@@ -91,6 +91,11 @@ impl<R: BufRead> Lexer<R> {
 
     fn consume_whitespace(&mut self) -> Result<(), io::Error> {
         self.read_chars_while(char::is_whitespace)?;
+        while self.current_char == Some(';') {
+            self.next_line()?;
+            self.next_char()?;
+            self.read_chars_while(char::is_whitespace)?;
+        }
         Ok(())
     }
 
@@ -131,7 +136,7 @@ impl<R: BufRead> Lexer<R> {
                 self.next_char()?;
                 Ok(Token::Symbol(symbol))
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -146,10 +151,12 @@ impl<R: BufRead> Lexer<R> {
         let base = match self.next_char()? {
             Some('b') => 2,
             Some('x') => 16,
-            other => return Err(ParserError::UnexpectedChar {
-                expected: &['b', 'x'],
-                got: other,
-            }),
+            other => {
+                return Err(ParserError::UnexpectedChar {
+                    expected: &['b', 'x'],
+                    got: other,
+                })
+            }
         };
         let s = self.read_chars_while(|c| c.is_digit(base))?;
         Ok(Token::Numeral(u64::from_str_radix(&s, base).unwrap()))
@@ -231,6 +238,22 @@ mod tests {
     fn test_empty_input() {
         assert_eq!(lex_all(""), vec![]);
         assert_eq!(lex_all("   \n  \n\n "), vec![]);
+        assert_eq!(lex_all("; comment\n"), vec![]);
+    }
+
+    #[test]
+    fn test_comments() {
+        assert_eq!(
+            lex_all("; comment\n symbol\n ; comment"),
+            vec![Token::Symbol("symbol".into())]
+        );
+        assert_eq!(
+            lex_all(";\n;\nsymbol ;\n symbol"),
+            vec![
+                Token::Symbol("symbol".into()),
+                Token::Symbol("symbol".into())
+            ]
+        );
     }
 
     #[test]
@@ -243,8 +266,7 @@ mod tests {
             Token::Keyword("b".into()),
             Token::Symbol("+-/*=%?!.$_~&^<>@".into()),
         ];
-        let got = lex_all(input);
-        assert_eq!(expected, got);
+        assert_eq!(expected, lex_all(input));
     }
 
     #[test]
@@ -257,18 +279,14 @@ mod tests {
             Token::Symbol("".into()),
             Token::Symbol("\n\t ".into()),
         ];
-        let got = lex_all(input);
-        assert_eq!(expected, got);
+        assert_eq!(expected, lex_all(input));
 
         assert!(matches!(
             lex_one("|\\|"),
             Err(ParserError::BackslashInQuotedSymbol)
         ));
 
-        assert!(matches!(
-            lex_one("|"),
-            Err(ParserError::EofInQuotedSymbol)
-        ));
+        assert!(matches!(lex_one("|"), Err(ParserError::EofInQuotedSymbol)));
     }
 
     #[test]
@@ -280,8 +298,7 @@ mod tests {
             Token::Numeral(42),
             Token::Numeral(255),
         ];
-        let got = lex_all(input);
-        assert_eq!(expected, got);
+        assert_eq!(expected, lex_all(input));
 
         assert!(matches!(lex_one("0123"), Err(ParserError::LeadingZero(_))));
 
@@ -311,12 +328,8 @@ mod tests {
             Token::String("\"".into()),
             Token::String("\"\"".into()),
         ];
-        let got = lex_all(input);
-        assert_eq!(expected, got);
+        assert_eq!(expected, lex_all(input));
 
-        assert!(matches!(
-            lex_one("\""),
-            Err(ParserError::EofInString)
-        ));
+        assert!(matches!(lex_one("\""), Err(ParserError::EofInString)));
     }
 }
