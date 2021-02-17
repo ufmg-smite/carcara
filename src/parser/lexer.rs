@@ -4,6 +4,8 @@ use std::io::{self, BufRead};
 pub enum Token {
     OpenParen,
     CloseParen,
+    Symbol(String),
+    Keyword(String),
     Eof,
 }
 
@@ -44,7 +46,7 @@ impl<R: BufRead> Lexer<R> {
                 self.next_line()?;
             }
         }
-        
+
         let new = if let Some(line) = &mut self.current_line {
             self.position.1 += 1;
             line.next()
@@ -69,23 +71,60 @@ impl<R: BufRead> Lexer<R> {
         Ok(())
     }
 
-    fn consume_whitespace(&mut self) -> Result<(), io::Error> {
-        while let Some(ch) = self.current_char {
-            if !ch.is_whitespace() {
+    fn read_chars_while<P: Fn(char) -> bool>(&mut self, predicate: P) -> Result<String, io::Error> {
+        let mut result = String::new();
+        while let Some(c) = self.current_char {
+            if !predicate(c) {
                 break;
             }
+            result.push(c);
             self.next_char()?;
         }
+        Ok(result)
+    }
+
+    fn consume_whitespace(&mut self) -> Result<(), io::Error> {
+        self.read_chars_while(char::is_whitespace)?;
         Ok(())
     }
 
     pub fn next_token(&mut self) -> Result<Token, io::Error> {
         self.consume_whitespace()?;
-        match self.next_char()? {
-            Some('(') => Ok(Token::OpenParen),
-            Some(')') => Ok(Token::CloseParen),
-            Some(c) => panic!("{}", c),
+        match self.current_char {
+            Some('(') => {
+                self.next_char()?;
+                Ok(Token::OpenParen)
+            }
+            Some(')') => {
+                self.next_char()?;
+                Ok(Token::CloseParen)
+            }
+            Some(':') => self.read_keyword(),
+            Some(c) if Lexer::is_symbol_character(c) => self.read_simple_symbol(),
+            Some(_) => todo!(),
             None => Ok(Token::Eof),
+        }
+    }
+
+    fn read_simple_symbol(&mut self) -> Result<Token, io::Error> {
+        let symbol = self.read_chars_while(Lexer::is_symbol_character)?;
+        Ok(Token::Symbol(symbol))
+    }
+
+    fn read_keyword(&mut self) -> Result<Token, io::Error> {
+        self.next_char()?; // Consume ':'
+        let symbol = self.read_chars_while(Lexer::is_symbol_character)?;
+        Ok(Token::Keyword(symbol))
+    }
+}
+
+impl Lexer<()> {
+    fn is_symbol_character(ch: char) -> bool {
+        match ch {
+            ch if ch.is_ascii_alphanumeric() => true,
+            '+' | '-' | '/' | '*' | '=' | '%' | '?' | '!' | '.' | '$' | '_' | '~' | '&' | '^'
+            | '<' | '>' | '@' => true,
+            _ => false,
         }
     }
 }
@@ -114,16 +153,18 @@ mod tests {
     }
 
     #[test]
-    fn test_parentheses() {
+    fn test_basic_tokens() {
+        let input = "() foo123 :foo123 :a:b +-/*=%?!.$_~&^<>@";
         let expected = vec![
             Token::OpenParen,
             Token::CloseParen,
-            Token::OpenParen,
-            Token::CloseParen,
-            Token::OpenParen,
-            Token::CloseParen,
+            Token::Symbol("foo123".into()),
+            Token::Keyword("foo123".into()),
+            Token::Keyword("a".into()),
+            Token::Keyword("b".into()),
+            Token::Symbol("+-/*=%?!.$_~&^<>@".into()),
         ];
-        let got = lex_all("    ()\n\n()(\t)");
+        let got = lex_all(input);
         assert_eq!(expected, got);
     }
 }
