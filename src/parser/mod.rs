@@ -10,6 +10,9 @@ pub enum ParserError {
         got: Option<char>,
     },
     LeadingZero(String),
+    BackslashInQuotedSymbol,
+    EofInQuotedSymbol,
+    EofInString
 }
 
 impl From<io::Error> for ParserError {

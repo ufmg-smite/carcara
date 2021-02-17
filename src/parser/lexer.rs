@@ -11,6 +11,7 @@ pub enum Token {
     Keyword(String),
     Numeral(u64),
     Decimal(Ratio<u64>),
+    String(String),
     Eof,
 }
 
@@ -104,18 +105,34 @@ impl<R: BufRead> Lexer<R> {
                 self.next_char()?;
                 Ok(Token::CloseParen)
             }
+            Some('"') => self.read_string(),
+            Some('|') => self.read_quoted_symbol(),
             Some(':') => self.read_keyword(),
             Some('#') => self.read_number_with_base(),
             Some(c) if c.is_ascii_digit() => self.read_number(),
             Some(c) if Lexer::is_symbol_character(c) => self.read_simple_symbol(),
-            Some(_) => todo!(),
             None => Ok(Token::Eof),
+            _ => todo!(),
         }
     }
 
     fn read_simple_symbol(&mut self) -> Result<Token, ParserError> {
         let symbol = self.read_chars_while(Lexer::is_symbol_character)?;
         Ok(Token::Symbol(symbol))
+    }
+
+    fn read_quoted_symbol(&mut self) -> Result<Token, ParserError> {
+        self.next_char()?; // Consume '|'
+        let symbol = self.read_chars_while(|c| c != '|' && c != '\\')?;
+        match self.current_char {
+            Some('\\') => Err(ParserError::BackslashInQuotedSymbol),
+            None => Err(ParserError::EofInQuotedSymbol),
+            Some('|') => {
+                self.next_char()?;
+                Ok(Token::Symbol(symbol))
+            }
+            _ => unreachable!()
+        }
     }
 
     fn read_keyword(&mut self) -> Result<Token, ParserError> {
@@ -155,6 +172,25 @@ impl<R: BufRead> Lexer<R> {
         } else {
             Ok(Token::Numeral(int_part.parse().unwrap()))
         }
+    }
+
+    fn read_string(&mut self) -> Result<Token, ParserError> {
+        self.next_char()?; // Consume '"'
+        let mut result = String::new();
+        loop {
+            result += &self.read_chars_while(|c| c != '"')?;
+            if self.current_char.is_none() {
+                return Err(ParserError::EofInString);
+            }
+            self.next_char()?; // Consume '"'
+            if self.current_char == Some('"') {
+                self.next_char()?;
+                result.push('"');
+            } else {
+                break;
+            }
+        }
+        Ok(Token::String(result))
     }
 }
 
@@ -198,11 +234,9 @@ mod tests {
     }
 
     #[test]
-    fn test_basic_tokens() {
-        let input = "() foo123 :foo123 :a:b +-/*=%?!.$_~&^<>@";
+    fn test_simple_symbols_and_keywords() {
+        let input = "foo123 :foo123 :a:b +-/*=%?!.$_~&^<>@";
         let expected = vec![
-            Token::OpenParen,
-            Token::CloseParen,
             Token::Symbol("foo123".into()),
             Token::Keyword("foo123".into()),
             Token::Keyword("a".into()),
@@ -214,7 +248,31 @@ mod tests {
     }
 
     #[test]
-    fn test_number_parsing() {
+    fn test_quoted_symbols() {
+        let input = "|abc| abc |:abc| || |\n\t |";
+        let expected = vec![
+            Token::Symbol("abc".into()),
+            Token::Symbol("abc".into()),
+            Token::Symbol(":abc".into()),
+            Token::Symbol("".into()),
+            Token::Symbol("\n\t ".into()),
+        ];
+        let got = lex_all(input);
+        assert_eq!(expected, got);
+
+        assert!(matches!(
+            lex_one("|\\|"),
+            Err(ParserError::BackslashInQuotedSymbol)
+        ));
+
+        assert!(matches!(
+            lex_one("|"),
+            Err(ParserError::EofInQuotedSymbol)
+        ));
+    }
+
+    #[test]
+    fn test_numerals_and_decimals() {
         let input = "42 3.14159 #b101010 #x0ff";
         let expected = vec![
             Token::Numeral(42),
@@ -241,6 +299,24 @@ mod tests {
                 expected: &['b', 'x'],
                 got: None,
             })
+        ));
+    }
+
+    #[test]
+    fn test_strings() {
+        let input = r#" "string" "escaped quote: """ """" """""" "#;
+        let expected = vec![
+            Token::String("string".into()),
+            Token::String("escaped quote: \"".into()),
+            Token::String("\"".into()),
+            Token::String("\"\"".into()),
+        ];
+        let got = lex_all(input);
+        assert_eq!(expected, got);
+
+        assert!(matches!(
+            lex_one("\""),
+            Err(ParserError::EofInString)
         ));
     }
 }
