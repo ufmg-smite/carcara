@@ -12,7 +12,20 @@ pub enum Token {
     Numeral(u64),
     Decimal(Ratio<u64>),
     String(String),
+    ReservedWord(Reserved),
     Eof,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Reserved {
+    Underscore, // _
+    Bang,       // !
+    As,         // as
+    Let,        // let
+    Exists,     // exists
+    Forall,     // forall
+    Match,      // match
+    Choice,     // choice
 }
 
 pub struct Lexer<R> {
@@ -123,7 +136,11 @@ impl<R: BufRead> Lexer<R> {
 
     fn read_simple_symbol(&mut self) -> Result<Token, ParserError> {
         let symbol = self.read_chars_while(Lexer::is_symbol_character)?;
-        Ok(Token::Symbol(symbol))
+        if let Some(reserved) = Lexer::match_reserved_symbol(&symbol) {
+            Ok(Token::ReservedWord(reserved))
+        } else {
+            Ok(Token::Symbol(symbol))
+        }
     }
 
     fn read_quoted_symbol(&mut self) -> Result<Token, ParserError> {
@@ -208,6 +225,20 @@ impl Lexer<()> {
             '+' | '-' | '/' | '*' | '=' | '%' | '?' | '!' | '.' | '$' | '_' | '~' | '&' | '^'
             | '<' | '>' | '@' => true,
             _ => false,
+        }
+    }
+
+    fn match_reserved_symbol(symbol: &str) -> Option<Reserved> {
+        match symbol {
+            "_" => Some(Reserved::Underscore),
+            "!" => Some(Reserved::Bang),
+            "as" => Some(Reserved::As),
+            "let" => Some(Reserved::Let),
+            "exists" => Some(Reserved::Exists),
+            "forall" => Some(Reserved::Forall),
+            "match" => Some(Reserved::Match),
+            "choice" => Some(Reserved::Choice),
+            _ => None,
         }
     }
 }
@@ -331,5 +362,23 @@ mod tests {
         assert_eq!(expected, lex_all(input));
 
         assert!(matches!(lex_one("\""), Err(ParserError::EofInString)));
+    }
+
+    #[test]
+    fn test_reserved_words() {
+        let input = "_ ! as let exists |_| |!| |as| |let| |exists|";
+        let expected = vec![
+            Token::ReservedWord(Reserved::Underscore),
+            Token::ReservedWord(Reserved::Bang),
+            Token::ReservedWord(Reserved::As),
+            Token::ReservedWord(Reserved::Let),
+            Token::ReservedWord(Reserved::Exists),
+            Token::Symbol("_".into()),
+            Token::Symbol("!".into()),
+            Token::Symbol("as".into()),
+            Token::Symbol("let".into()),
+            Token::Symbol("exists".into()),
+        ];
+        assert_eq!(expected, lex_all(input));
     }
 }
