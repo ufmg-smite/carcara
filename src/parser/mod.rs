@@ -48,6 +48,15 @@ impl<R: BufRead> Parser<R> {
         Ok(std::mem::replace(&mut self.current_token, new))
     }
 
+    fn expect_token(&mut self, expected: Token) -> ParserResult<Token> {
+        let got = self.next_token()?;
+        if got == expected {
+            Ok(got)
+        } else {
+            Err(ParserError::UnexpectedToken(got))
+        }
+    }
+
     fn expect_symbol(&mut self) -> ParserResult<String> {
         match self.next_token()? {
             Token::Symbol(s) => Ok(s),
@@ -119,8 +128,11 @@ impl<R: BufRead> Parser<R> {
     }
 
     fn parse_identifier_with_sort(&mut self) -> ParserResult<QualifiedIdentifier> {
-        // TODO: parse qualified identifiers of the form "(as <identifier> <sort>)"
-        todo!()
+        self.expect_token(Token::ReservedWord(Reserved::As))?;
+        let identifier = self.parse_identifier()?;
+        let sort = Some(self.parse_sort()?);
+        self.expect_token(Token::CloseParen)?;
+        Ok(QualifiedIdentifier { identifier, sort })
     }
 
     fn parse_identifier(&mut self) -> ParserResult<Identifier> {
@@ -132,9 +144,9 @@ impl<R: BufRead> Parser<R> {
     }
 
     fn parse_indexed_identifier(&mut self) -> ParserResult<Identifier> {
-        self.next_token()?; // Consume "_" token
+        self.expect_token(Token::ReservedWord(Reserved::Underscore))?;
         let symbol = self.expect_symbol()?;
-        let indexes = self.parse_sequence(Parser::<R>::parse_index, true)?;
+        let indexes = self.parse_sequence(Self::parse_index, true)?;
         Ok(Identifier::Indexed(symbol, indexes))
     }
 
@@ -142,6 +154,23 @@ impl<R: BufRead> Parser<R> {
         match self.next_token()? {
             Token::Numeral(n) => Ok(Index::Numeral(n)),
             Token::Symbol(s) => Ok(Index::Symbol(s)),
+            other => Err(ParserError::UnexpectedToken(other)),
+        }
+    }
+
+    fn parse_sort(&mut self) -> ParserResult<Sort> {
+        match self.next_token()? {
+            Token::OpenParen => match self.current_token {
+                Token::ReservedWord(Reserved::Underscore) => {
+                    Ok(Sort::NonParametric(self.parse_indexed_identifier()?))
+                }
+                _ => {
+                    let iden = self.parse_identifier()?;
+                    let params = self.parse_sequence(Self::parse_sort, true)?;
+                    Ok(Sort::Parametric(iden, params))
+                }
+            },
+            Token::Symbol(s) => Ok(Sort::NonParametric(Identifier::Simple(s))),
             other => Err(ParserError::UnexpectedToken(other)),
         }
     }
@@ -195,5 +224,41 @@ mod tests {
             }),
             parse_term("(_ bar 0 baz 42)")
         );
+
+        let input = "(as (_ foo 0) (_ bar 0))";
+        let expected = Term::Identifier(QualifiedIdentifier {
+            identifier: Identifier::Indexed("foo".into(), vec![Index::Numeral(0)]),
+            sort: Some(Sort::NonParametric(Identifier::Indexed(
+                "bar".into(),
+                vec![Index::Numeral(0)],
+            ))),
+        });
+        assert_eq!(expected, parse_term(input));
+
+        let input = "(as
+            (_ foo 0)
+            ((_ bar 0) Bool (List Int) (_ BitVec 3))
+        )";
+        let expected = Term::Identifier(QualifiedIdentifier {
+            identifier: Identifier::Indexed("foo".into(), vec![Index::Numeral(0)]),
+            sort: Some(Sort::Parametric(
+                Identifier::Indexed("bar".into(), vec![Index::Numeral(0)]),
+                vec![
+                    // Bool
+                    Sort::NonParametric(Identifier::Simple("Bool".into())),
+                    // (List Int)
+                    Sort::Parametric(
+                        Identifier::Simple("List".into()),
+                        vec![Sort::NonParametric(Identifier::Simple("Int".into()))],
+                    ),
+                    // (_ BitVec 3)
+                    Sort::NonParametric(Identifier::Indexed(
+                        "BitVec".into(),
+                        vec![Index::Numeral(3)],
+                    )),
+                ],
+            )),
+        });
+        assert_eq!(expected, parse_term(input));
     }
 }
