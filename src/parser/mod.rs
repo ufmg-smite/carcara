@@ -16,6 +16,8 @@ pub enum ParserError {
     BackslashInQuotedSymbol,
     EofInQuotedSymbol,
     EofInString,
+    UnexpectedToken(Token),
+    EmptySequence,
 }
 
 impl From<io::Error> for ParserError {
@@ -24,13 +26,15 @@ impl From<io::Error> for ParserError {
     }
 }
 
+type ParserResult<T> = Result<T, ParserError>;
+
 pub struct Parser<R> {
     lexer: Lexer<R>,
     current_token: Token,
 }
 
 impl<R: BufRead> Parser<R> {
-    pub fn new(input: R) -> Result<Self, ParserError> {
+    pub fn new(input: R) -> ParserResult<Self> {
         let mut lexer = Lexer::new(input)?;
         let current_token = lexer.next_token()?;
         Ok(Parser {
@@ -39,12 +43,35 @@ impl<R: BufRead> Parser<R> {
         })
     }
 
-    fn next_token(&mut self) -> Result<Token, ParserError> {
+    fn next_token(&mut self) -> ParserResult<Token> {
         let new = self.lexer.next_token()?;
         Ok(std::mem::replace(&mut self.current_token, new))
     }
 
-    pub fn parse_term(&mut self) -> Result<Term, ParserError> {
+    fn expect_symbol(&mut self) -> ParserResult<String> {
+        match self.next_token()? {
+            Token::Symbol(s) => Ok(s),
+            other => Err(ParserError::UnexpectedToken(other)),
+        }
+    }
+
+    fn parse_sequence<T, F>(&mut self, parse_func: F, non_empty: bool) -> ParserResult<Vec<T>>
+    where
+        F: Fn(&mut Self) -> ParserResult<T>,
+    {
+        let mut result = Vec::new();
+        while self.current_token != Token::CloseParen {
+            result.push(parse_func(self)?);
+        }
+        if non_empty && result.is_empty() {
+            Err(ParserError::EmptySequence)
+        } else {
+            self.next_token()?; // Consume ")" token
+            Ok(result)
+        }
+    }
+
+    pub fn parse_term(&mut self) -> ParserResult<Term> {
         match self.next_token()? {
             Token::Numeral(n) => Ok(Term::Constant(Constant::Numeral(n))),
             Token::Decimal(r) => Ok(Term::Constant(Constant::Decimal(r))),
@@ -54,11 +81,11 @@ impl<R: BufRead> Parser<R> {
                 sort: None,
             })),
             Token::OpenParen => self.parse_application(),
-            _ => todo!(),
+            other => Err(ParserError::UnexpectedToken(other)),
         }
     }
 
-    fn parse_application(&mut self) -> Result<Term, ParserError> {
+    fn parse_application(&mut self) -> ParserResult<Term> {
         match self.current_token {
             Token::ReservedWord(Reserved::As) => {
                 Ok(Term::Identifier(self.parse_identifier_with_sort()?))
@@ -73,7 +100,7 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
-    fn parse_qualified_identifier(&mut self) -> Result<QualifiedIdentifier, ParserError> {
+    fn parse_qualified_identifier(&mut self) -> ParserResult<QualifiedIdentifier> {
         match self.next_token()? {
             Token::Symbol(s) => Ok(QualifiedIdentifier {
                 identifier: Identifier::Simple(s),
@@ -85,46 +112,37 @@ impl<R: BufRead> Parser<R> {
                     identifier: self.parse_indexed_identifier()?,
                     sort: None,
                 }),
-                _ => todo!(),
+                _ => Err(ParserError::UnexpectedToken(self.next_token()?)),
             },
-            _ => todo!(),
+            other => Err(ParserError::UnexpectedToken(other)),
         }
     }
 
-    fn parse_identifier_with_sort(&mut self) -> Result<QualifiedIdentifier, ParserError> {
+    fn parse_identifier_with_sort(&mut self) -> ParserResult<QualifiedIdentifier> {
         // TODO: parse qualified identifiers of the form "(as <identifier> <sort>)"
         todo!()
     }
 
-    fn parse_identifier(&mut self) -> Result<Identifier, ParserError> {
+    fn parse_identifier(&mut self) -> ParserResult<Identifier> {
         match self.next_token()? {
             Token::Symbol(s) => Ok(Identifier::Simple(s)),
             Token::OpenParen => self.parse_indexed_identifier(),
-            _ => todo!(),
+            other => Err(ParserError::UnexpectedToken(other)),
         }
     }
 
-    fn parse_indexed_identifier(&mut self) -> Result<Identifier, ParserError> {
+    fn parse_indexed_identifier(&mut self) -> ParserResult<Identifier> {
         self.next_token()?; // Consume "_" token
-        let symbol = match self.next_token()? {
-            Token::Symbol(s) => s,
-            _ => todo!(),
-        };
-        let mut indexes = Vec::new();
-        while self.current_token != Token::CloseParen {
-            indexes.push(self.parse_index()?);
-        }
-        if indexes.is_empty() {
-            todo!()
-        }
+        let symbol = self.expect_symbol()?;
+        let indexes = self.parse_sequence(Parser::<R>::parse_index, true)?;
         Ok(Identifier::Indexed(symbol, indexes))
     }
 
-    fn parse_index(&mut self) -> Result<Index, ParserError> {
+    fn parse_index(&mut self) -> ParserResult<Index> {
         match self.next_token()? {
             Token::Numeral(n) => Ok(Index::Numeral(n)),
             Token::Symbol(s) => Ok(Index::Symbol(s)),
-            _ => todo!(),
+            other => Err(ParserError::UnexpectedToken(other)),
         }
     }
 }
