@@ -82,97 +82,17 @@ impl<R: BufRead> Parser<R> {
 
     pub fn parse_term(&mut self) -> ParserResult<Term> {
         match self.next_token()? {
-            Token::Numeral(n) => Ok(Term::Constant(Constant::Numeral(n))),
-            Token::Decimal(r) => Ok(Term::Constant(Constant::Decimal(r))),
-            Token::String(s) => Ok(Term::Constant(Constant::String(s))),
-            Token::Symbol(s) => Ok(Term::Identifier(QualifiedIdentifier {
-                identifier: Identifier::Simple(s),
-                sort: None,
-            })),
+            Token::Numeral(n) => Ok(Term::Terminal(Terminal::Integer(n))),
+            Token::Decimal(r) => Ok(Term::Terminal(Terminal::Real(r))),
+            Token::String(s) => Ok(Term::Terminal(Terminal::String(s))),
+            Token::Symbol(s) => Ok(Term::Terminal(Terminal::Var(Identifier::Simple(s)))),
             Token::OpenParen => self.parse_application(),
             other => Err(ParserError::UnexpectedToken(other)),
         }
     }
 
     fn parse_application(&mut self) -> ParserResult<Term> {
-        match self.current_token {
-            Token::ReservedWord(Reserved::As) => {
-                Ok(Term::Identifier(self.parse_identifier_with_sort()?))
-            }
-            Token::ReservedWord(Reserved::Underscore) => {
-                Ok(Term::Identifier(QualifiedIdentifier {
-                    identifier: self.parse_indexed_identifier()?,
-                    sort: None,
-                }))
-            }
-            _ => todo!(),
-        }
-    }
-
-    fn parse_qualified_identifier(&mut self) -> ParserResult<QualifiedIdentifier> {
-        match self.next_token()? {
-            Token::Symbol(s) => Ok(QualifiedIdentifier {
-                identifier: Identifier::Simple(s),
-                sort: None,
-            }),
-            Token::OpenParen => match self.current_token {
-                Token::ReservedWord(Reserved::As) => self.parse_identifier_with_sort(),
-                Token::ReservedWord(Reserved::Underscore) => Ok(QualifiedIdentifier {
-                    identifier: self.parse_indexed_identifier()?,
-                    sort: None,
-                }),
-                _ => Err(ParserError::UnexpectedToken(self.next_token()?)),
-            },
-            other => Err(ParserError::UnexpectedToken(other)),
-        }
-    }
-
-    fn parse_identifier_with_sort(&mut self) -> ParserResult<QualifiedIdentifier> {
-        self.expect_token(Token::ReservedWord(Reserved::As))?;
-        let identifier = self.parse_identifier()?;
-        let sort = Some(self.parse_sort()?);
-        self.expect_token(Token::CloseParen)?;
-        Ok(QualifiedIdentifier { identifier, sort })
-    }
-
-    fn parse_identifier(&mut self) -> ParserResult<Identifier> {
-        match self.next_token()? {
-            Token::Symbol(s) => Ok(Identifier::Simple(s)),
-            Token::OpenParen => self.parse_indexed_identifier(),
-            other => Err(ParserError::UnexpectedToken(other)),
-        }
-    }
-
-    fn parse_indexed_identifier(&mut self) -> ParserResult<Identifier> {
-        self.expect_token(Token::ReservedWord(Reserved::Underscore))?;
-        let symbol = self.expect_symbol()?;
-        let indexes = self.parse_sequence(Self::parse_index, true)?;
-        Ok(Identifier::Indexed(symbol, indexes))
-    }
-
-    fn parse_index(&mut self) -> ParserResult<Index> {
-        match self.next_token()? {
-            Token::Numeral(n) => Ok(Index::Numeral(n)),
-            Token::Symbol(s) => Ok(Index::Symbol(s)),
-            other => Err(ParserError::UnexpectedToken(other)),
-        }
-    }
-
-    fn parse_sort(&mut self) -> ParserResult<Sort> {
-        match self.next_token()? {
-            Token::OpenParen => match self.current_token {
-                Token::ReservedWord(Reserved::Underscore) => {
-                    Ok(Sort::NonParametric(self.parse_indexed_identifier()?))
-                }
-                _ => {
-                    let iden = self.parse_identifier()?;
-                    let params = self.parse_sequence(Self::parse_sort, true)?;
-                    Ok(Sort::Parametric(iden, params))
-                }
-            },
-            Token::Symbol(s) => Ok(Sort::NonParametric(Identifier::Simple(s))),
-            other => Err(ParserError::UnexpectedToken(other)),
-        }
+        todo!()
     }
 }
 
@@ -188,13 +108,13 @@ mod tests {
 
     #[test]
     fn test_constant_terms() {
-        assert_eq!(Term::Constant(Constant::Numeral(42)), parse_term("42"));
+        assert_eq!(Term::Terminal(Terminal::Integer(42)), parse_term("42"));
         assert_eq!(
-            Term::Constant(Constant::Decimal(num_rational::Ratio::new(3, 2))),
+            Term::Terminal(Terminal::Real(num_rational::Ratio::new(3, 2))),
             parse_term("1.5")
         );
         assert_eq!(
-            Term::Constant(Constant::String("foo".into())),
+            Term::Terminal(Terminal::String("foo".into())),
             parse_term("\"foo\"")
         );
     }
@@ -202,63 +122,8 @@ mod tests {
     #[test]
     fn test_identifier_terms() {
         assert_eq!(
-            Term::Identifier(QualifiedIdentifier {
-                identifier: Identifier::Simple("foo".into()),
-                sort: None,
-            }),
+            Term::Terminal(Terminal::Var(Identifier::Simple("foo".into()))),
             parse_term("foo")
         );
-
-        let identifier = Identifier::Indexed(
-            "bar".into(),
-            vec![
-                Index::Numeral(0),
-                Index::Symbol("baz".into()),
-                Index::Numeral(42),
-            ],
-        );
-        assert_eq!(
-            Term::Identifier(QualifiedIdentifier {
-                identifier,
-                sort: None,
-            }),
-            parse_term("(_ bar 0 baz 42)")
-        );
-
-        let input = "(as (_ foo 0) (_ bar 0))";
-        let expected = Term::Identifier(QualifiedIdentifier {
-            identifier: Identifier::Indexed("foo".into(), vec![Index::Numeral(0)]),
-            sort: Some(Sort::NonParametric(Identifier::Indexed(
-                "bar".into(),
-                vec![Index::Numeral(0)],
-            ))),
-        });
-        assert_eq!(expected, parse_term(input));
-
-        let input = "(as
-            (_ foo 0)
-            ((_ bar 0) Bool (List Int) (_ BitVec 3))
-        )";
-        let expected = Term::Identifier(QualifiedIdentifier {
-            identifier: Identifier::Indexed("foo".into(), vec![Index::Numeral(0)]),
-            sort: Some(Sort::Parametric(
-                Identifier::Indexed("bar".into(), vec![Index::Numeral(0)]),
-                vec![
-                    // Bool
-                    Sort::NonParametric(Identifier::Simple("Bool".into())),
-                    // (List Int)
-                    Sort::Parametric(
-                        Identifier::Simple("List".into()),
-                        vec![Sort::NonParametric(Identifier::Simple("Int".into()))],
-                    ),
-                    // (_ BitVec 3)
-                    Sort::NonParametric(Identifier::Indexed(
-                        "BitVec".into(),
-                        vec![Index::Numeral(3)],
-                    )),
-                ],
-            )),
-        });
-        assert_eq!(expected, parse_term(input));
     }
 }
