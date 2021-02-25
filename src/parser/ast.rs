@@ -1,6 +1,33 @@
 use num_rational::Ratio;
 use std::rc::Rc;
 
+#[derive(Debug)]
+pub struct Proof(pub Vec<ProofCommand>);
+
+#[derive(Debug)]
+pub enum ProofCommand {
+    Assume(String, Rc<Term>),
+    Step {
+        step_name: String,
+        clause: Clause,
+        rule: String,
+        premises: Vec<String>,
+        args: Vec<Rc<Term>>,
+    },
+    Anchor {
+        step: String,
+        args: Vec<Rc<Term>>,
+    },
+    DefineFun {
+        name: String,
+        args: Vec<(String, Sort)>,
+        return_sort: Sort,
+    },
+}
+
+#[derive(Debug)]
+pub struct Clause(pub Vec<Rc<Term>>);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Operator {
     // Arithmetic

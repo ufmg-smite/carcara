@@ -28,6 +28,11 @@ pub enum Reserved {
     Match,        // match
     Choice,       // choice
     Op(Operator), // Operators
+    Cl,           // cl
+    Assume,       // assume
+    Step,         // step
+    Anchor,       // anchor
+    DefineFun,    // define-fun
 }
 
 pub struct Lexer<R> {
@@ -248,6 +253,11 @@ impl Lexer<()> {
             "or" => Some(Reserved::Op(Operator::Or)),
             "and" => Some(Reserved::Op(Operator::And)),
             "not" => Some(Reserved::Op(Operator::Not)),
+            "cl" => Some(Reserved::Cl),
+            "assume" => Some(Reserved::Assume),
+            "step" => Some(Reserved::Step),
+            "anchor" => Some(Reserved::Anchor),
+            "define-fun" => Some(Reserved::DefineFun),
             _ => None,
         }
     }

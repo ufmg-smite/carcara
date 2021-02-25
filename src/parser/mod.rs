@@ -159,6 +159,81 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
+    pub fn parse_proof(&mut self) -> ParserResult<Proof> {
+        let mut commands = Vec::new();
+        while self.current_token != Token::Eof {
+            commands.push(self.parse_proof_command()?);
+        }
+        Ok(Proof(commands))
+    }
+
+    pub fn parse_proof_command(&mut self) -> ParserResult<ProofCommand> {
+        self.expect_token(Token::OpenParen)?;
+        match self.next_token()? {
+            Token::ReservedWord(Reserved::Assume) => {
+                let symbol = self.expect_symbol()?;
+                let term = self.parse_term()?;
+                let term = self.add_term(term);
+                self.expect_token(Token::CloseParen)?;
+                Ok(ProofCommand::Assume(symbol, term))
+            }
+            Token::ReservedWord(Reserved::Step) => {
+                let step_name = self.expect_symbol()?;
+                let clause = self.parse_clause()?;
+                self.expect_token(Token::Keyword("rule".into()))?;
+                let rule = self.expect_symbol()?;
+
+                let premises = if self.current_token == Token::Keyword("premises".into()) {
+                    self.next_token()?;
+                    self.expect_token(Token::OpenParen)?;
+                    self.parse_sequence(Self::expect_symbol, true)?
+                } else {
+                    Vec::new()
+                };
+
+                let args = if self.current_token == Token::Keyword("args".into()) {
+                    self.next_token()?;
+                    self.parse_proof_args()?
+                } else {
+                    Vec::new()
+                };
+
+                self.expect_token(Token::CloseParen)?;
+
+                Ok(ProofCommand::Step {
+                    step_name,
+                    clause,
+                    rule,
+                    premises,
+                    args,
+                })
+            }
+            Token::ReservedWord(Reserved::Anchor) => todo!(),
+            Token::ReservedWord(Reserved::DefineFun) => todo!(),
+            other => Err(ParserError::UnexpectedToken(other)),
+        }
+    }
+
+    fn parse_clause(&mut self) -> ParserResult<Clause> {
+        self.expect_token(Token::OpenParen)?;
+        self.expect_token(Token::ReservedWord(Reserved::Cl))?;
+        let terms = self
+            .parse_sequence(Self::parse_term, false)?
+            .into_iter()
+            .map(|term| self.add_term(term))
+            .collect();
+        Ok(Clause(terms))
+    }
+
+    fn parse_proof_args(&mut self) -> ParserResult<Vec<Rc<Term>>> {
+        self.expect_token(Token::OpenParen)?;
+        Ok(self
+            .parse_sequence(Self::parse_term, true)?
+            .into_iter()
+            .map(|term| self.add_term(term))
+            .collect())
+    }
+
     pub fn parse_term(&mut self) -> ParserResult<Term> {
         match self.next_token()? {
             Token::Numeral(n) => Ok(Term::Terminal(Terminal::Integer(n))),
