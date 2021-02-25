@@ -46,6 +46,7 @@ pub struct Parser<R> {
     lexer: Lexer<R>,
     current_token: Token,
     terms_map: HashMap<Term, Rc<Term>>,
+    symbol_table: HashMap<Identifier, Sort>,
 }
 
 impl<R: BufRead> Parser<R> {
@@ -56,6 +57,7 @@ impl<R: BufRead> Parser<R> {
             lexer,
             current_token,
             terms_map: HashMap::new(),
+            symbol_table: Parser::new_symbol_table(),
         })
     }
 
@@ -87,30 +89,52 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
+    fn get_sort(&self, term: &Term) -> Option<Sort> {
+        match term {
+            Term::Terminal(t) => match t {
+                Terminal::Integer(_) => Some(Sort::int()),
+                Terminal::Real(_) => Some(Sort::real()),
+                Terminal::String(_) => Some(Sort::string()),
+                Terminal::Var(iden) => self.symbol_table.get(iden).cloned(),
+            },
+            Term::Op(op, args) => match op {
+                Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => {
+                    self.get_sort(args[0].as_ref())
+                }
+                Operator::Eq | Operator::Or | Operator::And | Operator::Not => Some(Sort::bool()),
+            },
+            _ => todo!(),
+        }
+    }
+
     fn make_op(&mut self, op: Operator, args: Vec<Term>) -> ParserResult<Term> {
+        let sorts: Vec<_> = args
+            .iter()
+            .map(|term| self.get_sort(term))
+            .collect::<Option<_>>()
+            .ok_or(ParserError::TypeError)?;
         match op {
             Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => {
                 Parser::expect_num_of_args(&args, 2)?;
-                let first = args[0].sort();
-                if (first != Sort::int() && first != Sort::real()) || args[1].sort() != first {
+                if (sorts[0] != Sort::int() && sorts[0] != Sort::real()) || sorts[0] != sorts[1] {
                     return Err(ParserError::TypeError);
                 }
             }
             Operator::Eq => {
                 Parser::expect_num_of_args(&args, 2)?;
-                if args[0].sort() != args[1].sort() {
+                if sorts[0] != sorts[1] {
                     return Err(ParserError::TypeError);
                 }
             }
             Operator::Or | Operator::And => {
                 Parser::expect_num_of_args(&args, 2)?;
-                if args.iter().any(|a| a.sort() != Sort::bool()) {
+                if sorts.iter().any(|s| s != &Sort::bool()) {
                     return Err(ParserError::TypeError);
                 }
             }
             Operator::Not => {
                 Parser::expect_num_of_args(&args, 1)?;
-                if args[0].sort() != Sort::bool() {
+                if sorts[0] != Sort::bool() {
                     return Err(ParserError::TypeError);
                 }
             }
@@ -166,6 +190,14 @@ impl Parser<()> {
         } else {
             Ok(())
         }
+    }
+
+    fn new_symbol_table() -> HashMap<Identifier, Sort> {
+        let builtins = vec![("true", Sort::bool()), ("false", Sort::bool())];
+        builtins
+            .into_iter()
+            .map(|(iden, sort)| (Identifier::Simple(iden.into()), sort))
+            .collect()
     }
 }
 

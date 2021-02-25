@@ -24,28 +24,7 @@ pub enum Term {
     // TODO: binders
 }
 
-impl Term {
-    pub fn sort(&self) -> Sort {
-        match self {
-            Term::Terminal(t) => match t {
-                Terminal::Integer(_) => Sort::int(),
-                Terminal::Real(_) => Sort::real(),
-                Terminal::String(_) => Sort::string(),
-                Terminal::Var(Identifier::Simple(iden)) if iden == "true" || iden == "false" => {
-                    Sort::bool()
-                }
-                _ => todo!(),
-            },
-            Term::Op(op, args) => match op {
-                Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => args[0].sort(),
-                Operator::Eq | Operator::Or | Operator::And | Operator::Not => Sort::bool(),
-            },
-            _ => todo!(),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Sort(Term);
 
 macro_rules! sort_from_iden {
