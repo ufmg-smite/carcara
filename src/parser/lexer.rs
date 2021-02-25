@@ -1,5 +1,6 @@
 use num_rational::Ratio;
 use std::io::{self, BufRead};
+use std::str::FromStr;
 
 use super::ast::Operator;
 use super::ParserError;
@@ -32,6 +33,29 @@ pub enum Reserved {
     Step,       // step
     Anchor,     // anchor
     DefineFun,  // define-fun
+}
+
+impl FromStr for Reserved {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "_" => Ok(Reserved::Underscore),
+            "!" => Ok(Reserved::Bang),
+            "as" => Ok(Reserved::As),
+            "let" => Ok(Reserved::Let),
+            "exists" => Ok(Reserved::Exists),
+            "forall" => Ok(Reserved::Forall),
+            "match" => Ok(Reserved::Match),
+            "choice" => Ok(Reserved::Choice),
+            "cl" => Ok(Reserved::Cl),
+            "assume" => Ok(Reserved::Assume),
+            "step" => Ok(Reserved::Step),
+            "anchor" => Ok(Reserved::Anchor),
+            "define-fun" => Ok(Reserved::DefineFun),
+            _ => Err(()),
+        }
+    }
 }
 
 pub struct Lexer<R> {
@@ -142,7 +166,7 @@ impl<R: BufRead> Lexer<R> {
 
     fn read_simple_symbol(&mut self) -> Result<Token, ParserError> {
         let symbol = self.read_chars_while(Lexer::is_symbol_character)?;
-        if let Some(reserved) = Lexer::match_reserved_symbol(&symbol) {
+        if let Ok(reserved) = Reserved::from_str(&symbol) {
             Ok(Token::ReservedWord(reserved))
         } else {
             Ok(Token::Symbol(symbol))
@@ -231,25 +255,6 @@ impl Lexer<()> {
             '+' | '-' | '/' | '*' | '=' | '%' | '?' | '!' | '.' | '$' | '_' | '~' | '&' | '^'
             | '<' | '>' | '@' => true,
             _ => false,
-        }
-    }
-
-    fn match_reserved_symbol(symbol: &str) -> Option<Reserved> {
-        match symbol {
-            "_" => Some(Reserved::Underscore),
-            "!" => Some(Reserved::Bang),
-            "as" => Some(Reserved::As),
-            "let" => Some(Reserved::Let),
-            "exists" => Some(Reserved::Exists),
-            "forall" => Some(Reserved::Forall),
-            "match" => Some(Reserved::Match),
-            "choice" => Some(Reserved::Choice),
-            "cl" => Some(Reserved::Cl),
-            "assume" => Some(Reserved::Assume),
-            "step" => Some(Reserved::Step),
-            "anchor" => Some(Reserved::Anchor),
-            "define-fun" => Some(Reserved::DefineFun),
-            _ => None,
         }
     }
 }
