@@ -1,6 +1,7 @@
 use num_rational::Ratio;
 use std::io::{self, BufRead};
 
+use super::ast::Operator;
 use super::ParserError;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -18,18 +19,15 @@ pub enum Token {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Reserved {
-    Underscore, // _
-    Bang,       // !
-    As,         // as
-    Let,        // let
-    Exists,     // exists
-    Forall,     // forall
-    Match,      // match
-    Choice,     // choice
-    Plus,       // +
-    Minus,      // -
-    Asterisk,   // *
-    Slash,      // /
+    Underscore,   // _
+    Bang,         // !
+    As,           // as
+    Let,          // let
+    Exists,       // exists
+    Forall,       // forall
+    Match,        // match
+    Choice,       // choice
+    Op(Operator), // Operators
 }
 
 pub struct Lexer<R> {
@@ -242,10 +240,14 @@ impl Lexer<()> {
             "forall" => Some(Reserved::Forall),
             "match" => Some(Reserved::Match),
             "choice" => Some(Reserved::Choice),
-            "+" => Some(Reserved::Plus),
-            "-" => Some(Reserved::Minus),
-            "*" => Some(Reserved::Asterisk),
-            "/" => Some(Reserved::Slash),
+            "+" => Some(Reserved::Op(Operator::Add)),
+            "-" => Some(Reserved::Op(Operator::Sub)),
+            "*" => Some(Reserved::Op(Operator::Mult)),
+            "/" => Some(Reserved::Op(Operator::Div)),
+            "=" => Some(Reserved::Op(Operator::Eq)),
+            "or" => Some(Reserved::Op(Operator::Or)),
+            "and" => Some(Reserved::Op(Operator::And)),
+            "not" => Some(Reserved::Op(Operator::Not)),
             _ => None,
         }
     }

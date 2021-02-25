@@ -87,15 +87,36 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
-    fn make_arithmetic_op(&mut self, op: Operator, args: Vec<Term>) -> ParserResult<Term> {
-        Parser::expect_num_of_args(&args, 2)?;
-        let sort = args[0].sort();
-        if (sort != Sort::int() && sort != Sort::real()) || args.iter().any(|a| a.sort() != sort) {
-            Err(ParserError::TypeError)
-        } else {
-            let args = args.into_iter().map(|arg| self.add_term(arg)).collect();
-            Ok(Term::Op(op, args))
+    fn make_op(&mut self, op: Operator, args: Vec<Term>) -> ParserResult<Term> {
+        match op {
+            Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => {
+                Parser::expect_num_of_args(&args, 2)?;
+                let first = args[0].sort();
+                if (first != Sort::int() && first != Sort::real()) || args[1].sort() != first {
+                    return Err(ParserError::TypeError);
+                }
+            }
+            Operator::Eq => {
+                Parser::expect_num_of_args(&args, 2)?;
+                if args[0].sort() != args[1].sort() {
+                    return Err(ParserError::TypeError);
+                }
+            }
+            Operator::Or | Operator::And => {
+                Parser::expect_num_of_args(&args, 2)?;
+                if args.iter().any(|a| a.sort() != Sort::bool()) {
+                    return Err(ParserError::TypeError);
+                }
+            }
+            Operator::Not => {
+                Parser::expect_num_of_args(&args, 1)?;
+                if args[0].sort() != Sort::bool() {
+                    return Err(ParserError::TypeError);
+                }
+            }
         }
+        let args = args.into_iter().map(|arg| self.add_term(arg)).collect();
+        Ok(Term::Op(op, args))
     }
 
     fn parse_sequence<T, F>(&mut self, parse_func: F, non_empty: bool) -> ParserResult<Vec<T>>
@@ -127,26 +148,13 @@ impl<R: BufRead> Parser<R> {
 
     fn parse_application(&mut self) -> ParserResult<Term> {
         match self.current_token {
-            Token::ReservedWord(reserved) => match reserved {
-                Reserved::Plus | Reserved::Minus | Reserved::Asterisk | Reserved::Slash => {
-                    self.next_token()?;
-                    self.parse_arithmetic_op(reserved)
-                }
-                _ => todo!(),
-            },
+            Token::ReservedWord(Reserved::Op(operator)) => {
+                self.next_token()?;
+                let args = self.parse_sequence(Self::parse_term, true)?;
+                self.make_op(operator, args)
+            }
             _ => todo!(),
         }
-    }
-    fn parse_arithmetic_op(&mut self, operator: Reserved) -> ParserResult<Term> {
-        let operator = match operator {
-            Reserved::Plus => Operator::Add,
-            Reserved::Minus => Operator::Sub,
-            Reserved::Asterisk => Operator::Mult,
-            Reserved::Slash => Operator::Div,
-            _ => unreachable!(),
-        };
-        let args = self.parse_sequence(Self::parse_term, true)?;
-        self.make_arithmetic_op(operator, args)
     }
 }
 
@@ -193,34 +201,6 @@ mod tests {
     }
 
     #[test]
-    fn test_constant_terms() {
-        assert_eq!(terminal!(int 42), parse_term("42"));
-        assert_eq!(terminal!(real 3 / 2), parse_term("1.5"));
-        assert_eq!(terminal!(string "foo"), parse_term("\"foo\""));
-    }
-
-    #[test]
-    fn test_identifier_terms() {
-        assert_eq!(terminal!(var "foo"), parse_term("foo"));
-    }
-
-    #[test]
-    fn test_arithmetic_ops() {
-        assert_eq!(
-            Term::Op(
-                Operator::Add,
-                vec![Rc::new(terminal!(int 2)), Rc::new(terminal!(int 3))]
-            ),
-            parse_term("(+ 2 3)")
-        );
-
-        assert_eq!(
-            ParserError::TypeError,
-            parse_term_err("(+ (- 1 2) (* 3.0 4.2))")
-        );
-    }
-
-    #[test]
     fn test_hash_consing() {
         let input = "(-
             (-
@@ -252,5 +232,71 @@ mod tests {
         for e in &expected {
             assert!(parser.terms_map.contains_key(e))
         }
+    }
+
+    #[test]
+    fn test_constant_terms() {
+        assert_eq!(terminal!(int 42), parse_term("42"));
+        assert_eq!(terminal!(real 3 / 2), parse_term("1.5"));
+        assert_eq!(terminal!(string "foo"), parse_term("\"foo\""));
+    }
+
+    #[test]
+    fn test_identifier_terms() {
+        assert_eq!(terminal!(var "foo"), parse_term("foo"));
+    }
+
+    #[test]
+    fn test_arithmetic_ops() {
+        assert_eq!(
+            Term::Op(
+                Operator::Add,
+                vec![Rc::new(terminal!(int 2)), Rc::new(terminal!(int 3))]
+            ),
+            parse_term("(+ 2 3)"),
+        );
+
+        assert_eq!(
+            ParserError::TypeError,
+            parse_term_err("(+ (- 1 2) (* 3.0 4.2))"),
+        );
+    }
+
+    #[test]
+    fn test_logic_ops() {
+        assert_eq!(
+            Term::Op(
+                Operator::And,
+                vec![
+                    Rc::new(terminal!(var "true")),
+                    Rc::new(terminal!(var "false")),
+                ]
+            ),
+            parse_term("(and true false)"),
+        );
+
+        assert_eq!(
+            Term::Op(
+                Operator::Eq,
+                vec![Rc::new(terminal!(int 2)), Rc::new(terminal!(int 3))]
+            ),
+            parse_term("(= 2 3)"),
+        );
+
+        assert_eq!(
+            Term::Op(Operator::Not, vec![Rc::new(terminal!(var "false"))]),
+            parse_term("(not false)"),
+        );
+
+        assert_eq!(ParserError::TypeError, parse_term_err("(or true 1.2)"));
+        assert_eq!(ParserError::TypeError, parse_term_err("(= 10 10.0)"));
+        assert_eq!(
+            ParserError::WrongNumberOfArgs(1, 3),
+            parse_term_err("(not 1 2 3)"),
+        );
+        assert_eq!(
+            ParserError::WrongNumberOfArgs(2, 1),
+            parse_term_err("(or true)"),
+        );
     }
 }

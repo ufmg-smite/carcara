@@ -1,7 +1,7 @@
 use num_rational::Ratio;
 use std::rc::Rc;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Operator {
     // Arithmetic
     Add,
@@ -31,6 +31,9 @@ impl Term {
                 Terminal::Integer(_) => Sort::int(),
                 Terminal::Real(_) => Sort::real(),
                 Terminal::String(_) => Sort::string(),
+                Terminal::Var(Identifier::Simple(iden)) if iden == "true" || iden == "false" => {
+                    Sort::bool()
+                }
                 _ => todo!(),
             },
             Term::Op(op, args) => match op {
