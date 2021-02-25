@@ -19,20 +19,19 @@ pub enum Token {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Reserved {
-    Underscore,   // _
-    Bang,         // !
-    As,           // as
-    Let,          // let
-    Exists,       // exists
-    Forall,       // forall
-    Match,        // match
-    Choice,       // choice
-    Op(Operator), // Operators
-    Cl,           // cl
-    Assume,       // assume
-    Step,         // step
-    Anchor,       // anchor
-    DefineFun,    // define-fun
+    Underscore, // _
+    Bang,       // !
+    As,         // as
+    Let,        // let
+    Exists,     // exists
+    Forall,     // forall
+    Match,      // match
+    Choice,     // choice
+    Cl,         // cl
+    Assume,     // assume
+    Step,       // step
+    Anchor,     // anchor
+    DefineFun,  // define-fun
 }
 
 pub struct Lexer<R> {
@@ -245,14 +244,6 @@ impl Lexer<()> {
             "forall" => Some(Reserved::Forall),
             "match" => Some(Reserved::Match),
             "choice" => Some(Reserved::Choice),
-            "+" => Some(Reserved::Op(Operator::Add)),
-            "-" => Some(Reserved::Op(Operator::Sub)),
-            "*" => Some(Reserved::Op(Operator::Mult)),
-            "/" => Some(Reserved::Op(Operator::Div)),
-            "=" => Some(Reserved::Op(Operator::Eq)),
-            "or" => Some(Reserved::Op(Operator::Or)),
-            "and" => Some(Reserved::Op(Operator::And)),
-            "not" => Some(Reserved::Op(Operator::Not)),
             "cl" => Some(Reserved::Cl),
             "assume" => Some(Reserved::Assume),
             "step" => Some(Reserved::Step),

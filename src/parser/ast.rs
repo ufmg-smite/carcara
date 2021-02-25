@@ -1,5 +1,6 @@
 use num_rational::Ratio;
 use std::rc::Rc;
+use std::str::FromStr;
 
 #[derive(Debug)]
 pub struct Proof(pub Vec<ProofCommand>);
@@ -41,6 +42,24 @@ pub enum Operator {
     Or,
     And,
     Not,
+}
+
+impl FromStr for Operator {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "+" => Ok(Operator::Add),
+            "-" => Ok(Operator::Sub),
+            "*" => Ok(Operator::Mult),
+            "/" => Ok(Operator::Div),
+            "=" => Ok(Operator::Eq),
+            "or" => Ok(Operator::Or),
+            "and" => Ok(Operator::And),
+            "not" => Ok(Operator::Not),
+            _ => Err(()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

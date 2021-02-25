@@ -6,6 +6,7 @@ use lexer::*;
 use std::collections::{hash_map::Entry, HashMap};
 use std::io::{self, BufRead};
 use std::rc::Rc;
+use std::str::FromStr;
 
 #[derive(Debug, PartialEq)]
 pub enum ParserError {
@@ -247,10 +248,14 @@ impl<R: BufRead> Parser<R> {
 
     fn parse_application(&mut self) -> ParserResult<Term> {
         match self.current_token {
-            Token::ReservedWord(Reserved::Op(operator)) => {
-                self.next_token()?;
-                let args = self.parse_sequence(Self::parse_term, true)?;
-                self.make_op(operator, args)
+            Token::Symbol(ref s) => {
+                if let Ok(operator) = Operator::from_str(s) {
+                    self.next_token()?;
+                    let args = self.parse_sequence(Self::parse_term, true)?;
+                    self.make_op(operator, args)
+                } else {
+                    todo!()
+                }
             }
             _ => todo!(),
         }
