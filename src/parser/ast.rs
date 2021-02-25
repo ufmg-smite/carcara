@@ -33,6 +33,10 @@ impl Term {
                 Terminal::String(_) => Sort::string(),
                 _ => todo!(),
             },
+            Term::Op(op, args) => match op {
+                Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => args[0].sort(),
+                Operator::Eq | Operator::Or | Operator::And | Operator::Not => Sort::bool(),
+            },
             _ => todo!(),
         }
     }

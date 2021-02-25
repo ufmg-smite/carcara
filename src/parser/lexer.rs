@@ -16,7 +16,7 @@ pub enum Token {
     Eof,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Reserved {
     Underscore, // _
     Bang,       // !
@@ -26,6 +26,10 @@ pub enum Reserved {
     Forall,     // forall
     Match,      // match
     Choice,     // choice
+    Plus,       // +
+    Minus,      // -
+    Asterisk,   // *
+    Slash,      // /
 }
 
 pub struct Lexer<R> {
@@ -238,6 +242,10 @@ impl Lexer<()> {
             "forall" => Some(Reserved::Forall),
             "match" => Some(Reserved::Match),
             "choice" => Some(Reserved::Choice),
+            "+" => Some(Reserved::Plus),
+            "-" => Some(Reserved::Minus),
+            "*" => Some(Reserved::Asterisk),
+            "/" => Some(Reserved::Slash),
             _ => None,
         }
     }
