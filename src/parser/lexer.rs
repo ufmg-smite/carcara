@@ -2,7 +2,6 @@ use num_rational::Ratio;
 use std::io::{self, BufRead};
 use std::str::FromStr;
 
-use super::ast::Operator;
 use super::ParserError;
 
 #[derive(Debug, PartialEq, Eq)]

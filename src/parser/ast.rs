@@ -21,8 +21,8 @@ pub enum ProofCommand {
     },
     DefineFun {
         name: String,
-        args: Vec<(String, Sort)>,
-        return_sort: Sort,
+        args: Vec<(String, Term)>,
+        return_sort: Term,
     },
 }
 
@@ -63,39 +63,39 @@ impl FromStr for Operator {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum SortKind {
+    Function,
+    Atom,
+    Bool,
+    Int,
+    Real,
+    String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Term {
     Terminal(Terminal),
     App(Rc<Term>, Vec<Rc<Term>>),
     Op(Operator, Vec<Rc<Term>>),
+    Sort(SortKind, Vec<Rc<Term>>),
     // TODO: binders
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Sort(Term);
-
-macro_rules! sort_from_iden {
-    ($iden:expr) => {
-        Sort(Term::Terminal(Terminal::Var(Identifier::Simple(
-            $iden.into(),
-        ))))
-    };
-}
-
-impl Sort {
+impl Term {
     pub fn bool() -> Self {
-        sort_from_iden!("Bool")
+        Term::Sort(SortKind::Bool, Vec::new())
     }
 
     pub fn int() -> Self {
-        sort_from_iden!("Int")
+        Term::Sort(SortKind::Int, Vec::new())
     }
 
     pub fn real() -> Self {
-        sort_from_iden!("Real")
+        Term::Sort(SortKind::Real, Vec::new())
     }
 
     pub fn string() -> Self {
-        sort_from_iden!("String")
+        Term::Sort(SortKind::String, Vec::new())
     }
 }
 
