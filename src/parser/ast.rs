@@ -19,11 +19,12 @@ pub enum ProofCommand {
         step: String,
         args: Vec<Rc<Term>>,
     },
-    DefineFun {
-        name: String,
-        args: Vec<(String, Term)>,
-        return_sort: Term,
-    },
+}
+
+pub struct FunctionDef {
+    pub args: Vec<(String, Rc<Term>)>,
+    pub return_sort: Term,
+    pub body: Term,
 }
 
 #[derive(Debug)]

@@ -43,10 +43,16 @@ impl PartialEq for ParserIoError {
 
 type ParserResult<T> = Result<T, ParserError>;
 
+#[derive(Default)]
+pub struct ParserState {
+    function_defs: HashMap<String, FunctionDef>,
+    terms_map: HashMap<Term, Rc<Term>>,
+}
+
 pub struct Parser<R> {
     lexer: Lexer<R>,
     current_token: Token,
-    terms_map: HashMap<Term, Rc<Term>>,
+    state: ParserState,
     symbol_table: HashMap<Identifier, Term>,
 }
 
@@ -57,7 +63,7 @@ impl<R: BufRead> Parser<R> {
         Ok(Parser {
             lexer,
             current_token,
-            terms_map: HashMap::new(),
+            state: Default::default(),
             symbol_table: Parser::new_symbol_table(),
         })
     }
@@ -84,7 +90,7 @@ impl<R: BufRead> Parser<R> {
     }
 
     fn add_term(&mut self, term: Term) -> Rc<Term> {
-        match self.terms_map.entry(term.clone()) {
+        match self.state.terms_map.entry(term.clone()) {
             Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
             Entry::Vacant(vacant_entry) => vacant_entry.insert(Rc::new(term)).clone(),
         }
@@ -163,56 +169,78 @@ impl<R: BufRead> Parser<R> {
     pub fn parse_proof(&mut self) -> ParserResult<Proof> {
         let mut commands = Vec::new();
         while self.current_token != Token::Eof {
-            commands.push(self.parse_proof_command()?);
+            self.expect_token(Token::OpenParen)?;
+            let command = match self.next_token()? {
+                Token::ReservedWord(Reserved::Assume) => self.parse_assume_command(),
+                Token::ReservedWord(Reserved::Step) => self.parse_step_command(),
+                Token::ReservedWord(Reserved::DefineFun) => {
+                    let (name, func_def) = self.parse_function_def()?;
+                    self.state.function_defs.insert(name, func_def);
+                    continue;
+                }
+                Token::ReservedWord(Reserved::Anchor) => todo!(),
+                other => Err(ParserError::UnexpectedToken(other)),
+            };
+            commands.push(command?);
         }
         Ok(Proof(commands))
     }
 
-    pub fn parse_proof_command(&mut self) -> ParserResult<ProofCommand> {
+    fn parse_assume_command(&mut self) -> ParserResult<ProofCommand> {
+        let symbol = self.expect_symbol()?;
+        let term = self.parse_term()?;
+        let term = self.add_term(term);
+        self.expect_token(Token::CloseParen)?;
+        Ok(ProofCommand::Assume(symbol, term))
+    }
+
+    fn parse_step_command(&mut self) -> ParserResult<ProofCommand> {
+        let step_name = self.expect_symbol()?;
+        let clause = self.parse_clause()?;
+        self.expect_token(Token::Keyword("rule".into()))?;
+        let rule = self.expect_symbol()?;
+
+        let premises = if self.current_token == Token::Keyword("premises".into()) {
+            self.next_token()?;
+            self.expect_token(Token::OpenParen)?;
+            self.parse_sequence(Self::expect_symbol, true)?
+        } else {
+            Vec::new()
+        };
+
+        let args = if self.current_token == Token::Keyword("args".into()) {
+            self.next_token()?;
+            self.parse_proof_args()?
+        } else {
+            Vec::new()
+        };
+
+        self.expect_token(Token::CloseParen)?;
+
+        Ok(ProofCommand::Step {
+            step_name,
+            clause,
+            rule,
+            premises,
+            args,
+        })
+    }
+
+    fn parse_function_def(&mut self) -> ParserResult<(String, FunctionDef)> {
+        let name = self.expect_symbol()?;
         self.expect_token(Token::OpenParen)?;
-        match self.next_token()? {
-            Token::ReservedWord(Reserved::Assume) => {
-                let symbol = self.expect_symbol()?;
-                let term = self.parse_term()?;
-                let term = self.add_term(term);
-                self.expect_token(Token::CloseParen)?;
-                Ok(ProofCommand::Assume(symbol, term))
-            }
-            Token::ReservedWord(Reserved::Step) => {
-                let step_name = self.expect_symbol()?;
-                let clause = self.parse_clause()?;
-                self.expect_token(Token::Keyword("rule".into()))?;
-                let rule = self.expect_symbol()?;
-
-                let premises = if self.current_token == Token::Keyword("premises".into()) {
-                    self.next_token()?;
-                    self.expect_token(Token::OpenParen)?;
-                    self.parse_sequence(Self::expect_symbol, true)?
-                } else {
-                    Vec::new()
-                };
-
-                let args = if self.current_token == Token::Keyword("args".into()) {
-                    self.next_token()?;
-                    self.parse_proof_args()?
-                } else {
-                    Vec::new()
-                };
-
-                self.expect_token(Token::CloseParen)?;
-
-                Ok(ProofCommand::Step {
-                    step_name,
-                    clause,
-                    rule,
-                    premises,
-                    args,
-                })
-            }
-            Token::ReservedWord(Reserved::Anchor) => todo!(),
-            Token::ReservedWord(Reserved::DefineFun) => todo!(),
-            other => Err(ParserError::UnexpectedToken(other)),
-        }
+        let args = self.parse_sequence(Self::parse_sorted_var, false)?;
+        let return_sort = self.parse_sort()?;
+        let body = self.parse_term()?;
+        self.expect_token(Token::CloseParen)?;
+        Ok((
+            name,
+            FunctionDef {
+                args,
+                return_sort,
+                body,
+            },
+        ))
     }
 
     fn parse_clause(&mut self) -> ParserResult<Clause> {
@@ -233,6 +261,14 @@ impl<R: BufRead> Parser<R> {
             .into_iter()
             .map(|term| self.add_term(term))
             .collect())
+    }
+
+    fn parse_sorted_var(&mut self) -> ParserResult<(String, Rc<Term>)> {
+        self.expect_token(Token::OpenParen)?;
+        let symbol = self.expect_symbol()?;
+        let sort = self.parse_sort()?;
+        self.expect_token(Token::CloseParen)?;
+        Ok((symbol, self.add_term(sort)))
     }
 
     pub fn parse_term(&mut self) -> ParserResult<Term> {
@@ -258,6 +294,20 @@ impl<R: BufRead> Parser<R> {
                 }
             }
             _ => todo!(),
+        }
+    }
+
+    fn parse_sort(&mut self) -> ParserResult<Term> {
+        // TODO: since every sort is a valid term, maybe use `parse_term` to parse sorts
+        match self.next_token()? {
+            Token::Symbol(s) => match s.as_ref() {
+                "Bool" => Ok(Term::bool()),
+                "Int" => Ok(Term::int()),
+                "Real" => Ok(Term::real()),
+                "String" => Ok(Term::string()),
+                _ => todo!(),
+            },
+            other => Err(ParserError::UnexpectedToken(other)),
         }
     }
 }
@@ -332,7 +382,7 @@ mod tests {
         //   (- (+ 1 2) (/ ...))
         //   (* 2 2)
         // Note that the outer term (- (- ...) (* 2 2)) is not added to the hash map
-        assert_eq!(parser.terms_map.len(), 6);
+        assert_eq!(parser.state.terms_map.len(), 6);
         let expected = [
             terminal!(int 1),
             terminal!(int 2),
@@ -342,7 +392,7 @@ mod tests {
             parse_term("(* 2 2)"),
         ];
         for e in &expected {
-            assert!(parser.terms_map.contains_key(e))
+            assert!(parser.state.terms_map.contains_key(e))
         }
     }
 
