@@ -53,19 +53,30 @@ pub struct Parser<R> {
     lexer: Lexer<R>,
     current_token: Token,
     state: ParserState,
-    symbol_table: HashMap<Identifier, Term>,
+    symbol_table: HashMap<Identifier, Rc<Term>>,
 }
 
 impl<R: BufRead> Parser<R> {
     pub fn new(input: R) -> ParserResult<Self> {
         let mut lexer = Lexer::new(input)?;
         let current_token = lexer.next_token()?;
-        Ok(Parser {
+        let mut parser = Parser {
             lexer,
             current_token,
             state: Default::default(),
-            symbol_table: Parser::new_symbol_table(),
-        })
+            symbol_table: Default::default(),
+        };
+        parser.add_builtins();
+        Ok(parser)
+    }
+
+    fn add_builtins(&mut self) {
+        let builtins = vec![("true", Term::bool()), ("false", Term::bool())];
+        for (iden, sort) in builtins {
+            let iden = Identifier::Simple(iden.into());
+            let sort = self.add_term(sort);
+            self.symbol_table.insert(iden, sort);
+        }
     }
 
     fn next_token(&mut self) -> ParserResult<Token> {
@@ -102,7 +113,7 @@ impl<R: BufRead> Parser<R> {
                 Terminal::Integer(_) => Some(Term::int()),
                 Terminal::Real(_) => Some(Term::real()),
                 Terminal::String(_) => Some(Term::string()),
-                Terminal::Var(iden) => self.symbol_table.get(iden).cloned(),
+                Terminal::Var(iden) => self.symbol_table.get(iden).map(|t| (**t).clone()),
             },
             Term::Op(op, args) => match op {
                 Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => {
@@ -173,8 +184,14 @@ impl<R: BufRead> Parser<R> {
             let command = match self.next_token()? {
                 Token::ReservedWord(Reserved::Assume) => self.parse_assume_command(),
                 Token::ReservedWord(Reserved::Step) => self.parse_step_command(),
+                Token::ReservedWord(Reserved::DeclareFun) => {
+                    let (name, sort) = self.parse_declare_fun()?;
+                    self.symbol_table.insert(Identifier::Simple(name), sort);
+                    continue;
+                }
+                Token::ReservedWord(Reserved::DeclareSort) => todo!(),
                 Token::ReservedWord(Reserved::DefineFun) => {
-                    let (name, func_def) = self.parse_function_def()?;
+                    let (name, func_def) = self.parse_define_fun()?;
                     self.state.function_defs.insert(name, func_def);
                     continue;
                 }
@@ -226,7 +243,24 @@ impl<R: BufRead> Parser<R> {
         })
     }
 
-    fn parse_function_def(&mut self) -> ParserResult<(String, FunctionDef)> {
+    fn parse_declare_fun(&mut self) -> ParserResult<(String, Rc<Term>)> {
+        let name = self.expect_symbol()?;
+        let sort = {
+            self.expect_token(Token::OpenParen)?;
+            let mut sorts = self.parse_sequence(Self::parse_sort, false)?;
+            sorts.push(self.parse_sort()?);
+            let sorts: Vec<_> = sorts.into_iter().map(|term| self.add_term(term)).collect();
+            if sorts.len() == 1 {
+                sorts.into_iter().next().unwrap()
+            } else {
+                self.add_term(Term::Sort(SortKind::Function, sorts))
+            }
+        };
+        self.expect_token(Token::CloseParen)?;
+        Ok((name, sort))
+    }
+
+    fn parse_define_fun(&mut self) -> ParserResult<(String, FunctionDef)> {
         let name = self.expect_symbol()?;
         self.expect_token(Token::OpenParen)?;
         let args = self.parse_sequence(Self::parse_sorted_var, false)?;
@@ -321,14 +355,6 @@ impl Parser<()> {
             Ok(())
         }
     }
-
-    fn new_symbol_table() -> HashMap<Identifier, Term> {
-        let builtins = vec![("true", Term::bool()), ("false", Term::bool())];
-        builtins
-            .into_iter()
-            .map(|(iden, sort)| (Identifier::Simple(iden.into()), sort))
-            .collect()
-    }
 }
 
 #[cfg(test)]
@@ -382,7 +408,6 @@ mod tests {
         //   (- (+ 1 2) (/ ...))
         //   (* 2 2)
         // Note that the outer term (- (- ...) (* 2 2)) is not added to the hash map
-        assert_eq!(parser.state.terms_map.len(), 6);
         let expected = [
             terminal!(int 1),
             terminal!(int 2),

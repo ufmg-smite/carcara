@@ -19,19 +19,21 @@ pub enum Token {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Reserved {
-    Underscore, // _
-    Bang,       // !
-    As,         // as
-    Let,        // let
-    Exists,     // exists
-    Forall,     // forall
-    Match,      // match
-    Choice,     // choice
-    Cl,         // cl
-    Assume,     // assume
-    Step,       // step
-    Anchor,     // anchor
-    DefineFun,  // define-fun
+    Underscore,  // _
+    Bang,        // !
+    As,          // as
+    Let,         // let
+    Exists,      // exists
+    Forall,      // forall
+    Match,       // match
+    Choice,      // choice
+    Cl,          // cl
+    Assume,      // assume
+    Step,        // step
+    Anchor,      // anchor
+    DeclareFun,  // declare-fun
+    DeclareSort, // declare-sort
+    DefineFun,   // define-fun
 }
 
 impl FromStr for Reserved {
@@ -51,6 +53,8 @@ impl FromStr for Reserved {
             "assume" => Ok(Reserved::Assume),
             "step" => Ok(Reserved::Step),
             "anchor" => Ok(Reserved::Anchor),
+            "declare-fun" => Ok(Reserved::DeclareFun),
+            "declare-sort" => Ok(Reserved::DeclareSort),
             "define-fun" => Ok(Reserved::DefineFun),
             _ => Err(()),
         }
