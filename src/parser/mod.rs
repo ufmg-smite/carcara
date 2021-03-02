@@ -42,7 +42,7 @@ impl PartialEq for ParserIoError {
     }
 }
 
-type ParserResult<T> = Result<T, ParserError>;
+pub type ParserResult<T> = Result<T, ParserError>;
 
 #[derive(Default)]
 pub struct ParserState {
