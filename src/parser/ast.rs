@@ -64,7 +64,7 @@ impl FromStr for Operator {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum SortKind {
+pub enum SortKind {
     Function,
     Atom,
     Bool,
@@ -76,7 +76,7 @@ enum SortKind {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Term {
     Terminal(Terminal),
-    App(Rc<Term>, Vec<Rc<Term>>),
+    App(Identifier, Vec<Rc<Term>>),
     Op(Operator, Vec<Rc<Term>>),
     Sort(SortKind, Vec<Rc<Term>>),
     // TODO: binders

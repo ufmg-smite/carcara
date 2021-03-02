@@ -21,7 +21,8 @@ pub enum ParserError {
     EofInString,
     UnexpectedToken(Token),
     EmptySequence,
-    TypeError,
+    TypeError, // TODO: Add more specific type errors
+    UndefinedIden(Identifier),
     WrongNumberOfArgs(usize, usize),
 }
 
@@ -121,6 +122,10 @@ impl<R: BufRead> Parser<R> {
                 }
                 Operator::Eq | Operator::Or | Operator::And | Operator::Not => Some(Term::bool()),
             },
+            Term::App(f, _) => match self.symbol_table.get(f)?.as_ref() {
+                Term::Sort(SortKind::Function, sorts) => Some((**sorts.last().unwrap()).clone()),
+                _ => unreachable!(),
+            },
             _ => todo!(),
         }
     }
@@ -159,6 +164,30 @@ impl<R: BufRead> Parser<R> {
         }
         let args = args.into_iter().map(|arg| self.add_term(arg)).collect();
         Ok(Term::Op(op, args))
+    }
+
+    fn make_app(&mut self, function: Identifier, args: Vec<Term>) -> ParserResult<Term> {
+        let sorts = {
+            let function_sort = self
+                .symbol_table
+                .get(&function)
+                .ok_or_else(|| ParserError::UndefinedIden(function.clone()))?;
+            if let Term::Sort(SortKind::Function, sorts) = function_sort.as_ref() {
+                sorts
+            } else {
+                // Function does not have function sort
+                return Err(ParserError::TypeError);
+            }
+        };
+        Parser::expect_num_of_args(&args, sorts.len() - 1)?;
+        for i in 0..args.len() {
+            match self.get_sort(&args[i]) {
+                Some(s) if &s == sorts[i].as_ref() => (),
+                _ => return Err(ParserError::TypeError),
+            }
+        }
+        let args: Vec<_> = args.into_iter().map(|term| self.add_term(term)).collect();
+        Ok(Term::App(function, args))
     }
 
     fn parse_sequence<T, F>(&mut self, parse_func: F, non_empty: bool) -> ParserResult<Vec<T>>
@@ -317,14 +346,15 @@ impl<R: BufRead> Parser<R> {
     }
 
     fn parse_application(&mut self) -> ParserResult<Term> {
-        match self.current_token {
-            Token::Symbol(ref s) => {
-                if let Ok(operator) = Operator::from_str(s) {
-                    self.next_token()?;
+        match self.next_token()? {
+            Token::Symbol(s) => {
+                if let Ok(operator) = Operator::from_str(&s) {
                     let args = self.parse_sequence(Self::parse_term, true)?;
                     self.make_op(operator, args)
                 } else {
-                    todo!()
+                    let iden = Identifier::Simple(s);
+                    let args = self.parse_sequence(Self::parse_term, true)?;
+                    self.make_app(iden, args)
                 }
             }
             _ => todo!(),
