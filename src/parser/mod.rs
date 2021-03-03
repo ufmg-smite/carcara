@@ -1,3 +1,5 @@
+//! A parser for the veriT Proof Format.
+
 pub mod ast;
 pub mod lexer;
 
@@ -8,6 +10,7 @@ use std::io::{self, BufRead};
 use std::rc::Rc;
 use std::str::FromStr;
 
+/// The error type for the parser and lexer.
 #[derive(Debug, PartialEq)]
 pub enum ParserError {
     Io(ParserIoError),
@@ -26,9 +29,24 @@ pub enum ParserError {
     WrongNumberOfArgs(usize, usize),
 }
 
+/// A `Result` type alias for parser errors.
+pub type ParserResult<T> = Result<T, ParserError>;
+
 impl From<io::Error> for ParserError {
     fn from(e: io::Error) -> Self {
         ParserError::Io(ParserIoError(e))
+    }
+}
+
+impl ParserError {
+    /// Returns an error if the length of `sequence` is not `expected`.
+    fn assert_num_of_args<T>(sequence: &[T], expected: usize) -> ParserResult<()> {
+        let got = sequence.len();
+        if got != expected {
+            Err(ParserError::WrongNumberOfArgs(expected, got))
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -42,14 +60,8 @@ impl PartialEq for ParserIoError {
     }
 }
 
-pub type ParserResult<T> = Result<T, ParserError>;
-
-#[derive(Default)]
-pub struct ParserState {
-    function_defs: HashMap<String, FunctionDef>,
-    terms_map: HashMap<Term, Rc<Term>>,
-}
-
+/// A parser for the veriT Proof Format. The parser makes use of hash consing to reduce memory usage
+/// by sharing identical terms in the AST.
 pub struct Parser<R> {
     lexer: Lexer<R>,
     current_token: Token,
@@ -57,7 +69,15 @@ pub struct Parser<R> {
     symbol_table: HashMap<Identifier, Rc<Term>>,
 }
 
+#[derive(Default)]
+struct ParserState {
+    function_defs: HashMap<String, FunctionDef>,
+    terms_map: HashMap<Term, Rc<Term>>,
+}
+
 impl<R: BufRead> Parser<R> {
+    /// Constructs a new `Parser` from a type that implements `BufRead`. This operation can fail if
+    /// there is an IO or lexer error on the first token.
     pub fn new(input: R) -> ParserResult<Self> {
         let mut lexer = Lexer::new(input)?;
         let current_token = lexer.next_token()?;
@@ -80,20 +100,24 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
+    /// Advances the parser one token, and returns the previous `current_token`.
     fn next_token(&mut self) -> ParserResult<Token> {
         let new = self.lexer.next_token()?;
         Ok(std::mem::replace(&mut self.current_token, new))
     }
 
-    fn expect_token(&mut self, expected: Token) -> ParserResult<Token> {
+    /// Consumes the current token if it equals `expected`. Returns an error otherwise.
+    fn expect_token(&mut self, expected: Token) -> ParserResult<()> {
         let got = self.next_token()?;
         if got == expected {
-            Ok(got)
+            Ok(())
         } else {
             Err(ParserError::UnexpectedToken(got))
         }
     }
 
+    /// Consumes the current token if it is a symbol, and returns the inner `String`. Returns an
+    /// error otherwise.
     fn expect_symbol(&mut self) -> ParserResult<String> {
         match self.next_token()? {
             Token::Symbol(s) => Ok(s),
@@ -101,6 +125,8 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
+    /// Takes a term and returns an `Rc` referencing it. If the term was not originally in the
+    /// terms hash map, it is added to it.
     fn add_term(&mut self, term: Term) -> Rc<Term> {
         match self.state.terms_map.entry(term.clone()) {
             Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
@@ -108,55 +134,68 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
-    fn get_sort(&self, term: &Term) -> Option<Term> {
+    /// Returns the sort of a term. For operations and application terms, this method assumes that
+    /// the arguments' sorts have already been checked, and are correct.
+    fn get_sort(&self, term: &Term) -> ParserResult<Term> {
         match term {
             Term::Terminal(t) => match t {
-                Terminal::Integer(_) => Some(Term::int()),
-                Terminal::Real(_) => Some(Term::real()),
-                Terminal::String(_) => Some(Term::string()),
-                Terminal::Var(iden) => self.symbol_table.get(iden).map(|t| (**t).clone()),
+                Terminal::Integer(_) => Ok(Term::int()),
+                Terminal::Real(_) => Ok(Term::real()),
+                Terminal::String(_) => Ok(Term::string()),
+                Terminal::Var(iden) => self
+                    .symbol_table
+                    .get(iden)
+                    .ok_or_else(|| ParserError::UndefinedIden(iden.clone()))
+                    .map(|t| (**t).clone()),
             },
             Term::Op(op, args) => match op {
                 Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => {
                     self.get_sort(args[0].as_ref())
                 }
-                Operator::Eq | Operator::Or | Operator::And | Operator::Not => Some(Term::bool()),
+                Operator::Eq | Operator::Or | Operator::And | Operator::Not => Ok(Term::bool()),
             },
-            Term::App(f, _) => match self.symbol_table.get(f)?.as_ref() {
-                Term::Sort(SortKind::Function, sorts) => Some((**sorts.last().unwrap()).clone()),
-                _ => unreachable!(),
-            },
+            Term::App(f, _) => {
+                let function_sort = self
+                    .symbol_table
+                    .get(f)
+                    .ok_or_else(|| ParserError::UndefinedIden(f.clone()))?
+                    .as_ref();
+                match function_sort {
+                    Term::Sort(SortKind::Function, sorts) => Ok((**sorts.last().unwrap()).clone()),
+                    _ => unreachable!(),
+                }
+            }
             _ => todo!(),
         }
     }
 
+    /// Constructs and sort checks an operation term.
     fn make_op(&mut self, op: Operator, args: Vec<Term>) -> ParserResult<Term> {
         let sorts: Vec<_> = args
             .iter()
             .map(|term| self.get_sort(term))
-            .collect::<Option<_>>()
-            .ok_or(ParserError::TypeError)?;
+            .collect::<Result<_, _>>()?;
         match op {
             Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => {
-                Parser::expect_num_of_args(&args, 2)?;
+                ParserError::assert_num_of_args(&args, 2)?;
                 if (sorts[0] != Term::int() && sorts[0] != Term::real()) || sorts[0] != sorts[1] {
                     return Err(ParserError::TypeError);
                 }
             }
             Operator::Eq => {
-                Parser::expect_num_of_args(&args, 2)?;
+                ParserError::assert_num_of_args(&args, 2)?;
                 if sorts[0] != sorts[1] {
                     return Err(ParserError::TypeError);
                 }
             }
             Operator::Or | Operator::And => {
-                Parser::expect_num_of_args(&args, 2)?;
+                ParserError::assert_num_of_args(&args, 2)?;
                 if sorts.iter().any(|s| s != &Term::bool()) {
                     return Err(ParserError::TypeError);
                 }
             }
             Operator::Not => {
-                Parser::expect_num_of_args(&args, 1)?;
+                ParserError::assert_num_of_args(&args, 1)?;
                 if sorts[0] != Term::bool() {
                     return Err(ParserError::TypeError);
                 }
@@ -166,6 +205,7 @@ impl<R: BufRead> Parser<R> {
         Ok(Term::Op(op, args))
     }
 
+    /// Constructs and sort checks an application term.
     fn make_app(&mut self, function: Identifier, args: Vec<Term>) -> ParserResult<Term> {
         let sorts = {
             let function_sort = self
@@ -179,17 +219,18 @@ impl<R: BufRead> Parser<R> {
                 return Err(ParserError::TypeError);
             }
         };
-        Parser::expect_num_of_args(&args, sorts.len() - 1)?;
+        ParserError::assert_num_of_args(&args, sorts.len() - 1)?;
         for i in 0..args.len() {
-            match self.get_sort(&args[i]) {
-                Some(s) if &s == sorts[i].as_ref() => (),
-                _ => return Err(ParserError::TypeError),
+            if &self.get_sort(&args[i])? != sorts[i].as_ref() {
+                return Err(ParserError::TypeError);
             }
         }
         let args: Vec<_> = args.into_iter().map(|term| self.add_term(term)).collect();
         Ok(Term::App(function, args))
     }
 
+    /// Calls `parse_func` repeatedly until a closing parenthesis is reached. If `non_empty` is
+    /// true, empty sequences will result in an error. This method consumes the ending ")" token.
     fn parse_sequence<T, F>(&mut self, parse_func: F, non_empty: bool) -> ParserResult<Vec<T>>
     where
         F: Fn(&mut Self) -> ParserResult<T>,
@@ -206,6 +247,7 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
+    /// Parses a proof.
     pub fn parse_proof(&mut self) -> ParserResult<Proof> {
         let mut commands = Vec::new();
         while self.current_token != Token::Eof {
@@ -232,6 +274,8 @@ impl<R: BufRead> Parser<R> {
         Ok(Proof(commands))
     }
 
+    /// Parses an "assume" proof command. This method assumes that the "(" and "assume" tokens were
+    /// already consumed.
     fn parse_assume_command(&mut self) -> ParserResult<ProofCommand> {
         let symbol = self.expect_symbol()?;
         let term = self.parse_term()?;
@@ -240,6 +284,8 @@ impl<R: BufRead> Parser<R> {
         Ok(ProofCommand::Assume(symbol, term))
     }
 
+    /// Parses a "step" proof command. This method assumes that the "(" and "step" tokens were
+    /// already consumed.
     fn parse_step_command(&mut self) -> ParserResult<ProofCommand> {
         let step_name = self.expect_symbol()?;
         let clause = self.parse_clause()?;
@@ -272,6 +318,8 @@ impl<R: BufRead> Parser<R> {
         })
     }
 
+    /// Parses a "declare-fun" proof command. Returns the function name and a term representing its
+    /// sort. This method assumes that the "(" and "declare-fun" tokens were already consumed.
     fn parse_declare_fun(&mut self) -> ParserResult<(String, Rc<Term>)> {
         let name = self.expect_symbol()?;
         let sort = {
@@ -289,6 +337,8 @@ impl<R: BufRead> Parser<R> {
         Ok((name, sort))
     }
 
+    /// Parses a "define-fun" proof command. Returns the function name and its definition. This
+    /// method assumes that the "(" and "define-fun" tokens were already consumed.
     fn parse_define_fun(&mut self) -> ParserResult<(String, FunctionDef)> {
         let name = self.expect_symbol()?;
         self.expect_token(Token::OpenParen)?;
@@ -306,7 +356,8 @@ impl<R: BufRead> Parser<R> {
         ))
     }
 
-    fn parse_clause(&mut self) -> ParserResult<Clause> {
+    /// Parses a clause of the form "(cl <term>*)".
+    fn parse_clause(&mut self) -> ParserResult<Vec<Rc<Term>>> {
         self.expect_token(Token::OpenParen)?;
         self.expect_token(Token::ReservedWord(Reserved::Cl))?;
         let terms = self
@@ -314,10 +365,11 @@ impl<R: BufRead> Parser<R> {
             .into_iter()
             .map(|term| self.add_term(term))
             .collect();
-        Ok(Clause(terms))
+        Ok(terms)
     }
 
     fn parse_proof_args(&mut self) -> ParserResult<Vec<Rc<Term>>> {
+        // TODO: parse args of the form "(<symbol> <term>)"
         self.expect_token(Token::OpenParen)?;
         Ok(self
             .parse_sequence(Self::parse_term, true)?
@@ -326,6 +378,7 @@ impl<R: BufRead> Parser<R> {
             .collect())
     }
 
+    /// Parses a sorted variable of the form "(<symbol> <sort>)".
     fn parse_sorted_var(&mut self) -> ParserResult<(String, Rc<Term>)> {
         self.expect_token(Token::OpenParen)?;
         let symbol = self.expect_symbol()?;
@@ -334,6 +387,7 @@ impl<R: BufRead> Parser<R> {
         Ok((symbol, self.add_term(sort)))
     }
 
+    /// Parses a term.
     pub fn parse_term(&mut self) -> ParserResult<Term> {
         match self.next_token()? {
             Token::Numeral(n) => Ok(Term::Terminal(Terminal::Integer(n))),
@@ -361,6 +415,7 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
+    /// Parses a sort.
     fn parse_sort(&mut self) -> ParserResult<Term> {
         // TODO: since every sort is a valid term, maybe use `parse_term` to parse sorts
         match self.next_token()? {
@@ -372,17 +427,6 @@ impl<R: BufRead> Parser<R> {
                 _ => todo!(),
             },
             other => Err(ParserError::UnexpectedToken(other)),
-        }
-    }
-}
-
-impl Parser<()> {
-    fn expect_num_of_args<T>(sequence: &[T], expected: usize) -> ParserResult<()> {
-        let got = sequence.len();
-        if got != expected {
-            Err(ParserError::WrongNumberOfArgs(expected, got))
-        } else {
-            Ok(())
         }
     }
 }

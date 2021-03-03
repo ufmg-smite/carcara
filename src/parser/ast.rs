@@ -1,34 +1,41 @@
+//! The abstract syntax tree (AST) for the veriT Proof Format.
+
 use num_rational::Ratio;
 use std::rc::Rc;
 use std::str::FromStr;
 
+/// A proof in the veriT Proof Format.
 #[derive(Debug)]
 pub struct Proof(pub Vec<ProofCommand>);
 
+/// A proof command.
 #[derive(Debug)]
 pub enum ProofCommand {
+    /// An "assume" command, of the form "(assume <symbol> <term>)".
     Assume(String, Rc<Term>),
+
+    /// A "step" command, of the form "(step <symbol> <clause> :rule <symbol> [:premises
+    /// (<symbol>+)]? [:args <proof_args>]?)".
     Step {
         step_name: String,
-        clause: Clause,
+        clause: Vec<Rc<Term>>,
         rule: String,
         premises: Vec<String>,
         args: Vec<Rc<Term>>,
     },
-    Anchor {
-        step: String,
-        args: Vec<Rc<Term>>,
-    },
+
+    /// An "anchor" command, of the form "(anchor :step <symbol> [:args <proof_args>]?)".
+    Anchor { step: String, args: Vec<Rc<Term>> },
 }
 
+/// A function definition. Functions are defined using the "function-def" command, of the form
+/// "(define-fun <symbol> (<sorted_var>*) <sort> <term>)". These definitions are substituted in
+/// during parsing, so these commands don't appear in the final AST.
 pub struct FunctionDef {
     pub args: Vec<(String, Rc<Term>)>,
     pub return_sort: Term,
     pub body: Term,
 }
-
-#[derive(Debug)]
-pub struct Clause(pub Vec<Rc<Term>>);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Operator {
@@ -75,26 +82,37 @@ pub enum SortKind {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Term {
+    /// A terminal. This can be a constant or a variable.
     Terminal(Terminal),
+
+    /// An application of a function to one or more terms.
     App(Identifier, Vec<Rc<Term>>),
+
+    /// An application of a bulit-in operator to one or more terms.
     Op(Operator, Vec<Rc<Term>>),
+
+    /// A sort.
     Sort(SortKind, Vec<Rc<Term>>),
     // TODO: binders
 }
 
 impl Term {
+    /// The "Bool" built-in sort.
     pub fn bool() -> Self {
         Term::Sort(SortKind::Bool, Vec::new())
     }
 
+    /// The "Int" built-in sort.
     pub fn int() -> Self {
         Term::Sort(SortKind::Int, Vec::new())
     }
 
+    /// The "Real" built-in sort.
     pub fn real() -> Self {
         Term::Sort(SortKind::Real, Vec::new())
     }
 
+    /// The "String" built-in sort.
     pub fn string() -> Self {
         Term::Sort(SortKind::String, Vec::new())
     }
