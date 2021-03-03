@@ -73,6 +73,7 @@ impl FromStr for Operator {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SortKind {
     Function,
+    UserDefined,
     Atom,
     Bool,
     Int,
@@ -124,6 +125,26 @@ pub enum Terminal {
     Real(Ratio<u64>),
     String(String),
     Var(Identifier),
+}
+
+/// Helper macro to construct `Terminal` terms.
+#[macro_export]
+macro_rules! terminal {
+    (int $e:expr) => {
+        Term::Terminal(Terminal::Integer($e))
+    };
+    (real $num:literal / $denom:literal) => {
+        Term::Terminal(Terminal::Real(num_rational::Ratio::new($num, $denom)))
+    };
+    (real $e:expr) => {
+        Term::Terminal(Terminal::Real($e))
+    };
+    (string $e:expr) => {
+        Term::Terminal(Terminal::String($e.into()))
+    };
+    (var $e:expr) => {
+        Term::Terminal(Terminal::Var(Identifier::Simple($e.into())))
+    };
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

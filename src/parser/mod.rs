@@ -3,6 +3,7 @@
 pub mod ast;
 pub mod lexer;
 
+use crate::terminal;
 use ast::*;
 use lexer::*;
 use std::collections::{hash_map::Entry, HashMap};
@@ -73,6 +74,7 @@ pub struct Parser<R> {
 struct ParserState {
     function_defs: HashMap<String, FunctionDef>,
     terms_map: HashMap<Term, Rc<Term>>,
+    sort_declarations: HashMap<String, u64>,
 }
 
 impl<R: BufRead> Parser<R> {
@@ -121,6 +123,13 @@ impl<R: BufRead> Parser<R> {
     fn expect_symbol(&mut self) -> ParserResult<String> {
         match self.next_token()? {
             Token::Symbol(s) => Ok(s),
+            other => Err(ParserError::UnexpectedToken(other)),
+        }
+    }
+
+    fn expect_numeral(&mut self) -> ParserResult<u64> {
+        match self.next_token()? {
+            Token::Numeral(n) => Ok(n),
             other => Err(ParserError::UnexpectedToken(other)),
         }
     }
@@ -260,7 +269,11 @@ impl<R: BufRead> Parser<R> {
                     self.symbol_table.insert(Identifier::Simple(name), sort);
                     continue;
                 }
-                Token::ReservedWord(Reserved::DeclareSort) => todo!(),
+                Token::ReservedWord(Reserved::DeclareSort) => {
+                    let (name, arity) = self.parse_declare_sort()?;
+                    self.state.sort_declarations.insert(name, arity);
+                    continue;
+                }
                 Token::ReservedWord(Reserved::DefineFun) => {
                     let (name, func_def) = self.parse_define_fun()?;
                     self.state.function_defs.insert(name, func_def);
@@ -337,6 +350,15 @@ impl<R: BufRead> Parser<R> {
         Ok((name, sort))
     }
 
+    /// Parses a declare-sort proof command. Returns the sort name and its arity. This method
+    /// assumes that the "(" and "declare-sort" tokens were already consumed.
+    fn parse_declare_sort(&mut self) -> ParserResult<(String, u64)> {
+        let name = self.expect_symbol()?;
+        let arity = self.expect_numeral()?;
+        self.expect_token(Token::CloseParen)?;
+        Ok((name, arity))
+    }
+
     /// Parses a "define-fun" proof command. Returns the function name and its definition. This
     /// method assumes that the "(" and "define-fun" tokens were already consumed.
     fn parse_define_fun(&mut self) -> ParserResult<(String, FunctionDef)> {
@@ -390,10 +412,10 @@ impl<R: BufRead> Parser<R> {
     /// Parses a term.
     pub fn parse_term(&mut self) -> ParserResult<Term> {
         match self.next_token()? {
-            Token::Numeral(n) => Ok(Term::Terminal(Terminal::Integer(n))),
-            Token::Decimal(r) => Ok(Term::Terminal(Terminal::Real(r))),
-            Token::String(s) => Ok(Term::Terminal(Terminal::String(s))),
-            Token::Symbol(s) => Ok(Term::Terminal(Terminal::Var(Identifier::Simple(s)))),
+            Token::Numeral(n) => Ok(terminal!(int n)),
+            Token::Decimal(r) => Ok(terminal!(real r)),
+            Token::String(s) => Ok(terminal!(string s)),
+            Token::Symbol(s) => Ok(terminal!(var s)),
             Token::OpenParen => self.parse_application(),
             other => Err(ParserError::UnexpectedToken(other)),
         }
@@ -424,7 +446,14 @@ impl<R: BufRead> Parser<R> {
                 "Int" => Ok(Term::int()),
                 "Real" => Ok(Term::real()),
                 "String" => Ok(Term::string()),
-                _ => todo!(),
+                other => {
+                    if self.state.sort_declarations.contains_key(other) {
+                        let arg = self.add_term(terminal!(var other));
+                        Ok(Term::Sort(SortKind::UserDefined, vec![arg]))
+                    } else {
+                        Err(ParserError::UndefinedIden(Identifier::Simple(other.into())))
+                    }
+                }
             },
             other => Err(ParserError::UnexpectedToken(other)),
         }
@@ -434,21 +463,6 @@ impl<R: BufRead> Parser<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    macro_rules! terminal {
-        (int $e:literal) => {
-            Term::Terminal(Terminal::Integer($e))
-        };
-        (real $num:literal / $denom:literal) => {
-            Term::Terminal(Terminal::Real(num_rational::Ratio::new($num, $denom)))
-        };
-        (string $e:literal) => {
-            Term::Terminal(Terminal::String($e.into()))
-        };
-        (var $e:literal) => {
-            Term::Terminal(Terminal::Var(Identifier::Simple($e.into())))
-        };
-    }
 
     fn parse_term(input: &str) -> Term {
         Parser::new(io::Cursor::new(input))
