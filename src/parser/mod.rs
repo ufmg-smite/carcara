@@ -1,65 +1,17 @@
 //! A parser for the veriT Proof Format.
 
 pub mod ast;
+pub mod error;
 pub mod lexer;
 
 use crate::terminal;
 use ast::*;
+use error::*;
 use lexer::*;
 use std::collections::{hash_map::Entry, HashMap};
-use std::io::{self, BufRead};
+use std::io::BufRead;
 use std::rc::Rc;
 use std::str::FromStr;
-
-/// The error type for the parser and lexer.
-#[derive(Debug, PartialEq)]
-pub enum ParserError {
-    Io(ParserIoError),
-    UnexpectedChar {
-        expected: &'static [char],
-        got: Option<char>,
-    },
-    LeadingZero(String),
-    BackslashInQuotedSymbol,
-    EofInQuotedSymbol,
-    EofInString,
-    UnexpectedToken(Token),
-    EmptySequence,
-    TypeError, // TODO: Add more specific type errors
-    UndefinedIden(Identifier),
-    WrongNumberOfArgs(usize, usize),
-}
-
-/// A `Result` type alias for parser errors.
-pub type ParserResult<T> = Result<T, ParserError>;
-
-impl From<io::Error> for ParserError {
-    fn from(e: io::Error) -> Self {
-        ParserError::Io(ParserIoError(e))
-    }
-}
-
-impl ParserError {
-    /// Returns an error if the length of `sequence` is not `expected`.
-    fn assert_num_of_args<T>(sequence: &[T], expected: usize) -> ParserResult<()> {
-        let got = sequence.len();
-        if got != expected {
-            Err(ParserError::WrongNumberOfArgs(expected, got))
-        } else {
-            Ok(())
-        }
-    }
-}
-
-/// A simple wrapper of io::Error so ParserError can derive PartialEq
-#[derive(Debug)]
-pub struct ParserIoError(io::Error);
-
-impl PartialEq for ParserIoError {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.kind() == other.0.kind()
-    }
-}
 
 /// A parser for the veriT Proof Format. The parser makes use of hash consing to reduce memory usage
 /// by sharing identical terms in the AST.
@@ -187,27 +139,22 @@ impl<R: BufRead> Parser<R> {
         match op {
             Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => {
                 ParserError::assert_num_of_args(&args, 2)?;
-                if (sorts[0] != Term::int() && sorts[0] != Term::real()) || sorts[0] != sorts[1] {
-                    return Err(ParserError::TypeError);
-                }
+                SortError::expect_one_of(&[Term::int(), Term::real()], &sorts[0])?;
+                SortError::expect_eq(&sorts[0], &sorts[1])?;
             }
             Operator::Eq => {
                 ParserError::assert_num_of_args(&args, 2)?;
-                if sorts[0] != sorts[1] {
-                    return Err(ParserError::TypeError);
-                }
+                SortError::expect_eq(&sorts[0], &sorts[1])?;
             }
             Operator::Or | Operator::And => {
                 ParserError::assert_num_of_args(&args, 2)?;
-                if sorts.iter().any(|s| s != &Term::bool()) {
-                    return Err(ParserError::TypeError);
+                for s in sorts {
+                    SortError::expect_eq(&Term::bool(), &s)?;
                 }
             }
             Operator::Not => {
                 ParserError::assert_num_of_args(&args, 1)?;
-                if sorts[0] != Term::bool() {
-                    return Err(ParserError::TypeError);
-                }
+                SortError::expect_eq(&Term::bool(), &sorts[0])?;
             }
         }
         let args = args.into_iter().map(|arg| self.add_term(arg)).collect();
@@ -225,14 +172,15 @@ impl<R: BufRead> Parser<R> {
                 sorts
             } else {
                 // Function does not have function sort
-                return Err(ParserError::TypeError);
+                return Err(ParserError::SortError(SortError::Expected {
+                    expected: Term::Sort(SortKind::Function, Vec::new()),
+                    got: function_sort.as_ref().clone(),
+                }));
             }
         };
         ParserError::assert_num_of_args(&args, sorts.len() - 1)?;
         for i in 0..args.len() {
-            if &self.get_sort(&args[i])? != sorts[i].as_ref() {
-                return Err(ParserError::TypeError);
-            }
+            SortError::expect_eq(sorts[i].as_ref(), &args[i])?;
         }
         let args: Vec<_> = args.into_iter().map(|term| self.add_term(term)).collect();
         Ok(Term::App(function, args))
@@ -292,9 +240,7 @@ impl<R: BufRead> Parser<R> {
     fn parse_assume_command(&mut self) -> ParserResult<ProofCommand> {
         let symbol = self.expect_symbol()?;
         let term = self.parse_term()?;
-        if self.get_sort(&term)? != Term::bool() {
-            return Err(ParserError::TypeError);
-        }
+        SortError::expect_eq(&Term::bool(), &self.get_sort(&term)?)?;
         let term = self.add_term(term);
         self.expect_token(Token::CloseParen)?;
         Ok(ProofCommand::Assume(symbol, term))
@@ -388,12 +334,9 @@ impl<R: BufRead> Parser<R> {
         let terms = self
             .parse_sequence(Self::parse_term, false)?
             .into_iter()
-            .map(|term| {
-                if self.get_sort(&term)? != Term::bool() {
-                    Err(ParserError::TypeError)
-                } else {
-                    Ok(self.add_term(term))
-                }
+            .map(|term| -> ParserResult<Rc<Term>> {
+                SortError::expect_eq(&Term::bool(), &self.get_sort(&term)?)?;
+                Ok(self.add_term(term))
             })
             .collect::<Result<_, _>>()?;
         Ok(terms)
@@ -472,6 +415,7 @@ impl<R: BufRead> Parser<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io;
 
     fn parse_term(input: &str) -> Term {
         Parser::new(io::Cursor::new(input))
@@ -540,10 +484,10 @@ mod tests {
             parse_term("(+ 2 3)"),
         );
 
-        assert_eq!(
-            ParserError::TypeError,
+        assert!(matches!(
             parse_term_err("(+ (- 1 2) (* 3.0 4.2))"),
-        );
+            ParserError::SortError(SortError::Expected { .. }),
+        ));
     }
 
     #[test]
@@ -572,8 +516,17 @@ mod tests {
             parse_term("(not false)"),
         );
 
-        assert_eq!(ParserError::TypeError, parse_term_err("(or true 1.2)"));
-        assert_eq!(ParserError::TypeError, parse_term_err("(= 10 10.0)"));
+        assert!(matches!(
+            parse_term_err("(or true 1.2)"),
+            ParserError::SortError(SortError::Expected {
+                expected: Term::Sort(SortKind::Bool, _),
+                ..
+            }),
+        ));
+        assert!(matches!(
+            parse_term_err("(= 10 10.0)"),
+            ParserError::SortError(SortError::Expected { .. }),
+        ));
         assert_eq!(
             ParserError::WrongNumberOfArgs(1, 3),
             parse_term_err("(not 1 2 3)"),

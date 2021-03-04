@@ -2,6 +2,7 @@ extern crate num_rational;
 
 mod parser;
 
+use error::*;
 use parser::*;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
