@@ -292,6 +292,9 @@ impl<R: BufRead> Parser<R> {
     fn parse_assume_command(&mut self) -> ParserResult<ProofCommand> {
         let symbol = self.expect_symbol()?;
         let term = self.parse_term()?;
+        if self.get_sort(&term)? != Term::bool() {
+            return Err(ParserError::TypeError);
+        }
         let term = self.add_term(term);
         self.expect_token(Token::CloseParen)?;
         Ok(ProofCommand::Assume(symbol, term))
@@ -385,8 +388,14 @@ impl<R: BufRead> Parser<R> {
         let terms = self
             .parse_sequence(Self::parse_term, false)?
             .into_iter()
-            .map(|term| self.add_term(term))
-            .collect();
+            .map(|term| {
+                if self.get_sort(&term)? != Term::bool() {
+                    Err(ParserError::TypeError)
+                } else {
+                    Ok(self.add_term(term))
+                }
+            })
+            .collect::<Result<_, _>>()?;
         Ok(terms)
     }
 
