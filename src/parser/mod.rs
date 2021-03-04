@@ -26,7 +26,7 @@ pub struct Parser<R> {
 struct ParserState {
     function_defs: HashMap<String, FunctionDef>,
     terms_map: HashMap<Term, Rc<Term>>,
-    sort_declarations: HashMap<String, u64>,
+    sort_declarations: HashMap<String, (u64, Rc<Term>)>,
 }
 
 impl<R: BufRead> Parser<R> {
@@ -95,47 +95,17 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
-    /// Returns the sort of a term. For operations and application terms, this method assumes that
-    /// the arguments' sorts have already been checked, and are correct.
-    fn get_sort(&self, term: &Term) -> ParserResult<Term> {
-        match term {
-            Term::Terminal(t) => match t {
-                Terminal::Integer(_) => Ok(Term::int()),
-                Terminal::Real(_) => Ok(Term::real()),
-                Terminal::String(_) => Ok(Term::string()),
-                Terminal::Var(iden) => self
-                    .symbol_table
-                    .get(iden)
-                    .ok_or_else(|| ParserError::UndefinedIden(iden.clone()))
-                    .map(|t| (**t).clone()),
-            },
-            Term::Op(op, args) => match op {
-                Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => {
-                    self.get_sort(args[0].as_ref())
-                }
-                Operator::Eq | Operator::Or | Operator::And | Operator::Not => Ok(Term::bool()),
-            },
-            Term::App(f, _) => {
-                let function_sort = self
-                    .symbol_table
-                    .get(f)
-                    .ok_or_else(|| ParserError::UndefinedIden(f.clone()))?
-                    .as_ref();
-                match function_sort {
-                    Term::Sort(SortKind::Function, sorts) => Ok((**sorts.last().unwrap()).clone()),
-                    _ => unreachable!(),
-                }
-            }
-            _ => todo!(),
-        }
+    fn make_var(&mut self, iden: Identifier) -> ParserResult<Term> {
+        let sort = self
+            .symbol_table
+            .get(&iden)
+            .ok_or_else(|| ParserError::UndefinedIden(iden.clone()))?;
+        Ok(Term::Terminal(Terminal::Var(iden, sort.clone())))
     }
 
     /// Constructs and sort checks an operation term.
     fn make_op(&mut self, op: Operator, args: Vec<Term>) -> ParserResult<Term> {
-        let sorts: Vec<_> = args
-            .iter()
-            .map(|term| self.get_sort(term))
-            .collect::<Result<_, _>>()?;
+        let sorts: Vec<_> = args.iter().map(Term::sort).collect();
         match op {
             Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => {
                 ParserError::assert_num_of_args(&args, 2)?;
@@ -162,19 +132,16 @@ impl<R: BufRead> Parser<R> {
     }
 
     /// Constructs and sort checks an application term.
-    fn make_app(&mut self, function: Identifier, args: Vec<Term>) -> ParserResult<Term> {
+    fn make_app(&mut self, function: Term, args: Vec<Term>) -> ParserResult<Term> {
         let sorts = {
-            let function_sort = self
-                .symbol_table
-                .get(&function)
-                .ok_or_else(|| ParserError::UndefinedIden(function.clone()))?;
-            if let Term::Sort(SortKind::Function, sorts) = function_sort.as_ref() {
+            let function_sort = function.sort();
+            if let Term::Sort(SortKind::Function, sorts) = function_sort {
                 sorts
             } else {
                 // Function does not have function sort
                 return Err(ParserError::SortError(SortError::Expected {
                     expected: Term::Sort(SortKind::Function, Vec::new()),
-                    got: function_sort.as_ref().clone(),
+                    got: function_sort,
                 }));
             }
         };
@@ -182,6 +149,7 @@ impl<R: BufRead> Parser<R> {
         for i in 0..args.len() {
             SortError::expect_eq(sorts[i].as_ref(), &args[i])?;
         }
+        let function = self.add_term(function);
         let args: Vec<_> = args.into_iter().map(|term| self.add_term(term)).collect();
         Ok(Term::App(function, args))
     }
@@ -219,7 +187,13 @@ impl<R: BufRead> Parser<R> {
                 }
                 Token::ReservedWord(Reserved::DeclareSort) => {
                     let (name, arity) = self.parse_declare_sort()?;
-                    self.state.sort_declarations.insert(name, arity);
+                    // User declared sorts are represented with the `UserDeclared` sort kind, and an
+                    // argument which is a string terminal representing the sort name.
+                    let sort = {
+                        let arg = self.add_term(terminal!(string name.clone()));
+                        self.add_term(Term::Sort(SortKind::UserDeclared, vec![arg]))
+                    };
+                    self.state.sort_declarations.insert(name, (arity, sort));
                     continue;
                 }
                 Token::ReservedWord(Reserved::DefineFun) => {
@@ -240,7 +214,7 @@ impl<R: BufRead> Parser<R> {
     fn parse_assume_command(&mut self) -> ParserResult<ProofCommand> {
         let symbol = self.expect_symbol()?;
         let term = self.parse_term()?;
-        SortError::expect_eq(&Term::bool(), &self.get_sort(&term)?)?;
+        SortError::expect_eq(&Term::bool(), &term.sort())?;
         let term = self.add_term(term);
         self.expect_token(Token::CloseParen)?;
         Ok(ProofCommand::Assume(symbol, term))
@@ -335,7 +309,7 @@ impl<R: BufRead> Parser<R> {
             .parse_sequence(Self::parse_term, false)?
             .into_iter()
             .map(|term| -> ParserResult<Rc<Term>> {
-                SortError::expect_eq(&Term::bool(), &self.get_sort(&term)?)?;
+                SortError::expect_eq(&Term::bool(), &term.sort())?;
                 Ok(self.add_term(term))
             })
             .collect::<Result<_, _>>()?;
@@ -367,7 +341,7 @@ impl<R: BufRead> Parser<R> {
             Token::Numeral(n) => Ok(terminal!(int n)),
             Token::Decimal(r) => Ok(terminal!(real r)),
             Token::String(s) => Ok(terminal!(string s)),
-            Token::Symbol(s) => Ok(terminal!(var s)),
+            Token::Symbol(s) => self.make_var(Identifier::Simple(s)),
             Token::OpenParen => self.parse_application(),
             other => Err(ParserError::UnexpectedToken(other)),
         }
@@ -380,9 +354,9 @@ impl<R: BufRead> Parser<R> {
                     let args = self.parse_sequence(Self::parse_term, true)?;
                     self.make_op(operator, args)
                 } else {
-                    let iden = Identifier::Simple(s);
+                    let func = self.make_var(Identifier::Simple(s))?;
                     let args = self.parse_sequence(Self::parse_term, true)?;
-                    self.make_app(iden, args)
+                    self.make_app(func, args)
                 }
             }
             _ => todo!(),
@@ -399,9 +373,8 @@ impl<R: BufRead> Parser<R> {
                 "Real" => Ok(Term::real()),
                 "String" => Ok(Term::string()),
                 other => {
-                    if self.state.sort_declarations.contains_key(other) {
-                        let arg = self.add_term(terminal!(var other));
-                        Ok(Term::Sort(SortKind::UserDefined, vec![arg]))
+                    if let Some((_, sort)) = self.state.sort_declarations.get(other) {
+                        Ok((**sort).clone())
                     } else {
                         Err(ParserError::UndefinedIden(Identifier::Simple(other.into())))
                     }
@@ -470,11 +443,6 @@ mod tests {
     }
 
     #[test]
-    fn test_identifier_terms() {
-        assert_eq!(terminal!(var "foo"), parse_term("foo"));
-    }
-
-    #[test]
     fn test_arithmetic_ops() {
         assert_eq!(
             Term::Op(
@@ -496,8 +464,8 @@ mod tests {
             Term::Op(
                 Operator::And,
                 vec![
-                    Rc::new(terminal!(var "true")),
-                    Rc::new(terminal!(var "false")),
+                    Rc::new(terminal!(var "true"; Rc::new(Term::bool()))),
+                    Rc::new(terminal!(var "false"; Rc::new(Term::bool()))),
                 ]
             ),
             parse_term("(and true false)"),
@@ -512,7 +480,10 @@ mod tests {
         );
 
         assert_eq!(
-            Term::Op(Operator::Not, vec![Rc::new(terminal!(var "false"))]),
+            Term::Op(
+                Operator::Not,
+                vec![Rc::new(terminal!(var "false"; Rc::new(Term::bool())))]
+            ),
             parse_term("(not false)"),
         );
 

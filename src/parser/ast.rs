@@ -73,8 +73,7 @@ impl FromStr for Operator {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SortKind {
     Function,
-    UserDefined,
-    Atom,
+    UserDeclared,
     Bool,
     Int,
     Real,
@@ -87,7 +86,7 @@ pub enum Term {
     Terminal(Terminal),
 
     /// An application of a function to one or more terms.
-    App(Identifier, Vec<Rc<Term>>),
+    App(Rc<Term>, Vec<Rc<Term>>),
 
     /// An application of a bulit-in operator to one or more terms.
     Op(Operator, Vec<Rc<Term>>),
@@ -117,6 +116,32 @@ impl Term {
     pub fn string() -> Self {
         Term::Sort(SortKind::String, Vec::new())
     }
+
+    /// Returns the sort of this term. For operations and application terms, this method assumes that
+    /// the arguments' sorts have already been checked, and are correct.
+    pub fn sort(&self) -> Term {
+        match self {
+            Term::Terminal(t) => match t {
+                Terminal::Integer(_) => Term::int(),
+                Terminal::Real(_) => Term::real(),
+                Terminal::String(_) => Term::string(),
+                Terminal::Var(_, sort) => sort.as_ref().clone(),
+            },
+            Term::Op(op, args) => match op {
+                Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => args[0].sort(),
+                Operator::Eq | Operator::Or | Operator::And | Operator::Not => Term::bool(),
+            },
+            Term::App(f, _) => {
+                let function_sort = f.sort();
+                if let Term::Sort(SortKind::Function, sorts) = function_sort {
+                    (**sorts.last().unwrap()).clone()
+                } else {
+                    unreachable!() // We assume that the function is correcly sorted
+                }
+            }
+            _ => todo!(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -124,7 +149,7 @@ pub enum Terminal {
     Integer(u64),
     Real(Ratio<u64>),
     String(String),
-    Var(Identifier),
+    Var(Identifier, Rc<Term>),
 }
 
 /// Helper macro to construct `Terminal` terms.
@@ -142,8 +167,8 @@ macro_rules! terminal {
     (string $e:expr) => {
         Term::Terminal(Terminal::String($e.into()))
     };
-    (var $e:expr) => {
-        Term::Terminal(Terminal::Var(Identifier::Simple($e.into())))
+    (var $e:expr ; $sort:expr) => {
+        Term::Terminal(Terminal::Var(Identifier::Simple($e.into()), $sort))
     };
 }
 
