@@ -46,10 +46,10 @@ impl<R: BufRead> Parser<R> {
     }
 
     fn add_builtins(&mut self) {
-        let builtins = vec![("true", Term::bool()), ("false", Term::bool())];
+        let builtins = vec![("true", Term::BOOL_SORT), ("false", Term::BOOL_SORT)];
         for (iden, sort) in builtins {
             let iden = Identifier::Simple(iden.into());
-            let sort = self.add_term(sort);
+            let sort = self.add_term(sort.clone());
             self.symbol_table.insert(iden, sort);
         }
     }
@@ -109,7 +109,7 @@ impl<R: BufRead> Parser<R> {
         match op {
             Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => {
                 ParserError::assert_num_of_args(&args, 2)?;
-                SortError::expect_one_of(&[Term::int(), Term::real()], &sorts[0])?;
+                SortError::expect_one_of(&[Term::INT_SORT, Term::REAL_SORT], &sorts[0])?;
                 SortError::expect_eq(&sorts[0], &sorts[1])?;
             }
             Operator::Eq => {
@@ -119,12 +119,12 @@ impl<R: BufRead> Parser<R> {
             Operator::Or | Operator::And => {
                 ParserError::assert_num_of_args(&args, 2)?;
                 for s in sorts {
-                    SortError::expect_eq(&Term::bool(), &s)?;
+                    SortError::expect_eq(Term::BOOL_SORT, &s)?;
                 }
             }
             Operator::Not => {
                 ParserError::assert_num_of_args(&args, 1)?;
-                SortError::expect_eq(&Term::bool(), &sorts[0])?;
+                SortError::expect_eq(Term::BOOL_SORT, &sorts[0])?;
             }
         }
         let args = args.into_iter().map(|arg| self.add_term(arg)).collect();
@@ -141,7 +141,7 @@ impl<R: BufRead> Parser<R> {
                 // Function does not have function sort
                 return Err(ParserError::SortError(SortError::Expected {
                     expected: Term::Sort(SortKind::Function, Vec::new()),
-                    got: function_sort,
+                    got: function_sort.clone(),
                 }));
             }
         };
@@ -214,7 +214,7 @@ impl<R: BufRead> Parser<R> {
     fn parse_assume_command(&mut self) -> ParserResult<ProofCommand> {
         let symbol = self.expect_symbol()?;
         let term = self.parse_term()?;
-        SortError::expect_eq(&Term::bool(), &term.sort())?;
+        SortError::expect_eq(Term::BOOL_SORT, &term.sort())?;
         let term = self.add_term(term);
         self.expect_token(Token::CloseParen)?;
         Ok(ProofCommand::Assume(symbol, term))
@@ -309,7 +309,7 @@ impl<R: BufRead> Parser<R> {
             .parse_sequence(Self::parse_term, false)?
             .into_iter()
             .map(|term| -> ParserResult<Rc<Term>> {
-                SortError::expect_eq(&Term::bool(), &term.sort())?;
+                SortError::expect_eq(Term::BOOL_SORT, &term.sort())?;
                 Ok(self.add_term(term))
             })
             .collect::<Result<_, _>>()?;
@@ -368,10 +368,10 @@ impl<R: BufRead> Parser<R> {
         // TODO: since every sort is a valid term, maybe use `parse_term` to parse sorts
         match self.next_token()? {
             Token::Symbol(s) => match s.as_ref() {
-                "Bool" => Ok(Term::bool()),
-                "Int" => Ok(Term::int()),
-                "Real" => Ok(Term::real()),
-                "String" => Ok(Term::string()),
+                "Bool" => Ok(Term::BOOL_SORT.clone()),
+                "Int" => Ok(Term::INT_SORT.clone()),
+                "Real" => Ok(Term::REAL_SORT.clone()),
+                "String" => Ok(Term::STRING_SORT.clone()),
                 other => {
                     if let Some((_, sort)) = self.state.sort_declarations.get(other) {
                         Ok((**sort).clone())
@@ -464,8 +464,8 @@ mod tests {
             Term::Op(
                 Operator::And,
                 vec![
-                    Rc::new(terminal!(var "true"; Rc::new(Term::bool()))),
-                    Rc::new(terminal!(var "false"; Rc::new(Term::bool()))),
+                    Rc::new(terminal!(var "true"; Rc::new(Term::BOOL_SORT.clone()))),
+                    Rc::new(terminal!(var "false"; Rc::new(Term::BOOL_SORT.clone()))),
                 ]
             ),
             parse_term("(and true false)"),
@@ -482,7 +482,9 @@ mod tests {
         assert_eq!(
             Term::Op(
                 Operator::Not,
-                vec![Rc::new(terminal!(var "false"; Rc::new(Term::bool())))]
+                vec![Rc::new(
+                    terminal!(var "false"; Rc::new(Term::BOOL_SORT.clone()))
+                )]
             ),
             parse_term("(not false)"),
         );

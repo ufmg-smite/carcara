@@ -98,43 +98,35 @@ pub enum Term {
 
 impl Term {
     /// The "Bool" built-in sort.
-    pub fn bool() -> Self {
-        Term::Sort(SortKind::Bool, Vec::new())
-    }
+    pub const BOOL_SORT: &'static Term = &Term::Sort(SortKind::Bool, Vec::new());
 
     /// The "Int" built-in sort.
-    pub fn int() -> Self {
-        Term::Sort(SortKind::Int, Vec::new())
-    }
+    pub const INT_SORT: &'static Term = &Term::Sort(SortKind::Int, Vec::new());
 
     /// The "Real" built-in sort.
-    pub fn real() -> Self {
-        Term::Sort(SortKind::Real, Vec::new())
-    }
+    pub const REAL_SORT: &'static Term = &Term::Sort(SortKind::Real, Vec::new());
 
     /// The "String" built-in sort.
-    pub fn string() -> Self {
-        Term::Sort(SortKind::String, Vec::new())
-    }
+    pub const STRING_SORT: &'static Term = &Term::Sort(SortKind::String, Vec::new());
 
     /// Returns the sort of this term. For operations and application terms, this method assumes that
     /// the arguments' sorts have already been checked, and are correct.
-    pub fn sort(&self) -> Term {
+    pub fn sort(&self) -> &Term {
         match self {
             Term::Terminal(t) => match t {
-                Terminal::Integer(_) => Term::int(),
-                Terminal::Real(_) => Term::real(),
-                Terminal::String(_) => Term::string(),
-                Terminal::Var(_, sort) => sort.as_ref().clone(),
+                Terminal::Integer(_) => Term::INT_SORT,
+                Terminal::Real(_) => Term::REAL_SORT,
+                Terminal::String(_) => Term::STRING_SORT,
+                Terminal::Var(_, sort) => sort.as_ref(),
             },
             Term::Op(op, args) => match op {
                 Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => args[0].sort(),
-                Operator::Eq | Operator::Or | Operator::And | Operator::Not => Term::bool(),
+                Operator::Eq | Operator::Or | Operator::And | Operator::Not => Term::BOOL_SORT,
             },
             Term::App(f, _) => {
                 let function_sort = f.sort();
                 if let Term::Sort(SortKind::Function, sorts) = function_sort {
-                    (**sorts.last().unwrap()).clone()
+                    sorts.last().unwrap()
                 } else {
                     unreachable!() // We assume that the function is correcly sorted
                 }

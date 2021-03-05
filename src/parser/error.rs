@@ -79,11 +79,11 @@ impl SortError {
     }
 
     /// Returns an `ExpectedOneOf` sort error if `got` is not in `possibilities`.
-    pub fn expect_one_of(possibilities: &[Term], got: &Term) -> Result<(), Self> {
-        match possibilities.iter().find(|&s| s == got) {
+    pub fn expect_one_of(possibilities: &[&Term], got: &Term) -> Result<(), Self> {
+        match possibilities.iter().find(|&&s| s == got) {
             Some(_) => Ok(()),
             None => Err(Self::ExpectedOneOf {
-                possibilities: possibilities.to_vec(),
+                possibilities: possibilities.iter().map(|t| (*t).clone()).collect(),
                 got: got.clone(),
             }),
         }
