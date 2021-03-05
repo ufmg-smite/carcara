@@ -147,7 +147,7 @@ impl<R: BufRead> Parser<R> {
         };
         ParserError::assert_num_of_args(&args, sorts.len() - 1)?;
         for i in 0..args.len() {
-            SortError::expect_eq(sorts[i].as_ref(), &args[i])?;
+            SortError::expect_eq(sorts[i].as_ref(), &args[i].sort())?;
         }
         let function = self.add_term(function);
         let args: Vec<_> = args.into_iter().map(|term| self.add_term(term)).collect();
