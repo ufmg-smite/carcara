@@ -1,4 +1,5 @@
 use std::io;
+use std::ops::RangeFrom;
 
 use super::ast::*;
 use super::lexer::Token;
@@ -41,10 +42,22 @@ impl ParserError {
     /// Returns an error if the length of `sequence` is not `expected`.
     pub fn assert_num_of_args<T>(sequence: &[T], expected: usize) -> ParserResult<()> {
         let got = sequence.len();
-        if got != expected {
-            Err(ParserError::WrongNumberOfArgs(expected, got))
-        } else {
+        if got == expected {
             Ok(())
+        } else {
+            Err(ParserError::WrongNumberOfArgs(expected, got))
+        }
+    }
+
+    pub fn assert_num_of_args_range<T>(
+        sequence: &[T],
+        expected: RangeFrom<usize>,
+    ) -> ParserResult<()> {
+        let got = sequence.len();
+        if expected.contains(&got) {
+            Ok(())
+        } else {
+            Err(ParserError::WrongNumberOfArgs(expected.start, got))
         }
     }
 }
@@ -67,7 +80,7 @@ pub enum SortError {
 
 impl SortError {
     /// Returns an `Expected` sort error if `got` does not equal `expected`.
-    pub fn expect_eq(expected: &Term, got: &Term) -> Result<(), Self> {
+    pub fn assert_eq(expected: &Term, got: &Term) -> Result<(), Self> {
         if expected == got {
             Ok(())
         } else {
@@ -78,8 +91,17 @@ impl SortError {
         }
     }
 
+    /// Makes sure all terms in `sequence` are equal to each other, otherwise returns an `Expected`
+    /// error.
+    pub fn assert_all_eq(sequence: &[&Term]) -> Result<(), Self> {
+        for i in 1..sequence.len() {
+            Self::assert_eq(sequence[i - 1], sequence[i])?;
+        }
+        Ok(())
+    }
+
     /// Returns an `ExpectedOneOf` sort error if `got` is not in `possibilities`.
-    pub fn expect_one_of(possibilities: &[&Term], got: &Term) -> Result<(), Self> {
+    pub fn assert_one_of(possibilities: &[&Term], got: &Term) -> Result<(), Self> {
         match possibilities.iter().find(|&&s| s == got) {
             Some(_) => Ok(()),
             None => Err(Self::ExpectedOneOf {
