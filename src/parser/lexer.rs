@@ -163,7 +163,7 @@ impl<R: BufRead> Lexer<R> {
             Some(c) if c.is_ascii_digit() => self.read_number(),
             Some(c) if Lexer::is_symbol_character(c) => self.read_simple_symbol(),
             None => Ok(Token::Eof),
-            _ => todo!(),
+            other => Err(ParserError::UnexpectedChar(other)),
         }
     }
 
@@ -201,12 +201,7 @@ impl<R: BufRead> Lexer<R> {
         let base = match self.next_char()? {
             Some('b') => 2,
             Some('x') => 16,
-            other => {
-                return Err(ParserError::UnexpectedChar {
-                    expected: &['b', 'x'],
-                    got: other,
-                })
-            }
+            other => return Err(ParserError::UnexpectedChar(other)),
         };
         let s = self.read_chars_while(|c| c.is_digit(base))?;
         Ok(Token::Numeral(u64::from_str_radix(&s, base).unwrap()))
@@ -354,18 +349,12 @@ mod tests {
 
         assert!(matches!(
             lex_one("#o123"),
-            Err(ParserError::UnexpectedChar {
-                expected: &['b', 'x'],
-                got: Some('o'),
-            })
+            Err(ParserError::UnexpectedChar(Some('o'))),
         ));
 
         assert!(matches!(
             lex_one("#"),
-            Err(ParserError::UnexpectedChar {
-                expected: &['b', 'x'],
-                got: None,
-            })
+            Err(ParserError::UnexpectedChar(None)),
         ));
     }
 

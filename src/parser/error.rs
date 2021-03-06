@@ -11,10 +11,7 @@ pub type ParserResult<T> = Result<T, ParserError>;
 #[derive(Debug, PartialEq)]
 pub enum ParserError {
     Io(ParserIoError),
-    UnexpectedChar {
-        expected: &'static [char],
-        got: Option<char>,
-    },
+    UnexpectedChar(Option<char>),
     LeadingZero(String),
     BackslashInQuotedSymbol,
     EofInQuotedSymbol,

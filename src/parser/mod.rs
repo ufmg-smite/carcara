@@ -193,7 +193,7 @@ impl<R: BufRead> Parser<R> {
                     // argument which is a string terminal representing the sort name.
                     let sort = {
                         let arg = self.add_term(terminal!(string name.clone()));
-                        self.add_term(Term::Sort(SortKind::UserDeclared, vec![arg]))
+                        self.add_term(Term::Sort(SortKind::Atom, vec![arg]))
                     };
                     self.state.sort_declarations.insert(name, (arity, sort));
                     continue;

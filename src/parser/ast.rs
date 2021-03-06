@@ -73,7 +73,7 @@ impl FromStr for Operator {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SortKind {
     Function,
-    UserDeclared,
+    Atom,
     Bool,
     Int,
     Real,
@@ -110,7 +110,8 @@ impl Term {
     pub const STRING_SORT: &'static Term = &Term::Sort(SortKind::String, Vec::new());
 
     /// Returns the sort of this term. For operations and application terms, this method assumes that
-    /// the arguments' sorts have already been checked, and are correct.
+    /// the arguments' sorts have already been checked, and are correct. If `self` is a sort, this
+    /// method does nothing and returns `self`.
     pub fn sort(&self) -> &Term {
         match self {
             Term::Terminal(t) => match t {
@@ -131,7 +132,7 @@ impl Term {
                     unreachable!() // We assume that the function is correcly sorted
                 }
             }
-            _ => todo!(),
+            sort @ Term::Sort(_, _) => sort,
         }
     }
 }
