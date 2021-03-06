@@ -9,9 +9,47 @@ use ast::*;
 use error::*;
 use lexer::*;
 use std::collections::{hash_map::Entry, HashMap};
+use std::hash::Hash;
 use std::io::BufRead;
 use std::rc::Rc;
 use std::str::FromStr;
+
+struct SymbolTable<K, V> {
+    scopes: Vec<HashMap<K, V>>,
+}
+
+impl<K: Eq + Hash, V> SymbolTable<K, V> {
+    fn new() -> Self {
+        Self {
+            scopes: vec![HashMap::new()],
+        }
+    }
+
+    fn get(&self, key: &K) -> Option<&V> {
+        self.scopes.last().and_then(|map| map.get(key))
+    }
+
+    fn insert(&mut self, key: K, value: V) {
+        self.scopes
+            .last_mut()
+            .expect("no scopes in symbol table")
+            .insert(key, value);
+    }
+
+    fn push_scope(&mut self) {
+        self.scopes.push(HashMap::new());
+    }
+
+    fn pop_scope(&mut self) {
+        match self.scopes.len() {
+            0 => unreachable!(),
+            1 => panic!("cannot pop last scope in symbol table"),
+            _ => {
+                self.scopes.pop().expect("no scopes in symbol table");
+            }
+        }
+    }
+}
 
 /// A parser for the veriT Proof Format. The parser makes use of hash consing to reduce memory usage
 /// by sharing identical terms in the AST.
@@ -19,7 +57,7 @@ pub struct Parser<R> {
     lexer: Lexer<R>,
     current_token: Token,
     state: ParserState,
-    symbol_table: HashMap<Identifier, Rc<Term>>,
+    symbol_table: SymbolTable<Identifier, Rc<Term>>,
 }
 
 #[derive(Default)]
@@ -39,7 +77,7 @@ impl<R: BufRead> Parser<R> {
             lexer,
             current_token,
             state: Default::default(),
-            symbol_table: Default::default(),
+            symbol_table: SymbolTable::new(),
         };
         parser.add_builtins();
         Ok(parser)
@@ -291,7 +329,17 @@ impl<R: BufRead> Parser<R> {
         self.expect_token(Token::OpenParen)?;
         let args = self.parse_sequence(Self::parse_sorted_var, false)?;
         let return_sort = self.parse_sort()?;
+
+        // In order to correctly parse the function body, we push a new scope to the symbol table
+        // and add the functions arguments to it.
+        self.symbol_table.push_scope();
+        for (name, sort) in args.iter() {
+            let iden = Identifier::Simple(name.clone());
+            self.symbol_table.insert(iden, sort.clone());
+        }
         let body = self.parse_term()?;
+        self.symbol_table.pop_scope();
+
         self.expect_token(Token::CloseParen)?;
         Ok((
             name,
