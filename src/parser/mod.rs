@@ -194,6 +194,38 @@ impl<R: BufRead> Parser<R> {
         Ok(Term::App(function, args))
     }
 
+    /// Takes a term and a hash map of `String`s to terms and substitutes every ocurrence of those
+    /// variables with the associated term.
+    fn apply_substitutions(&mut self, term: &Term, substitutions: &HashMap<String, Term>) -> Term {
+        let mut apply_to_sequence = |sequence: &[Rc<Term>]| -> Vec<Rc<Term>> {
+            sequence
+                .iter()
+                .map(|a| {
+                    let reduced = self.apply_substitutions(a, substitutions);
+                    self.add_term(reduced)
+                })
+                .collect()
+        };
+        match term {
+            Term::Terminal(t) => match t {
+                Terminal::Var(Identifier::Simple(iden), _) if substitutions.contains_key(iden) => {
+                    substitutions[iden].clone()
+                }
+                other => Term::Terminal(other.clone()),
+            },
+            Term::App(func, args) => {
+                let new_args = apply_to_sequence(args);
+                let new_func = self.apply_substitutions(func, substitutions);
+                Term::App(self.add_term(new_func), new_args)
+            }
+            Term::Op(op, args) => {
+                let new_args = apply_to_sequence(args);
+                Term::Op(*op, new_args)
+            }
+            sort @ Term::Sort(_, _) => sort.clone(),
+        }
+    }
+
     /// Calls `parse_func` repeatedly until a closing parenthesis is reached. If `non_empty` is
     /// true, empty sequences will result in an error. This method consumes the ending ")" token.
     fn parse_sequence<T, F>(&mut self, parse_func: F, non_empty: bool) -> ParserResult<Vec<T>>
@@ -327,13 +359,13 @@ impl<R: BufRead> Parser<R> {
     fn parse_define_fun(&mut self) -> ParserResult<(String, FunctionDef)> {
         let name = self.expect_symbol()?;
         self.expect_token(Token::OpenParen)?;
-        let args = self.parse_sequence(Self::parse_sorted_var, false)?;
+        let params = self.parse_sequence(Self::parse_sorted_var, false)?;
         let return_sort = self.parse_sort()?;
 
         // In order to correctly parse the function body, we push a new scope to the symbol table
         // and add the functions arguments to it.
         self.symbol_table.push_scope();
-        for (name, sort) in args.iter() {
+        for (name, sort) in params.iter() {
             let iden = Identifier::Simple(name.clone());
             self.symbol_table.insert(iden, sort.clone());
         }
@@ -341,14 +373,9 @@ impl<R: BufRead> Parser<R> {
         self.symbol_table.pop_scope();
 
         self.expect_token(Token::CloseParen)?;
-        Ok((
-            name,
-            FunctionDef {
-                args,
-                return_sort,
-                body,
-            },
-        ))
+
+        SortError::assert_eq(&return_sort, body.sort())?;
+        Ok((name, FunctionDef { params, body }))
     }
 
     /// Parses a clause of the form "(cl <term>*)".
@@ -404,9 +431,34 @@ impl<R: BufRead> Parser<R> {
                     let args = self.parse_sequence(Self::parse_term, true)?;
                     self.make_op(operator, args)
                 } else {
-                    let func = self.make_var(Identifier::Simple(s))?;
                     let args = self.parse_sequence(Self::parse_term, true)?;
-                    self.make_app(func, args)
+                    if let Some(func) = self.state.function_defs.get(&s) {
+                        // If there is a function definition with this function name, we sort check
+                        // the arguments and apply the definition by performing a beta reduction.
+
+                        ParserError::assert_num_of_args(&args, func.params.len())?;
+                        for i in 0..args.len() {
+                            SortError::assert_eq(func.params[i].1.as_ref(), args[i].sort())?;
+                        }
+
+                        // Build a hash map of all the parameter names and the values they will
+                        // take
+                        let substitutions = func
+                            .params
+                            .iter()
+                            .map(|(name, _sort)| name.clone())
+                            .zip(args.into_iter())
+                            .collect::<HashMap<_, _>>();
+
+                        // `func.body` is a part of `self`, so we can't pass a referece to it
+                        // directly to `apply_substitutions` because that method already borrows
+                        // `self` mutably. So we have to clone the function body here.
+                        let body_clone = func.body.clone();
+                        Ok(self.apply_substitutions(&body_clone, &substitutions))
+                    } else {
+                        let func = self.make_var(Identifier::Simple(s))?;
+                        self.make_app(func, args)
+                    }
                 }
             }
             _ => todo!(),

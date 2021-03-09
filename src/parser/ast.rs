@@ -32,8 +32,7 @@ pub enum ProofCommand {
 /// "(define-fun <symbol> (<sorted_var>*) <sort> <term>)". These definitions are substituted in
 /// during parsing, so these commands don't appear in the final AST.
 pub struct FunctionDef {
-    pub args: Vec<(String, Rc<Term>)>,
-    pub return_sort: Term,
+    pub params: Vec<(String, Rc<Term>)>,
     pub body: Term,
 }
 
@@ -70,7 +69,7 @@ impl FromStr for Operator {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SortKind {
     Function,
     Atom,
