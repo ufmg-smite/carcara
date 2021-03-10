@@ -418,7 +418,18 @@ impl<R: BufRead> Parser<R> {
             Token::Numeral(n) => Ok(terminal!(int n)),
             Token::Decimal(r) => Ok(terminal!(real r)),
             Token::String(s) => Ok(terminal!(string s)),
-            Token::Symbol(s) => self.make_var(Identifier::Simple(s)),
+            Token::Symbol(s) => {
+                // Check to see if there is a nullary function defined with this name
+                if let Some(func_def) = self.state.function_defs.get(&s) {
+                    if func_def.params.is_empty() {
+                        Ok(func_def.body.clone())
+                    } else {
+                        Err(ParserError::WrongNumberOfArgs(func_def.params.len(), 0))
+                    }
+                } else {
+                    self.make_var(Identifier::Simple(s))
+                }
+            }
             Token::OpenParen => self.parse_application(),
             other => Err(ParserError::UnexpectedToken(other)),
         }
@@ -487,21 +498,41 @@ impl<R: BufRead> Parser<R> {
     }
 }
 
+impl<'a> Parser<std::io::Cursor<&'a str>> {
+    pub fn from_str(input: &'a str) -> ParserResult<Self> {
+        Self::new(std::io::Cursor::new(input))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io;
 
     fn parse_term(input: &str) -> Term {
-        Parser::new(io::Cursor::new(input))
+        Parser::from_str(input)
             .and_then(|mut p| p.parse_term())
             .expect("parser error during test")
     }
 
     fn parse_term_err(input: &str) -> ParserError {
-        Parser::new(io::Cursor::new(input))
+        Parser::from_str(input)
             .and_then(|mut p| p.parse_term())
             .expect_err("expected error")
+    }
+
+    /// Parses a series of definitions and declarations, and then parses a term and returns it.
+    fn parse_term_with_definitions(prelude: &str, term: &str) -> Term {
+        let error_message = "parser error during test";
+        let mut parser = Parser::from_str(prelude).expect(error_message);
+        parser.parse_proof().expect(error_message);
+        let mut new_parser = Parser::from_str(term).expect(error_message);
+
+        // To keep the definitions and delcarations, we transfer the parser state to the new
+        // parser.
+        new_parser.state = parser.state;
+        new_parser.symbol_table = parser.symbol_table;
+        new_parser.parse_term().expect(error_message)
     }
 
     #[test]
@@ -635,5 +666,65 @@ mod tests {
             ParserError::WrongNumberOfArgs(2, 1),
             parse_term_err("(or true)"),
         );
+    }
+
+    #[test]
+    fn test_declare_fun() {
+        // Just check if this parses without any errors.
+        parse_term_with_definitions(
+            "(declare-fun f (Bool Int Real) Real)",
+            "(f false 42 3.14159)",
+        );
+
+        parse_term_with_definitions(
+            "(declare-fun y () Real)
+             (declare-fun f (Real) Int)
+             (declare-fun g (Int Int) Bool)",
+            "(g (f y) 0)",
+        );
+
+        let got = parse_term_with_definitions("(declare-fun x () Real)", "x");
+        assert_eq!(terminal!(var "x"; Rc::new(Term::REAL_SORT.clone())), got);
+    }
+
+    #[test]
+    fn test_declare_sort() {
+        parse_term_with_definitions(
+            "(declare-sort T 0)
+             (declare-sort U 0)
+             (declare-sort Y 0)
+             (declare-fun t () T)
+             (declare-fun u () U)
+             (declare-fun f (T U) Y)",
+            "(f t u)",
+        );
+
+        let got = parse_term_with_definitions(
+            "(declare-sort T 0)
+             (declare-fun x () T)",
+            "x",
+        );
+        let expected_sort = Term::Sort(SortKind::Atom, vec![Rc::new(terminal!(string "T"))]);
+        assert_eq!(terminal!(var "x"; Rc::new(expected_sort)), got);
+    }
+
+    #[test]
+    fn test_define_fun() {
+        let got = parse_term_with_definitions(
+            "(define-fun add ((a Int) (b Int)) Int (+ a b))",
+            "(add 2 3)",
+        );
+        assert_eq!(parse_term("(+ 2 3)"), got);
+
+        let got = parse_term_with_definitions("(define-fun x () Int 2)", "(+ x 3)");
+        assert_eq!(parse_term("(+ 2 3)"), got);
+
+        let got = parse_term_with_definitions(
+            "(define-fun f ((x Int)) Int (+ x 1))
+             (define-fun g ((a Int) (b Int)) Int (* (f a) (f b)))",
+            "(g 2 3)",
+        );
+        let expected = parse_term("(* (+ 2 1) (+ 3 1))");
+        assert_eq!(expected, got);
     }
 }
