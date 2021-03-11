@@ -310,7 +310,8 @@ impl<R: BufRead> Parser<R> {
 
         let args = if self.current_token == Token::Keyword("args".into()) {
             self.next_token()?;
-            self.parse_proof_args()?
+            self.expect_token(Token::OpenParen)?;
+            self.parse_sequence(Self::parse_proof_arg, true)?
         } else {
             Vec::new()
         };
@@ -393,14 +394,34 @@ impl<R: BufRead> Parser<R> {
         Ok(terms)
     }
 
-    fn parse_proof_args(&mut self) -> ParserResult<Vec<Rc<Term>>> {
-        // TODO: parse args of the form "(<symbol> <term>)"
-        self.expect_token(Token::OpenParen)?;
-        Ok(self
-            .parse_sequence(Self::parse_term, true)?
-            .into_iter()
-            .map(|term| self.add_term(term))
-            .collect())
+    /// Parses an argument for a "step" or "anchor" command.
+    fn parse_proof_arg(&mut self) -> ParserResult<ProofArg> {
+        match self.current_token {
+            Token::OpenParen => {
+                self.next_token()?; // Consume "(" token
+
+                // If we encounter a "(" token, this could be an assignment argument of the form
+                // "(:= <symbol> <term>)", or a regular term that starts with "(". Note that the
+                // lexer reads ":=" as a keyword with contents "=".
+                if self.current_token == Token::Keyword("=".into()) {
+                    self.next_token()?; // Consume ":=" token
+                    let name = self.expect_symbol()?;
+                    let value = self.parse_term()?;
+                    self.expect_token(Token::CloseParen)?;
+                    Ok(ProofArg::Assign(name, self.add_term(value)))
+                } else {
+                    // If the first token is not ":=", this argument is just a regular term. Since
+                    // we already consumed the "(" token, we have to call `parse_application`
+                    // instead of `parse_term`.
+                    let term = self.parse_application()?;
+                    Ok(ProofArg::Term(self.add_term(term)))
+                }
+            }
+            _ => {
+                let term = self.parse_term()?;
+                Ok(ProofArg::Term(self.add_term(term)))
+            }
+        }
     }
 
     /// Parses a sorted variable of the form "(<symbol> <sort>)".
@@ -533,6 +554,12 @@ mod tests {
         new_parser.state = parser.state;
         new_parser.symbol_table = parser.symbol_table;
         new_parser.parse_term().expect(error_message)
+    }
+
+    fn parse_proof(input: &str) -> Proof {
+        Parser::from_str(input)
+            .and_then(|mut p| p.parse_proof())
+            .expect("parser error during test")
     }
 
     #[test]
@@ -726,5 +753,91 @@ mod tests {
         );
         let expected = parse_term("(* (+ 2 1) (+ 3 1))");
         assert_eq!(expected, got);
+    }
+
+    #[test]
+    fn test_step() {
+        let input = "
+            (step t1 (cl (= (+ 2 3) (- 1 2))) :rule rule-name)
+            (step t2 (cl) :rule rule-name :premises (h1 h2 h3))
+            (step t3 (cl) :rule rule-name :args (1 2.0 \"three\"))
+            (step t4 (cl) :rule rule-name :args ((:= a 12) (:= b 3.14) (:= c (* 6 7))))
+            (step t5 (cl) :rule rule-name :premises (h1 h2 h3) :args (42))
+        ";
+        let proof = parse_proof(input);
+        assert_eq!(proof.0.len(), 5);
+
+        assert_eq!(
+            proof.0[0],
+            ProofCommand::Step {
+                step_name: "t1".into(),
+                clause: vec![Rc::new(parse_term("(= (+ 2 3) (- 1 2))"))],
+                rule: "rule-name".into(),
+                premises: Vec::new(),
+                args: Vec::new(),
+            }
+        );
+
+        assert_eq!(
+            proof.0[1],
+            ProofCommand::Step {
+                step_name: "t2".into(),
+                clause: Vec::new(),
+                rule: "rule-name".into(),
+                premises: vec!["h1".into(), "h2".into(), "h3".into()],
+                args: Vec::new(),
+            }
+        );
+
+        assert_eq!(
+            proof.0[2],
+            ProofCommand::Step {
+                step_name: "t3".into(),
+                clause: Vec::new(),
+                rule: "rule-name".into(),
+                premises: Vec::new(),
+                args: {
+                    vec![
+                        terminal!(int 1),
+                        terminal!(real 2 / 1),
+                        terminal!(string "three"),
+                    ]
+                    .into_iter()
+                    .map(|term| ProofArg::Term(Rc::new(term)))
+                    .collect()
+                },
+            }
+        );
+
+        assert_eq!(
+            proof.0[3],
+            ProofCommand::Step {
+                step_name: "t4".into(),
+                clause: Vec::new(),
+                rule: "rule-name".into(),
+                premises: Vec::new(),
+                args: {
+                    vec![
+                        ("a", terminal!(int 12)),
+                        ("b", terminal!(real 314 / 100)),
+                        ("c", parse_term("(* 6 7)")),
+                    ]
+                    .into_iter()
+                    .map(|(name, term)| ProofArg::Assign(name.into(), Rc::new(term)))
+                    .collect()
+                },
+            }
+        );
+
+        assert_eq!(
+            proof.0[4],
+            ProofCommand::Step {
+                step_name: "t5".into(),
+                clause: Vec::new(),
+                rule: "rule-name".into(),
+                premises: vec!["h1".into(), "h2".into(), "h3".into()],
+                args: vec![ProofArg::Term(Rc::new(terminal!(int 42)))],
+            }
+        );
     }
 }

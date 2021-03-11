@@ -9,7 +9,7 @@ use std::str::FromStr;
 pub struct Proof(pub Vec<ProofCommand>);
 
 /// A proof command.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ProofCommand {
     /// An "assume" command, of the form "(assume <symbol> <term>)".
     Assume(String, Rc<Term>),
@@ -21,11 +21,21 @@ pub enum ProofCommand {
         clause: Vec<Rc<Term>>,
         rule: String,
         premises: Vec<String>,
-        args: Vec<Rc<Term>>,
+        args: Vec<ProofArg>,
     },
 
     /// An "anchor" command, of the form "(anchor :step <symbol> [:args <proof_args>]?)".
-    Anchor { step: String, args: Vec<Rc<Term>> },
+    Anchor { step: String, args: Vec<ProofArg> },
+}
+
+/// An argument for a "step" or "anchor" command.
+#[derive(Debug, PartialEq)]
+pub enum ProofArg {
+    /// An argument that is just a term.
+    Term(Rc<Term>),
+
+    /// An argument of the form "(:= <symbol> <term>)".
+    Assign(String, Rc<Term>),
 }
 
 /// A function definition. Functions are defined using the "function-def" command, of the form
