@@ -1,0 +1,320 @@
+#![cfg(test)]
+
+use super::*;
+
+impl<'a> Parser<std::io::Cursor<&'a str>> {
+    pub fn from_str(input: &'a str) -> ParserResult<Self> {
+        Self::new(std::io::Cursor::new(input))
+    }
+}
+
+const ERROR_MESSAGE: &'static str = "parser error during test";
+
+fn parse_term(input: &str) -> Term {
+    Parser::from_str(input)
+        .and_then(|mut p| p.parse_term())
+        .expect(ERROR_MESSAGE)
+}
+
+fn parse_term_err(input: &str) -> ParserError {
+    Parser::from_str(input)
+        .and_then(|mut p| p.parse_term())
+        .expect_err("expected error")
+}
+
+/// Parses a series of definitions and declarations, and then parses a term and returns it.
+fn parse_term_with_definitions(definitions: &str, term: &str) -> Term {
+    let mut parser = Parser::from_str(definitions).expect(ERROR_MESSAGE);
+    parser.parse_proof().expect(ERROR_MESSAGE);
+    let mut new_parser = Parser::from_str(term).expect(ERROR_MESSAGE);
+
+    // To keep the definitions and delcarations, we transfer the parser state to the new
+    // parser.
+    new_parser.state = parser.state;
+    new_parser.symbol_table = parser.symbol_table;
+    new_parser.parse_term().expect(ERROR_MESSAGE)
+}
+
+fn parse_proof(input: &str) -> Proof {
+    Parser::from_str(input)
+        .and_then(|mut p| p.parse_proof())
+        .expect(ERROR_MESSAGE)
+}
+
+#[test]
+fn test_hash_consing() {
+    let input = "(-
+        (-
+            (+ 1 2)
+            (/ (+ 1 2) (+ 1 2))
+        )
+        (* 2 2)
+    )";
+    let mut parser = Parser::from_str(input).unwrap();
+    parser.parse_term().unwrap();
+
+    // We expect this input to result in 6 unique terms after parsing:
+    //   1
+    //   2
+    //   (+ 1 2)
+    //   (/ (+ 1 2) (+ 1 2))
+    //   (- (+ 1 2) (/ ...))
+    //   (* 2 2)
+    // Note that the outer term (- (- ...) (* 2 2)) is not added to the hash map
+    let expected = [
+        terminal!(int 1),
+        terminal!(int 2),
+        parse_term("(+ 1 2)"),
+        parse_term("(/ (+ 1 2) (+ 1 2))"),
+        parse_term("(- (+ 1 2) (/ (+ 1 2) (+ 1 2)))"),
+        parse_term("(* 2 2)"),
+    ];
+    for e in &expected {
+        assert!(parser.state.terms_map.contains_key(e))
+    }
+}
+
+#[test]
+fn test_constant_terms() {
+    assert_eq!(terminal!(int 42), parse_term("42"));
+    assert_eq!(terminal!(real 3 / 2), parse_term("1.5"));
+    assert_eq!(terminal!(string "foo"), parse_term("\"foo\""));
+}
+
+#[test]
+fn test_arithmetic_ops() {
+    assert_eq!(
+        Term::Op(
+            Operator::Add,
+            vec![Rc::new(terminal!(int 2)), Rc::new(terminal!(int 3))]
+        ),
+        parse_term("(+ 2 3)"),
+    );
+
+    assert_eq!(
+        Term::Op(
+            Operator::Mult,
+            vec![
+                Rc::new(terminal!(int 2)),
+                Rc::new(terminal!(int 3)),
+                Rc::new(terminal!(int 5)),
+                Rc::new(terminal!(int 7)),
+            ]
+        ),
+        parse_term("(* 2 3 5 7)"),
+    );
+
+    assert!(matches!(
+        parse_term_err("(+ (- 1 2) (* 3.0 4.2))"),
+        ParserError::SortError(SortError::Expected { .. }),
+    ));
+}
+
+#[test]
+fn test_logic_ops() {
+    assert_eq!(
+        Term::Op(
+            Operator::And,
+            vec![
+                Rc::new(terminal!(var "true"; Rc::new(Term::BOOL_SORT.clone()))),
+                Rc::new(terminal!(var "false"; Rc::new(Term::BOOL_SORT.clone()))),
+            ]
+        ),
+        parse_term("(and true false)"),
+    );
+
+    assert_eq!(
+        Term::Op(
+            Operator::Or,
+            vec![
+                Rc::new(terminal!(var "true"; Rc::new(Term::BOOL_SORT.clone()))),
+                Rc::new(terminal!(var "true"; Rc::new(Term::BOOL_SORT.clone()))),
+                Rc::new(terminal!(var "false"; Rc::new(Term::BOOL_SORT.clone()))),
+            ]
+        ),
+        parse_term("(or true true false)"),
+    );
+
+    assert_eq!(
+        Term::Op(
+            Operator::Eq,
+            vec![Rc::new(terminal!(int 2)), Rc::new(terminal!(int 3))]
+        ),
+        parse_term("(= 2 3)"),
+    );
+
+    assert_eq!(
+        Term::Op(
+            Operator::Not,
+            vec![Rc::new(
+                terminal!(var "false"; Rc::new(Term::BOOL_SORT.clone()))
+            )]
+        ),
+        parse_term("(not false)"),
+    );
+
+    assert!(matches!(
+        parse_term_err("(or true 1.2)"),
+        ParserError::SortError(SortError::Expected {
+            expected: Term::Sort(SortKind::Bool, _),
+            ..
+        }),
+    ));
+    assert!(matches!(
+        parse_term_err("(= 10 10.0)"),
+        ParserError::SortError(SortError::Expected { .. }),
+    ));
+    assert_eq!(
+        ParserError::WrongNumberOfArgs(1, 3),
+        parse_term_err("(not 1 2 3)"),
+    );
+    assert_eq!(
+        ParserError::WrongNumberOfArgs(2, 1),
+        parse_term_err("(or true)"),
+    );
+}
+
+#[test]
+fn test_declare_fun() {
+    parse_term_with_definitions(
+        "(declare-fun f (Bool Int Real) Real)",
+        "(f false 42 3.14159)",
+    );
+
+    parse_term_with_definitions(
+        "(declare-fun y () Real)
+         (declare-fun f (Real) Int)
+         (declare-fun g (Int Int) Bool)",
+        "(g (f y) 0)",
+    );
+
+    let got = parse_term_with_definitions("(declare-fun x () Real)", "x");
+    assert_eq!(terminal!(var "x"; Rc::new(Term::REAL_SORT.clone())), got);
+}
+
+#[test]
+fn test_declare_sort() {
+    parse_term_with_definitions(
+        "(declare-sort T 0)
+         (declare-sort U 0)
+         (declare-sort Y 0)
+         (declare-fun t () T)
+         (declare-fun u () U)
+         (declare-fun f (T U) Y)",
+        "(f t u)",
+    );
+
+    let got = parse_term_with_definitions(
+        "(declare-sort T 0)
+         (declare-fun x () T)",
+        "x",
+    );
+    let expected_sort = Term::Sort(SortKind::Atom, vec![Rc::new(terminal!(string "T"))]);
+    assert_eq!(terminal!(var "x"; Rc::new(expected_sort)), got);
+}
+
+#[test]
+fn test_define_fun() {
+    let got = parse_term_with_definitions(
+        "(define-fun add ((a Int) (b Int)) Int (+ a b))",
+        "(add 2 3)",
+    );
+    assert_eq!(parse_term("(+ 2 3)"), got);
+
+    let got = parse_term_with_definitions("(define-fun x () Int 2)", "(+ x 3)");
+    assert_eq!(parse_term("(+ 2 3)"), got);
+
+    let got = parse_term_with_definitions(
+        "(define-fun f ((x Int)) Int (+ x 1))
+         (define-fun g ((a Int) (b Int)) Int (* (f a) (f b)))",
+        "(g 2 3)",
+    );
+    let expected = parse_term("(* (+ 2 1) (+ 3 1))");
+    assert_eq!(expected, got);
+}
+
+#[test]
+fn test_step() {
+    let input = "
+        (step t1 (cl (= (+ 2 3) (- 1 2))) :rule rule-name)
+        (step t2 (cl) :rule rule-name :premises (h1 h2 h3))
+        (step t3 (cl) :rule rule-name :args (1 2.0 \"three\"))
+        (step t4 (cl) :rule rule-name :args ((:= a 12) (:= b 3.14) (:= c (* 6 7))))
+        (step t5 (cl) :rule rule-name :premises (h1 h2 h3) :args (42))
+    ";
+    let proof = parse_proof(input);
+    assert_eq!(proof.0.len(), 5);
+
+    assert_eq!(
+        proof.0[0],
+        ProofCommand::Step {
+            step_name: "t1".into(),
+            clause: vec![Rc::new(parse_term("(= (+ 2 3) (- 1 2))"))],
+            rule: "rule-name".into(),
+            premises: Vec::new(),
+            args: Vec::new(),
+        }
+    );
+
+    assert_eq!(
+        proof.0[1],
+        ProofCommand::Step {
+            step_name: "t2".into(),
+            clause: Vec::new(),
+            rule: "rule-name".into(),
+            premises: vec!["h1".into(), "h2".into(), "h3".into()],
+            args: Vec::new(),
+        }
+    );
+
+    assert_eq!(
+        proof.0[2],
+        ProofCommand::Step {
+            step_name: "t3".into(),
+            clause: Vec::new(),
+            rule: "rule-name".into(),
+            premises: Vec::new(),
+            args: {
+                vec![
+                    terminal!(int 1),
+                    terminal!(real 2 / 1),
+                    terminal!(string "three"),
+                ]
+                .into_iter()
+                .map(|term| ProofArg::Term(Rc::new(term)))
+                .collect()
+            },
+        }
+    );
+
+    assert_eq!(
+        proof.0[3],
+        ProofCommand::Step {
+            step_name: "t4".into(),
+            clause: Vec::new(),
+            rule: "rule-name".into(),
+            premises: Vec::new(),
+            args: {
+                vec![
+                    ("a", terminal!(int 12)),
+                    ("b", terminal!(real 314 / 100)),
+                    ("c", parse_term("(* 6 7)")),
+                ]
+                .into_iter()
+                .map(|(name, term)| ProofArg::Assign(name.into(), Rc::new(term)))
+                .collect()
+            },
+        }
+    );
+
+    assert_eq!(
+        proof.0[4],
+        ProofCommand::Step {
+            step_name: "t5".into(),
+            clause: Vec::new(),
+            rule: "rule-name".into(),
+            premises: vec!["h1".into(), "h2".into(), "h3".into()],
+            args: vec![ProofArg::Term(Rc::new(terminal!(int 42)))],
+        }
+    );
+}
