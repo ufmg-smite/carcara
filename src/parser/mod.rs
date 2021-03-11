@@ -1,11 +1,10 @@
 //! A parser for the veriT Proof Format.
-
+#[macro_use]
 pub mod ast;
 pub mod error;
 pub mod lexer;
 pub mod tests;
 
-use crate::terminal;
 use ast::*;
 use error::*;
 use lexer::*;

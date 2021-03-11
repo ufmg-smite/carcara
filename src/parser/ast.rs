@@ -155,7 +155,6 @@ pub enum Terminal {
 }
 
 /// Helper macro to construct `Terminal` terms.
-#[macro_export]
 macro_rules! terminal {
     (int $e:expr) => {
         Term::Terminal(Terminal::Integer($e))
