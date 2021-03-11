@@ -237,10 +237,10 @@ fn test_define_fun() {
 fn test_step() {
     let input = "
         (step t1 (cl (= (+ 2 3) (- 1 2))) :rule rule-name)
-        (step t2 (cl) :rule rule-name :premises (h1 h2 h3))
+        (step t2 (cl) :rule rule-name :premises (t1))
         (step t3 (cl) :rule rule-name :args (1 2.0 \"three\"))
         (step t4 (cl) :rule rule-name :args ((:= a 12) (:= b 3.14) (:= c (* 6 7))))
-        (step t5 (cl) :rule rule-name :premises (h1 h2 h3) :args (42))
+        (step t5 (cl) :rule rule-name :premises (t1 t2 t3) :args (42))
     ";
     let proof = parse_proof(input);
     assert_eq!(proof.0.len(), 5);
@@ -248,7 +248,6 @@ fn test_step() {
     assert_eq!(
         proof.0[0],
         ProofCommand::Step {
-            step_name: "t1".into(),
             clause: vec![Rc::new(parse_term("(= (+ 2 3) (- 1 2))"))],
             rule: "rule-name".into(),
             premises: Vec::new(),
@@ -259,10 +258,9 @@ fn test_step() {
     assert_eq!(
         proof.0[1],
         ProofCommand::Step {
-            step_name: "t2".into(),
             clause: Vec::new(),
             rule: "rule-name".into(),
-            premises: vec!["h1".into(), "h2".into(), "h3".into()],
+            premises: vec![0],
             args: Vec::new(),
         }
     );
@@ -270,7 +268,6 @@ fn test_step() {
     assert_eq!(
         proof.0[2],
         ProofCommand::Step {
-            step_name: "t3".into(),
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: Vec::new(),
@@ -290,7 +287,6 @@ fn test_step() {
     assert_eq!(
         proof.0[3],
         ProofCommand::Step {
-            step_name: "t4".into(),
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: Vec::new(),
@@ -310,10 +306,9 @@ fn test_step() {
     assert_eq!(
         proof.0[4],
         ProofCommand::Step {
-            step_name: "t5".into(),
             clause: Vec::new(),
             rule: "rule-name".into(),
-            premises: vec!["h1".into(), "h2".into(), "h3".into()],
+            premises: vec![0, 1, 2],
             args: vec![ProofArg::Term(Rc::new(terminal!(int 42)))],
         }
     );

@@ -12,20 +12,16 @@ pub struct Proof(pub Vec<ProofCommand>);
 #[derive(Debug, PartialEq)]
 pub enum ProofCommand {
     /// An "assume" command, of the form "(assume <symbol> <term>)".
-    Assume(String, Rc<Term>),
+    Assume(Rc<Term>),
 
     /// A "step" command, of the form "(step <symbol> <clause> :rule <symbol> [:premises
     /// (<symbol>+)]? [:args <proof_args>]?)".
     Step {
-        step_name: String,
         clause: Vec<Rc<Term>>,
         rule: String,
-        premises: Vec<String>,
+        premises: Vec<usize>,
         args: Vec<ProofArg>,
     },
-
-    /// An "anchor" command, of the form "(anchor :step <symbol> [:args <proof_args>]?)".
-    Anchor { step: String, args: Vec<ProofArg> },
 }
 
 /// An argument for a "step" or "anchor" command.

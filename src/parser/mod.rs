@@ -65,6 +65,7 @@ struct ParserState {
     function_defs: HashMap<String, FunctionDef>,
     terms_map: HashMap<Term, Rc<Term>>,
     sort_declarations: HashMap<String, (u64, Rc<Term>)>,
+    step_indices: HashMap<String, usize>,
 }
 
 impl<R: BufRead> Parser<R> {
@@ -249,9 +250,9 @@ impl<R: BufRead> Parser<R> {
         let mut commands = Vec::new();
         while self.current_token != Token::Eof {
             self.expect_token(Token::OpenParen)?;
-            let command = match self.next_token()? {
-                Token::ReservedWord(Reserved::Assume) => self.parse_assume_command(),
-                Token::ReservedWord(Reserved::Step) => self.parse_step_command(),
+            let (index, command) = match self.next_token()? {
+                Token::ReservedWord(Reserved::Assume) => self.parse_assume_command()?,
+                Token::ReservedWord(Reserved::Step) => self.parse_step_command()?,
                 Token::ReservedWord(Reserved::DeclareFun) => {
                     let (name, sort) = self.parse_declare_fun()?;
                     self.symbol_table.insert(Identifier::Simple(name), sort);
@@ -259,7 +260,7 @@ impl<R: BufRead> Parser<R> {
                 }
                 Token::ReservedWord(Reserved::DeclareSort) => {
                     let (name, arity) = self.parse_declare_sort()?;
-                    // User declared sorts are represented with the `UserDeclared` sort kind, and an
+                    // User declared sorts are represented with the `Atom` sort kind, and an
                     // argument which is a string terminal representing the sort name.
                     let sort = {
                         let arg = self.add_term(terminal!(string name.clone()));
@@ -273,29 +274,30 @@ impl<R: BufRead> Parser<R> {
                     self.state.function_defs.insert(name, func_def);
                     continue;
                 }
-                Token::ReservedWord(Reserved::Anchor) => todo!(),
-                other => Err(ParserError::UnexpectedToken(other)),
+                Token::ReservedWord(Reserved::Anchor) => todo!(), // TODO: Add support for subproofs
+                other => return Err(ParserError::UnexpectedToken(other)),
             };
-            commands.push(command?);
+            self.state.step_indices.insert(index, commands.len());
+            commands.push(command);
         }
         Ok(Proof(commands))
     }
 
     /// Parses an "assume" proof command. This method assumes that the "(" and "assume" tokens were
     /// already consumed.
-    fn parse_assume_command(&mut self) -> ParserResult<ProofCommand> {
-        let symbol = self.expect_symbol()?;
+    fn parse_assume_command(&mut self) -> ParserResult<(String, ProofCommand)> {
+        let index = self.expect_symbol()?;
         let term = self.parse_term()?;
         SortError::assert_eq(Term::BOOL_SORT, &term.sort())?;
         let term = self.add_term(term);
         self.expect_token(Token::CloseParen)?;
-        Ok(ProofCommand::Assume(symbol, term))
+        Ok((index, ProofCommand::Assume(term)))
     }
 
     /// Parses a "step" proof command. This method assumes that the "(" and "step" tokens were
     /// already consumed.
-    fn parse_step_command(&mut self) -> ParserResult<ProofCommand> {
-        let step_name = self.expect_symbol()?;
+    fn parse_step_command(&mut self) -> ParserResult<(String, ProofCommand)> {
+        let step_index = self.expect_symbol()?;
         let clause = self.parse_clause()?;
         self.expect_token(Token::Keyword("rule".into()))?;
         let rule = self.expect_symbol()?;
@@ -303,7 +305,19 @@ impl<R: BufRead> Parser<R> {
         let premises = if self.current_token == Token::Keyword("premises".into()) {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
+            // Parse a series of index symbols and convert them to step indices
             self.parse_sequence(Self::expect_symbol, true)?
+                .into_iter()
+                .map(|index| {
+                    // For every index symbol, find the associated `usize` in the `step_indices`
+                    // hash map, or return an error
+                    self.state
+                        .step_indices
+                        .get(&index)
+                        .cloned()
+                        .ok_or_else(|| ParserError::UndefinedStepIndex(index))
+                })
+                .collect::<Result<_, _>>()?
         } else {
             Vec::new()
         };
@@ -318,13 +332,15 @@ impl<R: BufRead> Parser<R> {
 
         self.expect_token(Token::CloseParen)?;
 
-        Ok(ProofCommand::Step {
-            step_name,
-            clause,
-            rule,
-            premises,
-            args,
-        })
+        Ok((
+            step_index,
+            ProofCommand::Step {
+                clause,
+                rule,
+                premises,
+                args,
+            },
+        ))
     }
 
     /// Parses a "declare-fun" proof command. Returns the function name and a term representing its

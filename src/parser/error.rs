@@ -20,6 +20,7 @@ pub enum ParserError {
     EmptySequence,
     SortError(SortError),
     UndefinedIden(Identifier),
+    UndefinedStepIndex(String),
     WrongNumberOfArgs(usize, usize),
 }
 
