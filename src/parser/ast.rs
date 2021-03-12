@@ -1,8 +1,7 @@
 //! The abstract syntax tree (AST) for the veriT Proof Format.
 
 use num_rational::Ratio;
-use std::rc::Rc;
-use std::str::FromStr;
+use std::{fmt::Debug, rc::Rc, str::FromStr};
 
 /// A proof in the veriT Proof Format.
 #[derive(Debug)]
@@ -42,7 +41,7 @@ pub struct FunctionDef {
     pub body: Term,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Operator {
     // Arithmetic
     Add,
@@ -57,22 +56,40 @@ pub enum Operator {
     Not,
 }
 
-impl FromStr for Operator {
-    type Err = ();
+/// Implements `FromStr` and `Debug` for `Operator`.
+macro_rules! impl_operator_str_traits {
+    ($($op:ident: $s:literal),* $(,)?) => {
+        impl FromStr for Operator {
+            type Err = ();
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "+" => Ok(Operator::Add),
-            "-" => Ok(Operator::Sub),
-            "*" => Ok(Operator::Mult),
-            "/" => Ok(Operator::Div),
-            "=" => Ok(Operator::Eq),
-            "or" => Ok(Operator::Or),
-            "and" => Ok(Operator::And),
-            "not" => Ok(Operator::Not),
-            _ => Err(()),
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                match s {
+                    $($s => Ok(Operator::$op),)*
+                    _ => Err(()),
+                }
+            }
+        }
+
+        impl Debug for Operator {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                let s = match self {
+                    $(Operator::$op => $s,)*
+                };
+                write!(f, "{}", s)
+            }
         }
     }
+}
+
+impl_operator_str_traits! {
+    Add: "+",
+    Sub: "-",
+    Mult: "*",
+    Div: "/",
+    Eq: "=",
+    Or: "or",
+    And: "and",
+    Not: "not",
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -85,7 +102,7 @@ pub enum SortKind {
     String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Term {
     /// A terminal. This can be a constant or a variable.
     Terminal(Terminal),
@@ -142,12 +159,60 @@ impl Term {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+impl Debug for Term {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Term::Terminal(t) => write!(f, "{:?}", t),
+            Term::App(func, args) => {
+                write!(f, "({:?}", func)?;
+                for a in args {
+                    write!(f, " {:?}", a)?;
+                }
+                write!(f, ")")
+            }
+            Term::Op(op, args) => {
+                write!(f, "({:?}", op)?;
+                for a in args {
+                    write!(f, " {:?}", a)?;
+                }
+                write!(f, ")")
+            }
+            Term::Sort(sort_kind, args) => match sort_kind {
+                SortKind::Atom => {
+                    if let Term::Terminal(Terminal::String(s)) = args[0].as_ref() {
+                        write!(f, "{}", s)
+                    } else {
+                        panic!()
+                    }
+                }
+                SortKind::Bool => write!(f, "Bool"),
+                SortKind::Int => write!(f, "Int"),
+                SortKind::Real => write!(f, "Real"),
+                SortKind::String => write!(f, "String"),
+                SortKind::Function => panic!(),
+            },
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Terminal {
     Integer(u64),
     Real(Ratio<u64>),
     String(String),
     Var(Identifier, Rc<Term>),
+}
+
+impl Debug for Terminal {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Terminal::Integer(i) => write!(f, "{}", i),
+            Terminal::Real(r) => write!(f, "{}", (*r.numer() as f64 / *r.denom() as f64)),
+            Terminal::String(s) => write!(f, "\"{}\"", s),
+            Terminal::Var(Identifier::Simple(s), _) => write!(f, "{}", s),
+            _ => todo!(),
+        }
+    }
 }
 
 /// Helper macro to construct `Terminal` terms.

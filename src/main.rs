@@ -23,6 +23,6 @@ fn main() -> ParserResult<()> {
             parse_proof(stdin.lock())
         }
     }?;
-    println!("{:?}", proof);
+    println!("{:#?}", proof);
     Ok(())
 }
