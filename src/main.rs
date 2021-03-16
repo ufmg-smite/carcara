@@ -1,5 +1,6 @@
 extern crate num_rational;
 
+mod checker;
 mod parser;
 
 use error::*;
@@ -24,5 +25,6 @@ fn main() -> ParserResult<()> {
         }
     }?;
     println!("{:#?}", proof);
+    println!("{}", checker::ProofChecker::new(proof).check());
     Ok(())
 }
