@@ -277,6 +277,7 @@ impl<R: BufRead> Parser<R> {
                 Token::ReservedWord(Reserved::Anchor) => todo!(), // TODO: Add support for subproofs
                 other => return Err(ParserError::UnexpectedToken(other)),
             };
+            // TODO: Check if there is already a step with this index
             self.state.step_indices.insert(index, commands.len());
             commands.push(command);
         }

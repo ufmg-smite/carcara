@@ -10,20 +10,20 @@ impl<'a> Parser<std::io::Cursor<&'a str>> {
 
 const ERROR_MESSAGE: &'static str = "parser error during test";
 
-fn parse_term(input: &str) -> Term {
+pub fn parse_term(input: &str) -> Term {
     Parser::from_str(input)
         .and_then(|mut p| p.parse_term())
         .expect(ERROR_MESSAGE)
 }
 
-fn parse_term_err(input: &str) -> ParserError {
+pub fn parse_term_err(input: &str) -> ParserError {
     Parser::from_str(input)
         .and_then(|mut p| p.parse_term())
         .expect_err("expected error")
 }
 
 /// Parses a series of definitions and declarations, and then parses a term and returns it.
-fn parse_term_with_definitions(definitions: &str, term: &str) -> Term {
+pub fn parse_term_with_definitions(definitions: &str, term: &str) -> Term {
     let mut parser = Parser::from_str(definitions).expect(ERROR_MESSAGE);
     parser.parse_proof().expect(ERROR_MESSAGE);
     let mut new_parser = Parser::from_str(term).expect(ERROR_MESSAGE);
@@ -35,7 +35,7 @@ fn parse_term_with_definitions(definitions: &str, term: &str) -> Term {
     new_parser.parse_term().expect(ERROR_MESSAGE)
 }
 
-fn parse_proof(input: &str) -> Proof {
+pub fn parse_proof(input: &str) -> Proof {
     Parser::from_str(input)
         .and_then(|mut p| p.parse_proof())
         .expect(ERROR_MESSAGE)
