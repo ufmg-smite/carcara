@@ -22,6 +22,7 @@ pub enum ParserError {
     UndefinedIden(Identifier),
     UndefinedStepIndex(String),
     WrongNumberOfArgs(usize, usize),
+    RepeatedStepIndex,
 }
 
 impl From<io::Error> for ParserError {
