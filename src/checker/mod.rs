@@ -36,6 +36,7 @@ impl ProofChecker {
         match rule_name {
             "or" => rules::or,
             "eq_congruent" => rules::eq_congruent,
+            "resolution" => rules::resolution,
             _ => todo!(),
         }
     }
@@ -79,6 +80,7 @@ macro_rules! match_op {
 
 mod rules {
     use super::*;
+    use std::collections::{hash_map::Entry, HashMap};
 
     pub fn or(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
         if premises.len() != 1 {
@@ -137,6 +139,73 @@ mod rules {
             _ => false,
         }
     }
+
+    pub fn resolution(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
+        /// Represents the polarities of a term encountered during checking.
+        #[derive(Debug, PartialEq, Eq)]
+        enum Polarity {
+            Positive,
+            Negative,
+            Both,
+        }
+
+        /// Convert a term to positive polarity, and return its old polarity. Assumes that the term
+        /// has at most one leading negation, that is, it is not of the form "(not (not ...))".
+        fn to_positive(term: &Term) -> (&Term, Polarity) {
+            match term {
+                // We assume that the "not" term is well constructed, meaning it has exactly
+                // one argument
+                Term::Op(Operator::Not, args) => (args[0].as_ref(), Polarity::Negative),
+                other => (other, Polarity::Positive),
+            }
+        }
+
+        // For every term in each premise, we will convert it to positive polarity, and record
+        // with which polarities it was encountered
+        let mut encountered_polarities: HashMap<&Term, Polarity> = HashMap::new();
+        for command in premises.into_iter() {
+            let premise_clause = match command {
+                // "assume" premises are interpreted as a clause with a single term
+                ProofCommand::Assume(term) => std::slice::from_ref(term),
+                ProofCommand::Step { clause, .. } => &clause,
+            };
+            for term in premise_clause {
+                let (term, polarity) = to_positive(term.as_ref());
+                match encountered_polarities.entry(term) {
+                    // If the term is not in the hash map, we insert it
+                    Entry::Vacant(entry) => {
+                        entry.insert(polarity);
+                    }
+
+                    // If the term is in the hash map with the opposite polarity, we set the
+                    // polarity to `Polarity::Both`
+                    Entry::Occupied(mut entry) => {
+                        if *entry.get() != Polarity::Both && *entry.get() != polarity {
+                            entry.insert(Polarity::Both);
+                        }
+                    }
+                }
+            }
+        }
+
+        // We expect the final clause to be every term that appeared in the premises in only one
+        // polarity, and we also expect these terms to be in the correct polarity
+        let expected_len = encountered_polarities
+            .iter()
+            .filter(|&(_, polarity)| *polarity != Polarity::Both)
+            .count();
+        if clause.len() != expected_len {
+            return false;
+        }
+        for t in clause {
+            let (t, polarity) = to_positive(t.as_ref());
+            if encountered_polarities.get(t) != Some(&polarity) {
+                return false;
+            }
+        }
+
+        true
+    }
 }
 
 #[cfg(test)]
@@ -167,7 +236,7 @@ mod tests {
             (declare-fun p () Bool)
             (declare-fun q () Bool)
             (assume h1 (or p q))
-            (step t2 (cl p q) :rule or :premises (h1))        
+            (step t2 (cl p q) :rule or :premises (h1))
         ";
         assert_eq!(parse_and_check(proof), true);
 
@@ -177,7 +246,7 @@ mod tests {
             (declare-fun r () Bool)
             (declare-fun s () Bool)
             (assume h1 (or p q r s))
-            (step t2 (cl p q r s) :rule or :premises (h1))        
+            (step t2 (cl p q r s) :rule or :premises (h1))
         ";
         assert_eq!(parse_and_check(proof), true);
 
@@ -188,7 +257,7 @@ mod tests {
             (declare-fun r () Bool)
             (assume h1 (or p q))
             (assume h2 (or q r))
-            (step t2 (cl p q r) :rule or :premises (h1 h2))        
+            (step t2 (cl p q r) :rule or :premises (h1 h2))
         ";
         assert_eq!(parse_and_check(proof), false);
 
@@ -198,8 +267,8 @@ mod tests {
             (declare-fun q () Bool)
             (declare-fun r () Bool)
             (assume h1 (or p (or q r)))
-            (step t1 (cl p (or q r)) :rule or :premises (h1))        
-            (step t2 (cl p q) :rule or :premises (t1))        
+            (step t1 (cl p (or q r)) :rule or :premises (h1))
+            (step t2 (cl p q) :rule or :premises (t1))
         ";
         assert_eq!(parse_and_check(proof), false);
 
@@ -208,7 +277,7 @@ mod tests {
             (declare-fun p () Bool)
             (declare-fun q () Bool)
             (assume h1 (and p q))
-            (step t2 (cl p q) :rule or :premises (h1))        
+            (step t2 (cl p q) :rule or :premises (h1))
         ";
         assert_eq!(parse_and_check(proof), false);
 
@@ -219,7 +288,7 @@ mod tests {
             (declare-fun r () Bool)
             (declare-fun s () Bool)
             (assume h1 (or p q))
-            (step t2 (cl r s) :rule or :premises (h1))        
+            (step t2 (cl r s) :rule or :premises (h1))
         ";
         assert_eq!(parse_and_check(proof), false);
 
@@ -228,7 +297,7 @@ mod tests {
             (declare-fun q () Bool)
             (declare-fun r () Bool)
             (assume h1 (or p q r))
-            (step t2 (cl p q) :rule or :premises (h1))        
+            (step t2 (cl p q) :rule or :premises (h1))
         ";
         assert_eq!(parse_and_check(proof), false);
 
@@ -236,7 +305,7 @@ mod tests {
             (declare-fun p () Bool)
             (declare-fun q () Bool)
             (assume h1 (or q p))
-            (step t2 (cl p q) :rule or :premises (h1))        
+            (step t2 (cl p q) :rule or :premises (h1))
         ";
         assert_eq!(parse_and_check(proof), false);
     }
