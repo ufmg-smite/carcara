@@ -392,4 +392,91 @@ mod tests {
         ";
         assert_eq!(parse_and_check(proof), false);
     }
+
+    #[test]
+    fn test_resolution_rule() {
+        // Simple working examples
+        let proof = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (assume h1 (not p))
+            (assume h2 (or p q))
+            (step t3 (cl p q) :rule or :premises (h2))
+            (step t5 (cl q) :rule resolution :premises (h1 t3))
+        ";
+        assert_eq!(parse_and_check(proof), true);
+
+        let proof = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (assume h1 (not p))
+            (assume h2 (not q))
+            (assume h3 (not r))
+            (assume h4 (or p q r))
+            (step t5 (cl p q r) :rule or :premises (h4))
+            (step t6 (cl) :rule resolution :premises (h1 h2 h3 t5))
+        ";
+        assert_eq!(parse_and_check(proof), true);
+
+        let proof = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (assume h1 (not p))
+            (assume h2 q)
+            (assume h3 (or p (not q)))
+            (step t4 (cl p (not q)) :rule or :premises (h3))
+            (step t5 (cl) :rule resolution :premises (h1 h2 t4))
+        ";
+        assert_eq!(parse_and_check(proof), true);
+
+        // Missing term in final clause
+        let proof = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (assume h1 (not p))
+            (assume h2 (or p q r))
+            (step t3 (cl p q r) :rule or :premises (h2))
+            (step t4 (cl q) :rule resolution :premises (h1 t3))
+        ";
+        assert_eq!(parse_and_check(proof), false);
+
+        // Extra term in final clause
+        let proof = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (assume h1 (not p))
+            (assume h2 (or p q r))
+            (step t3 (cl p q r) :rule or :premises (h2))
+            (step t4 (cl p q r) :rule resolution :premises (h1 t3))
+        ";
+        assert_eq!(parse_and_check(proof), false);
+
+        // Term appears in final clause with wrong polarity
+        let proof = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (assume h1 (not p))
+            (assume h2 (or p q r))
+            (step t3 (cl p q r) :rule or :premises (h2))
+            (step t4 (cl (not q) r) :rule resolution :premises (h1 t3))
+        ";
+        assert_eq!(parse_and_check(proof), false);
+
+        // Duplicate term in final clause
+        let proof = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (assume h1 (not p))
+            (assume h2 (or p q r))
+            (step t3 (cl p q r) :rule or :premises (h2))
+            (step t4 (cl q q r) :rule resolution :premises (h1 t3))
+        ";
+        assert_eq!(parse_and_check(proof), false);
+    }
 }
