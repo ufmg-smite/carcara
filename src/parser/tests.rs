@@ -6,6 +6,10 @@ impl<'a> Parser<std::io::Cursor<&'a str>> {
     pub fn from_str(input: &'a str) -> ParserResult<Self> {
         Self::new(std::io::Cursor::new(input))
     }
+
+    fn from_str_with_state(input: &'a str, state: ParserState) -> ParserResult<Self> {
+        Self::with_state(std::io::Cursor::new(input), state)
+    }
 }
 
 const ERROR_MESSAGE: &'static str = "parser error during test";
@@ -26,12 +30,10 @@ pub fn parse_term_err(input: &str) -> ParserError {
 pub fn parse_term_with_definitions(definitions: &str, term: &str) -> Term {
     let mut parser = Parser::from_str(definitions).expect(ERROR_MESSAGE);
     parser.parse_proof().expect(ERROR_MESSAGE);
-    let mut new_parser = Parser::from_str(term).expect(ERROR_MESSAGE);
 
     // To keep the definitions and delcarations, we transfer the parser state to the new
     // parser.
-    new_parser.state = parser.state;
-    new_parser.symbol_table = parser.symbol_table;
+    let mut new_parser = Parser::from_str_with_state(term, parser.state).expect(ERROR_MESSAGE);
     new_parser.parse_term().expect(ERROR_MESSAGE)
 }
 

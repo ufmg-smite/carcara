@@ -51,17 +51,23 @@ impl<K: Eq + Hash, V> SymbolTable<K, V> {
     }
 }
 
+impl<K: Eq + Hash, V> Default for SymbolTable<K, V> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// A parser for the veriT Proof Format. The parser makes use of hash consing to reduce memory usage
 /// by sharing identical terms in the AST.
 pub struct Parser<R> {
     lexer: Lexer<R>,
     current_token: Token,
     state: ParserState,
-    symbol_table: SymbolTable<Identifier, Rc<Term>>,
 }
 
 #[derive(Default)]
 struct ParserState {
+    sorts_symbol_table: SymbolTable<Identifier, Rc<Term>>,
     function_defs: HashMap<String, FunctionDef>,
     terms_map: HashMap<Term, Rc<Term>>,
     sort_declarations: HashMap<String, (u64, Rc<Term>)>,
@@ -72,25 +78,24 @@ impl<R: BufRead> Parser<R> {
     /// Constructs a new `Parser` from a type that implements `BufRead`. This operation can fail if
     /// there is an IO or lexer error on the first token.
     pub fn new(input: R) -> ParserResult<Self> {
-        let mut lexer = Lexer::new(input)?;
-        let current_token = lexer.next_token()?;
-        let mut parser = Parser {
-            lexer,
-            current_token,
-            state: Default::default(),
-            symbol_table: SymbolTable::new(),
-        };
-        parser.add_builtins();
-        Ok(parser)
-    }
-
-    fn add_builtins(&mut self) {
+        let mut parser = Self::with_state(input, ParserState::default())?;
         let builtins = vec![("true", Term::BOOL_SORT), ("false", Term::BOOL_SORT)];
         for (iden, sort) in builtins {
             let iden = Identifier::Simple(iden.into());
-            let sort = self.add_term(sort.clone());
-            self.symbol_table.insert(iden, sort);
+            let sort = parser.add_term(sort.clone());
+            parser.state.sorts_symbol_table.insert(iden, sort);
         }
+        Ok(parser)
+    }
+
+    fn with_state(input: R, state: ParserState) -> ParserResult<Self> {
+        let mut lexer = Lexer::new(input)?;
+        let current_token = lexer.next_token()?;
+        Ok(Parser {
+            lexer,
+            current_token,
+            state,
+        })
     }
 
     /// Advances the parser one token, and returns the previous `current_token`.
@@ -136,7 +141,8 @@ impl<R: BufRead> Parser<R> {
 
     fn make_var(&mut self, iden: Identifier) -> ParserResult<Term> {
         let sort = self
-            .symbol_table
+            .state
+            .sorts_symbol_table
             .get(&iden)
             .ok_or_else(|| ParserError::UndefinedIden(iden.clone()))?;
         Ok(Term::Terminal(Terminal::Var(iden, sort.clone())))
@@ -255,7 +261,9 @@ impl<R: BufRead> Parser<R> {
                 Token::ReservedWord(Reserved::Step) => self.parse_step_command()?,
                 Token::ReservedWord(Reserved::DeclareFun) => {
                     let (name, sort) = self.parse_declare_fun()?;
-                    self.symbol_table.insert(Identifier::Simple(name), sort);
+                    self.state
+                        .sorts_symbol_table
+                        .insert(Identifier::Simple(name), sort);
                     continue;
                 }
                 Token::ReservedWord(Reserved::DeclareSort) => {
@@ -384,13 +392,13 @@ impl<R: BufRead> Parser<R> {
 
         // In order to correctly parse the function body, we push a new scope to the symbol table
         // and add the functions arguments to it.
-        self.symbol_table.push_scope();
+        self.state.sorts_symbol_table.push_scope();
         for (name, sort) in params.iter() {
             let iden = Identifier::Simple(name.clone());
-            self.symbol_table.insert(iden, sort.clone());
+            self.state.sorts_symbol_table.insert(iden, sort.clone());
         }
         let body = self.parse_term()?;
-        self.symbol_table.pop_scope();
+        self.state.sorts_symbol_table.pop_scope();
 
         self.expect_token(Token::CloseParen)?;
 
