@@ -28,22 +28,11 @@ struct SymbolTable<K, V> {
     scopes: Vec<HashMap<K, V>>,
 }
 
-impl<K: Eq + Hash, V> SymbolTable<K, V> {
+impl<K, V> SymbolTable<K, V> {
     fn new() -> Self {
         Self {
             scopes: vec![HashMap::new()],
         }
-    }
-
-    fn get(&self, key: &K) -> Option<&V> {
-        self.scopes.last().and_then(|map| map.get(key))
-    }
-
-    fn insert(&mut self, key: K, value: V) {
-        self.scopes
-            .last_mut()
-            .expect("no scopes in symbol table")
-            .insert(key, value);
     }
 
     fn push_scope(&mut self) {
@@ -61,18 +50,23 @@ impl<K: Eq + Hash, V> SymbolTable<K, V> {
     }
 }
 
-impl<K: Eq + Hash, V> Default for SymbolTable<K, V> {
-    fn default() -> Self {
-        Self::new()
+impl<K: Eq + Hash, V> SymbolTable<K, V> {
+    fn get(&self, key: &K) -> Option<&V> {
+        self.scopes.last().and_then(|map| map.get(key))
+    }
+
+    fn insert(&mut self, key: K, value: V) {
+        self.scopes
+            .last_mut()
+            .expect("no scopes in symbol table")
+            .insert(key, value);
     }
 }
 
-/// A parser for the veriT Proof Format. The parser makes use of hash consing to reduce memory usage
-/// by sharing identical terms in the AST.
-pub struct Parser<R> {
-    lexer: Lexer<R>,
-    current_token: Token,
-    state: ParserState,
+impl<K, V> Default for SymbolTable<K, V> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Default)]
@@ -84,20 +78,140 @@ struct ParserState {
     step_indices: HashMap<String, usize>,
 }
 
+impl ParserState {
+    /// Takes a term and returns an `Rc` referencing it. If the term was not originally in the
+    /// terms hash map, it is added to it.
+    fn add_term(&mut self, term: Term) -> Rc<Term> {
+        match self.terms_map.entry(term.clone()) {
+            Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
+            Entry::Vacant(vacant_entry) => vacant_entry.insert(Rc::new(term)).clone(),
+        }
+    }
+
+    // Takes a vector of terms and calls `add_term` on each.
+    fn add_all(&mut self, terms: Vec<Term>) -> Vec<Rc<Term>> {
+        terms.into_iter().map(|t| self.add_term(t)).collect()
+    }
+
+    /// Constructs and sort checks a variable term.
+    fn make_var(&mut self, iden: Identifier) -> ParserResult<Term> {
+        let sort = self
+            .sorts_symbol_table
+            .get(&iden)
+            .ok_or_else(|| ParserError::UndefinedIden(iden.clone()))?;
+        Ok(Term::Terminal(Terminal::Var(iden, sort.clone())))
+    }
+
+    /// Constructs and sort checks an operation term.
+    fn make_op(&mut self, op: Operator, args: Vec<Term>) -> ParserResult<Term> {
+        let sorts: Vec<_> = args.iter().map(Term::sort).collect();
+        match op {
+            Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => {
+                ParserError::assert_num_of_args_range(&args, 2..)?;
+
+                // All the arguments must have the same sort, and it must be either Int or Real
+                SortError::assert_one_of(&[Term::INT_SORT, Term::REAL_SORT], &sorts[0])?;
+                SortError::assert_all_eq(&sorts)?;
+            }
+            Operator::Eq => {
+                ParserError::assert_num_of_args_range(&args, 2..)?;
+                SortError::assert_all_eq(&sorts)?;
+            }
+            Operator::Or | Operator::And => {
+                ParserError::assert_num_of_args_range(&args, 2..)?;
+                for s in sorts {
+                    SortError::assert_eq(Term::BOOL_SORT, &s)?;
+                }
+            }
+            Operator::Not => {
+                ParserError::assert_num_of_args(&args, 1)?;
+                SortError::assert_eq(Term::BOOL_SORT, &sorts[0])?;
+            }
+        }
+        let args = self.add_all(args);
+        Ok(Term::Op(op, args))
+    }
+
+    /// Constructs and sort checks an application term.
+    fn make_app(&mut self, function: Term, args: Vec<Term>) -> ParserResult<Term> {
+        let sorts = {
+            let function_sort = function.sort();
+            if let Term::Sort(SortKind::Function, sorts) = function_sort {
+                sorts
+            } else {
+                // Function does not have function sort
+                return Err(ParserError::SortError(SortError::Expected {
+                    expected: Term::Sort(SortKind::Function, Vec::new()),
+                    got: function_sort.clone(),
+                }));
+            }
+        };
+        ParserError::assert_num_of_args(&args, sorts.len() - 1)?;
+        for i in 0..args.len() {
+            SortError::assert_eq(sorts[i].as_ref(), &args[i].sort())?;
+        }
+        let function = self.add_term(function);
+        let args = self.add_all(args);
+        Ok(Term::App(function, args))
+    }
+
+    /// Takes a term and a hash map of variables to terms and substitutes every ocurrence of those
+    /// variables with the associated term.
+    fn apply_substitutions(&mut self, term: &Term, substitutions: &HashMap<String, Term>) -> Term {
+        let mut apply_to_sequence = |sequence: &[Rc<Term>]| -> Vec<Rc<Term>> {
+            sequence
+                .iter()
+                .map(|a| {
+                    let reduced = self.apply_substitutions(a, substitutions);
+                    self.add_term(reduced)
+                })
+                .collect()
+        };
+        match term {
+            Term::Terminal(t) => match t {
+                Terminal::Var(Identifier::Simple(iden), _) if substitutions.contains_key(iden) => {
+                    substitutions[iden].clone()
+                }
+                other => Term::Terminal(other.clone()),
+            },
+            Term::App(func, args) => {
+                let new_args = apply_to_sequence(args);
+                let new_func = self.apply_substitutions(func, substitutions);
+                Term::App(self.add_term(new_func), new_args)
+            }
+            Term::Op(op, args) => {
+                let new_args = apply_to_sequence(args);
+                Term::Op(*op, new_args)
+            }
+            sort @ Term::Sort(_, _) => sort.clone(),
+        }
+    }
+}
+
+/// A parser for the veriT Proof Format. The parser makes use of hash consing to reduce memory usage
+/// by sharing identical terms in the AST.
+pub struct Parser<R> {
+    lexer: Lexer<R>,
+    current_token: Token,
+    state: ParserState,
+}
+
 impl<R: BufRead> Parser<R> {
     /// Constructs a new `Parser` from a type that implements `BufRead`. This operation can fail if
     /// there is an IO or lexer error on the first token.
     pub fn new(input: R) -> ParserResult<Self> {
-        let mut parser = Self::with_state(input, ParserState::default())?;
+        let mut state = ParserState::default();
         let builtins = vec![("true", Term::BOOL_SORT), ("false", Term::BOOL_SORT)];
         for (iden, sort) in builtins {
             let iden = Identifier::Simple(iden.into());
-            let sort = parser.add_term(sort.clone());
-            parser.state.sorts_symbol_table.insert(iden, sort);
+            let sort = state.add_term(sort.clone());
+            state.sorts_symbol_table.insert(iden, sort);
         }
-        Ok(parser)
+        Parser::with_state(input, state)
     }
 
+    /// Constructs a new `Parser` using an existing `ParserState`. This operation can fail if there
+    /// is an IO or lexer error on the first token.
     fn with_state(input: R, state: ParserState) -> ParserResult<Self> {
         let mut lexer = Lexer::new(input)?;
         let current_token = lexer.next_token()?;
@@ -133,113 +247,12 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
+    /// Consumes the current token if it is a numeral, and returns the inner `u64`. Returns an
+    /// error otherwise.
     fn expect_numeral(&mut self) -> ParserResult<u64> {
         match self.next_token()? {
             Token::Numeral(n) => Ok(n),
             other => Err(ParserError::UnexpectedToken(other)),
-        }
-    }
-
-    /// Takes a term and returns an `Rc` referencing it. If the term was not originally in the
-    /// terms hash map, it is added to it.
-    fn add_term(&mut self, term: Term) -> Rc<Term> {
-        match self.state.terms_map.entry(term.clone()) {
-            Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
-            Entry::Vacant(vacant_entry) => vacant_entry.insert(Rc::new(term)).clone(),
-        }
-    }
-
-    fn make_var(&mut self, iden: Identifier) -> ParserResult<Term> {
-        let sort = self
-            .state
-            .sorts_symbol_table
-            .get(&iden)
-            .ok_or_else(|| ParserError::UndefinedIden(iden.clone()))?;
-        Ok(Term::Terminal(Terminal::Var(iden, sort.clone())))
-    }
-
-    /// Constructs and sort checks an operation term.
-    fn make_op(&mut self, op: Operator, args: Vec<Term>) -> ParserResult<Term> {
-        let sorts: Vec<_> = args.iter().map(Term::sort).collect();
-        match op {
-            Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => {
-                ParserError::assert_num_of_args_range(&args, 2..)?;
-
-                // All the arguments must have the same sort, and it must be either Int or Real
-                SortError::assert_one_of(&[Term::INT_SORT, Term::REAL_SORT], &sorts[0])?;
-                SortError::assert_all_eq(&sorts)?;
-            }
-            Operator::Eq => {
-                ParserError::assert_num_of_args_range(&args, 2..)?;
-                SortError::assert_all_eq(&sorts)?;
-            }
-            Operator::Or | Operator::And => {
-                ParserError::assert_num_of_args_range(&args, 2..)?;
-                for s in sorts {
-                    SortError::assert_eq(Term::BOOL_SORT, &s)?;
-                }
-            }
-            Operator::Not => {
-                ParserError::assert_num_of_args(&args, 1)?;
-                SortError::assert_eq(Term::BOOL_SORT, &sorts[0])?;
-            }
-        }
-        let args = args.into_iter().map(|arg| self.add_term(arg)).collect();
-        Ok(Term::Op(op, args))
-    }
-
-    /// Constructs and sort checks an application term.
-    fn make_app(&mut self, function: Term, args: Vec<Term>) -> ParserResult<Term> {
-        let sorts = {
-            let function_sort = function.sort();
-            if let Term::Sort(SortKind::Function, sorts) = function_sort {
-                sorts
-            } else {
-                // Function does not have function sort
-                return Err(ParserError::SortError(SortError::Expected {
-                    expected: Term::Sort(SortKind::Function, Vec::new()),
-                    got: function_sort.clone(),
-                }));
-            }
-        };
-        ParserError::assert_num_of_args(&args, sorts.len() - 1)?;
-        for i in 0..args.len() {
-            SortError::assert_eq(sorts[i].as_ref(), &args[i].sort())?;
-        }
-        let function = self.add_term(function);
-        let args: Vec<_> = args.into_iter().map(|term| self.add_term(term)).collect();
-        Ok(Term::App(function, args))
-    }
-
-    /// Takes a term and a hash map of `String`s to terms and substitutes every ocurrence of those
-    /// variables with the associated term.
-    fn apply_substitutions(&mut self, term: &Term, substitutions: &HashMap<String, Term>) -> Term {
-        let mut apply_to_sequence = |sequence: &[Rc<Term>]| -> Vec<Rc<Term>> {
-            sequence
-                .iter()
-                .map(|a| {
-                    let reduced = self.apply_substitutions(a, substitutions);
-                    self.add_term(reduced)
-                })
-                .collect()
-        };
-        match term {
-            Term::Terminal(t) => match t {
-                Terminal::Var(Identifier::Simple(iden), _) if substitutions.contains_key(iden) => {
-                    substitutions[iden].clone()
-                }
-                other => Term::Terminal(other.clone()),
-            },
-            Term::App(func, args) => {
-                let new_args = apply_to_sequence(args);
-                let new_func = self.apply_substitutions(func, substitutions);
-                Term::App(self.add_term(new_func), new_args)
-            }
-            Term::Op(op, args) => {
-                let new_args = apply_to_sequence(args);
-                Term::Op(*op, new_args)
-            }
-            sort @ Term::Sort(_, _) => sort.clone(),
         }
     }
 
@@ -279,8 +292,8 @@ impl<R: BufRead> Parser<R> {
                     // User declared sorts are represented with the `Atom` sort kind, and an
                     // argument which is a string terminal representing the sort name.
                     let sort = {
-                        let arg = self.add_term(terminal!(string name.clone()));
-                        self.add_term(Term::Sort(SortKind::Atom, vec![arg]))
+                        let arg = self.state.add_term(terminal!(string name.clone()));
+                        self.state.add_term(Term::Sort(SortKind::Atom, vec![arg]))
                     };
                     self.state.sort_declarations.insert(name, (arity, sort));
                     continue;
@@ -339,7 +352,7 @@ impl<R: BufRead> Parser<R> {
         let index = self.expect_symbol()?;
         let term = self.parse_term()?;
         SortError::assert_eq(Term::BOOL_SORT, &term.sort())?;
-        let term = self.add_term(term);
+        let term = self.state.add_term(term);
         self.expect_token(Token::CloseParen)?;
         Ok((index, ProofCommand::Assume(term)))
     }
@@ -401,11 +414,11 @@ impl<R: BufRead> Parser<R> {
             self.expect_token(Token::OpenParen)?;
             let mut sorts = self.parse_sequence(Self::parse_sort, false)?;
             sorts.push(self.parse_sort()?);
-            let sorts: Vec<_> = sorts.into_iter().map(|term| self.add_term(term)).collect();
+            let sorts = self.state.add_all(sorts);
             if sorts.len() == 1 {
                 sorts.into_iter().next().unwrap()
             } else {
-                self.add_term(Term::Sort(SortKind::Function, sorts))
+                self.state.add_term(Term::Sort(SortKind::Function, sorts))
             }
         };
         self.expect_token(Token::CloseParen)?;
@@ -454,7 +467,7 @@ impl<R: BufRead> Parser<R> {
             .into_iter()
             .map(|term| -> ParserResult<Rc<Term>> {
                 SortError::assert_eq(Term::BOOL_SORT, &term.sort())?;
-                Ok(self.add_term(term))
+                Ok(self.state.add_term(term))
             })
             .collect::<Result<_, _>>()?;
         Ok(terms)
@@ -474,18 +487,18 @@ impl<R: BufRead> Parser<R> {
                     let name = self.expect_symbol()?;
                     let value = self.parse_term()?;
                     self.expect_token(Token::CloseParen)?;
-                    Ok(ProofArg::Assign(name, self.add_term(value)))
+                    Ok(ProofArg::Assign(name, self.state.add_term(value)))
                 } else {
                     // If the first token is not ":=", this argument is just a regular term. Since
                     // we already consumed the "(" token, we have to call `parse_application`
                     // instead of `parse_term`.
                     let term = self.parse_application()?;
-                    Ok(ProofArg::Term(self.add_term(term)))
+                    Ok(ProofArg::Term(self.state.add_term(term)))
                 }
             }
             _ => {
                 let term = self.parse_term()?;
-                Ok(ProofArg::Term(self.add_term(term)))
+                Ok(ProofArg::Term(self.state.add_term(term)))
             }
         }
     }
@@ -496,7 +509,7 @@ impl<R: BufRead> Parser<R> {
         let symbol = self.expect_symbol()?;
         let sort = self.parse_sort()?;
         self.expect_token(Token::CloseParen)?;
-        Ok((symbol, self.add_term(sort)))
+        Ok((symbol, self.state.add_term(sort)))
     }
 
     /// Parses a term.
@@ -514,7 +527,7 @@ impl<R: BufRead> Parser<R> {
                         Err(ParserError::WrongNumberOfArgs(func_def.params.len(), 0))
                     }
                 } else {
-                    self.make_var(Identifier::Simple(s))
+                    self.state.make_var(Identifier::Simple(s))
                 }
             }
             Token::OpenParen => self.parse_application(),
@@ -527,7 +540,7 @@ impl<R: BufRead> Parser<R> {
             Token::Symbol(s) => {
                 if let Ok(operator) = Operator::from_str(&s) {
                     let args = self.parse_sequence(Self::parse_term, true)?;
-                    self.make_op(operator, args)
+                    self.state.make_op(operator, args)
                 } else {
                     let args = self.parse_sequence(Self::parse_term, true)?;
                     if let Some(func) = self.state.function_defs.get(&s) {
@@ -552,10 +565,10 @@ impl<R: BufRead> Parser<R> {
                         // directly to `apply_substitutions` because that method already borrows
                         // `self` mutably. So we have to clone the function body here.
                         let body_clone = func.body.clone();
-                        Ok(self.apply_substitutions(&body_clone, &substitutions))
+                        Ok(self.state.apply_substitutions(&body_clone, &substitutions))
                     } else {
-                        let func = self.make_var(Identifier::Simple(s))?;
-                        self.make_app(func, args)
+                        let func = self.state.make_var(Identifier::Simple(s))?;
+                        self.state.make_app(func, args)
                     }
                 }
             }
@@ -565,7 +578,6 @@ impl<R: BufRead> Parser<R> {
 
     /// Parses a sort.
     fn parse_sort(&mut self) -> ParserResult<Term> {
-        // TODO: since every sort is a valid term, maybe use `parse_term` to parse sorts
         match self.next_token()? {
             Token::Symbol(s) => match s.as_ref() {
                 "Bool" => Ok(Term::BOOL_SORT.clone()),
