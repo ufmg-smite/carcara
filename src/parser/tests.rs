@@ -29,7 +29,7 @@ pub fn parse_term_err(input: &str) -> ParserError {
 /// Parses a series of definitions and declarations, and then parses a term and returns it.
 pub fn parse_term_with_definitions(definitions: &str, term: &str) -> Term {
     let mut parser = Parser::from_str(definitions).expect(ERROR_MESSAGE);
-    parser.parse_proof().expect(ERROR_MESSAGE);
+    parser.parse_problem().expect(ERROR_MESSAGE);
 
     // To keep the definitions and delcarations, we transfer the parser state to the new
     // parser.

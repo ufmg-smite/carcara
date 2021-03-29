@@ -6,24 +6,27 @@ mod parser;
 use error::*;
 use parser::*;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader};
-
-fn parse_proof(reader: impl BufRead) -> ParserResult<ast::Proof> {
-    let mut parser = Parser::new(reader)?;
-    parser.parse_proof()
-}
+use std::io::{self, BufReader};
 
 fn main() -> ParserResult<()> {
-    let proof = match std::env::args().nth(1) {
+    let problem = if let Some(file_path) = std::env::args().nth(1) {
+        let file = File::open(file_path)?;
+        BufReader::new(file)
+    } else {
+        panic!("missing argument")
+    };
+
+    let proof = match std::env::args().nth(2) {
         Some(file_path) => {
             let file = File::open(file_path)?;
-            parse_proof(BufReader::new(file))
+            parse_problem_proof(problem, BufReader::new(file))
         }
         None => {
             let stdin = io::stdin();
-            parse_proof(stdin.lock())
+            parse_problem_proof(problem, stdin.lock())
         }
     }?;
+
     println!("{:#?}", proof);
     println!("{}", checker::ProofChecker::new(proof).check());
     Ok(())

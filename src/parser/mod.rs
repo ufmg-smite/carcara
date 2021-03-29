@@ -1,4 +1,5 @@
 //! A parser for the veriT Proof Format.
+
 #[macro_use]
 pub mod ast;
 pub mod error;
@@ -8,11 +9,20 @@ pub mod tests;
 use ast::*;
 use error::*;
 use lexer::*;
-use std::collections::{hash_map::Entry, HashMap};
-use std::hash::Hash;
-use std::io::BufRead;
-use std::rc::Rc;
-use std::str::FromStr;
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    hash::Hash,
+    io::BufRead,
+    rc::Rc,
+    str::FromStr,
+};
+
+pub fn parse_problem_proof<T: BufRead, U: BufRead>(prob: T, proof: U) -> ParserResult<ast::Proof> {
+    let mut problem_parser = Parser::new(prob)?;
+    problem_parser.parse_problem()?;
+
+    Parser::with_state(proof, problem_parser.state)?.parse_proof()
+}
 
 struct SymbolTable<K, V> {
     scopes: Vec<HashMap<K, V>>,
@@ -251,14 +261,12 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
-    /// Parses a proof.
-    pub fn parse_proof(&mut self) -> ParserResult<Proof> {
-        let mut commands = Vec::new();
+    /// Reads an SMT-LIB script and parses the declarations and definitions. Ignores all other
+    /// SMT-LIB script commands.
+    pub fn parse_problem(&mut self) -> ParserResult<()> {
         while self.current_token != Token::Eof {
             self.expect_token(Token::OpenParen)?;
-            let (index, command) = match self.next_token()? {
-                Token::ReservedWord(Reserved::Assume) => self.parse_assume_command()?,
-                Token::ReservedWord(Reserved::Step) => self.parse_step_command()?,
+            match self.next_token()? {
                 Token::ReservedWord(Reserved::DeclareFun) => {
                     let (name, sort) = self.parse_declare_fun()?;
                     self.state
@@ -277,6 +285,37 @@ impl<R: BufRead> Parser<R> {
                     self.state.sort_declarations.insert(name, (arity, sort));
                     continue;
                 }
+                Token::ReservedWord(Reserved::DefineFun) => {
+                    let (name, func_def) = self.parse_define_fun()?;
+                    self.state.function_defs.insert(name, func_def);
+                    continue;
+                }
+                _ => {
+                    // If the command is not a declaration or definition, we just ignore it. We do
+                    // that by reading tokens until the command parenthesis is closed
+                    let mut parens_depth = 1;
+                    while parens_depth > 0 {
+                        parens_depth += match self.next_token()? {
+                            Token::OpenParen => 1,
+                            Token::CloseParen => -1,
+                            Token::Eof => return Err(ParserError::UnexpectedToken(Token::Eof)),
+                            _ => 0,
+                        };
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Parses a proof.
+    pub fn parse_proof(&mut self) -> ParserResult<Proof> {
+        let mut commands = Vec::new();
+        while self.current_token != Token::Eof {
+            self.expect_token(Token::OpenParen)?;
+            let (index, command) = match self.next_token()? {
+                Token::ReservedWord(Reserved::Assume) => self.parse_assume_command()?,
+                Token::ReservedWord(Reserved::Step) => self.parse_step_command()?,
                 Token::ReservedWord(Reserved::DefineFun) => {
                     let (name, func_def) = self.parse_define_fun()?;
                     self.state.function_defs.insert(name, func_def);
