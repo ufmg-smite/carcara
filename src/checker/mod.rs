@@ -80,7 +80,7 @@ macro_rules! match_op {
 
 mod rules {
     use super::*;
-    use std::collections::{hash_map::Entry, HashMap};
+    use std::collections::HashSet;
 
     pub fn or(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
         if premises.len() != 1 {
@@ -141,28 +141,23 @@ mod rules {
     }
 
     pub fn resolution(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
-        /// Represents the polarities of a term encountered during checking.
-        #[derive(Debug, PartialEq, Eq)]
-        enum Polarity {
-            Positive,
-            Negative,
-            Both,
-        }
-
-        /// Convert a term to positive polarity, and return its old polarity. Assumes that the term
-        /// has at most one leading negation, that is, it is not of the form "(not (not ...))".
-        fn to_positive(term: &Term) -> (&Term, Polarity) {
-            match term {
-                // We assume that the "not" term is well constructed, meaning it has exactly
-                // one argument
-                Term::Op(Operator::Not, args) => (args[0].as_ref(), Polarity::Negative),
-                other => (other, Polarity::Positive),
+        /// Removes all leading negations in a term and returns how many there were.
+        fn remove_negations(mut term: &Term) -> (u32, &Term) {
+            let mut n = 0;
+            while let Some(t) = match_op!((not t) = term) {
+                term = t;
+                n += 1;
             }
+            (n, term)
         }
 
-        // For every term in each premise, we will convert it to positive polarity, and record
-        // with which polarities it was encountered
-        let mut encountered_polarities: HashMap<&Term, Polarity> = HashMap::new();
+        // This set represents the current working clause, where (n, t) represents the term t with
+        // n leading negations.
+        let mut working_clause: HashSet<(u32, &Term)> = HashSet::new();
+
+        // For every term t in each premise, we check if (not t) is in the working clause, and if
+        // it is, we remove it. If t is of the form (not u), we do the same for u. If neither one
+        // was removed, we insert t into the working clause.
         for command in premises.into_iter() {
             let premise_clause = match command {
                 // "assume" premises are interpreted as a clause with a single term
@@ -170,36 +165,25 @@ mod rules {
                 ProofCommand::Step { clause, .. } => &clause,
             };
             for term in premise_clause {
-                let (term, polarity) = to_positive(term.as_ref());
-                match encountered_polarities.entry(term) {
-                    // If the term is not in the hash map, we insert it
-                    Entry::Vacant(entry) => {
-                        entry.insert(polarity);
-                    }
+                let (n, inner) = remove_negations(term.as_ref());
 
-                    // If the term is in the hash map with the opposite polarity, we set the
-                    // polarity to `Polarity::Both`
-                    Entry::Occupied(mut entry) => {
-                        if *entry.get() != Polarity::Both && *entry.get() != polarity {
-                            entry.insert(Polarity::Both);
-                        }
+                // Remove the entry for (n - 1, inner) if it exists
+                if !(n > 0 && working_clause.remove(&(n - 1, inner))) {
+                    // If it didn't exist, try the same for (n + 1, inner)
+                    if !working_clause.remove(&(n + 1, inner)) {
+                        // If neither entry exists, insert (n, inner)
+                        working_clause.insert((n, inner));
                     }
                 }
             }
         }
 
-        // We expect the final clause to be every term that appeared in the premises in only one
-        // polarity, and we also expect these terms to be in the correct polarity
-        let expected_len = encountered_polarities
-            .iter()
-            .filter(|&(_, polarity)| *polarity != Polarity::Both)
-            .count();
-        if clause.len() != expected_len {
+        // At the end, we expect the working clause to be equal to the conclusion clause
+        if clause.len() != working_clause.len() {
             return false;
         }
-        for t in clause {
-            let (t, polarity) = to_positive(t.as_ref());
-            if encountered_polarities.get(t) != Some(&polarity) {
+        for term in clause {
+            if !working_clause.contains(&remove_negations(term.as_ref())) {
                 return false;
             }
         }
