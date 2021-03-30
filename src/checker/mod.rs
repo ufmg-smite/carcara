@@ -1,3 +1,5 @@
+mod tests;
+
 use std::rc::Rc;
 
 use crate::parser::ast::*;
@@ -76,6 +78,23 @@ macro_rules! match_op {
     };
     (@GET_VARIANT not) => { Operator::Not };
     (@GET_VARIANT =) => { Operator::Eq };
+}
+
+// Macros can only be used after they're declared, so we can't put this test in the "tests" module,
+// as that module is declared in the top of the file. Instead of moving the module delcaration to
+// after the macro declaration, it's easier to just bring this single test here.
+#[cfg(test)]
+#[test]
+fn test_match_op() {
+    use crate::parser::tests::parse_term;
+
+    let true_term = parse_term("true");
+    let false_term = parse_term("false");
+    let term = parse_term("(= (= (not false) (= true false)) (not true))");
+    assert_eq!(
+        match_op!((= (= (not a) (= b c)) (not d)) = &term),
+        Some(((&false_term, (&true_term, &false_term)), &true_term)),
+    );
 }
 
 mod rules {
