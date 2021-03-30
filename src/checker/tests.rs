@@ -35,6 +35,7 @@ fn test_or_rule() {
             true,
         ),
         // Number of premises != 1
+        ("(step t2 (cl p q r) :rule or)", false),
         (
             "(assume h1 (or p q))
             (assume h2 (or q r))
