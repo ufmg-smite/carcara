@@ -35,18 +35,18 @@ fn test_or_rule() {
             true,
         ),
         // Number of premises != 1
-        ("(step t2 (cl p q r) :rule or)", false),
+        ("(step t1 (cl p q r) :rule or)", false),
         (
             "(assume h1 (or p q))
             (assume h2 (or q r))
-            (step t2 (cl p q r) :rule or :premises (h1 h2))",
+            (step t3 (cl p q r) :rule or :premises (h1 h2))",
             false,
         ),
         // Premise clause has more than one term
         (
             "(assume h1 (or p (or q r)))
-            (step t1 (cl p (or q r)) :rule or :premises (h1))
-            (step t2 (cl p q) :rule or :premises (t1))",
+            (step t2 (cl p (or q r)) :rule or :premises (h1))
+            (step t3 (cl p q) :rule or :premises (t2))",
             false,
         ),
         // Premise is not an "or" operation
@@ -153,7 +153,7 @@ fn test_resolution_rule() {
             "(assume h1 (not p))
             (assume h2 (or p q))
             (step t3 (cl p q) :rule or :premises (h2))
-            (step t5 (cl q) :rule resolution :premises (h1 t3))",
+            (step t4 (cl q) :rule resolution :premises (h1 t3))",
             true,
         ),
         (
