@@ -205,6 +205,18 @@ fn test_resolution_rule() {
             (step t4 (cl q q r) :rule resolution :premises (h1 t3))",
             false,
         ),
+        // Terms with leading negations
+        (
+            "(assume h1 (not p))
+            (assume h2 (not (not p)))
+            (assume h3 (not (not (not p))))
+            (assume h4 (not (not (not (not p)))))
+            (step t5 (cl) :rule resolution :premises (h1 h2))
+            (step t6 (cl) :rule resolution :premises (h2 h3))
+            (step t7 (cl (not p) (not (not (not p)))) :rule resolution :premises (h1 h3))
+            (step t8 (cl (not p) (not (not (not (not p))))) :rule resolution :premises (h1 h4))",
+            true,
+        ),
     ];
     run_tests(definitions, &cases);
 }
