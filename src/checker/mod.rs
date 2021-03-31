@@ -37,6 +37,7 @@ impl ProofChecker {
     fn get_rule(rule_name: &str) -> Rule {
         match rule_name {
             "or" => rules::or,
+            "eq_transitive" => rules::eq_transitive,
             "eq_congruent" => rules::eq_congruent,
             "resolution" => rules::resolution,
             _ => todo!(),
@@ -122,6 +123,48 @@ mod rules {
         };
 
         or_contents == clause
+    }
+
+    pub fn eq_transitive(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
+        if clause.len() < 3 {
+            return false;
+        }
+
+        // Represents the current known equality. This starts as the two terms in the first
+        // inequality, and is updated as we go through the other inequalities in the clause
+        let mut current = if let Some(terms) = match_op!((not (= t u)) = clause[0].as_ref()) {
+            terms
+        } else {
+            return false;
+        };
+        for term in &clause[1..clause.len() - 1] {
+            // All terms in the clause except for the last must be of the form (not (= t u))
+            if let Some((t, u)) = match_op!((not (= t u)) = term.as_ref()) {
+                // Find the two terms in "current" and (t, u) that are equal, and update "current"
+                // to be the two remaining terms
+                current = if current.0 == t {
+                    (u, current.1)
+                } else if current.0 == u {
+                    (t, current.1)
+                } else if current.1 == t {
+                    (current.0, u)
+                } else if current.1 == u {
+                    (current.0, t)
+                } else {
+                    return false;
+                };
+            } else {
+                return false;
+            }
+        }
+
+        // At the end, we expect the final term in the clause to be an equality, and we expect
+        // "current" to be the two terms in that equality, possibly flipped
+        if let Some((t, u)) = match_op!((= t u) = clause[clause.len() - 1].as_ref()) {
+            current == (t, u) || current == (u, t)
+        } else {
+            false
+        }
     }
 
     pub fn eq_congruent(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
