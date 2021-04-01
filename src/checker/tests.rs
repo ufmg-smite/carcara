@@ -114,7 +114,7 @@ fn test_eq_transitive_rule() {
         }
         "Clause terms in different orders" {
             "(step t1 (cl (not (= a b)) (not (= c d)) (not (= b c)) (= a d))
-                :rule eq_transitive)": false,
+                :rule eq_transitive)": true,
 
             "(step t1 (cl (not (= c d)) (not (= b c)) (not (= a b)) (= a d))
                 :rule eq_transitive)": true,
@@ -128,7 +128,7 @@ fn test_eq_transitive_rule() {
             "(step t1 (cl (not (= a b)) (not (= b c)) (not (= c d)) (= a e))
                 :rule eq_transitive)": false,
 
-            "(step t1 (cl (not (= a b)) (not (= b c)) (not (= d e)) (= a c))
+            "(step t1 (cl (not (= a b)) (not (= b e)) (not (= b c)) (= a c))
                 :rule eq_transitive)": false,
         }
     }

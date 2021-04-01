@@ -126,45 +126,66 @@ mod rules {
     }
 
     pub fn eq_transitive(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
+        /// Recursive function to find a transitive chain given a conclusion equality and a series
+        /// of premise equalities.
+        fn find_chain(conclusion: (&Term, &Term), premises: &mut [(&Term, &Term)]) -> bool {
+            // When the conclusion is of the form (= a a), it is trivially valid
+            if conclusion.0 == conclusion.1 {
+                return true;
+            }
+
+            // Find in the premises, if it exists, an equality such that one of its terms is equal
+            // to the first term in the conclusion. Possibly reorder this equality so the matching
+            // term is the first one
+            let found = premises.iter().enumerate().find_map(|(i, &(t, u))| {
+                if t == conclusion.0 {
+                    Some((i, (t, u)))
+                } else if u == conclusion.0 {
+                    Some((i, (u, t)))
+                } else {
+                    None
+                }
+            });
+
+            if let Some((index, eq)) = found {
+                // We remove the found equality by swapping it with the first element in
+                // `premises`. The new premises will then be all elements after the first
+                premises.swap(0, index);
+
+                // The new conclusion will be the terms in the conclusion and the found equality
+                // that didn't match. For example, if the conclusion was (= a d) and we found in
+                // the premises (= a b), the new conclusion will be (= b d)
+                find_chain((eq.1, conclusion.1), &mut premises[1..])
+            } else {
+                false
+            }
+        }
+
         if clause.len() < 3 {
             return false;
         }
 
-        // Represents the current known equality. This starts as the two terms in the first
-        // inequality, and is updated as we go through the other inequalities in the clause
-        let mut current = if let Some(terms) = match_op!((not (= t u)) = clause[0].as_ref()) {
-            terms
+        // The last term in clause should be an equality, and it will be the conclusion of the
+        // transitive chain
+        let last_term = clause.last().unwrap().as_ref();
+        let conclusion = if let Some(equality) = match_op!((= t u) = last_term) {
+            equality
         } else {
             return false;
         };
-        for term in &clause[1..clause.len() - 1] {
-            // All terms in the clause except for the last must be of the form (not (= t u))
+
+        // The first `clause.len()` - 1 terms in the clause must be a sequence of inequalites, and
+        // they will be the premises of the transitive chain
+        let mut premises = Vec::with_capacity(clause.len() - 1);
+        for term in &clause[..clause.len() - 1] {
             if let Some((t, u)) = match_op!((not (= t u)) = term.as_ref()) {
-                // Find the two terms in "current" and (t, u) that are equal, and update "current"
-                // to be the two remaining terms
-                current = if current.0 == t {
-                    (u, current.1)
-                } else if current.0 == u {
-                    (t, current.1)
-                } else if current.1 == t {
-                    (current.0, u)
-                } else if current.1 == u {
-                    (current.0, t)
-                } else {
-                    return false;
-                };
+                premises.push((t, u));
             } else {
                 return false;
             }
         }
 
-        // At the end, we expect the final term in the clause to be an equality, and we expect
-        // "current" to be the two terms in that equality, possibly flipped
-        if let Some((t, u)) = match_op!((= t u) = clause[clause.len() - 1].as_ref()) {
-            current == (t, u) || current == (u, t)
-        } else {
-            false
-        }
+        find_chain(conclusion, &mut premises)
     }
 
     pub fn eq_congruent(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
