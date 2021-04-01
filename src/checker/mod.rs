@@ -193,7 +193,7 @@ mod rules {
             return false;
         }
 
-        // The first `clause.len()` - 1 terms in the clause must be a sequece of inequalites
+        // The first `clause.len()` - 1 terms in the clause must be a sequence of inequalites
         let mut ts = Vec::new();
         let mut us = Vec::new();
         for term in &clause[..clause.len() - 1] {
