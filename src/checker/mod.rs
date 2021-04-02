@@ -37,6 +37,7 @@ impl ProofChecker {
     fn get_rule(rule_name: &str) -> Rule {
         match rule_name {
             "or" => rules::or,
+            "eq_reflexive" => rules::eq_reflexive,
             "eq_transitive" => rules::eq_transitive,
             "eq_congruent" => rules::eq_congruent,
             "resolution" | "th_resolution" => rules::resolution,
@@ -123,6 +124,15 @@ mod rules {
         };
 
         or_contents == clause
+    }
+
+    pub fn eq_reflexive(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
+        if clause.len() == 1 {
+            if let Some((a, b)) = match_op!((= a b) = clause[0].as_ref()) {
+                return a == b;
+            }
+        }
+        false
     }
 
     pub fn eq_transitive(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {

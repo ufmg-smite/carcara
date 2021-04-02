@@ -8,7 +8,8 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
 
     for (proof, expected) in cases {
         // This parses the definitions again for every case, which is not ideal
-        let parsed = parse_problem_proof(Cursor::new(definitions), Cursor::new(proof)).unwrap();
+        let parsed = parse_problem_proof(Cursor::new(definitions), Cursor::new(proof))
+            .expect(&format!("parser error during test \"{}\"", test_name));
         let got = ProofChecker::new(parsed).check();
         assert_eq!(*expected, got, "test case \"{}\" failed", test_name);
     }
@@ -71,6 +72,37 @@ fn test_or_rule() {
             "(assume h1 (or q p))
             (step t2 (cl p q) :rule or :premises (h1))": false,
         }
+    }
+}
+
+#[test]
+fn test_eq_reflexive_rule() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () Int)
+            (declare-fun b () Int)
+            (declare-fun f (Int Int) Int)
+        ",
+        "Simple working examples" {
+            "(step t1 (cl (= a a)) :rule eq_reflexive)": true,
+            "(step t1 (cl (= false false)) :rule eq_reflexive)": true,
+            "(step t1 (cl (= (f a b) (f a b))) :rule eq_reflexive)": true,
+            "(step t1 (cl (= (+ b a) (+ b a))) :rule eq_reflexive)": true,
+        }
+        "Number of terms in clause != 1" {
+            "(step t1 (cl) :rule eq_reflexive)": false,
+            "(step t1 (cl (= a a) (= b b)) :rule eq_reflexive)": false,
+        }
+        "Term is not an equality" {
+            "(step t1 (cl (not (= b b))) :rule eq_reflexive)": false,
+            "(step t1 (cl (and (= a a) (= b b))) :rule eq_reflexive)": false,
+        }
+        "Terms in equality aren't equal" {
+            "(step t1 (cl (= a b)) :rule eq_reflexive)": false,
+            "(step t1 (cl (= (f a b) (f b a))) :rule eq_reflexive)": false,
+            "(step t1 (cl (= (+ a b) (+ b a))) :rule eq_reflexive)": false,
+        }
+
     }
 }
 
