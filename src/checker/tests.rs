@@ -156,6 +156,15 @@ fn test_eq_congruent_rule() {
             "(step t1 (cl (not (= a x)) (not (= b y)) (not (= c z))
                       (= (f-3 a b c) (f-3 x y z))) :rule eq_congruent)": true,
         }
+        "t_i and u_i are possibly flipped" {
+            "(step t1 (cl (not (= b a)) (= (f-1 a) (f-1 b))) :rule eq_congruent)": true,
+
+            "(step t1 (cl (not (= x a)) (not (= b y)) (not (= z c))
+                      (= (f-3 a b c) (f-3 x y z))) :rule eq_congruent)": true,
+
+            "(step t1 (cl (not (= a x)) (not (= b y)) (= (f x y) (f a b)))
+                :rule eq_congruent)": true,
+        }
         "Clause term is not an inequality" {
             "(step t1 (cl (not (= a x)) (= b y) (= (f a b) (f x y))) :rule eq_congruent)": false,
         }
@@ -172,9 +181,6 @@ fn test_eq_congruent_rule() {
                 :rule eq_congruent)": false,
         }
         "Terms don't match" {
-            "(step t1 (cl (not (= a x)) (not (= b y)) (= (f x y) (f a b)))
-                :rule eq_congruent)": false,
-
             "(step t1 (cl (not (= a x)) (not (= b y)) (= (f b a) (f x y)))
                 :rule eq_congruent)": false,
 

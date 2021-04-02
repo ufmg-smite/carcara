@@ -213,7 +213,8 @@ mod rules {
                     return false;
                 }
                 for i in 0..ts.len() {
-                    if f_args[i].as_ref() != ts[i] || g_args[i].as_ref() != us[i] {
+                    let expected = (f_args[i].as_ref(), g_args[i].as_ref());
+                    if expected != (ts[i], us[i]) && expected != (us[i], ts[i]) {
                         return false;
                     }
                 }
