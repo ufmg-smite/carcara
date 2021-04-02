@@ -39,7 +39,7 @@ impl ProofChecker {
             "or" => rules::or,
             "eq_transitive" => rules::eq_transitive,
             "eq_congruent" => rules::eq_congruent,
-            "resolution" => rules::resolution,
+            "resolution" | "th_resolution" => rules::resolution,
             _ => todo!(),
         }
     }
