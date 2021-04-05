@@ -41,6 +41,7 @@ impl ProofChecker {
             "eq_transitive" => rules::eq_transitive,
             "eq_congruent" => rules::eq_congruent,
             "resolution" | "th_resolution" => rules::resolution,
+            "contraction" => rules::contraction,
             _ => todo!(),
         }
     }
@@ -283,5 +284,37 @@ mod rules {
         }
 
         true
+    }
+
+    pub fn contraction(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
+        if premises.len() != 1 {
+            return false;
+        }
+
+        let premise_clause: &[_] = match premises[0] {
+            ProofCommand::Step { clause, .. } => &clause,
+            _ => return false,
+        };
+
+        // This set will be populated with the terms we enconter as we iterate through the premise
+        let mut encountered = HashSet::<&Term>::with_capacity(premise_clause.len());
+        let mut clause_iter = clause.iter();
+
+        for t in premise_clause {
+            // `HashSet::insert` returns true if the inserted element was not in the set
+            let is_new_term = encountered.insert(t.as_ref());
+
+            // If the term in the premise clause has not been encountered before, we advance the
+            // conclusion clause iterator, and check if its next term is the encountered term
+            if is_new_term {
+                if clause_iter.next() != Some(t) {
+                    return false;
+                }
+            }
+        }
+
+        // At the end, the conclusion clause iterator must be empty, meaning all terms in the
+        // conclusion are in the premise
+        clause_iter.next() == None
     }
 }

@@ -287,3 +287,63 @@ fn test_resolution_rule() {
         }
     }
 }
+
+#[test]
+fn test_contraction_rule() {
+    test_cases! {
+        definitions = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (declare-fun s () Bool)
+        ",
+        "Simple working examples" {
+            "(assume h1 (or p q q r s s))
+            (step t2 (cl p q q r s s) :rule or :premises (h1))
+            (step t3 (cl p q r s) :rule contraction :premises (t2))": true,
+
+            "(assume h1 (or p p p q q r s s s))
+            (step t2 (cl p p p q q r s s s) :rule or :premises (h1))
+            (step t3 (cl p q r s) :rule contraction :premises (t2))": true,
+
+            "(assume h1 (or p q r s))
+            (step t2 (cl p q r s) :rule or :premises (h1))
+            (step t3 (cl p q r s) :rule contraction :premises (t2))": true,
+        }
+        "Number of premises != 1" {
+            "(step t1 (cl p q) :rule contraction)": false,
+
+            "(assume h1 q)
+            (assume h2 p)
+            (step t3 (cl p q) :rule contraction :premises (h1 h2))": false,
+        }
+        "Premise is not a \"step\" command" {
+            "(assume h1 q)
+            (step t2 (cl q) :rule contraction :premises (h1))": false,
+        }
+        "Encountered wrong term" {
+            "(assume h1 (or p p q))
+            (step t2 (cl p p q) :rule or :premises (h1))
+            (step t3 (cl p r) :rule contraction :premises (t2))": false,
+        }
+        "Terms are not in correct order" {
+            "(assume h1 (or p q q r))
+            (step t2 (cl p q q r) :rule or :premises (h1))
+            (step t3 (cl p r q) :rule contraction :premises (t2))": false,
+        }
+        "Conclusion is missing terms" {
+            "(assume h1 (or p q q r))
+            (step t2 (cl p q q r) :rule or :premises (h1))
+            (step t3 (cl p r) :rule contraction :premises (t2))": false,
+
+            "(assume h1 (or p p q r))
+            (step t2 (cl p p q r) :rule or :premises (h1))
+            (step t3 (cl p q) :rule contraction :premises (t2))": false,
+        }
+        "Conclusion has extra term at the end" {
+            "(assume h1 (or p p q))
+            (step t2 (cl p p q) :rule or :premises (h1))
+            (step t3 (cl p q r s) :rule contraction :premises (t2))": false,
+        }
+    }
+}
