@@ -269,10 +269,11 @@ fn test_resolution_rule() {
             (step t4 (cl (not q) r) :rule resolution :premises (h1 t3))": false,
         }
         "Duplicate term in final clause" {
-            "(assume h1 (not p))
+            "(assume h1 (or q (not p)))
             (assume h2 (or p q r))
-            (step t3 (cl p q r) :rule or :premises (h2))
-            (step t4 (cl q q r) :rule resolution :premises (h1 t3))": false,
+            (step t3 (cl q (not p)) :rule or :premises (h1))
+            (step t4 (cl p q r) :rule or :premises (h2))
+            (step t5 (cl q q r) :rule resolution :premises (t3 t4))": true,
         }
         "Terms with leading negations" {
             "(assume h1 (not p))

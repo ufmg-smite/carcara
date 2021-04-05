@@ -274,16 +274,12 @@ mod rules {
         }
 
         // At the end, we expect the working clause to be equal to the conclusion clause
-        if clause.len() != working_clause.len() {
-            return false;
-        }
-        for term in clause {
-            if !working_clause.contains(&remove_negations(term.as_ref())) {
-                return false;
-            }
-        }
+        let clause: HashSet<_> = clause
+            .into_iter()
+            .map(|t| remove_negations(t.as_ref()))
+            .collect();
 
-        true
+        working_clause == clause
     }
 
     pub fn contraction(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
