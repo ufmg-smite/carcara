@@ -290,6 +290,55 @@ fn test_resolution_rule() {
 }
 
 #[test]
+fn test_and_rule() {
+    test_cases! {
+        definitions = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (declare-fun s () Bool)
+        ",
+        "Simple working examples" {
+            "(assume h1 (and p q))
+            (step t2 (cl q) :rule and :premises (h1))": true,
+
+            "(assume h1 (and p q r s))
+            (step t2 (cl p) :rule and :premises (h1))": true,
+
+            "(assume h1 (and p q r s))
+            (step t2 (cl s) :rule and :premises (h1))": true,
+        }
+        "Number of premises != 1" {
+            "(step t1 (cl p) :rule and)": false,
+
+            "(assume h1 (and p q))
+            (assume h2 (and r s))
+            (step t2 (cl r) :rule and :premises (h1 h2))": false,
+        }
+        "Premise clause has more than one term" {
+            "(assume h1 (or (and p q) (and r s)))
+            (step t2 (cl (and p q) (and r s)) :rule or :premises (h1))
+            (step t3 (cl p) :rule and :premises (t2))": false,
+        }
+        "Conclusion clause does not have exactly one term" {
+            "(assume h1 (and p q r s))
+            (step t2 (cl q s) :rule and :premises (h1))": false,
+
+            "(assume h1 (and p q))
+            (step t2 (cl) :rule and :premises (h1))": false,
+        }
+        "Premise is not an \"and\" operation" {
+            "(assume h1 (or p q r s))
+            (step t2 (cl r) :rule and :premises (h1))": false,
+        }
+        "Conclusion term is not in premise" {
+            "(assume h1 (and p q r))
+            (step t2 (cl s) :rule and :premises (h1))": false,
+        }
+    }
+}
+
+#[test]
 fn test_contraction_rule() {
     test_cases! {
         definitions = "

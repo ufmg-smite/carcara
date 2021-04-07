@@ -41,6 +41,7 @@ impl ProofChecker {
             "eq_transitive" => rules::eq_transitive,
             "eq_congruent" | "eq_congruent_pred" => rules::eq_congruent,
             "resolution" | "th_resolution" => rules::resolution,
+            "and" => rules::and,
             "contraction" => rules::contraction,
             _ => todo!(),
         }
@@ -280,6 +281,24 @@ mod rules {
             .collect();
 
         working_clause == clause
+    }
+
+    pub fn and(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
+        if premises.len() != 1 || clause.len() != 1 {
+            return false;
+        }
+        let and_term = match premises[0] {
+            ProofCommand::Assume(term) => term,
+            ProofCommand::Step { clause, .. } if clause.len() == 1 => &clause[0],
+            _ => return false,
+        };
+        let and_contents = if let Term::Op(Operator::And, args) = and_term.as_ref() {
+            args
+        } else {
+            return false;
+        };
+
+        and_contents.iter().any(|t| t == &clause[0])
     }
 
     pub fn contraction(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
