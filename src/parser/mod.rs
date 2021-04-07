@@ -127,6 +127,11 @@ impl ParserState {
                 ParserError::assert_num_of_args(&args, 1)?;
                 SortError::assert_eq(Term::BOOL_SORT, &sorts[0])?;
             }
+            Operator::Ite => {
+                ParserError::assert_num_of_args(&args, 3)?;
+                SortError::assert_eq(Term::BOOL_SORT, &sorts[0])?;
+                SortError::assert_eq(&sorts[1], &sorts[2])?;
+            }
         }
         let args = self.add_all(args);
         Ok(Term::Op(op, args))

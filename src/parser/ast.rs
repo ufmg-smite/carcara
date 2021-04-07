@@ -54,6 +54,8 @@ pub enum Operator {
     Or,
     And,
     Not,
+
+    Ite,
 }
 
 /// Implements `FromStr` and `Debug` for `Operator`.
@@ -90,6 +92,7 @@ impl_operator_str_traits! {
     Or: "or",
     And: "and",
     Not: "not",
+    Ite: "ite",
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -145,6 +148,7 @@ impl Term {
             Term::Op(op, args) => match op {
                 Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => args[0].sort(),
                 Operator::Eq | Operator::Or | Operator::And | Operator::Not => Term::BOOL_SORT,
+                Operator::Ite => args[1].sort(),
             },
             Term::App(f, _) => {
                 let function_sort = f.sort();

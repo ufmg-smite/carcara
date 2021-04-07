@@ -177,6 +177,56 @@ fn test_logic_ops() {
 }
 
 #[test]
+fn test_ite() {
+    assert_eq!(
+        Term::Op(
+            Operator::Ite,
+            vec![
+                Rc::new(terminal!(var "true"; Rc::new(Term::BOOL_SORT.clone()))),
+                Rc::new(terminal!(int 2)),
+                Rc::new(terminal!(int 3)),
+            ],
+        ),
+        parse_term("(ite true 2 3)"),
+    );
+
+    assert_eq!(
+        Term::Op(
+            Operator::Ite,
+            vec![
+                Rc::new(parse_term("(not true)")),
+                Rc::new(terminal!(int 2)),
+                Rc::new(Term::Op(
+                    Operator::Ite,
+                    vec![
+                        Rc::new(terminal!(var "false"; Rc::new(Term::BOOL_SORT.clone()))),
+                        Rc::new(terminal!(int 2)),
+                        Rc::new(terminal!(int 1)),
+                    ],
+                )),
+            ],
+        ),
+        parse_term("(ite (not true) 2 (ite false 2 1))"),
+    );
+
+    assert_eq!(
+        ParserError::WrongNumberOfArgs(3, 2),
+        parse_term_err("(ite true 0)"),
+    );
+    assert!(matches!(
+        parse_term_err("(ite 0 1 2)"),
+        ParserError::SortError(SortError::Expected {
+            expected: Term::Sort(SortKind::Bool, _),
+            ..
+        }),
+    ));
+    assert!(matches!(
+        parse_term_err("(ite false 10 10.0)"),
+        ParserError::SortError(SortError::Expected { .. }),
+    ));
+}
+
+#[test]
 fn test_declare_fun() {
     parse_term_with_definitions(
         "(declare-fun f (Bool Int Real) Real)",
