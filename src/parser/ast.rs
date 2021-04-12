@@ -161,6 +161,24 @@ impl Term {
             sort @ Term::Sort(_, _) => sort,
         }
     }
+
+    /// Returns an iterator over this term and all its subterms. For example, calling this method
+    /// on the term (+ (f a b) 2) would return an iterator over the terms (+ (f a b) 2), (f a b),
+    /// f, a, b and 2.
+    pub fn subterms(&self) -> Box<dyn Iterator<Item = &Self> + '_> {
+        use std::iter;
+        let iter = iter::once(self);
+        match self {
+            Self::Terminal(_) => Box::new(iter),
+            Self::App(f, args) => Box::new(
+                iter.chain(iter::once(f.as_ref()))
+                    .chain(args.iter().flat_map(|t| t.as_ref().subterms())),
+            ),
+            Self::Op(_, args) | Self::Sort(_, args) => {
+                Box::new(iter.chain(args.iter().flat_map(|t| t.as_ref().subterms())))
+            }
+        }
+    }
 }
 
 impl Debug for Term {
