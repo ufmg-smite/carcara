@@ -155,7 +155,7 @@ impl Term {
                 if let Term::Sort(SortKind::Function, sorts) = function_sort {
                     sorts.last().unwrap()
                 } else {
-                    unreachable!() // We assume that the function is correcly sorted
+                    unreachable!() // We assume that the function is correctly sorted
                 }
             }
             sort @ Term::Sort(_, _) => sort,
