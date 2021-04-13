@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use crate::parser::ast::*;
 
-pub type Rule = fn(&[Rc<Term>], Vec<&ProofCommand>, &[ProofArg]) -> bool;
+pub type Rule = fn(&[Rc<Term>], Vec<&ProofCommand>, &[ProofArg]) -> Option<()>;
 
 pub struct ProofChecker {
     proof: Proof,
@@ -26,7 +26,7 @@ impl ProofChecker {
             {
                 let rule = Self::get_rule(rule);
                 let premises = premises.iter().map(|&i| &self.proof.0[i]).collect();
-                if !rule(&clause, premises, &args) {
+                if rule(&clause, premises, &args).is_none() {
                     return false;
                 }
             }
@@ -111,28 +111,36 @@ mod rules {
     use super::*;
     use std::collections::HashSet;
 
-    pub fn eq_reflexive(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
-        if clause.len() == 1 {
-            if let Some((a, b)) = match_op!((= a b) = clause[0].as_ref()) {
-                return a == b;
-            }
+    /// Converts a `bool` into an `Option<()>`.
+    fn to_option(b: bool) -> Option<()> {
+        match b {
+            true => Some(()),
+            false => None,
         }
-        false
     }
 
-    pub fn eq_transitive(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
+    pub fn eq_reflexive(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+        if clause.len() == 1 {
+            let (a, b) = match_op!((= a b) = clause[0].as_ref())?;
+            to_option(a == b)
+        } else {
+            None
+        }
+    }
+
+    pub fn eq_transitive(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
         /// Recursive function to find a transitive chain given a conclusion equality and a series
         /// of premise equalities.
-        fn find_chain(conclusion: (&Term, &Term), premises: &mut [(&Term, &Term)]) -> bool {
+        fn find_chain(conclusion: (&Term, &Term), premises: &mut [(&Term, &Term)]) -> Option<()> {
             // When the conclusion is of the form (= a a), it is trivially valid
             if conclusion.0 == conclusion.1 {
-                return true;
+                return Some(());
             }
 
             // Find in the premises, if it exists, an equality such that one of its terms is equal
             // to the first term in the conclusion. Possibly reorder this equality so the matching
             // term is the first one
-            let found = premises.iter().enumerate().find_map(|(i, &(t, u))| {
+            let (index, eq) = premises.iter().enumerate().find_map(|(i, &(t, u))| {
                 if t == conclusion.0 {
                     Some((i, (t, u)))
                 } else if u == conclusion.0 {
@@ -140,86 +148,76 @@ mod rules {
                 } else {
                     None
                 }
-            });
+            })?;
 
-            if let Some((index, eq)) = found {
-                // We remove the found equality by swapping it with the first element in
-                // `premises`. The new premises will then be all elements after the first
-                premises.swap(0, index);
+            // We remove the found equality by swapping it with the first element in `premises`.
+            // The new premises will then be all elements after the first
+            premises.swap(0, index);
 
-                // The new conclusion will be the terms in the conclusion and the found equality
-                // that didn't match. For example, if the conclusion was (= a d) and we found in
-                // the premises (= a b), the new conclusion will be (= b d)
-                find_chain((eq.1, conclusion.1), &mut premises[1..])
-            } else {
-                false
-            }
+            // The new conclusion will be the terms in the conclusion and the found equality that
+            // didn't match. For example, if the conclusion was (= a d) and we found in the
+            // premises (= a b), the new conclusion will be (= b d)
+            find_chain((eq.1, conclusion.1), &mut premises[1..])
         }
 
         if clause.len() < 3 {
-            return false;
+            return None;
         }
 
         // The last term in clause should be an equality, and it will be the conclusion of the
         // transitive chain
         let last_term = clause.last().unwrap().as_ref();
-        let conclusion = if let Some(equality) = match_op!((= t u) = last_term) {
-            equality
-        } else {
-            return false;
-        };
+        let conclusion = match_op!((= t u) = last_term)?;
 
         // The first `clause.len()` - 1 terms in the clause must be a sequence of inequalites, and
         // they will be the premises of the transitive chain
         let mut premises = Vec::with_capacity(clause.len() - 1);
         for term in &clause[..clause.len() - 1] {
-            if let Some((t, u)) = match_op!((not (= t u)) = term.as_ref()) {
-                premises.push((t, u));
-            } else {
-                return false;
-            }
+            let (t, u) = match_op!((not (= t u)) = term.as_ref())?;
+            premises.push((t, u));
         }
 
         find_chain(conclusion, &mut premises)
     }
 
-    pub fn eq_congruent(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
+    pub fn eq_congruent(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
         if clause.len() < 2 {
-            return false;
+            return None;
         }
 
         // The first `clause.len()` - 1 terms in the clause must be a sequence of inequalites
         let mut ts = Vec::new();
         let mut us = Vec::new();
         for term in &clause[..clause.len() - 1] {
-            if let Some((t, u)) = match_op!((not (= t u)) = term.as_ref()) {
-                ts.push(t);
-                us.push(u);
-            } else {
-                return false;
-            }
+            let (t, u) = match_op!((not (= t u)) = term.as_ref())?;
+            ts.push(t);
+            us.push(u);
         }
 
         // The final term in the clause must be an equality of two function applications, whose
         // arguments are the terms in the previous inequalities
-        match match_op!((= f g) = clause.last().unwrap().as_ref()) {
-            Some((Term::App(f, f_args), Term::App(g, g_args))) => {
+        match match_op!((= f g) = clause.last().unwrap().as_ref())? {
+            (Term::App(f, f_args), Term::App(g, g_args)) => {
                 if f != g || f_args.len() != ts.len() {
-                    return false;
+                    return None;
                 }
                 for i in 0..ts.len() {
                     let expected = (f_args[i].as_ref(), g_args[i].as_ref());
                     if expected != (ts[i], us[i]) && expected != (us[i], ts[i]) {
-                        return false;
+                        return None;
                     }
                 }
-                true
+                Some(())
             }
-            _ => false,
+            _ => None,
         }
     }
 
-    pub fn resolution(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
+    pub fn resolution(
+        clause: &[Rc<Term>],
+        premises: Vec<&ProofCommand>,
+        _: &[ProofArg],
+    ) -> Option<()> {
         /// Removes all leading negations in a term and returns how many there were.
         fn remove_negations(mut term: &Term) -> (u32, &Term) {
             let mut n = 0;
@@ -263,58 +261,48 @@ mod rules {
             .map(|t| remove_negations(t.as_ref()))
             .collect();
 
-        working_clause == clause
+        to_option(working_clause == clause)
     }
 
-    pub fn and(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
+    pub fn and(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
         if premises.len() != 1 || clause.len() != 1 {
-            return false;
+            return None;
         }
         let and_term = match premises[0] {
             ProofCommand::Assume(term) => term,
             ProofCommand::Step { clause, .. } if clause.len() == 1 => &clause[0],
-            _ => return false,
+            _ => return None,
         };
-        let and_contents = if let Term::Op(Operator::And, args) = and_term.as_ref() {
-            args
-        } else {
-            return false;
+        let and_contents = match and_term.as_ref() {
+            Term::Op(Operator::And, args) => args,
+            _ => return None,
         };
 
-        and_contents.iter().any(|t| t == &clause[0])
+        to_option(and_contents.iter().any(|t| t == &clause[0]))
     }
 
-    pub fn or(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
+    pub fn or(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
         if premises.len() != 1 {
-            return false;
+            return None;
         }
         let or_term = match premises[0] {
-            ProofCommand::Assume(cl) => cl,
-            ProofCommand::Step { clause, .. } => {
-                if clause.len() == 1 {
-                    &clause[0]
-                } else {
-                    return false;
-                }
-            }
+            ProofCommand::Assume(term) => term,
+            ProofCommand::Step { clause, .. } if clause.len() == 1 => &clause[0],
+            _ => return None,
         };
-        let or_contents = if let Term::Op(Operator::Or, args) = or_term.as_ref() {
-            args
-        } else {
-            return false;
+        let or_contents = match or_term.as_ref() {
+            Term::Op(Operator::Or, args) => args,
+            _ => return None,
         };
 
-        or_contents == clause
+        to_option(or_contents == clause)
     }
 
-    pub fn ite_intro(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
+    pub fn ite_intro(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
         if clause.len() != 1 {
-            return false;
+            return None;
         }
-        let (root_term, us) = match match_op!((= t us) = clause[0].as_ref()) {
-            Some((t, us)) => (t, us),
-            None => return false,
-        };
+        let (root_term, us) = match_op!((= t us) = clause[0].as_ref())?;
         let ite_terms: Vec<_> = root_term
             .subterms()
             .filter_map(|term| match_op!((ite a b c) = term))
@@ -323,39 +311,41 @@ mod rules {
         // "us" must be a conjunction where the first term is the root term
         let us = match us {
             Term::Op(Operator::And, args) => args,
-            _ => return false,
+            _ => return None,
         };
         if ite_terms.len() != us.len() - 1 || us[0].as_ref() != root_term {
-            return false;
+            return None;
         }
 
         // We assume that the "ite" terms appear in the conjunction in the same order as they
         // appear as subterms of the root term
         for (s_i, u_i) in ite_terms.iter().zip(&us[1..]) {
-            match match_op!((ite cond (= r1 s1) (= r2 s2)) = u_i.as_ref()) {
-                Some((cond, (r1, s1), (r2, s2))) => {
-                    // s_i == s1 == s2 == (ite cond r1 r2)
-                    let is_valid = (cond, r1, r2) == *s_i
-                        && s1 == s2
-                        && match_op!((ite a b c) = s1) == Some(*s_i);
-                    if !is_valid {
-                        return false;
-                    }
-                }
-                None => return false,
+            let (cond, (r1, s1), (r2, s2)) =
+                match_op!((ite cond (= r1 s1) (= r2 s2)) = u_i.as_ref())?;
+
+            // s_i == s1 == s2 == (ite cond r1 r2)
+            let is_valid =
+                (cond, r1, r2) == *s_i && s1 == s2 && match_op!((ite a b c) = s1) == Some(*s_i);
+
+            if !is_valid {
+                return None;
             }
         }
-        true
+        Some(())
     }
 
-    pub fn contraction(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
+    pub fn contraction(
+        clause: &[Rc<Term>],
+        premises: Vec<&ProofCommand>,
+        _: &[ProofArg],
+    ) -> Option<()> {
         if premises.len() != 1 {
-            return false;
+            return None;
         }
 
         let premise_clause: &[_] = match premises[0] {
             ProofCommand::Step { clause, .. } => &clause,
-            _ => return false,
+            _ => return None,
         };
 
         // This set will be populated with the terms we enconter as we iterate through the premise
@@ -370,13 +360,13 @@ mod rules {
             // conclusion clause iterator, and check if its next term is the encountered term
             if is_new_term {
                 if clause_iter.next() != Some(t) {
-                    return false;
+                    return None;
                 }
             }
         }
 
         // At the end, the conclusion clause iterator must be empty, meaning all terms in the
         // conclusion are in the premise
-        clause_iter.next() == None
+        to_option(clause_iter.next().is_none())
     }
 }
