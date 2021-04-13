@@ -30,52 +30,6 @@ macro_rules! test_cases {
 }
 
 #[test]
-fn test_or_rule() {
-    test_cases! {
-        definitions = "
-            (declare-fun p () Bool)
-            (declare-fun q () Bool)
-            (declare-fun r () Bool)
-            (declare-fun s () Bool)
-        ",
-
-        "Simple working examples" {
-            "(assume h1 (or p q))
-            (step t2 (cl p q) :rule or :premises (h1))": true,
-
-            "(assume h1 (or p q r s))
-            (step t2 (cl p q r s) :rule or :premises (h1))": true,
-        }
-        "Number of premises != 1" {
-            "(step t1 (cl p q r) :rule or)": false,
-
-            "(assume h1 (or p q))
-            (assume h2 (or q r))
-            (step t3 (cl p q r) :rule or :premises (h1 h2))": false,
-        }
-        "Premise clause has more than one term" {
-            "(assume h1 (or p (or q r)))
-            (step t2 (cl p (or q r)) :rule or :premises (h1))
-            (step t3 (cl p q) :rule or :premises (t2))": false,
-        }
-        "Premise is not an \"or\" operation" {
-            "(assume h1 (and p q))
-            (step t2 (cl p q) :rule or :premises (h1))": false,
-        }
-        "Premise and clause contents are different" {
-            "(assume h1 (or p q))
-            (step t2 (cl r s) :rule or :premises (h1))": false,
-
-            "(assume h1 (or p q r))
-            (step t2 (cl p q) :rule or :premises (h1))": false,
-
-            "(assume h1 (or q p))
-            (step t2 (cl p q) :rule or :premises (h1))": false,
-        }
-    }
-}
-
-#[test]
 fn test_eq_reflexive_rule() {
     test_cases! {
         definitions = "
@@ -334,6 +288,52 @@ fn test_and_rule() {
         "Conclusion term is not in premise" {
             "(assume h1 (and p q r))
             (step t2 (cl s) :rule and :premises (h1))": false,
+        }
+    }
+}
+
+#[test]
+fn test_or_rule() {
+    test_cases! {
+        definitions = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (declare-fun s () Bool)
+        ",
+
+        "Simple working examples" {
+            "(assume h1 (or p q))
+            (step t2 (cl p q) :rule or :premises (h1))": true,
+
+            "(assume h1 (or p q r s))
+            (step t2 (cl p q r s) :rule or :premises (h1))": true,
+        }
+        "Number of premises != 1" {
+            "(step t1 (cl p q r) :rule or)": false,
+
+            "(assume h1 (or p q))
+            (assume h2 (or q r))
+            (step t3 (cl p q r) :rule or :premises (h1 h2))": false,
+        }
+        "Premise clause has more than one term" {
+            "(assume h1 (or p (or q r)))
+            (step t2 (cl p (or q r)) :rule or :premises (h1))
+            (step t3 (cl p q) :rule or :premises (t2))": false,
+        }
+        "Premise is not an \"or\" operation" {
+            "(assume h1 (and p q))
+            (step t2 (cl p q) :rule or :premises (h1))": false,
+        }
+        "Premise and clause contents are different" {
+            "(assume h1 (or p q))
+            (step t2 (cl r s) :rule or :premises (h1))": false,
+
+            "(assume h1 (or p q r))
+            (step t2 (cl p q) :rule or :premises (h1))": false,
+
+            "(assume h1 (or q p))
+            (step t2 (cl p q) :rule or :premises (h1))": false,
         }
     }
 }

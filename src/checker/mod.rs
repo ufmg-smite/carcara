@@ -36,12 +36,12 @@ impl ProofChecker {
 
     fn get_rule(rule_name: &str) -> Rule {
         match rule_name {
-            "or" => rules::or,
             "eq_reflexive" => rules::eq_reflexive,
             "eq_transitive" => rules::eq_transitive,
             "eq_congruent" | "eq_congruent_pred" => rules::eq_congruent,
-            "resolution" | "th_resolution" => rules::resolution,
+            "th_resolution" | "resolution" => rules::resolution,
             "and" => rules::and,
+            "or" => rules::or,
             "ite_intro" => rules::ite_intro,
             "contraction" => rules::contraction,
             _ => todo!(),
@@ -110,29 +110,6 @@ fn test_match_op() {
 mod rules {
     use super::*;
     use std::collections::HashSet;
-
-    pub fn or(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
-        if premises.len() != 1 {
-            return false;
-        }
-        let or_term = match premises[0] {
-            ProofCommand::Assume(cl) => cl,
-            ProofCommand::Step { clause, .. } => {
-                if clause.len() == 1 {
-                    &clause[0]
-                } else {
-                    return false;
-                }
-            }
-        };
-        let or_contents = if let Term::Op(Operator::Or, args) = or_term.as_ref() {
-            args
-        } else {
-            return false;
-        };
-
-        or_contents == clause
-    }
 
     pub fn eq_reflexive(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
         if clause.len() == 1 {
@@ -305,6 +282,29 @@ mod rules {
         };
 
         and_contents.iter().any(|t| t == &clause[0])
+    }
+
+    pub fn or(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
+        if premises.len() != 1 {
+            return false;
+        }
+        let or_term = match premises[0] {
+            ProofCommand::Assume(cl) => cl,
+            ProofCommand::Step { clause, .. } => {
+                if clause.len() == 1 {
+                    &clause[0]
+                } else {
+                    return false;
+                }
+            }
+        };
+        let or_contents = if let Term::Op(Operator::Or, args) = or_term.as_ref() {
+            args
+        } else {
+            return false;
+        };
+
+        or_contents == clause
     }
 
     pub fn ite_intro(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
