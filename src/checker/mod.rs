@@ -42,6 +42,7 @@ impl ProofChecker {
             "eq_congruent" | "eq_congruent_pred" => rules::eq_congruent,
             "resolution" | "th_resolution" => rules::resolution,
             "and" => rules::and,
+            "ite_intro" => rules::ite_intro,
             "contraction" => rules::contraction,
             _ => todo!(),
         }
@@ -64,24 +65,29 @@ macro_rules! match_op {
         }
     }};
     (@ARGS ($arg:tt) = $var:expr) => {
-        if let [arg] = $var {
-            match_op!($arg = arg.as_ref())
-        } else {
-            None
-        }
+        match_op!(@ARGS_IDENT (arg1: $arg) = $var)
     };
     (@ARGS ($arg1:tt $arg2:tt) = $var:expr) => {
-        if let [arg1, arg2] = $var {
-            match (match_op!($arg1 = arg1.as_ref()), match_op!($arg2 = arg2.as_ref())) {
-                (Some(arg1), Some(arg2)) => Some((arg1, arg2)),
+        match_op!(@ARGS_IDENT (arg1: $arg1, arg2: $arg2) = $var)
+    };
+    (@ARGS ($arg1:tt $arg2:tt $arg3:tt) = $var:expr) => {
+        match_op!(@ARGS_IDENT (arg1: $arg1, arg2: $arg2, arg3: $arg3) = $var)
+    };
+    (@ARGS_IDENT ( $($name:ident : $arg:tt),* ) = $var:expr) => {
+        if let [$($name),*] = $var {
+            #[allow(unused_parens)]
+            match ($(match_op!($arg = $name.as_ref())),*) {
+                ($(Some($name)),*) => Some(($($name),*)),
                 _ => None,
             }
         } else {
             None
         }
+
     };
     (@GET_VARIANT not) => { Operator::Not };
     (@GET_VARIANT =) => { Operator::Eq };
+    (@GET_VARIANT ite) => { Operator::Ite };
 }
 
 // Macros can only be used after they're declared, so we can't put this test in the "tests" module,
@@ -299,6 +305,47 @@ mod rules {
         };
 
         and_contents.iter().any(|t| t == &clause[0])
+    }
+
+    pub fn ite_intro(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
+        if clause.len() != 1 {
+            return false;
+        }
+        let (root_term, us) = match match_op!((= t us) = clause[0].as_ref()) {
+            Some((t, us)) => (t, us),
+            None => return false,
+        };
+        let ite_terms: Vec<_> = root_term
+            .subterms()
+            .filter_map(|term| match_op!((ite a b c) = term))
+            .collect();
+
+        // "us" must be a conjunction where the first term is the root term
+        let us = match us {
+            Term::Op(Operator::And, args) => args,
+            _ => return false,
+        };
+        if ite_terms.len() != us.len() - 1 || us[0].as_ref() != root_term {
+            return false;
+        }
+
+        // We assume that the "ite" terms appear in the conjunction in the same order as they
+        // appear as subterms of the root term
+        for (s_i, u_i) in ite_terms.iter().zip(&us[1..]) {
+            match match_op!((ite cond (= r1 s1) (= r2 s2)) = u_i.as_ref()) {
+                Some((cond, (r1, s1), (r2, s2))) => {
+                    // s_i == s1 == s2 == (ite cond r1 r2)
+                    let is_valid = (cond, r1, r2) == *s_i
+                        && s1 == s2
+                        && match_op!((ite a b c) = s1) == Some(*s_i);
+                    if !is_valid {
+                        return false;
+                    }
+                }
+                None => return false,
+            }
+        }
+        true
     }
 
     pub fn contraction(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> bool {
