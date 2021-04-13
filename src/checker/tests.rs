@@ -339,6 +339,86 @@ fn test_and_rule() {
 }
 
 #[test]
+fn test_ite_intro_rule() {
+    test_cases! {
+        definitions = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun a () Bool)
+            (declare-fun b () Bool)
+            (declare-fun c () Bool)
+            (declare-fun d () Bool)
+        ",
+        "Simple working examples" {
+            "(step t1 (cl (=
+                (ite p a b)
+                (and (ite p a b) (ite p (= a (ite p a b)) (= b (ite p a b))))
+            )) :rule ite_intro)": true,
+
+            "(step t1 (cl (=
+                (not (ite p a b))
+                (and (not (ite p a b)) (ite p (= a (ite p a b)) (= b (ite p a b))))
+            )) :rule ite_intro)": true,
+        }
+        "Multiple \"ite\" subterms" {
+            "(step t1 (cl (=
+                (or (ite p a b) (ite q c d))
+                (and
+                    (or (ite p a b) (ite q c d))
+                    (ite p (= a (ite p a b)) (= b (ite p a b)))
+                    (ite q (= c (ite q c d)) (= d (ite q c d)))
+                )
+            )) :rule ite_intro)": true,
+
+            "(step t1 (cl (=
+                (or (ite p a b) (and (ite q c d) (ite (not p) b (not d))))
+                (and
+                    (or (ite p a b) (and (ite q c d) (ite (not p) b (not d))))
+                    (ite p (= a (ite p a b)) (= b (ite p a b)))
+                    (ite q (= c (ite q c d)) (= d (ite q c d)))
+                    (ite (not p) (= b (ite (not p) b (not d))) (= (not d) (ite (not p) b (not d))))
+                )
+            )) :rule ite_intro)": true,
+        }
+        "Clause term is not an equality" {
+            "(step t1 (cl) :rule ite_intro)": false,
+            "(step t1 (cl (not (= p q))) :rule ite_intro)": false,
+        }
+        "Conjunction is not an \"and\" term" {
+            "(step t1 (cl (=
+                (ite p a b)
+                (or (ite p a b) (ite p (= a (ite p a b)) (= b (ite p a b))))
+            )) :rule ite_intro)": false,
+        }
+        "First term in conjunction is not root term" {
+            "(step t1 (cl (=
+                (ite p a b)
+                (and q (ite p (= a (ite p a b)) (= b (ite p a b))))
+            )) :rule ite_intro)": false,
+        }
+        "Conjunction has the wrong number of terms" {
+            "(step t1 (cl (=
+                (or (ite p a b) (ite q c d))
+                (and
+                    (or (ite p a b) (ite q c d))
+                    (ite p (= a (ite p a b)) (= b (ite p a b)))
+                )
+            )) :rule ite_intro)": false,
+
+            "(step t1 (cl (=
+                (or (ite p a b) (ite q c d))
+                (and
+                    (or (ite p a b) (ite q c d))
+                    (ite p (= a (ite p a b)) (= b (ite p a b)))
+                    (ite q (= c (ite q c d)) (= d (ite q c d)))
+                    p
+                )
+            )) :rule ite_intro)": false,
+        }
+    }
+}
+
+#[test]
 fn test_contraction_rule() {
     test_cases! {
         definitions = "
