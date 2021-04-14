@@ -42,6 +42,7 @@ impl ProofChecker {
             "th_resolution" | "resolution" => rules::resolution,
             "and" => rules::and,
             "or" => rules::or,
+            "ite1" => rules::ite1,
             "ite_intro" => rules::ite_intro,
             "contraction" => rules::contraction,
             _ => todo!(),
@@ -116,6 +117,14 @@ mod rules {
         match b {
             true => Some(()),
             false => None,
+        }
+    }
+
+    fn get_single_term_from_command(command: &ProofCommand) -> Option<&Rc<Term>> {
+        match command {
+            ProofCommand::Assume(term) => Some(term),
+            ProofCommand::Step { clause, .. } if clause.len() == 1 => Some(&clause[0]),
+            _ => None,
         }
     }
 
@@ -268,11 +277,7 @@ mod rules {
         if premises.len() != 1 || clause.len() != 1 {
             return None;
         }
-        let and_term = match premises[0] {
-            ProofCommand::Assume(term) => term,
-            ProofCommand::Step { clause, .. } if clause.len() == 1 => &clause[0],
-            _ => return None,
-        };
+        let and_term = get_single_term_from_command(premises[0])?;
         let and_contents = match and_term.as_ref() {
             Term::Op(Operator::And, args) => args,
             _ => return None,
@@ -285,17 +290,23 @@ mod rules {
         if premises.len() != 1 {
             return None;
         }
-        let or_term = match premises[0] {
-            ProofCommand::Assume(term) => term,
-            ProofCommand::Step { clause, .. } if clause.len() == 1 => &clause[0],
-            _ => return None,
-        };
+        let or_term = get_single_term_from_command(premises[0])?;
         let or_contents = match or_term.as_ref() {
             Term::Op(Operator::Or, args) => args,
             _ => return None,
         };
 
         to_option(or_contents == clause)
+    }
+
+    pub fn ite1(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+        if premises.len() != 1 || clause.len() != 2 {
+            return None;
+        }
+        let premise_term = get_single_term_from_command(premises[0])?;
+        let (psi_1, _, psi_3) = match_op!((ite psi_1 psi_2 psi_3) = premise_term.as_ref())?;
+
+        to_option(psi_1 == clause[0].as_ref() && psi_3 == clause[1].as_ref())
     }
 
     pub fn ite_intro(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
