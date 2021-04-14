@@ -37,6 +37,7 @@ impl ProofChecker {
     fn get_rule(rule_name: &str) -> Rule {
         match rule_name {
             "not_not" => rules::not_not,
+            "equiv_pos1" => rules::equiv_pos1,
             "eq_reflexive" => rules::eq_reflexive,
             "eq_transitive" => rules::eq_transitive,
             "eq_congruent" | "eq_congruent_pred" => rules::eq_congruent,
@@ -137,6 +138,16 @@ mod rules {
         let p = match_op!((not (not (not p))) = clause[0].as_ref())?;
         let q = clause[1].as_ref();
         to_option(p == q)
+    }
+
+    pub fn equiv_pos1(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+        if clause.len() != 3 {
+            return None;
+        }
+        let (phi_1, phi_2) = match_op!((not (= phi_1 phi_2)) = clause[0].as_ref())?;
+        to_option(
+            phi_1 == clause[1].as_ref() && phi_2 == match_op!((not phi_2) = clause[2].as_ref())?,
+        )
     }
 
     pub fn eq_reflexive(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {

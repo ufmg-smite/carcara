@@ -56,6 +56,35 @@ fn test_not_not_rule() {
 }
 
 #[test]
+fn test_equiv_pos1_rule() {
+    test_cases! {
+        definitions = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+        ",
+        "Simple working examples" {
+            "(step t1 (cl (not (= p q)) p (not q)) :rule equiv_pos1)": true,
+            "(step t1 (cl (not (= p (not q))) p (not (not q))) :rule equiv_pos1)": true,
+            "(step t1 (cl (not (= (not p) q)) (not p) (not q)) :rule equiv_pos1)": true,
+        }
+        "Number of terms in clause != 3" {
+            "(step t1 (cl (not (= p q)) p) :rule equiv_pos1)": false,
+            "(step t1 (cl (not (= p q)) p (not q) q) :rule equiv_pos1)": false,
+        }
+        "Term in clause is not of the correct form" {
+            "(step t1 (cl (= p q) p (not q)) :rule equiv_pos1)": false,
+            "(step t1 (cl (and p q) p (not q)) :rule equiv_pos1)": false,
+            "(step t1 (cl (not (= p q)) p q) :rule equiv_pos1)": false,
+        }
+        "Terms don't match" {
+            "(step t1 (cl (not (= p q)) q (not q)) :rule equiv_pos1)": false,
+            "(step t1 (cl (not (= p q)) p (not p)) :rule equiv_pos1)": false,
+            "(step t1 (cl (not (= (not p) q)) p (not q)) :rule equiv_pos1)": false,
+        }
+    }
+}
+
+#[test]
 fn test_eq_reflexive_rule() {
     test_cases! {
         definitions = "
