@@ -43,6 +43,7 @@ impl ProofChecker {
             "and" => rules::and,
             "or" => rules::or,
             "ite1" => rules::ite1,
+            "ite2" => rules::ite2,
             "ite_intro" => rules::ite_intro,
             "contraction" => rules::contraction,
             _ => todo!(),
@@ -307,6 +308,18 @@ mod rules {
         let (psi_1, _, psi_3) = match_op!((ite psi_1 psi_2 psi_3) = premise_term.as_ref())?;
 
         to_option(psi_1 == clause[0].as_ref() && psi_3 == clause[1].as_ref())
+    }
+
+    pub fn ite2(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+        if premises.len() != 1 || clause.len() != 2 {
+            return None;
+        }
+        let premise_term = get_single_term_from_command(premises[0])?;
+        let (psi_1, psi_2, _) = match_op!((ite psi_1 psi_2 psi_3) = premise_term.as_ref())?;
+
+        to_option(
+            psi_1 == match_op!((not psi_1) = clause[0].as_ref())? && psi_2 == clause[1].as_ref(),
+        )
     }
 
     pub fn ite_intro(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {

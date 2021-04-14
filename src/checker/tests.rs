@@ -371,6 +371,41 @@ fn test_ite1_rule() {
 }
 
 #[test]
+fn test_ite2_rule() {
+    test_cases! {
+        definitions = "
+            (declare-fun p () Bool)
+            (declare-fun a () Bool)
+            (declare-fun b () Bool)
+        ",
+        "Simple working examples" {
+            "(assume h1 (ite p a b))
+            (step t2 (cl (not p) a) :rule ite2 :premises (h1))": true,
+        }
+        "Premise term is not an \"ite\" term" {
+            "(assume h1 (or p a b))
+            (step t2 (cl (not p) a) :rule ite2 :premises (h1))": false,
+        }
+        "Conclusion clause is of the wrong form" {
+            "(assume h1 (ite p a b))
+            (step t2 (cl a (not p)) :rule ite2 :premises (h1))": false,
+
+            "(assume h1 (ite (not p) a b))
+            (step t2 (cl p a) :rule ite2 :premises (h1))": false,
+
+            "(assume h1 (ite p a b))
+            (step t2 (cl (not p) b) :rule ite2 :premises (h1))": false,
+
+            "(assume h1 (ite p a b))
+            (step t2 (cl (not p)) :rule ite2 :premises (h1))": false,
+
+            "(assume h1 (ite p a b))
+            (step t2 (cl (not p) a b) :rule ite2 :premises (h1))": false,
+        }
+    }
+}
+
+#[test]
 fn test_ite_intro_rule() {
     test_cases! {
         definitions = "
