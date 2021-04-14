@@ -36,6 +36,7 @@ impl ProofChecker {
 
     fn get_rule(rule_name: &str) -> Rule {
         match rule_name {
+            "not_not" => rules::not_not,
             "eq_reflexive" => rules::eq_reflexive,
             "eq_transitive" => rules::eq_transitive,
             "eq_congruent" | "eq_congruent_pred" => rules::eq_congruent,
@@ -46,7 +47,7 @@ impl ProofChecker {
             "ite2" => rules::ite2,
             "ite_intro" => rules::ite_intro,
             "contraction" => rules::contraction,
-            _ => todo!(),
+            other => todo!("{}", other),
         }
     }
 }
@@ -127,6 +128,15 @@ mod rules {
             ProofCommand::Step { clause, .. } if clause.len() == 1 => Some(&clause[0]),
             _ => None,
         }
+    }
+
+    pub fn not_not(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+        if clause.len() != 2 {
+            return None;
+        }
+        let p = match_op!((not (not (not p))) = clause[0].as_ref())?;
+        let q = clause[1].as_ref();
+        to_option(p == q)
     }
 
     pub fn eq_reflexive(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {

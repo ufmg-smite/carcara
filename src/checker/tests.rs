@@ -30,6 +30,32 @@ macro_rules! test_cases {
 }
 
 #[test]
+fn test_not_not_rule() {
+    test_cases! {
+        definitions = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+        ",
+        "Simple working examples" {
+            "(step t1 (cl (not (not (not p))) p) :rule not_not)": true,
+            "(step t1 (cl (not (not (not (not q)))) (not q)) :rule not_not)": true,
+        }
+        "Number of terms in clause != 2" {
+            "(step t1 (cl (not (not (not p)))) :rule not_not)": false,
+            "(step t1 (cl (not (not (not p))) p q) :rule not_not)": false,
+        }
+        "First term in clause is not of the correct form" {
+            "(step t1 (cl (not (not p)) (not p)) :rule not_not)": false,
+            "(step t1 (cl p (not p)) :rule not_not)": false,
+        }
+        "Terms don't match" {
+            "(step t1 (cl (not (not (not p))) (not p)) :rule not_not)": false,
+            "(step t1 (cl (not (not (not p))) q) :rule not_not)": false,
+        }
+    }
+}
+
+#[test]
 fn test_eq_reflexive_rule() {
     test_cases! {
         definitions = "
