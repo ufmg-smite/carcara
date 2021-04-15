@@ -113,7 +113,7 @@ impl ParserState {
                 SortError::assert_one_of(&[Term::INT_SORT, Term::REAL_SORT], &sorts[0])?;
                 SortError::assert_all_eq(&sorts)?;
             }
-            Operator::Eq => {
+            Operator::Eq | Operator::Distinct => {
                 ParserError::assert_num_of_args_range(&args, 2..)?;
                 SortError::assert_all_eq(&sorts)?;
             }

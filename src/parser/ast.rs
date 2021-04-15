@@ -54,6 +54,7 @@ pub enum Operator {
     Or,
     And,
     Not,
+    Distinct,
 
     Ite,
 }
@@ -92,6 +93,7 @@ impl_operator_str_traits! {
     Or: "or",
     And: "and",
     Not: "not",
+    Distinct: "distinct",
     Ite: "ite",
 }
 
@@ -147,7 +149,11 @@ impl Term {
             },
             Term::Op(op, args) => match op {
                 Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => args[0].sort(),
-                Operator::Eq | Operator::Or | Operator::And | Operator::Not => Term::BOOL_SORT,
+                Operator::Eq
+                | Operator::Or
+                | Operator::And
+                | Operator::Not
+                | Operator::Distinct => Term::BOOL_SORT,
                 Operator::Ite => args[1].sort(),
             },
             Term::App(f, _) => {

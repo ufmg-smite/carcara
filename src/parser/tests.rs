@@ -175,6 +175,14 @@ fn test_logic_ops() {
         parse_term("(not false)"),
     );
 
+    assert_eq!(
+        Term::Op(
+            Operator::Distinct,
+            vec![Rc::new(terminal!(int 4)), Rc::new(terminal!(int 2))]
+        ),
+        parse_term("(distinct 4 2)"),
+    );
+
     assert!(matches!(
         parse_term_err("(or true 1.2)"),
         ParserError::SortError(SortError::Expected {
@@ -193,6 +201,14 @@ fn test_logic_ops() {
     assert_eq!(
         ParserError::WrongNumberOfArgs(2, 1),
         parse_term_err("(or true)"),
+    );
+    assert!(matches!(
+        parse_term_err("(distinct 2 1.0)"),
+        ParserError::SortError(SortError::Expected { .. }),
+    ));
+    assert_eq!(
+        ParserError::WrongNumberOfArgs(2, 1),
+        parse_term_err("(distinct 0)"),
     );
 }
 
