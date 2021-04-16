@@ -24,7 +24,7 @@ impl ProofChecker {
                 args,
             } = step
             {
-                let rule = Self::get_rule(rule);
+                let rule = Self::get_rule(rule).expect(&format!("unknown rule: {}", rule));
                 let premises = premises.iter().map(|&i| &self.proof.0[i]).collect();
                 if rule(&clause, premises, &args).is_none() {
                     return false;
@@ -34,8 +34,8 @@ impl ProofChecker {
         true
     }
 
-    fn get_rule(rule_name: &str) -> Rule {
-        match rule_name {
+    pub fn get_rule(rule_name: &str) -> Option<Rule> {
+        Some(match rule_name {
             "not_not" => rules::not_not,
             "equiv_pos1" => rules::equiv_pos1,
             "equiv_pos2" => rules::equiv_pos2,
@@ -50,8 +50,8 @@ impl ProofChecker {
             "ite2" => rules::ite2,
             "ite_intro" => rules::ite_intro,
             "contraction" => rules::contraction,
-            other => todo!("{}", other),
-        }
+            _ => return None,
+        })
     }
 }
 
