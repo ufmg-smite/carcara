@@ -42,6 +42,7 @@ impl ProofChecker {
             "eq_reflexive" => rules::eq_reflexive,
             "eq_transitive" => rules::eq_transitive,
             "eq_congruent" | "eq_congruent_pred" => rules::eq_congruent,
+            "distinct_elim" => rules::distinct_elim,
             "th_resolution" | "resolution" => rules::resolution,
             "and" => rules::and,
             "or" => rules::or,
@@ -252,6 +253,51 @@ mod rules {
                 Some(())
             }
             _ => None,
+        }
+    }
+
+    pub fn distinct_elim(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+        if clause.len() != 1 {
+            return None;
+        }
+
+        let (distinct_term, second_term) = match_op!((= a b) = clause[0].as_ref())?;
+        let distinct_args = match distinct_term {
+            Term::Op(Operator::Distinct, args) => args,
+            _ => return None,
+        };
+        match distinct_args.as_slice() {
+            [] | [_] => unreachable!(),
+            [a, b] => {
+                let got: (&Term, &Term) = match_op!((not (= x y)) = second_term)?;
+                to_option(got == (a, b) || got == (b, a))
+            }
+            args => {
+                if args[0].sort() == Term::BOOL_SORT {
+                    // If there are more than two boolean arguments to the distinct operator, the
+                    // second term must be "false"
+                    return match second_term {
+                        Term::Terminal(Terminal::Var(Identifier::Simple(s), _)) if s == "false" => {
+                            Some(())
+                        }
+                        _ => None,
+                    };
+                }
+                let got = match second_term {
+                    Term::Op(Operator::And, args) => args,
+                    _ => return None,
+                };
+                let mut k = 0;
+                for i in 0..args.len() {
+                    for j in i + 1..args.len() {
+                        let (a, b) = (args[i].as_ref(), args[j].as_ref());
+                        let got: (&Term, &Term) = match_op!((not (= x y)) = got[k].as_ref())?;
+                        to_option(got == (a, b) || got == (b, a))?;
+                        k += 1;
+                    }
+                }
+                Some(())
+            }
         }
     }
 

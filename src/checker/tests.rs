@@ -261,6 +261,56 @@ fn test_eq_congruent_rule() {
 }
 
 #[test]
+fn test_distinct_elim_intro() {
+    test_cases! {
+        definitions = "
+            (declare-sort T 0)
+            (declare-fun a () T)
+            (declare-fun b () T)
+            (declare-fun c () T)
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+        ",
+
+        "Simple working examples" {
+            "(step t1 (cl (= (distinct a b) (not (= a b)))) :rule distinct_elim)": true,
+
+            "(step t1 (cl (= (distinct a b c) (and
+                (not (= a b))
+                (not (= a c))
+                (not (= b c))
+            ))) :rule distinct_elim)": true,
+        }
+        "Inequality terms in different orders" {
+            "(step t1 (cl (= (distinct a b) (not (= b a)))) :rule distinct_elim)": true,
+
+            "(step t1 (cl (= (distinct a b c) (and
+                (not (= b a))
+                (not (= a c))
+                (not (= c b))
+            ))) :rule distinct_elim)": true,
+        }
+        "Conjunction terms in wrong order" {
+            "(step t1 (cl (= (distinct a b c) (and
+                (not (= b c))
+                (not (= a b))
+                (not (= a c))
+            ))) :rule distinct_elim)": false,
+        }
+        "\"distinct\" on more than two booleans should be \"false\"" {
+            "(step t1 (cl (= (distinct p q r) false)) :rule distinct_elim)": true,
+
+            "(step t1 (cl (= (distinct p q r) (and
+                (not (= p q))
+                (not (= p r))
+                (not (= q r))
+            ))) :rule distinct_elim)": false,
+        }
+    }
+}
+
+#[test]
 fn test_resolution_rule() {
     test_cases! {
         definitions = "
