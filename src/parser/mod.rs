@@ -382,7 +382,7 @@ impl<R: BufRead> Parser<R> {
                         .step_indices
                         .get(&index)
                         .cloned()
-                        .ok_or_else(|| ParserError::UndefinedStepIndex(index))
+                        .ok_or(ParserError::UndefinedStepIndex(index))
                 })
                 .collect::<Result<_, _>>()?
         } else {
@@ -552,8 +552,8 @@ impl<R: BufRead> Parser<R> {
                         // the arguments and apply the definition by performing a beta reduction.
 
                         ParserError::assert_num_of_args(&args, func.params.len())?;
-                        for i in 0..args.len() {
-                            SortError::assert_eq(func.params[i].1.as_ref(), args[i].sort())?;
+                        for (arg, param) in args.iter().zip(func.params.iter()) {
+                            SortError::assert_eq(param.1.as_ref(), arg.sort())?;
                         }
 
                         // Build a hash map of all the parameter names and the values they will

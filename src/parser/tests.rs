@@ -12,7 +12,7 @@ impl<'a> Parser<std::io::Cursor<&'a str>> {
     }
 }
 
-const ERROR_MESSAGE: &'static str = "parser error during test";
+const ERROR_MESSAGE: &str = "parser error during test";
 
 pub fn parse_term(input: &str) -> Term {
     Parser::from_str(input)

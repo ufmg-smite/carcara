@@ -22,7 +22,7 @@ impl ProofChecker {
                 args,
             } = step
             {
-                let rule = Self::get_rule(rule).expect(&format!("unknown rule: {}", rule));
+                let rule = Self::get_rule(rule).unwrap_or_else(|| panic!("unknown rule: {}", rule));
                 let premises = premises.iter().map(|&i| &self.proof.0[i]).collect();
                 if rule(&clause, premises, &args).is_none() {
                     return false;
@@ -367,7 +367,7 @@ mod rules {
 
         // At the end, we expect the working clause to be equal to the conclusion clause
         let clause: HashSet<_> = clause
-            .into_iter()
+            .iter()
             .map(|t| remove_negations(t.as_ref()))
             .collect();
 
@@ -502,10 +502,8 @@ mod rules {
 
             // If the term in the premise clause has not been encountered before, we advance the
             // conclusion clause iterator, and check if its next term is the encountered term
-            if is_new_term {
-                if clause_iter.next() != Some(t) {
-                    return None;
-                }
+            if is_new_term && clause_iter.next() != Some(t) {
+                return None;
             }
         }
 

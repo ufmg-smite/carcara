@@ -28,7 +28,7 @@ fn print_used_rules(file_path: &str) -> ParserResult<()> {
 }
 
 fn main() -> ParserResult<()> {
-    const MISSING_ARG: &'static str = "missing argument";
+    const MISSING_ARG: &str = "missing argument";
     let mut args = std::env::args();
     args.next();
 
