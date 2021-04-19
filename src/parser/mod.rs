@@ -13,7 +13,6 @@ use std::{
     collections::{hash_map::Entry, HashMap},
     hash::Hash,
     io::BufRead,
-    rc::Rc,
     str::FromStr,
 };
 
@@ -71,25 +70,25 @@ impl<K, V> Default for SymbolTable<K, V> {
 
 #[derive(Default)]
 struct ParserState {
-    sorts_symbol_table: SymbolTable<Identifier, Rc<Term>>,
+    sorts_symbol_table: SymbolTable<Identifier, ByRefRc<Term>>,
     function_defs: HashMap<String, FunctionDef>,
-    terms_map: HashMap<Term, Rc<Term>>,
-    sort_declarations: HashMap<String, (u64, Rc<Term>)>,
+    terms_map: HashMap<Term, ByRefRc<Term>>,
+    sort_declarations: HashMap<String, (u64, ByRefRc<Term>)>,
     step_indices: HashMap<String, usize>,
 }
 
 impl ParserState {
-    /// Takes a term and returns an `Rc` referencing it. If the term was not originally in the
+    /// Takes a term and returns a `ByRefRc` referencing it. If the term was not originally in the
     /// terms hash map, it is added to it.
-    fn add_term(&mut self, term: Term) -> Rc<Term> {
+    fn add_term(&mut self, term: Term) -> ByRefRc<Term> {
         match self.terms_map.entry(term.clone()) {
             Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
-            Entry::Vacant(vacant_entry) => vacant_entry.insert(Rc::new(term)).clone(),
+            Entry::Vacant(vacant_entry) => vacant_entry.insert(ByRefRc::new(term)).clone(),
         }
     }
 
     // Takes a vector of terms and calls `add_term` on each.
-    fn add_all(&mut self, terms: Vec<Term>) -> Vec<Rc<Term>> {
+    fn add_all(&mut self, terms: Vec<Term>) -> Vec<ByRefRc<Term>> {
         terms.into_iter().map(|t| self.add_term(t)).collect()
     }
 
@@ -163,7 +162,7 @@ impl ParserState {
     /// Takes a term and a hash map of variables to terms and substitutes every ocurrence of those
     /// variables with the associated term.
     fn apply_substitutions(&mut self, term: &Term, substitutions: &HashMap<String, Term>) -> Term {
-        let mut apply_to_sequence = |sequence: &[Rc<Term>]| -> Vec<Rc<Term>> {
+        let mut apply_to_sequence = |sequence: &[ByRefRc<Term>]| -> Vec<ByRefRc<Term>> {
             sequence
                 .iter()
                 .map(|a| {
@@ -413,7 +412,7 @@ impl<R: BufRead> Parser<R> {
 
     /// Parses a "declare-fun" proof command. Returns the function name and a term representing its
     /// sort. This method assumes that the "(" and "declare-fun" tokens were already consumed.
-    fn parse_declare_fun(&mut self) -> ParserResult<(String, Rc<Term>)> {
+    fn parse_declare_fun(&mut self) -> ParserResult<(String, ByRefRc<Term>)> {
         let name = self.expect_symbol()?;
         let sort = {
             self.expect_token(Token::OpenParen)?;
@@ -464,13 +463,13 @@ impl<R: BufRead> Parser<R> {
     }
 
     /// Parses a clause of the form "(cl <term>*)".
-    fn parse_clause(&mut self) -> ParserResult<Vec<Rc<Term>>> {
+    fn parse_clause(&mut self) -> ParserResult<Vec<ByRefRc<Term>>> {
         self.expect_token(Token::OpenParen)?;
         self.expect_token(Token::ReservedWord(Reserved::Cl))?;
         let terms = self
             .parse_sequence(Self::parse_term, false)?
             .into_iter()
-            .map(|term| -> ParserResult<Rc<Term>> {
+            .map(|term| -> ParserResult<ByRefRc<Term>> {
                 SortError::assert_eq(Term::BOOL_SORT, &term.sort())?;
                 Ok(self.state.add_term(term))
             })
@@ -509,7 +508,7 @@ impl<R: BufRead> Parser<R> {
     }
 
     /// Parses a sorted variable of the form "(<symbol> <sort>)".
-    fn parse_sorted_var(&mut self) -> ParserResult<(String, Rc<Term>)> {
+    fn parse_sorted_var(&mut self) -> ParserResult<(String, ByRefRc<Term>)> {
         self.expect_token(Token::OpenParen)?;
         let symbol = self.expect_symbol()?;
         let sort = self.parse_sort()?;

@@ -1,10 +1,8 @@
 mod tests;
 
-use std::rc::Rc;
-
 use crate::parser::ast::*;
 
-pub type Rule = fn(&[Rc<Term>], Vec<&ProofCommand>, &[ProofArg]) -> Option<()>;
+pub type Rule = fn(&[ByRefRc<Term>], Vec<&ProofCommand>, &[ProofArg]) -> Option<()>;
 
 pub struct ProofChecker {
     proof: Proof,
@@ -125,7 +123,7 @@ mod rules {
         }
     }
 
-    fn get_single_term_from_command(command: &ProofCommand) -> Option<&Rc<Term>> {
+    fn get_single_term_from_command(command: &ProofCommand) -> Option<&ByRefRc<Term>> {
         match command {
             ProofCommand::Assume(term) => Some(term),
             ProofCommand::Step { clause, .. } if clause.len() == 1 => Some(&clause[0]),
@@ -133,7 +131,7 @@ mod rules {
         }
     }
 
-    pub fn not_not(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+    pub fn not_not(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
         if clause.len() != 2 {
             return None;
         }
@@ -142,7 +140,11 @@ mod rules {
         to_option(p == q)
     }
 
-    pub fn equiv_pos1(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+    pub fn equiv_pos1(
+        clause: &[ByRefRc<Term>],
+        _: Vec<&ProofCommand>,
+        _: &[ProofArg],
+    ) -> Option<()> {
         if clause.len() != 3 {
             return None;
         }
@@ -152,7 +154,11 @@ mod rules {
         )
     }
 
-    pub fn equiv_pos2(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+    pub fn equiv_pos2(
+        clause: &[ByRefRc<Term>],
+        _: Vec<&ProofCommand>,
+        _: &[ProofArg],
+    ) -> Option<()> {
         if clause.len() != 3 {
             return None;
         }
@@ -162,7 +168,11 @@ mod rules {
         )
     }
 
-    pub fn eq_reflexive(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+    pub fn eq_reflexive(
+        clause: &[ByRefRc<Term>],
+        _: Vec<&ProofCommand>,
+        _: &[ProofArg],
+    ) -> Option<()> {
         if clause.len() == 1 {
             let (a, b) = match_op!((= a b) = clause[0].as_ref())?;
             to_option(a == b)
@@ -171,7 +181,11 @@ mod rules {
         }
     }
 
-    pub fn eq_transitive(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+    pub fn eq_transitive(
+        clause: &[ByRefRc<Term>],
+        _: Vec<&ProofCommand>,
+        _: &[ProofArg],
+    ) -> Option<()> {
         /// Recursive function to find a transitive chain given a conclusion equality and a series
         /// of premise equalities.
         fn find_chain(conclusion: (&Term, &Term), premises: &mut [(&Term, &Term)]) -> Option<()> {
@@ -223,7 +237,11 @@ mod rules {
         find_chain(conclusion, &mut premises)
     }
 
-    pub fn eq_congruent(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+    pub fn eq_congruent(
+        clause: &[ByRefRc<Term>],
+        _: Vec<&ProofCommand>,
+        _: &[ProofArg],
+    ) -> Option<()> {
         if clause.len() < 2 {
             return None;
         }
@@ -256,7 +274,11 @@ mod rules {
         }
     }
 
-    pub fn distinct_elim(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+    pub fn distinct_elim(
+        clause: &[ByRefRc<Term>],
+        _: Vec<&ProofCommand>,
+        _: &[ProofArg],
+    ) -> Option<()> {
         if clause.len() != 1 {
             return None;
         }
@@ -302,7 +324,7 @@ mod rules {
     }
 
     pub fn resolution(
-        clause: &[Rc<Term>],
+        clause: &[ByRefRc<Term>],
         premises: Vec<&ProofCommand>,
         _: &[ProofArg],
     ) -> Option<()> {
@@ -352,7 +374,11 @@ mod rules {
         to_option(working_clause == clause)
     }
 
-    pub fn and(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+    pub fn and(
+        clause: &[ByRefRc<Term>],
+        premises: Vec<&ProofCommand>,
+        _: &[ProofArg],
+    ) -> Option<()> {
         if premises.len() != 1 || clause.len() != 1 {
             return None;
         }
@@ -365,7 +391,11 @@ mod rules {
         to_option(and_contents.iter().any(|t| t == &clause[0]))
     }
 
-    pub fn or(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+    pub fn or(
+        clause: &[ByRefRc<Term>],
+        premises: Vec<&ProofCommand>,
+        _: &[ProofArg],
+    ) -> Option<()> {
         if premises.len() != 1 {
             return None;
         }
@@ -378,7 +408,11 @@ mod rules {
         to_option(or_contents == clause)
     }
 
-    pub fn ite1(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+    pub fn ite1(
+        clause: &[ByRefRc<Term>],
+        premises: Vec<&ProofCommand>,
+        _: &[ProofArg],
+    ) -> Option<()> {
         if premises.len() != 1 || clause.len() != 2 {
             return None;
         }
@@ -388,7 +422,11 @@ mod rules {
         to_option(psi_1 == clause[0].as_ref() && psi_3 == clause[1].as_ref())
     }
 
-    pub fn ite2(clause: &[Rc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+    pub fn ite2(
+        clause: &[ByRefRc<Term>],
+        premises: Vec<&ProofCommand>,
+        _: &[ProofArg],
+    ) -> Option<()> {
         if premises.len() != 1 || clause.len() != 2 {
             return None;
         }
@@ -400,7 +438,11 @@ mod rules {
         )
     }
 
-    pub fn ite_intro(clause: &[Rc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+    pub fn ite_intro(
+        clause: &[ByRefRc<Term>],
+        _: Vec<&ProofCommand>,
+        _: &[ProofArg],
+    ) -> Option<()> {
         if clause.len() != 1 {
             return None;
         }
@@ -437,7 +479,7 @@ mod rules {
     }
 
     pub fn contraction(
-        clause: &[Rc<Term>],
+        clause: &[ByRefRc<Term>],
         premises: Vec<&ProofCommand>,
         _: &[ProofArg],
     ) -> Option<()> {

@@ -108,7 +108,10 @@ fn test_arithmetic_ops() {
     assert_eq!(
         Term::Op(
             Operator::Add,
-            vec![Rc::new(terminal!(int 2)), Rc::new(terminal!(int 3))]
+            vec![
+                ByRefRc::new(terminal!(int 2)),
+                ByRefRc::new(terminal!(int 3)),
+            ]
         ),
         parse_term("(+ 2 3)"),
     );
@@ -117,10 +120,10 @@ fn test_arithmetic_ops() {
         Term::Op(
             Operator::Mult,
             vec![
-                Rc::new(terminal!(int 2)),
-                Rc::new(terminal!(int 3)),
-                Rc::new(terminal!(int 5)),
-                Rc::new(terminal!(int 7)),
+                ByRefRc::new(terminal!(int 2)),
+                ByRefRc::new(terminal!(int 3)),
+                ByRefRc::new(terminal!(int 5)),
+                ByRefRc::new(terminal!(int 7)),
             ]
         ),
         parse_term("(* 2 3 5 7)"),
@@ -138,8 +141,8 @@ fn test_logic_ops() {
         Term::Op(
             Operator::And,
             vec![
-                Rc::new(terminal!(var "true"; Rc::new(Term::BOOL_SORT.clone()))),
-                Rc::new(terminal!(var "false"; Rc::new(Term::BOOL_SORT.clone()))),
+                ByRefRc::new(terminal!(var "true"; ByRefRc::new(Term::BOOL_SORT.clone()))),
+                ByRefRc::new(terminal!(var "false"; ByRefRc::new(Term::BOOL_SORT.clone()))),
             ]
         ),
         parse_term("(and true false)"),
@@ -149,9 +152,9 @@ fn test_logic_ops() {
         Term::Op(
             Operator::Or,
             vec![
-                Rc::new(terminal!(var "true"; Rc::new(Term::BOOL_SORT.clone()))),
-                Rc::new(terminal!(var "true"; Rc::new(Term::BOOL_SORT.clone()))),
-                Rc::new(terminal!(var "false"; Rc::new(Term::BOOL_SORT.clone()))),
+                ByRefRc::new(terminal!(var "true"; ByRefRc::new(Term::BOOL_SORT.clone()))),
+                ByRefRc::new(terminal!(var "true"; ByRefRc::new(Term::BOOL_SORT.clone()))),
+                ByRefRc::new(terminal!(var "false"; ByRefRc::new(Term::BOOL_SORT.clone()))),
             ]
         ),
         parse_term("(or true true false)"),
@@ -160,7 +163,10 @@ fn test_logic_ops() {
     assert_eq!(
         Term::Op(
             Operator::Eq,
-            vec![Rc::new(terminal!(int 2)), Rc::new(terminal!(int 3))]
+            vec![
+                ByRefRc::new(terminal!(int 2)),
+                ByRefRc::new(terminal!(int 3)),
+            ]
         ),
         parse_term("(= 2 3)"),
     );
@@ -168,8 +174,8 @@ fn test_logic_ops() {
     assert_eq!(
         Term::Op(
             Operator::Not,
-            vec![Rc::new(
-                terminal!(var "false"; Rc::new(Term::BOOL_SORT.clone()))
+            vec![ByRefRc::new(
+                terminal!(var "false"; ByRefRc::new(Term::BOOL_SORT.clone()))
             )]
         ),
         parse_term("(not false)"),
@@ -178,7 +184,10 @@ fn test_logic_ops() {
     assert_eq!(
         Term::Op(
             Operator::Distinct,
-            vec![Rc::new(terminal!(int 4)), Rc::new(terminal!(int 2))]
+            vec![
+                ByRefRc::new(terminal!(int 4)),
+                ByRefRc::new(terminal!(int 2)),
+            ]
         ),
         parse_term("(distinct 4 2)"),
     );
@@ -218,9 +227,9 @@ fn test_ite() {
         Term::Op(
             Operator::Ite,
             vec![
-                Rc::new(terminal!(var "true"; Rc::new(Term::BOOL_SORT.clone()))),
-                Rc::new(terminal!(int 2)),
-                Rc::new(terminal!(int 3)),
+                ByRefRc::new(terminal!(var "true"; ByRefRc::new(Term::BOOL_SORT.clone()))),
+                ByRefRc::new(terminal!(int 2)),
+                ByRefRc::new(terminal!(int 3)),
             ],
         ),
         parse_term("(ite true 2 3)"),
@@ -230,14 +239,14 @@ fn test_ite() {
         Term::Op(
             Operator::Ite,
             vec![
-                Rc::new(parse_term("(not true)")),
-                Rc::new(terminal!(int 2)),
-                Rc::new(Term::Op(
+                ByRefRc::new(parse_term("(not true)")),
+                ByRefRc::new(terminal!(int 2)),
+                ByRefRc::new(Term::Op(
                     Operator::Ite,
                     vec![
-                        Rc::new(terminal!(var "false"; Rc::new(Term::BOOL_SORT.clone()))),
-                        Rc::new(terminal!(int 2)),
-                        Rc::new(terminal!(int 1)),
+                        ByRefRc::new(terminal!(var "false"; ByRefRc::new(Term::BOOL_SORT.clone()))),
+                        ByRefRc::new(terminal!(int 2)),
+                        ByRefRc::new(terminal!(int 1)),
                     ],
                 )),
             ],
@@ -277,7 +286,10 @@ fn test_declare_fun() {
     );
 
     let got = parse_term_with_definitions("(declare-fun x () Real)", "x");
-    assert_eq!(terminal!(var "x"; Rc::new(Term::REAL_SORT.clone())), got);
+    assert_eq!(
+        terminal!(var "x"; ByRefRc::new(Term::REAL_SORT.clone())),
+        got
+    );
 }
 
 #[test]
@@ -297,8 +309,8 @@ fn test_declare_sort() {
          (declare-fun x () T)",
         "x",
     );
-    let expected_sort = Term::Sort(SortKind::Atom, vec![Rc::new(terminal!(string "T"))]);
-    assert_eq!(terminal!(var "x"; Rc::new(expected_sort)), got);
+    let expected_sort = Term::Sort(SortKind::Atom, vec![ByRefRc::new(terminal!(string "T"))]);
+    assert_eq!(terminal!(var "x"; ByRefRc::new(expected_sort)), got);
 }
 
 #[test]
@@ -336,7 +348,7 @@ fn test_step() {
     assert_eq!(
         proof.0[0],
         ProofCommand::Step {
-            clause: vec![Rc::new(parse_term("(= (+ 2 3) (- 1 2))"))],
+            clause: vec![ByRefRc::new(parse_term("(= (+ 2 3) (- 1 2))"))],
             rule: "rule-name".into(),
             premises: Vec::new(),
             args: Vec::new(),
@@ -366,7 +378,7 @@ fn test_step() {
                     terminal!(string "three"),
                 ]
                 .into_iter()
-                .map(|term| ProofArg::Term(Rc::new(term)))
+                .map(|term| ProofArg::Term(ByRefRc::new(term)))
                 .collect()
             },
         }
@@ -385,7 +397,7 @@ fn test_step() {
                     ("c", parse_term("(* 6 7)")),
                 ]
                 .into_iter()
-                .map(|(name, term)| ProofArg::Assign(name.into(), Rc::new(term)))
+                .map(|(name, term)| ProofArg::Assign(name.into(), ByRefRc::new(term)))
                 .collect()
             },
         }
@@ -397,7 +409,7 @@ fn test_step() {
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: vec![0, 1, 2],
-            args: vec![ProofArg::Term(Rc::new(terminal!(int 42)))],
+            args: vec![ProofArg::Term(ByRefRc::new(terminal!(int 42)))],
         }
     );
 }

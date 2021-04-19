@@ -1,7 +1,49 @@
 //! The abstract syntax tree (AST) for the veriT Proof Format.
 
 use num_rational::Ratio;
-use std::{fmt::Debug, rc::Rc, str::FromStr};
+use std::{fmt::Debug, hash::Hash, ops::Deref, rc, str::FromStr};
+
+/// An `Rc` where equality and hashing are done by reference, instead of by value
+#[derive(Clone, Eq)]
+pub struct ByRefRc<T>(rc::Rc<T>);
+
+impl<T> PartialEq for ByRefRc<T> {
+    fn eq(&self, other: &Self) -> bool {
+        rc::Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl<T> Hash for ByRefRc<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        rc::Rc::as_ptr(&self.0).hash(state)
+    }
+}
+
+impl<T> Deref for ByRefRc<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
+    }
+}
+
+impl<T> AsRef<T> for ByRefRc<T> {
+    fn as_ref(&self) -> &T {
+        self.0.as_ref()
+    }
+}
+
+impl<T: Debug> Debug for ByRefRc<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
+impl<T> ByRefRc<T> {
+    pub fn new(value: T) -> Self {
+        Self(rc::Rc::new(value))
+    }
+}
 
 /// A proof in the veriT Proof Format.
 #[derive(Debug)]
@@ -11,12 +53,12 @@ pub struct Proof(pub Vec<ProofCommand>);
 #[derive(Debug, PartialEq)]
 pub enum ProofCommand {
     /// An "assume" command, of the form "(assume <symbol> <term>)".
-    Assume(Rc<Term>),
+    Assume(ByRefRc<Term>),
 
     /// A "step" command, of the form "(step <symbol> <clause> :rule <symbol> [:premises
     /// (<symbol>+)]? [:args <proof_args>]?)".
     Step {
-        clause: Vec<Rc<Term>>,
+        clause: Vec<ByRefRc<Term>>,
         rule: String,
         premises: Vec<usize>,
         args: Vec<ProofArg>,
@@ -27,17 +69,17 @@ pub enum ProofCommand {
 #[derive(Debug, PartialEq)]
 pub enum ProofArg {
     /// An argument that is just a term.
-    Term(Rc<Term>),
+    Term(ByRefRc<Term>),
 
     /// An argument of the form "(:= <symbol> <term>)".
-    Assign(String, Rc<Term>),
+    Assign(String, ByRefRc<Term>),
 }
 
 /// A function definition. Functions are defined using the "function-def" command, of the form
 /// "(define-fun <symbol> (<sorted_var>*) <sort> <term>)". These definitions are substituted in
 /// during parsing, so these commands don't appear in the final AST.
 pub struct FunctionDef {
-    pub params: Vec<(String, Rc<Term>)>,
+    pub params: Vec<(String, ByRefRc<Term>)>,
     pub body: Term,
 }
 
@@ -113,13 +155,13 @@ pub enum Term {
     Terminal(Terminal),
 
     /// An application of a function to one or more terms.
-    App(Rc<Term>, Vec<Rc<Term>>),
+    App(ByRefRc<Term>, Vec<ByRefRc<Term>>),
 
     /// An application of a bulit-in operator to one or more terms.
-    Op(Operator, Vec<Rc<Term>>),
+    Op(Operator, Vec<ByRefRc<Term>>),
 
     /// A sort.
-    Sort(SortKind, Vec<Rc<Term>>),
+    Sort(SortKind, Vec<ByRefRc<Term>>),
     // TODO: binders
 }
 
@@ -228,7 +270,7 @@ pub enum Terminal {
     Integer(u64),
     Real(Ratio<u64>),
     String(String),
-    Var(Identifier, Rc<Term>),
+    Var(Identifier, ByRefRc<Term>),
 }
 
 impl Debug for Terminal {
