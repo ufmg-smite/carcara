@@ -1,7 +1,8 @@
 extern crate num_rational;
 
-mod checker;
+#[macro_use]
 mod parser;
+mod checker;
 
 use error::*;
 use parser::*;

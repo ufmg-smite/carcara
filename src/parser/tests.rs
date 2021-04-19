@@ -44,7 +44,7 @@ pub fn parse_proof(input: &str) -> Proof {
 }
 
 /// A trait to represent equality by value for types that use `ByRefRc`.
-trait EqByValue {
+pub trait EqByValue {
     fn eq(a: &Self, b: &Self) -> bool;
 }
 

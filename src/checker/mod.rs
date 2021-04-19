@@ -100,14 +100,37 @@ macro_rules! match_op {
 #[cfg(test)]
 #[test]
 fn test_match_op() {
-    use crate::parser::tests::parse_term;
+    use crate::parser::tests::{parse_term, EqByValue};
 
-    let true_term = parse_term("true");
-    let false_term = parse_term("false");
     let term = parse_term("(= (= (not false) (= true false)) (not true))");
-    assert_eq!(
-        match_op!((= (= (not a) (= b c)) (not d)) = &term),
-        Some(((&false_term, (&true_term, &false_term)), &true_term)),
+    let ((a, (b, c)), d) = match_op!((= (= (not a) (= b c)) (not d)) = &term).unwrap();
+    EqByValue::eq(a, &terminal!(bool false));
+    EqByValue::eq(b, &terminal!(bool true));
+    EqByValue::eq(c, &terminal!(bool false));
+    EqByValue::eq(d, &terminal!(bool true));
+
+    let term = parse_term("(ite (not true) (- 2 2) (* 1 5))");
+    let (a, b, c) = match_op!((ite (not a) b c) = &term).unwrap();
+    EqByValue::eq(a, &terminal!(bool true));
+    EqByValue::eq(
+        b,
+        &Term::Op(
+            Operator::Sub,
+            vec![
+                ByRefRc::new(terminal!(int 2)),
+                ByRefRc::new(terminal!(int 2)),
+            ],
+        ),
+    );
+    EqByValue::eq(
+        c,
+        &Term::Op(
+            Operator::Mult,
+            vec![
+                ByRefRc::new(terminal!(int 1)),
+                ByRefRc::new(terminal!(int 5)),
+            ],
+        ),
     );
 }
 
