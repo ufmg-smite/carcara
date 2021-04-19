@@ -1,7 +1,8 @@
 use std::io;
 use std::ops::RangeFrom;
 
-use super::ast::*;
+use crate::ast::*;
+
 use super::lexer::Token;
 
 /// A `Result` type alias for parser errors.

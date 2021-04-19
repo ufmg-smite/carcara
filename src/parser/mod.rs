@@ -1,12 +1,10 @@
 //! A parser for the veriT Proof Format.
 
-#[macro_use]
-pub mod ast;
 pub mod error;
 pub mod lexer;
 pub mod tests;
 
-use ast::*;
+use crate::ast::*;
 use error::*;
 use lexer::*;
 use std::{
@@ -16,7 +14,7 @@ use std::{
     str::FromStr,
 };
 
-pub fn parse_problem_proof<T: BufRead, U: BufRead>(prob: T, proof: U) -> ParserResult<ast::Proof> {
+pub fn parse_problem_proof<T: BufRead, U: BufRead>(prob: T, proof: U) -> ParserResult<Proof> {
     let mut problem_parser = Parser::new(prob)?;
     problem_parser.parse_problem()?;
 

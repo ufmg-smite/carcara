@@ -1,6 +1,6 @@
 mod tests;
 
-use crate::parser::ast::*;
+use crate::ast::*;
 
 pub type Rule = fn(&[ByRefRc<Term>], Vec<&ProofCommand>, &[ProofArg]) -> Option<()>;
 
