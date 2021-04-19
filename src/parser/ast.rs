@@ -302,6 +302,12 @@ macro_rules! terminal {
     (var $e:expr ; $sort:expr) => {
         Term::Terminal(Terminal::Var(Identifier::Simple($e.into()), $sort))
     };
+    (bool true) => {
+        terminal!(var "true"; ByRefRc::new(Term::BOOL_SORT.clone()))
+    };
+    (bool false) => {
+        terminal!(var "false"; ByRefRc::new(Term::BOOL_SORT.clone()))
+    };
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

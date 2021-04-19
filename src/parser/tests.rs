@@ -43,8 +43,102 @@ pub fn parse_proof(input: &str) -> Proof {
         .expect(ERROR_MESSAGE)
 }
 
+/// A trait to represent equality by value for types that use `ByRefRc`.
+trait EqByValue {
+    fn eq(a: &Self, b: &Self) -> bool;
+}
+
+impl EqByValue for Term {
+    fn eq(a: &Self, b: &Self) -> bool {
+        match (a, b) {
+            (Term::App(f_a, args_a), Term::App(f_b, args_b)) => {
+                EqByValue::eq(f_a.as_ref(), f_b.as_ref()) && EqByValue::eq(args_a, args_b)
+            }
+            (Term::Op(op_a, args_a), Term::Op(op_b, args_b)) => {
+                op_a == op_b && EqByValue::eq(args_a, args_b)
+            }
+            (Term::Sort(kind_a, args_a), Term::Sort(kind_b, args_b)) => {
+                kind_a == kind_b && EqByValue::eq(args_a, args_b)
+            }
+            (Term::Terminal(a), Term::Terminal(b)) => match (a, b) {
+                (Terminal::Var(iden_a, sort_a), Terminal::Var(iden_b, sort_b)) => {
+                    iden_a == iden_b && EqByValue::eq(sort_a, sort_b)
+                }
+                (a, b) => a == b,
+            },
+            _ => false,
+        }
+    }
+}
+
+impl EqByValue for ProofArg {
+    fn eq(a: &Self, b: &Self) -> bool {
+        match (a, b) {
+            (ProofArg::Term(a), ProofArg::Term(b)) => EqByValue::eq(a, b),
+            (ProofArg::Assign(sa, ta), ProofArg::Assign(sb, tb)) => {
+                sa == sb && EqByValue::eq(ta, tb)
+            }
+            _ => false,
+        }
+    }
+}
+
+impl EqByValue for ProofCommand {
+    fn eq(a: &Self, b: &Self) -> bool {
+        match (a, b) {
+            (ProofCommand::Assume(a), ProofCommand::Assume(b)) => EqByValue::eq(a, b),
+            (
+                ProofCommand::Step {
+                    clause: clause_a,
+                    rule: rule_a,
+                    premises: premises_a,
+                    args: args_a,
+                },
+                ProofCommand::Step {
+                    clause: clause_b,
+                    rule: rule_b,
+                    premises: premises_b,
+                    args: args_b,
+                },
+            ) => {
+                EqByValue::eq(clause_a, clause_b)
+                    && rule_a == rule_b
+                    && premises_a == premises_b
+                    && EqByValue::eq(args_a, args_b)
+            }
+            _ => false,
+        }
+    }
+}
+
+impl<T: EqByValue> EqByValue for ByRefRc<T> {
+    fn eq(a: &Self, b: &Self) -> bool {
+        EqByValue::eq(a.as_ref(), b.as_ref())
+    }
+}
+
+impl<T: EqByValue> EqByValue for Vec<T> {
+    fn eq(a: &Self, b: &Self) -> bool {
+        a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| EqByValue::eq(a, b))
+    }
+}
+
+fn run_parser_tests(cases: &[(&str, Term)]) {
+    for (case, expected) in cases {
+        let got = parse_term(case);
+        assert!(
+            EqByValue::eq(expected, &got),
+            "test case failed: {:?} != {:?}",
+            expected,
+            got
+        );
+    }
+}
+
 #[test]
 fn test_hash_consing() {
+    use std::collections::HashSet;
+
     let input = "(-
         (-
             (+ 1 2)
@@ -63,16 +157,25 @@ fn test_hash_consing() {
     //   (- (+ 1 2) (/ ...))
     //   (* 2 2)
     // Note that the outer term (- (- ...) (* 2 2)) is not added to the hash map
-    let expected = [
-        terminal!(int 1),
-        terminal!(int 2),
-        parse_term("(+ 1 2)"),
-        parse_term("(/ (+ 1 2) (+ 1 2))"),
-        parse_term("(- (+ 1 2) (/ (+ 1 2) (+ 1 2)))"),
-        parse_term("(* 2 2)"),
-    ];
-    for e in &expected {
-        assert!(parser.state.terms_map.contains_key(e))
+    let expected = vec![
+        // The Bool sort is always added to the terms map because of the boolean bulit-ins "true"
+        // and "false"
+        "Bool",
+        "1",
+        "2",
+        "(+ 1 2)",
+        "(/ (+ 1 2) (+ 1 2))",
+        "(- (+ 1 2) (/ (+ 1 2) (+ 1 2)))",
+        "(* 2 2)",
+    ]
+    .into_iter()
+    .collect::<HashSet<&str>>();
+
+    assert_eq!(parser.state.terms_map.len(), expected.len());
+
+    for got in parser.state.terms_map.keys() {
+        let formatted: &str = &format!("{:?}", got);
+        assert!(expected.contains(formatted), "{:?}", formatted)
     }
 }
 
@@ -89,10 +192,10 @@ fn test_subterms() {
 
     assert_eq!(expected.len(), got.len());
     for i in 0..expected.len() {
-        assert_eq!(
+        assert!(EqByValue::eq(
             &parse_term_with_definitions(definitions, expected[i]),
             got[i]
-        );
+        ));
     }
 }
 
@@ -105,29 +208,46 @@ fn test_constant_terms() {
 
 #[test]
 fn test_arithmetic_ops() {
-    assert_eq!(
-        Term::Op(
-            Operator::Add,
-            vec![
-                ByRefRc::new(terminal!(int 2)),
-                ByRefRc::new(terminal!(int 3)),
-            ]
+    run_parser_tests(&[
+        (
+            "(+ 2 3)",
+            Term::Op(
+                Operator::Add,
+                vec![
+                    ByRefRc::new(terminal!(int 2)),
+                    ByRefRc::new(terminal!(int 3)),
+                ],
+            ),
         ),
-        parse_term("(+ 2 3)"),
-    );
-
-    assert_eq!(
-        Term::Op(
-            Operator::Mult,
-            vec![
-                ByRefRc::new(terminal!(int 2)),
-                ByRefRc::new(terminal!(int 3)),
-                ByRefRc::new(terminal!(int 5)),
-                ByRefRc::new(terminal!(int 7)),
-            ]
+        (
+            "(* 2 3 5 7)",
+            Term::Op(
+                Operator::Mult,
+                vec![
+                    ByRefRc::new(terminal!(int 2)),
+                    ByRefRc::new(terminal!(int 3)),
+                    ByRefRc::new(terminal!(int 5)),
+                    ByRefRc::new(terminal!(int 7)),
+                ],
+            ),
         ),
-        parse_term("(* 2 3 5 7)"),
-    );
+        (
+            "(- (+ 1 1) 2)",
+            Term::Op(
+                Operator::Sub,
+                vec![
+                    ByRefRc::new(Term::Op(
+                        Operator::Add,
+                        vec![
+                            ByRefRc::new(terminal!(int 1)),
+                            ByRefRc::new(terminal!(int 1)),
+                        ],
+                    )),
+                    ByRefRc::new(terminal!(int 2)),
+                ],
+            ),
+        ),
+    ]);
 
     assert!(matches!(
         parse_term_err("(+ (- 1 2) (* 3.0 4.2))"),
@@ -137,60 +257,69 @@ fn test_arithmetic_ops() {
 
 #[test]
 fn test_logic_ops() {
-    assert_eq!(
-        Term::Op(
-            Operator::And,
-            vec![
-                ByRefRc::new(terminal!(var "true"; ByRefRc::new(Term::BOOL_SORT.clone()))),
-                ByRefRc::new(terminal!(var "false"; ByRefRc::new(Term::BOOL_SORT.clone()))),
-            ]
+    run_parser_tests(&[
+        (
+            "(and true false)",
+            Term::Op(
+                Operator::And,
+                vec![
+                    ByRefRc::new(terminal!(bool true)),
+                    ByRefRc::new(terminal!(bool false)),
+                ],
+            ),
         ),
-        parse_term("(and true false)"),
-    );
-
-    assert_eq!(
-        Term::Op(
-            Operator::Or,
-            vec![
-                ByRefRc::new(terminal!(var "true"; ByRefRc::new(Term::BOOL_SORT.clone()))),
-                ByRefRc::new(terminal!(var "true"; ByRefRc::new(Term::BOOL_SORT.clone()))),
-                ByRefRc::new(terminal!(var "false"; ByRefRc::new(Term::BOOL_SORT.clone()))),
-            ]
+        (
+            "(or true true false)",
+            Term::Op(
+                Operator::Or,
+                vec![
+                    ByRefRc::new(terminal!(bool true)),
+                    ByRefRc::new(terminal!(bool true)),
+                    ByRefRc::new(terminal!(bool false)),
+                ],
+            ),
         ),
-        parse_term("(or true true false)"),
-    );
-
-    assert_eq!(
-        Term::Op(
-            Operator::Eq,
-            vec![
-                ByRefRc::new(terminal!(int 2)),
-                ByRefRc::new(terminal!(int 3)),
-            ]
+        (
+            "(or true (and false false))",
+            Term::Op(
+                Operator::Or,
+                vec![
+                    ByRefRc::new(terminal!(bool true)),
+                    ByRefRc::new(Term::Op(
+                        Operator::And,
+                        vec![
+                            ByRefRc::new(terminal!(bool false)),
+                            ByRefRc::new(terminal!(bool false)),
+                        ],
+                    )),
+                ],
+            ),
         ),
-        parse_term("(= 2 3)"),
-    );
-
-    assert_eq!(
-        Term::Op(
-            Operator::Not,
-            vec![ByRefRc::new(
-                terminal!(var "false"; ByRefRc::new(Term::BOOL_SORT.clone()))
-            )]
+        (
+            "(= 2 3)",
+            Term::Op(
+                Operator::Eq,
+                vec![
+                    ByRefRc::new(terminal!(int 2)),
+                    ByRefRc::new(terminal!(int 3)),
+                ],
+            ),
         ),
-        parse_term("(not false)"),
-    );
-
-    assert_eq!(
-        Term::Op(
-            Operator::Distinct,
-            vec![
-                ByRefRc::new(terminal!(int 4)),
-                ByRefRc::new(terminal!(int 2)),
-            ]
+        (
+            "(not false)",
+            Term::Op(Operator::Not, vec![ByRefRc::new(terminal!(bool false))]),
         ),
-        parse_term("(distinct 4 2)"),
-    );
+        (
+            "(distinct 4 2)",
+            Term::Op(
+                Operator::Distinct,
+                vec![
+                    ByRefRc::new(terminal!(int 4)),
+                    ByRefRc::new(terminal!(int 2)),
+                ],
+            ),
+        ),
+    ]);
 
     assert!(matches!(
         parse_term_err("(or true 1.2)"),
@@ -223,36 +352,37 @@ fn test_logic_ops() {
 
 #[test]
 fn test_ite() {
-    assert_eq!(
-        Term::Op(
-            Operator::Ite,
-            vec![
-                ByRefRc::new(terminal!(var "true"; ByRefRc::new(Term::BOOL_SORT.clone()))),
-                ByRefRc::new(terminal!(int 2)),
-                ByRefRc::new(terminal!(int 3)),
-            ],
+    run_parser_tests(&[
+        (
+            "(ite true 2 3)",
+            Term::Op(
+                Operator::Ite,
+                vec![
+                    ByRefRc::new(terminal!(bool true)),
+                    ByRefRc::new(terminal!(int 2)),
+                    ByRefRc::new(terminal!(int 3)),
+                ],
+            ),
         ),
-        parse_term("(ite true 2 3)"),
-    );
-
-    assert_eq!(
-        Term::Op(
-            Operator::Ite,
-            vec![
-                ByRefRc::new(parse_term("(not true)")),
-                ByRefRc::new(terminal!(int 2)),
-                ByRefRc::new(Term::Op(
-                    Operator::Ite,
-                    vec![
-                        ByRefRc::new(terminal!(var "false"; ByRefRc::new(Term::BOOL_SORT.clone()))),
-                        ByRefRc::new(terminal!(int 2)),
-                        ByRefRc::new(terminal!(int 1)),
-                    ],
-                )),
-            ],
+        (
+            "(ite (not true) 2 (ite false 2 1))",
+            Term::Op(
+                Operator::Ite,
+                vec![
+                    ByRefRc::new(parse_term("(not true)")),
+                    ByRefRc::new(terminal!(int 2)),
+                    ByRefRc::new(Term::Op(
+                        Operator::Ite,
+                        vec![
+                            ByRefRc::new(terminal!(bool false)),
+                            ByRefRc::new(terminal!(int 2)),
+                            ByRefRc::new(terminal!(int 1)),
+                        ],
+                    )),
+                ],
+            ),
         ),
-        parse_term("(ite (not true) 2 (ite false 2 1))"),
-    );
+    ]);
 
     assert_eq!(
         ParserError::WrongNumberOfArgs(3, 2),
@@ -286,10 +416,10 @@ fn test_declare_fun() {
     );
 
     let got = parse_term_with_definitions("(declare-fun x () Real)", "x");
-    assert_eq!(
-        terminal!(var "x"; ByRefRc::new(Term::REAL_SORT.clone())),
-        got
-    );
+    assert!(EqByValue::eq(
+        &terminal!(var "x"; ByRefRc::new(Term::REAL_SORT.clone())),
+        &got
+    ));
 }
 
 #[test]
@@ -310,7 +440,10 @@ fn test_declare_sort() {
         "x",
     );
     let expected_sort = Term::Sort(SortKind::Atom, vec![ByRefRc::new(terminal!(string "T"))]);
-    assert_eq!(terminal!(var "x"; ByRefRc::new(expected_sort)), got);
+    assert!(EqByValue::eq(
+        &terminal!(var "x"; ByRefRc::new(expected_sort)),
+        &got
+    ));
 }
 
 #[test]
@@ -319,10 +452,10 @@ fn test_define_fun() {
         "(define-fun add ((a Int) (b Int)) Int (+ a b))",
         "(add 2 3)",
     );
-    assert_eq!(parse_term("(+ 2 3)"), got);
+    assert!(EqByValue::eq(&parse_term("(+ 2 3)"), &got));
 
     let got = parse_term_with_definitions("(define-fun x () Int 2)", "(+ x 3)");
-    assert_eq!(parse_term("(+ 2 3)"), got);
+    assert!(EqByValue::eq(&parse_term("(+ 2 3)"), &got));
 
     let got = parse_term_with_definitions(
         "(define-fun f ((x Int)) Int (+ x 1))
@@ -330,7 +463,7 @@ fn test_define_fun() {
         "(g 2 3)",
     );
     let expected = parse_term("(* (+ 2 1) (+ 3 1))");
-    assert_eq!(expected, got);
+    assert!(EqByValue::eq(&expected, &got));
 }
 
 #[test]
@@ -345,29 +478,29 @@ fn test_step() {
     let proof = parse_proof(input);
     assert_eq!(proof.0.len(), 5);
 
-    assert_eq!(
-        proof.0[0],
-        ProofCommand::Step {
+    assert!(EqByValue::eq(
+        &proof.0[0],
+        &ProofCommand::Step {
             clause: vec![ByRefRc::new(parse_term("(= (+ 2 3) (- 1 2))"))],
             rule: "rule-name".into(),
             premises: Vec::new(),
             args: Vec::new(),
         }
-    );
+    ));
 
-    assert_eq!(
-        proof.0[1],
-        ProofCommand::Step {
+    assert!(EqByValue::eq(
+        &proof.0[1],
+        &ProofCommand::Step {
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: vec![0],
             args: Vec::new(),
         }
-    );
+    ));
 
-    assert_eq!(
-        proof.0[2],
-        ProofCommand::Step {
+    assert!(EqByValue::eq(
+        &proof.0[2],
+        &ProofCommand::Step {
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: Vec::new(),
@@ -382,11 +515,11 @@ fn test_step() {
                 .collect()
             },
         }
-    );
+    ));
 
-    assert_eq!(
-        proof.0[3],
-        ProofCommand::Step {
+    assert!(EqByValue::eq(
+        &proof.0[3],
+        &ProofCommand::Step {
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: Vec::new(),
@@ -401,15 +534,15 @@ fn test_step() {
                 .collect()
             },
         }
-    );
+    ));
 
-    assert_eq!(
-        proof.0[4],
-        ProofCommand::Step {
+    assert!(EqByValue::eq(
+        &proof.0[4],
+        &ProofCommand::Step {
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: vec![0, 1, 2],
             args: vec![ProofArg::Term(ByRefRc::new(terminal!(int 42)))],
         }
-    );
+    ));
 }
