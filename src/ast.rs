@@ -97,6 +97,7 @@ pub enum Operator {
     And,
     Not,
     Distinct,
+    Implies,
 
     Ite,
 }
@@ -136,6 +137,7 @@ impl_operator_str_traits! {
     And: "and",
     Not: "not",
     Distinct: "distinct",
+    Implies: "=>",
     Ite: "ite",
 }
 
@@ -195,7 +197,8 @@ impl Term {
                 | Operator::Or
                 | Operator::And
                 | Operator::Not
-                | Operator::Distinct => Term::BOOL_SORT,
+                | Operator::Distinct
+                | Operator::Implies => Term::BOOL_SORT,
                 Operator::Ite => args[1].sort(),
             },
             Term::App(f, _) => {

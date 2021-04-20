@@ -299,6 +299,23 @@ fn test_logic_ops() {
                 ],
             ),
         ),
+        (
+            "(=> (= 0 1) true false)",
+            Term::Op(
+                Operator::Implies,
+                vec![
+                    ByRefRc::new(Term::Op(
+                        Operator::Eq,
+                        vec![
+                            ByRefRc::new(terminal!(int 0)),
+                            ByRefRc::new(terminal!(int 1)),
+                        ],
+                    )),
+                    ByRefRc::new(terminal!(bool true)),
+                    ByRefRc::new(terminal!(bool false)),
+                ],
+            ),
+        ),
     ]);
 
     assert!(matches!(
@@ -328,6 +345,10 @@ fn test_logic_ops() {
         ParserError::WrongNumberOfArgs(2, 1),
         parse_term_err("(distinct 0)"),
     );
+    assert!(matches!(
+        parse_term_err("(=> true 0)"),
+        ParserError::SortError(SortError::Expected { .. }),
+    ));
 }
 
 #[test]

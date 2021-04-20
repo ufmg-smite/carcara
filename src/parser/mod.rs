@@ -114,7 +114,7 @@ impl ParserState {
                 ParserError::assert_num_of_args_range(&args, 2..)?;
                 SortError::assert_all_eq(&sorts)?;
             }
-            Operator::Or | Operator::And => {
+            Operator::Or | Operator::And | Operator::Implies => {
                 ParserError::assert_num_of_args_range(&args, 2..)?;
                 for s in sorts {
                     SortError::assert_eq(Term::BOOL_SORT, &s)?;
