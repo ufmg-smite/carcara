@@ -321,3 +321,85 @@ pub enum Index {
     Numeral(u64),
     Symbol(String),
 }
+
+/// A macro to help deconstruct operation terms. Since a term holds references to other terms in
+/// `Vec`s and `Rc`s, pattern matching a complex term can be difficult and verbose. This macro
+/// helps with that.
+macro_rules! match_term {
+    ($bind:ident = $var:expr) => {
+        Some($var)
+    };
+    (($op:tt $($args:tt)+) = $var:expr) => {{
+        let _: &Term = $var;
+        if let Term::Op(match_term!(@GET_VARIANT $op), args) = $var {
+            match_term!(@ARGS ($($args)+) = args.as_slice())
+        } else {
+            None
+        }
+    }};
+    (@ARGS ($arg:tt) = $var:expr) => {
+        match_term!(@ARGS_IDENT (arg1: $arg) = $var)
+    };
+    (@ARGS ($arg1:tt $arg2:tt) = $var:expr) => {
+        match_term!(@ARGS_IDENT (arg1: $arg1, arg2: $arg2) = $var)
+    };
+    (@ARGS ($arg1:tt $arg2:tt $arg3:tt) = $var:expr) => {
+        match_term!(@ARGS_IDENT (arg1: $arg1, arg2: $arg2, arg3: $arg3) = $var)
+    };
+    (@ARGS_IDENT ( $($name:ident : $arg:tt),* ) = $var:expr) => {
+        if let [$($name),*] = $var {
+            #[allow(unused_parens)]
+            match ($(match_term!($arg = $name.as_ref())),*) {
+                ($(Some($name)),*) => Some(($($name),*)),
+                _ => None,
+            }
+        } else {
+            None
+        }
+
+    };
+    (@GET_VARIANT not) => { Operator::Not };
+    (@GET_VARIANT =) => { Operator::Eq };
+    (@GET_VARIANT ite) => { Operator::Ite };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_match_term() {
+        use crate::parser::tests::{parse_term, EqByValue};
+
+        let term = parse_term("(= (= (not false) (= true false)) (not true))");
+        let ((a, (b, c)), d) = match_term!((= (= (not a) (= b c)) (not d)) = &term).unwrap();
+        EqByValue::eq(a, &terminal!(bool false));
+        EqByValue::eq(b, &terminal!(bool true));
+        EqByValue::eq(c, &terminal!(bool false));
+        EqByValue::eq(d, &terminal!(bool true));
+
+        let term = parse_term("(ite (not true) (- 2 2) (* 1 5))");
+        let (a, b, c) = match_term!((ite (not a) b c) = &term).unwrap();
+        EqByValue::eq(a, &terminal!(bool true));
+        EqByValue::eq(
+            b,
+            &Term::Op(
+                Operator::Sub,
+                vec![
+                    ByRefRc::new(terminal!(int 2)),
+                    ByRefRc::new(terminal!(int 2)),
+                ],
+            ),
+        );
+        EqByValue::eq(
+            c,
+            &Term::Op(
+                Operator::Mult,
+                vec![
+                    ByRefRc::new(terminal!(int 1)),
+                    ByRefRc::new(terminal!(int 5)),
+                ],
+            ),
+        );
+    }
+}

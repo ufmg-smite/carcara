@@ -53,87 +53,6 @@ impl ProofChecker {
     }
 }
 
-/// A macro to help deconstruct operation terms. Since a term holds references to other terms in
-/// `Vec`s and `Rc`s, pattern matching a complex term can be difficult and verbose. This macro
-/// helps with that.
-macro_rules! match_op {
-    ($bind:ident = $var:expr) => {
-        Some($var)
-    };
-    (($op:tt $($args:tt)+) = $var:expr) => {{
-        let _: &Term = $var;
-        if let Term::Op(match_op!(@GET_VARIANT $op), args) = $var {
-            match_op!(@ARGS ($($args)+) = args.as_slice())
-        } else {
-            None
-        }
-    }};
-    (@ARGS ($arg:tt) = $var:expr) => {
-        match_op!(@ARGS_IDENT (arg1: $arg) = $var)
-    };
-    (@ARGS ($arg1:tt $arg2:tt) = $var:expr) => {
-        match_op!(@ARGS_IDENT (arg1: $arg1, arg2: $arg2) = $var)
-    };
-    (@ARGS ($arg1:tt $arg2:tt $arg3:tt) = $var:expr) => {
-        match_op!(@ARGS_IDENT (arg1: $arg1, arg2: $arg2, arg3: $arg3) = $var)
-    };
-    (@ARGS_IDENT ( $($name:ident : $arg:tt),* ) = $var:expr) => {
-        if let [$($name),*] = $var {
-            #[allow(unused_parens)]
-            match ($(match_op!($arg = $name.as_ref())),*) {
-                ($(Some($name)),*) => Some(($($name),*)),
-                _ => None,
-            }
-        } else {
-            None
-        }
-
-    };
-    (@GET_VARIANT not) => { Operator::Not };
-    (@GET_VARIANT =) => { Operator::Eq };
-    (@GET_VARIANT ite) => { Operator::Ite };
-}
-
-// Macros can only be used after they're declared, so we can't put this test in the "tests" module,
-// as that module is declared in the top of the file. Instead of moving the module delcaration to
-// after the macro declaration, it's easier to just bring this single test here.
-#[cfg(test)]
-#[test]
-fn test_match_op() {
-    use crate::parser::tests::{parse_term, EqByValue};
-
-    let term = parse_term("(= (= (not false) (= true false)) (not true))");
-    let ((a, (b, c)), d) = match_op!((= (= (not a) (= b c)) (not d)) = &term).unwrap();
-    EqByValue::eq(a, &terminal!(bool false));
-    EqByValue::eq(b, &terminal!(bool true));
-    EqByValue::eq(c, &terminal!(bool false));
-    EqByValue::eq(d, &terminal!(bool true));
-
-    let term = parse_term("(ite (not true) (- 2 2) (* 1 5))");
-    let (a, b, c) = match_op!((ite (not a) b c) = &term).unwrap();
-    EqByValue::eq(a, &terminal!(bool true));
-    EqByValue::eq(
-        b,
-        &Term::Op(
-            Operator::Sub,
-            vec![
-                ByRefRc::new(terminal!(int 2)),
-                ByRefRc::new(terminal!(int 2)),
-            ],
-        ),
-    );
-    EqByValue::eq(
-        c,
-        &Term::Op(
-            Operator::Mult,
-            vec![
-                ByRefRc::new(terminal!(int 1)),
-                ByRefRc::new(terminal!(int 5)),
-            ],
-        ),
-    );
-}
-
 mod rules {
     use super::*;
     use std::collections::HashSet;
@@ -158,7 +77,7 @@ mod rules {
         if clause.len() != 2 {
             return None;
         }
-        let p = match_op!((not (not (not p))) = clause[0].as_ref())?;
+        let p = match_term!((not (not (not p))) = clause[0].as_ref())?;
         let q = clause[1].as_ref();
         to_option(p == q)
     }
@@ -171,9 +90,9 @@ mod rules {
         if clause.len() != 3 {
             return None;
         }
-        let (phi_1, phi_2) = match_op!((not (= phi_1 phi_2)) = clause[0].as_ref())?;
+        let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = clause[0].as_ref())?;
         to_option(
-            phi_1 == clause[1].as_ref() && phi_2 == match_op!((not phi_2) = clause[2].as_ref())?,
+            phi_1 == clause[1].as_ref() && phi_2 == match_term!((not phi_2) = clause[2].as_ref())?,
         )
     }
 
@@ -185,9 +104,9 @@ mod rules {
         if clause.len() != 3 {
             return None;
         }
-        let (phi_1, phi_2) = match_op!((not (= phi_1 phi_2)) = clause[0].as_ref())?;
+        let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = clause[0].as_ref())?;
         to_option(
-            phi_1 == match_op!((not phi_1) = clause[1].as_ref())? && phi_2 == clause[2].as_ref(),
+            phi_1 == match_term!((not phi_1) = clause[1].as_ref())? && phi_2 == clause[2].as_ref(),
         )
     }
 
@@ -197,7 +116,7 @@ mod rules {
         _: &[ProofArg],
     ) -> Option<()> {
         if clause.len() == 1 {
-            let (a, b) = match_op!((= a b) = clause[0].as_ref())?;
+            let (a, b) = match_term!((= a b) = clause[0].as_ref())?;
             to_option(a == b)
         } else {
             None
@@ -247,13 +166,13 @@ mod rules {
         // The last term in clause should be an equality, and it will be the conclusion of the
         // transitive chain
         let last_term = clause.last().unwrap().as_ref();
-        let conclusion = match_op!((= t u) = last_term)?;
+        let conclusion = match_term!((= t u) = last_term)?;
 
         // The first `clause.len()` - 1 terms in the clause must be a sequence of inequalites, and
         // they will be the premises of the transitive chain
         let mut premises = Vec::with_capacity(clause.len() - 1);
         for term in &clause[..clause.len() - 1] {
-            let (t, u) = match_op!((not (= t u)) = term.as_ref())?;
+            let (t, u) = match_term!((not (= t u)) = term.as_ref())?;
             premises.push((t, u));
         }
 
@@ -273,14 +192,14 @@ mod rules {
         let mut ts = Vec::new();
         let mut us = Vec::new();
         for term in &clause[..clause.len() - 1] {
-            let (t, u) = match_op!((not (= t u)) = term.as_ref())?;
+            let (t, u) = match_term!((not (= t u)) = term.as_ref())?;
             ts.push(t);
             us.push(u);
         }
 
         // The final term in the clause must be an equality of two function applications, whose
         // arguments are the terms in the previous inequalities
-        match match_op!((= f g) = clause.last().unwrap().as_ref())? {
+        match match_term!((= f g) = clause.last().unwrap().as_ref())? {
             (Term::App(f, f_args), Term::App(g, g_args)) => {
                 if f != g || f_args.len() != ts.len() {
                     return None;
@@ -306,7 +225,7 @@ mod rules {
             return None;
         }
 
-        let (distinct_term, second_term) = match_op!((= a b) = clause[0].as_ref())?;
+        let (distinct_term, second_term) = match_term!((= a b) = clause[0].as_ref())?;
         let distinct_args = match distinct_term {
             Term::Op(Operator::Distinct, args) => args,
             _ => return None,
@@ -314,7 +233,7 @@ mod rules {
         match distinct_args.as_slice() {
             [] | [_] => unreachable!(),
             [a, b] => {
-                let got: (&Term, &Term) = match_op!((not (= x y)) = second_term)?;
+                let got: (&Term, &Term) = match_term!((not (= x y)) = second_term)?;
                 to_option(got == (a, b) || got == (b, a))
             }
             args => {
@@ -336,7 +255,7 @@ mod rules {
                 for i in 0..args.len() {
                     for j in i + 1..args.len() {
                         let (a, b) = (args[i].as_ref(), args[j].as_ref());
-                        let got: (&Term, &Term) = match_op!((not (= x y)) = got[k].as_ref())?;
+                        let got: (&Term, &Term) = match_term!((not (= x y)) = got[k].as_ref())?;
                         to_option(got == (a, b) || got == (b, a))?;
                         k += 1;
                     }
@@ -354,7 +273,7 @@ mod rules {
         /// Removes all leading negations in a term and returns how many there were.
         fn remove_negations(mut term: &Term) -> (u32, &Term) {
             let mut n = 0;
-            while let Some(t) = match_op!((not t) = term) {
+            while let Some(t) = match_term!((not t) = term) {
                 term = t;
                 n += 1;
             }
@@ -440,7 +359,7 @@ mod rules {
             return None;
         }
         let premise_term = get_single_term_from_command(premises[0])?;
-        let (psi_1, _, psi_3) = match_op!((ite psi_1 psi_2 psi_3) = premise_term.as_ref())?;
+        let (psi_1, _, psi_3) = match_term!((ite psi_1 psi_2 psi_3) = premise_term.as_ref())?;
 
         to_option(psi_1 == clause[0].as_ref() && psi_3 == clause[1].as_ref())
     }
@@ -454,10 +373,10 @@ mod rules {
             return None;
         }
         let premise_term = get_single_term_from_command(premises[0])?;
-        let (psi_1, psi_2, _) = match_op!((ite psi_1 psi_2 psi_3) = premise_term.as_ref())?;
+        let (psi_1, psi_2, _) = match_term!((ite psi_1 psi_2 psi_3) = premise_term.as_ref())?;
 
         to_option(
-            psi_1 == match_op!((not psi_1) = clause[0].as_ref())? && psi_2 == clause[1].as_ref(),
+            psi_1 == match_term!((not psi_1) = clause[0].as_ref())? && psi_2 == clause[1].as_ref(),
         )
     }
 
@@ -469,10 +388,10 @@ mod rules {
         if clause.len() != 1 {
             return None;
         }
-        let (root_term, us) = match_op!((= t us) = clause[0].as_ref())?;
+        let (root_term, us) = match_term!((= t us) = clause[0].as_ref())?;
         let ite_terms: Vec<_> = root_term
             .subterms()
-            .filter_map(|term| match_op!((ite a b c) = term))
+            .filter_map(|term| match_term!((ite a b c) = term))
             .collect();
 
         // "us" must be a conjunction where the first term is the root term
@@ -488,11 +407,11 @@ mod rules {
         // appear as subterms of the root term
         for (s_i, u_i) in ite_terms.iter().zip(&us[1..]) {
             let (cond, (r1, s1), (r2, s2)) =
-                match_op!((ite cond (= r1 s1) (= r2 s2)) = u_i.as_ref())?;
+                match_term!((ite cond (= r1 s1) (= r2 s2)) = u_i.as_ref())?;
 
             // s_i == s1 == s2 == (ite cond r1 r2)
             let is_valid =
-                (cond, r1, r2) == *s_i && s1 == s2 && match_op!((ite a b c) = s1) == Some(*s_i);
+                (cond, r1, r2) == *s_i && s1 == s2 && match_term!((ite a b c) = s1) == Some(*s_i);
 
             if !is_valid {
                 return None;
