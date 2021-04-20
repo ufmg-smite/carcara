@@ -391,6 +391,7 @@ mod rules {
         let (root_term, us) = match_term!((= t us) = clause[0].as_ref())?;
         let ite_terms: Vec<_> = root_term
             .subterms()
+            .iter()
             .filter_map(|term| match_term!((ite a b c) = term))
             .collect();
 

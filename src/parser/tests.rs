@@ -180,26 +180,6 @@ fn test_hash_consing() {
 }
 
 #[test]
-fn test_subterms() {
-    let definitions = "
-        (declare-fun f (Int Int) Int)
-        (declare-fun a () Int)
-        (declare-fun b () Int)
-    ";
-    let expected = ["(+ (f a b) 2)", "(f a b)", "f", "a", "b", "2"];
-    let root = parse_term_with_definitions(definitions, "(+ (f a b) 2)");
-    let got = root.subterms().collect::<Vec<_>>();
-
-    assert_eq!(expected.len(), got.len());
-    for i in 0..expected.len() {
-        assert!(EqByValue::eq(
-            &parse_term_with_definitions(definitions, expected[i]),
-            got[i]
-        ));
-    }
-}
-
-#[test]
 fn test_constant_terms() {
     assert_eq!(terminal!(int 42), parse_term("42"));
     assert_eq!(terminal!(real 3 / 2), parse_term("1.5"));

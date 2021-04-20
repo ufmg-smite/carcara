@@ -1,7 +1,7 @@
 //! The abstract syntax tree (AST) for the veriT Proof Format.
 
 use num_rational::Ratio;
-use std::{fmt::Debug, hash::Hash, ops::Deref, rc, str::FromStr};
+use std::{collections::HashSet, fmt::Debug, hash::Hash, ops::Deref, rc, str::FromStr};
 
 /// An `Rc` where equality and hashing are done by reference, instead of by value
 #[derive(Clone, Eq)]
@@ -210,22 +210,39 @@ impl Term {
         }
     }
 
-    /// Returns an iterator over this term and all its subterms. For example, calling this method
-    /// on the term (+ (f a b) 2) would return an iterator over the terms (+ (f a b) 2), (f a b),
-    /// f, a, b and 2.
-    pub fn subterms(&self) -> Box<dyn Iterator<Item = &Self> + '_> {
-        use std::iter;
-        let iter = iter::once(self);
-        match self {
-            Self::Terminal(_) => Box::new(iter),
-            Self::App(f, args) => Box::new(
-                iter.chain(iter::once(f.as_ref()))
-                    .chain(args.iter().flat_map(|t| t.as_ref().subterms())),
-            ),
-            Self::Op(_, args) | Self::Sort(_, args) => {
-                Box::new(iter.chain(args.iter().flat_map(|t| t.as_ref().subterms())))
+    /// Returns a `Vec` with this term and all its subterms, in topological ordering. For example,
+    /// calling this method on the term (+ (f a b) 2) would return a `Vec` with the terms (+ (f a
+    /// b) 2), (f a b), f, a, b and 2. This method traverses the term as DAG, and the resulting
+    /// `Vec` will not contain any duplicate terms. This method ignores sort terms.
+    pub fn subterms(&self) -> Vec<&Term> {
+        let mut result = Vec::new();
+        let mut visited = HashSet::new();
+
+        fn visit<'a>(term: &'a Term, r: &mut Vec<&'a Term>, visited: &mut HashSet<&'a Term>) {
+            let is_new = visited.insert(term);
+            if !is_new {
+                return;
+            }
+            r.push(term);
+
+            match term {
+                Term::App(f, args) => {
+                    visit(f, r, visited);
+                    for a in args.iter() {
+                        visit(a, r, visited);
+                    }
+                }
+                Term::Op(_, args) => {
+                    for a in args.iter() {
+                        visit(a, r, visited);
+                    }
+                }
+                _ => (),
             }
         }
+
+        visit(self, &mut result, &mut visited);
+        result
     }
 }
 
@@ -366,11 +383,10 @@ macro_rules! match_term {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::parser::tests::{parse_term, parse_term_with_definitions, EqByValue};
 
     #[test]
     fn test_match_term() {
-        use crate::parser::tests::{parse_term, EqByValue};
-
         let term = parse_term("(= (= (not false) (= true false)) (not true))");
         let ((a, (b, c)), d) = match_term!((= (= (not a) (= b c)) (not d)) = &term).unwrap();
         EqByValue::eq(a, &terminal!(bool false));
@@ -401,5 +417,83 @@ mod tests {
                 ],
             ),
         );
+    }
+
+    #[test]
+    fn test_subterms_no_duplicates() {
+        fn run_tests(cases: &[&str]) {
+            fn no_duplicates(slice: &[&Term]) -> bool {
+                let mut seen = HashSet::new();
+                slice.iter().all(|&t| seen.insert(t))
+            }
+            for s in cases {
+                let term = parse_term(s);
+                assert!(no_duplicates(&term.subterms()))
+            }
+        }
+        run_tests(&[
+            "(= 1 1)",
+            "(ite false false false)",
+            "(- (ite (not true) 2 3) (ite (not true) 2 3))",
+            "(= (= 1 2) (not (= 1 2)))",
+            "(+ (* 1 2) (- 2 (* 1 2)))",
+        ]);
+    }
+
+    #[test]
+    fn test_subterms() {
+        fn run_tests(definitions: &str, cases: &[&[&str]]) {
+            for c in cases {
+                let expected = c.iter().cloned();
+
+                let root = parse_term_with_definitions(definitions, c[0]);
+                let subterms = root.subterms();
+                let as_strings: Vec<_> = subterms.iter().map(|&t| format!("{:?}", t)).collect();
+                let got = as_strings.iter().map(String::as_str);
+
+                assert!(expected.eq(got))
+            }
+        }
+        run_tests(
+            "(declare-fun f (Int Int) Int)
+            (declare-fun a () Int)
+            (declare-fun b () Int)
+            (declare-fun c () Int)",
+            &[
+                &["(= 0 1)", "0", "1"],
+                &["(f a b)", "f", "a", "b"],
+                &[
+                    "(f (f a b) (f b c))",
+                    "f",
+                    "(f a b)",
+                    "a",
+                    "b",
+                    "(f b c)",
+                    "c",
+                ],
+                &[
+                    "(= (= 1 2) (not (= 1 2)))",
+                    "(= 1 2)",
+                    "1",
+                    "2",
+                    "(not (= 1 2))",
+                ],
+                &[
+                    "(ite (not false) (+ 2 (f 0 1)) (- (f a b) (f 0 1)))",
+                    "(not false)",
+                    "false",
+                    "(+ 2 (f 0 1))",
+                    "2",
+                    "(f 0 1)",
+                    "f",
+                    "0",
+                    "1",
+                    "(- (f a b) (f 0 1))",
+                    "(f a b)",
+                    "a",
+                    "b",
+                ],
+            ],
+        )
     }
 }
