@@ -604,4 +604,40 @@ mod tests {
             ],
         )
     }
+
+    #[test]
+    fn test_deep_eq() {
+        fn run_tests(definitions: &str, cases: &[(&str, &str)]) {
+            for (a, b) in cases {
+                let (a, b) = (
+                    parse_term_with_definitions(definitions, a),
+                    parse_term_with_definitions(definitions, b),
+                );
+                assert!(DeepEq::eq(&a, &b))
+            }
+        }
+        run_tests(
+            "(declare-sort T 0)
+            (declare-fun a () T)
+            (declare-fun b () T)
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun x () Int)
+            (declare-fun y () Int)",
+            &[
+                ("a", "a"),
+                ("(+ x y)", "(+ x y)"),
+                (
+                    "(ite (and (not p) q) (* x y) (- 0 y))",
+                    "(ite (and (not p) q) (* x y) (- 0 y))",
+                ),
+                ("(= a b)", "(= b a)"),
+                ("(= p (= p (= p q)))", "(= p (= (= p q) p))"),
+                (
+                    "(ite (= a b) (= x (+ x y)) (and p (not (= x y))))",
+                    "(ite (= b a) (= (+ x y) x) (and p (not (= y x))))",
+                ),
+            ],
+        )
+    }
 }
