@@ -44,6 +44,7 @@ impl ProofChecker {
             "th_resolution" | "resolution" => rules::resolution,
             "and" => rules::and,
             "or" => rules::or,
+            "implies" => rules::implies,
             "ite1" => rules::ite1,
             "ite2" => rules::ite2,
             "ite_intro" => rules::ite_intro,
@@ -348,6 +349,22 @@ mod rules {
         };
 
         to_option(or_contents == clause)
+    }
+
+    pub fn implies(
+        clause: &[ByRefRc<Term>],
+        premises: Vec<&ProofCommand>,
+        _: &[ProofArg],
+    ) -> Option<()> {
+        if premises.len() != 1 || clause.len() != 2 {
+            return None;
+        }
+        let premise_term = get_single_term_from_command(premises[0])?;
+        let (phi_1, phi_2) = match_term!((=> phi_1 phi_2) = premise_term.as_ref())?;
+
+        to_option(
+            phi_1 == match_term!((not phi_1) = clause[0].as_ref())? && phi_2 == clause[1].as_ref(),
+        )
     }
 
     pub fn ite1(

@@ -381,6 +381,7 @@ macro_rules! match_term {
     (@GET_VARIANT not) => { Operator::Not };
     (@GET_VARIANT =) => { Operator::Eq };
     (@GET_VARIANT ite) => { Operator::Ite };
+    (@GET_VARIANT =>) => { Operator::Implies };
 }
 
 #[cfg(test)]

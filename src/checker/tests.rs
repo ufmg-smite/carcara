@@ -473,6 +473,37 @@ fn test_or_rule() {
 }
 
 #[test]
+fn test_implies() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () Bool)
+            (declare-fun b () Bool)
+        ",
+        "Simple working examples" {
+            "(assume h1 (=> a b))
+            (step t2 (cl (not a) b) :rule implies :premises (h1))": true,
+
+            "(assume h1 (=> (not a) b))
+            (step t2 (cl (not (not a)) b) :rule implies :premises (h1))": true,
+        }
+        "Premise term is not an \"implies\" term" {
+            "(assume h1 (= a b))
+            (step t2 (cl (not a) b) :rule implies :premises (h1))": false,
+        }
+        "Conclusion clause is of the wrong form" {
+            "(assume h1 (=> a b))
+            (step t2 (cl b (not a)) :rule implies :premises (h1))": false,
+
+            "(assume h1 (=> a b))
+            (step t2 (cl a (not b)) :rule implies :premises (h1))": false,
+
+            "(assume h1 (=> (not a) b))
+            (step t2 (cl a b) :rule implies :premises (h1))": false,
+        }
+    }
+}
+
+#[test]
 fn test_ite1_rule() {
     test_cases! {
         definitions = "
