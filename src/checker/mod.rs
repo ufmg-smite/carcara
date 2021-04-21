@@ -424,12 +424,21 @@ mod rules {
         // We assume that the "ite" terms appear in the conjunction in the same order as they
         // appear as subterms of the root term
         for (s_i, u_i) in ite_terms.iter().zip(&us[1..]) {
-            let (cond, (r1, s1), (r2, s2)) =
-                match_term!((ite cond (= r1 s1) (= r2 s2)) = u_i.as_ref())?;
+            let (cond, (a, b), (c, d)) = match_term!((ite cond (= a b) (= c d)) = u_i.as_ref())?;
 
-            // s_i == s1 == s2 == (ite cond r1 r2)
-            let is_valid =
-                (cond, r1, r2) == *s_i && s1 == s2 && match_term!((ite a b c) = s1) == Some(*s_i);
+            // Since the (= r_1 s_1) and (= r_2 s_2) equalities may be flipped, we have to check
+            // all four possibilities: neither are flipped, either one is flipped, or both are
+            // flipped
+            let is_valid = |r_1, s_1, r_2, s_2: &Term| {
+                // s_i == s_1 == s_2 == (ite cond r_1 r_2)
+                s_1 == s_2
+                    && (cond, r_1, r_2) == *s_i
+                    && match_term!((ite a b c) = s_1) == Some(*s_i)
+            };
+            let is_valid = is_valid(a, b, c, d)
+                || is_valid(b, a, c, d)
+                || is_valid(a, b, d, c)
+                || is_valid(b, a, d, c);
 
             if !is_valid {
                 return None;
