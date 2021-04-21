@@ -4,6 +4,11 @@ use crate::ast::*;
 
 pub type Rule = fn(&[ByRefRc<Term>], Vec<&ProofCommand>, &[ProofArg]) -> Option<()>;
 
+pub enum CheckerError<'a> {
+    UnknownRule(&'a str),
+    FailedOnRule(&'a str),
+}
+
 pub struct ProofChecker {
     proof: Proof,
 }
@@ -13,23 +18,23 @@ impl ProofChecker {
         ProofChecker { proof }
     }
 
-    pub fn check(self) -> bool {
+    pub fn check(&self) -> Result<(), CheckerError> {
         for step in &self.proof.0 {
             if let ProofCommand::Step {
                 clause,
-                rule,
+                rule: rule_name,
                 premises,
                 args,
             } = step
             {
-                let rule = Self::get_rule(rule).unwrap_or_else(|| panic!("unknown rule: {}", rule));
+                let rule = Self::get_rule(rule_name).ok_or(CheckerError::UnknownRule(rule_name))?;
                 let premises = premises.iter().map(|&i| &self.proof.0[i]).collect();
                 if rule(&clause, premises, &args).is_none() {
-                    return false;
+                    return Err(CheckerError::FailedOnRule(rule_name));
                 }
             }
         }
-        true
+        Ok(())
     }
 
     pub fn get_rule(rule_name: &str) -> Option<Rule> {

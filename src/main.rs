@@ -5,6 +5,7 @@ mod ast;
 mod checker;
 mod parser;
 
+use checker::*;
 use error::*;
 use parser::*;
 use std::fs::File;
@@ -38,7 +39,7 @@ fn main() -> ParserResult<()> {
         "--print-used-rules" => print_used_rules(&args.next().expect(MISSING_ARG))?,
         "--is-rule-implemented" => {
             let rule = &args.next().expect(MISSING_ARG);
-            println!("{}", checker::ProofChecker::get_rule(rule).is_some());
+            println!("{}", ProofChecker::get_rule(rule).is_some());
         }
         file_path => {
             let problem = BufReader::new(File::open(file_path)?);
@@ -50,7 +51,11 @@ fn main() -> ParserResult<()> {
                 parse_problem_proof(problem, stdin.lock())?
             };
             println!("{:#?}", proof);
-            println!("{}", checker::ProofChecker::new(proof).check());
+            match ProofChecker::new(proof).check() {
+                Ok(()) => println!("true"),
+                Err(CheckerError::UnknownRule(s)) => println!("unknown rule: {}", s),
+                Err(CheckerError::FailedOnRule(s)) => println!("false ({})", s),
+            }
         }
     }
 

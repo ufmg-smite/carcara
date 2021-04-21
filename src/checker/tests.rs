@@ -10,7 +10,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
         // This parses the definitions again for every case, which is not ideal
         let parsed = parse_problem_proof(Cursor::new(definitions), Cursor::new(proof))
             .unwrap_or_else(|_| panic!("parser error during test \"{}\"", test_name));
-        let got = ProofChecker::new(parsed).check();
+        let got = ProofChecker::new(parsed).check().is_ok();
         assert_eq!(*expected, got, "test case \"{}\" failed", test_name);
     }
 }
