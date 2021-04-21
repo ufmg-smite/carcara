@@ -43,91 +43,11 @@ pub fn parse_proof(input: &str) -> Proof {
         .expect(ERROR_MESSAGE)
 }
 
-/// A trait to represent equality by value for types that use `ByRefRc`.
-pub trait EqByValue {
-    fn eq(a: &Self, b: &Self) -> bool;
-}
-
-impl EqByValue for Term {
-    fn eq(a: &Self, b: &Self) -> bool {
-        match (a, b) {
-            (Term::App(f_a, args_a), Term::App(f_b, args_b)) => {
-                EqByValue::eq(f_a.as_ref(), f_b.as_ref()) && EqByValue::eq(args_a, args_b)
-            }
-            (Term::Op(op_a, args_a), Term::Op(op_b, args_b)) => {
-                op_a == op_b && EqByValue::eq(args_a, args_b)
-            }
-            (Term::Sort(kind_a, args_a), Term::Sort(kind_b, args_b)) => {
-                kind_a == kind_b && EqByValue::eq(args_a, args_b)
-            }
-            (Term::Terminal(a), Term::Terminal(b)) => match (a, b) {
-                (Terminal::Var(iden_a, sort_a), Terminal::Var(iden_b, sort_b)) => {
-                    iden_a == iden_b && EqByValue::eq(sort_a, sort_b)
-                }
-                (a, b) => a == b,
-            },
-            _ => false,
-        }
-    }
-}
-
-impl EqByValue for ProofArg {
-    fn eq(a: &Self, b: &Self) -> bool {
-        match (a, b) {
-            (ProofArg::Term(a), ProofArg::Term(b)) => EqByValue::eq(a, b),
-            (ProofArg::Assign(sa, ta), ProofArg::Assign(sb, tb)) => {
-                sa == sb && EqByValue::eq(ta, tb)
-            }
-            _ => false,
-        }
-    }
-}
-
-impl EqByValue for ProofCommand {
-    fn eq(a: &Self, b: &Self) -> bool {
-        match (a, b) {
-            (ProofCommand::Assume(a), ProofCommand::Assume(b)) => EqByValue::eq(a, b),
-            (
-                ProofCommand::Step {
-                    clause: clause_a,
-                    rule: rule_a,
-                    premises: premises_a,
-                    args: args_a,
-                },
-                ProofCommand::Step {
-                    clause: clause_b,
-                    rule: rule_b,
-                    premises: premises_b,
-                    args: args_b,
-                },
-            ) => {
-                EqByValue::eq(clause_a, clause_b)
-                    && rule_a == rule_b
-                    && premises_a == premises_b
-                    && EqByValue::eq(args_a, args_b)
-            }
-            _ => false,
-        }
-    }
-}
-
-impl<T: EqByValue> EqByValue for ByRefRc<T> {
-    fn eq(a: &Self, b: &Self) -> bool {
-        EqByValue::eq(a.as_ref(), b.as_ref())
-    }
-}
-
-impl<T: EqByValue> EqByValue for Vec<T> {
-    fn eq(a: &Self, b: &Self) -> bool {
-        a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| EqByValue::eq(a, b))
-    }
-}
-
 fn run_parser_tests(cases: &[(&str, Term)]) {
     for (case, expected) in cases {
         let got = parse_term(case);
         assert!(
-            EqByValue::eq(expected, &got),
+            DeepEq::eq(expected, &got),
             "test case failed: {:?} != {:?}",
             expected,
             got
@@ -417,7 +337,7 @@ fn test_declare_fun() {
     );
 
     let got = parse_term_with_definitions("(declare-fun x () Real)", "x");
-    assert!(EqByValue::eq(
+    assert!(DeepEq::eq(
         &terminal!(var "x"; ByRefRc::new(Term::REAL_SORT.clone())),
         &got
     ));
@@ -441,7 +361,7 @@ fn test_declare_sort() {
         "x",
     );
     let expected_sort = Term::Sort(SortKind::Atom, vec![ByRefRc::new(terminal!(string "T"))]);
-    assert!(EqByValue::eq(
+    assert!(DeepEq::eq(
         &terminal!(var "x"; ByRefRc::new(expected_sort)),
         &got
     ));
@@ -453,10 +373,10 @@ fn test_define_fun() {
         "(define-fun add ((a Int) (b Int)) Int (+ a b))",
         "(add 2 3)",
     );
-    assert!(EqByValue::eq(&parse_term("(+ 2 3)"), &got));
+    assert!(DeepEq::eq(&parse_term("(+ 2 3)"), &got));
 
     let got = parse_term_with_definitions("(define-fun x () Int 2)", "(+ x 3)");
-    assert!(EqByValue::eq(&parse_term("(+ 2 3)"), &got));
+    assert!(DeepEq::eq(&parse_term("(+ 2 3)"), &got));
 
     let got = parse_term_with_definitions(
         "(define-fun f ((x Int)) Int (+ x 1))
@@ -464,7 +384,7 @@ fn test_define_fun() {
         "(g 2 3)",
     );
     let expected = parse_term("(* (+ 2 1) (+ 3 1))");
-    assert!(EqByValue::eq(&expected, &got));
+    assert!(DeepEq::eq(&expected, &got));
 }
 
 #[test]
@@ -479,7 +399,7 @@ fn test_step() {
     let proof = parse_proof(input);
     assert_eq!(proof.0.len(), 5);
 
-    assert!(EqByValue::eq(
+    assert!(DeepEq::eq(
         &proof.0[0],
         &ProofCommand::Step {
             clause: vec![ByRefRc::new(parse_term("(= (+ 2 3) (- 1 2))"))],
@@ -489,7 +409,7 @@ fn test_step() {
         }
     ));
 
-    assert!(EqByValue::eq(
+    assert!(DeepEq::eq(
         &proof.0[1],
         &ProofCommand::Step {
             clause: Vec::new(),
@@ -499,7 +419,7 @@ fn test_step() {
         }
     ));
 
-    assert!(EqByValue::eq(
+    assert!(DeepEq::eq(
         &proof.0[2],
         &ProofCommand::Step {
             clause: Vec::new(),
@@ -518,7 +438,7 @@ fn test_step() {
         }
     ));
 
-    assert!(EqByValue::eq(
+    assert!(DeepEq::eq(
         &proof.0[3],
         &ProofCommand::Step {
             clause: Vec::new(),
@@ -537,7 +457,7 @@ fn test_step() {
         }
     ));
 
-    assert!(EqByValue::eq(
+    assert!(DeepEq::eq(
         &proof.0[4],
         &ProofCommand::Step {
             clause: Vec::new(),

@@ -384,24 +384,128 @@ macro_rules! match_term {
     (@GET_VARIANT =>) => { Operator::Implies };
 }
 
+/// A trait that represents a less strict definition of equality for terms. This differs from
+/// `PartialEq` in two ways:
+/// - This is a "deep" equality, meaning that it compares `ByRefRc`s by value, instead of by
+///   reference
+/// - This considers equality terms that are "reflections" of each other as equal, meaning the
+///   terms (= a b) and (= b a) are considered equal by this trait
+pub trait DeepEq {
+    fn eq(a: &Self, b: &Self) -> bool;
+}
+
+impl DeepEq for Term {
+    fn eq(a: &Self, b: &Self) -> bool {
+        match (a, b) {
+            (Term::App(f_a, args_a), Term::App(f_b, args_b)) => {
+                DeepEq::eq(f_a.as_ref(), f_b.as_ref()) && DeepEq::eq(args_a, args_b)
+            }
+            (Term::Op(op_a, args_a), Term::Op(op_b, args_b)) => {
+                if let (Operator::Eq, [a_1, a_2], Operator::Eq, [b_1, b_2]) =
+                    (op_a, args_a.as_slice(), op_b, args_b.as_slice())
+                {
+                    // If the term is an equality of two terms, we also check if they would be
+                    // equal if one of them was flipped
+                    DeepEq::eq(&(a_1, a_2), &(b_1, b_2)) || DeepEq::eq(&(a_1, a_2), &(b_2, b_1))
+                } else {
+                    // General case
+                    op_a == op_b && DeepEq::eq(args_a, args_b)
+                }
+            }
+            (Term::Sort(kind_a, args_a), Term::Sort(kind_b, args_b)) => {
+                kind_a == kind_b && DeepEq::eq(args_a, args_b)
+            }
+            (Term::Terminal(a), Term::Terminal(b)) => match (a, b) {
+                (Terminal::Var(iden_a, sort_a), Terminal::Var(iden_b, sort_b)) => {
+                    iden_a == iden_b && DeepEq::eq(sort_a, sort_b)
+                }
+                (a, b) => a == b,
+            },
+            _ => false,
+        }
+    }
+}
+
+impl DeepEq for ProofArg {
+    fn eq(a: &Self, b: &Self) -> bool {
+        match (a, b) {
+            (ProofArg::Term(a), ProofArg::Term(b)) => DeepEq::eq(a, b),
+            (ProofArg::Assign(sa, ta), ProofArg::Assign(sb, tb)) => sa == sb && DeepEq::eq(ta, tb),
+            _ => false,
+        }
+    }
+}
+
+impl DeepEq for ProofCommand {
+    fn eq(a: &Self, b: &Self) -> bool {
+        match (a, b) {
+            (ProofCommand::Assume(a), ProofCommand::Assume(b)) => DeepEq::eq(a, b),
+            (
+                ProofCommand::Step {
+                    clause: clause_a,
+                    rule: rule_a,
+                    premises: premises_a,
+                    args: args_a,
+                },
+                ProofCommand::Step {
+                    clause: clause_b,
+                    rule: rule_b,
+                    premises: premises_b,
+                    args: args_b,
+                },
+            ) => {
+                DeepEq::eq(clause_a, clause_b)
+                    && rule_a == rule_b
+                    && premises_a == premises_b
+                    && DeepEq::eq(args_a, args_b)
+            }
+            _ => false,
+        }
+    }
+}
+
+impl<T: DeepEq> DeepEq for &T {
+    fn eq(a: &Self, b: &Self) -> bool {
+        DeepEq::eq(*a, *b)
+    }
+}
+
+impl<T: DeepEq> DeepEq for ByRefRc<T> {
+    fn eq(a: &Self, b: &Self) -> bool {
+        DeepEq::eq(a.as_ref(), b.as_ref())
+    }
+}
+
+impl<T: DeepEq> DeepEq for Vec<T> {
+    fn eq(a: &Self, b: &Self) -> bool {
+        a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| DeepEq::eq(a, b))
+    }
+}
+
+impl<T: DeepEq> DeepEq for (T, T) {
+    fn eq(a: &Self, b: &Self) -> bool {
+        DeepEq::eq(&a.0, &b.0) && DeepEq::eq(&a.1, &b.1)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::tests::{parse_term, parse_term_with_definitions, EqByValue};
+    use crate::parser::tests::{parse_term, parse_term_with_definitions};
 
     #[test]
     fn test_match_term() {
         let term = parse_term("(= (= (not false) (= true false)) (not true))");
         let ((a, (b, c)), d) = match_term!((= (= (not a) (= b c)) (not d)) = &term).unwrap();
-        EqByValue::eq(a, &terminal!(bool false));
-        EqByValue::eq(b, &terminal!(bool true));
-        EqByValue::eq(c, &terminal!(bool false));
-        EqByValue::eq(d, &terminal!(bool true));
+        DeepEq::eq(a, &terminal!(bool false));
+        DeepEq::eq(b, &terminal!(bool true));
+        DeepEq::eq(c, &terminal!(bool false));
+        DeepEq::eq(d, &terminal!(bool true));
 
         let term = parse_term("(ite (not true) (- 2 2) (* 1 5))");
         let (a, b, c) = match_term!((ite (not a) b c) = &term).unwrap();
-        EqByValue::eq(a, &terminal!(bool true));
-        EqByValue::eq(
+        DeepEq::eq(a, &terminal!(bool true));
+        DeepEq::eq(
             b,
             &Term::Op(
                 Operator::Sub,
@@ -411,7 +515,7 @@ mod tests {
                 ],
             ),
         );
-        EqByValue::eq(
+        DeepEq::eq(
             c,
             &Term::Op(
                 Operator::Mult,

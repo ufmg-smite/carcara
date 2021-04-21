@@ -422,7 +422,7 @@ mod rules {
             Term::Op(Operator::And, args) => args,
             _ => return None,
         };
-        if ite_terms.len() != us.len() - 1 || us[0].as_ref() != root_term {
+        if ite_terms.len() != us.len() - 1 || !DeepEq::eq(us[0].as_ref(), root_term) {
             return None;
         }
 
