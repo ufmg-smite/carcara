@@ -56,6 +56,60 @@ fn test_not_not_rule() {
 }
 
 #[test]
+fn test_and_pos_rule() {
+    test_cases! {
+        definitions = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (declare-fun s () Bool)
+        ",
+        "Simple working examples" {
+            "(step t1 (cl (not (and p q r)) r) :rule and_pos)": true,
+            "(step t1 (cl (not (and (or (not r) p) q)) (or (not r) p)) :rule and_pos)": true,
+        }
+        "First term in clause is not of the correct form" {
+            "(step t1 (cl (and p q r) r) :rule and_pos)": false,
+            "(step t1 (cl (not (or p q r)) r) :rule and_pos)": false,
+        }
+        "Second term is not in \"and\" term" {
+            "(step t1 (cl (not (and p q r)) s) :rule and_pos)": false,
+            "(step t1 (cl (not (and p (not q) r)) q) :rule and_pos)": false,
+        }
+    }
+}
+
+#[test]
+fn test_and_neg_rule() {
+    test_cases! {
+        definitions = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (declare-fun s () Bool)
+        ",
+        "Simple working examples" {
+            "(step t1 (cl (and p q) (not p) (not q)) :rule and_neg)": true,
+            "(step t1 (cl (and p q r s) (not p) (not q) (not r) (not s)) :rule and_neg)": true,
+        }
+        "First term in clause is not of the correct form" {
+            "(step t1 (cl (or p q r) (not p) (not q) (not r)) :rule and_neg)": false,
+        }
+        "Remaining terms in clause are not of the correct form" {
+            "(step t1 (cl (and p q) p (not q)) :rule and_neg)": false,
+        }
+        "Number of remaining terms is incorrect" {
+            "(step t1 (cl (and p q r) (not p) (not q) (not r) (not s)) :rule and_neg)": false,
+            "(step t1 (cl (and p q r) (not p) (not q)) :rule and_neg)": false,
+        }
+        "Terms don't match" {
+            "(step t1 (cl (and p q r) (not p) (not q) (not s)) :rule and_neg)": false,
+            "(step t1 (cl (and p q r s) (not p) (not r) (not q) (not s)) :rule and_neg)": false,
+        }
+    }
+}
+
+#[test]
 fn test_equiv_pos1_rule() {
     test_cases! {
         definitions = "

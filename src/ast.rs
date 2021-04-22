@@ -182,6 +182,9 @@ macro_rules! match_term {
             None
         }
     }};
+    (@ARGS (...) = $var:expr) => {
+        Some($var)
+    };
     (@ARGS ($arg:tt) = $var:expr) => {
         match_term!(@ARGS_IDENT (arg1: $arg) = $var)
     };
@@ -203,6 +206,7 @@ macro_rules! match_term {
         }
 
     };
+    (@GET_VARIANT and) => { Operator::And };
     (@GET_VARIANT not) => { Operator::Not };
     (@GET_VARIANT =) => { Operator::Eq };
     (@GET_VARIANT ite) => { Operator::Ite };

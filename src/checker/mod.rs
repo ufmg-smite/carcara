@@ -40,6 +40,8 @@ impl ProofChecker {
     pub fn get_rule(rule_name: &str) -> Option<Rule> {
         Some(match rule_name {
             "not_not" => rules::not_not,
+            "and_pos" => rules::and_pos,
+            "and_neg" => rules::and_neg,
             "equiv_pos1" => rules::equiv_pos1,
             "equiv_pos2" => rules::equiv_pos2,
             "eq_reflexive" => rules::eq_reflexive,
@@ -87,6 +89,26 @@ mod rules {
         let p = match_term!((not (not (not p))) = clause[0].as_ref())?;
         let q = clause[1].as_ref();
         to_option(p == q)
+    }
+
+    pub fn and_pos(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+        if clause.len() != 2 {
+            return None;
+        }
+        let and_contents = match_term!((not (and ...)) = clause[0].as_ref())?;
+        and_contents.iter().find(|&t| *t == clause[1]).map(|_| ())
+    }
+
+    pub fn and_neg(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+        if clause.len() < 2 {
+            return None;
+        }
+
+        let and_contents = match_term!((and ...) = clause[0].as_ref())?
+            .iter()
+            .map(|t| Some(t.as_ref()));
+        let remaining = clause[1..].iter().map(|t| t.as_ref().remove_negation());
+        to_option(and_contents.eq(remaining))
     }
 
     pub fn equiv_pos1(
