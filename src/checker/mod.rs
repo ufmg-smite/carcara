@@ -408,9 +408,9 @@ mod rules {
             return None;
         }
         let premise_term = get_single_term_from_command(premises[0])?;
-        let (psi_1, _, psi_3) = match_term!((ite psi_1 psi_2 psi_3) = premise_term.as_ref())?;
+        let (phi_1, _, phi_3) = match_term!((ite phi_1 phi_2 phi_3) = premise_term.as_ref())?;
 
-        to_option(psi_1 == clause[0].as_ref() && psi_3 == clause[1].as_ref())
+        to_option(phi_1 == clause[0].as_ref() && phi_3 == clause[1].as_ref())
     }
 
     pub fn ite2(
@@ -422,9 +422,9 @@ mod rules {
             return None;
         }
         let premise_term = get_single_term_from_command(premises[0])?;
-        let (psi_1, psi_2, _) = match_term!((ite psi_1 psi_2 psi_3) = premise_term.as_ref())?;
+        let (phi_1, phi_2, _) = match_term!((ite phi_1 phi_2 phi_3) = premise_term.as_ref())?;
 
-        to_option(psi_1 == clause[0].as_ref().remove_negation()? && psi_2 == clause[1].as_ref())
+        to_option(phi_1 == clause[0].as_ref().remove_negation()? && phi_2 == clause[1].as_ref())
     }
 
     pub fn ite_intro(
