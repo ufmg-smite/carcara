@@ -98,9 +98,7 @@ mod rules {
             return None;
         }
         let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = clause[0].as_ref())?;
-        to_option(
-            phi_1 == clause[1].as_ref() && phi_2 == match_term!((not phi_2) = clause[2].as_ref())?,
-        )
+        to_option(phi_1 == clause[1].as_ref() && phi_2 == clause[2].as_ref().remove_negation()?)
     }
 
     pub fn equiv_pos2(
@@ -112,9 +110,7 @@ mod rules {
             return None;
         }
         let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = clause[0].as_ref())?;
-        to_option(
-            phi_1 == match_term!((not phi_1) = clause[1].as_ref())? && phi_2 == clause[2].as_ref(),
-        )
+        to_option(phi_1 == clause[1].as_ref().remove_negation()? && phi_2 == clause[2].as_ref())
     }
 
     pub fn eq_reflexive(
@@ -196,7 +192,8 @@ mod rules {
         }
         let premises = clause[..clause.len() - 1]
             .iter()
-            .map(|t| match_term!((not t) = t.as_ref()));
+            .map(ByRefRc::as_ref)
+            .map(Term::remove_negation);
         let conclusion = match_term!((= f g) = clause.last().unwrap().as_ref())?;
 
         generic_congruent_rule(premises, conclusion)
@@ -212,9 +209,10 @@ mod rules {
         }
         let premises = clause[..clause.len() - 2]
             .iter()
-            .map(|t| match_term!((not t) = t.as_ref()));
+            .map(ByRefRc::as_ref)
+            .map(Term::remove_negation);
         let conclusion = (
-            match_term!((not t) = clause[clause.len() - 2].as_ref())?,
+            clause[clause.len() - 2].as_ref().remove_negation()?,
             clause[clause.len() - 1].as_ref(),
         );
 
@@ -310,7 +308,7 @@ mod rules {
         /// Removes all leading negations in a term and returns how many there were.
         fn remove_negations(mut term: &Term) -> (u32, &Term) {
             let mut n = 0;
-            while let Some(t) = match_term!((not t) = term) {
+            while let Some(t) = term.remove_negation() {
                 term = t;
                 n += 1;
             }
@@ -398,9 +396,7 @@ mod rules {
         let premise_term = get_single_term_from_command(premises[0])?;
         let (phi_1, phi_2) = match_term!((=> phi_1 phi_2) = premise_term.as_ref())?;
 
-        to_option(
-            phi_1 == match_term!((not phi_1) = clause[0].as_ref())? && phi_2 == clause[1].as_ref(),
-        )
+        to_option(phi_1 == clause[0].as_ref().remove_negation()? && phi_2 == clause[1].as_ref())
     }
 
     pub fn ite1(
@@ -428,9 +424,7 @@ mod rules {
         let premise_term = get_single_term_from_command(premises[0])?;
         let (psi_1, psi_2, _) = match_term!((ite psi_1 psi_2 psi_3) = premise_term.as_ref())?;
 
-        to_option(
-            psi_1 == match_term!((not psi_1) = clause[0].as_ref())? && psi_2 == clause[1].as_ref(),
-        )
+        to_option(psi_1 == clause[0].as_ref().remove_negation()? && psi_2 == clause[1].as_ref())
     }
 
     pub fn ite_intro(

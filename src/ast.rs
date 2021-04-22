@@ -167,6 +167,48 @@ pub enum Term {
     // TODO: binders
 }
 
+/// A macro to help deconstruct operation terms. Since a term holds references to other terms in
+/// `Vec`s and `Rc`s, pattern matching a complex term can be difficult and verbose. This macro
+/// helps with that.
+macro_rules! match_term {
+    ($bind:ident = $var:expr) => {
+        Some($var)
+    };
+    (($op:tt $($args:tt)+) = $var:expr) => {{
+        let _: &Term = $var;
+        if let Term::Op(match_term!(@GET_VARIANT $op), args) = $var {
+            match_term!(@ARGS ($($args)+) = args.as_slice())
+        } else {
+            None
+        }
+    }};
+    (@ARGS ($arg:tt) = $var:expr) => {
+        match_term!(@ARGS_IDENT (arg1: $arg) = $var)
+    };
+    (@ARGS ($arg1:tt $arg2:tt) = $var:expr) => {
+        match_term!(@ARGS_IDENT (arg1: $arg1, arg2: $arg2) = $var)
+    };
+    (@ARGS ($arg1:tt $arg2:tt $arg3:tt) = $var:expr) => {
+        match_term!(@ARGS_IDENT (arg1: $arg1, arg2: $arg2, arg3: $arg3) = $var)
+    };
+    (@ARGS_IDENT ( $($name:ident : $arg:tt),* ) = $var:expr) => {
+        if let [$($name),*] = $var {
+            #[allow(unused_parens)]
+            match ($(match_term!($arg = $name.as_ref())),*) {
+                ($(Some($name)),*) => Some(($($name),*)),
+                _ => None,
+            }
+        } else {
+            None
+        }
+
+    };
+    (@GET_VARIANT not) => { Operator::Not };
+    (@GET_VARIANT =) => { Operator::Eq };
+    (@GET_VARIANT ite) => { Operator::Ite };
+    (@GET_VARIANT =>) => { Operator::Implies };
+}
+
 impl Term {
     /// The "Bool" built-in sort.
     pub const BOOL_SORT: &'static Term = &Term::Sort(SortKind::Bool, Vec::new());
@@ -246,6 +288,12 @@ impl Term {
 
         visit(self, &mut result, &mut visited);
         result
+    }
+
+    /// Removes a leading negation from the term, if it exists. Same thing as `match_term!((not t)
+    /// = term)`
+    pub fn remove_negation(&self) -> Option<&Self> {
+        match_term!((not t) = self)
     }
 }
 
@@ -340,48 +388,6 @@ pub enum Identifier {
 pub enum Index {
     Numeral(u64),
     Symbol(String),
-}
-
-/// A macro to help deconstruct operation terms. Since a term holds references to other terms in
-/// `Vec`s and `Rc`s, pattern matching a complex term can be difficult and verbose. This macro
-/// helps with that.
-macro_rules! match_term {
-    ($bind:ident = $var:expr) => {
-        Some($var)
-    };
-    (($op:tt $($args:tt)+) = $var:expr) => {{
-        let _: &Term = $var;
-        if let Term::Op(match_term!(@GET_VARIANT $op), args) = $var {
-            match_term!(@ARGS ($($args)+) = args.as_slice())
-        } else {
-            None
-        }
-    }};
-    (@ARGS ($arg:tt) = $var:expr) => {
-        match_term!(@ARGS_IDENT (arg1: $arg) = $var)
-    };
-    (@ARGS ($arg1:tt $arg2:tt) = $var:expr) => {
-        match_term!(@ARGS_IDENT (arg1: $arg1, arg2: $arg2) = $var)
-    };
-    (@ARGS ($arg1:tt $arg2:tt $arg3:tt) = $var:expr) => {
-        match_term!(@ARGS_IDENT (arg1: $arg1, arg2: $arg2, arg3: $arg3) = $var)
-    };
-    (@ARGS_IDENT ( $($name:ident : $arg:tt),* ) = $var:expr) => {
-        if let [$($name),*] = $var {
-            #[allow(unused_parens)]
-            match ($(match_term!($arg = $name.as_ref())),*) {
-                ($(Some($name)),*) => Some(($($name),*)),
-                _ => None,
-            }
-        } else {
-            None
-        }
-
-    };
-    (@GET_VARIANT not) => { Operator::Not };
-    (@GET_VARIANT =) => { Operator::Eq };
-    (@GET_VARIANT ite) => { Operator::Ite };
-    (@GET_VARIANT =>) => { Operator::Implies };
 }
 
 /// A trait that represents a less strict definition of equality for terms. This differs from
