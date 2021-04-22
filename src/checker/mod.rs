@@ -44,7 +44,8 @@ impl ProofChecker {
             "equiv_pos2" => rules::equiv_pos2,
             "eq_reflexive" => rules::eq_reflexive,
             "eq_transitive" => rules::eq_transitive,
-            "eq_congruent" | "eq_congruent_pred" => rules::eq_congruent,
+            "eq_congruent" => rules::eq_congruent,
+            "eq_congruent_pred" => rules::eq_congruent_pred,
             "distinct_elim" => rules::distinct_elim,
             "th_resolution" | "resolution" => rules::resolution,
             "and" => rules::and,
@@ -193,19 +194,49 @@ mod rules {
         if clause.len() < 2 {
             return None;
         }
+        let premises = clause[..clause.len() - 1]
+            .iter()
+            .map(|t| match_term!((not t) = t.as_ref()));
+        let conclusion = match_term!((= f g) = clause.last().unwrap().as_ref())?;
 
-        // The first `clause.len()` - 1 terms in the clause must be a sequence of inequalites
+        generic_congruent_rule(premises, conclusion)
+    }
+
+    pub fn eq_congruent_pred(
+        clause: &[ByRefRc<Term>],
+        _: Vec<&ProofCommand>,
+        _: &[ProofArg],
+    ) -> Option<()> {
+        if clause.len() < 3 {
+            return None;
+        }
+        let premises = clause[..clause.len() - 2]
+            .iter()
+            .map(|t| match_term!((not t) = t.as_ref()));
+        let conclusion = (
+            match_term!((not t) = clause[clause.len() - 2].as_ref())?,
+            clause[clause.len() - 1].as_ref(),
+        );
+
+        generic_congruent_rule(premises, conclusion)
+    }
+
+    /// A function to check congruency. Useful for the "eq_congruent", "eq_congruent_pred" and
+    /// "cong" rules. `premises` should be an iterator over the argument equalities, and
+    /// `conclusion` should be the two function applications.
+    fn generic_congruent_rule<'a, T>(premises: T, conclusion: (&Term, &Term)) -> Option<()>
+    where
+        T: Iterator<Item = Option<&'a Term>>,
+    {
         let mut ts = Vec::new();
         let mut us = Vec::new();
-        for term in &clause[..clause.len() - 1] {
-            let (t, u) = match_term!((not (= t u)) = term.as_ref())?;
+        for term in premises {
+            let (t, u) = match_term!((= t u) = term.as_ref()?)?;
             ts.push(t);
             us.push(u);
         }
 
-        // The final term in the clause must be an equality of two function applications, whose
-        // arguments are the terms in the previous inequalities
-        match match_term!((= f g) = clause.last().unwrap().as_ref())? {
+        match conclusion {
             (Term::App(f, f_args), Term::App(g, g_args)) => {
                 if f != g || f_args.len() != ts.len() {
                     return None;
