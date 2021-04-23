@@ -169,42 +169,55 @@ pub enum Term {
 
 /// A macro to help deconstruct operation terms. Since a term holds references to other terms in
 /// `Vec`s and `Rc`s, pattern matching a complex term can be difficult and verbose. This macro
-/// helps with that.
+/// helps with that. The return type of this macro is an `Option` of a tree-like tuple. The
+/// structure of the tree will depend on the pattern passed, and the leaf nodes will be `&Term`s. An
+/// optional flag "RETURN_RCS" can be passed, in which case the leaf nodes will instead be
+/// `&ByRefRc<Term>`s.
 macro_rules! match_term {
-    ($bind:ident = $var:expr) => {
-        Some($var)
-    };
-    (($op:tt $($args:tt)+) = $var:expr) => {{
-        let _: &Term = $var;
-        if let Term::Op(match_term!(@GET_VARIANT $op), args) = $var {
-            match_term!(@ARGS ($($args)+) = args.as_slice())
+    ($bind:ident = $var:expr) => { Some($var.as_ref()) };
+    ($bind:ident = $var:expr, RETURN_RCS) => { Some($var) };
+    (($op:tt $($args:tt)+) = $var:expr $(, $flag:ident)?) => {{
+        if let Term::Op(match_term!(@GET_VARIANT $op), args) = &$var as &Term {
+            match_term!(@ARGS ($($args)+) = args.as_slice() $(, $flag)?)
         } else {
             None
         }
     }};
-    (@ARGS (...) = $var:expr) => {
-        Some($var)
+
+    (@ARGS (...) = $var:expr $(, $flag:ident)?) => { Some($var) };
+    (@ARGS ($arg:tt) = $var:expr $(, $flag:ident)?) => {
+        match_term!(@ARGS_IDENT (arg1: $arg) = $var $(, $flag)?)
     };
-    (@ARGS ($arg:tt) = $var:expr) => {
-        match_term!(@ARGS_IDENT (arg1: $arg) = $var)
+    (@ARGS ($arg1:tt $arg2:tt) = $var:expr $(, $flag:ident)?) => {
+        match_term!(@ARGS_IDENT (arg1: $arg1, arg2: $arg2) = $var $(, $flag)?)
     };
-    (@ARGS ($arg1:tt $arg2:tt) = $var:expr) => {
-        match_term!(@ARGS_IDENT (arg1: $arg1, arg2: $arg2) = $var)
-    };
-    (@ARGS ($arg1:tt $arg2:tt $arg3:tt) = $var:expr) => {
-        match_term!(@ARGS_IDENT (arg1: $arg1, arg2: $arg2, arg3: $arg3) = $var)
+    (@ARGS ($arg1:tt $arg2:tt $arg3:tt) = $var:expr $(, $flag:ident)?) => {
+        match_term!(@ARGS_IDENT (arg1: $arg1, arg2: $arg2, arg3: $arg3) = $var $(, $flag)?)
     };
     (@ARGS_IDENT ( $($name:ident : $arg:tt),* ) = $var:expr) => {
         if let [$($name),*] = $var {
             #[allow(unused_parens)]
-            match ($(match_term!($arg = $name.as_ref())),*) {
+            match ($(match_term!($arg = $name)),*) {
                 ($(Some($name)),*) => Some(($($name),*)),
                 _ => None,
             }
         } else {
             None
         }
-
+    };
+    // `macro_rules!` doesn't allow nested repetition, so I can't do
+    //   $(match_term!($arg = $name $(, $flag)?),*
+    // Instead, I have to repeat this case, adding the optional flag manually
+    (@ARGS_IDENT ( $($name:ident : $arg:tt),* ) = $var:expr, RETURN_RCS) => {
+        if let [$($name),*] = $var {
+            #[allow(unused_parens)]
+            match ($(match_term!($arg = $name, RETURN_RCS)),*) {
+                ($(Some($name)),*) => Some(($($name),*)),
+                _ => None,
+            }
+        } else {
+            None
+        }
     };
     (@GET_VARIANT =) => { Operator::Eq };
     (@GET_VARIANT or) => { Operator::Or };
@@ -537,6 +550,15 @@ mod tests {
                 ],
             ),
         );
+
+        // Make sure that when "RETURN_RCS" flag is passed, the macro returns `&ByRefRc<Term>`
+        // instead of `&Term`
+        let term = parse_term("(= (not false) (=> true false) (or false false))");
+        let _: (
+            &ByRefRc<_>,
+            (&ByRefRc<_>, &ByRefRc<_>),
+            (&ByRefRc<_>, &ByRefRc<_>),
+        ) = match_term!((= (not a) (=> b c) (or d e)) = &term, RETURN_RCS).unwrap();
     }
 
     #[test]
