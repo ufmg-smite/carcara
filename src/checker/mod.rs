@@ -108,7 +108,7 @@ mod rules {
         let and_contents = match_term!((and ...) = clause[0].as_ref())?
             .iter()
             .map(|t| Some(t.as_ref()));
-        let remaining = clause[1..].iter().map(|t| t.as_ref().remove_negation());
+        let remaining = clause[1..].iter().map(|t| t.remove_negation());
         to_option(and_contents.eq(remaining))
     }
 
@@ -141,7 +141,7 @@ mod rules {
             return None;
         }
         let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = clause[0].as_ref())?;
-        to_option(phi_1 == clause[1].as_ref() && phi_2 == clause[2].as_ref().remove_negation()?)
+        to_option(phi_1 == clause[1].as_ref() && phi_2 == clause[2].remove_negation()?)
     }
 
     pub fn equiv_pos2(
@@ -153,7 +153,7 @@ mod rules {
             return None;
         }
         let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = clause[0].as_ref())?;
-        to_option(phi_1 == clause[1].as_ref().remove_negation()? && phi_2 == clause[2].as_ref())
+        to_option(phi_1 == clause[1].remove_negation()? && phi_2 == clause[2].as_ref())
     }
 
     pub fn eq_reflexive(
@@ -235,8 +235,7 @@ mod rules {
         }
         let premises = clause[..clause.len() - 1]
             .iter()
-            .map(ByRefRc::as_ref)
-            .map(Term::remove_negation);
+            .map(|t| t.remove_negation());
         let conclusion = match_term!((= f g) = clause.last().unwrap().as_ref())?;
 
         generic_congruent_rule(premises, conclusion)
@@ -252,10 +251,9 @@ mod rules {
         }
         let premises = clause[..clause.len() - 2]
             .iter()
-            .map(ByRefRc::as_ref)
-            .map(Term::remove_negation);
+            .map(|t| t.remove_negation());
         let conclusion = (
-            clause[clause.len() - 2].as_ref().remove_negation()?,
+            clause[clause.len() - 2].remove_negation()?,
             clause[clause.len() - 1].as_ref(),
         );
 
@@ -427,7 +425,7 @@ mod rules {
         let premise_term = get_single_term_from_command(premises[0])?;
         let (phi_1, phi_2) = match_term!((=> phi_1 phi_2) = premise_term.as_ref())?;
 
-        to_option(phi_1 == clause[0].as_ref().remove_negation()? && phi_2 == clause[1].as_ref())
+        to_option(phi_1 == clause[0].remove_negation()? && phi_2 == clause[1].as_ref())
     }
 
     pub fn ite1(
@@ -455,7 +453,7 @@ mod rules {
         let premise_term = get_single_term_from_command(premises[0])?;
         let (phi_1, phi_2, _) = match_term!((ite phi_1 phi_2 phi_3) = premise_term.as_ref())?;
 
-        to_option(phi_1 == clause[0].as_ref().remove_negation()? && phi_2 == clause[1].as_ref())
+        to_option(phi_1 == clause[0].remove_negation()? && phi_2 == clause[1].as_ref())
     }
 
     pub fn ite_intro(
