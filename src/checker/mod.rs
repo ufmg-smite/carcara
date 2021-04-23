@@ -42,6 +42,8 @@ impl ProofChecker {
             "not_not" => rules::not_not,
             "and_pos" => rules::and_pos,
             "and_neg" => rules::and_neg,
+            "or_pos" => rules::or_pos,
+            "or_neg" => rules::or_neg,
             "equiv_pos1" => rules::equiv_pos1,
             "equiv_pos2" => rules::equiv_pos2,
             "eq_reflexive" => rules::eq_reflexive,
@@ -103,12 +105,31 @@ mod rules {
         if clause.len() < 2 {
             return None;
         }
-
         let and_contents = match_term!((and ...) = clause[0].as_ref())?
             .iter()
             .map(|t| Some(t.as_ref()));
         let remaining = clause[1..].iter().map(|t| t.as_ref().remove_negation());
         to_option(and_contents.eq(remaining))
+    }
+
+    pub fn or_pos(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+        if clause.len() < 2 {
+            return None;
+        }
+        let or_contents = match_term!((not (or ...)) = clause[0].as_ref())?;
+        to_option(or_contents.iter().eq(&clause[1..]))
+    }
+
+    pub fn or_neg(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+        if clause.len() < 2 {
+            return None;
+        }
+        let or_contents = match_term!((or ...) = clause[0].as_ref())?;
+        let other = clause[1].remove_negation()?;
+        or_contents
+            .iter()
+            .find(|&t| t.as_ref() == other)
+            .map(|_| ())
     }
 
     pub fn equiv_pos1(

@@ -110,6 +110,58 @@ fn test_and_neg_rule() {
 }
 
 #[test]
+fn test_or_pos_rule() {
+    test_cases! {
+        definitions = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (declare-fun s () Bool)
+        ",
+        "Simple working examples" {
+            "(step t1 (cl (not (or p q)) p q) :rule or_pos)": true,
+            "(step t1 (cl (not (or p q r s)) p q r s) :rule or_pos)": true,
+        }
+        "First term in clause is not of the correct form" {
+            "(step t1 (cl (or p q r) p q r) :rule or_pos)": false,
+            "(step t1 (cl (not (and p q r)) p q r) :rule or_pos)": false,
+        }
+        "Number of remaining terms is incorrect" {
+            "(step t1 (cl (not (or p q r)) p q) :rule or_pos)": false,
+            "(step t1 (cl (not (or p q r)) p q r s) :rule or_pos)": false,
+        }
+        "Terms don't match" {
+            "(step t1 (cl (not (or p q r)) p q s) :rule or_pos)": false,
+            "(step t1 (cl (not (or p q r s)) p r q s) :rule or_pos)": false,
+        }
+    }
+}
+
+#[test]
+fn test_or_neg_rule() {
+    test_cases! {
+        definitions = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (declare-fun s () Bool)
+        ",
+        "Simple working examples" {
+            "(step t1 (cl (or p q r) (not r)) :rule or_neg)": true,
+        }
+        "First term in clause is not of the correct form" {
+            "(step t1 (cl (and p q r) (not r)) :rule or_neg)": false,
+            "(step t1 (cl (not (or p q r)) (not r)) :rule or_neg)": false,
+        }
+        "Second term is not in \"or\" term" {
+            "(step t1 (cl (or p q r) (not s)) :rule or_neg)": false,
+            "(step t1 (cl (or p (not q) r) (not q)) :rule or_neg)": false,
+
+        }
+    }
+}
+
+#[test]
 fn test_equiv_pos1_rule() {
     test_cases! {
         definitions = "
