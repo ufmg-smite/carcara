@@ -206,11 +206,13 @@ macro_rules! match_term {
         }
 
     };
+    (@GET_VARIANT =) => { Operator::Eq };
+    (@GET_VARIANT or) => { Operator::Or };
     (@GET_VARIANT and) => { Operator::And };
     (@GET_VARIANT not) => { Operator::Not };
-    (@GET_VARIANT =) => { Operator::Eq };
-    (@GET_VARIANT ite) => { Operator::Ite };
+    (@GET_VARIANT distinct) => { Operator::Distinct };
     (@GET_VARIANT =>) => { Operator::Implies };
+    (@GET_VARIANT ite) => { Operator::Ite };
 }
 
 impl Term {

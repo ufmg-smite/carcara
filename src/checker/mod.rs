@@ -282,12 +282,9 @@ mod rules {
             return None;
         }
 
-        let (distinct_term, second_term) = match_term!((= a b) = clause[0].as_ref())?;
-        let distinct_args = match distinct_term {
-            Term::Op(Operator::Distinct, args) => args,
-            _ => return None,
-        };
-        match distinct_args.as_slice() {
+        let (distinct_args, second_term) =
+            match_term!((= (distinct ...) second) = clause[0].as_ref())?;
+        match distinct_args {
             [] | [_] => unreachable!(),
             [a, b] => {
                 let got: (&Term, &Term) = match_term!((not (= x y)) = second_term)?;
@@ -304,10 +301,7 @@ mod rules {
                         _ => None,
                     };
                 }
-                let got = match second_term {
-                    Term::Op(Operator::And, args) => args,
-                    _ => return None,
-                };
+                let got = match_term!((and ...) = second_term)?;
                 let mut k = 0;
                 for i in 0..args.len() {
                     for j in i + 1..args.len() {
@@ -382,10 +376,7 @@ mod rules {
             return None;
         }
         let and_term = get_single_term_from_command(premises[0])?;
-        let and_contents = match and_term.as_ref() {
-            Term::Op(Operator::And, args) => args,
-            _ => return None,
-        };
+        let and_contents = match_term!((and ...) = and_term.as_ref())?;
 
         to_option(and_contents.iter().any(|t| t == &clause[0]))
     }
@@ -399,10 +390,7 @@ mod rules {
             return None;
         }
         let or_term = get_single_term_from_command(premises[0])?;
-        let or_contents = match or_term.as_ref() {
-            Term::Op(Operator::Or, args) => args,
-            _ => return None,
-        };
+        let or_contents = match_term!((or ...) = or_term.as_ref())?;
 
         to_option(or_contents == clause)
     }
@@ -457,7 +445,7 @@ mod rules {
         if clause.len() != 1 {
             return None;
         }
-        let (root_term, us) = match_term!((= t us) = clause[0].as_ref())?;
+        let (root_term, us) = match_term!((= t (and ...)) = clause[0].as_ref())?;
         let ite_terms: Vec<_> = root_term
             .subterms()
             .iter()
@@ -465,10 +453,6 @@ mod rules {
             .collect();
 
         // "us" must be a conjunction where the first term is the root term
-        let us = match us {
-            Term::Op(Operator::And, args) => args,
-            _ => return None,
-        };
         if ite_terms.len() != us.len() - 1 || !DeepEq::eq(us[0].as_ref(), root_term) {
             return None;
         }
