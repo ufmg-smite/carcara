@@ -90,6 +90,10 @@ pub enum Operator {
     Sub,
     Mult,
     Div,
+    LessThan,
+    GreaterThan,
+    LessEq,
+    GreaterEq,
 
     // Logic
     Eq,
@@ -132,6 +136,10 @@ impl_operator_str_traits! {
     Sub: "-",
     Mult: "*",
     Div: "/",
+    LessThan: "<",
+    GreaterThan: ">",
+    LessEq: "<=",
+    GreaterEq: ">=",
     Eq: "=",
     Or: "or",
     And: "and",
@@ -259,7 +267,11 @@ impl Term {
                 | Operator::And
                 | Operator::Not
                 | Operator::Distinct
-                | Operator::Implies => Term::BOOL_SORT,
+                | Operator::Implies
+                | Operator::LessThan
+                | Operator::GreaterThan
+                | Operator::LessEq
+                | Operator::GreaterEq => Term::BOOL_SORT,
                 Operator::Ite => args[1].sort(),
             },
             Term::App(f, _) => {

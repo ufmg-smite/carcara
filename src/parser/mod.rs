@@ -129,6 +129,7 @@ impl ParserState {
                 SortError::assert_eq(Term::BOOL_SORT, &sorts[0])?;
                 SortError::assert_eq(&sorts[1], &sorts[2])?;
             }
+            _ => return Err(ParserError::NotYetImplemented),
         }
         let args = self.add_all(args);
         Ok(Term::Op(op, args))
