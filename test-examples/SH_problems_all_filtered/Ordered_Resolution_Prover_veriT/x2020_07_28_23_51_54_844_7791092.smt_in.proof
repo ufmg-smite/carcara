@@ -1,0 +1,3 @@
+(assume a1 (less_eq$ (sup$ (set$ cAs$) (insert$ da$ bot$)) (q_of_state$ (lnth$ sts$ j$))))
+(assume a0 (not (less_eq$ (sup$ (set$ cAs$) (insert$ da$ bot$)) (q_of_state$ (lnth$ sts$ j$)))))
+(step t3 (cl) :rule th_resolution :premises (a1 a0))

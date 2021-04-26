@@ -1,0 +1,5 @@
+(assume a2 (not (= (card$ (collect$ uu$)) (card$ (collect$ uua$)))))
+(assume a3 (= (card$ (collect$ uu$)) n$))
+(assume a6 (= (card$ (collect$ uua$)) n$))
+(step t4 (cl (not (= (card$ (collect$ uu$)) n$)) (not (= (card$ (collect$ uua$)) n$)) (= (card$ (collect$ uu$)) (card$ (collect$ uua$)))) :rule eq_transitive)
+(step t5 (cl) :rule resolution :premises (t4 a2 a3 a6))

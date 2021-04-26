@@ -1,0 +1,3 @@
+(assume a2 (not (forall ((?v0 B$) (?v1 B$)) (= (max$ ?v0 ?v1) (ite (less_eq$ ?v0 ?v1) ?v1 ?v0)))))
+(assume a1 (forall ((?v0 B$) (?v1 B$)) (= (max$ ?v0 ?v1) (ite (less_eq$ ?v0 ?v1) ?v1 ?v0))))
+(step t3 (cl) :rule th_resolution :premises (a2 a1))

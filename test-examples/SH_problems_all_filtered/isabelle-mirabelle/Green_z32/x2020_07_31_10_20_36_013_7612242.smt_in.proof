@@ -1,0 +1,3 @@
+(assume a1 (<= za$ 1.0))
+(assume a0 (not (<= za$ 1.0)))
+(step t3 (cl) :rule th_resolution :premises (a1 a0))

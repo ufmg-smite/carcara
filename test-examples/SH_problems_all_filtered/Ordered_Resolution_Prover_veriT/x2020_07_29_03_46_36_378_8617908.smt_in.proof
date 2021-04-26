@@ -1,0 +1,5 @@
+(assume a0 (not (= (subst_cls_list$ subst_atm$ (map$ s$ cAs0$) eta$) (map$ (s_M$ subst_atm$ s$ m$) cAs$))))
+(assume a1 (= (subst_cls_list$ subst_atm$ (map$ s$ cAs0$) eta$) (subst_cls_lists$ subst_atm$ (map$ s$ cAs0$) eta_s0$)))
+(assume a2 (= (map$ (s_M$ subst_atm$ s$ m$) cAs$) (subst_cls_lists$ subst_atm$ (map$ s$ cAs0$) eta_s0$)))
+(step t4 (cl (not (= (subst_cls_list$ subst_atm$ (map$ s$ cAs0$) eta$) (subst_cls_lists$ subst_atm$ (map$ s$ cAs0$) eta_s0$))) (not (= (map$ (s_M$ subst_atm$ s$ m$) cAs$) (subst_cls_lists$ subst_atm$ (map$ s$ cAs0$) eta_s0$))) (= (subst_cls_list$ subst_atm$ (map$ s$ cAs0$) eta$) (map$ (s_M$ subst_atm$ s$ m$) cAs$))) :rule eq_transitive)
+(step t5 (cl) :rule resolution :premises (t4 a0 a1 a2))

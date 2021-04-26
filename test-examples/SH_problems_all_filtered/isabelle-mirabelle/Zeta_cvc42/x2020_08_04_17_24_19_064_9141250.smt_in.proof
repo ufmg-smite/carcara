@@ -1,0 +1,5 @@
+(assume a1 (not (set_integrable$ m2$ b$ uu$)))
+(assume a2 (member$ x$ a$))
+(assume a3 (=> (member$ x$ a$) (set_integrable$ m2$ b$ uu$)))
+(step t4 (cl (not (member$ x$ a$)) (set_integrable$ m2$ b$ uu$)) :rule implies :premises (a3))
+(step t5 (cl) :rule resolution :premises (t4 a1 a2))

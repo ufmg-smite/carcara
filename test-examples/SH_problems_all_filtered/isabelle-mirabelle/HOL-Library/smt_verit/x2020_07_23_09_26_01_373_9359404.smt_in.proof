@@ -1,0 +1,3 @@
+(assume a1 (forall ((?v0 A$)) (not (= (f$ ?v0) zero$))))
+(assume a0 (not (forall ((?v0 A$)) (not (= (f$ ?v0) zero$)))))
+(step t3 (cl) :rule th_resolution :premises (a1 a0))

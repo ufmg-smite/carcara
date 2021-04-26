@@ -1,0 +1,3 @@
+(assume a3 (less_eq$ zero$ (f$ xa$)))
+(assume a0 (not (less_eq$ zero$ (f$ xa$))))
+(step t3 (cl) :rule th_resolution :premises (a3 a0))

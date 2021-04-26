@@ -1,0 +1,6 @@
+(assume a0 (not (less_eq$ (fun_app$ atms_of$ e$) (sup$ (sup$a (image$ atms_of$ (set$ cAs$))) (fun_app$ atms_of$ da$)))))
+(assume a1 (=> (ground_resolution_with_selection$ s$) (less_eq$ (fun_app$ atms_of$ e$) (sup$ (sup$a (image$ atms_of$ (set$ cAs$))) (fun_app$ atms_of$ da$)))))
+(assume a2 (ground_resolution_with_selection$ s$))
+(step t4 (cl (not (ground_resolution_with_selection$ s$)) (less_eq$ (fun_app$ atms_of$ e$) (sup$ (sup$a (image$ atms_of$ (set$ cAs$))) (fun_app$ atms_of$ da$)))) :rule implies :premises (a1))
+(step t5 (cl (not (ground_resolution_with_selection$ s$))) :rule resolution :premises (t4 a0))
+(step t6 (cl) :rule resolution :premises (a2 t5))

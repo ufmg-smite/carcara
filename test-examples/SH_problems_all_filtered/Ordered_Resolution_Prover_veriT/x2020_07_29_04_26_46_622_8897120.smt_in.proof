@@ -1,0 +1,3 @@
+(assume a1 (eligible$ s_G$ asa$ (plus$ d$ (image_mset$ neg$ (mset$ asa$)))))
+(assume a0 (not (eligible$ s_G$ asa$ (plus$ d$ (image_mset$ neg$ (mset$ asa$))))))
+(step t3 (cl) :rule th_resolution :premises (a1 a0))

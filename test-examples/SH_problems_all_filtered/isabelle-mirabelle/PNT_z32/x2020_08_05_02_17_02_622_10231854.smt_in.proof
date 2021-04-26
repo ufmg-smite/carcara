@@ -1,0 +1,5 @@
+(assume a2 (not (= (eval_fds$ (fds_remainder$ m$ f$) s$) (suminf$ uu$))))
+(assume a3 (= (eval_fds$ (fds_remainder$ m$ f$) s$) (the$ uua$)))
+(assume a4 (= (suminf$ uu$) (the$ uua$)))
+(step t4 (cl (not (= (eval_fds$ (fds_remainder$ m$ f$) s$) (the$ uua$))) (not (= (suminf$ uu$) (the$ uua$))) (= (eval_fds$ (fds_remainder$ m$ f$) s$) (suminf$ uu$))) :rule eq_transitive)
+(step t5 (cl) :rule resolution :premises (t4 a2 a3 a4))

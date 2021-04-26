@@ -1,0 +1,5 @@
+(assume a0 (not (= (nth$ (subst_cls_list$ subst_atm$ cs0$ eta$) i$) (nth$ cs$ i$))))
+(assume a1 (= (nth$ cs$ i$) (nth$ (subst_cls_lists$ subst_atm$ cs0$ eta_s0$) i$)))
+(assume a2 (= (nth$ (subst_cls_list$ subst_atm$ cs0$ eta$) i$) (nth$ (subst_cls_lists$ subst_atm$ cs0$ eta_s0$) i$)))
+(step t4 (cl (not (= (nth$ (subst_cls_list$ subst_atm$ cs0$ eta$) i$) (nth$ (subst_cls_lists$ subst_atm$ cs0$ eta_s0$) i$))) (not (= (nth$ cs$ i$) (nth$ (subst_cls_lists$ subst_atm$ cs0$ eta_s0$) i$))) (= (nth$ (subst_cls_list$ subst_atm$ cs0$ eta$) i$) (nth$ cs$ i$))) :rule eq_transitive)
+(step t5 (cl) :rule resolution :premises (t4 a0 a1 a2))

@@ -1,0 +1,7 @@
+(assume a1 (not (less_eq$ (fst$ (f$ (pair$ x$ (lfp$ uu$)))) x$)))
+(assume a2 (= x$ (fst$ (f$ (pair$ x$ y$)))))
+(assume a3 (less_eq$ (fst$ (f$ (pair$ x$ (lfp$ uu$)))) (fst$ (f$ (pair$ x$ y$)))))
+(step t4 (cl (not (= (fst$ (f$ (pair$ x$ (lfp$ uu$)))) (fst$ (f$ (pair$ x$ (lfp$ uu$)))))) (not (= x$ (fst$ (f$ (pair$ x$ y$))))) (not (less_eq$ (fst$ (f$ (pair$ x$ (lfp$ uu$)))) (fst$ (f$ (pair$ x$ y$))))) (less_eq$ (fst$ (f$ (pair$ x$ (lfp$ uu$)))) x$)) :rule eq_congruent_pred)
+(step t5 (cl (= (fst$ (f$ (pair$ x$ (lfp$ uu$)))) (fst$ (f$ (pair$ x$ (lfp$ uu$)))))) :rule eq_reflexive)
+(step t6 (cl (not (= x$ (fst$ (f$ (pair$ x$ y$))))) (not (less_eq$ (fst$ (f$ (pair$ x$ (lfp$ uu$)))) (fst$ (f$ (pair$ x$ y$))))) (less_eq$ (fst$ (f$ (pair$ x$ (lfp$ uu$)))) x$)) :rule th_resolution :premises (t4 t5))
+(step t7 (cl) :rule resolution :premises (t6 a1 a2 a3))

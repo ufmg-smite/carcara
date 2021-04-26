@@ -1,0 +1,6 @@
+(assume h1 (= a b))
+(assume h2 (= c d))
+(assume h3 (= e1 e2))
+(assume h4 (not (= (f a c e1) (f b d e2))))
+(step t5 (cl (not (= a b)) (not (= c d)) (not (= e1 e2)) (= (f a c e1) (f b d e2))) :rule eq_congruent)
+(step t6 (cl) :rule resolution :premises (t5 h1 h2 h3 h4))

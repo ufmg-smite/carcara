@@ -1,0 +1,13 @@
+(set-logic QF_UF)
+(set-info :smt-lib-version 2.0)
+(set-info :category "crafted")
+(set-info :status unsat)
+(declare-sort U 0)
+(declare-fun a () U)
+(declare-fun b () U)
+(declare-fun f (U) U)
+
+(assert (= a b))
+(assert (not (= (f a) (f b))))
+(check-sat)
+(exit)

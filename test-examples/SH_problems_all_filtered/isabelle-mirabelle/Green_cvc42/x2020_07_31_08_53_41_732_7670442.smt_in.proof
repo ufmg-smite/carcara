@@ -1,0 +1,3 @@
+(assume a3 (member$ x$ (image$ uu$ top$)))
+(assume a2 (not (member$ x$ (image$ uu$ top$))))
+(step t3 (cl) :rule th_resolution :premises (a3 a2))

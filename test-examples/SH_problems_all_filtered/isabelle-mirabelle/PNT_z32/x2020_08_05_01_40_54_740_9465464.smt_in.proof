@@ -1,0 +1,6 @@
+(assume a1 (not (has_integral$ uu$ (scaleR$a (inverse$ (power$ m$ (card$ basis$))) i$) (cbox$ (scaleR$ (inverse$ m$) (minus$ a$ c$)) (scaleR$ (inverse$ m$) (minus$ b$ c$))))))
+(assume a2 (=> (< 0.0 m$) (has_integral$ uu$ (scaleR$a (inverse$ (power$ m$ (card$ basis$))) i$) (cbox$ (scaleR$ (inverse$ m$) (minus$ a$ c$)) (scaleR$ (inverse$ m$) (minus$ b$ c$))))))
+(assume a3 (< 0.0 m$))
+(step t4 (cl (not (< 0.0 m$)) (has_integral$ uu$ (scaleR$a (inverse$ (power$ m$ (card$ basis$))) i$) (cbox$ (scaleR$ (inverse$ m$) (minus$ a$ c$)) (scaleR$ (inverse$ m$) (minus$ b$ c$))))) :rule implies :premises (a2))
+(step t5 (cl (not (< 0.0 m$))) :rule resolution :premises (t4 a1))
+(step t6 (cl) :rule resolution :premises (a3 t5))

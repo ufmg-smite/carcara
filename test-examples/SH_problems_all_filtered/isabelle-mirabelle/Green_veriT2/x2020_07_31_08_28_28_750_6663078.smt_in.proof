@@ -1,0 +1,3 @@
+(assume a13 (forall ((?v0 A$)) (=> (member$ ?v0 basis$) (p$ ?v0 (fun_app$b uua$ ?v0)))))
+(assume a7 (not (forall ((?v0 A$)) (=> (member$ ?v0 basis$) (p$ ?v0 (fun_app$b uua$ ?v0))))))
+(step t3 (cl) :rule th_resolution :premises (a13 a7))

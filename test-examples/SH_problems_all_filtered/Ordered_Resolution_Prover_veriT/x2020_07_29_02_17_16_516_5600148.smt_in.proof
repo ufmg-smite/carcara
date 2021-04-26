@@ -1,0 +1,3 @@
+(assume a1 (true_cls_mset$ i$ (subst_cls_mset$ subst_atm$ (subst_cls_mset$ subst_atm$ (mset$ cAs$) sigma$) eta$)))
+(assume a0 (not (true_cls_mset$ i$ (subst_cls_mset$ subst_atm$ (subst_cls_mset$ subst_atm$ (mset$ cAs$) sigma$) eta$))))
+(step t3 (cl) :rule th_resolution :premises (a1 a0))

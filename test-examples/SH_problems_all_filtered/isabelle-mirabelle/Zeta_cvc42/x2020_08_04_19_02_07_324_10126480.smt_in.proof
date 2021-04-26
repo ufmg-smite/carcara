@@ -1,0 +1,3 @@
+(assume a3 (= (interval_lebesgue_integral$ lborel$ zero$ one$ uu$) (divide$ 1.0 (power$ (+ e$ 1.0) (numeral$ (bit0$ one$a))))))
+(assume a1 (not (= (interval_lebesgue_integral$ lborel$ zero$ one$ uu$) (divide$ 1.0 (power$ (+ e$ 1.0) (numeral$ (bit0$ one$a)))))))
+(step t3 (cl) :rule th_resolution :premises (a3 a1))

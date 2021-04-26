@@ -1,0 +1,10 @@
+; --proof-with-sharing --index-fresh-sorts --proof-define-skolems --proof-prune --proof-merge --disable-print-success --disable-banner --max-time=1
+(set-option :produce-proofs true)
+(set-logic AUFLIA)
+(declare-sort B_set$ 0)
+(declare-fun a$ () B_set$)
+(declare-fun finite$ (B_set$) Bool)
+(assert (! (not (finite$ a$)) :named a0))
+(assert (! (finite$ a$) :named a1))
+(check-sat)
+;;;;;;(get-proof)

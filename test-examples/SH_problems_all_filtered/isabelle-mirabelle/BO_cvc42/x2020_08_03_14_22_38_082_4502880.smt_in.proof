@@ -1,0 +1,3 @@
+(assume a2 (forall ((?v0 S$)) (=> (member$ ?v0 (ground_heads$ uu$ (head$ (subst_db$ lam$ db$ ia$ x$ sa$)))) (fun_app$a (fun_app$b (fun_app$c (fun_app$d extf$ ?v0) (gt$ gt_sym$ wt_sym$ extf$ uu$)) (args$ (subst_db$ lam$ db$ ia$ x$ ta$))) (args$ (subst_db$ lam$ db$ ia$ x$ sa$))))))
+(assume a1 (not (forall ((?v0 S$)) (=> (member$ ?v0 (ground_heads$ uu$ (head$ (subst_db$ lam$ db$ ia$ x$ sa$)))) (fun_app$a (fun_app$b (fun_app$c (fun_app$d extf$ ?v0) (gt$ gt_sym$ wt_sym$ extf$ uu$)) (args$ (subst_db$ lam$ db$ ia$ x$ ta$))) (args$ (subst_db$ lam$ db$ ia$ x$ sa$)))))))
+(step t3 (cl) :rule th_resolution :premises (a2 a1))

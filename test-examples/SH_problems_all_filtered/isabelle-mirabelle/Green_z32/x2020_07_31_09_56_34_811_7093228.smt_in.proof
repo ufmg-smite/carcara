@@ -1,0 +1,6 @@
+(assume a1 (not (= (vector_derivative$ uu$ (at_within$ x$ (atLeastAtMost$ 0.0 1.0))) (inner$ (vector_derivative$a gamma$ (at_within$ x$ (atLeastAtMost$ 0.0 1.0))) i$))))
+(assume a2 (= (vector_derivative$ uu$ (at_within$ x$ top$)) (inner$ (vector_derivative$a gamma$ (at_within$ x$ top$)) i$)))
+(assume a3 (= (vector_derivative$ uu$ (at_within$ x$ (atLeastAtMost$ 0.0 1.0))) (vector_derivative$ uu$ (at_within$ x$ top$))))
+(assume a4 (= (inner$ (vector_derivative$a gamma$ (at_within$ x$ (atLeastAtMost$ 0.0 1.0))) i$) (inner$ (vector_derivative$a gamma$ (at_within$ x$ top$)) i$)))
+(step t5 (cl (not (= (vector_derivative$ uu$ (at_within$ x$ (atLeastAtMost$ 0.0 1.0))) (vector_derivative$ uu$ (at_within$ x$ top$)))) (not (= (vector_derivative$ uu$ (at_within$ x$ top$)) (inner$ (vector_derivative$a gamma$ (at_within$ x$ top$)) i$))) (not (= (inner$ (vector_derivative$a gamma$ (at_within$ x$ (atLeastAtMost$ 0.0 1.0))) i$) (inner$ (vector_derivative$a gamma$ (at_within$ x$ top$)) i$))) (= (vector_derivative$ uu$ (at_within$ x$ (atLeastAtMost$ 0.0 1.0))) (inner$ (vector_derivative$a gamma$ (at_within$ x$ (atLeastAtMost$ 0.0 1.0))) i$))) :rule eq_transitive)
+(step t6 (cl) :rule resolution :premises (t5 a1 a2 a3 a4))

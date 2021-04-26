@@ -1,0 +1,10 @@
+; --proof-with-sharing --index-fresh-sorts --proof-define-skolems --proof-prune --proof-merge --disable-print-success --disable-banner --max-time=30
+(set-option :produce-proofs true)
+(set-logic AUFLIA)
+(declare-sort A$ 0)
+(declare-fun c$ () A$)
+(declare-fun zero$ () A$)
+(assert (! (not (not (= c$ zero$))) :named a0))
+(assert (! (not (= c$ zero$)) :named a1))
+(check-sat)
+;;;;;;(get-proof)

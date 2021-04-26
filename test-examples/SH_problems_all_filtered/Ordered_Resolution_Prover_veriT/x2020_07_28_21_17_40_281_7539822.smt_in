@@ -1,0 +1,13 @@
+; --proof-with-sharing --index-fresh-sorts --proof-define-skolems --proof-prune --proof-merge --disable-print-success --disable-banner --max-time=30
+(set-option :produce-proofs true)
+(set-logic AUFLIA)
+(declare-sort A_s_a_fun_fun$ 0)
+(declare-sort A_literal_multiset$ 0)
+(declare-fun c$ () A_literal_multiset$)
+(declare-fun d$ () A_literal_multiset$)
+(declare-fun subst_atm$ () A_s_a_fun_fun$)
+(declare-fun generalizes$ (A_s_a_fun_fun$ A_literal_multiset$ A_literal_multiset$) Bool)
+(assert (! (not (not (and (generalizes$ subst_atm$ d$ c$) (not (generalizes$ subst_atm$ c$ d$))))) :named a0))
+(assert (! (and (generalizes$ subst_atm$ c$ d$) (not (generalizes$ subst_atm$ d$ c$))) :named a1))
+(check-sat)
+;;;;(get-proof)

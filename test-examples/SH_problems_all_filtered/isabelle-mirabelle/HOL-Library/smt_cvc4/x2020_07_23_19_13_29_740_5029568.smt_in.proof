@@ -1,0 +1,3 @@
+(assume a1 (finite$ a$))
+(assume a0 (not (finite$ a$)))
+(step t3 (cl) :rule th_resolution :premises (a1 a0))

@@ -1,0 +1,5 @@
+(assume a0 (not (= n_twin$ n$)))
+(assume a7 (= n$ (size$ cAs$)))
+(assume a9 (= n_twin$ (size$ cAs$)))
+(step t4 (cl (not (= n_twin$ (size$ cAs$))) (not (= n$ (size$ cAs$))) (= n_twin$ n$)) :rule eq_transitive)
+(step t5 (cl) :rule resolution :premises (t4 a0 a7 a9))

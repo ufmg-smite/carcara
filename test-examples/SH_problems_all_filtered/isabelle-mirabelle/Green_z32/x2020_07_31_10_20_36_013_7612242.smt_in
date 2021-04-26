@@ -1,0 +1,13 @@
+; smt.random_seed=1 smt.refine_inj_axioms=false -T:30 -smt2
+(set-option :produce-proofs true)
+(set-logic AUFLIRA)
+(declare-sort Real_set$ 0)
+(declare-fun s2$ () Real_set$)
+(declare-fun za$ () Real)
+(declare-fun member$ (Real Real_set$) Bool)
+(assert (! (not (<= za$ 1.0)) :named a0))
+(assert (! (<= za$ 1.0) :named a1))
+(assert (! (< 1.0 (* za$ 2.0)) :named a2))
+(assert (! (not (member$ (- (* za$ 2.0) 1.0) s2$)) :named a3))
+(check-sat)
+;;;;(get-proof)

@@ -1,0 +1,7 @@
+(assume a0 (not (= (f$ m$) (g$ n$))))
+(assume a1 (= m$ n$))
+(assume a2 (= (g$ n$) (f$ n$)))
+(step t4 (cl (not (= (f$ m$) (f$ n$))) (not (= (g$ n$) (f$ n$))) (= (f$ m$) (g$ n$))) :rule eq_transitive)
+(step t5 (cl (not (= m$ n$)) (= (f$ m$) (f$ n$))) :rule eq_congruent)
+(step t6 (cl (not (= (g$ n$) (f$ n$))) (= (f$ m$) (g$ n$)) (not (= m$ n$))) :rule th_resolution :premises (t4 t5))
+(step t7 (cl) :rule resolution :premises (t6 a0 a1 a2))

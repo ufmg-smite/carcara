@@ -1,0 +1,5 @@
+(assume a0 (not (= (size$ cAs0$) (size$ cAs$))))
+(assume a1 (= (size$ cAs$) n$))
+(assume a8 (= (size$ cAs0$) n$))
+(step t4 (cl (not (= (size$ cAs0$) n$)) (not (= (size$ cAs$) n$)) (= (size$ cAs0$) (size$ cAs$))) :rule eq_transitive)
+(step t5 (cl) :rule resolution :premises (t4 a0 a1 a8))

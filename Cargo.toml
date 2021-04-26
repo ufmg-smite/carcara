@@ -8,3 +8,6 @@ edition = "2018"
 
 [dependencies]
 num-rational = "0.3.2"
+
+[dev-dependencies]
+walkdir = "2.3.1"

@@ -1,13 +1,9 @@
-extern crate num_rational;
-
-#[macro_use]
-mod ast;
-mod checker;
-mod parser;
+use verit_proof_checker::*;
 
 use checker::*;
 use error::*;
 use parser::*;
+
 use std::fs::File;
 use std::io::{self, BufReader};
 

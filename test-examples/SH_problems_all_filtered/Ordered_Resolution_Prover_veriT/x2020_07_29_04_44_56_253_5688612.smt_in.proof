@@ -1,0 +1,5 @@
+(assume a1 (not (true_cls$ (interp$ s$ n$) (plus$ (sum_mset$ (mset$ cs$)) d$))))
+(assume a0 (not (not (true_cls$ (interp$ s$ n$) (plus$ (sum_mset$ (mset$ cs$)) d$)))))
+(step t3 (cl (not (not (not (true_cls$ (interp$ s$ n$) (plus$ (sum_mset$ (mset$ cs$)) d$))))) (true_cls$ (interp$ s$ n$) (plus$ (sum_mset$ (mset$ cs$)) d$))) :rule not_not)
+(step t4 (cl (true_cls$ (interp$ s$ n$) (plus$ (sum_mset$ (mset$ cs$)) d$))) :rule th_resolution :premises (t3 a0))
+(step t5 (cl) :rule th_resolution :premises (a1 t4))

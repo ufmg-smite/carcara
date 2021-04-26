@@ -1,0 +1,5 @@
+(assume a0 (not (= (wt$ ground_heads_var$ delta$ arity_sym$ wt_sym$ ua$) (wt$ ground_heads_var$ delta$ arity_sym$ wt_sym$ sa$))))
+(assume a1 (= (wt$ ground_heads_var$ delta$ arity_sym$ wt_sym$ sa$) (wt$ ground_heads_var$ delta$ arity_sym$ wt_sym$ ta$)))
+(assume a2 (= (wt$ ground_heads_var$ delta$ arity_sym$ wt_sym$ ua$) (wt$ ground_heads_var$ delta$ arity_sym$ wt_sym$ ta$)))
+(step t4 (cl (not (= (wt$ ground_heads_var$ delta$ arity_sym$ wt_sym$ ua$) (wt$ ground_heads_var$ delta$ arity_sym$ wt_sym$ ta$))) (not (= (wt$ ground_heads_var$ delta$ arity_sym$ wt_sym$ sa$) (wt$ ground_heads_var$ delta$ arity_sym$ wt_sym$ ta$))) (= (wt$ ground_heads_var$ delta$ arity_sym$ wt_sym$ ua$) (wt$ ground_heads_var$ delta$ arity_sym$ wt_sym$ sa$))) :rule eq_transitive)
+(step t5 (cl) :rule resolution :premises (t4 a0 a1 a2))

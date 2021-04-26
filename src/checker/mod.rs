@@ -4,6 +4,7 @@ use crate::ast::*;
 
 pub type Rule = fn(&[ByRefRc<Term>], Vec<&ProofCommand>, &[ProofArg]) -> Option<()>;
 
+#[derive(Debug)]
 pub enum CheckerError<'a> {
     UnknownRule(&'a str),
     FailedOnRule(&'a str),

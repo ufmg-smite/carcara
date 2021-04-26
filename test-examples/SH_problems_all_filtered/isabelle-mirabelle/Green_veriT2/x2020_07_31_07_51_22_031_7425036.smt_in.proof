@@ -1,0 +1,5 @@
+(assume a0 (not (= (sup$ s$) (sup$a (atLeastLessThan$ a$ x$) (greaterThanAtMost$ x$ b$)))))
+(assume a5 (= (sup$ s$) (minus$ (atLeastAtMost$ a$ b$) (insert$ x$ bot$))))
+(assume a6 (= (sup$a (atLeastLessThan$ a$ x$) (greaterThanAtMost$ x$ b$)) (minus$ (atLeastAtMost$ a$ b$) (insert$ x$ bot$))))
+(step t4 (cl (not (= (sup$ s$) (minus$ (atLeastAtMost$ a$ b$) (insert$ x$ bot$)))) (not (= (sup$a (atLeastLessThan$ a$ x$) (greaterThanAtMost$ x$ b$)) (minus$ (atLeastAtMost$ a$ b$) (insert$ x$ bot$)))) (= (sup$ s$) (sup$a (atLeastLessThan$ a$ x$) (greaterThanAtMost$ x$ b$)))) :rule eq_transitive)
+(step t5 (cl) :rule resolution :premises (t4 a0 a5 a6))

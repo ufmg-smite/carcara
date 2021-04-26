@@ -1,0 +1,8 @@
+(assume a0 (not (= (head$ ta$) (head$ sa$))))
+(assume a1 (= (head$ sa$) (sym$ f$)))
+(assume a2 (= (head$ ta$) (sym$ g$)))
+(assume a3 (= f$ g$))
+(step t5 (cl (not (= (head$ ta$) (sym$ g$))) (not (= (sym$ f$) (sym$ g$))) (not (= (head$ sa$) (sym$ f$))) (= (head$ ta$) (head$ sa$))) :rule eq_transitive)
+(step t6 (cl (not (= f$ g$)) (= (sym$ f$) (sym$ g$))) :rule eq_congruent)
+(step t7 (cl (not (= (head$ ta$) (sym$ g$))) (not (= (head$ sa$) (sym$ f$))) (= (head$ ta$) (head$ sa$)) (not (= f$ g$))) :rule th_resolution :premises (t5 t6))
+(step t8 (cl) :rule resolution :premises (t7 a0 a1 a2 a3))

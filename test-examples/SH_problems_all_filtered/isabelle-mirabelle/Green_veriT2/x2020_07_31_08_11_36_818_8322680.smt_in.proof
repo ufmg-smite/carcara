@@ -1,0 +1,3 @@
+(assume a3 (integrable_on$ f$ (atLeastAtMost$ c$ d$)))
+(assume a2 (not (integrable_on$ f$ (atLeastAtMost$ c$ d$))))
+(step t3 (cl) :rule th_resolution :premises (a3 a2))

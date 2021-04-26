@@ -1,0 +1,3 @@
+(assume a2 (not (true_cls$ (i_of$ m$) e$)))
+(assume a1 (true_cls$ (i_of$ m$) e$))
+(step t3 (cl) :rule th_resolution :premises (a2 a1))
