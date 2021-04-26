@@ -88,7 +88,7 @@ mod rules {
         if clause.len() != 2 {
             return None;
         }
-        let p = match_term!((not (not (not p))) = clause[0].as_ref())?;
+        let p = match_term!((not (not (not p))) = clause[0])?;
         let q = clause[1].as_ref();
         to_option(p == q)
     }
@@ -97,7 +97,7 @@ mod rules {
         if clause.len() != 2 {
             return None;
         }
-        let and_contents = match_term!((not (and ...)) = clause[0].as_ref())?;
+        let and_contents = match_term!((not (and ...)) = clause[0])?;
         and_contents.iter().find(|&t| *t == clause[1]).map(|_| ())
     }
 
@@ -105,7 +105,7 @@ mod rules {
         if clause.len() < 2 {
             return None;
         }
-        let and_contents = match_term!((and ...) = clause[0].as_ref())?
+        let and_contents = match_term!((and ...) = clause[0])?
             .iter()
             .map(|t| Some(t.as_ref()));
         let remaining = clause[1..].iter().map(|t| t.remove_negation());
@@ -116,7 +116,7 @@ mod rules {
         if clause.len() < 2 {
             return None;
         }
-        let or_contents = match_term!((not (or ...)) = clause[0].as_ref())?;
+        let or_contents = match_term!((not (or ...)) = clause[0])?;
         to_option(or_contents.iter().eq(&clause[1..]))
     }
 
@@ -124,7 +124,7 @@ mod rules {
         if clause.len() < 2 {
             return None;
         }
-        let or_contents = match_term!((or ...) = clause[0].as_ref())?;
+        let or_contents = match_term!((or ...) = clause[0])?;
         let other = clause[1].remove_negation()?;
         or_contents
             .iter()
@@ -140,7 +140,7 @@ mod rules {
         if clause.len() != 3 {
             return None;
         }
-        let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = clause[0].as_ref())?;
+        let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = clause[0])?;
         to_option(phi_1 == clause[1].as_ref() && phi_2 == clause[2].remove_negation()?)
     }
 
@@ -152,7 +152,7 @@ mod rules {
         if clause.len() != 3 {
             return None;
         }
-        let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = clause[0].as_ref())?;
+        let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = clause[0])?;
         to_option(phi_1 == clause[1].remove_negation()? && phi_2 == clause[2].as_ref())
     }
 
@@ -162,7 +162,7 @@ mod rules {
         _: &[ProofArg],
     ) -> Option<()> {
         if clause.len() == 1 {
-            let (a, b) = match_term!((= a b) = clause[0].as_ref())?;
+            let (a, b) = match_term!((= a b) = clause[0])?;
             to_option(a == b)
         } else {
             None
@@ -211,14 +211,13 @@ mod rules {
 
         // The last term in clause should be an equality, and it will be the conclusion of the
         // transitive chain
-        let last_term = clause.last().unwrap().as_ref();
-        let conclusion = match_term!((= t u) = last_term)?;
+        let conclusion = match_term!((= t u) = clause.last().unwrap())?;
 
         // The first `clause.len()` - 1 terms in the clause must be a sequence of inequalites, and
         // they will be the premises of the transitive chain
         let mut premises = Vec::with_capacity(clause.len() - 1);
         for term in &clause[..clause.len() - 1] {
-            let (t, u) = match_term!((not (= t u)) = term.as_ref())?;
+            let (t, u) = match_term!((not (= t u)) = term)?;
             premises.push((t, u));
         }
 
@@ -236,7 +235,7 @@ mod rules {
         let premises = clause[..clause.len() - 1]
             .iter()
             .map(|t| t.remove_negation());
-        let conclusion = match_term!((= f g) = clause.last().unwrap().as_ref())?;
+        let conclusion = match_term!((= f g) = clause.last().unwrap())?;
 
         generic_congruent_rule(premises, conclusion)
     }
@@ -270,7 +269,7 @@ mod rules {
         let mut ts = Vec::new();
         let mut us = Vec::new();
         for term in premises {
-            let (t, u) = match_term!((= t u) = term.as_ref()?)?;
+            let (t, u) = match_term!((= t u) = term?)?;
             ts.push(t);
             us.push(u);
         }
@@ -301,8 +300,7 @@ mod rules {
             return None;
         }
 
-        let (distinct_args, second_term) =
-            match_term!((= (distinct ...) second) = clause[0].as_ref())?;
+        let (distinct_args, second_term) = match_term!((= (distinct ...) second) = clause[0])?;
         match distinct_args {
             [] | [_] => unreachable!(),
             [a, b] => {
@@ -325,7 +323,7 @@ mod rules {
                 for i in 0..args.len() {
                     for j in i + 1..args.len() {
                         let (a, b) = (args[i].as_ref(), args[j].as_ref());
-                        let got: (&Term, &Term) = match_term!((not (= x y)) = got[k].as_ref())?;
+                        let got = match_term!((not (= x y)) = got[k])?;
                         to_option(got == (a, b) || got == (b, a))?;
                         k += 1;
                     }
@@ -395,7 +393,7 @@ mod rules {
             return None;
         }
         let and_term = get_single_term_from_command(premises[0])?;
-        let and_contents = match_term!((and ...) = and_term.as_ref())?;
+        let and_contents = match_term!((and ...) = and_term)?;
 
         to_option(and_contents.iter().any(|t| t == &clause[0]))
     }
@@ -409,7 +407,7 @@ mod rules {
             return None;
         }
         let or_term = get_single_term_from_command(premises[0])?;
-        let or_contents = match_term!((or ...) = or_term.as_ref())?;
+        let or_contents = match_term!((or ...) = or_term)?;
 
         to_option(or_contents == clause)
     }
@@ -423,7 +421,7 @@ mod rules {
             return None;
         }
         let premise_term = get_single_term_from_command(premises[0])?;
-        let (phi_1, phi_2) = match_term!((=> phi_1 phi_2) = premise_term.as_ref())?;
+        let (phi_1, phi_2) = match_term!((=> phi_1 phi_2) = premise_term)?;
 
         to_option(phi_1 == clause[0].remove_negation()? && phi_2 == clause[1].as_ref())
     }
@@ -437,7 +435,7 @@ mod rules {
             return None;
         }
         let premise_term = get_single_term_from_command(premises[0])?;
-        let (phi_1, _, phi_3) = match_term!((ite phi_1 phi_2 phi_3) = premise_term.as_ref())?;
+        let (phi_1, _, phi_3) = match_term!((ite phi_1 phi_2 phi_3) = premise_term)?;
 
         to_option(phi_1 == clause[0].as_ref() && phi_3 == clause[1].as_ref())
     }
@@ -451,7 +449,7 @@ mod rules {
             return None;
         }
         let premise_term = get_single_term_from_command(premises[0])?;
-        let (phi_1, phi_2, _) = match_term!((ite phi_1 phi_2 phi_3) = premise_term.as_ref())?;
+        let (phi_1, phi_2, _) = match_term!((ite phi_1 phi_2 phi_3) = premise_term)?;
 
         to_option(phi_1 == clause[0].remove_negation()? && phi_2 == clause[1].as_ref())
     }
@@ -464,7 +462,7 @@ mod rules {
         if clause.len() != 1 {
             return None;
         }
-        let (root_term, us) = match_term!((= t (and ...)) = clause[0].as_ref())?;
+        let (root_term, us) = match_term!((= t (and ...)) = clause[0])?;
         let ite_terms: Vec<_> = root_term
             .subterms()
             .iter()
@@ -481,7 +479,7 @@ mod rules {
         // We assume that the "ite" terms appear in the conjunction in the same order as they
         // appear as subterms of the root term
         for (s_i, u_i) in ite_terms.iter().zip(&us[1..]) {
-            let (cond, (a, b), (c, d)) = match_term!((ite cond (= a b) (= c d)) = u_i.as_ref())?;
+            let (cond, (a, b), (c, d)) = match_term!((ite cond (= a b) (= c d)) = u_i)?;
 
             // Since the (= r_1 s_1) and (= r_2 s_2) equalities may be flipped, we have to check
             // all four possibilities: neither are flipped, either one is flipped, or both are
