@@ -472,7 +472,9 @@ mod rules {
             .collect();
 
         // "us" must be a conjunction where the first term is the root term
-        if ite_terms.len() != us.len() - 1 || !DeepEq::eq(us[0].as_ref(), root_term) {
+        if ite_terms.len() != us.len() - 1
+            || !DeepEq::eq_modulo_reordering(us[0].as_ref(), root_term)
+        {
             return None;
         }
 

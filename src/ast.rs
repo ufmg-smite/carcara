@@ -409,40 +409,52 @@ pub enum Index {
     Symbol(String),
 }
 
-/// A trait that represents a less strict definition of equality for terms. This differs from
-/// `PartialEq` in two ways:
-/// - This is a "deep" equality, meaning that it compares `ByRefRc`s by value, instead of by
-///   reference
-/// - This considers equality terms that are "reflections" of each other as equal, meaning the
-///   terms (= a b) and (= b a) are considered equal by this trait
+/// A trait that implements less strict definitions of equality for terms. This trait represents
+/// two definitions of equality that differ from `PartialEq`:
+/// - `DeepEq::eq` implements a "deep" equality, meaning that it compares `ByRefRc`s by value,
+/// instead of by reference
+/// - `DeepEq::eq_modulo_reordering` is also a "deep" equality, but it considers "=" terms that are
+/// "reflections" of each other as equal, meaning the terms (= a b) and (= b a) are considered
+/// equal by this method
 pub trait DeepEq {
-    fn eq(a: &Self, b: &Self) -> bool;
+    fn eq(a: &Self, b: &Self) -> bool {
+        DeepEq::eq_impl(a, b, false)
+    }
+
+    fn eq_modulo_reordering(a: &Self, b: &Self) -> bool {
+        DeepEq::eq_impl(a, b, true)
+    }
+
+    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool;
 }
 
 impl DeepEq for Term {
-    fn eq(a: &Self, b: &Self) -> bool {
+    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
         match (a, b) {
             (Term::App(f_a, args_a), Term::App(f_b, args_b)) => {
-                DeepEq::eq(f_a.as_ref(), f_b.as_ref()) && DeepEq::eq(args_a, args_b)
+                DeepEq::eq_impl(f_a.as_ref(), f_b.as_ref(), is_mod_reordering)
+                    && DeepEq::eq_impl(args_a, args_b, is_mod_reordering)
             }
             (Term::Op(op_a, args_a), Term::Op(op_b, args_b)) => {
-                if let (Operator::Eq, [a_1, a_2], Operator::Eq, [b_1, b_2]) =
-                    (op_a, args_a.as_slice(), op_b, args_b.as_slice())
-                {
-                    // If the term is an equality of two terms, we also check if they would be
-                    // equal if one of them was flipped
-                    DeepEq::eq(&(a_1, a_2), &(b_1, b_2)) || DeepEq::eq(&(a_1, a_2), &(b_2, b_1))
-                } else {
-                    // General case
-                    op_a == op_b && DeepEq::eq(args_a, args_b)
+                if is_mod_reordering {
+                    if let (Operator::Eq, [a_1, a_2], Operator::Eq, [b_1, b_2]) =
+                        (op_a, args_a.as_slice(), op_b, args_b.as_slice())
+                    {
+                        // If the term is an equality of two terms, we also check if they would be
+                        // equal if one of them was flipped
+                        return DeepEq::eq_impl(&(a_1, a_2), &(b_1, b_2), true)
+                            || DeepEq::eq_impl(&(a_1, a_2), &(b_2, b_1), true);
+                    }
                 }
+                // General case
+                op_a == op_b && DeepEq::eq_impl(args_a, args_b, is_mod_reordering)
             }
             (Term::Sort(kind_a, args_a), Term::Sort(kind_b, args_b)) => {
-                kind_a == kind_b && DeepEq::eq(args_a, args_b)
+                kind_a == kind_b && DeepEq::eq_impl(args_a, args_b, is_mod_reordering)
             }
             (Term::Terminal(a), Term::Terminal(b)) => match (a, b) {
                 (Terminal::Var(iden_a, sort_a), Terminal::Var(iden_b, sort_b)) => {
-                    iden_a == iden_b && DeepEq::eq(sort_a, sort_b)
+                    iden_a == iden_b && DeepEq::eq_impl(sort_a, sort_b, is_mod_reordering)
                 }
                 (a, b) => a == b,
             },
@@ -452,19 +464,23 @@ impl DeepEq for Term {
 }
 
 impl DeepEq for ProofArg {
-    fn eq(a: &Self, b: &Self) -> bool {
+    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
         match (a, b) {
-            (ProofArg::Term(a), ProofArg::Term(b)) => DeepEq::eq(a, b),
-            (ProofArg::Assign(sa, ta), ProofArg::Assign(sb, tb)) => sa == sb && DeepEq::eq(ta, tb),
+            (ProofArg::Term(a), ProofArg::Term(b)) => DeepEq::eq_impl(a, b, is_mod_reordering),
+            (ProofArg::Assign(sa, ta), ProofArg::Assign(sb, tb)) => {
+                sa == sb && DeepEq::eq_impl(ta, tb, is_mod_reordering)
+            }
             _ => false,
         }
     }
 }
 
 impl DeepEq for ProofCommand {
-    fn eq(a: &Self, b: &Self) -> bool {
+    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
         match (a, b) {
-            (ProofCommand::Assume(a), ProofCommand::Assume(b)) => DeepEq::eq(a, b),
+            (ProofCommand::Assume(a), ProofCommand::Assume(b)) => {
+                DeepEq::eq_impl(a, b, is_mod_reordering)
+            }
             (
                 ProofCommand::Step {
                     clause: clause_a,
@@ -479,10 +495,10 @@ impl DeepEq for ProofCommand {
                     args: args_b,
                 },
             ) => {
-                DeepEq::eq(clause_a, clause_b)
+                DeepEq::eq_impl(clause_a, clause_b, is_mod_reordering)
                     && rule_a == rule_b
                     && premises_a == premises_b
-                    && DeepEq::eq(args_a, args_b)
+                    && DeepEq::eq_impl(args_a, args_b, is_mod_reordering)
             }
             _ => false,
         }
@@ -490,26 +506,30 @@ impl DeepEq for ProofCommand {
 }
 
 impl<T: DeepEq> DeepEq for &T {
-    fn eq(a: &Self, b: &Self) -> bool {
-        DeepEq::eq(*a, *b)
+    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
+        DeepEq::eq_impl(*a, *b, is_mod_reordering)
     }
 }
 
 impl<T: DeepEq> DeepEq for ByRefRc<T> {
-    fn eq(a: &Self, b: &Self) -> bool {
-        DeepEq::eq(a.as_ref(), b.as_ref())
+    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
+        a == b || DeepEq::eq_impl(a.as_ref(), b.as_ref(), is_mod_reordering)
     }
 }
 
 impl<T: DeepEq> DeepEq for Vec<T> {
-    fn eq(a: &Self, b: &Self) -> bool {
-        a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| DeepEq::eq(a, b))
+    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
+        a.len() == b.len()
+            && a.iter()
+                .zip(b.iter())
+                .all(|(a, b)| DeepEq::eq_impl(a, b, is_mod_reordering))
     }
 }
 
 impl<T: DeepEq> DeepEq for (T, T) {
-    fn eq(a: &Self, b: &Self) -> bool {
-        DeepEq::eq(&a.0, &b.0) && DeepEq::eq(&a.1, &b.1)
+    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
+        DeepEq::eq_impl(&a.0, &b.0, is_mod_reordering)
+            && DeepEq::eq_impl(&a.1, &b.1, is_mod_reordering)
     }
 }
 
@@ -641,23 +661,30 @@ mod tests {
 
     #[test]
     fn test_deep_eq() {
-        fn run_tests(definitions: &str, cases: &[(&str, &str)]) {
+        fn run_tests(definitions: &str, cases: &[(&str, &str)], is_mod_reordering: bool) {
             for (a, b) in cases {
                 let (a, b) = (
                     parse_term_with_definitions(definitions, a),
                     parse_term_with_definitions(definitions, b),
                 );
-                assert!(DeepEq::eq(&a, &b))
+                if is_mod_reordering {
+                    assert!(DeepEq::eq_modulo_reordering(&a, &b))
+                } else {
+                    assert!(DeepEq::eq(&a, &b))
+                }
             }
         }
-        run_tests(
-            "(declare-sort T 0)
+        let definitions = "
+            (declare-sort T 0)
             (declare-fun a () T)
             (declare-fun b () T)
             (declare-fun p () Bool)
             (declare-fun q () Bool)
             (declare-fun x () Int)
-            (declare-fun y () Int)",
+            (declare-fun y () Int)
+        ";
+        run_tests(
+            definitions,
             &[
                 ("a", "a"),
                 ("(+ x y)", "(+ x y)"),
@@ -665,6 +692,12 @@ mod tests {
                     "(ite (and (not p) q) (* x y) (- 0 y))",
                     "(ite (and (not p) q) (* x y) (- 0 y))",
                 ),
+            ],
+            false,
+        );
+        run_tests(
+            definitions,
+            &[
                 ("(= a b)", "(= b a)"),
                 ("(= p (= p (= p q)))", "(= p (= (= p q) p))"),
                 (
@@ -672,6 +705,7 @@ mod tests {
                     "(ite (= b a) (= (+ x y) x) (and p (not (= y x))))",
                 ),
             ],
-        )
+            true,
+        );
     }
 }
