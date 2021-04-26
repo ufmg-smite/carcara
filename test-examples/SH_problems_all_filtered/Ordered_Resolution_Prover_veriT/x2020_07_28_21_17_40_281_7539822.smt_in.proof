@@ -1,7 +1,0 @@
-(assume a0 (not (not (and (generalizes$ subst_atm$ d$ c$) (not (generalizes$ subst_atm$ c$ d$))))))
-(step t2 (cl (not (not (not (and (generalizes$ subst_atm$ d$ c$) (not (generalizes$ subst_atm$ c$ d$)))))) (and (generalizes$ subst_atm$ d$ c$) (not (generalizes$ subst_atm$ c$ d$)))) :rule not_not)
-(step t3 (cl (and (generalizes$ subst_atm$ d$ c$) (not (generalizes$ subst_atm$ c$ d$)))) :rule th_resolution :premises (t2 a0))
-(assume a1 (and (generalizes$ subst_atm$ c$ d$) (not (generalizes$ subst_atm$ d$ c$))))
-(step t5 (cl (not (generalizes$ subst_atm$ c$ d$))) :rule and :premises (t3))
-(step t6 (cl (generalizes$ subst_atm$ c$ d$)) :rule and :premises (a1))
-(step t7 (cl) :rule resolution :premises (t6 t5))

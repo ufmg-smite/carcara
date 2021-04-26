@@ -1,3 +1,0 @@
-(assume a1 (= (f$ times$ one$) (prod$ times$ one$)))
-(assume a0 (not (= (f$ times$ one$) (prod$ times$ one$))))
-(step t3 (cl) :rule th_resolution :premises (a1 a0))

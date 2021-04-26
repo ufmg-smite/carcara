@@ -1,8 +1,0 @@
-(assume a0 (not (subseteq_mset$ (image_mset$ pos$ aA0$) (nth$ cAs0$ i$))))
-(assume a1 (and (= (subst_cls$ subst_atm$ poss_AA0$ (nth$a eta_s0$ i$)) (image_mset$ pos$ (nth$b aAs$ i$))) (subseteq_mset$ poss_AA0$ (nth$ cAs0$ i$))))
-(assume a2 (= (image_mset$ pos$ aA0$) poss_AA0$))
-(step t4 (cl (subseteq_mset$ poss_AA0$ (nth$ cAs0$ i$))) :rule and :premises (a1))
-(step t5 (cl (not (= (image_mset$ pos$ aA0$) poss_AA0$)) (not (= (nth$ cAs0$ i$) (nth$ cAs0$ i$))) (not (subseteq_mset$ poss_AA0$ (nth$ cAs0$ i$))) (subseteq_mset$ (image_mset$ pos$ aA0$) (nth$ cAs0$ i$))) :rule eq_congruent_pred)
-(step t6 (cl (= (nth$ cAs0$ i$) (nth$ cAs0$ i$))) :rule eq_reflexive)
-(step t7 (cl (not (= (image_mset$ pos$ aA0$) poss_AA0$)) (not (subseteq_mset$ poss_AA0$ (nth$ cAs0$ i$))) (subseteq_mset$ (image_mset$ pos$ aA0$) (nth$ cAs0$ i$))) :rule th_resolution :premises (t5 t6))
-(step t8 (cl) :rule resolution :premises (t7 a0 t4 a2))

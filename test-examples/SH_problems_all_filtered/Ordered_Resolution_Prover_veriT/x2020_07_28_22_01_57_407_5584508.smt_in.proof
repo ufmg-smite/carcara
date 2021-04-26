@@ -1,3 +1,0 @@
-(assume a2 (true_cls$ (interp$ s$ n$ d$) d$a))
-(assume a1 (not (true_cls$ (interp$ s$ n$ d$) d$a)))
-(step t3 (cl) :rule th_resolution :premises (a2 a1))

@@ -1,3 +1,0 @@
-(assume a1 (member$ f$ (elt_set_plus$ g$ (bigo$ h$))))
-(assume a0 (not (member$ f$ (elt_set_plus$ g$ (bigo$ h$)))))
-(step t3 (cl) :rule th_resolution :premises (a1 a0))

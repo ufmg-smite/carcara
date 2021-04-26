@@ -1,3 +1,0 @@
-(assume a1 (forall ((?v0 A_literal_multiset$)) (=> (member$ ?v0 (set$ cAs$)) (= (s$ ?v0) zero$))))
-(assume a0 (not (forall ((?v0 A_literal_multiset$)) (=> (member$ ?v0 (set$ cAs$)) (= (s$ ?v0) zero$)))))
-(step t3 (cl) :rule th_resolution :premises (a1 a0))

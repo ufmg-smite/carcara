@@ -1,5 +1,0 @@
-(assume a3 (not (= (lebesgue_integral$a lborel$a uua$) (integral$a top$a uub$))))
-(assume a4 (= (lebesgue_integral$a lborel$a uua$) (lebesgue_integral$a lborel$a uub$)))
-(assume a5 (= (integral$a top$a uub$) (lebesgue_integral$a lborel$a uub$)))
-(step t4 (cl (not (= (lebesgue_integral$a lborel$a uua$) (lebesgue_integral$a lborel$a uub$))) (not (= (integral$a top$a uub$) (lebesgue_integral$a lborel$a uub$))) (= (lebesgue_integral$a lborel$a uua$) (integral$a top$a uub$))) :rule eq_transitive)
-(step t5 (cl) :rule resolution :premises (t4 a3 a4 a5))

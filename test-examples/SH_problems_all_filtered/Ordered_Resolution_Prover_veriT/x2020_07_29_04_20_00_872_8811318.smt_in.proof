@@ -1,3 +1,0 @@
-(assume a1 (= (subst_cls$ subst_atm$ (plus$ (sum_mset$ (mset$ cs$)) d$) sigma$) e$))
-(assume a0 (not (= (subst_cls$ subst_atm$ (plus$ (sum_mset$ (mset$ cs$)) d$) sigma$) e$)))
-(step t3 (cl) :rule th_resolution :premises (a1 a0))

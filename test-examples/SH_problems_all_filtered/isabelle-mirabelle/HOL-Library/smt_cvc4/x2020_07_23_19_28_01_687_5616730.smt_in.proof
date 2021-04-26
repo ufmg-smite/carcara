@@ -1,3 +1,0 @@
-(assume a1 (= (f$ plus$ zero$) (sum$ plus$ zero$)))
-(assume a0 (not (= (f$ plus$ zero$) (sum$ plus$ zero$))))
-(step t3 (cl) :rule th_resolution :premises (a1 a0))

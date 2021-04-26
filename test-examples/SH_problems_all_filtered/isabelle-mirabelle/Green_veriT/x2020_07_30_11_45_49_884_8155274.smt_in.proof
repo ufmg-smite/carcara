@@ -1,3 +1,0 @@
-(assume a1 (gen_division$ (fun_app$ cubeImage$ (diamond_cube$ d$)) (image$ cubeImage$ (insert$ (rot_diamond_cube$ d$) bot$))))
-(assume a0 (not (gen_division$ (fun_app$ cubeImage$ (diamond_cube$ d$)) (image$ cubeImage$ (insert$ (rot_diamond_cube$ d$) bot$)))))
-(step t3 (cl) :rule th_resolution :premises (a1 a0))

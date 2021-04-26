@@ -1,6 +1,0 @@
-(assume a56 (not (= (integral$b s$ g$) (integral$c (cbox$c a$ b$) uua$))))
-(assume a57 (= (integral$b s$ g$) (integral$b top$a f$)))
-(assume a58 (= (integral$b top$a f$) (integral$c top$b uuc$)))
-(assume a59 (= (integral$c (cbox$c a$ b$) uua$) (integral$c top$b uuc$)))
-(step t5 (cl (not (= (integral$b s$ g$) (integral$b top$a f$))) (not (= (integral$b top$a f$) (integral$c top$b uuc$))) (not (= (integral$c (cbox$c a$ b$) uua$) (integral$c top$b uuc$))) (= (integral$b s$ g$) (integral$c (cbox$c a$ b$) uua$))) :rule eq_transitive)
-(step t6 (cl) :rule resolution :premises (t5 a56 a57 a58 a59))

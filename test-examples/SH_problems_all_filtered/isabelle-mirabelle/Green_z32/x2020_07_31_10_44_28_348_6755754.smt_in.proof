@@ -1,3 +1,0 @@
-(assume a3 (forall ((?v0 A$)) (=> (member$ ?v0 basis$) (p$ ?v0 (uua$ ?v0)))))
-(assume a2 (not (forall ((?v0 A$)) (=> (member$ ?v0 basis$) (p$ ?v0 (uua$ ?v0))))))
-(step t3 (cl) :rule th_resolution :premises (a3 a2))

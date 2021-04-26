@@ -1,7 +1,0 @@
-(assume a52 (not (integrable$ (pair_measure$ lborel$c lborel$d) f$)))
-(assume a53 (integrable$ lborel$e f$))
-(assume a57 (= lborel$e (pair_measure$ lborel$c lborel$d)))
-(step t4 (cl (not (= lborel$e (pair_measure$ lborel$c lborel$d))) (not (= f$ f$)) (not (integrable$ lborel$e f$)) (integrable$ (pair_measure$ lborel$c lborel$d) f$)) :rule eq_congruent_pred)
-(step t5 (cl (= f$ f$)) :rule eq_reflexive)
-(step t6 (cl (not (= lborel$e (pair_measure$ lborel$c lborel$d))) (not (integrable$ lborel$e f$)) (integrable$ (pair_measure$ lborel$c lborel$d) f$)) :rule th_resolution :premises (t4 t5))
-(step t7 (cl) :rule resolution :premises (t6 a52 a53 a57))

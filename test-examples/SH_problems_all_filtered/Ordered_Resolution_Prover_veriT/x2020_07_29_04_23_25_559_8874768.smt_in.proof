@@ -1,5 +1,0 @@
-(assume a0 (not (= (size$ aAsa$) (size$a asa$))))
-(assume a1 (= (size$ aAsa$) n$))
-(assume a2 (= (size$a asa$) n$))
-(step t4 (cl (not (= (size$ aAsa$) n$)) (not (= (size$a asa$) n$)) (= (size$ aAsa$) (size$a asa$))) :rule eq_transitive)
-(step t5 (cl) :rule resolution :premises (t4 a0 a1 a2))

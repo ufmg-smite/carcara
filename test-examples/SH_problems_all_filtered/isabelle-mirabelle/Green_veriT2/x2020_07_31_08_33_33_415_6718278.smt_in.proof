@@ -1,3 +1,0 @@
-(assume a2 (<= 0.0 (- (divide$ 1.0 4.0) (times$ x$ x$))))
-(assume a0 (not (<= 0.0 (- (divide$ 1.0 4.0) (times$ x$ x$)))))
-(step t3 (cl) :rule th_resolution :premises (a2 a0))

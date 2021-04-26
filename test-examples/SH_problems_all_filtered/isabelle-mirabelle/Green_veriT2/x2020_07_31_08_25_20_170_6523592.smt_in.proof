@@ -1,3 +1,0 @@
-(assume a7 (forall ((?v0 N$)) (p$ ?v0 (fun_app$b uua$ ?v0))))
-(assume a3 (not (forall ((?v0 N$)) (p$ ?v0 (fun_app$b uua$ ?v0)))))
-(step t3 (cl) :rule th_resolution :premises (a7 a3))

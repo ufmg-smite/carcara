@@ -1,3 +1,0 @@
-(assume a4 (wfP$ uua$))
-(assume a3 (not (wfP$ uua$)))
-(step t3 (cl) :rule th_resolution :premises (a4 a3))

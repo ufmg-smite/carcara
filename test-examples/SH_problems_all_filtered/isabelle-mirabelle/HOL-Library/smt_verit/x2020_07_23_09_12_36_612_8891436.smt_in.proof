@@ -1,3 +1,0 @@
-(assume a2 (not (forall ((?v0 B$) (?v1 B$)) (=> (and (or (less_eq$ zero$ ?v0) (less_eq$ ?v0 zero$)) (or (less_eq$ zero$ ?v1) (less_eq$ ?v1 zero$))) (= (abs$ (times$ ?v0 ?v1)) (times$ (abs$ ?v0) (abs$ ?v1)))))))
-(assume a0 (forall ((?v0 B$) (?v1 B$)) (=> (and (or (less_eq$ zero$ ?v0) (less_eq$ ?v0 zero$)) (or (less_eq$ zero$ ?v1) (less_eq$ ?v1 zero$))) (= (abs$ (times$ ?v0 ?v1)) (times$ (abs$ ?v0) (abs$ ?v1))))))
-(step t3 (cl) :rule th_resolution :premises (a2 a0))

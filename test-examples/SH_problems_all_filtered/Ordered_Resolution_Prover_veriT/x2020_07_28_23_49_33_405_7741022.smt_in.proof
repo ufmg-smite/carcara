@@ -1,3 +1,0 @@
-(assume a2 (forall ((?v0 A_literal_multiset$)) (=> (member$ ?v0 (liminf_llist$ (lmap$ uu$ sts$))) (is_ground_cls$ subst_atm$ ?v0))))
-(assume a1 (not (forall ((?v0 A_literal_multiset$)) (=> (member$ ?v0 (liminf_llist$ (lmap$ uu$ sts$))) (is_ground_cls$ subst_atm$ ?v0)))))
-(step t3 (cl) :rule th_resolution :premises (a2 a1))

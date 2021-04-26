@@ -1,5 +1,0 @@
-(assume a0 (not (p$ ma$)))
-(assume a2 (p$ fmempty$))
-(assume a3 (= ma$ fmempty$))
-(step t4 (cl (not (= ma$ fmempty$)) (not (p$ fmempty$)) (p$ ma$)) :rule eq_congruent_pred)
-(step t5 (cl) :rule resolution :premises (t4 a0 a2 a3))

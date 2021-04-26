@@ -1,7 +1,0 @@
-(assume a0 (not (not (= n$ zero$))))
-(step t2 (cl (not (not (not (= n$ zero$)))) (= n$ zero$)) :rule not_not)
-(step t3 (cl (= n$ zero$)) :rule th_resolution :premises (t2 a0))
-(assume a2 (not (= zero$ n_twin$)))
-(assume a4 (= n$ n_twin$))
-(step t6 (cl (not (= n$ zero$)) (not (= n$ n_twin$)) (= zero$ n_twin$)) :rule eq_transitive)
-(step t7 (cl) :rule resolution :premises (t6 t3 a2 a4))

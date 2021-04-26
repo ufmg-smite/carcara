@@ -1,3 +1,0 @@
-(assume a1 (<= (of_nat$ (power$ p$ (plus$ i$ k$))) x$))
-(assume a0 (not (<= (of_nat$ (power$ p$ (plus$ i$ k$))) x$)))
-(step t3 (cl) :rule th_resolution :premises (a1 a0))

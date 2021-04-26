@@ -1,8 +1,0 @@
-(assume h1 (= a (f b c)))
-(assume h2 (not (= a (f d e))))
-(assume h3 (= b d))
-(assume h4 (= c e))
-(step t5 (cl (not (= a (f b c))) (not (= (f b c) (f d e))) (= a (f d e))) :rule eq_transitive)
-(step t6 (cl (not (= b d)) (not (= c e)) (= (f b c) (f d e))) :rule eq_congruent)
-(step t7 (cl (not (= a (f b c))) (= a (f d e)) (not (= b d)) (not (= c e))) :rule th_resolution :premises (t5 t6))
-(step t8 (cl) :rule resolution :premises (t7 h1 h2 h3 h4))

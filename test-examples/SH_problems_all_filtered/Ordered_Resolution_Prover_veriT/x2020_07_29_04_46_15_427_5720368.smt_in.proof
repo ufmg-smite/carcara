@@ -1,7 +1,0 @@
-(assume a0 (not (less_eq$ (fun_app$ atms_of$ (sum_mset$ (mset$ cs$))) (sup$ (image$ atms_of$ (set$ cAs$))))))
-(assume a1 (less_eq$ (fun_app$ atms_of$ (sum_mset$ (mset$ cs$))) (fun_app$ atms_of$ (sum_mset$ (mset$ cAs$)))))
-(assume a2 (= (sup$ (image$ atms_of$ (set$ cAs$))) (fun_app$ atms_of$ (sum_mset$ (mset$ cAs$)))))
-(step t4 (cl (not (= (fun_app$ atms_of$ (sum_mset$ (mset$ cs$))) (fun_app$ atms_of$ (sum_mset$ (mset$ cs$))))) (not (= (sup$ (image$ atms_of$ (set$ cAs$))) (fun_app$ atms_of$ (sum_mset$ (mset$ cAs$))))) (not (less_eq$ (fun_app$ atms_of$ (sum_mset$ (mset$ cs$))) (fun_app$ atms_of$ (sum_mset$ (mset$ cAs$))))) (less_eq$ (fun_app$ atms_of$ (sum_mset$ (mset$ cs$))) (sup$ (image$ atms_of$ (set$ cAs$))))) :rule eq_congruent_pred)
-(step t5 (cl (= (fun_app$ atms_of$ (sum_mset$ (mset$ cs$))) (fun_app$ atms_of$ (sum_mset$ (mset$ cs$))))) :rule eq_reflexive)
-(step t6 (cl (not (= (sup$ (image$ atms_of$ (set$ cAs$))) (fun_app$ atms_of$ (sum_mset$ (mset$ cAs$))))) (not (less_eq$ (fun_app$ atms_of$ (sum_mset$ (mset$ cs$))) (fun_app$ atms_of$ (sum_mset$ (mset$ cAs$))))) (less_eq$ (fun_app$ atms_of$ (sum_mset$ (mset$ cs$))) (sup$ (image$ atms_of$ (set$ cAs$))))) :rule th_resolution :premises (t4 t5))
-(step t7 (cl) :rule resolution :premises (t6 a0 a1 a2))

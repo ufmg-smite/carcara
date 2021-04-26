@@ -1,7 +1,0 @@
-(assume a0 (not (member$ e$ (n_of_state$ (lnth$ sts$ j$)))))
-(assume a1 (= (n_of_state$ (lnth$ sts$ j$)) (image$ concl_of$ (inferences_between$ (ord_FO_Gamma$ subst_atm$ renamings_apart$ mgu$ less_atm$ s$) (q_of_state$ (lnth$ sts$ (minus$ j$ one$))) c$))))
-(assume a2 (member$ e$ (image$ concl_of$ (inferences_between$ (ord_FO_Gamma$ subst_atm$ renamings_apart$ mgu$ less_atm$ s$) (q_of_state$ (lnth$ sts$ (minus$ j$ one$))) c$))))
-(step t4 (cl (not (= e$ e$)) (not (= (n_of_state$ (lnth$ sts$ j$)) (image$ concl_of$ (inferences_between$ (ord_FO_Gamma$ subst_atm$ renamings_apart$ mgu$ less_atm$ s$) (q_of_state$ (lnth$ sts$ (minus$ j$ one$))) c$)))) (not (member$ e$ (image$ concl_of$ (inferences_between$ (ord_FO_Gamma$ subst_atm$ renamings_apart$ mgu$ less_atm$ s$) (q_of_state$ (lnth$ sts$ (minus$ j$ one$))) c$)))) (member$ e$ (n_of_state$ (lnth$ sts$ j$)))) :rule eq_congruent_pred)
-(step t5 (cl (= e$ e$)) :rule eq_reflexive)
-(step t6 (cl (not (= (n_of_state$ (lnth$ sts$ j$)) (image$ concl_of$ (inferences_between$ (ord_FO_Gamma$ subst_atm$ renamings_apart$ mgu$ less_atm$ s$) (q_of_state$ (lnth$ sts$ (minus$ j$ one$))) c$)))) (not (member$ e$ (image$ concl_of$ (inferences_between$ (ord_FO_Gamma$ subst_atm$ renamings_apart$ mgu$ less_atm$ s$) (q_of_state$ (lnth$ sts$ (minus$ j$ one$))) c$)))) (member$ e$ (n_of_state$ (lnth$ sts$ j$)))) :rule th_resolution :premises (t4 t5))
-(step t7 (cl) :rule resolution :premises (t6 a0 a1 a2))

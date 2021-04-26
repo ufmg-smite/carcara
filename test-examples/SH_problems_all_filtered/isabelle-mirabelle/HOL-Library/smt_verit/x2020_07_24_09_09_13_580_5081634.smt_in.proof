@@ -1,6 +1,0 @@
-(assume a0 (not (p$ (class$ (pick$ (class$ a$))) (class$a (pick$a (class$a b$))))))
-(assume a1 (p$ (class$ a$) (class$a b$)))
-(assume a2 (= (class$ a$) (class$ (pick$ (class$ a$)))))
-(assume a3 (= (class$a b$) (class$a (pick$a (class$a b$)))))
-(step t5 (cl (not (= (class$ a$) (class$ (pick$ (class$ a$))))) (not (= (class$a b$) (class$a (pick$a (class$a b$))))) (not (p$ (class$ a$) (class$a b$))) (p$ (class$ (pick$ (class$ a$))) (class$a (pick$a (class$a b$))))) :rule eq_congruent_pred)
-(step t6 (cl) :rule resolution :premises (t5 a0 a1 a2 a3))

@@ -1,3 +1,0 @@
-(assume a4 (member$ uu$ (elt_set_plus$ uua$ (bigo$ uub$))))
-(assume a3 (not (member$ uu$ (elt_set_plus$ uua$ (bigo$ uub$)))))
-(step t3 (cl) :rule th_resolution :premises (a4 a3))

@@ -1,3 +1,0 @@
-(assume a1 (= (size$ as$) n$))
-(assume a0 (not (= (size$ as$) n$)))
-(step t3 (cl) :rule th_resolution :premises (a1 a0))

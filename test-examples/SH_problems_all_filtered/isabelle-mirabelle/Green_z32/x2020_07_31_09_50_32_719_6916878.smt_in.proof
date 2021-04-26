@@ -1,7 +1,0 @@
-(assume a2 (not (continuous_on$ (atLeastAtMost$ c$ d$) uu$)))
-(assume a4 (continuous_on$ (image$ uua$ (atLeastAtMost$ 0.0 1.0)) uu$))
-(assume a5 (= (atLeastAtMost$ c$ d$) (image$ uua$ (atLeastAtMost$ 0.0 1.0))))
-(step t4 (cl (not (= (atLeastAtMost$ c$ d$) (image$ uua$ (atLeastAtMost$ 0.0 1.0)))) (not (= uu$ uu$)) (not (continuous_on$ (image$ uua$ (atLeastAtMost$ 0.0 1.0)) uu$)) (continuous_on$ (atLeastAtMost$ c$ d$) uu$)) :rule eq_congruent_pred)
-(step t5 (cl (= uu$ uu$)) :rule eq_reflexive)
-(step t6 (cl (not (= (atLeastAtMost$ c$ d$) (image$ uua$ (atLeastAtMost$ 0.0 1.0)))) (not (continuous_on$ (image$ uua$ (atLeastAtMost$ 0.0 1.0)) uu$)) (continuous_on$ (atLeastAtMost$ c$ d$) uu$)) :rule th_resolution :premises (t4 t5))
-(step t7 (cl) :rule resolution :premises (t6 a2 a4 a5))

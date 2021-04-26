@@ -1,3 +1,0 @@
-(assume a1 (< 0.0 c$))
-(assume a0 (not (< 0.0 c$)))
-(step t3 (cl) :rule th_resolution :premises (a1 a0))

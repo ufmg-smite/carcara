@@ -1,3 +1,0 @@
-(assume a5 (not (eventually$ uua$ (ae_filter$ lborel$a))))
-(assume a3 (eventually$ uua$ (ae_filter$ lborel$a)))
-(step t3 (cl) :rule th_resolution :premises (a5 a3))

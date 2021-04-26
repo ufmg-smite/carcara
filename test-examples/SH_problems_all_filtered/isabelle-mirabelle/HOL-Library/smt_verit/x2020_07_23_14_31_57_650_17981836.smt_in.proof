@@ -1,3 +1,0 @@
-(assume a3 (member$ (minus$ f$ g$) (bigo$ h$)))
-(assume a0 (not (member$ (minus$ f$ g$) (bigo$ h$))))
-(step t3 (cl) :rule th_resolution :premises (a3 a0))

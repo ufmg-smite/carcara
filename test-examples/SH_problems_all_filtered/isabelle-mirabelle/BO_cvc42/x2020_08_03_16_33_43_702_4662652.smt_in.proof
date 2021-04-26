@@ -1,7 +1,0 @@
-(assume a0 (not (less$ zero$ delta$)))
-(assume a1 (= delta$ epsilon$))
-(assume a2 (less$ zero$ epsilon$))
-(step t4 (cl (not (= zero$ zero$)) (not (= delta$ epsilon$)) (not (less$ zero$ epsilon$)) (less$ zero$ delta$)) :rule eq_congruent_pred)
-(step t5 (cl (= zero$ zero$)) :rule eq_reflexive)
-(step t6 (cl (not (= delta$ epsilon$)) (not (less$ zero$ epsilon$)) (less$ zero$ delta$)) :rule th_resolution :premises (t4 t5))
-(step t7 (cl) :rule resolution :premises (t6 a0 a1 a2))

@@ -1,8 +1,0 @@
-(assume a0 (not (member$ c$ (lnth$ ns$ k$))))
-(assume a1 (=> (and (less_eq$ i$ k$) (less$ (enat$ k$) (llength$ ns$))) (member$ c$ (lnth$ ns$ k$))))
-(assume a2 (less_eq$ i$ k$))
-(assume a3 (less$ (enat$ k$) (llength$ ns$)))
-(step t5 (cl (and (less_eq$ i$ k$) (less$ (enat$ k$) (llength$ ns$))) (not (less_eq$ i$ k$)) (not (less$ (enat$ k$) (llength$ ns$)))) :rule and_neg)
-(step t6 (cl (not (and (less_eq$ i$ k$) (less$ (enat$ k$) (llength$ ns$)))) (member$ c$ (lnth$ ns$ k$))) :rule implies :premises (a1))
-(step t7 (cl (not (and (less_eq$ i$ k$) (less$ (enat$ k$) (llength$ ns$))))) :rule resolution :premises (t6 a0))
-(step t8 (cl) :rule resolution :premises (t5 t7 a3 a2))

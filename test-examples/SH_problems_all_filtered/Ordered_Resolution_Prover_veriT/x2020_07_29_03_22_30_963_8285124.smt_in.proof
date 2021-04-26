@@ -1,3 +1,0 @@
-(assume a2 (forall ((?v0 S$)) (=> (member$ ?v0 (set$ eta_s0$)) (is_ground_subst$ subst_atm$ ?v0))))
-(assume a0 (not (forall ((?v0 S$)) (=> (member$ ?v0 (set$ eta_s0$)) (is_ground_subst$ subst_atm$ ?v0)))))
-(step t3 (cl) :rule th_resolution :premises (a2 a0))

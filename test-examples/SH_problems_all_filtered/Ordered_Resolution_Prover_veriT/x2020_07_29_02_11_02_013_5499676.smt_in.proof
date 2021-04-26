@@ -1,4 +1,0 @@
-(assume a1 (not (= (map$ uu$ (map$a neg$ as$)) (map$a neg$ as$a))))
-(assume a2 (and (= (map$ uu$ (map$a neg$ as$)) (map$a neg$ as$a)) (= (mset$ (map$a neg$ as$)) sda$)))
-(step t3 (cl (= (map$ uu$ (map$a neg$ as$)) (map$a neg$ as$a))) :rule and :premises (a2))
-(step t4 (cl) :rule resolution :premises (t3 a1))

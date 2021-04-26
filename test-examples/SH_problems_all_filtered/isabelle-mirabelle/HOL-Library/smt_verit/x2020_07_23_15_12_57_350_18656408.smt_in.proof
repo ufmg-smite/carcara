@@ -1,3 +1,0 @@
-(assume a4 (less_eq$ no$ n$))
-(assume a0 (not (less_eq$ no$ n$)))
-(step t3 (cl) :rule th_resolution :premises (a4 a0))

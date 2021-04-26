@@ -1,5 +1,0 @@
-(assume a0 (not (true_cls$ i$ (subst_cls$ subst_atm$ e$ eta$))))
-(assume a1 (is_ground_subst$ subst_atm$ eta$))
-(assume a2 (=> (is_ground_subst$ subst_atm$ eta$) (true_cls$ i$ (subst_cls$ subst_atm$ e$ eta$))))
-(step t4 (cl (not (is_ground_subst$ subst_atm$ eta$)) (true_cls$ i$ (subst_cls$ subst_atm$ e$ eta$))) :rule implies :premises (a2))
-(step t5 (cl) :rule resolution :premises (t4 a0 a1))

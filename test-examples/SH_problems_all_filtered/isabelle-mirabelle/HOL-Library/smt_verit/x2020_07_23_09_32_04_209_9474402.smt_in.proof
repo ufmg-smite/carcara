@@ -1,5 +1,0 @@
-(assume a1 (not (= c$ zero$)))
-(assume a0 (not (not (= c$ zero$))))
-(step t3 (cl (not (not (not (= c$ zero$)))) (= c$ zero$)) :rule not_not)
-(step t4 (cl (= c$ zero$)) :rule th_resolution :premises (t3 a0))
-(step t5 (cl) :rule th_resolution :premises (a1 t4))

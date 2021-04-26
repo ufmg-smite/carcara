@@ -1,3 +1,0 @@
-(assume a1 (= s$ r$))
-(assume a0 (not (= s$ r$)))
-(step t3 (cl) :rule th_resolution :premises (a1 a0))

@@ -1,5 +1,0 @@
-(assume a0 (not (= a$ (class$ (pick$ a$)))))
-(assume a1 (= (class$ (pick$ a$)) (class$ a$a)))
-(assume a2 (= a$ (class$ a$a)))
-(step t4 (cl (not (= a$ (class$ a$a))) (not (= (class$ (pick$ a$)) (class$ a$a))) (= a$ (class$ (pick$ a$)))) :rule eq_transitive)
-(step t5 (cl) :rule resolution :premises (t4 a0 a1 a2))

@@ -1,3 +1,0 @@
-(assume a2 (eqv$ x$ y$))
-(assume a1 (not (eqv$ x$ y$)))
-(step t3 (cl) :rule th_resolution :premises (a2 a1))

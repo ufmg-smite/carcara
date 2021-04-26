@@ -1,6 +1,0 @@
-(assume a1 (not (member$ zero$ (q_of_state$ (liminf_state$ sts$)))))
-(assume a2 (=> (member$ zero$ (liminf_llist$ (lmap$ uu$ sts$))) (member$ zero$ (q_of_state$ (liminf_state$ sts$)))))
-(assume a3 (member$ zero$ (liminf_llist$ (lmap$ uu$ sts$))))
-(step t4 (cl (not (member$ zero$ (liminf_llist$ (lmap$ uu$ sts$)))) (member$ zero$ (q_of_state$ (liminf_state$ sts$)))) :rule implies :premises (a2))
-(step t5 (cl (not (member$ zero$ (liminf_llist$ (lmap$ uu$ sts$))))) :rule resolution :premises (t4 a1))
-(step t6 (cl) :rule resolution :premises (a3 t5))

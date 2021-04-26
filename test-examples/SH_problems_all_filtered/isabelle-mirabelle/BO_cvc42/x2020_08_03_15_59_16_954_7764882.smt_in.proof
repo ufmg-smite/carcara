@@ -1,3 +1,0 @@
-(assume a1 (forall ((?v0 S$)) (=> (member$ ?v0 (ground_heads$ ground_heads_var$ (head$ (subst$ rho$ ta$)))) (fun_app$ (fun_app$a (fun_app$b (fun_app$c extf$ ?v0) (gt$ ground_heads_var$ gt_sym$ delta$ extf$ arity_sym$ wt_sym$ coef_sym$)) (args$ (subst$ rho$ ta$))) (args$ (subst$ rho$ sa$))))))
-(assume a0 (not (forall ((?v0 S$)) (=> (member$ ?v0 (ground_heads$ ground_heads_var$ (head$ (subst$ rho$ ta$)))) (fun_app$ (fun_app$a (fun_app$b (fun_app$c extf$ ?v0) (gt$ ground_heads_var$ gt_sym$ delta$ extf$ arity_sym$ wt_sym$ coef_sym$)) (args$ (subst$ rho$ ta$))) (args$ (subst$ rho$ sa$)))))))
-(step t3 (cl) :rule th_resolution :premises (a1 a0))

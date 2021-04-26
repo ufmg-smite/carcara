@@ -1,3 +1,0 @@
-(assume a1 (or (= (subst_cls$ subst_atm$ d$ sigma$) c$) (subset_mset$ (subst_cls$ subst_atm$ d$ sigma$) c$)))
-(assume a0 (not (or (= (subst_cls$ subst_atm$ d$ sigma$) c$) (subset_mset$ (subst_cls$ subst_atm$ d$ sigma$) c$))))
-(step t3 (cl) :rule th_resolution :premises (a1 a0))

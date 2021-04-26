@@ -1,3 +1,0 @@
-(assume a30 (has_vector_derivative$ uu$ (scaleR$i d$ (pair$i zero$c one$)) (at_within$ x$ top$)))
-(assume a20 (not (has_vector_derivative$ uu$ (scaleR$i d$ (pair$i zero$c one$)) (at_within$ x$ top$))))
-(step t3 (cl) :rule th_resolution :premises (a30 a20))

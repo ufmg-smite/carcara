@@ -1,3 +1,0 @@
-(assume a4 (subseteq_mset$ (sum_mset$ (mset$ cs$)) (sum_mset$ (mset$ cAs$))))
-(assume a0 (not (subseteq_mset$ (sum_mset$ (mset$ cs$)) (sum_mset$ (mset$ cAs$)))))
-(step t3 (cl) :rule th_resolution :premises (a4 a0))

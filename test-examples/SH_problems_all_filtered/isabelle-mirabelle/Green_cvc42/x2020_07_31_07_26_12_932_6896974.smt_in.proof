@@ -1,3 +1,0 @@
-(assume a1 (common_sudiv_exists$ (two_chain_horizontal_boundary$ c$) (two_chain_horizontal_boundary$ c$)))
-(assume a0 (not (common_sudiv_exists$ (two_chain_horizontal_boundary$ c$) (two_chain_horizontal_boundary$ c$))))
-(step t3 (cl) :rule th_resolution :premises (a1 a0))

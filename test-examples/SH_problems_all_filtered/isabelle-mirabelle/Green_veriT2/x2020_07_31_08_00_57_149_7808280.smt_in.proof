@@ -1,3 +1,0 @@
-(assume a35 (finite$ (collect$ uu$)))
-(assume a28 (not (finite$ (collect$ uu$))))
-(step t3 (cl) :rule th_resolution :premises (a35 a28))

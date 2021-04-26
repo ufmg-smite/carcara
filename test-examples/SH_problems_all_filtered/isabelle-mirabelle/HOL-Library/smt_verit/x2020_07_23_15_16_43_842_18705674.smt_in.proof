@@ -1,3 +1,0 @@
-(assume a3 (filterlim$ uu$ (nhds$ 0.0) at_top$))
-(assume a1 (not (filterlim$ uu$ (nhds$ 0.0) at_top$)))
-(step t3 (cl) :rule th_resolution :premises (a3 a1))

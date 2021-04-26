@@ -1,7 +1,0 @@
-(assume a0 (not (less$ zero$ (of_nat$ delta$))))
-(assume a1 (less$ zero$ (of_nat$ epsilon$)))
-(assume a2 (= (of_nat$ delta$) (of_nat$ epsilon$)))
-(step t4 (cl (not (= zero$ zero$)) (not (= (of_nat$ delta$) (of_nat$ epsilon$))) (not (less$ zero$ (of_nat$ epsilon$))) (less$ zero$ (of_nat$ delta$))) :rule eq_congruent_pred)
-(step t5 (cl (= zero$ zero$)) :rule eq_reflexive)
-(step t6 (cl (not (= (of_nat$ delta$) (of_nat$ epsilon$))) (not (less$ zero$ (of_nat$ epsilon$))) (less$ zero$ (of_nat$ delta$))) :rule th_resolution :premises (t4 t5))
-(step t7 (cl) :rule resolution :premises (t6 a0 a1 a2))

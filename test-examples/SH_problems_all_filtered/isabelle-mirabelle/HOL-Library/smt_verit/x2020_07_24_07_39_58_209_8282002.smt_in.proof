@@ -1,3 +1,0 @@
-(assume a1 (p$ empty$))
-(assume a0 (not (p$ empty$)))
-(step t3 (cl) :rule th_resolution :premises (a1 a0))

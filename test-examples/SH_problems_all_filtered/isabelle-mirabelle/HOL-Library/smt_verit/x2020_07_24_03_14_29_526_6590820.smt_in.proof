@@ -1,4 +1,0 @@
-(assume a0 (not (equivp$ r$)))
-(assume a1 (and (equivp$ r$) (rel_fun$ (rel$ r$) r$ eval$ eval$)))
-(step t3 (cl (equivp$ r$)) :rule and :premises (a1))
-(step t4 (cl) :rule resolution :premises (t3 a0))

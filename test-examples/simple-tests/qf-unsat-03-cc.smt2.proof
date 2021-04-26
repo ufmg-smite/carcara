@@ -1,7 +1,0 @@
-(assume h1 (= a b))
-(assume h2 (or p (not (= (f a) (f b)))))
-(assume h3 (not p))
-(step t4 (cl p (not (= (f a) (f b)))) :rule or :premises (h2))
-(step t5 (cl (not (= (f a) (f b)))) :rule resolution :premises (t4 h3))
-(step t6 (cl (not (= a b)) (= (f a) (f b))) :rule eq_congruent)
-(step t7 (cl) :rule resolution :premises (t6 h1 t5))
