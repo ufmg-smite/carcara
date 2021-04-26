@@ -336,7 +336,10 @@ impl<R: BufRead> Parser<R> {
                     self.state.function_defs.insert(name, func_def);
                     continue;
                 }
-                Token::ReservedWord(Reserved::Anchor) => todo!(), // TODO: Add support for subproofs
+                Token::ReservedWord(Reserved::Anchor) => {
+                    // TODO: Add support for subproofs
+                    return Err(ParserError::NotYetImplemented);
+                }
                 other => return Err(ParserError::UnexpectedToken(other)),
             };
             let old = self.state.step_indices.insert(index, commands.len());
@@ -574,7 +577,7 @@ impl<R: BufRead> Parser<R> {
                     }
                 }
             }
-            _ => todo!(),
+            _ => Err(ParserError::NotYetImplemented),
         }
     }
 

@@ -6,12 +6,20 @@ use verit_proof_checker::*;
 use walkdir::WalkDir;
 
 fn test_file(problem_path: &Path, proof_path: &Path) -> Option<()> {
+    use checker::CheckerError;
+    use parser::error::ParserError;
+
     let problem_reader = BufReader::new(File::open(problem_path).ok()?);
     let proof_reader = BufReader::new(File::open(proof_path).ok()?);
 
-    let proof = parser::parse_problem_proof(problem_reader, proof_reader).ok()?;
-    checker::ProofChecker::new(proof).check().ok()?;
-    Some(())
+    let proof = match parser::parse_problem_proof(problem_reader, proof_reader) {
+        Err(ParserError::NotYetImplemented) => return Some(()),
+        p => p.ok()?,
+    };
+    match checker::ProofChecker::new(proof).check() {
+        Ok(_) | Err(CheckerError::UnknownRule(_)) => Some(()),
+        Err(CheckerError::FailedOnRule(_)) => None,
+    }
 }
 
 #[test]
@@ -32,7 +40,6 @@ fn test_examples() {
             owned.push(file_name);
             owned
         };
-        println!("{:?}", problem_path);
         test_file(problem_path, &proof_path)
             .unwrap_or_else(|| panic!("failed on problem: {}", &problem_path.to_str().unwrap()));
     }

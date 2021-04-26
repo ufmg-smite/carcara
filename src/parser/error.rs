@@ -24,6 +24,7 @@ pub enum ParserError {
     UndefinedStepIndex(String),
     WrongNumberOfArgs(usize, usize),
     RepeatedStepIndex,
+    NotYetImplemented,
 }
 
 impl From<io::Error> for ParserError {
