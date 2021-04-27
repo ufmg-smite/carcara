@@ -121,8 +121,15 @@ impl ParserState {
                 ErrorKind::assert_num_of_args_range(&args, 2..)?;
                 SortError::assert_all_eq(&sorts)?;
             }
-            Operator::Or | Operator::And | Operator::Implies => {
+            Operator::Implies => {
                 ErrorKind::assert_num_of_args_range(&args, 2..)?;
+                for s in sorts {
+                    SortError::assert_eq(Term::BOOL_SORT, &s)?;
+                }
+            }
+            Operator::Or | Operator::And => {
+                // The "or" and "and" operators can be called with only one argument
+                ErrorKind::assert_num_of_args_range(&args, 1..)?;
                 for s in sorts {
                     SortError::assert_eq(Term::BOOL_SORT, &s)?;
                 }

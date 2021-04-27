@@ -184,6 +184,10 @@ fn test_logic_ops() {
             ),
         ),
         (
+            "(and true)",
+            Term::Op(Operator::And, vec![ByRefRc::new(terminal!(bool true))]),
+        ),
+        (
             "(or true (and false false))",
             Term::Op(
                 Operator::Or,
@@ -259,10 +263,6 @@ fn test_logic_ops() {
     assert!(matches!(
         parse_term_err("(not 1 2 3)"),
         ParserError(ErrorKind::WrongNumberOfArgs(1, 3), _),
-    ));
-    assert!(matches!(
-        parse_term_err("(or true)"),
-        ParserError(ErrorKind::WrongNumberOfArgs(2, 1), _),
     ));
     assert!(matches!(
         parse_term_err("(distinct 2 1.0)"),
