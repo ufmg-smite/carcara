@@ -7,13 +7,13 @@ use walkdir::WalkDir;
 
 fn test_file(problem_path: &Path, proof_path: &Path) -> Option<()> {
     use checker::CheckerError;
-    use parser::error::ParserError;
+    use parser::error::{ErrorKind, ParserError};
 
     let problem_reader = BufReader::new(File::open(problem_path).ok()?);
     let proof_reader = BufReader::new(File::open(proof_path).ok()?);
 
     let proof = match parser::parse_problem_proof(problem_reader, proof_reader) {
-        Err(ParserError::NotYetImplemented) => return Some(()),
+        Err(ParserError(ErrorKind::NotYetImplemented, _)) => return Some(()),
         p => p.ok()?,
     };
     match checker::ProofChecker::new(proof).check() {

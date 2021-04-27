@@ -9,8 +9,8 @@ use std::io::{self, BufReader};
 
 fn print_used_rules(file_path: &str) -> ParserResult<()> {
     use parser::lexer::{Lexer, Token};
-    let file = File::open(file_path)?;
-    let mut lex = Lexer::new(BufReader::new(file))?;
+    let file = File::open(file_path).map_err(|err| (err, (0, 0)))?;
+    let mut lex = Lexer::new(BufReader::new(file)).map_err(|err| (err, (0, 0)))?;
     loop {
         let tk = lex.next_token()?;
         match tk {
@@ -38,9 +38,9 @@ fn main() -> ParserResult<()> {
             println!("{}", ProofChecker::get_rule(rule).is_some());
         }
         file_path => {
-            let problem = BufReader::new(File::open(file_path)?);
+            let problem = BufReader::new(File::open(file_path).map_err(|err| (err, (0, 0)))?);
             let proof = if let Some(file_path) = args.next() {
-                let file = File::open(file_path)?;
+                let file = File::open(file_path).map_err(|err| (err, (0, 0)))?;
                 parse_problem_proof(problem, BufReader::new(file))?
             } else {
                 let stdin = io::stdin();

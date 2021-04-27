@@ -3,14 +3,23 @@ use std::ops::RangeFrom;
 
 use crate::ast::*;
 
-use super::lexer::Token;
+use super::lexer::{Position, Token};
 
 /// A `Result` type alias for parser errors.
 pub type ParserResult<T> = Result<T, ParserError>;
 
+#[derive(Debug, PartialEq)]
+pub struct ParserError(pub ErrorKind, pub Position);
+
+impl From<(io::Error, Position)> for ParserError {
+    fn from((err, pos): (io::Error, Position)) -> Self {
+        ParserError(err.into(), pos)
+    }
+}
+
 /// The error type for the parser and lexer.
 #[derive(Debug, PartialEq)]
-pub enum ParserError {
+pub enum ErrorKind {
     Io(ParserIoError),
     UnexpectedChar(Option<char>),
     LeadingZero(String),
@@ -27,38 +36,38 @@ pub enum ParserError {
     NotYetImplemented,
 }
 
-impl From<io::Error> for ParserError {
-    fn from(e: io::Error) -> Self {
-        ParserError::Io(ParserIoError(e))
+impl From<io::Error> for ErrorKind {
+    fn from(err: io::Error) -> Self {
+        ErrorKind::Io(ParserIoError(err))
     }
 }
 
-impl From<SortError> for ParserError {
-    fn from(e: SortError) -> Self {
-        ParserError::SortError(e)
+impl From<SortError> for ErrorKind {
+    fn from(err: SortError) -> Self {
+        ErrorKind::SortError(err)
     }
 }
 
-impl ParserError {
+impl ErrorKind {
     /// Returns an error if the length of `sequence` is not `expected`.
-    pub fn assert_num_of_args<T>(sequence: &[T], expected: usize) -> ParserResult<()> {
+    pub fn assert_num_of_args<T>(sequence: &[T], expected: usize) -> Result<(), Self> {
         let got = sequence.len();
         if got == expected {
             Ok(())
         } else {
-            Err(ParserError::WrongNumberOfArgs(expected, got))
+            Err(ErrorKind::WrongNumberOfArgs(expected, got))
         }
     }
 
     pub fn assert_num_of_args_range<T>(
         sequence: &[T],
         expected: RangeFrom<usize>,
-    ) -> ParserResult<()> {
+    ) -> Result<(), Self> {
         let got = sequence.len();
         if expected.contains(&got) {
             Ok(())
         } else {
-            Err(ParserError::WrongNumberOfArgs(expected.start, got))
+            Err(ErrorKind::WrongNumberOfArgs(expected.start, got))
         }
     }
 }

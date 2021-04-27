@@ -2,7 +2,7 @@ use num_rational::Ratio;
 use std::io::{self, BufRead};
 use std::str::FromStr;
 
-use super::ParserError;
+use super::error::*;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Token {
@@ -61,11 +61,13 @@ impl FromStr for Reserved {
     }
 }
 
+pub type Position = (usize, usize);
+
 pub struct Lexer<R> {
     input: R,
     current_line: Option<std::vec::IntoIter<char>>,
     current_char: Option<char>,
-    position: (usize, usize),
+    pub position: Position,
 }
 
 impl<R: BufRead> Lexer<R> {
@@ -91,7 +93,7 @@ impl<R: BufRead> Lexer<R> {
         }
     }
 
-    fn next_char(&mut self) -> Result<Option<char>, io::Error> {
+    fn next_char(&mut self) -> Result<Option<char>, (io::Error, Position)> {
         // If there are no more characters in the current line, go to the next line
         if let Some(line) = &self.current_line {
             if line.as_slice().is_empty() {
@@ -109,9 +111,12 @@ impl<R: BufRead> Lexer<R> {
         Ok(old)
     }
 
-    fn next_line(&mut self) -> Result<(), io::Error> {
+    fn next_line(&mut self) -> Result<(), (io::Error, Position)> {
         let mut buf = String::new();
-        let read = self.input.read_line(&mut buf)?;
+        let read = self
+            .input
+            .read_line(&mut buf)
+            .map_err(|io_err| (io_err, self.position))?;
         if read == 0 {
             self.current_line = None;
         } else {
@@ -123,7 +128,10 @@ impl<R: BufRead> Lexer<R> {
         Ok(())
     }
 
-    fn read_chars_while<P: Fn(char) -> bool>(&mut self, predicate: P) -> Result<String, io::Error> {
+    fn read_chars_while<P>(&mut self, predicate: P) -> Result<String, (io::Error, Position)>
+    where
+        P: Fn(char) -> bool,
+    {
         let mut result = String::new();
         while let Some(c) = self.current_char {
             if !predicate(c) {
@@ -135,7 +143,7 @@ impl<R: BufRead> Lexer<R> {
         Ok(result)
     }
 
-    fn consume_whitespace(&mut self) -> Result<(), io::Error> {
+    fn consume_whitespace(&mut self) -> Result<(), (io::Error, Position)> {
         self.read_chars_while(char::is_whitespace)?;
         while self.current_char == Some(';') {
             self.next_line()?;
@@ -145,7 +153,7 @@ impl<R: BufRead> Lexer<R> {
         Ok(())
     }
 
-    pub fn next_token(&mut self) -> Result<Token, ParserError> {
+    pub fn next_token(&mut self) -> ParserResult<Token> {
         self.consume_whitespace()?;
         match self.current_char {
             Some('(') => {
@@ -163,7 +171,7 @@ impl<R: BufRead> Lexer<R> {
             Some(c) if c.is_ascii_digit() => self.read_number(),
             Some(c) if Lexer::is_symbol_character(c) => self.read_simple_symbol(),
             None => Ok(Token::Eof),
-            other => Err(ParserError::UnexpectedChar(other)),
+            other => Err(ParserError(ErrorKind::UnexpectedChar(other), self.position)),
         }
     }
 
@@ -180,8 +188,11 @@ impl<R: BufRead> Lexer<R> {
         self.next_char()?; // Consume '|'
         let symbol = self.read_chars_while(|c| c != '|' && c != '\\')?;
         match self.current_char {
-            Some('\\') => Err(ParserError::BackslashInQuotedSymbol),
-            None => Err(ParserError::EofInQuotedSymbol),
+            Some('\\') => Err(ParserError(
+                ErrorKind::BackslashInQuotedSymbol,
+                self.position,
+            )),
+            None => Err(ParserError(ErrorKind::EofInQuotedSymbol, self.position)),
             Some('|') => {
                 self.next_char()?;
                 Ok(Token::Symbol(symbol))
@@ -201,7 +212,7 @@ impl<R: BufRead> Lexer<R> {
         let base = match self.next_char()? {
             Some('b') => 2,
             Some('x') => 16,
-            other => return Err(ParserError::UnexpectedChar(other)),
+            other => return Err(ParserError(ErrorKind::UnexpectedChar(other), self.position)),
         };
         let s = self.read_chars_while(|c| c.is_digit(base))?;
         Ok(Token::Numeral(u64::from_str_radix(&s, base).unwrap()))
@@ -211,7 +222,7 @@ impl<R: BufRead> Lexer<R> {
         let int_part = self.read_chars_while(|c| c.is_ascii_digit())?;
 
         if int_part.len() > 1 && int_part.starts_with('0') {
-            return Err(ParserError::LeadingZero(int_part));
+            return Err(ParserError(ErrorKind::LeadingZero(int_part), self.position));
         }
 
         if self.current_char == Some('.') {
@@ -232,7 +243,7 @@ impl<R: BufRead> Lexer<R> {
         loop {
             result += &self.read_chars_while(|c| c != '"')?;
             if self.current_char.is_none() {
-                return Err(ParserError::EofInString);
+                return Err(ParserError(ErrorKind::EofInString, self.position));
             }
             self.next_char()?; // Consume '"'
             if self.current_char == Some('"') {
@@ -261,8 +272,8 @@ impl Lexer<()> {
 mod tests {
     use super::*;
 
-    fn lex_one(input: &str) -> Result<Token, ParserError> {
-        let mut lex = Lexer::new(std::io::Cursor::new(input))?;
+    fn lex_one(input: &str) -> ParserResult<Token> {
+        let mut lex = Lexer::new(std::io::Cursor::new(input)).map_err(|err| (err, (0, 0)))?;
         lex.next_token()
     }
 
@@ -328,10 +339,13 @@ mod tests {
 
         assert!(matches!(
             lex_one("|\\|"),
-            Err(ParserError::BackslashInQuotedSymbol)
+            Err(ParserError(ErrorKind::BackslashInQuotedSymbol, _))
         ));
 
-        assert!(matches!(lex_one("|"), Err(ParserError::EofInQuotedSymbol)));
+        assert!(matches!(
+            lex_one("|"),
+            Err(ParserError(ErrorKind::EofInQuotedSymbol, _))
+        ));
     }
 
     #[test]
@@ -345,16 +359,19 @@ mod tests {
         ];
         assert_eq!(expected, lex_all(input));
 
-        assert!(matches!(lex_one("0123"), Err(ParserError::LeadingZero(_))));
+        assert!(matches!(
+            lex_one("0123"),
+            Err(ParserError(ErrorKind::LeadingZero(_), _))
+        ));
 
         assert!(matches!(
             lex_one("#o123"),
-            Err(ParserError::UnexpectedChar(Some('o'))),
+            Err(ParserError(ErrorKind::UnexpectedChar(Some('o')), _)),
         ));
 
         assert!(matches!(
             lex_one("#"),
-            Err(ParserError::UnexpectedChar(None)),
+            Err(ParserError(ErrorKind::UnexpectedChar(None), _)),
         ));
     }
 
@@ -369,7 +386,10 @@ mod tests {
         ];
         assert_eq!(expected, lex_all(input));
 
-        assert!(matches!(lex_one("\""), Err(ParserError::EofInString)));
+        assert!(matches!(
+            lex_one("\""),
+            Err(ParserError(ErrorKind::EofInString, _))
+        ));
     }
 
     #[test]

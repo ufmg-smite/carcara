@@ -91,65 +91,65 @@ impl ParserState {
     }
 
     /// Constructs and sort checks a variable term.
-    fn make_var(&mut self, iden: Identifier) -> ParserResult<Term> {
+    fn make_var(&mut self, iden: Identifier) -> Result<Term, ErrorKind> {
         let sort = self
             .sorts_symbol_table
             .get(&iden)
-            .ok_or_else(|| ParserError::UndefinedIden(iden.clone()))?;
+            .ok_or_else(|| ErrorKind::UndefinedIden(iden.clone()))?;
         Ok(Term::Terminal(Terminal::Var(iden, sort.clone())))
     }
 
     /// Constructs and sort checks an operation term.
-    fn make_op(&mut self, op: Operator, args: Vec<Term>) -> ParserResult<Term> {
+    fn make_op(&mut self, op: Operator, args: Vec<Term>) -> Result<Term, ErrorKind> {
         let sorts: Vec<_> = args.iter().map(Term::sort).collect();
         match op {
             Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => {
-                ParserError::assert_num_of_args_range(&args, 2..)?;
+                ErrorKind::assert_num_of_args_range(&args, 2..)?;
 
                 // All the arguments must have the same sort, and it must be either Int or Real
                 SortError::assert_one_of(&[Term::INT_SORT, Term::REAL_SORT], &sorts[0])?;
                 SortError::assert_all_eq(&sorts)?;
             }
             Operator::Eq | Operator::Distinct => {
-                ParserError::assert_num_of_args_range(&args, 2..)?;
+                ErrorKind::assert_num_of_args_range(&args, 2..)?;
                 SortError::assert_all_eq(&sorts)?;
             }
             Operator::Or | Operator::And | Operator::Implies => {
-                ParserError::assert_num_of_args_range(&args, 2..)?;
+                ErrorKind::assert_num_of_args_range(&args, 2..)?;
                 for s in sorts {
                     SortError::assert_eq(Term::BOOL_SORT, &s)?;
                 }
             }
             Operator::Not => {
-                ParserError::assert_num_of_args(&args, 1)?;
+                ErrorKind::assert_num_of_args(&args, 1)?;
                 SortError::assert_eq(Term::BOOL_SORT, &sorts[0])?;
             }
             Operator::Ite => {
-                ParserError::assert_num_of_args(&args, 3)?;
+                ErrorKind::assert_num_of_args(&args, 3)?;
                 SortError::assert_eq(Term::BOOL_SORT, &sorts[0])?;
                 SortError::assert_eq(&sorts[1], &sorts[2])?;
             }
-            _ => return Err(ParserError::NotYetImplemented),
+            _ => return Err(ErrorKind::NotYetImplemented),
         }
         let args = self.add_all(args);
         Ok(Term::Op(op, args))
     }
 
     /// Constructs and sort checks an application term.
-    fn make_app(&mut self, function: Term, args: Vec<Term>) -> ParserResult<Term> {
+    fn make_app(&mut self, function: Term, args: Vec<Term>) -> Result<Term, ErrorKind> {
         let sorts = {
             let function_sort = function.sort();
             if let Term::Sort(SortKind::Function, sorts) = function_sort {
                 sorts
             } else {
                 // Function does not have function sort
-                return Err(ParserError::SortError(SortError::Expected {
+                return Err(ErrorKind::SortError(SortError::Expected {
                     expected: Term::Sort(SortKind::Function, Vec::new()),
                     got: function_sort.clone(),
                 }));
             }
         };
-        ParserError::assert_num_of_args(&args, sorts.len() - 1)?;
+        ErrorKind::assert_num_of_args(&args, sorts.len() - 1)?;
         for i in 0..args.len() {
             SortError::assert_eq(sorts[i].as_ref(), &args[i].sort())?;
         }
@@ -216,7 +216,7 @@ impl<R: BufRead> Parser<R> {
     /// Constructs a new `Parser` using an existing `ParserState`. This operation can fail if there
     /// is an IO or lexer error on the first token.
     fn with_state(input: R, state: ParserState) -> ParserResult<Self> {
-        let mut lexer = Lexer::new(input)?;
+        let mut lexer = Lexer::new(input).map_err(|io_err| ParserError(io_err.into(), (0, 0)))?;
         let current_token = lexer.next_token()?;
         Ok(Parser {
             lexer,
@@ -231,13 +231,23 @@ impl<R: BufRead> Parser<R> {
         Ok(std::mem::replace(&mut self.current_token, new))
     }
 
+    /// Helper method to build a parser error with the current lexer position.
+    fn err(&self, err: ErrorKind) -> ParserError {
+        ParserError(err, self.lexer.position)
+    }
+
+    /// Helper method to build a `ErrorKind::UnexpectedToken` error.
+    fn unexpected_token(&self, got: Token) -> ParserError {
+        self.err(ErrorKind::UnexpectedToken(got))
+    }
+
     /// Consumes the current token if it equals `expected`. Returns an error otherwise.
     fn expect_token(&mut self, expected: Token) -> ParserResult<()> {
         let got = self.next_token()?;
         if got == expected {
             Ok(())
         } else {
-            Err(ParserError::UnexpectedToken(got))
+            Err(self.unexpected_token(got))
         }
     }
 
@@ -246,7 +256,7 @@ impl<R: BufRead> Parser<R> {
     fn expect_symbol(&mut self) -> ParserResult<String> {
         match self.next_token()? {
             Token::Symbol(s) => Ok(s),
-            other => Err(ParserError::UnexpectedToken(other)),
+            other => Err(self.unexpected_token(other)),
         }
     }
 
@@ -255,7 +265,7 @@ impl<R: BufRead> Parser<R> {
     fn expect_numeral(&mut self) -> ParserResult<u64> {
         match self.next_token()? {
             Token::Numeral(n) => Ok(n),
-            other => Err(ParserError::UnexpectedToken(other)),
+            other => Err(self.unexpected_token(other)),
         }
     }
 
@@ -270,7 +280,7 @@ impl<R: BufRead> Parser<R> {
             result.push(parse_func(self)?);
         }
         if non_empty && result.is_empty() {
-            Err(ParserError::EmptySequence)
+            Err(self.err(ErrorKind::EmptySequence))
         } else {
             self.next_token()?; // Consume ")" token
             Ok(result)
@@ -314,7 +324,7 @@ impl<R: BufRead> Parser<R> {
                         parens_depth += match self.next_token()? {
                             Token::OpenParen => 1,
                             Token::CloseParen => -1,
-                            Token::Eof => return Err(ParserError::UnexpectedToken(Token::Eof)),
+                            Token::Eof => return Err(self.unexpected_token(Token::Eof)),
                             _ => 0,
                         };
                     }
@@ -339,13 +349,13 @@ impl<R: BufRead> Parser<R> {
                 }
                 Token::ReservedWord(Reserved::Anchor) => {
                     // TODO: Add support for subproofs
-                    return Err(ParserError::NotYetImplemented);
+                    return Err(self.err(ErrorKind::NotYetImplemented));
                 }
-                other => return Err(ParserError::UnexpectedToken(other)),
+                other => return Err(self.unexpected_token(other)),
             };
             let old = self.state.step_indices.insert(index, commands.len());
             if old.is_some() {
-                return Err(ParserError::RepeatedStepIndex);
+                return Err(self.err(ErrorKind::RepeatedStepIndex));
             }
             commands.push(command);
         }
@@ -357,7 +367,7 @@ impl<R: BufRead> Parser<R> {
     fn parse_assume_command(&mut self) -> ParserResult<(String, ProofCommand)> {
         let index = self.expect_symbol()?;
         let term = self.parse_term()?;
-        SortError::assert_eq(Term::BOOL_SORT, &term.sort())?;
+        SortError::assert_eq(Term::BOOL_SORT, &term.sort()).map_err(|err| self.err(err.into()))?;
         let term = self.state.add_term(term);
         self.expect_token(Token::CloseParen)?;
         Ok((index, ProofCommand::Assume(term)))
@@ -384,7 +394,7 @@ impl<R: BufRead> Parser<R> {
                         .step_indices
                         .get(&index)
                         .cloned()
-                        .ok_or(ParserError::UndefinedStepIndex(index))
+                        .ok_or_else(|| self.err(ErrorKind::UndefinedStepIndex(index)))
                 })
                 .collect::<Result<_, _>>()?
         } else {
@@ -460,7 +470,7 @@ impl<R: BufRead> Parser<R> {
 
         self.expect_token(Token::CloseParen)?;
 
-        SortError::assert_eq(&return_sort, body.sort())?;
+        SortError::assert_eq(&return_sort, body.sort()).map_err(|err| self.err(err.into()))?;
         Ok((name, FunctionDef { params, body }))
     }
 
@@ -472,7 +482,8 @@ impl<R: BufRead> Parser<R> {
             .parse_sequence(Self::parse_term, false)?
             .into_iter()
             .map(|term| -> ParserResult<ByRefRc<Term>> {
-                SortError::assert_eq(Term::BOOL_SORT, &term.sort())?;
+                SortError::assert_eq(Term::BOOL_SORT, &term.sort())
+                    .map_err(|err| self.err(err.into()))?;
                 Ok(self.state.add_term(term))
             })
             .collect::<Result<_, _>>()?;
@@ -530,14 +541,16 @@ impl<R: BufRead> Parser<R> {
                     if func_def.params.is_empty() {
                         Ok(func_def.body.clone())
                     } else {
-                        Err(ParserError::WrongNumberOfArgs(func_def.params.len(), 0))
+                        Err(self.err(ErrorKind::WrongNumberOfArgs(func_def.params.len(), 0)))
                     }
                 } else {
-                    self.state.make_var(Identifier::Simple(s))
+                    self.state
+                        .make_var(Identifier::Simple(s))
+                        .map_err(|err| self.err(err))
                 }
             }
             Token::OpenParen => self.parse_application(),
-            other => Err(ParserError::UnexpectedToken(other)),
+            other => Err(self.unexpected_token(other)),
         }
     }
 
@@ -546,16 +559,20 @@ impl<R: BufRead> Parser<R> {
             Token::Symbol(s) => {
                 if let Ok(operator) = Operator::from_str(&s) {
                     let args = self.parse_sequence(Self::parse_term, true)?;
-                    self.state.make_op(operator, args)
+                    self.state
+                        .make_op(operator, args)
+                        .map_err(|err| self.err(err))
                 } else {
                     let args = self.parse_sequence(Self::parse_term, true)?;
                     if let Some(func) = self.state.function_defs.get(&s) {
                         // If there is a function definition with this function name, we sort check
                         // the arguments and apply the definition by performing a beta reduction.
 
-                        ParserError::assert_num_of_args(&args, func.params.len())?;
+                        ErrorKind::assert_num_of_args(&args, func.params.len())
+                            .map_err(|err| self.err(err))?;
                         for (arg, param) in args.iter().zip(func.params.iter()) {
-                            SortError::assert_eq(param.1.as_ref(), arg.sort())?;
+                            SortError::assert_eq(param.1.as_ref(), arg.sort())
+                                .map_err(|err| self.err(err.into()))?;
                         }
 
                         // Build a hash map of all the parameter names and the values they will
@@ -573,12 +590,15 @@ impl<R: BufRead> Parser<R> {
                         let body_clone = func.body.clone();
                         Ok(self.state.apply_substitutions(&body_clone, &substitutions))
                     } else {
-                        let func = self.state.make_var(Identifier::Simple(s))?;
-                        self.state.make_app(func, args)
+                        let func = self
+                            .state
+                            .make_var(Identifier::Simple(s))
+                            .map_err(|err| self.err(err))?;
+                        self.state.make_app(func, args).map_err(|err| self.err(err))
                     }
                 }
             }
-            _ => Err(ParserError::NotYetImplemented),
+            _ => Err(self.err(ErrorKind::NotYetImplemented)),
         }
     }
 
@@ -594,11 +614,11 @@ impl<R: BufRead> Parser<R> {
                     if let Some((_, sort)) = self.state.sort_declarations.get(other) {
                         Ok((**sort).clone())
                     } else {
-                        Err(ParserError::UndefinedIden(Identifier::Simple(other.into())))
+                        Err(self.err(ErrorKind::UndefinedIden(Identifier::Simple(other.into()))))
                     }
                 }
             },
-            other => Err(ParserError::UnexpectedToken(other)),
+            other => Err(self.unexpected_token(other)),
         }
     }
 }
