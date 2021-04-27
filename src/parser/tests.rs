@@ -132,6 +132,10 @@ fn test_arithmetic_ops() {
             ),
         ),
         (
+            "(- 5)",
+            Term::Op(Operator::Sub, vec![ByRefRc::new(terminal!(int 5))]),
+        ),
+        (
             "(- (+ 1 1) 2)",
             Term::Op(
                 Operator::Sub,

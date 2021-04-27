@@ -103,10 +103,17 @@ impl ParserState {
     fn make_op(&mut self, op: Operator, args: Vec<Term>) -> Result<Term, ErrorKind> {
         let sorts: Vec<_> = args.iter().map(Term::sort).collect();
         match op {
-            Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => {
+            Operator::Add | Operator::Mult | Operator::Div => {
                 ErrorKind::assert_num_of_args_range(&args, 2..)?;
 
                 // All the arguments must have the same sort, and it must be either Int or Real
+                SortError::assert_one_of(&[Term::INT_SORT, Term::REAL_SORT], &sorts[0])?;
+                SortError::assert_all_eq(&sorts)?;
+            }
+            Operator::Sub => {
+                // The "-" operator, in particular, can be called with only one argument, in which
+                // case it means negation instead of subtraction
+                ErrorKind::assert_num_of_args_range(&args, 1..)?;
                 SortError::assert_one_of(&[Term::INT_SORT, Term::REAL_SORT], &sorts[0])?;
                 SortError::assert_all_eq(&sorts)?;
             }
