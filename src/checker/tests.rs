@@ -894,3 +894,41 @@ fn test_bool_simplify_rule() {
         // TODO: Add tests that combine more than one transformation
     }
 }
+
+#[test]
+fn test_nary_elim_rule() {
+    test_cases! {
+        definitions = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (declare-fun s () Bool)
+            (declare-fun a () Int)
+            (declare-fun b () Int)
+            (declare-fun c () Int)
+            (declare-fun d () Int)
+        ",
+        "Chainable operators" {
+            "(step t1 (cl (= (= a b c d) (and (= a b) (= b c) (= c d)))) :rule nary_elim)": true,
+            "(step t1 (cl (= (= a b) (and (= a b)))) :rule nary_elim)": true,
+            "(step t1 (cl (= (= a b c) (and (= b c) (= a b)))) :rule nary_elim)": false,
+            "(step t1 (cl (= (= a b c d) (and (= a b) (= c d)))) :rule nary_elim)": false,
+        }
+        "Left associative operators" {
+            "(step t1 (cl (= (+ a b c d) (+ (+ (+ a b) c) d))) :rule nary_elim)": true,
+            "(step t1 (cl (= (* a b) (* a b))) :rule nary_elim)": true,
+            "(step t1 (cl (= (- a b c d) (- a (- b (- c d))))) :rule nary_elim)": false,
+            "(step t1 (cl (= (+ a b c d) (+ (+ (+ d c) b) a))) :rule nary_elim)": false,
+        }
+        "Right associative operators" {
+            "(step t1 (cl (= (=> p q r s) (=> p (=> q (=> r s))))) :rule nary_elim)": true,
+            "(step t1 (cl (= (=> p q) (=> p q))) :rule nary_elim)": true,
+            "(step t1 (cl (= (=> p q r s) (=> (=> (=> p q) r) s))) :rule nary_elim)": false,
+        }
+        "Clause term is not of the correct form" {
+            "(step t1 (cl (= (or p q r s) (or (or (or p q) r) s))) :rule nary_elim)": false,
+            "(step t1 (cl (= (- a) (- a))) :rule nary_elim)": false,
+            "(step t1 (cl (= (=> p (=> q (=> r s))) (=> p q r s))) :rule nary_elim)": false,
+        }
+    }
+}
