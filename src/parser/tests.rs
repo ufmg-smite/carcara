@@ -347,10 +347,7 @@ fn test_declare_fun() {
     );
 
     let got = parse_term_with_definitions("(declare-fun x () Real)", "x");
-    assert!(DeepEq::eq(
-        &terminal!(var "x"; ByRefRc::new(Term::REAL_SORT.clone())),
-        &got
-    ));
+    assert!(DeepEq::eq(&terminal!(var "x"; REAL_SORT), &got));
 }
 
 #[test]

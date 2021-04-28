@@ -568,50 +568,39 @@ mod rules {
 
     fn bool_simplify_once(term: &Term) -> Option<Term> {
         simplify!(term {
+            // ¬(phi_1 -> phi_2) => (phi_1 ^ ¬phi_2)
             (not (=> phi_1 phi_2)): (phi_1, phi_2) => {
-                Term::Op(
-                    Operator::And,
-                    vec![
-                        phi_1.clone(),
-                        ByRefRc::new(Term::Op(Operator::Not, vec![phi_2.clone()])),
-                    ],
-                )
+                build_term!(and {phi_1.clone()} (not {phi_2.clone()}))
             },
+
+            // ¬(phi_1 v phi_2) => (¬phi_1 ^ ¬phi_2)
             (not (or phi_1 phi_2)): (phi_1, phi_2) => {
-                Term::Op(
-                    Operator::And,
-                    vec![
-                        ByRefRc::new(Term::Op(Operator::Not, vec![phi_1.clone()])),
-                        ByRefRc::new(Term::Op(Operator::Not, vec![phi_2.clone()])),
-                    ],
-                )
+                build_term!(and (not {phi_1.clone()}) (not {phi_2.clone()}))
             },
+
+            // ¬(phi_1 ^ phi_2) => (¬phi_1 v ¬phi_2)
             (not (and phi_1 phi_2)): (phi_1, phi_2) => {
-                Term::Op(
-                    Operator::Or,
-                    vec![
-                        ByRefRc::new(Term::Op(Operator::Not, vec![phi_1.clone()])),
-                        ByRefRc::new(Term::Op(Operator::Not, vec![phi_2.clone()])),
-                    ],
-                )
+                build_term!(or (not {phi_1.clone()}) (not {phi_2.clone()}))
             },
+
+            // (phi_1 -> (phi_2 -> phi_3)) => ((phi_1 ^ phi_2) -> phi_3)
             (=> phi_1 (=> phi_2 phi_3)): (phi_1, (phi_2, phi_3)) => {
-                Term::Op(
-                    Operator::Implies,
-                    vec![
-                        ByRefRc::new(Term::Op(Operator::And, vec![phi_1.clone(), phi_2.clone()])),
-                        phi_3.clone(),
-                    ],
-                )
+                build_term!(=> (and {phi_1.clone()} {phi_2.clone()}) {phi_3.clone()})
             },
+
+            // ((phi_1 -> phi_2) -> phi_2) => (phi_1 v phi_2)
             (=> (=> phi_1 phi_2) phi_3): ((phi_1, phi_2), phi_3) if phi_2 == phi_3 => {
-                Term::Op(Operator::Or, vec![phi_1.clone(), phi_2.clone()])
+                build_term!(or {phi_1.clone()} {phi_2.clone()})
             },
+
+            // (phi_1 ^ (phi_1 -> phi_2)) => (phi_1 ^ phi_2)
             (and phi_1 (=> phi_2 phi_3)): (phi_1, (phi_2, phi_3)) if phi_1 == phi_2 => {
-                Term::Op(Operator::And, vec![phi_1.clone(), phi_3.clone()])
+                build_term!(and {phi_1.clone()} {phi_3.clone()})
             },
+
+            // ((phi_1 -> phi_2) ^ phi_1) => (phi_1 ^ phi_2)
             (and (=> phi_1 phi_2) phi_3): ((phi_1, phi_2), phi_3) if phi_1 == phi_3 => {
-                Term::Op(Operator::And, vec![phi_1.clone(), phi_2.clone()])
+                build_term!(and {phi_1.clone()} {phi_2.clone()})
             },
         })
     }

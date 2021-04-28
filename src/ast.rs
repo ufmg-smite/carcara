@@ -33,6 +33,12 @@ impl<T> AsRef<T> for ByRefRc<T> {
     }
 }
 
+impl<T> From<T> for ByRefRc<T> {
+    fn from(value: T) -> Self {
+        ByRefRc::new(value)
+    }
+}
+
 impl<T: Debug> Debug for ByRefRc<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{:?}", self.0)
@@ -236,6 +242,22 @@ macro_rules! match_term {
     (@GET_VARIANT ite) => { Operator::Ite };
 }
 
+/// A macro to help build new terms. Note that this macro will construct subterms by calling
+/// `ByRefRc::new` and does not make use of hash consing.
+macro_rules! build_term {
+    (@INNER {$terminal:expr}) => { $terminal };
+    (@INNER ($op:tt $($args:tt)+)) => {
+        Term::Op(
+            match_term!(@GET_VARIANT $op),
+            vec![ $(build_term!(@INNER $args).into(),)+ ],
+        )
+    };
+    // This is a trick so the macro user doesn't have to add an extra layer of parentheses when
+    // calling the macro. This rule just adds parentheses and calls the inner rules. It has to be
+    // the last rule defined to avoid a recursion error, as it can match any input
+    ($($input:tt)*) => { build_term!(@INNER ($($input)*)) };
+}
+
 impl Term {
     /// The "Bool" built-in sort.
     pub const BOOL_SORT: &'static Term = &Term::Sort(SortKind::Bool, Vec::new());
@@ -398,15 +420,14 @@ macro_rules! terminal {
     (string $e:expr) => {
         Term::Terminal(Terminal::String($e.into()))
     };
+    (var $e:expr ; $sort:ident) => {
+        Term::Terminal(Terminal::Var(Identifier::Simple($e.into()), Term::$sort.clone().into()))
+    };
     (var $e:expr ; $sort:expr) => {
         Term::Terminal(Terminal::Var(Identifier::Simple($e.into()), $sort))
     };
-    (bool true) => {
-        terminal!(var "true"; ByRefRc::new(Term::BOOL_SORT.clone()))
-    };
-    (bool false) => {
-        terminal!(var "false"; ByRefRc::new(Term::BOOL_SORT.clone()))
-    };
+    (bool true) => { terminal!(var "true"; BOOL_SORT) };
+    (bool false) => { terminal!(var "false"; BOOL_SORT) };
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -591,6 +612,47 @@ mod tests {
             (&ByRefRc<_>, &ByRefRc<_>),
             (&ByRefRc<_>, &ByRefRc<_>),
         ) = match_term!((= (not a) (=> b c) (or d e)) = &term, RETURN_RCS).unwrap();
+    }
+
+    #[test]
+    fn test_build_term() {
+        let definitions = "
+            (declare-fun a () Int)
+            (declare-fun b () Int)
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+        ";
+        let (one, two, three) = (terminal!(int 1), terminal!(int 2), terminal!(int 3));
+        let (a, b) = (terminal!(var "a"; INT_SORT), terminal!(var "b"; INT_SORT));
+        let (p, q) = (terminal!(var "p"; BOOL_SORT), terminal!(var "q"; BOOL_SORT));
+        let (true_, false_) = (terminal!(bool true), terminal!(bool false));
+
+        let cases = [
+            ("(= a b)", build_term!(= {a} {b})),
+            ("(= 1 2)", build_term!(= {one.clone()} {two.clone()})),
+            ("(not true)", build_term!(not {true_.clone()})),
+            ("(or p false)", build_term!(or {p.clone()} {false_.clone()})),
+            (
+                "(and (=> p q) (ite p false (= 1 3)))",
+                build_term!(and
+                    (=> {p.clone()} {q.clone()})
+                    (ite {p.clone()} {false_} (= {one.clone()} {three.clone()}))
+                ),
+            ),
+            ("(distinct p q true)", build_term!(distinct {p} {q} {true_})),
+            (
+                "(or (not (= 2 3)) (= 1 1))",
+                build_term!(or
+                    (not (= {two} {three}))
+                    (= {one.clone()} {one})
+                ),
+            ),
+        ];
+
+        for (s, got) in cases.iter() {
+            let expected = parse_term_with_definitions(definitions, s);
+            assert!(DeepEq::eq(&expected, got))
+        }
     }
 
     #[test]
