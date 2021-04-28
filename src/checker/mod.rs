@@ -60,6 +60,7 @@ impl ProofChecker {
             "ite2" => rules::ite2,
             "ite_intro" => rules::ite_intro,
             "contraction" => rules::contraction,
+            "bool_simplify" => rules::bool_simplify,
             _ => return None,
         })
     }
@@ -535,5 +536,107 @@ mod rules {
         // At the end, the conclusion clause iterator must be empty, meaning all terms in the
         // conclusion are in the premise
         to_option(clause_iter.next().is_none())
+    }
+
+    /// A macro to define the possible transformations for a "simplify" rule.
+    macro_rules! simplify {
+        // This is a recursive macro that expands to a series of nested `match` expressions. For
+        // example:
+        //      simplify!(term {
+        //          (or a b): (bind_a, bind_b) => { foo },
+        //          (not c): (bind_c) if pred(bind_c) => { bar },
+        //      })
+        // becomes:
+        //      match match_term!((or a b) = term, RETURN_RCS) {
+        //          Some((bind_a, bind_b)) => foo,
+        //          _ => match match_term!((not c) = term, RETURN_RCS) {
+        //              Some(bind_c) if pred(bind_c) => bar,
+        //              _ => None,
+        //          }
+        //      }
+        ($term:ident {}) => { None };
+        ($term:ident {
+            $pat:tt: $idens:tt $(if $guard:expr)? => { $res:expr },
+            $($rest:tt)*
+         }) => {
+            match match_term!($pat = $term, RETURN_RCS) {
+                Some($idens) $(if $guard)? => Some($res),
+                _ => simplify!($term { $($rest)* }),
+            }
+        };
+    }
+
+    fn bool_simplify_once(term: &Term) -> Option<Term> {
+        simplify!(term {
+            (not (=> phi_1 phi_2)): (phi_1, phi_2) => {
+                Term::Op(
+                    Operator::And,
+                    vec![
+                        phi_1.clone(),
+                        ByRefRc::new(Term::Op(Operator::Not, vec![phi_2.clone()])),
+                    ],
+                )
+            },
+            (not (or phi_1 phi_2)): (phi_1, phi_2) => {
+                Term::Op(
+                    Operator::And,
+                    vec![
+                        ByRefRc::new(Term::Op(Operator::Not, vec![phi_1.clone()])),
+                        ByRefRc::new(Term::Op(Operator::Not, vec![phi_2.clone()])),
+                    ],
+                )
+            },
+            (not (and phi_1 phi_2)): (phi_1, phi_2) => {
+                Term::Op(
+                    Operator::Or,
+                    vec![
+                        ByRefRc::new(Term::Op(Operator::Not, vec![phi_1.clone()])),
+                        ByRefRc::new(Term::Op(Operator::Not, vec![phi_2.clone()])),
+                    ],
+                )
+            },
+            (=> phi_1 (=> phi_2 phi_3)): (phi_1, (phi_2, phi_3)) => {
+                Term::Op(
+                    Operator::Implies,
+                    vec![
+                        ByRefRc::new(Term::Op(Operator::And, vec![phi_1.clone(), phi_2.clone()])),
+                        phi_3.clone(),
+                    ],
+                )
+            },
+            (=> (=> phi_1 phi_2) phi_3): ((phi_1, phi_2), phi_3) if phi_2 == phi_3 => {
+                Term::Op(Operator::Or, vec![phi_1.clone(), phi_2.clone()])
+            },
+            (and phi_1 (=> phi_2 phi_3)): (phi_1, (phi_2, phi_3)) if phi_1 == phi_2 => {
+                Term::Op(Operator::And, vec![phi_1.clone(), phi_3.clone()])
+            },
+            (and (=> phi_1 phi_2) phi_3): ((phi_1, phi_2), phi_3) if phi_1 == phi_3 => {
+                Term::Op(Operator::And, vec![phi_1.clone(), phi_2.clone()])
+            },
+        })
+    }
+
+    pub fn bool_simplify(
+        clause: &[ByRefRc<Term>],
+        _: Vec<&ProofCommand>,
+        _: &[ProofArg],
+    ) -> Option<()> {
+        if clause.len() != 1 {
+            return None;
+        }
+        let (current, goal) = match_term!((= phi psi) = clause[0].as_ref())?;
+        let mut current = current.clone();
+        loop {
+            if let Some(next) = bool_simplify_once(&current) {
+                // TODO: Detect cycles in the simplification rules
+                if DeepEq::eq(&next, goal) {
+                    return Some(());
+                } else {
+                    current = next;
+                }
+            } else {
+                return None;
+            }
+        }
     }
 }

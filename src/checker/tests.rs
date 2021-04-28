@@ -815,3 +815,82 @@ fn test_contraction_rule() {
         }
     }
 }
+
+#[test]
+fn test_bool_simplify_rule() {
+    test_cases! {
+        definitions = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+        ",
+        "Transformation #1" {
+            "(step t1 (cl (=
+                (not (=> p q)) (and p (not q))
+            )) :rule bool_simplify)": true,
+
+            "(step t1 (cl (=
+                (not (=> p q)) (and (not q) p)
+            )) :rule bool_simplify)": false,
+
+            "(step t1 (cl (=
+                (not (=> p (not q))) (and p q)
+            )) :rule bool_simplify)": false,
+        }
+        "Transformation #2" {
+            "(step t1 (cl (=
+                (not (or p q)) (and (not p) (not q))
+            )) :rule bool_simplify)": true,
+
+            "(step t1 (cl (=
+                (not (or (not p) (not q))) (and p q)
+            )) :rule bool_simplify)": false,
+        }
+        "Transformation #3" {
+            "(step t1 (cl (=
+                (not (and p q)) (or (not p) (not q))
+            )) :rule bool_simplify)": true,
+
+            "(step t1 (cl (=
+                (not (and (not p) (not q))) (or p q)
+            )) :rule bool_simplify)": false,
+        }
+        "Transformation #4" {
+            "(step t1 (cl (=
+                (=> p (=> q r)) (=> (and p q) r)
+            )) :rule bool_simplify)": true,
+
+            "(step t1 (cl (=
+                (=> p (=> q r)) (=> (and q p) r)
+            )) :rule bool_simplify)": false,
+        }
+        "Transformation #5" {
+            "(step t1 (cl (=
+                (=> (=> p q) q) (or p q)
+            )) :rule bool_simplify)": true,
+
+            "(step t1 (cl (=
+                (=> (=> p q) r) (or p q)
+            )) :rule bool_simplify)": false,
+        }
+        "Transformation #6" {
+            "(step t1 (cl (=
+                (and p (=> p q)) (and p q)
+            )) :rule bool_simplify)": true,
+
+            "(step t1 (cl (=
+                (and p (=> r q)) (and p q)
+            )) :rule bool_simplify)": false,
+        }
+        "Transformation #7" {
+            "(step t1 (cl (=
+                (and (=> p q) p) (and p q)
+            )) :rule bool_simplify)": true,
+
+            "(step t1 (cl (=
+                (and (=> p q) r) (and p q)
+            )) :rule bool_simplify)": false,
+        }
+        // TODO: Add tests that combine more than one transformation
+    }
+}
