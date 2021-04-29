@@ -53,6 +53,7 @@ impl ProofChecker {
             "eq_congruent_pred" => rules::eq_congruent_pred,
             "distinct_elim" => rules::distinct_elim,
             "th_resolution" | "resolution" => rules::resolution,
+            "cong" => rules::cong,
             "and" => rules::and,
             "or" => rules::or,
             "implies" => rules::implies,
@@ -262,9 +263,9 @@ mod rules {
         generic_congruent_rule(premises, conclusion)
     }
 
-    /// A function to check congruency. Useful for the "eq_congruent", "eq_congruent_pred" and
-    /// "cong" rules. `premises` should be an iterator over the argument equalities, and
-    /// `conclusion` should be the two function applications.
+    /// A function to check congruency. Useful for the "eq_congruent" and "eq_congruent_pred"
+    /// rules. `premises` should be an iterator over the argument equalities, and `conclusion`
+    /// should be the two function applications.
     fn generic_congruent_rule<'a, T>(premises: T, conclusion: (&Term, &Term)) -> Option<()>
     where
         T: Iterator<Item = Option<&'a Term>>,
@@ -385,6 +386,45 @@ mod rules {
             .collect();
 
         to_option(working_clause == clause)
+    }
+
+    pub fn cong(
+        clause: &[ByRefRc<Term>],
+        premises: Vec<&ProofCommand>,
+        _: &[ProofArg],
+    ) -> Option<()> {
+        if premises.is_empty() || clause.len() != 1 {
+            return None;
+        }
+
+        let mut premises = premises.into_iter().map(|command| {
+            get_single_term_from_command(command).and_then(|term| match_term!((= t u) = term))
+        });
+        let (args_f, args_g) = match match_term!((= f g) = clause[0].as_ref())? {
+            (Term::App(f, args_f), Term::App(g, args_g)) if f == g => (args_f, args_g),
+            (Term::Op(op_f, args_f), Term::Op(op_g, args_g)) if op_f == op_g => (args_f, args_g),
+            _ => return None,
+        };
+        if args_f.len() != args_g.len() {
+            return None;
+        }
+
+        // Since the semantics of this rule is slighty different from that of "eq_congruent" and
+        // "eq_congruent_pred", we cannot just use the `generic_congruent_rule` function
+        for (arg_f, arg_g) in args_f.iter().zip(args_g) {
+            if arg_f != arg_g {
+                // If the arguments aren't directly identical, we need a premise that shows that
+                // they are equal
+                let (t, u) = premises.next()??;
+                let expected = (arg_f.as_ref(), arg_g.as_ref());
+                if expected != (t, u) && expected != (u, t) {
+                    return None;
+                }
+            }
+        }
+
+        // At the end, all premises must have been consumed
+        to_option(premises.next().is_none())
     }
 
     pub fn and(

@@ -6,12 +6,16 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
     use crate::parser::parse_problem_proof;
     use std::io::Cursor;
 
-    for (proof, expected) in cases {
+    for (i, (proof, expected)) in cases.iter().enumerate() {
         // This parses the definitions again for every case, which is not ideal
         let parsed = parse_problem_proof(Cursor::new(definitions), Cursor::new(proof))
             .unwrap_or_else(|_| panic!("parser error during test \"{}\"", test_name));
         let got = ProofChecker::new(parsed).check().is_ok();
-        assert_eq!(*expected, got, "test case \"{}\" failed", test_name);
+        assert_eq!(
+            *expected, got,
+            "test case \"{}\" index {} failed",
+            test_name, i
+        );
     }
 }
 
@@ -479,6 +483,68 @@ fn test_resolution_rule() {
             (step t7 (cl (not p) (not (not (not p)))) :rule resolution :premises (h1 h3))
             (step t8 (cl (not p) (not (not (not (not p)))))
                 :rule resolution :premises (h1 h4))": true,
+        }
+    }
+}
+
+#[test]
+fn test_cong_rule() {
+    test_cases! {
+        definitions = "
+            (declare-sort T 0)
+            (declare-fun a () T)
+            (declare-fun b () T)
+            (declare-fun c () T)
+            (declare-fun d () T)
+            (declare-fun f (T Bool T) T)
+            (declare-fun g (T Bool T) T)
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (declare-fun s () Bool)
+        ",
+        "Simple working examples" {
+            "(assume h1 (= a b))
+            (assume h2 (= c d))
+            (step t3 (cl (= (f b false c) (f a false d))) :rule cong :premises (h1 h2))": true,
+
+            "(assume h1 (= p q))
+            (assume h2 (= r s))
+            (step t3 (cl (= (and p false s) (and q false r))) :rule cong :premises (h1 h2))": true,
+        }
+        "Functions or operators don't match" {
+            "(assume h1 (= a b))
+            (assume h2 (= c d))
+            (step t3 (cl (= (f b false c) (g a false d))) :rule cong :premises (h1 h2))": false,
+
+            "(assume h1 (= p q))
+            (assume h2 (= r s))
+            (step t3 (cl (= (and p false s) (or q false r))) :rule cong :premises (h1 h2))": false,
+        }
+        "No premises were given" {
+            "(step t1 (cl (= (f a true c) (f a true c))) :rule cong)": false,
+        }
+        "Wrong number of premises" {
+            "(assume h1 (= a b))
+            (assume h2 (= p q))
+            (step t3 (cl (= (f a p c) (f b q d))) :rule cong :premises (h1 h2))": false,
+
+            "(assume h1 (= a b))
+            (assume h2 (= p q))
+            (assume h3 (= c d))
+            (assume h4 (= r s))
+            (step t5 (cl (= (f a p c) (f b q d))) :rule cong :premises (h1 h2 h3 h4))": false,
+        }
+        "Premise doesn't match expected terms" {
+            "(assume h1 (= a b))
+            (assume h2 (= r s))
+            (assume h3 (= c d))
+            (step t4 (cl (= (f a p c) (f b q d))) :rule cong :premises (h1 h2 h3))": false,
+
+            "(assume h1 (= a b))
+            (assume h2 (= c d))
+            (assume h3 (= p q))
+            (step t4 (cl (= (f a p c) (f b q d))) :rule cong :premises (h1 h2 h3))": false,
         }
     }
 }
