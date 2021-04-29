@@ -347,7 +347,7 @@ fn test_declare_fun() {
     );
 
     let got = parse_term_with_definitions("(declare-fun x () Real)", "x");
-    assert!(DeepEq::eq(&terminal!(var "x"; REAL_SORT), &got));
+    assert_deep_eq!(&terminal!(var "x"; REAL_SORT), &got);
 }
 
 #[test]
@@ -368,10 +368,7 @@ fn test_declare_sort() {
         "x",
     );
     let expected_sort = Term::Sort(SortKind::Atom, vec![ByRefRc::new(terminal!(string "T"))]);
-    assert!(DeepEq::eq(
-        &terminal!(var "x"; ByRefRc::new(expected_sort)),
-        &got
-    ));
+    assert_deep_eq!(&terminal!(var "x"; ByRefRc::new(expected_sort)), &got);
 }
 
 #[test]
@@ -380,10 +377,10 @@ fn test_define_fun() {
         "(define-fun add ((a Int) (b Int)) Int (+ a b))",
         "(add 2 3)",
     );
-    assert!(DeepEq::eq(&parse_term("(+ 2 3)"), &got));
+    assert_deep_eq!(&parse_term("(+ 2 3)"), &got);
 
     let got = parse_term_with_definitions("(define-fun x () Int 2)", "(+ x 3)");
-    assert!(DeepEq::eq(&parse_term("(+ 2 3)"), &got));
+    assert_deep_eq!(&parse_term("(+ 2 3)"), &got);
 
     let got = parse_term_with_definitions(
         "(define-fun f ((x Int)) Int (+ x 1))
@@ -391,7 +388,7 @@ fn test_define_fun() {
         "(g 2 3)",
     );
     let expected = parse_term("(* (+ 2 1) (+ 3 1))");
-    assert!(DeepEq::eq(&expected, &got));
+    assert_deep_eq!(&expected, &got);
 }
 
 #[test]
@@ -406,7 +403,7 @@ fn test_step() {
     let proof = parse_proof(input);
     assert_eq!(proof.0.len(), 5);
 
-    assert!(DeepEq::eq(
+    assert_deep_eq!(
         &proof.0[0],
         &ProofCommand::Step {
             clause: vec![ByRefRc::new(parse_term("(= (+ 2 3) (- 1 2))"))],
@@ -414,9 +411,9 @@ fn test_step() {
             premises: Vec::new(),
             args: Vec::new(),
         }
-    ));
+    );
 
-    assert!(DeepEq::eq(
+    assert_deep_eq!(
         &proof.0[1],
         &ProofCommand::Step {
             clause: Vec::new(),
@@ -424,9 +421,9 @@ fn test_step() {
             premises: vec![0],
             args: Vec::new(),
         }
-    ));
+    );
 
-    assert!(DeepEq::eq(
+    assert_deep_eq!(
         &proof.0[2],
         &ProofCommand::Step {
             clause: Vec::new(),
@@ -443,9 +440,9 @@ fn test_step() {
                 .collect()
             },
         }
-    ));
+    );
 
-    assert!(DeepEq::eq(
+    assert_deep_eq!(
         &proof.0[3],
         &ProofCommand::Step {
             clause: Vec::new(),
@@ -462,9 +459,9 @@ fn test_step() {
                 .collect()
             },
         }
-    ));
+    );
 
-    assert!(DeepEq::eq(
+    assert_deep_eq!(
         &proof.0[4],
         &ProofCommand::Step {
             clause: Vec::new(),
@@ -472,5 +469,5 @@ fn test_step() {
             premises: vec![0, 1, 2],
             args: vec![ProofArg::Term(ByRefRc::new(terminal!(int 42)))],
         }
-    ));
+    );
 }

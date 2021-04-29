@@ -461,6 +461,11 @@ pub trait DeepEq {
     fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool;
 }
 
+#[cfg(test)]
+macro_rules! assert_deep_eq {
+    ($($input:tt)*) => { assert!(DeepEq::eq( $($input)* )) };
+}
+
 impl DeepEq for Term {
     fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
         match (a, b) {
@@ -575,15 +580,15 @@ mod tests {
     fn test_match_term() {
         let term = parse_term("(= (= (not false) (= true false)) (not true))");
         let ((a, (b, c)), d) = match_term!((= (= (not a) (= b c)) (not d)) = &term).unwrap();
-        DeepEq::eq(a, &terminal!(bool false));
-        DeepEq::eq(b, &terminal!(bool true));
-        DeepEq::eq(c, &terminal!(bool false));
-        DeepEq::eq(d, &terminal!(bool true));
+        assert_deep_eq!(a, &terminal!(bool false));
+        assert_deep_eq!(b, &terminal!(bool true));
+        assert_deep_eq!(c, &terminal!(bool false));
+        assert_deep_eq!(d, &terminal!(bool true));
 
         let term = parse_term("(ite (not true) (- 2 2) (* 1 5))");
         let (a, b, c) = match_term!((ite (not a) b c) = &term).unwrap();
-        DeepEq::eq(a, &terminal!(bool true));
-        DeepEq::eq(
+        assert_deep_eq!(a, &terminal!(bool true));
+        assert_deep_eq!(
             b,
             &Term::Op(
                 Operator::Sub,
@@ -593,7 +598,7 @@ mod tests {
                 ],
             ),
         );
-        DeepEq::eq(
+        assert_deep_eq!(
             c,
             &Term::Op(
                 Operator::Mult,
@@ -651,7 +656,7 @@ mod tests {
 
         for (s, got) in cases.iter() {
             let expected = parse_term_with_definitions(definitions, s);
-            assert!(DeepEq::eq(&expected, got))
+            assert_deep_eq!(&expected, got)
         }
     }
 
