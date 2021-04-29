@@ -617,6 +617,27 @@ mod tests {
             (&ByRefRc<_>, &ByRefRc<_>),
             (&ByRefRc<_>, &ByRefRc<_>),
         ) = match_term!((= (not a) (=> b c) (or d e)) = &term, RETURN_RCS).unwrap();
+
+        // Test the "..." pattern
+        let term = parse_term("(not (and true false true))");
+        match match_term!((not (and ...)) = &term) {
+            Some([a, b, c]) => {
+                assert_deep_eq!(&terminal!(bool true), a);
+                assert_deep_eq!(&terminal!(bool false), b);
+                assert_deep_eq!(&terminal!(bool true), c);
+            }
+            _ => panic!(),
+        }
+        let term = parse_term("(and (or false true) (= 2 2))");
+        match match_term!((and (or ...) (= ...)) = &term) {
+            Some(([a, b], [c, d])) => {
+                assert_deep_eq!(&terminal!(bool false), a);
+                assert_deep_eq!(&terminal!(bool true), b);
+                assert_deep_eq!(&terminal!(int 2), c);
+                assert_deep_eq!(&terminal!(int 2), d);
+            }
+            _ => panic!(),
+        }
     }
 
     #[test]
