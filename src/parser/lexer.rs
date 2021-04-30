@@ -1,4 +1,6 @@
-use num_rational::Ratio;
+use num_bigint::BigInt;
+use num_rational::BigRational;
+use num_traits::Num;
 use std::io::{self, BufRead};
 use std::str::FromStr;
 
@@ -10,8 +12,8 @@ pub enum Token {
     CloseParen,
     Symbol(String),
     Keyword(String),
-    Numeral(u64),
-    Decimal(Ratio<u64>),
+    Numeral(BigInt),
+    Decimal(BigRational),
     String(String),
     ReservedWord(Reserved),
     Eof,
@@ -215,7 +217,7 @@ impl<R: BufRead> Lexer<R> {
             other => return Err(ParserError(ErrorKind::UnexpectedChar(other), self.position)),
         };
         let s = self.read_chars_while(|c| c.is_digit(base))?;
-        Ok(Token::Numeral(u64::from_str_radix(&s, base).unwrap()))
+        Ok(Token::Numeral(BigInt::from_str_radix(&s, base).unwrap()))
     }
 
     fn read_number(&mut self) -> Result<Token, ParserError> {
@@ -228,9 +230,9 @@ impl<R: BufRead> Lexer<R> {
         if self.current_char == Some('.') {
             self.next_char()?;
             let frac_part = self.read_chars_while(|c| c.is_ascii_digit())?;
-            let denom = 10u64.pow(frac_part.len() as u32);
-            let numer = (int_part + &frac_part).parse::<u64>().unwrap();
-            let r = Ratio::new(numer, denom);
+            let denom = BigInt::from(10).pow(frac_part.len() as u32);
+            let numer = (int_part + &frac_part).parse::<BigInt>().unwrap();
+            let r = BigRational::new(numer, denom);
             Ok(Token::Decimal(r))
         } else {
             Ok(Token::Numeral(int_part.parse().unwrap()))
@@ -352,10 +354,10 @@ mod tests {
     fn test_numerals_and_decimals() {
         let input = "42 3.14159 #b101010 #x0ff";
         let expected = vec![
-            Token::Numeral(42),
-            Token::Decimal(Ratio::new(314159, 100_000)),
-            Token::Numeral(42),
-            Token::Numeral(255),
+            Token::Numeral(42.into()),
+            Token::Decimal(BigRational::new(314159.into(), 100_000.into())),
+            Token::Numeral(42.into()),
+            Token::Numeral(255.into()),
         ];
         assert_eq!(expected, lex_all(input));
 

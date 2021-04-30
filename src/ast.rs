@@ -1,6 +1,8 @@
 //! The abstract syntax tree (AST) for the veriT Proof Format.
 
-use num_rational::Ratio;
+use num_bigint::BigInt;
+use num_rational::BigRational;
+use num_traits::ToPrimitive;
 use std::{collections::HashSet, fmt::Debug, hash::Hash, ops::Deref, rc, str::FromStr};
 
 /// An `Rc` where equality and hashing are done by reference, instead of by value
@@ -389,8 +391,8 @@ impl Debug for Term {
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Terminal {
-    Integer(u64),
-    Real(Ratio<u64>),
+    Integer(BigInt),
+    Real(BigRational),
     String(String),
     Var(Identifier, ByRefRc<Term>),
 }
@@ -399,7 +401,11 @@ impl Debug for Terminal {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Terminal::Integer(i) => write!(f, "{}", i),
-            Terminal::Real(r) => write!(f, "{}", (*r.numer() as f64 / *r.denom() as f64)),
+            Terminal::Real(r) => write!(
+                f,
+                "{}",
+                (r.numer().to_f64().unwrap() / r.denom().to_f64().unwrap())
+            ),
             Terminal::String(s) => write!(f, "\"{}\"", s),
             Terminal::Var(Identifier::Simple(s), _) => write!(f, "{}", s),
             _ => todo!(),
@@ -410,10 +416,10 @@ impl Debug for Terminal {
 /// Helper macro to construct `Terminal` terms.
 macro_rules! terminal {
     (int $e:expr) => {
-        Term::Terminal(Terminal::Integer($e))
+        Term::Terminal(Terminal::Integer($e.into()))
     };
     (real $num:literal / $denom:literal) => {
-        Term::Terminal(Terminal::Real(num_rational::Ratio::new($num, $denom)))
+        Term::Terminal(Terminal::Real(num_rational::Ratio::new($num.into(), $denom.into())))
     };
     (real $e:expr) => {
         Term::Terminal(Terminal::Real($e))

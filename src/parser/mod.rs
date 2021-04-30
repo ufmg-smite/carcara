@@ -7,6 +7,8 @@ pub mod tests;
 use crate::ast::*;
 use error::*;
 use lexer::*;
+use num_bigint::BigInt;
+use num_traits::ToPrimitive;
 use std::{
     collections::{hash_map::Entry, HashMap},
     hash::Hash,
@@ -276,7 +278,7 @@ impl<R: BufRead> Parser<R> {
 
     /// Consumes the current token if it is a numeral, and returns the inner `u64`. Returns an
     /// error otherwise.
-    fn expect_numeral(&mut self) -> ParserResult<u64> {
+    fn expect_numeral(&mut self) -> ParserResult<BigInt> {
         match self.next_token()? {
             Token::Numeral(n) => Ok(n),
             other => Err(self.unexpected_token(other)),
@@ -461,7 +463,7 @@ impl<R: BufRead> Parser<R> {
         let name = self.expect_symbol()?;
         let arity = self.expect_numeral()?;
         self.expect_token(Token::CloseParen)?;
-        Ok((name, arity))
+        Ok((name, arity.to_u64().unwrap())) // TODO: Add proper error handling
     }
 
     /// Parses a "define-fun" proof command. Returns the function name and its definition. This

@@ -2,7 +2,7 @@ use super::to_option;
 
 use crate::ast::*;
 
-use num_rational::Ratio;
+use num_rational::BigRational;
 use num_traits::{One, Zero};
 
 /// A macro to define the possible transformations for a "simplify" rule.
@@ -101,10 +101,10 @@ pub fn prod_simplify(
     _: Vec<&ProofCommand>,
     _: &[ProofArg],
 ) -> Option<()> {
-    fn get_ratio_from_term(term: &Term) -> Option<Ratio<u64>> {
+    fn get_ratio_from_term(term: &Term) -> Option<BigRational> {
         match term {
-            Term::Terminal(Terminal::Real(r)) => Some(*r),
-            Term::Terminal(Terminal::Integer(i)) => Some(Ratio::from_integer(*i)),
+            Term::Terminal(Terminal::Real(r)) => Some(r.clone()),
+            Term::Terminal(Terminal::Integer(i)) => Some(BigRational::from_integer(i.clone())),
             _ => None,
         }
     }
@@ -113,7 +113,7 @@ pub fn prod_simplify(
     }
     let (ts, u) = match_term!((= (* ...) u) = clause[0].as_ref())?;
     let mut result = Vec::with_capacity(ts.len());
-    let mut constant_total = Ratio::one();
+    let mut constant_total = BigRational::one();
 
     // First, we go through the t_i terms, multiplying all the constants we find together, and push
     // the non-constant terms to the `result` vector
@@ -128,7 +128,7 @@ pub fn prod_simplify(
         }
         // If we find a zero, we can leave the loop early. We also clear the `result` vector
         // because we expect the u term to be just the zero constant
-        if constant_total == Ratio::zero() {
+        if constant_total == BigRational::zero() {
             result.clear();
             break;
         }
@@ -138,7 +138,7 @@ pub fn prod_simplify(
     let (u_constant, u_args) = match match_term!((* ...) = u) {
         Some([]) | Some([_]) => unreachable!(),
         // If `constant_total` is one, we expect there to be no leading constant in u
-        Some(args) if constant_total == Ratio::one() => (Ratio::one(), args),
+        Some(args) if constant_total == BigRational::one() => (BigRational::one(), args),
         Some([constant, rest @ ..]) => (get_ratio_from_term(constant)?, rest),
         // If u is not a product, we take the term as whole as the leading constant, with no
         // remaining arguments
