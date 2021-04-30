@@ -2,43 +2,33 @@
 
 use super::*;
 
-impl<'a> Parser<std::io::Cursor<&'a str>> {
-    pub fn from_str(input: &'a str) -> ParserResult<Self> {
-        Self::new(std::io::Cursor::new(input))
-    }
-
-    fn from_str_with_state(input: &'a str, state: ParserState) -> ParserResult<Self> {
-        Self::with_state(std::io::Cursor::new(input), state)
-    }
-}
-
 const ERROR_MESSAGE: &str = "parser error during test";
 
 pub fn parse_term(input: &str) -> Term {
-    Parser::from_str(input)
+    Parser::new(input.as_bytes())
         .and_then(|mut p| p.parse_term())
         .expect(ERROR_MESSAGE)
 }
 
 pub fn parse_term_err(input: &str) -> ParserError {
-    Parser::from_str(input)
+    Parser::new(input.as_bytes())
         .and_then(|mut p| p.parse_term())
         .expect_err("expected error")
 }
 
 /// Parses a series of definitions and declarations, and then parses a term and returns it.
 pub fn parse_term_with_definitions(definitions: &str, term: &str) -> Term {
-    let mut parser = Parser::from_str(definitions).expect(ERROR_MESSAGE);
+    let mut parser = Parser::new(definitions.as_bytes()).expect(ERROR_MESSAGE);
     parser.parse_problem().expect(ERROR_MESSAGE);
 
     // To keep the definitions and delcarations, we transfer the parser state to the new
     // parser.
-    let mut new_parser = Parser::from_str_with_state(term, parser.state).expect(ERROR_MESSAGE);
+    let mut new_parser = Parser::with_state(term.as_bytes(), parser.state).expect(ERROR_MESSAGE);
     new_parser.parse_term().expect(ERROR_MESSAGE)
 }
 
 pub fn parse_proof(input: &str) -> Proof {
-    Parser::from_str(input)
+    Parser::new(input.as_bytes())
         .and_then(|mut p| p.parse_proof())
         .expect(ERROR_MESSAGE)
 }
@@ -66,7 +56,7 @@ fn test_hash_consing() {
         )
         (* 2 2)
     )";
-    let mut parser = Parser::from_str(input).unwrap();
+    let mut parser = Parser::new(input.as_bytes()).unwrap();
     parser.parse_term().unwrap();
 
     // We expect this input to result in 6 unique terms after parsing:
