@@ -80,6 +80,7 @@ impl ProofChecker {
             "ite_intro" => general_rules::ite_intro,
             "contraction" => general_rules::contraction,
             "bool_simplify" => simplification_rules::bool_simplify,
+            "prod_simplify" => simplification_rules::prod_simplify,
             "nary_elim" => general_rules::nary_elim,
             _ => return None,
         })

@@ -1,4 +1,5 @@
 extern crate num_rational;
+extern crate num_traits;
 
 #[macro_use]
 pub mod ast;

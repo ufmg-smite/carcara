@@ -240,6 +240,7 @@ macro_rules! match_term {
     (@GET_VARIANT distinct) => { Operator::Distinct };
     (@GET_VARIANT =>) => { Operator::Implies };
     (@GET_VARIANT ite) => { Operator::Ite };
+    (@GET_VARIANT *) => { Operator::Mult };
 }
 
 /// A macro to help build new terms. Note that this macro will construct subterms by calling

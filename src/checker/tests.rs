@@ -962,6 +962,63 @@ fn test_bool_simplify_rule() {
 }
 
 #[test]
+fn test_prod_simplify_rule() {
+    test_cases! {
+        definitions = "
+            (declare-fun i () Int)
+            (declare-fun j () Int)
+            (declare-fun k () Int)
+            (declare-fun x () Real)
+            (declare-fun y () Real)
+            (declare-fun z () Real)
+        ",
+        "Transformation #1" {
+            "(step t1 (cl (= (* 2 3 5 7) 210)) :rule prod_simplify)": true,
+            "(step t1 (cl (= (* 1.5 3.7 0.1) 0.555)) :rule prod_simplify)": true,
+            "(step t1 (cl (= (* 1 1 1) 1)) :rule prod_simplify)": true,
+
+            "(step t1 (cl (= (* 1 2 4) 6)) :rule prod_simplify)": false,
+            "(step t1 (cl (= (* 1.0 2.0 1.0) 4.0)) :rule prod_simplify)": false,
+        }
+        "Transformation #2" {
+            "(step t1 (cl (= (* 2 3 0 7) 0)) :rule prod_simplify)": true,
+            "(step t1 (cl (= (* 1.5 3.7 0.0) 0.0)) :rule prod_simplify)": true,
+            "(step t1 (cl (= (* i 2 k 3 0 j) 0)) :rule prod_simplify)": true,
+            "(step t1 (cl (= (* i j 0 k) 0)) :rule prod_simplify)": true,
+            "(step t1 (cl (= (* x y 1.0 2.0 z 0.0 z) 0.0)) :rule prod_simplify)": true,
+
+            "(step t1 (cl (= (* 2 4 0 3) 24)) :rule prod_simplify)": false,
+            "(step t1 (cl (= (* 1 1 2 3) 0)) :rule prod_simplify)": false,
+            "(step t1 (cl (= (* i j 0 k) (* i j k))) :rule prod_simplify)": false,
+        }
+        "Transformation #3" {
+            "(step t1 (cl (= (* i 2 k 3 5 j) (* 30 i k j))) :rule prod_simplify)": true,
+            "(step t1 (cl (= (* i k 6 j) (* 6 i k j))) :rule prod_simplify)": true,
+            "(step t1 (cl (= (* x y 1.0 2.0 z 3.0 z) (* 6.0 x y z z))) :rule prod_simplify)": true,
+            "(step t1 (cl (= (* x y 2.0 z z) (* 2.0 x y z z))) :rule prod_simplify)": true,
+
+            "(step t1 (cl (= (* i 2 k 3 5 j) (* 60 i k j))) :rule prod_simplify)": false,
+            "(step t1 (cl (= (* i k 6 j) (* i k 6 j))) :rule prod_simplify)": false,
+            "(step t1 (cl (= (* x y 1.0 2.0 z 3.0 z) (* 4.0 x y z z))) :rule prod_simplify)": false,
+            "(step t1 (cl (= (* x y 1.0 2.0 z 3.0 z) (* x y z z))) :rule prod_simplify)": false,
+        }
+        "Transformation #4" {
+            "(step t1 (cl (= (* i k 1 j) (* i k j))) :rule prod_simplify)": true,
+            "(step t1 (cl (= (* i 1 1 k 1 j) (* i k j))) :rule prod_simplify)": true,
+            "(step t1 (cl (= (* x y 1.0 z z) (* x y z z))) :rule prod_simplify)": true,
+            "(step t1 (cl (= (* x y 5.0 1.0 z 0.2 z) (* x y z z))) :rule prod_simplify)": true,
+
+            "(step t1 (cl (= (* i k 1 j) (* 1 i k j))) :rule prod_simplify)": false,
+            "(step t1 (cl (= (* x y 5.0 1.0 z 0.2 z) (* 1.0 x y z z))) :rule prod_simplify)": false,
+        }
+        "Clause is of the wrong form" {
+            "(step t1 (cl (= (* i 1 1) i)) :rule prod_simplify)": false,
+            "(step t1 (cl (= (* y 0.1 10.0) y)) :rule prod_simplify)": false,
+        }
+    }
+}
+
+#[test]
 fn test_nary_elim_rule() {
     test_cases! {
         definitions = "
