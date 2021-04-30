@@ -369,11 +369,16 @@ impl<R: BufRead> Parser<R> {
                 }
                 other => return Err(self.unexpected_token(other)),
             };
-            let old = self.state.step_indices.insert(index, commands.len());
-            if old.is_some() {
-                return Err(self.err(ErrorKind::RepeatedStepIndex));
+            match self.state.step_indices.entry(index) {
+                Entry::Occupied(entry) => {
+                    let key = entry.key().clone();
+                    return Err(self.err(ErrorKind::RepeatedStepIndex(key)));
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(commands.len());
+                    commands.push(command);
+                }
             }
-            commands.push(command);
         }
         Ok(Proof(commands))
     }
@@ -463,7 +468,10 @@ impl<R: BufRead> Parser<R> {
         let name = self.expect_symbol()?;
         let arity = self.expect_numeral()?;
         self.expect_token(Token::CloseParen)?;
-        Ok((name, arity.to_u64().unwrap())) // TODO: Add proper error handling
+        let arity = arity
+            .to_u64()
+            .ok_or_else(|| self.err(ErrorKind::InvalidSortArity(arity)))?;
+        Ok((name, arity))
     }
 
     /// Parses a "define-fun" proof command. Returns the function name and its definition. This

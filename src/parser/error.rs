@@ -1,6 +1,8 @@
 use std::io;
 use std::ops::RangeFrom;
 
+use num_bigint::BigInt;
+
 use crate::ast::*;
 
 use super::lexer::{Position, Token};
@@ -32,7 +34,8 @@ pub enum ErrorKind {
     UndefinedIden(Identifier),
     UndefinedStepIndex(String),
     WrongNumberOfArgs(usize, usize),
-    RepeatedStepIndex,
+    RepeatedStepIndex(String),
+    InvalidSortArity(BigInt),
     NotYetImplemented,
 }
 
