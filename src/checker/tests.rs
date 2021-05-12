@@ -371,7 +371,7 @@ fn test_eq_congruent_rule() {
 }
 
 #[test]
-fn test_distinct_elim_intro() {
+fn test_distinct_elim_rule() {
     test_cases! {
         definitions = "
             (declare-sort T 0)
