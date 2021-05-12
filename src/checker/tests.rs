@@ -421,6 +421,46 @@ fn test_distinct_elim_rule() {
 }
 
 #[test]
+fn test_la_rw_eq_rule() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () Int)
+            (declare-fun b () Int)
+            (declare-fun x () Real)
+            (declare-fun y () Real)
+        ",
+        "Simple working examples" {
+            "(step t1 (cl (= (= a b) (and (<= a b) (<= b a)))) :rule la_rw_eq)": true,
+            "(step t1 (cl (= (= x y) (and (<= x y) (<= y x)))) :rule la_rw_eq)": true,
+        }
+        "Clause term is not of the correct form" {
+            "(step t1 (cl (= (= b a) (and (<= a b) (<= b a)))) :rule la_rw_eq)": false,
+            "(step t1 (cl (= (= x y) (and (<= x y) (<= x y)))) :rule la_rw_eq)": false,
+        }
+    }
+}
+
+#[test]
+fn test_la_disequality_rule() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () Int)
+            (declare-fun b () Int)
+            (declare-fun x () Real)
+            (declare-fun y () Real)
+        ",
+        "Simple working examples" {
+            "(step t1 (cl (or (= a b) (not (<= a b)) (not (<= b a)))) :rule la_disequality)": true,
+            "(step t1 (cl (or (= x y) (not (<= x y)) (not (<= y x)))) :rule la_disequality)": true,
+        }
+        "Clause term is not of the correct form" {
+            "(step t1 (cl (or (= b a) (not (<= a b)) (not (<= b a)))) :rule la_disequality)": false,
+            "(step t1 (cl (or (= x y) (not (<= y x)) (not (<= y x)))) :rule la_disequality)": false,
+        }
+    }
+}
+
+#[test]
 fn test_resolution_rule() {
     test_cases! {
         definitions = "

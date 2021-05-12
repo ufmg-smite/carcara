@@ -105,7 +105,13 @@ impl ParserState {
     fn make_op(&mut self, op: Operator, args: Vec<Term>) -> Result<Term, ErrorKind> {
         let sorts: Vec<_> = args.iter().map(Term::sort).collect();
         match op {
-            Operator::Add | Operator::Mult | Operator::Div => {
+            Operator::Add
+            | Operator::Mult
+            | Operator::Div
+            | Operator::LessThan
+            | Operator::GreaterThan
+            | Operator::LessEq
+            | Operator::GreaterEq => {
                 ErrorKind::assert_num_of_args_range(&args, 2..)?;
 
                 // All the arguments must have the same sort, and it must be either Int or Real
@@ -145,7 +151,6 @@ impl ParserState {
                 SortError::assert_eq(Term::BOOL_SORT, &sorts[0])?;
                 SortError::assert_eq(&sorts[1], &sorts[2])?;
             }
-            _ => return Err(ErrorKind::NotYetImplemented),
         }
         let args = self.add_all(args);
         Ok(Term::Op(op, args))

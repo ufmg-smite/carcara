@@ -237,6 +237,7 @@ macro_rules! match_term {
             None
         }
     };
+    (@GET_VARIANT <=) => { Operator::LessEq };
     (@GET_VARIANT =) => { Operator::Eq };
     (@GET_VARIANT or) => { Operator::Or };
     (@GET_VARIANT and) => { Operator::And };
