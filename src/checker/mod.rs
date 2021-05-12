@@ -31,11 +31,15 @@ pub enum CheckerError<'a> {
 
 pub struct ProofChecker {
     proof: Proof,
+    skip_unknown_rules: bool,
 }
 
 impl ProofChecker {
-    pub fn new(proof: Proof) -> Self {
-        ProofChecker { proof }
+    pub fn new(proof: Proof, skip_unknown_rules: bool) -> Self {
+        ProofChecker {
+            proof,
+            skip_unknown_rules,
+        }
     }
 
     pub fn check(&self) -> Result<(), CheckerError> {
@@ -47,7 +51,11 @@ impl ProofChecker {
                 args,
             } = step
             {
-                let rule = Self::get_rule(rule_name).ok_or(CheckerError::UnknownRule(rule_name))?;
+                let rule = match Self::get_rule(rule_name) {
+                    Some(r) => r,
+                    None if self.skip_unknown_rules => continue,
+                    None => return Err(CheckerError::UnknownRule(rule_name)),
+                };
                 let premises = premises.iter().map(|&i| &self.proof.0[i]).collect();
                 if rule(&clause, premises, &args).is_none() {
                     return Err(CheckerError::FailedOnRule(rule_name));

@@ -47,7 +47,7 @@ fn main() -> ParserResult<()> {
                 parse_problem_proof(problem, stdin.lock())?
             };
             println!("{:#?}", proof);
-            match ProofChecker::new(proof).check() {
+            match ProofChecker::new(proof, false).check() {
                 Ok(()) => println!("true"),
                 Err(CheckerError::UnknownRule(s)) => println!("unknown rule: {}", s),
                 Err(CheckerError::FailedOnRule(s)) => println!("false ({})", s),

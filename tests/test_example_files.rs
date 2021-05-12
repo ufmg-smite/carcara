@@ -7,20 +7,23 @@ use std::{
 
 use verit_proof_checker::*;
 
-fn test_file(problem_path: &Path, proof_path: &Path) -> Option<()> {
+fn test_file(problem_path: &Path, proof_path: &Path) {
     use checker::CheckerError;
     use parser::error::{ErrorKind, ParserError};
 
-    let problem_reader = BufReader::new(File::open(problem_path).ok()?);
-    let proof_reader = BufReader::new(File::open(proof_path).ok()?);
+    let problem_reader = BufReader::new(File::open(problem_path).unwrap());
+    let proof_reader = BufReader::new(File::open(proof_path).unwrap());
 
     let proof = match parser::parse_problem_proof(problem_reader, proof_reader) {
-        Err(ParserError(ErrorKind::NotYetImplemented, _)) => return Some(()),
-        p => p.ok()?,
+        Err(ParserError(ErrorKind::NotYetImplemented, _)) => return,
+        p => p.unwrap(),
     };
-    match checker::ProofChecker::new(proof).check() {
-        Ok(_) | Err(CheckerError::UnknownRule(_)) => Some(()),
-        Err(CheckerError::FailedOnRule(_)) => None,
+    if let Err(CheckerError::FailedOnRule(rule)) = checker::ProofChecker::new(proof, true).check() {
+        panic!(
+            "\ntest file \"{}\"\nfailed on rule \"{}\"\n",
+            &problem_path.to_str().unwrap(),
+            rule,
+        );
     }
 }
 
@@ -43,8 +46,7 @@ fn test_examples_from_dir(dir_path: &str) {
             cloned.push(file_name);
             cloned
         };
-        test_file(&problem_path, &proof_path)
-            .unwrap_or_else(|| panic!("failed on problem: {}", &problem_path.to_str().unwrap()));
+        test_file(&problem_path, &proof_path);
     }
 }
 
