@@ -213,6 +213,7 @@ macro_rules! match_term {
     (@ARGS_IDENT ( $($name:ident : $arg:tt),* ) = $var:expr) => {
         if let [$($name),*] = $var {
             #[allow(unused_parens)]
+            #[allow(clippy::manual_map)]
             match ($(match_term!($arg = $name)),*) {
                 ($(Some($name)),*) => Some(($($name),*)),
                 _ => None,
@@ -227,6 +228,7 @@ macro_rules! match_term {
     (@ARGS_IDENT ( $($name:ident : $arg:tt),* ) = $var:expr, RETURN_RCS) => {
         if let [$($name),*] = $var {
             #[allow(unused_parens)]
+            #[allow(clippy::manual_map)]
             match ($(match_term!($arg = $name, RETURN_RCS)),*) {
                 ($(Some($name)),*) => Some(($($name),*)),
                 _ => None,
