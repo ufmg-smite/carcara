@@ -178,21 +178,21 @@ where
         us.push(u);
     }
 
-    match conclusion {
-        (Term::App(f, f_args), Term::App(g, g_args)) => {
-            if f != g || f_args.len() != ts.len() {
-                return None;
-            }
-            for i in 0..ts.len() {
-                let expected = (f_args[i].as_ref(), g_args[i].as_ref());
-                if expected != (ts[i], us[i]) && expected != (us[i], ts[i]) {
-                    return None;
-                }
-            }
-            Some(())
-        }
-        _ => None,
+    let (f_args, g_args) = match conclusion {
+        (Term::App(f, f_args), Term::App(g, g_args)) if f == g => (f_args, g_args),
+        (Term::Op(f, f_args), Term::Op(g, g_args)) if f == g => (f_args, g_args),
+        _ => return None,
+    };
+    if f_args.len() != g_args.len() || f_args.len() != ts.len() {
+        return None;
     }
+    for i in 0..ts.len() {
+        let expected = (f_args[i].as_ref(), g_args[i].as_ref());
+        if expected != (ts[i], us[i]) && expected != (us[i], ts[i]) {
+            return None;
+        }
+    }
+    Some(())
 }
 
 pub fn distinct_elim(

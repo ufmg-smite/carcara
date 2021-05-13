@@ -335,6 +335,9 @@ fn test_eq_congruent_rule() {
 
             "(step t1 (cl (not (= a x)) (not (= b y)) (not (= c z))
                       (= (f-3 a b c) (f-3 x y z))) :rule eq_congruent)": true,
+
+            "(step t1 (cl (not (= a x)) (not (= b y)) (not (= c z))
+                      (= (* a b c) (* x y z))) :rule eq_congruent)": true,
         }
         "t_i and u_i are possibly flipped" {
             "(step t1 (cl (not (= b a)) (= (f-1 a) (f-1 b))) :rule eq_congruent)": true,
@@ -355,9 +358,15 @@ fn test_eq_congruent_rule() {
         "Functions are not the same" {
             "(step t1 (cl (not (= a x)) (not (= b y)) (= (f a b) (g x y)))
                 :rule eq_congruent)": false,
+
+            "(step t1 (cl (not (= a x)) (not (= b y)) (not (= c z))
+                      (= (* a b c) (+ x y z))) :rule eq_congruent)": false,
         }
         "Number of function arguments is not the same as the number of inequalities" {
             "(step t1 (cl (not (= a x)) (not (= b y)) (= (f-3 a b c) (f-3 x y z)))
+                :rule eq_congruent)": false,
+
+            "(step t1 (cl (not (= a x)) (not (= b y)) (= (+ a b) (+ x y z)))
                 :rule eq_congruent)": false,
         }
         "Terms don't match" {
