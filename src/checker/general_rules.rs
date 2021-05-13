@@ -293,9 +293,12 @@ pub fn cong(clause: &[ByRefRc<Term>], premises: Vec<&ProofCommand>, _: &[ProofAr
         return None;
     }
 
-    let mut premises = premises.into_iter().map(|command| {
-        get_single_term_from_command(command).and_then(|term| match_term!((= t u) = term))
-    });
+    let mut premises = premises
+        .into_iter()
+        .map(|command| {
+            get_single_term_from_command(command).and_then(|term| match_term!((= t u) = term))
+        })
+        .peekable();
     let (args_f, args_g) = match match_term!((= f g) = clause[0].as_ref())? {
         (Term::App(f, args_f), Term::App(g, args_g)) if f == g => (args_f, args_g),
         (Term::Op(op_f, args_f), Term::Op(op_g, args_g)) if op_f == op_g => (args_f, args_g),
@@ -308,14 +311,22 @@ pub fn cong(clause: &[ByRefRc<Term>], premises: Vec<&ProofCommand>, _: &[ProofAr
     // Since the semantics of this rule is slighty different from that of "eq_congruent" and
     // "eq_congruent_pred", we cannot just use the `generic_congruent_rule` function
     for (arg_f, arg_g) in args_f.iter().zip(args_g) {
-        if arg_f != arg_g {
-            // If the arguments aren't directly identical, we need a premise that shows that
-            // they are equal
-            let (t, u) = premises.next()??;
-            let expected = (arg_f.as_ref(), arg_g.as_ref());
-            if expected != (t, u) && expected != (u, t) {
-                return None;
+        let expected = (arg_f.as_ref(), arg_g.as_ref());
+        match premises.peek() {
+            // If the next premise can justify that the arguments are equal, we consume it. We
+            // prefer consuming the premise even if the arguments are directly equal
+            Some(Some((t, u))) if expected == (t, u) || expected == (u, t) => {
+                premises.next();
             }
+            // If there are no more premises, or the next premise does not match the current
+            // arguments, the arguments need to be directly equal
+            None | Some(Some(_)) => {
+                if arg_f != arg_g {
+                    return None;
+                }
+            }
+            // If the inner option is `None`, it means the premise was of the wrong form
+            Some(None) => return None,
         }
     }
 

@@ -551,6 +551,7 @@ fn test_cong_rule() {
             (declare-fun q () Bool)
             (declare-fun r () Bool)
             (declare-fun s () Bool)
+            (declare-fun x () Real)
         ",
         "Simple working examples" {
             "(assume h1 (= a b))
@@ -594,6 +595,14 @@ fn test_cong_rule() {
             (assume h2 (= c d))
             (assume h3 (= p q))
             (step t4 (cl (= (f a p c) (f b q d))) :rule cong :premises (h1 h2 h3))": false,
+        }
+        "Should prefer consuming premise than relying on reflexivity" {
+            "(assume h1 (= false false))
+            (assume h2 (= r s))
+            (step t3 (cl (= (and false false s) (and false false r))) :rule cong :premises (h1 h2))": true,
+
+            "(assume h1 (= (- 1.0) (- 1.0)))
+            (step t2 (cl (= (< x (- 1.0)) (< x (- 1.0)))) :rule cong :premises (h1))": true,
         }
     }
 }
