@@ -108,10 +108,54 @@ pub fn prod_simplify(
             _ => None,
         }
     }
+    fn is_constant(term: &ByRefRc<Term>) -> bool {
+        matches!(
+            term.as_ref(),
+            Term::Terminal(Terminal::Real(_)) | Term::Terminal(Terminal::Integer(_))
+        )
+    }
+
+    /// Checks if the u term is valid and extracts from it the leading constant and the remaining
+    /// arguments.
+    fn unwrap_u_term(u: &Term) -> Option<(BigRational, &[ByRefRc<Term>])> {
+        Some(match match_term!((* ...) = u) {
+            Some([]) | Some([_]) => unreachable!(),
+
+            Some(args) => {
+                // We check if there are any constants in u (aside from the leading constant). If
+                // there are any, we know this u term is invalid, so we can return `None`
+                if args[1..].iter().any(is_constant) {
+                    return None;
+                }
+                match get_ratio_from_term(&args[0]) {
+                    // If the leading constant is 1, it should have been omitted
+                    Some(constant) if constant.is_one() => return None,
+                    Some(constant) => (constant, &args[1..]),
+                    None => (BigRational::one(), args),
+                }
+            }
+
+            // If u is not a product, we take the term as whole as the leading constant, with no
+            // remaining arguments
+            None => (get_ratio_from_term(u)?, &[] as &[_]),
+        })
+    }
+
     if clause.len() != 1 {
         return None;
     }
-    let (ts, u) = match_term!((= (* ...) u) = clause[0].as_ref())?;
+
+    let (first, second) = match_term!((= first second) = clause[0].as_ref())?;
+    let (ts, (u_constant, u_args)) = {
+        // Since the ts and u terms may be in either order, we have to try to validate both options
+        // to find out which term is which
+        let try_order = |ts, u| {
+            let ts = match_term!((* ...) = ts)?;
+            Some((ts, unwrap_u_term(u)?))
+        };
+        try_order(first, second).or_else(|| try_order(second, first))?
+    };
+
     let mut result = Vec::with_capacity(ts.len());
     let mut constant_total = BigRational::one();
 
@@ -133,17 +177,6 @@ pub fn prod_simplify(
             break;
         }
     }
-
-    // Extract from the u term the leading constant and the remaining arguments
-    let (u_constant, u_args) = match match_term!((* ...) = u) {
-        Some([]) | Some([_]) => unreachable!(),
-        // If `constant_total` is one, we expect there to be no leading constant in u
-        Some(args) if constant_total == BigRational::one() => (BigRational::one(), args),
-        Some([constant, rest @ ..]) => (get_ratio_from_term(constant)?, rest),
-        // If u is not a product, we take the term as whole as the leading constant, with no
-        // remaining arguments
-        None => (get_ratio_from_term(u)?, &[] as &[_]),
-    };
 
     // Finally, we verify that the constant and the remaining arguments are what we expect
     to_option(u_constant == constant_total && u_args.iter().map(ByRefRc::as_ref).eq(result))

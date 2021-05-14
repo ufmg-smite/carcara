@@ -1032,7 +1032,7 @@ fn test_prod_simplify_rule() {
         ",
         "Transformation #1" {
             "(step t1 (cl (= (* 2 3 5 7) 210)) :rule prod_simplify)": true,
-            "(step t1 (cl (= (* 1.5 3.7 0.1) 0.555)) :rule prod_simplify)": true,
+            "(step t1 (cl (= 0.555 (* 1.5 3.7 0.1))) :rule prod_simplify)": true,
             "(step t1 (cl (= (* 1 1 1) 1)) :rule prod_simplify)": true,
 
             "(step t1 (cl (= (* 1 2 4) 6)) :rule prod_simplify)": false,
@@ -1041,7 +1041,7 @@ fn test_prod_simplify_rule() {
         "Transformation #2" {
             "(step t1 (cl (= (* 2 3 0 7) 0)) :rule prod_simplify)": true,
             "(step t1 (cl (= (* 1.5 3.7 0.0) 0.0)) :rule prod_simplify)": true,
-            "(step t1 (cl (= (* i 2 k 3 0 j) 0)) :rule prod_simplify)": true,
+            "(step t1 (cl (= 0 (* i 2 k 3 0 j))) :rule prod_simplify)": true,
             "(step t1 (cl (= (* i j 0 k) 0)) :rule prod_simplify)": true,
             "(step t1 (cl (= (* x y 1.0 2.0 z 0.0 z) 0.0)) :rule prod_simplify)": true,
 
@@ -1050,9 +1050,9 @@ fn test_prod_simplify_rule() {
             "(step t1 (cl (= (* i j 0 k) (* i j k))) :rule prod_simplify)": false,
         }
         "Transformation #3" {
-            "(step t1 (cl (= (* i 2 k 3 5 j) (* 30 i k j))) :rule prod_simplify)": true,
+            "(step t1 (cl (= (* 30 i k j) (* i 2 k 3 5 j))) :rule prod_simplify)": true,
             "(step t1 (cl (= (* i k 6 j) (* 6 i k j))) :rule prod_simplify)": true,
-            "(step t1 (cl (= (* x y 1.0 2.0 z 3.0 z) (* 6.0 x y z z))) :rule prod_simplify)": true,
+            "(step t1 (cl (= (* 6.0 x y z z) (* x y 1.0 2.0 z 3.0 z))) :rule prod_simplify)": true,
             "(step t1 (cl (= (* x y 2.0 z z) (* 2.0 x y z z))) :rule prod_simplify)": true,
 
             "(step t1 (cl (= (* i 2 k 3 5 j) (* 60 i k j))) :rule prod_simplify)": false,
@@ -1063,7 +1063,7 @@ fn test_prod_simplify_rule() {
         "Transformation #4" {
             "(step t1 (cl (= (* i k 1 j) (* i k j))) :rule prod_simplify)": true,
             "(step t1 (cl (= (* i 1 1 k 1 j) (* i k j))) :rule prod_simplify)": true,
-            "(step t1 (cl (= (* x y 1.0 z z) (* x y z z))) :rule prod_simplify)": true,
+            "(step t1 (cl (= (* x y z z) (* x y 1.0 z z))) :rule prod_simplify)": true,
             "(step t1 (cl (= (* x y 5.0 1.0 z 0.2 z) (* x y z z))) :rule prod_simplify)": true,
 
             "(step t1 (cl (= (* i k 1 j) (* 1 i k j))) :rule prod_simplify)": false,
