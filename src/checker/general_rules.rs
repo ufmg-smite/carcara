@@ -293,12 +293,12 @@ pub fn cong(clause: &[ByRefRc<Term>], premises: Vec<&ProofCommand>, _: &[ProofAr
     /// "eq_congruent_pred", we cannot just use the `generic_congruent_rule` function
     fn check_cong<'a>(
         premises: &[Option<(&'a Term, &'a Term)>],
-        args_f: &[ByRefRc<Term>],
-        args_g: &[ByRefRc<Term>],
+        f_args: &[ByRefRc<Term>],
+        g_args: &[ByRefRc<Term>],
     ) -> bool {
         let mut premises = premises.iter().peekable();
-        for (arg_f, arg_g) in args_f.iter().zip(args_g) {
-            let expected = (arg_f.as_ref(), arg_g.as_ref());
+        for (f_arg, g_arg) in f_args.iter().zip(g_args) {
+            let expected = (f_arg.as_ref(), g_arg.as_ref());
             match premises.peek() {
                 // If the next premise can justify that the arguments are equal, we consume it. We
                 // prefer consuming the premise even if the arguments are directly equal
@@ -308,7 +308,7 @@ pub fn cong(clause: &[ByRefRc<Term>], premises: Vec<&ProofCommand>, _: &[ProofAr
                 // If there are no more premises, or the next premise does not match the current
                 // arguments, the arguments need to be directly equal
                 None | Some(Some(_)) => {
-                    if arg_f != arg_g {
+                    if f_arg != g_arg {
                         return false;
                     }
                 }
@@ -332,33 +332,33 @@ pub fn cong(clause: &[ByRefRc<Term>], premises: Vec<&ProofCommand>, _: &[ProofAr
         })
         .collect();
 
-    let (args_f, args_g) = match match_term!((= f g) = clause[0].as_ref())? {
+    let (f_args, g_args) = match match_term!((= f g) = clause[0].as_ref())? {
         // Because of the way veriT handles equality terms, when the "cong" rule is called with two
         // equalities of two terms, the order of their arguments may be flipped. Because of that,
         // we have to treat this special case separately
-        (Term::Op(Operator::Eq, args_f), Term::Op(Operator::Eq, args_g))
-            if args_f.len() == 2 && args_g.len() == 2 =>
+        (Term::Op(Operator::Eq, f_args), Term::Op(Operator::Eq, g_args))
+            if f_args.len() == 2 && g_args.len() == 2 =>
         {
             // We have to test all four possibilites: neither f nor g are flipped, only f is
             // flipped, only g is flipped, or both f and g are flipped
-            let args_f_flipped = [args_f[1].clone(), args_f[0].clone()];
-            let args_g_flipped = [args_g[1].clone(), args_g[0].clone()];
+            let f_args_flipped = [f_args[1].clone(), f_args[0].clone()];
+            let g_args_flipped = [g_args[1].clone(), g_args[0].clone()];
             return to_option(
-                check_cong(&premises, args_f, args_g)
-                    || check_cong(&premises, &args_f_flipped, args_g)
-                    || check_cong(&premises, args_f, &args_g_flipped)
-                    || check_cong(&premises, &args_f_flipped, &args_g_flipped),
+                check_cong(&premises, f_args, g_args)
+                    || check_cong(&premises, &f_args_flipped, g_args)
+                    || check_cong(&premises, f_args, &g_args_flipped)
+                    || check_cong(&premises, &f_args_flipped, &g_args_flipped),
             );
         }
 
-        (Term::App(f, args_f), Term::App(g, args_g)) if f == g => (args_f, args_g),
-        (Term::Op(op_f, args_f), Term::Op(op_g, args_g)) if op_f == op_g => (args_f, args_g),
+        (Term::App(f, f_args), Term::App(g, g_args)) if f == g => (f_args, g_args),
+        (Term::Op(f, f_args), Term::Op(g, g_args)) if f == g => (f_args, g_args),
         _ => return None,
     };
-    if args_f.len() != args_g.len() {
+    if f_args.len() != g_args.len() {
         return None;
     }
-    to_option(check_cong(&premises, args_f, args_g))
+    to_option(check_cong(&premises, f_args, g_args))
 }
 
 pub fn and(clause: &[ByRefRc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
