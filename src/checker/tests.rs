@@ -552,6 +552,7 @@ fn test_cong_rule() {
             (declare-fun r () Bool)
             (declare-fun s () Bool)
             (declare-fun x () Real)
+            (declare-fun y () Real)
         ",
         "Simple working examples" {
             "(assume h1 (= a b))
@@ -603,6 +604,22 @@ fn test_cong_rule() {
 
             "(assume h1 (= (- 1.0) (- 1.0)))
             (step t2 (cl (= (< x (- 1.0)) (< x (- 1.0)))) :rule cong :premises (h1))": true,
+        }
+        "Argument order may be flipped if operator is \"=\"" {
+            "(assume h1 (= x y))
+            (step t2 (cl (= (= 0.0 x) (= y 0.0))) :rule cong :premises (h1))": true,
+
+            "(assume h1 (= x y))
+            (step t2 (cl (= (= x 0.0) (= 0.0 y))) :rule cong :premises (h1))": true,
+
+            "(assume h1 (= a b)) (assume h2 (= c d))
+            (step t3 (cl (= (= c a) (= b d))) :rule cong :premises (h1 h2))": true,
+
+            "(assume h1 (= a b)) (assume h2 (= c d))
+            (step t3 (cl (= (= a c) (= d b))) :rule cong :premises (h1 h2))": true,
+
+            "(assume h1 (= a b)) (assume h2 (= c d))
+            (step t3 (cl (= (= c a) (= d b))) :rule cong :premises (h1 h2))": true,
         }
     }
 }

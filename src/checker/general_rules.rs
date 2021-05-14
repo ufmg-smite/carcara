@@ -289,17 +289,68 @@ pub fn resolution(
 }
 
 pub fn cong(clause: &[ByRefRc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+    /// Since the semantics of this rule is slighty different from that of "eq_congruent" and
+    /// "eq_congruent_pred", we cannot just use the `generic_congruent_rule` function
+    fn check_cong<'a>(
+        premises: &[Option<(&'a Term, &'a Term)>],
+        args_f: &[ByRefRc<Term>],
+        args_g: &[ByRefRc<Term>],
+    ) -> bool {
+        let mut premises = premises.iter().peekable();
+        for (arg_f, arg_g) in args_f.iter().zip(args_g) {
+            let expected = (arg_f.as_ref(), arg_g.as_ref());
+            match premises.peek() {
+                // If the next premise can justify that the arguments are equal, we consume it. We
+                // prefer consuming the premise even if the arguments are directly equal
+                Some(Some((t, u))) if expected == (t, u) || expected == (u, t) => {
+                    premises.next();
+                }
+                // If there are no more premises, or the next premise does not match the current
+                // arguments, the arguments need to be directly equal
+                None | Some(Some(_)) => {
+                    if arg_f != arg_g {
+                        return false;
+                    }
+                }
+                // If the inner option is `None`, it means the premise was of the wrong form
+                Some(None) => return false,
+            }
+        }
+
+        // At the end, all premises must have been consumed
+        premises.next().is_none()
+    }
+
     if premises.is_empty() || clause.len() != 1 {
         return None;
     }
 
-    let mut premises = premises
+    let premises: Vec<_> = premises
         .into_iter()
         .map(|command| {
             get_single_term_from_command(command).and_then(|term| match_term!((= t u) = term))
         })
-        .peekable();
+        .collect();
+
     let (args_f, args_g) = match match_term!((= f g) = clause[0].as_ref())? {
+        // Because of the way veriT handles equality terms, when the "cong" rule is called with two
+        // equalities of two terms, the order of their arguments may be flipped. Because of that,
+        // we have to treat this special case separately
+        (Term::Op(Operator::Eq, args_f), Term::Op(Operator::Eq, args_g))
+            if args_f.len() == 2 && args_g.len() == 2 =>
+        {
+            // We have to test all four possibilites: neither f nor g are flipped, only f is
+            // flipped, only g is flipped, or both f and g are flipped
+            let args_f_flipped = [args_f[1].clone(), args_f[0].clone()];
+            let args_g_flipped = [args_g[1].clone(), args_g[0].clone()];
+            return to_option(
+                check_cong(&premises, args_f, args_g)
+                    || check_cong(&premises, &args_f_flipped, args_g)
+                    || check_cong(&premises, args_f, &args_g_flipped)
+                    || check_cong(&premises, &args_f_flipped, &args_g_flipped),
+            );
+        }
+
         (Term::App(f, args_f), Term::App(g, args_g)) if f == g => (args_f, args_g),
         (Term::Op(op_f, args_f), Term::Op(op_g, args_g)) if op_f == op_g => (args_f, args_g),
         _ => return None,
@@ -307,31 +358,7 @@ pub fn cong(clause: &[ByRefRc<Term>], premises: Vec<&ProofCommand>, _: &[ProofAr
     if args_f.len() != args_g.len() {
         return None;
     }
-
-    // Since the semantics of this rule is slighty different from that of "eq_congruent" and
-    // "eq_congruent_pred", we cannot just use the `generic_congruent_rule` function
-    for (arg_f, arg_g) in args_f.iter().zip(args_g) {
-        let expected = (arg_f.as_ref(), arg_g.as_ref());
-        match premises.peek() {
-            // If the next premise can justify that the arguments are equal, we consume it. We
-            // prefer consuming the premise even if the arguments are directly equal
-            Some(Some((t, u))) if expected == (t, u) || expected == (u, t) => {
-                premises.next();
-            }
-            // If there are no more premises, or the next premise does not match the current
-            // arguments, the arguments need to be directly equal
-            None | Some(Some(_)) => {
-                if arg_f != arg_g {
-                    return None;
-                }
-            }
-            // If the inner option is `None`, it means the premise was of the wrong form
-            Some(None) => return None,
-        }
-    }
-
-    // At the end, all premises must have been consumed
-    to_option(premises.next().is_none())
+    to_option(check_cong(&premises, args_f, args_g))
 }
 
 pub fn and(clause: &[ByRefRc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
