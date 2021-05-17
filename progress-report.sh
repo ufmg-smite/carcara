@@ -20,12 +20,12 @@ IMPLEMENTED=0
 if [ $1 = "--files" ] || [ $1 = "-f" ]; then
     cargo build --release 2> /dev/null
     for f in ${@:2}; do
-        ./target/release/verit-proof-checker --print-used-rules "$f" > $TEMPFILE
+        ./target/release/verit-proof-checker print-used-rules "$f" > $TEMPFILE
         sort --unique $TEMPFILE -o $TEMPFILE
 
         ALL_IMPLEMENTED=true
         while read rule; do
-            RESULT=$(./target/release/verit-proof-checker --is-rule-implemented "$rule")
+            RESULT=$(./target/release/verit-proof-checker is-rule-implemented "$rule")
             if [ $RESULT = "false" ]; then
                 ALL_IMPLEMENTED=$(false)
                 break
@@ -45,12 +45,12 @@ if [ $1 = "--files" ] || [ $1 = "-f" ]; then
 elif [ $1 = "--rules" ] || [ $1 = "-r" ]; then
     cargo build --release 2> /dev/null
     for f in ${@:2}; do
-        ./target/release/verit-proof-checker --print-used-rules "$f" >> $TEMPFILE
+        ./target/release/verit-proof-checker print-used-rules "$f" >> $TEMPFILE
     done
     sort --unique $TEMPFILE -o $TEMPFILE
 
     while read rule; do
-        RESULT=$(./target/release/verit-proof-checker --is-rule-implemented "$rule")
+        RESULT=$(./target/release/verit-proof-checker is-rule-implemented "$rule")
         if [ $RESULT = "true" ]; then
             let IMPLEMENTED++
             echo -e "\e[1;32m$rule"
