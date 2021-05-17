@@ -9,24 +9,76 @@ use parser::*;
 use std::fs::File;
 use std::io::BufReader;
 
-use clap::{App, AppSettings, Arg, SubCommand};
+use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
 
-fn print_used_rules(file_path: &str) -> ParserResult<()> {
+fn get_used_rules(file_path: &str) -> ParserResult<Vec<String>> {
     use parser::lexer::{Lexer, Token};
+
     let file = File::open(file_path).map_err(|err| (err, (0, 0)))?;
     let mut lex = Lexer::new(BufReader::new(file)).map_err(|err| (err, (0, 0)))?;
+    let mut result = Vec::new();
     loop {
         let tk = lex.next_token()?;
         match tk {
             Token::Eof => break,
             Token::Keyword(s) if &s == "rule" => {
                 if let Token::Symbol(s) = lex.next_token()? {
-                    println!("{}", s)
+                    result.push(s)
                 }
             }
             _ => (),
         }
     }
+    Ok(result)
+}
+
+fn report_by_files(files: &[&str]) -> ParserResult<()> {
+    let mut implemented = 0;
+    for file in files {
+        let all_implemented = get_used_rules(file)?
+            .iter()
+            .all(|rule| ProofChecker::get_rule(rule).is_some());
+        if all_implemented {
+            println!("\x1b[1;32m{}", file);
+            implemented += 1;
+        } else {
+            println!("\x1b[0;31m{}", file);
+        }
+    }
+    println!(
+        "\x1b[0;37m{} / {} files with all rules implemented",
+        implemented,
+        files.len()
+    );
+    Ok(())
+}
+
+fn report_by_rules(files: &[&str]) -> ParserResult<()> {
+    let mut rules = files
+        .iter()
+        .flat_map(|file| match get_used_rules(file) {
+            Ok(rules) => rules.into_iter().map(Ok).collect(),
+            Err(e) => vec![Err(e)],
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    rules.sort();
+    rules.dedup();
+
+    let mut implemented = 0;
+    for r in &rules {
+        if ProofChecker::get_rule(&r).is_some() {
+            println!("\x1b[1;32m{}", r);
+            implemented += 1;
+        } else {
+            println!("\x1b[0;31m{}", r);
+        }
+    }
+    println!(
+        "\x1b[0;37m{} / {} rules implemented",
+        implemented,
+        rules.len()
+    );
     Ok(())
 }
 
@@ -50,14 +102,27 @@ fn main() -> ParserResult<()> {
                         .long("skip-unknown-rules")
                         .help("Skips rules that are not yet implemented"),
                 ),
-            SubCommand::with_name("print-used-rules")
+            SubCommand::with_name("progress-report")
                 .setting(AppSettings::DisableVersion)
-                .about("Prints all rules that were used in a proof file")
-                .arg(Arg::with_name("PROOF_FILE").required(true)),
-            SubCommand::with_name("is-rule-implemented")
-                .setting(AppSettings::DisableVersion)
-                .about("Prints \"true\" if the given rule is implemented, and \"false\" otherwise")
-                .arg(Arg::with_name("RULE").required(true)),
+                .about("Prints a progress report on which rules are implemented")
+                .arg(
+                    Arg::with_name("by-files")
+                        .short("f")
+                        .long("by-files")
+                        .help("Reports which files have all rules implemented"),
+                )
+                .arg(
+                    Arg::with_name("by-rules")
+                        .short("r")
+                        .long("by-rules")
+                        .help("Reports which rules in the given files are implemented"),
+                )
+                .group(
+                    ArgGroup::with_name("mode")
+                        .args(&["by-files", "by-rules"])
+                        .required(true),
+                )
+                .arg(Arg::with_name("files").multiple(true)),
         ])
         .get_matches();
 
@@ -77,13 +142,16 @@ fn main() -> ParserResult<()> {
             Err(CheckerError::UnknownRule(s)) => println!("unknown rule: {}", s),
             Err(CheckerError::FailedOnRule(s)) => println!("false ({})", s),
         }
-    } else if let Some(matches) = matches.subcommand_matches("print-used-rules") {
-        print_used_rules(matches.value_of("PROOF_FILE").unwrap())?
-    } else if let Some(matches) = matches.subcommand_matches("is-rule-implemented") {
-        println!(
-            "{}",
-            ProofChecker::get_rule(matches.value_of("RULE").unwrap()).is_some()
-        )
+    } else if let Some(matches) = matches.subcommand_matches("progress-report") {
+        let files = matches
+            .values_of("files")
+            .map(Iterator::collect::<Vec<_>>)
+            .unwrap_or_default();
+        if matches.is_present("by-files") {
+            report_by_files(&files)?;
+        } else if matches.is_present("by-rules") {
+            report_by_rules(&files)?;
+        }
     }
     Ok(())
 }
