@@ -44,6 +44,11 @@ fn main() -> ParserResult<()> {
                     Arg::with_name("print-ast")
                         .long("print-ast")
                         .help("Prints the parsed proof AST"),
+                )
+                .arg(
+                    Arg::with_name("skip-unknown-rules")
+                        .long("skip-unknown-rules")
+                        .help("Skips rules that are not yet implemented"),
                 ),
             SubCommand::with_name("print-used-rules")
                 .setting(AppSettings::DisableVersion)
@@ -67,7 +72,7 @@ fn main() -> ParserResult<()> {
         if matches.is_present("print-ast") {
             println!("{:#?}", proof);
         }
-        match ProofChecker::new(proof, false).check() {
+        match ProofChecker::new(proof, matches.is_present("skip-unknown-rules")).check() {
             Ok(()) => println!("true"),
             Err(CheckerError::UnknownRule(s)) => println!("unknown rule: {}", s),
             Err(CheckerError::FailedOnRule(s)) => println!("false ({})", s),
