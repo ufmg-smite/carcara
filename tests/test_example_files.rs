@@ -28,24 +28,17 @@ fn test_file(problem_path: &Path, proof_path: &Path) {
 }
 
 fn test_examples_from_dir(dir_path: &str) {
-    fn is_problem_file(entry: &io::Result<fs::DirEntry>) -> bool {
+    fn is_proof_file(entry: &io::Result<fs::DirEntry>) -> bool {
         let entry = entry.as_ref().unwrap();
         entry.file_type().unwrap().is_file()
-            && entry.path().extension() != Some(OsStr::new("proof"))
+            && entry.path().extension() == Some(OsStr::new("proof"))
     }
     let dir_path = String::from("test-examples/") + dir_path;
     let rd = fs::read_dir(dir_path).unwrap();
-    for entry in rd.filter(is_problem_file) {
+    for entry in rd.filter(is_proof_file) {
         let entry = entry.unwrap();
-        let problem_path = entry.path();
-        let proof_path = {
-            let mut cloned = problem_path.clone();
-            let mut file_name = cloned.file_name().unwrap().to_owned();
-            file_name.push(".proof");
-            cloned.pop();
-            cloned.push(file_name);
-            cloned
-        };
+        let proof_path = entry.path();
+        let problem_path = proof_path.with_extension("");
         test_file(&problem_path, &proof_path);
     }
 }
