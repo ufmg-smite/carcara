@@ -354,6 +354,14 @@ impl Term {
     pub fn remove_negation(&self) -> Option<&Self> {
         match_term!((not t) = self)
     }
+
+    pub fn as_ratio(&self) -> Option<BigRational> {
+        match self {
+            Term::Terminal(Terminal::Real(r)) => Some(r.clone()),
+            Term::Terminal(Terminal::Integer(i)) => Some(BigRational::from_integer(i.clone())),
+            _ => None,
+        }
+    }
 }
 
 impl Debug for Term {

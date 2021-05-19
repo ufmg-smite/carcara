@@ -101,13 +101,6 @@ pub fn prod_simplify(
     _: Vec<&ProofCommand>,
     _: &[ProofArg],
 ) -> Option<()> {
-    fn get_ratio_from_term(term: &Term) -> Option<BigRational> {
-        match term {
-            Term::Terminal(Terminal::Real(r)) => Some(r.clone()),
-            Term::Terminal(Terminal::Integer(i)) => Some(BigRational::from_integer(i.clone())),
-            _ => None,
-        }
-    }
     fn is_constant(term: &ByRefRc<Term>) -> bool {
         matches!(
             term.as_ref(),
@@ -127,7 +120,7 @@ pub fn prod_simplify(
                 if args[1..].iter().any(is_constant) {
                     return None;
                 }
-                match get_ratio_from_term(&args[0]) {
+                match args[0].as_ratio() {
                     // If the leading constant is 1, it should have been omitted
                     Some(constant) if constant.is_one() => return None,
                     Some(constant) => (constant, &args[1..]),
@@ -137,7 +130,7 @@ pub fn prod_simplify(
 
             // If u is not a product, we take the term as whole as the leading constant, with no
             // remaining arguments
-            None => (get_ratio_from_term(u)?, &[] as &[_]),
+            None => (u.as_ratio()?, &[] as &[_]),
         })
     }
 
