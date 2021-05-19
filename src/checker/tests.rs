@@ -380,6 +380,72 @@ fn test_eq_congruent_rule() {
 }
 
 #[test]
+fn test_eq_congruent_pred_rule() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () Bool)
+            (declare-fun b () Bool)
+            (declare-fun c () Bool)
+            (declare-fun x () Bool)
+            (declare-fun y () Bool)
+            (declare-fun z () Bool)
+            (declare-fun p (Bool Bool) Bool)
+            (declare-fun q (Bool Bool) Bool)
+            (declare-fun p-1 (Bool) Bool)
+            (declare-fun p-3 (Bool Bool Bool) Bool)
+        ",
+
+        "Simple working examples" {
+            "(step t1 (cl (not (= a b)) (not (p-1 a)) (p-1 b)) :rule eq_congruent_pred)": true,
+
+            "(step t1 (cl (not (= a x)) (not (= b y)) (not (= c z))
+                      (not (p-3 a b c)) (p-3 x y z)) :rule eq_congruent_pred)": true,
+
+            "(step t1 (cl (not (= a x)) (not (= b y)) (not (= c z))
+                      (not (and a b c)) (and x y z)) :rule eq_congruent_pred)": true,
+        }
+        "t_i and u_i are possibly flipped" {
+            "(step t1 (cl (not (= b a)) (not (p-1 a)) (p-1 b)) :rule eq_congruent_pred)": true,
+
+            "(step t1 (cl (not (= x a)) (not (= b y)) (not (= z c))
+                      (not (p-3 a b c)) (p-3 x y z)) :rule eq_congruent_pred)": true,
+
+            "(step t1 (cl (not (= a x)) (not (= b y)) (not (p x y)) (p a b))
+                :rule eq_congruent_pred)": true,
+        }
+        "Clause term is not an inequality" {
+            "(step t1 (cl (not (= a x)) (= b y) (not (p a b)) (p x y))
+                :rule eq_congruent_pred)": false,
+        }
+        "Final two terms are in the wrong order" {
+            "(step t1 (cl (not (= a x)) (not (= b y)) (p a b) (not (p x y)))
+                :rule eq_congruent_pred)": false,
+        }
+        "Functions are not the same" {
+            "(step t1 (cl (not (= a x)) (not (= b y)) (not (p a b)) (q x y))
+                :rule eq_congruent_pred)": false,
+
+            "(step t1 (cl (not (= a x)) (not (= b y)) (not (= c z))
+                      (not (or a b c)) (and x y z)) :rule eq_congruent_pred)": false,
+        }
+        "Number of function arguments is not the same as the number of inequalities" {
+            "(step t1 (cl (not (= a x)) (not (= b y)) (not (p-3 a b c)) (p-3 x y z))
+                :rule eq_congruent_pred)": false,
+
+            "(step t1 (cl (not (= a x)) (not (= b y)) (not (and a b)) (and x y z))
+                :rule eq_congruent_pred)": false,
+        }
+        "Terms don't match" {
+            "(step t1 (cl (not (= a x)) (not (= b y)) (not (p b a)) (p x y))
+                :rule eq_congruent_pred)": false,
+
+            "(step t1 (cl (not (= a x)) (not (= b y)) (not (p a b)) (p c z))
+                :rule eq_congruent_pred)": false,
+        }
+    }
+}
+
+#[test]
 fn test_distinct_elim_rule() {
     test_cases! {
         definitions = "
