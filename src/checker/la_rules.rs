@@ -118,12 +118,12 @@ impl<'a> LinearComb<'a> {
                 false => -BigRational::one(),
             };
             match match_term!((* a b) = arg) {
-                // TODO: We probably should allow products of two non-constant terms, and treat
-                // them as non-constant terms with coefficient one
                 Some((a, b)) => {
-                    let (coeff, var) = match a.as_ratio() {
-                        Some(r) => (r, b),
-                        None => (b.as_ratio()?, a),
+                    let (var, coeff) = match (a.as_ratio(), b.as_ratio()) {
+                        (None, None) => (arg, BigRational::one()),
+                        (None, Some(r)) => (a, r),
+                        (Some(r), None) => (b, r),
+                        (Some(_), Some(_)) => return None,
                     };
                     result.insert(var, coeff * polarity_coeff);
                 }
