@@ -55,14 +55,13 @@ fn flatten_sum(term: &Term) -> Vec<(&Term, bool)> {
         let mut result = flatten_sum(t);
         result.iter_mut().for_each(|item| item.1 = !item.1);
         result
-    } else if let Some((a, b)) = match_term!((- a b) = term) {
-        // TODO: Add support for subtractions with more than two arguments, e.g. "(- a b c)"
-        let mut result = flatten_sum(a);
-        result.extend(
-            flatten_sum(b)
+    } else if let Some(args) = match_term!((- ...) = term) {
+        let mut result = flatten_sum(&args[0]);
+        result.extend(args[1..].iter().flat_map(|t| {
+            flatten_sum(t.as_ref())
                 .into_iter()
-                .map(|(t, polarity)| (t, !polarity)),
-        );
+                .map(|(t, polarity)| (t, !polarity))
+        }));
         result
     } else {
         vec![(term, true)]
