@@ -516,6 +516,49 @@ fn test_la_rw_eq_rule() {
 }
 
 #[test]
+fn test_la_generic_rule() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () Real)
+            (declare-fun b () Real)
+            (declare-fun c () Real)
+        ",
+        "Simple working examples" {
+            "(step t1 (cl (> a 0.0) (<= a 0.0)) :rule la_generic :args (1.0 1.0))": true,
+            "(step t1 (cl (>= a 0.0) (< a 0.0)) :rule la_generic :args (1.0 1.0))": true,
+            "(step t1 (cl (<= 0.0 0.0)) :rule la_generic :args (1.0))": true,
+
+            "(step t1 (cl (< (+ a b) 1.0) (> (+ a b) 0.0))
+                :rule la_generic :args (1.0 (- 1.0)))": true,
+
+            "(step t1 (cl (<= (+ a (- b a)) b)) :rule la_generic :args (1.0))": true,
+
+            "(step t1 (cl (not (<= (- a b) (- c 1.0))) (<= (+ 1.0 (- a c)) b))
+                :rule la_generic :args (1.0 1.0))": true,
+        }
+        "Empty clause" {
+            "(step t1 (cl) :rule la_generic)": false,
+        }
+        "Wrong number of arguments" {
+            "(step t1 (cl (>= a 0.0) (< a 0.0)) :rule la_generic :args (1.0 1.0 1.0))": false,
+        }
+        "Invalid argument term" {
+            "(step t1 (cl (>= a 0.0) (< a 0.0)) :rule la_generic :args (1.0 b))": false,
+        }
+        "Clause term is not of the correct form" {
+            "(step t1 (cl (ite (= a b) false true)) :rule la_generic :args (1.0))": false,
+            "(step t1 (cl (= a 0.0) (< a 0.0)) :rule la_generic :args (1.0 1.0))": false,
+        }
+        "Negation of disequalities is satisfiable" {
+            "(step t1 (cl (< 0.0 0.0)) :rule la_generic :args (1.0))": false,
+
+            "(step t1 (cl (< (+ a b) 1.0) (> (+ a b c) 0.0))
+                :rule la_generic :args (1.0 (- 1.0)))": false,
+        }
+    }
+}
+
+#[test]
 fn test_la_disequality_rule() {
     test_cases! {
         definitions = "
