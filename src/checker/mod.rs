@@ -80,6 +80,7 @@ impl ProofChecker {
             "eq_congruent_pred" => general_rules::eq_congruent_pred,
             "distinct_elim" => general_rules::distinct_elim,
             "la_rw_eq" => la_rules::la_rw_eq,
+            "la_generic" => la_rules::la_generic,
             "la_disequality" => la_rules::la_disequality,
             "th_resolution" | "resolution" => general_rules::resolution,
             "cong" => general_rules::cong,

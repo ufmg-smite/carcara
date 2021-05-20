@@ -237,6 +237,10 @@ macro_rules! match_term {
             None
         }
     };
+    (@GET_VARIANT +) => { Operator::Add };
+    (@GET_VARIANT -) => { Operator::Sub };
+    (@GET_VARIANT *) => { Operator::Mult };
+    (@GET_VARIANT /) => { Operator::Div };
     (@GET_VARIANT <=) => { Operator::LessEq };
     (@GET_VARIANT =) => { Operator::Eq };
     (@GET_VARIANT or) => { Operator::Or };
@@ -245,7 +249,6 @@ macro_rules! match_term {
     (@GET_VARIANT distinct) => { Operator::Distinct };
     (@GET_VARIANT =>) => { Operator::Implies };
     (@GET_VARIANT ite) => { Operator::Ite };
-    (@GET_VARIANT *) => { Operator::Mult };
 }
 
 /// A macro to help build new terms. Note that this macro will construct subterms by calling
