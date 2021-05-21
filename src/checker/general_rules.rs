@@ -419,7 +419,26 @@ pub fn ite_intro(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]
     if clause.len() != 1 {
         return None;
     }
-    let (root_term, us) = match_term!((= t (and ...)) = clause[0])?;
+    let (root_term, right_side) = match_term!((= t u) = clause[0])?;
+
+    // In some cases, no "ite" subterm is extracted from "t" (even if "t" has "ite" subterms), so
+    // the conjunction in the right side of the equality has only one term: "t" itself, modulo
+    // reordering of equalities. One example where this happens is the test file
+    // SH_problems_all_filtered/isabelle-mirabelle/HOL-Library/smt_verit/x2020_07_23_15_09_29_511_18566192.smt_in.proof
+    // Step "t7" in that proof is:
+    //     (step t7 (cl (=
+    //         (= (times$ c$ (ite (< (g$ n$) 0.0) (- (g$ n$)) (g$ n$)))
+    //            (times$ (ite (< (g$ n$) 0.0) (- (g$ n$)) (g$ n$)) c$))
+    //         (= (times$ c$ (ite (< (g$ n$) 0.0) (- (g$ n$)) (g$ n$)))
+    //            (times$ (ite (< (g$ n$) 0.0) (- (g$ n$)) (g$ n$)) c$))
+    //     )) :rule ite_intro)
+    // For cases like this, we first check if "t" equals the right side term modulo reordering of
+    // equalities. If not, we unwrap the conjunction and continue checking the rule normally.
+    if DeepEq::eq_modulo_reordering(root_term, right_side) {
+        return Some(());
+    }
+    let us = match_term!((and ...) = right_side)?;
+
     let ite_terms: Vec<_> = root_term
         .subterms()
         .iter()

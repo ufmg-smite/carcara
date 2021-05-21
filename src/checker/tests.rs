@@ -1003,6 +1003,14 @@ fn test_ite_intro_rule() {
                 )
             )) :rule ite_intro)": false,
         }
+        "Right side may equal root term" {
+            "(step t1 (cl (= (or a b) (or a b))) :rule ite_intro)": true,
+            "(step t1 (cl (= (ite p a b) (ite p a b))) :rule ite_intro)": true,
+            "(step t1 (cl (=
+                (and (ite p a b) (or (ite q c d) (ite (not p) b (not d))))
+                (and (ite p a b) (or (ite q c d) (ite (not p) b (not d))))
+            )) :rule ite_intro)": true,
+        }
     }
 }
 
