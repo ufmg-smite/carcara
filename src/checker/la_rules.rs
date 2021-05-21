@@ -16,20 +16,6 @@ pub fn la_rw_eq(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg])
     to_option(t_1 == t_2 && t_2 == t_3 && u_1 == u_2 && u_2 == u_3)
 }
 
-pub fn la_disequality(
-    clause: &[ByRefRc<Term>],
-    _: Vec<&ProofCommand>,
-    _: &[ProofArg],
-) -> Option<()> {
-    if clause.len() != 1 {
-        return None;
-    }
-    let ((t1_1, t2_1), (t1_2, t2_2), (t2_3, t1_3)) = match_term!(
-        (or (= t1 t2) (not (<= t1 t2)) (not (<= t2 t1))) = clause[0]
-    )?;
-    to_option(t1_1 == t1_2 && t1_2 == t1_3 && t2_1 == t2_2 && t2_2 == t2_3)
-}
-
 /// Converts a rational represented with division and negation to the resulting rational value. For
 /// example, the term "(/ (- 5) 2)" is converted to the rational value "-2.5".
 fn simple_operation_to_rational(term: &Term) -> Option<BigRational> {
@@ -280,4 +266,18 @@ pub fn la_generic(
 
     // The final disequality must be contradictory
     to_option(!is_disequality_true)
+}
+
+pub fn la_disequality(
+    clause: &[ByRefRc<Term>],
+    _: Vec<&ProofCommand>,
+    _: &[ProofArg],
+) -> Option<()> {
+    if clause.len() != 1 {
+        return None;
+    }
+    let ((t1_1, t2_1), (t1_2, t2_2), (t2_3, t1_3)) = match_term!(
+        (or (= t1 t2) (not (<= t1 t2)) (not (<= t2 t1))) = clause[0]
+    )?;
+    to_option(t1_1 == t1_2 && t1_2 == t1_3 && t2_1 == t2_2 && t2_2 == t2_3)
 }
