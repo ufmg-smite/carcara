@@ -55,13 +55,11 @@ macro_rules! generate_tests {
 }
 
 generate_tests! {
-    sh_problems: "SH_problems_all_filtered",
     sh_problems_green_verit: "SH_problems_all_filtered/Green_veriT",
     sh_problems_ordered_resolution_prover_verit:
         "SH_problems_all_filtered/Ordered_Resolution_Prover_veriT",
     sh_problems_ordered_resolution_prover_verit_mirabelle_z3:
         "SH_problems_all_filtered/Ordered_Resolution_Prover_veriT/Mirabelle_z3",
-    sh_problems_isabelle_mirabelle: "SH_problems_all_filtered/isabelle-mirabelle",
     sh_problems_isabelle_mirabelle_bo_cvc42: "SH_problems_all_filtered/isabelle-mirabelle/BO_cvc42",
     sh_problems_isabelle_mirabelle_green_cvc42:
         "SH_problems_all_filtered/isabelle-mirabelle/Green_cvc42",
@@ -71,8 +69,6 @@ generate_tests! {
         "SH_problems_all_filtered/isabelle-mirabelle/Green_veriT2",
     sh_problems_isabelle_mirabelle_green_z32:
         "SH_problems_all_filtered/isabelle-mirabelle/Green_z32",
-    sh_problems_isabelle_mirabelle_hol_library:
-        "SH_problems_all_filtered/isabelle-mirabelle/HOL-Library",
     sh_problems_isabelle_mirabelle_hol_library_smt_cvc4:
         "SH_problems_all_filtered/isabelle-mirabelle/HOL-Library/smt_cvc4",
     sh_problems_isabelle_mirabelle_hol_library_smt_verit:
