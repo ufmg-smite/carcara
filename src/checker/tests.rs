@@ -642,6 +642,27 @@ fn test_resolution_rule() {
             (step t8 (cl (not p) (not (not (not (not p)))))
                 :rule resolution :premises (h1 h4))": true,
         }
+        "Must use correct pivots" {
+            "(assume h1 (or (not q) (not (not p)) (not p)))
+            (assume h2 (or (not (not (not p))) p))
+            (step t3 (cl (not q) (not (not p)) (not p)) :rule or :premises (h1))
+            (step t4 (cl (not (not (not p))) p) :rule or :premises (h2))
+            (step t5 (cl (not q) p (not p)) :rule resolution :premises (t3 t4))": true,
+
+            "(assume h1 (or (not q) (not (not p)) (not p)))
+            (assume h2 (or (not (not (not p))) p))
+            (step t3 (cl (not q) (not (not p)) (not p)) :rule or :premises (h1))
+            (step t4 (cl (not (not (not p))) p) :rule or :premises (h2))
+            (step t5 (cl (not q) (not (not (not p))) (not (not p)))
+                :rule resolution :premises (t3 t4))": true,
+
+            "(assume h1 (or (not q) (not (not p)) (not p)))
+            (assume h2 (or (not (not (not p))) p))
+            (step t3 (cl (not q) (not (not p)) (not p)) :rule or :premises (h1))
+            (step t4 (cl (not (not (not p))) p) :rule or :premises (h2))
+            (step t5 (cl (not q) p (not p) (not (not (not p))) (not (not p)))
+                :rule resolution :premises (t3 t4))": true,
+        }
     }
 }
 

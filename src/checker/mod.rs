@@ -21,6 +21,14 @@ fn get_single_term_from_command(command: &ProofCommand) -> Option<&ByRefRc<Term>
     }
 }
 
+fn get_clause_from_command(command: &ProofCommand) -> &[ByRefRc<Term>] {
+    match command {
+        // "assume" premises are interpreted as a clause with a single term
+        ProofCommand::Assume(term) => std::slice::from_ref(term),
+        ProofCommand::Step { clause, .. } => &clause,
+    }
+}
+
 pub type Rule = fn(&[ByRefRc<Term>], Vec<&ProofCommand>, &[ProofArg]) -> Option<()>;
 
 #[derive(Debug)]

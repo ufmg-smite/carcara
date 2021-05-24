@@ -1,4 +1,4 @@
-use super::{get_single_term_from_command, to_option};
+use super::{get_clause_from_command, get_single_term_from_command, to_option};
 
 use crate::ast::*;
 
@@ -243,7 +243,7 @@ pub fn resolution(
     _: &[ProofArg],
 ) -> Option<()> {
     /// Removes all leading negations in a term and returns how many there were.
-    fn remove_negations(mut term: &Term) -> (u32, &Term) {
+    fn remove_negations(mut term: &Term) -> (i32, &Term) {
         let mut n = 0;
         while let Some(t) = term.remove_negation() {
             term = t;
@@ -252,40 +252,64 @@ pub fn resolution(
         (n, term)
     }
 
-    // This set represents the current working clause, where (n, t) represents the term t with
-    // n leading negations.
-    let mut working_clause: HashSet<(u32, &Term)> = HashSet::new();
+    // When checking this rule, we must look at what the conclusion clause looks like in order to
+    // determine the pivots. The reason for that is because there is no other way to know which
+    // terms should be removed in a given binary resolution step. Consider the following example,
+    // adapted from an actual generated proof:
+    //
+    //     (step t1 (cl (not q) (not (not p)) (not p)) :rule irrelevant)
+    //     (step t2 (cl (not (not (not p))) p) :rule irrelevant)
+    //     (step t3 (cl (not q) p (not p)) :rule tresolution :premises (t1 t2))
+    //
+    // Without looking at the conclusion, it is unclear if the (not p) term should be removed by
+    // the p term, if the (not (not p)) should be removed by the (not (not (not p))), or both. We
+    // can only determine this by looking at the conlcusion and using it to derive the pivots.
+    let conclusion: HashSet<_> = clause
+        .iter()
+        .map(|t| remove_negations(t.as_ref()))
+        .collect();
 
-    // For every term t in each premise, we check if (not t) is in the working clause, and if
-    // it is, we remove it. If t is of the form (not u), we do the same for u. If neither one
-    // was removed, we insert t into the working clause.
-    for command in premises.into_iter() {
-        let premise_clause = match command {
-            // "assume" premises are interpreted as a clause with a single term
-            ProofCommand::Assume(term) => std::slice::from_ref(term),
-            ProofCommand::Step { clause, .. } => &clause,
-        };
+    // The working clause contains the terms from the conclusion clause that we already encountered
+    let mut working_clause = HashSet::new();
+
+    // The pivots are the encountered terms that are not present in the conclusion clause, and so
+    // should be removed
+    let mut pivots = HashSet::new();
+
+    for command in premises {
+        let premise_clause = get_clause_from_command(command);
         for term in premise_clause {
             let (n, inner) = remove_negations(term.as_ref());
 
-            // Remove the entry for (n - 1, inner) if it exists
-            if !(n > 0 && working_clause.remove(&(n - 1, inner))) {
-                // If it didn't exist, try the same for (n + 1, inner)
-                if !working_clause.remove(&(n + 1, inner)) {
-                    // If neither entry exists, insert (n, inner)
+            // There are two possible negations of a term, with one leading negation added, or with
+            // one leading negation removed (if the term had any in the first place)
+            let below = (n - 1, inner);
+            let above = (n + 1, inner);
+
+            // First, if the encountered term should be in the conclusion, but is not yet in the
+            // working clause, we insert it and don't try to remove it with a pivot
+            if conclusion.contains(&(n, inner)) && !working_clause.contains(&(n, inner)) {
+                working_clause.insert((n, inner));
+                continue;
+            }
+
+            // If the negation of the encountered term is present in the pivots set, we simply
+            // remove it. Otherwise, we insert the encountered term in the working clause or the
+            // pivots set, depending on wether it is present in the conclusion clause or not
+            let removed = n > 0 && pivots.remove(&below) || pivots.remove(&above);
+            if !removed {
+                if conclusion.contains(&(n, inner)) {
                     working_clause.insert((n, inner));
+                } else {
+                    pivots.insert((n, inner));
                 }
             }
         }
     }
 
-    // At the end, we expect the working clause to be equal to the conclusion clause
-    let clause: HashSet<_> = clause
-        .iter()
-        .map(|t| remove_negations(t.as_ref()))
-        .collect();
-
-    to_option(working_clause == clause)
+    // At the end, we expect all pivots to have been removed, and the working clause to be equal to
+    // the conclusion clause
+    to_option(pivots.is_empty() && working_clause == conclusion)
 }
 
 pub fn cong(clause: &[ByRefRc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
