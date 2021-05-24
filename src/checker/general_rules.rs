@@ -259,7 +259,7 @@ pub fn resolution(
     //
     //     (step t1 (cl (not q) (not (not p)) (not p)) :rule irrelevant)
     //     (step t2 (cl (not (not (not p))) p) :rule irrelevant)
-    //     (step t3 (cl (not q) p (not p)) :rule tresolution :premises (t1 t2))
+    //     (step t3 (cl (not q) p (not p)) :rule resolution :premises (t1 t2))
     //
     // Without looking at the conclusion, it is unclear if the (not p) term should be removed by
     // the p term, if the (not (not p)) should be removed by the (not (not (not p))), or both. We
