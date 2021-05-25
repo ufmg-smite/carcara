@@ -51,7 +51,7 @@ impl<K, V> SymbolTable<K, V> {
 
 impl<K: Eq + Hash, V> SymbolTable<K, V> {
     fn get(&self, key: &K) -> Option<&V> {
-        self.scopes.last().and_then(|map| map.get(key))
+        self.scopes.iter().rev().find_map(|scope| scope.get(key))
     }
 
     fn insert(&mut self, key: K, value: V) {
@@ -208,7 +208,10 @@ impl ParserState {
                 Term::Op(*op, new_args)
             }
             sort @ Term::Sort(_, _) => sort.clone(),
-            _ => todo!(),
+            Term::Quant(q, b, t) => {
+                let new_term = self.apply_substitutions(t, substitutions);
+                Term::Quant(*q, b.clone(), self.add_term(new_term))
+            }
         }
     }
 }
@@ -584,8 +587,33 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
+    fn parse_quantifier(&mut self, quantifier: Quantifier) -> ParserResult<Term> {
+        self.expect_token(Token::OpenParen)?;
+        self.state.sorts_symbol_table.push_scope();
+        let bindings = self.parse_sequence(
+            |p| {
+                let (name, sort) = p.parse_sorted_var()?;
+                let iden = Identifier::Simple(name.clone());
+                p.state.sorts_symbol_table.insert(iden, sort.clone());
+                Ok((name, sort))
+            },
+            true,
+        )?;
+        let term = self.parse_term()?;
+        SortError::assert_eq(Term::BOOL_SORT, term.sort()).map_err(|e| self.err(e.into()))?;
+        let term = self.state.add_term(term);
+        self.state.sorts_symbol_table.pop_scope();
+        self.expect_token(Token::CloseParen)?;
+        Ok(Term::Quant(quantifier, bindings, term))
+    }
+
     fn parse_application(&mut self) -> ParserResult<Term> {
         match self.next_token()? {
+            Token::ReservedWord(reserved) => match reserved {
+                Reserved::Exists => self.parse_quantifier(Quantifier::Exists),
+                Reserved::Forall => self.parse_quantifier(Quantifier::Forall),
+                _ => Err(self.err(ErrorKind::NotYetImplemented)),
+            },
             Token::Symbol(s) => {
                 if let Ok(operator) = Operator::from_str(&s) {
                     let args = self.parse_sequence(Self::parse_term, true)?;

@@ -323,6 +323,51 @@ fn test_ite() {
 }
 
 #[test]
+fn test_quantifiers() {
+    run_parser_tests(&[
+        (
+            "(exists ((p Bool)) p)",
+            Term::Quant(
+                Quantifier::Exists,
+                vec![("p".into(), Term::BOOL_SORT.clone().into())],
+                ByRefRc::new(terminal!(var "p"; BOOL_SORT)),
+            ),
+        ),
+        (
+            "(forall ((x Real) (y Real)) (= (+ x y) 0.0))",
+            Term::Quant(
+                Quantifier::Forall,
+                vec![
+                    ("x".into(), Term::REAL_SORT.clone().into()),
+                    ("y".into(), Term::REAL_SORT.clone().into()),
+                ],
+                ByRefRc::new(Term::Op(
+                    Operator::Eq,
+                    vec![
+                        ByRefRc::new(Term::Op(
+                            Operator::Add,
+                            vec![
+                                terminal!(var "x"; REAL_SORT).into(),
+                                terminal!(var "y"; REAL_SORT).into(),
+                            ],
+                        )),
+                        terminal!(real 0 / 1).into(),
+                    ],
+                )),
+            ),
+        ),
+    ]);
+    assert!(matches!(
+        parse_term_err("(exists () true)"),
+        ParserError(ErrorKind::EmptySequence, _),
+    ));
+    assert!(matches!(
+        parse_term_err("(forall ((x Int)) (+ x x)"),
+        ParserError(ErrorKind::SortError(SortError::Expected { .. }), _),
+    ));
+}
+
+#[test]
 fn test_declare_fun() {
     parse_term_with_definitions(
         "(declare-fun f (Bool Int Real) Real)",
