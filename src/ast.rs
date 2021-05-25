@@ -167,6 +167,12 @@ pub enum SortKind {
     String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Quantifier {
+    Forall,
+    Exists,
+}
+
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Term {
     /// A terminal. This can be a constant or a variable.
@@ -180,7 +186,10 @@ pub enum Term {
 
     /// A sort.
     Sort(SortKind, Vec<ByRefRc<Term>>),
-    // TODO: binders
+
+    /// A quantifier binder
+    Quant(Quantifier, Vec<(String, ByRefRc<Term>)>, ByRefRc<Term>),
+    // TODO: "let" and "match" binders
 }
 
 /// A macro to help deconstruct operation terms. Since a term holds references to other terms in
@@ -314,6 +323,7 @@ impl Term {
                 }
             }
             sort @ Term::Sort(_, _) => sort,
+            Term::Quant(_, _, _) => Term::BOOL_SORT,
         }
     }
 
@@ -399,6 +409,21 @@ impl Debug for Term {
                 SortKind::String => write!(f, "String"),
                 SortKind::Function => panic!(),
             },
+            Term::Quant(quantifier, bindings, term) => {
+                let quantifier = match quantifier {
+                    Quantifier::Forall => "forall",
+                    Quantifier::Exists => "exists",
+                };
+                write!(f, "({} (", quantifier)?;
+
+                for (i, (symbol, sort)) in bindings.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, " ")?;
+                    }
+                    write!(f, "({} {:?})", symbol, sort.as_ref())?;
+                }
+                write!(f, ") {:?})", term)
+            }
         }
     }
 }
@@ -517,6 +542,11 @@ impl DeepEq for Term {
                 }
                 (a, b) => a == b,
             },
+            (Term::Quant(q_a, binds_a, a), Term::Quant(q_b, binds_b, b)) => {
+                q_a == q_b
+                    && DeepEq::eq_impl(binds_a, binds_b, is_mod_reordering)
+                    && DeepEq::eq_impl(a, b, is_mod_reordering)
+            }
             _ => false,
         }
     }
@@ -589,6 +619,12 @@ impl<T: DeepEq> DeepEq for (T, T) {
     fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
         DeepEq::eq_impl(&a.0, &b.0, is_mod_reordering)
             && DeepEq::eq_impl(&a.1, &b.1, is_mod_reordering)
+    }
+}
+
+impl<T: DeepEq> DeepEq for (String, T) {
+    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
+        a.0 == b.0 && DeepEq::eq_impl(&a.1, &b.1, is_mod_reordering)
     }
 }
 

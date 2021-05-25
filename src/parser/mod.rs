@@ -208,6 +208,7 @@ impl ParserState {
                 Term::Op(*op, new_args)
             }
             sort @ Term::Sort(_, _) => sort.clone(),
+            _ => todo!(),
         }
     }
 }
