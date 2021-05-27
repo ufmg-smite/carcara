@@ -71,6 +71,8 @@ pub enum ProofCommand {
         premises: Vec<usize>,
         args: Vec<ProofArg>,
     },
+
+    Subproof(Vec<ProofCommand>, Vec<ProofArg>),
 }
 
 /// An argument for a "step" or "anchor" command.

@@ -74,7 +74,7 @@ struct ParserState {
     function_defs: HashMap<String, FunctionDef>,
     terms_map: HashMap<Term, ByRefRc<Term>>,
     sort_declarations: HashMap<String, (u64, ByRefRc<Term>)>,
-    step_indices: HashMap<String, usize>,
+    step_indices: SymbolTable<String, usize>,
 }
 
 impl ParserState {
@@ -361,6 +361,12 @@ impl<R: BufRead> Parser<R> {
 
     /// Parses a proof.
     pub fn parse_proof(&mut self) -> ParserResult<Proof> {
+        self.parse_subproof(None)
+    }
+
+    /// Parses a proof or subproof. Will stop parsing after encountering a command with index
+    /// `end_step`. If `end_step` is `None`, stops at EOF.
+    fn parse_subproof(&mut self, end_step: Option<&str>) -> ParserResult<Proof> {
         let mut commands = Vec::new();
         while self.current_token != Token::Eof {
             self.expect_token(Token::OpenParen)?;
@@ -373,19 +379,32 @@ impl<R: BufRead> Parser<R> {
                     continue;
                 }
                 Token::ReservedWord(Reserved::Anchor) => {
-                    // TODO: Add support for subproofs
-                    return Err(self.err(ErrorKind::NotYetImplemented));
+                    self.expect_token(Token::Keyword("step".into()))?;
+                    let end_step_index = self.expect_symbol()?;
+                    if self.current_token == Token::Keyword("args".into()) {
+                        // TODO: Add support for subproof arguments
+                        return Err(self.err(ErrorKind::NotYetImplemented));
+                    }
+                    self.expect_token(Token::CloseParen)?;
+
+                    self.state.step_indices.push_scope();
+                    let Proof(commands) = self.parse_subproof(Some(&end_step_index))?;
+                    self.state.step_indices.pop_scope();
+
+                    (end_step_index, ProofCommand::Subproof(commands, Vec::new()))
                 }
                 other => return Err(self.unexpected_token(other)),
             };
-            match self.state.step_indices.entry(index) {
-                Entry::Occupied(entry) => {
-                    let key = entry.key().clone();
-                    return Err(self.err(ErrorKind::RepeatedStepIndex(key)));
-                }
-                Entry::Vacant(entry) => {
-                    entry.insert(commands.len());
-                    commands.push(command);
+            if self.state.step_indices.get(&index).is_some() {
+                return Err(self.err(ErrorKind::RepeatedStepIndex(index)));
+            } else {
+                // Since index is moved when inserted in the step_indices symbol table, we must do
+                // this check here
+                let is_last_command = end_step == Some(&index);
+                self.state.step_indices.insert(index, commands.len());
+                commands.push(command);
+                if is_last_command {
+                    break;
                 }
             }
         }

@@ -26,6 +26,7 @@ fn get_clause_from_command(command: &ProofCommand) -> &[ByRefRc<Term>] {
         // "assume" premises are interpreted as a clause with a single term
         ProofCommand::Assume(term) => std::slice::from_ref(term),
         ProofCommand::Step { clause, .. } => &clause,
+        _ => todo!(),
     }
 }
 
