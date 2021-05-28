@@ -285,6 +285,15 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
+    /// Consumes the current token if it is a keyword, and returns the inner `String`. Returns an
+    /// error otherwise.
+    fn expect_keyword(&mut self) -> ParserResult<String> {
+        match self.next_token()? {
+            Token::Keyword(s) => Ok(s),
+            other => Err(self.unexpected_token(other)),
+        }
+    }
+
     /// Consumes the current token if it is a numeral, and returns the inner `u64`. Returns an
     /// error otherwise.
     fn expect_numeral(&mut self) -> ParserResult<BigInt> {
@@ -631,6 +640,21 @@ impl<R: BufRead> Parser<R> {
             Token::ReservedWord(reserved) => match reserved {
                 Reserved::Exists => self.parse_quantifier(Quantifier::Exists),
                 Reserved::Forall => self.parse_quantifier(Quantifier::Forall),
+                Reserved::Bang => {
+                    let inner = self.parse_term()?;
+                    self.parse_sequence(
+                        |p| {
+                            // Simply consume and discard the attributes and their values
+                            p.expect_keyword()?;
+                            if let Token::Symbol(_) = p.current_token {
+                                p.next_token()?;
+                            }
+                            Ok(())
+                        },
+                        true,
+                    )?;
+                    Ok(inner)
+                }
                 _ => Err(self.err(ErrorKind::NotYetImplemented)),
             },
             Token::Symbol(s) => {

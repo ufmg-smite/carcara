@@ -368,6 +368,37 @@ fn test_quantifiers() {
 }
 
 #[test]
+fn test_annotated_terms() {
+    run_parser_tests(&[
+        ("(! 0 :named foo)", terminal!(int 0)),
+        ("(! (! 0 :named foo) :named bar)", terminal!(int 0)),
+        (
+            "(ite (! true :named baz) 2 3)",
+            Term::Op(
+                Operator::Ite,
+                vec![
+                    ByRefRc::new(terminal!(bool true)),
+                    ByRefRc::new(terminal!(int 2)),
+                    ByRefRc::new(terminal!(int 3)),
+                ],
+            ),
+        ),
+    ]);
+    assert!(matches!(
+        parse_term_err("(! true)"),
+        ParserError(ErrorKind::EmptySequence, _),
+    ));
+    assert!(matches!(
+        parse_term_err("(! true not_a_keyword)"),
+        ParserError(ErrorKind::UnexpectedToken(_), _),
+    ));
+    assert!(matches!(
+        parse_term_err("(! true :too_many_values 1 2 3)"),
+        ParserError(ErrorKind::UnexpectedToken(_), _),
+    ));
+}
+
+#[test]
 fn test_declare_fun() {
     parse_term_with_definitions(
         "(declare-fun f (Bool Int Real) Real)",
