@@ -42,53 +42,23 @@ pub enum Reserved {
     DefineFun,   // define-fun
 }
 
-impl FromStr for Reserved {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "_" => Ok(Reserved::Underscore),
-            "!" => Ok(Reserved::Bang),
-            "as" => Ok(Reserved::As),
-            "let" => Ok(Reserved::Let),
-            "exists" => Ok(Reserved::Exists),
-            "forall" => Ok(Reserved::Forall),
-            "match" => Ok(Reserved::Match),
-            "choice" => Ok(Reserved::Choice),
-            "cl" => Ok(Reserved::Cl),
-            "assume" => Ok(Reserved::Assume),
-            "step" => Ok(Reserved::Step),
-            "anchor" => Ok(Reserved::Anchor),
-            "declare-fun" => Ok(Reserved::DeclareFun),
-            "declare-sort" => Ok(Reserved::DeclareSort),
-            "define-fun" => Ok(Reserved::DefineFun),
-            _ => Err(()),
-        }
-    }
-}
-
-impl Debug for Reserved {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let s = match self {
-            Reserved::Underscore => "_",
-            Reserved::Bang => "!",
-            Reserved::As => "as",
-            Reserved::Let => "let",
-            Reserved::Exists => "exists",
-            Reserved::Forall => "forall",
-            Reserved::Match => "match",
-            Reserved::Choice => "choice",
-            Reserved::Cl => "cl",
-            Reserved::Assume => "assume",
-            Reserved::Step => "step",
-            Reserved::Anchor => "anchor",
-            Reserved::DeclareFun => "declare-fun",
-            Reserved::DeclareSort => "declare-sort",
-            Reserved::DefineFun => "define-fun",
-        };
-        write!(f, "{}", s)
-    }
-}
+impl_str_conversion_traits!(Reserved {
+    Underscore: "_",
+    Bang: "!",
+    As: "as",
+    Let: "let",
+    Exists: "exists",
+    Forall: "forall",
+    Match: "match",
+    Choice: "choice",
+    Cl: "cl",
+    Assume: "assume",
+    Step: "step",
+    Anchor: "anchor",
+    DeclareFun: "declare-fun",
+    DeclareSort: "declare-sort",
+    DefineFun: "define-fun",
+});
 
 pub type Position = (usize, usize);
 

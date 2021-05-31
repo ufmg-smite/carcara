@@ -121,32 +121,7 @@ pub enum Operator {
     Ite,
 }
 
-/// Implements `FromStr` and `Debug` for `Operator`.
-macro_rules! impl_operator_str_traits {
-    ($($op:ident: $s:literal),* $(,)?) => {
-        impl FromStr for Operator {
-            type Err = ();
-
-            fn from_str(s: &str) -> Result<Self, Self::Err> {
-                match s {
-                    $($s => Ok(Operator::$op),)*
-                    _ => Err(()),
-                }
-            }
-        }
-
-        impl Debug for Operator {
-            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                let s = match self {
-                    $(Operator::$op => $s,)*
-                };
-                write!(f, "{}", s)
-            }
-        }
-    }
-}
-
-impl_operator_str_traits! {
+impl_str_conversion_traits!(Operator {
     Add: "+",
     Sub: "-",
     Mult: "*",
@@ -162,7 +137,7 @@ impl_operator_str_traits! {
     Distinct: "distinct",
     Implies: "=>",
     Ite: "ite",
-}
+});
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SortKind {
