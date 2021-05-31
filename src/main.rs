@@ -119,9 +119,12 @@ fn get_used_rules(file_path: &str) -> ParserResult<Vec<String>> {
         match tk {
             Token::Eof => break,
             Token::Keyword(s) if &s == "rule" => {
-                if let Token::Symbol(s) = lex.next_token()? {
-                    result.push(s)
-                }
+                let rule_name = match lex.next_token()? {
+                    Token::Symbol(s) => s,
+                    Token::ReservedWord(r) => format!("{:?}", r),
+                    _ => continue,
+                };
+                result.push(rule_name)
             }
             _ => (),
         }

@@ -437,7 +437,11 @@ impl<R: BufRead> Parser<R> {
         let step_index = self.expect_symbol()?;
         let clause = self.parse_clause()?;
         self.expect_token(Token::Keyword("rule".into()))?;
-        let rule = self.expect_symbol()?;
+        let rule = match self.next_token()? {
+            Token::Symbol(s) => s,
+            Token::ReservedWord(r) => format!("{:?}", r),
+            other => return Err(self.unexpected_token(other)),
+        };
 
         let premises = if self.current_token == Token::Keyword("premises".into()) {
             self.next_token()?;

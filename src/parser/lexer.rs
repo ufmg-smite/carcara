@@ -1,8 +1,12 @@
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::Num;
-use std::io::{self, BufRead};
-use std::str::FromStr;
+
+use std::{
+    fmt::Debug,
+    io::{self, BufRead},
+    str::FromStr,
+};
 
 use super::error::*;
 
@@ -19,7 +23,7 @@ pub enum Token {
     Eof,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub enum Reserved {
     Underscore,  // _
     Bang,        // !
@@ -60,6 +64,29 @@ impl FromStr for Reserved {
             "define-fun" => Ok(Reserved::DefineFun),
             _ => Err(()),
         }
+    }
+}
+
+impl Debug for Reserved {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let s = match self {
+            Reserved::Underscore => "_",
+            Reserved::Bang => "!",
+            Reserved::As => "as",
+            Reserved::Let => "let",
+            Reserved::Exists => "exists",
+            Reserved::Forall => "forall",
+            Reserved::Match => "match",
+            Reserved::Choice => "choice",
+            Reserved::Cl => "cl",
+            Reserved::Assume => "assume",
+            Reserved::Step => "step",
+            Reserved::Anchor => "anchor",
+            Reserved::DeclareFun => "declare-fun",
+            Reserved::DeclareSort => "declare-sort",
+            Reserved::DefineFun => "define-fun",
+        };
+        write!(f, "{}", s)
     }
 }
 
