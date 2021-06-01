@@ -155,10 +155,12 @@ pub fn eq_congruent_pred(
     let premises = clause[..clause.len() - 2]
         .iter()
         .map(|t| t.remove_negation());
-    let conclusion = (
-        clause[clause.len() - 2].remove_negation()?,
-        clause[clause.len() - 1].as_ref(),
-    );
+
+    let (p, q) = (&clause[clause.len() - 2], &clause[clause.len() - 1]);
+    let conclusion = match p.remove_negation() {
+        Some(p) => (p, q.as_ref()),
+        None => (p.as_ref(), q.remove_negation()?),
+    };
 
     generic_congruent_rule(premises, conclusion)
 }

@@ -417,9 +417,9 @@ fn test_eq_congruent_pred_rule() {
             "(step t1 (cl (not (= a x)) (= b y) (not (p a b)) (p x y))
                 :rule eq_congruent_pred)": false,
         }
-        "Final two terms are in the wrong order" {
+        "Final two terms' order may be flipped" {
             "(step t1 (cl (not (= a x)) (not (= b y)) (p a b) (not (p x y)))
-                :rule eq_congruent_pred)": false,
+                :rule eq_congruent_pred)": true,
         }
         "Functions are not the same" {
             "(step t1 (cl (not (= a x)) (not (= b y)) (not (p a b)) (q x y))
