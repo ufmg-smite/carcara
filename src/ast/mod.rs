@@ -8,7 +8,14 @@ mod tests;
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
-use std::{collections::HashSet, fmt::Debug, hash::Hash, ops::Deref, rc, str::FromStr};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+    hash::Hash,
+    ops::Deref,
+    rc,
+    str::FromStr,
+};
 
 /// An `Rc` where equality and hashing are done by reference, instead of by value
 #[derive(Clone, Eq)]
@@ -77,7 +84,7 @@ pub enum ProofCommand {
         args: Vec<ProofArg>,
     },
 
-    Subproof(Vec<ProofCommand>, Vec<ProofArg>),
+    Subproof(Vec<ProofCommand>, HashMap<String, ByRefRc<Term>>),
 }
 
 /// An argument for a "step" or "anchor" command.

@@ -305,9 +305,9 @@ impl<R: BufRead> Parser<R> {
 
     /// Calls `parse_func` repeatedly until a closing parenthesis is reached. If `non_empty` is
     /// true, empty sequences will result in an error. This method consumes the ending ")" token.
-    fn parse_sequence<T, F>(&mut self, parse_func: F, non_empty: bool) -> ParserResult<Vec<T>>
+    fn parse_sequence<T, F>(&mut self, mut parse_func: F, non_empty: bool) -> ParserResult<Vec<T>>
     where
-        F: Fn(&mut Self) -> ParserResult<T>,
+        F: FnMut(&mut Self) -> ParserResult<T>,
     {
         let mut result = Vec::new();
         while self.current_token != Token::CloseParen {
@@ -390,9 +390,43 @@ impl<R: BufRead> Parser<R> {
                 Token::ReservedWord(Reserved::Anchor) => {
                     self.expect_token(Token::Keyword("step".into()))?;
                     let end_step_index = self.expect_symbol()?;
+
+                    // We have to push a new scope into the sorts symbol table in order to parse
+                    // the subproof arguments
+                    self.state.sorts_symbol_table.push_scope();
+
+                    let mut args = HashMap::new();
                     if self.current_token == Token::Keyword("args".into()) {
-                        // TODO: Add support for subproof arguments
-                        return Err(self.err(ErrorKind::NotYetImplemented));
+                        // TODO: Currently, only assingment style "(:= (a A) (b B))" arguments are
+                        // supported
+                        self.next_token()?;
+                        self.expect_token(Token::OpenParen)?;
+                        self.parse_sequence(
+                            |p| {
+                                // Instead of just parsing the arguments and returning them in a
+                                // `Vec`, we use this closure to already add them to the symbol
+                                // table and the `args` hash map
+                                p.expect_token(Token::OpenParen)?;
+                                p.expect_token(Token::Keyword("=".into()))?;
+                                let (a, a_sort) = p.parse_sorted_var()?;
+                                let (b, b_sort) = p.parse_sorted_var()?;
+                                p.expect_token(Token::CloseParen)?;
+
+                                let b_term =
+                                    p.state.add_term(terminal!(var b.clone(); b_sort.clone()));
+                                args.insert(a.clone(), b_term);
+
+                                let (a, b) = (Identifier::Simple(a), Identifier::Simple(b));
+                                p.state.sorts_symbol_table.insert(a, a_sort);
+                                p.state.sorts_symbol_table.insert(b, b_sort);
+
+                                Ok(())
+                            },
+                            true,
+                        )
+                        // Since some argument types are not yet supported, we return an
+                        // `ErrorKind::NotYetImplemented` if any error is encountered
+                        .map_err(|_| self.err(ErrorKind::NotYetImplemented))?;
                     }
                     self.expect_token(Token::CloseParen)?;
 
@@ -400,7 +434,10 @@ impl<R: BufRead> Parser<R> {
                     let Proof(commands) = self.parse_subproof(Some(&end_step_index))?;
                     self.state.step_indices.pop_scope();
 
-                    (end_step_index, ProofCommand::Subproof(commands, Vec::new()))
+                    // Now we can pop the scope with the subproof arguments
+                    self.state.sorts_symbol_table.pop_scope();
+
+                    (end_step_index, ProofCommand::Subproof(commands, args))
                 }
                 other => return Err(self.unexpected_token(other)),
             };
