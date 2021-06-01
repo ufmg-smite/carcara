@@ -14,9 +14,8 @@ fn to_option(b: bool) -> Option<()> {
 }
 
 fn get_single_term_from_command(command: &ProofCommand) -> Option<&ByRefRc<Term>> {
-    match command {
-        ProofCommand::Assume(term) => Some(term),
-        ProofCommand::Step { clause, .. } if clause.len() == 1 => Some(&clause[0]),
+    match get_clause_from_command(command) {
+        [t] => Some(t),
         _ => None,
     }
 }
@@ -26,7 +25,7 @@ fn get_clause_from_command(command: &ProofCommand) -> &[ByRefRc<Term>] {
         // "assume" premises are interpreted as a clause with a single term
         ProofCommand::Assume(term) => std::slice::from_ref(term),
         ProofCommand::Step { clause, .. } => &clause,
-        _ => todo!(),
+        ProofCommand::Subproof(commands, _) => get_clause_from_command(commands.last().unwrap()),
     }
 }
 
