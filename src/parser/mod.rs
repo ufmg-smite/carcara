@@ -388,53 +388,14 @@ impl<R: BufRead> Parser<R> {
                     continue;
                 }
                 Token::ReservedWord(Reserved::Anchor) => {
-                    self.expect_token(Token::Keyword("step".into()))?;
-                    let end_step_index = self.expect_symbol()?;
-
-                    // We have to push a new scope into the sorts symbol table in order to parse
-                    // the subproof arguments
-                    self.state.sorts_symbol_table.push_scope();
-
-                    let mut args = HashMap::new();
-                    if self.current_token == Token::Keyword("args".into()) {
-                        // TODO: Currently, only assingment style "(:= (a A) (b B))" arguments are
-                        // supported
-                        self.next_token()?;
-                        self.expect_token(Token::OpenParen)?;
-                        self.parse_sequence(
-                            |p| {
-                                // Instead of just parsing the arguments and returning them in a
-                                // `Vec`, we use this closure to already add them to the symbol
-                                // table and the `args` hash map
-                                p.expect_token(Token::OpenParen)?;
-                                p.expect_token(Token::Keyword("=".into()))?;
-                                let (a, a_sort) = p.parse_sorted_var()?;
-                                let (b, b_sort) = p.parse_sorted_var()?;
-                                p.expect_token(Token::CloseParen)?;
-
-                                let b_term =
-                                    p.state.add_term(terminal!(var b.clone(); b_sort.clone()));
-                                args.insert(a.clone(), b_term);
-
-                                let (a, b) = (Identifier::Simple(a), Identifier::Simple(b));
-                                p.state.sorts_symbol_table.insert(a, a_sort);
-                                p.state.sorts_symbol_table.insert(b, b_sort);
-
-                                Ok(())
-                            },
-                            true,
-                        )
-                        // Since some argument types are not yet supported, we return an
-                        // `ErrorKind::NotYetImplemented` if any error is encountered
-                        .map_err(|_| self.err(ErrorKind::NotYetImplemented))?;
-                    }
-                    self.expect_token(Token::CloseParen)?;
+                    let (end_step_index, args) = self.parse_anchor_command()?;
 
                     self.state.step_indices.push_scope();
                     let Proof(commands) = self.parse_subproof(Some(&end_step_index))?;
                     self.state.step_indices.pop_scope();
 
-                    // Now we can pop the scope with the subproof arguments
+                    // Since `Parser::parse_anchor_command` pushes a scope into the symbol table, we
+                    // have to pop it now, after parsing the subproof
                     self.state.sorts_symbol_table.pop_scope();
 
                     (end_step_index, ProofCommand::Subproof(commands, args))
@@ -523,6 +484,51 @@ impl<R: BufRead> Parser<R> {
                 args,
             },
         ))
+    }
+
+    /// Parses an "anchor" proof command. This method assumes that the "(" and "anchor" tokens were
+    /// already consumed. In order to parse the subproof arguments, this method pushes a new scope
+    /// into the sorts symbol table. This scope must be removed after parsing the subproof.
+    fn parse_anchor_command(&mut self) -> ParserResult<(String, HashMap<String, ByRefRc<Term>>)> {
+        self.expect_token(Token::Keyword("step".into()))?;
+        let end_step_index = self.expect_symbol()?;
+
+        // We have to push a new scope into the sorts symbol table in order to parse the subproof
+        // arguments
+        self.state.sorts_symbol_table.push_scope();
+
+        let mut args = HashMap::new();
+        if self.current_token == Token::Keyword("args".into()) {
+            // TODO: Currently, only assingment style "(:= (a A) (b B))" arguments are supported
+            self.next_token()?;
+            self.expect_token(Token::OpenParen)?;
+            self.parse_sequence(
+                |p| {
+                    // Instead of just parsing the arguments and returning them in a `Vec`, we use
+                    // this closure to already add them to the symbol table and the `args` hash map
+                    p.expect_token(Token::OpenParen)?;
+                    p.expect_token(Token::Keyword("=".into()))?;
+                    let (a, a_sort) = p.parse_sorted_var()?;
+                    let (b, b_sort) = p.parse_sorted_var()?;
+                    p.expect_token(Token::CloseParen)?;
+
+                    let b_term = p.state.add_term(terminal!(var b.clone(); b_sort.clone()));
+                    args.insert(a.clone(), b_term);
+
+                    let (a, b) = (Identifier::Simple(a), Identifier::Simple(b));
+                    p.state.sorts_symbol_table.insert(a, a_sort);
+                    p.state.sorts_symbol_table.insert(b, b_sort);
+
+                    Ok(())
+                },
+                true,
+            )
+            // Since some argument types are not yet supported, we return an
+            // `ErrorKind::NotYetImplemented` if any error is encountered
+            .map_err(|_| self.err(ErrorKind::NotYetImplemented))?;
+        }
+        self.expect_token(Token::CloseParen)?;
+        Ok((end_step_index, args))
     }
 
     /// Parses a "declare-fun" proof command. Returns the function name and a term representing its
