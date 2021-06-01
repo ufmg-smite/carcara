@@ -508,6 +508,10 @@ impl<R: BufRead> Parser<R> {
             Vec::new()
         };
 
+        if self.current_token == Token::Keyword("discharge".into()) {
+            return Err(self.err(ErrorKind::NotYetImplemented));
+        }
+
         self.expect_token(Token::CloseParen)?;
 
         Ok((
