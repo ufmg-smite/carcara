@@ -72,95 +72,6 @@ struct ParserState {
     step_indices: SymbolTable<String, usize>,
 }
 
-impl ParserState {
-    /// Constructs and sort checks a variable term.
-    fn make_var(&mut self, iden: Identifier) -> Result<Term, ErrorKind> {
-        let sort = self
-            .sorts_symbol_table
-            .get(&iden)
-            .ok_or_else(|| ErrorKind::UndefinedIden(iden.clone()))?;
-        Ok(Term::Terminal(Terminal::Var(iden, sort.clone())))
-    }
-
-    /// Constructs and sort checks an operation term.
-    fn make_op(&mut self, op: Operator, args: Vec<Term>) -> Result<Term, ErrorKind> {
-        let sorts: Vec<_> = args.iter().map(Term::sort).collect();
-        match op {
-            Operator::Add
-            | Operator::Mult
-            | Operator::Div
-            | Operator::LessThan
-            | Operator::GreaterThan
-            | Operator::LessEq
-            | Operator::GreaterEq => {
-                ErrorKind::assert_num_of_args_range(&args, 2..)?;
-
-                // All the arguments must have the same sort, and it must be either Int or Real
-                SortError::assert_one_of(&[Term::INT_SORT, Term::REAL_SORT], &sorts[0])?;
-                SortError::assert_all_eq(&sorts)?;
-            }
-            Operator::Sub => {
-                // The "-" operator, in particular, can be called with only one argument, in which
-                // case it means negation instead of subtraction
-                ErrorKind::assert_num_of_args_range(&args, 1..)?;
-                SortError::assert_one_of(&[Term::INT_SORT, Term::REAL_SORT], &sorts[0])?;
-                SortError::assert_all_eq(&sorts)?;
-            }
-            Operator::Eq | Operator::Distinct => {
-                ErrorKind::assert_num_of_args_range(&args, 2..)?;
-                SortError::assert_all_eq(&sorts)?;
-            }
-            Operator::Implies => {
-                ErrorKind::assert_num_of_args_range(&args, 2..)?;
-                for s in sorts {
-                    SortError::assert_eq(Term::BOOL_SORT, &s)?;
-                }
-            }
-            Operator::Or | Operator::And => {
-                // The "or" and "and" operators can be called with only one argument
-                ErrorKind::assert_num_of_args_range(&args, 1..)?;
-                for s in sorts {
-                    SortError::assert_eq(Term::BOOL_SORT, &s)?;
-                }
-            }
-            Operator::Not => {
-                ErrorKind::assert_num_of_args(&args, 1)?;
-                SortError::assert_eq(Term::BOOL_SORT, &sorts[0])?;
-            }
-            Operator::Ite => {
-                ErrorKind::assert_num_of_args(&args, 3)?;
-                SortError::assert_eq(Term::BOOL_SORT, &sorts[0])?;
-                SortError::assert_eq(&sorts[1], &sorts[2])?;
-            }
-        }
-        let args = self.term_pool.add_all(args);
-        Ok(Term::Op(op, args))
-    }
-
-    /// Constructs and sort checks an application term.
-    fn make_app(&mut self, function: Term, args: Vec<Term>) -> Result<Term, ErrorKind> {
-        let sorts = {
-            let function_sort = function.sort();
-            if let Term::Sort(SortKind::Function, sorts) = function_sort {
-                sorts
-            } else {
-                // Function does not have function sort
-                return Err(ErrorKind::SortError(SortError::Expected {
-                    expected: Term::Sort(SortKind::Function, Vec::new()),
-                    got: function_sort.clone(),
-                }));
-            }
-        };
-        ErrorKind::assert_num_of_args(&args, sorts.len() - 1)?;
-        for i in 0..args.len() {
-            SortError::assert_eq(sorts[i].as_ref(), &args[i].sort())?;
-        }
-        let function = self.term_pool.add_term(function);
-        let args = self.term_pool.add_all(args);
-        Ok(Term::App(function, args))
-    }
-}
-
 /// A parser for the veriT Proof Format. The parser makes use of hash consing to reduce memory usage
 /// by sharing identical terms in the AST.
 pub struct Parser<R> {
@@ -219,6 +130,94 @@ impl<R: BufRead> Parser<R> {
     /// Helper method to build a `ErrorKind::UnexpectedToken` error.
     fn unexpected_token(&self, got: Token) -> ParserError {
         self.err(ErrorKind::UnexpectedToken(got))
+    }
+
+    /// Constructs and sort checks a variable term.
+    fn make_var(&mut self, iden: Identifier) -> Result<Term, ErrorKind> {
+        let sort = self
+            .state
+            .sorts_symbol_table
+            .get(&iden)
+            .ok_or_else(|| ErrorKind::UndefinedIden(iden.clone()))?;
+        Ok(Term::Terminal(Terminal::Var(iden, sort.clone())))
+    }
+
+    /// Constructs and sort checks an operation term.
+    fn make_op(&mut self, op: Operator, args: Vec<Term>) -> Result<Term, ErrorKind> {
+        let sorts: Vec<_> = args.iter().map(Term::sort).collect();
+        match op {
+            Operator::Add
+            | Operator::Mult
+            | Operator::Div
+            | Operator::LessThan
+            | Operator::GreaterThan
+            | Operator::LessEq
+            | Operator::GreaterEq => {
+                ErrorKind::assert_num_of_args_range(&args, 2..)?;
+
+                // All the arguments must have the same sort, and it must be either Int or Real
+                SortError::assert_one_of(&[Term::INT_SORT, Term::REAL_SORT], &sorts[0])?;
+                SortError::assert_all_eq(&sorts)?;
+            }
+            Operator::Sub => {
+                // The "-" operator, in particular, can be called with only one argument, in which
+                // case it means negation instead of subtraction
+                ErrorKind::assert_num_of_args_range(&args, 1..)?;
+                SortError::assert_one_of(&[Term::INT_SORT, Term::REAL_SORT], &sorts[0])?;
+                SortError::assert_all_eq(&sorts)?;
+            }
+            Operator::Eq | Operator::Distinct => {
+                ErrorKind::assert_num_of_args_range(&args, 2..)?;
+                SortError::assert_all_eq(&sorts)?;
+            }
+            Operator::Implies => {
+                ErrorKind::assert_num_of_args_range(&args, 2..)?;
+                for s in sorts {
+                    SortError::assert_eq(Term::BOOL_SORT, &s)?;
+                }
+            }
+            Operator::Or | Operator::And => {
+                // The "or" and "and" operators can be called with only one argument
+                ErrorKind::assert_num_of_args_range(&args, 1..)?;
+                for s in sorts {
+                    SortError::assert_eq(Term::BOOL_SORT, &s)?;
+                }
+            }
+            Operator::Not => {
+                ErrorKind::assert_num_of_args(&args, 1)?;
+                SortError::assert_eq(Term::BOOL_SORT, &sorts[0])?;
+            }
+            Operator::Ite => {
+                ErrorKind::assert_num_of_args(&args, 3)?;
+                SortError::assert_eq(Term::BOOL_SORT, &sorts[0])?;
+                SortError::assert_eq(&sorts[1], &sorts[2])?;
+            }
+        }
+        let args = self.add_all(args);
+        Ok(Term::Op(op, args))
+    }
+
+    /// Constructs and sort checks an application term.
+    fn make_app(&mut self, function: Term, args: Vec<Term>) -> Result<Term, ErrorKind> {
+        let sorts = {
+            let function_sort = function.sort();
+            if let Term::Sort(SortKind::Function, sorts) = function_sort {
+                sorts
+            } else {
+                // Function does not have function sort
+                return Err(ErrorKind::SortError(SortError::Expected {
+                    expected: Term::Sort(SortKind::Function, Vec::new()),
+                    got: function_sort.clone(),
+                }));
+            }
+        };
+        ErrorKind::assert_num_of_args(&args, sorts.len() - 1)?;
+        for i in 0..args.len() {
+            SortError::assert_eq(sorts[i].as_ref(), &args[i].sort())?;
+        }
+        let function = self.add_term(function);
+        let args = self.add_all(args);
+        Ok(Term::App(function, args))
     }
 
     /// Consumes the current token if it equals `expected`. Returns an error otherwise.
@@ -611,8 +610,7 @@ impl<R: BufRead> Parser<R> {
                         Err(self.err(ErrorKind::WrongNumberOfArgs(func_def.params.len(), 0)))
                     }
                 } else {
-                    self.state
-                        .make_var(Identifier::Simple(s))
+                    self.make_var(Identifier::Simple(s))
                         .map_err(|err| self.err(err))
                 }
             }
@@ -666,9 +664,7 @@ impl<R: BufRead> Parser<R> {
             Token::Symbol(s) => {
                 if let Ok(operator) = Operator::from_str(&s) {
                     let args = self.parse_sequence(Self::parse_term, true)?;
-                    self.state
-                        .make_op(operator, args)
-                        .map_err(|err| self.err(err))
+                    self.make_op(operator, args).map_err(|err| self.err(err))
                 } else {
                     let args = self.parse_sequence(Self::parse_term, true)?;
                     if let Some(func) = self.state.function_defs.get(&s) {
@@ -701,10 +697,9 @@ impl<R: BufRead> Parser<R> {
                             .apply_substitutions(&body_clone, &substitutions))
                     } else {
                         let func = self
-                            .state
                             .make_var(Identifier::Simple(s))
                             .map_err(|err| self.err(err))?;
-                        self.state.make_app(func, args).map_err(|err| self.err(err))
+                        self.make_app(func, args).map_err(|err| self.err(err))
                     }
                 }
             }
