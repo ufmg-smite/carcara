@@ -680,21 +680,18 @@ impl<R: BufRead> Parser<R> {
 
                         // Build a hash map of all the parameter names and the values they will
                         // take
-                        let substitutions = func
+                        let parameters: Vec<_> = func
                             .params
                             .iter()
-                            .map(|(name, _sort)| name.clone())
-                            .zip(args.into_iter())
-                            .collect::<HashMap<_, _>>();
+                            .map(|(name, sort)| terminal!(var name; sort.clone()))
+                            .collect();
+                        let mut substitutions: HashMap<_, _> =
+                            parameters.iter().zip(args).collect();
 
-                        // `func.body` is a part of `self`, so we can't pass a referece to it
-                        // directly to `apply_substitutions` because that method already borrows
-                        // `self` mutably. So we have to clone the function body here.
-                        let body_clone = func.body.clone();
                         Ok(self
                             .state
                             .term_pool
-                            .apply_substitutions(&body_clone, &substitutions))
+                            .apply_substitutions(&func.body, &mut substitutions))
                     } else {
                         let func = self
                             .make_var(Identifier::Simple(s))

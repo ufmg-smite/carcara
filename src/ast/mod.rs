@@ -86,43 +86,52 @@ impl TermPool {
     }
 
     /// Takes a term and a hash map of variables to terms and substitutes every ocurrence of those
-    /// variables with the associated term.
-    pub fn apply_substitutions(
+    /// variables with the associated term. This method uses the given substitutions hash map as a
+    /// cache, and will therefore mutate it.
+    pub fn apply_substitutions<'a>(
         &mut self,
-        term: &Term,
-        substitutions: &HashMap<String, Term>,
+        term: &'a Term,
+        substitutions: &mut HashMap<&'a Term, Term>,
     ) -> Term {
-        let mut apply_to_sequence = |sequence: &[ByRefRc<Term>]| -> Vec<ByRefRc<Term>> {
-            sequence
-                .iter()
-                .map(|a| {
-                    let reduced = self.apply_substitutions(a, substitutions);
-                    self.add_term(reduced)
-                })
-                .collect()
-        };
-        match term {
-            Term::Terminal(t) => match t {
-                Terminal::Var(Identifier::Simple(iden), _) if substitutions.contains_key(iden) => {
-                    substitutions[iden].clone()
-                }
-                other => Term::Terminal(other.clone()),
-            },
+        macro_rules! apply_to_sequence {
+            ($sequence:expr) => {
+                $sequence
+                    .iter()
+                    .map(|a| {
+                        let reduced = self.apply_substitutions(a, substitutions);
+                        self.add_term(reduced)
+                    })
+                    .collect()
+            };
+        }
+
+        if let Some(t) = substitutions.get(term) {
+            return t.clone();
+        }
+
+        let result = match term {
             Term::App(func, args) => {
-                let new_args = apply_to_sequence(args);
+                let new_args = apply_to_sequence!(args);
                 let new_func = self.apply_substitutions(func, substitutions);
                 Term::App(self.add_term(new_func), new_args)
             }
             Term::Op(op, args) => {
-                let new_args = apply_to_sequence(args);
+                let new_args = apply_to_sequence!(args);
                 Term::Op(*op, new_args)
             }
-            sort @ Term::Sort(_, _) => sort.clone(),
             Term::Quant(q, b, t) => {
                 let new_term = self.apply_substitutions(t, substitutions);
                 Term::Quant(*q, b.clone(), self.add_term(new_term))
             }
-        }
+            other => other.clone(),
+        };
+
+        // Since frequently a term will have more than one identical subterms, we insert the
+        // calculated substitution in the substitutions hash map so it may be reused later. This
+        // means we don't re-visit already seen terms, so this method traverses the term as a DAG,
+        // not as a tree
+        substitutions.insert(term, result.clone());
+        result
     }
 }
 
