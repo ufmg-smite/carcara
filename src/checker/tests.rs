@@ -663,6 +663,13 @@ fn test_resolution_rule() {
             (step t5 (cl (not q) p (not p) (not (not (not p))) (not (not p)))
                 :rule resolution :premises (t3 t4))": true,
         }
+        "Weird behaviour where leading negations sometimes are added to conclusion" {
+            "(assume h1 (not p))
+            (assume h2 (= (not p) (not (not q))))
+            (assume h3 (or (not (= (not p) (not (not q)))) p q))
+            (step t4 (cl (not (= (not p) (not (not q)))) p q) :rule or :premises (h3))
+            (step t5 (cl (not (not q))) :rule resolution :premises (h1 h2 t4))": true,
+        }
     }
 }
 

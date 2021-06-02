@@ -309,6 +309,22 @@ pub fn resolution(
         }
     }
 
+    // In some cases, when the result of the resolution is just one term, it may appear in the
+    // conclusion clause with an even number of leading negations added to it. The following is an
+    // example of this, adapted from a generated proof:
+    //
+    //     (step t1 (cl (not e)) :rule irrelevant)
+    //     (step t2 (cl (= (not e) (not (not f)))) :rule irrelevant)
+    //     (step t3 (cl (not (= (not e) (not (not f)))) e f) :rule irrelevant)
+    //     (step t4 (cl (not (not f))) :rule resolution :premises (t1 t2 t3))
+    //
+    // Usually, we would expect the clause in the t4 step to be (cl f).
+    if pivots.len() == 1 && conclusion.len() == 1 {
+        let (i, pivot) = pivots.into_iter().next().unwrap();
+        let (j, conclusion) = conclusion.into_iter().next().unwrap();
+        return to_option(conclusion == pivot && (i % 2) == (j % 2));
+    }
+
     // At the end, we expect all pivots to have been removed, and the working clause to be equal to
     // the conclusion clause
     to_option(pivots.is_empty() && working_clause == conclusion)
