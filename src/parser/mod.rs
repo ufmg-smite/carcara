@@ -9,12 +9,7 @@ use error::*;
 use lexer::*;
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
-use std::{
-    collections::{hash_map::Entry, HashMap},
-    hash::Hash,
-    io::BufRead,
-    str::FromStr,
-};
+use std::{collections::HashMap, hash::Hash, io::BufRead, str::FromStr};
 
 pub fn parse_problem_proof<T: BufRead, U: BufRead>(prob: T, proof: U) -> ParserResult<Proof> {
     let mut problem_parser = Parser::new(prob)?;
@@ -72,26 +67,12 @@ impl<K, V> Default for SymbolTable<K, V> {
 struct ParserState {
     sorts_symbol_table: SymbolTable<Identifier, ByRefRc<Term>>,
     function_defs: HashMap<String, FunctionDef>,
-    terms_map: HashMap<Term, ByRefRc<Term>>,
+    term_pool: TermPool,
     sort_declarations: HashMap<String, (u64, ByRefRc<Term>)>,
     step_indices: SymbolTable<String, usize>,
 }
 
 impl ParserState {
-    /// Takes a term and returns a `ByRefRc` referencing it. If the term was not originally in the
-    /// terms hash map, it is added to it.
-    fn add_term(&mut self, term: Term) -> ByRefRc<Term> {
-        match self.terms_map.entry(term.clone()) {
-            Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
-            Entry::Vacant(vacant_entry) => vacant_entry.insert(ByRefRc::new(term)).clone(),
-        }
-    }
-
-    // Takes a vector of terms and calls `add_term` on each.
-    fn add_all(&mut self, terms: Vec<Term>) -> Vec<ByRefRc<Term>> {
-        terms.into_iter().map(|t| self.add_term(t)).collect()
-    }
-
     /// Constructs and sort checks a variable term.
     fn make_var(&mut self, iden: Identifier) -> Result<Term, ErrorKind> {
         let sort = self
@@ -152,7 +133,7 @@ impl ParserState {
                 SortError::assert_eq(&sorts[1], &sorts[2])?;
             }
         }
-        let args = self.add_all(args);
+        let args = self.term_pool.add_all(args);
         Ok(Term::Op(op, args))
     }
 
@@ -174,45 +155,9 @@ impl ParserState {
         for i in 0..args.len() {
             SortError::assert_eq(sorts[i].as_ref(), &args[i].sort())?;
         }
-        let function = self.add_term(function);
-        let args = self.add_all(args);
+        let function = self.term_pool.add_term(function);
+        let args = self.term_pool.add_all(args);
         Ok(Term::App(function, args))
-    }
-
-    /// Takes a term and a hash map of variables to terms and substitutes every ocurrence of those
-    /// variables with the associated term.
-    fn apply_substitutions(&mut self, term: &Term, substitutions: &HashMap<String, Term>) -> Term {
-        let mut apply_to_sequence = |sequence: &[ByRefRc<Term>]| -> Vec<ByRefRc<Term>> {
-            sequence
-                .iter()
-                .map(|a| {
-                    let reduced = self.apply_substitutions(a, substitutions);
-                    self.add_term(reduced)
-                })
-                .collect()
-        };
-        match term {
-            Term::Terminal(t) => match t {
-                Terminal::Var(Identifier::Simple(iden), _) if substitutions.contains_key(iden) => {
-                    substitutions[iden].clone()
-                }
-                other => Term::Terminal(other.clone()),
-            },
-            Term::App(func, args) => {
-                let new_args = apply_to_sequence(args);
-                let new_func = self.apply_substitutions(func, substitutions);
-                Term::App(self.add_term(new_func), new_args)
-            }
-            Term::Op(op, args) => {
-                let new_args = apply_to_sequence(args);
-                Term::Op(*op, new_args)
-            }
-            sort @ Term::Sort(_, _) => sort.clone(),
-            Term::Quant(q, b, t) => {
-                let new_term = self.apply_substitutions(t, substitutions);
-                Term::Quant(*q, b.clone(), self.add_term(new_term))
-            }
-        }
     }
 }
 
@@ -232,7 +177,7 @@ impl<R: BufRead> Parser<R> {
         let builtins = vec![("true", Term::BOOL_SORT), ("false", Term::BOOL_SORT)];
         for (iden, sort) in builtins {
             let iden = Identifier::Simple(iden.into());
-            let sort = state.add_term(sort.clone());
+            let sort = state.term_pool.add_term(sort.clone());
             state.sorts_symbol_table.insert(iden, sort);
         }
         Parser::with_state(input, state)
@@ -259,6 +204,16 @@ impl<R: BufRead> Parser<R> {
     /// Helper method to build a parser error with the current lexer position.
     fn err(&self, err: ErrorKind) -> ParserError {
         ParserError(err, self.lexer.position)
+    }
+
+    /// Shortcut for `self.state.term_pool.add_term`.
+    fn add_term(&mut self, term: Term) -> ByRefRc<Term> {
+        self.state.term_pool.add_term(term)
+    }
+
+    /// Shortcut for `self.state.term_pool.add_all`.
+    fn add_all(&mut self, term: Vec<Term>) -> Vec<ByRefRc<Term>> {
+        self.state.term_pool.add_all(term)
     }
 
     /// Helper method to build a `ErrorKind::UnexpectedToken` error.
@@ -339,8 +294,8 @@ impl<R: BufRead> Parser<R> {
                     // User declared sorts are represented with the `Atom` sort kind, and an
                     // argument which is a string terminal representing the sort name.
                     let sort = {
-                        let arg = self.state.add_term(terminal!(string name.clone()));
-                        self.state.add_term(Term::Sort(SortKind::Atom, vec![arg]))
+                        let arg = self.add_term(terminal!(string name.clone()));
+                        self.add_term(Term::Sort(SortKind::Atom, vec![arg]))
                     };
                     self.state.sort_declarations.insert(name, (arity, sort));
                     continue;
@@ -424,7 +379,7 @@ impl<R: BufRead> Parser<R> {
         let index = self.expect_symbol()?;
         let term = self.parse_term()?;
         SortError::assert_eq(Term::BOOL_SORT, &term.sort()).map_err(|err| self.err(err.into()))?;
-        let term = self.state.add_term(term);
+        let term = self.add_term(term);
         self.expect_token(Token::CloseParen)?;
         Ok((index, ProofCommand::Assume(term)))
     }
@@ -512,7 +467,7 @@ impl<R: BufRead> Parser<R> {
                     let (b, b_sort) = p.parse_sorted_var()?;
                     p.expect_token(Token::CloseParen)?;
 
-                    let b_term = p.state.add_term(terminal!(var b.clone(); b_sort.clone()));
+                    let b_term = p.add_term(terminal!(var b.clone(); b_sort.clone()));
                     args.insert(a.clone(), b_term);
 
                     let (a, b) = (Identifier::Simple(a), Identifier::Simple(b));
@@ -539,11 +494,11 @@ impl<R: BufRead> Parser<R> {
             self.expect_token(Token::OpenParen)?;
             let mut sorts = self.parse_sequence(Self::parse_sort, false)?;
             sorts.push(self.parse_sort()?);
-            let sorts = self.state.add_all(sorts);
+            let sorts = self.add_all(sorts);
             if sorts.len() == 1 {
                 sorts.into_iter().next().unwrap()
             } else {
-                self.state.add_term(Term::Sort(SortKind::Function, sorts))
+                self.add_term(Term::Sort(SortKind::Function, sorts))
             }
         };
         self.expect_token(Token::CloseParen)?;
@@ -596,7 +551,7 @@ impl<R: BufRead> Parser<R> {
             .map(|term| -> ParserResult<ByRefRc<Term>> {
                 SortError::assert_eq(Term::BOOL_SORT, &term.sort())
                     .map_err(|err| self.err(err.into()))?;
-                Ok(self.state.add_term(term))
+                Ok(self.add_term(term))
             })
             .collect::<Result<_, _>>()?;
         Ok(terms)
@@ -616,18 +571,18 @@ impl<R: BufRead> Parser<R> {
                     let name = self.expect_symbol()?;
                     let value = self.parse_term()?;
                     self.expect_token(Token::CloseParen)?;
-                    Ok(ProofArg::Assign(name, self.state.add_term(value)))
+                    Ok(ProofArg::Assign(name, self.add_term(value)))
                 } else {
                     // If the first token is not ":=", this argument is just a regular term. Since
                     // we already consumed the "(" token, we have to call `parse_application`
                     // instead of `parse_term`.
                     let term = self.parse_application()?;
-                    Ok(ProofArg::Term(self.state.add_term(term)))
+                    Ok(ProofArg::Term(self.add_term(term)))
                 }
             }
             _ => {
                 let term = self.parse_term()?;
-                Ok(ProofArg::Term(self.state.add_term(term)))
+                Ok(ProofArg::Term(self.add_term(term)))
             }
         }
     }
@@ -638,7 +593,7 @@ impl<R: BufRead> Parser<R> {
         let symbol = self.expect_symbol()?;
         let sort = self.parse_sort()?;
         self.expect_token(Token::CloseParen)?;
-        Ok((symbol, self.state.add_term(sort)))
+        Ok((symbol, self.add_term(sort)))
     }
 
     /// Parses a term.
@@ -680,7 +635,7 @@ impl<R: BufRead> Parser<R> {
         )?;
         let term = self.parse_term()?;
         SortError::assert_eq(Term::BOOL_SORT, term.sort()).map_err(|e| self.err(e.into()))?;
-        let term = self.state.add_term(term);
+        let term = self.add_term(term);
         self.state.sorts_symbol_table.pop_scope();
         self.expect_token(Token::CloseParen)?;
         Ok(Term::Quant(quantifier, bindings, term))
@@ -740,7 +695,10 @@ impl<R: BufRead> Parser<R> {
                         // directly to `apply_substitutions` because that method already borrows
                         // `self` mutably. So we have to clone the function body here.
                         let body_clone = func.body.clone();
-                        Ok(self.state.apply_substitutions(&body_clone, &substitutions))
+                        Ok(self
+                            .state
+                            .term_pool
+                            .apply_substitutions(&body_clone, &substitutions))
                     } else {
                         let func = self
                             .state

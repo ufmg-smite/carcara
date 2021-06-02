@@ -65,6 +65,67 @@ impl<T> ByRefRc<T> {
     }
 }
 
+#[derive(Default)]
+pub struct TermPool(pub HashMap<Term, ByRefRc<Term>>);
+
+impl TermPool {
+    /// Takes a term and returns a `ByRefRc` referencing it. If the term was not originally in the
+    /// terms hash map, it is added to it.
+    pub fn add_term(&mut self, term: Term) -> ByRefRc<Term> {
+        use std::collections::hash_map::Entry;
+
+        match self.0.entry(term.clone()) {
+            Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
+            Entry::Vacant(vacant_entry) => vacant_entry.insert(ByRefRc::new(term)).clone(),
+        }
+    }
+
+    // Takes a vector of terms and calls `add_term` on each.
+    pub fn add_all(&mut self, terms: Vec<Term>) -> Vec<ByRefRc<Term>> {
+        terms.into_iter().map(|t| self.add_term(t)).collect()
+    }
+
+    /// Takes a term and a hash map of variables to terms and substitutes every ocurrence of those
+    /// variables with the associated term.
+    pub fn apply_substitutions(
+        &mut self,
+        term: &Term,
+        substitutions: &HashMap<String, Term>,
+    ) -> Term {
+        let mut apply_to_sequence = |sequence: &[ByRefRc<Term>]| -> Vec<ByRefRc<Term>> {
+            sequence
+                .iter()
+                .map(|a| {
+                    let reduced = self.apply_substitutions(a, substitutions);
+                    self.add_term(reduced)
+                })
+                .collect()
+        };
+        match term {
+            Term::Terminal(t) => match t {
+                Terminal::Var(Identifier::Simple(iden), _) if substitutions.contains_key(iden) => {
+                    substitutions[iden].clone()
+                }
+                other => Term::Terminal(other.clone()),
+            },
+            Term::App(func, args) => {
+                let new_args = apply_to_sequence(args);
+                let new_func = self.apply_substitutions(func, substitutions);
+                Term::App(self.add_term(new_func), new_args)
+            }
+            Term::Op(op, args) => {
+                let new_args = apply_to_sequence(args);
+                Term::Op(*op, new_args)
+            }
+            sort @ Term::Sort(_, _) => sort.clone(),
+            Term::Quant(q, b, t) => {
+                let new_term = self.apply_substitutions(t, substitutions);
+                Term::Quant(*q, b.clone(), self.add_term(new_term))
+            }
+        }
+    }
+}
+
 /// A proof in the veriT Proof Format.
 #[derive(Debug)]
 pub struct Proof(pub Vec<ProofCommand>);
