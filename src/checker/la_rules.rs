@@ -1,4 +1,4 @@
-use super::to_option;
+use super::{to_option, RuleArgs};
 
 use crate::ast::*;
 
@@ -6,12 +6,12 @@ use num_rational::BigRational;
 use num_traits::{One, Signed, Zero};
 use std::collections::HashMap;
 
-pub fn la_rw_eq(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
-    if clause.len() != 1 {
+pub fn la_rw_eq(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    if conclusion.len() != 1 {
         return None;
     }
     let ((t_1, u_1), ((t_2, u_2), (u_3, t_3))) = match_term!(
-        (= (= t u) (and (<= t u) (<= u t))) = clause[0]
+        (= (= t u) (and (<= t u) (<= u t))) = conclusion[0]
     )?;
     to_option(t_1 == t_2 && t_2 == t_3 && u_1 == u_2 && u_2 == u_3)
 }
@@ -173,14 +173,14 @@ impl<'a> LinearComb<'a> {
 }
 
 pub fn la_generic(
-    clause: &[ByRefRc<Term>],
-    _: Vec<&ProofCommand>,
-    args: &[ProofArg],
+    RuleArgs {
+        conclusion, args, ..
+    }: RuleArgs,
 ) -> Option<()> {
-    if clause.len() != args.len() {
+    if conclusion.len() != args.len() {
         return None;
     }
-    let final_disequality = clause
+    let final_disequality = conclusion
         .iter()
         .zip(args)
         .map(|(phi, a)| {
@@ -268,16 +268,12 @@ pub fn la_generic(
     to_option(!is_disequality_true)
 }
 
-pub fn la_disequality(
-    clause: &[ByRefRc<Term>],
-    _: Vec<&ProofCommand>,
-    _: &[ProofArg],
-) -> Option<()> {
-    if clause.len() != 1 {
+pub fn la_disequality(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    if conclusion.len() != 1 {
         return None;
     }
     let ((t1_1, t2_1), (t1_2, t2_2), (t2_3, t1_3)) = match_term!(
-        (or (= t1 t2) (not (<= t1 t2)) (not (<= t2 t1))) = clause[0]
+        (or (= t1 t2) (not (<= t1 t2)) (not (<= t2 t1))) = conclusion[0]
     )?;
     to_option(t1_1 == t1_2 && t1_2 == t1_3 && t2_1 == t2_2 && t2_2 == t2_3)
 }

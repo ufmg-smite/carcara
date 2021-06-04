@@ -29,7 +29,13 @@ fn get_clause_from_command(command: &ProofCommand) -> &[ByRefRc<Term>] {
     }
 }
 
-pub type Rule = fn(&[ByRefRc<Term>], Vec<&ProofCommand>, &[ProofArg]) -> Option<()>;
+pub type Rule = fn(RuleArgs) -> Option<()>;
+
+pub struct RuleArgs<'a> {
+    conclusion: &'a [ByRefRc<Term>],
+    premises: Vec<&'a ProofCommand>,
+    args: &'a [ProofArg],
+}
 
 #[derive(Debug)]
 pub enum CheckerError<'a> {
@@ -65,7 +71,12 @@ impl ProofChecker {
                     None => return Err(CheckerError::UnknownRule(rule_name)),
                 };
                 let premises = premises.iter().map(|&i| &self.proof.0[i]).collect();
-                if rule(&clause, premises, &args).is_none() {
+                let rule_args = RuleArgs {
+                    conclusion: &clause,
+                    premises,
+                    args: &args,
+                };
+                if rule(rule_args).is_none() {
                     return Err(CheckerError::FailedOnRule(rule_name));
                 }
             }

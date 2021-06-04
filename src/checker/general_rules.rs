@@ -1,87 +1,86 @@
-use super::{get_clause_from_command, get_single_term_from_command, to_option};
+use super::{get_clause_from_command, get_single_term_from_command, to_option, RuleArgs};
 
 use crate::ast::*;
 
 use std::collections::HashSet;
 
-pub fn not_not(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
-    if clause.len() != 2 {
+pub fn not_not(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    if conclusion.len() != 2 {
         return None;
     }
-    let p = match_term!((not (not (not p))) = clause[0])?;
-    let q = clause[1].as_ref();
+    let p = match_term!((not (not (not p))) = conclusion[0])?;
+    let q = conclusion[1].as_ref();
     to_option(p == q)
 }
 
-pub fn and_pos(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
-    if clause.len() != 2 {
+pub fn and_pos(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    if conclusion.len() != 2 {
         return None;
     }
-    let and_contents = match_term!((not (and ...)) = clause[0])?;
-    and_contents.iter().find(|&t| *t == clause[1]).map(|_| ())
+    let and_contents = match_term!((not (and ...)) = conclusion[0])?;
+    and_contents
+        .iter()
+        .find(|&t| *t == conclusion[1])
+        .map(|_| ())
 }
 
-pub fn and_neg(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
-    if clause.len() < 2 {
+pub fn and_neg(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    if conclusion.len() < 2 {
         return None;
     }
-    let and_contents = match_term!((and ...) = clause[0])?
+    let and_contents = match_term!((and ...) = conclusion[0])?
         .iter()
         .map(|t| Some(t.as_ref()));
-    let remaining = clause[1..].iter().map(|t| t.remove_negation());
+    let remaining = conclusion[1..].iter().map(|t| t.remove_negation());
     to_option(and_contents.eq(remaining))
 }
 
-pub fn or_pos(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
-    if clause.len() < 2 {
+pub fn or_pos(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    if conclusion.len() < 2 {
         return None;
     }
-    let or_contents = match_term!((not (or ...)) = clause[0])?;
-    to_option(or_contents.iter().eq(&clause[1..]))
+    let or_contents = match_term!((not (or ...)) = conclusion[0])?;
+    to_option(or_contents.iter().eq(&conclusion[1..]))
 }
 
-pub fn or_neg(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
-    if clause.len() < 2 {
+pub fn or_neg(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    if conclusion.len() < 2 {
         return None;
     }
-    let or_contents = match_term!((or ...) = clause[0])?;
-    let other = clause[1].remove_negation()?;
+    let or_contents = match_term!((or ...) = conclusion[0])?;
+    let other = conclusion[1].remove_negation()?;
     or_contents
         .iter()
         .find(|&t| t.as_ref() == other)
         .map(|_| ())
 }
 
-pub fn equiv_pos1(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
-    if clause.len() != 3 {
+pub fn equiv_pos1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    if conclusion.len() != 3 {
         return None;
     }
-    let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = clause[0])?;
-    to_option(phi_1 == clause[1].as_ref() && phi_2 == clause[2].remove_negation()?)
+    let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = conclusion[0])?;
+    to_option(phi_1 == conclusion[1].as_ref() && phi_2 == conclusion[2].remove_negation()?)
 }
 
-pub fn equiv_pos2(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
-    if clause.len() != 3 {
+pub fn equiv_pos2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    if conclusion.len() != 3 {
         return None;
     }
-    let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = clause[0])?;
-    to_option(phi_1 == clause[1].remove_negation()? && phi_2 == clause[2].as_ref())
+    let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = conclusion[0])?;
+    to_option(phi_1 == conclusion[1].remove_negation()? && phi_2 == conclusion[2].as_ref())
 }
 
-pub fn eq_reflexive(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
-    if clause.len() == 1 {
-        let (a, b) = match_term!((= a b) = clause[0])?;
+pub fn eq_reflexive(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    if conclusion.len() == 1 {
+        let (a, b) = match_term!((= a b) = conclusion[0])?;
         to_option(a == b)
     } else {
         None
     }
 }
 
-pub fn eq_transitive(
-    clause: &[ByRefRc<Term>],
-    _: Vec<&ProofCommand>,
-    _: &[ProofArg],
-) -> Option<()> {
+pub fn eq_transitive(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     /// Recursive function to find a transitive chain given a conclusion equality and a series
     /// of premise equalities.
     fn find_chain(conclusion: (&Term, &Term), premises: &mut [(&Term, &Term)]) -> Option<()> {
@@ -113,50 +112,49 @@ pub fn eq_transitive(
         find_chain((eq.1, conclusion.1), &mut premises[1..])
     }
 
-    if clause.len() < 3 {
+    if conclusion.len() < 3 {
         return None;
     }
 
-    // The last term in clause should be an equality, and it will be the conclusion of the
-    // transitive chain
-    let conclusion = match_term!((= t u) = clause.last().unwrap())?;
+    // The last term in the conclusion clause should be an equality, and it will be the conclusion
+    // of the transitive chain
+    let chain_conclusion = match_term!((= t u) = conclusion.last().unwrap())?;
 
-    // The first `clause.len()` - 1 terms in the clause must be a sequence of inequalites, and
-    // they will be the premises of the transitive chain
-    let mut premises = Vec::with_capacity(clause.len() - 1);
-    for term in &clause[..clause.len() - 1] {
+    // The first `conclusion.len()` - 1 terms in the conclusion clause must be a sequence of
+    // inequalites, and they will be the premises of the transitive chain
+    let mut premises = Vec::with_capacity(conclusion.len() - 1);
+    for term in &conclusion[..conclusion.len() - 1] {
         let (t, u) = match_term!((not (= t u)) = term)?;
         premises.push((t, u));
     }
 
-    find_chain(conclusion, &mut premises)
+    find_chain(chain_conclusion, &mut premises)
 }
 
-pub fn eq_congruent(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
-    if clause.len() < 2 {
+pub fn eq_congruent(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    if conclusion.len() < 2 {
         return None;
     }
-    let premises = clause[..clause.len() - 1]
+    let premises = conclusion[..conclusion.len() - 1]
         .iter()
         .map(|t| t.remove_negation());
-    let conclusion = match_term!((= f g) = clause.last().unwrap())?;
+    let conclusion = match_term!((= f g) = conclusion.last().unwrap())?;
 
     generic_congruent_rule(premises, conclusion)
 }
 
-pub fn eq_congruent_pred(
-    clause: &[ByRefRc<Term>],
-    _: Vec<&ProofCommand>,
-    _: &[ProofArg],
-) -> Option<()> {
-    if clause.len() < 3 {
+pub fn eq_congruent_pred(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    if conclusion.len() < 3 {
         return None;
     }
-    let premises = clause[..clause.len() - 2]
+    let premises = conclusion[..conclusion.len() - 2]
         .iter()
         .map(|t| t.remove_negation());
 
-    let (p, q) = (&clause[clause.len() - 2], &clause[clause.len() - 1]);
+    let (p, q) = (
+        &conclusion[conclusion.len() - 2],
+        &conclusion[conclusion.len() - 1],
+    );
     let conclusion = match p.remove_negation() {
         Some(p) => (p, q.as_ref()),
         None => (p.as_ref(), q.remove_negation()?),
@@ -197,16 +195,12 @@ where
     Some(())
 }
 
-pub fn distinct_elim(
-    clause: &[ByRefRc<Term>],
-    _: Vec<&ProofCommand>,
-    _: &[ProofArg],
-) -> Option<()> {
-    if clause.len() != 1 {
+pub fn distinct_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    if conclusion.len() != 1 {
         return None;
     }
 
-    let (distinct_args, second_term) = match_term!((= (distinct ...) second) = clause[0])?;
+    let (distinct_args, second_term) = match_term!((= (distinct ...) second) = conclusion[0])?;
     match distinct_args {
         [] | [_] => unreachable!(),
         [a, b] => {
@@ -240,9 +234,11 @@ pub fn distinct_elim(
 }
 
 pub fn resolution(
-    clause: &[ByRefRc<Term>],
-    premises: Vec<&ProofCommand>,
-    _: &[ProofArg],
+    RuleArgs {
+        conclusion,
+        premises,
+        ..
+    }: RuleArgs,
 ) -> Option<()> {
     /// Removes all leading negations in a term and returns how many there were.
     fn remove_negations(mut term: &Term) -> (i32, &Term) {
@@ -266,7 +262,7 @@ pub fn resolution(
     // Without looking at the conclusion, it is unclear if the (not p) term should be removed by
     // the p term, if the (not (not p)) should be removed by the (not (not (not p))), or both. We
     // can only determine this by looking at the conlcusion and using it to derive the pivots.
-    let conclusion: HashSet<_> = clause
+    let conclusion: HashSet<_> = conclusion
         .iter()
         .map(|t| remove_negations(t.as_ref()))
         .collect();
@@ -330,7 +326,13 @@ pub fn resolution(
     to_option(pivots.is_empty() && working_clause == conclusion)
 }
 
-pub fn cong(clause: &[ByRefRc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+pub fn cong(
+    RuleArgs {
+        conclusion,
+        premises,
+        ..
+    }: RuleArgs,
+) -> Option<()> {
     /// Since the semantics of this rule is slighty different from that of "eq_congruent" and
     /// "eq_congruent_pred", we cannot just use the `generic_congruent_rule` function
     fn check_cong<'a>(
@@ -363,7 +365,7 @@ pub fn cong(clause: &[ByRefRc<Term>], premises: Vec<&ProofCommand>, _: &[ProofAr
         premises.next().is_none()
     }
 
-    if premises.is_empty() || clause.len() != 1 {
+    if premises.is_empty() || conclusion.len() != 1 {
         return None;
     }
 
@@ -374,7 +376,7 @@ pub fn cong(clause: &[ByRefRc<Term>], premises: Vec<&ProofCommand>, _: &[ProofAr
         })
         .collect();
 
-    let (f_args, g_args) = match match_term!((= f g) = clause[0].as_ref())? {
+    let (f_args, g_args) = match match_term!((= f g) = conclusion[0].as_ref())? {
         // Because of the way veriT handles equality terms, when the "cong" rule is called with two
         // equalities of two terms, the order of their arguments may be flipped. Because of that,
         // we have to treat this special case separately
@@ -403,65 +405,91 @@ pub fn cong(clause: &[ByRefRc<Term>], premises: Vec<&ProofCommand>, _: &[ProofAr
     to_option(check_cong(&premises, f_args, g_args))
 }
 
-pub fn and(clause: &[ByRefRc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
-    if premises.len() != 1 || clause.len() != 1 {
+pub fn and(
+    RuleArgs {
+        conclusion,
+        premises,
+        ..
+    }: RuleArgs,
+) -> Option<()> {
+    if premises.len() != 1 || conclusion.len() != 1 {
         return None;
     }
     let and_term = get_single_term_from_command(premises[0])?;
     let and_contents = match_term!((and ...) = and_term)?;
 
-    to_option(and_contents.iter().any(|t| t == &clause[0]))
+    to_option(and_contents.iter().any(|t| t == &conclusion[0]))
 }
 
-pub fn or(clause: &[ByRefRc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+pub fn or(
+    RuleArgs {
+        conclusion,
+        premises,
+        ..
+    }: RuleArgs,
+) -> Option<()> {
     if premises.len() != 1 {
         return None;
     }
     let or_term = get_single_term_from_command(premises[0])?;
     let or_contents = match_term!((or ...) = or_term)?;
 
-    to_option(or_contents == clause)
+    to_option(or_contents == conclusion)
 }
 
 pub fn implies(
-    clause: &[ByRefRc<Term>],
-    premises: Vec<&ProofCommand>,
-    _: &[ProofArg],
+    RuleArgs {
+        conclusion,
+        premises,
+        ..
+    }: RuleArgs,
 ) -> Option<()> {
-    if premises.len() != 1 || clause.len() != 2 {
+    if premises.len() != 1 || conclusion.len() != 2 {
         return None;
     }
     let premise_term = get_single_term_from_command(premises[0])?;
     let (phi_1, phi_2) = match_term!((=> phi_1 phi_2) = premise_term)?;
 
-    to_option(phi_1 == clause[0].remove_negation()? && phi_2 == clause[1].as_ref())
+    to_option(phi_1 == conclusion[0].remove_negation()? && phi_2 == conclusion[1].as_ref())
 }
 
-pub fn ite1(clause: &[ByRefRc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
-    if premises.len() != 1 || clause.len() != 2 {
+pub fn ite1(
+    RuleArgs {
+        conclusion,
+        premises,
+        ..
+    }: RuleArgs,
+) -> Option<()> {
+    if premises.len() != 1 || conclusion.len() != 2 {
         return None;
     }
     let premise_term = get_single_term_from_command(premises[0])?;
     let (phi_1, _, phi_3) = match_term!((ite phi_1 phi_2 phi_3) = premise_term)?;
 
-    to_option(phi_1 == clause[0].as_ref() && phi_3 == clause[1].as_ref())
+    to_option(phi_1 == conclusion[0].as_ref() && phi_3 == conclusion[1].as_ref())
 }
 
-pub fn ite2(clause: &[ByRefRc<Term>], premises: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
-    if premises.len() != 1 || clause.len() != 2 {
+pub fn ite2(
+    RuleArgs {
+        conclusion,
+        premises,
+        ..
+    }: RuleArgs,
+) -> Option<()> {
+    if premises.len() != 1 || conclusion.len() != 2 {
         return None;
     }
     let premise_term = get_single_term_from_command(premises[0])?;
     let (phi_1, phi_2, _) = match_term!((ite phi_1 phi_2 phi_3) = premise_term)?;
 
-    to_option(phi_1 == clause[0].remove_negation()? && phi_2 == clause[1].as_ref())
+    to_option(phi_1 == conclusion[0].remove_negation()? && phi_2 == conclusion[1].as_ref())
 }
 
-pub fn ite_intro(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
-    if clause.len() != 1 {
+pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    if conclusion.len() != 1 {
         return None;
     }
-    let (root_term, right_side) = match_term!((= t u) = clause[0])?;
+    let (root_term, right_side) = match_term!((= t u) = conclusion[0])?;
 
     // In some cases, no "ite" subterm is extracted from "t" (even if "t" has "ite" subterms), so
     // the conjunction in the right side of the equality has only one term: "t" itself, modulo
@@ -517,9 +545,11 @@ pub fn ite_intro(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]
 }
 
 pub fn contraction(
-    clause: &[ByRefRc<Term>],
-    premises: Vec<&ProofCommand>,
-    _: &[ProofArg],
+    RuleArgs {
+        conclusion,
+        premises,
+        ..
+    }: RuleArgs,
 ) -> Option<()> {
     if premises.len() != 1 {
         return None;
@@ -532,7 +562,7 @@ pub fn contraction(
 
     // This set will be populated with the terms we enconter as we iterate through the premise
     let mut encountered = HashSet::<&Term>::with_capacity(premise_clause.len());
-    let mut clause_iter = clause.iter();
+    let mut conclusion_iter = conclusion.iter();
 
     for t in premise_clause {
         // `HashSet::insert` returns true if the inserted element was not in the set
@@ -540,17 +570,17 @@ pub fn contraction(
 
         // If the term in the premise clause has not been encountered before, we advance the
         // conclusion clause iterator, and check if its next term is the encountered term
-        if is_new_term && clause_iter.next() != Some(t) {
+        if is_new_term && conclusion_iter.next() != Some(t) {
             return None;
         }
     }
 
     // At the end, the conclusion clause iterator must be empty, meaning all terms in the
     // conclusion are in the premise
-    to_option(clause_iter.next().is_none())
+    to_option(conclusion_iter.next().is_none())
 }
 
-pub fn nary_elim(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]) -> Option<()> {
+pub fn nary_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     // The three possible cases for n-ary operators: chainable, right associative and left
     // associative
     #[derive(Debug, PartialEq, Eq)]
@@ -601,10 +631,10 @@ pub fn nary_elim(clause: &[ByRefRc<Term>], _: Vec<&ProofCommand>, _: &[ProofArg]
         }
     }
 
-    if clause.len() != 1 {
+    if conclusion.len() != 1 {
         return None;
     }
-    let (original, result) = match_term!((= o r) = clause[0].as_ref())?;
+    let (original, result) = match_term!((= o r) = conclusion[0].as_ref())?;
     if let Term::Op(op, args) = original {
         let case = match op {
             Operator::Eq => Case::Chainable,

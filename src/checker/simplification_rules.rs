@@ -1,4 +1,4 @@
-use super::to_option;
+use super::{to_option, RuleArgs};
 
 use crate::ast::*;
 
@@ -72,15 +72,11 @@ fn bool_simplify_once(term: &Term) -> Option<Term> {
     })
 }
 
-pub fn bool_simplify(
-    clause: &[ByRefRc<Term>],
-    _: Vec<&ProofCommand>,
-    _: &[ProofArg],
-) -> Option<()> {
-    if clause.len() != 1 {
+pub fn bool_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    if conclusion.len() != 1 {
         return None;
     }
-    let (current, goal) = match_term!((= phi psi) = clause[0].as_ref())?;
+    let (current, goal) = match_term!((= phi psi) = conclusion[0].as_ref())?;
     let mut current = current.clone();
     loop {
         if let Some(next) = bool_simplify_once(&current) {
@@ -96,11 +92,7 @@ pub fn bool_simplify(
     }
 }
 
-pub fn prod_simplify(
-    clause: &[ByRefRc<Term>],
-    _: Vec<&ProofCommand>,
-    _: &[ProofArg],
-) -> Option<()> {
+pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     fn is_constant(term: &ByRefRc<Term>) -> bool {
         matches!(
             term.as_ref(),
@@ -134,11 +126,11 @@ pub fn prod_simplify(
         })
     }
 
-    if clause.len() != 1 {
+    if conclusion.len() != 1 {
         return None;
     }
 
-    let (first, second) = match_term!((= first second) = clause[0].as_ref())?;
+    let (first, second) = match_term!((= first second) = conclusion[0].as_ref())?;
     let (ts, (u_constant, u_args)) = {
         // Since the ts and u terms may be in either order, we have to try to validate both options
         // to find out which term is which
