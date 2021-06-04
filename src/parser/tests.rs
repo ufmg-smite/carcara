@@ -29,7 +29,7 @@ pub fn parse_term_with_definitions(definitions: &str, term: &str) -> Term {
 
 pub fn parse_proof(input: &str) -> Proof {
     Parser::new(input.as_bytes())
-        .and_then(|mut p| p.parse_proof())
+        .and_then(Parser::parse_proof)
         .expect(ERROR_MESSAGE)
         .0
 }

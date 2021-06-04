@@ -46,29 +46,23 @@ pub enum CheckerError<'a> {
 }
 
 pub struct ProofChecker {
-    proof: Proof,
     pool: TermPool,
     skip_unknown_rules: bool,
 }
 
 impl ProofChecker {
-    pub fn new(proof: Proof, pool: TermPool, skip_unknown_rules: bool) -> Self {
+    pub fn new(pool: TermPool, skip_unknown_rules: bool) -> Self {
         ProofChecker {
-            proof,
             pool,
             skip_unknown_rules,
         }
     }
 
-    pub fn check(&mut self) -> Result<(), CheckerError> {
-        ProofChecker::check_subproof(&self.proof.0, &mut self.pool, self.skip_unknown_rules)
+    pub fn check<'a>(&mut self, proof: &'a Proof) -> Result<(), CheckerError<'a>> {
+        self.check_subproof(&proof.0)
     }
 
-    fn check_subproof<'a>(
-        commands: &'a [ProofCommand],
-        pool: &mut TermPool,
-        skip_unknown_rules: bool,
-    ) -> Result<(), CheckerError<'a>> {
+    fn check_subproof<'a>(&mut self, commands: &'a [ProofCommand]) -> Result<(), CheckerError<'a>> {
         for step in commands {
             match step {
                 ProofCommand::Step {
@@ -79,7 +73,7 @@ impl ProofChecker {
                 } => {
                     let rule = match Self::get_rule(rule_name) {
                         Some(r) => r,
-                        None if skip_unknown_rules => continue,
+                        None if self.skip_unknown_rules => continue,
                         None => return Err(CheckerError::UnknownRule(rule_name)),
                     };
                     let premises = premises.iter().map(|&i| &commands[i]).collect();
@@ -87,14 +81,14 @@ impl ProofChecker {
                         conclusion: &clause,
                         premises,
                         args: &args,
-                        pool,
+                        pool: &mut self.pool,
                     };
                     if rule(rule_args).is_none() {
                         return Err(CheckerError::FailedOnRule(rule_name));
                     }
                 }
                 ProofCommand::Subproof(commands, _) => {
-                    ProofChecker::check_subproof(&commands, pool, skip_unknown_rules)?;
+                    self.check_subproof(&commands)?;
                 }
                 ProofCommand::Assume(_) => (),
             }

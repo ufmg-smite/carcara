@@ -19,7 +19,7 @@ fn test_file(problem_path: &Path, proof_path: &Path) {
         p => p.unwrap(),
     };
     if let Err(CheckerError::FailedOnRule(rule)) =
-        checker::ProofChecker::new(proof, pool, true).check()
+        checker::ProofChecker::new(pool, true).check(&proof)
     {
         panic!(
             "\ntest file \"{}\"\nfailed on rule \"{}\"\n",

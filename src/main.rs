@@ -82,7 +82,7 @@ fn main() -> ParserResult<()> {
         if matches.is_present("print-ast") {
             println!("{:#?}", proof);
         }
-        match ProofChecker::new(proof, pool, matches.is_present("skip-unknown-rules")).check() {
+        match ProofChecker::new(pool, matches.is_present("skip-unknown-rules")).check(&proof) {
             Ok(()) => println!("true"),
             Err(CheckerError::UnknownRule(s)) => println!("unknown rule: {}", s),
             Err(CheckerError::FailedOnRule(s)) => println!("false ({})", s),
