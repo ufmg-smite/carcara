@@ -57,28 +57,37 @@ impl ProofChecker {
     }
 
     pub fn check(&self) -> Result<(), CheckerError> {
-        for step in &self.proof.0 {
-            if let ProofCommand::Step {
-                clause,
-                rule: rule_name,
-                premises,
-                args,
-            } = step
-            {
-                let rule = match Self::get_rule(rule_name) {
-                    Some(r) => r,
-                    None if self.skip_unknown_rules => continue,
-                    None => return Err(CheckerError::UnknownRule(rule_name)),
-                };
-                let premises = premises.iter().map(|&i| &self.proof.0[i]).collect();
-                let rule_args = RuleArgs {
-                    conclusion: &clause,
+        self.check_subproof(&self.proof.0)
+    }
+
+    fn check_subproof<'a>(&self, commands: &'a [ProofCommand]) -> Result<(), CheckerError<'a>> {
+        for step in commands {
+            match step {
+                ProofCommand::Step {
+                    clause,
+                    rule: rule_name,
                     premises,
-                    args: &args,
-                };
-                if rule(rule_args).is_none() {
-                    return Err(CheckerError::FailedOnRule(rule_name));
+                    args,
+                } => {
+                    let rule = match Self::get_rule(rule_name) {
+                        Some(r) => r,
+                        None if self.skip_unknown_rules => continue,
+                        None => return Err(CheckerError::UnknownRule(rule_name)),
+                    };
+                    let premises = premises.iter().map(|&i| &commands[i]).collect();
+                    let rule_args = RuleArgs {
+                        conclusion: &clause,
+                        premises,
+                        args: &args,
+                    };
+                    if rule(rule_args).is_none() {
+                        return Err(CheckerError::FailedOnRule(rule_name));
+                    }
                 }
+                ProofCommand::Subproof(commands, _) => {
+                    self.check_subproof(&commands)?;
+                }
+                ProofCommand::Assume(_) => (),
             }
         }
         Ok(())
