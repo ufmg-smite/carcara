@@ -1013,13 +1013,6 @@ fn test_ite_intro_rule() {
             )) :rule ite_intro)": false,
         }
         "Conjunction has the wrong number of terms" {
-            "(step t1 (cl (=
-                (or (ite p a b) (ite q c d))
-                (and
-                    (or (ite p a b) (ite q c d))
-                    (ite p (= a (ite p a b)) (= b (ite p a b)))
-                )
-            )) :rule ite_intro)": false,
 
             "(step t1 (cl (=
                 (or (ite p a b) (ite q c d))
@@ -1037,6 +1030,16 @@ fn test_ite_intro_rule() {
             "(step t1 (cl (=
                 (and (ite p a b) (or (ite q c d) (ite (not p) b (not d))))
                 (and (ite p a b) (or (ite q c d) (ite (not p) b (not d))))
+            )) :rule ite_intro)": true,
+        }
+        "\"ite\" subterm may be skipped" {
+            "(step t1 (cl (=
+                (or (ite p a b) (ite q c d) (ite q d a))
+                (and
+                    (or (ite p a b) (ite q c d) (ite q d a))
+                    (ite p (= a (ite p a b)) (= b (ite p a b)))
+                    (ite q (= d (ite q d a)) (= a (ite q d a)))
+                )
             )) :rule ite_intro)": true,
         }
     }

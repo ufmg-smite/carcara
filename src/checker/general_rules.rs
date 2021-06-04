@@ -509,37 +509,43 @@ pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     }
     let us = match_term!((and ...) = right_side)?;
 
-    let ite_terms: Vec<_> = root_term
-        .subterms()
-        .iter()
-        .filter_map(|term| match_term!((ite a b c) = term))
-        .collect();
-
     // "us" must be a conjunction where the first term is the root term
-    if ite_terms.len() != us.len() - 1 || !DeepEq::eq_modulo_reordering(us[0].as_ref(), root_term) {
+    if !DeepEq::eq_modulo_reordering(us[0].as_ref(), root_term) {
         return None;
     }
+    let us = &us[1..];
+
+    let subterms = root_term.subterms();
+    let mut ite_subterms = subterms
+        .iter()
+        .filter_map(|term| match_term!((ite a b c) = term));
 
     // We assume that the "ite" terms appear in the conjunction in the same order as they
     // appear as subterms of the root term
-    for (s_i, u_i) in ite_terms.iter().zip(&us[1..]) {
+    'outer: for u_i in &us[1..] {
         let (cond, (a, b), (c, d)) = match_term!((ite cond (= a b) (= c d)) = u_i)?;
 
-        // Since the (= r_1 s_1) and (= r_2 s_2) equalities may be flipped, we have to check
-        // all four possibilities: neither are flipped, either one is flipped, or both are
-        // flipped
-        let is_valid = |r_1, s_1, r_2, s_2: &Term| {
-            // s_i == s_1 == s_2 == (ite cond r_1 r_2)
-            s_1 == s_2 && (cond, r_1, r_2) == *s_i && match_term!((ite a b c) = s_1) == Some(*s_i)
-        };
-        let is_valid = is_valid(a, b, c, d)
-            || is_valid(b, a, c, d)
-            || is_valid(a, b, d, c)
-            || is_valid(b, a, d, c);
+        // For every term in "us", we find the next "ite" subterm that matches the expected form.
+        // This is because some "ite" subterms may be skipped, and may not have a corresponding "u"
+        // term
+        while let Some(s_i) = ite_subterms.next() {
+            // Since the (= r_1 s_1) and (= r_2 s_2) equalities may be flipped, we have to check
+            // all four possibilities: neither are flipped, either one is flipped, or both are
+            // flipped
+            let is_valid = |r_1, s_1, r_2, s_2: &Term| {
+                // s_i == s_1 == s_2 == (ite cond r_1 r_2)
+                s_1 == s_2 && (cond, r_1, r_2) == s_i && match_term!((ite a b c) = s_1) == Some(s_i)
+            };
+            let is_valid = is_valid(a, b, c, d)
+                || is_valid(b, a, c, d)
+                || is_valid(a, b, d, c)
+                || is_valid(b, a, d, c);
 
-        if !is_valid {
-            return None;
+            if is_valid {
+                continue 'outer;
+            }
         }
+        return None;
     }
     Some(())
 }
