@@ -14,11 +14,13 @@ fn test_file(problem_path: &Path, proof_path: &Path) {
     let problem_reader = BufReader::new(File::open(problem_path).unwrap());
     let proof_reader = BufReader::new(File::open(proof_path).unwrap());
 
-    let proof = match parser::parse_problem_proof(problem_reader, proof_reader) {
+    let (proof, pool) = match parser::parse_problem_proof(problem_reader, proof_reader) {
         Err(ParserError(ErrorKind::NotYetImplemented, _)) => return,
         p => p.unwrap(),
     };
-    if let Err(CheckerError::FailedOnRule(rule)) = checker::ProofChecker::new(proof, true).check() {
+    if let Err(CheckerError::FailedOnRule(rule)) =
+        checker::ProofChecker::new(proof, pool, true).check()
+    {
         panic!(
             "\ntest file \"{}\"\nfailed on rule \"{}\"\n",
             &problem_path.to_str().unwrap(),

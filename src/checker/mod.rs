@@ -35,6 +35,8 @@ pub struct RuleArgs<'a> {
     conclusion: &'a [ByRefRc<Term>],
     premises: Vec<&'a ProofCommand>,
     args: &'a [ProofArg],
+    #[allow(dead_code)] // WIP
+    pool: &'a mut TermPool,
 }
 
 #[derive(Debug)]
@@ -45,22 +47,28 @@ pub enum CheckerError<'a> {
 
 pub struct ProofChecker {
     proof: Proof,
+    pool: TermPool,
     skip_unknown_rules: bool,
 }
 
 impl ProofChecker {
-    pub fn new(proof: Proof, skip_unknown_rules: bool) -> Self {
+    pub fn new(proof: Proof, pool: TermPool, skip_unknown_rules: bool) -> Self {
         ProofChecker {
             proof,
+            pool,
             skip_unknown_rules,
         }
     }
 
-    pub fn check(&self) -> Result<(), CheckerError> {
-        self.check_subproof(&self.proof.0)
+    pub fn check(&mut self) -> Result<(), CheckerError> {
+        ProofChecker::check_subproof(&self.proof.0, &mut self.pool, self.skip_unknown_rules)
     }
 
-    fn check_subproof<'a>(&self, commands: &'a [ProofCommand]) -> Result<(), CheckerError<'a>> {
+    fn check_subproof<'a>(
+        commands: &'a [ProofCommand],
+        pool: &mut TermPool,
+        skip_unknown_rules: bool,
+    ) -> Result<(), CheckerError<'a>> {
         for step in commands {
             match step {
                 ProofCommand::Step {
@@ -71,7 +79,7 @@ impl ProofChecker {
                 } => {
                     let rule = match Self::get_rule(rule_name) {
                         Some(r) => r,
-                        None if self.skip_unknown_rules => continue,
+                        None if skip_unknown_rules => continue,
                         None => return Err(CheckerError::UnknownRule(rule_name)),
                     };
                     let premises = premises.iter().map(|&i| &commands[i]).collect();
@@ -79,13 +87,14 @@ impl ProofChecker {
                         conclusion: &clause,
                         premises,
                         args: &args,
+                        pool,
                     };
                     if rule(rule_args).is_none() {
                         return Err(CheckerError::FailedOnRule(rule_name));
                     }
                 }
                 ProofCommand::Subproof(commands, _) => {
-                    self.check_subproof(&commands)?;
+                    ProofChecker::check_subproof(&commands, pool, skip_unknown_rules)?;
                 }
                 ProofCommand::Assume(_) => (),
             }

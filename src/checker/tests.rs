@@ -8,9 +8,9 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
 
     for (i, (proof, expected)) in cases.iter().enumerate() {
         // This parses the definitions again for every case, which is not ideal
-        let parsed = parse_problem_proof(Cursor::new(definitions), Cursor::new(proof))
+        let (parsed, pool) = parse_problem_proof(Cursor::new(definitions), Cursor::new(proof))
             .unwrap_or_else(|_| panic!("parser error during test \"{}\"", test_name));
-        let got = ProofChecker::new(parsed, false).check().is_ok();
+        let got = ProofChecker::new(parsed, pool, false).check().is_ok();
         assert_eq!(
             *expected, got,
             "test case \"{}\" index {} failed",

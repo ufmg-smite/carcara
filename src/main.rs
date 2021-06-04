@@ -78,11 +78,11 @@ fn main() -> ParserResult<()> {
         let proof_file = BufReader::new(
             File::open(matches.value_of("PROOF_FILE").unwrap()).map_err(|err| (err, (0, 0)))?,
         );
-        let proof = parse_problem_proof(problem_file, proof_file)?;
+        let (proof, pool) = parse_problem_proof(problem_file, proof_file)?;
         if matches.is_present("print-ast") {
             println!("{:#?}", proof);
         }
-        match ProofChecker::new(proof, matches.is_present("skip-unknown-rules")).check() {
+        match ProofChecker::new(proof, pool, matches.is_present("skip-unknown-rules")).check() {
             Ok(()) => println!("true"),
             Err(CheckerError::UnknownRule(s)) => println!("unknown rule: {}", s),
             Err(CheckerError::FailedOnRule(s)) => println!("false ({})", s),

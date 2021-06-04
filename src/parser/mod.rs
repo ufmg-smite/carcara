@@ -11,8 +11,8 @@ use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 use std::{collections::HashMap, hash::Hash, io::BufRead, str::FromStr};
 
-pub fn parse_problem_proof<T: BufRead, U: BufRead>(prob: T, proof: U) -> ParserResult<Proof> {
-    let mut problem_parser = Parser::new(prob)?;
+pub fn parse_problem_proof<T: BufRead>(problem: T, proof: T) -> ParserResult<(Proof, TermPool)> {
+    let mut problem_parser = Parser::new(problem)?;
     problem_parser.parse_problem()?;
 
     Parser::with_state(proof, problem_parser.state)?.parse_proof()
@@ -323,8 +323,9 @@ impl<R: BufRead> Parser<R> {
     }
 
     /// Parses a proof.
-    pub fn parse_proof(&mut self) -> ParserResult<Proof> {
-        self.parse_subproof(None)
+    pub fn parse_proof(mut self) -> ParserResult<(Proof, TermPool)> {
+        let proof = self.parse_subproof(None)?;
+        Ok((proof, self.state.term_pool))
     }
 
     /// Parses a proof or subproof. Will stop parsing after encountering a command with index

@@ -31,6 +31,7 @@ pub fn parse_proof(input: &str) -> Proof {
     Parser::new(input.as_bytes())
         .and_then(|mut p| p.parse_proof())
         .expect(ERROR_MESSAGE)
+        .0
 }
 
 fn run_parser_tests(cases: &[(&str, Term)]) {
