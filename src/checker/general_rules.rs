@@ -2,7 +2,7 @@ use super::{get_clause_from_command, get_single_term_from_command, to_option, Ru
 
 use crate::ast::*;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 pub fn not_not(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     if conclusion.len() != 2 {
@@ -231,6 +231,56 @@ pub fn distinct_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
             Some(())
         }
     }
+}
+
+pub fn forall_inst(
+    RuleArgs {
+        conclusion,
+        args,
+        pool,
+        ..
+    }: RuleArgs,
+) -> Option<()> {
+    if conclusion.len() != 1 {
+        return None;
+    }
+    let (forall_term, substituted) = match_term!((or (not f) s) = conclusion[0])?;
+    let (bindings, original) = match forall_term {
+        Term::Quant(Quantifier::Forall, b, t) => (b, t),
+        _ => return None,
+    };
+
+    if args.len() != bindings.len() {
+        return None;
+    }
+
+    let args: Vec<_> = bindings
+        .iter()
+        .zip(args)
+        .map(|((binding_name, binding_sort), arg)| {
+            let (arg_name, arg_value) = match arg {
+                ProofArg::Assign(name, value) => (name, value),
+                ProofArg::Term(_) => return None,
+            };
+            let arg_sort = arg_value.sort();
+            if arg_name != binding_name || binding_sort.as_ref() != arg_sort {
+                return None;
+            }
+
+            // We must use `pool.add_term` so we don't create a new term for the argument sort, and
+            // instead use the one already in the term pool
+            let ident_term = terminal!(var arg_name; pool.add_term(arg_sort.clone()));
+            Some((ident_term, arg_value))
+        })
+        .collect::<Option<_>>()?;
+    let mut substitutions: HashMap<_, _> =
+        args.iter().map(|(k, v)| (k, v.as_ref().clone())).collect();
+
+    // Equalities may be reordered in the final term, so we use `DeepEq::eq_modulo_reordering`
+    to_option(DeepEq::eq_modulo_reordering(
+        &pool.apply_substitutions(original, &mut substitutions),
+        substituted,
+    ))
 }
 
 pub fn resolution(

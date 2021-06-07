@@ -113,6 +113,7 @@ impl ProofChecker {
             "la_rw_eq" => la_rules::la_rw_eq,
             "la_generic" => la_rules::la_generic,
             "la_disequality" => la_rules::la_disequality,
+            "forall_inst" => general_rules::forall_inst,
             "th_resolution" | "resolution" => general_rules::resolution,
             "cong" => general_rules::cong,
             "and" => general_rules::and,
