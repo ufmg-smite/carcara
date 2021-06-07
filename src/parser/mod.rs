@@ -692,17 +692,24 @@ impl<R: BufRead> Parser<R> {
                             let pool = &mut self.state.term_pool;
                             func.params
                                 .iter()
-                                .map(|(name, sort)| {
-                                    pool.add_term(terminal!(var name; sort.clone()))
-                                })
                                 .zip(args)
+                                .map(|((name, sort), arg)| {
+                                    let k = pool.add_term(terminal!(var name; sort.clone()));
+                                    let v = pool.add_term(arg);
+                                    (k, v)
+                                })
                                 .collect()
                         };
 
+                        // Since `apply_substitutions` returns a `ByRefRc<Term>`, we have to go
+                        // into the inner term and clone it, even though it is already added to the
+                        // term pool
                         Ok(self
                             .state
                             .term_pool
-                            .apply_substitutions(&func.body, &mut substitutions))
+                            .apply_substitutions(&func.body, &mut substitutions)
+                            .as_ref()
+                            .clone())
                     } else {
                         let func = self
                             .make_var(Identifier::Simple(s))

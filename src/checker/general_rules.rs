@@ -244,8 +244,8 @@ pub fn forall_inst(
     if conclusion.len() != 1 {
         return None;
     }
-    let (forall_term, substituted) = match_term!((or (not f) s) = conclusion[0])?;
-    let (bindings, original) = match forall_term {
+    let (forall_term, substituted) = match_term!((or (not f) s) = conclusion[0], RETURN_RCS)?;
+    let (bindings, original) = match forall_term.as_ref() {
         Term::Quant(Quantifier::Forall, b, t) => (b, t),
         _ => return None,
     };
@@ -270,7 +270,7 @@ pub fn forall_inst(
             // We must use `pool.add_term` so we don't create a new term for the argument sort, and
             // instead use the one already in the term pool
             let ident_term = terminal!(var arg_name; pool.add_term(arg_sort.clone()));
-            Some((pool.add_term(ident_term), arg_value.as_ref().clone()))
+            Some((pool.add_term(ident_term), arg_value.clone()))
         })
         .collect::<Option<_>>()?;
 

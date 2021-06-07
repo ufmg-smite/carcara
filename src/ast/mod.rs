@@ -98,16 +98,13 @@ impl TermPool {
     pub fn apply_substitutions<'a>(
         &mut self,
         term: &'a ByRefRc<Term>,
-        substitutions: &mut HashMap<ByRefRc<Term>, Term>,
-    ) -> Term {
+        substitutions: &mut HashMap<ByRefRc<Term>, ByRefRc<Term>>,
+    ) -> ByRefRc<Term> {
         macro_rules! apply_to_sequence {
             ($sequence:expr) => {
                 $sequence
                     .iter()
-                    .map(|a| {
-                        let reduced = self.apply_substitutions(a, substitutions);
-                        self.add_term(reduced)
-                    })
+                    .map(|a| self.apply_substitutions(a, substitutions))
                     .collect()
             };
         }
@@ -120,7 +117,7 @@ impl TermPool {
             Term::App(func, args) => {
                 let new_args = apply_to_sequence!(args);
                 let new_func = self.apply_substitutions(func, substitutions);
-                Term::App(self.add_term(new_func), new_args)
+                Term::App(new_func, new_args)
             }
             Term::Op(op, args) => {
                 let new_args = apply_to_sequence!(args);
@@ -128,10 +125,11 @@ impl TermPool {
             }
             Term::Quant(q, b, t) => {
                 let new_term = self.apply_substitutions(t, substitutions);
-                Term::Quant(*q, b.clone(), self.add_term(new_term))
+                Term::Quant(*q, b.clone(), new_term)
             }
             other => other.clone(),
         };
+        let result = self.add_term(result);
 
         // Since frequently a term will have more than one identical subterms, we insert the
         // calculated substitution in the substitutions hash map so it may be reused later. This
