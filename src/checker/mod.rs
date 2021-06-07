@@ -3,6 +3,8 @@ mod la_rules;
 mod simplification_rules;
 mod tests;
 
+use std::collections::HashMap;
+
 use crate::ast::*;
 
 /// Converts a `bool` into an `Option<()>`.
@@ -35,8 +37,9 @@ pub struct RuleArgs<'a> {
     conclusion: &'a [ByRefRc<Term>],
     premises: Vec<&'a ProofCommand>,
     args: &'a [ProofArg],
-    #[allow(dead_code)] // WIP
     pool: &'a mut TermPool,
+    #[allow(dead_code)] // WIP
+    context: &'a mut [HashMap<ByRefRc<Term>, ByRefRc<Term>>],
 }
 
 #[derive(Debug)]
@@ -48,6 +51,7 @@ pub enum CheckerError<'a> {
 pub struct ProofChecker {
     pool: TermPool,
     skip_unknown_rules: bool,
+    context: Vec<HashMap<ByRefRc<Term>, ByRefRc<Term>>>,
 }
 
 impl ProofChecker {
@@ -55,6 +59,7 @@ impl ProofChecker {
         ProofChecker {
             pool,
             skip_unknown_rules,
+            context: Vec::new(),
         }
     }
 
@@ -82,13 +87,23 @@ impl ProofChecker {
                         premises,
                         args: &args,
                         pool: &mut self.pool,
+                        context: &mut self.context,
                     };
                     if rule(rule_args).is_none() {
                         return Err(CheckerError::FailedOnRule(rule_name));
                     }
                 }
-                ProofCommand::Subproof(commands, _) => {
+                ProofCommand::Subproof(commands, subproof_args) => {
+                    let new_context = subproof_args
+                        .iter()
+                        .map(|(k, v)| {
+                            let ident_term = terminal!(var k; self.pool.add_term(v.sort().clone()));
+                            (self.pool.add_term(ident_term), v.clone())
+                        })
+                        .collect();
+                    self.context.push(new_context);
                     self.check_subproof(&commands)?;
+                    self.context.pop();
                 }
                 ProofCommand::Assume(_) => (),
             }
