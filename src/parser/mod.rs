@@ -538,6 +538,7 @@ impl<R: BufRead> Parser<R> {
         self.expect_token(Token::CloseParen)?;
 
         SortError::assert_eq(&return_sort, body.sort()).map_err(|err| self.err(err.into()))?;
+        let body = self.add_term(body);
         Ok((name, FunctionDef { params, body }))
     }
 
@@ -606,7 +607,9 @@ impl<R: BufRead> Parser<R> {
                 // Check to see if there is a nullary function defined with this name
                 if let Some(func_def) = self.state.function_defs.get(&s) {
                     if func_def.params.is_empty() {
-                        Ok(func_def.body.clone())
+                        // This has to clone the function body term, even though it is already
+                        // added to the term pool
+                        Ok(func_def.body.as_ref().clone())
                     } else {
                         Err(self.err(ErrorKind::WrongNumberOfArgs(func_def.params.len(), 0)))
                     }
@@ -681,13 +684,20 @@ impl<R: BufRead> Parser<R> {
 
                         // Build a hash map of all the parameter names and the values they will
                         // take
-                        let parameters: Vec<_> = func
-                            .params
-                            .iter()
-                            .map(|(name, sort)| terminal!(var name; sort.clone()))
-                            .collect();
-                        let mut substitutions: HashMap<_, _> =
-                            parameters.iter().zip(args).collect();
+                        let mut substitutions = {
+                            // We have to take a reference to the term pool here, so the closure in
+                            // the `map` call later on doesn't have to capture all of `self`, and
+                            // can just capture the term pool. We need this to please the borrow
+                            // checker
+                            let pool = &mut self.state.term_pool;
+                            func.params
+                                .iter()
+                                .map(|(name, sort)| {
+                                    pool.add_term(terminal!(var name; sort.clone()))
+                                })
+                                .zip(args)
+                                .collect()
+                        };
 
                         Ok(self
                             .state

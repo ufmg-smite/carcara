@@ -254,7 +254,7 @@ pub fn forall_inst(
         return None;
     }
 
-    let args: Vec<_> = bindings
+    let mut substitutions: HashMap<_, _> = bindings
         .iter()
         .zip(args)
         .map(|((binding_name, binding_sort), arg)| {
@@ -270,11 +270,9 @@ pub fn forall_inst(
             // We must use `pool.add_term` so we don't create a new term for the argument sort, and
             // instead use the one already in the term pool
             let ident_term = terminal!(var arg_name; pool.add_term(arg_sort.clone()));
-            Some((ident_term, arg_value))
+            Some((pool.add_term(ident_term), arg_value.as_ref().clone()))
         })
         .collect::<Option<_>>()?;
-    let mut substitutions: HashMap<_, _> =
-        args.iter().map(|(k, v)| (k, v.as_ref().clone())).collect();
 
     // Equalities may be reordered in the final term, so we use `DeepEq::eq_modulo_reordering`
     to_option(DeepEq::eq_modulo_reordering(

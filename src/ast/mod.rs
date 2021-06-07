@@ -9,6 +9,7 @@ use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
 use std::{
+    borrow::Borrow,
     collections::{HashMap, HashSet},
     fmt::Debug,
     hash::Hash,
@@ -43,6 +44,12 @@ impl<T> Deref for ByRefRc<T> {
 
 impl<T> AsRef<T> for ByRefRc<T> {
     fn as_ref(&self) -> &T {
+        self.0.as_ref()
+    }
+}
+
+impl<T> Borrow<T> for ByRefRc<T> {
+    fn borrow(&self) -> &T {
         self.0.as_ref()
     }
 }
@@ -90,8 +97,8 @@ impl TermPool {
     /// cache, and will therefore mutate it.
     pub fn apply_substitutions<'a>(
         &mut self,
-        term: &'a Term,
-        substitutions: &mut HashMap<&'a Term, Term>,
+        term: &'a ByRefRc<Term>,
+        substitutions: &mut HashMap<ByRefRc<Term>, Term>,
     ) -> Term {
         macro_rules! apply_to_sequence {
             ($sequence:expr) => {
@@ -109,7 +116,7 @@ impl TermPool {
             return t.clone();
         }
 
-        let result = match term {
+        let result = match term.as_ref() {
             Term::App(func, args) => {
                 let new_args = apply_to_sequence!(args);
                 let new_func = self.apply_substitutions(func, substitutions);
@@ -130,7 +137,7 @@ impl TermPool {
         // calculated substitution in the substitutions hash map so it may be reused later. This
         // means we don't re-visit already seen terms, so this method traverses the term as a DAG,
         // not as a tree
-        substitutions.insert(term, result.clone());
+        substitutions.insert(term.clone(), result.clone());
         result
     }
 }
@@ -172,7 +179,7 @@ pub enum ProofArg {
 /// during parsing, so these commands don't appear in the final AST.
 pub struct FunctionDef {
     pub params: Vec<(String, ByRefRc<Term>)>,
-    pub body: Term,
+    pub body: ByRefRc<Term>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
