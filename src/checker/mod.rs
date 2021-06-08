@@ -38,7 +38,6 @@ pub struct RuleArgs<'a> {
     premises: Vec<&'a ProofCommand>,
     args: &'a [ProofArg],
     pool: &'a mut TermPool,
-    #[allow(dead_code)] // WIP
     context: &'a mut [HashMap<ByRefRc<Term>, ByRefRc<Term>>],
 }
 
@@ -130,6 +129,7 @@ impl ProofChecker {
             "la_disequality" => la_rules::la_disequality,
             "forall_inst" => general_rules::forall_inst,
             "th_resolution" | "resolution" => general_rules::resolution,
+            "refl" => general_rules::refl,
             "cong" => general_rules::cong,
             "and" => general_rules::and,
             "or" => general_rules::or,

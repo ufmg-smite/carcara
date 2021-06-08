@@ -138,6 +138,18 @@ impl TermPool {
         substitutions.insert(term.clone(), result.clone());
         result
     }
+
+    pub fn apply_context_substitutions<'a>(
+        &mut self,
+        term: &'a ByRefRc<Term>,
+        context: &mut [HashMap<ByRefRc<Term>, ByRefRc<Term>>],
+    ) -> ByRefRc<Term> {
+        let mut current = term.clone();
+        for subs in context {
+            current = self.apply_substitutions(&current, subs)
+        }
+        current
+    }
 }
 
 /// A proof in the veriT Proof Format.
