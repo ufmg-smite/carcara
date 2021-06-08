@@ -629,10 +629,7 @@ pub fn contraction(
         return None;
     }
 
-    let premise_clause: &[_] = match premises[0] {
-        ProofCommand::Step { clause, .. } => &clause,
-        _ => return None,
-    };
+    let premise_clause = get_clause_from_command(premises[0]);
 
     // This set will be populated with the terms we enconter as we iterate through the premise
     let mut encountered = HashSet::<&Term>::with_capacity(premise_clause.len());

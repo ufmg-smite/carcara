@@ -26,7 +26,7 @@ fn get_clause_from_command(command: &ProofCommand) -> &[ByRefRc<Term>] {
     match command {
         // "assume" premises are interpreted as a clause with a single term
         ProofCommand::Assume(term) => std::slice::from_ref(term),
-        ProofCommand::Step { clause, .. } => &clause,
+        ProofCommand::Step(ProofStep { clause, .. }) => &clause,
         ProofCommand::Subproof(commands, _) => get_clause_from_command(commands.last().unwrap()),
     }
 }
@@ -69,12 +69,12 @@ impl ProofChecker {
     fn check_subproof<'a>(&mut self, commands: &'a [ProofCommand]) -> Result<(), CheckerError<'a>> {
         for step in commands {
             match step {
-                ProofCommand::Step {
+                ProofCommand::Step(ProofStep {
                     clause,
                     rule: rule_name,
                     premises,
                     args,
-                } => {
+                }) => {
                     let rule = match Self::get_rule(rule_name) {
                         Some(r) => r,
                         None if self.skip_unknown_rules => continue,

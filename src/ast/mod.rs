@@ -162,16 +162,20 @@ pub enum ProofCommand {
     /// An "assume" command, of the form "(assume <symbol> <term>)".
     Assume(ByRefRc<Term>),
 
-    /// A "step" command, of the form "(step <symbol> <clause> :rule <symbol> [:premises
-    /// (<symbol>+)]? [:args <proof_args>]?)".
-    Step {
-        clause: Vec<ByRefRc<Term>>,
-        rule: String,
-        premises: Vec<usize>,
-        args: Vec<ProofArg>,
-    },
+    /// A "step" command.
+    Step(ProofStep),
 
     Subproof(Vec<ProofCommand>, HashMap<String, ByRefRc<Term>>),
+}
+
+/// A "step" command, of the form "(step <symbol> <clause> :rule <symbol> [:premises (<symbol>+)]?
+/// [:args <proof_args>]?)".
+#[derive(Debug, PartialEq)]
+pub struct ProofStep {
+    pub clause: Vec<ByRefRc<Term>>,
+    pub rule: String,
+    pub premises: Vec<usize>,
+    pub args: Vec<ProofArg>,
 }
 
 /// An argument for a "step" or "anchor" command.
@@ -533,27 +537,20 @@ impl DeepEq for ProofCommand {
             (ProofCommand::Assume(a), ProofCommand::Assume(b)) => {
                 DeepEq::eq_impl(a, b, is_mod_reordering)
             }
-            (
-                ProofCommand::Step {
-                    clause: clause_a,
-                    rule: rule_a,
-                    premises: premises_a,
-                    args: args_a,
-                },
-                ProofCommand::Step {
-                    clause: clause_b,
-                    rule: rule_b,
-                    premises: premises_b,
-                    args: args_b,
-                },
-            ) => {
-                DeepEq::eq_impl(clause_a, clause_b, is_mod_reordering)
-                    && rule_a == rule_b
-                    && premises_a == premises_b
-                    && DeepEq::eq_impl(args_a, args_b, is_mod_reordering)
+            (ProofCommand::Step(a), ProofCommand::Step(b)) => {
+                DeepEq::eq_impl(a, b, is_mod_reordering)
             }
             _ => false,
         }
+    }
+}
+
+impl DeepEq for ProofStep {
+    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
+        DeepEq::eq_impl(&a.clause, &b.clause, is_mod_reordering)
+            && a.rule == b.rule
+            && a.premises == b.premises
+            && DeepEq::eq_impl(&a.args, &b.args, is_mod_reordering)
     }
 }
 

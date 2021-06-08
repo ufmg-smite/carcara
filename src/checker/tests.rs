@@ -1162,7 +1162,7 @@ fn test_contraction_rule() {
         }
         "Premise is not a \"step\" command" {
             "(assume h1 q)
-            (step t2 (cl q) :rule contraction :premises (h1))": false,
+            (step t2 (cl q) :rule contraction :premises (h1))": true,
         }
         "Encountered wrong term" {
             "(assume h1 (or p p q))

@@ -472,27 +472,27 @@ fn test_step() {
 
     assert_deep_eq!(
         &proof.0[0],
-        &ProofCommand::Step {
+        &ProofCommand::Step(ProofStep {
             clause: vec![ByRefRc::new(parse_term("(= (+ 2 3) (- 1 2))"))],
             rule: "rule-name".into(),
             premises: Vec::new(),
             args: Vec::new(),
-        }
+        })
     );
 
     assert_deep_eq!(
         &proof.0[1],
-        &ProofCommand::Step {
+        &ProofCommand::Step(ProofStep {
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: vec![0],
             args: Vec::new(),
-        }
+        })
     );
 
     assert_deep_eq!(
         &proof.0[2],
-        &ProofCommand::Step {
+        &ProofCommand::Step(ProofStep {
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: Vec::new(),
@@ -506,12 +506,12 @@ fn test_step() {
                 .map(|term| ProofArg::Term(ByRefRc::new(term)))
                 .collect()
             },
-        }
+        })
     );
 
     assert_deep_eq!(
         &proof.0[3],
-        &ProofCommand::Step {
+        &ProofCommand::Step(ProofStep {
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: Vec::new(),
@@ -525,16 +525,16 @@ fn test_step() {
                 .map(|(name, term)| ProofArg::Assign(name.into(), ByRefRc::new(term)))
                 .collect()
             },
-        }
+        })
     );
 
     assert_deep_eq!(
         &proof.0[4],
-        &ProofCommand::Step {
+        &ProofCommand::Step(ProofStep {
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: vec![0, 1, 2],
             args: vec![ProofArg::Term(ByRefRc::new(terminal!(int 42)))],
-        }
+        })
     );
 }

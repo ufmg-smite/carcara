@@ -432,12 +432,12 @@ impl<R: BufRead> Parser<R> {
 
         Ok((
             step_index,
-            ProofCommand::Step {
+            ProofCommand::Step(ProofStep {
                 clause,
                 rule,
                 premises,
                 args,
-            },
+            }),
         ))
     }
 
