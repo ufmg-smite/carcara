@@ -31,6 +31,7 @@ fn main() -> ParserResult<()> {
                 )
                 .arg(
                     Arg::with_name("skip-unknown-rules")
+                        .short("s")
                         .long("skip-unknown-rules")
                         .help("Skips rules that are not yet implemented"),
                 ),
