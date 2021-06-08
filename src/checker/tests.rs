@@ -9,7 +9,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
     for (i, (proof, expected)) in cases.iter().enumerate() {
         // This parses the definitions again for every case, which is not ideal
         let (parsed, pool) = parse_problem_proof(Cursor::new(definitions), Cursor::new(proof))
-            .unwrap_or_else(|_| panic!("parser error during test \"{}\"", test_name));
+            .unwrap_or_else(|e| panic!("parser error during test \"{}\": {:?}", test_name, e));
         let got = ProofChecker::new(pool, false).check(&parsed).is_ok();
         assert_eq!(
             *expected, got,
@@ -719,6 +719,42 @@ fn test_resolution_rule() {
             (assume h3 (or (not (= (not p) (not (not q)))) p q))
             (step t4 (cl (not (= (not p) (not (not q)))) p q) :rule or :premises (h3))
             (step t5 (cl (not (not q))) :rule resolution :premises (h1 h2 t4))": true,
+        }
+    }
+}
+
+#[test]
+fn test_refl_rule() {
+    test_cases! {
+        definitions = "
+            (declare-fun f (Real) Real)
+            (declare-fun g (Real) Real)
+            (declare-fun z () Real)
+        ",
+        "Simple working examples" {
+            "(anchor :step t1 :args ((:= (x Real) (y Real))))
+            (step t1 (cl (= x y)) :rule refl)": true,
+
+            "(anchor :step t1) (step t1 (cl (= z z)) :rule refl)": true,
+
+            "(anchor :step t1 :args ((:= (x Real) (y Real))))
+            (step t1 (cl (= (f x) (f y))) :rule refl)": true,
+        }
+        "Nested subproofs" {
+            "(anchor :step t1 :args ((:= (x Real) (y Real))))
+            (anchor :step t1.t1 :args ((:= (a Real) (b Real))))
+            (step t1.t1 (cl (= (+ x a) (+ y b))) :rule refl)": true,
+
+            "(anchor :step t1 :args ((:= (x Real) (y Real))))
+            (anchor :step t1.t1 :args ((:= (y Real) (z Real))))
+            (step t1.t1 (cl (= x z)) :rule refl)": true,
+        }
+        "Terms aren't equal after applying context substitutions" {
+            "(anchor :step t1 :args ((:= (x Real) (y Real))))
+            (step t1 (cl (= x z)) :rule refl)": false,
+
+            "(anchor :step t1 :args ((:= (x Real) (y Real))))
+            (step t1 (cl (= (f x) (g y))) :rule refl)": false,
         }
     }
 }
