@@ -584,9 +584,7 @@ pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     let us = &us[1..];
 
     let subterms = root_term.subterms();
-    let mut ite_subterms = subterms
-        .iter()
-        .filter_map(|term| match_term!((ite a b c) = term));
+    let mut ite_subterms = subterms.filter_map(|term| match_term!((ite a b c) = term));
 
     // We assume that the "ite" terms appear in the conjunction in the same order as they
     // appear as subterms of the root term

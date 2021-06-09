@@ -2,20 +2,17 @@
 
 #[macro_use]
 mod macros;
+mod subterms;
 #[cfg(test)]
 mod tests;
+
+pub use subterms::Subterms;
 
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
 use std::{
-    borrow::Borrow,
-    collections::{HashMap, HashSet},
-    fmt::Debug,
-    hash::Hash,
-    ops::Deref,
-    rc,
-    str::FromStr,
+    borrow::Borrow, collections::HashMap, fmt::Debug, hash::Hash, ops::Deref, rc, str::FromStr,
 };
 
 /// An `Rc` where equality and hashing are done by reference, instead of by value
@@ -323,39 +320,12 @@ impl Term {
         }
     }
 
-    /// Returns a `Vec` with this term and all its subterms, in topological ordering. For example,
-    /// calling this method on the term (+ (f a b) 2) would return a `Vec` with the terms (+ (f a
-    /// b) 2), (f a b), f, a, b and 2. This method traverses the term as DAG, and the resulting
-    /// `Vec` will not contain any duplicate terms. This method ignores sort terms.
-    pub fn subterms(&self) -> Vec<&Term> {
-        let mut result = Vec::new();
-        let mut visited = HashSet::new();
-
-        fn visit<'a>(term: &'a Term, r: &mut Vec<&'a Term>, visited: &mut HashSet<&'a Term>) {
-            let is_new = visited.insert(term);
-            if !is_new {
-                return;
-            }
-            r.push(term);
-
-            match term {
-                Term::App(f, args) => {
-                    visit(f, r, visited);
-                    for a in args.iter() {
-                        visit(a, r, visited);
-                    }
-                }
-                Term::Op(_, args) => {
-                    for a in args.iter() {
-                        visit(a, r, visited);
-                    }
-                }
-                _ => (),
-            }
-        }
-
-        visit(self, &mut result, &mut visited);
-        result
+    /// Returns an iterator over this term and all its subterms, in topological ordering. For
+    /// example, calling this method on the term (+ (f a b) 2) would return an iterator over the
+    /// terms (+ (f a b) 2), (f a b), f, a, b and 2. This method traverses the term as a DAG, and
+    /// the resulting iterator will not contain any duplicate terms. This ignores sort terms.
+    pub fn subterms(&self) -> Subterms {
+        Subterms::new(self)
     }
 
     /// Removes a leading negation from the term, if it exists. Same thing as `match_term!((not t)

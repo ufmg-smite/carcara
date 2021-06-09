@@ -1,16 +1,14 @@
 use super::*;
 use crate::parser::tests::{parse_term, parse_term_with_definitions};
+use std::collections::HashSet;
 
 #[test]
 fn test_subterms_no_duplicates() {
     fn run_tests(cases: &[&str]) {
-        fn no_duplicates(slice: &[&Term]) -> bool {
-            let mut seen = HashSet::new();
-            slice.iter().all(|&t| seen.insert(t))
-        }
         for s in cases {
             let term = parse_term(s);
-            assert!(no_duplicates(&term.subterms()))
+            let mut seen = HashSet::new();
+            assert!(term.subterms().all(|t| seen.insert(t)));
         }
     }
     run_tests(&[
@@ -30,7 +28,7 @@ fn test_subterms() {
 
             let root = parse_term_with_definitions(definitions, c[0]);
             let subterms = root.subterms();
-            let as_strings: Vec<_> = subterms.iter().map(|&t| format!("{:?}", t)).collect();
+            let as_strings: Vec<_> = subterms.map(|t| format!("{:?}", t)).collect();
             let got = as_strings.iter().map(String::as_str);
 
             assert!(expected.eq(got))
