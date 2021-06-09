@@ -211,10 +211,8 @@ pub fn distinct_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
             if args[0].sort() == Term::BOOL_SORT {
                 // If there are more than two boolean arguments to the distinct operator, the
                 // second term must be "false"
-                return match second_term {
-                    Term::Terminal(Terminal::Var(Identifier::Simple(s), _)) if s == "false" => {
-                        Some(())
-                    }
+                return match second_term.try_as_var() {
+                    Some("false") => Some(()),
                     _ => None,
                 };
             }

@@ -25,7 +25,7 @@ fn simple_operation_to_rational(term: &Term) -> Option<BigRational> {
     } else if let Some(t) = match_term!((-t) = term) {
         Some(-simple_operation_to_rational(t)?)
     } else {
-        term.as_ratio()
+        term.try_as_ratio()
     }
 }
 
@@ -104,7 +104,7 @@ impl<'a> LinearComb<'a> {
             };
             match match_term!((* a b) = arg) {
                 Some((a, b)) => {
-                    let (var, coeff) = match (a.as_ratio(), b.as_ratio()) {
+                    let (var, coeff) = match (a.try_as_ratio(), b.try_as_ratio()) {
                         (None, None) => (arg, BigRational::one()),
                         (None, Some(r)) => (a, r),
                         (Some(r), None) => (b, r),
@@ -112,7 +112,7 @@ impl<'a> LinearComb<'a> {
                     };
                     result.insert(var, coeff * polarity_coeff);
                 }
-                None => match arg.as_ratio() {
+                None => match arg.try_as_ratio() {
                     Some(r) => {
                         if constant_is_set {
                             return None;

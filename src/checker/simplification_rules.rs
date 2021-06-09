@@ -112,7 +112,7 @@ pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
                 if args[1..].iter().any(is_constant) {
                     return None;
                 }
-                match args[0].as_ratio() {
+                match args[0].try_as_ratio() {
                     // If the leading constant is 1, it should have been omitted
                     Some(constant) if constant.is_one() => return None,
                     Some(constant) => (constant, &args[1..]),
@@ -122,7 +122,7 @@ pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 
             // If u is not a product, we take the term as whole as the leading constant, with no
             // remaining arguments
-            None => (u.as_ratio()?, &[] as &[_]),
+            None => (u.try_as_ratio()?, &[] as &[_]),
         })
     }
 

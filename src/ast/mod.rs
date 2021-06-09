@@ -340,10 +340,21 @@ impl Term {
         match_term!((not t) = self)
     }
 
-    pub fn as_ratio(&self) -> Option<BigRational> {
+    /// Tries to extract a `BigRational` from a term. Returns `Some` if the term is an integer or
+    /// real number.
+    pub fn try_as_ratio(&self) -> Option<BigRational> {
         match self {
             Term::Terminal(Terminal::Real(r)) => Some(r.clone()),
             Term::Terminal(Terminal::Integer(i)) => Some(BigRational::from_integer(i.clone())),
+            _ => None,
+        }
+    }
+
+    /// Tries to extract the variable name from a term. Returns `Some` if the term is a variable
+    /// with a simple identifier.
+    pub fn try_as_var(&self) -> Option<&str> {
+        match self {
+            Term::Terminal(Terminal::Var(Identifier::Simple(var), _)) => Some(var.as_str()),
             _ => None,
         }
     }

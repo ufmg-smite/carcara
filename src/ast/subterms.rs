@@ -121,10 +121,11 @@ impl<'a> Iterator for FreeVars<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         if !self.visited_root {
             self.visited_root = true;
-            if let Term::Terminal(Terminal::Var(Identifier::Simple(var), _)) = self.root {
-                return Some(var.as_str());
+            if let Some(var) = self.root.try_as_var() {
+                return Some(var);
             }
         }
+
         loop {
             let got = self.inner.next()?;
             if !self.bound_vars.contains(got) {
