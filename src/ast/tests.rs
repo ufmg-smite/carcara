@@ -78,6 +78,35 @@ fn test_subterms() {
 }
 
 #[test]
+fn test_free_vars() {
+    fn run_tests(definitions: &str, cases: &[(&str, &[&str])]) {
+        for &(term, expected) in cases {
+            let root = parse_term_with_definitions(definitions, term);
+            let free_vars = root.free_vars().collect::<Vec<_>>();
+
+            assert_eq!(expected, free_vars)
+        }
+    }
+    run_tests(
+        "(declare-fun p () Bool)
+        (declare-fun q () Bool)
+        (declare-fun r () Bool)
+        (declare-fun a () Int)
+        (declare-fun b () Int)",
+        &[
+            ("(and p q r)", &["p", "q", "r"]),
+            ("(= a b)", &["a", "b"]),
+            ("(= b b)", &["b", "b"]),
+            ("(forall ((a Int) (b Int)) (= a b))", &[]),
+            ("(forall ((a Int)) (= a b))", &["b"]),
+            ("(forall ((a Int)) (forall ((b Int)) (= a b)))", &[]),
+            ("(and (forall ((a Int)) (= a 0)) (= a 0))", &["a"]),
+            ("(and (= a 0) (forall ((a Int)) (= a 0)))", &["a"]),
+        ],
+    )
+}
+
+#[test]
 fn test_deep_eq() {
     fn run_tests(definitions: &str, cases: &[(&str, &str)], is_mod_reordering: bool) {
         for (a, b) in cases {

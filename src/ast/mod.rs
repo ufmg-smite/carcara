@@ -6,7 +6,7 @@ mod subterms;
 #[cfg(test)]
 mod tests;
 
-pub use subterms::Subterms;
+pub use subterms::{FreeVars, Subterms};
 
 use num_bigint::BigInt;
 use num_rational::BigRational;
@@ -326,6 +326,12 @@ impl Term {
     /// the resulting iterator will not contain any duplicate terms. This ignores sort terms.
     pub fn subterms(&self) -> Subterms {
         Subterms::new(self)
+    }
+
+    /// Returns an iterator over the free variables in this term. This iterator has to traverse the
+    /// term as a tree, so it may yield duplicate terms.
+    pub fn free_vars(&self) -> FreeVars {
+        FreeVars::new(self)
     }
 
     /// Removes a leading negation from the term, if it exists. Same thing as `match_term!((not t)

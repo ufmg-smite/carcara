@@ -32,10 +32,10 @@ struct SubtermsInner<'a> {
 
 impl<'a> SubtermsInner<'a> {
     fn new(root: &'a Term) -> Self {
-        // TODO: Make subterms visit quantifier terms properly
         let children: Box<dyn Iterator<Item = _>> = match root {
             Term::App(f, args) => Box::new(iter::once(f).chain(args.iter())),
             Term::Op(_, args) => Box::new(args.iter()),
+            Term::Quant(_, _, t) => Box::new(iter::once(t)),
             _ => Box::new(iter::empty()),
         };
         Self {
@@ -69,5 +69,67 @@ impl<'a> SubtermsInner<'a> {
         self.children
             .find(|t| !visited.contains(t.as_ref()))
             .map(|t| Box::new(SubtermsInner::new(t.as_ref())))
+    }
+}
+
+pub struct FreeVars<'a> {
+    root: &'a Term,
+    visited_root: bool,
+    bound_vars: HashSet<&'a str>,
+    inner: iter::Flatten<Box<dyn Iterator<Item = Box<Self>> + 'a>>,
+}
+
+impl<'a> FreeVars<'a> {
+    pub fn new(root: &'a Term) -> Self {
+        // Unlike `Subterms`, this struct iterates through the term without skipping already seen
+        // subterms, meaning it traverses it as tree, and not as a DAG. That is necessary beacause
+        // a variable that may be free in one subterm may not be free in another identical subterm,
+        // depending on where in appears. For example, consider the following term:
+        //
+        //     (and (forall ((a Int)) (= a 0)) (= a 0))
+        //
+        // The "a" variable is bound in the first appearance of the (= a 0) subterm, but it is free
+        // when that subterm appears again, outside the "forall" term.
+        let mut bound_vars = HashSet::new();
+        let children: Box<dyn Iterator<Item = _>> = match root {
+            Term::App(f, args) => Box::new(
+                iter::once(f)
+                    .chain(args.iter())
+                    .map(|t| Box::new(t.free_vars())),
+            ),
+            Term::Op(_, args) => Box::new(args.iter().map(|t| Box::new(t.free_vars()))),
+            Term::Quant(_, bindings, t) => {
+                for (var, _) in bindings {
+                    bound_vars.insert(var.as_str());
+                }
+                Box::new(iter::once(Box::new(t.free_vars())))
+            }
+            _ => Box::new(iter::empty()),
+        };
+        Self {
+            root,
+            visited_root: false,
+            bound_vars,
+            inner: children.flatten(),
+        }
+    }
+}
+
+impl<'a> Iterator for FreeVars<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.visited_root {
+            self.visited_root = true;
+            if let Term::Terminal(Terminal::Var(Identifier::Simple(var), _)) = self.root {
+                return Some(var.as_str());
+            }
+        }
+        loop {
+            let got = self.inner.next()?;
+            if !self.bound_vars.contains(got) {
+                return Some(got);
+            }
+        }
     }
 }
