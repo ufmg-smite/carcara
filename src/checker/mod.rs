@@ -39,6 +39,12 @@ pub struct RuleArgs<'a> {
     args: &'a [ProofArg],
     pool: &'a mut TermPool,
     context: &'a mut [HashMap<ByRefRc<Term>, ByRefRc<Term>>],
+
+    // For rules like "bind", that end a subproof, we need to pass all the commands of the subproof
+    // that it is closing, because they may need to refer to some of them, and they are not given
+    // as premises
+    #[allow(dead_code)] // WIP
+    subproof_commands: &'a [ProofCommand],
 }
 
 #[derive(Debug)]
@@ -69,29 +75,7 @@ impl ProofChecker {
     fn check_subproof<'a>(&mut self, commands: &'a [ProofCommand]) -> Result<(), CheckerError<'a>> {
         for step in commands {
             match step {
-                ProofCommand::Step(ProofStep {
-                    clause,
-                    rule: rule_name,
-                    premises,
-                    args,
-                }) => {
-                    let rule = match Self::get_rule(rule_name) {
-                        Some(r) => r,
-                        None if self.skip_unknown_rules => continue,
-                        None => return Err(CheckerError::UnknownRule(rule_name)),
-                    };
-                    let premises = premises.iter().map(|&i| &commands[i]).collect();
-                    let rule_args = RuleArgs {
-                        conclusion: &clause,
-                        premises,
-                        args: &args,
-                        pool: &mut self.pool,
-                        context: &mut self.context,
-                    };
-                    if rule(rule_args).is_none() {
-                        return Err(CheckerError::FailedOnRule(rule_name));
-                    }
-                }
+                ProofCommand::Step(step) => self.check_step(step, commands)?,
                 ProofCommand::Subproof(commands, subproof_args) => {
                     let new_context = subproof_args
                         .iter()
@@ -106,6 +90,36 @@ impl ProofChecker {
                 }
                 ProofCommand::Assume(_) => (),
             }
+        }
+        Ok(())
+    }
+
+    fn check_step<'a>(
+        &mut self,
+        ProofStep {
+            clause,
+            rule: rule_name,
+            premises,
+            args,
+        }: &'a ProofStep,
+        all_commands: &'a [ProofCommand],
+    ) -> Result<(), CheckerError<'a>> {
+        let rule = match Self::get_rule(rule_name) {
+            Some(r) => r,
+            None if self.skip_unknown_rules => return Ok(()),
+            None => return Err(CheckerError::UnknownRule(rule_name)),
+        };
+        let premises = premises.iter().map(|&i| &all_commands[i]).collect();
+        let rule_args = RuleArgs {
+            conclusion: &clause,
+            premises,
+            args: &args,
+            pool: &mut self.pool,
+            context: &mut self.context,
+            subproof_commands: all_commands,
+        };
+        if rule(rule_args).is_none() {
+            return Err(CheckerError::FailedOnRule(rule_name));
         }
         Ok(())
     }
