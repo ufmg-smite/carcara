@@ -1,6 +1,7 @@
 mod general_rules;
 mod la_rules;
 mod simplification_rules;
+mod subproof_rules;
 mod tests;
 
 use std::collections::HashMap;
@@ -43,7 +44,6 @@ pub struct RuleArgs<'a> {
     // For rules like "bind", that end a subproof, we need to pass all the commands of the subproof
     // that it is closing, because they may need to refer to some of them, and they are not given
     // as premises
-    #[allow(dead_code)] // WIP
     subproof_commands: &'a [ProofCommand],
 }
 
@@ -155,6 +155,7 @@ impl ProofChecker {
             "bool_simplify" => simplification_rules::bool_simplify,
             "prod_simplify" => simplification_rules::prod_simplify,
             "nary_elim" => general_rules::nary_elim,
+            "bind" => subproof_rules::bind,
             _ => return None,
         })
     }
