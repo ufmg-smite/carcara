@@ -83,7 +83,8 @@ fn main() -> ParserResult<()> {
         if matches.is_present("print-ast") {
             println!("{:#?}", proof);
         }
-        match ProofChecker::new(pool, matches.is_present("skip-unknown-rules")).check(&proof) {
+        match ProofChecker::new(pool, matches.is_present("skip-unknown-rules"), false).check(&proof)
+        {
             Ok(()) => println!("true"),
             Err(CheckerError::UnknownRule(s)) => println!("unknown rule: {}", s),
             Err(CheckerError::FailedOnRule(s)) => println!("false ({})", s),
@@ -148,7 +149,7 @@ fn report_by_files(files: &[&str], quiet: bool) -> ParserResult<()> {
     for file in files {
         let all_implemented = get_used_rules(file)?
             .iter()
-            .all(|rule| ProofChecker::get_rule(rule).is_some());
+            .all(|rule| ProofChecker::get_rule(rule, false).is_some());
         print_report_entry(file, all_implemented, quiet);
         implemented += all_implemented as i32;
     }
@@ -174,7 +175,7 @@ fn report_by_rules(files: &[&str], quiet: bool) -> ParserResult<()> {
     for r in rules {
         let r = r?;
         if seen.insert(r.clone()) {
-            let success = ProofChecker::get_rule(&r).is_some();
+            let success = ProofChecker::get_rule(&r, false).is_some();
             print_report_entry(&r, success, quiet);
             implemented += success as i32;
         }

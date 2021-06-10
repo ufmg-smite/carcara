@@ -10,7 +10,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
         // This parses the definitions again for every case, which is not ideal
         let (parsed, pool) = parse_problem_proof(Cursor::new(definitions), Cursor::new(proof))
             .unwrap_or_else(|e| panic!("parser error during test \"{}\": {:?}", test_name, e));
-        let got = ProofChecker::new(pool, false).check(&parsed).is_ok();
+        let got = ProofChecker::new(pool, false, true).check(&parsed).is_ok();
         assert_eq!(
             *expected, got,
             "test case \"{}\" index {} failed",
@@ -639,47 +639,39 @@ fn test_resolution_rule() {
 
         "Simple working examples" {
             "(assume h1 (not p))
-            (assume h2 (or p q))
-            (step t3 (cl p q) :rule or :premises (h2))
-            (step t4 (cl q) :rule resolution :premises (h1 t3))": true,
+            (step t2 (cl p q) :rule trust_me)
+            (step t3 (cl q) :rule resolution :premises (h1 t2))": true,
 
             "(assume h1 (not p))
             (assume h2 (not q))
             (assume h3 (not r))
-            (assume h4 (or p q r))
-            (step t5 (cl p q r) :rule or :premises (h4))
-            (step t6 (cl) :rule resolution :premises (h1 h2 h3 t5))": true,
+            (step t4 (cl p q r) :rule trust_me)
+            (step t5 (cl) :rule resolution :premises (h1 h2 h3 t4))": true,
 
             "(assume h1 (not p))
             (assume h2 q)
-            (assume h3 (or p (not q)))
-            (step t4 (cl p (not q)) :rule or :premises (h3))
-            (step t5 (cl) :rule resolution :premises (h1 h2 t4))": true,
+            (step t3 (cl p (not q)) :rule trust_me)
+            (step t4 (cl) :rule resolution :premises (h1 h2 t3))": true,
         }
         "Missing term in final clause" {
             "(assume h1 (not p))
-            (assume h2 (or p q r))
-            (step t3 (cl p q r) :rule or :premises (h2))
-            (step t4 (cl q) :rule resolution :premises (h1 t3))": false,
+            (step t2 (cl p q r) :rule trust_me)
+            (step t3 (cl q) :rule resolution :premises (h1 t2))": false,
         }
         "Extra term in final clause" {
             "(assume h1 (not p))
-            (assume h2 (or p q r))
-            (step t3 (cl p q r) :rule or :premises (h2))
-            (step t4 (cl p q r) :rule resolution :premises (h1 t3))": false,
+            (step t2 (cl p q r) :rule trust_me)
+            (step t3 (cl p q r) :rule resolution :premises (h1 t2))": false,
         }
         "Term appears in final clause with wrong polarity" {
             "(assume h1 (not p))
-            (assume h2 (or p q r))
-            (step t3 (cl p q r) :rule or :premises (h2))
-            (step t4 (cl (not q) r) :rule resolution :premises (h1 t3))": false,
+            (step t2 (cl p q r) :rule trust_me)
+            (step t3 (cl (not q) r) :rule resolution :premises (h1 t2))": false,
         }
         "Duplicate term in final clause" {
-            "(assume h1 (or q (not p)))
-            (assume h2 (or p q r))
-            (step t3 (cl q (not p)) :rule or :premises (h1))
-            (step t4 (cl p q r) :rule or :premises (h2))
-            (step t5 (cl q q r) :rule resolution :premises (t3 t4))": true,
+            "(step t1 (cl q (not p)) :rule trust_me)
+            (step t2 (cl p q r) :rule trust_me)
+            (step t3 (cl q q r) :rule resolution :premises (t1 t2))": true,
         }
         "Terms with leading negations" {
             "(assume h1 (not p))
@@ -693,32 +685,25 @@ fn test_resolution_rule() {
                 :rule resolution :premises (h1 h4))": true,
         }
         "Must use correct pivots" {
-            "(assume h1 (or (not q) (not (not p)) (not p)))
-            (assume h2 (or (not (not (not p))) p))
-            (step t3 (cl (not q) (not (not p)) (not p)) :rule or :premises (h1))
-            (step t4 (cl (not (not (not p))) p) :rule or :premises (h2))
-            (step t5 (cl (not q) p (not p)) :rule resolution :premises (t3 t4))": true,
+            "(step t1 (cl (not q) (not (not p)) (not p)) :rule trust_me)
+            (step t2 (cl (not (not (not p))) p) :rule trust_me)
+            (step t3 (cl (not q) p (not p)) :rule resolution :premises (t1 t2))": true,
 
-            "(assume h1 (or (not q) (not (not p)) (not p)))
-            (assume h2 (or (not (not (not p))) p))
-            (step t3 (cl (not q) (not (not p)) (not p)) :rule or :premises (h1))
-            (step t4 (cl (not (not (not p))) p) :rule or :premises (h2))
-            (step t5 (cl (not q) (not (not (not p))) (not (not p)))
-                :rule resolution :premises (t3 t4))": true,
+            "(step t1 (cl (not q) (not (not p)) (not p)) :rule trust_me)
+            (step t2 (cl (not (not (not p))) p) :rule trust_me)
+            (step t3 (cl (not q) (not (not (not p))) (not (not p)))
+                :rule resolution :premises (t1 t2))": true,
 
-            "(assume h1 (or (not q) (not (not p)) (not p)))
-            (assume h2 (or (not (not (not p))) p))
-            (step t3 (cl (not q) (not (not p)) (not p)) :rule or :premises (h1))
-            (step t4 (cl (not (not (not p))) p) :rule or :premises (h2))
-            (step t5 (cl (not q) p (not p) (not (not (not p))) (not (not p)))
-                :rule resolution :premises (t3 t4))": true,
+            "(step t1 (cl (not q) (not (not p)) (not p)) :rule trust_me)
+            (step t2 (cl (not (not (not p))) p) :rule trust_me)
+            (step t3 (cl (not q) p (not p) (not (not (not p))) (not (not p)))
+                :rule resolution :premises (t1 t2))": true,
         }
         "Weird behaviour where leading negations sometimes are added to conclusion" {
             "(assume h1 (not p))
             (assume h2 (= (not p) (not (not q))))
-            (assume h3 (or (not (= (not p) (not (not q)))) p q))
-            (step t4 (cl (not (= (not p) (not (not q)))) p q) :rule or :premises (h3))
-            (step t5 (cl (not (not q))) :rule resolution :premises (h1 h2 t4))": true,
+            (step t3 (cl (not (= (not p) (not (not q)))) p q) :rule trust_me)
+            (step t4 (cl (not (not q))) :rule resolution :premises (h1 h2 t3))": true,
         }
     }
 }
@@ -874,9 +859,8 @@ fn test_and_rule() {
             (step t2 (cl r) :rule and :premises (h1 h2))": false,
         }
         "Premise clause has more than one term" {
-            "(assume h1 (or (and p q) (and r s)))
-            (step t2 (cl (and p q) (and r s)) :rule or :premises (h1))
-            (step t3 (cl p) :rule and :premises (t2))": false,
+            "(step t1 (cl (and p q) (and r s)) :rule trust_me)
+            (step t2 (cl p) :rule and :premises (t1))": false,
         }
         "Conclusion clause does not have exactly one term" {
             "(assume h1 (and p q r s))
@@ -1141,17 +1125,14 @@ fn test_contraction_rule() {
             (declare-fun s () Bool)
         ",
         "Simple working examples" {
-            "(assume h1 (or p q q r s s))
-            (step t2 (cl p q q r s s) :rule or :premises (h1))
-            (step t3 (cl p q r s) :rule contraction :premises (t2))": true,
+            "(step t1 (cl p q q r s s) :rule trust_me)
+            (step t2 (cl p q r s) :rule contraction :premises (t1))": true,
 
-            "(assume h1 (or p p p q q r s s s))
-            (step t2 (cl p p p q q r s s s) :rule or :premises (h1))
-            (step t3 (cl p q r s) :rule contraction :premises (t2))": true,
+            "(step t1 (cl p p p q q r s s s) :rule trust_me)
+            (step t2 (cl p q r s) :rule contraction :premises (t1))": true,
 
-            "(assume h1 (or p q r s))
-            (step t2 (cl p q r s) :rule or :premises (h1))
-            (step t3 (cl p q r s) :rule contraction :premises (t2))": true,
+            "(step t1 (cl p q r s) :rule trust_me)
+            (step t2 (cl p q r s) :rule contraction :premises (t1))": true,
         }
         "Number of premises != 1" {
             "(step t1 (cl p q) :rule contraction)": false,
@@ -1165,28 +1146,23 @@ fn test_contraction_rule() {
             (step t2 (cl q) :rule contraction :premises (h1))": true,
         }
         "Encountered wrong term" {
-            "(assume h1 (or p p q))
-            (step t2 (cl p p q) :rule or :premises (h1))
-            (step t3 (cl p r) :rule contraction :premises (t2))": false,
+            "(step t1 (cl p p q) :rule trust_me)
+            (step t2 (cl p r) :rule contraction :premises (t1))": false,
         }
         "Terms are not in correct order" {
-            "(assume h1 (or p q q r))
-            (step t2 (cl p q q r) :rule or :premises (h1))
-            (step t3 (cl p r q) :rule contraction :premises (t2))": false,
+            "(step t1 (cl p q q r) :rule trust_me)
+            (step t2 (cl p r q) :rule contraction :premises (t1))": false,
         }
         "Conclusion is missing terms" {
-            "(assume h1 (or p q q r))
-            (step t2 (cl p q q r) :rule or :premises (h1))
-            (step t3 (cl p r) :rule contraction :premises (t2))": false,
+            "(step t1 (cl p q q r) :rule trust_me)
+            (step t2 (cl p r) :rule contraction :premises (t1))": false,
 
-            "(assume h1 (or p p q r))
-            (step t2 (cl p p q r) :rule or :premises (h1))
-            (step t3 (cl p q) :rule contraction :premises (t2))": false,
+            "(step t1 (cl p p q r) :rule trust_me)
+            (step t2 (cl p q) :rule contraction :premises (t1))": false,
         }
         "Conclusion has extra term at the end" {
-            "(assume h1 (or p p q))
-            (step t2 (cl p p q) :rule or :premises (h1))
-            (step t3 (cl p q r s) :rule contraction :premises (t2))": false,
+            "(step t1 (cl p p q) :rule trust_me)
+            (step t2 (cl p q r s) :rule contraction :premises (t1))": false,
         }
     }
 }

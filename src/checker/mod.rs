@@ -56,14 +56,16 @@ pub enum CheckerError<'a> {
 pub struct ProofChecker {
     pool: TermPool,
     skip_unknown_rules: bool,
+    allow_test_rule: bool,
     context: Vec<HashMap<ByRefRc<Term>, ByRefRc<Term>>>,
 }
 
 impl ProofChecker {
-    pub fn new(pool: TermPool, skip_unknown_rules: bool) -> Self {
+    pub fn new(pool: TermPool, skip_unknown_rules: bool, allow_test_rule: bool) -> Self {
         ProofChecker {
             pool,
             skip_unknown_rules,
+            allow_test_rule,
             context: Vec::new(),
         }
     }
@@ -104,7 +106,7 @@ impl ProofChecker {
         }: &'a ProofStep,
         all_commands: &'a [ProofCommand],
     ) -> Result<(), CheckerError<'a>> {
-        let rule = match Self::get_rule(rule_name) {
+        let rule = match Self::get_rule(rule_name, self.allow_test_rule) {
             Some(r) => r,
             None if self.skip_unknown_rules => return Ok(()),
             None => return Err(CheckerError::UnknownRule(rule_name)),
@@ -124,7 +126,7 @@ impl ProofChecker {
         Ok(())
     }
 
-    pub fn get_rule(rule_name: &str) -> Option<Rule> {
+    pub fn get_rule(rule_name: &str, allow_test_rule: bool) -> Option<Rule> {
         Some(match rule_name {
             "not_not" => general_rules::not_not,
             "and_pos" => general_rules::and_pos,
@@ -156,6 +158,7 @@ impl ProofChecker {
             "prod_simplify" => simplification_rules::prod_simplify,
             "nary_elim" => general_rules::nary_elim,
             "bind" => subproof_rules::bind,
+            "trust_me" if allow_test_rule => |_| Some(()),
             _ => return None,
         })
     }
