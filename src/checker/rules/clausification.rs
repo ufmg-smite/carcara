@@ -174,7 +174,7 @@ pub fn nary_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn test_distinct_elim_rule() {
+    fn distinct_elim() {
         test_cases! {
             definitions = "
                 (declare-sort T 0)
@@ -223,7 +223,7 @@ mod tests {
     }
 
     #[test]
-    fn test_and_rule() {
+    fn and() {
         test_cases! {
             definitions = "
                 (declare-fun p () Bool)
@@ -271,7 +271,7 @@ mod tests {
     }
 
     #[test]
-    fn test_or_rule() {
+    fn or() {
         test_cases! {
             definitions = "
                 (declare-fun p () Bool)
@@ -316,7 +316,7 @@ mod tests {
     }
 
     #[test]
-    fn test_implies() {
+    fn implies() {
         test_cases! {
             definitions = "
                 (declare-fun a () Bool)
@@ -347,7 +347,7 @@ mod tests {
     }
 
     #[test]
-    fn test_nary_elim_rule() {
+    fn nary_elim() {
         test_cases! {
             definitions = "
                 (declare-fun p () Bool)

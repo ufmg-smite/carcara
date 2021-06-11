@@ -62,7 +62,7 @@ pub fn bind(
 #[cfg(test)]
 mod tests {
     #[test]
-    fn test_bind_rule() {
+    fn bind() {
         test_cases! {
             definitions = "
                 (declare-fun p () Bool)

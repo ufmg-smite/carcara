@@ -166,7 +166,7 @@ pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn test_not_not_rule() {
+    fn not_not() {
         test_cases! {
             definitions = "
                 (declare-fun p () Bool)
@@ -192,7 +192,7 @@ mod tests {
     }
 
     #[test]
-    fn test_and_pos_rule() {
+    fn and_pos() {
         test_cases! {
             definitions = "
                 (declare-fun p () Bool)
@@ -216,7 +216,7 @@ mod tests {
     }
 
     #[test]
-    fn test_and_neg_rule() {
+    fn and_neg() {
         test_cases! {
             definitions = "
                 (declare-fun p () Bool)
@@ -246,7 +246,7 @@ mod tests {
     }
 
     #[test]
-    fn test_or_pos_rule() {
+    fn or_pos() {
         test_cases! {
             definitions = "
                 (declare-fun p () Bool)
@@ -274,7 +274,7 @@ mod tests {
     }
 
     #[test]
-    fn test_or_neg_rule() {
+    fn or_neg() {
         test_cases! {
             definitions = "
                 (declare-fun p () Bool)
@@ -298,7 +298,7 @@ mod tests {
     }
 
     #[test]
-    fn test_equiv_pos1_rule() {
+    fn equiv_pos1() {
         test_cases! {
             definitions = "
                 (declare-fun p () Bool)
@@ -327,7 +327,7 @@ mod tests {
     }
 
     #[test]
-    fn test_equiv_pos2_rule() {
+    fn equiv_pos2() {
         test_cases! {
             definitions = "
                 (declare-fun p () Bool)
@@ -355,7 +355,7 @@ mod tests {
         }
     }
     #[test]
-    fn test_ite1_rule() {
+    fn ite1() {
         test_cases! {
             definitions = "
                 (declare-fun p () Bool)
@@ -387,7 +387,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ite2_rule() {
+    fn ite2() {
         test_cases! {
             definitions = "
                 (declare-fun p () Bool)
@@ -422,7 +422,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ite_intro_rule() {
+    fn ite_intro() {
         test_cases! {
             definitions = "
                 (declare-fun p () Bool)

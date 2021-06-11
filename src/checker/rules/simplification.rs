@@ -168,7 +168,7 @@ pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn test_bool_simplify_rule() {
+    fn bool_simplify() {
         test_cases! {
             definitions = "
                 (declare-fun p () Bool)
@@ -247,7 +247,7 @@ mod tests {
     }
 
     #[test]
-    fn test_prod_simplify_rule() {
+    fn prod_simplify() {
         test_cases! {
             definitions = "
                 (declare-fun i () Int)

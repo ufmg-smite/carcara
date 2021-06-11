@@ -131,7 +131,7 @@ pub fn contraction(
 #[cfg(test)]
 mod tests {
     #[test]
-    fn test_resolution_rule() {
+    fn resolution() {
         test_cases! {
             definitions = "
                 (declare-fun p () Bool)
@@ -210,7 +210,7 @@ mod tests {
     }
 
     #[test]
-    fn test_contraction_rule() {
+    fn contraction() {
         test_cases! {
             definitions = "
                 (declare-fun p () Bool)

@@ -147,7 +147,7 @@ pub fn cong(
 #[cfg(test)]
 mod tests {
     #[test]
-    fn test_eq_congruent_rule() {
+    fn eq_congruent() {
         test_cases! {
             definitions = "
                 (declare-fun a () Int)
@@ -211,7 +211,7 @@ mod tests {
     }
 
     #[test]
-    fn test_eq_congruent_pred_rule() {
+    fn eq_congruent_pred() {
         test_cases! {
             definitions = "
                 (declare-fun a () Bool)
@@ -276,7 +276,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cong_rule() {
+    fn cong() {
         test_cases! {
             definitions = "
                 (declare-sort T 0)

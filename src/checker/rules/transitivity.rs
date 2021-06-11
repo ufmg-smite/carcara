@@ -55,7 +55,7 @@ pub fn eq_transitive(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn test_eq_transitive_rule() {
+    fn eq_transitive() {
         test_cases! {
             definitions = "
                 (declare-sort T 0)

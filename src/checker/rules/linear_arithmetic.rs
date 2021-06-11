@@ -279,7 +279,7 @@ pub fn la_disequality(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn test_la_rw_eq_rule() {
+    fn la_rw_eq() {
         test_cases! {
             definitions = "
                 (declare-fun a () Int)
@@ -299,7 +299,7 @@ mod tests {
     }
 
     #[test]
-    fn test_la_generic_rule() {
+    fn la_generic() {
         test_cases! {
             definitions = "
                 (declare-fun a () Real)
@@ -342,7 +342,7 @@ mod tests {
     }
 
     #[test]
-    fn test_la_disequality_rule() {
+    fn la_disequality() {
         test_cases! {
             definitions = "
                 (declare-fun a () Int)

@@ -33,7 +33,7 @@ pub fn refl(
 #[cfg(test)]
 mod tests {
     #[test]
-    fn test_eq_reflexive_rule() {
+    fn eq_reflexive() {
         test_cases! {
             definitions = "
                 (declare-fun a () Int)
@@ -63,7 +63,7 @@ mod tests {
     }
 
     #[test]
-    fn test_refl_rule() {
+    fn refl() {
         test_cases! {
             definitions = "
                 (declare-fun f (Real) Real)

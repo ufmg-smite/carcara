@@ -53,7 +53,7 @@ pub fn forall_inst(
 #[cfg(test)]
 mod tests {
     #[test]
-    fn test_forall_inst_rule() {
+    fn forall_inst() {
         test_cases! {
             definitions = "
                 (declare-fun p () Bool)
