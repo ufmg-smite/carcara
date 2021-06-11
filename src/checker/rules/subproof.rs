@@ -24,11 +24,9 @@ pub fn bind(
     let substitutions = context.last()?;
 
     // None of y_1, ..., y_n can appear as free variables in phi
-    let ys: HashSet<_> = substitutions
-        .values()
-        .map(|t| t.try_as_var())
-        .collect::<Option<_>>()?;
-    if phi.free_vars().any(|var| ys.contains(var)) {
+    let mut ys = substitutions.values().map(|t| t.try_as_var());
+    let free_vars = phi.free_vars();
+    if ys.any(|y| y.map(|var| free_vars.contains(var)).unwrap_or(true)) {
         return None;
     }
 

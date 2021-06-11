@@ -6,13 +6,19 @@ mod subterms;
 #[cfg(test)]
 mod tests;
 
-pub use subterms::{FreeVars, Subterms};
+pub use subterms::Subterms;
 
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
 use std::{
-    borrow::Borrow, collections::HashMap, fmt::Debug, hash::Hash, ops::Deref, rc, str::FromStr,
+    borrow::Borrow,
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+    hash::Hash,
+    ops::Deref,
+    rc,
+    str::FromStr,
 };
 
 /// An `Rc` where equality and hashing are done by reference, instead of by value
@@ -328,10 +334,60 @@ impl Term {
         Subterms::new(self)
     }
 
-    /// Returns an iterator over the free variables in this term. This iterator has to traverse the
-    /// term as a tree, so it may yield duplicate terms.
-    pub fn free_vars(&self) -> FreeVars {
-        FreeVars::new(self)
+    /// Returns a `HashSet` containing all the free variables in this term.
+    pub fn free_vars(&self) -> HashSet<&str> {
+        fn free_vars_inner<'t, 'c>(
+            term: &'t Term,
+            cache: &'c mut HashMap<&'t Term, HashSet<&'t str>>,
+        ) -> &'c HashSet<&'t str> {
+            // Here, I would like to do
+            // ```
+            // if let Some(vars) = cache.get(term) {
+            //     return vars;
+            // }
+            // ```
+            // However, because of a limitation in the borrow checker, the compiler thinks that
+            // this immutable borrow of `cache` has to live until the end of the function, even
+            // though the code immediately returns. This would stop me from mutating `cache` in the
+            // rest of the function. Because of that, I have to check if the hash map contains
+            // `term` as a key, and then get the value associated with it, meaning I have to access
+            // the hash map twice, which is a bit slower. This is an example of problem case #3
+            // from the non-lexical lifetimes RFC:
+            // https://github.com/rust-lang/rfcs/blob/master/text/2094-nll.md
+            if cache.contains_key(term) {
+                return cache.get(term).unwrap();
+            }
+            let set = match term {
+                Term::App(f, args) => {
+                    let mut set = args.iter().fold(HashSet::new(), |acc, next| {
+                        &acc | free_vars_inner(next, cache)
+                    });
+                    set.extend(free_vars_inner(f, cache).iter());
+                    set
+                }
+                Term::Op(_, args) => args.iter().fold(HashSet::new(), |acc, next| {
+                    &acc | free_vars_inner(next, cache)
+                }),
+                Term::Quant(_, bindings, inner) => {
+                    let mut vars = free_vars_inner(inner, cache).clone();
+                    for (s, _) in bindings {
+                        vars.remove(s.as_str());
+                    }
+                    vars
+                }
+                Term::Terminal(Terminal::Var(Identifier::Simple(var), _)) => {
+                    let mut set = HashSet::with_capacity(1);
+                    set.insert(var.as_str());
+                    set
+                }
+                Term::Terminal(_) | Term::Sort(_, _) => HashSet::new(),
+            };
+            cache.insert(term, set);
+            cache.get(term).unwrap()
+        }
+
+        let mut cache = HashMap::new();
+        free_vars_inner(self, &mut cache).clone()
     }
 
     /// Removes a leading negation from the term, if it exists. Same thing as `match_term!((not t)
