@@ -104,6 +104,7 @@ impl ProofChecker {
             "forall_inst" => quantifier::forall_inst,
             "th_resolution" | "resolution" => resolution::resolution,
             "refl" => reflexivity::refl,
+            "trans" => transitivity::trans,
             "cong" => congruence::cong,
             "and" => clausification::and,
             "or" => clausification::or,
