@@ -49,3 +49,56 @@ pub fn forall_inst(
         substituted,
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_forall_inst_rule() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun a () Real)
+                (declare-fun b () Real)
+                (declare-fun x () Real)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (or (not (forall ((p Bool)) p)) q))
+                    :rule forall_inst :args ((:= p q)))": true,
+
+                "(step t1 (cl (or (not (forall ((x Real) (y Real)) (= x y))) (= a b)))
+                    :rule forall_inst :args ((:= x a) (:= y b)))": true,
+
+                "(step t1 (cl (or (not (forall ((x Real)) (= x a))) (= a a)))
+                    :rule forall_inst :args ((:= x a)))": true,
+
+                "(step t1 (cl (or (not (forall ((p Bool)) p)) (ite q (= a b) (and (= a 0.0) true))))
+                    :rule forall_inst :args ((:= p (ite q (= a b) (and (= a 0.0) true)))))": true,
+            }
+            "Equalities may be flipped" {
+                "(step t1 (cl (or (not (forall ((x Real) (y Real)) (and (= x y) (= 1 0))))
+                    (and (= b a) (= 1 0)))) :rule forall_inst :args ((:= x a) (:= y b)))": true,
+            }
+            "Argument is not in quantifier bindings" {
+                "(step t1 (cl (or (not (forall ((x Real)) (= x a))) (= b 0.0)))
+                    :rule forall_inst :args ((:= x b) (:= a 0.0)))": false,
+            }
+            "Binding has no associated substitution" {
+                "(step t1 (cl (or (not (forall ((x Real) (y Real)) (= x x))) (= a a)))
+                    :rule forall_inst :args ((:= x a)))": false,
+            }
+            "Substitution was not applied" {
+                "(step t1 (cl (or (not (forall ((x Real) (y Real)) (= x y))) (= x b)))
+                    :rule forall_inst :args ((:= x a) (:= y b)))": false,
+            }
+            "Applied substitution was not passed as argument" {
+                "(step t1 (cl (or (not (forall ((x Real) (y Real)) (= x y))) (= a b)))
+                    :rule forall_inst :args ((:= x a)))": false,
+            }
+            "Wrong type of rule argument" {
+                "(step t1 (cl (or (not (forall ((x Real) (y Real)) (= x y))) (= a b)))
+                    :rule forall_inst :args ((:= x a) b))": false,
+            }
+        }
+    }
+}

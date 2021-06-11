@@ -58,3 +58,55 @@ pub fn bind(
 
     to_option(l_bindings == xs && r_bindings == ys)
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_bind_rule() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+                (declare-fun s () Bool)
+                (declare-fun y () Real)
+            ",
+            "Simple working examples" {
+                "(anchor :step t1 :args ((:= (x Real) (y Real))))
+                (step t1.t1 (cl (= p q)) :rule trust_me)
+                (step t1 (cl (= (forall ((x Real)) p) (forall ((y Real)) q))) :rule bind)": true,
+
+                "(anchor :step t1 :args ((:= (x1 Real) (y1 Real)) (:= (x2 Real) (y2 Real))))
+                (step t1.t1 (cl (= (= x1 x2) (= y1 y2))) :rule trust_me)
+                (step t1 (cl (= (forall ((x1 Real) (x2 Real)) (= x1 x2))
+                    (forall ((y1 Real) (y2 Real)) (= y1 y2)))) :rule bind)": true,
+            }
+            "y_i appears in phi as a free variable" {
+                "(anchor :step t1 :args ((:= (x Real) (y Real))))
+                (step t1.t1 (cl (= (= y x) (= y y))) :rule trust_me)
+                (step t1 (cl (= (forall ((x Real)) (= y x))
+                    (forall ((y Real)) (= y y)))) :rule bind)": false,
+            }
+            "Terms in conclusion clause don't match terms in previous command" {
+                "(anchor :step t1 :args ((:= (x Real) (y Real))))
+                (step t1.t1 (cl (= p q)) :rule trust_me)
+                (step t1.t2 (cl (= r s)) :rule trust_me) ; This step shouldn't be here!
+                (step t1 (cl (= (forall ((x Real)) p) (forall ((y Real)) q))) :rule bind)": false,
+
+                "(anchor :step t1 :args ((:= (x Real) (y Real))))
+                (step t1.t1 (cl (= p q)) :rule trust_me)
+                (step t1 (cl (= (forall ((x Real)) q) (forall ((y Real)) p))) :rule bind)": false,
+            }
+            "Context substitutions don't match quantifier bindings" {
+                "(anchor :step t1 :args ((:= (x Real) (y Real))))
+                (step t1.t1 (cl (= p q)) :rule trust_me)
+                (step t1 (cl (= (forall ((y Real)) p) (forall ((x Real)) q))) :rule bind)": false,
+
+                "(anchor :step t1 :args ((:= (x1 Real) (y1 Real)) (:= (x2 Real) (y2 Real))))
+                (step t1.t1 (cl (= (= x1 x2) (= y1 y2))) :rule trust_me)
+                (step t1 (cl (= (forall ((x2 Real)) (= x1 x2))
+                    (forall ((y1 Real) (y2 Real)) (= y1 y2)))) :rule bind)": false,
+            }
+        }
+    }
+}

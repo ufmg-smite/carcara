@@ -1,5 +1,4 @@
 mod rules;
-mod tests;
 
 use crate::ast::*;
 use rules::{Rule, RuleArgs};

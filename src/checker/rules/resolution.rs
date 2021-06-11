@@ -127,3 +127,137 @@ pub fn contraction(
     // conclusion are in the premise
     to_option(conclusion_iter.next().is_none())
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_resolution_rule() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+            ",
+            "Simple working examples" {
+                "(assume h1 (not p))
+                (step t2 (cl p q) :rule trust_me)
+                (step t3 (cl q) :rule resolution :premises (h1 t2))": true,
+
+                "(assume h1 (not p))
+                (assume h2 (not q))
+                (assume h3 (not r))
+                (step t4 (cl p q r) :rule trust_me)
+                (step t5 (cl) :rule resolution :premises (h1 h2 h3 t4))": true,
+
+                "(assume h1 (not p))
+                (assume h2 q)
+                (step t3 (cl p (not q)) :rule trust_me)
+                (step t4 (cl) :rule resolution :premises (h1 h2 t3))": true,
+            }
+            "Missing term in final clause" {
+                "(assume h1 (not p))
+                (step t2 (cl p q r) :rule trust_me)
+                (step t3 (cl q) :rule resolution :premises (h1 t2))": false,
+            }
+            "Extra term in final clause" {
+                "(assume h1 (not p))
+                (step t2 (cl p q r) :rule trust_me)
+                (step t3 (cl p q r) :rule resolution :premises (h1 t2))": false,
+            }
+            "Term appears in final clause with wrong polarity" {
+                "(assume h1 (not p))
+                (step t2 (cl p q r) :rule trust_me)
+                (step t3 (cl (not q) r) :rule resolution :premises (h1 t2))": false,
+            }
+            "Duplicate term in final clause" {
+                "(step t1 (cl q (not p)) :rule trust_me)
+                (step t2 (cl p q r) :rule trust_me)
+                (step t3 (cl q q r) :rule resolution :premises (t1 t2))": true,
+            }
+            "Terms with leading negations" {
+                "(assume h1 (not p))
+                (assume h2 (not (not p)))
+                (assume h3 (not (not (not p))))
+                (assume h4 (not (not (not (not p)))))
+                (step t5 (cl) :rule resolution :premises (h1 h2))
+                (step t6 (cl) :rule resolution :premises (h2 h3))
+                (step t7 (cl (not p) (not (not (not p)))) :rule resolution :premises (h1 h3))
+                (step t8 (cl (not p) (not (not (not (not p)))))
+                    :rule resolution :premises (h1 h4))": true,
+            }
+            "Must use correct pivots" {
+                "(step t1 (cl (not q) (not (not p)) (not p)) :rule trust_me)
+                (step t2 (cl (not (not (not p))) p) :rule trust_me)
+                (step t3 (cl (not q) p (not p)) :rule resolution :premises (t1 t2))": true,
+
+                "(step t1 (cl (not q) (not (not p)) (not p)) :rule trust_me)
+                (step t2 (cl (not (not (not p))) p) :rule trust_me)
+                (step t3 (cl (not q) (not (not (not p))) (not (not p)))
+                    :rule resolution :premises (t1 t2))": true,
+
+                "(step t1 (cl (not q) (not (not p)) (not p)) :rule trust_me)
+                (step t2 (cl (not (not (not p))) p) :rule trust_me)
+                (step t3 (cl (not q) p (not p) (not (not (not p))) (not (not p)))
+                    :rule resolution :premises (t1 t2))": true,
+            }
+            "Weird behaviour where leading negations sometimes are added to conclusion" {
+                "(assume h1 (not p))
+                (assume h2 (= (not p) (not (not q))))
+                (step t3 (cl (not (= (not p) (not (not q)))) p q) :rule trust_me)
+                (step t4 (cl (not (not q))) :rule resolution :premises (h1 h2 t3))": true,
+            }
+        }
+    }
+
+    #[test]
+    fn test_contraction_rule() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+                (declare-fun s () Bool)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl p q q r s s) :rule trust_me)
+                (step t2 (cl p q r s) :rule contraction :premises (t1))": true,
+
+                "(step t1 (cl p p p q q r s s s) :rule trust_me)
+                (step t2 (cl p q r s) :rule contraction :premises (t1))": true,
+
+                "(step t1 (cl p q r s) :rule trust_me)
+                (step t2 (cl p q r s) :rule contraction :premises (t1))": true,
+            }
+            "Number of premises != 1" {
+                "(step t1 (cl p q) :rule contraction)": false,
+
+                "(assume h1 q)
+                (assume h2 p)
+                (step t3 (cl p q) :rule contraction :premises (h1 h2))": false,
+            }
+            "Premise is not a \"step\" command" {
+                "(assume h1 q)
+                (step t2 (cl q) :rule contraction :premises (h1))": true,
+            }
+            "Encountered wrong term" {
+                "(step t1 (cl p p q) :rule trust_me)
+                (step t2 (cl p r) :rule contraction :premises (t1))": false,
+            }
+            "Terms are not in correct order" {
+                "(step t1 (cl p q q r) :rule trust_me)
+                (step t2 (cl p r q) :rule contraction :premises (t1))": false,
+            }
+            "Conclusion is missing terms" {
+                "(step t1 (cl p q q r) :rule trust_me)
+                (step t2 (cl p r) :rule contraction :premises (t1))": false,
+
+                "(step t1 (cl p p q r) :rule trust_me)
+                (step t2 (cl p q) :rule contraction :premises (t1))": false,
+            }
+            "Conclusion has extra term at the end" {
+                "(step t1 (cl p p q) :rule trust_me)
+                (step t2 (cl p q r s) :rule contraction :premises (t1))": false,
+            }
+        }
+    }
+}

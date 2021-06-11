@@ -170,3 +170,217 @@ pub fn nary_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_distinct_elim_rule() {
+        test_cases! {
+            definitions = "
+                (declare-sort T 0)
+                (declare-fun a () T)
+                (declare-fun b () T)
+                (declare-fun c () T)
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (= (distinct a b) (not (= a b)))) :rule distinct_elim)": true,
+
+                "(step t1 (cl (= (distinct a b c) (and
+                    (not (= a b))
+                    (not (= a c))
+                    (not (= b c))
+                ))) :rule distinct_elim)": true,
+            }
+            "Inequality terms in different orders" {
+                "(step t1 (cl (= (distinct a b) (not (= b a)))) :rule distinct_elim)": true,
+
+                "(step t1 (cl (= (distinct a b c) (and
+                    (not (= b a))
+                    (not (= a c))
+                    (not (= c b))
+                ))) :rule distinct_elim)": true,
+            }
+            "Conjunction terms in wrong order" {
+                "(step t1 (cl (= (distinct a b c) (and
+                    (not (= b c))
+                    (not (= a b))
+                    (not (= a c))
+                ))) :rule distinct_elim)": false,
+            }
+            "\"distinct\" on more than two booleans should be \"false\"" {
+                "(step t1 (cl (= (distinct p q r) false)) :rule distinct_elim)": true,
+
+                "(step t1 (cl (= (distinct p q r) (and
+                    (not (= p q))
+                    (not (= p r))
+                    (not (= q r))
+                ))) :rule distinct_elim)": false,
+            }
+        }
+    }
+
+    #[test]
+    fn test_and_rule() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+                (declare-fun s () Bool)
+            ",
+            "Simple working examples" {
+                "(assume h1 (and p q))
+                (step t2 (cl q) :rule and :premises (h1))": true,
+
+                "(assume h1 (and p q r s))
+                (step t2 (cl p) :rule and :premises (h1))": true,
+
+                "(assume h1 (and p q r s))
+                (step t2 (cl s) :rule and :premises (h1))": true,
+            }
+            "Number of premises != 1" {
+                "(step t1 (cl p) :rule and)": false,
+
+                "(assume h1 (and p q))
+                (assume h2 (and r s))
+                (step t2 (cl r) :rule and :premises (h1 h2))": false,
+            }
+            "Premise clause has more than one term" {
+                "(step t1 (cl (and p q) (and r s)) :rule trust_me)
+                (step t2 (cl p) :rule and :premises (t1))": false,
+            }
+            "Conclusion clause does not have exactly one term" {
+                "(assume h1 (and p q r s))
+                (step t2 (cl q s) :rule and :premises (h1))": false,
+
+                "(assume h1 (and p q))
+                (step t2 (cl) :rule and :premises (h1))": false,
+            }
+            "Premise is not an \"and\" operation" {
+                "(assume h1 (or p q r s))
+                (step t2 (cl r) :rule and :premises (h1))": false,
+            }
+            "Conclusion term is not in premise" {
+                "(assume h1 (and p q r))
+                (step t2 (cl s) :rule and :premises (h1))": false,
+            }
+        }
+    }
+
+    #[test]
+    fn test_or_rule() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+                (declare-fun s () Bool)
+            ",
+            "Simple working examples" {
+                "(assume h1 (or p q))
+                (step t2 (cl p q) :rule or :premises (h1))": true,
+
+                "(assume h1 (or p q r s))
+                (step t2 (cl p q r s) :rule or :premises (h1))": true,
+            }
+            "Number of premises != 1" {
+                "(step t1 (cl p q r) :rule or)": false,
+
+                "(assume h1 (or p q))
+                (assume h2 (or q r))
+                (step t3 (cl p q r) :rule or :premises (h1 h2))": false,
+            }
+            "Premise clause has more than one term" {
+                "(assume h1 (or p (or q r)))
+                (step t2 (cl p (or q r)) :rule or :premises (h1))
+                (step t3 (cl p q) :rule or :premises (t2))": false,
+            }
+            "Premise is not an \"or\" operation" {
+                "(assume h1 (and p q))
+                (step t2 (cl p q) :rule or :premises (h1))": false,
+            }
+            "Premise and clause contents are different" {
+                "(assume h1 (or p q))
+                (step t2 (cl r s) :rule or :premises (h1))": false,
+
+                "(assume h1 (or p q r))
+                (step t2 (cl p q) :rule or :premises (h1))": false,
+
+                "(assume h1 (or q p))
+                (step t2 (cl p q) :rule or :premises (h1))": false,
+            }
+        }
+    }
+
+    #[test]
+    fn test_implies() {
+        test_cases! {
+            definitions = "
+                (declare-fun a () Bool)
+                (declare-fun b () Bool)
+            ",
+            "Simple working examples" {
+                "(assume h1 (=> a b))
+                (step t2 (cl (not a) b) :rule implies :premises (h1))": true,
+
+                "(assume h1 (=> (not a) b))
+                (step t2 (cl (not (not a)) b) :rule implies :premises (h1))": true,
+            }
+            "Premise term is not an \"implies\" term" {
+                "(assume h1 (= a b))
+                (step t2 (cl (not a) b) :rule implies :premises (h1))": false,
+            }
+            "Conclusion clause is of the wrong form" {
+                "(assume h1 (=> a b))
+                (step t2 (cl b (not a)) :rule implies :premises (h1))": false,
+
+                "(assume h1 (=> a b))
+                (step t2 (cl a (not b)) :rule implies :premises (h1))": false,
+
+                "(assume h1 (=> (not a) b))
+                (step t2 (cl a b) :rule implies :premises (h1))": false,
+            }
+        }
+    }
+
+    #[test]
+    fn test_nary_elim_rule() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+                (declare-fun s () Bool)
+                (declare-fun a () Int)
+                (declare-fun b () Int)
+                (declare-fun c () Int)
+                (declare-fun d () Int)
+            ",
+            "Chainable operators" {
+                "(step t1 (cl (= (= a b c d) (and (= a b) (= b c) (= c d)))) :rule nary_elim)": true,
+                "(step t1 (cl (= (= a b) (and (= a b)))) :rule nary_elim)": true,
+                "(step t1 (cl (= (= a b c) (and (= b c) (= a b)))) :rule nary_elim)": false,
+                "(step t1 (cl (= (= a b c d) (and (= a b) (= c d)))) :rule nary_elim)": false,
+            }
+            "Left associative operators" {
+                "(step t1 (cl (= (+ a b c d) (+ (+ (+ a b) c) d))) :rule nary_elim)": true,
+                "(step t1 (cl (= (* a b) (* a b))) :rule nary_elim)": true,
+                "(step t1 (cl (= (- a b c d) (- a (- b (- c d))))) :rule nary_elim)": false,
+                "(step t1 (cl (= (+ a b c d) (+ (+ (+ d c) b) a))) :rule nary_elim)": false,
+            }
+            "Right associative operators" {
+                "(step t1 (cl (= (=> p q r s) (=> p (=> q (=> r s))))) :rule nary_elim)": true,
+                "(step t1 (cl (= (=> p q) (=> p q))) :rule nary_elim)": true,
+                "(step t1 (cl (= (=> p q r s) (=> (=> (=> p q) r) s))) :rule nary_elim)": false,
+            }
+            "Clause term is not of the correct form" {
+                "(step t1 (cl (= (or p q r s) (or (or (or p q) r) s))) :rule nary_elim)": false,
+                "(step t1 (cl (= (- a) (- a))) :rule nary_elim)": false,
+                "(step t1 (cl (= (=> p (=> q (=> r s))) (=> p q r s))) :rule nary_elim)": false,
+            }
+        }
+    }
+}

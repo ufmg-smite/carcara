@@ -51,3 +51,66 @@ pub fn eq_transitive(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 
     find_chain(chain_conclusion, &mut premises)
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_eq_transitive_rule() {
+        test_cases! {
+            definitions = "
+                (declare-sort T 0)
+                (declare-fun a () T)
+                (declare-fun b () T)
+                (declare-fun c () T)
+                (declare-fun d () T)
+                (declare-fun e () T)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (not (= a b)) (not (= b c)) (= a c)) :rule eq_transitive)": true,
+
+                "(step t1 (cl (not (= a b)) (not (= b c)) (not (= c d)) (= a d))
+                    :rule eq_transitive)": true,
+
+                "(step t1 (cl (not (= a a)) (not (= a a)) (= a a)) :rule eq_transitive)": true,
+            }
+            "Inequality terms in different orders" {
+                "(step t1 (cl (not (= a b)) (not (= c b)) (not (= c d)) (= d a))
+                    :rule eq_transitive)": true,
+
+                "(step t1 (cl (not (= b a)) (not (= c b)) (not (= d c)) (= a d))
+                    :rule eq_transitive)": true,
+            }
+            "Clause term is not an inequality" {
+                "(step t1 (cl (= a b) (not (= b c)) (= a c)) :rule eq_transitive)": false,
+
+                "(step t1 (cl (not (= a b)) (= b c) (= a c)) :rule eq_transitive)": false,
+            }
+            "Final term is not an equality" {
+                "(step t1 (cl (not (= a b)) (not (= b c)) (not (= a c)))
+                    :rule eq_transitive)": false,
+            }
+            "Clause is too small" {
+                "(step t1 (cl (not (= a b)) (= a b)) :rule eq_transitive)": false,
+            }
+            "Clause terms in different orders" {
+                "(step t1 (cl (not (= a b)) (not (= c d)) (not (= b c)) (= a d))
+                    :rule eq_transitive)": true,
+
+                "(step t1 (cl (not (= c d)) (not (= b c)) (not (= a b)) (= a d))
+                    :rule eq_transitive)": true,
+            }
+            "Clause doesn't form transitive chain" {
+                "(step t1 (cl (not (= a b)) (not (= c d)) (= a d)) :rule eq_transitive)": false,
+
+                "(step t1 (cl (not (= a b)) (not (= b b)) (not (= c d)) (= a d))
+                    :rule eq_transitive)": false,
+
+                "(step t1 (cl (not (= a b)) (not (= b c)) (not (= c d)) (= a e))
+                    :rule eq_transitive)": false,
+
+                "(step t1 (cl (not (= a b)) (not (= b e)) (not (= b c)) (= a c))
+                    :rule eq_transitive)": false,
+            }
+        }
+    }
+}
