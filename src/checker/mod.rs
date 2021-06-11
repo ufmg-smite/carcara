@@ -1,51 +1,9 @@
-mod general_rules;
-mod la_rules;
-mod simplification_rules;
-mod subproof_rules;
+mod rules;
 mod tests;
 
-use std::collections::HashMap;
-
 use crate::ast::*;
-
-/// Converts a `bool` into an `Option<()>`.
-fn to_option(b: bool) -> Option<()> {
-    match b {
-        true => Some(()),
-        false => None,
-    }
-}
-
-fn get_single_term_from_command(command: &ProofCommand) -> Option<&ByRefRc<Term>> {
-    match get_clause_from_command(command) {
-        [t] => Some(t),
-        _ => None,
-    }
-}
-
-fn get_clause_from_command(command: &ProofCommand) -> &[ByRefRc<Term>] {
-    match command {
-        // "assume" premises are interpreted as a clause with a single term
-        ProofCommand::Assume(term) => std::slice::from_ref(term),
-        ProofCommand::Step(ProofStep { clause, .. }) => &clause,
-        ProofCommand::Subproof(commands, _) => get_clause_from_command(commands.last().unwrap()),
-    }
-}
-
-pub type Rule = fn(RuleArgs) -> Option<()>;
-
-pub struct RuleArgs<'a> {
-    conclusion: &'a [ByRefRc<Term>],
-    premises: Vec<&'a ProofCommand>,
-    args: &'a [ProofArg],
-    pool: &'a mut TermPool,
-    context: &'a mut [HashMap<ByRefRc<Term>, ByRefRc<Term>>],
-
-    // For rules like "bind", that end a subproof, we need to pass all the commands of the subproof
-    // that it is closing, because they may need to refer to some of them, and they are not given
-    // as premises
-    subproof_commands: &'a [ProofCommand],
-}
+use rules::{Rule, RuleArgs};
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub enum CheckerError<'a> {
@@ -127,37 +85,38 @@ impl ProofChecker {
     }
 
     pub fn get_rule(rule_name: &str, allow_test_rule: bool) -> Option<Rule> {
+        use rules::*;
         Some(match rule_name {
-            "not_not" => general_rules::not_not,
-            "and_pos" => general_rules::and_pos,
-            "and_neg" => general_rules::and_neg,
-            "or_pos" => general_rules::or_pos,
-            "or_neg" => general_rules::or_neg,
-            "equiv_pos1" => general_rules::equiv_pos1,
-            "equiv_pos2" => general_rules::equiv_pos2,
-            "eq_reflexive" => general_rules::eq_reflexive,
-            "eq_transitive" => general_rules::eq_transitive,
-            "eq_congruent" => general_rules::eq_congruent,
-            "eq_congruent_pred" => general_rules::eq_congruent_pred,
-            "distinct_elim" => general_rules::distinct_elim,
-            "la_rw_eq" => la_rules::la_rw_eq,
-            "la_generic" => la_rules::la_generic,
-            "la_disequality" => la_rules::la_disequality,
-            "forall_inst" => general_rules::forall_inst,
-            "th_resolution" | "resolution" => general_rules::resolution,
-            "refl" => general_rules::refl,
-            "cong" => general_rules::cong,
-            "and" => general_rules::and,
-            "or" => general_rules::or,
-            "implies" => general_rules::implies,
-            "ite1" => general_rules::ite1,
-            "ite2" => general_rules::ite2,
-            "ite_intro" => general_rules::ite_intro,
-            "contraction" => general_rules::contraction,
-            "bool_simplify" => simplification_rules::bool_simplify,
-            "prod_simplify" => simplification_rules::prod_simplify,
-            "nary_elim" => general_rules::nary_elim,
-            "bind" => subproof_rules::bind,
+            "not_not" => tautology::not_not,
+            "and_pos" => tautology::and_pos,
+            "and_neg" => tautology::and_neg,
+            "or_pos" => tautology::or_pos,
+            "or_neg" => tautology::or_neg,
+            "equiv_pos1" => tautology::equiv_pos1,
+            "equiv_pos2" => tautology::equiv_pos2,
+            "eq_reflexive" => reflexivity::eq_reflexive,
+            "eq_transitive" => transitivity::eq_transitive,
+            "eq_congruent" => congruence::eq_congruent,
+            "eq_congruent_pred" => congruence::eq_congruent_pred,
+            "distinct_elim" => clausification::distinct_elim,
+            "la_rw_eq" => linear_arithmetic::la_rw_eq,
+            "la_generic" => linear_arithmetic::la_generic,
+            "la_disequality" => linear_arithmetic::la_disequality,
+            "forall_inst" => quantifier::forall_inst,
+            "th_resolution" | "resolution" => resolution::resolution,
+            "refl" => reflexivity::refl,
+            "cong" => congruence::cong,
+            "and" => clausification::and,
+            "or" => clausification::or,
+            "implies" => clausification::implies,
+            "ite1" => tautology::ite1,
+            "ite2" => tautology::ite2,
+            "ite_intro" => tautology::ite_intro,
+            "contraction" => resolution::contraction,
+            "bool_simplify" => simplification::bool_simplify,
+            "prod_simplify" => simplification::prod_simplify,
+            "nary_elim" => clausification::nary_elim,
+            "bind" => subproof::bind,
             "trust_me" if allow_test_rule => |_| Some(()),
             _ => return None,
         })

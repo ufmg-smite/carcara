@@ -1,7 +1,5 @@
 use super::{get_single_term_from_command, to_option, RuleArgs};
-
 use crate::ast::*;
-
 use std::collections::HashSet;
 
 pub fn bind(

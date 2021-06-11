@@ -1,7 +1,5 @@
 use super::{to_option, RuleArgs};
-
 use crate::ast::*;
-
 use num_rational::BigRational;
 use num_traits::{One, Zero};
 
