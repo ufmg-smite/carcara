@@ -1,6 +1,14 @@
 use super::{get_single_term_from_command, to_option, RuleArgs};
 use crate::ast::*;
 
+pub fn r#true(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    to_option(conclusion.len() == 1 && conclusion[0].try_as_var()? == "true")
+}
+
+pub fn r#false(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    to_option(conclusion.len() == 1 && conclusion[0].remove_negation()?.try_as_var()? == "false")
+}
+
 pub fn not_not(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     if conclusion.len() != 2 {
         return None;
@@ -165,6 +173,38 @@ pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn r#true() {
+        test_cases! {
+            definitions = "",
+            "Simple working examples" {
+                "(step t1 (cl true) :rule true)": true,
+            }
+            "Failing examples" {
+                "(step t1 (cl false true) :rule true)": false,
+                "(step t1 (cl (not true)) :rule true)": false,
+                "(step t1 (cl (not false)) :rule true)": false,
+                "(step t1 (cl (= 0 0)) :rule true)": false,
+            }
+        }
+    }
+
+    #[test]
+    fn r#false() {
+        test_cases! {
+            definitions = "",
+            "Simple working examples" {
+                "(step t1 (cl (not false)) :rule false)": true,
+            }
+            "Failing examples" {
+                "(step t1 (cl false true) :rule false)": false,
+                "(step t1 (cl (not true)) :rule false)": false,
+                "(step t1 (cl true) :rule false)": false,
+                "(step t1 (cl (= 0 0)) :rule false)": false,
+            }
+        }
+    }
+
     #[test]
     fn not_not() {
         test_cases! {

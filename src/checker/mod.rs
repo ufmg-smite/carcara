@@ -86,6 +86,8 @@ impl ProofChecker {
     pub fn get_rule(rule_name: &str, allow_test_rule: bool) -> Option<Rule> {
         use rules::*;
         Some(match rule_name {
+            "true" => tautology::r#true,
+            "false" => tautology::r#false,
             "not_not" => tautology::not_not,
             "and_pos" => tautology::and_pos,
             "and_neg" => tautology::and_neg,
