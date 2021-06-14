@@ -369,6 +369,39 @@ fn test_quantifiers() {
 }
 
 #[test]
+fn test_let_terms() {
+    run_parser_tests(&[
+        (
+            "(let ((p false)) p)",
+            Term::Let(
+                vec![("p".into(), ByRefRc::new(terminal!(bool false)))],
+                ByRefRc::new(terminal!(var "p"; BOOL_SORT)),
+            ),
+        ),
+        (
+            "(let ((x 1) (y 2)) (+ x y))",
+            Term::Let(
+                vec![
+                    ("x".into(), terminal!(int 1).into()),
+                    ("y".into(), terminal!(int 2).into()),
+                ],
+                ByRefRc::new(Term::Op(
+                    Operator::Add,
+                    vec![
+                        terminal!(var "x"; INT_SORT).into(),
+                        terminal!(var "y"; INT_SORT).into(),
+                    ],
+                )),
+            ),
+        ),
+    ]);
+    assert!(matches!(
+        parse_term_err("(let () 0)"),
+        ParserError(ErrorKind::EmptySequence, _),
+    ));
+}
+
+#[test]
 fn test_annotated_terms() {
     run_parser_tests(&[
         ("(! 0 :named foo)", terminal!(int 0)),

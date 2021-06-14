@@ -572,6 +572,10 @@ impl DeepEq for Term {
                     && DeepEq::eq_impl(binds_a, binds_b, is_mod_reordering)
                     && DeepEq::eq_impl(a, b, is_mod_reordering)
             }
+            (Term::Let(binds_a, a), Term::Let(binds_b, b)) => {
+                DeepEq::eq_impl(binds_a, binds_b, is_mod_reordering)
+                    && DeepEq::eq_impl(a, b, is_mod_reordering)
+            }
             _ => false,
         }
     }
