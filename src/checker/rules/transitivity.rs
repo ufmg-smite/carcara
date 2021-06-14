@@ -136,4 +136,46 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn trans() {
+        test_cases! {
+            definitions = "
+                (declare-sort T 0)
+                (declare-fun a () T)
+                (declare-fun b () T)
+                (declare-fun c () T)
+                (declare-fun d () T)
+                (declare-fun e () T)
+            ",
+            "Simple working examples" {
+                "(assume h1 (= a b)) (assume h2 (= b c))
+                (step t3 (cl (= a c)) :rule trans :premises (h1 h2))": true,
+
+                "(assume h1 (= a b)) (assume h2 (= b c)) (assume h3 (= c d))
+                (step t4 (cl (= a d)) :rule trans :premises (h1 h2 h3))": true,
+
+                "(assume h1 (= a a))
+                (step t2 (cl (= a a)) :rule trans :premises (h1))": true,
+            }
+            "Premises in different orders" {
+                "(assume h1 (= a b)) (assume h2 (= c d)) (assume h3 (= b c))
+                (step t4 (cl (= a d)) :rule trans :premises (h1 h2 h3))": true,
+
+                "(assume h1 (= c d)) (assume h2 (= b c)) (assume h3 (= a b))
+                (step t4 (cl (= a d)) :rule trans :premises (h1 h2 h3))": true,
+            }
+            "Prmise term is not an equality" {
+                "(assume h1 (= a b)) (assume h2 (not (= b c))) (assume h3 (= c d))
+                (step t4 (cl (= a d)) :rule trans :premises (h1 h2 h3))": false,
+            }
+            "Conclusion clause is of the wrong form" {
+                "(assume h1 (= a b)) (assume h2 (= b c))
+                (step t3 (cl (not (= a c))) :rule trans :premises (h1 h2))": false,
+
+                "(assume h1 (= a b)) (assume h2 (= b c))
+                (step t3 (cl (= a c) (= c a)) :rule trans :premises (h1 h2))": false,
+            }
+        }
+    }
 }
