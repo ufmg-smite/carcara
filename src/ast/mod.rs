@@ -270,9 +270,12 @@ pub enum Term {
     /// A sort.
     Sort(SortKind, Vec<ByRefRc<Term>>),
 
-    /// A quantifier binder
+    /// A quantifier binder term.
     Quant(Quantifier, Vec<(String, ByRefRc<Term>)>, ByRefRc<Term>),
-    // TODO: "let" and "match" binders
+
+    /// A `let` binder term.
+    Let(Vec<(String, ByRefRc<Term>)>, ByRefRc<Term>),
+    // TODO: `match` binder terms
 }
 
 impl Term {
@@ -323,6 +326,7 @@ impl Term {
             }
             sort @ Term::Sort(_, _) => sort,
             Term::Quant(_, _, _) => Term::BOOL_SORT,
+            Term::Let(_, inner) => inner.sort(),
         }
     }
 
@@ -368,7 +372,7 @@ impl Term {
                 Term::Op(_, args) => args.iter().fold(HashSet::new(), |acc, next| {
                     &acc | free_vars_inner(next, cache)
                 }),
-                Term::Quant(_, bindings, inner) => {
+                Term::Quant(_, bindings, inner) | Term::Let(bindings, inner) => {
                     let mut vars = free_vars_inner(inner, cache).clone();
                     for (s, _) in bindings {
                         vars.remove(s.as_str());
@@ -460,6 +464,17 @@ impl Debug for Term {
                         write!(f, " ")?;
                     }
                     write!(f, "({} {:?})", symbol, sort.as_ref())?;
+                }
+                write!(f, ") {:?})", term)
+            }
+            Term::Let(bindings, term) => {
+                write!(f, "(let (")?;
+
+                for (i, (symbol, value)) in bindings.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, " ")?;
+                    }
+                    write!(f, "({} {:?})", symbol, value.as_ref())?;
                 }
                 write!(f, ") {:?})", term)
             }
