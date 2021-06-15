@@ -59,6 +59,58 @@ pub fn bind(
     to_option(l_bindings == xs && r_bindings == ys)
 }
 
+pub fn r#let(
+    RuleArgs {
+        conclusion,
+        context,
+        premises,
+        pool,
+        subproof_commands,
+        ..
+    }: RuleArgs,
+) -> Option<()> {
+    if conclusion.len() != 1 {
+        return None;
+    }
+
+    // Since we are closing a subproof, we only care about the substitutions that were introduced
+    // in it
+    let substitutions = context.last()?;
+
+    let (let_term, u_prime) = match_term!((= l u) = conclusion[0], RETURN_RCS)?;
+    let (let_bindigns, u) = match let_term.as_ref() {
+        Term::Let(b, t) => (b, t),
+        _ => return None,
+    };
+
+    // The u and u' in the conclusion must match the u and u' in the previous command in the
+    // subproof
+    let previous_term =
+        get_single_term_from_command(&subproof_commands[subproof_commands.len() - 2])?;
+    let (previous_u, previous_u_prime) = match_term!((= u u_prime) = previous_term, RETURN_RCS)?;
+    if u != previous_u || u_prime != previous_u_prime {
+        return None;
+    }
+
+    if let_bindigns.len() != substitutions.len() {
+        return None;
+    }
+
+    let mut premises = premises.iter();
+    for (x, t) in let_bindigns {
+        let x_term = terminal!(var x; pool.add_term(t.sort().clone()));
+        let s = substitutions.get(&pool.add_term(x_term))?;
+        if s != t {
+            let premise = premises.next()?;
+            let premise_equality = match_term!((= a b) = get_single_term_from_command(premise)?)?;
+            if premise_equality != (s, t) && premise_equality != (t, s) {
+                return None;
+            }
+        }
+    }
+    to_option(premises.next().is_none())
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

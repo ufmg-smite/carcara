@@ -119,6 +119,7 @@ impl ProofChecker {
             "prod_simplify" => simplification::prod_simplify,
             "nary_elim" => clausification::nary_elim,
             "bind" => subproof::bind,
+            "let" => subproof::r#let,
             "trust_me" if allow_test_rule => |_| Some(()),
             _ => return None,
         })
