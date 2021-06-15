@@ -115,6 +115,7 @@ impl ProofChecker {
             "ite2" => tautology::ite2,
             "ite_intro" => tautology::ite_intro,
             "contraction" => resolution::contraction,
+            "not_simplify" => simplification::not_simplify,
             "bool_simplify" => simplification::bool_simplify,
             "prod_simplify" => simplification::prod_simplify,
             "nary_elim" => clausification::nary_elim,

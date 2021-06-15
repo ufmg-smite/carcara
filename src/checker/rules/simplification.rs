@@ -31,53 +31,17 @@ macro_rules! simplify {
     };
 }
 
-fn bool_simplify_once(term: &Term) -> Option<Term> {
-    simplify!(term {
-        // ¬(phi_1 -> phi_2) => (phi_1 ^ ¬phi_2)
-        (not (=> phi_1 phi_2)): (phi_1, phi_2) => {
-            build_term!(and {phi_1.clone()} (not {phi_2.clone()}))
-        },
-
-        // ¬(phi_1 v phi_2) => (¬phi_1 ^ ¬phi_2)
-        (not (or phi_1 phi_2)): (phi_1, phi_2) => {
-            build_term!(and (not {phi_1.clone()}) (not {phi_2.clone()}))
-        },
-
-        // ¬(phi_1 ^ phi_2) => (¬phi_1 v ¬phi_2)
-        (not (and phi_1 phi_2)): (phi_1, phi_2) => {
-            build_term!(or (not {phi_1.clone()}) (not {phi_2.clone()}))
-        },
-
-        // (phi_1 -> (phi_2 -> phi_3)) => ((phi_1 ^ phi_2) -> phi_3)
-        (=> phi_1 (=> phi_2 phi_3)): (phi_1, (phi_2, phi_3)) => {
-            build_term!(=> (and {phi_1.clone()} {phi_2.clone()}) {phi_3.clone()})
-        },
-
-        // ((phi_1 -> phi_2) -> phi_2) => (phi_1 v phi_2)
-        (=> (=> phi_1 phi_2) phi_3): ((phi_1, phi_2), phi_3) if phi_2 == phi_3 => {
-            build_term!(or {phi_1.clone()} {phi_2.clone()})
-        },
-
-        // (phi_1 ^ (phi_1 -> phi_2)) => (phi_1 ^ phi_2)
-        (and phi_1 (=> phi_2 phi_3)): (phi_1, (phi_2, phi_3)) if phi_1 == phi_2 => {
-            build_term!(and {phi_1.clone()} {phi_3.clone()})
-        },
-
-        // ((phi_1 -> phi_2) ^ phi_1) => (phi_1 ^ phi_2)
-        (and (=> phi_1 phi_2) phi_3): ((phi_1, phi_2), phi_3) if phi_1 == phi_3 => {
-            build_term!(and {phi_1.clone()} {phi_2.clone()})
-        },
-    })
-}
-
-pub fn bool_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+fn generic_simplify_rule(
+    conclusion: &[ByRefRc<Term>],
+    simplify_function: fn(&Term) -> Option<Term>,
+) -> Option<()> {
     if conclusion.len() != 1 {
         return None;
     }
     let (current, goal) = match_term!((= phi psi) = conclusion[0].as_ref())?;
     let mut current = current.clone();
     loop {
-        if let Some(next) = bool_simplify_once(&current) {
+        if let Some(next) = simplify_function(&current) {
             // TODO: Detect cycles in the simplification rules
             if DeepEq::eq(&next, goal) {
                 return Some(());
@@ -88,6 +52,72 @@ pub fn bool_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
             return None;
         }
     }
+}
+
+pub fn not_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    fn not_simplify_once(term: &Term) -> Option<Term> {
+        simplify!(term {
+            // ¬(¬phi) => phi
+            (not (not phi)): phi => {
+                phi.as_ref().clone()
+            },
+
+            // ¬false => true
+            (not lit): lit if lit.try_as_var() == Some("false") => {
+                terminal!(bool true)
+            },
+
+            // ¬true => false
+            (not lit): lit if lit.try_as_var() == Some("true") => {
+                terminal!(bool false)
+            },
+        })
+    }
+
+    generic_simplify_rule(conclusion, not_simplify_once)
+}
+
+pub fn bool_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    fn bool_simplify_once(term: &Term) -> Option<Term> {
+        simplify!(term {
+            // ¬(phi_1 -> phi_2) => (phi_1 ^ ¬phi_2)
+            (not (=> phi_1 phi_2)): (phi_1, phi_2) => {
+                build_term!(and {phi_1.clone()} (not {phi_2.clone()}))
+            },
+
+            // ¬(phi_1 v phi_2) => (¬phi_1 ^ ¬phi_2)
+            (not (or phi_1 phi_2)): (phi_1, phi_2) => {
+                build_term!(and (not {phi_1.clone()}) (not {phi_2.clone()}))
+            },
+
+            // ¬(phi_1 ^ phi_2) => (¬phi_1 v ¬phi_2)
+            (not (and phi_1 phi_2)): (phi_1, phi_2) => {
+                build_term!(or (not {phi_1.clone()}) (not {phi_2.clone()}))
+            },
+
+            // (phi_1 -> (phi_2 -> phi_3)) => ((phi_1 ^ phi_2) -> phi_3)
+            (=> phi_1 (=> phi_2 phi_3)): (phi_1, (phi_2, phi_3)) => {
+                build_term!(=> (and {phi_1.clone()} {phi_2.clone()}) {phi_3.clone()})
+            },
+
+            // ((phi_1 -> phi_2) -> phi_2) => (phi_1 v phi_2)
+            (=> (=> phi_1 phi_2) phi_3): ((phi_1, phi_2), phi_3) if phi_2 == phi_3 => {
+                build_term!(or {phi_1.clone()} {phi_2.clone()})
+            },
+
+            // (phi_1 ^ (phi_1 -> phi_2)) => (phi_1 ^ phi_2)
+            (and phi_1 (=> phi_2 phi_3)): (phi_1, (phi_2, phi_3)) if phi_1 == phi_2 => {
+                build_term!(and {phi_1.clone()} {phi_3.clone()})
+            },
+
+            // ((phi_1 -> phi_2) ^ phi_1) => (phi_1 ^ phi_2)
+            (and (=> phi_1 phi_2) phi_3): ((phi_1, phi_2), phi_3) if phi_1 == phi_3 => {
+                build_term!(and {phi_1.clone()} {phi_2.clone()})
+            },
+        })
+    }
+
+    generic_simplify_rule(conclusion, bool_simplify_once)
 }
 
 pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
@@ -167,6 +197,35 @@ pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn not_simplify() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+            ",
+            "Transformation #1" {
+                "(step t1 (cl (= (not (not p)) p)) :rule not_simplify)": true,
+                "(step t1 (cl (= (not (not (not (not p)))) p)) :rule not_simplify)": true,
+                "(step t1 (cl (= (not (not (not (and p q)))) (and p q))) :rule not_simplify)": false,
+            }
+            "Transformation #2" {
+                "(step t1 (cl (= (not false) true)) :rule not_simplify)": true,
+                "(step t1 (cl (= (not false) false)) :rule not_simplify)": false,
+            }
+            "Transformation #3" {
+                "(step t1 (cl (= (not true) false)) :rule not_simplify)": true,
+                "(step t1 (cl (= (not true) true)) :rule not_simplify)": false,
+            }
+            "Multiple transformations" {
+                "(step t1 (cl (= (not (not (not false))) true)) :rule not_simplify)": true,
+                "(step t1 (cl (= (not (not (not true))) false)) :rule not_simplify)": true,
+            }
+        }
+    }
+
     #[test]
     fn bool_simplify() {
         test_cases! {
