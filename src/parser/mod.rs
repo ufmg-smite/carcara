@@ -146,6 +146,32 @@ impl<R: BufRead> Parser<R> {
     fn make_op(&mut self, op: Operator, args: Vec<Term>) -> Result<Term, ErrorKind> {
         let sorts: Vec<_> = args.iter().map(Term::sort).collect();
         match op {
+            Operator::Not => {
+                ErrorKind::assert_num_of_args(&args, 1)?;
+                SortError::assert_eq(Term::BOOL_SORT, &sorts[0])?;
+            }
+            Operator::Implies => {
+                ErrorKind::assert_num_of_args_range(&args, 2..)?;
+                for s in sorts {
+                    SortError::assert_eq(Term::BOOL_SORT, &s)?;
+                }
+            }
+            Operator::Or | Operator::And | Operator::Xor => {
+                // These operators can be called with only one argument
+                ErrorKind::assert_num_of_args_range(&args, 1..)?;
+                for s in sorts {
+                    SortError::assert_eq(Term::BOOL_SORT, &s)?;
+                }
+            }
+            Operator::Equals | Operator::Distinct => {
+                ErrorKind::assert_num_of_args_range(&args, 2..)?;
+                SortError::assert_all_eq(&sorts)?;
+            }
+            Operator::Ite => {
+                ErrorKind::assert_num_of_args(&args, 3)?;
+                SortError::assert_eq(Term::BOOL_SORT, &sorts[0])?;
+                SortError::assert_eq(&sorts[1], &sorts[2])?;
+            }
             Operator::Add
             | Operator::Mult
             | Operator::Div
@@ -165,32 +191,6 @@ impl<R: BufRead> Parser<R> {
                 ErrorKind::assert_num_of_args_range(&args, 1..)?;
                 SortError::assert_one_of(&[Term::INT_SORT, Term::REAL_SORT], &sorts[0])?;
                 SortError::assert_all_eq(&sorts)?;
-            }
-            Operator::Eq | Operator::Distinct => {
-                ErrorKind::assert_num_of_args_range(&args, 2..)?;
-                SortError::assert_all_eq(&sorts)?;
-            }
-            Operator::Implies => {
-                ErrorKind::assert_num_of_args_range(&args, 2..)?;
-                for s in sorts {
-                    SortError::assert_eq(Term::BOOL_SORT, &s)?;
-                }
-            }
-            Operator::Or | Operator::And | Operator::Xor => {
-                // These operators can be called with only one argument
-                ErrorKind::assert_num_of_args_range(&args, 1..)?;
-                for s in sorts {
-                    SortError::assert_eq(Term::BOOL_SORT, &s)?;
-                }
-            }
-            Operator::Not => {
-                ErrorKind::assert_num_of_args(&args, 1)?;
-                SortError::assert_eq(Term::BOOL_SORT, &sorts[0])?;
-            }
-            Operator::Ite => {
-                ErrorKind::assert_num_of_args(&args, 3)?;
-                SortError::assert_eq(Term::BOOL_SORT, &sorts[0])?;
-                SortError::assert_eq(&sorts[1], &sorts[2])?;
             }
         }
         let args = self.add_all(args);

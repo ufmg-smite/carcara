@@ -119,7 +119,7 @@ pub fn cong(
         // Because of the way veriT handles equality terms, when the "cong" rule is called with two
         // equalities of two terms, the order of their arguments may be flipped. Because of that,
         // we have to treat this special case separately
-        (Term::Op(Operator::Eq, f_args), Term::Op(Operator::Eq, g_args))
+        (Term::Op(Operator::Equals, f_args), Term::Op(Operator::Equals, g_args))
             if f_args.len() == 2 && g_args.len() == 2 =>
         {
             // We have to test all four possibilites: neither f nor g are flipped, only f is

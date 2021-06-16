@@ -208,7 +208,7 @@ fn test_logic_ops() {
         (
             "(= 2 3)",
             Term::Op(
-                Operator::Eq,
+                Operator::Equals,
                 vec![
                     ByRefRc::new(terminal!(int 2)),
                     ByRefRc::new(terminal!(int 3)),
@@ -235,7 +235,7 @@ fn test_logic_ops() {
                 Operator::Implies,
                 vec![
                     ByRefRc::new(Term::Op(
-                        Operator::Eq,
+                        Operator::Equals,
                         vec![
                             ByRefRc::new(terminal!(int 0)),
                             ByRefRc::new(terminal!(int 1)),
@@ -354,7 +354,7 @@ fn test_quantifiers() {
                     ("y".into(), Term::REAL_SORT.clone().into()),
                 ],
                 ByRefRc::new(Term::Op(
-                    Operator::Eq,
+                    Operator::Equals,
                     vec![
                         ByRefRc::new(Term::Op(
                             Operator::Add,

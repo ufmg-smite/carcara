@@ -142,7 +142,7 @@ pub fn nary_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     let (original, result) = match_term!((= o r) = conclusion[0].as_ref())?;
     if let Term::Op(op, args) = original {
         let case = match op {
-            Operator::Eq => Case::Chainable,
+            Operator::Equals => Case::Chainable,
             Operator::Add | Operator::Sub | Operator::Mult => Case::LeftAssoc,
             Operator::Implies => Case::RightAssoc,
             _ => return None,

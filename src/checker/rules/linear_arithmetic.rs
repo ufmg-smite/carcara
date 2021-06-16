@@ -72,7 +72,7 @@ fn negate_disequality(term: &Term) -> Option<(Operator, &[ByRefRc<Term>])> {
     }
 
     if let Some(Term::Op(op, args)) = match_term!((not t) = term) {
-        if matches!(op, GreaterEq | LessEq | GreaterThan | LessThan | Eq) {
+        if matches!(op, GreaterEq | LessEq | GreaterThan | LessThan | Equals) {
             return Some((*op, args));
         }
     } else if let Term::Op(op, args) = term {
@@ -224,23 +224,26 @@ pub fn la_generic(
 
             // Step 5: Multiply disequality by a
             let a = match op {
-                Operator::Eq => a,
+                Operator::Equals => a,
                 _ => a.abs(),
             };
             disequality.mul(a);
 
             Some((op, disequality))
         })
-        .try_fold((Operator::Eq, LinearComb::new()), |(acc_op, acc), item| {
-            let (op, diseq) = item?;
-            let new_acc = acc.add(diseq);
-            let new_op = match (acc_op, op) {
-                (_, Operator::GreaterEq) => Operator::GreaterEq,
-                (Operator::Eq, Operator::GreaterThan) => Operator::GreaterThan,
-                _ => acc_op,
-            };
-            Some((new_op, new_acc))
-        })?;
+        .try_fold(
+            (Operator::Equals, LinearComb::new()),
+            |(acc_op, acc), item| {
+                let (op, diseq) = item?;
+                let new_acc = acc.add(diseq);
+                let new_op = match (acc_op, op) {
+                    (_, Operator::GreaterEq) => Operator::GreaterEq,
+                    (Operator::Equals, Operator::GreaterThan) => Operator::GreaterThan,
+                    _ => acc_op,
+                };
+                Some((new_op, new_acc))
+            },
+        )?;
 
     let (op, LinearComb(left_side, right_side)) = final_disequality;
 
@@ -257,7 +260,7 @@ pub fn la_generic(
         // disequality is true
         match BigRational::zero().cmp(&right_side) {
             Ordering::Less => matches!(op, LessThan | LessEq),
-            Ordering::Equal => matches!(op, LessEq | GreaterEq | Eq),
+            Ordering::Equal => matches!(op, LessEq | GreaterEq | Equals),
             Ordering::Greater => matches!(op, GreaterThan | GreaterEq),
         }
     };

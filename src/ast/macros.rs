@@ -52,18 +52,22 @@ macro_rules! match_term {
             None
         }
     };
-    (@GET_VARIANT +) => { Operator::Add };
-    (@GET_VARIANT -) => { Operator::Sub };
-    (@GET_VARIANT *) => { Operator::Mult };
-    (@GET_VARIANT /) => { Operator::Div };
-    (@GET_VARIANT <=) => { Operator::LessEq };
-    (@GET_VARIANT =) => { Operator::Eq };
-    (@GET_VARIANT or) => { Operator::Or };
-    (@GET_VARIANT and) => { Operator::And };
-    (@GET_VARIANT not) => { Operator::Not };
+    (@GET_VARIANT not)      => { Operator::Not };
+    (@GET_VARIANT =>)       => { Operator::Implies };
+    (@GET_VARIANT and)      => { Operator::And };
+    (@GET_VARIANT or)       => { Operator::Or };
+    (@GET_VARIANT xor)      => { Operator::Or };
+    (@GET_VARIANT =)        => { Operator::Equals };
     (@GET_VARIANT distinct) => { Operator::Distinct };
-    (@GET_VARIANT =>) => { Operator::Implies };
-    (@GET_VARIANT ite) => { Operator::Ite };
+    (@GET_VARIANT ite)      => { Operator::Ite };
+    (@GET_VARIANT +)        => { Operator::Add };
+    (@GET_VARIANT -)        => { Operator::Sub };
+    (@GET_VARIANT *)        => { Operator::Mult };
+    (@GET_VARIANT /)        => { Operator::Div };
+    (@GET_VARIANT <)        => { Operator::LessThan };
+    (@GET_VARIANT >)        => { Operator::GreaterThan };
+    (@GET_VARIANT <=)       => { Operator::LessEq };
+    (@GET_VARIANT >=)       => { Operator::GreaterEq };
 }
 
 /// A macro to help build new terms. Note that this macro will construct subterms by calling

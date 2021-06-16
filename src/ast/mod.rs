@@ -201,6 +201,16 @@ pub struct FunctionDef {
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Operator {
+    // Logic
+    Not,
+    Implies,
+    And,
+    Or,
+    Xor,
+    Equals,
+    Distinct,
+    Ite,
+
     // Arithmetic
     Add,
     Sub,
@@ -210,20 +220,18 @@ pub enum Operator {
     GreaterThan,
     LessEq,
     GreaterEq,
-
-    // Logic
-    Eq,
-    Or,
-    And,
-    Not,
-    Xor,
-    Distinct,
-    Implies,
-
-    Ite,
 }
 
 impl_str_conversion_traits!(Operator {
+    Not: "not",
+    Implies: "=>",
+    And: "and",
+    Or: "or",
+    Xor: "xor",
+    Equals: "=",
+    Distinct: "distinct",
+    Ite: "ite",
+
     Add: "+",
     Sub: "-",
     Mult: "*",
@@ -232,14 +240,6 @@ impl_str_conversion_traits!(Operator {
     GreaterThan: ">",
     LessEq: "<=",
     GreaterEq: ">=",
-    Eq: "=",
-    Or: "or",
-    And: "and",
-    Not: "not",
-    Xor: "xor",
-    Distinct: "distinct",
-    Implies: "=>",
-    Ite: "ite",
 });
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -305,19 +305,19 @@ impl Term {
                 Terminal::Var(_, sort) => sort.as_ref(),
             },
             Term::Op(op, args) => match op {
-                Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => args[0].sort(),
-                Operator::Eq
-                | Operator::Or
-                | Operator::And
-                | Operator::Not
-                | Operator::Xor
-                | Operator::Distinct
+                Operator::Not
                 | Operator::Implies
+                | Operator::And
+                | Operator::Or
+                | Operator::Xor
+                | Operator::Equals
+                | Operator::Distinct
                 | Operator::LessThan
                 | Operator::GreaterThan
                 | Operator::LessEq
                 | Operator::GreaterEq => Term::BOOL_SORT,
                 Operator::Ite => args[1].sort(),
+                Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => args[0].sort(),
             },
             Term::App(f, _) => {
                 let function_sort = f.sort();
@@ -549,7 +549,7 @@ impl DeepEq for Term {
             }
             (Term::Op(op_a, args_a), Term::Op(op_b, args_b)) => {
                 if is_mod_reordering {
-                    if let (Operator::Eq, [a_1, a_2], Operator::Eq, [b_1, b_2]) =
+                    if let (Operator::Equals, [a_1, a_2], Operator::Equals, [b_1, b_2]) =
                         (op_a, args_a.as_slice(), op_b, args_b.as_slice())
                     {
                         // If the term is an equality of two terms, we also check if they would be
