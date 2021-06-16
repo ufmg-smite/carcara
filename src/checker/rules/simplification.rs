@@ -59,6 +59,33 @@ fn generic_simplify_rule(
     }
 }
 
+pub fn eq_simplify(args: RuleArgs) -> Option<()> {
+    fn eq_simplify_once(term: &Term, pool: &mut TermPool) -> Option<ByRefRc<Term>> {
+        simplify!(term {
+            // t = t => true
+            (= t t): (t1, t2) if t1 == t2 => {
+                pool.add_term(terminal!(bool true))
+            },
+
+            // t_1 = t_2 => false, if t_1 and t_2 are different numerical constants
+            (= t t): (t1, t2) if {
+                let t1 = t1.try_as_ratio();
+                let t2 = t2.try_as_ratio();
+                t1.is_some() && t2.is_some() && t1 != t2
+            } => {
+                pool.add_term(terminal!(bool false))
+            },
+
+            // ¬(t = t) => false, if t is a numerical constant
+            (not (= t t)): (t1, t2) if t1 == t2 && t1.try_as_ratio().is_some() => {
+                pool.add_term(terminal!(bool false))
+            },
+        })
+    }
+
+    generic_simplify_rule(args.conclusion, args.pool, eq_simplify_once)
+}
+
 pub fn not_simplify(args: RuleArgs) -> Option<()> {
     fn not_simplify_once(term: &Term, pool: &mut TermPool) -> Option<ByRefRc<Term>> {
         simplify!(term {
@@ -200,6 +227,34 @@ pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn eq_simplify() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun a () Int)
+                (declare-fun b () Int)
+            ",
+            "Transformation #1" {
+                "(step t1 (cl (= (= a a) true)) :rule eq_simplify)": true,
+                "(step t1 (cl (= (= (and p q) (and p q)) true)) :rule eq_simplify)": true,
+                "(step t1 (cl (= (= a b) true)) :rule eq_simplify)": false,
+            }
+            "Transformation #2" {
+                "(step t1 (cl (= (= 0 1) false)) :rule eq_simplify)": true,
+                "(step t1 (cl (= (= 0.0 0.01) false)) :rule eq_simplify)": true,
+                "(step t1 (cl (= (= 0 1) true)) :rule eq_simplify)": false,
+                "(step t1 (cl (= (= 0.0 0.0) false)) :rule eq_simplify)": false,
+            }
+            "Transformation #3" {
+                "(step t1 (cl (= (not (= 0.0 0.0)) false)) :rule eq_simplify)": true,
+                "(step t1 (cl (= (not (= 0 0)) true)) :rule eq_simplify)": false,
+                "(step t1 (cl (= (not (= 0 1)) false)) :rule eq_simplify)": false,
+                "(step t1 (cl (= (not (= a a)) false)) :rule eq_simplify)": false,
+            }
+        }
+    }
 
     #[test]
     fn not_simplify() {
