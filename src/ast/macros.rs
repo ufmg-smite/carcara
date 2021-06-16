@@ -69,17 +69,14 @@ macro_rules! match_term {
 /// A macro to help build new terms. Note that this macro will construct subterms by calling
 /// `ByRefRc::new` and does not make use of hash consing.
 macro_rules! build_term {
-    (@INNER {$terminal:expr}) => { $terminal };
-    (@INNER ($op:tt $($args:tt)+)) => {
-        Term::Op(
+    ($pool:expr, {$terminal:expr}) => { $terminal };
+    ($pool:expr, ($op:tt $($args:tt)+)) => {{
+        let term = Term::Op(
             match_term!(@GET_VARIANT $op),
-            vec![ $(build_term!(@INNER $args).into(),)+ ],
-        )
-    };
-    // This is a trick so the macro user doesn't have to add an extra layer of parentheses when
-    // calling the macro. This rule just adds parentheses and calls the inner rules. It has to be
-    // the last rule defined to avoid a recursion error, as it can match any input
-    ($($input:tt)*) => { build_term!(@INNER ($($input)*)) };
+            vec![ $(build_term!($pool, $args)),+ ],
+        );
+        $pool.add_term(term)
+    }};
 }
 
 /// Helper macro to construct `Terminal` terms.
@@ -213,30 +210,54 @@ mod tests {
             (declare-fun p () Bool)
             (declare-fun q () Bool)
         ";
-        let (one, two, three) = (terminal!(int 1), terminal!(int 2), terminal!(int 3));
-        let (a, b) = (terminal!(var "a"; INT_SORT), terminal!(var "b"; INT_SORT));
-        let (p, q) = (terminal!(var "p"; BOOL_SORT), terminal!(var "q"; BOOL_SORT));
-        let (true_, false_) = (terminal!(bool true), terminal!(bool false));
+        let mut pool = TermPool(HashMap::new());
+
+        let (one, two, three) = (
+            pool.add_term(terminal!(int 1)),
+            pool.add_term(terminal!(int 2)),
+            pool.add_term(terminal!(int 3)),
+        );
+        let (a, b) = (
+            pool.add_term(terminal!(var "a"; INT_SORT)),
+            pool.add_term(terminal!(var "b"; INT_SORT)),
+        );
+        let (p, q) = (
+            pool.add_term(terminal!(var "p"; BOOL_SORT)),
+            pool.add_term(terminal!(var "q"; BOOL_SORT)),
+        );
+        let (r#true, r#false) = (
+            pool.add_term(terminal!(bool true)),
+            pool.add_term(terminal!(bool false)),
+        );
 
         let cases = [
-            ("(= a b)", build_term!(= {a} {b})),
-            ("(= 1 2)", build_term!(= {one.clone()} {two.clone()})),
-            ("(not true)", build_term!(not {true_.clone()})),
-            ("(or p false)", build_term!(or {p.clone()} {false_.clone()})),
+            ("(= a b)", build_term!(pool, (= {a} {b}))),
+            (
+                "(= 1 2)",
+                build_term!(pool, (= {one.clone()} {two.clone()})),
+            ),
+            ("(not true)", build_term!(pool, (not {r#true.clone()}))),
+            (
+                "(or p false)",
+                build_term!(pool, (or {p.clone()} {r#false.clone()})),
+            ),
             (
                 "(and (=> p q) (ite p false (= 1 3)))",
-                build_term!(and
+                build_term!(pool, (and
                     (=> {p.clone()} {q.clone()})
-                    (ite {p.clone()} {false_} (= {one.clone()} {three.clone()}))
-                ),
+                    (ite {p.clone()} {r#false} (= {one.clone()} {three.clone()}))
+                )),
             ),
-            ("(distinct p q true)", build_term!(distinct {p} {q} {true_})),
+            (
+                "(distinct p q true)",
+                build_term!(pool, (distinct {p} {q} {r#true})),
+            ),
             (
                 "(or (not (= 2 3)) (= 1 1))",
-                build_term!(or
+                build_term!(pool, (or
                     (not (= {two} {three}))
                     (= {one.clone()} {one})
-                ),
+                )),
             ),
         ];
 

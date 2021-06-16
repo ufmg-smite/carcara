@@ -33,15 +33,16 @@ macro_rules! simplify {
 
 fn generic_simplify_rule(
     conclusion: &[ByRefRc<Term>],
-    simplify_function: fn(&Term) -> Option<Term>,
+    pool: &mut TermPool,
+    simplify_function: fn(&Term, &mut TermPool) -> Option<ByRefRc<Term>>,
 ) -> Option<()> {
     if conclusion.len() != 1 {
         return None;
     }
-    let (current, goal) = match_term!((= phi psi) = conclusion[0].as_ref())?;
+    let (current, goal) = match_term!((= phi psi) = conclusion[0].as_ref(), RETURN_RCS)?;
     let mut current = current.clone();
     loop {
-        if let Some(next) = simplify_function(&current) {
+        if let Some(next) = simplify_function(&current, pool) {
             // TODO: Detect cycles in the simplification rules
             if DeepEq::eq(&next, goal) {
                 return Some(());
@@ -54,70 +55,68 @@ fn generic_simplify_rule(
     }
 }
 
-pub fn not_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    fn not_simplify_once(term: &Term) -> Option<Term> {
+pub fn not_simplify(args: RuleArgs) -> Option<()> {
+    fn not_simplify_once(term: &Term, pool: &mut TermPool) -> Option<ByRefRc<Term>> {
         simplify!(term {
             // ¬(¬phi) => phi
-            (not (not phi)): phi => {
-                phi.as_ref().clone()
-            },
+            (not (not phi)): phi => { phi.clone() },
 
             // ¬false => true
             (not lit): lit if lit.try_as_var() == Some("false") => {
-                terminal!(bool true)
+                pool.add_term(terminal!(bool true))
             },
 
             // ¬true => false
             (not lit): lit if lit.try_as_var() == Some("true") => {
-                terminal!(bool false)
+                pool.add_term(terminal!(bool false))
             },
         })
     }
 
-    generic_simplify_rule(conclusion, not_simplify_once)
+    generic_simplify_rule(args.conclusion, args.pool, not_simplify_once)
 }
 
-pub fn bool_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    fn bool_simplify_once(term: &Term) -> Option<Term> {
+pub fn bool_simplify(args: RuleArgs) -> Option<()> {
+    fn bool_simplify_once(term: &Term, pool: &mut TermPool) -> Option<ByRefRc<Term>> {
         simplify!(term {
             // ¬(phi_1 -> phi_2) => (phi_1 ^ ¬phi_2)
             (not (=> phi_1 phi_2)): (phi_1, phi_2) => {
-                build_term!(and {phi_1.clone()} (not {phi_2.clone()}))
+                build_term!(pool, (and {phi_1.clone()} (not {phi_2.clone()})))
             },
 
             // ¬(phi_1 v phi_2) => (¬phi_1 ^ ¬phi_2)
             (not (or phi_1 phi_2)): (phi_1, phi_2) => {
-                build_term!(and (not {phi_1.clone()}) (not {phi_2.clone()}))
+                build_term!(pool, (and (not {phi_1.clone()}) (not {phi_2.clone()})))
             },
 
             // ¬(phi_1 ^ phi_2) => (¬phi_1 v ¬phi_2)
             (not (and phi_1 phi_2)): (phi_1, phi_2) => {
-                build_term!(or (not {phi_1.clone()}) (not {phi_2.clone()}))
+                build_term!(pool, (or (not {phi_1.clone()}) (not {phi_2.clone()})))
             },
 
             // (phi_1 -> (phi_2 -> phi_3)) => ((phi_1 ^ phi_2) -> phi_3)
             (=> phi_1 (=> phi_2 phi_3)): (phi_1, (phi_2, phi_3)) => {
-                build_term!(=> (and {phi_1.clone()} {phi_2.clone()}) {phi_3.clone()})
+                build_term!(pool, (=> (and {phi_1.clone()} {phi_2.clone()}) {phi_3.clone()}))
             },
 
             // ((phi_1 -> phi_2) -> phi_2) => (phi_1 v phi_2)
             (=> (=> phi_1 phi_2) phi_3): ((phi_1, phi_2), phi_3) if phi_2 == phi_3 => {
-                build_term!(or {phi_1.clone()} {phi_2.clone()})
+                build_term!(pool, (or {phi_1.clone()} {phi_2.clone()}))
             },
 
             // (phi_1 ^ (phi_1 -> phi_2)) => (phi_1 ^ phi_2)
             (and phi_1 (=> phi_2 phi_3)): (phi_1, (phi_2, phi_3)) if phi_1 == phi_2 => {
-                build_term!(and {phi_1.clone()} {phi_3.clone()})
+                build_term!(pool, (and {phi_1.clone()} {phi_3.clone()}))
             },
 
             // ((phi_1 -> phi_2) ^ phi_1) => (phi_1 ^ phi_2)
             (and (=> phi_1 phi_2) phi_3): ((phi_1, phi_2), phi_3) if phi_1 == phi_3 => {
-                build_term!(and {phi_1.clone()} {phi_2.clone()})
+                build_term!(pool, (and {phi_1.clone()} {phi_2.clone()}))
             },
         })
     }
 
-    generic_simplify_rule(conclusion, bool_simplify_once)
+    generic_simplify_rule(args.conclusion, args.pool, bool_simplify_once)
 }
 
 pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
