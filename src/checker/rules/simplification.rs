@@ -2,6 +2,7 @@ use super::{to_option, RuleArgs};
 use crate::ast::*;
 use num_rational::BigRational;
 use num_traits::{One, Zero};
+use std::collections::HashSet;
 
 /// A macro to define the possible transformations for a "simplify" rule.
 macro_rules! simplify {
@@ -41,9 +42,12 @@ fn generic_simplify_rule(
     }
     let (current, goal) = match_term!((= phi psi) = conclusion[0].as_ref(), RETURN_RCS)?;
     let mut current = current.clone();
+    let mut seen = HashSet::new();
     loop {
+        if !seen.insert(current.clone()) {
+            panic!("Cycle detected in simplification rule!")
+        }
         if let Some(next) = simplify_function(&current, pool) {
-            // TODO: Detect cycles in the simplification rules
             if DeepEq::eq(&next, goal) {
                 return Some(());
             } else {
