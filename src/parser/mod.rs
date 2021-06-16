@@ -176,8 +176,8 @@ impl<R: BufRead> Parser<R> {
                     SortError::assert_eq(Term::BOOL_SORT, &s)?;
                 }
             }
-            Operator::Or | Operator::And => {
-                // The "or" and "and" operators can be called with only one argument
+            Operator::Or | Operator::And | Operator::Xor => {
+                // These operators can be called with only one argument
                 ErrorKind::assert_num_of_args_range(&args, 1..)?;
                 for s in sorts {
                     SortError::assert_eq(Term::BOOL_SORT, &s)?;

@@ -216,6 +216,7 @@ pub enum Operator {
     Or,
     And,
     Not,
+    Xor,
     Distinct,
     Implies,
 
@@ -235,6 +236,7 @@ impl_str_conversion_traits!(Operator {
     Or: "or",
     And: "and",
     Not: "not",
+    Xor: "xor",
     Distinct: "distinct",
     Implies: "=>",
     Ite: "ite",
@@ -308,6 +310,7 @@ impl Term {
                 | Operator::Or
                 | Operator::And
                 | Operator::Not
+                | Operator::Xor
                 | Operator::Distinct
                 | Operator::Implies
                 | Operator::LessThan

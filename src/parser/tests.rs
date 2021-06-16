@@ -195,6 +195,17 @@ fn test_logic_ops() {
             ),
         ),
         (
+            "(xor true false false)",
+            Term::Op(
+                Operator::Xor,
+                vec![
+                    ByRefRc::new(terminal!(bool true)),
+                    ByRefRc::new(terminal!(bool false)),
+                    ByRefRc::new(terminal!(bool false)),
+                ],
+            ),
+        ),
+        (
             "(= 2 3)",
             Term::Op(
                 Operator::Eq,
