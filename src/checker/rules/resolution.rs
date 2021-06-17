@@ -2,6 +2,16 @@ use super::{get_clause_from_command, to_option, RuleArgs};
 use crate::ast::*;
 use std::collections::HashSet;
 
+/// Removes all leading negations in a term and returns how many there were.
+fn remove_all_negations(mut term: &Term) -> (u32, &Term) {
+    let mut n = 0;
+    while let Some(t) = term.remove_negation() {
+        term = t;
+        n += 1;
+    }
+    (n, term)
+}
+
 pub fn resolution(
     RuleArgs {
         conclusion,
@@ -9,16 +19,6 @@ pub fn resolution(
         ..
     }: RuleArgs,
 ) -> Option<()> {
-    /// Removes all leading negations in a term and returns how many there were.
-    fn remove_negations(mut term: &Term) -> (i32, &Term) {
-        let mut n = 0;
-        while let Some(t) = term.remove_negation() {
-            term = t;
-            n += 1;
-        }
-        (n, term)
-    }
-
     // When checking this rule, we must look at what the conclusion clause looks like in order to
     // determine the pivots. The reason for that is because there is no other way to know which
     // terms should be removed in a given binary resolution step. Consider the following example,
@@ -33,7 +33,8 @@ pub fn resolution(
     // can only determine this by looking at the conlcusion and using it to derive the pivots.
     let conclusion: HashSet<_> = conclusion
         .iter()
-        .map(|t| remove_negations(t.as_ref()))
+        .map(|t| remove_all_negations(t.as_ref()))
+        .map(|(n, t)| (n as i32, t))
         .collect();
 
     // The working clause contains the terms from the conclusion clause that we already encountered
@@ -46,7 +47,8 @@ pub fn resolution(
     for command in premises {
         let premise_clause = get_clause_from_command(command);
         for term in premise_clause {
-            let (n, inner) = remove_negations(term.as_ref());
+            let (n, inner) = remove_all_negations(term.as_ref());
+            let n = n as i32;
 
             // There are two possible negations of a term, with one leading negation added, or with
             // one leading negation removed (if the term had any in the first place)
@@ -93,6 +95,31 @@ pub fn resolution(
     // At the end, we expect all pivots to have been removed, and the working clause to be equal to
     // the conclusion clause
     to_option(pivots.is_empty() && working_clause == conclusion)
+}
+
+pub fn tautology(
+    RuleArgs {
+        conclusion,
+        premises,
+        ..
+    }: RuleArgs,
+) -> Option<()> {
+    if conclusion.len() != 1 || conclusion[0].try_as_var() != Some("true") || premises.len() != 1 {
+        return None;
+    }
+    let premise = get_clause_from_command(premises[0]);
+    let mut seen = HashSet::with_capacity(premise.len());
+    let with_negations_removed = premise
+        .iter()
+        .map(|t| remove_all_negations(t.as_ref()))
+        .map(|(n, t)| (n % 2 == 0, t));
+    for (polarity, term) in with_negations_removed {
+        if seen.contains(&(!polarity, term)) {
+            return Some(());
+        }
+        seen.insert((polarity, term));
+    }
+    None
 }
 
 pub fn contraction(

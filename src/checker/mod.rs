@@ -109,6 +109,7 @@ impl ProofChecker {
             "trans" => transitivity::trans,
             "cong" => congruence::cong,
             "and" => clausification::and,
+            "tautology" => resolution::tautology,
             "or" => clausification::or,
             "implies" => clausification::implies,
             "ite1" => tautology::ite1,
