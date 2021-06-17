@@ -56,7 +56,7 @@ macro_rules! match_term {
     (@GET_VARIANT =>)       => { Operator::Implies };
     (@GET_VARIANT and)      => { Operator::And };
     (@GET_VARIANT or)       => { Operator::Or };
-    (@GET_VARIANT xor)      => { Operator::Or };
+    (@GET_VARIANT xor)      => { Operator::Xor };
     (@GET_VARIANT =)        => { Operator::Equals };
     (@GET_VARIANT distinct) => { Operator::Distinct };
     (@GET_VARIANT ite)      => { Operator::Ite };
