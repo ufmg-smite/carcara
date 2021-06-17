@@ -265,7 +265,7 @@ mod tests {
             ),
         ];
 
-        for (s, got) in cases.iter() {
+        for (s, got) in &cases {
             let expected = parse_term_with_definitions(definitions, s);
             assert_deep_eq!(&expected, got)
         }

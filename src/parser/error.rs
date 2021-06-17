@@ -1,11 +1,8 @@
+use super::lexer::{Position, Token};
+use crate::ast::{Identifier, Term};
+use num_bigint::BigInt;
 use std::io;
 use std::ops::RangeFrom;
-
-use num_bigint::BigInt;
-
-use crate::ast::*;
-
-use super::lexer::{Position, Token};
 
 /// A `Result` type alias for parser errors.
 pub type ParserResult<T> = Result<T, ParserError>;
@@ -75,7 +72,7 @@ impl ErrorKind {
     }
 }
 
-/// A simple wrapper of io::Error so ParserError can derive PartialEq
+/// A simple wrapper of `io::Error` so `ParserError` can derive `PartialEq`
 #[derive(Debug)]
 pub struct ParserIoError(io::Error);
 

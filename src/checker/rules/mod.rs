@@ -65,11 +65,11 @@ macro_rules! test_cases {
         $($name:literal { $($proof:literal: $exp:literal,)* } )*
     ) => {{
         let definitions: &str = $defs;
-        $(
+        $({
             let name: &str = $name;
             let cases = [ $(($proof, $exp),)* ];
             crate::checker::rules::run_tests(name, definitions, &cases);
-        )*
+        })*
     }};
 }
 

@@ -26,7 +26,7 @@ pub fn bind(
     // None of y_1, ..., y_n can appear as free variables in phi
     let mut ys = substitutions.values().map(|t| t.try_as_var());
     let free_vars = phi.free_vars();
-    if ys.any(|y| y.map(|var| free_vars.contains(var)).unwrap_or(true)) {
+    if ys.any(|y| y.map_or(true, |var| free_vars.contains(var))) {
         return None;
     }
 

@@ -352,7 +352,7 @@ mod tests {
         let input = "42 3.14159 #b101010 #x0ff";
         let expected = vec![
             Token::Numeral(42.into()),
-            Token::Decimal(BigRational::new(314159.into(), 100_000.into())),
+            Token::Decimal(BigRational::new(314_159.into(), 100_000.into())),
             Token::Numeral(42.into()),
             Token::Numeral(255.into()),
         ];

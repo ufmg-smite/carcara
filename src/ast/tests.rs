@@ -24,7 +24,7 @@ fn test_subterms_no_duplicates() {
 fn test_subterms() {
     fn run_tests(definitions: &str, cases: &[&[&str]]) {
         for c in cases {
-            let expected = c.iter().cloned();
+            let expected = c.iter().copied();
 
             let root = parse_term_with_definitions(definitions, c[0]);
             let subterms = root.subterms();

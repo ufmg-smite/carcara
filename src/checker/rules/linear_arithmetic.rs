@@ -151,17 +151,17 @@ impl<'a> LinearComb<'a> {
         self
     }
 
-    fn mul(&mut self, scalar: BigRational) {
+    fn mul(&mut self, scalar: &BigRational) {
         for coeff in self.0.values_mut() {
-            *coeff *= &scalar;
+            *coeff *= scalar;
         }
-        self.1 *= &scalar;
+        self.1 *= scalar;
     }
 
     fn neg(&mut self) {
         // We multiply by -1 instead of using the unary "-" operator because that would require
         // cloning. There is no simple way to negate in place
-        self.mul(-BigRational::one());
+        self.mul(&-BigRational::one());
     }
 
     fn sub(self, mut other: Self) -> Self {
@@ -227,7 +227,7 @@ pub fn la_generic(
                 Operator::Equals => a,
                 _ => a.abs(),
             };
-            disequality.mul(a);
+            disequality.mul(&a);
 
             Some((op, disequality))
         })

@@ -50,9 +50,8 @@ fn generic_simplify_rule(
         if let Some(next) = simplify_function(&current, pool) {
             if DeepEq::eq(&next, goal) {
                 return Some(());
-            } else {
-                current = next;
             }
+            current = next;
         } else {
             return None;
         }
@@ -77,7 +76,7 @@ pub fn eq_simplify(args: RuleArgs) -> Option<()> {
             },
 
             // ¬(t = t) => false, if t is a numerical constant
-            (not (= t t)): (t1, t2) if t1 == t2 && t1.try_as_ratio().is_some() => {
+            (not (= t t)): (t1, t2) if t1 == t2 && t1.is_constant() => {
                 pool.add_term(terminal!(bool false))
             },
         })
@@ -151,23 +150,16 @@ pub fn bool_simplify(args: RuleArgs) -> Option<()> {
 }
 
 pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    fn is_constant(term: &ByRefRc<Term>) -> bool {
-        matches!(
-            term.as_ref(),
-            Term::Terminal(Terminal::Real(_)) | Term::Terminal(Terminal::Integer(_))
-        )
-    }
-
     /// Checks if the u term is valid and extracts from it the leading constant and the remaining
     /// arguments.
     fn unwrap_u_term(u: &Term) -> Option<(BigRational, &[ByRefRc<Term>])> {
         Some(match match_term!((* ...) = u) {
-            Some([]) | Some([_]) => unreachable!(),
+            Some([] | [_]) => unreachable!(),
 
             Some(args) => {
                 // We check if there are any constants in u (aside from the leading constant). If
                 // there are any, we know this u term is invalid, so we can return `None`
-                if args[1..].iter().any(is_constant) {
+                if args[1..].iter().any(|t| t.is_constant()) {
                     return None;
                 }
                 match args[0].try_as_ratio() {

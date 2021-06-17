@@ -1,4 +1,4 @@
-use super::*;
+use super::{ByRefRc, Term};
 use std::{collections::HashSet, iter};
 
 pub struct Subterms<'a> {
@@ -53,15 +53,12 @@ impl<'a> SubtermsInner<'a> {
             return Some(self.root);
         }
         let current = self.current.as_mut()?;
-        match current.next(visited) {
-            Some(t) => {
-                visited.insert(t);
-                Some(t)
-            }
-            None => {
-                self.current = self.next_child(visited);
-                self.next(visited)
-            }
+        if let Some(t) = current.next(visited) {
+            visited.insert(t);
+            Some(t)
+        } else {
+            self.current = self.next_child(visited);
+            self.next(visited)
         }
     }
 

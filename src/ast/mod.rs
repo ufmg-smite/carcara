@@ -171,8 +171,8 @@ pub enum ProofCommand {
     Subproof(Vec<ProofCommand>, HashMap<String, ByRefRc<Term>>),
 }
 
-/// A "step" command, of the form "(step <symbol> <clause> :rule <symbol> [:premises (<symbol>+)]?
-/// [:args <proof_args>]?)".
+/// A "step" command, of the form `(step <symbol> <clause> :rule <symbol> [:premises (<symbol>+)]?
+/// [:args <proof_args>]?)`.
 #[derive(Debug, PartialEq)]
 pub struct ProofStep {
     pub clause: Vec<ByRefRc<Term>>,
@@ -187,12 +187,12 @@ pub enum ProofArg {
     /// An argument that is just a term.
     Term(ByRefRc<Term>),
 
-    /// An argument of the form "(:= <symbol> <term>)".
+    /// An argument of the form `(:= <symbol> <term>)`.
     Assign(String, ByRefRc<Term>),
 }
 
 /// A function definition. Functions are defined using the "function-def" command, of the form
-/// "(define-fun <symbol> (<sorted_var>*) <sort> <term>)". These definitions are substituted in
+/// `(define-fun <symbol> (<sorted_var>*) <sort> <term>)`. These definitions are substituted in
 /// during parsing, so these commands don't appear in the final AST.
 pub struct FunctionDef {
     pub params: Vec<(String, ByRefRc<Term>)>,
@@ -398,13 +398,21 @@ impl Term {
     }
 
     /// Removes a leading negation from the term, if it exists. Same thing as `match_term!((not t)
-    /// = term)`
+    /// = term)`.
     pub fn remove_negation(&self) -> Option<&Self> {
         match_term!((not t) = self)
     }
 
+    /// Returns `true` if the term is an integer or real constant.
+    pub fn is_constant(&self) -> bool {
+        matches!(
+            self,
+            Term::Terminal(Terminal::Real(_) | Terminal::Integer(_))
+        )
+    }
+
     /// Tries to extract a `BigRational` from a term. Returns `Some` if the term is an integer or
-    /// real number.
+    /// real constant.
     pub fn try_as_ratio(&self) -> Option<BigRational> {
         match self {
             Term::Terminal(Terminal::Real(r)) => Some(r.clone()),
@@ -504,7 +512,7 @@ impl Debug for Terminal {
             ),
             Terminal::String(s) => write!(f, "\"{}\"", s),
             Terminal::Var(Identifier::Simple(s), _) => write!(f, "{}", s),
-            _ => todo!(),
+            Terminal::Var(_, _) => todo!(),
         }
     }
 }

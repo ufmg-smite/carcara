@@ -359,15 +359,15 @@ impl<R: BufRead> Parser<R> {
             };
             if self.state.step_indices.get(&index).is_some() {
                 return Err(self.err(ErrorKind::RepeatedStepIndex(index)));
-            } else {
-                // Since index is moved when inserted in the step_indices symbol table, we must do
-                // this check here
-                let is_last_command = end_step == Some(&index);
-                self.state.step_indices.insert(index, commands.len());
-                commands.push(command);
-                if is_last_command {
-                    break;
-                }
+            }
+
+            // Since index is moved when inserted in the step_indices symbol table, we must do
+            // this check here
+            let is_last_command = end_step == Some(&index);
+            self.state.step_indices.insert(index, commands.len());
+            commands.push(command);
+            if is_last_command {
+                break;
             }
         }
         Ok(Proof(commands))
@@ -408,7 +408,7 @@ impl<R: BufRead> Parser<R> {
                     self.state
                         .step_indices
                         .get(&index)
-                        .cloned()
+                        .copied()
                         .ok_or_else(|| self.err(ErrorKind::UndefinedStepIndex(index)))
                 })
                 .collect::<Result<_, _>>()?
@@ -528,7 +528,7 @@ impl<R: BufRead> Parser<R> {
         // In order to correctly parse the function body, we push a new scope to the symbol table
         // and add the functions arguments to it.
         self.state.sorts_symbol_table.push_scope();
-        for (name, sort) in params.iter() {
+        for (name, sort) in &params {
             let iden = Identifier::Simple(name.clone());
             self.state.sorts_symbol_table.insert(iden, sort.clone());
         }
@@ -560,31 +560,28 @@ impl<R: BufRead> Parser<R> {
 
     /// Parses an argument for a "step" or "anchor" command.
     fn parse_proof_arg(&mut self) -> ParserResult<ProofArg> {
-        match self.current_token {
-            Token::OpenParen => {
-                self.next_token()?; // Consume "(" token
+        if self.current_token == Token::OpenParen {
+            self.next_token()?; // Consume "(" token
 
-                // If we encounter a "(" token, this could be an assignment argument of the form
-                // "(:= <symbol> <term>)", or a regular term that starts with "(". Note that the
-                // lexer reads ":=" as a keyword with contents "=".
-                if self.current_token == Token::Keyword("=".into()) {
-                    self.next_token()?; // Consume ":=" token
-                    let name = self.expect_symbol()?;
-                    let value = self.parse_term()?;
-                    self.expect_token(Token::CloseParen)?;
-                    Ok(ProofArg::Assign(name, self.add_term(value)))
-                } else {
-                    // If the first token is not ":=", this argument is just a regular term. Since
-                    // we already consumed the "(" token, we have to call `parse_application`
-                    // instead of `parse_term`.
-                    let term = self.parse_application()?;
-                    Ok(ProofArg::Term(self.add_term(term)))
-                }
-            }
-            _ => {
-                let term = self.parse_term()?;
+            // If we encounter a "(" token, this could be an assignment argument of the form
+            // "(:= <symbol> <term>)", or a regular term that starts with "(". Note that the
+            // lexer reads ":=" as a keyword with contents "=".
+            if self.current_token == Token::Keyword("=".into()) {
+                self.next_token()?; // Consume ":=" token
+                let name = self.expect_symbol()?;
+                let value = self.parse_term()?;
+                self.expect_token(Token::CloseParen)?;
+                Ok(ProofArg::Assign(name, self.add_term(value)))
+            } else {
+                // If the first token is not ":=", this argument is just a regular term. Since
+                // we already consumed the "(" token, we have to call `parse_application`
+                // instead of `parse_term`.
+                let term = self.parse_application()?;
                 Ok(ProofArg::Term(self.add_term(term)))
             }
+        } else {
+            let term = self.parse_term()?;
+            Ok(ProofArg::Term(self.add_term(term)))
         }
     }
 
