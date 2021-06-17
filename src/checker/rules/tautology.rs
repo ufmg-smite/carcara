@@ -171,6 +171,40 @@ pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     Some(())
 }
 
+pub fn connective_def(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    if conclusion.len() != 1 {
+        return None;
+    }
+    let (first, second) = match_term!((= f s) = conclusion[0])?;
+
+    let result = if let Some((phi_1, phi_2)) = match_term!((xor phi_1 phi_2) = first) {
+        // phi_1 xor phi_2 <-> (¬phi_1 ^ phi_2) v (phi_1 ^ ¬phi_2)
+        let ((a, b), (c, d)) = match_term!((or (and (not a) b) (and c (not d))) = second)?;
+        a == phi_1 && b == phi_2 && c == phi_1 && d == phi_2
+    } else if let Some((phi_1, phi_2)) = match_term!((= phi_1 phi_2) = first) {
+        // (phi_1 <-> phi_2) <-> (phi_1 -> phi_2) ^ (phi_2 -> phi_1)
+        let ((a, b), (c, d)) = match_term!((and (=> a b) (=> c d)) = second)?;
+        a == phi_1 && b == phi_2 && c == phi_2 && d == phi_1
+    } else if let Some((phi_1, phi_2, phi_3)) = match_term!((ite phi_1 phi_2 phi_3) = first) {
+        // ite phi_1 phi_2 phi_3 <-> (phi_1 -> phi_2) ^ (¬phi_1 -> ¬phi_3)
+        let ((a, b), (c, d)) = match_term!((and (=> a b) (=> (not c) (not d))) = second)?;
+        a == phi_1 && b == phi_2 && c == phi_1 && d == phi_3
+    } else if let Term::Quant(Quantifier::Exists, first_bindings, first_inner) = first {
+        // This case of the "connective_def" rule is not documented, but appears in some examples
+        // ∃ x_1, ..., x_n . phi <-> ¬(∀ x_1, ..., x_n . ¬phi)
+        if let Some(Term::Quant(Quantifier::Forall, second_bindings, second_inner)) =
+            second.remove_negation()
+        {
+            first_bindings == second_bindings && second_inner.remove_negation() == Some(first_inner)
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+    to_option(result)
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -550,6 +584,47 @@ mod tests {
                         (ite q (= d (ite q d a)) (= a (ite q d a)))
                     )
                 )) :rule ite_intro)": true,
+            }
+        }
+    }
+
+    #[test]
+    fn connective_def() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+            ",
+            "Case #1" {
+                "(step t1 (cl (= (xor p q) (or (and (not p) q) (and p (not q)))))
+                    :rule connective_def)": true,
+                "(step t1 (cl (= (xor p q) (or (and q (not p)) (and p (not q)))))
+                    :rule connective_def)": false,
+                "(step t1 (cl (= (xor p q) (or (and p (not q)) (and (not p) q))))
+                    :rule connective_def)": false,
+            }
+            "Case #2" {
+                "(step t1 (cl (= (= p q) (and (=> p q) (=> q p)))) :rule connective_def)": true,
+                "(step t1 (cl (= (= p q) (and (=> q p) (=> p q)))) :rule connective_def)": false,
+            }
+            "Case #3" {
+                "(step t1 (cl (= (ite p q r) (and (=> p q) (=> (not p) (not r)))))
+                    :rule connective_def)": true,
+                "(step t1 (cl (= (ite p q r) (and (=> p r) (=> (not p) (not q)))))
+                    :rule connective_def)": false,
+            }
+            "Case #4" {
+                "(step t1 (cl (= (exists ((x Real)) p) (not (forall ((x Real)) (not p)))))
+                    :rule connective_def)": true,
+                "(step t1 (cl (=
+                    (exists ((x Real) (y Real)) (= x y))
+                    (not (forall ((x Real) (y Real)) (not (= x y))))
+                )) :rule connective_def)": true,
+                "(step t1 (cl (= (exists ((x Real)) p) (forall ((x Real)) (not p))))
+                    :rule connective_def)": false,
+                "(step t1 (cl (= (forall ((x Real)) p) (not (exists ((x Real)) (not p)))))
+                    :rule connective_def)": false,
             }
         }
     }
