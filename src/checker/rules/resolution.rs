@@ -237,6 +237,42 @@ mod tests {
     }
 
     #[test]
+    fn tautology() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+                (declare-fun s () Bool)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (not p) p) :rule trust_me)
+                (step t2 (cl true) :rule tautology :premises (t1))": true,
+
+                "(step t1 (cl p q (not q) r s) :rule trust_me)
+                (step t2 (cl true) :rule tautology :premises (t1))": true,
+
+                "(step t1 (cl p (not (not s)) q r (not (not (not s)))) :rule trust_me)
+                (step t2 (cl true) :rule tautology  :premises (t1))": true,
+            }
+            "Conclusion is not \"true\"" {
+                "(step t1 (cl p q (not q) r s) :rule trust_me)
+                (step t2 (cl false) :rule tautology :premises (t1))": false,
+
+                "(step t1 (cl p q (not q) r s) :rule trust_me)
+                (step t2 (cl) :rule tautology :premises (t1))": false,
+            }
+            "Premise is not a tautology" {
+                "(step t1 (cl p) :rule trust_me)
+                (step t2 (cl true) :rule tautology :premises (t1))": false,
+
+                "(step t1 (cl p (not (not s)) q r s) :rule trust_me)
+                (step t2 (cl true) :rule tautology :premises (t1))": false,
+            }
+        }
+    }
+
+    #[test]
     fn contraction() {
         test_cases! {
             definitions = "
