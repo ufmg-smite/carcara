@@ -172,13 +172,7 @@ impl<R: BufRead> Parser<R> {
                 SortError::assert_eq(Term::BOOL_SORT, &sorts[0])?;
                 SortError::assert_eq(&sorts[1], &sorts[2])?;
             }
-            Operator::Add
-            | Operator::Mult
-            | Operator::Div
-            | Operator::LessThan
-            | Operator::GreaterThan
-            | Operator::LessEq
-            | Operator::GreaterEq => {
+            Operator::Add | Operator::Mult | Operator::Div => {
                 ErrorKind::assert_num_of_args_range(&args, 2..)?;
 
                 // All the arguments must have the same sort, and it must be either Int or Real
@@ -191,6 +185,12 @@ impl<R: BufRead> Parser<R> {
                 ErrorKind::assert_num_of_args_range(&args, 1..)?;
                 SortError::assert_one_of(&[Term::INT_SORT, Term::REAL_SORT], &sorts[0])?;
                 SortError::assert_all_eq(&sorts)?;
+            }
+            Operator::LessThan | Operator::GreaterThan | Operator::LessEq | Operator::GreaterEq => {
+                ErrorKind::assert_num_of_args_range(&args, 2..)?;
+                // All the arguments must be either Int or Real sorted, but they don't need to all
+                // have the same sort
+                SortError::assert_one_of(&[Term::INT_SORT, Term::REAL_SORT], &sorts[0])?;
             }
         }
         let args = self.add_all(args);
