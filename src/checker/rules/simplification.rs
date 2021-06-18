@@ -68,15 +68,15 @@ pub fn eq_simplify(args: RuleArgs) -> Option<()> {
 
             // t_1 = t_2 => false, if t_1 and t_2 are different numerical constants
             (= t t): (t1, t2) if {
-                let t1 = t1.try_as_ratio();
-                let t2 = t2.try_as_ratio();
+                let t1 = t1.try_as_signed_ratio();
+                let t2 = t2.try_as_signed_ratio();
                 t1.is_some() && t2.is_some() && t1 != t2
             } => {
                 pool.add_term(terminal!(bool false))
             },
 
             // ¬(t = t) => false, if t is a numerical constant
-            (not (= t t)): (t1, t2) if t1 == t2 && t1.is_constant() => {
+            (not (= t t)): (t1, t2) if t1 == t2 && t1.is_signed_constant() => {
                 pool.add_term(terminal!(bool false))
             },
         })
@@ -236,11 +236,13 @@ mod tests {
             "Transformation #2" {
                 "(step t1 (cl (= (= 0 1) false)) :rule eq_simplify)": true,
                 "(step t1 (cl (= (= 0.0 0.01) false)) :rule eq_simplify)": true,
+                "(step t1 (cl (= (= 1 (- 1)) false)) :rule eq_simplify)": true,
                 "(step t1 (cl (= (= 0 1) true)) :rule eq_simplify)": false,
                 "(step t1 (cl (= (= 0.0 0.0) false)) :rule eq_simplify)": false,
             }
             "Transformation #3" {
                 "(step t1 (cl (= (not (= 0.0 0.0)) false)) :rule eq_simplify)": true,
+                "(step t1 (cl (= (not (= (- 1) (- 1))) false)) :rule eq_simplify)": true,
                 "(step t1 (cl (= (not (= 0 0)) true)) :rule eq_simplify)": false,
                 "(step t1 (cl (= (not (= 0 1)) false)) :rule eq_simplify)": false,
                 "(step t1 (cl (= (not (= a a)) false)) :rule eq_simplify)": false,

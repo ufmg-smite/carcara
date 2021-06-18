@@ -411,6 +411,15 @@ impl Term {
         )
     }
 
+    /// Returns `true` if the term is an integer or real constant, or one such constant negated
+    /// with the "-" operator.
+    pub fn is_signed_constant(&self) -> bool {
+        match match_term!((-x) = self) {
+            Some(x) => x.is_constant(),
+            None => self.is_constant(),
+        }
+    }
+
     /// Tries to extract a `BigRational` from a term. Returns `Some` if the term is an integer or
     /// real constant.
     pub fn try_as_ratio(&self) -> Option<BigRational> {
@@ -418,6 +427,16 @@ impl Term {
             Term::Terminal(Terminal::Real(r)) => Some(r.clone()),
             Term::Terminal(Terminal::Integer(i)) => Some(BigRational::from_integer(i.clone())),
             _ => None,
+        }
+    }
+
+    /// Tries to extract a `BigRational` from a term, allowing negative values represented with the
+    /// unary "-" operator. Returns `Some` if the term is an integer or real constant, or one such
+    /// constant negated with the "-" operator.
+    pub fn try_as_signed_ratio(&self) -> Option<BigRational> {
+        match match_term!((-x) = self) {
+            Some(x) => x.try_as_ratio().map(|r| -r),
+            None => self.try_as_ratio(),
         }
     }
 
