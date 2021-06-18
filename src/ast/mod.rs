@@ -275,9 +275,12 @@ pub enum Term {
     /// A quantifier binder term.
     Quant(Quantifier, Vec<(String, ByRefRc<Term>)>, ByRefRc<Term>),
 
-    /// A `let` binder term.
+    /// A "choice" term.
+    Choice((String, ByRefRc<Term>), ByRefRc<Term>),
+
+    /// A "let" binder term.
     Let(Vec<(String, ByRefRc<Term>)>, ByRefRc<Term>),
-    // TODO: `match` binder terms
+    // TODO: "match" binder terms
 }
 
 impl Term {
@@ -329,6 +332,7 @@ impl Term {
             }
             sort @ Term::Sort(_, _) => sort,
             Term::Quant(_, _, _) => Term::BOOL_SORT,
+            Term::Choice((_, sort), _) => sort,
             Term::Let(_, inner) => inner.sort(),
         }
     }
@@ -380,6 +384,11 @@ impl Term {
                     for (s, _) in bindings {
                         vars.remove(s.as_str());
                     }
+                    vars
+                }
+                Term::Choice((bound_var, _), inner) => {
+                    let mut vars = free_vars_inner(inner, cache).clone();
+                    vars.remove(bound_var.as_str());
                     vars
                 }
                 Term::Terminal(Terminal::Var(Identifier::Simple(var), _)) => {
@@ -497,6 +506,9 @@ impl Debug for Term {
                 }
                 write!(f, ") {:?})", term)
             }
+            Term::Choice((symbol, sort), term) => {
+                write!(f, "(choice ({} {:?}) {:?})", symbol, sort, term)
+            }
             Term::Let(bindings, term) => {
                 write!(f, "(let (")?;
 
@@ -600,6 +612,10 @@ impl DeepEq for Term {
             (Term::Quant(q_a, binds_a, a), Term::Quant(q_b, binds_b, b)) => {
                 q_a == q_b
                     && DeepEq::eq_impl(binds_a, binds_b, is_mod_reordering)
+                    && DeepEq::eq_impl(a, b, is_mod_reordering)
+            }
+            (Term::Choice(var_a, a), Term::Choice(var_b, b)) => {
+                DeepEq::eq_impl(var_a, var_b, is_mod_reordering)
                     && DeepEq::eq_impl(a, b, is_mod_reordering)
             }
             (Term::Let(binds_a, a), Term::Let(binds_b, b)) => {
