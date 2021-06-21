@@ -697,69 +697,78 @@ impl<R: BufRead> Parser<R> {
     }
 
     fn parse_application(&mut self) -> ParserResult<Term> {
-        match self.next_token()? {
-            Token::ReservedWord(reserved) => match reserved {
-                Reserved::Exists => self.parse_quantifier(Quantifier::Exists),
-                Reserved::Forall => self.parse_quantifier(Quantifier::Forall),
-                Reserved::Choice => self.parse_choice_term(),
-                Reserved::Bang => self.parse_annotated_term(),
-                Reserved::Let => self.parse_let_term(),
-                _ => Err(self.err(ErrorKind::NotYetImplemented)),
-            },
-            Token::Symbol(s) => {
-                if let Ok(operator) = Operator::from_str(&s) {
-                    let args = self.parse_sequence(Self::parse_term, true)?;
-                    self.make_op(operator, args).map_err(|err| self.err(err))
-                } else {
-                    let args = self.parse_sequence(Self::parse_term, true)?;
-                    if let Some(func) = self.state.function_defs.get(&s) {
-                        // If there is a function definition with this function name, we sort check
-                        // the arguments and apply the definition by performing a beta reduction.
-
-                        ErrorKind::assert_num_of_args(&args, func.params.len())
-                            .map_err(|err| self.err(err))?;
-                        for (arg, param) in args.iter().zip(func.params.iter()) {
-                            SortError::assert_eq(param.1.as_ref(), arg.sort())
-                                .map_err(|err| self.err(err.into()))?;
-                        }
-
-                        // Build a hash map of all the parameter names and the values they will
-                        // take
-                        let mut substitutions = {
-                            // We have to take a reference to the term pool here, so the closure in
-                            // the `map` call later on doesn't have to capture all of `self`, and
-                            // can just capture the term pool. We need this to please the borrow
-                            // checker
-                            let pool = &mut self.state.term_pool;
-                            func.params
-                                .iter()
-                                .zip(args)
-                                .map(|((name, sort), arg)| {
-                                    let k = pool.add_term(terminal!(var name; sort.clone()));
-                                    let v = pool.add_term(arg);
-                                    (k, v)
-                                })
-                                .collect()
-                        };
-
-                        // Since `apply_substitutions` returns a `ByRefRc<Term>`, we have to go
-                        // into the inner term and clone it, even though it is already added to the
-                        // term pool
-                        Ok(self
-                            .state
-                            .term_pool
-                            .apply_substitutions(&func.body, &mut substitutions)
-                            .as_ref()
-                            .clone())
-                    } else {
-                        let func = self
-                            .make_var(Identifier::Simple(s))
-                            .map_err(|err| self.err(err))?;
-                        self.make_app(func, args).map_err(|err| self.err(err))
-                    }
+        match &self.current_token {
+            &Token::ReservedWord(reserved) => {
+                self.next_token()?;
+                match reserved {
+                    Reserved::Exists => self.parse_quantifier(Quantifier::Exists),
+                    Reserved::Forall => self.parse_quantifier(Quantifier::Forall),
+                    Reserved::Choice => self.parse_choice_term(),
+                    Reserved::Bang => self.parse_annotated_term(),
+                    Reserved::Let => self.parse_let_term(),
+                    _ => Err(self.err(ErrorKind::NotYetImplemented)),
                 }
             }
-            _ => Err(self.err(ErrorKind::NotYetImplemented)),
+            // Here, I would like to use an `if let` guard, like:
+            //
+            //     Token::Symbol(s) if let Ok(operator) = Operator::from_str(s) => { ... }
+            //
+            // However, `if let` guards are still nightly only. For more info, see:
+            // https://github.com/rust-lang/rust/issues/51114
+            Token::Symbol(s) if Operator::from_str(s).is_ok() => {
+                let operator = Operator::from_str(s).unwrap();
+                self.next_token()?;
+                let args = self.parse_sequence(Self::parse_term, true)?;
+                self.make_op(operator, args).map_err(|err| self.err(err))
+            }
+            Token::Symbol(s) if self.state.function_defs.get(s).is_some() => {
+                let func_name = self.expect_symbol()?;
+                let args = self.parse_sequence(Self::parse_term, true)?;
+                let func = self.state.function_defs.get(&func_name).unwrap();
+
+                // If there is a function definition with this function name, we sort check
+                // the arguments and apply the definition by performing a beta reduction.
+                ErrorKind::assert_num_of_args(&args, func.params.len())
+                    .map_err(|err| self.err(err))?;
+                for (arg, param) in args.iter().zip(func.params.iter()) {
+                    SortError::assert_eq(param.1.as_ref(), arg.sort())
+                        .map_err(|err| self.err(err.into()))?;
+                }
+
+                // Build a hash map of all the parameter names and the values they will
+                // take
+                let mut substitutions = {
+                    // We have to take a reference to the term pool here, so the closure in
+                    // the `map` call later on doesn't have to capture all of `self`, and
+                    // can just capture the term pool. We need this to please the borrow
+                    // checker
+                    let pool = &mut self.state.term_pool;
+                    func.params
+                        .iter()
+                        .zip(args)
+                        .map(|((name, sort), arg)| {
+                            let k = pool.add_term(terminal!(var name; sort.clone()));
+                            let v = pool.add_term(arg);
+                            (k, v)
+                        })
+                        .collect()
+                };
+
+                // Since `apply_substitutions` returns a `ByRefRc<Term>`, we have to go
+                // into the inner term and clone it, even though it is already added to the
+                // term pool
+                Ok(self
+                    .state
+                    .term_pool
+                    .apply_substitutions(&func.body, &mut substitutions)
+                    .as_ref()
+                    .clone())
+            }
+            _ => {
+                let func = self.parse_term()?;
+                let args = self.parse_sequence(Self::parse_term, true)?;
+                self.make_app(func, args).map_err(|err| self.err(err))
+            }
         }
     }
 
