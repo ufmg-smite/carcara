@@ -592,7 +592,7 @@ impl<R: BufRead> Parser<R> {
     }
 
     /// Parses a sorted variable of the form "(<symbol> <sort>)".
-    fn parse_sorted_var(&mut self) -> ParserResult<(String, ByRefRc<Term>)> {
+    fn parse_sorted_var(&mut self) -> ParserResult<SortedVar> {
         self.expect_token(Token::OpenParen)?;
         let symbol = self.expect_symbol()?;
         let sort = self.parse_sort()?;

@@ -195,7 +195,7 @@ pub enum ProofArg {
 /// `(define-fun <symbol> (<sorted_var>*) <sort> <term>)`. These definitions are substituted in
 /// during parsing, so these commands don't appear in the final AST.
 pub struct FunctionDef {
-    pub params: Vec<(String, ByRefRc<Term>)>,
+    pub params: Vec<SortedVar>,
     pub body: ByRefRc<Term>,
 }
 
@@ -242,6 +242,8 @@ impl_str_conversion_traits!(Operator {
     GreaterEq: ">=",
 });
 
+pub type SortedVar = (String, ByRefRc<Term>);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SortKind {
     Function,
@@ -273,13 +275,13 @@ pub enum Term {
     Sort(SortKind, Vec<ByRefRc<Term>>),
 
     /// A quantifier binder term.
-    Quant(Quantifier, Vec<(String, ByRefRc<Term>)>, ByRefRc<Term>),
+    Quant(Quantifier, Vec<SortedVar>, ByRefRc<Term>),
 
     /// A "choice" term.
-    Choice((String, ByRefRc<Term>), ByRefRc<Term>),
+    Choice(SortedVar, ByRefRc<Term>),
 
     /// A "let" binder term.
-    Let(Vec<(String, ByRefRc<Term>)>, ByRefRc<Term>),
+    Let(Vec<SortedVar>, ByRefRc<Term>),
     // TODO: "match" binder terms
 }
 
@@ -690,7 +692,7 @@ impl<T: DeepEq> DeepEq for (T, T) {
     }
 }
 
-impl<T: DeepEq> DeepEq for (String, T) {
+impl DeepEq for SortedVar {
     fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
         a.0 == b.0 && DeepEq::eq_impl(&a.1, &b.1, is_mod_reordering)
     }
