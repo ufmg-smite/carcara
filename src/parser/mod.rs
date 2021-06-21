@@ -655,51 +655,55 @@ impl<R: BufRead> Parser<R> {
         Ok(Term::Choice(var, self.add_term(inner)))
     }
 
+    fn parse_let_term(&mut self) -> ParserResult<Term> {
+        self.expect_token(Token::OpenParen)?;
+        self.state.sorts_symbol_table.push_scope();
+        let bindings = self.parse_sequence(
+            |p| {
+                p.expect_token(Token::OpenParen)?;
+                let name = p.expect_symbol()?;
+                let value = p.parse_term()?;
+                let value = p.add_term(value);
+                let sort = p.add_term(value.sort().clone());
+                p.state
+                    .sorts_symbol_table
+                    .insert(Identifier::Simple(name.clone()), sort);
+                p.expect_token(Token::CloseParen)?;
+                Ok((name, value))
+            },
+            true,
+        )?;
+        let inner = self.parse_term()?;
+        self.expect_token(Token::CloseParen)?;
+        let inner = self.add_term(inner);
+        self.state.sorts_symbol_table.pop_scope();
+        Ok(Term::Let(bindings, inner))
+    }
+
+    fn parse_annotated_term(&mut self) -> ParserResult<Term> {
+        let inner = self.parse_term()?;
+        self.parse_sequence(
+            |p| {
+                // Simply consume and discard the attributes and their values
+                p.expect_keyword()?;
+                if let Token::Symbol(_) = p.current_token {
+                    p.next_token()?;
+                }
+                Ok(())
+            },
+            true,
+        )?;
+        Ok(inner)
+    }
+
     fn parse_application(&mut self) -> ParserResult<Term> {
         match self.next_token()? {
             Token::ReservedWord(reserved) => match reserved {
                 Reserved::Exists => self.parse_quantifier(Quantifier::Exists),
                 Reserved::Forall => self.parse_quantifier(Quantifier::Forall),
                 Reserved::Choice => self.parse_choice_term(),
-                Reserved::Bang => {
-                    let inner = self.parse_term()?;
-                    self.parse_sequence(
-                        |p| {
-                            // Simply consume and discard the attributes and their values
-                            p.expect_keyword()?;
-                            if let Token::Symbol(_) = p.current_token {
-                                p.next_token()?;
-                            }
-                            Ok(())
-                        },
-                        true,
-                    )?;
-                    Ok(inner)
-                }
-                Reserved::Let => {
-                    self.expect_token(Token::OpenParen)?;
-                    self.state.sorts_symbol_table.push_scope();
-                    let bindings = self.parse_sequence(
-                        |p| {
-                            p.expect_token(Token::OpenParen)?;
-                            let name = p.expect_symbol()?;
-                            let value = p.parse_term()?;
-                            let value = p.add_term(value);
-                            let sort = p.add_term(value.sort().clone());
-                            p.state
-                                .sorts_symbol_table
-                                .insert(Identifier::Simple(name.clone()), sort);
-                            p.expect_token(Token::CloseParen)?;
-                            Ok((name, value))
-                        },
-                        true,
-                    )?;
-                    let inner = self.parse_term()?;
-                    self.expect_token(Token::CloseParen)?;
-                    let inner = self.add_term(inner);
-                    self.state.sorts_symbol_table.pop_scope();
-                    Ok(Term::Let(bindings, inner))
-                }
+                Reserved::Bang => self.parse_annotated_term(),
+                Reserved::Let => self.parse_let_term(),
                 _ => Err(self.err(ErrorKind::NotYetImplemented)),
             },
             Token::Symbol(s) => {
