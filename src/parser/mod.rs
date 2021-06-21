@@ -646,11 +646,21 @@ impl<R: BufRead> Parser<R> {
         Ok(Term::Quant(quantifier, bindings, term))
     }
 
+    fn parse_choice_term(&mut self) -> ParserResult<Term> {
+        self.expect_token(Token::OpenParen)?;
+        let var = self.parse_sorted_var()?;
+        self.expect_token(Token::CloseParen)?;
+        let inner = self.parse_term()?;
+        self.expect_token(Token::CloseParen)?;
+        Ok(Term::Choice(var, self.add_term(inner)))
+    }
+
     fn parse_application(&mut self) -> ParserResult<Term> {
         match self.next_token()? {
             Token::ReservedWord(reserved) => match reserved {
                 Reserved::Exists => self.parse_quantifier(Quantifier::Exists),
                 Reserved::Forall => self.parse_quantifier(Quantifier::Forall),
+                Reserved::Choice => self.parse_choice_term(),
                 Reserved::Bang => {
                     let inner = self.parse_term()?;
                     self.parse_sequence(
