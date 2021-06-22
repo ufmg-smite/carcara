@@ -2,16 +2,6 @@ use super::{get_clause_from_command, to_option, RuleArgs};
 use crate::ast::*;
 use std::collections::HashSet;
 
-/// Removes all leading negations in a term and returns how many there were.
-fn remove_all_negations(mut term: &Term) -> (u32, &Term) {
-    let mut n = 0;
-    while let Some(t) = term.remove_negation() {
-        term = t;
-        n += 1;
-    }
-    (n, term)
-}
-
 pub fn resolution(
     RuleArgs {
         conclusion,
@@ -33,7 +23,7 @@ pub fn resolution(
     // can only determine this by looking at the conlcusion and using it to derive the pivots.
     let conclusion: HashSet<_> = conclusion
         .iter()
-        .map(|t| remove_all_negations(t.as_ref()))
+        .map(|t| t.remove_all_negations())
         .map(|(n, t)| (n as i32, t))
         .collect();
 
@@ -47,7 +37,7 @@ pub fn resolution(
     for command in premises {
         let premise_clause = get_clause_from_command(command);
         for term in premise_clause {
-            let (n, inner) = remove_all_negations(term.as_ref());
+            let (n, inner) = term.remove_all_negations();
             let n = n as i32;
 
             // There are two possible negations of a term, with one leading negation added, or with
@@ -111,8 +101,7 @@ pub fn tautology(
     let mut seen = HashSet::with_capacity(premise.len());
     let with_negations_removed = premise
         .iter()
-        .map(|t| remove_all_negations(t.as_ref()))
-        .map(|(n, t)| (n % 2 == 0, t));
+        .map(|t| t.remove_all_negations_with_polarity());
     for (polarity, term) in with_negations_removed {
         if seen.contains(&(!polarity, term)) {
             return Some(());
