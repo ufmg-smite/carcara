@@ -5,6 +5,7 @@ use std::collections::HashSet;
 pub fn bind(
     RuleArgs {
         conclusion,
+        pool,
         context,
         subproof_commands,
         ..
@@ -17,7 +18,8 @@ pub fn bind(
     // The last command in the subproof is the one we are currently checking, so we look at the one
     // before that
     let previous_command = &subproof_commands[subproof_commands.len() - 2];
-    let (phi, phi_prime) = match_term!((= p q) = get_single_term_from_command(previous_command)?)?;
+    let (phi, phi_prime) =
+        match_term!((= p q) = get_single_term_from_command(previous_command)?, RETURN_RCS)?;
 
     // Since we are closing a subproof, we only care about the substitutions that were introduced
     // in it
@@ -25,7 +27,7 @@ pub fn bind(
 
     // None of y_1, ..., y_n can appear as free variables in phi
     let mut ys = substitutions.values().map(|t| t.try_as_var());
-    let free_vars = phi.free_vars();
+    let free_vars = pool.free_vars(phi);
     if ys.any(|y| y.map_or(true, |var| free_vars.contains(var))) {
         return None;
     }
@@ -41,7 +43,7 @@ pub fn bind(
     };
 
     // The terms in the quantifiers must be phi and phi'
-    if left != phi || right != phi_prime {
+    if left != phi.as_ref() || right != phi_prime.as_ref() {
         return None;
     }
 

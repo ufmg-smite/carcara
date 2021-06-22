@@ -82,9 +82,9 @@ fn test_hash_consing() {
     .into_iter()
     .collect::<HashSet<&str>>();
 
-    assert_eq!(parser.state.term_pool.0.len(), expected.len());
+    assert_eq!(parser.state.term_pool.terms.len(), expected.len());
 
-    for got in parser.state.term_pool.0.keys() {
+    for got in parser.state.term_pool.terms.keys() {
         let formatted: &str = &format!("{:?}", got);
         assert!(expected.contains(formatted), "{:?}", formatted)
     }

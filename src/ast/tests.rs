@@ -82,9 +82,17 @@ fn test_free_vars() {
     fn run_tests(definitions: &str, cases: &[(&str, &[&str])]) {
         for &(term, expected) in cases {
             let root = parse_term_with_definitions(definitions, term);
-            let expected = expected.iter().map(Clone::clone).collect::<HashSet<_>>();
+            let expected = expected
+                .iter()
+                .map(|&s| s.to_string())
+                .collect::<HashSet<_>>();
 
-            assert_eq!(expected, root.free_vars())
+            // Since we are only using the term pool as a cache for `free_vars`, it doesn't need to
+            // actually hold the terms, meaning we can just use an empty pool.
+            let mut pool = TermPool::new();
+            let root = pool.add_term(root);
+
+            assert_eq!(&expected, pool.free_vars(&root))
         }
     }
     run_tests(

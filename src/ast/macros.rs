@@ -214,7 +214,7 @@ mod tests {
             (declare-fun p () Bool)
             (declare-fun q () Bool)
         ";
-        let mut pool = TermPool(HashMap::new());
+        let mut pool = TermPool::new();
 
         let (one, two, three) = (
             pool.add_term(terminal!(int 1)),
