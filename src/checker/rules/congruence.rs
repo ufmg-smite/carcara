@@ -2,9 +2,8 @@ use super::{get_single_term_from_command, to_option, RuleArgs};
 use crate::ast::*;
 
 pub fn eq_congruent(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    if conclusion.len() < 2 {
-        return None;
-    }
+    rassert!(conclusion.len() >= 2);
+
     let premises = conclusion[..conclusion.len() - 1]
         .iter()
         .map(|t| t.remove_negation());
@@ -14,9 +13,8 @@ pub fn eq_congruent(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 }
 
 pub fn eq_congruent_pred(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    if conclusion.len() < 3 {
-        return None;
-    }
+    rassert!(conclusion.len() >= 3);
+
     let premises = conclusion[..conclusion.len() - 2]
         .iter()
         .map(|t| t.remove_negation());
@@ -53,14 +51,11 @@ where
         (Term::Op(f, f_args), Term::Op(g, g_args)) if f == g => (f_args, g_args),
         _ => return None,
     };
-    if f_args.len() != g_args.len() || f_args.len() != ts.len() {
-        return None;
-    }
+    rassert!(f_args.len() == g_args.len() && f_args.len() == ts.len());
+
     for i in 0..ts.len() {
         let expected = (f_args[i].as_ref(), g_args[i].as_ref());
-        if expected != (ts[i], us[i]) && expected != (us[i], ts[i]) {
-            return None;
-        }
+        rassert!(expected == (ts[i], us[i]) || expected == (us[i], ts[i]));
     }
     Some(())
 }
@@ -104,9 +99,7 @@ pub fn cong(
         premises.next().is_none()
     }
 
-    if premises.is_empty() || conclusion.len() != 1 {
-        return None;
-    }
+    rassert!(!premises.is_empty() && conclusion.len() == 1);
 
     let premises: Vec<_> = premises
         .into_iter()
@@ -138,9 +131,7 @@ pub fn cong(
         (Term::Op(f, f_args), Term::Op(g, g_args)) if f == g => (f_args, g_args),
         _ => return None,
     };
-    if f_args.len() != g_args.len() {
-        return None;
-    }
+    rassert!(f_args.len() == g_args.len());
     to_option(check_cong(&premises, f_args, g_args))
 }
 

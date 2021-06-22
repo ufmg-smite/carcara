@@ -40,6 +40,14 @@ fn get_clause_from_command(command: &ProofCommand) -> &[ByRefRc<Term>] {
     }
 }
 
+/// Asserts that the argument is true, and returns `None` otherwise. `rassert!(arg)` is identical
+/// to `to_option(arg)?`, but much more readable.
+macro_rules! rassert {
+    ($arg:expr) => {
+        to_option($arg)?
+    };
+}
+
 #[cfg(test)]
 fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
     use crate::{checker::ProofChecker, parser::parse_problem_proof};

@@ -2,9 +2,7 @@ use super::{get_single_term_from_command, to_option, RuleArgs};
 use crate::ast::*;
 
 pub fn distinct_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    if conclusion.len() != 1 {
-        return None;
-    }
+    rassert!(conclusion.len() == 1);
 
     let (distinct_args, second_term) = match_term!((= (distinct ...) second) = conclusion[0])?;
     match distinct_args {
@@ -41,9 +39,8 @@ pub fn and(
         ..
     }: RuleArgs,
 ) -> Option<()> {
-    if premises.len() != 1 || conclusion.len() != 1 {
-        return None;
-    }
+    rassert!(premises.len() == 1 && conclusion.len() == 1);
+
     let and_term = get_single_term_from_command(premises[0])?;
     let and_contents = match_term!((and ...) = and_term)?;
 
@@ -57,9 +54,8 @@ pub fn or(
         ..
     }: RuleArgs,
 ) -> Option<()> {
-    if premises.len() != 1 {
-        return None;
-    }
+    rassert!(premises.len() == 1);
+
     let or_term = get_single_term_from_command(premises[0])?;
     let or_contents = match_term!((or ...) = or_term)?;
 
@@ -73,9 +69,8 @@ pub fn implies(
         ..
     }: RuleArgs,
 ) -> Option<()> {
-    if premises.len() != 1 || conclusion.len() != 2 {
-        return None;
-    }
+    rassert!(premises.len() == 1 && conclusion.len() == 2);
+
     let premise_term = get_single_term_from_command(premises[0])?;
     let (phi_1, phi_2) = match_term!((=> phi_1 phi_2) = premise_term)?;
 
@@ -133,9 +128,8 @@ pub fn nary_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
         }
     }
 
-    if conclusion.len() != 1 {
-        return None;
-    }
+    rassert!(conclusion.len() == 1);
+
     let (original, result) = match_term!((= o r) = conclusion[0].as_ref())?;
     if let Term::Op(op, args) = original {
         let case = match op {

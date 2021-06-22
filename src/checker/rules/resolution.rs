@@ -94,9 +94,8 @@ pub fn tautology(
         ..
     }: RuleArgs,
 ) -> Option<()> {
-    if conclusion.len() != 1 || !conclusion[0].is_bool_true() || premises.len() != 1 {
-        return None;
-    }
+    rassert!(conclusion.len() == 1 && conclusion[0].is_bool_true() && premises.len() == 1);
+
     let premise = get_clause_from_command(premises[0]);
     let mut seen = HashSet::with_capacity(premise.len());
     let with_negations_removed = premise
@@ -118,9 +117,7 @@ pub fn contraction(
         ..
     }: RuleArgs,
 ) -> Option<()> {
-    if premises.len() != 1 {
-        return None;
-    }
+    rassert!(premises.len() == 1);
 
     let premise_clause = get_clause_from_command(premises[0]);
 
@@ -134,8 +131,8 @@ pub fn contraction(
 
         // If the term in the premise clause has not been encountered before, we advance the
         // conclusion clause iterator, and check if its next term is the encountered term
-        if is_new_term && conclusion_iter.next() != Some(t) {
-            return None;
+        if is_new_term {
+            rassert!(conclusion_iter.next() == Some(t));
         }
     }
 

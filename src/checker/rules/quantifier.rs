@@ -10,18 +10,15 @@ pub fn forall_inst(
         ..
     }: RuleArgs,
 ) -> Option<()> {
-    if conclusion.len() != 1 {
-        return None;
-    }
+    rassert!(conclusion.len() == 1);
+
     let (forall_term, substituted) = match_term!((or (not f) s) = conclusion[0], RETURN_RCS)?;
     let (bindings, original) = match forall_term.as_ref() {
         Term::Quant(Quantifier::Forall, b, t) => (b, t),
         _ => return None,
     };
 
-    if args.len() != bindings.len() {
-        return None;
-    }
+    rassert!(args.len() == bindings.len());
 
     let mut substitutions: HashMap<_, _> = bindings
         .iter()
@@ -32,9 +29,7 @@ pub fn forall_inst(
                 ProofArg::Term(_) => return None,
             };
             let arg_sort = arg_value.sort();
-            if arg_name != binding_name || binding_sort.as_ref() != arg_sort {
-                return None;
-            }
+            rassert!(arg_name == binding_name && binding_sort.as_ref() == arg_sort);
 
             // We must use `pool.add_term` so we don't create a new term for the argument sort, and
             // instead use the one already in the term pool

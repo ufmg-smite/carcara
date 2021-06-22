@@ -5,9 +5,8 @@ use num_traits::{One, Signed, Zero};
 use std::collections::HashMap;
 
 pub fn la_rw_eq(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    if conclusion.len() != 1 {
-        return None;
-    }
+    rassert!(conclusion.len() == 1);
+
     let ((t_1, u_1), ((t_2, u_2), (u_3, t_3))) = match_term!(
         (= (= t u) (and (<= t u) (<= u t))) = conclusion[0]
     )?;
@@ -175,9 +174,8 @@ pub fn la_generic(
         conclusion, args, ..
     }: RuleArgs,
 ) -> Option<()> {
-    if conclusion.len() != args.len() {
-        return None;
-    }
+    rassert!(conclusion.len() == args.len());
+
     let final_disequality = conclusion
         .iter()
         .zip(args)
@@ -190,12 +188,10 @@ pub fn la_generic(
 
             // Steps 1 and 2: Negate the disequality
             let (mut op, args) = negate_disequality(phi)?;
-            let (s1, s2) = if args.len() == 2 {
-                (args[0].as_ref(), args[1].as_ref())
-            } else {
-                return None;
+            let (s1, s2) = match args {
+                [s1, s2] => (LinearComb::from_term(s1)?, LinearComb::from_term(s2)?),
+                _ => return None,
             };
-            let (s1, s2) = (LinearComb::from_term(s1)?, LinearComb::from_term(s2)?);
 
             // Step 3: Move all non constant terms to the left side, and the d terms to the right.
             // We move everything to the left side by subtracting s2 from s1
@@ -248,9 +244,7 @@ pub fn la_generic(
     let (op, LinearComb(left_side, right_side)) = final_disequality;
 
     // The left side must be empty, that is, equal to 0
-    if !left_side.is_empty() {
-        return None;
-    }
+    rassert!(left_side.is_empty());
 
     let is_disequality_true = {
         use std::cmp::Ordering;
@@ -270,9 +264,8 @@ pub fn la_generic(
 }
 
 pub fn la_disequality(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    if conclusion.len() != 1 {
-        return None;
-    }
+    rassert!(conclusion.len() == 1);
+
     let ((t1_1, t2_1), (t1_2, t2_2), (t2_3, t1_3)) = match_term!(
         (or (= t1 t2) (not (<= t1 t2)) (not (<= t2 t1))) = conclusion[0]
     )?;

@@ -37,9 +37,8 @@ fn generic_simplify_rule(
     pool: &mut TermPool,
     simplify_function: fn(&Term, &mut TermPool) -> Option<ByRefRc<Term>>,
 ) -> Option<()> {
-    if conclusion.len() != 1 {
-        return None;
-    }
+    rassert!(conclusion.len() == 1);
+
     let (current, goal) = match_term!((= phi psi) = conclusion[0].as_ref(), RETURN_RCS)?;
     let mut current = current.clone();
     let mut seen = HashSet::new();
@@ -176,9 +175,7 @@ pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
         })
     }
 
-    if conclusion.len() != 1 {
-        return None;
-    }
+    rassert!(conclusion.len() == 1);
 
     let (first, second) = match_term!((= first second) = conclusion[0].as_ref())?;
     let (ts, (u_constant, u_args)) = {

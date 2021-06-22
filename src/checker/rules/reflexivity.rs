@@ -2,12 +2,9 @@ use super::{to_option, RuleArgs};
 use crate::ast::*;
 
 pub fn eq_reflexive(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    if conclusion.len() == 1 {
-        let (a, b) = match_term!((= a b) = conclusion[0])?;
-        to_option(a == b)
-    } else {
-        None
-    }
+    rassert!(conclusion.len() == 1);
+    let (a, b) = match_term!((= a b) = conclusion[0])?;
+    to_option(a == b)
 }
 
 pub fn refl(
@@ -18,9 +15,7 @@ pub fn refl(
         ..
     }: RuleArgs,
 ) -> Option<()> {
-    if conclusion.len() != 1 {
-        return None;
-    }
+    rassert!(conclusion.len() == 1);
 
     let (left, right) = match_term!((= l r) = conclusion[0], RETURN_RCS)?;
 

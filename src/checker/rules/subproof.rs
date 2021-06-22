@@ -11,9 +11,7 @@ pub fn bind(
         ..
     }: RuleArgs,
 ) -> Option<()> {
-    if subproof_commands.len() < 2 || conclusion.len() != 1 {
-        return None;
-    }
+    rassert!(subproof_commands.len() >= 2 && conclusion.len() == 1);
 
     // The last command in the subproof is the one we are currently checking, so we look at the one
     // before that
@@ -28,9 +26,7 @@ pub fn bind(
     // None of y_1, ..., y_n can appear as free variables in phi
     let mut ys = substitutions.values().map(|t| t.try_as_var());
     let free_vars = pool.free_vars(phi);
-    if ys.any(|y| y.map_or(true, |var| free_vars.contains(var))) {
-        return None;
-    }
+    rassert!(ys.all(|y| y.map_or(false, |var| !free_vars.contains(var))));
 
     let (left, right) = match_term!((= l r) = conclusion[0])?;
     let ((l_bindings, left), (r_bindings, right)) = match (left, right) {
@@ -43,9 +39,7 @@ pub fn bind(
     };
 
     // The terms in the quantifiers must be phi and phi'
-    if left != phi.as_ref() || right != phi_prime.as_ref() {
-        return None;
-    }
+    rassert!(left == phi.as_ref() && right == phi_prime.as_ref());
 
     // And the quantifier binders must be the xs and ys of the context substitutions
     let substitutions: Vec<_> = substitutions
@@ -71,9 +65,7 @@ pub fn r#let(
         ..
     }: RuleArgs,
 ) -> Option<()> {
-    if conclusion.len() != 1 {
-        return None;
-    }
+    rassert!(conclusion.len() == 1);
 
     // Since we are closing a subproof, we only care about the substitutions that were introduced
     // in it
@@ -90,13 +82,9 @@ pub fn r#let(
     let previous_term =
         get_single_term_from_command(&subproof_commands[subproof_commands.len() - 2])?;
     let (previous_u, previous_u_prime) = match_term!((= u u_prime) = previous_term, RETURN_RCS)?;
-    if u != previous_u || u_prime != previous_u_prime {
-        return None;
-    }
+    rassert!(u == previous_u && u_prime == previous_u_prime);
 
-    if let_bindigns.len() != substitutions.len() {
-        return None;
-    }
+    rassert!(let_bindigns.len() == substitutions.len());
 
     let mut premises = premises.iter();
     for (x, t) in let_bindigns {
@@ -105,9 +93,7 @@ pub fn r#let(
         if s != t {
             let premise = premises.next()?;
             let premise_equality = match_term!((= a b) = get_single_term_from_command(premise)?)?;
-            if premise_equality != (s, t) && premise_equality != (t, s) {
-                return None;
-            }
+            rassert!(premise_equality == (s, t) || premise_equality == (t, s));
         }
     }
     to_option(premises.next().is_none())

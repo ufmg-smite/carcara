@@ -10,18 +10,16 @@ pub fn r#false(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 }
 
 pub fn not_not(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    if conclusion.len() != 2 {
-        return None;
-    }
+    rassert!(conclusion.len() == 2);
+
     let p = match_term!((not (not (not p))) = conclusion[0])?;
     let q = conclusion[1].as_ref();
     to_option(p == q)
 }
 
 pub fn and_pos(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    if conclusion.len() != 2 {
-        return None;
-    }
+    rassert!(conclusion.len() == 2);
+
     let and_contents = match_term!((not (and ...)) = conclusion[0])?;
     and_contents
         .iter()
@@ -30,9 +28,8 @@ pub fn and_pos(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 }
 
 pub fn and_neg(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    if conclusion.len() < 2 {
-        return None;
-    }
+    rassert!(conclusion.len() >= 2);
+
     let and_contents = match_term!((and ...) = conclusion[0])?
         .iter()
         .map(|t| Some(t.as_ref()));
@@ -41,17 +38,15 @@ pub fn and_neg(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 }
 
 pub fn or_pos(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    if conclusion.len() < 2 {
-        return None;
-    }
+    rassert!(conclusion.len() >= 2);
+
     let or_contents = match_term!((not (or ...)) = conclusion[0])?;
     to_option(or_contents.iter().eq(&conclusion[1..]))
 }
 
 pub fn or_neg(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    if conclusion.len() < 2 {
-        return None;
-    }
+    rassert!(conclusion.len() >= 2);
+
     let or_contents = match_term!((or ...) = conclusion[0])?;
     let other = conclusion[1].remove_negation()?;
     or_contents
@@ -61,17 +56,15 @@ pub fn or_neg(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 }
 
 pub fn equiv_pos1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    if conclusion.len() != 3 {
-        return None;
-    }
+    rassert!(conclusion.len() == 3);
+
     let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = conclusion[0])?;
     to_option(phi_1 == conclusion[1].as_ref() && phi_2 == conclusion[2].remove_negation()?)
 }
 
 pub fn equiv_pos2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    if conclusion.len() != 3 {
-        return None;
-    }
+    rassert!(conclusion.len() == 3);
+
     let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = conclusion[0])?;
     to_option(phi_1 == conclusion[1].remove_negation()? && phi_2 == conclusion[2].as_ref())
 }
@@ -83,9 +76,8 @@ pub fn ite1(
         ..
     }: RuleArgs,
 ) -> Option<()> {
-    if premises.len() != 1 || conclusion.len() != 2 {
-        return None;
-    }
+    rassert!(premises.len() == 1 && conclusion.len() == 2);
+
     let premise_term = get_single_term_from_command(premises[0])?;
     let (phi_1, _, phi_3) = match_term!((ite phi_1 phi_2 phi_3) = premise_term)?;
 
@@ -99,9 +91,8 @@ pub fn ite2(
         ..
     }: RuleArgs,
 ) -> Option<()> {
-    if premises.len() != 1 || conclusion.len() != 2 {
-        return None;
-    }
+    rassert!(premises.len() == 1 && conclusion.len() == 2);
+
     let premise_term = get_single_term_from_command(premises[0])?;
     let (phi_1, phi_2, _) = match_term!((ite phi_1 phi_2 phi_3) = premise_term)?;
 
@@ -109,9 +100,8 @@ pub fn ite2(
 }
 
 pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    if conclusion.len() != 1 {
-        return None;
-    }
+    rassert!(conclusion.len() == 1);
+
     let (root_term, right_side) = match_term!((= t u) = conclusion[0])?;
 
     // In some cases, no "ite" subterm is extracted from "t" (even if "t" has "ite" subterms), so
@@ -133,9 +123,8 @@ pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     let us = match_term!((and ...) = right_side)?;
 
     // "us" must be a conjunction where the first term is the root term
-    if !DeepEq::eq_modulo_reordering(us[0].as_ref(), root_term) {
-        return None;
-    }
+    rassert!(DeepEq::eq_modulo_reordering(us[0].as_ref(), root_term));
+
     let us = &us[1..];
 
     let subterms = root_term.subterms();
@@ -172,9 +161,8 @@ pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 }
 
 pub fn connective_def(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    if conclusion.len() != 1 {
-        return None;
-    }
+    rassert!(conclusion.len() == 1);
+
     let (first, second) = match_term!((= f s) = conclusion[0])?;
 
     let result = if let Some((phi_1, phi_2)) = match_term!((xor phi_1 phi_2) = first) {
