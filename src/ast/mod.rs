@@ -476,6 +476,16 @@ impl Term {
             _ => None,
         }
     }
+
+    /// Returns `true` if the term is the boolean constant "true".
+    pub fn is_bool_true(&self) -> bool {
+        self.sort() == Term::BOOL_SORT && self.try_as_var() == Some("true")
+    }
+
+    /// Returns `true` if the term is the boolean constant "false".
+    pub fn is_bool_false(&self) -> bool {
+        self.sort() == Term::BOOL_SORT && self.try_as_var() == Some("false")
+    }
 }
 
 impl Debug for Term {

@@ -92,12 +92,12 @@ pub fn not_simplify(args: RuleArgs) -> Option<()> {
             (not (not phi)): phi => { phi.clone() },
 
             // ¬false => true
-            (not lit): lit if lit.try_as_var() == Some("false") => {
+            (not lit): lit if lit.is_bool_false() => {
                 pool.add_term(terminal!(bool true))
             },
 
             // ¬true => false
-            (not lit): lit if lit.try_as_var() == Some("true") => {
+            (not lit): lit if lit.is_bool_true() => {
                 pool.add_term(terminal!(bool false))
             },
         })

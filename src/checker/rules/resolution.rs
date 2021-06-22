@@ -94,7 +94,7 @@ pub fn tautology(
         ..
     }: RuleArgs,
 ) -> Option<()> {
-    if conclusion.len() != 1 || conclusion[0].try_as_var() != Some("true") || premises.len() != 1 {
+    if conclusion.len() != 1 || !conclusion[0].is_bool_true() || premises.len() != 1 {
         return None;
     }
     let premise = get_clause_from_command(premises[0]);

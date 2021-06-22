@@ -2,11 +2,11 @@ use super::{get_single_term_from_command, to_option, RuleArgs};
 use crate::ast::*;
 
 pub fn r#true(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    to_option(conclusion.len() == 1 && conclusion[0].try_as_var()? == "true")
+    to_option(conclusion.len() == 1 && conclusion[0].is_bool_true())
 }
 
 pub fn r#false(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    to_option(conclusion.len() == 1 && conclusion[0].remove_negation()?.try_as_var()? == "false")
+    to_option(conclusion.len() == 1 && conclusion[0].remove_negation()?.is_bool_false())
 }
 
 pub fn not_not(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
