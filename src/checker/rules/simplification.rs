@@ -282,6 +282,65 @@ mod tests {
     }
 
     #[test]
+    fn or_simplify() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+            ",
+            "Transformation #1" {
+                "(step t1 (cl (= (or false false false) false)) :rule or_simplify)": true,
+                "(step t1 (cl (= (or false false false) (or false))) :rule or_simplify)": true,
+                "(step t1 (cl (= (or false) false)) :rule or_simplify)": true,
+
+                "(step t1 (cl (= (or false p false) false)) :rule or_simplify)": false,
+                "(step t1 (cl (= (or false false) true)) :rule or_simplify)": false,
+            }
+            "Transformation #2" {
+                "(step t1 (cl (= (or p false q) (or p q))) :rule or_simplify)": true,
+                "(step t1 (cl (= (or p false q r false false) (or p q r))) :rule or_simplify)": true,
+                "(step t1 (cl (= (or false q false false) q)) :rule or_simplify)": true,
+                "(step t1 (cl (= (or false q false false) (or q))) :rule or_simplify)": true,
+
+                "(step t1 (cl (= (or p false q false) (or p false q))) :rule or_simplify)": false,
+                "(step t1 (cl (= (or p false q r false false) (or p r))) :rule or_simplify)": false,
+            }
+            "Transformation #3" {
+                "(step t1 (cl (= (or p p q q q r) (or p q r))) :rule or_simplify)": true,
+                "(step t1 (cl (= (or p p) (or p))) :rule or_simplify)": true,
+                "(step t1 (cl (= (or p p) p)) :rule or_simplify)": true,
+
+                "(step t1 (cl (= (or p p q q q r) (or p q q r))) :rule or_simplify)": false,
+                "(step t1 (cl (= (or p p q q q) (or p q r))) :rule or_simplify)": false,
+            }
+            "Transformation #4" {
+                "(step t1 (cl (= (or p q true r) true)) :rule or_simplify)": true,
+                "(step t1 (cl (= (or p q true r) (or true))) :rule or_simplify)": true,
+                "(step t1 (cl (= (or true false) true)) :rule or_simplify)": true,
+
+                "(step t1 (cl (= (or p q true r) (or p q r))) :rule or_simplify)": false,
+                "(step t1 (cl (= (or p q true r) false)) :rule or_simplify)": false,
+            }
+            "Transformation #5" {
+                "(step t1 (cl (= (or p q (not q) r) true)) :rule or_simplify)": true,
+                "(step t1 (cl (= (or p q (not q) r) (or true))) :rule or_simplify)": true,
+                "(step t1 (cl (= (or p (not (not q)) (not q) r) true)) :rule or_simplify)": true,
+                "(step t1 (cl (= (or p (not (not (not p))) (not p)) true)) :rule or_simplify)": true,
+
+                "(step t1 (cl (= (or p (not (not p)) (not q) r) true)) :rule or_simplify)": false,
+                "(step t1 (cl (= (or q (not r)) true)) :rule or_simplify)": false,
+                "(step t1 (cl (= (or r (not r)) false)) :rule or_simplify)": false,
+            }
+            "Multiple transformations" {
+                "(step t1 (cl (= (or p p false q q false q r) (or p q r))) :rule or_simplify)": true,
+                "(step t1 (cl (= (or p p (not p) q q false q r) true)) :rule or_simplify)": true,
+                "(step t1 (cl (= (or p true p (not p) q false q r) true)) :rule or_simplify)": true,
+            }
+        }
+    }
+
+    #[test]
     fn not_simplify() {
         test_cases! {
             definitions = "
