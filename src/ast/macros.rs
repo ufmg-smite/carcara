@@ -229,10 +229,7 @@ mod tests {
             pool.add_term(terminal!(var "p"; BOOL_SORT)),
             pool.add_term(terminal!(var "q"; BOOL_SORT)),
         );
-        let (r#true, r#false) = (
-            pool.add_term(terminal!(bool true)),
-            pool.add_term(terminal!(bool false)),
-        );
+        let (r#true, r#false) = (pool.bool_true(), pool.bool_false());
 
         let cases = [
             ("(= a b)", build_term!(pool, (= {a} {b}))),

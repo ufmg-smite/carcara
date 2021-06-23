@@ -62,7 +62,7 @@ pub fn eq_simplify(args: RuleArgs) -> Option<()> {
         simplify!(term {
             // t = t => true
             (= t t): (t1, t2) if t1 == t2 => {
-                pool.add_term(terminal!(bool true))
+                pool.bool_true()
             },
 
             // t_1 = t_2 => false, if t_1 and t_2 are different numerical constants
@@ -71,12 +71,12 @@ pub fn eq_simplify(args: RuleArgs) -> Option<()> {
                 let t2 = t2.try_as_signed_ratio();
                 t1.is_some() && t2.is_some() && t1 != t2
             } => {
-                pool.add_term(terminal!(bool false))
+                pool.bool_false()
             },
 
             // ¬(t = t) => false, if t is a numerical constant
             (not (= t t)): (t1, t2) if t1 == t2 && t1.is_signed_constant() => {
-                pool.add_term(terminal!(bool false))
+                pool.bool_false()
             },
         })
     }
@@ -126,12 +126,12 @@ pub fn not_simplify(args: RuleArgs) -> Option<()> {
 
             // ¬false => true
             (not lit): lit if lit.is_bool_false() => {
-                pool.add_term(terminal!(bool true))
+                pool.bool_true()
             },
 
             // ¬true => false
             (not lit): lit if lit.is_bool_true() => {
-                pool.add_term(terminal!(bool false))
+                pool.bool_false()
             },
         })
     }

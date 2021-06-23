@@ -75,26 +75,63 @@ impl<T> ByRefRc<T> {
     }
 }
 
-#[derive(Default)]
 pub struct TermPool {
     pub terms: HashMap<Term, ByRefRc<Term>>,
     pub free_vars_cache: HashMap<ByRefRc<Term>, HashSet<String>>,
+    bool_true: ByRefRc<Term>,
+    bool_false: ByRefRc<Term>,
+}
+
+impl Default for TermPool {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TermPool {
     pub fn new() -> Self {
-        Self::default()
+        let mut terms = HashMap::new();
+        let bool_sort = Self::add_term_to_map(&mut terms, Term::BOOL_SORT.clone());
+        let bool_true = Self::add_term_to_map(
+            &mut terms,
+            Term::Terminal(Terminal::Var(
+                Identifier::Simple("true".into()),
+                bool_sort.clone(),
+            )),
+        );
+        let bool_false = Self::add_term_to_map(
+            &mut terms,
+            Term::Terminal(Terminal::Var(Identifier::Simple("false".into()), bool_sort)),
+        );
+        Self {
+            terms,
+            free_vars_cache: HashMap::new(),
+            bool_true,
+            bool_false,
+        }
+    }
+
+    pub fn bool_true(&self) -> ByRefRc<Term> {
+        self.bool_true.clone()
+    }
+
+    pub fn bool_false(&self) -> ByRefRc<Term> {
+        self.bool_false.clone()
+    }
+
+    fn add_term_to_map(terms_map: &mut HashMap<Term, ByRefRc<Term>>, term: Term) -> ByRefRc<Term> {
+        use std::collections::hash_map::Entry;
+
+        match terms_map.entry(term.clone()) {
+            Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
+            Entry::Vacant(vacant_entry) => vacant_entry.insert(ByRefRc::new(term)).clone(),
+        }
     }
 
     /// Takes a term and returns a `ByRefRc` referencing it. If the term was not originally in the
     /// terms hash map, it is added to it.
     pub fn add_term(&mut self, term: Term) -> ByRefRc<Term> {
-        use std::collections::hash_map::Entry;
-
-        match self.terms.entry(term.clone()) {
-            Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
-            Entry::Vacant(vacant_entry) => vacant_entry.insert(ByRefRc::new(term)).clone(),
-        }
+        Self::add_term_to_map(&mut self.terms, term)
     }
 
     // Takes a vector of terms and calls `add_term` on each.

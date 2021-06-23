@@ -69,9 +69,11 @@ fn test_hash_consing() {
     //   (* 2 2)
     // Note that the outer term (- (- ...) (* 2 2)) is not added to the hash map
     let expected = vec![
-        // The Bool sort is always added to the terms map because of the boolean bulit-ins "true"
-        // and "false"
+        // The "Bool" sort and the boolean constants "true" and "false" are always added to the
+        // terms map
         "Bool",
+        "true",
+        "false",
         "1",
         "2",
         "(+ 1 2)",
