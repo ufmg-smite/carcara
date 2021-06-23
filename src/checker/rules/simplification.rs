@@ -84,6 +84,40 @@ pub fn eq_simplify(args: RuleArgs) -> Option<()> {
     generic_simplify_rule(args.conclusion, args.pool, eq_simplify_once)
 }
 
+pub fn or_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    rassert!(conclusion.len() == 1);
+
+    let (clause, result) = match_term!((= (or ...) psi) = conclusion[0], RETURN_RCS)?;
+    let result = match_term!((or ...) = result).unwrap_or_else(|| std::slice::from_ref(&result));
+
+    let mut seen = HashSet::with_capacity(clause.len());
+    let mut expected = Vec::with_capacity(clause.len());
+
+    for term in clause {
+        if term.is_bool_false() {
+            continue; // Skip term if it is "false"
+        }
+
+        // If the term is the boolean constant "true", or is the negation of a term previously
+        // encountered, the result is short-circuited to "true"
+        let (polarity, inner) = term.remove_all_negations_with_polarity();
+        if seen.contains(&(!polarity, inner)) || term.is_bool_true() {
+            return to_option(result.len() == 1 && result[0].is_bool_true());
+        }
+
+        let is_new = seen.insert((polarity, inner));
+        if is_new {
+            expected.push(term)
+        }
+    }
+
+    to_option(if expected.is_empty() {
+        result.len() == 1 && result[0].is_bool_false()
+    } else {
+        result.iter().eq(expected)
+    })
+}
+
 pub fn not_simplify(args: RuleArgs) -> Option<()> {
     fn not_simplify_once(term: &Term, pool: &mut TermPool) -> Option<ByRefRc<Term>> {
         simplify!(term {

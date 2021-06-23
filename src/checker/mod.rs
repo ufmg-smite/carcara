@@ -118,6 +118,7 @@ impl ProofChecker {
             "contraction" => resolution::contraction,
             "connective_def" => tautology::connective_def,
             "eq_simplify" => simplification::eq_simplify,
+            "or_simplify" => simplification::or_simplify,
             "not_simplify" => simplification::not_simplify,
             "bool_simplify" => simplification::bool_simplify,
             "prod_simplify" => simplification::prod_simplify,
