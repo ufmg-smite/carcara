@@ -47,7 +47,7 @@ fn generic_simplify_rule(
             panic!("Cycle detected in simplification rule!")
         }
         if let Some(next) = simplify_function(&current, pool) {
-            if DeepEq::eq(&next, goal) {
+            if next == *goal {
                 return Some(());
             }
             current = next;
