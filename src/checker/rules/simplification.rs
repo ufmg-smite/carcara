@@ -645,4 +645,37 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn ac_simp() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+                (declare-fun s () Bool)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (= (and (and p q) (and r s)) (and p q r s))) :rule ac_simp)": true,
+                "(step t1 (cl (= (or (or (or p q) r) s) (or p q r s))) :rule ac_simp)": true,
+            }
+            "Mixed operators" {
+                "(step t1 (cl (= (or (and (and p q) r) s (or p q)) (or (and p q r) s p q)))
+                    :rule ac_simp)": true,
+
+                "(step t1 (cl (= (or (= (and (and p q) r) s) (or p q)) (or (= (and p q r) s) p q)))
+                    :rule ac_simp)": true,
+
+                "(step t1 (cl (= (or (= (and (and p q) r) s) (or p q))
+                    (or (= (and (and p q) r) s) p q))) :rule ac_simp)": false,
+
+                "(step t1 (cl (= (xor (xor (xor p q) r) s) (xor p q r s))) :rule ac_simp)": false,
+            }
+            "Removing duplicates" {
+                "(step t1 (cl (= (or p p q r s) (or p q r s))) :rule ac_simp)": true,
+                "(step t1 (cl (= (and (and p q) (and q r)) (and p q r))) :rule ac_simp)": true,
+                "(step t1 (cl (= (and (and p q) (and q r)) (and p q q r))) :rule ac_simp)": false,
+            }
+        }
+    }
 }
