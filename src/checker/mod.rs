@@ -124,6 +124,7 @@ impl ProofChecker {
             "bool_simplify" => simplification::bool_simplify,
             "prod_simplify" => simplification::prod_simplify,
             "nary_elim" => clausification::nary_elim,
+            "ac_simp" => simplification::ac_simp,
             "bind" => subproof::bind,
             "let" => subproof::r#let,
             "trust_me" if allow_test_rule => |_| Some(()),
