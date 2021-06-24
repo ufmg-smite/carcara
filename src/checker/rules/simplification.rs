@@ -139,6 +139,44 @@ pub fn not_simplify(args: RuleArgs) -> Option<()> {
     generic_simplify_rule(args.conclusion, args.pool, not_simplify_once)
 }
 
+pub fn equiv_simplify(args: RuleArgs) -> Option<()> {
+    fn equiv_simplify_once(term: &Term, pool: &mut TermPool) -> Option<ByRefRc<Term>> {
+        simplify!(term {
+            // ¬phi_1 = ¬phi_2 => phi_1 = phi_2
+            (= (not phi_1) (not phi_2)): (phi_1, phi_2) => {
+                build_term!(pool, (= {phi_1.clone()} {phi_2.clone()}))
+            },
+
+            // phi = phi => true
+            (= phi_1 phi_2): (phi_1, phi_2) if phi_1 == phi_2 => { pool.bool_true() },
+
+            // phi = ¬phi => false
+            (= phi_1 (not phi_2)): (phi_1, phi_2) if phi_1 == phi_2 => { pool.bool_false() },
+
+            // ¬phi = phi => false
+            (= (not phi_1) phi_2): (phi_1, phi_2) if phi_1 == phi_2 => { pool.bool_false() },
+
+            // true = phi => phi
+            (= t phi_1): (t, phi_1) if t.is_bool_true() => { phi_1.clone() },
+
+            // phi = true => phi
+            (= phi_1 t): (phi_1, t) if t.is_bool_true() => { phi_1.clone() },
+
+            // false = phi => ¬phi
+            (= f phi_1): (f, phi_1) if f.is_bool_false() => {
+                build_term!(pool, (not {phi_1.clone()}))
+            },
+
+            // phi = false => ¬phi
+            (= phi_1 f): (phi_1, f) if f.is_bool_false() => {
+                build_term!(pool, (not {phi_1.clone()}))
+            },
+        })
+    }
+
+    generic_simplify_rule(args.conclusion, args.pool, equiv_simplify_once)
+}
+
 pub fn bool_simplify(args: RuleArgs) -> Option<()> {
     fn bool_simplify_once(term: &Term, pool: &mut TermPool) -> Option<ByRefRc<Term>> {
         simplify!(term {
@@ -364,6 +402,53 @@ mod tests {
             "Multiple transformations" {
                 "(step t1 (cl (= (not (not (not false))) true)) :rule not_simplify)": true,
                 "(step t1 (cl (= (not (not (not true))) false)) :rule not_simplify)": true,
+            }
+        }
+    }
+
+    #[test]
+    fn equiv_simplify() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+            ",
+            "Transformation #1" {
+                "(step t1 (cl (= (= (not p) (not q)) (= p q))) :rule equiv_simplify)": true,
+                "(step t1 (cl (= (= (not (not p)) (not q)) (= (not p) q)))
+                    :rule equiv_simplify)": true,
+            }
+            "Transformation #2" {
+                "(step t1 (cl (= (= p p) true)) :rule equiv_simplify)": true,
+                "(step t1 (cl (= (= (and p q) (and p q)) true)) :rule equiv_simplify)": true,
+            }
+            "Transformation #3" {
+                "(step t1 (cl (= (= p (not p)) false)) :rule equiv_simplify)": true,
+            }
+            "Transformation #4" {
+                "(step t1 (cl (= (= (not p) p) false)) :rule equiv_simplify)": true,
+            }
+            "Transformation #5" {
+                "(step t1 (cl (= (= true p) p)) :rule equiv_simplify)": true,
+                "(step t1 (cl (= (= true (and q p)) (and q p))) :rule equiv_simplify)": true,
+            }
+            "Transformation #6" {
+                "(step t1 (cl (= (= p true) p)) :rule equiv_simplify)": true,
+                "(step t1 (cl (= (= (and q p) true) (and q p))) :rule equiv_simplify)": true,
+            }
+            "Transformation #7" {
+                "(step t1 (cl (= (= false p) (not p))) :rule equiv_simplify)": true,
+                "(step t1 (cl (= (= false (and q p)) (not (and q p)))) :rule equiv_simplify)": true,
+            }
+            "Transformation #8" {
+                "(step t1 (cl (= (= p false) (not p))) :rule equiv_simplify)": true,
+                "(step t1 (cl (= (= (and q p) false) (not (and q p)))) :rule equiv_simplify)": true,
+            }
+            "Multiple transformations" {
+                "(step t1 (cl (= (= (not (not p)) (not p)) false)) :rule equiv_simplify)": true,
+                "(step t1 (cl (= (= (not (not false)) (not (not p))) (not p)))
+                    :rule equiv_simplify)": true,
             }
         }
     }

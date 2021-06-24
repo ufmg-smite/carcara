@@ -120,6 +120,7 @@ impl ProofChecker {
             "eq_simplify" => simplification::eq_simplify,
             "or_simplify" => simplification::or_simplify,
             "not_simplify" => simplification::not_simplify,
+            "equiv_simplify" => simplification::equiv_simplify,
             "bool_simplify" => simplification::bool_simplify,
             "prod_simplify" => simplification::prod_simplify,
             "nary_elim" => clausification::nary_elim,
