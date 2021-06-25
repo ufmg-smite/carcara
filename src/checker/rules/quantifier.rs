@@ -1,5 +1,5 @@
 use super::{to_option, RuleArgs};
-use crate::ast::*;
+use crate::{ast::*, utils::DedupIterator};
 use std::collections::HashMap;
 
 pub fn forall_inst(
@@ -43,6 +43,28 @@ pub fn forall_inst(
         &pool.apply_substitutions(original, &mut substitutions),
         substituted,
     ))
+}
+
+/// Unwraps a quantifier term, returning the `Quantifier`, the bindings and the inner term.
+fn unwrap_quant(term: &Term) -> Option<(Quantifier, &Vec<SortedVar>, &ByRefRc<Term>)> {
+    match term {
+        Term::Quant(q, b, t) => Some((*q, b, t)),
+        _ => None,
+    }
+}
+
+pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    rassert!(conclusion.len() == 1);
+
+    let (left, right) = match_term!((= l r) = conclusion[0])?;
+    let (q_1, bindings_1, left) = unwrap_quant(left)?;
+    let (q_2, bindings_2, left) = unwrap_quant(left)?;
+    let (q_3, bindings_3, right) = unwrap_quant(right)?;
+
+    rassert!(q_1 == q_2 && q_2 == q_3 && left == right);
+
+    let combined = bindings_1.iter().chain(bindings_2).dedup();
+    to_option(bindings_3.iter().eq(combined))
 }
 
 #[cfg(test)]
@@ -93,6 +115,62 @@ mod tests {
             "Wrong type of rule argument" {
                 "(step t1 (cl (or (not (forall ((x Real) (y Real)) (= x y))) (= a b)))
                     :rule forall_inst :args ((:= x a) b))": false,
+            }
+        }
+    }
+
+    #[test]
+    fn qnt_join() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun a () Real)
+                (declare-fun b () Real)
+                (declare-fun x () Real)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (=
+                    (forall ((x Real)) (forall ((y Real)) (= x y)))
+                    (forall ((x Real) (y Real)) (= x y))
+                )) :rule qnt_join)": true,
+
+                "(step t1 (cl (=
+                    (forall ((x Real) (y Real)) (forall ((z Real) (w Real)) (= (+ x y) (+ z w))))
+                    (forall ((x Real) (y Real) (z Real) (w Real)) (= (+ x y) (+ z w)))
+                )) :rule qnt_join)": true,
+            }
+            "Bindings in wrong order" {
+                "(step t1 (cl (=
+                    (forall ((x Real)) (forall ((y Real)) (= x y)))
+                    (forall ((y Real) (x Real)) (= x y))
+                )) :rule qnt_join)": false,
+
+                "(step t1 (cl (=
+                    (forall ((x Real) (y Real)) (forall ((z Real) (w Real)) (= (+ x y) (+ z w))))
+                    (forall ((z Real) (y Real) (w Real) (x Real)) (= (+ x y) (+ z w)))
+                )) :rule qnt_join)": false,
+            }
+            "Removing duplicates" {
+                "(step t1 (cl (=
+                    (forall ((p Bool)) (forall ((p Bool)) p))
+                    (forall ((p Bool)) p)
+                )) :rule qnt_join)": true,
+
+                "(step t1 (cl (=
+                    (forall ((x Real) (y Real)) (forall ((y Real) (z Real)) (distinct x y z)))
+                    (forall ((x Real) (y Real) (z Real)) (distinct x y z))
+                )) :rule qnt_join)": true,
+
+                "(step t1 (cl (=
+                    (forall ((x Real) (y Real)) (forall ((x Real) (y Real)) (= x y)))
+                    (forall ((x Real) (y Real)) (= x y))
+                )) :rule qnt_join)": true,
+
+                "(step t1 (cl (=
+                    (forall ((x Real) (y Real)) (forall ((z Real) (x Real)) (distinct x y z)))
+                    (forall ((x Real) (y Real) (z Real) (x Real)) (distinct x y z))
+                )) :rule qnt_join)": false,
             }
         }
     }
