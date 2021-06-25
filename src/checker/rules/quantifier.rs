@@ -194,4 +194,40 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn qnt_rm_unused() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun a () Real)
+                (declare-fun b () Real)
+                (declare-fun x () Real)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (=
+                    (forall ((x Real) (y Real) (z Real)) (= x z))
+                    (forall ((x Real) (z Real)) (= x z))
+                )) :rule qnt_rm_unused)": true,
+
+                "(step t1 (cl (=
+                    (forall ((x Real) (y Real) (z Real) (w Real)) (= y y))
+                    (forall ((y Real)) (= y y))
+                )) :rule qnt_rm_unused)": true,
+            }
+            "Bindings in wrong order" {
+                "(step t1 (cl (=
+                    (forall ((x Real) (y Real) (z Real)) (= x z))
+                    (forall ((z Real) (x Real)) (= x z))
+                )) :rule qnt_rm_unused)": false,
+            }
+            "Not all unused bindings were removed" {
+                "(step t1 (cl (=
+                    (forall ((x Real) (y Real) (z Real) (w Real)) (= y y))
+                    (forall ((y Real) (w Real)) (= y y))
+                )) :rule qnt_rm_unused)": false,
+            }
+        }
+    }
 }
