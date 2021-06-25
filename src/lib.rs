@@ -6,3 +6,4 @@ extern crate num_traits;
 pub mod ast;
 pub mod checker;
 pub mod parser;
+mod utils;

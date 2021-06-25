@@ -1,5 +1,5 @@
 use super::{to_option, RuleArgs};
-use crate::ast::*;
+use crate::{ast::*, utils::DedupIterator};
 use num_rational::BigRational;
 use num_traits::{One, Zero};
 use std::collections::HashSet;
@@ -286,23 +286,6 @@ pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     to_option(u_constant == constant_total && u_args.iter().map(ByRefRc::as_ref).eq(result))
 }
 
-/// Collects an interator into a `Vec`, skipping elements that have already been seen before.
-fn collect_deduped<T, I>(iter: I) -> Vec<T>
-where
-    T: Clone + std::hash::Hash + Eq,
-    I: Iterator<Item = T>,
-{
-    let mut seen = HashSet::new();
-    let mut result = Vec::new();
-    for element in iter {
-        let is_new = seen.insert(element.clone());
-        if is_new {
-            result.push(element);
-        }
-    }
-    result
-}
-
 pub fn ac_simp(
     RuleArgs {
         conclusion, pool, ..
@@ -311,13 +294,17 @@ pub fn ac_simp(
     fn flatten_operation(term: &ByRefRc<Term>, pool: &mut TermPool) -> ByRefRc<Term> {
         match term.as_ref() {
             Term::Op(op @ (Operator::And | Operator::Or), args) => {
-                let args = collect_deduped(args.iter().flat_map(|term| {
-                    let term = flatten_operation(term, pool);
-                    match term.as_ref() {
-                        Term::Op(inner_op, inner_args) if inner_op == op => inner_args.clone(),
-                        _ => vec![term.clone()],
-                    }
-                }));
+                let args: Vec<_> = args
+                    .iter()
+                    .flat_map(|term| {
+                        let term = flatten_operation(term, pool);
+                        match term.as_ref() {
+                            Term::Op(inner_op, inner_args) if inner_op == op => inner_args.clone(),
+                            _ => vec![term.clone()],
+                        }
+                    })
+                    .dedup()
+                    .collect();
                 if args.len() == 1 {
                     args[0].clone()
                 } else {
