@@ -67,6 +67,26 @@ pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     to_option(bindings_3.iter().eq(combined))
 }
 
+pub fn qnt_rm_unused(
+    RuleArgs {
+        conclusion, pool, ..
+    }: RuleArgs,
+) -> Option<()> {
+    rassert!(conclusion.len() == 1);
+
+    let (left, right) = match_term!((= l r) = conclusion[0])?;
+    let (q_1, bindings_1, phi_1) = unwrap_quant(left)?;
+    let (q_2, bindings_2, phi_2) = unwrap_quant(right)?;
+    rassert!(q_1 == q_2 && phi_1 == phi_2);
+    let free_vars = pool.free_vars(phi_1);
+    to_option(
+        bindings_1
+            .iter()
+            .filter(|(var, _)| free_vars.contains(var))
+            .eq(bindings_2),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

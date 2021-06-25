@@ -105,6 +105,7 @@ impl ProofChecker {
             "la_disequality" => linear_arithmetic::la_disequality,
             "forall_inst" => quantifier::forall_inst,
             "qnt_join" => quantifier::qnt_join,
+            "qnt_rm_unused" => quantifier::qnt_rm_unused,
             "th_resolution" | "resolution" => resolution::resolution,
             "refl" => reflexivity::refl,
             "trans" => transitivity::trans,
