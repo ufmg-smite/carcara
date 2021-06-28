@@ -127,6 +127,13 @@ impl<R: BufRead> Parser<R> {
         self.state.term_pool.add_all(term)
     }
 
+    /// Helper method to insert a `SortedVar` into the parser symbol table.
+    fn insert_sorted_var(&mut self, (symbol, sort): SortedVar) {
+        self.state
+            .sorts_symbol_table
+            .insert(Identifier::Simple(symbol), sort)
+    }
+
     /// Helper method to build a `ErrorKind::UnexpectedToken` error.
     fn unexpected_token(&self, got: Token) -> ParserError {
         self.err(ErrorKind::UnexpectedToken(got))
@@ -283,9 +290,7 @@ impl<R: BufRead> Parser<R> {
             match self.next_token()? {
                 Token::ReservedWord(Reserved::DeclareFun) => {
                     let (name, sort) = self.parse_declare_fun()?;
-                    self.state
-                        .sorts_symbol_table
-                        .insert(Identifier::Simple(name), sort);
+                    self.insert_sorted_var((name, sort));
                     continue;
                 }
                 Token::ReservedWord(Reserved::DeclareSort) => {
@@ -476,9 +481,8 @@ impl<R: BufRead> Parser<R> {
                     let b_term = p.add_term(terminal!(var b.clone(); b_sort.clone()));
                     args.insert(a.clone(), b_term);
 
-                    let (a, b) = (Identifier::Simple(a), Identifier::Simple(b));
-                    p.state.sorts_symbol_table.insert(a, a_sort);
-                    p.state.sorts_symbol_table.insert(b, b_sort);
+                    p.insert_sorted_var((a, a_sort));
+                    p.insert_sorted_var((b, b_sort));
 
                     Ok(())
                 },
@@ -534,9 +538,8 @@ impl<R: BufRead> Parser<R> {
         // In order to correctly parse the function body, we push a new scope to the symbol table
         // and add the functions arguments to it.
         self.state.sorts_symbol_table.push_scope();
-        for (name, sort) in &params {
-            let iden = Identifier::Simple(name.clone());
-            self.state.sorts_symbol_table.insert(iden, sort.clone());
+        for var in &params {
+            self.insert_sorted_var(var.clone());
         }
         let body = self.parse_term()?;
         self.state.sorts_symbol_table.pop_scope();
@@ -631,10 +634,9 @@ impl<R: BufRead> Parser<R> {
         self.state.sorts_symbol_table.push_scope();
         let bindings = self.parse_sequence(
             |p| {
-                let (name, sort) = p.parse_sorted_var()?;
-                let iden = Identifier::Simple(name.clone());
-                p.state.sorts_symbol_table.insert(iden, sort.clone());
-                Ok((name, sort))
+                let var = p.parse_sorted_var()?;
+                p.insert_sorted_var(var.clone());
+                Ok(var)
             },
             true,
         )?;
@@ -649,6 +651,7 @@ impl<R: BufRead> Parser<R> {
     fn parse_choice_term(&mut self) -> ParserResult<Term> {
         self.expect_token(Token::OpenParen)?;
         let var = self.parse_sorted_var()?;
+        self.insert_sorted_var(var.clone());
         self.expect_token(Token::CloseParen)?;
         let inner = self.parse_term()?;
         self.expect_token(Token::CloseParen)?;
@@ -665,9 +668,7 @@ impl<R: BufRead> Parser<R> {
                 let value = p.parse_term()?;
                 let value = p.add_term(value);
                 let sort = p.add_term(value.sort().clone());
-                p.state
-                    .sorts_symbol_table
-                    .insert(Identifier::Simple(name.clone()), sort);
+                p.insert_sorted_var((name.clone(), sort));
                 p.expect_token(Token::CloseParen)?;
                 Ok((name, value))
             },
