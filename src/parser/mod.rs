@@ -784,7 +784,7 @@ impl<R: BufRead> Parser<R> {
                     if let Some((_, sort)) = self.state.sort_declarations.get(other) {
                         Ok((**sort).clone())
                     } else {
-                        Err(self.err(ErrorKind::UndefinedIden(Identifier::Simple(other.into()))))
+                        Err(self.err(ErrorKind::UndefinedSort(other.into())))
                     }
                 }
             },

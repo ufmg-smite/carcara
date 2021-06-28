@@ -29,6 +29,7 @@ pub enum ErrorKind {
     EmptySequence,
     SortError(SortError),
     UndefinedIden(Identifier),
+    UndefinedSort(String),
     UndefinedStepIndex(String),
     WrongNumberOfArgs(usize, usize),
     RepeatedStepIndex(String),
