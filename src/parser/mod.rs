@@ -567,7 +567,7 @@ impl<R: BufRead> Parser<R> {
         Ok(terms)
     }
 
-    /// Parses an argument for a "step" or "anchor" command.
+    /// Parses an argument for a "step" command.
     fn parse_proof_arg(&mut self) -> ParserResult<ProofArg> {
         if self.current_token == Token::OpenParen {
             self.next_token()?; // Consume "(" token
