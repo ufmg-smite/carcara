@@ -35,8 +35,12 @@ impl ProofChecker {
         for step in commands {
             match step {
                 ProofCommand::Step(step) => self.check_step(step, commands)?,
-                ProofCommand::Subproof(commands, subproof_args) => {
-                    let new_context = subproof_args
+                ProofCommand::Subproof {
+                    commands,
+                    assignment_args,
+                    ..
+                } => {
+                    let new_context = assignment_args
                         .iter()
                         .map(|(k, v)| {
                             let ident_term = terminal!(var k; self.pool.add_term(v.sort().clone()));

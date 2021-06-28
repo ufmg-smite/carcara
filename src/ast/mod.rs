@@ -265,7 +265,12 @@ pub enum ProofCommand {
     /// A "step" command.
     Step(ProofStep),
 
-    Subproof(Vec<ProofCommand>, HashMap<String, ByRefRc<Term>>),
+    /// A subproof.
+    Subproof {
+        commands: Vec<ProofCommand>,
+        assignment_args: HashMap<String, ByRefRc<Term>>,
+        variable_args: Vec<SortedVar>,
+    },
 }
 
 /// A "step" command, of the form `(step <symbol> <clause> :rule <symbol> [:premises (<symbol>+)]?

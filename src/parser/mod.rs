@@ -348,7 +348,8 @@ impl<R: BufRead> Parser<R> {
                     continue;
                 }
                 Token::ReservedWord(Reserved::Anchor) => {
-                    let (end_step_index, args) = self.parse_anchor_command()?;
+                    let (end_step_index, assignment_args, variable_args) =
+                        self.parse_anchor_command()?;
 
                     self.state.step_indices.push_scope();
                     let Proof(commands) = self.parse_subproof(Some(&end_step_index))?;
@@ -358,7 +359,12 @@ impl<R: BufRead> Parser<R> {
                     // have to pop it now, after parsing the subproof
                     self.state.sorts_symbol_table.pop_scope();
 
-                    (end_step_index, ProofCommand::Subproof(commands, args))
+                    let subproof = ProofCommand::Subproof {
+                        commands,
+                        assignment_args,
+                        variable_args,
+                    };
+                    (end_step_index, subproof)
                 }
                 other => return Err(self.unexpected_token(other)),
             };
@@ -454,8 +460,12 @@ impl<R: BufRead> Parser<R> {
 
     /// Parses an "anchor" proof command. This method assumes that the "(" and "anchor" tokens were
     /// already consumed. In order to parse the subproof arguments, this method pushes a new scope
-    /// into the sorts symbol table. This scope must be removed after parsing the subproof.
-    fn parse_anchor_command(&mut self) -> ParserResult<(String, HashMap<String, ByRefRc<Term>>)> {
+    /// into the sorts symbol table which must be removed after parsing the subproof. This method
+    /// returns the index of the step that will end the subproof, as well as the subproof
+    /// assignment and variable arguments.
+    fn parse_anchor_command(
+        &mut self,
+    ) -> ParserResult<(String, HashMap<String, ByRefRc<Term>>, Vec<SortedVar>)> {
         self.expect_token(Token::Keyword("step".into()))?;
         let end_step_index = self.expect_symbol()?;
 
@@ -464,6 +474,7 @@ impl<R: BufRead> Parser<R> {
         self.state.sorts_symbol_table.push_scope();
 
         let mut assignment_args = HashMap::new();
+        let mut variable_args = Vec::new();
         if self.current_token == Token::Keyword("args".into()) {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
@@ -482,13 +493,15 @@ impl<R: BufRead> Parser<R> {
                         self.insert_sorted_var((a, a_sort));
                         self.insert_sorted_var((b, b_sort));
                     }
-                    // TODO: Store variable binding style arguments to subproof
-                    Either::Right(var) => self.insert_sorted_var(var),
+                    Either::Right(var) => {
+                        variable_args.push(var.clone());
+                        self.insert_sorted_var(var)
+                    }
                 }
             }
         }
         self.expect_token(Token::CloseParen)?;
-        Ok((end_step_index, assignment_args))
+        Ok((end_step_index, assignment_args, variable_args))
     }
 
     fn parse_anchor_argument(&mut self) -> ParserResult<Either<(SortedVar, SortedVar), SortedVar>> {
