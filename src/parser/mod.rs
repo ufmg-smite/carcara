@@ -4,7 +4,7 @@ pub mod error;
 pub mod lexer;
 pub mod tests;
 
-use crate::ast::*;
+use crate::{ast::*, utils::Either};
 use error::*;
 use lexer::*;
 use num_bigint::BigInt;
@@ -463,37 +463,59 @@ impl<R: BufRead> Parser<R> {
         // arguments
         self.state.sorts_symbol_table.push_scope();
 
-        let mut args = HashMap::new();
+        let mut assignment_args = HashMap::new();
         if self.current_token == Token::Keyword("args".into()) {
-            // TODO: Currently, only assingment style "(:= (a A) (b B))" arguments are supported
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
-            self.parse_sequence(
-                |p| {
-                    // Instead of just parsing the arguments and returning them in a `Vec`, we use
-                    // this closure to already add them to the symbol table and the `args` hash map
-                    p.expect_token(Token::OpenParen)?;
-                    p.expect_token(Token::Keyword("=".into()))?;
-                    let (a, a_sort) = p.parse_sorted_var()?;
-                    let (b, b_sort) = p.parse_sorted_var()?;
-                    p.expect_token(Token::CloseParen)?;
-
-                    let b_term = p.add_term(terminal!(var b.clone(); b_sort.clone()));
-                    args.insert(a.clone(), b_term);
-
-                    p.insert_sorted_var((a, a_sort));
-                    p.insert_sorted_var((b, b_sort));
-
-                    Ok(())
-                },
-                true,
-            )
-            // Since some argument types are not yet supported, we return an
-            // `ErrorKind::NotYetImplemented` if any error is encountered
-            .map_err(|_| self.err(ErrorKind::NotYetImplemented))?;
+            let args = self.parse_sequence(Parser::parse_anchor_argument, true)?;
+            for a in args {
+                match a {
+                    Either::Left(((a, a_sort), (b, b_sort))) => {
+                        let b_term = {
+                            let term = Term::Terminal(Terminal::Var(
+                                Identifier::Simple(b.clone()),
+                                b_sort.clone(),
+                            ));
+                            self.add_term(term)
+                        };
+                        assignment_args.insert(a.clone(), b_term);
+                        self.insert_sorted_var((a, a_sort));
+                        self.insert_sorted_var((b, b_sort));
+                    }
+                    // TODO: Store variable binding style arguments to subproof
+                    Either::Right(var) => self.insert_sorted_var(var),
+                }
+            }
         }
         self.expect_token(Token::CloseParen)?;
-        Ok((end_step_index, args))
+        Ok((end_step_index, assignment_args))
+    }
+
+    fn parse_anchor_argument(&mut self) -> ParserResult<Either<(SortedVar, SortedVar), SortedVar>> {
+        self.expect_token(Token::OpenParen)?;
+        Ok(if self.current_token == Token::Keyword("=".into()) {
+            self.next_token()?;
+            let a = self.parse_sorted_var()?;
+
+            // The parser currently doesn't support assignment style arguments where the right-hand
+            // side is not a sorted var. Because of that, if we encounter any parser error when
+            // trying to parse the right-hand side, we return `ErrorKind::NotYetImplemented`
+            // TODO: Add support for assignment style arguments with an arbitrary term as the
+            // right-hand side
+            let b = self
+                .parse_sorted_var()
+                .map_err(|_| self.err(ErrorKind::NotYetImplemented))?;
+
+            self.expect_token(Token::CloseParen)?;
+            Either::Left((a, b))
+        } else {
+            let symbol = self.expect_symbol()?;
+            let sort = self.parse_sort()?;
+            let sort = self.add_term(sort);
+
+            self.expect_token(Token::CloseParen)?;
+            Either::Right((symbol, sort))
+        })
     }
 
     /// Parses a "declare-fun" proof command. Returns the function name and a term representing its
