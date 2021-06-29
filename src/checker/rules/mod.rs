@@ -1,5 +1,5 @@
+use super::Context;
 use crate::ast::*;
-use std::collections::HashMap;
 
 pub type Rule = fn(RuleArgs) -> Option<()>;
 
@@ -8,7 +8,7 @@ pub struct RuleArgs<'a> {
     pub(super) premises: Vec<&'a ProofCommand>,
     pub(super) args: &'a [ProofArg],
     pub(super) pool: &'a mut TermPool,
-    pub(super) context: &'a mut [HashMap<ByRefRc<Term>, ByRefRc<Term>>],
+    pub(super) context: &'a mut [Context],
 
     // For rules like "bind", that end a subproof, we need to pass all the commands of the subproof
     // that it is closing, because they may need to refer to some of them, and they are not given

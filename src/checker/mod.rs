@@ -2,7 +2,7 @@ mod rules;
 
 use crate::ast::*;
 use rules::{Rule, RuleArgs};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
 pub enum CheckerError<'a> {
@@ -10,11 +10,16 @@ pub enum CheckerError<'a> {
     FailedOnRule(&'a str),
 }
 
+pub(crate) struct Context {
+    pub(crate) substitutions: HashMap<ByRefRc<Term>, ByRefRc<Term>>,
+    bindings: HashSet<SortedVar>,
+}
+
 pub struct ProofChecker {
     pool: TermPool,
     skip_unknown_rules: bool,
     allow_test_rule: bool,
-    context: Vec<HashMap<ByRefRc<Term>, ByRefRc<Term>>>,
+    context: Vec<Context>,
 }
 
 impl ProofChecker {
@@ -38,15 +43,23 @@ impl ProofChecker {
                 ProofCommand::Subproof {
                     commands,
                     assignment_args,
-                    ..
+                    variable_args,
                 } => {
-                    let new_context = assignment_args
-                        .iter()
-                        .map(|(k, v)| {
-                            let ident_term = terminal!(var k; self.pool.add_term(v.sort().clone()));
-                            (self.pool.add_term(ident_term), v.clone())
-                        })
-                        .collect();
+                    let new_context = {
+                        let substitutions = assignment_args
+                            .iter()
+                            .map(|(k, v)| {
+                                let ident_term =
+                                    terminal!(var k; self.pool.add_term(v.sort().clone()));
+                                (self.pool.add_term(ident_term), v.clone())
+                            })
+                            .collect();
+                        let bindings = variable_args.iter().cloned().collect();
+                        Context {
+                            substitutions,
+                            bindings,
+                        }
+                    };
                     self.context.push(new_context);
                     self.check_subproof(&commands)?;
                     self.context.pop();

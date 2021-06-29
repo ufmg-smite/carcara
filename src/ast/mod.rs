@@ -8,6 +8,7 @@ mod tests;
 
 pub use subterms::Subterms;
 
+use crate::checker::Context;
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
@@ -186,14 +187,14 @@ impl TermPool {
         result
     }
 
-    pub fn apply_context_substitutions<'a>(
+    pub(crate) fn apply_context_substitutions<'a>(
         &mut self,
         term: &'a ByRefRc<Term>,
-        context: &mut [HashMap<ByRefRc<Term>, ByRefRc<Term>>],
+        context: &mut [Context],
     ) -> ByRefRc<Term> {
         let mut current = term.clone();
-        for subs in context {
-            current = self.apply_substitutions(&current, subs)
+        for c in context {
+            current = self.apply_substitutions(&current, &mut c.substitutions)
         }
         current
     }

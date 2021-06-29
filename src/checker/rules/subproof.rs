@@ -21,7 +21,7 @@ pub fn bind(
 
     // Since we are closing a subproof, we only care about the substitutions that were introduced
     // in it
-    let substitutions = context.last()?;
+    let substitutions = &context.last()?.substitutions;
 
     // None of y_1, ..., y_n can appear as free variables in phi
     let mut ys = substitutions.values().map(|t| t.try_as_var());
@@ -69,7 +69,7 @@ pub fn r#let(
 
     // Since we are closing a subproof, we only care about the substitutions that were introduced
     // in it
-    let substitutions = context.last()?;
+    let substitutions = &context.last()?.substitutions;
 
     let (let_term, u_prime) = match_term!((= l u) = conclusion[0], RETURN_RCS)?;
     let (let_bindigns, u) = match let_term.as_ref() {
