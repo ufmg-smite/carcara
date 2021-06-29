@@ -508,9 +508,8 @@ impl<R: BufRead> Parser<R> {
                 Term::Terminal(Terminal::Var(iden, sort.clone()))
             } else {
                 let term = self.parse_term()?;
-                if term.sort() != sort.as_ref() {
-                    todo!(); // TODO: Add proper error handling
-                }
+                SortError::assert_eq(term.sort(), sort.as_ref())
+                    .map_err(|err| self.err(err.into()))?;
                 term
             };
             let b = self.add_term(b);
