@@ -481,22 +481,10 @@ impl<R: BufRead> Parser<R> {
             let args = self.parse_sequence(Parser::parse_anchor_argument, true)?;
             for a in args {
                 match a {
-                    Either::Left(((a, a_sort), (b, b_sort))) => {
-                        let b_term = {
-                            let term = Term::Terminal(Terminal::Var(
-                                Identifier::Simple(b.clone()),
-                                b_sort.clone(),
-                            ));
-                            self.add_term(term)
-                        };
-                        assignment_args.insert(a.clone(), b_term);
-                        self.insert_sorted_var((a, a_sort));
-                        self.insert_sorted_var((b, b_sort));
+                    Either::Left(((a, _), b)) => {
+                        assignment_args.insert(a.clone(), b);
                     }
-                    Either::Right(var) => {
-                        variable_args.push(var.clone());
-                        self.insert_sorted_var(var)
-                    }
+                    Either::Right(var) => variable_args.push(var.clone()),
                 }
             }
         }
@@ -504,30 +492,38 @@ impl<R: BufRead> Parser<R> {
         Ok((end_step_index, assignment_args, variable_args))
     }
 
-    fn parse_anchor_argument(&mut self) -> ParserResult<Either<(SortedVar, SortedVar), SortedVar>> {
+    fn parse_anchor_argument(
+        &mut self,
+    ) -> ParserResult<Either<(SortedVar, ByRefRc<Term>), SortedVar>> {
         self.expect_token(Token::OpenParen)?;
         Ok(if self.current_token == Token::Keyword("=".into()) {
             self.next_token()?;
-            let a = self.parse_sorted_var()?;
+            let (a, sort) = self.parse_sorted_var()?;
+            self.insert_sorted_var((a.clone(), sort.clone()));
 
-            // The parser currently doesn't support assignment style arguments where the right-hand
-            // side is not a sorted var. Because of that, if we encounter any parser error when
-            // trying to parse the right-hand side, we return `ErrorKind::NotYetImplemented`
-            // TODO: Add support for assignment style arguments with an arbitrary term as the
-            // right-hand side
-            let b = self
-                .parse_sorted_var()
-                .map_err(|_| self.err(ErrorKind::NotYetImplemented))?;
+            let b = if let Token::Symbol(_) = &self.current_token {
+                let var = self.expect_symbol()?;
+                self.insert_sorted_var((var.clone(), sort.clone()));
+                let iden = Identifier::Simple(var);
+                Term::Terminal(Terminal::Var(iden, sort.clone()))
+            } else {
+                let term = self.parse_term()?;
+                if term.sort() != sort.as_ref() {
+                    todo!(); // TODO: Add proper error handling
+                }
+                term
+            };
+            let b = self.add_term(b);
 
             self.expect_token(Token::CloseParen)?;
-            Either::Left((a, b))
+            Either::Left(((a, sort), b))
         } else {
             let symbol = self.expect_symbol()?;
             let sort = self.parse_sort()?;
-            let sort = self.add_term(sort);
-
+            let var = (symbol, self.add_term(sort));
+            self.insert_sorted_var(var.clone());
             self.expect_token(Token::CloseParen)?;
-            Either::Right((symbol, sort))
+            Either::Right(var)
         })
     }
 

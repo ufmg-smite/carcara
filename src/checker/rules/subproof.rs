@@ -112,37 +112,37 @@ mod tests {
                 (declare-fun y () Real)
             ",
             "Simple working examples" {
-                "(anchor :step t1 :args ((:= (x Real) (y Real))))
+                "(anchor :step t1 :args ((:= (x Real) y)))
                 (step t1.t1 (cl (= p q)) :rule trust_me)
                 (step t1 (cl (= (forall ((x Real)) p) (forall ((y Real)) q))) :rule bind)": true,
 
-                "(anchor :step t1 :args ((:= (x1 Real) (y1 Real)) (:= (x2 Real) (y2 Real))))
+                "(anchor :step t1 :args ((:= (x1 Real) y1) (:= (x2 Real) y2)))
                 (step t1.t1 (cl (= (= x1 x2) (= y1 y2))) :rule trust_me)
                 (step t1 (cl (= (forall ((x1 Real) (x2 Real)) (= x1 x2))
                     (forall ((y1 Real) (y2 Real)) (= y1 y2)))) :rule bind)": true,
             }
             "y_i appears in phi as a free variable" {
-                "(anchor :step t1 :args ((:= (x Real) (y Real))))
+                "(anchor :step t1 :args ((:= (x Real) y)))
                 (step t1.t1 (cl (= (= y x) (= y y))) :rule trust_me)
                 (step t1 (cl (= (forall ((x Real)) (= y x))
                     (forall ((y Real)) (= y y)))) :rule bind)": false,
             }
             "Terms in conclusion clause don't match terms in previous command" {
-                "(anchor :step t1 :args ((:= (x Real) (y Real))))
+                "(anchor :step t1 :args ((:= (x Real) y)))
                 (step t1.t1 (cl (= p q)) :rule trust_me)
                 (step t1.t2 (cl (= r s)) :rule trust_me) ; This step shouldn't be here!
                 (step t1 (cl (= (forall ((x Real)) p) (forall ((y Real)) q))) :rule bind)": false,
 
-                "(anchor :step t1 :args ((:= (x Real) (y Real))))
+                "(anchor :step t1 :args ((:= (x Real) y)))
                 (step t1.t1 (cl (= p q)) :rule trust_me)
                 (step t1 (cl (= (forall ((x Real)) q) (forall ((y Real)) p))) :rule bind)": false,
             }
             "Context substitutions don't match quantifier bindings" {
-                "(anchor :step t1 :args ((:= (x Real) (y Real))))
+                "(anchor :step t1 :args ((:= (x Real) y)))
                 (step t1.t1 (cl (= p q)) :rule trust_me)
                 (step t1 (cl (= (forall ((y Real)) p) (forall ((x Real)) q))) :rule bind)": false,
 
-                "(anchor :step t1 :args ((:= (x1 Real) (y1 Real)) (:= (x2 Real) (y2 Real))))
+                "(anchor :step t1 :args ((:= (x1 Real) y1) (:= (x2 Real) y2)))
                 (step t1.t1 (cl (= (= x1 x2) (= y1 y2))) :rule trust_me)
                 (step t1 (cl (= (forall ((x2 Real)) (= x1 x2))
                     (forall ((y1 Real) (y2 Real)) (= y1 y2)))) :rule bind)": false,
@@ -161,13 +161,13 @@ mod tests {
                 (declare-fun k () Int)
             ",
             "Simple working examples" {
-                "(anchor :step t1 :args ((:= (a Int) (x Int))))
+                "(anchor :step t1 :args ((:= (a Int) x)))
                 (step t1.t1 (cl (= i x)) :rule trust_me)
                 (step t1.t2 (cl (= p q)) :rule trust_me)
                 (step t1 (cl (= (let ((a i)) p) q)) :rule let :premises (t1.t1))": true,
 
                 "(anchor :step t1 :args (
-                    (:= (a Int) (x Int)) (:= (b Int) (y Int)) (:= (c Int) (z Int))
+                    (:= (a Int) x) (:= (b Int) y) (:= (c Int) z)
                 ))
                 (step t1.t1 (cl (= i x)) :rule trust_me)
                 (step t1.t2 (cl (= k z)) :rule trust_me)
@@ -176,14 +176,14 @@ mod tests {
                     :rule let :premises (t1.t1 t1.t2))": true,
             }
             "Premise equalities may be flipped" {
-                "(anchor :step t1 :args ((:= (a Int) (x Int))))
+                "(anchor :step t1 :args ((:= (a Int) x)))
                 (step t1.t1 (cl (= x i)) :rule trust_me)
                 (step t1.t2 (cl (= p q)) :rule trust_me)
                 (step t1 (cl (= (let ((a i)) p) q)) :rule let :premises (t1.t1))": true,
             }
             "Wrong number of premises" {
                 "(anchor :step t1 :args (
-                    (:= (a Int) (x Int)) (:= (b Int) (y Int)) (:= (c Int) (z Int))
+                    (:= (a Int) x) (:= (b Int) y) (:= (c Int) z)
                 ))
                 (step t1.t1 (cl (= i x)) :rule trust_me)
                 (step t1.t2 (cl (= p q)) :rule trust_me)
@@ -191,7 +191,7 @@ mod tests {
                     :rule let :premises (t1.t1))": false,
 
                 "(anchor :step t1 :args (
-                    (:= (a Int) (x Int)) (:= (b Int) (y Int)) (:= (c Int) (z Int))
+                    (:= (a Int) x) (:= (b Int) y) (:= (c Int) z)
                 ))
                 (step t1.t1 (cl (= i x)) :rule trust_me)
                 (step t1.t2 (cl (= y y)) :rule trust_me)
@@ -202,7 +202,7 @@ mod tests {
             }
             "Number of bindings is `let` term doesn't match number of substitutions in context" {
                 "(anchor :step t1 :args (
-                    (:= (a Int) (x Int)) (:= (b Int) (y Int)) (:= (c Int) (z Int))
+                    (:= (a Int) x) (:= (b Int) y) (:= (c Int) z)
                 ))
                 (step t1.t1 (cl (= i x)) :rule trust_me)
                 (step t1.t2 (cl (= j y)) :rule trust_me)
@@ -210,7 +210,7 @@ mod tests {
                 (step t1 (cl (= (let ((a i) (b j)) p) q)) :rule let :premises (t1.t1 t1.t2))": false,
             }
             "u and u' don't match equality in previous command" {
-                "(anchor :step t1 :args ((:= (a Int) (x Int))))
+                "(anchor :step t1 :args ((:= (a Int) x)))
                 (step t1.t1 (cl (= i x)) :rule trust_me)
                 (step t1.t2 (cl (= p (= i j))) :rule trust_me)
                 (step t1 (cl (= (let ((a i)) p) q)) :rule let :premises (t1.t1))": false,
