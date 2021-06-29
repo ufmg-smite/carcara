@@ -18,6 +18,8 @@ pub fn parse_problem_proof<T: BufRead>(problem: T, proof: T) -> ParserResult<(Pr
     Parser::with_state(proof, problem_parser.state)?.parse_proof()
 }
 
+type AnchorCommand = (String, HashMap<String, ByRefRc<Term>>, Vec<SortedVar>);
+
 struct SymbolTable<K, V> {
     scopes: Vec<HashMap<K, V>>,
 }
@@ -463,9 +465,7 @@ impl<R: BufRead> Parser<R> {
     /// into the sorts symbol table which must be removed after parsing the subproof. This method
     /// returns the index of the step that will end the subproof, as well as the subproof
     /// assignment and variable arguments.
-    fn parse_anchor_command(
-        &mut self,
-    ) -> ParserResult<(String, HashMap<String, ByRefRc<Term>>, Vec<SortedVar>)> {
+    fn parse_anchor_command(&mut self) -> ParserResult<AnchorCommand> {
         self.expect_token(Token::Keyword("step".into()))?;
         let end_step_index = self.expect_symbol()?;
 
