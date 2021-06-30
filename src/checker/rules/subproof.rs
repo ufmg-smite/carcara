@@ -132,11 +132,22 @@ mod tests {
                 (step t1 (cl (= (forall ((x1 Real) (x2 Real)) (= x1 x2))
                     (forall ((y1 Real) (y2 Real)) (= y1 y2)))) :rule bind)": true,
             }
+            "Examples with binding arguments" {
+                "(anchor :step t1 :args ((z Real) (:= (x Real) y)))
+                (step t1.t1 (cl (= p q)) :rule trust_me)
+                (step t1 (cl (= (forall ((x Real) (z Real)) p)
+                    (forall ((y Real) (z Real)) q))) :rule bind)": true,
+            }
             "y_i appears in phi as a free variable" {
                 "(anchor :step t1 :args ((:= (x Real) y)))
                 (step t1.t1 (cl (= (= y x) (= y y))) :rule trust_me)
                 (step t1 (cl (= (forall ((x Real)) (= y x))
                     (forall ((y Real)) (= y y)))) :rule bind)": false,
+
+                "(anchor :step t1 :args ((z Real) (:= (x Real) y)))
+                (step t1.t1 (cl (= (= y x) (= y y))) :rule trust_me)
+                (step t1 (cl (= (forall ((z Real) (x Real)) (= y z))
+                    (forall ((z Real) (y Real)) (= y z)))) :rule bind)": false,
             }
             "Terms in conclusion clause don't match terms in previous command" {
                 "(anchor :step t1 :args ((:= (x Real) y)))
