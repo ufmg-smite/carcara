@@ -23,7 +23,7 @@ fn main() -> ParserResult<()> {
                 .about("Checks a proof file")
                 .setting(AppSettings::DisableVersion)
                 .arg(Arg::with_name("PROBLEM_FILE").required(true))
-                .arg(Arg::with_name("PROOF_FILE").required(true))
+                .arg(Arg::with_name("PROOF_FILE").required(false))
                 .arg(
                     Arg::with_name("print-ast")
                         .long("print-ast")
@@ -73,12 +73,17 @@ fn main() -> ParserResult<()> {
         .get_matches();
 
     if let Some(matches) = matches.subcommand_matches("check") {
-        let problem_file = BufReader::new(
-            File::open(matches.value_of("PROBLEM_FILE").unwrap()).map_err(|err| (err, (0, 0)))?,
-        );
-        let proof_file = BufReader::new(
-            File::open(matches.value_of("PROOF_FILE").unwrap()).map_err(|err| (err, (0, 0)))?,
-        );
+        let (problem_file, proof_file) = {
+            let problem = matches.value_of("PROBLEM_FILE").unwrap();
+            let proof = matches
+                .value_of("PROOF_FILE")
+                .map(str::to_string)
+                .unwrap_or(problem.to_string() + ".proof");
+            (
+                BufReader::new(File::open(problem).map_err(|e| (e, (0, 0)))?),
+                BufReader::new(File::open(proof).map_err(|e| (e, (0, 0)))?),
+            )
+        };
         let (proof, pool) = parse_problem_proof(problem_file, proof_file)?;
         if matches.is_present("print-ast") {
             println!("{:#?}", proof);
