@@ -19,15 +19,6 @@ pub fn bind(
     let (phi, phi_prime) =
         match_term!((= p q) = get_single_term_from_command(previous_command)?, RETURN_RCS)?;
 
-    // Since we are closing a subproof, we only care about the substitutions that were introduced
-    // in it
-    let substitutions = &context.last()?.substitutions;
-
-    // None of y_1, ..., y_n can appear as free variables in phi
-    let mut ys = substitutions.values().map(|t| t.try_as_var());
-    let free_vars = pool.free_vars(phi);
-    rassert!(ys.all(|y| y.map_or(false, |var| !free_vars.contains(var))));
-
     let (left, right) = match_term!((= l r) = conclusion[0])?;
     let ((l_bindings, left), (r_bindings, right)) = match (left, right) {
         // While the documentation indicates this rule is only called with "forall" quantifiers, in
@@ -37,22 +28,42 @@ pub fn bind(
         }
         _ => return None,
     };
+    let l_bindings: HashSet<_> = l_bindings.iter().map(|(var, _)| var.as_str()).collect();
+    let r_bindings: HashSet<_> = r_bindings.iter().map(|(var, _)| var.as_str()).collect();
 
     // The terms in the quantifiers must be phi and phi'
     rassert!(left == phi.as_ref() && right == phi_prime.as_ref());
 
-    // And the quantifier binders must be the xs and ys of the context substitutions
-    let substitutions: Vec<_> = substitutions
+    // None of the bindings in the right side can appear as free variables in phi
+    let free_vars = pool.free_vars(phi);
+    rassert!(r_bindings
+        .difference(&l_bindings)
+        .all(|&y| !free_vars.contains(y)));
+
+    // Since we are closing a subproof, we only care about the substitutions that were introduced
+    // in it
+    let context = context.last()?;
+
+    // The quantifier binders must be the xs and ys of the context substitutions
+    let (xs, ys): (HashSet<_>, HashSet<_>) = context
+        .substitutions
         .iter()
-        .filter(|&(k, v)| k != v) // We ignore symmetric substitutions like (:= x x)
-        .map(|(x, y)| Some((x.try_as_var()?, y.try_as_var()?)))
-        .collect::<Option<_>>()?;
-    let (xs, ys): (HashSet<_>, HashSet<_>) = substitutions.into_iter().unzip();
-
-    let l_bindings: HashSet<_> = l_bindings.iter().map(|(var, _)| var.as_str()).collect();
-    let r_bindings: HashSet<_> = r_bindings.iter().map(|(var, _)| var.as_str()).collect();
-
-    to_option(l_bindings == xs && r_bindings == ys)
+        // We skip terms which are not simply variables
+        .filter_map(|(x, y)| Some((x.try_as_var()?, y.try_as_var()?)))
+        .chain(
+            // Sometimes, the context bindings also appear as bindings in the quantifiers, so we
+            // include them in the "xs" and "ys"
+            context
+                .bindings
+                .iter()
+                .map(|(var, _)| (var.as_str(), var.as_str())),
+        )
+        .unzip();
+    to_option(
+        l_bindings.len() == r_bindings.len()
+            && l_bindings.is_subset(&xs)
+            && r_bindings.is_subset(&ys),
+    )
 }
 
 pub fn r#let(
