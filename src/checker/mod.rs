@@ -10,9 +10,40 @@ pub enum CheckerError<'a> {
     FailedOnRule(&'a str),
 }
 
-pub(crate) struct Context {
-    pub(crate) substitutions: HashMap<ByRefRc<Term>, ByRefRc<Term>>,
+struct Context {
+    substitutions: HashMap<ByRefRc<Term>, ByRefRc<Term>>,
     bindings: HashSet<SortedVar>,
+}
+
+impl Context {
+    /// Applies the substitutions in the context until there are no more substitutions or the term
+    /// is unchanged. Note that this method does not apply the substitutions recursively, like
+    /// `Pool::apply_substitutions`. For example, with the substitution `(:= x y)`, this
+    /// method will not map the term `(f x)` to `(f y)`. Panics if there is a cycle in the
+    /// substitutions.
+    fn apply_substitutions_as_long_as_possible(&self, term: &ByRefRc<Term>) -> ByRefRc<Term> {
+        let mut current = term.clone();
+        for _ in 0..self.substitutions.len() + 1 {
+            let new = self.substitutions.get(&current).unwrap_or(&current).clone();
+            if new == current {
+                return new;
+            }
+            current = new;
+        }
+        // If we didn't reach a fixed point after `self.substitutions.len() + 1` substitutions, we
+        // must be in a cycle, so we panic
+        panic!("Cycle encountered when trying to apply context substitutions")
+    }
+}
+
+/// Calls `Context::apply_substitutions_as_long_as_possible` sequentially for every context in the
+/// slice, transforming a term.
+fn apply_all_context_substitutions(term: &ByRefRc<Term>, context: &[Context]) -> ByRefRc<Term> {
+    let mut current = term.clone();
+    for c in context {
+        current = c.apply_substitutions_as_long_as_possible(&current)
+    }
+    current
 }
 
 pub struct ProofChecker {

@@ -8,7 +8,6 @@ mod tests;
 
 pub use subterms::Subterms;
 
-use crate::checker::Context;
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
@@ -187,18 +186,6 @@ impl TermPool {
             substitutions.insert(term.clone(), result.clone());
         }
         result
-    }
-
-    pub(crate) fn apply_context_substitutions<'a>(
-        &mut self,
-        term: &'a ByRefRc<Term>,
-        context: &mut [Context],
-    ) -> ByRefRc<Term> {
-        let mut current = term.clone();
-        for c in context {
-            current = self.apply_substitutions(&current, &mut c.substitutions)
-        }
-        current
     }
 
     /// Returns a `HashSet` containing all the free variables in this term.

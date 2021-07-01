@@ -1,5 +1,5 @@
 use super::{to_option, RuleArgs};
-use crate::ast::*;
+use crate::{ast::*, checker::apply_all_context_substitutions};
 
 pub fn eq_reflexive(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1);
@@ -10,7 +10,6 @@ pub fn eq_reflexive(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 pub fn refl(
     RuleArgs {
         conclusion,
-        pool,
         context,
         ..
     }: RuleArgs,
@@ -19,8 +18,8 @@ pub fn refl(
 
     let (left, right) = match_term!((= l r) = conclusion[0], RETURN_RCS)?;
 
-    let new_left = pool.apply_context_substitutions(&left, context);
-    let new_right = pool.apply_context_substitutions(&right, context);
+    let new_left = apply_all_context_substitutions(&left, context);
+    let new_right = apply_all_context_substitutions(&right, context);
 
     to_option(new_left == new_right)
 }
