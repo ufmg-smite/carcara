@@ -183,7 +183,9 @@ impl TermPool {
         // calculated substitution in the substitutions hash map so it may be reused later. This
         // means we don't re-visit already seen terms, so this method traverses the term as a DAG,
         // not as a tree
-        substitutions.insert(term.clone(), result.clone());
+        if *term != result {
+            substitutions.insert(term.clone(), result.clone());
+        }
         result
     }
 
