@@ -70,13 +70,15 @@ mod tests {
 
                 "(anchor :step t1) (step t1 (cl (= z z)) :rule refl)": true,
 
-                "(anchor :step t1 :args ((:= (x Real) y)))
-                (step t1 (cl (= (f x) (f y))) :rule refl)": true,
+            }
+            "Multiple substitutions in sequence" {
+                "(anchor :step t1 :args ((:= (x Real) y) (:= (y Real) z)))
+                (step t1 (cl (= x z)) :rule refl)": true,
             }
             "Nested subproofs" {
-                "(anchor :step t1 :args ((:= (x Real) y)))
-                (anchor :step t1.t1 :args ((:= (a Real) b)))
-                (step t1.t1 (cl (= (+ x a) (+ y b))) :rule refl)": true,
+                "(anchor :step t1 :args ((:= (x Real) z)))
+                (anchor :step t1.t1 :args ((:= (y Real) z)))
+                (step t1.t1 (cl (= x y)) :rule refl)": true,
 
                 "(anchor :step t1 :args ((:= (x Real) y)))
                 (anchor :step t1.t1 :args ((:= (y Real) z)))
@@ -85,9 +87,6 @@ mod tests {
             "Terms aren't equal after applying context substitutions" {
                 "(anchor :step t1 :args ((:= (x Real) y)))
                 (step t1 (cl (= x z)) :rule refl)": false,
-
-                "(anchor :step t1 :args ((:= (x Real) y)))
-                (step t1 (cl (= (f x) (g y))) :rule refl)": false,
             }
         }
     }
