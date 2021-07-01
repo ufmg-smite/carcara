@@ -269,7 +269,7 @@ pub enum ProofCommand {
     /// A subproof.
     Subproof {
         commands: Vec<ProofCommand>,
-        assignment_args: HashMap<String, ByRefRc<Term>>,
+        assignment_args: Vec<(String, ByRefRc<Term>)>,
         variable_args: Vec<SortedVar>,
     },
 }

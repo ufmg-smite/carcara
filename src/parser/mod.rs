@@ -18,7 +18,7 @@ pub fn parse_problem_proof<T: BufRead>(problem: T, proof: T) -> ParserResult<(Pr
     Parser::with_state(proof, problem_parser.state)?.parse_proof()
 }
 
-type AnchorCommand = (String, HashMap<String, ByRefRc<Term>>, Vec<SortedVar>);
+type AnchorCommand = (String, Vec<(String, ByRefRc<Term>)>, Vec<SortedVar>);
 
 struct SymbolTable<K, V> {
     scopes: Vec<HashMap<K, V>>,
@@ -473,7 +473,7 @@ impl<R: BufRead> Parser<R> {
         // arguments
         self.state.sorts_symbol_table.push_scope();
 
-        let mut assignment_args = HashMap::new();
+        let mut assignment_args = Vec::new();
         let mut variable_args = Vec::new();
         if self.current_token == Token::Keyword("args".into()) {
             self.next_token()?;
@@ -482,7 +482,7 @@ impl<R: BufRead> Parser<R> {
             for a in args {
                 match a {
                     Either::Left(((a, _), b)) => {
-                        assignment_args.insert(a.clone(), b);
+                        assignment_args.push((a.clone(), b));
                     }
                     Either::Right(var) => variable_args.push(var.clone()),
                 }
