@@ -12,38 +12,8 @@ pub enum CheckerError<'a> {
 
 struct Context {
     substitutions: HashMap<ByRefRc<Term>, ByRefRc<Term>>,
+    substitutions_until_fixed_point: HashMap<ByRefRc<Term>, ByRefRc<Term>>,
     bindings: HashSet<SortedVar>,
-}
-
-impl Context {
-    /// Applies the substitutions in the context until there are no more substitutions or the term
-    /// is unchanged. Note that this method does not apply the substitutions recursively, like
-    /// `Pool::apply_substitutions`. For example, with the substitution `(:= x y)`, this
-    /// method will not map the term `(f x)` to `(f y)`. Panics if there is a cycle in the
-    /// substitutions.
-    fn apply_substitutions_as_long_as_possible(&self, term: &ByRefRc<Term>) -> ByRefRc<Term> {
-        let mut current = term.clone();
-        for _ in 0..self.substitutions.len() + 1 {
-            let new = self.substitutions.get(&current).unwrap_or(&current).clone();
-            if new == current {
-                return new;
-            }
-            current = new;
-        }
-        // If we didn't reach a fixed point after `self.substitutions.len() + 1` substitutions, we
-        // must be in a cycle, so we panic
-        panic!("Cycle encountered when trying to apply context substitutions")
-    }
-}
-
-/// Calls `Context::apply_substitutions_as_long_as_possible` sequentially for every context in the
-/// slice, transforming a term.
-fn apply_all_context_substitutions(term: &ByRefRc<Term>, context: &[Context]) -> ByRefRc<Term> {
-    let mut current = term.clone();
-    for c in context {
-        current = c.apply_substitutions_as_long_as_possible(&current)
-    }
-    current
 }
 
 pub struct ProofChecker {
@@ -76,21 +46,7 @@ impl ProofChecker {
                     assignment_args,
                     variable_args,
                 } => {
-                    let new_context = {
-                        let substitutions = assignment_args
-                            .iter()
-                            .map(|(k, v)| {
-                                let ident_term =
-                                    terminal!(var k; self.pool.add_term(v.sort().clone()));
-                                (self.pool.add_term(ident_term), v.clone())
-                            })
-                            .collect();
-                        let bindings = variable_args.iter().cloned().collect();
-                        Context {
-                            substitutions,
-                            bindings,
-                        }
-                    };
+                    let new_context = self.build_context(assignment_args, variable_args);
                     self.context.push(new_context);
                     self.check_subproof(&commands)?;
                     self.context.pop();
@@ -99,6 +55,45 @@ impl ProofChecker {
             }
         }
         Ok(())
+    }
+
+    fn build_context(
+        &mut self,
+        assignment_args: &[(String, ByRefRc<Term>)],
+        variable_args: &[SortedVar],
+    ) -> Context {
+        // Since some rules (like "refl") need to apply substitutions until a fixed point, we
+        // precompute these substitutions into a separate hash map. This assumes that the assignment
+        // arguments are in the correct order.
+        let mut substitutions = HashMap::new();
+        let mut substitutions_until_fixed_point = HashMap::new();
+
+        // We build the `substitutions_until_fixed_point` hash map from the bottom up, by using the
+        // substitutions already introduced to transform the result of a new substitution before
+        // inserting it into the hash map. So for instance, if the substitutions are "(:= y z)" and
+        // "(:= x (f y))", we insert the first substitution, and then, when introducing the second,
+        // we use the current state of the hash map to transform "(f y)" into "(f z)". The
+        // resulting hash map will then contain "(:= y z)" and "(:= x (f z))". However, the
+        // arguments are given in the opposite order, that is, "(:= x (f y))" would come first,
+        // followed by "(:= y z)". Because of that, we traverse the assignment arguments slice in
+        // reverse.
+        for (var, value) in assignment_args.iter().rev() {
+            let var_term = terminal!(var var; self.pool.add_term(value.sort().clone()));
+            let var_term = self.pool.add_term(var_term);
+            substitutions.insert(var_term.clone(), value.clone());
+
+            let new_value = self
+                .pool
+                .apply_substitutions(value, &mut substitutions_until_fixed_point);
+            substitutions_until_fixed_point.insert(var_term, new_value);
+        }
+
+        let bindings = variable_args.iter().cloned().collect();
+        Context {
+            substitutions,
+            substitutions_until_fixed_point,
+            bindings,
+        }
     }
 
     fn check_step<'a>(

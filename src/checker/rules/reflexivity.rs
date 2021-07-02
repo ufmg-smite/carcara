@@ -1,5 +1,5 @@
 use super::{to_option, RuleArgs};
-use crate::{ast::*, checker::apply_all_context_substitutions};
+use crate::{ast::*, checker::Context};
 
 pub fn eq_reflexive(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1);
@@ -10,18 +10,32 @@ pub fn eq_reflexive(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 pub fn refl(
     RuleArgs {
         conclusion,
+        pool,
         context,
         ..
     }: RuleArgs,
 ) -> Option<()> {
+    fn apply_all_context_substitutions(
+        pool: &mut TermPool,
+        term: ByRefRc<Term>,
+        context: &mut [Context],
+    ) -> ByRefRc<Term> {
+        let mut current = term;
+        for c in context {
+            current = pool.apply_substitutions(&current, &mut c.substitutions_until_fixed_point);
+        }
+        current
+    }
     rassert!(conclusion.len() == 1);
 
     let (left, right) = match_term!((= l r) = conclusion[0], RETURN_RCS)?;
 
-    let new_left = apply_all_context_substitutions(&left, context);
-    let new_right = apply_all_context_substitutions(&right, context);
+    let new_left = apply_all_context_substitutions(pool, left.clone(), context);
+    let new_right = apply_all_context_substitutions(pool, right.clone(), context);
 
-    to_option(new_left == new_right)
+    // In some cases, the substitution is only applied to the left or the right term, and in some
+    // cases it is applied to both. To cover all cases, we must check all three possibilities
+    to_option(new_left == *right || *left == new_right || new_left == new_right)
 }
 
 #[cfg(test)]
