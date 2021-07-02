@@ -292,7 +292,7 @@ pub fn ac_simp(
     }: RuleArgs,
 ) -> Option<()> {
     fn flatten_operation(term: &ByRefRc<Term>, pool: &mut TermPool) -> ByRefRc<Term> {
-        match term.as_ref() {
+        let term = match term.as_ref() {
             Term::Op(op @ (Operator::And | Operator::Or), args) => {
                 let args: Vec<_> = args
                     .iter()
@@ -306,9 +306,9 @@ pub fn ac_simp(
                     .dedup()
                     .collect();
                 if args.len() == 1 {
-                    args[0].clone()
+                    return args[0].clone();
                 } else {
-                    pool.add_term(Term::Op(*op, args))
+                    Term::Op(*op, args)
                 }
             }
             Term::Op(op, args) => {
@@ -316,12 +316,26 @@ pub fn ac_simp(
                     .iter()
                     .map(|term| flatten_operation(term, pool))
                     .collect();
-                pool.add_term(Term::Op(*op, args))
+                Term::Op(*op, args)
             }
-            _ => term.clone(),
-        }
+            Term::App(func, args) => {
+                let args = args
+                    .iter()
+                    .map(|term| flatten_operation(term, pool))
+                    .collect();
+                Term::App(func.clone(), args)
+            }
+            Term::Quant(q, bindings, inner) => {
+                Term::Quant(*q, bindings.clone(), flatten_operation(inner, pool))
+            }
+            Term::Choice(binding, inner) => {
+                Term::Choice(binding.clone(), flatten_operation(inner, pool))
+            }
+            Term::Let(binding, inner) => Term::Let(binding.clone(), flatten_operation(inner, pool)),
+            _ => return term.clone(),
+        };
+        pool.add_term(term)
     }
-
     rassert!(conclusion.len() == 1);
     let (original, flattened) = match_term!((= psi phis) = conclusion[0], RETURN_RCS)?;
     to_option(flatten_operation(original, pool) == *flattened)
@@ -657,6 +671,9 @@ mod tests {
                     (or (= (and (and p q) r) s) p q))) :rule ac_simp)": false,
 
                 "(step t1 (cl (= (xor (xor (xor p q) r) s) (xor p q r s))) :rule ac_simp)": false,
+
+                "(step t1 (cl (= (forall ((p Bool) (q Bool)) (and (and p q) p))
+                    (forall ((p Bool) (q Bool)) (and p q)))) :rule ac_simp)": true,
             }
             "Removing duplicates" {
                 "(step t1 (cl (= (or p p q r s) (or p q r s))) :rule ac_simp)": true,
