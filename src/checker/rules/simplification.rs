@@ -223,7 +223,7 @@ pub fn bool_simplify(args: RuleArgs) -> Option<()> {
 pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     /// Checks if the u term is valid and extracts from it the leading constant and the remaining
     /// arguments.
-    fn unwrap_u_term(u: &Term) -> Option<(BigRational, &[ByRefRc<Term>])> {
+    fn unwrap_u_term(u: &ByRefRc<Term>) -> Option<(BigRational, &[ByRefRc<Term>])> {
         Some(match match_term!((* ...) = u) {
             Some([] | [_]) => unreachable!(),
 
@@ -241,15 +241,18 @@ pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
                 }
             }
 
-            // If u is not a product, we take the term as whole as the leading constant, with no
-            // remaining arguments
-            None => (u.try_as_ratio()?, &[] as &[_]),
+            // If u is not a product, we consider it a product of a single term. That term might be
+            // a regular term or the leading constant, depending on if u is a constant or not
+            None => match u.try_as_ratio() {
+                Some(u) => (u, &[]),
+                None => (BigRational::one(), std::slice::from_ref(u)),
+            },
         })
     }
 
     rassert!(conclusion.len() == 1);
 
-    let (first, second) = match_term!((= first second) = conclusion[0].as_ref())?;
+    let (first, second) = match_term!((= first second) = conclusion[0].as_ref(), RETURN_RCS)?;
     let (ts, (u_constant, u_args)) = {
         // Since the ts and u terms may be in either order, we have to try to validate both options
         // to find out which term is which
@@ -639,10 +642,6 @@ mod tests {
                 "(step t1 (cl (= (* i k 1 j) (* 1 i k j))) :rule prod_simplify)": false,
                 "(step t1 (cl (= (* x y 5.0 1.0 z 0.2 z) (* 1.0 x y z z)))
                     :rule prod_simplify)": false,
-            }
-            "Clause is of the wrong form" {
-                "(step t1 (cl (= (* i 1 1) i)) :rule prod_simplify)": false,
-                "(step t1 (cl (= (* y 0.1 10.0) y)) :rule prod_simplify)": false,
             }
         }
     }
