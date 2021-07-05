@@ -174,8 +174,10 @@ pub fn connective_def(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
         let ((a, b), (c, d)) = match_term!((and (=> a b) (=> c d)) = second)?;
         a == phi_1 && b == phi_2 && c == phi_2 && d == phi_1
     } else if let Some((phi_1, phi_2, phi_3)) = match_term!((ite phi_1 phi_2 phi_3) = first) {
-        // ite phi_1 phi_2 phi_3 <-> (phi_1 -> phi_2) ^ (¬phi_1 -> ¬phi_3)
-        let ((a, b), (c, d)) = match_term!((and (=> a b) (=> (not c) (not d))) = second)?;
+        // ite phi_1 phi_2 phi_3 <-> (phi_1 -> phi_2) ^ (¬phi_1 -> phi_3)
+        // Note: In the proofonomicon, this case is incorrectly documented as:
+        //     ite phi_1 phi_2 phi_3 <-> (phi_1 -> phi_2) ^ (¬phi_1 -> ¬phi_3)
+        let ((a, b), (c, d)) = match_term!((and (=> a b) (=> (not c) d)) = second)?;
         a == phi_1 && b == phi_2 && c == phi_1 && d == phi_3
     } else if let Term::Quant(Quantifier::Exists, first_bindings, first_inner) = first {
         // This case of the "connective_def" rule is not documented, but appears in some examples
@@ -597,9 +599,11 @@ mod tests {
                 "(step t1 (cl (= (= p q) (and (=> q p) (=> p q)))) :rule connective_def)": false,
             }
             "Case #3" {
-                "(step t1 (cl (= (ite p q r) (and (=> p q) (=> (not p) (not r)))))
+                "(step t1 (cl (= (ite p q r) (and (=> p q) (=> (not p) r))))
                     :rule connective_def)": true,
-                "(step t1 (cl (= (ite p q r) (and (=> p r) (=> (not p) (not q)))))
+                "(step t1 (cl (= (ite p q r) (and (=> p q) (=> (not p) (not r)))))
+                    :rule connective_def)": false,
+                "(step t1 (cl (= (ite p q r) (and (=> p r) (=> (not p) q))))
                     :rule connective_def)": false,
             }
             "Case #4" {
