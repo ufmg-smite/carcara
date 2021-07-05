@@ -101,7 +101,7 @@ impl<'a> LinearComb<'a> {
             };
             match match_term!((* a b) = arg) {
                 Some((a, b)) => {
-                    let (var, coeff) = match (a.try_as_ratio(), b.try_as_ratio()) {
+                    let (var, coeff) = match (a.try_as_signed_ratio(), b.try_as_signed_ratio()) {
                         (None, None) => (arg, BigRational::one()),
                         (None, Some(r)) => (a, r),
                         (Some(r), None) => (b, r),
