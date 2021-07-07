@@ -137,6 +137,58 @@ pub fn r#let(
 #[cfg(test)]
 mod tests {
     #[test]
+    fn subproof() {
+        // TODO: When the ":discharge" attribute is properly implemented, change the examples to
+        // use it
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+                (declare-fun s () Bool)
+            ",
+            "Simple working examples" {
+                "(anchor :step t1)
+                (assume t1.h1 p)
+                (step t1.t2 (cl q) :rule trust_me)
+                (step t1 (cl (not p) q) :rule subproof)": true,
+
+                "(anchor :step t1)
+                (assume t1.h1 p)
+                (assume t1.h2 q)
+                (step t1.t3 (cl (= r s)) :rule trust_me)
+                (step t1 (cl (not p) (not q) (= r s)) :rule subproof)": true,
+            }
+            "Missing assumption" {
+                "(anchor :step t1)
+                (assume t1.h1 p)
+                (step t1.t2 (cl (= r s)) :rule trust_me)
+                (step t1 (cl (not p) (not q) (= r s)) :rule subproof)": false,
+            }
+            "Assumption terms don't match" {
+                "(anchor :step t1)
+                (assume t1.h1 p)
+                (assume t1.h2 q)
+                (step t1.t3 (cl (= r s)) :rule trust_me)
+                (step t1 (cl (not q) (not p) (= r s)) :rule subproof)": false,
+
+                "(anchor :step t1)
+                (assume t1.h1 (or p q))
+                (assume t1.h2 (= p q))
+                (step t1.t3 (cl (= r s)) :rule trust_me)
+                (step t1 (cl (not (and p q)) (not (= q p)) (= r s)) :rule subproof)": false,
+            }
+            "Conclusion terms don't match" {
+                "(anchor :step t1)
+                (assume t1.h1 p)
+                (assume t1.h2 q)
+                (step t1.t3 (cl (= r s)) :rule trust_me)
+                (step t1 (cl (not p) (not q) (= s r)) :rule subproof)": false,
+            }
+        }
+    }
+
+    #[test]
     fn bind() {
         test_cases! {
             definitions = "
