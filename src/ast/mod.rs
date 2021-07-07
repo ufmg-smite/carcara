@@ -509,6 +509,15 @@ impl Term {
         }
     }
 
+    /// Tries to unwrap a quantifier term, returning the `Quantifier`, the bindings and the inner
+    /// term. Returns `None` if term is not a quantifier term.
+    pub fn unwrap_quant(&self) -> Option<(Quantifier, &Vec<SortedVar>, &ByRefRc<Term>)> {
+        match self {
+            Term::Quant(q, b, t) => Some((*q, b, t)),
+            _ => None,
+        }
+    }
+
     /// Returns `true` if the term is the boolean constant "true".
     pub fn is_bool_true(&self) -> bool {
         self.sort() == Term::BOOL_SORT && self.try_as_var() == Some("true")

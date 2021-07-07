@@ -13,10 +13,8 @@ pub fn forall_inst(
     rassert!(conclusion.len() == 1);
 
     let (forall_term, substituted) = match_term!((or (not f) s) = conclusion[0], RETURN_RCS)?;
-    let (bindings, original) = match forall_term.as_ref() {
-        Term::Quant(Quantifier::Forall, b, t) => (b, t),
-        _ => return None,
-    };
+    let (quant, bindings, original) = forall_term.unwrap_quant()?;
+    rassert!(quant == Quantifier::Forall);
 
     rassert!(args.len() == bindings.len());
 
@@ -45,21 +43,13 @@ pub fn forall_inst(
     ))
 }
 
-/// Unwraps a quantifier term, returning the `Quantifier`, the bindings and the inner term.
-fn unwrap_quant(term: &Term) -> Option<(Quantifier, &Vec<SortedVar>, &ByRefRc<Term>)> {
-    match term {
-        Term::Quant(q, b, t) => Some((*q, b, t)),
-        _ => None,
-    }
-}
-
 pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1);
 
     let (left, right) = match_term!((= l r) = conclusion[0])?;
-    let (q_1, bindings_1, left) = unwrap_quant(left)?;
-    let (q_2, bindings_2, left) = unwrap_quant(left)?;
-    let (q_3, bindings_3, right) = unwrap_quant(right)?;
+    let (q_1, bindings_1, left) = left.unwrap_quant()?;
+    let (q_2, bindings_2, left) = left.unwrap_quant()?;
+    let (q_3, bindings_3, right) = right.unwrap_quant()?;
 
     rassert!(q_1 == q_2 && q_2 == q_3 && left == right);
 
@@ -75,8 +65,8 @@ pub fn qnt_rm_unused(
     rassert!(conclusion.len() == 1);
 
     let (left, right) = match_term!((= l r) = conclusion[0])?;
-    let (q_1, bindings_1, phi_1) = unwrap_quant(left)?;
-    let (q_2, bindings_2, phi_2) = unwrap_quant(right)?;
+    let (q_1, bindings_1, phi_1) = left.unwrap_quant()?;
+    let (q_2, bindings_2, phi_2) = right.unwrap_quant()?;
     rassert!(q_1 == q_2 && phi_1 == phi_2);
     let free_vars = pool.free_vars(phi_1);
     to_option(

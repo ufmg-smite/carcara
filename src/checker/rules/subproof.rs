@@ -44,19 +44,18 @@ pub fn bind(
         match_term!((= p q) = get_single_term_from_command(previous_command)?, RETURN_RCS)?;
 
     let (left, right) = match_term!((= l r) = conclusion[0])?;
-    let ((l_bindings, left), (r_bindings, right)) = match (left, right) {
-        // While the documentation indicates this rule is only called with "forall" quantifiers, in
-        // some of the tests examples it is also called with the "exists" quantifier
-        (Term::Quant(_, l_binds, l_term), Term::Quant(_, r_binds, r_term)) => {
-            ((l_binds, l_term.as_ref()), (r_binds, r_term.as_ref()))
-        }
-        _ => return None,
-    };
+
+    // While the documentation indicates this rule is only called with "forall" quantifiers, in
+    // some of the tests examples it is also called with the "exists" quantifier
+    let (l_quant, l_bindings, left) = left.unwrap_quant()?;
+    let (r_quant, r_bindings, right) = right.unwrap_quant()?;
+    rassert!(l_quant == r_quant);
+
     let l_bindings: HashSet<_> = l_bindings.iter().map(|(var, _)| var.as_str()).collect();
     let r_bindings: HashSet<_> = r_bindings.iter().map(|(var, _)| var.as_str()).collect();
 
     // The terms in the quantifiers must be phi and phi'
-    rassert!(left == phi.as_ref() && right == phi_prime.as_ref());
+    rassert!(left == phi && right == phi_prime);
 
     // None of the bindings in the right side can appear as free variables in phi
     let free_vars = pool.free_vars(phi);
