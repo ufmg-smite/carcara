@@ -171,6 +171,7 @@ impl ProofChecker {
             "nary_elim" => clausification::nary_elim,
             "ac_simp" => simplification::ac_simp,
             "bind" => subproof::bind,
+            "subproof" => subproof::subproof,
             "let" => subproof::r#let,
             "trust_me" if allow_test_rule => |_| Some(()),
             _ => return None,

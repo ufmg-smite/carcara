@@ -2,6 +2,30 @@ use super::{get_single_term_from_command, to_option, RuleArgs};
 use crate::ast::*;
 use std::collections::HashSet;
 
+pub fn subproof(
+    RuleArgs {
+        conclusion,
+        subproof_commands,
+        ..
+    }: RuleArgs,
+) -> Option<()> {
+    // TODO: We should get the series of assumptions from the ":discharge" attribute, but currently
+    // we just take the first `conclusion.len() - 1` steps in the subproof.
+    let assumptions = &subproof_commands[..conclusion.len() - 1];
+
+    rassert!(conclusion.len() == assumptions.len() + 1); // Currently, this is always true
+
+    for (assumption, term) in assumptions.iter().zip(conclusion) {
+        let assumption = get_single_term_from_command(assumption)?;
+        rassert!(assumption.as_ref() == term.remove_negation()?)
+    }
+
+    let previous_command = &subproof_commands[subproof_commands.len() - 2];
+    let phi = get_single_term_from_command(previous_command)?;
+
+    to_option(conclusion.last().unwrap() == phi)
+}
+
 pub fn bind(
     RuleArgs {
         conclusion,

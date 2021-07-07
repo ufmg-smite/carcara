@@ -438,8 +438,9 @@ impl<R: BufRead> Parser<R> {
         };
 
         // In some steps (notably those with the "subproof" rule) a ":discharge" attribute appears,
-        // with an assumption index as its value. The checker currently doesn't support this rule,
-        // so we are simply consuming and ignoring the attribute if it appears
+        // with an assumption index as its value. While the checker already has support this rule,
+        // it still can't parse and interpret the ":discharge" attributes values properly, so we
+        // are simply consuming and ignoring the attribute if it appears
         if self.current_token == Token::Keyword("discharge".into()) {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
