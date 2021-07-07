@@ -173,6 +173,7 @@ impl ProofChecker {
             "bind" => subproof::bind,
             "subproof" => subproof::subproof,
             "let" => subproof::r#let,
+            "onepoint" => subproof::onepoint,
             "trust_me" if allow_test_rule => |_| Some(()),
             _ => return None,
         })

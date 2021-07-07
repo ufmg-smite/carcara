@@ -133,6 +133,56 @@ pub fn r#let(
     to_option(premises.next().is_none())
 }
 
+pub fn onepoint(
+    RuleArgs {
+        conclusion,
+        context,
+        pool,
+        subproof_commands,
+        ..
+    }: RuleArgs,
+) -> Option<()> {
+    rassert!(conclusion.len() == 1);
+    let (left, right) = match_term!((= l r) = conclusion[0], RETURN_RCS)?;
+    let (l_quant, l_bindings, left) = left.unwrap_quant()?;
+    let (r_bindings, right) = match right.unwrap_quant() {
+        Some((q, b, t)) => {
+            rassert!(q == l_quant);
+            (b.as_slice(), t)
+        }
+        // If the right-hand side term is not a quantifier, that possibly means all quantifier
+        // bindings were removed, so we consider it a quantifier with an empty list of bindings
+        None => (&[] as &[_], right),
+    };
+
+    let previous_term =
+        get_single_term_from_command(&subproof_commands[subproof_commands.len() - 2])?;
+    let previous_equality = match_term!((= p q) = previous_term, RETURN_RCS)?;
+    rassert!(previous_equality == (left, right) || previous_equality == (right, left));
+
+    let context = context.last()?;
+    rassert!(
+        context.bindings.len() == r_bindings.len()
+            && r_bindings.iter().all(|b| context.bindings.contains(b))
+    );
+
+    let l_bindings: HashSet<_> = l_bindings
+        .iter()
+        .map(|var| pool.add_term(var.clone().into()))
+        .collect();
+    let r_bindings: HashSet<_> = r_bindings
+        .iter()
+        .map(|var| pool.add_term(var.clone().into()))
+        .collect();
+    let substitution_vars: HashSet<_> = context
+        .substitutions
+        .iter()
+        .map(|(k, _)| k.clone())
+        .collect();
+
+    to_option(l_bindings == &r_bindings | &substitution_vars)
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
