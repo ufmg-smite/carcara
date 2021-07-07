@@ -17,6 +17,7 @@ pub struct RuleArgs<'a> {
 }
 
 /// Converts a `bool` into an `Option<()>`.
+#[must_use]
 fn to_option(b: bool) -> Option<()> {
     match b {
         true => Some(()),
