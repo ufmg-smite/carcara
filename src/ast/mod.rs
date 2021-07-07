@@ -336,6 +336,12 @@ impl_str_conversion_traits!(Operator {
 
 pub type SortedVar = (String, ByRefRc<Term>);
 
+impl Into<Term> for SortedVar {
+    fn into(self) -> Term {
+        Term::Terminal(Terminal::Var(Identifier::Simple(self.0), self.1))
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SortKind {
     Function,
