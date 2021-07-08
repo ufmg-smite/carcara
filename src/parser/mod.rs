@@ -19,6 +19,7 @@ pub fn parse_problem_proof<T: BufRead>(problem: T, proof: T) -> ParserResult<(Pr
 }
 
 type AnchorCommand = (String, Vec<(String, ByRefRc<Term>)>, Vec<SortedVar>);
+type StepCommand = (Vec<ByRefRc<Term>>, String, Vec<String>, Vec<ProofArg>);
 
 struct SymbolTable<K, V> {
     scopes: Vec<HashMap<K, V>>,
@@ -343,7 +344,38 @@ impl<R: BufRead> Parser<R> {
             self.expect_token(Token::OpenParen)?;
             let (index, command) = match self.next_token()? {
                 Token::ReservedWord(Reserved::Assume) => self.parse_assume_command()?,
-                Token::ReservedWord(Reserved::Step) => self.parse_step_command()?,
+                Token::ReservedWord(Reserved::Step) => {
+                    let (index, (clause, rule, premises, args)) = self.parse_step_command()?;
+
+                    // If this is the last step in the subproof, we pop the top scope of the step
+                    // indices symbol table before converting the premises into indices. We must do
+                    // this here because if the last step of a subproof has premises, they refer to
+                    // the outer scope, and not inside the subproof
+                    if end_step == Some(&index) {
+                        self.state.step_indices.pop_scope();
+                    }
+
+                    // For every premise index symbol, find the associated `usize` in the
+                    // `step_indices` hash map, or return an error
+                    let premises: Vec<_> = premises
+                        .into_iter()
+                        .map(|index| {
+                            self.state
+                                .step_indices
+                                .get(&index)
+                                .copied()
+                                .ok_or_else(|| self.err(ErrorKind::UndefinedStepIndex(index)))
+                        })
+                        .collect::<Result<_, _>>()?;
+
+                    let command = ProofCommand::Step(ProofStep {
+                        clause,
+                        rule,
+                        premises,
+                        args,
+                    });
+                    (index, command)
+                }
                 Token::ReservedWord(Reserved::DefineFun) => {
                     let (name, func_def) = self.parse_define_fun()?;
                     self.state.function_defs.insert(name, func_def);
@@ -355,7 +387,8 @@ impl<R: BufRead> Parser<R> {
 
                     self.state.step_indices.push_scope();
                     let Proof(commands) = self.parse_subproof(Some(&end_step_index))?;
-                    self.state.step_indices.pop_scope();
+                    // We don't need to pop the scope that we pushed because it is popped when the
+                    // last step of the subproof is parsed
 
                     // Since `Parser::parse_anchor_command` pushes a scope into the symbol table, we
                     // have to pop it now, after parsing the subproof
@@ -374,14 +407,11 @@ impl<R: BufRead> Parser<R> {
                 return Err(self.err(ErrorKind::RepeatedStepIndex(index)));
             }
 
-            // Since index is moved when inserted in the step_indices symbol table, we must do
-            // this check here
-            let is_last_command = end_step == Some(&index);
-            self.state.step_indices.insert(index, commands.len());
             commands.push(command);
-            if is_last_command {
+            if end_step == Some(&index) {
                 break;
             }
+            self.state.step_indices.insert(index, commands.len() - 1);
         }
         Ok(Proof(commands))
     }
@@ -399,7 +429,7 @@ impl<R: BufRead> Parser<R> {
 
     /// Parses a "step" proof command. This method assumes that the "(" and "step" tokens were
     /// already consumed.
-    fn parse_step_command(&mut self) -> ParserResult<(String, ProofCommand)> {
+    fn parse_step_command(&mut self) -> ParserResult<(String, StepCommand)> {
         let step_index = self.expect_symbol()?;
         let clause = self.parse_clause()?;
         self.expect_token(Token::Keyword("rule".into()))?;
@@ -412,19 +442,7 @@ impl<R: BufRead> Parser<R> {
         let premises = if self.current_token == Token::Keyword("premises".into()) {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
-            // Parse a series of index symbols and convert them to step indices
             self.parse_sequence(Self::expect_symbol, true)?
-                .into_iter()
-                .map(|index| {
-                    // For every index symbol, find the associated `usize` in the `step_indices`
-                    // hash map, or return an error
-                    self.state
-                        .step_indices
-                        .get(&index)
-                        .copied()
-                        .ok_or_else(|| self.err(ErrorKind::UndefinedStepIndex(index)))
-                })
-                .collect::<Result<_, _>>()?
         } else {
             Vec::new()
         };
@@ -450,15 +468,7 @@ impl<R: BufRead> Parser<R> {
 
         self.expect_token(Token::CloseParen)?;
 
-        Ok((
-            step_index,
-            ProofCommand::Step(ProofStep {
-                clause,
-                rule,
-                premises,
-                args,
-            }),
-        ))
+        Ok((step_index, (clause, rule, premises, args)))
     }
 
     /// Parses an "anchor" proof command. This method assumes that the "(" and "anchor" tokens were
