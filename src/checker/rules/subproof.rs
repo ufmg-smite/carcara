@@ -310,61 +310,53 @@ mod tests {
                 (declare-fun i () Int)
                 (declare-fun j () Int)
                 (declare-fun k () Int)
+                (declare-fun x () Int)
+                (declare-fun y () Int)
+                (declare-fun z () Int)
             ",
             "Simple working examples" {
-                "(anchor :step t1 :args ((:= (a Int) x)))
-                (step t1.t1 (cl (= i x)) :rule trust_me)
-                (step t1.t2 (cl (= p q)) :rule trust_me)
-                (step t1 (cl (= (let ((a i)) p) q)) :rule let :premises (t1.t1))": true,
+                "(step t1 (cl (= i x)) :rule trust_me)
+                (anchor :step t2 :args ((:= (a Int) x)))
+                (step t2.t1 (cl (= p q)) :rule trust_me)
+                (step t2 (cl (= (let ((a i)) p) q)) :rule let :premises (t1))": true,
 
-                "(anchor :step t1 :args (
-                    (:= (a Int) x) (:= (b Int) y) (:= (c Int) z)
-                ))
-                (step t1.t1 (cl (= i x)) :rule trust_me)
-                (step t1.t2 (cl (= k z)) :rule trust_me)
-                (step t1.t3 (cl (= p q)) :rule trust_me)
-                (step t1 (cl (= (let ((a i) (b y) (c k)) p) q))
-                    :rule let :premises (t1.t1 t1.t2))": true,
+                "(step t1 (cl (= i x)) :rule trust_me)
+                (step t2 (cl (= k z)) :rule trust_me)
+                (anchor :step t3 :args ((:= (a Int) x) (:= (b Int) y) (:= (c Int) z)))
+                (step t3.t1 (cl (= p q)) :rule trust_me)
+                (step t3 (cl (= (let ((a i) (b y) (c k)) p) q)) :rule let :premises (t1 t2))": true,
             }
             "Premise equalities may be flipped" {
-                "(anchor :step t1 :args ((:= (a Int) x)))
-                (step t1.t1 (cl (= x i)) :rule trust_me)
-                (step t1.t2 (cl (= p q)) :rule trust_me)
-                (step t1 (cl (= (let ((a i)) p) q)) :rule let :premises (t1.t1))": true,
+                "(step t1 (cl (= x i)) :rule trust_me)
+                (anchor :step t2 :args ((:= (a Int) x)))
+                (step t2.t1 (cl (= p q)) :rule trust_me)
+                (step t2 (cl (= (let ((a i)) p) q)) :rule let :premises (t1))": true,
             }
             "Wrong number of premises" {
-                "(anchor :step t1 :args (
-                    (:= (a Int) x) (:= (b Int) y) (:= (c Int) z)
-                ))
-                (step t1.t1 (cl (= i x)) :rule trust_me)
-                (step t1.t2 (cl (= p q)) :rule trust_me)
-                (step t1 (cl (= (let ((a i) (b y) (c k)) p) q))
-                    :rule let :premises (t1.t1))": false,
+                "(step t1 (cl (= i x)) :rule trust_me)
+                (anchor :step t2 :args ((:= (a Int) x) (:= (b Int) y) (:= (c Int) z)))
+                (step t2.t1 (cl (= p q)) :rule trust_me)
+                (step t2 (cl (= (let ((a i) (b y) (c k)) p) q)) :rule let :premises (t1))": false,
 
-                "(anchor :step t1 :args (
-                    (:= (a Int) x) (:= (b Int) y) (:= (c Int) z)
-                ))
-                (step t1.t1 (cl (= i x)) :rule trust_me)
-                (step t1.t2 (cl (= y y)) :rule trust_me)
-                (step t1.t3 (cl (= k z)) :rule trust_me)
-                (step t1.t4 (cl (= p q)) :rule trust_me)
-                (step t1 (cl (= (let ((a i) (b y) (c k)) p) q))
-                    :rule let :premises (t1.t1 t1.t2))": false,
+                "(step t1 (cl (= i x)) :rule trust_me)
+                (step t2 (cl (= y y)) :rule trust_me)
+                (step t3 (cl (= k z)) :rule trust_me)
+                (anchor :step t4 :args ((:= (a Int) x) (:= (b Int) y) (:= (c Int) z)))
+                (step t4.t1 (cl (= p q)) :rule trust_me)
+                (step t4 (cl (= (let ((a i) (b y) (c k)) p) q)) :rule let :premises (t1 t2))": false,
             }
             "Number of bindings is `let` term doesn't match number of substitutions in context" {
-                "(anchor :step t1 :args (
-                    (:= (a Int) x) (:= (b Int) y) (:= (c Int) z)
-                ))
-                (step t1.t1 (cl (= i x)) :rule trust_me)
-                (step t1.t2 (cl (= j y)) :rule trust_me)
-                (step t1.t3 (cl (= p q)) :rule trust_me)
-                (step t1 (cl (= (let ((a i) (b j)) p) q)) :rule let :premises (t1.t1 t1.t2))": false,
+                "(step t1 (cl (= i x)) :rule trust_me)
+                (step t2 (cl (= j y)) :rule trust_me)
+                (anchor :step t3 :args ((:= (a Int) x) (:= (b Int) y) (:= (c Int) z)))
+                (step t3.t1 (cl (= p q)) :rule trust_me)
+                (step t3 (cl (= (let ((a i) (b j)) p) q)) :rule let :premises (t1 t2))": false,
             }
             "u and u' don't match equality in previous command" {
-                "(anchor :step t1 :args ((:= (a Int) x)))
-                (step t1.t1 (cl (= i x)) :rule trust_me)
-                (step t1.t2 (cl (= p (= i j))) :rule trust_me)
-                (step t1 (cl (= (let ((a i)) p) q)) :rule let :premises (t1.t1))": false,
+                "(step t1 (cl (= i x)) :rule trust_me)
+                (anchor :step t2 :args ((:= (a Int) x)))
+                (step t2.t1 (cl (= p (= i j))) :rule trust_me)
+                (step t2 (cl (= (let ((a i)) p) q)) :rule let :premises (t1))": false,
             }
         }
     }

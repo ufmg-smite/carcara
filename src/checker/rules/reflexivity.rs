@@ -90,13 +90,18 @@ mod tests {
                 (step t1 (cl (= x z)) :rule refl)": true,
             }
             "Nested subproofs" {
+                // Since an inner subproof cannot end an outer subproof, we need to have a dummy
+                // step to the end the outer subproofs in these examples
+
                 "(anchor :step t1 :args ((:= (x Real) z)))
                 (anchor :step t1.t1 :args ((:= (y Real) z)))
-                (step t1.t1 (cl (= x y)) :rule refl)": true,
+                (step t1.t1 (cl (= x y)) :rule refl)
+                (step t1 (cl) :rule trust_me)": true,
 
                 "(anchor :step t1 :args ((:= (x Real) y)))
                 (anchor :step t1.t1 :args ((:= (y Real) z)))
-                (step t1.t1 (cl (= x z)) :rule refl)": true,
+                (step t1.t1 (cl (= x z)) :rule refl)
+                (step t1 (cl) :rule trust_me)": true,
             }
             "Terms aren't equal after applying context substitutions" {
                 "(anchor :step t1 :args ((:= (x Real) y)))

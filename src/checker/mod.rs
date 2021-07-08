@@ -40,15 +40,20 @@ impl ProofChecker {
     fn check_subproof<'a>(&mut self, commands: &'a [ProofCommand]) -> Result<(), CheckerError<'a>> {
         for step in commands {
             match step {
-                ProofCommand::Step(step) => self.check_step(step, commands)?,
+                ProofCommand::Step(step) => self.check_step(step, commands, None)?,
                 ProofCommand::Subproof {
-                    commands,
+                    commands: inner_commands,
                     assignment_args,
                     variable_args,
                 } => {
                     let new_context = self.build_context(assignment_args, variable_args);
                     self.context.push(new_context);
-                    self.check_subproof(&commands)?;
+                    self.check_subproof(&inner_commands[..inner_commands.len() - 1])?;
+                    let last_step = match inner_commands.last().unwrap() {
+                        ProofCommand::Step(s) => s,
+                        _ => panic!(), // TODO: Add better error handling for this case
+                    };
+                    self.check_step(last_step, commands, Some(inner_commands))?;
                     self.context.pop();
                 }
                 ProofCommand::Assume(_) => (),
@@ -105,6 +110,7 @@ impl ProofChecker {
             args,
         }: &'a ProofStep,
         all_commands: &'a [ProofCommand],
+        subproof_commands: Option<&'a [ProofCommand]>,
     ) -> Result<(), CheckerError<'a>> {
         let rule = match Self::get_rule(rule_name, self.allow_test_rule) {
             Some(r) => r,
@@ -118,7 +124,7 @@ impl ProofChecker {
             args: &args,
             pool: &mut self.pool,
             context: &mut self.context,
-            subproof_commands: all_commands,
+            subproof_commands: subproof_commands.unwrap_or(&[]),
         };
         if rule(rule_args).is_none() {
             return Err(CheckerError::FailedOnRule(rule_name));
