@@ -142,7 +142,11 @@ pub fn onepoint(
         ..
     }: RuleArgs,
 ) -> Option<()> {
+    // TODO: We still need to make sure that for each (:= x t) in the context substitutions, t is
+    // the point of x, that is, (= x t) appears in phi with positive polarity
+
     rassert!(conclusion.len() == 1);
+
     let (left, right) = match_term!((= l r) = conclusion[0], RETURN_RCS)?;
     let (l_quant, l_bindings, left) = left.unwrap_quant()?;
     let (r_bindings, right) = match right.unwrap_quant() {
