@@ -124,7 +124,7 @@ impl ProofChecker {
             args: &args,
             pool: &mut self.pool,
             context: &mut self.context,
-            subproof_commands: subproof_commands.unwrap_or(&[]),
+            subproof_commands,
         };
         if rule(rule_args).is_none() {
             return Err(CheckerError::FailedOnRule(rule_name));

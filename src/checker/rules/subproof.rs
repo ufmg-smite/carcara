@@ -11,7 +11,7 @@ pub fn subproof(
 ) -> Option<()> {
     // TODO: We should get the series of assumptions from the ":discharge" attribute, but currently
     // we just take the first `conclusion.len() - 1` steps in the subproof.
-    let assumptions = &subproof_commands[..conclusion.len() - 1];
+    let assumptions = &subproof_commands?[..conclusion.len() - 1];
 
     rassert!(conclusion.len() == assumptions.len() + 1); // Currently, this is always true
 
@@ -20,7 +20,7 @@ pub fn subproof(
         rassert!(assumption.as_ref() == term.remove_negation()?)
     }
 
-    let previous_command = &subproof_commands[subproof_commands.len() - 2];
+    let previous_command = &subproof_commands?[subproof_commands?.len() - 2];
     let phi = get_single_term_from_command(previous_command)?;
 
     to_option(conclusion.last().unwrap() == phi)
@@ -35,11 +35,11 @@ pub fn bind(
         ..
     }: RuleArgs,
 ) -> Option<()> {
-    rassert!(subproof_commands.len() >= 2 && conclusion.len() == 1);
+    rassert!(subproof_commands?.len() >= 2 && conclusion.len() == 1);
 
     // The last command in the subproof is the one we are currently checking, so we look at the one
     // before that
-    let previous_command = &subproof_commands[subproof_commands.len() - 2];
+    let previous_command = &subproof_commands?[subproof_commands?.len() - 2];
     let (phi, phi_prime) =
         match_term!((= p q) = get_single_term_from_command(previous_command)?, RETURN_RCS)?;
 
@@ -114,7 +114,7 @@ pub fn r#let(
     // The u and u' in the conclusion must match the u and u' in the previous command in the
     // subproof
     let previous_term =
-        get_single_term_from_command(&subproof_commands[subproof_commands.len() - 2])?;
+        get_single_term_from_command(&subproof_commands?[subproof_commands?.len() - 2])?;
     let (previous_u, previous_u_prime) = match_term!((= u u_prime) = previous_term, RETURN_RCS)?;
     rassert!(u == previous_u && u_prime == previous_u_prime);
 
@@ -160,7 +160,7 @@ pub fn onepoint(
     };
 
     let previous_term =
-        get_single_term_from_command(&subproof_commands[subproof_commands.len() - 2])?;
+        get_single_term_from_command(&subproof_commands?[subproof_commands?.len() - 2])?;
     let previous_equality = match_term!((= p q) = previous_term, RETURN_RCS)?;
     rassert!(previous_equality == (left, right) || previous_equality == (right, left));
 
