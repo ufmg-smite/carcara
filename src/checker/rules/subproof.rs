@@ -16,8 +16,10 @@ pub fn subproof(
     rassert!(conclusion.len() == assumptions.len() + 1); // Currently, this is always true
 
     for (assumption, term) in assumptions.iter().zip(conclusion) {
-        let assumption = get_single_term_from_command(assumption)?;
-        rassert!(assumption.as_ref() == term.remove_negation()?)
+        match assumption {
+            ProofCommand::Assume(t) => rassert!(t.as_ref() == term.remove_negation()?),
+            _ => return None,
+        };
     }
 
     let previous_command = &subproof_commands?[subproof_commands?.len() - 2];
