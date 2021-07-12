@@ -135,6 +135,40 @@ pub fn r#let(
     to_option(premises.next().is_none())
 }
 
+fn extract_points(quant: Quantifier, term: &Term) -> HashSet<(&ByRefRc<Term>, &ByRefRc<Term>)> {
+    // TODO: This still doesn't handle the case where there is a variable in t_i that must be
+    // substituted
+
+    let mut result = HashSet::new();
+    match quant {
+        Quantifier::Forall => {
+            let mut current = term;
+            while let Some((equality, u)) = match_term!((=> (= x t) u) = current, RETURN_RCS)
+                .or_else(|| match_term!((or (not (= x t)) u) = current, RETURN_RCS))
+            {
+                result.insert(equality);
+                current = u;
+            }
+            if let Some(equality) = match_term!((not (= x t)) = current, RETURN_RCS) {
+                result.insert(equality);
+            }
+        }
+        Quantifier::Exists => {
+            let mut current = term;
+            while let Some((equality, u)) = match_term!((and eq u) = current, RETURN_RCS) {
+                if let Some(equality) = match_term!((= x t) = equality, RETURN_RCS) {
+                    result.insert(equality);
+                }
+                current = u;
+            }
+            if let Some(equality) = match_term!((= x t) = current, RETURN_RCS) {
+                result.insert(equality);
+            }
+        }
+    }
+    result
+}
+
 pub fn onepoint(
     RuleArgs {
         conclusion,
@@ -144,16 +178,13 @@ pub fn onepoint(
         ..
     }: RuleArgs,
 ) -> Option<()> {
-    // TODO: We still need to make sure that for each (:= x t) in the context substitutions, t is
-    // the point of x, that is, (= x t) appears in phi with positive polarity
-
     rassert!(conclusion.len() == 1);
 
     let (left, right) = match_term!((= l r) = conclusion[0], RETURN_RCS)?;
-    let (l_quant, l_bindings, left) = left.unwrap_quant()?;
+    let (quant, l_bindings, left) = left.unwrap_quant()?;
     let (r_bindings, right) = match right.unwrap_quant() {
         Some((q, b, t)) => {
-            rassert!(q == l_quant);
+            rassert!(q == quant);
             (b.as_slice(), t)
         }
         // If the right-hand side term is not a quantifier, that possibly means all quantifier
@@ -185,6 +216,19 @@ pub fn onepoint(
         .iter()
         .map(|(k, _)| k.clone())
         .collect();
+
+    if match_term!((=> (and ...) u) = left).is_some() {
+        // This case is currently not supported, so we just skip it
+        // TODO: Add support for this case
+        return Some(());
+    }
+
+    // For each substitution (:= x t) in the context, the equality (= x t) must appear in phi
+    let points = extract_points(quant, left);
+    rassert!(context
+        .substitutions
+        .iter()
+        .all(|(k, v)| points.contains(&(k, v)) || points.contains(&(v, k))));
 
     to_option(l_bindings == &r_bindings | &substitution_vars)
 }
