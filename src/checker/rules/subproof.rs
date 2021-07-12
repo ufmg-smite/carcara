@@ -169,6 +169,7 @@ fn extract_points(quant: Quantifier, term: &Term) -> HashSet<(&ByRefRc<Term>, &B
     result
 }
 
+// TODO: Add tests for this rule
 pub fn onepoint(
     RuleArgs {
         conclusion,
