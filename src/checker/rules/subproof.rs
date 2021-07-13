@@ -178,7 +178,6 @@ fn extract_points(quant: Quantifier, term: &Term) -> HashSet<(&ByRefRc<Term>, &B
     result
 }
 
-// TODO: Add tests for this rule
 pub fn onepoint(
     RuleArgs {
         conclusion,
@@ -407,6 +406,81 @@ mod tests {
                 (anchor :step t2 :args ((:= (a Int) x)))
                 (step t2.t1 (cl (= p (= i j))) :rule trust_me)
                 (step t2 (cl (= (let ((a i)) p) q)) :rule let :premises (t1))": false,
+            }
+        }
+    }
+
+    #[test]
+    fn onepoint() {
+        test_cases! {
+            definitions = "(declare-fun p () Bool)",
+            "Simple working examples" {
+                "(anchor :step t1 :args ((:= (x Int) t)))
+                (step t1.t1 (cl (= (=> (= x t) p) (=> (= t t) p))) :rule trust_me)
+                (step t1 (cl (= (forall ((x Int)) (=> (= x t) p)) (=> (= t t) p)))
+                    :rule onepoint)": true,
+
+                "(anchor :step t1 :args ((:= (x Int) t)))
+                (step t1.t1 (cl (= (or (not (= x t)) p) (or (not (= t t)) p))) :rule trust_me)
+                (step t1 (cl (= (forall ((x Int)) (or (not (= x t)) p)) (or (not (= t t)) p)))
+                    :rule onepoint)": true,
+
+                "(anchor :step t1 :args ((:= (x Int) t)))
+                (step t1.t1 (cl (= (and (= x t) p) (and (= t t) p))) :rule trust_me)
+                (step t1 (cl (= (exists ((x Int)) (and (= x t) p)) (and (= t t) p)))
+                    :rule onepoint)": true,
+            }
+            "Multiple quantifier bindings" {
+                "(anchor :step t1 :args ((x Int) (y Int) (:= (z Int) t)))
+                (step t1.t1 (cl (= (=> (= z t) (= (+ x y) (+ z t)))
+                                   (=> (= t t) (= (+ x y) (+ t t))))) :rule trust_me)
+                (step t1 (cl (=
+                    (forall ((x Int) (y Int) (z Int)) (=> (= z t) (= (+ x y) (+ z t))))
+                    (forall ((x Int) (y Int))         (=> (= t t) (= (+ x y) (+ t t))))
+                )) :rule onepoint)": true,
+
+                "(anchor :step t1 :args ((x Int) (y Int) (:= (z Int) t)))
+                (step t1.t1 (cl (= (and (= z t) (= (+ x y) (+ z t)))
+                                   (and (= t t) (= (+ x y) (+ t t))))) :rule trust_me)
+                (step t1 (cl (=
+                    (exists ((x Int) (y Int) (z Int)) (and (= z t) (= (+ x y) (+ z t))))
+                    (exists ((x Int) (y Int))         (and (= t t) (= (+ x y) (+ t t))))
+                )) :rule onepoint)": true,
+            }
+            "Multiple quantifier bindings eliminated" {
+                "(anchor :step t1 :args ((:= (x Int) t) (:= (y Int) u) (:= (z Int) v)))
+                (step t1.t1 (cl (= (=> (= x t) (=> (= y u) (=> (= z v) p)))
+                                   (=> (= t t) (=> (= u u) (=> (= v v) p))))) :rule trust_me)
+                (step t1 (cl (=
+                    (forall ((x Int) (y Int) (z Int)) (=> (= x t) (=> (= y u) (=> (= z v) p))))
+                    (=> (= t t) (=> (= u u) (=> (= v v) p)))
+                )) :rule onepoint)": true,
+
+                "(anchor :step t1 :args ((:= (x Int) t) (:= (y Int) u) (:= (z Int) v)))
+                (step t1.t1 (cl (= (or (not (= x t)) (or (not (= y u)) (or (not (= z v)) p)))
+                                   (or (not (= t t)) (or (not (= u u)) (or (not (= v v)) p)))
+                )) :rule trust_me)
+                (step t1 (cl (=
+                    (forall ((x Int) (y Int) (z Int))
+                        (or (not (= x t)) (or (not (= y u)) (or (not (= z v)) p))))
+                    (or (not (= t t)) (or (not (= u u)) (or (not (= v v)) p)))
+                )) :rule onepoint)": true,
+
+                "(anchor :step t1 :args ((:= (x Int) t) (:= (y Int) u) (:= (z Int) v)))
+                (step t1.t1 (cl (= (=> (and (= x t) (and (= y u) (= z v))) p)
+                                   (=> (and (= t t) (and (= u u) (= v v))) p))) :rule trust_me)
+                (step t1 (cl (=
+                    (forall ((x Int) (y Int) (z Int)) (=> (and (= x t) (and (= y u) (= z v))) p))
+                    (=> (and (= t t) (and (= u u) (= v v))) p)
+                )) :rule onepoint)": true,
+
+                "(anchor :step t1 :args ((:= (x Int) t) (:= (y Int) u) (:= (z Int) v)))
+                (step t1.t1 (cl (= (and (= x t) (and (= y u) (and (= z v) p)))
+                                   (and (= t t) (and (= u u) (and (= v v) p))))) :rule trust_me)
+                (step t1 (cl (=
+                    (exists ((x Int) (y Int) (z Int)) (and (= x t) (and (= y u) (and (= z v) p))))
+                    (and (= t t) (and (= u u) (and (= v v) p)))
+                )) :rule onepoint)": true,
             }
         }
     }
