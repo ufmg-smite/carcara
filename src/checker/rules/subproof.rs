@@ -1,6 +1,6 @@
 use super::{get_single_term_from_command, to_option, RuleArgs};
 use crate::ast::*;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 pub fn subproof(
     RuleArgs {
@@ -234,6 +234,68 @@ pub fn onepoint(
         .all(|(k, v)| points.contains(&(k, v)) || points.contains(&(v, k))));
 
     to_option(l_bindings == &r_bindings | &substitution_vars)
+}
+
+// TODO: Add tests for this rule
+pub fn sko_ex(
+    RuleArgs {
+        conclusion,
+        pool,
+        context,
+        subproof_commands,
+        ..
+    }: RuleArgs,
+) -> Option<()> {
+    rassert!(conclusion.len() == 1);
+
+    let (left, psi) = match_term!((= l r) = conclusion[0])?;
+
+    let (quant, bindings, phi) = left.unwrap_quant()?;
+    rassert!(quant == Quantifier::Exists);
+
+    let previous_term =
+        get_single_term_from_command(&subproof_commands?[subproof_commands?.len() - 2])?;
+    let previous_equality = match_term!((= p q) = previous_term)?;
+    rassert!(previous_equality == (phi, psi));
+
+    let mut current_phi = phi.clone();
+    // I have to extract the length into a separate variable (instead of just using it directly in
+    // the slice index) to please the borrow checker
+    let n = context.len();
+    for c in context[..n - 1].iter_mut() {
+        // Based on the test examples, we must first apply all previous context substitutions to
+        // phi, before applying the substitutions present in the current context
+        current_phi = pool.apply_substitutions(&current_phi, &mut c.substitutions);
+    }
+
+    let substitutions = &context.last()?.substitutions_until_fixed_point;
+    for (i, x) in bindings.iter().enumerate() {
+        let x_term = pool.add_term(Term::from(x.clone()));
+        let t = substitutions.get(&x_term)?;
+        let (t_choice_var, t_bindings, t_inner) = match t.as_ref() {
+            Term::Choice(var, inner) => {
+                // If this is the last binding, all bindigns were skolemized, so we don't need to
+                // unwrap any quantifier
+                if i == bindings.len() - 1 {
+                    (var, &[] as &[_], inner)
+                } else {
+                    let (q, b, t) = inner.unwrap_quant()?;
+                    rassert!(q == Quantifier::Exists);
+                    (var, b.as_slice(), t)
+                }
+            }
+            _ => return None,
+        };
+        rassert!(t_choice_var == x);
+        rassert!(t_bindings == &bindings[i + 1..]);
+        rassert!(DeepEq::eq_modulo_reordering(t_inner, &current_phi));
+
+        // For every binding we skolemize, we must apply another substitution to phi
+        let mut s = HashMap::new();
+        s.insert(x_term, t.clone());
+        current_phi = pool.apply_substitutions(&current_phi, &mut s);
+    }
+    Some(())
 }
 
 #[cfg(test)]

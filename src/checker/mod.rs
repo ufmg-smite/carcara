@@ -180,6 +180,7 @@ impl ProofChecker {
             "subproof" => subproof::subproof,
             "let" => subproof::r#let,
             "onepoint" => subproof::onepoint,
+            "sko_ex" => subproof::sko_ex,
             "trust_me" if allow_test_rule => |_| Some(()),
             _ => return None,
         })
