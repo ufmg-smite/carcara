@@ -139,8 +139,28 @@ fn extract_points(quant: Quantifier, term: &Term) -> HashSet<(&ByRefRc<Term>, &B
     // TODO: This still doesn't handle the case where there is a variable in t_i that must be
     // substituted
 
+    fn extract_from_nested_and<'a>(
+        result: &mut HashSet<(&'a ByRefRc<Term>, &'a ByRefRc<Term>)>,
+        term: &'a Term,
+    ) {
+        let mut current = term;
+        while let Some((equality, u)) = match_term!((and eq u) = current, RETURN_RCS) {
+            if let Some(equality) = match_term!((= x t) = equality, RETURN_RCS) {
+                result.insert(equality);
+            }
+            current = u;
+        }
+        if let Some(equality) = match_term!((= x t) = current, RETURN_RCS) {
+            result.insert(equality);
+        }
+    }
+
     let mut result = HashSet::new();
     match quant {
+        Quantifier::Forall if match_term!((=> (and ...) u) = term).is_some() => {
+            let (t, _) = match_term!((=> t u) = term).unwrap();
+            extract_from_nested_and(&mut result, t)
+        }
         Quantifier::Forall => {
             let mut current = term;
             while let Some((equality, u)) = match_term!((=> (= x t) u) = current, RETURN_RCS)
@@ -153,18 +173,7 @@ fn extract_points(quant: Quantifier, term: &Term) -> HashSet<(&ByRefRc<Term>, &B
                 result.insert(equality);
             }
         }
-        Quantifier::Exists => {
-            let mut current = term;
-            while let Some((equality, u)) = match_term!((and eq u) = current, RETURN_RCS) {
-                if let Some(equality) = match_term!((= x t) = equality, RETURN_RCS) {
-                    result.insert(equality);
-                }
-                current = u;
-            }
-            if let Some(equality) = match_term!((= x t) = current, RETURN_RCS) {
-                result.insert(equality);
-            }
-        }
+        Quantifier::Exists => extract_from_nested_and(&mut result, term),
     }
     result
 }
@@ -217,12 +226,6 @@ pub fn onepoint(
         .iter()
         .map(|(k, _)| k.clone())
         .collect();
-
-    if match_term!((=> (and ...) u) = left).is_some() {
-        // This case is currently not supported, so we just skip it
-        // TODO: Add support for this case
-        return Some(());
-    }
 
     // For each substitution (:= x t) in the context, the equality (= x t) must appear in phi
     let points = extract_points(quant, left);
