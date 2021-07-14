@@ -583,7 +583,7 @@ impl Debug for Term {
                 write!(f, ") {:?})", term)
             }
             Term::Choice((symbol, sort), term) => {
-                write!(f, "(choice ({} {:?}) {:?})", symbol, sort, term)
+                write!(f, "(choice (({} {:?})) {:?})", symbol, sort, term)
             }
             Term::Let(bindings, term) => {
                 write!(f, "(let (")?;
