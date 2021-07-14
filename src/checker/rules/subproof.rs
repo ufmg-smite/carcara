@@ -236,7 +236,8 @@ pub fn onepoint(
     to_option(l_bindings == &r_bindings | &substitution_vars)
 }
 
-pub fn sko_ex(
+fn generic_skolemization_rule(
+    rule_type: Quantifier,
     RuleArgs {
         conclusion,
         pool,
@@ -250,7 +251,7 @@ pub fn sko_ex(
     let (left, psi) = match_term!((= l r) = conclusion[0])?;
 
     let (quant, bindings, phi) = left.unwrap_quant()?;
-    rassert!(quant == Quantifier::Exists);
+    rassert!(quant == rule_type);
 
     let previous_term =
         get_single_term_from_command(&subproof_commands?[subproof_commands?.len() - 2])?;
@@ -273,13 +274,19 @@ pub fn sko_ex(
         let t = substitutions.get(&x_term)?;
         let (t_choice_var, t_bindings, t_inner) = match t.as_ref() {
             Term::Choice(var, inner) => {
+                // If the rule is "sko_forall", the predicate in the choice term is negated
+                let inner = if rule_type == Quantifier::Forall {
+                    match_term!((not t) = inner, RETURN_RCS)?
+                } else {
+                    inner
+                };
                 // If this is the last binding, all bindigns were skolemized, so we don't need to
                 // unwrap any quantifier
                 if i == bindings.len() - 1 {
                     (var, &[] as &[_], inner)
                 } else {
                     let (q, b, t) = inner.unwrap_quant()?;
-                    rassert!(q == Quantifier::Exists);
+                    rassert!(q == rule_type);
                     (var, b.as_slice(), t)
                 }
             }
@@ -295,6 +302,15 @@ pub fn sko_ex(
         current_phi = pool.apply_substitutions(&current_phi, &mut s);
     }
     Some(())
+}
+
+pub fn sko_ex(args: RuleArgs) -> Option<()> {
+    generic_skolemization_rule(Quantifier::Exists, args)
+}
+
+// TODO: Add tests for this rule
+pub fn sko_forall(args: RuleArgs) -> Option<()> {
+    generic_skolemization_rule(Quantifier::Forall, args)
 }
 
 #[cfg(test)]
