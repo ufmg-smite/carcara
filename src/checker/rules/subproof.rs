@@ -236,7 +236,6 @@ pub fn onepoint(
     to_option(l_bindings == &r_bindings | &substitution_vars)
 }
 
-// TODO: Add tests for this rule
 pub fn sko_ex(
     RuleArgs {
         conclusion,
@@ -543,6 +542,38 @@ mod tests {
                     (exists ((x Int) (y Int) (z Int)) (and (= x t) (and (= y u) (and (= z v) p))))
                     (and (= t t) (and (= u u) (and (= v v) p)))
                 )) :rule onepoint)": true,
+            }
+        }
+    }
+
+    #[test]
+    fn sko_ex() {
+        test_cases! {
+            definitions = "
+                (declare-fun p (Int) Bool)
+                (declare-fun q (Int) Bool)
+            ",
+            "Simple working examples" {
+                "(anchor :step t1 :args ((:= (x Int) (choice ((x Int)) (p x)))))
+                (step t1.t1 (cl (= (p x) (p (choice ((x Int)) (p x))))) :rule trust_me)
+                (step t1 (cl (= (exists ((x Int)) (p x)) (p (choice ((x Int)) (p x)))))
+                    :rule sko_ex)": true,
+
+                "(anchor :step t1 :args (
+                    (:= (x Int) (choice ((x Int)) (exists ((y Int)) (= x y))))
+                    (:= (y Int)
+                        (choice ((y Int)) (= (choice ((x Int)) (exists ((y Int)) (= x y))) y)))
+                ))
+                (step t1.t1 (cl (=
+                    (= x y)
+                    (= (choice ((x Int)) (exists ((y Int)) (= x y)))
+                       (choice ((y Int)) (= (choice ((x Int)) (exists ((y Int)) (= x y))) y)))
+                )) :rule trust_me)
+                (step t1 (cl (=
+                    (exists ((x Int) (y Int)) (= x y))
+                    (= (choice ((x Int)) (exists ((y Int)) (= x y)))
+                       (choice ((y Int)) (= (choice ((x Int)) (exists ((y Int)) (= x y))) y)))
+                )) :rule sko_ex)": true,
             }
         }
     }
