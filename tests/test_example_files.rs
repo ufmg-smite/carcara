@@ -11,21 +11,20 @@ fn test_file(problem_path: &Path, proof_path: &Path) {
     use checker::CheckerError;
     use parser::error::{ErrorKind, ParserError};
 
-    let problem_reader = BufReader::new(File::open(problem_path).unwrap());
-    let proof_reader = BufReader::new(File::open(proof_path).unwrap());
-
-    let (proof, pool) = match parser::parse_problem_proof(problem_reader, proof_reader) {
-        Err(ParserError(ErrorKind::NotYetImplemented, _)) => return,
-        p => p.unwrap(),
-    };
-    if let Err(CheckerError::FailedOnRule(rule)) =
-        checker::ProofChecker::new(pool, true, false).check(&proof)
-    {
-        panic!(
+    match check(problem_path, proof_path, true, false) {
+        Ok(()) | Err(Error::Parser(ParserError(ErrorKind::NotYetImplemented, _))) => (),
+        Err(Error::Parser(e)) => panic!(
+            "\ntest file \"{}\"\nreturned parser error: {:?}\n",
+            &problem_path.to_str().unwrap(),
+            e,
+        ),
+        Err(Error::Checker(CheckerError::FailedOnRule(rule))) => panic!(
             "\ntest file \"{}\"\nfailed on rule \"{}\"\n",
             &problem_path.to_str().unwrap(),
             rule,
-        );
+        ),
+        // We told the checker to skip unknown rules, so this error is never returned
+        Err(Error::Checker(CheckerError::UnknownRule(_))) => unreachable!(),
     }
 }
 

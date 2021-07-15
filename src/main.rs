@@ -25,16 +25,16 @@ fn main() -> ParserResult<()> {
                 .arg(Arg::with_name("PROBLEM_FILE").required(true))
                 .arg(Arg::with_name("PROOF_FILE").required(false))
                 .arg(
-                    Arg::with_name("print-ast")
-                        .long("print-ast")
-                        .help("Prints the parsed proof AST"),
-                )
-                .arg(
                     Arg::with_name("skip-unknown-rules")
                         .short("s")
                         .long("skip-unknown-rules")
                         .help("Skips rules that are not yet implemented"),
                 ),
+            SubCommand::with_name("parse")
+                .about("Parses a proof file and prints the AST")
+                .setting(AppSettings::DisableVersion)
+                .arg(Arg::with_name("PROBLEM_FILE").required(true))
+                .arg(Arg::with_name("PROOF_FILE").required(false)),
             SubCommand::with_name("progress-report")
                 .setting(AppSettings::DisableVersion)
                 .setting(AppSettings::DeriveDisplayOrder)
@@ -73,27 +73,30 @@ fn main() -> ParserResult<()> {
         .get_matches();
 
     if let Some(matches) = matches.subcommand_matches("check") {
-        let (problem_file, proof_file) = {
-            let problem = matches.value_of("PROBLEM_FILE").unwrap();
-            let proof = matches
-                .value_of("PROOF_FILE")
-                .map(str::to_string)
-                .unwrap_or(problem.to_string() + ".proof");
-            (
-                BufReader::new(File::open(problem).map_err(|e| (e, (0, 0)))?),
-                BufReader::new(File::open(proof).map_err(|e| (e, (0, 0)))?),
-            )
-        };
-        let (proof, pool) = parse_problem_proof(problem_file, proof_file)?;
-        if matches.is_present("print-ast") {
-            println!("{:#?}", proof);
-        }
-        match ProofChecker::new(pool, matches.is_present("skip-unknown-rules"), false).check(&proof)
-        {
+        let problem = matches.value_of("PROBLEM_FILE").unwrap();
+        let proof = matches
+            .value_of("PROOF_FILE")
+            .map(str::to_string)
+            .unwrap_or(problem.to_string() + ".proof");
+        let skip = matches.is_present("skip-unknown-rules");
+        match check(problem, &proof, skip, false) {
             Ok(()) => println!("true"),
-            Err(CheckerError::UnknownRule(s)) => println!("unknown rule: {}", s),
-            Err(CheckerError::FailedOnRule(s)) => println!("false ({})", s),
+            Err(Error::Parser(e)) => return Err(e),
+            Err(Error::Checker(CheckerError::UnknownRule(r))) => println!("unknown rule: {}", r),
+            Err(Error::Checker(CheckerError::FailedOnRule(s))) => println!("false ({})", s),
         }
+    } else if let Some(matches) = matches.subcommand_matches("parse") {
+        let problem = matches.value_of("PROBLEM_FILE").unwrap();
+        let proof = matches
+            .value_of("PROOF_FILE")
+            .map(str::to_string)
+            .unwrap_or(problem.to_string() + ".proof");
+        let (problem, proof) = (
+            BufReader::new(File::open(problem).map_err(|e| (e, (0, 0)))?),
+            BufReader::new(File::open(proof).map_err(|e| (e, (0, 0)))?),
+        );
+        let (proof, _) = parse_problem_proof(problem, proof)?;
+        println!("{:#?}", proof);
     } else if let Some(matches) = matches.subcommand_matches("progress-report") {
         let files = matches
             .values_of("files")

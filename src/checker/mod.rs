@@ -5,9 +5,9 @@ use rules::{Rule, RuleArgs};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
-pub enum CheckerError<'a> {
-    UnknownRule(&'a str),
-    FailedOnRule(&'a str),
+pub enum CheckerError {
+    UnknownRule(String),
+    FailedOnRule(String),
 }
 
 struct Context {
@@ -33,11 +33,11 @@ impl ProofChecker {
         }
     }
 
-    pub fn check<'a>(&mut self, proof: &'a Proof) -> Result<(), CheckerError<'a>> {
+    pub fn check(&mut self, proof: &Proof) -> Result<(), CheckerError> {
         self.check_subproof(&proof.0)
     }
 
-    fn check_subproof<'a>(&mut self, commands: &'a [ProofCommand]) -> Result<(), CheckerError<'a>> {
+    fn check_subproof(&mut self, commands: &[ProofCommand]) -> Result<(), CheckerError> {
         for step in commands {
             match step {
                 ProofCommand::Step(step) => self.check_step(step, commands, None)?,
@@ -111,11 +111,11 @@ impl ProofChecker {
         }: &'a ProofStep,
         all_commands: &'a [ProofCommand],
         subproof_commands: Option<&'a [ProofCommand]>,
-    ) -> Result<(), CheckerError<'a>> {
+    ) -> Result<(), CheckerError> {
         let rule = match Self::get_rule(rule_name, self.allow_test_rule) {
             Some(r) => r,
             None if self.skip_unknown_rules => return Ok(()),
-            None => return Err(CheckerError::UnknownRule(rule_name)),
+            None => return Err(CheckerError::UnknownRule(rule_name.to_string())),
         };
         let premises = premises.iter().map(|&i| &all_commands[i]).collect();
         let rule_args = RuleArgs {
@@ -127,7 +127,7 @@ impl ProofChecker {
             subproof_commands,
         };
         if rule(rule_args).is_none() {
-            return Err(CheckerError::FailedOnRule(rule_name));
+            return Err(CheckerError::FailedOnRule(rule_name.to_string()));
         }
         Ok(())
     }
