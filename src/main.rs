@@ -92,8 +92,8 @@ fn main() -> ParserResult<()> {
             .map(str::to_string)
             .unwrap_or(problem.to_string() + ".proof");
         let (problem, proof) = (
-            BufReader::new(File::open(problem).map_err(|e| (e, (0, 0)))?),
-            BufReader::new(File::open(proof).map_err(|e| (e, (0, 0)))?),
+            BufReader::new(File::open(problem)?),
+            BufReader::new(File::open(proof)?),
         );
         let (proof, _) = parse_problem_proof(problem, proof)?;
         println!("{:#?}", proof);
@@ -121,8 +121,8 @@ fn main() -> ParserResult<()> {
 fn get_used_rules(file_path: &str) -> ParserResult<Vec<String>> {
     use parser::lexer::{Lexer, Token};
 
-    let file = File::open(file_path).map_err(|err| (err, (0, 0)))?;
-    let mut lex = Lexer::new(BufReader::new(file)).map_err(|err| (err, (0, 0)))?;
+    let file = File::open(file_path)?;
+    let mut lex = Lexer::new(BufReader::new(file))?;
     let mut result = Vec::new();
     loop {
         let tk = lex.next_token()?;

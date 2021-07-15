@@ -8,11 +8,17 @@ use std::ops::RangeFrom;
 pub type ParserResult<T> = Result<T, ParserError>;
 
 #[derive(Debug, PartialEq)]
-pub struct ParserError(pub ErrorKind, pub Position);
+pub struct ParserError(pub ErrorKind, pub Option<Position>);
 
-impl From<(io::Error, Position)> for ParserError {
-    fn from((err, pos): (io::Error, Position)) -> Self {
-        ParserError(err.into(), pos)
+impl<T: Into<ErrorKind>> From<T> for ParserError {
+    fn from(err: T) -> Self {
+        ParserError(err.into(), None)
+    }
+}
+
+impl<T: Into<ErrorKind>> From<(T, Position)> for ParserError {
+    fn from((err, pos): (T, Position)) -> Self {
+        ParserError(err.into(), Some(pos))
     }
 }
 

@@ -100,7 +100,7 @@ impl<R: BufRead> Parser<R> {
     /// Constructs a new `Parser` using an existing `ParserState`. This operation can fail if there
     /// is an IO or lexer error on the first token.
     fn with_state(input: R, state: ParserState) -> ParserResult<Self> {
-        let mut lexer = Lexer::new(input).map_err(|io_err| ParserError(io_err.into(), (0, 0)))?;
+        let mut lexer = Lexer::new(input)?;
         let current_token = lexer.next_token()?;
         Ok(Parser {
             lexer,
@@ -117,7 +117,7 @@ impl<R: BufRead> Parser<R> {
 
     /// Helper method to build a parser error with the current lexer position.
     fn err(&self, err: ErrorKind) -> ParserError {
-        ParserError(err, self.lexer.position)
+        ParserError(err, Some(self.lexer.position))
     }
 
     /// Shortcut for `self.state.term_pool.add_term`.

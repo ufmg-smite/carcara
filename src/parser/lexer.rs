@@ -170,7 +170,10 @@ impl<R: BufRead> Lexer<R> {
             Some(c) if c.is_ascii_digit() => self.read_number(),
             Some(c) if Lexer::is_symbol_character(c) => self.read_simple_symbol(),
             None => Ok(Token::Eof),
-            other => Err(ParserError(ErrorKind::UnexpectedChar(other), self.position)),
+            other => Err(ParserError(
+                ErrorKind::UnexpectedChar(other),
+                Some(self.position),
+            )),
         }
     }
 
@@ -189,9 +192,12 @@ impl<R: BufRead> Lexer<R> {
         match self.current_char {
             Some('\\') => Err(ParserError(
                 ErrorKind::BackslashInQuotedSymbol,
-                self.position,
+                Some(self.position),
             )),
-            None => Err(ParserError(ErrorKind::EofInQuotedSymbol, self.position)),
+            None => Err(ParserError(
+                ErrorKind::EofInQuotedSymbol,
+                Some(self.position),
+            )),
             Some('|') => {
                 self.next_char()?;
                 Ok(Token::Symbol(symbol))
@@ -211,7 +217,12 @@ impl<R: BufRead> Lexer<R> {
         let base = match self.next_char()? {
             Some('b') => 2,
             Some('x') => 16,
-            other => return Err(ParserError(ErrorKind::UnexpectedChar(other), self.position)),
+            other => {
+                return Err(ParserError(
+                    ErrorKind::UnexpectedChar(other),
+                    Some(self.position),
+                ))
+            }
         };
         let s = self.read_chars_while(|c| c.is_digit(base))?;
         Ok(Token::Numeral(BigInt::from_str_radix(&s, base).unwrap()))
@@ -221,7 +232,10 @@ impl<R: BufRead> Lexer<R> {
         let int_part = self.read_chars_while(|c| c.is_ascii_digit())?;
 
         if int_part.len() > 1 && int_part.starts_with('0') {
-            return Err(ParserError(ErrorKind::LeadingZero(int_part), self.position));
+            return Err(ParserError(
+                ErrorKind::LeadingZero(int_part),
+                Some(self.position),
+            ));
         }
 
         if self.current_char == Some('.') {
@@ -242,7 +256,7 @@ impl<R: BufRead> Lexer<R> {
         loop {
             result += &self.read_chars_while(|c| c != '"')?;
             if self.current_char.is_none() {
-                return Err(ParserError(ErrorKind::EofInString, self.position));
+                return Err(ParserError(ErrorKind::EofInString, Some(self.position)));
             }
             self.next_char()?; // Consume '"'
             if self.current_char == Some('"') {
