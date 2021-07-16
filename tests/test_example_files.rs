@@ -1,9 +1,4 @@
-use std::{
-    ffi::OsStr,
-    fs::{self, File},
-    io::{self, BufReader},
-    path::Path,
-};
+use std::{ffi::OsStr, fs, io, path::Path};
 
 use verit_proof_checker::*;
 
