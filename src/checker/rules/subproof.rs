@@ -135,43 +135,36 @@ pub fn r#let(
     to_option(premises.next().is_none())
 }
 
-fn extract_points(quant: Quantifier, term: &Term) -> HashSet<(&ByRefRc<Term>, &ByRefRc<Term>)> {
-    fn extract_from_nested_and<'a>(
-        result: &mut HashSet<(&'a ByRefRc<Term>, &'a ByRefRc<Term>)>,
-        term: &'a Term,
-    ) {
-        let mut current = term;
-        while let Some((equality, u)) = match_term!((and eq u) = current, RETURN_RCS) {
-            if let Some(equality) = match_term!((= x t) = equality, RETURN_RCS) {
-                result.insert(equality);
-            }
-            current = u;
+fn extract_points(quant: Quantifier, term: &Term) -> HashSet<(ByRefRc<Term>, ByRefRc<Term>)> {
+    fn find_points(acc: &mut HashSet<(ByRefRc<Term>, ByRefRc<Term>)>, polarity: bool, term: &Term) {
+        if let Some(inner) = term.remove_negation() {
+            return find_points(acc, !polarity, inner);
         }
-        if let Some(equality) = match_term!((= x t) = current, RETURN_RCS) {
-            result.insert(equality);
+        match polarity {
+            true => {
+                if let Some((x, t)) = match_term!((= x t) = term, RETURN_RCS) {
+                    acc.insert((x.clone(), t.clone()));
+                } else if let Some(args) = match_term!((and ...) = term, RETURN_RCS) {
+                    for a in args {
+                        find_points(acc, true, a.as_ref())
+                    }
+                }
+            }
+            false => {
+                if let Some((p, q)) = match_term!((=> p q) = term, RETURN_RCS) {
+                    find_points(acc, true, p);
+                    find_points(acc, false, q);
+                } else if let Some(args) = match_term!((or ...) = term, RETURN_RCS) {
+                    for a in args {
+                        find_points(acc, false, a.as_ref())
+                    }
+                }
+            }
         }
     }
 
     let mut result = HashSet::new();
-    match quant {
-        Quantifier::Forall if match_term!((=> (and ...) u) = term).is_some() => {
-            let (t, _) = match_term!((=> t u) = term).unwrap();
-            extract_from_nested_and(&mut result, t)
-        }
-        Quantifier::Forall => {
-            let mut current = term;
-            while let Some((equality, u)) = match_term!((=> (= x t) u) = current, RETURN_RCS)
-                .or_else(|| match_term!((or (not (= x t)) u) = current, RETURN_RCS))
-            {
-                result.insert(equality);
-                current = u;
-            }
-            if let Some(equality) = match_term!((not (= x t)) = current, RETURN_RCS) {
-                result.insert(equality);
-            }
-        }
-        Quantifier::Exists => extract_from_nested_and(&mut result, term),
-    }
+    find_points(&mut result, quant == Quantifier::Exists, term);
     result
 }
 
@@ -235,8 +228,8 @@ pub fn onepoint(
     let points: HashSet<_> = points
         .into_iter()
         .flat_map(|(x, t)| {
-            let new_t = pool.apply_substitutions(t, &mut substitutions_clone);
-            let new_x = pool.apply_substitutions(x, &mut substitutions_clone);
+            let new_t = pool.apply_substitutions(&t, &mut substitutions_clone);
+            let new_x = pool.apply_substitutions(&x, &mut substitutions_clone);
             [(x, new_t), (t, new_x)]
         })
         .collect();
@@ -245,7 +238,7 @@ pub fn onepoint(
     rassert!(context
         .substitutions
         .iter()
-        .all(|(k, v)| points.contains(&(k, v.clone()))));
+        .all(|(k, v)| points.contains(&(k.clone(), v.clone()))));
 
     to_option(l_bindings == &r_bindings | &substitution_vars)
 }
