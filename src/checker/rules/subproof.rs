@@ -593,4 +593,39 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn sko_forall() {
+        test_cases! {
+            definitions = "
+                (declare-fun p (Int) Bool)
+                (declare-fun q (Int) Bool)
+            ",
+            "Simple working examples" {
+                "(anchor :step t1 :args ((:= (x Int) (choice ((x Int)) (not (p x))))))
+                (step t1.t1 (cl (= (p x) (p (choice ((x Int)) (not (p x)))))) :rule trust_me)
+                (step t1 (cl (= (forall ((x Int)) (p x)) (p (choice ((x Int)) (not (p x))))))
+                    :rule sko_forall)": true,
+
+                "(anchor :step t1 :args (
+                    (:= (x Int) (choice ((x Int)) (not (forall ((y Int)) (= x y)))))
+                    (:= (y Int)
+                        (choice ((y Int))
+                            (not (= (choice ((x Int)) (not (forall ((y Int)) (= x y)))) y))))
+                ))
+                (step t1.t1 (cl (=
+                    (= x y)
+                    (= (choice ((x Int)) (not (forall ((y Int)) (= x y))))
+                        (choice ((y Int))
+                            (not (= (choice ((x Int)) (not (forall ((y Int)) (= x y)))) y))))
+                )) :rule trust_me)
+                (step t1 (cl (=
+                    (forall ((x Int) (y Int)) (= x y))
+                    (= (choice ((x Int)) (not (forall ((y Int)) (= x y))))
+                        (choice ((y Int))
+                            (not (= (choice ((x Int)) (not (forall ((y Int)) (= x y)))) y))))
+                )) :rule sko_forall)": true,
+            }
+        }
+    }
 }
