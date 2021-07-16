@@ -136,9 +136,6 @@ pub fn r#let(
 }
 
 fn extract_points(quant: Quantifier, term: &Term) -> HashSet<(&ByRefRc<Term>, &ByRefRc<Term>)> {
-    // TODO: This still doesn't handle the case where there is a variable in t_i that must be
-    // substituted
-
     fn extract_from_nested_and<'a>(
         result: &mut HashSet<(&'a ByRefRc<Term>, &'a ByRefRc<Term>)>,
         term: &'a Term,
@@ -226,12 +223,29 @@ pub fn onepoint(
         .map(|(k, _)| k.clone())
         .collect();
 
-    // For each substitution (:= x t) in the context, the equality (= x t) must appear in phi
     let points = extract_points(quant, left);
+
+    // We clone the substitutions so we don't pollute the hash map when applying the substitutions
+    // to `points`
+    let mut substitutions_clone = context.substitutions_until_fixed_point.clone();
+
+    // Since a substitution may use a varibale introduced in a previous substitution, we apply the
+    // substitutions to the points in order to these variables. We also create a duplicate of every
+    // point in the reverse order, since the order of equalities may be flipped
+    let points: HashSet<_> = points
+        .into_iter()
+        .flat_map(|(x, t)| {
+            let new_t = pool.apply_substitutions(t, &mut substitutions_clone);
+            let new_x = pool.apply_substitutions(x, &mut substitutions_clone);
+            [(x, new_t), (t, new_x)]
+        })
+        .collect();
+
+    // For each substitution (:= x t) in the context, the equality (= x t) must appear in phi
     rassert!(context
         .substitutions
         .iter()
-        .all(|(k, v)| points.contains(&(k, v)) || points.contains(&(v, k))));
+        .all(|(k, v)| points.contains(&(k, v.clone()))));
 
     to_option(l_bindings == &r_bindings | &substitution_vars)
 }
