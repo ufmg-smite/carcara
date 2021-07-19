@@ -315,7 +315,6 @@ pub fn sko_ex(args: RuleArgs) -> Option<()> {
     generic_skolemization_rule(Quantifier::Exists, args)
 }
 
-// TODO: Add tests for this rule
 pub fn sko_forall(args: RuleArgs) -> Option<()> {
     generic_skolemization_rule(Quantifier::Forall, args)
 }
