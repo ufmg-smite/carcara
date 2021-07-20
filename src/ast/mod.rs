@@ -352,6 +352,17 @@ pub enum Quantifier {
     Exists,
 }
 
+impl std::ops::Not for Quantifier {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        match self {
+            Quantifier::Forall => Quantifier::Exists,
+            Quantifier::Exists => Quantifier::Forall,
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Term {
     /// A terminal. This can be a constant or a variable.

@@ -77,6 +77,58 @@ pub fn qnt_rm_unused(
     )
 }
 
+#[allow(dead_code)] // WIP
+fn negative_normal_form(
+    pool: &mut TermPool,
+    term: &ByRefRc<Term>,
+    polarity: bool,
+) -> ByRefRc<Term> {
+    if let Some(inner) = match_term!((not t) = term, RETURN_RCS) {
+        negative_normal_form(pool, inner, !polarity)
+    } else if let Term::Op(op @ (Operator::And | Operator::Or), args) = term.as_ref() {
+        let op = match (op, polarity) {
+            (op, true) => *op,
+            (Operator::And, false) => Operator::Or,
+            (Operator::Or, false) => Operator::And,
+            (_, false) => unreachable!(),
+        };
+        let args = args
+            .iter()
+            .map(|a| negative_normal_form(pool, a, polarity))
+            .collect();
+        pool.add_term(Term::Op(op, args))
+    } else if let Some((p, q)) = match_term!((=> p q) = term, RETURN_RCS) {
+        let a = negative_normal_form(pool, p, !polarity);
+        let b = negative_normal_form(pool, q, polarity);
+        let c = negative_normal_form(pool, q, !polarity);
+        let d = negative_normal_form(pool, p, polarity);
+
+        match polarity {
+            true => build_term!(pool, (and (or {a} {b}) (or {c} {d}))),
+            false => build_term!(pool, (or (and {a} {b}) (and {c} {d}))),
+        }
+    } else if let Some((p, q, r)) = match_term!((ite p q r) = term, RETURN_RCS) {
+        let a = negative_normal_form(pool, p, !polarity);
+        let b = negative_normal_form(pool, q, polarity);
+        let c = negative_normal_form(pool, p, polarity);
+        let d = negative_normal_form(pool, r, polarity);
+
+        match polarity {
+            true => build_term!(pool, (and (or {a} {b}) (or {c} {d}))),
+            false => build_term!(pool, (or (and {a} {b}) (and {c} {d}))),
+        }
+    } else if let Some((quant, bindings, inner)) = term.unwrap_quant() {
+        let quant = if !polarity { !quant } else { quant };
+        let inner = negative_normal_form(pool, inner, polarity);
+        pool.add_term(Term::Quant(quant, bindings.clone(), inner))
+    } else {
+        match polarity {
+            true => term.clone(),
+            false => build_term!(pool, (not {term.clone()})),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
