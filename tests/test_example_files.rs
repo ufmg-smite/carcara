@@ -3,23 +3,22 @@ use std::{ffi::OsStr, fs, io, path::Path};
 use verit_proof_checker::*;
 
 fn test_file(problem_path: &Path, proof_path: &Path) {
-    use checker::CheckerError;
+    use checker::Correctness;
     use parser::error::{ErrorKind, ParserError};
 
     match check(problem_path, proof_path, true, false) {
-        Ok(()) | Err(Error::Parser(ParserError(ErrorKind::NotYetImplemented, _))) => (),
-        Err(Error::Parser(e)) => panic!(
-            "\ntest file \"{}\"\nreturned parser error: {:?}\n",
-            &problem_path.to_str().unwrap(),
-            e,
-        ),
-        Err(Error::Checker(CheckerError::FailedOnRule(rule))) => panic!(
+        Ok(Correctness::True)
+        | Err(Error::Parser(ParserError(ErrorKind::NotYetImplemented, _))) => (),
+        Ok(Correctness::False(rule)) => panic!(
             "\ntest file \"{}\"\nfailed on rule \"{}\"\n",
             &problem_path.to_str().unwrap(),
             rule,
         ),
-        // We told the checker to skip unknown rules, so this error is never returned
-        Err(Error::Checker(CheckerError::UnknownRule(_))) => unreachable!(),
+        Err(e) => panic!(
+            "\ntest file \"{}\"\nreturned error: {:?}\n",
+            &problem_path.to_str().unwrap(),
+            e,
+        ),
     }
 }
 

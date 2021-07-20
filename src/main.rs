@@ -14,7 +14,7 @@ use std::{
 
 use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
 
-fn main() -> ParserResult<()> {
+fn main() -> Result<(), Error> {
     let matches = App::new("veriT proof checker")
         .version("0.1.0")
         .setting(AppSettings::SubcommandRequiredElseHelp)
@@ -79,11 +79,9 @@ fn main() -> ParserResult<()> {
             .map(str::to_string)
             .unwrap_or(problem.to_string() + ".proof");
         let skip = matches.is_present("skip-unknown-rules");
-        match check(problem, &proof, skip, false) {
-            Ok(()) => println!("true"),
-            Err(Error::Parser(e)) => return Err(e),
-            Err(Error::Checker(CheckerError::UnknownRule(r))) => println!("unknown rule: {}", r),
-            Err(Error::Checker(CheckerError::FailedOnRule(s))) => println!("false ({})", s),
+        match check(problem, &proof, skip, false)? {
+            Correctness::True => println!("true"),
+            Correctness::False(r) => println!("false ({})", r),
         }
     } else if let Some(matches) = matches.subcommand_matches("parse") {
         let problem = matches.value_of("PROBLEM_FILE").unwrap();

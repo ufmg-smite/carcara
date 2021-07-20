@@ -7,8 +7,27 @@ use std::collections::{HashMap, HashSet};
 #[derive(Debug)]
 pub enum CheckerError {
     UnknownRule(String),
-    FailedOnRule(String),
+    LastSubproofStepIsNotStep,
 }
+
+/// Represents the correctness of a proof or a proof step.
+#[must_use]
+#[derive(Debug)]
+pub enum Correctness {
+    True,          // The proof/step is valid
+    False(String), // The proof/step is invalid, and checking failed on the given rule
+}
+
+impl Correctness {
+    fn as_bool(&self) -> bool {
+        match self {
+            Correctness::True => true,
+            Correctness::False(_) => false,
+        }
+    }
+}
+
+type CheckerResult = Result<Correctness, CheckerError>;
 
 struct Context {
     substitutions: HashMap<ByRefRc<Term>, ByRefRc<Term>>,
@@ -33,33 +52,80 @@ impl ProofChecker {
         }
     }
 
-    pub fn check(&mut self, proof: &Proof) -> Result<(), CheckerError> {
+    pub fn check(&mut self, proof: &Proof) -> CheckerResult {
         self.check_subproof(&proof.0)
     }
 
-    fn check_subproof(&mut self, commands: &[ProofCommand]) -> Result<(), CheckerError> {
+    fn check_subproof(&mut self, commands: &[ProofCommand]) -> CheckerResult {
         for step in commands {
-            match step {
-                ProofCommand::Step(step) => self.check_step(step, commands, None)?,
-                ProofCommand::Subproof {
-                    commands: inner_commands,
-                    assignment_args,
-                    variable_args,
-                } => {
-                    let new_context = self.build_context(assignment_args, variable_args);
-                    self.context.push(new_context);
-                    self.check_subproof(&inner_commands[..inner_commands.len() - 1])?;
-                    let last_step = match inner_commands.last().unwrap() {
-                        ProofCommand::Step(s) => s,
-                        _ => panic!(), // TODO: Add better error handling for this case
-                    };
-                    self.check_step(last_step, commands, Some(inner_commands))?;
-                    self.context.pop();
-                }
-                ProofCommand::Assume(_) => (),
+            let correctness = self.check_command(step, commands)?;
+            if !correctness.as_bool() {
+                return Ok(correctness);
             }
         }
-        Ok(())
+        Ok(Correctness::True)
+    }
+
+    fn check_command(
+        &mut self,
+        command: &ProofCommand,
+        all_commands: &[ProofCommand],
+    ) -> CheckerResult {
+        match command {
+            ProofCommand::Step(step) => self.check_step(step, all_commands, None),
+            ProofCommand::Subproof {
+                commands: inner_commands,
+                assignment_args,
+                variable_args,
+            } => {
+                let new_context = self.build_context(assignment_args, variable_args);
+                self.context.push(new_context);
+                let subproof_correctness =
+                    self.check_subproof(&inner_commands[..inner_commands.len() - 1])?;
+                if !subproof_correctness.as_bool() {
+                    return Ok(subproof_correctness);
+                }
+                let last_step = match inner_commands.last().unwrap() {
+                    ProofCommand::Step(s) => s,
+                    _ => return Err(CheckerError::LastSubproofStepIsNotStep),
+                };
+                let correctness = self.check_step(last_step, all_commands, Some(inner_commands))?;
+                self.context.pop();
+                Ok(correctness)
+            }
+            ProofCommand::Assume(_) => Ok(Correctness::True),
+        }
+    }
+
+    fn check_step<'a>(
+        &mut self,
+        ProofStep {
+            clause,
+            rule: rule_name,
+            premises,
+            args,
+        }: &'a ProofStep,
+        all_commands: &'a [ProofCommand],
+        subproof_commands: Option<&'a [ProofCommand]>,
+    ) -> CheckerResult {
+        let rule = match Self::get_rule(rule_name, self.allow_test_rule) {
+            Some(r) => r,
+            None if self.skip_unknown_rules => return Ok(Correctness::True),
+            None => return Err(CheckerError::UnknownRule(rule_name.to_string())),
+        };
+        let premises = premises.iter().map(|&i| &all_commands[i]).collect();
+        let rule_args = RuleArgs {
+            conclusion: &clause,
+            premises,
+            args: &args,
+            pool: &mut self.pool,
+            context: &mut self.context,
+            subproof_commands,
+        };
+        Ok(match rule(rule_args) {
+            Some(()) => Correctness::True,
+            None => Correctness::False(rule_name.clone()),
+        })
     }
 
     fn build_context(
@@ -99,37 +165,6 @@ impl ProofChecker {
             substitutions_until_fixed_point,
             bindings,
         }
-    }
-
-    fn check_step<'a>(
-        &mut self,
-        ProofStep {
-            clause,
-            rule: rule_name,
-            premises,
-            args,
-        }: &'a ProofStep,
-        all_commands: &'a [ProofCommand],
-        subproof_commands: Option<&'a [ProofCommand]>,
-    ) -> Result<(), CheckerError> {
-        let rule = match Self::get_rule(rule_name, self.allow_test_rule) {
-            Some(r) => r,
-            None if self.skip_unknown_rules => return Ok(()),
-            None => return Err(CheckerError::UnknownRule(rule_name.to_string())),
-        };
-        let premises = premises.iter().map(|&i| &all_commands[i]).collect();
-        let rule_args = RuleArgs {
-            conclusion: &clause,
-            premises,
-            args: &args,
-            pool: &mut self.pool,
-            context: &mut self.context,
-            subproof_commands,
-        };
-        if rule(rule_args).is_none() {
-            return Err(CheckerError::FailedOnRule(rule_name.to_string()));
-        }
-        Ok(())
     }
 
     pub fn get_rule(rule_name: &str, allow_test_rule: bool) -> Option<Rule> {
