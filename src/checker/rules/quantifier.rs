@@ -121,6 +121,16 @@ fn negation_normal_form(
         let inner = negation_normal_form(pool, inner, polarity);
         pool.add_term(Term::Quant(quant, bindings.clone(), inner))
     } else {
+        if let Some((p, q)) = match_term!((= p q) = term, RETURN_RCS) {
+            if polarity && p.sort() == Term::BOOL_SORT {
+                let a = negation_normal_form(pool, p, false);
+                let b = negation_normal_form(pool, q, true);
+                let c = negation_normal_form(pool, q, false);
+                let d = negation_normal_form(pool, p, true);
+                return build_term!(pool, (and (or {a} {b}) (or {c} {d})));
+            }
+        }
+
         match polarity {
             true => term.clone(),
             false => build_term!(pool, (not {term.clone()})),
