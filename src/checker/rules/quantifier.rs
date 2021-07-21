@@ -77,13 +77,13 @@ pub fn qnt_rm_unused(
     )
 }
 
-fn negative_normal_form(
+fn negation_normal_form(
     pool: &mut TermPool,
     term: &ByRefRc<Term>,
     polarity: bool,
 ) -> ByRefRc<Term> {
     if let Some(inner) = match_term!((not t) = term, RETURN_RCS) {
-        negative_normal_form(pool, inner, !polarity)
+        negation_normal_form(pool, inner, !polarity)
     } else if let Term::Op(op @ (Operator::And | Operator::Or), args) = term.as_ref() {
         let op = match (op, polarity) {
             (op, true) => *op,
@@ -93,24 +93,24 @@ fn negative_normal_form(
         };
         let args = args
             .iter()
-            .map(|a| negative_normal_form(pool, a, polarity))
+            .map(|a| negation_normal_form(pool, a, polarity))
             .collect();
         pool.add_term(Term::Op(op, args))
     } else if let Some((p, q)) = match_term!((=> p q) = term, RETURN_RCS) {
-        let a = negative_normal_form(pool, p, !polarity);
-        let b = negative_normal_form(pool, q, polarity);
-        let c = negative_normal_form(pool, q, !polarity);
-        let d = negative_normal_form(pool, p, polarity);
+        let a = negation_normal_form(pool, p, !polarity);
+        let b = negation_normal_form(pool, q, polarity);
+        let c = negation_normal_form(pool, q, !polarity);
+        let d = negation_normal_form(pool, p, polarity);
 
         match polarity {
             true => build_term!(pool, (and (or {a} {b}) (or {c} {d}))),
             false => build_term!(pool, (or (and {a} {b}) (and {c} {d}))),
         }
     } else if let Some((p, q, r)) = match_term!((ite p q r) = term, RETURN_RCS) {
-        let a = negative_normal_form(pool, p, !polarity);
-        let b = negative_normal_form(pool, q, polarity);
-        let c = negative_normal_form(pool, p, polarity);
-        let d = negative_normal_form(pool, r, polarity);
+        let a = negation_normal_form(pool, p, !polarity);
+        let b = negation_normal_form(pool, q, polarity);
+        let c = negation_normal_form(pool, p, polarity);
+        let d = negation_normal_form(pool, r, polarity);
 
         match polarity {
             true => build_term!(pool, (and (or {a} {b}) (or {c} {d}))),
@@ -118,7 +118,7 @@ fn negative_normal_form(
         }
     } else if let Some((quant, bindings, inner)) = term.unwrap_quant() {
         let quant = if !polarity { !quant } else { quant };
-        let inner = negative_normal_form(pool, inner, polarity);
+        let inner = negation_normal_form(pool, inner, polarity);
         pool.add_term(Term::Quant(quant, bindings.clone(), inner))
     } else {
         match polarity {
@@ -148,9 +148,9 @@ pub fn qnt_cnf(
     rassert!(l_bindings.iter().all(|b| r_bindings.contains(b)));
 
     // This is currently a WIP, and doesn't work for most cases
-    // TODO: Implement missing steps: converting from negative normal form to conjunctive normal
+    // TODO: Implement missing steps: converting from negation normal form to conjunctive normal
     // form, and prenexing
-    let phi_transformed = negative_normal_form(pool, phi, true);
+    let phi_transformed = negation_normal_form(pool, phi, true);
     to_option(if *phi_prime == phi_transformed {
         true
     } else {
