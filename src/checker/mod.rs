@@ -183,6 +183,7 @@ impl ProofChecker {
             "eq_transitive" => transitivity::eq_transitive,
             "eq_congruent" => congruence::eq_congruent,
             "eq_congruent_pred" => congruence::eq_congruent_pred,
+            "qnt_cnf" => quantifier::qnt_cnf,
             "distinct_elim" => clausification::distinct_elim,
             "la_rw_eq" => linear_arithmetic::la_rw_eq,
             "la_generic" => linear_arithmetic::la_generic,

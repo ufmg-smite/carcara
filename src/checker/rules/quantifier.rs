@@ -1,6 +1,6 @@
 use super::{to_option, RuleArgs};
 use crate::{ast::*, utils::DedupIterator};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub fn forall_inst(
     RuleArgs {
@@ -77,7 +77,6 @@ pub fn qnt_rm_unused(
     )
 }
 
-#[allow(dead_code)] // WIP
 fn negative_normal_form(
     pool: &mut TermPool,
     term: &ByRefRc<Term>,
@@ -127,6 +126,39 @@ fn negative_normal_form(
             false => build_term!(pool, (not {term.clone()})),
         }
     }
+}
+
+pub fn qnt_cnf(
+    RuleArgs {
+        conclusion, pool, ..
+    }: RuleArgs,
+) -> Option<()> {
+    rassert!(conclusion.len() == 1);
+
+    let (l_bindings, phi, r_bindings, phi_prime) = {
+        let (l, r) = match_term!((or (not l) r) = conclusion[0])?;
+        let (l_q, l_b, phi) = l.unwrap_quant()?;
+        let (r_q, r_b, phi_prime) = r.unwrap_quant()?;
+        rassert!(l_q == r_q && l_q == Quantifier::Forall);
+        (l_b, phi, r_b, phi_prime)
+    };
+
+    // TODO: Handle extra bindings added by prenexing
+    let r_bindings = r_bindings.iter().collect::<HashSet<_>>();
+    rassert!(l_bindings.iter().all(|b| r_bindings.contains(b)));
+
+    // This is currently a WIP, and doesn't work for most cases
+    // TODO: Implement missing steps: converting from negative normal form to conjunctive normal
+    // form, and prenexing
+    let phi_transformed = negative_normal_form(pool, phi, true);
+    to_option(if *phi_prime == phi_transformed {
+        true
+    } else {
+        match match_term!((and ...) = phi_transformed) {
+            Some(clauses) => clauses.iter().any(|p| p == phi_prime),
+            None => false,
+        }
+    })
 }
 
 #[cfg(test)]
