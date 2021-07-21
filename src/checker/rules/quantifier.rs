@@ -128,6 +128,41 @@ fn negation_normal_form(
     }
 }
 
+// This represents a formula in conjunctive normal form, that is, it is a conjunction of clauses,
+// which are disjunctions of literals
+type CnfFormula = Vec<Vec<ByRefRc<Term>>>;
+
+fn distribute(formulae: &[CnfFormula]) -> CnfFormula {
+    match formulae {
+        [formula] => formula.iter().map(|clause| clause.to_vec()).collect(),
+        [tail @ .., head] => {
+            let tail = distribute(tail);
+            let mut acc = Vec::with_capacity(head.len() * tail.len());
+            for head_clause in head {
+                for tail_clause in &tail {
+                    let mut result = Vec::with_capacity(tail_clause.len() + head_clause.len());
+                    result.extend(tail_clause.iter().cloned());
+                    result.extend(head_clause.iter().cloned());
+                    acc.push(result)
+                }
+            }
+            acc
+        }
+        [] => vec![Vec::new()],
+    }
+}
+
+fn conjunctive_normal_form(term: &ByRefRc<Term>) -> CnfFormula {
+    match term.as_ref() {
+        Term::Op(Operator::And, args) => args.iter().flat_map(conjunctive_normal_form).collect(),
+        Term::Op(Operator::Or, args) => {
+            let args: Vec<_> = args.iter().map(conjunctive_normal_form).collect();
+            distribute(&args)
+        }
+        _ => vec![vec![term.clone()]],
+    }
+}
+
 pub fn qnt_cnf(
     RuleArgs {
         conclusion, pool, ..
@@ -148,17 +183,19 @@ pub fn qnt_cnf(
     rassert!(l_bindings.iter().all(|b| r_bindings.contains(b)));
 
     // This is currently a WIP, and doesn't work for most cases
-    // TODO: Implement missing steps: converting from negation normal form to conjunctive normal
-    // form, and prenexing
-    let phi_transformed = negation_normal_form(pool, phi, true);
-    to_option(if *phi_prime == phi_transformed {
-        true
-    } else {
-        match match_term!((and ...) = phi_transformed) {
-            Some(clauses) => clauses.iter().any(|p| p == phi_prime),
-            None => false,
-        }
-    })
+    // TODO: Implement prenexing step
+    let clauses: Vec<_> = {
+        let nnf = negation_normal_form(pool, phi, true);
+        conjunctive_normal_form(&nnf)
+            .into_iter()
+            .map(|c| match c.as_slice() {
+                [] => unreachable!(),
+                [term] => term.clone(),
+                _ => pool.add_term(Term::Op(Operator::Or, c)),
+            })
+            .collect()
+    };
+    to_option(clauses.iter().any(|term| term == phi_prime))
 }
 
 #[cfg(test)]
