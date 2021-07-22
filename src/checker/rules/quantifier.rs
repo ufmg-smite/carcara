@@ -77,6 +77,7 @@ pub fn qnt_rm_unused(
     )
 }
 
+/// Converts a term into negation normal form, expanding all connectives.
 fn negation_normal_form(
     pool: &mut TermPool,
     term: &ByRefRc<Term>,
@@ -138,37 +139,62 @@ fn negation_normal_form(
     }
 }
 
-// This represents a formula in conjunctive normal form, that is, it is a conjunction of clauses,
-// which are disjunctions of literals
+/// This represents a formula in conjunctive normal form, that is, it is a conjunction of clauses,
+/// which are disjunctions of literals
 type CnfFormula = Vec<Vec<ByRefRc<Term>>>;
 
+/// Applies the distribution rules into a disjunction of formulae in conjunctive normal form. More
+/// precisely, this takes the disjunction `P v Q v R v ...`, where
+/// ```
+///     P = P_1 ^ P_2 ^ P_3 ^ ...
+///     Q = Q_1 ^ Q_2 ^ Q_3 ^ ...
+///     R = R_1 ^ R_2 ^ R_3 ^ ...
+///     ...
+/// ```
+/// and returns the conjunction of all `(P_i v Q_j v R_k v ...)`, for every combination of `i`,
+/// `j`, `k`, etc.
 fn distribute(formulae: &[CnfFormula]) -> CnfFormula {
     match formulae {
-        [formula] => formula.iter().map(|clause| clause.to_vec()).collect(),
-        [tail @ .., head] => {
+        // This function is never called with an empty slice of formulae, so to avoid unnecessary
+        // allocations we use the case with just one formula as the base case for the recursion
+        [formula] => formula.clone(),
+        [] => unreachable!(),
+
+        [head, tail @ ..] => {
+            // We recursively apply the distribution rules to the tail, and, for every combination
+            // of a clause in the tail formula and a clause in the head formula, we append the two
+            // clauses and push the result to the final formula
             let tail = distribute(tail);
             let mut acc = Vec::with_capacity(head.len() * tail.len());
             for head_clause in head {
                 for tail_clause in &tail {
-                    let mut result = Vec::with_capacity(tail_clause.len() + head_clause.len());
-                    result.extend(tail_clause.iter().cloned());
+                    let mut result = Vec::with_capacity(head_clause.len() + tail_clause.len());
                     result.extend(head_clause.iter().cloned());
+                    result.extend(tail_clause.iter().cloned());
                     acc.push(result)
                 }
             }
             acc
         }
-        [] => vec![Vec::new()],
     }
 }
 
+/// Converts a term into a formula in conjunctive normal form. This assumes the term is already in
+/// negation normal form.
 fn conjunctive_normal_form(term: &ByRefRc<Term>) -> CnfFormula {
     match term.as_ref() {
-        Term::Op(Operator::And, args) => args.iter().flat_map(conjunctive_normal_form).collect(),
+        Term::Op(Operator::And, args) => {
+            // If the term is a conjunction, we just convert every argument into conjunctive normal
+            // form, and flatten the result
+            args.iter().flat_map(conjunctive_normal_form).collect()
+        }
         Term::Op(Operator::Or, args) => {
+            // If the term is a disjunction, we have to convert every argument into conjunctive
+            // normal form and then apply the distribution rules
             let args: Vec<_> = args.iter().map(conjunctive_normal_form).collect();
             distribute(&args)
         }
+        // Every other term is considered a literal
         _ => vec![vec![term.clone()]],
     }
 }
