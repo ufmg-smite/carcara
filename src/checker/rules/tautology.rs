@@ -55,6 +55,12 @@ pub fn or_neg(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
         .map(|_| ())
 }
 
+pub fn implies_pos(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    rassert!(conclusion.len() == 3);
+    let (phi_1, phi_2) = match_term!((not (=> phi_1 phi_2)) = conclusion[0])?;
+    to_option(phi_1 == conclusion[1].remove_negation()? && phi_2 == conclusion[2].as_ref())
+}
+
 pub fn equiv_pos1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 3);
 
@@ -357,6 +363,31 @@ mod tests {
                 "(step t1 (cl (or p q r) (not s)) :rule or_neg)": false,
                 "(step t1 (cl (or p (not q) r) (not q)) :rule or_neg)": false,
 
+            }
+        }
+    }
+
+    #[test]
+    fn implies_pos() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (not (=> p q)) (not p) q) :rule implies_pos)": true,
+                "(step t1 (cl (not (=> p (not q))) (not p) (not q)) :rule implies_pos)": true,
+                "(step t1 (cl (not (=> (not p) q)) (not (not p)) q) :rule implies_pos)": true,
+            }
+            "Term in clause is not of the correct form" {
+                "(step t1 (cl (=> p q) (not p) q) :rule implies_pos)": false,
+                "(step t1 (cl (= p q) (not p) q) :rule implies_pos)": false,
+                "(step t1 (cl (not (=> p q)) p q) :rule implies_pos)": false,
+            }
+            "Terms don't match" {
+                "(step t1 (cl (not (=> p q)) (not q) q) :rule implies_pos)": false,
+                "(step t1 (cl (not (=> p q)) (not p) p) :rule implies_pos)": false,
+                "(step t1 (cl (not (=> (not p) q)) p q) :rule implies_pos)": false,
             }
         }
     }

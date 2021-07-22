@@ -177,6 +177,7 @@ impl ProofChecker {
             "and_neg" => tautology::and_neg,
             "or_pos" => tautology::or_pos,
             "or_neg" => tautology::or_neg,
+            "implies_pos" => tautology::implies_pos,
             "equiv_pos1" => tautology::equiv_pos1,
             "equiv_pos2" => tautology::equiv_pos2,
             "eq_reflexive" => reflexivity::eq_reflexive,
