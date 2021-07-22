@@ -75,16 +75,28 @@ pub fn implies_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 
 pub fn equiv_pos1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 3);
-
     let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = conclusion[0])?;
     to_option(phi_1 == conclusion[1].as_ref() && phi_2 == conclusion[2].remove_negation()?)
 }
 
 pub fn equiv_pos2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 3);
-
     let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = conclusion[0])?;
     to_option(phi_1 == conclusion[1].remove_negation()? && phi_2 == conclusion[2].as_ref())
+}
+
+pub fn equiv_neg1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    rassert!(conclusion.len() == 3);
+    let (phi_1, phi_2) = match_term!((= phi_1 phi_2) = conclusion[0])?;
+    to_option(
+        phi_1 == conclusion[1].remove_negation()? && phi_2 == conclusion[2].remove_negation()?,
+    )
+}
+
+pub fn equiv_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    rassert!(conclusion.len() == 3);
+    let (phi_1, phi_2) = match_term!((= phi_1 phi_2) = conclusion[0])?;
+    to_option(phi_1 == conclusion[1].as_ref() && phi_2 == conclusion[2].as_ref())
 }
 
 pub fn ite1(
@@ -507,6 +519,50 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn equiv_neg1() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (= p q) (not p) (not q)) :rule equiv_neg1)": true,
+                "(step t1 (cl (= (not p) q) (not (not p)) (not q)) :rule equiv_neg1)": true,
+            }
+            "Term in clause is not of the correct form" {
+                "(step t1 (cl (= p (not q)) (not p) q) :rule equiv_neg1)": false,
+                "(step t1 (cl (not (= p q)) (not p) (not q)) :rule equiv_neg1)": false,
+            }
+            "Terms don't match" {
+                "(step t1 (cl (= p q) (not q) (not p)) :rule equiv_neg1)": false,
+                "(step t1 (cl (= p q) (not p) (not p)) :rule equiv_neg1)": false,
+            }
+        }
+    }
+
+    #[test]
+    fn equiv_neg2() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (= p q) p q) :rule equiv_neg2)": true,
+                "(step t1 (cl (= (not p) q) (not p) q) :rule equiv_neg2)": true,
+            }
+            "Term in clause is not of the correct form" {
+                "(step t1 (cl (not (= p q)) p q) :rule equiv_neg2)": false,
+            }
+            "Terms don't match" {
+                "(step t1 (cl (= p q) q p) :rule equiv_neg2)": false,
+                "(step t1 (cl (= p q) p p) :rule equiv_neg2)": false,
+            }
+        }
+    }
+
     #[test]
     fn ite1() {
         test_cases! {
