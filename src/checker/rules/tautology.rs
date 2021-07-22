@@ -61,6 +61,18 @@ pub fn implies_pos(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     to_option(phi_1 == conclusion[1].remove_negation()? && phi_2 == conclusion[2].as_ref())
 }
 
+pub fn implies_neg1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    rassert!(conclusion.len() == 2);
+    let (phi_1, _) = match_term!((=> phi_1 phi_2) = conclusion[0])?;
+    to_option(phi_1 == conclusion[1].as_ref())
+}
+
+pub fn implies_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    rassert!(conclusion.len() == 2);
+    let (_, phi_2) = match_term!((=> phi_1 phi_2) = conclusion[0])?;
+    to_option(phi_2 == conclusion[1].remove_negation()?)
+}
+
 pub fn equiv_pos1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 3);
 
@@ -388,6 +400,52 @@ mod tests {
                 "(step t1 (cl (not (=> p q)) (not q) q) :rule implies_pos)": false,
                 "(step t1 (cl (not (=> p q)) (not p) p) :rule implies_pos)": false,
                 "(step t1 (cl (not (=> (not p) q)) p q) :rule implies_pos)": false,
+            }
+        }
+    }
+
+    #[test]
+    fn implies_neg1() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (=> p q) p) :rule implies_neg1)": true,
+                "(step t1 (cl (=> (= p q) q) (= p q)) :rule implies_neg1)": true,
+            }
+            "Term in clause is not of the correct form" {
+                "(step t1 (cl (=> p q) p (not q)) :rule implies_neg1)": false,
+                "(step t1 (cl (= p q) p) :rule implies_neg1)": false,
+                "(step t1 (cl (not (=> p q)) p) :rule implies_neg1)": false,
+            }
+            "Terms don't match" {
+                "(step t1 (cl (=> p q) q) :rule implies_neg1)": false,
+                "(step t1 (cl (=> p q) (not p)) :rule implies_neg1)": false,
+            }
+        }
+    }
+
+    #[test]
+    fn implies_neg2() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (=> p q) (not q)) :rule implies_neg2)": true,
+                "(step t1 (cl (=> p (not q)) (not (not q))) :rule implies_neg2)": true,
+            }
+            "Term in clause is not of the correct form" {
+                "(step t1 (cl (=> p q) (not q) p) :rule implies_neg2)": false,
+                "(step t1 (cl (= p q) (not q)) :rule implies_neg2)": false,
+                "(step t1 (cl (not (=> p q)) (not q)) :rule implies_neg2)": false,
+            }
+            "Terms don't match" {
+                "(step t1 (cl (=> p q) (not p)) :rule implies_neg2)": false,
+                "(step t1 (cl (=> p (not q)) q) :rule implies_neg2)": false,
             }
         }
     }
