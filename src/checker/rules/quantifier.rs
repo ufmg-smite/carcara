@@ -179,6 +179,28 @@ fn distribute(formulae: &[CnfFormula]) -> CnfFormula {
     }
 }
 
+/// Prenex all universal quantifiers in a term. This doesn't prenex existential quantifiers. This
+/// assumes the term is in negation normal form.
+fn prenex_forall(
+    pool: &mut TermPool,
+    acc: &mut HashSet<SortedVar>,
+    term: &ByRefRc<Term>,
+) -> ByRefRc<Term> {
+    match term.as_ref() {
+        // This function assumes that the term is already in negation normal form, so any term
+        // other than a conjunction, disjunction, or a universal quantifier is considered a literal
+        Term::Op(op @ (Operator::And | Operator::Or), args) => {
+            let args = args.iter().map(|a| prenex_forall(pool, acc, a)).collect();
+            pool.add_term(Term::Op(*op, args))
+        }
+        Term::Quant(Quantifier::Forall, bindings, inner) => {
+            acc.extend(bindings.iter().cloned());
+            prenex_forall(pool, acc, inner)
+        }
+        _ => term.clone(),
+    }
+}
+
 /// Converts a term into a formula in conjunctive normal form. This assumes the term is already in
 /// negation normal form.
 fn conjunctive_normal_form(term: &ByRefRc<Term>) -> CnfFormula {
@@ -214,16 +236,13 @@ pub fn qnt_cnf(
         (l_b, phi, r_b, phi_prime)
     };
 
-    // TODO: Handle extra bindings added by prenexing
-    let r_bindings = r_bindings.iter().collect::<HashSet<_>>();
-    rassert!(l_bindings.iter().all(|b| r_bindings.contains(b)));
-
-    // This is currently a WIP, and doesn't work for most cases
-    // TODO: Implement prenexing step
+    let r_bindings = r_bindings.iter().cloned().collect::<HashSet<_>>();
+    let mut new_bindings = l_bindings.iter().cloned().collect::<HashSet<_>>();
     let clauses: Vec<_> = {
         let nnf = negation_normal_form(pool, phi, true);
-        conjunctive_normal_form(&nnf)
-            .into_iter()
+        let prenexed = prenex_forall(pool, &mut new_bindings, &nnf);
+        let cnf = conjunctive_normal_form(&prenexed);
+        cnf.into_iter()
             .map(|c| match c.as_slice() {
                 [] => unreachable!(),
                 [term] => term.clone(),
@@ -231,7 +250,21 @@ pub fn qnt_cnf(
             })
             .collect()
     };
-    to_option(clauses.iter().any(|term| term == phi_prime))
+    // `new_bindings` contains all bindings that existed in the original term, plus all bindings
+    // added by the prenexing step. All bindings in the right side must be in this set
+    rassert!(r_bindings.is_subset(&new_bindings));
+
+    to_option(clauses.iter().any(|term| {
+        // While all bindings in `r_bindings` must also be in `new_bindings`, the same is not true
+        // in the opposite direction. That is because some variables from the set may be omitted in
+        // the right-hand side quantifier if they don't appear in phi_prime as free variables
+        let free_vars = pool.free_vars(term);
+        let bindings_are_valid = new_bindings
+            .iter()
+            .all(|b| r_bindings.contains(b) || !free_vars.contains(&b.0));
+
+        term == phi_prime && bindings_are_valid
+    }))
 }
 
 #[cfg(test)]
