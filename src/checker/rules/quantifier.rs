@@ -100,12 +100,10 @@ fn negation_normal_form(
     } else if let Some((p, q)) = match_term!((=> p q) = term, RETURN_RCS) {
         let a = negation_normal_form(pool, p, !polarity);
         let b = negation_normal_form(pool, q, polarity);
-        let c = negation_normal_form(pool, q, !polarity);
-        let d = negation_normal_form(pool, p, polarity);
 
         match polarity {
-            true => build_term!(pool, (and (or {a} {b}) (or {c} {d}))),
-            false => build_term!(pool, (or (and {a} {b}) (and {c} {d}))),
+            true => build_term!(pool, (or {a} {b})),
+            false => build_term!(pool, (and {a} {b})),
         }
     } else if let Some((p, q, r)) = match_term!((ite p q r) = term, RETURN_RCS) {
         let a = negation_normal_form(pool, p, !polarity);
