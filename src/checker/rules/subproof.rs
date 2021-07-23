@@ -108,7 +108,7 @@ pub fn r#let(
     let substitutions = &context.last()?.substitutions;
 
     let (let_term, u_prime) = match_term!((= l u) = conclusion[0], RETURN_RCS)?;
-    let (let_bindigns, u) = match let_term.as_ref() {
+    let (let_bindings, u) = match let_term.as_ref() {
         Term::Let(b, t) => (b, t),
         _ => return None,
     };
@@ -120,10 +120,10 @@ pub fn r#let(
     let (previous_u, previous_u_prime) = match_term!((= u u_prime) = previous_term, RETURN_RCS)?;
     rassert!(u == previous_u && u_prime == previous_u_prime);
 
-    rassert!(let_bindigns.len() == substitutions.len());
+    rassert!(let_bindings.len() == substitutions.len());
 
     let mut premises = premises.iter();
-    for (x, t) in let_bindigns {
+    for (x, t) in let_bindings {
         let x_term = terminal!(var x; pool.add_term(t.sort().clone()));
         let s = substitutions.get(&pool.add_term(x_term))?;
         if s != t {
@@ -287,7 +287,7 @@ fn generic_skolemization_rule(
                 } else {
                     inner
                 };
-                // If this is the last binding, all bindigns were skolemized, so we don't need to
+                // If this is the last binding, all bindings were skolemized, so we don't need to
                 // unwrap any quantifier
                 if i == bindings.len() - 1 {
                     (var, &[] as &[_], inner)
