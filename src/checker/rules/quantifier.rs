@@ -411,4 +411,104 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn conjunctive_normal_form() {
+        use super::*;
+        use crate::parser::tests::parse_term_with_definitions;
+
+        fn to_cnf_term(pool: &mut TermPool, term: &ByRefRc<Term>) -> ByRefRc<Term> {
+            let nnf = negation_normal_form(pool, term, true);
+            let mut bindings = Vec::new();
+            let prenexed = prenex_forall(pool, &mut bindings, &nnf);
+            let cnf = conjunctive_normal_form(&prenexed);
+            let mut clauses: Vec<_> = cnf
+                .into_iter()
+                .map(|c| match c.as_slice() {
+                    [] => unreachable!(),
+                    [term] => term.clone(),
+                    _ => pool.add_term(Term::Op(Operator::Or, c)),
+                })
+                .collect();
+
+            let conjunctions = if clauses.len() == 1 {
+                clauses.pop().unwrap()
+            } else {
+                pool.add_term(Term::Op(Operator::And, clauses))
+            };
+
+            if !bindings.is_empty() {
+                pool.add_term(Term::Quant(Quantifier::Forall, bindings, conjunctions))
+            } else {
+                conjunctions
+            }
+        }
+
+        fn run_tests(definitions: &str, cases: &[(&str, &str)]) {
+            for &(term, expected) in cases {
+                let mut pool = TermPool::new();
+                let term = pool.add_term(parse_term_with_definitions(definitions, term));
+                let got = to_cnf_term(&mut pool, &term);
+                let expected = parse_term_with_definitions(definitions, expected);
+                assert_deep_eq!(&expected, got.as_ref());
+            }
+        }
+
+        let definitions = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (declare-fun s () Bool)
+            (declare-fun a () Real)
+            (declare-fun b () Real)
+        ";
+        let cases = [
+            // Cases that only need the negation normal form to be computed
+            ("(not (and p q r))", "(or (not p) (not q) (not r))"),
+            ("(not (not p))", "p"),
+            ("(=> p q)", "(or (not p) q)"),
+            ("(not (=> p q))", "(and p (not q))"),
+            ("(= p q)", "(and (or (not p) q) (or (not q) p))"),
+            ("(ite p q r)", "(and (or (not p) q) (or p r))"),
+            // Cases that require prenexing
+            (
+                "(or (forall ((x Int)) (= 0 x)) (forall ((y Int)) (= 1 y)))",
+                "(forall ((x Int) (y Int)) (or (= 0 x) (= 1 y)))",
+            ),
+            (
+                "(and (exists ((x Int)) (= 0 x)) (forall ((y Int)) (= 1 y)))",
+                "(forall ((y Int)) (and (exists ((x Int)) (= 0 x)) (= 1 y)))",
+            ),
+            (
+                "(=> (exists ((x Int)) (= x x)) p)",
+                "(forall ((x Int)) (or (not (= x x)) p))",
+            ),
+            // Cases where the distribution rules must be applied
+            ("(or p (and q r))", "(and (or p q) (or p r))"),
+            (
+                "(or (and p q) (and r s))",
+                "(and (or p r) (or p s) (or q r) (or q s))",
+            ),
+            ("(or p (or q r) s)", "(or p q r s)"),
+            ("(and p (and q r) s)", "(and p q r s)"),
+            (
+                "(not (and
+                    (=> (forall ((x Int)) (= x 0)) p)
+                    (or q (not (not r)))
+                    (or s (not (exists ((y Int)) (< y 0))))
+                ))",
+                "(forall ((x Int)) (and
+                    (or (= x 0) (not q) (not s))
+                    (or (= x 0) (not q) (exists ((y Int)) (< y 0)))
+                    (or (= x 0) (not r) (not s))
+                    (or (= x 0) (not r) (exists ((y Int)) (< y 0)))
+                    (or (not p) (not q) (not s))
+                    (or (not p) (not q) (exists ((y Int)) (< y 0)))
+                    (or (not p) (not r) (not s))
+                    (or (not p) (not r) (exists ((y Int)) (< y 0)))
+                ))",
+            ),
+        ];
+        run_tests(definitions, &cases);
+    }
 }
