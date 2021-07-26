@@ -182,9 +182,9 @@ fn distribute(formulae: &[CnfFormula]) -> CnfFormula {
 
 /// Prenex all universal quantifiers in a term. This doesn't prenex existential quantifiers. This
 /// assumes the term is in negation normal form.
-fn prenex_forall(
+fn prenex_forall<C: Extend<SortedVar>>(
     pool: &mut TermPool,
-    acc: &mut HashSet<SortedVar>,
+    acc: &mut C,
     term: &ByRefRc<Term>,
 ) -> ByRefRc<Term> {
     match term.as_ref() {
