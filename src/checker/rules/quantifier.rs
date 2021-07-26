@@ -511,4 +511,49 @@ mod tests {
         ];
         run_tests(definitions, &cases);
     }
+
+    #[test]
+    fn qnt_cnf() {
+        test_cases! {
+            definitions = "",
+            "Simple working examples" {
+                "(step t1 (cl (or (not (forall ((p Bool)) p)) (forall ((p Bool)) p)))
+                    :rule qnt_cnf)": true,
+
+                "(step t1 (cl (or
+                    (not (forall ((p Bool) (q Bool)) (not (and p q))))
+                    (forall ((p Bool) (q Bool)) (or (not p) (not q)))
+                )) :rule qnt_cnf)": true,
+            }
+            "Selecting only one clause from conjunction" {
+                "(step t1 (cl (or
+                    (not (forall ((p Bool) (q Bool)) (or (and p true) (and q false))))
+                    (forall ((p Bool) (q Bool)) (or true q))
+                )) :rule qnt_cnf)": true,
+
+                "(step t1 (cl (or
+                    (not (forall ((p Bool) (q Bool))
+                        (not (and (=> p q) (or q (not (not p))) (or true false (not q))))
+                    ))
+                    (forall ((p Bool) (q Bool)) (or p (not q) (not true)))
+                )) :rule qnt_cnf)": true,
+            }
+            "Quantifier bindings added due to prenexing" {
+                "(step t1 (cl (or
+                    (not (forall ((p Bool)) (forall ((q Bool)) (or p q))))
+                    (forall ((p Bool) (q Bool)) (or p q))
+                )) :rule qnt_cnf)": true,
+
+                "(step t1 (cl (or
+                    (not (forall ((p Bool)) (not (exists ((q Bool)) (and p q)))))
+                    (forall ((p Bool) (q Bool)) (or (not p) (not q)))
+                )) :rule qnt_cnf)": true,
+
+                "(step t1 (cl (or
+                    (not (forall ((p Bool)) (or p (and false (forall ((q Bool)) q)))))
+                    (forall ((p Bool)) (or p false))
+                )) :rule qnt_cnf)": true,
+            }
+        }
+    }
 }
