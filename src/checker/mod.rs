@@ -205,6 +205,8 @@ impl ProofChecker {
             "implies" => clausification::implies,
             "equiv1" => tautology::equiv1,
             "equiv2" => tautology::equiv2,
+            "not_equiv1" => tautology::not_equiv1,
+            "not_equiv2" => tautology::not_equiv2,
             "ite1" => tautology::ite1,
             "ite2" => tautology::ite2,
             "ite_intro" => tautology::ite_intro,

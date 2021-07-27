@@ -125,6 +125,34 @@ pub fn equiv2(
     to_option(phi_1 == conclusion[0].as_ref() && phi_2 == conclusion[1].remove_negation()?)
 }
 
+pub fn not_equiv1(
+    RuleArgs {
+        conclusion,
+        premises,
+        ..
+    }: RuleArgs,
+) -> Option<()> {
+    rassert!(premises.len() == 1 && conclusion.len() == 2);
+    let premise_term = get_single_term_from_command(premises[0])?;
+    let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = premise_term)?;
+    to_option(phi_1 == conclusion[0].as_ref() && phi_2 == conclusion[1].as_ref())
+}
+
+pub fn not_equiv2(
+    RuleArgs {
+        conclusion,
+        premises,
+        ..
+    }: RuleArgs,
+) -> Option<()> {
+    rassert!(premises.len() == 1 && conclusion.len() == 2);
+    let premise_term = get_single_term_from_command(premises[0])?;
+    let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = premise_term)?;
+    to_option(
+        phi_1 == conclusion[0].remove_negation()? && phi_2 == conclusion[1].remove_negation()?,
+    )
+}
+
 pub fn ite1(
     RuleArgs {
         conclusion,
@@ -633,6 +661,48 @@ mod tests {
 
                 "(assume h1 (= p q))
                 (step t2 (cl p q) :rule equiv2 :premises (h1))": false,
+            }
+        }
+    }
+
+    #[test]
+    fn not_equiv1() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+            ",
+            "Simple working examples" {
+                "(assume h1 (not (= p q)))
+                (step t2 (cl p q) :rule not_equiv1 :premises (h1))": true,
+            }
+            "Conclusion clause is of the wrong form" {
+                "(assume h1 (not (= p q)))
+                (step t2 (cl (not p) q) :rule not_equiv1 :premises (h1))": false,
+
+                "(assume h1 (not (= p q)))
+                (step t2 (cl p) :rule not_equiv1 :premises (h1))": false,
+            }
+        }
+    }
+
+    #[test]
+    fn not_equiv2() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+            ",
+            "Simple working examples" {
+                "(assume h1 (not (= p q)))
+                (step t2 (cl (not p) (not q)) :rule not_equiv2 :premises (h1))": true,
+            }
+            "Conclusion clause is of the wrong form" {
+                "(assume h1 (not (= p q)))
+                (step t2 (cl p (not q)) :rule not_equiv2 :premises (h1))": false,
+
+                "(assume h1 (not (= p q)))
+                (step t2 (cl (not p)) :rule not_equiv2 :premises (h1))": false,
             }
         }
     }
