@@ -99,6 +99,32 @@ pub fn equiv_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     to_option(phi_1 == conclusion[1].as_ref() && phi_2 == conclusion[2].as_ref())
 }
 
+pub fn equiv1(
+    RuleArgs {
+        conclusion,
+        premises,
+        ..
+    }: RuleArgs,
+) -> Option<()> {
+    rassert!(premises.len() == 1 && conclusion.len() == 2);
+    let premise_term = get_single_term_from_command(premises[0])?;
+    let (phi_1, phi_2) = match_term!((= phi_1 phi_2) = premise_term)?;
+    to_option(phi_1 == conclusion[0].remove_negation()? && phi_2 == conclusion[1].as_ref())
+}
+
+pub fn equiv2(
+    RuleArgs {
+        conclusion,
+        premises,
+        ..
+    }: RuleArgs,
+) -> Option<()> {
+    rassert!(premises.len() == 1 && conclusion.len() == 2);
+    let premise_term = get_single_term_from_command(premises[0])?;
+    let (phi_1, phi_2) = match_term!((= phi_1 phi_2) = premise_term)?;
+    to_option(phi_1 == conclusion[0].as_ref() && phi_2 == conclusion[1].remove_negation()?)
+}
+
 pub fn ite1(
     RuleArgs {
         conclusion,
@@ -559,6 +585,54 @@ mod tests {
             "Terms don't match" {
                 "(step t1 (cl (= p q) q p) :rule equiv_neg2)": false,
                 "(step t1 (cl (= p q) p p) :rule equiv_neg2)": false,
+            }
+        }
+    }
+
+    #[test]
+    fn equiv1() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+            ",
+            "Simple working examples" {
+                "(assume h1 (= p q))
+                (step t2 (cl (not p) q) :rule equiv1 :premises (h1))": true,
+            }
+            "Conclusion clause is of the wrong form" {
+                "(assume h1 (= p q))
+                (step t2 (cl p (not q)) :rule equiv1 :premises (h1))": false,
+
+                "(assume h1 (= p q))
+                (step t2 (cl (not p)) :rule equiv1 :premises (h1))": false,
+
+                "(assume h1 (= p q))
+                (step t2 (cl (not p) (not q)) :rule equiv1 :premises (h1))": false,
+            }
+        }
+    }
+
+    #[test]
+    fn equiv2() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+            ",
+            "Simple working examples" {
+                "(assume h1 (= p q))
+                (step t2 (cl p (not q)) :rule equiv2 :premises (h1))": true,
+            }
+            "Conclusion clause is of the wrong form" {
+                "(assume h1 (= p q))
+                (step t2 (cl (not p) q) :rule equiv2 :premises (h1))": false,
+
+                "(assume h1 (= p q))
+                (step t2 (cl p) :rule equiv2 :premises (h1))": false,
+
+                "(assume h1 (= p q))
+                (step t2 (cl p q) :rule equiv2 :premises (h1))": false,
             }
         }
     }

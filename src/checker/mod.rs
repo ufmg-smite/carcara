@@ -203,6 +203,8 @@ impl ProofChecker {
             "tautology" => resolution::tautology,
             "or" => clausification::or,
             "implies" => clausification::implies,
+            "equiv1" => tautology::equiv1,
+            "equiv2" => tautology::equiv2,
             "ite1" => tautology::ite1,
             "ite2" => tautology::ite2,
             "ite_intro" => tautology::ite_intro,
