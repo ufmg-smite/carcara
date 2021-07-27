@@ -84,25 +84,50 @@ pub fn eq_simplify(args: RuleArgs) -> Option<()> {
     generic_simplify_rule(args.conclusion, args.pool, eq_simplify_once)
 }
 
-pub fn or_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+/// Used for both the "and_simplify" and "or_simplify" rules, depending on `rule_kind`. `rule_kind`
+/// has to be either `Operator::And` or `Operator::Or`.
+fn generic_and_or_simplify(conclusion: &[ByRefRc<Term>], rule_kind: Operator) -> Option<()> {
     rassert!(conclusion.len() == 1);
 
-    let (clause, result) = match_term!((= (or ...) psi) = conclusion[0], RETURN_RCS)?;
-    let result = match_term!((or ...) = result).unwrap_or_else(|| std::slice::from_ref(&result));
+    // The "skip term" is the term that represents the empty conjunction or disjunction, and can be
+    // skipped. This is "false" for conjunctions and "true" disjunctions
+    let is_skip_term = match rule_kind {
+        Operator::And => Term::is_bool_true,
+        Operator::Or => Term::is_bool_false,
+        _ => unreachable!(),
+    };
 
-    let mut seen = HashSet::with_capacity(clause.len());
-    let mut expected = Vec::with_capacity(clause.len());
+    // The "short-circuit term" is the term that can short-circuit the conjunction or disjunction.
+    // This is "true" for conjunctions and "false" disjunctions
+    let is_short_ciruit_term = match rule_kind {
+        Operator::And => Term::is_bool_false,
+        Operator::Or => Term::is_bool_true,
+        _ => unreachable!(),
+    };
 
-    for term in clause {
-        if term.is_bool_false() {
-            continue; // Skip term if it is "false"
+    let (phis, result) = match_term!((= phi psi) = conclusion[0], RETURN_RCS)?;
+    let phis = match phis.as_ref() {
+        Term::Op(op, args) if *op == rule_kind => args,
+        _ => return None,
+    };
+    let result = match result.as_ref() {
+        Term::Op(op, args) if *op == rule_kind => args,
+        _ => std::slice::from_ref(result),
+    };
+
+    let mut seen = HashSet::with_capacity(phis.len());
+    let mut expected = Vec::with_capacity(phis.len());
+
+    for term in phis {
+        if is_skip_term(term) {
+            continue; // Skip term if it is the "skip term"
         }
 
-        // If the term is the boolean constant "true", or is the negation of a term previously
-        // encountered, the result is short-circuited to "true"
+        // If the term is the "short-circuit term", or is the negation of a term previously
+        // encountered, the result is short-circuited
         let (polarity, inner) = term.remove_all_negations_with_polarity();
-        if seen.contains(&(!polarity, inner)) || term.is_bool_true() {
-            return to_option(result.len() == 1 && result[0].is_bool_true());
+        if seen.contains(&(!polarity, inner)) || is_short_ciruit_term(term) {
+            return to_option(result.len() == 1 && is_short_ciruit_term(&result[0]));
         }
 
         let is_new = seen.insert((polarity, inner));
@@ -112,10 +137,20 @@ pub fn or_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     }
 
     to_option(if expected.is_empty() {
-        result.len() == 1 && result[0].is_bool_false()
+        // If the filtered conjunction or disjunction is empty, the expected result is just the
+        // "skip term", which represents an empty conjunction or disjunction
+        result.len() == 1 && is_skip_term(&result[0])
     } else {
         result.iter().eq(expected)
     })
+}
+
+pub fn and_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    generic_and_or_simplify(conclusion, Operator::And)
+}
+
+pub fn or_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    generic_and_or_simplify(conclusion, Operator::Or)
 }
 
 pub fn not_simplify(args: RuleArgs) -> Option<()> {
@@ -373,6 +408,65 @@ mod tests {
                 "(step t1 (cl (= (not (= 0 0)) true)) :rule eq_simplify)": false,
                 "(step t1 (cl (= (not (= 0 1)) false)) :rule eq_simplify)": false,
                 "(step t1 (cl (= (not (= a a)) false)) :rule eq_simplify)": false,
+            }
+        }
+    }
+
+    #[test]
+    fn and_simplify() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+            ",
+            "Transformation #1" {
+                "(step t1 (cl (= (and true true true) true)) :rule and_simplify)": true,
+                "(step t1 (cl (= (and true true true) (and true))) :rule and_simplify)": true,
+                "(step t1 (cl (= (and true) true)) :rule and_simplify)": true,
+
+                "(step t1 (cl (= (and true p true) true)) :rule and_simplify)": false,
+                "(step t1 (cl (= (and true true) false)) :rule and_simplify)": false,
+            }
+            "Transformation #2" {
+                "(step t1 (cl (= (and p true q) (and p q))) :rule and_simplify)": true,
+                "(step t1 (cl (= (and p true q r true true) (and p q r))) :rule and_simplify)": true,
+                "(step t1 (cl (= (and true q true true) q)) :rule and_simplify)": true,
+                "(step t1 (cl (= (and true q true true) (and q))) :rule and_simplify)": true,
+
+                "(step t1 (cl (= (and p true q true) (and p true q))) :rule and_simplify)": false,
+                "(step t1 (cl (= (and p true q r true true) (and p r))) :rule and_simplify)": false,
+            }
+            "Transformation #3" {
+                "(step t1 (cl (= (and p p q q q r) (and p q r))) :rule and_simplify)": true,
+                "(step t1 (cl (= (and p p) (and p))) :rule and_simplify)": true,
+                "(step t1 (cl (= (and p p) p)) :rule and_simplify)": true,
+
+                "(step t1 (cl (= (and p p q q q r) (and p q q r))) :rule and_simplify)": false,
+                "(step t1 (cl (= (and p p q q q) (and p q r))) :rule and_simplify)": false,
+            }
+            "Transformation #4" {
+                "(step t1 (cl (= (and p q false r) false)) :rule and_simplify)": true,
+                "(step t1 (cl (= (and p q false r) (and false))) :rule and_simplify)": true,
+                "(step t1 (cl (= (and false true) false)) :rule and_simplify)": true,
+
+                "(step t1 (cl (= (and p q false r) (and p q r))) :rule and_simplify)": false,
+                "(step t1 (cl (= (and p q false r) true)) :rule and_simplify)": false,
+            }
+            "Transformation #5" {
+                "(step t1 (cl (= (and p q (not q) r) false)) :rule and_simplify)": true,
+                "(step t1 (cl (= (and p q (not q) r) (and false))) :rule and_simplify)": true,
+                "(step t1 (cl (= (and p (not (not q)) (not q) r) false)) :rule and_simplify)": true,
+                "(step t1 (cl (= (and p (not (not (not p))) (not p)) false)) :rule and_simplify)": true,
+
+                "(step t1 (cl (= (and p (not (not p)) (not q) r) false)) :rule and_simplify)": false,
+                "(step t1 (cl (= (and q (not r)) false)) :rule and_simplify)": false,
+                "(step t1 (cl (= (and r (not r)) true)) :rule and_simplify)": false,
+            }
+            "Multiple transformations" {
+                "(step t1 (cl (= (and p p true q q true q r) (and p q r))) :rule and_simplify)": true,
+                "(step t1 (cl (= (and p p (not p) q q true q r) false)) :rule and_simplify)": true,
+                "(step t1 (cl (= (and p false p (not p) q true q r) false)) :rule and_simplify)": true,
             }
         }
     }
