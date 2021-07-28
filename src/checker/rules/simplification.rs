@@ -9,8 +9,8 @@ macro_rules! simplify {
     // This is a recursive macro that expands to a series of nested `match` expressions. For
     // example:
     //      simplify!(term {
-    //          (or a b): (bind_a, bind_b) => { foo },
-    //          (not c): (bind_c) if pred(bind_c) => { bar },
+    //          (or a b): (bind_a, bind_b) => foo,
+    //          (not c): (bind_c) if pred(bind_c) => bar,
     //      })
     // becomes:
     //      match match_term!((or a b) = term, RETURN_RCS) {
@@ -22,7 +22,7 @@ macro_rules! simplify {
     //      }
     ($term:ident {}) => { None };
     ($term:ident {
-        $pat:tt: $idens:tt $(if $guard:expr)? => { $res:expr },
+        $pat:tt: $idens:tt $(if $guard:expr)? => $res:expr,
         $($rest:tt)*
      }) => {
         match match_term!($pat = $term, RETURN_RCS) {
@@ -61,23 +61,17 @@ pub fn eq_simplify(args: RuleArgs) -> Option<()> {
     fn eq_simplify_once(term: &Term, pool: &mut TermPool) -> Option<ByRefRc<Term>> {
         simplify!(term {
             // t = t => true
-            (= t t): (t1, t2) if t1 == t2 => {
-                pool.bool_true()
-            },
+            (= t t): (t1, t2) if t1 == t2 => pool.bool_true(),
 
             // t_1 = t_2 => false, if t_1 and t_2 are different numerical constants
             (= t t): (t1, t2) if {
                 let t1 = t1.try_as_signed_ratio();
                 let t2 = t2.try_as_signed_ratio();
                 t1.is_some() && t2.is_some() && t1 != t2
-            } => {
-                pool.bool_false()
-            },
+            } => pool.bool_false(),
 
             // ¬(t = t) => false, if t is a numerical constant
-            (not (= t t)): (t1, t2) if t1 == t2 && t1.is_signed_constant() => {
-                pool.bool_false()
-            },
+            (not (= t t)): (t1, t2) if t1 == t2 && t1.is_signed_constant() => pool.bool_false(),
         })
     }
 
@@ -157,17 +151,13 @@ pub fn not_simplify(args: RuleArgs) -> Option<()> {
     fn not_simplify_once(term: &Term, pool: &mut TermPool) -> Option<ByRefRc<Term>> {
         simplify!(term {
             // ¬(¬phi) => phi
-            (not (not phi)): phi => { phi.clone() },
+            (not (not phi)): phi => phi.clone(),
 
             // ¬false => true
-            (not lit): lit if lit.is_bool_false() => {
-                pool.bool_true()
-            },
+            (not lit): lit if lit.is_bool_false() => pool.bool_true(),
 
             // ¬true => false
-            (not lit): lit if lit.is_bool_true() => {
-                pool.bool_false()
-            },
+            (not lit): lit if lit.is_bool_true() => pool.bool_false(),
         })
     }
 
@@ -183,29 +173,25 @@ pub fn equiv_simplify(args: RuleArgs) -> Option<()> {
             },
 
             // phi = phi => true
-            (= phi_1 phi_2): (phi_1, phi_2) if phi_1 == phi_2 => { pool.bool_true() },
+            (= phi_1 phi_2): (phi_1, phi_2) if phi_1 == phi_2 => pool.bool_true(),
 
             // phi = ¬phi => false
-            (= phi_1 (not phi_2)): (phi_1, phi_2) if phi_1 == phi_2 => { pool.bool_false() },
+            (= phi_1 (not phi_2)): (phi_1, phi_2) if phi_1 == phi_2 => pool.bool_false(),
 
             // ¬phi = phi => false
-            (= (not phi_1) phi_2): (phi_1, phi_2) if phi_1 == phi_2 => { pool.bool_false() },
+            (= (not phi_1) phi_2): (phi_1, phi_2) if phi_1 == phi_2 => pool.bool_false(),
 
             // true = phi => phi
-            (= t phi_1): (t, phi_1) if t.is_bool_true() => { phi_1.clone() },
+            (= t phi_1): (t, phi_1) if t.is_bool_true() => phi_1.clone(),
 
             // phi = true => phi
-            (= phi_1 t): (phi_1, t) if t.is_bool_true() => { phi_1.clone() },
+            (= phi_1 t): (phi_1, t) if t.is_bool_true() => phi_1.clone(),
 
             // false = phi => ¬phi
-            (= f phi_1): (f, phi_1) if f.is_bool_false() => {
-                build_term!(pool, (not {phi_1.clone()}))
-            },
+            (= f phi_1): (f, phi_1) if f.is_bool_false() => build_term!(pool, (not {phi_1.clone()})),
 
             // phi = false => ¬phi
-            (= phi_1 f): (phi_1, f) if f.is_bool_false() => {
-                build_term!(pool, (not {phi_1.clone()}))
-            },
+            (= phi_1 f): (phi_1, f) if f.is_bool_false() => build_term!(pool, (not {phi_1.clone()})),
         })
     }
 
