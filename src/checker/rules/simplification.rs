@@ -58,7 +58,7 @@ fn generic_simplify_rule(
 }
 
 pub fn eq_simplify(args: RuleArgs) -> Option<()> {
-    fn eq_simplify_once(term: &Term, pool: &mut TermPool) -> Option<ByRefRc<Term>> {
+    generic_simplify_rule(args.conclusion, args.pool, |term, pool| {
         simplify!(term {
             // t = t => true
             (= t t): (t1, t2) if t1 == t2 => pool.bool_true(),
@@ -73,9 +73,7 @@ pub fn eq_simplify(args: RuleArgs) -> Option<()> {
             // ¬(t = t) => false, if t is a numerical constant
             (not (= t t)): (t1, t2) if t1 == t2 && t1.is_signed_constant() => pool.bool_false(),
         })
-    }
-
-    generic_simplify_rule(args.conclusion, args.pool, eq_simplify_once)
+    })
 }
 
 /// Used for both the "and_simplify" and "or_simplify" rules, depending on `rule_kind`. `rule_kind`
@@ -148,7 +146,7 @@ pub fn or_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 }
 
 pub fn not_simplify(args: RuleArgs) -> Option<()> {
-    fn not_simplify_once(term: &Term, pool: &mut TermPool) -> Option<ByRefRc<Term>> {
+    generic_simplify_rule(args.conclusion, args.pool, |term, pool| {
         simplify!(term {
             // ¬(¬phi) => phi
             (not (not phi)): phi => phi.clone(),
@@ -159,13 +157,11 @@ pub fn not_simplify(args: RuleArgs) -> Option<()> {
             // ¬true => false
             (not lit): lit if lit.is_bool_true() => pool.bool_false(),
         })
-    }
-
-    generic_simplify_rule(args.conclusion, args.pool, not_simplify_once)
+    })
 }
 
 pub fn equiv_simplify(args: RuleArgs) -> Option<()> {
-    fn equiv_simplify_once(term: &Term, pool: &mut TermPool) -> Option<ByRefRc<Term>> {
+    generic_simplify_rule(args.conclusion, args.pool, |term, pool| {
         simplify!(term {
             // ¬phi_1 = ¬phi_2 => phi_1 = phi_2
             (= (not phi_1) (not phi_2)): (phi_1, phi_2) => {
@@ -193,13 +189,11 @@ pub fn equiv_simplify(args: RuleArgs) -> Option<()> {
             // phi = false => ¬phi
             (= phi_1 f): (phi_1, f) if f.is_bool_false() => build_term!(pool, (not {phi_1.clone()})),
         })
-    }
-
-    generic_simplify_rule(args.conclusion, args.pool, equiv_simplify_once)
+    })
 }
 
 pub fn bool_simplify(args: RuleArgs) -> Option<()> {
-    fn bool_simplify_once(term: &Term, pool: &mut TermPool) -> Option<ByRefRc<Term>> {
+    generic_simplify_rule(args.conclusion, args.pool, |term, pool| {
         simplify!(term {
             // ¬(phi_1 -> phi_2) => (phi_1 ^ ¬phi_2)
             (not (=> phi_1 phi_2)): (phi_1, phi_2) => {
@@ -236,9 +230,7 @@ pub fn bool_simplify(args: RuleArgs) -> Option<()> {
                 build_term!(pool, (and {phi_1.clone()} {phi_2.clone()}))
             },
         })
-    }
-
-    generic_simplify_rule(args.conclusion, args.pool, bool_simplify_once)
+    })
 }
 
 pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
