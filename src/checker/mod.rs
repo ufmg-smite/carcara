@@ -216,6 +216,7 @@ impl ProofChecker {
             "and_simplify" => simplification::and_simplify,
             "or_simplify" => simplification::or_simplify,
             "not_simplify" => simplification::not_simplify,
+            "implies_simplify" => simplification::implies_simplify,
             "equiv_simplify" => simplification::equiv_simplify,
             "bool_simplify" => simplification::bool_simplify,
             "prod_simplify" => simplification::prod_simplify,

@@ -160,6 +160,43 @@ pub fn not_simplify(args: RuleArgs) -> Option<()> {
     })
 }
 
+pub fn implies_simplify(args: RuleArgs) -> Option<()> {
+    generic_simplify_rule(args.conclusion, args.pool, |term, pool| {
+        simplify!(term {
+            // ¬phi_1 -> ¬phi_2 => phi_2 -> phi_1
+            (=> (not phi_1) (not phi_2)): (phi_1, phi_2) => {
+                build_term!(pool, (=> {phi_2.clone()} {phi_1.clone()}))
+            },
+
+            // false -> phi => true
+            (=> f phi): (f, _) if f.is_bool_false() => pool.bool_true(),
+
+            // phi -> true => true
+            (=> phi t): (_, t) if t.is_bool_true() => pool.bool_true(),
+
+            // true -> phi => phi
+            (=> t phi): (t, phi) if t.is_bool_true() => phi.clone(),
+
+            // phi -> false => ¬phi
+            (=> phi f): (phi, f) if f.is_bool_false() => build_term!(pool, (not {phi.clone()})),
+
+            // phi -> phi => true
+            (=> phi phi): (phi_1, phi_2) if phi_1 == phi_2 => pool.bool_true(),
+
+            // ¬phi -> phi => phi
+            // phi -> ¬phi => ¬phi
+            (=> phi_1 phi_2): (phi_1, phi_2) if {
+                phi_1.remove_negation() == Some(phi_2) || phi_2.remove_negation() == Some(phi_1)
+            } => phi_2.clone(),
+
+            // (phi_1 -> phi_2) -> phi_2 => phi_1 v phi_2
+            (=> (=> phi_1 phi_2) phi_3): ((phi_1, phi_2), phi_3) if phi_2 == phi_3 => {
+                build_term!(pool, (or {phi_1.clone()} {phi_2.clone()}))
+            },
+        })
+    })
+}
+
 pub fn equiv_simplify(args: RuleArgs) -> Option<()> {
     generic_simplify_rule(args.conclusion, args.pool, |term, pool| {
         simplify!(term {
@@ -532,6 +569,59 @@ mod tests {
             "Multiple transformations" {
                 "(step t1 (cl (= (not (not (not false))) true)) :rule not_simplify)": true,
                 "(step t1 (cl (= (not (not (not true))) false)) :rule not_simplify)": true,
+            }
+        }
+    }
+
+    #[test]
+    fn implies_simplify() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+            ",
+            "Transformation #1" {
+                "(step t1 (cl (= (=> (not p) (not q)) (=> q p))) :rule implies_simplify)": true,
+                "(step t1 (cl (= (=> (not (not p)) (not (not q))) (=> p q)))
+                    :rule implies_simplify)": true,
+                "(step t1 (cl (= (=> (not (not p)) (not (not q))) (=> (not q) (not p))))
+                    :rule implies_simplify)": true,
+            }
+            "Transformation #2" {
+                "(step t1 (cl (= (=> false p) true)) :rule implies_simplify)": true,
+                "(step t1 (cl (= (=> false false) true)) :rule implies_simplify)": true,
+            }
+            "Transformation #3" {
+                "(step t1 (cl (= (=> p true) true)) :rule implies_simplify)": true,
+                "(step t1 (cl (= (=> false true) true)) :rule implies_simplify)": true,
+            }
+            "Transformation #4" {
+                "(step t1 (cl (= (=> true p) p)) :rule implies_simplify)": true,
+                "(step t1 (cl (= (=> true false) false)) :rule implies_simplify)": true,
+            }
+            "Transformation #5" {
+                "(step t1 (cl (= (=> p false) (not p))) :rule implies_simplify)": true,
+                "(step t1 (cl (= (=> false false) (not false))) :rule implies_simplify)": false,
+                "(step t1 (cl (= (=> true false) (not true))) :rule implies_simplify)": false,
+            }
+            "Transformation #6" {
+                "(step t1 (cl (= (=> p p) true)) :rule implies_simplify)": true,
+            }
+            "Transformation #7" {
+                "(step t1 (cl (= (=> (not p) p) p)) :rule implies_simplify)": true,
+                "(step t1 (cl (= (=> p (not p)) (not p))) :rule implies_simplify)": true,
+            }
+            "Transformation #8" {
+                "(step t1 (cl (= (=> (=> p q) q) (or p q))) :rule implies_simplify)": true,
+                "(step t1 (cl (= (=> (=> p q) q) (or q p))) :rule implies_simplify)": false,
+                "(step t1 (cl (= (=> (=> q p) q) (or p q))) :rule implies_simplify)": false,
+            }
+            "Multiple transformations" {
+                "(step t1 (cl (= (=> (not p) (not true)) p)) :rule implies_simplify)": true,
+                "(step t1 (cl (= (=> (not (not p)) (not p)) (not p))) :rule implies_simplify)": true,
+                "(step t1 (cl (= (=> (not q) (not (=> p q))) (or p q)))
+                    :rule implies_simplify)": true,
             }
         }
     }
