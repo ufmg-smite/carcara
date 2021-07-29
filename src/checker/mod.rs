@@ -184,6 +184,8 @@ impl ProofChecker {
             "equiv_pos2" => tautology::equiv_pos2,
             "equiv_neg1" => tautology::equiv_neg1,
             "equiv_neg2" => tautology::equiv_neg2,
+            "ite_pos1" => tautology::ite_pos1,
+            "ite_pos2" => tautology::ite_pos2,
             "eq_reflexive" => reflexivity::eq_reflexive,
             "eq_transitive" => transitivity::eq_transitive,
             "eq_congruent" => congruence::eq_congruent,

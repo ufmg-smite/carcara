@@ -99,6 +99,18 @@ pub fn equiv_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     to_option(phi_1 == conclusion[1].as_ref() && phi_2 == conclusion[2].as_ref())
 }
 
+pub fn ite_pos1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    rassert!(conclusion.len() == 3);
+    let (phi_1, _, phi_3) = match_term!((not (ite phi_1 phi_2 phi_3)) = conclusion[0])?;
+    to_option(phi_1 == conclusion[1].as_ref() && phi_3 == conclusion[2].as_ref())
+}
+
+pub fn ite_pos2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    rassert!(conclusion.len() == 3);
+    let (phi_1, phi_2, _) = match_term!((not (ite phi_1 phi_2 phi_3)) = conclusion[0])?;
+    to_option(phi_1 == conclusion[1].remove_negation()? && phi_2 == conclusion[2].as_ref())
+}
+
 pub fn equiv1(
     RuleArgs {
         conclusion,
@@ -613,6 +625,54 @@ mod tests {
             "Terms don't match" {
                 "(step t1 (cl (= p q) q p) :rule equiv_neg2)": false,
                 "(step t1 (cl (= p q) p p) :rule equiv_neg2)": false,
+            }
+        }
+    }
+
+    #[test]
+    fn ite_pos1() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (not (ite p q r)) p r) :rule ite_pos1)": true,
+                "(step t1 (cl (not (ite (not p) false (and q r))) (not p) (and q r))
+                    :rule ite_pos1)": true,
+            }
+            "Number of terms in clause != 3" {
+                "(step t1 (cl (not (ite p q r)) p) :rule ite_pos1)": false,
+                "(step t1 (cl (not (ite p q r)) p q r) :rule ite_pos1)": false,
+            }
+            "Terms don't match" {
+                "(step t1 (cl (not (ite p q r)) p q) :rule ite_pos1)": false,
+                "(step t1 (cl (not (ite p q r)) (not p) r) :rule ite_pos1)": false,
+            }
+        }
+    }
+
+    #[test]
+    fn ite_pos2() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (not (ite p q r)) (not p) q) :rule ite_pos2)": true,
+                "(step t1 (cl (not (ite (not p) (and q r) false)) (not (not p)) (and q r))
+                    :rule ite_pos2)": true,
+            }
+            "Number of terms in clause != 3" {
+                "(step t1 (cl (not (ite p q r)) (not p)) :rule ite_pos2)": false,
+                "(step t1 (cl (not (ite p q r)) (not p) q r) :rule ite_pos2)": false,
+            }
+            "Terms don't match" {
+                "(step t1 (cl (not (ite p q r)) (not p) r) :rule ite_pos2)": false,
+                "(step t1 (cl (not (ite p q r)) p q) :rule ite_pos2)": false,
             }
         }
     }
