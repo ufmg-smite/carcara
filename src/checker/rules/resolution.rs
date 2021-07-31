@@ -2,13 +2,7 @@ use super::{get_clause_from_command, to_option, RuleArgs};
 use crate::ast::*;
 use std::collections::HashSet;
 
-pub fn resolution(
-    RuleArgs {
-        conclusion,
-        premises,
-        ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn resolution(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     // When checking this rule, we must look at what the conclusion clause looks like in order to
     // determine the pivots. The reason for that is because there is no other way to know which
     // terms should be removed in a given binary resolution step. Consider the following example,
@@ -87,13 +81,7 @@ pub fn resolution(
     to_option(pivots.is_empty() && working_clause == conclusion)
 }
 
-pub fn tautology(
-    RuleArgs {
-        conclusion,
-        premises,
-        ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn tautology(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1 && conclusion[0].is_bool_true() && premises.len() == 1);
 
     let premise = get_clause_from_command(premises[0]);
@@ -110,13 +98,7 @@ pub fn tautology(
     None
 }
 
-pub fn contraction(
-    RuleArgs {
-        conclusion,
-        premises,
-        ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn contraction(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1);
 
     let premise_clause = get_clause_from_command(premises[0]);

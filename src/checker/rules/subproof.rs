@@ -2,13 +2,7 @@ use super::{get_single_term_from_command, to_option, RuleArgs};
 use crate::ast::*;
 use std::collections::{HashMap, HashSet};
 
-pub fn subproof(
-    RuleArgs {
-        conclusion,
-        subproof_commands,
-        ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn subproof(RuleArgs { conclusion, subproof_commands, .. }: RuleArgs) -> Option<()> {
     // TODO: We should get the series of assumptions from the ":discharge" attribute, but currently
     // we just take the first `conclusion.len() - 1` steps in the subproof.
     let assumptions = &subproof_commands?[..conclusion.len() - 1];

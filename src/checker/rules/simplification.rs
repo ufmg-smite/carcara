@@ -339,11 +339,7 @@ pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     to_option(u_constant == constant_total && u_args.iter().map(ByRefRc::as_ref).eq(result))
 }
 
-pub fn ac_simp(
-    RuleArgs {
-        conclusion, pool, ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn ac_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> {
     fn flatten_operation(term: &ByRefRc<Term>, pool: &mut TermPool) -> ByRefRc<Term> {
         let term = match term.as_ref() {
             Term::Op(op @ (Operator::And | Operator::Or), args) => {

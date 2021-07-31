@@ -169,11 +169,7 @@ impl<'a> LinearComb<'a> {
     }
 }
 
-pub fn la_generic(
-    RuleArgs {
-        conclusion, args, ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == args.len());
 
     let final_disequality = conclusion

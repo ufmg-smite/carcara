@@ -44,9 +44,6 @@ impl<T, I: Iterator<Item = T>> DedupIterator<T> for I {
     where
         Self: Sized,
     {
-        Dedup {
-            seen: HashSet::new(),
-            iter: self,
-        }
+        Dedup { seen: HashSet::new(), iter: self }
     }
 }

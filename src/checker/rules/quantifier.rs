@@ -2,14 +2,7 @@ use super::{to_option, RuleArgs};
 use crate::{ast::*, utils::DedupIterator};
 use std::collections::{HashMap, HashSet};
 
-pub fn forall_inst(
-    RuleArgs {
-        conclusion,
-        args,
-        pool,
-        ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1);
 
     let (forall_term, substituted) = match_term!((or (not f) s) = conclusion[0], RETURN_RCS)?;
@@ -57,11 +50,7 @@ pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     to_option(bindings_3.iter().eq(combined))
 }
 
-pub fn qnt_rm_unused(
-    RuleArgs {
-        conclusion, pool, ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1);
 
     let (left, right) = match_term!((= l r) = conclusion[0])?;
@@ -222,11 +211,7 @@ fn conjunctive_normal_form(term: &ByRefRc<Term>) -> CnfFormula {
     }
 }
 
-pub fn qnt_cnf(
-    RuleArgs {
-        conclusion, pool, ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1);
 
     let (l_bindings, phi, r_bindings, phi_prime) = {

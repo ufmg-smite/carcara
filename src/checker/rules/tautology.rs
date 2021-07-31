@@ -111,52 +111,28 @@ pub fn ite_pos2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     to_option(phi_1 == conclusion[1].remove_negation()? && phi_2 == conclusion[2].as_ref())
 }
 
-pub fn equiv1(
-    RuleArgs {
-        conclusion,
-        premises,
-        ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn equiv1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1 && conclusion.len() == 2);
     let premise_term = get_single_term_from_command(premises[0])?;
     let (phi_1, phi_2) = match_term!((= phi_1 phi_2) = premise_term)?;
     to_option(phi_1 == conclusion[0].remove_negation()? && phi_2 == conclusion[1].as_ref())
 }
 
-pub fn equiv2(
-    RuleArgs {
-        conclusion,
-        premises,
-        ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn equiv2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1 && conclusion.len() == 2);
     let premise_term = get_single_term_from_command(premises[0])?;
     let (phi_1, phi_2) = match_term!((= phi_1 phi_2) = premise_term)?;
     to_option(phi_1 == conclusion[0].as_ref() && phi_2 == conclusion[1].remove_negation()?)
 }
 
-pub fn not_equiv1(
-    RuleArgs {
-        conclusion,
-        premises,
-        ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn not_equiv1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1 && conclusion.len() == 2);
     let premise_term = get_single_term_from_command(premises[0])?;
     let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = premise_term)?;
     to_option(phi_1 == conclusion[0].as_ref() && phi_2 == conclusion[1].as_ref())
 }
 
-pub fn not_equiv2(
-    RuleArgs {
-        conclusion,
-        premises,
-        ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn not_equiv2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1 && conclusion.len() == 2);
     let premise_term = get_single_term_from_command(premises[0])?;
     let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = premise_term)?;
@@ -165,13 +141,7 @@ pub fn not_equiv2(
     )
 }
 
-pub fn ite1(
-    RuleArgs {
-        conclusion,
-        premises,
-        ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn ite1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1 && conclusion.len() == 2);
 
     let premise_term = get_single_term_from_command(premises[0])?;
@@ -180,13 +150,7 @@ pub fn ite1(
     to_option(phi_1 == conclusion[0].as_ref() && phi_3 == conclusion[1].as_ref())
 }
 
-pub fn ite2(
-    RuleArgs {
-        conclusion,
-        premises,
-        ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn ite2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1 && conclusion.len() == 2);
 
     let premise_term = get_single_term_from_command(premises[0])?;

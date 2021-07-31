@@ -32,13 +32,7 @@ pub fn distinct_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     }
 }
 
-pub fn and(
-    RuleArgs {
-        conclusion,
-        premises,
-        ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn and(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1 && conclusion.len() == 1);
 
     let and_term = get_single_term_from_command(premises[0])?;
@@ -47,13 +41,7 @@ pub fn and(
     to_option(and_contents.iter().any(|t| t == &conclusion[0]))
 }
 
-pub fn or(
-    RuleArgs {
-        conclusion,
-        premises,
-        ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn or(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1);
 
     let or_term = get_single_term_from_command(premises[0])?;
@@ -62,13 +50,7 @@ pub fn or(
     to_option(or_contents == conclusion)
 }
 
-pub fn implies(
-    RuleArgs {
-        conclusion,
-        premises,
-        ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn implies(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1 && conclusion.len() == 2);
 
     let premise_term = get_single_term_from_command(premises[0])?;

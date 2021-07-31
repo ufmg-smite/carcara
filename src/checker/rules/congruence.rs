@@ -60,13 +60,7 @@ where
     Some(())
 }
 
-pub fn cong(
-    RuleArgs {
-        conclusion,
-        premises,
-        ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     /// Since the semantics of this rule is slighty different from that of "eq_congruent" and
     /// "eq_congruent_pred", we cannot just use the `generic_congruent_rule` function
     fn check_cong<'a>(

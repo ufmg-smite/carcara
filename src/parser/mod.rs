@@ -27,9 +27,7 @@ struct SymbolTable<K, V> {
 
 impl<K, V> SymbolTable<K, V> {
     fn new() -> Self {
-        Self {
-            scopes: vec![HashMap::new()],
-        }
+        Self { scopes: vec![HashMap::new()] }
     }
 
     fn push_scope(&mut self) {
@@ -102,11 +100,7 @@ impl<R: BufRead> Parser<R> {
     fn with_state(input: R, state: ParserState) -> ParserResult<Self> {
         let mut lexer = Lexer::new(input)?;
         let current_token = lexer.next_token()?;
-        Ok(Parser {
-            lexer,
-            current_token,
-            state,
-        })
+        Ok(Parser { lexer, current_token, state })
     }
 
     /// Advances the parser one token, and returns the previous `current_token`.
@@ -368,13 +362,8 @@ impl<R: BufRead> Parser<R> {
                         })
                         .collect::<Result<_, _>>()?;
 
-                    let command = ProofCommand::Step(ProofStep {
-                        clause,
-                        rule,
-                        premises,
-                        args,
-                    });
-                    (index, command)
+                    let step = ProofStep { clause, rule, premises, args };
+                    (index, ProofCommand::Step(step))
                 }
                 Token::ReservedWord(Reserved::DefineFun) => {
                     let (name, func_def) = self.parse_define_fun()?;

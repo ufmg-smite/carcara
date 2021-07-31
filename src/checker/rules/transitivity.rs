@@ -52,13 +52,7 @@ pub fn eq_transitive(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     find_chain(chain_conclusion, &mut premises)
 }
 
-pub fn trans(
-    RuleArgs {
-        conclusion,
-        premises,
-        ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn trans(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     if conclusion.len() != 1 {
         return None;
     }

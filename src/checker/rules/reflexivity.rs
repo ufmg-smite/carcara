@@ -7,14 +7,7 @@ pub fn eq_reflexive(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     to_option(a == b)
 }
 
-pub fn refl(
-    RuleArgs {
-        conclusion,
-        pool,
-        context,
-        ..
-    }: RuleArgs,
-) -> Option<()> {
+pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> Option<()> {
     fn apply_all_context_substitutions(
         pool: &mut TermPool,
         term: ByRefRc<Term>,
