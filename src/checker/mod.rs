@@ -203,6 +203,7 @@ impl ProofChecker {
             "cong" => congruence::cong,
             "and" => clausification::and,
             "tautology" => resolution::tautology,
+            "not_or" => clausification::not_or,
             "or" => clausification::or,
             "implies" => clausification::implies,
             "equiv1" => tautology::equiv1,

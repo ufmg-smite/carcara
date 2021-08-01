@@ -41,6 +41,16 @@ pub fn and(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     to_option(and_contents.iter().any(|t| t == &conclusion[0]))
 }
 
+pub fn not_or(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
+    rassert!(premises.len() == 1 && conclusion.len() == 1);
+
+    let or_term = get_single_term_from_command(premises[0])?;
+    let or_contents = match_term!((not (or ...)) = or_term)?;
+    let conclusion = conclusion[0].remove_negation()?;
+
+    to_option(or_contents.iter().any(|t| t.as_ref() == conclusion))
+}
+
 pub fn or(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1);
 
@@ -239,6 +249,43 @@ mod tests {
             "Conclusion term is not in premise" {
                 "(assume h1 (and p q r))
                 (step t2 (cl s) :rule and :premises (h1))": false,
+            }
+        }
+    }
+
+    #[test]
+    fn not_or() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+                (declare-fun s () Bool)
+            ",
+            "Simple working examples" {
+                "(assume h1 (not (or p q)))
+                (step t2 (cl (not q)) :rule not_or :premises (h1))": true,
+
+                "(assume h1 (not (or p q r s)))
+                (step t2 (cl (not p)) :rule not_or :premises (h1))": true,
+            }
+            "Conclusion clause is of the wrong form" {
+                "(assume h1 (not (or p q r s)))
+                (step t2 (cl (not q) (not s)) :rule not_or :premises (h1))": false,
+
+                "(assume h1 (not (or p q)))
+                (step t2 (cl q) :rule not_or :premises (h1))": false,
+            }
+            "Premise is of the wrong form" {
+                "(assume h1 (not (and p q r s)))
+                (step t2 (cl (not r)) :rule not_or :premises (h1))": false,
+
+                "(assume h1 (or p q r s))
+                (step t2 (cl (not r)) :rule not_or :premises (h1))": false,
+            }
+            "Conclusion term is not in premise" {
+                "(assume h1 (not (or p q r)))
+                (step t2 (cl (not s)) :rule not_or :premises (h1))": false,
             }
         }
     }
