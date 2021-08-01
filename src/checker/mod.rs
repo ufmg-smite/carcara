@@ -205,6 +205,7 @@ impl ProofChecker {
             "tautology" => resolution::tautology,
             "not_or" => clausification::not_or,
             "or" => clausification::or,
+            "not_and" => clausification::not_and,
             "implies" => clausification::implies,
             "equiv1" => tautology::equiv1,
             "equiv2" => tautology::equiv2,

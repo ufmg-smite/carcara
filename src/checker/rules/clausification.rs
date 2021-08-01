@@ -60,6 +60,19 @@ pub fn or(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     to_option(or_contents == conclusion)
 }
 
+pub fn not_and(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
+    rassert!(premises.len() == 1);
+
+    let and_term = get_single_term_from_command(premises[0])?;
+    let and_contents = match_term!((not (and ...)) = and_term)?;
+    to_option(
+        conclusion
+            .iter()
+            .map(|t| t.remove_negation())
+            .eq(and_contents.iter().map(|t| Some(t.as_ref()))),
+    )
+}
+
 pub fn implies(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1 && conclusion.len() == 2);
 
@@ -331,6 +344,42 @@ mod tests {
 
                 "(assume h1 (or q p))
                 (step t2 (cl p q) :rule or :premises (h1))": false,
+            }
+        }
+    }
+
+    #[test]
+    fn not_and() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+                (declare-fun s () Bool)
+            ",
+            "Simple working examples" {
+                "(assume h1 (not (and p q)))
+                (step t2 (cl (not p) (not q)) :rule not_and :premises (h1))": true,
+
+                "(assume h1 (not (and p q r s)))
+                (step t2 (cl (not p) (not q) (not r) (not s)) :rule not_and :premises (h1))": true,
+            }
+            "Premise is of the wrong form" {
+                "(assume h1 (and p q))
+                (step t2 (cl (not p) (not q)) :rule not_and :premises (h1))": false,
+
+                "(assume h1 (not (or p q)))
+                (step t2 (cl (not p) (not q)) :rule not_and :premises (h1))": false,
+            }
+            "Premise and clause contents are different" {
+                "(assume h1 (not (and p q)))
+                (step t2 (cl (not r) (not s)) :rule not_and :premises (h1))": false,
+
+                "(assume h1 (not (and p q r)))
+                (step t2 (cl (not p) (not q)) :rule not_and :premises (h1))": false,
+
+                "(assume h1 (not (and q p)))
+                (step t2 (cl (not p) (not q)) :rule not_and :premises (h1))": false,
             }
         }
     }
