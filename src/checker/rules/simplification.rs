@@ -339,6 +339,41 @@ pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     to_option(u_constant == constant_total && u_args.iter().map(ByRefRc::as_ref).eq(result))
 }
 
+pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    // Despite being separate rules in the documentation, this rule is used to do the job of both
+    // the "minus_simplify" and the "unary_minus_simplify" rules
+
+    fn check(t: &ByRefRc<Term>, u: &ByRefRc<Term>) -> Option<()> {
+        // First case of "unary_minus_simplify"
+        match match_term!((-(-t)) = t, RETURN_RCS) {
+            Some(t) if t == u => return Some(()),
+            _ => (),
+        }
+
+        // Second case of "unary_minus_simplify"
+        match (t.try_as_signed_ratio(), u.try_as_signed_ratio()) {
+            (Some(t), Some(u)) if t == u => return Some(()),
+            _ => (),
+        }
+
+        let (t_1, t_2) = match_term!((- t_1 t_2) = t, RETURN_RCS)?;
+        if t_1 == t_2 {
+            return to_option(u.try_as_ratio()?.is_zero());
+        }
+        to_option(match (t_1.try_as_ratio(), t_2.try_as_ratio()) {
+            (_, Some(z)) if z.is_zero() => u == t_1,
+            (Some(z), _) if z.is_zero() => match_term!((-t) = u, RETURN_RCS)? == t_2,
+            (Some(t_1), Some(t_2)) => u.try_as_signed_ratio()? == t_1 - t_2,
+            _ => false,
+        })
+    }
+
+    rassert!(conclusion.len() == 1);
+
+    let (left, right) = match_term!((= l r) = conclusion[0], RETURN_RCS)?;
+    check(left, right).or_else(|| check(right, left))
+}
+
 pub fn ac_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> {
     fn flatten_operation(term: &ByRefRc<Term>, pool: &mut TermPool) -> ByRefRc<Term> {
         let term = match term.as_ref() {
@@ -800,6 +835,49 @@ mod tests {
                 "(step t1 (cl (= (* i k 1 j) (* 1 i k j))) :rule prod_simplify)": false,
                 "(step t1 (cl (= (* x y 5.0 1.0 z 0.2 z) (* 1.0 x y z z)))
                     :rule prod_simplify)": false,
+            }
+        }
+    }
+
+    #[test]
+    fn minus_simplify() {
+        test_cases! {
+            definitions = "
+                (declare-fun x () Real)
+                (declare-fun a () Int)
+                (declare-fun b () Int)
+            ",
+            "Transformation #1" {
+                "(step t1 (cl (= (- x x) 0.0)) :rule minus_simplify)": true,
+                "(step t1 (cl (= (- (+ a b) (+ a b)) 0)) :rule minus_simplify)": true,
+                "(step t1 (cl (= 0 (- a a))) :rule minus_simplify)": true,
+                "(step t1 (cl (= 0 (- a b))) :rule minus_simplify)": false,
+            }
+            "Transformation #2" {
+                "(step t1 (cl (= (- 4.5 2.0) 2.5)) :rule minus_simplify)": true,
+                "(step t1 (cl (= (- 5 7) (- 2))) :rule minus_simplify)": true,
+                "(step t1 (cl (= 4 (- 2 3))) :rule minus_simplify)": false,
+            }
+            "Transformation #3" {
+                "(step t1 (cl (= (- x 0.0) x)) :rule minus_simplify)": true,
+                "(step t1 (cl (= (- a 0) a)) :rule minus_simplify)": true,
+                "(step t1 (cl (= (- 0.0 x) x)) :rule minus_simplify)": false,
+            }
+            "Transformation #4" {
+                "(step t1 (cl (= (- 0.0 x) (- x))) :rule minus_simplify)": true,
+                "(step t1 (cl (= (- 0 a) (- a))) :rule minus_simplify)": true,
+                "(step t1 (cl (= (- a) (- 0 a))) :rule minus_simplify)": true,
+                "(step t1 (cl (= (- a) (- a 0))) :rule minus_simplify)": false,
+            }
+            "Transformation #1 from \"unary_minus_simplify\"" {
+                "(step t1 (cl (= (- (- x)) x)) :rule minus_simplify)": true,
+                "(step t1 (cl (= x (- (- x)))) :rule minus_simplify)": true,
+                "(step t1 (cl (= (- (- (+ a b))) (+ a b))) :rule minus_simplify)": true,
+            }
+            "Transformation #2 from \"unary_minus_simplify\"" {
+                "(step t1 (cl (= (- 5.0) (- 5.0))) :rule minus_simplify)": true,
+                "(step t1 (cl (= (- 0) 0)) :rule minus_simplify)": true,
+                "(step t1 (cl (= 0.0 (- 0.0))) :rule minus_simplify)": true,
             }
         }
     }

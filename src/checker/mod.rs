@@ -224,6 +224,7 @@ impl ProofChecker {
             "equiv_simplify" => simplification::equiv_simplify,
             "bool_simplify" => simplification::bool_simplify,
             "prod_simplify" => simplification::prod_simplify,
+            "minus_simplify" => simplification::minus_simplify,
             "nary_elim" => clausification::nary_elim,
             "ac_simp" => simplification::ac_simp,
             "bind" => subproof::bind,
