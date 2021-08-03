@@ -1,5 +1,6 @@
 use super::{get_single_term_from_command, to_option, RuleArgs};
 use crate::ast::*;
+use std::collections::HashMap;
 
 pub fn distinct_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1);
@@ -165,6 +166,112 @@ pub fn nary_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     } else {
         None
     }
+}
+
+/// Applies the simplification steps for the "bfun_elim" rule.
+fn apply_bfun_elim(pool: &mut TermPool, term: &ByRefRc<Term>) -> ByRefRc<Term> {
+    /// The first simplification step, that expands quantifiers over boolean variables.
+    fn first_step(
+        pool: &mut TermPool,
+        bindigns: &[SortedVar],
+        term: &ByRefRc<Term>,
+        acc: &mut Vec<ByRefRc<Term>>,
+    ) {
+        let var = match bindigns {
+            [.., var] if var.1.as_ref() == Term::BOOL_SORT => pool.add_term(var.clone().into()),
+            [rest @ .., _] => return first_step(pool, rest, term, acc),
+            [] => {
+                acc.push(term.clone());
+                return;
+            }
+        };
+        for value in [pool.bool_false(), pool.bool_true()] {
+            let mut subs = HashMap::new();
+            subs.insert(var.clone(), value);
+            let term = pool.apply_substitutions(term, &mut subs);
+            first_step(pool, &bindigns[..bindigns.len() - 1], &term, acc)
+        }
+    }
+
+    /// The second simplification step, that expands function applications over non-constant boolean
+    /// arguments into "ite" terms.
+    fn second_step(pool: &mut TermPool, term: &ByRefRc<Term>, processed: usize) -> ByRefRc<Term> {
+        if let Term::App(f, args) = term.as_ref() {
+            for i in processed..args.len() {
+                if args[i].sort() == Term::BOOL_SORT
+                    && !args[i].is_bool_false()
+                    && !args[i].is_bool_true()
+                {
+                    let mut ite_args = Vec::with_capacity(3);
+                    ite_args.push(args[i].clone());
+                    for bool_constant in [pool.bool_true(), pool.bool_false()] {
+                        let mut new_args = args.clone();
+                        new_args[i] = bool_constant;
+                        let inner_term = pool.add_term(Term::App(f.clone(), new_args));
+                        let inner_term = second_step(pool, &inner_term, i + 1);
+                        ite_args.push(inner_term)
+                    }
+                    return pool.add_term(Term::Op(Operator::Ite, ite_args));
+                }
+            }
+            term.clone()
+        } else {
+            unreachable!()
+        }
+    }
+
+    match term.as_ref() {
+        Term::App(f, args) => {
+            let args = args.iter().map(|a| apply_bfun_elim(pool, a)).collect();
+            let new_term = pool.add_term(Term::App(f.clone(), args));
+            second_step(pool, &new_term, 0)
+        }
+        Term::Op(op, args) => {
+            let args = args.iter().map(|a| apply_bfun_elim(pool, a)).collect();
+            pool.add_term(Term::Op(*op, args))
+        }
+        Term::Quant(q, bindings, inner) => {
+            let op = match q {
+                Quantifier::Forall => Operator::And,
+                Quantifier::Exists => Operator::Or,
+            };
+            let mut args = Vec::with_capacity(2usize.pow(bindings.len() as u32));
+            first_step(pool, bindings, inner, &mut args);
+
+            let op_term = if args.len() == 1 {
+                args.pop().unwrap()
+            } else {
+                pool.add_term(Term::Op(op, args))
+            };
+            let op_term = apply_bfun_elim(pool, &op_term);
+
+            let new_bindings: Vec<_> = bindings
+                .iter()
+                .cloned()
+                .filter(|(_, sort)| sort.as_ref() != Term::BOOL_SORT)
+                .collect();
+            if new_bindings.is_empty() {
+                op_term
+            } else {
+                pool.add_term(Term::Quant(*q, new_bindings, op_term))
+            }
+        }
+        Term::Choice(var, inner) => {
+            let inner = apply_bfun_elim(pool, inner);
+            pool.add_term(Term::Choice(var.clone(), inner))
+        }
+        Term::Let(bindings, inner) => {
+            let inner = apply_bfun_elim(pool, inner);
+            pool.add_term(Term::Let(bindings.clone(), inner))
+        }
+        _ => term.clone(),
+    }
+}
+
+pub fn bfun_elim(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> Option<()> {
+    rassert!(premises.len() == 1 && conclusion.len() == 1);
+    let psi = get_single_term_from_command(premises[0])?;
+    to_option(conclusion[0] == apply_bfun_elim(pool, psi))
 }
 
 #[cfg(test)]

@@ -227,6 +227,7 @@ impl ProofChecker {
             "minus_simplify" => simplification::minus_simplify,
             "nary_elim" => clausification::nary_elim,
             "ac_simp" => simplification::ac_simp,
+            "bfun_elim" => clausification::bfun_elim,
             "bind" => subproof::bind,
             "qnt_cnf" => quantifier::qnt_cnf,
             "subproof" => subproof::subproof,
