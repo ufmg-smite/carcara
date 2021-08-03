@@ -160,7 +160,7 @@ pub fn nary_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
                 // iterator over the pairs of adjacent terms
                 args.windows(2).map(Some).eq(chain)
             }
-            assoc_case => check_assoc(*op, &args, result, assoc_case == Case::RightAssoc),
+            assoc_case => check_assoc(*op, args, result, assoc_case == Case::RightAssoc),
         })
     } else {
         None

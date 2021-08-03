@@ -198,7 +198,7 @@ pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
         // For every term in "us", we find the next "ite" subterm that matches the expected form.
         // This is because some "ite" subterms may be skipped, and may not have a corresponding "u"
         // term
-        while let Some(s_i) = ite_subterms.next() {
+        for s_i in &mut ite_subterms {
             // Since the (= r_1 s_1) and (= r_2 s_2) equalities may be flipped, we have to check
             // all four possibilities: neither are flipped, either one is flipped, or both are
             // flipped

@@ -115,9 +115,9 @@ impl ProofChecker {
         };
         let premises = premises.iter().map(|&i| &all_commands[i]).collect();
         let rule_args = RuleArgs {
-            conclusion: &clause,
+            conclusion: clause,
             premises,
-            args: &args,
+            args,
             pool: &mut self.pool,
             context: &mut self.context,
             subproof_commands,
