@@ -559,4 +559,71 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn bfun_elim() {
+        test_cases! {
+            definitions = "
+                (declare-fun f (Bool) Bool)
+                (declare-fun g (Bool Bool Bool) Bool)
+                (declare-fun h (Int Bool Real) Bool)
+                (declare-fun a () Bool)
+                (declare-fun b () Bool)
+                (declare-fun c () Bool)
+            ",
+            "First step" {
+                "(assume h1 (forall ((x Bool)) (f x)))
+                (step t1 (cl (and (f false) (f true))) :rule bfun_elim :premises (h1))": true,
+
+                "(assume h1 (exists ((x Int) (y Bool)) (f y)))
+                (step t1 (cl (exists ((x Int)) (or (f false) (f true))))
+                    :rule bfun_elim :premises (h1))": true,
+
+                "(assume h1 (exists ((x Bool) (y Bool) (z Bool)) (g x y z)))
+                (step t1 (cl (or
+                    (g false false false)
+                    (g true false false)
+                    (g false true false)
+                    (g true true false)
+                    (g false false true)
+                    (g true false true)
+                    (g false true true)
+                    (g true true true)
+                )) :rule bfun_elim :premises (h1))": true,
+            }
+            "Second step" {
+                "(assume h1 (f a))
+                (step t1 (cl (ite a (f true) (f false))) :rule bfun_elim :premises (h1))": true,
+
+                "(assume h1 (h 1 a 0.0))
+                (step t1 (cl (ite a (h 1 true 0.0) (h 1 false 0.0)))
+                    :rule bfun_elim :premises (h1))": true,
+
+                "(assume h1 (g a b c))
+                (step t1 (cl (ite a
+                    (ite b
+                        (ite c (g true true true) (g true true false))
+                        (ite c (g true false true) (g true false false)))
+                    (ite b
+                        (ite c (g false true true) (g false true false))
+                        (ite c (g false false true) (g false false false)))
+                )) :rule bfun_elim :premises (h1))": true,
+            }
+            "Both steps" {
+                "(assume h1 (exists ((x Bool)) (and x (f a))))
+                (step t1 (cl (or
+                    (and false (ite a (f true) (f false)))
+                    (and true (ite a (f true) (f false)))
+                )) :rule bfun_elim :premises (h1))": true,
+
+                "(assume h1 (forall ((x Bool) (y Bool)) (g x a y)))
+                (step t1 (cl (and
+                    (ite a (g false true false) (g false false false))
+                    (ite a (g true true false) (g true false false))
+                    (ite a (g false true true) (g false false true))
+                    (ite a (g true true true) (g true false true))
+                )) :rule bfun_elim :premises (h1))": true,
+            }
+        }
+    }
 }
