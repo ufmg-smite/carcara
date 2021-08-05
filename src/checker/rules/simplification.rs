@@ -374,6 +374,46 @@ pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     check(left, right).or_else(|| check(right, left))
 }
 
+pub fn comp_simplify(args: RuleArgs) -> Option<()> {
+    generic_simplify_rule(args.conclusion, args.pool, |term, pool| {
+        simplify!(term {
+            (< t_1 t_2): (t_1, t_2) => {
+                if let (Some(t_1), Some(t_2)) =
+                    (t_1.try_as_signed_ratio(), t_2.try_as_signed_ratio())
+                {
+                    // t_1 < t_2 => phi, where t_1 and t_2 are numerical constants
+                    pool.bool_constant(t_1 < t_2)
+                } else if t_1 == t_2 {
+                    // t < t => false
+                    pool.bool_false()
+                } else {
+                    // t_1 < t_2 => ¬(t_2 <= t_1)
+                    build_term!(pool, (not (<= {t_2.clone()} {t_1.clone()})))
+                }
+            },
+            (<= t_1 t_2): (t_1, t_2) => {
+                if let (Some(t_1), Some(t_2)) =
+                    (t_1.try_as_signed_ratio(), t_2.try_as_signed_ratio())
+                {
+                    // t_1 <= t_2 => phi, where t_1 and t_2 are numerical constants
+                    pool.bool_constant(t_1 <= t_2)
+                } else if t_1 == t_2 {
+                    // t <= t => true
+                    pool.bool_true()
+                } else {
+                    return None
+                }
+            },
+
+            // t_1 >= t_2 => t_2 <= t_1
+            (>= t_1 t_2): (t_1, t_2) => build_term!(pool, (<= {t_2.clone()} {t_1.clone()})),
+
+            // t_1 > t_2 => ¬(t_1 <= t_2)
+            (> t_1 t_2): (t_1, t_2) => build_term!(pool, (not (<= {t_1.clone()} {t_2.clone()}))),
+        })
+    })
+}
+
 pub fn ac_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> {
     fn flatten_operation(term: &ByRefRc<Term>, pool: &mut TermPool) -> ByRefRc<Term> {
         let term = match term.as_ref() {
@@ -878,6 +918,51 @@ mod tests {
                 "(step t1 (cl (= (- 5.0) (- 5.0))) :rule minus_simplify)": true,
                 "(step t1 (cl (= (- 0) 0)) :rule minus_simplify)": true,
                 "(step t1 (cl (= 0.0 (- 0.0))) :rule minus_simplify)": true,
+            }
+        }
+    }
+
+    #[test]
+    fn comp_simplify() {
+        test_cases! {
+            definitions = "
+                (declare-fun a () Int)
+                (declare-fun b () Int)
+            ",
+            "Transformation #1" {
+                "(step t1 (cl (= (< 1 2) true)) :rule comp_simplify)": true,
+                "(step t1 (cl (= (< 1.0 1.0) false)) :rule comp_simplify)": true,
+                "(step t1 (cl (= (< 0.0 (- 1.0)) true)) :rule comp_simplify)": false,
+            }
+            "Transformation #2" {
+                "(step t1 (cl (= (< a a) false)) :rule comp_simplify)": true,
+                "(step t1 (cl (= (< (+ 1 2) (+ 1 2)) true)) :rule comp_simplify)": false,
+            }
+            "Transformation #3" {
+                "(step t1 (cl (= (<= 1 2) true)) :rule comp_simplify)": true,
+                "(step t1 (cl (= (<= 1.0 1.0) true)) :rule comp_simplify)": true,
+                "(step t1 (cl (= (<= 0.0 (- 1.0)) true)) :rule comp_simplify)": false,
+            }
+            "Transformation #4" {
+                "(step t1 (cl (= (<= a a) true)) :rule comp_simplify)": true,
+                "(step t1 (cl (= (<= (+ 1 2) (+ 1 2)) false)) :rule comp_simplify)": false,
+            }
+            "Transformation #5" {
+                "(step t1 (cl (= (>= a b) (<= b a))) :rule comp_simplify)": true,
+                "(step t1 (cl (= (>= 1 a) (<= 1 a))) :rule comp_simplify)": false,
+            }
+            "Transformation #6" {
+                "(step t1 (cl (= (< a b) (not (<= b a)))) :rule comp_simplify)": true,
+                "(step t1 (cl (= (< a b) (> b a))) :rule comp_simplify)": false,
+            }
+            "Transformation #7" {
+                "(step t1 (cl (= (> a b) (not (<= a b)))) :rule comp_simplify)": true,
+                "(step t1 (cl (= (> a b) (not (>= b a)))) :rule comp_simplify)": false,
+                "(step t1 (cl (= (> a b) (< b a))) :rule comp_simplify)": false,
+            }
+            "Multiple transformations" {
+                "(step t1 (cl (= (>= a a) true)) :rule comp_simplify)": true,
+                "(step t1 (cl (= (>= 5.0 8.0) false)) :rule comp_simplify)": true,
             }
         }
     }

@@ -119,6 +119,13 @@ impl TermPool {
         self.bool_false.clone()
     }
 
+    pub fn bool_constant(&self, value: bool) -> ByRefRc<Term> {
+        match value {
+            true => self.bool_true(),
+            false => self.bool_false(),
+        }
+    }
+
     fn add_term_to_map(terms_map: &mut HashMap<Term, ByRefRc<Term>>, term: Term) -> ByRefRc<Term> {
         use std::collections::hash_map::Entry;
 

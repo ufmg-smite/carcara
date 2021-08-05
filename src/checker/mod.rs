@@ -225,6 +225,7 @@ impl ProofChecker {
             "bool_simplify" => simplification::bool_simplify,
             "prod_simplify" => simplification::prod_simplify,
             "minus_simplify" => simplification::minus_simplify,
+            "comp_simplify" => simplification::comp_simplify,
             "nary_elim" => clausification::nary_elim,
             "ac_simp" => simplification::ac_simp,
             "bfun_elim" => clausification::bfun_elim,
