@@ -225,6 +225,7 @@ impl ProofChecker {
             "implies_simplify" => simplification::implies_simplify,
             "equiv_simplify" => simplification::equiv_simplify,
             "bool_simplify" => simplification::bool_simplify,
+            "qnt_simplify" => simplification::qnt_simplify,
             "prod_simplify" => simplification::prod_simplify,
             "minus_simplify" => simplification::minus_simplify,
             "comp_simplify" => simplification::comp_simplify,

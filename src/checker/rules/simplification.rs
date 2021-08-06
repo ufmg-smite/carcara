@@ -270,6 +270,14 @@ pub fn bool_simplify(args: RuleArgs) -> Option<()> {
     })
 }
 
+pub fn qnt_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    rassert!(conclusion.len() == 1);
+    let (left, right) = match_term!((= l r) = conclusion[0], RETURN_RCS)?;
+    let (q, _, inner) = left.unwrap_quant()?;
+    rassert!(q == Quantifier::Forall);
+    to_option((inner.is_bool_false() || inner.is_bool_true()) && right == inner)
+}
+
 pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     /// Checks if the u term is valid and extracts from it the leading constant and the remaining
     /// arguments.
@@ -820,6 +828,26 @@ mod tests {
                 )) :rule bool_simplify)": false,
             }
             // TODO: Add tests that combine more than one transformation
+        }
+    }
+
+    #[test]
+    fn qnt_simplify() {
+        test_cases! {
+            definitions = "",
+            "Simple working examples" {
+                "(step t1 (cl (= (forall ((x Int)) false) false)) :rule qnt_simplify)": true,
+                "(step t1 (cl (= (forall ((x Int) (p Bool)) true) true)) :rule qnt_simplify)": true,
+            }
+            "Quantifier is not \"forall\"" {
+                "(step t1 (cl (= (exists ((x Int)) false) false)) :rule qnt_simplify)": false,
+            }
+            "Inner term is not boolean constant" {
+                "(step t1 (cl (= (forall ((x Int)) (not false)) true)) :rule qnt_simplify)": false,
+            }
+            "Left and right terms don't match" {
+                "(step t1 (cl (= (forall ((x Int)) false) true)) :rule qnt_simplify)": false,
+            }
         }
     }
 
