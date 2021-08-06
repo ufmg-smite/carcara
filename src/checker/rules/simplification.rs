@@ -551,16 +551,19 @@ mod tests {
                 "(step t1 (cl (= (and p q (not q) r) false)) :rule and_simplify)": true,
                 "(step t1 (cl (= (and p q (not q) r) (and false))) :rule and_simplify)": true,
                 "(step t1 (cl (= (and p (not (not q)) (not q) r) false)) :rule and_simplify)": true,
-                "(step t1 (cl (= (and p (not (not (not p))) (not p)) false)) :rule and_simplify)": true,
+                "(step t1 (cl (= (and p (not (not (not p))) (not p)) false))
+                    :rule and_simplify)": true,
 
                 "(step t1 (cl (= (and p (not (not p)) (not q) r) false)) :rule and_simplify)": false,
                 "(step t1 (cl (= (and q (not r)) false)) :rule and_simplify)": false,
                 "(step t1 (cl (= (and r (not r)) true)) :rule and_simplify)": false,
             }
             "Multiple transformations" {
-                "(step t1 (cl (= (and p p true q q true q r) (and p q r))) :rule and_simplify)": true,
+                "(step t1 (cl (= (and p p true q q true q r) (and p q r)))
+                    :rule and_simplify)": true,
                 "(step t1 (cl (= (and p p (not p) q q true q r) false)) :rule and_simplify)": true,
-                "(step t1 (cl (= (and p false p (not p) q true q r) false)) :rule and_simplify)": true,
+                "(step t1 (cl (= (and p false p (not p) q true q r) false))
+                    :rule and_simplify)": true,
             }
         }
     }
