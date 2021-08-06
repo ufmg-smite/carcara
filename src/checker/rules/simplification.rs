@@ -152,10 +152,10 @@ pub fn not_simplify(args: RuleArgs) -> Option<()> {
             (not (not phi)): phi => phi.clone(),
 
             // ¬false => true
-            (not lit): lit if lit.is_bool_false() => pool.bool_true(),
+            (not false): _ => pool.bool_true(),
 
             // ¬true => false
-            (not lit): lit if lit.is_bool_true() => pool.bool_false(),
+            (not true): _ => pool.bool_false(),
         })
     })
 }
@@ -169,16 +169,16 @@ pub fn implies_simplify(args: RuleArgs) -> Option<()> {
             },
 
             // false -> phi => true
-            (=> f phi): (f, _) if f.is_bool_false() => pool.bool_true(),
+            (=> false phi): _ => pool.bool_true(),
 
             // phi -> true => true
-            (=> phi t): (_, t) if t.is_bool_true() => pool.bool_true(),
+            (=> phi true): _ => pool.bool_true(),
 
             // true -> phi => phi
-            (=> t phi): (t, phi) if t.is_bool_true() => phi.clone(),
+            (=> true phi): (_, phi) => phi.clone(),
 
             // phi -> false => ¬phi
-            (=> phi f): (phi, f) if f.is_bool_false() => build_term!(pool, (not {phi.clone()})),
+            (=> phi false): (phi, _) => build_term!(pool, (not {phi.clone()})),
 
             // phi -> phi => true
             (=> phi phi): (phi_1, phi_2) if phi_1 == phi_2 => pool.bool_true(),
@@ -215,16 +215,16 @@ pub fn equiv_simplify(args: RuleArgs) -> Option<()> {
             (= (not phi_1) phi_2): (phi_1, phi_2) if phi_1 == phi_2 => pool.bool_false(),
 
             // true = phi => phi
-            (= t phi_1): (t, phi_1) if t.is_bool_true() => phi_1.clone(),
+            (= true phi_1): (_, phi_1) => phi_1.clone(),
 
             // phi = true => phi
-            (= phi_1 t): (phi_1, t) if t.is_bool_true() => phi_1.clone(),
+            (= phi_1 true): (phi_1, _) => phi_1.clone(),
 
             // false = phi => ¬phi
-            (= f phi_1): (f, phi_1) if f.is_bool_false() => build_term!(pool, (not {phi_1.clone()})),
+            (= false phi_1): (_, phi_1) => build_term!(pool, (not {phi_1.clone()})),
 
             // phi = false => ¬phi
-            (= phi_1 f): (phi_1, f) if f.is_bool_false() => build_term!(pool, (not {phi_1.clone()})),
+            (= phi_1 false): (phi_1, _) => build_term!(pool, (not {phi_1.clone()})),
         })
     })
 }

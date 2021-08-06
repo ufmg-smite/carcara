@@ -5,6 +5,12 @@
 /// optional flag "RETURN_RCS" can be passed, in which case the leaf nodes will instead be
 /// `&ByRefRc<Term>`s.
 macro_rules! match_term {
+    (true = $var:expr $(, $flag:ident)?) => {
+        if $var.is_bool_true() { Some(()) } else { None }
+    };
+    (false = $var:expr $(, $flag:ident)?) => {
+        if $var.is_bool_false() { Some(()) } else { None }
+    };
     ($bind:ident = $var:expr) => { Some($var.as_ref()) };
     ($bind:ident = $var:expr, RETURN_RCS) => { Some($var) };
     (($op:tt $($args:tt)+) = $var:expr $(, $flag:ident)?) => {{
