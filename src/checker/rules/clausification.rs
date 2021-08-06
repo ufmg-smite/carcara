@@ -76,11 +76,23 @@ pub fn not_and(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
 
 pub fn implies(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1 && conclusion.len() == 2);
-
     let premise_term = get_single_term_from_command(premises[0])?;
     let (phi_1, phi_2) = match_term!((=> phi_1 phi_2) = premise_term)?;
-
     to_option(phi_1 == conclusion[0].remove_negation()? && phi_2 == conclusion[1].as_ref())
+}
+
+pub fn not_implies1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
+    rassert!(premises.len() == 1 && conclusion.len() == 1);
+    let premise_term = get_single_term_from_command(premises[0])?;
+    let (phi_1, _) = match_term!((not (=> phi_1 phi_2)) = premise_term)?;
+    to_option(phi_1 == conclusion[0].as_ref())
+}
+
+pub fn not_implies2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
+    rassert!(premises.len() == 1 && conclusion.len() == 1);
+    let premise_term = get_single_term_from_command(premises[0])?;
+    let (_, phi_2) = match_term!((not (=> phi_1 phi_2)) = premise_term)?;
+    to_option(phi_2 == conclusion[0].remove_negation()?)
 }
 
 pub fn nary_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
@@ -518,6 +530,68 @@ mod tests {
 
                 "(assume h1 (=> (not a) b))
                 (step t2 (cl a b) :rule implies :premises (h1))": false,
+            }
+        }
+    }
+
+    #[test]
+    fn not_implies1() {
+        test_cases! {
+            definitions = "
+                (declare-fun a () Bool)
+                (declare-fun b () Bool)
+            ",
+            "Simple working examples" {
+                "(assume h1 (not (=> a b)))
+                (step t2 (cl a) :rule not_implies1 :premises (h1))": true,
+
+                "(assume h1 (not (=> (not a) b)))
+                (step t2 (cl (not a)) :rule not_implies1 :premises (h1))": true,
+            }
+            "Premise term is of the wrong form" {
+                "(assume h1 (=> a b))
+                (step t2 (cl a) :rule not_implies1 :premises (h1))": false,
+
+                "(assume h1 (not (= a b)))
+                (step t2 (cl a) :rule not_implies1 :premises (h1))": false,
+            }
+            "Conclusion clause is of the wrong form" {
+                "(assume h1 (not (=> a b)))
+                (step t2 (cl (not a)) :rule not_implies1 :premises (h1))": false,
+
+                "(assume h1 (not (=> a b)))
+                (step t2 (cl b) :rule not_implies1 :premises (h1))": false,
+            }
+        }
+    }
+
+    #[test]
+    fn not_implies2() {
+        test_cases! {
+            definitions = "
+                (declare-fun a () Bool)
+                (declare-fun b () Bool)
+            ",
+            "Simple working examples" {
+                "(assume h1 (not (=> a b)))
+                (step t2 (cl (not b)) :rule not_implies2 :premises (h1))": true,
+
+                "(assume h1 (not (=> a (not b))))
+                (step t2 (cl (not (not b))) :rule not_implies2 :premises (h1))": true,
+            }
+            "Premise term is of the wrong form" {
+                "(assume h1 (=> a b))
+                (step t2 (cl (not b)) :rule not_implies2 :premises (h1))": false,
+
+                "(assume h1 (not (= a b)))
+                (step t2 (cl (not b)) :rule not_implies2 :premises (h1))": false,
+            }
+            "Conclusion clause is of the wrong form" {
+                "(assume h1 (not (=> a b)))
+                (step t2 (cl b) :rule not_implies2 :premises (h1))": false,
+
+                "(assume h1 (not (=> a b)))
+                (step t2 (cl (not a)) :rule not_implies2 :premises (h1))": false,
             }
         }
     }
