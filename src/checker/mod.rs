@@ -220,6 +220,7 @@ impl ProofChecker {
             "ite_intro" => tautology::ite_intro,
             "contraction" => resolution::contraction,
             "connective_def" => tautology::connective_def,
+            "ite_simplify" => simplification::ite_simplify,
             "eq_simplify" => simplification::eq_simplify,
             "and_simplify" => simplification::and_simplify,
             "or_simplify" => simplification::or_simplify,

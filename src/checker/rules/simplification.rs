@@ -39,22 +39,79 @@ fn generic_simplify_rule(
 ) -> Option<()> {
     rassert!(conclusion.len() == 1);
 
-    let (current, goal) = match_term!((= phi psi) = conclusion[0].as_ref(), RETURN_RCS)?;
-    let mut current = current.clone();
-    let mut seen = HashSet::new();
-    loop {
-        if !seen.insert(current.clone()) {
-            panic!("Cycle detected in simplification rule!")
-        }
-        if let Some(next) = simplify_function(&current, pool) {
+    let mut simplify_until_fixed_point = |term: &ByRefRc<Term>, goal: &ByRefRc<Term>| {
+        let mut current = term.clone();
+        let mut seen = HashSet::new();
+        loop {
+            if !seen.insert(current.clone()) {
+                panic!("Cycle detected in simplification rule!")
+            }
+            let next = simplify_function(&current, pool)?;
             if next == *goal {
                 return Some(());
             }
             current = next;
-        } else {
-            return None;
         }
-    }
+    };
+
+    let (left, right) = match_term!((= phi psi) = conclusion[0].as_ref(), RETURN_RCS)?;
+    simplify_until_fixed_point(left, right).or_else(|| simplify_until_fixed_point(right, left))
+}
+
+pub fn ite_simplify(args: RuleArgs) -> Option<()> {
+    generic_simplify_rule(args.conclusion, args.pool, |term, pool| {
+        simplify!(term {
+            // ite true t_1 t_2 => t_1
+            (ite true t_1 t_2): (_, t_1, _) => t_1.clone(),
+
+            // ite false t_1 t_2 => t_2
+            (ite false t_1 t_2): (_, _, t_2) => t_2.clone(),
+
+            // ite phi t t => t
+            (ite phi t t): (_, t_1, t_2) if t_1 == t_2 => t_1.clone(),
+
+            // ite ¬phi t_1 t_2 => ite phi t_2 t_1
+            (ite (not phi) t_1 t_2): (phi, t_1, t_2) => {
+                build_term!(pool, (ite {phi.clone()} {t_2.clone()} {t_1.clone()}))
+            },
+
+            // ite phi (ite phi t_1 t_2) t_3 => ite phi t_1 t_3
+            (ite phi (ite phi t_1 t_2) t_3): (phi_1, (phi_2, t_1, _), t_3) if phi_1 == phi_2 => {
+                build_term!(pool, (ite {phi_1.clone()} {t_1.clone()} {t_3.clone()}))
+            },
+
+            // ite phi t_1 (ite phi t_2 t_3) => ite phi t_1 t_3
+            (ite phi t_1 (ite phi t_2 t_3)): (phi_1, t_1, (phi_2, _, t_3)) if phi_1 == phi_2 => {
+                build_term!(pool, (ite {phi_1.clone()} {t_1.clone()} {t_3.clone()}))
+            },
+
+            // ite psi true false => psi
+            (ite psi true false): (psi, _, _) => psi.clone(),
+
+            // ite psi false true => ¬psi
+            (ite psi false true): (psi, _, _) => build_term!(pool, (not {psi.clone()})),
+
+            // ite psi true phi => psi v phi
+            (ite psi true phi): (psi, _, phi) => {
+                build_term!(pool, (or {psi.clone()} {phi.clone()}))
+            },
+
+            // ite psi phi false => psi ^ phi
+            (ite psi phi false): (psi, phi, _) => {
+                build_term!(pool, (and {psi.clone()} {phi.clone()}))
+            },
+
+            // ite psi false phi => ¬psi ^ phi
+            (ite psi false phi): (psi, _, phi) => {
+                build_term!(pool, (and (not {psi.clone()}) {phi.clone()}))
+            },
+
+            // ite psi phi true => ¬psi v phi
+            (ite psi phi true): (psi, phi, _) => {
+                build_term!(pool, (or (not {psi.clone()}) {phi.clone()}))
+            },
+        })
+    })
 }
 
 pub fn eq_simplify(args: RuleArgs) -> Option<()> {
@@ -475,6 +532,60 @@ pub fn ac_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn ite_simplify() {
+        test_cases! {
+            definitions = "
+                (declare-fun a () Bool)
+                (declare-fun b () Bool)
+                (declare-fun c () Bool)
+                (declare-fun d () Bool)
+            ",
+            "Transformation #1" {
+                "(step t1 (cl (= (ite true a b) a)) :rule ite_simplify)": true,
+            }
+            "Transformation #2" {
+                "(step t1 (cl (= (ite false a b) b)) :rule ite_simplify)": true,
+            }
+            "Transformation #3" {
+                "(step t1 (cl (= (ite a b b) b)) :rule ite_simplify)": true,
+            }
+            "Transformation #4" {
+                "(step t1 (cl (= (ite (not a) b c) (ite a c b))) :rule ite_simplify)": true,
+            }
+            "Transformation #5" {
+                "(step t1 (cl (= (ite a (ite a b c) d) (ite a b d))) :rule ite_simplify)": true,
+            }
+            "Transformation #6" {
+                "(step t1 (cl (= (ite a b (ite a c d)) (ite a b d))) :rule ite_simplify)": true,
+            }
+            "Transformation #7" {
+                "(step t1 (cl (= (ite a true false) a)) :rule ite_simplify)": true,
+            }
+            "Transformation #8" {
+                "(step t1 (cl (= (ite a false true) (not a))) :rule ite_simplify)": true,
+            }
+            "Transformation #9" {
+                "(step t1 (cl (= (ite a true b) (or a b))) :rule ite_simplify)": true,
+            }
+            "Transformation #10" {
+                "(step t1 (cl (= (ite a b false) (and a b))) :rule ite_simplify)": true,
+            }
+            "Transformation #11" {
+                "(step t1 (cl (= (ite a false b) (and (not a) b))) :rule ite_simplify)": true,
+            }
+            "Transformation #12" {
+                "(step t1 (cl (= (ite a b true) (or (not a) b))) :rule ite_simplify)": true,
+            }
+            "Multiple transformations" {
+                "(step t1 (cl (= (ite (not a) false true) a)) :rule ite_simplify)": true,
+                "(step t1 (cl (= (ite a (ite a d c) d) d)) :rule ite_simplify)": true,
+                "(step t1 (cl (= (ite a (ite true b c) (ite true b c)) b))
+                    :rule ite_simplify)": true,
+            }
+        }
+    }
+
     #[test]
     fn eq_simplify() {
         test_cases! {
