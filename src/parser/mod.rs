@@ -507,16 +507,22 @@ impl<R: BufRead> Parser<R> {
             let (a, sort) = self.parse_sorted_var()?;
             self.insert_sorted_var((a.clone(), sort.clone()));
 
-            let b = if let Token::Symbol(_) = &self.current_token {
-                let var = self.expect_symbol()?;
-                self.insert_sorted_var((var.clone(), sort.clone()));
-                let iden = Identifier::Simple(var);
-                Term::Terminal(Terminal::Var(iden, sort.clone()))
-            } else {
-                let term = self.parse_term()?;
-                SortError::assert_eq(term.sort(), sort.as_ref())
-                    .map_err(|err| self.err(err.into()))?;
-                term
+            let b = match &self.current_token {
+                // If we encounter a symbol as the value of the assignment, we must check if there
+                // are any function definitions with that symbol. If there are, we consider the
+                // value a term insetad of a new variable
+                Token::Symbol(s) if !self.state.function_defs.contains_key(s) => {
+                    let var = self.expect_symbol()?;
+                    self.insert_sorted_var((var.clone(), sort.clone()));
+                    let iden = Identifier::Simple(var);
+                    Term::Terminal(Terminal::Var(iden, sort.clone()))
+                }
+                _ => {
+                    let term = self.parse_term()?;
+                    SortError::assert_eq(term.sort(), sort.as_ref())
+                        .map_err(|err| self.err(err.into()))?;
+                    term
+                }
             };
             let b = self.add_term(b);
 
@@ -719,18 +725,29 @@ impl<R: BufRead> Parser<R> {
 
     fn parse_annotated_term(&mut self) -> ParserResult<Term> {
         let inner = self.parse_term()?;
+        let inner = self.add_term(inner);
         self.parse_sequence(
             |p| {
-                // Simply consume and discard the attributes and their values
-                p.expect_keyword()?;
-                if let Token::Symbol(_) = p.current_token {
+                let attribute = p.expect_keyword()?;
+                if attribute.as_str() == "named" {
+                    // If the term has a "named" attribute, we introduce a new nullary function
+                    // definition that maps the name to the term
+                    let name = p.expect_symbol()?;
+                    p.state.function_defs.insert(
+                        name,
+                        FunctionDef {
+                            params: Vec::new(),
+                            body: inner.clone(),
+                        },
+                    );
+                } else if let Token::Symbol(_) = p.current_token {
                     p.next_token()?;
                 }
                 Ok(())
             },
             true,
         )?;
-        Ok(inner)
+        Ok(inner.as_ref().clone())
     }
 
     fn parse_application(&mut self) -> ParserResult<Term> {
