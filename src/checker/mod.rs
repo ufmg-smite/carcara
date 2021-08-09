@@ -231,6 +231,7 @@ impl ProofChecker {
             "qnt_simplify" => simplification::qnt_simplify,
             "prod_simplify" => simplification::prod_simplify,
             "minus_simplify" => simplification::minus_simplify,
+            "sum_simplify" => simplification::sum_simplify,
             "comp_simplify" => simplification::comp_simplify,
             "nary_elim" => clausification::nary_elim,
             "ac_simp" => simplification::ac_simp,

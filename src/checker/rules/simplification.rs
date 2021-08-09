@@ -335,66 +335,85 @@ pub fn qnt_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     to_option((inner.is_bool_false() || inner.is_bool_true()) && right == inner)
 }
 
-pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+/// Used for both the "sum_simplify" and "prod_simplify" rules, depending on `rule_kind`.
+/// `rule_kind` has to be either `Operator::Add` or `Operator::Mult`.
+fn generic_sum_prod_simplify_rule(conclusion: &[ByRefRc<Term>], rule_kind: Operator) -> Option<()> {
     /// Checks if the u term is valid and extracts from it the leading constant and the remaining
     /// arguments.
-    fn unwrap_u_term(u: &ByRefRc<Term>) -> Option<(BigRational, &[ByRefRc<Term>])> {
-        Some(match match_term!((* ...) = u) {
-            Some([] | [_]) => unreachable!(),
+    fn unwrap_u_term<'a>(
+        u: &'a ByRefRc<Term>,
+        identity_value: &BigRational,
+        rule_kind: Operator,
+    ) -> Option<(BigRational, &'a [ByRefRc<Term>])> {
+        let args = match u.as_ref() {
+            Term::Op(op, args) if *op == rule_kind => args,
 
-            Some(args) => {
-                // We check if there are any constants in u (aside from the leading constant). If
-                // there are any, we know this u term is invalid, so we can return `None`
-                if args[1..].iter().any(|t| t.is_constant()) {
-                    return None;
-                }
-                match args[0].try_as_ratio() {
-                    // If the leading constant is 1, it should have been omitted
-                    Some(constant) if constant.is_one() => return None,
-                    Some(constant) => (constant, &args[1..]),
-                    None => (BigRational::one(), args),
-                }
+            // If u is not an application of the operator, we consider it a product/sum of a single
+            // term. That term might be a regular term or the leading constant, depending on if u
+            // is a constant or not
+            _ => {
+                return Some(match u.try_as_ratio() {
+                    Some(u) => (u, &[]),
+                    None => (identity_value.clone(), std::slice::from_ref(u)),
+                });
             }
+        };
 
-            // If u is not a product, we consider it a product of a single term. That term might be
-            // a regular term or the leading constant, depending on if u is a constant or not
-            None => match u.try_as_ratio() {
-                Some(u) => (u, &[]),
-                None => (BigRational::one(), std::slice::from_ref(u)),
-            },
-        })
+        // We check if there are any constants in u (aside from the leading constant). If
+        // there are any, we know this u term is invalid, so we can return `None`
+        if args[1..].iter().any(|t| t.is_constant()) {
+            return None;
+        }
+
+        match args[0].try_as_ratio() {
+            // If the leading constant is the identity value, it should have been omitted
+            Some(constant) if constant == *identity_value => None,
+            Some(constant) => Some((constant, &args[1..])),
+            None => Some((identity_value.clone(), args)),
+        }
     }
 
     rassert!(conclusion.len() == 1);
+
+    let identity_value = match rule_kind {
+        Operator::Add => BigRational::zero(),
+        Operator::Mult => BigRational::one(),
+        _ => unreachable!(),
+    };
 
     let (first, second) = match_term!((= first second) = conclusion[0].as_ref(), RETURN_RCS)?;
     let (ts, (u_constant, u_args)) = {
         // Since the ts and u terms may be in either order, we have to try to validate both options
         // to find out which term is which
         let try_order = |ts, u| {
-            let ts = match_term!((* ...) = ts)?;
-            Some((ts, unwrap_u_term(u)?))
+            let ts = match (ts as &ByRefRc<Term>).as_ref() {
+                Term::Op(op, args) if *op == rule_kind => args,
+                _ => return None,
+            };
+            Some((ts.as_slice(), unwrap_u_term(u, &identity_value, rule_kind)?))
         };
         try_order(first, second).or_else(|| try_order(second, first))?
     };
 
     let mut result = Vec::with_capacity(ts.len());
-    let mut constant_total = BigRational::one();
+    let mut constant_total = identity_value;
 
-    // First, we go through the t_i terms, multiplying all the constants we find together, and push
-    // the non-constant terms to the `result` vector
+    // First, we go through the t_i terms, adding/multiplying all the constants we find together,
+    // and push the non-constant terms to the `result` vector
     for t in ts {
-        match t.as_ref() {
-            Term::Terminal(Terminal::Real(r)) => constant_total *= r,
-            Term::Terminal(Terminal::Integer(i)) => constant_total *= i,
-            t => {
+        match (t.as_ref(), rule_kind) {
+            (Term::Terminal(Terminal::Real(r)), Operator::Add) => constant_total += r,
+            (Term::Terminal(Terminal::Real(r)), Operator::Mult) => constant_total *= r,
+            (Term::Terminal(Terminal::Integer(i)), Operator::Add) => constant_total += i,
+            (Term::Terminal(Terminal::Integer(i)), Operator::Mult) => constant_total *= i,
+            (t, _) => {
                 result.push(t);
                 continue; // Since `constant_total` didn't change, we can skip the check
             }
         }
-        // If we find a zero, we can leave the loop early. We also clear the `result` vector
-        // because we expect the u term to be just the zero constant
-        if constant_total == BigRational::zero() {
+        // If the rule kind is "prod_simplify" and we find a zero, we can leave the loop early. We
+        // also clear the `result` vector because we expect the u term to be just the zero constant
+        if rule_kind == Operator::Mult && constant_total == BigRational::zero() {
             result.clear();
             break;
         }
@@ -402,6 +421,10 @@ pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 
     // Finally, we verify that the constant and the remaining arguments are what we expect
     to_option(u_constant == constant_total && u_args.iter().map(ByRefRc::as_ref).eq(result))
+}
+
+pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    generic_sum_prod_simplify_rule(conclusion, Operator::Mult)
 }
 
 pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
@@ -437,6 +460,10 @@ pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 
     let (left, right) = match_term!((= l r) = conclusion[0], RETURN_RCS)?;
     check(left, right).or_else(|| check(right, left))
+}
+
+pub fn sum_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    generic_sum_prod_simplify_rule(conclusion, Operator::Add)
 }
 
 pub fn comp_simplify(args: RuleArgs) -> Option<()> {
@@ -1060,6 +1087,50 @@ mod tests {
                 "(step t1 (cl (= (- 5.0) (- 5.0))) :rule minus_simplify)": true,
                 "(step t1 (cl (= (- 0) 0)) :rule minus_simplify)": true,
                 "(step t1 (cl (= 0.0 (- 0.0))) :rule minus_simplify)": true,
+            }
+        }
+    }
+
+    #[test]
+    fn sum_simplify() {
+        test_cases! {
+            definitions = "
+                (declare-fun i () Int)
+                (declare-fun j () Int)
+                (declare-fun k () Int)
+                (declare-fun x () Real)
+                (declare-fun y () Real)
+                (declare-fun z () Real)
+            ",
+            "Transformation #1" {
+                "(step t1 (cl (= (+ 1 2 3 4) 10)) :rule sum_simplify)": true,
+                "(step t1 (cl (= 5.5 (+ 1.5 3.5 0.5))) :rule sum_simplify)": true,
+                "(step t1 (cl (= (+ 0 0 0) 0)) :rule sum_simplify)": true,
+
+                "(step t1 (cl (= (+ 1 2 4) 6)) :rule sum_simplify)": false,
+                "(step t1 (cl (= (+ 1.0 2.0 1.0) 2.0)) :rule sum_simplify)": false,
+            }
+            "Transformation #2" {
+                "(step t1 (cl (= (+ 10 i k j) (+ i 2 k 3 5 j))) :rule sum_simplify)": true,
+                "(step t1 (cl (= (+ i k 6 j) (+ 6 i k j))) :rule sum_simplify)": true,
+                "(step t1 (cl (= (+ 6.0 x y z z) (+ x y 1.0 2.0 z 3.0 z)))
+                    :rule sum_simplify)": true,
+                "(step t1 (cl (= (+ x y 2.0 z z) (+ 2.0 x y z z))) :rule sum_simplify)": true,
+
+                "(step t1 (cl (= (+ i 2 k 3 5 j) (+ 20 i k j))) :rule sum_simplify)": false,
+                "(step t1 (cl (= (+ i k 6 j) (+ i k 6 j))) :rule sum_simplify)": false,
+                "(step t1 (cl (= (+ x y 1.0 2.0 z 3.0 z) (+ 4.0 x y z z)))
+                    :rule sum_simplify)": false,
+                "(step t1 (cl (= (+ x y 1.0 2.0 z 3.0 z) (+ x y z z))) :rule sum_simplify)": false,
+            }
+            "Transformation #3" {
+                "(step t1 (cl (= (+ i k 0 j) (+ i k j))) :rule sum_simplify)": true,
+                "(step t1 (cl (= (+ i 0 0 k 0 j) (+ i k j))) :rule sum_simplify)": true,
+                "(step t1 (cl (= (+ x y z z) (+ x y 0.0 z z))) :rule sum_simplify)": true,
+                "(step t1 (cl (= (+ x y 0.0 0.0 z z) (+ x y z z))) :rule sum_simplify)": true,
+
+                "(step t1 (cl (= (+ i k 0 j) (+ 0 i k j))) :rule sum_simplify)": false,
+                "(step t1 (cl (= (+ x y 0.0 0.0 z z) (+ 0.0 x y z z))) :rule sum_simplify)": false,
             }
         }
     }
