@@ -519,6 +519,7 @@ fn test_step() {
     assert_deep_eq!(
         &proof.0[0],
         &ProofCommand::Step(ProofStep {
+            index: "t1".into(),
             clause: vec![ByRefRc::new(parse_term("(= (+ 2 3) (- 1 2))"))],
             rule: "rule-name".into(),
             premises: Vec::new(),
@@ -529,6 +530,7 @@ fn test_step() {
     assert_deep_eq!(
         &proof.0[1],
         &ProofCommand::Step(ProofStep {
+            index: "t2".into(),
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: vec![0],
@@ -539,6 +541,7 @@ fn test_step() {
     assert_deep_eq!(
         &proof.0[2],
         &ProofCommand::Step(ProofStep {
+            index: "t3".into(),
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: Vec::new(),
@@ -558,6 +561,7 @@ fn test_step() {
     assert_deep_eq!(
         &proof.0[3],
         &ProofCommand::Step(ProofStep {
+            index: "t4".into(),
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: Vec::new(),
@@ -577,6 +581,7 @@ fn test_step() {
     assert_deep_eq!(
         &proof.0[4],
         &ProofCommand::Step(ProofStep {
+            index: "t5".into(),
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: vec![0, 1, 2],

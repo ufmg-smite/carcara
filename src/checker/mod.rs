@@ -14,15 +14,18 @@ pub enum CheckerError {
 #[must_use]
 #[derive(Debug)]
 pub enum Correctness {
-    True,          // The proof/step is valid
-    False(String), // The proof/step is invalid, and checking failed on the given rule
+    // The proof/step is valid
+    True,
+
+    // The proof/step is invalid, and checking failed on the given step and rule
+    False(String, String),
 }
 
 impl Correctness {
     fn as_bool(&self) -> bool {
         match self {
             Correctness::True => true,
-            Correctness::False(_) => false,
+            Correctness::False(_, _) => false,
         }
     }
 }
@@ -100,6 +103,7 @@ impl ProofChecker {
     fn check_step<'a>(
         &mut self,
         ProofStep {
+            index,
             clause,
             rule: rule_name,
             premises,
@@ -124,7 +128,7 @@ impl ProofChecker {
         };
         Ok(match rule(rule_args) {
             Some(()) => Correctness::True,
-            None => Correctness::False(rule_name.clone()),
+            None => Correctness::False(index.clone(), rule_name.clone()),
         })
     }
 

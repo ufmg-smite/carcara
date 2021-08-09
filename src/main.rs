@@ -81,7 +81,7 @@ fn main() -> Result<(), Error> {
         let skip = matches.is_present("skip-unknown-rules");
         match check(problem, &proof, skip, false)? {
             Correctness::True => println!("true"),
-            Correctness::False(r) => println!("false ({})", r),
+            Correctness::False(s, r) => println!("false ({}, {})", s, r),
         }
     } else if let Some(matches) = matches.subcommand_matches("parse") {
         let problem = matches.value_of("PROBLEM_FILE").unwrap();

@@ -362,7 +362,13 @@ impl<R: BufRead> Parser<R> {
                         })
                         .collect::<Result<_, _>>()?;
 
-                    let step = ProofStep { clause, rule, premises, args };
+                    let step = ProofStep {
+                        index: index.clone(),
+                        clause,
+                        rule,
+                        premises,
+                        args,
+                    };
                     (index, ProofCommand::Step(step))
                 }
                 Token::ReservedWord(Reserved::DefineFun) => {

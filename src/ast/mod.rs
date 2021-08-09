@@ -274,6 +274,7 @@ pub enum ProofCommand {
 /// [:args <proof_args>]?)`.
 #[derive(Debug, PartialEq)]
 pub struct ProofStep {
+    pub index: String,
     pub clause: Vec<ByRefRc<Term>>,
     pub rule: String,
     pub premises: Vec<usize>,

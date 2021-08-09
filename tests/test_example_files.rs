@@ -9,9 +9,10 @@ fn test_file(problem_path: &Path, proof_path: &Path) {
     match check(problem_path, proof_path, true, false) {
         Ok(Correctness::True)
         | Err(Error::Parser(ParserError(ErrorKind::NotYetImplemented, _))) => (),
-        Ok(Correctness::False(rule)) => panic!(
-            "\ntest file \"{}\"\nfailed on rule \"{}\"\n",
+        Ok(Correctness::False(step, rule)) => panic!(
+            "\ntest file \"{}\"\nfailed on step {}, with rule \"{}\"\n",
             &problem_path.to_str().unwrap(),
+            step,
             rule,
         ),
         Err(e) => panic!(
