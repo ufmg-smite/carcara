@@ -34,7 +34,13 @@ fn test_examples_from_dir(dir_path: &str) {
     for entry in rd.filter(is_proof_file) {
         let entry = entry.unwrap();
         let proof_path = entry.path();
-        let problem_path = proof_path.with_extension("");
+        let problem_path = {
+            let mut path = proof_path.clone();
+            while path.extension().unwrap() != "smt_in" {
+                path.set_extension("");
+            }
+            path
+        };
         test_file(&problem_path, &proof_path);
     }
 }
