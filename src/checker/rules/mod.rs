@@ -54,7 +54,7 @@ macro_rules! rassert {
 #[cfg(test)]
 fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
     use crate::{
-        checker::{Correctness, ProofChecker},
+        checker::{Config, Correctness, ProofChecker},
         parser::parse_problem_proof,
     };
     use std::io::Cursor;
@@ -63,10 +63,15 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
         // This parses the definitions again for every case, which is not ideal
         let (parsed, pool) = parse_problem_proof(Cursor::new(definitions), Cursor::new(proof))
             .unwrap_or_else(|e| panic!("parser error during test \"{}\": {:?}", test_name, e));
-        let got = matches!(
-            ProofChecker::new(pool, false, true).check(&parsed),
-            Ok(Correctness::True),
+        let mut checker = ProofChecker::new(
+            pool,
+            Config {
+                skip_unknown_rules: false,
+                allow_test_rule: true,
+                collect_statistics: false,
+            },
         );
+        let got = matches!(checker.check(&parsed), Ok(Correctness::True));
         assert_eq!(
             *expected, got,
             "test case \"{}\" index {} failed",

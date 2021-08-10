@@ -51,7 +51,12 @@ pub fn check<P: AsRef<Path>>(
         BufReader::new(File::open(proof_path).unwrap()),
     )?;
 
-    checker::ProofChecker::new(pool, skip_unknown_rules, allow_test_rule)
+    let config = checker::Config {
+        skip_unknown_rules,
+        allow_test_rule,
+        collect_statistics: false,
+    };
+    checker::ProofChecker::new(pool, config)
         .check(&proof)
         .map_err(Error::Checker)
 }

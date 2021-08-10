@@ -3,6 +3,7 @@ mod rules;
 use crate::ast::*;
 use rules::{Rule, RuleArgs};
 use std::collections::{HashMap, HashSet};
+use std::time::{Duration, Instant};
 
 #[derive(Debug)]
 pub enum CheckerError {
@@ -30,6 +31,12 @@ impl Correctness {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct CheckerStatistics {
+    by_rule: HashMap<String, (usize, Duration)>,
+    by_step: Vec<(String, Duration)>,
+}
+
 type CheckerResult = Result<Correctness, CheckerError>;
 
 struct Context {
@@ -38,19 +45,26 @@ struct Context {
     bindings: HashSet<SortedVar>,
 }
 
+#[derive(Debug, Default)]
+pub struct Config {
+    pub skip_unknown_rules: bool,
+    pub allow_test_rule: bool,
+    pub collect_statistics: bool,
+}
+
 pub struct ProofChecker {
     pool: TermPool,
-    skip_unknown_rules: bool,
-    allow_test_rule: bool,
+    config: Config,
+    stats: CheckerStatistics,
     context: Vec<Context>,
 }
 
 impl ProofChecker {
-    pub fn new(pool: TermPool, skip_unknown_rules: bool, allow_test_rule: bool) -> Self {
+    pub fn new(pool: TermPool, config: Config) -> Self {
         ProofChecker {
             pool,
-            skip_unknown_rules,
-            allow_test_rule,
+            config,
+            stats: Default::default(),
             context: Vec::new(),
         }
     }
@@ -112,9 +126,10 @@ impl ProofChecker {
         all_commands: &'a [ProofCommand],
         subproof_commands: Option<&'a [ProofCommand]>,
     ) -> CheckerResult {
-        let rule = match Self::get_rule(rule_name, self.allow_test_rule) {
+        let time = Instant::now();
+        let rule = match Self::get_rule(rule_name, self.config.allow_test_rule) {
             Some(r) => r,
-            None if self.skip_unknown_rules => return Ok(Correctness::True),
+            None if self.config.skip_unknown_rules => return Ok(Correctness::True),
             None => return Err(CheckerError::UnknownRule(rule_name.to_string())),
         };
         let premises = premises.iter().map(|&i| &all_commands[i]).collect();
@@ -126,10 +141,22 @@ impl ProofChecker {
             context: &mut self.context,
             subproof_commands,
         };
-        Ok(match rule(rule_args) {
+        let result = match rule(rule_args) {
             Some(()) => Correctness::True,
             None => Correctness::False(index.clone(), rule_name.clone()),
-        })
+        };
+        if self.config.collect_statistics {
+            let elapsed = time.elapsed();
+            let rule_entry = self
+                .stats
+                .by_rule
+                .entry(rule_name.clone())
+                .or_insert((0, Duration::ZERO));
+            rule_entry.0 += 1;
+            rule_entry.1 += elapsed;
+            self.stats.by_step.push((index.clone(), elapsed));
+        }
+        Ok(result)
     }
 
     fn build_context(
