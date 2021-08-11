@@ -35,6 +35,7 @@ impl<K: Clone> Metrics<K> {
                 diff * diff
             })
             .sum();
+        let variance = variance / std::cmp::max(1, count - 1) as f64;
         let standard_deviation = Duration::from_secs_f64(variance.sqrt());
 
         let max = data.iter().max_by_key(|(_, x)| x).unwrap().clone();
