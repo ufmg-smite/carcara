@@ -7,8 +7,8 @@ use std::{
     io::{BufReader, Write},
 };
 use verit_proof_checker::{
-    check,
-    checker::{self, Correctness, ProofChecker},
+    benchmarking, check,
+    checker::{Correctness, ProofChecker},
     parser::{error::ParserResult, lexer, parse_problem_proof},
     Error,
 };
@@ -125,35 +125,20 @@ fn main() -> Result<(), Error> {
 }
 
 fn bench_subcommand(matches: &ArgMatches) -> Result<(), Error> {
-    let mut stats = checker::CheckerStatistics::default();
+    use benchmarking::compile_measurements::*;
 
     let files: Vec<_> = matches.values_of("files").unwrap().collect();
-    for chunk in files.chunks_exact(2) {
-        let (problem_path, proof_path) = (chunk[0], chunk[1]);
-        let (proof, pool) = parse_problem_proof(
-            BufReader::new(File::open(problem_path)?),
-            BufReader::new(File::open(proof_path)?),
-        )?;
-        let config = checker::Config {
-            skip_unknown_rules: false,
-            allow_test_rule: false,
-            collect_statistics: true,
-        };
+    let instances: Vec<_> = files
+        .chunks_exact(2)
+        .map(|chunk| (chunk[0], chunk[1]))
+        .collect();
+    // TODO: Add number of runs as command line argument
+    let results = benchmarking::run_benchmark(&instances, 100)?;
 
-        let previous_len = stats.by_step.len();
-        let mut checker = ProofChecker::new(pool, config);
-        checker.stats = stats;
-        let _ = checker.check(&proof)?; // Ignore checking result
-        stats = checker.stats;
+    println!("parsing: {:#?}", total_parsing_time(&results));
+    println!("checking: {:#?}", total_checking_time(&results));
+    println!("parsing + checking: {:#?}", total_time(&results));
 
-        // For every step entry added in the last iteration, prepend the step index with the proof
-        // filename. For example, "t42" would become "example.proof:t42"
-        for (step_index, _) in &mut stats.by_step[previous_len..] {
-            step_index.insert(0, ':');
-            step_index.insert_str(0, proof_path);
-        }
-    }
-    println!("{:#?}", stats);
     Ok(())
 }
 

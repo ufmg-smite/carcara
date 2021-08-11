@@ -4,6 +4,7 @@ extern crate num_traits;
 
 #[macro_use]
 pub mod ast;
+pub mod benchmarking;
 pub mod checker;
 pub mod parser;
 mod utils;
@@ -54,7 +55,7 @@ pub fn check<P: AsRef<Path>>(
     let config = checker::Config {
         skip_unknown_rules,
         allow_test_rule,
-        collect_statistics: false,
+        statistics: None,
     };
     checker::ProofChecker::new(pool, config)
         .check(&proof)

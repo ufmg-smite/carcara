@@ -68,7 +68,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
             Config {
                 skip_unknown_rules: false,
                 allow_test_rule: true,
-                collect_statistics: false,
+                statistics: None,
             },
         );
         let got = matches!(checker.check(&parsed), Ok(Correctness::True));

@@ -1,9 +1,10 @@
 mod rules;
 
 use crate::ast::*;
+use crate::benchmarking::StepMeasurement;
 use rules::{Rule, RuleArgs};
 use std::collections::{HashMap, HashSet};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 #[derive(Debug)]
 pub enum CheckerError {
@@ -31,12 +32,6 @@ impl Correctness {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct CheckerStatistics {
-    pub by_rule: HashMap<String, (usize, Duration)>,
-    pub by_step: Vec<(String, Duration)>,
-}
-
 type CheckerResult = Result<Correctness, CheckerError>;
 
 struct Context {
@@ -46,27 +41,21 @@ struct Context {
 }
 
 #[derive(Debug, Default)]
-pub struct Config {
+pub struct Config<'c> {
     pub skip_unknown_rules: bool,
     pub allow_test_rule: bool,
-    pub collect_statistics: bool,
+    pub statistics: Option<&'c mut Vec<StepMeasurement>>,
 }
 
-pub struct ProofChecker {
+pub struct ProofChecker<'c> {
     pool: TermPool,
-    config: Config,
-    pub stats: CheckerStatistics,
+    config: Config<'c>,
     context: Vec<Context>,
 }
 
-impl ProofChecker {
-    pub fn new(pool: TermPool, config: Config) -> Self {
-        ProofChecker {
-            pool,
-            config,
-            stats: Default::default(),
-            context: Vec::new(),
-        }
+impl<'c> ProofChecker<'c> {
+    pub fn new(pool: TermPool, config: Config<'c>) -> Self {
+        ProofChecker { pool, config, context: Vec::new() }
     }
 
     pub fn check(&mut self, proof: &Proof) -> CheckerResult {
@@ -145,16 +134,13 @@ impl ProofChecker {
             Some(()) => Correctness::True,
             None => Correctness::False(index.clone(), rule_name.clone()),
         };
-        if self.config.collect_statistics {
-            let elapsed = time.elapsed();
-            let rule_entry = self
-                .stats
-                .by_rule
-                .entry(rule_name.clone())
-                .or_insert((0, Duration::ZERO));
-            rule_entry.0 += 1;
-            rule_entry.1 += elapsed;
-            self.stats.by_step.push((index.clone(), elapsed));
+        if let Some(stats) = &mut self.config.statistics {
+            let measurement = StepMeasurement {
+                step_index: index.clone(),
+                rule: rule_name.clone(),
+                time: time.elapsed(),
+            };
+            stats.push(measurement);
         }
         Ok(result)
     }
