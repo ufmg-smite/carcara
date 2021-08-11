@@ -33,8 +33,8 @@ impl Correctness {
 
 #[derive(Debug, Default)]
 pub struct CheckerStatistics {
-    by_rule: HashMap<String, (usize, Duration)>,
-    by_step: Vec<(String, Duration)>,
+    pub by_rule: HashMap<String, (usize, Duration)>,
+    pub by_step: Vec<(String, Duration)>,
 }
 
 type CheckerResult = Result<Correctness, CheckerError>;
@@ -55,7 +55,7 @@ pub struct Config {
 pub struct ProofChecker {
     pool: TermPool,
     config: Config,
-    stats: CheckerStatistics,
+    pub stats: CheckerStatistics,
     context: Vec<Context>,
 }
 

@@ -1,18 +1,17 @@
 extern crate clap;
 
-use verit_proof_checker::*;
-
-use checker::*;
-use error::*;
-use parser::*;
-
+use clap::{App, AppSettings, Arg, ArgGroup, ArgMatches, SubCommand};
 use std::{
     collections::HashSet,
     fs::File,
     io::{BufReader, Write},
 };
-
-use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
+use verit_proof_checker::{
+    check,
+    checker::{self, Correctness, ProofChecker},
+    parser::{error::ParserResult, lexer, parse_problem_proof},
+    Error,
+};
 
 fn main() -> Result<(), Error> {
     let matches = App::new("veriT proof checker")
@@ -35,6 +34,13 @@ fn main() -> Result<(), Error> {
                 .setting(AppSettings::DisableVersion)
                 .arg(Arg::with_name("PROBLEM_FILE").required(true))
                 .arg(Arg::with_name("PROOF_FILE").required(false)),
+            SubCommand::with_name("bench")
+                .about("Checks a series of proof files and records performance statistics")
+                .setting(AppSettings::DisableVersion)
+                .arg(Arg::with_name("files").multiple(true).required(true).help(
+                    "The problem and proof files to be checked. Each problem file must be \
+                    immediately followed by its associated proof file",
+                )),
             SubCommand::with_name("progress-report")
                 .setting(AppSettings::DisableVersion)
                 .setting(AppSettings::DeriveDisplayOrder)
@@ -95,6 +101,8 @@ fn main() -> Result<(), Error> {
         );
         let (proof, _) = parse_problem_proof(problem, proof)?;
         println!("{:#?}", proof);
+    } else if let Some(matches) = matches.subcommand_matches("bench") {
+        bench_subcommand(matches)?
     } else if let Some(matches) = matches.subcommand_matches("progress-report") {
         let files = matches
             .values_of("files")
@@ -116,8 +124,41 @@ fn main() -> Result<(), Error> {
     Ok(())
 }
 
+fn bench_subcommand(matches: &ArgMatches) -> Result<(), Error> {
+    let mut stats = checker::CheckerStatistics::default();
+
+    let files: Vec<_> = matches.values_of("files").unwrap().collect();
+    for chunk in files.chunks_exact(2) {
+        let (problem_path, proof_path) = (chunk[0], chunk[1]);
+        let (proof, pool) = parse_problem_proof(
+            BufReader::new(File::open(problem_path)?),
+            BufReader::new(File::open(proof_path)?),
+        )?;
+        let config = checker::Config {
+            skip_unknown_rules: false,
+            allow_test_rule: false,
+            collect_statistics: true,
+        };
+
+        let previous_len = stats.by_step.len();
+        let mut checker = ProofChecker::new(pool, config);
+        checker.stats = stats;
+        let _ = checker.check(&proof)?; // Ignore checking result
+        stats = checker.stats;
+
+        // For every step entry added in the last iteration, prepend the step index with the proof
+        // filename. For example, "t42" would become "example.proof:t42"
+        for (step_index, _) in &mut stats.by_step[previous_len..] {
+            step_index.insert(0, ':');
+            step_index.insert_str(0, proof_path);
+        }
+    }
+    println!("{:#?}", stats);
+    Ok(())
+}
+
 fn get_used_rules(file_path: &str) -> ParserResult<Vec<String>> {
-    use parser::lexer::{Lexer, Token};
+    use lexer::{Lexer, Token};
 
     let file = File::open(file_path)?;
     let mut lex = Lexer::new(BufReader::new(file))?;
