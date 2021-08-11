@@ -52,10 +52,10 @@ impl<K: Clone> Metrics<K> {
     }
 }
 
-// TODO: Store run index in run measurement
 #[derive(Debug)]
 pub struct CheckerRunMeasurement {
     proof_file_name: String,
+    run_index: usize,
     parsing_time: Duration,
     step_measurements: Vec<StepMeasurement>,
 }
@@ -73,7 +73,7 @@ pub fn run_benchmark(
 ) -> Result<Vec<CheckerRunMeasurement>, crate::Error> {
     let mut runs = Vec::new();
     for &(problem_file, proof_file) in instances {
-        for _ in 0..num_runs {
+        for i in 0..num_runs {
             let parsing_time = Instant::now();
             let (proof, pool) = parse_problem_proof(
                 BufReader::new(File::open(problem_file)?),
@@ -90,6 +90,7 @@ pub fn run_benchmark(
             let _ = checker::ProofChecker::new(pool, config).check(&proof)?;
             runs.push(CheckerRunMeasurement {
                 proof_file_name: proof_file.to_string(),
+                run_index: i,
                 parsing_time,
                 step_measurements,
             })
@@ -101,22 +102,22 @@ pub fn run_benchmark(
 pub mod compile_measurements {
     use super::*;
 
-    pub fn total_parsing_time(runs: &[CheckerRunMeasurement]) -> Metrics<String> {
+    pub fn total_parsing_time(runs: &[CheckerRunMeasurement]) -> Metrics<usize> {
         Metrics::new(
             runs.iter()
-                .map(|m| (m.proof_file_name.clone(), m.parsing_time))
+                .map(|m| (m.run_index, m.parsing_time))
                 .collect::<Vec<_>>()
                 .as_slice(),
         )
         .unwrap()
     }
 
-    pub fn total_checking_time(runs: &[CheckerRunMeasurement]) -> Metrics<String> {
+    pub fn total_checking_time(runs: &[CheckerRunMeasurement]) -> Metrics<usize> {
         Metrics::new(
             runs.iter()
                 .map(|m| {
                     let checking_time = m.step_measurements.iter().map(|s| s.time).sum();
-                    (m.proof_file_name.clone(), checking_time)
+                    (m.run_index, checking_time)
                 })
                 .collect::<Vec<_>>()
                 .as_slice(),
@@ -124,13 +125,13 @@ pub mod compile_measurements {
         .unwrap()
     }
 
-    pub fn total_time(runs: &[CheckerRunMeasurement]) -> Metrics<String> {
+    pub fn total_time(runs: &[CheckerRunMeasurement]) -> Metrics<usize> {
         Metrics::new(
             runs.iter()
                 .map(|m| {
                     let total_time =
                         m.parsing_time + m.step_measurements.iter().map(|s| s.time).sum();
-                    (m.proof_file_name.clone(), total_time)
+                    (m.run_index, total_time)
                 })
                 .collect::<Vec<_>>()
                 .as_slice(),
