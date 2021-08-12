@@ -1,8 +1,8 @@
 use super::{to_option, RuleArgs};
 use crate::ast::*;
+use ahash::AHashMap;
 use num_rational::BigRational;
 use num_traits::{One, Signed, Zero};
-use std::collections::HashMap;
 
 pub fn la_rw_eq(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1);
@@ -83,16 +83,16 @@ fn negate_disequality(term: &Term) -> Option<(Operator, &[ByRefRc<Term>])> {
 /// A linear combination, represented by a hash map from non-constant terms to their coefficients,
 /// plus a constant term. This is also used to represent a disequality, in which case the left side
 /// is the non-constant terms and their coefficients, and the right side is the constant term.
-struct LinearComb<'a>(HashMap<&'a Term, BigRational>, BigRational);
+struct LinearComb<'a>(AHashMap<&'a Term, BigRational>, BigRational);
 
 impl<'a> LinearComb<'a> {
     fn new() -> Self {
-        Self(HashMap::new(), BigRational::zero())
+        Self(AHashMap::new(), BigRational::zero())
     }
 
     /// Builds a linear combination from a term. Only one constant term is allowed.
     fn from_term(term: &'a Term) -> Option<Self> {
-        let mut result = Self(HashMap::new(), BigRational::zero());
+        let mut result = Self(AHashMap::new(), BigRational::zero());
         let mut constant_is_set = false;
         for (arg, polarity) in flatten_sum(term) {
             let polarity_coeff = match polarity {

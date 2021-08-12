@@ -1,8 +1,8 @@
 use super::{to_option, RuleArgs};
 use crate::{ast::*, utils::DedupIterator};
+use ahash::AHashSet;
 use num_rational::BigRational;
 use num_traits::{One, Zero};
-use std::collections::HashSet;
 
 /// A macro to define the possible transformations for a "simplify" rule.
 macro_rules! simplify {
@@ -41,7 +41,7 @@ fn generic_simplify_rule(
 
     let mut simplify_until_fixed_point = |term: &ByRefRc<Term>, goal: &ByRefRc<Term>| {
         let mut current = term.clone();
-        let mut seen = HashSet::new();
+        let mut seen = AHashSet::new();
         loop {
             if !seen.insert(current.clone()) {
                 panic!("Cycle detected in simplification rule!")
@@ -164,7 +164,7 @@ fn generic_and_or_simplify(conclusion: &[ByRefRc<Term>], rule_kind: Operator) ->
         _ => std::slice::from_ref(result),
     };
 
-    let mut seen = HashSet::with_capacity(phis.len());
+    let mut seen = AHashSet::with_capacity(phis.len());
     let mut expected = Vec::with_capacity(phis.len());
 
     for term in phis {

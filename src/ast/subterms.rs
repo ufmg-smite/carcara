@@ -1,15 +1,16 @@
 use super::{ByRefRc, Term};
-use std::{collections::HashSet, iter};
+use ahash::AHashSet;
+use std::iter;
 
 pub struct Subterms<'a> {
-    visited: HashSet<&'a Term>,
+    visited: AHashSet<&'a Term>,
     inner: SubtermsInner<'a>,
 }
 
 impl<'a> Subterms<'a> {
     pub fn new(root: &'a Term) -> Self {
         Self {
-            visited: HashSet::new(),
+            visited: AHashSet::new(),
             inner: SubtermsInner::new(root),
         }
     }
@@ -46,7 +47,7 @@ impl<'a> SubtermsInner<'a> {
         }
     }
 
-    fn next(&mut self, visited: &mut HashSet<&'a Term>) -> Option<&'a Term> {
+    fn next(&mut self, visited: &mut AHashSet<&'a Term>) -> Option<&'a Term> {
         if !self.visited_root {
             self.current = self.next_child(visited);
             self.visited_root = true;
@@ -62,7 +63,7 @@ impl<'a> SubtermsInner<'a> {
         }
     }
 
-    fn next_child(&mut self, visited: &mut HashSet<&'a Term>) -> Option<Box<Self>> {
+    fn next_child(&mut self, visited: &mut AHashSet<&'a Term>) -> Option<Box<Self>> {
         self.children
             .find(|t| !visited.contains(t.as_ref()))
             .map(|t| Box::new(SubtermsInner::new(t.as_ref())))

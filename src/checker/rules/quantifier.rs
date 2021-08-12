@@ -1,6 +1,6 @@
 use super::{to_option, RuleArgs};
 use crate::{ast::*, utils::DedupIterator};
-use std::collections::{HashMap, HashSet};
+use ahash::{AHashMap, AHashSet};
 
 pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1);
@@ -11,7 +11,7 @@ pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> Option<
 
     rassert!(args.len() == bindings.len());
 
-    let mut substitutions: HashMap<_, _> = bindings
+    let mut substitutions: AHashMap<_, _> = bindings
         .iter()
         .zip(args)
         .map(|((binding_name, binding_sort), arg)| {
@@ -222,8 +222,8 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> {
         (l_b, phi, r_b, phi_prime)
     };
 
-    let r_bindings = r_bindings.iter().cloned().collect::<HashSet<_>>();
-    let mut new_bindings = l_bindings.iter().cloned().collect::<HashSet<_>>();
+    let r_bindings = r_bindings.iter().cloned().collect::<AHashSet<_>>();
+    let mut new_bindings = l_bindings.iter().cloned().collect::<AHashSet<_>>();
     let clauses: Vec<_> = {
         let nnf = negation_normal_form(pool, phi, true);
         let prenexed = prenex_forall(pool, &mut new_bindings, &nnf);

@@ -1,4 +1,5 @@
-use std::{collections::HashSet, hash::Hash};
+use ahash::AHashSet;
+use std::hash::Hash;
 
 /// An enum that can hold one of two types. Similar to `Result`, but doesn't imply that one of the
 /// variants is "better" than the other.
@@ -10,7 +11,7 @@ pub enum Either<T, U> {
 /// An iterator that removes duplicate elements from `iter`. This will yield the elements in
 /// `iter` in order, skipping elements that have already been seen before.
 pub struct Dedup<T, I> {
-    seen: HashSet<T>,
+    seen: AHashSet<T>,
     iter: I,
 }
 
@@ -44,6 +45,6 @@ impl<T, I: Iterator<Item = T>> DedupIterator<T> for I {
     where
         Self: Sized,
     {
-        Dedup { seen: HashSet::new(), iter: self }
+        Dedup { seen: AHashSet::new(), iter: self }
     }
 }

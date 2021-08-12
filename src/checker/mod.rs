@@ -2,8 +2,8 @@ mod rules;
 
 use crate::ast::*;
 use crate::benchmarking::StepMeasurement;
+use ahash::{AHashMap, AHashSet};
 use rules::{Rule, RuleArgs};
-use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 #[derive(Debug)]
@@ -35,9 +35,9 @@ impl Correctness {
 type CheckerResult = Result<Correctness, CheckerError>;
 
 struct Context {
-    substitutions: HashMap<ByRefRc<Term>, ByRefRc<Term>>,
-    substitutions_until_fixed_point: HashMap<ByRefRc<Term>, ByRefRc<Term>>,
-    bindings: HashSet<SortedVar>,
+    substitutions: AHashMap<ByRefRc<Term>, ByRefRc<Term>>,
+    substitutions_until_fixed_point: AHashMap<ByRefRc<Term>, ByRefRc<Term>>,
+    bindings: AHashSet<SortedVar>,
 }
 
 #[derive(Debug, Default)]
@@ -153,8 +153,8 @@ impl<'c> ProofChecker<'c> {
         // Since some rules (like "refl") need to apply substitutions until a fixed point, we
         // precompute these substitutions into a separate hash map. This assumes that the assignment
         // arguments are in the correct order.
-        let mut substitutions = HashMap::new();
-        let mut substitutions_until_fixed_point = HashMap::new();
+        let mut substitutions = AHashMap::new();
+        let mut substitutions_until_fixed_point = AHashMap::new();
 
         // We build the `substitutions_until_fixed_point` hash map from the bottom up, by using the
         // substitutions already introduced to transform the result of a new substitution before

@@ -1,6 +1,6 @@
 use super::{get_single_term_from_command, to_option, RuleArgs};
 use crate::ast::*;
-use std::collections::HashMap;
+use ahash::AHashMap;
 
 pub fn distinct_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1);
@@ -198,7 +198,7 @@ fn apply_bfun_elim(pool: &mut TermPool, term: &ByRefRc<Term>) -> ByRefRc<Term> {
             }
         };
         for value in [pool.bool_false(), pool.bool_true()] {
-            let mut subs = HashMap::new();
+            let mut subs = AHashMap::new();
             subs.insert(var.clone(), value);
             let term = pool.apply_substitutions(term, &mut subs);
             first_step(pool, &bindigns[..bindigns.len() - 1], &term, acc)

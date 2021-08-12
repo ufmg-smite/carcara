@@ -5,11 +5,12 @@ pub mod lexer;
 pub mod tests;
 
 use crate::{ast::*, utils::Either};
+use ahash::AHashMap;
 use error::*;
 use lexer::*;
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
-use std::{collections::HashMap, hash::Hash, io::BufRead, str::FromStr};
+use std::{hash::Hash, io::BufRead, str::FromStr};
 
 pub fn parse_problem_proof<T: BufRead>(problem: T, proof: T) -> ParserResult<(Proof, TermPool)> {
     let mut problem_parser = Parser::new(problem)?;
@@ -22,16 +23,16 @@ type AnchorCommand = (String, Vec<(String, ByRefRc<Term>)>, Vec<SortedVar>);
 type StepCommand = (Vec<ByRefRc<Term>>, String, Vec<String>, Vec<ProofArg>);
 
 struct SymbolTable<K, V> {
-    scopes: Vec<HashMap<K, V>>,
+    scopes: Vec<AHashMap<K, V>>,
 }
 
 impl<K, V> SymbolTable<K, V> {
     fn new() -> Self {
-        Self { scopes: vec![HashMap::new()] }
+        Self { scopes: vec![AHashMap::new()] }
     }
 
     fn push_scope(&mut self) {
-        self.scopes.push(HashMap::new());
+        self.scopes.push(AHashMap::new());
     }
 
     fn pop_scope(&mut self) {
@@ -67,9 +68,9 @@ impl<K, V> Default for SymbolTable<K, V> {
 #[derive(Default)]
 struct ParserState {
     sorts_symbol_table: SymbolTable<Identifier, ByRefRc<Term>>,
-    function_defs: HashMap<String, FunctionDef>,
+    function_defs: AHashMap<String, FunctionDef>,
     term_pool: TermPool,
-    sort_declarations: HashMap<String, (u64, ByRefRc<Term>)>,
+    sort_declarations: AHashMap<String, (u64, ByRefRc<Term>)>,
     step_indices: SymbolTable<String, usize>,
 }
 

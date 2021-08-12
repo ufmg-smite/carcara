@@ -48,7 +48,7 @@ fn run_parser_tests(cases: &[(&str, Term)]) {
 
 #[test]
 fn test_hash_consing() {
-    use std::collections::HashSet;
+    use ahash::AHashSet;
 
     let input = "(-
         (-
@@ -82,7 +82,7 @@ fn test_hash_consing() {
         "(* 2 2)",
     ]
     .into_iter()
-    .collect::<HashSet<&str>>();
+    .collect::<AHashSet<&str>>();
 
     assert_eq!(parser.state.term_pool.terms.len(), expected.len());
 

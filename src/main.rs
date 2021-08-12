@@ -1,8 +1,8 @@
 extern crate clap;
 
+use ahash::AHashSet;
 use clap::{App, AppSettings, Arg, ArgGroup, ArgMatches, SubCommand};
 use std::{
-    collections::HashSet,
     fs::File,
     io::{BufReader, Write},
     path::PathBuf,
@@ -233,7 +233,7 @@ fn report_by_rules(files: &[&str], quiet: bool) -> ParserResult<()> {
         Err(e) => vec![Err(e)],
     });
 
-    let mut seen = HashSet::new();
+    let mut seen = AHashSet::new();
     let mut implemented = 0;
     for r in rules {
         let r = r?;

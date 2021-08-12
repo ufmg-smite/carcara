@@ -1,6 +1,6 @@
 use super::{get_single_term_from_command, to_option, RuleArgs};
 use crate::ast::*;
-use std::collections::{HashMap, HashSet};
+use ahash::{AHashMap, AHashSet};
 
 pub fn subproof(RuleArgs { conclusion, subproof_commands, .. }: RuleArgs) -> Option<()> {
     // TODO: We should get the series of assumptions from the ":discharge" attribute, but currently
@@ -47,8 +47,8 @@ pub fn bind(
     let (r_quant, r_bindings, right) = right.unwrap_quant()?;
     rassert!(l_quant == r_quant);
 
-    let l_bindings: HashSet<_> = l_bindings.iter().map(|(var, _)| var.as_str()).collect();
-    let r_bindings: HashSet<_> = r_bindings.iter().map(|(var, _)| var.as_str()).collect();
+    let l_bindings: AHashSet<_> = l_bindings.iter().map(|(var, _)| var.as_str()).collect();
+    let r_bindings: AHashSet<_> = r_bindings.iter().map(|(var, _)| var.as_str()).collect();
 
     // The terms in the quantifiers must be phi and phi'
     rassert!(left == phi && right == phi_prime);
@@ -64,7 +64,7 @@ pub fn bind(
     let context = context.last()?;
 
     // The quantifier binders must be the xs and ys of the context substitutions
-    let (xs, ys): (HashSet<_>, HashSet<_>) = context
+    let (xs, ys): (AHashSet<_>, AHashSet<_>) = context
         .substitutions
         .iter()
         // We skip terms which are not simply variables
@@ -129,8 +129,12 @@ pub fn r#let(
     to_option(premises.next().is_none())
 }
 
-fn extract_points(quant: Quantifier, term: &Term) -> HashSet<(ByRefRc<Term>, ByRefRc<Term>)> {
-    fn find_points(acc: &mut HashSet<(ByRefRc<Term>, ByRefRc<Term>)>, polarity: bool, term: &Term) {
+fn extract_points(quant: Quantifier, term: &Term) -> AHashSet<(ByRefRc<Term>, ByRefRc<Term>)> {
+    fn find_points(
+        acc: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+        polarity: bool,
+        term: &Term,
+    ) {
         if let Some(inner) = term.remove_negation() {
             return find_points(acc, !polarity, inner);
         }
@@ -157,7 +161,7 @@ fn extract_points(quant: Quantifier, term: &Term) -> HashSet<(ByRefRc<Term>, ByR
         }
     }
 
-    let mut result = HashSet::new();
+    let mut result = AHashSet::new();
     find_points(&mut result, quant == Quantifier::Exists, term);
     result
 }
@@ -196,15 +200,15 @@ pub fn onepoint(
             && r_bindings.iter().all(|b| context.bindings.contains(b))
     );
 
-    let l_bindings: HashSet<_> = l_bindings
+    let l_bindings: AHashSet<_> = l_bindings
         .iter()
         .map(|var| pool.add_term(var.clone().into()))
         .collect();
-    let r_bindings: HashSet<_> = r_bindings
+    let r_bindings: AHashSet<_> = r_bindings
         .iter()
         .map(|var| pool.add_term(var.clone().into()))
         .collect();
-    let substitution_vars: HashSet<_> = context
+    let substitution_vars: AHashSet<_> = context
         .substitutions
         .iter()
         .map(|(k, _)| k.clone())
@@ -219,7 +223,7 @@ pub fn onepoint(
     // Since a substitution may use a varibale introduced in a previous substitution, we apply the
     // substitutions to the points in order to these variables. We also create a duplicate of every
     // point in the reverse order, since the order of equalities may be flipped
-    let points: HashSet<_> = points
+    let points: AHashSet<_> = points
         .into_iter()
         .flat_map(|(x, t)| {
             let new_t = pool.apply_substitutions(&t, &mut substitutions_clone);
@@ -298,7 +302,7 @@ fn generic_skolemization_rule(
         rassert!(DeepEq::eq_modulo_reordering(t_inner, &current_phi));
 
         // For every binding we skolemize, we must apply another substitution to phi
-        let mut s = HashMap::new();
+        let mut s = AHashMap::new();
         s.insert(x_term, t.clone());
         current_phi = pool.apply_substitutions(&current_phi, &mut s);
     }

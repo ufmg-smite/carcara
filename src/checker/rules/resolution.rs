@@ -1,6 +1,6 @@
 use super::{get_clause_from_command, to_option, RuleArgs};
 use crate::ast::*;
-use std::collections::HashSet;
+use ahash::AHashSet;
 
 pub fn resolution(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     // When checking this rule, we must look at what the conclusion clause looks like in order to
@@ -15,18 +15,18 @@ pub fn resolution(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()>
     // Without looking at the conclusion, it is unclear if the (not p) term should be removed by
     // the p term, if the (not (not p)) should be removed by the (not (not (not p))), or both. We
     // can only determine this by looking at the conlcusion and using it to derive the pivots.
-    let conclusion: HashSet<_> = conclusion
+    let conclusion: AHashSet<_> = conclusion
         .iter()
         .map(|t| t.remove_all_negations())
         .map(|(n, t)| (n as i32, t))
         .collect();
 
     // The working clause contains the terms from the conclusion clause that we already encountered
-    let mut working_clause = HashSet::new();
+    let mut working_clause = AHashSet::new();
 
     // The pivots are the encountered terms that are not present in the conclusion clause, and so
     // should be removed
-    let mut pivots = HashSet::new();
+    let mut pivots = AHashSet::new();
 
     for command in premises {
         let premise_clause = get_clause_from_command(command);
@@ -85,7 +85,7 @@ pub fn tautology(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> 
     rassert!(conclusion.len() == 1 && conclusion[0].is_bool_true() && premises.len() == 1);
 
     let premise = get_clause_from_command(premises[0]);
-    let mut seen = HashSet::with_capacity(premise.len());
+    let mut seen = AHashSet::with_capacity(premise.len());
     let with_negations_removed = premise
         .iter()
         .map(|t| t.remove_all_negations_with_polarity());
@@ -104,11 +104,11 @@ pub fn contraction(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()
     let premise_clause = get_clause_from_command(premises[0]);
 
     // This set will be populated with the terms we enconter as we iterate through the premise
-    let mut encountered = HashSet::<&Term>::with_capacity(premise_clause.len());
+    let mut encountered = AHashSet::<&Term>::with_capacity(premise_clause.len());
     let mut conclusion_iter = conclusion.iter();
 
     for t in premise_clause {
-        // `HashSet::insert` returns true if the inserted element was not in the set
+        // `AHashSet::insert` returns true if the inserted element was not in the set
         let is_new_term = encountered.insert(t.as_ref());
 
         // If the term in the premise clause has not been encountered before, we advance the

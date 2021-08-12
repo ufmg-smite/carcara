@@ -8,18 +8,11 @@ mod tests;
 
 pub use subterms::Subterms;
 
+use ahash::{AHashMap, AHashSet};
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
-use std::{
-    borrow::Borrow,
-    collections::{HashMap, HashSet},
-    fmt::Debug,
-    hash::Hash,
-    ops::Deref,
-    rc,
-    str::FromStr,
-};
+use std::{borrow::Borrow, fmt::Debug, hash::Hash, ops::Deref, rc, str::FromStr};
 
 /// An `Rc` where equality and hashing are done by reference, instead of by value
 #[derive(Clone, Eq)]
@@ -76,8 +69,8 @@ impl<T> ByRefRc<T> {
 }
 
 pub struct TermPool {
-    pub terms: HashMap<Term, ByRefRc<Term>>,
-    pub free_vars_cache: HashMap<ByRefRc<Term>, HashSet<String>>,
+    pub terms: AHashMap<Term, ByRefRc<Term>>,
+    pub free_vars_cache: AHashMap<ByRefRc<Term>, AHashSet<String>>,
     bool_true: ByRefRc<Term>,
     bool_false: ByRefRc<Term>,
 }
@@ -90,7 +83,7 @@ impl Default for TermPool {
 
 impl TermPool {
     pub fn new() -> Self {
-        let mut terms = HashMap::new();
+        let mut terms = AHashMap::new();
         let bool_sort = Self::add_term_to_map(&mut terms, Term::BOOL_SORT.clone());
         let bool_true = Self::add_term_to_map(
             &mut terms,
@@ -105,7 +98,7 @@ impl TermPool {
         );
         Self {
             terms,
-            free_vars_cache: HashMap::new(),
+            free_vars_cache: AHashMap::new(),
             bool_true,
             bool_false,
         }
@@ -126,7 +119,7 @@ impl TermPool {
         }
     }
 
-    fn add_term_to_map(terms_map: &mut HashMap<Term, ByRefRc<Term>>, term: Term) -> ByRefRc<Term> {
+    fn add_term_to_map(terms_map: &mut AHashMap<Term, ByRefRc<Term>>, term: Term) -> ByRefRc<Term> {
         use std::collections::hash_map::Entry;
 
         match terms_map.entry(term.clone()) {
@@ -152,7 +145,7 @@ impl TermPool {
     pub fn apply_substitutions<'a>(
         &mut self,
         term: &'a ByRefRc<Term>,
-        substitutions: &mut HashMap<ByRefRc<Term>, ByRefRc<Term>>,
+        substitutions: &mut AHashMap<ByRefRc<Term>, ByRefRc<Term>>,
     ) -> ByRefRc<Term> {
         macro_rules! apply_to_sequence {
             ($sequence:expr) => {
@@ -195,8 +188,8 @@ impl TermPool {
         result
     }
 
-    /// Returns a `HashSet` containing all the free variables in this term.
-    pub fn free_vars<'t>(&mut self, term: &'t ByRefRc<Term>) -> &HashSet<String> {
+    /// Returns an `AHashSet` containing all the free variables in this term.
+    pub fn free_vars<'t>(&mut self, term: &'t ByRefRc<Term>) -> &AHashSet<String> {
         // Here, I would like to do
         // ```
         // if let Some(vars) = self.free_vars_cache.get(term) {
@@ -218,13 +211,13 @@ impl TermPool {
             Term::App(f, args) => {
                 let mut set = args
                     .iter()
-                    .fold(HashSet::new(), |acc, next| &acc | self.free_vars(next));
+                    .fold(AHashSet::new(), |acc, next| &acc | self.free_vars(next));
                 set.extend(self.free_vars(f).iter().map(Clone::clone));
                 set
             }
             Term::Op(_, args) => args
                 .iter()
-                .fold(HashSet::new(), |acc, next| &acc | self.free_vars(next)),
+                .fold(AHashSet::new(), |acc, next| &acc | self.free_vars(next)),
             Term::Quant(_, bindings, inner) | Term::Let(bindings, inner) => {
                 let mut vars = self.free_vars(inner).clone();
                 for (s, _) in bindings {
@@ -238,11 +231,11 @@ impl TermPool {
                 vars
             }
             Term::Terminal(Terminal::Var(Identifier::Simple(var), _)) => {
-                let mut set = HashSet::with_capacity(1);
+                let mut set = AHashSet::with_capacity(1);
                 set.insert(var.clone());
                 set
             }
-            Term::Terminal(_) | Term::Sort(_, _) => HashSet::new(),
+            Term::Terminal(_) | Term::Sort(_, _) => AHashSet::new(),
         };
         self.free_vars_cache.insert(term.clone(), set);
         self.free_vars_cache.get(term).unwrap()

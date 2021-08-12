@@ -108,12 +108,12 @@ pub fn run_benchmark(
 
 pub mod compile_measurements {
     use super::*;
-    use std::collections::HashMap;
+    use ahash::AHashMap;
 
     type Runs<'a> = &'a [CheckerRunMeasurement];
 
-    pub fn by_rule(runs: Runs) -> HashMap<String, Metrics<(String, String)>> {
-        let mut data_by_rule = HashMap::new();
+    pub fn by_rule(runs: Runs) -> AHashMap<String, Metrics<(String, String)>> {
+        let mut data_by_rule = AHashMap::new();
         for measurement in runs {
             for s in &measurement.step_measurements {
                 let entry = data_by_rule.entry(s.rule.clone()).or_insert_with(Vec::new);

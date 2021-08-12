@@ -1,13 +1,13 @@
 use super::*;
 use crate::parser::tests::{parse_term, parse_term_with_definitions};
-use std::collections::HashSet;
+use ahash::AHashSet;
 
 #[test]
 fn test_subterms_no_duplicates() {
     fn run_tests(cases: &[&str]) {
         for s in cases {
             let term = parse_term(s);
-            let mut seen = HashSet::new();
+            let mut seen = AHashSet::new();
             assert!(term.subterms().all(|t| seen.insert(t)));
         }
     }
@@ -85,7 +85,7 @@ fn test_free_vars() {
             let expected = expected
                 .iter()
                 .map(|&s| s.to_string())
-                .collect::<HashSet<_>>();
+                .collect::<AHashSet<_>>();
 
             // Since we are only using the term pool as a cache for `free_vars`, it doesn't need to
             // actually hold the terms, meaning we can just use an empty pool.
