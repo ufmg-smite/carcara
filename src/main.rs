@@ -38,6 +38,13 @@ fn main() -> Result<(), Error> {
             SubCommand::with_name("bench")
                 .about("Checks a series of proof files and records performance statistics")
                 .setting(AppSettings::DisableVersion)
+                .arg(
+                    Arg::with_name("num-runs")
+                        .short("n")
+                        .long("num-runs")
+                        .default_value("10")
+                        .help("Number of times to run the benchmark for each file"),
+                )
                 .arg(Arg::with_name("files").multiple(true).required(true).help(
                     "The proof files to be checked. The problem files will be inferred from the \
                     proof files",
@@ -128,6 +135,8 @@ fn main() -> Result<(), Error> {
 fn bench_subcommand(matches: &ArgMatches) -> Result<(), Error> {
     use benchmarking::compile_measurements::*;
 
+    // TODO: Add better error handling
+    let num_runs = matches.value_of("num-runs").unwrap().parse().unwrap();
     let instances: Vec<_> = matches
         .values_of("files")
         .unwrap()
@@ -143,10 +152,12 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), Error> {
         })
         .collect();
 
-    println!("running benchmark on {} files", instances.len());
-
-    // TODO: Add number of runs as command line argument
-    let results = benchmarking::run_benchmark(&instances, 100)?;
+    println!(
+        "running benchmark on {} files, doing {} runs each",
+        instances.len(),
+        num_runs
+    );
+    let results = benchmarking::run_benchmark(&instances, num_runs)?;
 
     println!("parsing:            {}", total_parsing_time(&results));
     println!("checking:           {}", total_checking_time(&results));
