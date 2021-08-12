@@ -1,5 +1,6 @@
 use crate::{checker, parser::parse_problem_proof};
 use std::{
+    fmt,
     fs::File,
     io::BufReader,
     time::{Duration, Instant},
@@ -52,6 +53,12 @@ impl<K: Clone> Metrics<K> {
     }
 }
 
+impl<K> fmt::Display for Metrics<K> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?} ± {:?}", self.mean, self.standard_deviation)
+    }
+}
+
 #[derive(Debug)]
 pub struct CheckerRunMeasurement {
     proof_file_name: String,
@@ -101,8 +108,28 @@ pub fn run_benchmark(
 
 pub mod compile_measurements {
     use super::*;
+    use std::collections::HashMap;
 
-    pub fn total_parsing_time(runs: &[CheckerRunMeasurement]) -> Metrics<usize> {
+    type Runs<'a> = &'a [CheckerRunMeasurement];
+
+    pub fn by_rule(runs: Runs) -> HashMap<String, Metrics<(String, String)>> {
+        let mut data_by_rule = HashMap::new();
+        for measurement in runs {
+            for s in &measurement.step_measurements {
+                let entry = data_by_rule.entry(s.rule.clone()).or_insert_with(Vec::new);
+                entry.push((
+                    (measurement.proof_file_name.clone(), s.step_index.clone()),
+                    s.time,
+                ));
+            }
+        }
+        data_by_rule
+            .into_iter()
+            .filter_map(|(k, v)| Some((k, Metrics::new(&v)?)))
+            .collect()
+    }
+
+    pub fn total_parsing_time(runs: Runs) -> Metrics<usize> {
         Metrics::new(
             runs.iter()
                 .map(|m| (m.run_index, m.parsing_time))
@@ -112,7 +139,7 @@ pub mod compile_measurements {
         .unwrap()
     }
 
-    pub fn total_checking_time(runs: &[CheckerRunMeasurement]) -> Metrics<usize> {
+    pub fn total_checking_time(runs: Runs) -> Metrics<usize> {
         Metrics::new(
             runs.iter()
                 .map(|m| {
@@ -125,7 +152,7 @@ pub mod compile_measurements {
         .unwrap()
     }
 
-    pub fn total_time(runs: &[CheckerRunMeasurement]) -> Metrics<usize> {
+    pub fn total_time(runs: Runs) -> Metrics<usize> {
         Metrics::new(
             runs.iter()
                 .map(|m| {

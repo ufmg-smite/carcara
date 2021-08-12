@@ -142,13 +142,23 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), Error> {
             (problem_path, proof_file.to_string())
         })
         .collect();
+
+    println!("running benchmark on {} files", instances.len());
+
     // TODO: Add number of runs as command line argument
     let results = benchmarking::run_benchmark(&instances, 100)?;
 
-    println!("parsing: {:#?}", total_parsing_time(&results));
-    println!("checking: {:#?}", total_checking_time(&results));
-    println!("parsing + checking: {:#?}", total_time(&results));
+    println!("parsing:            {}", total_parsing_time(&results));
+    println!("checking:           {}", total_checking_time(&results));
+    println!("parsing + checking: {}", total_time(&results));
 
+    let data_by_rule = by_rule(&results);
+    let mut data_by_rule: Vec<_> = data_by_rule.iter().collect();
+    data_by_rule.sort_by_key(|(_, m)| m.mean);
+    println!("by rule:");
+    for (rule, data) in data_by_rule {
+        println!("    {: <18}{}", rule, data);
+    }
     Ok(())
 }
 
