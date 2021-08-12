@@ -142,12 +142,25 @@ impl<R: BufRead> Lexer<R> {
         Ok(result)
     }
 
+    /// Specialized function to drop whitespace characters. Similar to calling
+    /// `self.read_chars_while(char::is_whitespace)`, but doesn't allocate a string to store the
+    /// result.
+    fn drop_while_whitespace(&mut self) -> Result<(), (io::Error, Position)> {
+        while let Some(c) = self.current_char {
+            if !c.is_whitespace() {
+                break;
+            }
+            self.next_char()?;
+        }
+        Ok(())
+    }
+
     fn consume_whitespace(&mut self) -> Result<(), (io::Error, Position)> {
-        self.read_chars_while(char::is_whitespace)?;
+        self.drop_while_whitespace()?;
         while self.current_char == Some(';') {
             self.next_line()?;
             self.next_char()?;
-            self.read_chars_while(char::is_whitespace)?;
+            self.drop_while_whitespace()?;
         }
         Ok(())
     }
