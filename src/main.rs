@@ -5,6 +5,7 @@ use std::{
     collections::HashSet,
     fs::File,
     io::{BufReader, Write},
+    path::PathBuf,
 };
 use verit_proof_checker::{
     benchmarking, check,
@@ -38,8 +39,8 @@ fn main() -> Result<(), Error> {
                 .about("Checks a series of proof files and records performance statistics")
                 .setting(AppSettings::DisableVersion)
                 .arg(Arg::with_name("files").multiple(true).required(true).help(
-                    "The problem and proof files to be checked. Each problem file must be \
-                    immediately followed by its associated proof file",
+                    "The proof files to be checked. The problem files will be inferred from the \
+                    proof files",
                 )),
             SubCommand::with_name("progress-report")
                 .setting(AppSettings::DisableVersion)
@@ -127,10 +128,19 @@ fn main() -> Result<(), Error> {
 fn bench_subcommand(matches: &ArgMatches) -> Result<(), Error> {
     use benchmarking::compile_measurements::*;
 
-    let files: Vec<_> = matches.values_of("files").unwrap().collect();
-    let instances: Vec<_> = files
-        .chunks_exact(2)
-        .map(|chunk| (chunk[0], chunk[1]))
+    let instances: Vec<_> = matches
+        .values_of("files")
+        .unwrap()
+        .map(|proof_file| {
+            let problem_path = {
+                let mut path = PathBuf::from(proof_file);
+                while path.extension().unwrap() != "smt_in" {
+                    path.set_extension("");
+                }
+                path.to_str().unwrap().to_string()
+            };
+            (problem_path, proof_file.to_string())
+        })
         .collect();
     // TODO: Add number of runs as command line argument
     let results = benchmarking::run_benchmark(&instances, 100)?;

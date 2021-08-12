@@ -68,11 +68,11 @@ pub struct StepMeasurement {
 }
 
 pub fn run_benchmark(
-    instances: &[(&str, &str)],
+    instances: &[(String, String)],
     num_runs: usize,
 ) -> Result<Vec<CheckerRunMeasurement>, crate::Error> {
     let mut runs = Vec::new();
-    for &(problem_file, proof_file) in instances {
+    for (problem_file, proof_file) in instances {
         for i in 0..num_runs {
             let parsing_time = Instant::now();
             let (proof, pool) = parse_problem_proof(
