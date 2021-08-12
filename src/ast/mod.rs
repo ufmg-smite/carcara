@@ -122,9 +122,12 @@ impl TermPool {
     fn add_term_to_map(terms_map: &mut AHashMap<Term, ByRefRc<Term>>, term: Term) -> ByRefRc<Term> {
         use std::collections::hash_map::Entry;
 
-        match terms_map.entry(term.clone()) {
+        match terms_map.entry(term) {
             Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
-            Entry::Vacant(vacant_entry) => vacant_entry.insert(ByRefRc::new(term)).clone(),
+            Entry::Vacant(vacant_entry) => {
+                let term = vacant_entry.key().clone();
+                vacant_entry.insert(ByRefRc::new(term)).clone()
+            }
         }
     }
 
