@@ -14,121 +14,133 @@ use verit_proof_checker::{
     Error,
 };
 
-fn main() -> Result<(), Error> {
-    let matches = App::new("veriT proof checker")
+fn infer_problem_path(proof_path: impl Into<PathBuf>) -> Option<PathBuf> {
+    const SMT_FILE_EXTENSIONS: [&str; 3] = ["smt", "smt2", "smt_in"];
+
+    let mut path: PathBuf = proof_path.into();
+    while !SMT_FILE_EXTENSIONS.contains(&path.extension()?.to_str()?) {
+        path.set_extension("");
+    }
+    Some(path)
+}
+
+fn app() -> App<'static, 'static> {
+    let subcommands = vec![
+        SubCommand::with_name("check")
+            .about("Checks a proof file")
+            .setting(AppSettings::DisableVersion)
+            .arg(Arg::with_name("proof-file").required(true))
+            .arg(Arg::with_name("problem-file"))
+            .arg(
+                Arg::with_name("skip-unknown-rules")
+                    .short("s")
+                    .long("skip-unknown-rules")
+                    .help("Skips rules that are not yet implemented"),
+            ),
+        SubCommand::with_name("parse")
+            .about("Parses a proof file and prints the AST")
+            .setting(AppSettings::DisableVersion)
+            .arg(Arg::with_name("proof-file").required(true))
+            .arg(Arg::with_name("problem-file")),
+        SubCommand::with_name("bench")
+            .about("Checks a series of proof files and records performance statistics")
+            .setting(AppSettings::DisableVersion)
+            .arg(
+                Arg::with_name("num-runs")
+                    .short("n")
+                    .long("num-runs")
+                    .default_value("10")
+                    .help("Number of times to run the benchmark for each file"),
+            )
+            .arg(Arg::with_name("files").multiple(true).required(true).help(
+                "The proof files to be checked. The problem files will be inferred from the \
+                proof files",
+            )),
+        SubCommand::with_name("progress-report")
+            .setting(AppSettings::DisableVersion)
+            .setting(AppSettings::DeriveDisplayOrder)
+            .about("Prints a progress report on which rules are implemented")
+            .arg(
+                Arg::with_name("by-files")
+                    .short("f")
+                    .long("by-files")
+                    .help("Reports which files have all rules implemented"),
+            )
+            .arg(
+                Arg::with_name("by-rules")
+                    .short("r")
+                    .long("by-rules")
+                    .help("Reports which rules in the given files are implemented"),
+            )
+            .arg(
+                Arg::with_name("by-files-and-rules")
+                    .short("a")
+                    .long("by-files-and-rules")
+                    .help("For every file given, reports which rules are implemented"),
+            )
+            .group(
+                ArgGroup::with_name("mode")
+                    .args(&["by-files", "by-rules", "by-files-and-rules"])
+                    .required(true),
+            )
+            .arg(
+                Arg::with_name("quiet")
+                    .short("-q")
+                    .long("--quiet")
+                    .help("Print only one character per file/rule"),
+            )
+            .arg(Arg::with_name("files").multiple(true)),
+    ];
+    App::new("veriT proof checker")
         .version("0.1.0")
         .setting(AppSettings::SubcommandRequiredElseHelp)
-        .subcommands(vec![
-            SubCommand::with_name("check")
-                .about("Checks a proof file")
-                .setting(AppSettings::DisableVersion)
-                .arg(Arg::with_name("PROBLEM_FILE").required(true))
-                .arg(Arg::with_name("PROOF_FILE").required(false))
-                .arg(
-                    Arg::with_name("skip-unknown-rules")
-                        .short("s")
-                        .long("skip-unknown-rules")
-                        .help("Skips rules that are not yet implemented"),
-                ),
-            SubCommand::with_name("parse")
-                .about("Parses a proof file and prints the AST")
-                .setting(AppSettings::DisableVersion)
-                .arg(Arg::with_name("PROBLEM_FILE").required(true))
-                .arg(Arg::with_name("PROOF_FILE").required(false)),
-            SubCommand::with_name("bench")
-                .about("Checks a series of proof files and records performance statistics")
-                .setting(AppSettings::DisableVersion)
-                .arg(
-                    Arg::with_name("num-runs")
-                        .short("n")
-                        .long("num-runs")
-                        .default_value("10")
-                        .help("Number of times to run the benchmark for each file"),
-                )
-                .arg(Arg::with_name("files").multiple(true).required(true).help(
-                    "The proof files to be checked. The problem files will be inferred from the \
-                    proof files",
-                )),
-            SubCommand::with_name("progress-report")
-                .setting(AppSettings::DisableVersion)
-                .setting(AppSettings::DeriveDisplayOrder)
-                .about("Prints a progress report on which rules are implemented")
-                .arg(
-                    Arg::with_name("by-files")
-                        .short("f")
-                        .long("by-files")
-                        .help("Reports which files have all rules implemented"),
-                )
-                .arg(
-                    Arg::with_name("by-rules")
-                        .short("r")
-                        .long("by-rules")
-                        .help("Reports which rules in the given files are implemented"),
-                )
-                .arg(
-                    Arg::with_name("by-files-and-rules")
-                        .short("a")
-                        .long("by-files-and-rules")
-                        .help("For every file given, reports which rules are implemented"),
-                )
-                .group(
-                    ArgGroup::with_name("mode")
-                        .args(&["by-files", "by-rules", "by-files-and-rules"])
-                        .required(true),
-                )
-                .arg(
-                    Arg::with_name("quiet")
-                        .short("-q")
-                        .long("--quiet")
-                        .help("Print only one character per file/rule"),
-                )
-                .arg(Arg::with_name("files").multiple(true)),
-        ])
-        .get_matches();
+        .subcommands(subcommands)
+}
+
+fn main() -> Result<(), Error> {
+    let matches = app().get_matches();
 
     if let Some(matches) = matches.subcommand_matches("check") {
-        let problem = matches.value_of("PROBLEM_FILE").unwrap();
-        let proof = matches
-            .value_of("PROOF_FILE")
-            .map(str::to_string)
-            .unwrap_or(problem.to_string() + ".proof");
-        let skip = matches.is_present("skip-unknown-rules");
-        match check(problem, &proof, skip, false)? {
-            Correctness::True => println!("true"),
-            Correctness::False(s, r) => println!("false ({}, {})", s, r),
-        }
+        check_subcommand(matches)
     } else if let Some(matches) = matches.subcommand_matches("parse") {
-        let problem = matches.value_of("PROBLEM_FILE").unwrap();
-        let proof = matches
-            .value_of("PROOF_FILE")
-            .map(str::to_string)
-            .unwrap_or(problem.to_string() + ".proof");
-        let (problem, proof) = (
-            BufReader::new(File::open(problem)?),
-            BufReader::new(File::open(proof)?),
-        );
-        let (proof, _) = parse_problem_proof(problem, proof)?;
-        println!("{:#?}", proof);
+        parse_subcommand(matches)
     } else if let Some(matches) = matches.subcommand_matches("bench") {
-        bench_subcommand(matches)?
+        bench_subcommand(matches)
     } else if let Some(matches) = matches.subcommand_matches("progress-report") {
-        let files = matches
-            .values_of("files")
-            .map(Iterator::collect::<Vec<_>>)
-            .unwrap_or_default();
-        let quiet = matches.is_present("quiet");
-        if matches.is_present("by-files") {
-            report_by_files(&files, quiet)?;
-        } else if matches.is_present("by-rules") {
-            report_by_rules(&files, quiet)?;
-        } else if matches.is_present("by-files-and-rules") {
-            for file in files {
-                println!("\x1b[0;0m{}:", file);
-                report_by_rules(&[file], quiet)?;
-                println!();
-            }
-        }
+        progress_report_subcommand(matches)
+    } else {
+        unreachable!()
     }
+}
+
+fn check_subcommand(matches: &ArgMatches) -> Result<(), Error> {
+    let proof_file = matches.value_of("proof-file").unwrap();
+    let problem_file = matches
+        .value_of("problem-file")
+        .map(PathBuf::from)
+        .or_else(|| infer_problem_path(proof_file))
+        .expect("Couldn't infer original problem file");
+    let skip = matches.is_present("skip-unknown-rules");
+    match check(problem_file, PathBuf::from(proof_file), skip, false)? {
+        Correctness::True => println!("true"),
+        Correctness::False(s, r) => println!("false ({}, {})", s, r),
+    }
+    Ok(())
+}
+
+fn parse_subcommand(matches: &ArgMatches) -> Result<(), Error> {
+    let proof_file = matches.value_of("proof-file").unwrap();
+    let problem_file = matches
+        .value_of("problem-file")
+        .map(PathBuf::from)
+        .or_else(|| infer_problem_path(proof_file))
+        .expect("Couldn't infer original problem file");
+    let (problem, proof) = (
+        BufReader::new(File::open(problem_file)?),
+        BufReader::new(File::open(proof_file)?),
+    );
+    let (proof, _) = parse_problem_proof(problem, proof)?;
+    println!("{:#?}", proof);
     Ok(())
 }
 
@@ -140,17 +152,23 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), Error> {
     let instances: Vec<_> = matches
         .values_of("files")
         .unwrap()
-        .map(|proof_file| {
-            let problem_path = {
-                let mut path = PathBuf::from(proof_file);
-                while path.extension().unwrap() != "smt_in" {
-                    path.set_extension("");
-                }
-                path.to_str().unwrap().to_string()
-            };
-            (problem_path, proof_file.to_string())
+        .filter_map(|proof_file| {
+            let problem_file =
+                infer_problem_path(proof_file).and_then(|p| Some(p.to_str()?.to_string()));
+            if problem_file.is_none() {
+                println!(
+                    "Couldn't infer problem file for proof file \"{}\", skipping",
+                    proof_file
+                )
+            }
+            Some((problem_file?, proof_file.to_string()))
         })
         .collect();
+
+    if instances.is_empty() {
+        println!("No files left, exiting");
+        return Ok(());
+    }
 
     println!(
         "running benchmark on {} files, doing {} runs each",
@@ -169,6 +187,26 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), Error> {
     println!("by rule:");
     for (rule, data) in data_by_rule {
         println!("    {: <18}{}", rule, data);
+    }
+    Ok(())
+}
+
+fn progress_report_subcommand(matches: &ArgMatches) -> Result<(), Error> {
+    let files = matches
+        .values_of("files")
+        .map(Iterator::collect::<Vec<_>>)
+        .unwrap_or_default();
+    let quiet = matches.is_present("quiet");
+    if matches.is_present("by-files") {
+        report_by_files(&files, quiet)?;
+    } else if matches.is_present("by-rules") {
+        report_by_rules(&files, quiet)?;
+    } else if matches.is_present("by-files-and-rules") {
+        for file in files {
+            println!("\x1b[0;0m{}:", file);
+            report_by_rules(&[file], quiet)?;
+            println!();
+        }
     }
     Ok(())
 }
