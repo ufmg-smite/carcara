@@ -15,3 +15,6 @@ num-traits = "0.2.14"
 
 [profile.release]
 debug = true
+
+[features]
+large-test-set = []
