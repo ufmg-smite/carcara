@@ -12,7 +12,13 @@ use ahash::{AHashMap, AHashSet};
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
-use std::{borrow::Borrow, fmt::Debug, hash::Hash, ops::Deref, rc, str::FromStr};
+use std::{
+    borrow::Borrow,
+    fmt::{self, Debug},
+    hash::Hash,
+    ops::Deref,
+    rc,
+};
 
 /// An `Rc` where equality and hashing are done by reference, instead of by value
 #[derive(Clone, Eq)]
@@ -57,7 +63,7 @@ impl<T> From<T> for ByRefRc<T> {
 }
 
 impl<T: Debug> Debug for ByRefRc<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self.0)
     }
 }
@@ -238,7 +244,7 @@ impl TermPool {
                 set.insert(var.clone());
                 set
             }
-            Term::Terminal(_) | Term::Sort(_, _) => AHashSet::new(),
+            Term::Terminal(_) | Term::Sort(_) => AHashSet::new(),
         };
         self.free_vars_cache.insert(term.clone(), set);
         self.free_vars_cache.get(term).unwrap()
@@ -342,10 +348,10 @@ impl_str_conversion_traits!(Operator {
 
 pub type SortedVar = (String, ByRefRc<Term>);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum SortKind {
-    Function,
-    Atom,
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Sort {
+    Function(Vec<ByRefRc<Term>>),
+    Atom(String, Vec<ByRefRc<Term>>),
     Bool,
     Int,
     Real,
@@ -381,7 +387,7 @@ pub enum Term {
     Op(Operator, Vec<ByRefRc<Term>>),
 
     /// A sort.
-    Sort(SortKind, Vec<ByRefRc<Term>>),
+    Sort(Sort),
 
     /// A quantifier binder term.
     Quant(Quantifier, Vec<SortedVar>, ByRefRc<Term>),
@@ -402,16 +408,16 @@ impl From<SortedVar> for Term {
 
 impl Term {
     /// The "Bool" built-in sort.
-    pub const BOOL_SORT: &'static Term = &Term::Sort(SortKind::Bool, Vec::new());
+    pub const BOOL_SORT: &'static Term = &Term::Sort(Sort::Bool);
 
     /// The "Int" built-in sort.
-    pub const INT_SORT: &'static Term = &Term::Sort(SortKind::Int, Vec::new());
+    pub const INT_SORT: &'static Term = &Term::Sort(Sort::Int);
 
     /// The "Real" built-in sort.
-    pub const REAL_SORT: &'static Term = &Term::Sort(SortKind::Real, Vec::new());
+    pub const REAL_SORT: &'static Term = &Term::Sort(Sort::Real);
 
     /// The "String" built-in sort.
-    pub const STRING_SORT: &'static Term = &Term::Sort(SortKind::String, Vec::new());
+    pub const STRING_SORT: &'static Term = &Term::Sort(Sort::String);
 
     /// Returns the sort of this term. For operations and application terms, this method assumes that
     /// the arguments' sorts have already been checked, and are correct. If `self` is a sort, this
@@ -445,13 +451,13 @@ impl Term {
             },
             Term::App(f, _) => {
                 let function_sort = f.sort();
-                if let Term::Sort(SortKind::Function, sorts) = function_sort {
+                if let Term::Sort(Sort::Function(sorts)) = function_sort {
                     sorts.last().unwrap()
                 } else {
                     unreachable!() // We assume that the function is correctly sorted
                 }
             }
-            sort @ Term::Sort(_, _) => sort,
+            sort @ Term::Sort(_) => sort,
             Term::Quant(_, _, _) => Term::BOOL_SORT,
             Term::Choice((_, sort), _) => sort,
             Term::Let(_, inner) => inner.sort(),
@@ -557,36 +563,33 @@ impl Term {
 }
 
 impl Debug for Term {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fn write_sequence<H, T>(f: &mut fmt::Formatter, head: H, tail: &[T]) -> fmt::Result
+        where
+            H: Debug,
+            T: Debug,
+        {
+            write!(f, "({:?}", head)?;
+            for e in tail {
+                write!(f, " {:?}", e)?;
+            }
+            write!(f, ")")
+        }
+
         match self {
             Term::Terminal(t) => write!(f, "{:?}", t),
-            Term::App(func, args) => {
-                write!(f, "({:?}", func)?;
-                for a in args {
-                    write!(f, " {:?}", a)?;
-                }
-                write!(f, ")")
-            }
-            Term::Op(op, args) => {
-                write!(f, "({:?}", op)?;
-                for a in args {
-                    write!(f, " {:?}", a)?;
-                }
-                write!(f, ")")
-            }
-            Term::Sort(sort_kind, args) => match sort_kind {
-                SortKind::Atom => {
-                    if let Term::Terminal(Terminal::String(s)) = args[0].as_ref() {
-                        write!(f, "{}", s)
-                    } else {
-                        panic!()
-                    }
-                }
-                SortKind::Bool => write!(f, "Bool"),
-                SortKind::Int => write!(f, "Int"),
-                SortKind::Real => write!(f, "Real"),
-                SortKind::String => write!(f, "String"),
-                SortKind::Function => panic!(),
+            Term::App(func, args) => write_sequence(f, func, args),
+            Term::Op(op, args) => write_sequence(f, op, args),
+            Term::Sort(sort) => match sort {
+                Sort::Atom(name, args) => match args.len() {
+                    0 => write!(f, "{}", name),
+                    _ => write_sequence(f, name, args),
+                },
+                Sort::Bool => write!(f, "Bool"),
+                Sort::Int => write!(f, "Int"),
+                Sort::Real => write!(f, "Real"),
+                Sort::String => write!(f, "String"),
+                Sort::Function(args) => write_sequence(f, "Func", args),
             },
             Term::Quant(quantifier, bindings, term) => {
                 let quantifier = match quantifier {
@@ -697,9 +700,7 @@ impl DeepEq for Term {
                 // General case
                 op_a == op_b && DeepEq::eq_impl(args_a, args_b, is_mod_reordering)
             }
-            (Term::Sort(kind_a, args_a), Term::Sort(kind_b, args_b)) => {
-                kind_a == kind_b && DeepEq::eq_impl(args_a, args_b, is_mod_reordering)
-            }
+            (Term::Sort(a), Term::Sort(b)) => DeepEq::eq_impl(a, b, is_mod_reordering),
             (Term::Terminal(a), Term::Terminal(b)) => match (a, b) {
                 (Terminal::Var(iden_a, sort_a), Terminal::Var(iden_b, sort_b)) => {
                     iden_a == iden_b && DeepEq::eq_impl(sort_a, sort_b, is_mod_reordering)
@@ -719,6 +720,24 @@ impl DeepEq for Term {
                 DeepEq::eq_impl(binds_a, binds_b, is_mod_reordering)
                     && DeepEq::eq_impl(a, b, is_mod_reordering)
             }
+            _ => false,
+        }
+    }
+}
+
+impl DeepEq for Sort {
+    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
+        match (a, b) {
+            (Sort::Function(sorts_a), Sort::Function(sorts_b)) => {
+                DeepEq::eq_impl(sorts_a, sorts_b, is_mod_reordering)
+            }
+            (Sort::Atom(a, sorts_a), Sort::Atom(b, sorts_b)) => {
+                a == b && DeepEq::eq_impl(sorts_a, sorts_b, is_mod_reordering)
+            }
+            (Sort::Bool, Sort::Bool)
+            | (Sort::Int, Sort::Int)
+            | (Sort::Real, Sort::Real)
+            | (Sort::String, Sort::String) => true,
             _ => false,
         }
     }

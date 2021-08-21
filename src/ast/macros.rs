@@ -117,7 +117,7 @@ macro_rules! terminal {
 /// Implements `FromStr` and `Debug` for an enum, given a string representation for each variant.
 macro_rules! impl_str_conversion_traits {
     ($enum_name:ident { $($variant:ident: $str:literal),* $(,)? }) => {
-        impl FromStr for $enum_name {
+        impl std::str::FromStr for $enum_name {
             type Err = ();
 
             fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -128,7 +128,7 @@ macro_rules! impl_str_conversion_traits {
             }
         }
 
-        impl Debug for $enum_name {
+        impl std::fmt::Debug for $enum_name {
             fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
                 let s = match self {
                     $($enum_name::$variant => $str,)*

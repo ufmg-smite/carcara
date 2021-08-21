@@ -254,7 +254,7 @@ fn test_logic_ops() {
         parse_term_err("(or true 1.2)"),
         ParserError(
             ErrorKind::SortError(SortError::Expected {
-                expected: Term::Sort(SortKind::Bool, _),
+                expected: Term::Sort(Sort::Bool),
                 ..
             }),
             _
@@ -324,7 +324,7 @@ fn test_ite() {
         parse_term_err("(ite 0 1 2)"),
         ParserError(
             ErrorKind::SortError(SortError::Expected {
-                expected: Term::Sort(SortKind::Bool, _),
+                expected: Term::Sort(Sort::Bool),
                 ..
             }),
             _
@@ -480,7 +480,7 @@ fn test_declare_sort() {
          (declare-fun x () T)",
         "x",
     );
-    let expected_sort = Term::Sort(SortKind::Atom, vec![ByRefRc::new(terminal!(string "T"))]);
+    let expected_sort = Term::Sort(Sort::Atom("T".to_string(), Vec::new()));
     assert_deep_eq!(&terminal!(var "x"; ByRefRc::new(expected_sort)), &got);
 }
 

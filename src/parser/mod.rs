@@ -70,7 +70,7 @@ struct ParserState {
     sorts_symbol_table: SymbolTable<Identifier, ByRefRc<Term>>,
     function_defs: AHashMap<String, FunctionDef>,
     term_pool: TermPool,
-    sort_declarations: AHashMap<String, (u64, ByRefRc<Term>)>,
+    sort_declarations: AHashMap<String, u64>,
     step_indices: SymbolTable<String, usize>,
 }
 
@@ -206,12 +206,12 @@ impl<R: BufRead> Parser<R> {
     fn make_app(&mut self, function: Term, args: Vec<Term>) -> Result<Term, ErrorKind> {
         let sorts = {
             let function_sort = function.sort();
-            if let Term::Sort(SortKind::Function, sorts) = function_sort {
+            if let Term::Sort(Sort::Function(sorts)) = function_sort {
                 sorts
             } else {
                 // Function does not have function sort
                 return Err(ErrorKind::SortError(SortError::Expected {
-                    expected: Term::Sort(SortKind::Function, Vec::new()),
+                    expected: Term::Sort(Sort::Function(Vec::new())),
                     got: function_sort.clone(),
                 }));
             }
@@ -295,11 +295,7 @@ impl<R: BufRead> Parser<R> {
                     let (name, arity) = self.parse_declare_sort()?;
                     // User declared sorts are represented with the `Atom` sort kind, and an
                     // argument which is a string terminal representing the sort name.
-                    let sort = {
-                        let arg = self.add_term(terminal!(string name.clone()));
-                        self.add_term(Term::Sort(SortKind::Atom, vec![arg]))
-                    };
-                    self.state.sort_declarations.insert(name, (arity, sort));
+                    self.state.sort_declarations.insert(name, arity);
                     continue;
                 }
                 Token::ReservedWord(Reserved::DefineFun) => {
@@ -574,7 +570,7 @@ impl<R: BufRead> Parser<R> {
             if sorts.len() == 1 {
                 sorts.into_iter().next().unwrap()
             } else {
-                self.add_term(Term::Sort(SortKind::Function, sorts))
+                self.add_term(Term::Sort(Sort::Function(sorts)))
             }
         };
         self.expect_token(Token::CloseParen)?;
@@ -852,21 +848,21 @@ impl<R: BufRead> Parser<R> {
 
     /// Parses a sort.
     fn parse_sort(&mut self) -> ParserResult<Term> {
-        match self.next_token()? {
+        let sort = match self.next_token()? {
             Token::Symbol(s) => match s.as_ref() {
-                "Bool" => Ok(Term::BOOL_SORT.clone()),
-                "Int" => Ok(Term::INT_SORT.clone()),
-                "Real" => Ok(Term::REAL_SORT.clone()),
-                "String" => Ok(Term::STRING_SORT.clone()),
-                other => {
-                    if let Some((_, sort)) = self.state.sort_declarations.get(other) {
-                        Ok((**sort).clone())
-                    } else {
-                        Err(self.err(ErrorKind::UndefinedSort(other.into())))
-                    }
-                }
+                "Bool" => Ok(Sort::Bool),
+                "Int" => Ok(Sort::Int),
+                "Real" => Ok(Sort::Real),
+                "String" => Ok(Sort::String),
+                other => match self.state.sort_declarations.get(other) {
+                    Some(0) => Ok(Sort::Atom(other.to_string(), Vec::new())),
+                    Some(arity) => Err(self.err(ErrorKind::WrongNumberOfArgs(*arity as usize, 0))),
+                    None => Err(self.err(ErrorKind::UndefinedSort(other.into()))),
+                },
             },
+            Token::OpenParen => Err(self.err(ErrorKind::NotYetImplemented)),
             other => Err(self.unexpected_token(other)),
-        }
+        }?;
+        Ok(Term::Sort(sort))
     }
 }
