@@ -40,6 +40,7 @@ pub enum ErrorKind {
     WrongNumberOfArgs(usize, usize),
     RepeatedStepIndex(String),
     InvalidSortArity(BigInt),
+    LastSubproofStepIsNotStep,
     NotYetImplemented,
 }
 

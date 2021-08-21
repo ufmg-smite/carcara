@@ -327,14 +327,12 @@ impl<R: BufRead> Parser<R> {
 
     /// Parses a proof.
     pub fn parse_proof(mut self) -> ParserResult<(Proof, TermPool)> {
-        let proof = self.parse_subproof(None)?;
-        Ok((proof, self.state.term_pool))
-    }
+        // To avoid stack overflows in proofs with many nested subproofs, we parse the subproofs
+        // iteratively, instead of recursively
+        let mut commands_stack = vec![Vec::new()];
+        let mut end_step_stack = Vec::new();
+        let mut subproof_args_stack = Vec::new();
 
-    /// Parses a proof or subproof. Will stop parsing after encountering a command with index
-    /// `end_step`. If `end_step` is `None`, stops at EOF.
-    fn parse_subproof(&mut self, end_step: Option<&str>) -> ParserResult<Proof> {
-        let mut commands = Vec::new();
         while self.current_token != Token::Eof {
             self.expect_token(Token::OpenParen)?;
             let (index, command) = match self.next_token()? {
@@ -342,11 +340,11 @@ impl<R: BufRead> Parser<R> {
                 Token::ReservedWord(Reserved::Step) => {
                     let (index, (clause, rule, premises, args)) = self.parse_step_command()?;
 
-                    // If this is the last step in the subproof, we pop the top scope of the step
-                    // indices symbol table before converting the premises into indices. We must do
-                    // this here because if the last step of a subproof has premises, they refer to
-                    // the outer scope, and not inside the subproof
-                    if end_step == Some(&index) {
+                    // If this is the last step in the subproof, we pop the top scope off of the
+                    // step indices symbol table before converting the premises into indices. We
+                    // must do this here because if the last step of a subproof has premises, they
+                    // refer to the outer scope, and not inside the subproof
+                    if end_step_stack.last() == Some(&index) {
                         self.state.step_indices.pop_scope();
                     }
 
@@ -381,21 +379,17 @@ impl<R: BufRead> Parser<R> {
                     let (end_step_index, assignment_args, variable_args) =
                         self.parse_anchor_command()?;
 
+                    // When we encounter an "anchor" command, we push a new scope into the step
+                    // indices symbol table, a fresh commands vector into the commands stack for
+                    // the subproof to fill, and the "anchor" data (end step and arguments) into
+                    // their respective stacks. All of this will be popped off at the end of the
+                    // subproof. We don't need to push a new scope into the sorts symbol table
+                    // because `Parser::parse_anchor_command` already does that for us
                     self.state.step_indices.push_scope();
-                    let Proof(commands) = self.parse_subproof(Some(&end_step_index))?;
-                    // We don't need to pop the scope that we pushed because it is popped when the
-                    // last step of the subproof is parsed
-
-                    // Since `Parser::parse_anchor_command` pushes a scope into the symbol table, we
-                    // have to pop it now, after parsing the subproof
-                    self.state.sorts_symbol_table.pop_scope();
-
-                    let subproof = ProofCommand::Subproof {
-                        commands,
-                        assignment_args,
-                        variable_args,
-                    };
-                    (end_step_index, subproof)
+                    commands_stack.push(Vec::new());
+                    end_step_stack.push(end_step_index);
+                    subproof_args_stack.push((assignment_args, variable_args));
+                    continue;
                 }
                 other => return Err(self.unexpected_token(other)),
             };
@@ -403,13 +397,42 @@ impl<R: BufRead> Parser<R> {
                 return Err(self.err(ErrorKind::RepeatedStepIndex(index)));
             }
 
-            commands.push(command);
-            if end_step == Some(&index) {
-                break;
+            commands_stack.last_mut().unwrap().push(command);
+            if end_step_stack.last() == Some(&index) {
+                // If this is the last step in a subproof, we need to pop all the subproof data off
+                // of the stacks and build the subproof command with it. We don't need to pop off
+                // the scope added to the step indices symbol table because that is done when the
+                // last step is being parsed. We just need to make sure that the last command is in
+                // fact a "step"
+                let commands = commands_stack.pop().unwrap();
+                match commands.last() {
+                    Some(ProofCommand::Step(_)) => (),
+                    _ => return Err(self.err(ErrorKind::LastSubproofStepIsNotStep)),
+                };
+                end_step_stack.pop().unwrap();
+                let (assignment_args, variable_args) = subproof_args_stack.pop().unwrap();
+                self.state.sorts_symbol_table.pop_scope();
+                commands_stack
+                    .last_mut()
+                    .unwrap()
+                    .push(ProofCommand::Subproof {
+                        commands,
+                        assignment_args,
+                        variable_args,
+                    })
             }
-            self.state.step_indices.insert(index, commands.len() - 1);
+            self.state
+                .step_indices
+                .insert(index, commands_stack.last().unwrap().len() - 1);
         }
-        Ok(Proof(commands))
+        match commands_stack.len() {
+            0 => unreachable!(),
+            1 => Ok((Proof(commands_stack.pop().unwrap()), self.state.term_pool)),
+
+            // If there is more than one vector in the commands stack, we are inside a subproof
+            // that should be closed before the outer proof is finished
+            _ => Err(self.err(ErrorKind::UnexpectedToken(Token::Eof))),
+        }
     }
 
     /// Parses an "assume" proof command. This method assumes that the "(" and "assume" tokens were
