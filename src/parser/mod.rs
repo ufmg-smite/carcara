@@ -70,7 +70,7 @@ struct ParserState {
     sorts_symbol_table: SymbolTable<Identifier, ByRefRc<Term>>,
     function_defs: AHashMap<String, FunctionDef>,
     term_pool: TermPool,
-    sort_declarations: AHashMap<String, u64>,
+    sort_declarations: AHashMap<String, usize>,
     step_indices: SymbolTable<String, usize>,
 }
 
@@ -579,12 +579,12 @@ impl<R: BufRead> Parser<R> {
 
     /// Parses a declare-sort proof command. Returns the sort name and its arity. This method
     /// assumes that the "(" and "declare-sort" tokens were already consumed.
-    fn parse_declare_sort(&mut self) -> ParserResult<(String, u64)> {
+    fn parse_declare_sort(&mut self) -> ParserResult<(String, usize)> {
         let name = self.expect_symbol()?;
         let arity = self.expect_numeral()?;
         self.expect_token(Token::CloseParen)?;
         let arity = arity
-            .to_u64()
+            .to_usize()
             .ok_or_else(|| self.err(ErrorKind::InvalidSortArity(arity)))?;
         Ok((name, arity))
     }
@@ -848,20 +848,34 @@ impl<R: BufRead> Parser<R> {
 
     /// Parses a sort.
     fn parse_sort(&mut self) -> ParserResult<Term> {
-        let sort = match self.next_token()? {
-            Token::Symbol(s) => match s.as_ref() {
-                "Bool" => Ok(Sort::Bool),
-                "Int" => Ok(Sort::Int),
-                "Real" => Ok(Sort::Real),
-                "String" => Ok(Sort::String),
-                other => match self.state.sort_declarations.get(other) {
-                    Some(0) => Ok(Sort::Atom(other.to_string(), Vec::new())),
-                    Some(arity) => Err(self.err(ErrorKind::WrongNumberOfArgs(*arity as usize, 0))),
-                    None => Err(self.err(ErrorKind::UndefinedSort(other.into()))),
-                },
+        let (name, args) = match self.next_token()? {
+            Token::Symbol(s) => (s, Vec::new()),
+            Token::OpenParen => {
+                let name = self.expect_symbol()?;
+                let args = self.parse_sequence(Parser::parse_sort, true)?;
+                (name, self.add_all(args))
+            }
+            other => return Err(self.unexpected_token(other)),
+        };
+
+        let sort = match name.as_str() {
+            "Bool" | "Int" | "Real" | "String" if !args.is_empty() => {
+                Err(self.err(ErrorKind::WrongNumberOfArgs(0, args.len())))
+            }
+            "Bool" => Ok(Sort::Bool),
+            "Int" => Ok(Sort::Int),
+            "Real" => Ok(Sort::Real),
+            "String" => Ok(Sort::String),
+
+            "Array" => match args.as_slice() {
+                [x, y] => Ok(Sort::Array(x.clone(), y.clone())),
+                _ => Err(self.err(ErrorKind::WrongNumberOfArgs(2, args.len()))),
             },
-            Token::OpenParen => Err(self.err(ErrorKind::NotYetImplemented)),
-            other => Err(self.unexpected_token(other)),
+            _ => match self.state.sort_declarations.get(&name) {
+                Some(arity) if *arity == args.len() => Ok(Sort::Atom(name, args)),
+                Some(arity) => Err(self.err(ErrorKind::WrongNumberOfArgs(*arity, args.len()))),
+                None => Err(self.err(ErrorKind::UndefinedSort(name))),
+            },
         }?;
         Ok(Term::Sort(sort))
     }

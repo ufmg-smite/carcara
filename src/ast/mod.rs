@@ -356,6 +356,7 @@ pub enum Sort {
     Int,
     Real,
     String,
+    Array(ByRefRc<Term>, ByRefRc<Term>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -590,6 +591,7 @@ impl Debug for Term {
                 Sort::Real => write!(f, "Real"),
                 Sort::String => write!(f, "String"),
                 Sort::Function(args) => write_sequence(f, "Func", args),
+                Sort::Array(x, y) => write_sequence(f, "Array", &[x, y]),
             },
             Term::Quant(quantifier, bindings, term) => {
                 let quantifier = match quantifier {
@@ -738,6 +740,10 @@ impl DeepEq for Sort {
             | (Sort::Int, Sort::Int)
             | (Sort::Real, Sort::Real)
             | (Sort::String, Sort::String) => true,
+            (Sort::Array(x_a, y_a), Sort::Array(x_b, y_b)) => {
+                DeepEq::eq_impl(x_a, x_b, is_mod_reordering)
+                    && DeepEq::eq_impl(y_a, y_b, is_mod_reordering)
+            }
             _ => false,
         }
     }
