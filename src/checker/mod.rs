@@ -9,7 +9,6 @@ use std::time::Instant;
 #[derive(Debug)]
 pub enum CheckerError {
     UnknownRule(String),
-    LastSubproofStepIsNotStep,
 }
 
 /// Represents the correctness of a proof or a proof step.
@@ -59,48 +58,51 @@ impl<'c> ProofChecker<'c> {
     }
 
     pub fn check(&mut self, proof: &Proof) -> CheckerResult {
-        self.check_subproof(&proof.0)
-    }
+        // Similarly to the parser, to avoid stack overflows in proofs with many nested subproofs,
+        // we check the subproofs iteratively, instead of recursively
 
-    fn check_subproof(&mut self, commands: &[ProofCommand]) -> CheckerResult {
-        for step in commands {
-            let correctness = self.check_command(step, commands)?;
+        // A stack of the subproof commands, and the index of the command being currently checked
+        let mut commands_stack = vec![(0, proof.0.as_slice())];
+
+        while let Some(&(i, commands)) = commands_stack.last() {
+            if i == commands.len() {
+                // If we got to the end without popping the commands vector off the stack, we must
+                // not be in a subproof
+                assert!(commands_stack.len() == 1);
+                break;
+            }
+            let correctness = match &commands[i] {
+                // The parser already ensures that the last command in a subproof is always a
+                // "step" command
+                ProofCommand::Step(step) if commands_stack.len() > 1 && i == commands.len() - 1 => {
+                    // If this is the last command of a subproof, we have to pop the subproof
+                    // commands off of the stack
+                    commands_stack.pop();
+                    let correctness =
+                        self.check_step(step, commands_stack.last().unwrap().1, Some(commands))?;
+                    self.context.pop();
+                    Ok(correctness)
+                }
+                ProofCommand::Step(step) => self.check_step(step, commands, None),
+                ProofCommand::Subproof {
+                    commands: inner_commands,
+                    assignment_args,
+                    variable_args,
+                } => {
+                    let new_context = self.build_context(assignment_args, variable_args);
+                    self.context.push(new_context);
+                    commands_stack.push((0, inner_commands));
+                    continue;
+                }
+                ProofCommand::Assume(_) => Ok(Correctness::True),
+            }?;
             if !correctness.as_bool() {
                 return Ok(correctness);
             }
+            commands_stack.last_mut().unwrap().0 += 1;
         }
-        Ok(Correctness::True)
-    }
 
-    fn check_command(
-        &mut self,
-        command: &ProofCommand,
-        all_commands: &[ProofCommand],
-    ) -> CheckerResult {
-        match command {
-            ProofCommand::Step(step) => self.check_step(step, all_commands, None),
-            ProofCommand::Subproof {
-                commands: inner_commands,
-                assignment_args,
-                variable_args,
-            } => {
-                let new_context = self.build_context(assignment_args, variable_args);
-                self.context.push(new_context);
-                let subproof_correctness =
-                    self.check_subproof(&inner_commands[..inner_commands.len() - 1])?;
-                if !subproof_correctness.as_bool() {
-                    return Ok(subproof_correctness);
-                }
-                let last_step = match inner_commands.last().unwrap() {
-                    ProofCommand::Step(s) => s,
-                    _ => return Err(CheckerError::LastSubproofStepIsNotStep),
-                };
-                let correctness = self.check_step(last_step, all_commands, Some(inner_commands))?;
-                self.context.pop();
-                Ok(correctness)
-            }
-            ProofCommand::Assume(_) => Ok(Correctness::True),
-        }
+        Ok(Correctness::True)
     }
 
     fn check_step<'a>(
