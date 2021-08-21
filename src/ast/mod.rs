@@ -311,7 +311,8 @@ pub enum Operator {
     Add,
     Sub,
     Mult,
-    Div,
+    IntDiv,
+    RealDiv,
     LessThan,
     GreaterThan,
     LessEq,
@@ -331,7 +332,8 @@ impl_str_conversion_traits!(Operator {
     Add: "+",
     Sub: "-",
     Mult: "*",
-    Div: "/",
+    IntDiv: "div",
+    RealDiv: "/",
     LessThan: "<",
     GreaterThan: ">",
     LessEq: "<=",
@@ -435,7 +437,11 @@ impl Term {
                 | Operator::LessEq
                 | Operator::GreaterEq => Term::BOOL_SORT,
                 Operator::Ite => args[1].sort(),
-                Operator::Add | Operator::Sub | Operator::Mult | Operator::Div => args[0].sort(),
+                Operator::Add
+                | Operator::Sub
+                | Operator::Mult
+                | Operator::IntDiv
+                | Operator::RealDiv => args[0].sort(),
             },
             Term::App(f, _) => {
                 let function_sort = f.sort();

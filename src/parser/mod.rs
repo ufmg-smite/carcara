@@ -177,7 +177,7 @@ impl<R: BufRead> Parser<R> {
                 SortError::assert_eq(Term::BOOL_SORT, sorts[0])?;
                 SortError::assert_eq(sorts[1], sorts[2])?;
             }
-            Operator::Add | Operator::Mult | Operator::Div => {
+            Operator::Add | Operator::Mult | Operator::IntDiv | Operator::RealDiv => {
                 ErrorKind::assert_num_of_args_range(&args, 2..)?;
 
                 // All the arguments must have the same sort, and it must be either Int or Real

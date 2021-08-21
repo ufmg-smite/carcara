@@ -69,7 +69,8 @@ macro_rules! match_term {
     (@GET_VARIANT +)        => { Operator::Add };
     (@GET_VARIANT -)        => { Operator::Sub };
     (@GET_VARIANT *)        => { Operator::Mult };
-    (@GET_VARIANT /)        => { Operator::Div };
+    (@GET_VARIANT div)      => { Operator::IntDiv };
+    (@GET_VARIANT /)        => { Operator::RealDiv };
     (@GET_VARIANT <)        => { Operator::LessThan };
     (@GET_VARIANT >)        => { Operator::GreaterThan };
     (@GET_VARIANT <=)       => { Operator::LessEq };
