@@ -253,7 +253,7 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
-    /// Consumes the current token if it is a numeral, and returns the inner `u64`. Returns an
+    /// Consumes the current token if it is a numeral, and returns the inner `BigInt`. Returns an
     /// error otherwise.
     fn expect_numeral(&mut self) -> ParserResult<BigInt> {
         match self.next_token()? {
