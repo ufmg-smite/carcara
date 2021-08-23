@@ -1,6 +1,6 @@
 use super::{to_option, RuleArgs};
 use crate::{ast::*, utils::DedupIterator};
-use ahash::AHashSet;
+use ahash::{AHashMap, AHashSet};
 use num_rational::BigRational;
 use num_traits::{One, Zero};
 
@@ -529,13 +529,20 @@ pub fn comp_simplify(args: RuleArgs) -> Option<()> {
 }
 
 pub fn ac_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> {
-    fn flatten_operation(term: &ByRefRc<Term>, pool: &mut TermPool) -> ByRefRc<Term> {
-        let term = match term.as_ref() {
+    fn flatten_operation(
+        term: &ByRefRc<Term>,
+        pool: &mut TermPool,
+        cache: &mut AHashMap<ByRefRc<Term>, ByRefRc<Term>>,
+    ) -> ByRefRc<Term> {
+        if let Some(t) = cache.get(term) {
+            return t.clone();
+        }
+        let result = match term.as_ref() {
             Term::Op(op @ (Operator::And | Operator::Or), args) => {
                 let args: Vec<_> = args
                     .iter()
                     .flat_map(|term| {
-                        let term = flatten_operation(term, pool);
+                        let term = flatten_operation(term, pool, cache);
                         match term.as_ref() {
                             Term::Op(inner_op, inner_args) if inner_op == op => inner_args.clone(),
                             _ => vec![term.clone()],
@@ -552,31 +559,36 @@ pub fn ac_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> {
             Term::Op(op, args) => {
                 let args = args
                     .iter()
-                    .map(|term| flatten_operation(term, pool))
+                    .map(|term| flatten_operation(term, pool, cache))
                     .collect();
                 Term::Op(*op, args)
             }
             Term::App(func, args) => {
                 let args = args
                     .iter()
-                    .map(|term| flatten_operation(term, pool))
+                    .map(|term| flatten_operation(term, pool, cache))
                     .collect();
                 Term::App(func.clone(), args)
             }
             Term::Quant(q, bindings, inner) => {
-                Term::Quant(*q, bindings.clone(), flatten_operation(inner, pool))
+                Term::Quant(*q, bindings.clone(), flatten_operation(inner, pool, cache))
             }
             Term::Choice(binding, inner) => {
-                Term::Choice(binding.clone(), flatten_operation(inner, pool))
+                Term::Choice(binding.clone(), flatten_operation(inner, pool, cache))
             }
-            Term::Let(binding, inner) => Term::Let(binding.clone(), flatten_operation(inner, pool)),
+            Term::Let(binding, inner) => {
+                Term::Let(binding.clone(), flatten_operation(inner, pool, cache))
+            }
             _ => return term.clone(),
         };
-        pool.add_term(term)
+        let result = pool.add_term(result);
+        cache.insert(term.clone(), result.clone());
+        result
     }
     rassert!(conclusion.len() == 1);
     let (original, flattened) = match_term!((= psi phis) = conclusion[0], RETURN_RCS)?;
-    to_option(flatten_operation(original, pool) == *flattened)
+    let mut cache = AHashMap::new();
+    to_option(flatten_operation(original, pool, &mut cache) == *flattened)
 }
 
 #[cfg(test)]
