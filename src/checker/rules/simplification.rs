@@ -155,8 +155,8 @@ fn generic_and_or_simplify(conclusion: &[ByRefRc<Term>], rule_kind: Operator) ->
     };
 
     let (phis, result) = match_term!((= phi psi) = conclusion[0], RETURN_RCS)?;
-    let phis = match phis.as_ref() {
-        Term::Op(op, args) if *op == rule_kind => args,
+    let mut phis = match phis.as_ref() {
+        Term::Op(op, args) if *op == rule_kind => args.clone(),
         _ => return None,
     };
     let result = match result.as_ref() {
@@ -164,33 +164,55 @@ fn generic_and_or_simplify(conclusion: &[ByRefRc<Term>], rule_kind: Operator) ->
         _ => std::slice::from_ref(result),
     };
 
-    let mut seen = AHashSet::with_capacity(phis.len());
-    let mut expected = Vec::with_capacity(phis.len());
-
-    for term in phis {
-        if is_skip_term(term) {
-            continue; // Skip term if it is the "skip term"
+    // Sometimes, the "and_simplify" and "or_simplify" rules are used on a nested application of
+    // the rule operator, where the outer operation only has one argument, e.g. "(and (and p q r)".
+    // If we encounter this, we remove the outer application
+    if phis.len() == 1 {
+        match phis[0].as_ref() {
+            Term::Op(op, args) if *op == rule_kind => phis = args.clone(),
+            _ => (),
         }
+    }
 
+    // First, we remove all "skip term"s from the arguments. If at this point we already found the
+    // result, we return true. While doing this before the main loop requires an additional
+    // allocation for the `phis` vector, it allows us to exit early in some cases, which overall
+    // improves performance significantly. More importantly, it is necessary in some examples,
+    // where not all steps of the simplification are applied
+    phis.retain(|t| !is_skip_term(t));
+    if result.iter().eq(&phis) {
+        return Some(());
+    }
+
+    // Then, we remove all duplicate terms. We do this in place to avoid another allocation.
+    // Similarly to the step that removes the "skip term", we check if we already found the result
+    // after this step. This is also necessary in some examples
+    let mut seen = AHashSet::with_capacity(phis.len());
+    phis.retain(|t| seen.insert(t.clone()));
+    if result.iter().eq(&phis) {
+        return Some(());
+    }
+
+    // Finally, we check to see if the result was short-circuited
+    let seen: AHashSet<(bool, &Term)> = phis
+        .iter()
+        .map(|t| t.remove_all_negations_with_polarity())
+        .collect();
+    for term in &phis {
         // If the term is the "short-circuit term", or is the negation of a term previously
         // encountered, the result is short-circuited
         let (polarity, inner) = term.remove_all_negations_with_polarity();
         if seen.contains(&(!polarity, inner)) || is_short_ciruit_term(term) {
             return to_option(result.len() == 1 && is_short_ciruit_term(&result[0]));
         }
-
-        let is_new = seen.insert((polarity, inner));
-        if is_new {
-            expected.push(term)
-        }
     }
 
-    to_option(if expected.is_empty() {
+    to_option(if phis.is_empty() {
         // If the filtered conjunction or disjunction is empty, the expected result is just the
         // "skip term", which represents an empty conjunction or disjunction
         result.len() == 1 && is_skip_term(&result[0])
     } else {
-        result.iter().eq(expected)
+        result.iter().eq(&phis)
     })
 }
 
@@ -703,6 +725,10 @@ mod tests {
                 "(step t1 (cl (= (and p false p (not p) q true q r) false))
                     :rule and_simplify)": true,
             }
+            "Nested \"and\" term" {
+                "(step t1 (cl (= (and (and p p true q q true q r)) (and p q r)))
+                    :rule and_simplify)": true,
+            }
         }
     }
 
@@ -761,6 +787,10 @@ mod tests {
                 "(step t1 (cl (= (or p p false q q false q r) (or p q r))) :rule or_simplify)": true,
                 "(step t1 (cl (= (or p p (not p) q q false q r) true)) :rule or_simplify)": true,
                 "(step t1 (cl (= (or p true p (not p) q false q r) true)) :rule or_simplify)": true,
+            }
+            "Nested \"or\" term" {
+                "(step t1 (cl (= (or (or p p false q q false q r)) (or p q r)))
+                    :rule or_simplify)": true,
             }
         }
     }
