@@ -65,6 +65,7 @@ pub struct CheckerRunMeasurement {
     run_index: usize,
     parsing_time: Duration,
     step_measurements: Vec<StepMeasurement>,
+    total_time: Duration,
 }
 
 #[derive(Debug)]
@@ -81,6 +82,7 @@ pub fn run_benchmark(
     let mut runs = Vec::new();
     for (problem_file, proof_file) in instances {
         for i in 0..num_runs {
+            let total_time = Instant::now();
             let parsing_time = Instant::now();
             let (proof, pool) = parse_problem_proof(
                 BufReader::new(File::open(problem_file)?),
@@ -95,11 +97,13 @@ pub fn run_benchmark(
                 statistics: Some(&mut step_measurements),
             };
             let _ = checker::ProofChecker::new(pool, config).check(&proof)?;
+            let total_time = total_time.elapsed();
             runs.push(CheckerRunMeasurement {
                 proof_file_name: proof_file.to_string(),
                 run_index: i,
                 parsing_time,
                 step_measurements,
+                total_time,
             })
         }
     }
@@ -112,6 +116,7 @@ pub mod compile_measurements {
 
     type Runs<'a> = &'a [CheckerRunMeasurement];
 
+    /// For each rule, reports the time taken to check each step of each file that uses that rule.
     pub fn by_rule(runs: Runs) -> AHashMap<String, Metrics<(String, String)>> {
         let mut data_by_rule = AHashMap::new();
         for measurement in runs {
@@ -129,40 +134,37 @@ pub mod compile_measurements {
             .collect()
     }
 
-    pub fn total_parsing_time(runs: Runs) -> Metrics<usize> {
-        Metrics::new(
-            runs.iter()
-                .map(|m| (m.run_index, m.parsing_time))
-                .collect::<Vec<_>>()
-                .as_slice(),
-        )
-        .unwrap()
+    fn aggregate_by_run_index(
+        runs: Runs,
+        key: fn(&CheckerRunMeasurement) -> (usize, Duration),
+    ) -> Metrics<usize> {
+        Metrics::new(runs.iter().map(key).collect::<Vec<_>>().as_slice()).unwrap()
     }
 
-    pub fn total_checking_time(runs: Runs) -> Metrics<usize> {
-        Metrics::new(
-            runs.iter()
-                .map(|m| {
-                    let checking_time = m.step_measurements.iter().map(|s| s.time).sum();
-                    (m.run_index, checking_time)
-                })
-                .collect::<Vec<_>>()
-                .as_slice(),
-        )
-        .unwrap()
+    /// The time per run to completely parse the proof.
+    pub fn parsing_time(runs: Runs) -> Metrics<usize> {
+        aggregate_by_run_index(runs, |m| (m.run_index, m.parsing_time))
     }
 
+    /// The time per run to check all the steps in the proof.
+    pub fn checking_time(runs: Runs) -> Metrics<usize> {
+        aggregate_by_run_index(runs, |m| {
+            let checking_time = m.step_measurements.iter().map(|s| s.time).sum();
+            (m.run_index, checking_time)
+        })
+    }
+
+    /// The combined time per run to parse and check all the steps in the proof.
+    pub fn parsing_checking_time(runs: Runs) -> Metrics<usize> {
+        aggregate_by_run_index(runs, |m| {
+            let parsing_checking_time =
+                m.parsing_time + m.step_measurements.iter().map(|s| s.time).sum();
+            (m.run_index, parsing_checking_time)
+        })
+    }
+
+    /// The total time per run. Should be pretty similar to `total_parsing_checking_time`.
     pub fn total_time(runs: Runs) -> Metrics<usize> {
-        Metrics::new(
-            runs.iter()
-                .map(|m| {
-                    let total_time =
-                        m.parsing_time + m.step_measurements.iter().map(|s| s.time).sum();
-                    (m.run_index, total_time)
-                })
-                .collect::<Vec<_>>()
-                .as_slice(),
-        )
-        .unwrap()
+        aggregate_by_run_index(runs, |m| (m.run_index, m.total_time))
     }
 }

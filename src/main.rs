@@ -177,9 +177,10 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), Error> {
     );
     let results = benchmarking::run_benchmark(&instances, num_runs)?;
 
-    println!("parsing:            {}", total_parsing_time(&results));
-    println!("checking:           {}", total_checking_time(&results));
-    println!("parsing + checking: {}", total_time(&results));
+    println!("parsing:            {}", parsing_time(&results));
+    println!("checking:           {}", checking_time(&results));
+    println!("parsing + checking: {}", parsing_checking_time(&results));
+    println!("total:              {}", total_time(&results));
 
     let data_by_rule = by_rule(&results);
     let mut data_by_rule: Vec<_> = data_by_rule.iter().collect();
