@@ -323,6 +323,10 @@ pub enum Operator {
     GreaterThan,
     LessEq,
     GreaterEq,
+
+    // Arrays
+    Select,
+    Store,
 }
 
 impl_str_conversion_traits!(Operator {
@@ -344,6 +348,9 @@ impl_str_conversion_traits!(Operator {
     GreaterThan: ">",
     LessEq: "<=",
     GreaterEq: ">=",
+
+    Select: "select",
+    Store: "store",
 });
 
 pub type SortedVar = (String, ByRefRc<Term>);
@@ -449,6 +456,11 @@ impl Term {
                 | Operator::Mult
                 | Operator::IntDiv
                 | Operator::RealDiv => args[0].sort(),
+                Operator::Select => match args[0].sort() {
+                    Term::Sort(Sort::Array(_, y)) => y,
+                    _ => unreachable!(),
+                },
+                Operator::Store => args[0].sort(),
             },
             Term::App(f, _) => {
                 let function_sort = f.sort();

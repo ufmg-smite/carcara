@@ -197,6 +197,44 @@ impl<R: BufRead> Parser<R> {
                 // have the same sort
                 SortError::assert_one_of(&[Term::INT_SORT, Term::REAL_SORT], sorts[0])?;
             }
+            Operator::Select => {
+                ErrorKind::assert_num_of_args(&args, 2)?;
+                match sorts[0] {
+                    Term::Sort(Sort::Array(_, _)) => (),
+                    got => {
+                        // Instead of creating some special case for sort errors with parametric
+                        // sorts, we just create a sort "Y" to represent the sort parameter. We
+                        // infer the "X" sort from the second operator argument. This may be
+                        // changed later
+                        let x = self.add_term(sorts[1].clone());
+                        let y = self.add_term(Term::Sort(Sort::Atom("Y".to_string(), Vec::new())));
+                        return Err(SortError::Expected {
+                            expected: Term::Sort(Sort::Array(x, y)),
+                            got: got.clone(),
+                        }
+                        .into());
+                    }
+                }
+            }
+            Operator::Store => {
+                ErrorKind::assert_num_of_args(&args, 3)?;
+                match sorts[0] {
+                    Term::Sort(Sort::Array(x, y)) => {
+                        SortError::assert_eq(x, sorts[1])?;
+                        SortError::assert_eq(y, sorts[2])?;
+                    }
+                    got => {
+                        return Err(SortError::Expected {
+                            expected: Term::Sort(Sort::Array(
+                                self.add_term(sorts[0].clone()),
+                                self.add_term(sorts[1].clone()),
+                            )),
+                            got: got.clone(),
+                        }
+                        .into());
+                    }
+                }
+            }
         }
         let args = self.add_all(args);
         Ok(Term::Op(op, args))
@@ -780,7 +818,8 @@ impl<R: BufRead> Parser<R> {
                     Reserved::Choice => self.parse_choice_term(),
                     Reserved::Bang => self.parse_annotated_term(),
                     Reserved::Let => self.parse_let_term(),
-                    _ => Err(self.err(ErrorKind::NotYetImplemented)),
+                    _ => Err(self.err(ErrorKind::UnexpectedToken(Token::ReservedWord(reserved)))),
+                    // _ => Err(self.err(ErrorKind::NotYetImplemented)),
                 }
             }
             // Here, I would like to use an `if let` guard, like:
