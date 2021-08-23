@@ -1,8 +1,19 @@
-use super::{get_clause_from_command, to_option, RuleArgs};
+use super::{get_clause_from_command, get_single_term_from_command, to_option, RuleArgs};
 use crate::ast::*;
-use ahash::AHashSet;
+use ahash::{AHashMap, AHashSet};
+use std::collections::hash_map::Entry;
 
 pub fn resolution(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
+    // In some cases, this rule is used with a single premise "(not true)" to justify an empty
+    // conclusion clause
+    if conclusion.is_empty() && premises.len() == 1 {
+        if let Some(t) = get_single_term_from_command(premises[0]) {
+            if match_term!((not true) = t).is_some() {
+                return Some(());
+            }
+        }
+    }
+
     // When checking this rule, we must look at what the conclusion clause looks like in order to
     // determine the pivots. The reason for that is because there is no other way to know which
     // terms should be removed in a given binary resolution step. Consider the following example,
@@ -25,8 +36,11 @@ pub fn resolution(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()>
     let mut working_clause = AHashSet::new();
 
     // The pivots are the encountered terms that are not present in the conclusion clause, and so
-    // should be removed
-    let mut pivots = AHashSet::new();
+    // should be removed. After being used to eliminate a term, a pivot can still be used to
+    // eliminate other terms. Because of that, we represent the pivots as a hash map to a boolean,
+    // which represents if the pivot was already eliminated or not. At the end, this boolean should
+    // be true for all pivots
+    let mut pivots = AHashMap::new();
 
     for command in premises {
         let premise_clause = get_clause_from_command(command);
@@ -47,14 +61,24 @@ pub fn resolution(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()>
             }
 
             // If the negation of the encountered term is present in the pivots set, we simply
-            // remove it. Otherwise, we insert the encountered term in the working clause or the
+            // eliminate it. Otherwise, we insert the encountered term in the working clause or the
             // pivots set, depending on wether it is present in the conclusion clause or not
-            let removed = n > 0 && pivots.remove(&below) || pivots.remove(&above);
-            if !removed {
+            let mut try_eliminate = |pivot| match pivots.entry(pivot) {
+                Entry::Occupied(mut e) => {
+                    e.insert(true);
+                    true
+                }
+                Entry::Vacant(_) => false,
+            };
+            let eliminated = try_eliminate(below) || try_eliminate(above);
+            if !eliminated {
                 if conclusion.contains(&(n, inner)) {
                     working_clause.insert((n, inner));
                 } else {
-                    pivots.insert((n, inner));
+                    // If the term is not in the conclusion clause, it must be a pivot. If it was
+                    // not already in the pivots set, we insert `false`, to indicate that it was
+                    // not yet eliminated
+                    pivots.entry((n, inner)).or_insert(false);
                 }
             }
         }
@@ -70,15 +94,20 @@ pub fn resolution(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()>
     //     (step t4 (cl (not (not f))) :rule resolution :premises (t1 t2 t3))
     //
     // Usually, we would expect the clause in the t4 step to be (cl f).
-    if pivots.len() == 1 && conclusion.len() == 1 {
-        let (i, pivot) = pivots.into_iter().next().unwrap();
-        let (j, conclusion) = conclusion.into_iter().next().unwrap();
-        return to_option(conclusion == pivot && (i % 2) == (j % 2));
+    if conclusion.len() == 1 {
+        let mut remaining_pivots = pivots.iter().filter(|&(_, eliminated)| !eliminated);
+        // Check if there is only one remaining pivot
+        if let Some(((i, pivot), _)) = remaining_pivots.next() {
+            if remaining_pivots.next().is_none() {
+                let (j, conclusion) = conclusion.into_iter().next().unwrap();
+                return to_option(conclusion == *pivot && (i % 2) == (j % 2));
+            }
+        }
     }
 
-    // At the end, we expect all pivots to have been removed, and the working clause to be equal to
-    // the conclusion clause
-    to_option(pivots.is_empty() && working_clause == conclusion)
+    // At the end, we expect all pivots to have been eliminated, and the working clause to be equal
+    // to the conclusion clause
+    to_option(pivots.iter().all(|(_, eliminated)| *eliminated) && working_clause == conclusion)
 }
 
 pub fn tautology(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
@@ -132,6 +161,7 @@ mod tests {
                 (declare-fun p () Bool)
                 (declare-fun q () Bool)
                 (declare-fun r () Bool)
+                (declare-fun s () Bool)
             ",
             "Simple working examples" {
                 "(assume h1 (not p))
@@ -200,6 +230,18 @@ mod tests {
                 (assume h2 (= (not p) (not (not q))))
                 (step t3 (cl (not (= (not p) (not (not q)))) p q) :rule trust_me)
                 (step t4 (cl (not (not q))) :rule resolution :premises (h1 h2 t3))": true,
+            }
+            "Premise is \"(not true)\" and leads to empty conclusion clause" {
+                "(step t1 (cl (not true)) :rule trust_me)
+                (step t2 (cl) :rule th_resolution :premises (t1))": true,
+
+                "(step t1 (cl false) :rule trust_me)
+                (step t2 (cl) :rule th_resolution :premises (t1))": false,
+            }
+            "Repeated premises" {
+                "(step t1 (cl (not r)) :rule trust_me)
+                (step t2 (cl p q r s) :rule trust_me)
+                (step t3 (cl p q s) :rule th_resolution :premises (t1 t2 t2))": true,
             }
         }
     }
