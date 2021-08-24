@@ -36,6 +36,7 @@ type CheckerResult = Result<Correctness, CheckerError>;
 struct Context {
     substitutions: AHashMap<ByRefRc<Term>, ByRefRc<Term>>,
     substitutions_until_fixed_point: AHashMap<ByRefRc<Term>, ByRefRc<Term>>,
+    cumulative_substitutions: AHashMap<ByRefRc<Term>, ByRefRc<Term>>,
     bindings: AHashSet<SortedVar>,
 }
 
@@ -181,25 +182,39 @@ impl<'c> ProofChecker<'c> {
         // inserting it into the hash map. So for instance, if the substitutions are "(:= y z)" and
         // "(:= x (f y))", we insert the first substitution, and then, when introducing the second,
         // we use the current state of the hash map to transform "(f y)" into "(f z)". The
-        // resulting hash map will then contain "(:= y z)" and "(:= x (f z))". However, the
-        // arguments are given in the opposite order, that is, "(:= x (f y))" would come first,
-        // followed by "(:= y z)". Because of that, we traverse the assignment arguments slice in
-        // reverse.
-        for (var, value) in assignment_args.iter().rev() {
+        // resulting hash map will then contain "(:= y z)" and "(:= x (f z))"
+        for (var, value) in assignment_args.iter() {
             let var_term = terminal!(var var; self.pool.add_term(value.sort().clone()));
             let var_term = self.pool.add_term(var_term);
             substitutions.insert(var_term.clone(), value.clone());
 
             let new_value = self
                 .pool
-                .apply_substitutions(value, &mut substitutions_until_fixed_point);
+                .apply_substitutions(value, &substitutions_until_fixed_point);
             substitutions_until_fixed_point.insert(var_term, new_value);
+        }
+
+        // Some rules (notably "refl") need to apply the substitutions introduced by all the
+        // previous contexts instead of just the current one. Instead of doing this iteratively
+        // everytime the rule is used, we precompute the cumulative substitutions of this context
+        // and all the previous ones and store that in a hash map. This improves the performance of
+        // these rules considerably
+        let mut cumulative_substitutions = substitutions_until_fixed_point.clone();
+        if let Some(previous_context) = self.context.last() {
+            for (k, v) in previous_context.cumulative_substitutions.iter() {
+                let value = match substitutions_until_fixed_point.get(v) {
+                    Some(new_value) => new_value,
+                    None => v,
+                };
+                cumulative_substitutions.insert(k.clone(), value.clone());
+            }
         }
 
         let bindings = variable_args.iter().cloned().collect();
         Context {
             substitutions,
             substitutions_until_fixed_point,
+            cumulative_substitutions,
             bindings,
         }
     }

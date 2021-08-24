@@ -1,5 +1,5 @@
 use super::{to_option, RuleArgs};
-use crate::{ast::*, checker::Context};
+use crate::ast::*;
 
 pub fn eq_reflexive(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1);
@@ -8,18 +8,9 @@ pub fn eq_reflexive(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 }
 
 pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> Option<()> {
-    fn apply_all_context_substitutions(
-        pool: &mut TermPool,
-        term: ByRefRc<Term>,
-        context: &[Context],
-    ) -> ByRefRc<Term> {
-        let mut current = term;
-        for c in context {
-            current = pool.apply_substitutions(&current, &c.substitutions_until_fixed_point);
-        }
-        current
-    }
     rassert!(conclusion.len() == 1);
+
+    let cumulative_substitutions = &context.last()?.cumulative_substitutions;
 
     let (left, right) = match_term!((= l r) = conclusion[0], RETURN_RCS)?;
 
@@ -28,9 +19,9 @@ pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> Option<()> 
     // don't compute the new left and right terms until they are needed, to avoid doing unnecessary
     // work
     let result = left == right || {
-        let new_left = apply_all_context_substitutions(pool, left.clone(), context);
+        let new_left = pool.apply_substitutions(left, cumulative_substitutions);
         new_left == *right || {
-            let new_right = apply_all_context_substitutions(pool, right.clone(), context);
+            let new_right = pool.apply_substitutions(right, cumulative_substitutions);
             *left == new_right || new_left == new_right
         }
     };
@@ -85,7 +76,7 @@ mod tests {
 
             }
             "Multiple substitutions in sequence" {
-                "(anchor :step t1 :args ((:= (x Real) y) (:= (y Real) z)))
+                "(anchor :step t1 :args ((:= (y Real) z) (:= (x Real) y)))
                 (step t1 (cl (= x z)) :rule refl)": true,
             }
             "Nested subproofs" {
