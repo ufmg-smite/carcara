@@ -23,12 +23,18 @@ pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> Option<()> 
 
     let (left, right) = match_term!((= l r) = conclusion[0], RETURN_RCS)?;
 
-    let new_left = apply_all_context_substitutions(pool, left.clone(), context);
-    let new_right = apply_all_context_substitutions(pool, right.clone(), context);
-
     // In some cases, the substitution is only applied to the left or the right term, and in some
-    // cases it is applied to both. To cover all cases, we must check all three possibilities
-    to_option(new_left == *right || *left == new_right || new_left == new_right)
+    // cases it is applied to both. To cover all cases, we must check all three possibilities. We
+    // don't compute the new left and right terms until they are needed, to avoid doing unnecessary
+    // work
+    let result = left == right || {
+        let new_left = apply_all_context_substitutions(pool, left.clone(), context);
+        new_left == *right || {
+            let new_right = apply_all_context_substitutions(pool, right.clone(), context);
+            *left == new_right || new_left == new_right
+        }
+    };
+    to_option(result)
 }
 
 #[cfg(test)]
