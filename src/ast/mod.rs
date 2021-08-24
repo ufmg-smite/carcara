@@ -1,4 +1,4 @@
-//! The abstract syntax tree (AST) for the veriT Proof Format.
+//! The abstract syntax tree (AST) for the Alethe Proof Format.
 
 #[macro_use]
 mod macros;
@@ -259,7 +259,7 @@ impl TermPool {
     }
 }
 
-/// A proof in the veriT Proof Format.
+/// A proof in the Alethe Proof Format.
 #[derive(Debug)]
 pub struct Proof(pub Vec<ProofCommand>);
 

@@ -14,6 +14,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "alethe-proof-checker"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "clap",
+ "num-bigint",
+ "num-rational",
+ "num-traits",
+]
+
+[[package]]
 name = "ansi_term"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -166,17 +177,6 @@ name = "vec_map"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
-
-[[package]]
-name = "verit-proof-checker"
-version = "0.1.0"
-dependencies = [
- "ahash",
- "clap",
- "num-bigint",
- "num-rational",
- "num-traits",
-]
 
 [[package]]
 name = "version_check"

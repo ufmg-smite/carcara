@@ -1,17 +1,17 @@
 extern crate clap;
 
 use ahash::AHashSet;
+use alethe_proof_checker::{
+    benchmarking, check,
+    checker::{Correctness, ProofChecker},
+    parser::{error::ParserResult, lexer, parse_problem_proof},
+    Error,
+};
 use clap::{App, AppSettings, Arg, ArgGroup, ArgMatches, SubCommand};
 use std::{
     fs::File,
     io::{BufReader, Write},
     path::PathBuf,
-};
-use verit_proof_checker::{
-    benchmarking, check,
-    checker::{Correctness, ProofChecker},
-    parser::{error::ParserResult, lexer, parse_problem_proof},
-    Error,
 };
 
 fn infer_problem_path(proof_path: impl Into<PathBuf>) -> Option<PathBuf> {
@@ -91,7 +91,7 @@ fn app() -> App<'static, 'static> {
             )
             .arg(Arg::with_name("files").multiple(true)),
     ];
-    App::new("veriT proof checker")
+    App::new("Alethe proof checker")
         .version("0.1.0")
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .subcommands(subcommands)

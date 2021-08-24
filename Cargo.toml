@@ -1,5 +1,5 @@
 [package]
-name = "verit-proof-checker"
+name = "alethe-proof-checker"
 version = "0.1.0"
 authors = ["Bruno Andreotti <bandreotti@protonmail.com>"]
 edition = "2018"

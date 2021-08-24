@@ -1,4 +1,4 @@
-//! A parser for the veriT Proof Format.
+//! A parser for the Alethe Proof Format.
 
 pub mod error;
 pub mod lexer;
@@ -74,7 +74,7 @@ struct ParserState {
     step_indices: SymbolTable<String, usize>,
 }
 
-/// A parser for the veriT Proof Format. The parser makes use of hash consing to reduce memory usage
+/// A parser for the Alethe Proof Format. The parser makes use of hash consing to reduce memory usage
 /// by sharing identical terms in the AST.
 pub struct Parser<R> {
     lexer: Lexer<R>,

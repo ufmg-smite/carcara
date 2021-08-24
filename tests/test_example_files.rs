@@ -1,6 +1,5 @@
+use alethe_proof_checker::*;
 use std::{ffi::OsStr, fs, io, path::Path};
-
-use verit_proof_checker::*;
 
 fn test_file(problem_path: &Path, proof_path: &Path) {
     use checker::Correctness;

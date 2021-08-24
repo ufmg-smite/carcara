@@ -1,4 +1,4 @@
-# veriT Proof Checker
+# Alethe Proof Checker
 
 ### Building and running
 
@@ -34,4 +34,4 @@ $ cargo run --release -q -- progress-report -r $(find test-examples -name '*.pro
 ```
 
 will report which rules are implemented, of all rules used in the test examples. See
-`verit-proof-checker progress-report --help` for more details.
+`alethe-proof-checker progress-report --help` for more details.
