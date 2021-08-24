@@ -89,9 +89,27 @@ impl<'c> ProofChecker<'c> {
                     assignment_args,
                     variable_args,
                 } => {
+                    let time = Instant::now();
                     let new_context = self.build_context(assignment_args, variable_args);
                     self.context.push(new_context);
                     commands_stack.push((0, inner_commands));
+
+                    if let Some(stats) = &mut self.config.statistics {
+                        let step_index = inner_commands
+                            .last()
+                            .and_then(|s| match s {
+                                ProofCommand::Step(s) => Some(s.index.clone()),
+                                _ => None,
+                            })
+                            .unwrap_or_default();
+                        let measurement = StepMeasurement {
+                            step_index,
+                            // An asterisk to indicate that it's not exactly a rule
+                            rule: "anchor*".to_string(),
+                            time: time.elapsed(),
+                        };
+                        stats.push(measurement);
+                    }
                     continue;
                 }
                 ProofCommand::Assume(_) => Ok(Correctness::True),
