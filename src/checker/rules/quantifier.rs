@@ -11,7 +11,7 @@ pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> Option<
 
     rassert!(args.len() == bindings.len());
 
-    let mut substitutions: AHashMap<_, _> = bindings
+    let substitutions: AHashMap<_, _> = bindings
         .iter()
         .zip(args)
         .map(|((binding_name, binding_sort), arg)| {
@@ -31,7 +31,7 @@ pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> Option<
 
     // Equalities may be reordered in the final term, so we use `DeepEq::eq_modulo_reordering`
     to_option(DeepEq::eq_modulo_reordering(
-        &pool.apply_substitutions(original, &mut substitutions),
+        &pool.apply_substitutions(original, &substitutions),
         substituted,
     ))
 }

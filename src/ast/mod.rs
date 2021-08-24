@@ -148,23 +148,24 @@ impl TermPool {
         terms.into_iter().map(|t| self.add_term(t)).collect()
     }
 
-    /// Takes a term and a hash map of variables to terms and substitutes every ocurrence of those
-    /// variables with the associated term. This method uses the given substitutions hash map as a
-    /// cache, and will therefore mutate it.
-    pub fn apply_substitutions<'a>(
+    fn apply_substitutions_rec<'a>(
         &mut self,
         term: &'a ByRefRc<Term>,
-        substitutions: &mut AHashMap<ByRefRc<Term>, ByRefRc<Term>>,
+        substitutions: &AHashMap<ByRefRc<Term>, ByRefRc<Term>>,
+        cache: &mut AHashMap<ByRefRc<Term>, ByRefRc<Term>>,
     ) -> ByRefRc<Term> {
         macro_rules! apply_to_sequence {
             ($sequence:expr) => {
                 $sequence
                     .iter()
-                    .map(|a| self.apply_substitutions(a, substitutions))
+                    .map(|a| self.apply_substitutions_rec(a, substitutions, cache))
                     .collect()
             };
         }
 
+        if let Some(t) = cache.get(term) {
+            return t.clone();
+        }
         if let Some(t) = substitutions.get(term) {
             return t.clone();
         }
@@ -172,29 +173,36 @@ impl TermPool {
         let result = match term.as_ref() {
             Term::App(func, args) => {
                 let new_args = apply_to_sequence!(args);
-                let new_func = self.apply_substitutions(func, substitutions);
-                Term::App(new_func, new_args)
+                let new_func = self.apply_substitutions_rec(func, substitutions, cache);
+                self.add_term(Term::App(new_func, new_args))
             }
             Term::Op(op, args) => {
                 let new_args = apply_to_sequence!(args);
-                Term::Op(*op, new_args)
+                self.add_term(Term::Op(*op, new_args))
             }
             Term::Quant(q, b, t) => {
-                let new_term = self.apply_substitutions(t, substitutions);
-                Term::Quant(*q, b.clone(), new_term)
+                let new_term = self.apply_substitutions_rec(t, substitutions, cache);
+                self.add_term(Term::Quant(*q, b.clone(), new_term))
             }
-            other => other.clone(),
+            _ => term.clone(),
         };
-        let result = self.add_term(result);
 
         // Since frequently a term will have more than one identical subterms, we insert the
-        // calculated substitution in the substitutions hash map so it may be reused later. This
-        // means we don't re-visit already seen terms, so this method traverses the term as a DAG,
-        // not as a tree
-        if *term != result {
-            substitutions.insert(term.clone(), result.clone());
-        }
+        // calculated substitution in the cache hash map so it may be reused later. This means we
+        // don't re-visit already seen terms, so this method traverses the term as a DAG, not as a
+        // tree
+        cache.insert(term.clone(), result.clone());
         result
+    }
+
+    /// Takes a term and a hash map of variables to terms and substitutes every ocurrence of those
+    /// variables with the associated term.
+    pub fn apply_substitutions<'a>(
+        &mut self,
+        term: &'a ByRefRc<Term>,
+        substitutions: &AHashMap<ByRefRc<Term>, ByRefRc<Term>>,
+    ) -> ByRefRc<Term> {
+        self.apply_substitutions_rec(term, substitutions, &mut AHashMap::new())
     }
 
     /// Returns an `AHashSet` containing all the free variables in this term.

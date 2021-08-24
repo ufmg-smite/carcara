@@ -11,11 +11,11 @@ pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> Option<()> 
     fn apply_all_context_substitutions(
         pool: &mut TermPool,
         term: ByRefRc<Term>,
-        context: &mut [Context],
+        context: &[Context],
     ) -> ByRefRc<Term> {
         let mut current = term;
         for c in context {
-            current = pool.apply_substitutions(&current, &mut c.substitutions_until_fixed_point);
+            current = pool.apply_substitutions(&current, &c.substitutions_until_fixed_point);
         }
         current
     }

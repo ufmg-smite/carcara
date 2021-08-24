@@ -147,7 +147,7 @@ impl<'c> ProofChecker<'c> {
             premises,
             args,
             pool: &mut self.pool,
-            context: &mut self.context,
+            context: &self.context,
             subproof_commands,
         };
         let result = match rule(rule_args) {

@@ -218,7 +218,7 @@ pub fn onepoint(
 
     // We clone the substitutions so we don't pollute the hash map when applying the substitutions
     // to `points`
-    let mut substitutions_clone = context.substitutions_until_fixed_point.clone();
+    let substitutions_clone = context.substitutions_until_fixed_point.clone();
 
     // Since a substitution may use a varibale introduced in a previous substitution, we apply the
     // substitutions to the points in order to these variables. We also create a duplicate of every
@@ -226,8 +226,8 @@ pub fn onepoint(
     let points: AHashSet<_> = points
         .into_iter()
         .flat_map(|(x, t)| {
-            let new_t = pool.apply_substitutions(&t, &mut substitutions_clone);
-            let new_x = pool.apply_substitutions(&x, &mut substitutions_clone);
+            let new_t = pool.apply_substitutions(&t, &substitutions_clone);
+            let new_x = pool.apply_substitutions(&x, &substitutions_clone);
             [(x, new_t), (t, new_x)]
         })
         .collect();
@@ -267,10 +267,10 @@ fn generic_skolemization_rule(
     // I have to extract the length into a separate variable (instead of just using it directly in
     // the slice index) to please the borrow checker
     let n = context.len();
-    for c in context[..n - 1].iter_mut() {
+    for c in &context[..n - 1] {
         // Based on the test examples, we must first apply all previous context substitutions to
         // phi, before applying the substitutions present in the current context
-        current_phi = pool.apply_substitutions(&current_phi, &mut c.substitutions);
+        current_phi = pool.apply_substitutions(&current_phi, &c.substitutions);
     }
 
     let substitutions = &context.last()?.substitutions_until_fixed_point;
@@ -304,7 +304,7 @@ fn generic_skolemization_rule(
         // For every binding we skolemize, we must apply another substitution to phi
         let mut s = AHashMap::new();
         s.insert(x_term, t.clone());
-        current_phi = pool.apply_substitutions(&current_phi, &mut s);
+        current_phi = pool.apply_substitutions(&current_phi, &s);
     }
     Some(())
 }
