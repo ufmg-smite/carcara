@@ -9,7 +9,7 @@ pub fn distinct_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     match distinct_args {
         [] | [_] => unreachable!(),
         [a, b] => {
-            let got: (&Term, &Term) = match_term!((not (= x y)) = second_term)?;
+            let got = match_term!((not (= x y)) = second_term, RETURN_RCS)?;
             to_option(got == (a, b) || got == (b, a))
         }
         args => {
@@ -22,8 +22,8 @@ pub fn distinct_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
             let mut k = 0;
             for i in 0..args.len() {
                 for j in i + 1..args.len() {
-                    let (a, b) = (args[i].as_ref(), args[j].as_ref());
-                    let got = match_term!((not (= x y)) = got[k])?;
+                    let (a, b) = (&args[i], &args[j]);
+                    let got = match_term!((not (= x y)) = got[k], RETURN_RCS)?;
                     to_option(got == (a, b) || got == (b, a))?;
                     k += 1;
                 }
