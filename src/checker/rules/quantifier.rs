@@ -11,23 +11,26 @@ pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> Option<
 
     rassert!(args.len() == bindings.len());
 
-    let substitutions: AHashMap<_, _> = bindings
+    // Since the bindings and arguments may not be in the same order, we collect the bindings into
+    // a hash set, and remove each binding from it as we find the associated argument
+    let mut bindings: AHashSet<_> = bindings.iter().cloned().collect();
+    let substitutions: AHashMap<_, _> = args
         .iter()
-        .zip(args)
-        .map(|((binding_name, binding_sort), arg)| {
+        .map(|arg| {
             let (arg_name, arg_value) = match arg {
                 ProofArg::Assign(name, value) => (name, value),
                 ProofArg::Term(_) => return None,
             };
-            let arg_sort = arg_value.sort();
-            rassert!(arg_name == binding_name && binding_sort.as_ref() == arg_sort);
+            let arg_sort = pool.add_term(arg_value.sort().clone());
+            rassert!(bindings.remove(&(arg_name.clone(), arg_sort.clone())));
 
-            // We must use `pool.add_term` so we don't create a new term for the argument sort, and
-            // instead use the one already in the term pool
-            let ident_term = terminal!(var arg_name; pool.add_term(arg_sort.clone()));
+            let ident_term = (arg_name.clone(), arg_sort).into();
             Some((pool.add_term(ident_term), arg_value.clone()))
         })
         .collect::<Option<_>>()?;
+
+    // All bindings were accounted for in the arguments
+    rassert!(bindings.is_empty());
 
     // Equalities may be reordered in the final term, so we use `DeepEq::eq_modulo_reordering`
     to_option(DeepEq::eq_modulo_reordering(
