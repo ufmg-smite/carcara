@@ -56,10 +56,17 @@ pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1);
 
-    let (left, right) = match_term!((= l r) = conclusion[0])?;
+    let (left, right) = match_term!((= l r) = conclusion[0], RETURN_RCS)?;
     let (q_1, bindings_1, phi_1) = left.unwrap_quant()?;
-    let (q_2, bindings_2, phi_2) = right.unwrap_quant()?;
-    rassert!(q_1 == q_2 && phi_1 == phi_2);
+    let (bindings_2, phi_2) = match right.unwrap_quant() {
+        Some((q, b, t)) if q == q_1 => (b.as_slice(), t),
+        Some(_) => return None,
+
+        // If the right-hand side term is not a quantifier, we consider it a quantifier with an
+        // empty list of bindings
+        None => (&[] as _, right),
+    };
+    rassert!(phi_1 == phi_2);
     let free_vars = pool.free_vars(phi_1);
     to_option(
         bindings_1
