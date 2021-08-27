@@ -691,22 +691,49 @@ pub enum Index {
 /// equal by this method
 pub trait DeepEq {
     fn eq(a: &Self, b: &Self) -> bool {
-        DeepEq::eq_impl(a, b, false)
+        DeepEq::eq_impl(a, b, false, &mut AHashSet::new())
     }
 
     fn eq_modulo_reordering(a: &Self, b: &Self) -> bool {
-        DeepEq::eq_impl(a, b, true)
+        DeepEq::eq_impl(a, b, true, &mut AHashSet::new())
     }
 
-    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool;
+    fn eq_impl(
+        a: &Self,
+        b: &Self,
+        is_mod_reordering: bool,
+        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+    ) -> bool;
+}
+
+impl DeepEq for ByRefRc<Term> {
+    fn eq_impl(
+        a: &Self,
+        b: &Self,
+        is_mod_reordering: bool,
+        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+    ) -> bool {
+        a == b || cache.contains(&(a.clone(), b.clone())) || {
+            let result = DeepEq::eq_impl(a.as_ref(), b.as_ref(), is_mod_reordering, cache);
+            if result {
+                cache.insert((a.clone(), b.clone()));
+            }
+            result
+        }
+    }
 }
 
 impl DeepEq for Term {
-    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
+    fn eq_impl(
+        a: &Self,
+        b: &Self,
+        is_mod_reordering: bool,
+        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+    ) -> bool {
         match (a, b) {
             (Term::App(f_a, args_a), Term::App(f_b, args_b)) => {
-                DeepEq::eq_impl(f_a.as_ref(), f_b.as_ref(), is_mod_reordering)
-                    && DeepEq::eq_impl(args_a, args_b, is_mod_reordering)
+                DeepEq::eq_impl(f_a.as_ref(), f_b.as_ref(), is_mod_reordering, cache)
+                    && DeepEq::eq_impl(args_a, args_b, is_mod_reordering, cache)
             }
             (Term::Op(op_a, args_a), Term::Op(op_b, args_b)) => {
                 if is_mod_reordering {
@@ -715,32 +742,32 @@ impl DeepEq for Term {
                     {
                         // If the term is an equality of two terms, we also check if they would be
                         // equal if one of them was flipped
-                        return DeepEq::eq_impl(&(a_1, a_2), &(b_1, b_2), true)
-                            || DeepEq::eq_impl(&(a_1, a_2), &(b_2, b_1), true);
+                        return DeepEq::eq_impl(&(a_1, a_2), &(b_1, b_2), true, cache)
+                            || DeepEq::eq_impl(&(a_1, a_2), &(b_2, b_1), true, cache);
                     }
                 }
                 // General case
-                op_a == op_b && DeepEq::eq_impl(args_a, args_b, is_mod_reordering)
+                op_a == op_b && DeepEq::eq_impl(args_a, args_b, is_mod_reordering, cache)
             }
-            (Term::Sort(a), Term::Sort(b)) => DeepEq::eq_impl(a, b, is_mod_reordering),
+            (Term::Sort(a), Term::Sort(b)) => DeepEq::eq_impl(a, b, is_mod_reordering, cache),
             (Term::Terminal(a), Term::Terminal(b)) => match (a, b) {
                 (Terminal::Var(iden_a, sort_a), Terminal::Var(iden_b, sort_b)) => {
-                    iden_a == iden_b && DeepEq::eq_impl(sort_a, sort_b, is_mod_reordering)
+                    iden_a == iden_b && DeepEq::eq_impl(sort_a, sort_b, is_mod_reordering, cache)
                 }
                 (a, b) => a == b,
             },
             (Term::Quant(q_a, binds_a, a), Term::Quant(q_b, binds_b, b)) => {
                 q_a == q_b
-                    && DeepEq::eq_impl(binds_a, binds_b, is_mod_reordering)
-                    && DeepEq::eq_impl(a, b, is_mod_reordering)
+                    && DeepEq::eq_impl(binds_a, binds_b, is_mod_reordering, cache)
+                    && DeepEq::eq_impl(a, b, is_mod_reordering, cache)
             }
             (Term::Choice(var_a, a), Term::Choice(var_b, b)) => {
-                DeepEq::eq_impl(var_a, var_b, is_mod_reordering)
-                    && DeepEq::eq_impl(a, b, is_mod_reordering)
+                DeepEq::eq_impl(var_a, var_b, is_mod_reordering, cache)
+                    && DeepEq::eq_impl(a, b, is_mod_reordering, cache)
             }
             (Term::Let(binds_a, a), Term::Let(binds_b, b)) => {
-                DeepEq::eq_impl(binds_a, binds_b, is_mod_reordering)
-                    && DeepEq::eq_impl(a, b, is_mod_reordering)
+                DeepEq::eq_impl(binds_a, binds_b, is_mod_reordering, cache)
+                    && DeepEq::eq_impl(a, b, is_mod_reordering, cache)
             }
             _ => false,
         }
@@ -748,21 +775,26 @@ impl DeepEq for Term {
 }
 
 impl DeepEq for Sort {
-    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
+    fn eq_impl(
+        a: &Self,
+        b: &Self,
+        is_mod_reordering: bool,
+        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+    ) -> bool {
         match (a, b) {
             (Sort::Function(sorts_a), Sort::Function(sorts_b)) => {
-                DeepEq::eq_impl(sorts_a, sorts_b, is_mod_reordering)
+                DeepEq::eq_impl(sorts_a, sorts_b, is_mod_reordering, cache)
             }
             (Sort::Atom(a, sorts_a), Sort::Atom(b, sorts_b)) => {
-                a == b && DeepEq::eq_impl(sorts_a, sorts_b, is_mod_reordering)
+                a == b && DeepEq::eq_impl(sorts_a, sorts_b, is_mod_reordering, cache)
             }
             (Sort::Bool, Sort::Bool)
             | (Sort::Int, Sort::Int)
             | (Sort::Real, Sort::Real)
             | (Sort::String, Sort::String) => true,
             (Sort::Array(x_a, y_a), Sort::Array(x_b, y_b)) => {
-                DeepEq::eq_impl(x_a, x_b, is_mod_reordering)
-                    && DeepEq::eq_impl(y_a, y_b, is_mod_reordering)
+                DeepEq::eq_impl(x_a, x_b, is_mod_reordering, cache)
+                    && DeepEq::eq_impl(y_a, y_b, is_mod_reordering, cache)
             }
             _ => false,
         }
@@ -770,11 +802,18 @@ impl DeepEq for Sort {
 }
 
 impl DeepEq for ProofArg {
-    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
+    fn eq_impl(
+        a: &Self,
+        b: &Self,
+        is_mod_reordering: bool,
+        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+    ) -> bool {
         match (a, b) {
-            (ProofArg::Term(a), ProofArg::Term(b)) => DeepEq::eq_impl(a, b, is_mod_reordering),
+            (ProofArg::Term(a), ProofArg::Term(b)) => {
+                DeepEq::eq_impl(a, b, is_mod_reordering, cache)
+            }
             (ProofArg::Assign(sa, ta), ProofArg::Assign(sb, tb)) => {
-                sa == sb && DeepEq::eq_impl(ta, tb, is_mod_reordering)
+                sa == sb && DeepEq::eq_impl(ta, tb, is_mod_reordering, cache)
             }
             _ => false,
         }
@@ -782,13 +821,18 @@ impl DeepEq for ProofArg {
 }
 
 impl DeepEq for ProofCommand {
-    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
+    fn eq_impl(
+        a: &Self,
+        b: &Self,
+        is_mod_reordering: bool,
+        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+    ) -> bool {
         match (a, b) {
             (ProofCommand::Assume(a), ProofCommand::Assume(b)) => {
-                DeepEq::eq_impl(a, b, is_mod_reordering)
+                DeepEq::eq_impl(a, b, is_mod_reordering, cache)
             }
             (ProofCommand::Step(a), ProofCommand::Step(b)) => {
-                DeepEq::eq_impl(a, b, is_mod_reordering)
+                DeepEq::eq_impl(a, b, is_mod_reordering, cache)
             }
             _ => false,
         }
@@ -796,44 +840,63 @@ impl DeepEq for ProofCommand {
 }
 
 impl DeepEq for ProofStep {
-    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
-        DeepEq::eq_impl(&a.clause, &b.clause, is_mod_reordering)
+    fn eq_impl(
+        a: &Self,
+        b: &Self,
+        is_mod_reordering: bool,
+        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+    ) -> bool {
+        DeepEq::eq_impl(&a.clause, &b.clause, is_mod_reordering, cache)
             && a.rule == b.rule
             && a.premises == b.premises
-            && DeepEq::eq_impl(&a.args, &b.args, is_mod_reordering)
+            && DeepEq::eq_impl(&a.args, &b.args, is_mod_reordering, cache)
     }
 }
 
 impl<T: DeepEq> DeepEq for &T {
-    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
-        DeepEq::eq_impl(*a, *b, is_mod_reordering)
-    }
-}
-
-impl<T: DeepEq> DeepEq for ByRefRc<T> {
-    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
-        a == b || DeepEq::eq_impl(a.as_ref(), b.as_ref(), is_mod_reordering)
+    fn eq_impl(
+        a: &Self,
+        b: &Self,
+        is_mod_reordering: bool,
+        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+    ) -> bool {
+        DeepEq::eq_impl(*a, *b, is_mod_reordering, cache)
     }
 }
 
 impl<T: DeepEq> DeepEq for Vec<T> {
-    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
+    fn eq_impl(
+        a: &Self,
+        b: &Self,
+        is_mod_reordering: bool,
+        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+    ) -> bool {
         a.len() == b.len()
             && a.iter()
                 .zip(b.iter())
-                .all(|(a, b)| DeepEq::eq_impl(a, b, is_mod_reordering))
+                .all(|(a, b)| DeepEq::eq_impl(a, b, is_mod_reordering, cache))
     }
 }
 
 impl<T: DeepEq> DeepEq for (T, T) {
-    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
-        DeepEq::eq_impl(&a.0, &b.0, is_mod_reordering)
-            && DeepEq::eq_impl(&a.1, &b.1, is_mod_reordering)
+    fn eq_impl(
+        a: &Self,
+        b: &Self,
+        is_mod_reordering: bool,
+        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+    ) -> bool {
+        DeepEq::eq_impl(&a.0, &b.0, is_mod_reordering, cache)
+            && DeepEq::eq_impl(&a.1, &b.1, is_mod_reordering, cache)
     }
 }
 
 impl DeepEq for SortedVar {
-    fn eq_impl(a: &Self, b: &Self, is_mod_reordering: bool) -> bool {
-        a.0 == b.0 && DeepEq::eq_impl(&a.1, &b.1, is_mod_reordering)
+    fn eq_impl(
+        a: &Self,
+        b: &Self,
+        is_mod_reordering: bool,
+        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+    ) -> bool {
+        a.0 == b.0 && DeepEq::eq_impl(&a.1, &b.1, is_mod_reordering, cache)
     }
 }
