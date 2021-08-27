@@ -573,9 +573,6 @@ pub fn ac_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> {
             Term::Quant(q, bindings, inner) => {
                 Term::Quant(*q, bindings.clone(), flatten_operation(inner, pool, cache))
             }
-            Term::Choice(binding, inner) => {
-                Term::Choice(binding.clone(), flatten_operation(inner, pool, cache))
-            }
             Term::Let(binding, inner) => {
                 Term::Let(binding.clone(), flatten_operation(inner, pool, cache))
             }
@@ -588,7 +585,10 @@ pub fn ac_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1);
     let (original, flattened) = match_term!((= psi phis) = conclusion[0], RETURN_RCS)?;
     let mut cache = AHashMap::new();
-    to_option(flatten_operation(original, pool, &mut cache) == *flattened)
+    to_option(DeepEq::eq_modulo_reordering(
+        &flatten_operation(original, pool, &mut cache),
+        flattened,
+    ))
 }
 
 #[cfg(test)]
