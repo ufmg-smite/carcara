@@ -1,0 +1,16 @@
+[package]
+name = "alethe-proof-checker"
+version = "0.1.0"
+authors = ["Bruno Andreotti <bandreotti@protonmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ahash = "0.7.4"
+num-bigint = "0.4.0"
+num-rational = "0.4.0"
+num-traits = "0.2.14"
+
+[features]
+large-test-set = []

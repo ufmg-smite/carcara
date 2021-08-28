@@ -1,0 +1,15 @@
+[package]
+name = "alethe-proof-checker-cli"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+name = "alethe-proof-checker"
+path = "src/main.rs"
+
+[dependencies]
+alethe-proof-checker = { path = "../alethe-proof-checker" }
+ahash = "0.7.4"
+clap = "2.33.3"
