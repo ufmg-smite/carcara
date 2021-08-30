@@ -4,13 +4,11 @@
 # does not. If the problem path is "problem.smt_in", the proofs will be in
 # "problem.smt_in.sharing.proof" and "problem.smt_in.proof"
 
-
 if [[ -z "$VERIT" ]]; then
     echo "\$VERIT environment variable is not defined, using 'veriT' as default value"
     VERIT='veriT'
 fi
 
-cd alethe-proof-checker
 if [ ! -d "test-examples" ]; then
     echo "'test-examples' directory not found, trying to unzip 'test-examples.zip'"
     unzip -q test-examples.zip || exit 1

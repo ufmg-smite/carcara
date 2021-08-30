@@ -55,7 +55,7 @@ macro_rules! generate_tests {
 }
 
 generate_tests! {
-    "test-examples/",
+    "../test-examples/",
     sh_problems_green_verit: "SH_problems_all_filtered/Green_veriT",
     sh_problems_ordered_resolution_prover_verit:
         "SH_problems_all_filtered/Ordered_Resolution_Prover_veriT",
@@ -86,7 +86,7 @@ generate_tests! {
 // time to run
 #[cfg(feature = "large-test-set")]
 generate_tests! {
-    "large-test-set/",
+    "../large-test-set/",
     auflia_20170829_rodin: "AUFLIA/20170829-Rodin",
     auflia_misc: "AUFLIA/misc",
     auflira_fft: "AUFLIRA/FFT",
