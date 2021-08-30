@@ -1,10 +1,12 @@
 mod rules;
 
-use crate::ast::*;
-use crate::benchmarking::StepMeasurement;
+use crate::{
+    ast::*,
+    benchmarking::{Metrics, StepId},
+};
 use ahash::{AHashMap, AHashSet};
 use rules::{Rule, RuleArgs};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 #[derive(Debug)]
 pub enum CheckerError {
@@ -40,11 +42,20 @@ struct Context {
     bindings: AHashSet<SortedVar>,
 }
 
+#[derive(Debug)]
+pub struct CheckerStatistics<'s> {
+    pub(crate) file_name: &'s str,
+    pub(crate) checking_time: &'s mut Duration,
+    pub(crate) step_time: &'s mut Metrics<StepId>,
+    pub(crate) step_time_by_file: &'s mut AHashMap<String, Metrics<StepId>>,
+    pub(crate) step_time_by_rule: &'s mut AHashMap<String, Metrics<StepId>>,
+}
+
 #[derive(Debug, Default)]
 pub struct Config<'c> {
     pub skip_unknown_rules: bool,
     pub allow_test_rule: bool,
-    pub statistics: Option<&'c mut Vec<StepMeasurement>>,
+    pub statistics: Option<CheckerStatistics<'c>>,
 }
 
 pub struct ProofChecker<'c> {
@@ -95,22 +106,14 @@ impl<'c> ProofChecker<'c> {
                     self.context.push(new_context);
                     commands_stack.push((0, inner_commands));
 
-                    if let Some(stats) = &mut self.config.statistics {
-                        let step_index = inner_commands
-                            .last()
-                            .and_then(|s| match s {
-                                ProofCommand::Step(s) => Some(s.index.clone()),
-                                _ => None,
-                            })
-                            .unwrap_or_default();
-                        let measurement = StepMeasurement {
-                            step_index,
-                            // An asterisk to indicate that it's not exactly a rule
-                            rule: "anchor*".to_string(),
-                            time: time.elapsed(),
-                        };
-                        stats.push(measurement);
-                    }
+                    let step_index = inner_commands
+                        .last()
+                        .and_then(|s| match s {
+                            ProofCommand::Step(s) => Some(s.index.clone()),
+                            _ => None,
+                        })
+                        .unwrap_or_default();
+                    self.add_statistics_measurement(&step_index, "anchor*", time);
                     continue;
                 }
                 ProofCommand::Assume(_) => Ok(Correctness::True),
@@ -155,14 +158,7 @@ impl<'c> ProofChecker<'c> {
             Some(()) => Correctness::True,
             None => Correctness::False(index.clone(), rule_name.clone()),
         };
-        if let Some(stats) = &mut self.config.statistics {
-            let measurement = StepMeasurement {
-                step_index: index.clone(),
-                rule: rule_name.clone(),
-                time: time.elapsed(),
-            };
-            stats.push(measurement);
-        }
+        self.add_statistics_measurement(index, rule_name, time);
         Ok(result)
     }
 
@@ -216,6 +212,32 @@ impl<'c> ProofChecker<'c> {
             substitutions_until_fixed_point,
             cumulative_substitutions,
             bindings,
+        }
+    }
+
+    fn add_statistics_measurement(&mut self, step_index: &str, rule: &str, start_time: Instant) {
+        if let Some(stats) = &mut self.config.statistics {
+            let measurement = start_time.elapsed();
+            let file_name = stats.file_name.to_string();
+            let step_index = step_index.to_string();
+            let rule = rule.to_string();
+            let id = StepId {
+                file: file_name.clone().into_boxed_str(),
+                step_index: step_index.into_boxed_str(),
+                rule: rule.clone().into_boxed_str(),
+            };
+            stats.step_time.add(&id, measurement);
+            stats
+                .step_time_by_file
+                .entry(file_name)
+                .or_default()
+                .add(&id, measurement);
+            stats
+                .step_time_by_rule
+                .entry(rule)
+                .or_default()
+                .add(&id, measurement);
+            *stats.checking_time += measurement;
         }
     }
 

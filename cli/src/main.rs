@@ -145,8 +145,6 @@ fn parse_subcommand(matches: &ArgMatches) -> Result<(), Error> {
 }
 
 fn bench_subcommand(matches: &ArgMatches) -> Result<(), Error> {
-    use benchmarking::compile_measurements::*;
-
     // TODO: Add better error handling
     let num_runs = matches.value_of("num-runs").unwrap().parse().unwrap();
     let instances: Vec<_> = matches
@@ -177,18 +175,40 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), Error> {
     );
     let results = benchmarking::run_benchmark(&instances, num_runs)?;
 
-    println!("parsing:            {}", parsing_time(&results));
-    println!("checking:           {}", checking_time(&results));
-    println!("parsing + checking: {}", parsing_checking_time(&results));
-    println!("total:              {}", total_time(&results));
+    println!("parsing:            {}", results.parsing());
+    println!("checking:           {}", results.checking());
+    println!("parsing + checking: {}", results.parsing_checking());
+    println!("total:              {}", results.total());
 
-    let data_by_rule = by_rule(&results);
+    let data_by_rule = results.step_time_by_rule();
     let mut data_by_rule: Vec<_> = data_by_rule.iter().collect();
     data_by_rule.sort_by_key(|(_, m)| m.mean);
     println!("by rule:");
     for (rule, data) in data_by_rule {
         println!("    {: <18}{}", rule, data);
     }
+
+    println!("worst cases:");
+    let worst_step = results.step_time().max();
+    println!("    step:            {} ({:?})", worst_step.0, worst_step.1);
+
+    let worst_file_parsing = results.parsing().max();
+    println!(
+        "    file (parsing):  {} ({:?})",
+        worst_file_parsing.0 .0, worst_file_parsing.1
+    );
+
+    let worst_file_checking = results.checking().max();
+    println!(
+        "    file (checking): {} ({:?})",
+        worst_file_checking.0 .0, worst_file_checking.1
+    );
+
+    let worst_file_total = results.total().max();
+    println!(
+        "    file overall:    {} ({:?})",
+        worst_file_total.0 .0, worst_file_total.1
+    );
     Ok(())
 }
 
