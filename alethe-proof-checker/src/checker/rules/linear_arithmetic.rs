@@ -17,7 +17,7 @@ pub fn la_rw_eq(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 /// example, the term "(/ (- 5) 2)" is converted to the rational value "-2.5".
 fn simple_operation_to_rational(term: &Term) -> Option<BigRational> {
     // TODO: Add tests for this
-    if let Some((n, d)) = match_term!((/ n d) = term) {
+    if let Some((n, d)) = match_term!((/ n d) = term).or_else(|| match_term!((div n d) = term)) {
         Some(simple_operation_to_rational(n)? / simple_operation_to_rational(d)?)
     } else if let Some(t) = match_term!((-t) = term) {
         Some(-simple_operation_to_rational(t)?)
@@ -32,6 +32,10 @@ fn simple_operation_to_rational(term: &Term) -> Option<BigRational> {
 /// positive polarity.
 fn flatten_sum(term: &Term) -> Vec<(&Term, bool)> {
     // TODO: Add tests for this
+    // TODO: Add support for distributing numerical constant multiplications. For example, this
+    // function should transform the term "(* 2 (+ (* 22 x) y 4))" into "(+ (* 44 x) (* 2 y) 8)".
+    // Maybe it is more natural to merge this term with `LinearComb::from_term`.
+
     if let Some(args) = match_term!((+ ...) = term) {
         args.iter().flat_map(|t| flatten_sum(t.as_ref())).collect()
     } else if let Some(t) = match_term!((-t) = term) {
@@ -93,7 +97,6 @@ impl<'a> LinearComb<'a> {
     /// Builds a linear combination from a term. Only one constant term is allowed.
     fn from_term(term: &'a Term) -> Option<Self> {
         let mut result = Self(AHashMap::new(), BigRational::zero());
-        let mut constant_is_set = false;
         for (arg, polarity) in flatten_sum(term) {
             let polarity_coeff = match polarity {
                 true => BigRational::one(),
@@ -101,7 +104,10 @@ impl<'a> LinearComb<'a> {
             };
             match match_term!((* a b) = arg) {
                 Some((a, b)) => {
-                    let (var, coeff) = match (a.try_as_signed_ratio(), b.try_as_signed_ratio()) {
+                    let (var, coeff) = match (
+                        simple_operation_to_rational(a),
+                        simple_operation_to_rational(b),
+                    ) {
                         (None, None) => (arg, BigRational::one()),
                         (None, Some(r)) => (a, r),
                         (Some(r), None) => (b, r),
@@ -109,14 +115,8 @@ impl<'a> LinearComb<'a> {
                     };
                     result.insert(var, coeff * polarity_coeff);
                 }
-                None => match arg.try_as_ratio() {
-                    Some(r) => {
-                        if constant_is_set {
-                            return None;
-                        }
-                        result.1 = r * polarity_coeff;
-                        constant_is_set = true;
-                    }
+                None => match simple_operation_to_rational(arg) {
+                    Some(r) => result.1 += r * polarity_coeff,
                     None => result.insert(arg, polarity_coeff),
                 },
             };
@@ -169,6 +169,54 @@ impl<'a> LinearComb<'a> {
     }
 }
 
+fn strengthen(op: Operator, disequality: &mut LinearComb, a: &BigRational) -> Operator {
+    let is_integer = (&disequality.1 * a).is_integer();
+    match op {
+        Operator::GreaterEq if is_integer => op,
+
+        // In some cases, when the disequality is over integers, we can make the strengthening
+        // rules even stronger. Consider for instance the following example:
+        //     (step t1 (cl
+        //         (not (<= (- 1) n))
+        //         (not (<= (- 1) (+ n m)))
+        //         (<= (- 2) (* 2 n))
+        //         (not (<= m 1))
+        //     ) :rule la_generic :args (1 1 1 1))
+        // After the third disequality is negated and flipped, it becomes:
+        //     -2 * n > 2
+        // If nothing fancy is done, this would strenghten to:
+        //     -2 * n >= 3
+        // However, in this case, we can divide the disequality by 2 before strengthening, and then
+        // multiply it by 2 to get back. This would result in:
+        //     -2 * n > 2
+        //     -1 * n > 1
+        //     -1 * n >= 2
+        //     -2 * n >= 4
+        // This is a stronger statement, and follows from the original disequality. To find the
+        // value by which we should divide, we take the smallest coefficient in the left side of
+        // the disequality.
+        Operator::GreaterThan if is_integer => {
+            let min = disequality
+                .0
+                .values()
+                .map(|x| x.abs())
+                .min()
+                .unwrap_or_else(BigRational::one);
+
+            // Instead of dividing and then multiplying back, we just multiply the "+ 1"
+            // that is added by the strengthening rule
+            disequality.1 = disequality.1.floor() + min;
+            Operator::GreaterEq
+        }
+        Operator::GreaterThan | Operator::GreaterEq => {
+            disequality.1 = disequality.1.floor() + BigRational::one();
+            Operator::GreaterEq
+        }
+        Operator::LessThan | Operator::LessEq => unreachable!(),
+        _ => op,
+    }
+}
+
 pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == args.len());
 
@@ -204,15 +252,7 @@ pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> Option<()> {
             }
 
             // Step 4: Apply strengthening rules
-            match op {
-                Operator::GreaterEq if disequality.1.is_integer() => (),
-                Operator::GreaterThan | Operator::GreaterEq => {
-                    disequality.1 = disequality.1.floor() + BigRational::one();
-                    op = Operator::GreaterEq;
-                }
-                Operator::LessThan | Operator::LessEq => unreachable!(),
-                _ => (),
-            }
+            let op = strengthen(op, &mut disequality, &a);
 
             // Step 5: Multiply disequality by a
             let a = match op {
@@ -297,6 +337,8 @@ mod tests {
                 (declare-fun a () Real)
                 (declare-fun b () Real)
                 (declare-fun c () Real)
+                (declare-fun m () Int)
+                (declare-fun n () Int)
             ",
             "Simple working examples" {
                 "(step t1 (cl (> a 0.0) (<= a 0.0)) :rule la_generic :args (1.0 1.0))": true,
@@ -329,6 +371,14 @@ mod tests {
 
                 "(step t1 (cl (< (+ a b) 1.0) (> (+ a b c) 0.0))
                     :rule la_generic :args (1.0 (- 1.0)))": false,
+            }
+            "Edge case where the strengthening rules need to be stronger" {
+                "(step t1 (cl
+                    (not (<= (- 1) n))
+                    (not (<= (- 1) (+ n m)))
+                    (<= (- 2) (* 2 n))
+                    (not (<= m 1))
+                ) :rule la_generic :args (1 1 1 1))": true,
             }
         }
     }
