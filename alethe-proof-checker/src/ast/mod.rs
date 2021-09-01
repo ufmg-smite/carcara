@@ -563,7 +563,7 @@ impl Term {
         fn as_unsigned_fraction(term: &Term) -> Option<BigRational> {
             match term {
                 Term::Op(Operator::IntDiv | Operator::RealDiv, args) if args.len() == 2 => {
-                    Some(args[0].as_number()? / args[1].as_number()?)
+                    Some(args[0].as_signed_number()? / args[1].as_signed_number()?)
                 }
                 _ => term.as_number(),
             }
