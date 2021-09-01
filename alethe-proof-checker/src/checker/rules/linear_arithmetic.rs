@@ -13,19 +13,6 @@ pub fn la_rw_eq(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     to_option(t_1 == t_2 && t_2 == t_3 && u_1 == u_2 && u_2 == u_3)
 }
 
-/// Converts a rational represented with division and negation to the resulting rational value. For
-/// example, the term "(/ (- 5) 2)" is converted to the rational value "-2.5".
-fn simple_operation_to_rational(term: &Term) -> Option<BigRational> {
-    // TODO: Add tests for this
-    if let Some((n, d)) = match_term!((/ n d) = term).or_else(|| match_term!((div n d) = term)) {
-        Some(simple_operation_to_rational(n)? / simple_operation_to_rational(d)?)
-    } else if let Some(t) = match_term!((-t) = term) {
-        Some(-simple_operation_to_rational(t)?)
-    } else {
-        term.try_as_ratio()
-    }
-}
-
 /// Takes a nested sequence of additions, subtractions and negations, and flattens it to a list of
 /// terms and the polarity that they appear in. For example, the term "(+ (- x y) (+ (- z) w))" is
 /// flattened to `[(x, true), (y, false), (z, false), (w, true)]`, where `true` representes
@@ -104,10 +91,7 @@ impl<'a> LinearComb<'a> {
             };
             match match_term!((* a b) = arg) {
                 Some((a, b)) => {
-                    let (var, coeff) = match (
-                        simple_operation_to_rational(a),
-                        simple_operation_to_rational(b),
-                    ) {
+                    let (var, coeff) = match (a.as_fraction(), b.as_fraction()) {
                         (None, None) => (arg, BigRational::one()),
                         (None, Some(r)) => (a, r),
                         (Some(r), None) => (b, r),
@@ -115,7 +99,7 @@ impl<'a> LinearComb<'a> {
                     };
                     result.insert(var, coeff * polarity_coeff);
                 }
-                None => match simple_operation_to_rational(arg) {
+                None => match arg.as_fraction() {
                     Some(r) => result.1 += r * polarity_coeff,
                     None => result.insert(arg, polarity_coeff),
                 },
@@ -226,7 +210,7 @@ pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> Option<()> {
         .map(|(phi, a)| {
             let phi = phi.as_ref();
             let a = match a {
-                ProofArg::Term(a) => simple_operation_to_rational(a)?,
+                ProofArg::Term(a) => a.as_fraction()?,
                 ProofArg::Assign(_, _) => return None,
             };
 

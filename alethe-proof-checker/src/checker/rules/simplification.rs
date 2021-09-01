@@ -122,13 +122,13 @@ pub fn eq_simplify(args: RuleArgs) -> Option<()> {
 
             // t_1 = t_2 => false, if t_1 and t_2 are different numerical constants
             (= t t): (t1, t2) if {
-                let t1 = t1.try_as_signed_ratio();
-                let t2 = t2.try_as_signed_ratio();
+                let t1 = t1.as_signed_number();
+                let t2 = t2.as_signed_number();
                 t1.is_some() && t2.is_some() && t1 != t2
             } => pool.bool_false(),
 
             // ¬(t = t) => false, if t is a numerical constant
-            (not (= t t)): (t1, t2) if t1 == t2 && t1.is_signed_constant() => pool.bool_false(),
+            (not (= t t)): (t1, t2) if t1 == t2 && t1.is_signed_number() => pool.bool_false(),
         })
     })
 }
@@ -374,7 +374,7 @@ fn generic_sum_prod_simplify_rule(conclusion: &[ByRefRc<Term>], rule_kind: Opera
             // term. That term might be a regular term or the leading constant, depending on if u
             // is a constant or not
             _ => {
-                return Some(match u.try_as_ratio() {
+                return Some(match u.as_number() {
                     Some(u) => (u, &[]),
                     None => (identity_value.clone(), std::slice::from_ref(u)),
                 });
@@ -383,11 +383,11 @@ fn generic_sum_prod_simplify_rule(conclusion: &[ByRefRc<Term>], rule_kind: Opera
 
         // We check if there are any constants in u (aside from the leading constant). If
         // there are any, we know this u term is invalid, so we can return `None`
-        if args[1..].iter().any(|t| t.is_constant()) {
+        if args[1..].iter().any(|t| t.is_number()) {
             return None;
         }
 
-        match args[0].try_as_ratio() {
+        match args[0].as_number() {
             // If the leading constant is the identity value, it should have been omitted
             Some(constant) if constant == *identity_value => None,
             Some(constant) => Some((constant, &args[1..])),
@@ -461,19 +461,19 @@ pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
         }
 
         // Second case of "unary_minus_simplify"
-        match (t.try_as_signed_ratio(), u.try_as_signed_ratio()) {
+        match (t.as_signed_number(), u.as_signed_number()) {
             (Some(t), Some(u)) if t == u => return Some(()),
             _ => (),
         }
 
         let (t_1, t_2) = match_term!((- t_1 t_2) = t, RETURN_RCS)?;
         if t_1 == t_2 {
-            return to_option(u.try_as_ratio()?.is_zero());
+            return to_option(u.as_number()?.is_zero());
         }
-        to_option(match (t_1.try_as_ratio(), t_2.try_as_ratio()) {
+        to_option(match (t_1.as_number(), t_2.as_number()) {
             (_, Some(z)) if z.is_zero() => u == t_1,
             (Some(z), _) if z.is_zero() => match_term!((-t) = u, RETURN_RCS)? == t_2,
-            (Some(t_1), Some(t_2)) => u.try_as_signed_ratio()? == t_1 - t_2,
+            (Some(t_1), Some(t_2)) => u.as_signed_number()? == t_1 - t_2,
             _ => false,
         })
     }
@@ -493,7 +493,7 @@ pub fn comp_simplify(args: RuleArgs) -> Option<()> {
         simplify!(term {
             (< t_1 t_2): (t_1, t_2) => {
                 if let (Some(t_1), Some(t_2)) =
-                    (t_1.try_as_signed_ratio(), t_2.try_as_signed_ratio())
+                    (t_1.as_signed_number(), t_2.as_signed_number())
                 {
                     // t_1 < t_2 => phi, where t_1 and t_2 are numerical constants
                     pool.bool_constant(t_1 < t_2)
@@ -507,7 +507,7 @@ pub fn comp_simplify(args: RuleArgs) -> Option<()> {
             },
             (<= t_1 t_2): (t_1, t_2) => {
                 if let (Some(t_1), Some(t_2)) =
-                    (t_1.try_as_signed_ratio(), t_2.try_as_signed_ratio())
+                    (t_1.as_signed_number(), t_2.as_signed_number())
                 {
                     // t_1 <= t_2 => phi, where t_1 and t_2 are numerical constants
                     pool.bool_constant(t_1 <= t_2)

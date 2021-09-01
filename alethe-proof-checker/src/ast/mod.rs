@@ -518,7 +518,7 @@ impl Term {
     }
 
     /// Returns `true` if the term is an integer or real constant.
-    pub fn is_constant(&self) -> bool {
+    pub fn is_number(&self) -> bool {
         matches!(
             self,
             Term::Terminal(Terminal::Real(_) | Terminal::Integer(_))
@@ -527,16 +527,16 @@ impl Term {
 
     /// Returns `true` if the term is an integer or real constant, or one such constant negated
     /// with the "-" operator.
-    pub fn is_signed_constant(&self) -> bool {
+    pub fn is_signed_number(&self) -> bool {
         match match_term!((-x) = self) {
-            Some(x) => x.is_constant(),
-            None => self.is_constant(),
+            Some(x) => x.is_number(),
+            None => self.is_number(),
         }
     }
 
     /// Tries to extract a `BigRational` from a term. Returns `Some` if the term is an integer or
     /// real constant.
-    pub fn try_as_ratio(&self) -> Option<BigRational> {
+    pub fn as_number(&self) -> Option<BigRational> {
         match self {
             Term::Terminal(Terminal::Real(r)) => Some(r.clone()),
             Term::Terminal(Terminal::Integer(i)) => Some(BigRational::from_integer(i.clone())),
@@ -547,16 +547,37 @@ impl Term {
     /// Tries to extract a `BigRational` from a term, allowing negative values represented with the
     /// unary "-" operator. Returns `Some` if the term is an integer or real constant, or one such
     /// constant negated with the "-" operator.
-    pub fn try_as_signed_ratio(&self) -> Option<BigRational> {
+    pub fn as_signed_number(&self) -> Option<BigRational> {
         match match_term!((-x) = self) {
-            Some(x) => x.try_as_ratio().map(|r| -r),
-            None => self.try_as_ratio(),
+            Some(x) => x.as_number().map(|r| -r),
+            None => self.as_number(),
+        }
+    }
+
+    /// Tries to extract a `BigRational` from a term, allowing fractions. This method will return
+    /// `Some` if the term is:
+    /// * A real or integer constant
+    /// * An application of the "/" or "div" operators on two real or integer constants
+    /// * An application of the unary "-" operator on one of the two previous cases
+    pub fn as_fraction(&self) -> Option<BigRational> {
+        fn as_unsigned_fraction(term: &Term) -> Option<BigRational> {
+            match term {
+                Term::Op(Operator::IntDiv | Operator::RealDiv, args) if args.len() == 2 => {
+                    Some(args[0].as_number()? / args[1].as_number()?)
+                }
+                _ => term.as_number(),
+            }
+        }
+
+        match match_term!((-x) = self) {
+            Some(x) => as_unsigned_fraction(x).map(|r| -r),
+            None => as_unsigned_fraction(self),
         }
     }
 
     /// Tries to extract the variable name from a term. Returns `Some` if the term is a variable
     /// with a simple identifier.
-    pub fn try_as_var(&self) -> Option<&str> {
+    pub fn as_var(&self) -> Option<&str> {
         match self {
             Term::Terminal(Terminal::Var(Identifier::Simple(var), _)) => Some(var.as_str()),
             _ => None,
@@ -574,12 +595,12 @@ impl Term {
 
     /// Returns `true` if the term is the boolean constant "true".
     pub fn is_bool_true(&self) -> bool {
-        self.sort() == Term::BOOL_SORT && self.try_as_var() == Some("true")
+        self.sort() == Term::BOOL_SORT && self.as_var() == Some("true")
     }
 
     /// Returns `true` if the term is the boolean constant "false".
     pub fn is_bool_false(&self) -> bool {
-        self.sort() == Term::BOOL_SORT && self.try_as_var() == Some("false")
+        self.sort() == Term::BOOL_SORT && self.as_var() == Some("false")
     }
 }
 

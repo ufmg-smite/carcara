@@ -68,7 +68,7 @@ pub fn bind(
         .substitutions
         .iter()
         // We skip terms which are not simply variables
-        .filter_map(|(x, y)| Some((x.try_as_var()?, y.try_as_var()?)))
+        .filter_map(|(x, y)| Some((x.as_var()?, y.as_var()?)))
         .chain(
             // Sometimes, the context bindings also appear as bindings in the quantifiers, so we
             // include them in the "xs" and "ys"
