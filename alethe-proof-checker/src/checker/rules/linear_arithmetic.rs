@@ -81,7 +81,7 @@ impl<'a> LinearComb<'a> {
         Self(AHashMap::new(), BigRational::zero())
     }
 
-    /// Builds a linear combination from a term. Only one constant term is allowed.
+    /// Builds a linear combination from a term.
     fn from_term(term: &'a Term) -> Option<Self> {
         let mut result = Self(AHashMap::new(), BigRational::zero());
         for (arg, polarity) in flatten_sum(term) {
