@@ -1,6 +1,7 @@
 use super::{to_option, RuleArgs};
 use crate::ast::*;
 use ahash::AHashMap;
+use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::{One, Signed, Zero};
 
@@ -151,6 +152,23 @@ impl<'a> LinearComb<'a> {
         other.neg();
         self.add(other)
     }
+
+    /// Finds the greatest common divisor of the coefficients in the linear combination. Returns
+    /// `None` if the linear combination is empty, or if any of the coefficients is not an integer.
+    fn coefficients_gcd(&self) -> Option<BigInt> {
+        self.0
+            .iter()
+            .map(|(_, coeff)| {
+                if coeff.is_integer() {
+                    Some(coeff.to_integer().abs())
+                } else {
+                    None
+                }
+            })
+            .collect::<Option<Vec<_>>>()?
+            .into_iter()
+            .reduce(num_integer::gcd)
+    }
 }
 
 fn strengthen(op: Operator, disequality: &mut LinearComb, a: &BigRational) -> Operator {
@@ -176,20 +194,17 @@ fn strengthen(op: Operator, disequality: &mut LinearComb, a: &BigRational) -> Op
         //     -1 * n > 1
         //     -1 * n >= 2
         //     -2 * n >= 4
-        // This is a stronger statement, and follows from the original disequality. To find the
-        // value by which we should divide, we take the smallest coefficient in the left side of
-        // the disequality.
+        // This is a stronger statement, and follows from the original disequality. Importantly,
+        // this strengthening is sometimes necessary to check some "la_generic" steps. To find the
+        // value by which we should divide we have to take the greatest common divisor of the
+        // coefficients, as this makes sure all coefficients will continue being integers after the
+        // division. This strengthening is still valid because, since the variables are integers,
+        // the result of their linear combination will always be a multiple of their GCD.
         Operator::GreaterThan if is_integer => {
-            let min = disequality
-                .0
-                .values()
-                .map(|x| x.abs())
-                .min()
-                .unwrap_or_else(BigRational::one);
-
             // Instead of dividing and then multiplying back, we just multiply the "+ 1"
             // that is added by the strengthening rule
-            disequality.1 = disequality.1.floor() + min;
+            let increment = disequality.coefficients_gcd().unwrap_or_else(BigInt::one);
+            disequality.1 = disequality.1.floor() + increment;
             Operator::GreaterEq
         }
         Operator::GreaterThan | Operator::GreaterEq => {
