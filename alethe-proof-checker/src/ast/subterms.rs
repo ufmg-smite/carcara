@@ -1,4 +1,4 @@
-use super::{ByRefRc, Term};
+use super::{Rc, Term};
 use ahash::AHashSet;
 use std::iter;
 
@@ -28,7 +28,7 @@ struct SubtermsInner<'a> {
     root: &'a Term,
     visited_root: bool,
     current: Option<Box<Self>>,
-    children: Box<dyn Iterator<Item = &'a ByRefRc<Term>> + 'a>,
+    children: Box<dyn Iterator<Item = &'a Rc<Term>> + 'a>,
 }
 
 impl<'a> SubtermsInner<'a> {

@@ -1,0 +1,4 @@
+disallowed-methods = [
+    "std::rc::Rc::new",
+    "alloc::rc::Rc::new",
+]

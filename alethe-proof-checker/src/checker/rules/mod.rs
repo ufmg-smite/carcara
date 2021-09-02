@@ -4,7 +4,7 @@ use crate::ast::*;
 pub type Rule = fn(RuleArgs) -> Option<()>;
 
 pub struct RuleArgs<'a> {
-    pub(super) conclusion: &'a [ByRefRc<Term>],
+    pub(super) conclusion: &'a [Rc<Term>],
     pub(super) premises: Vec<&'a ProofCommand>,
     pub(super) args: &'a [ProofArg],
     pub(super) pool: &'a mut TermPool,
@@ -25,14 +25,14 @@ fn to_option(b: bool) -> Option<()> {
     }
 }
 
-fn get_single_term_from_command(command: &ProofCommand) -> Option<&ByRefRc<Term>> {
+fn get_single_term_from_command(command: &ProofCommand) -> Option<&Rc<Term>> {
     match get_clause_from_command(command) {
         [t] => Some(t),
         _ => None,
     }
 }
 
-fn get_clause_from_command(command: &ProofCommand) -> &[ByRefRc<Term>] {
+fn get_clause_from_command(command: &ProofCommand) -> &[Rc<Term>] {
     match command {
         // "assume" premises are interpreted as a clause with a single term
         ProofCommand::Assume(term) => std::slice::from_ref(term),

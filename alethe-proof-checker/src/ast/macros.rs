@@ -1,9 +1,9 @@
 /// A macro to help deconstruct operation terms. Since a term holds references to other terms in
 /// `Vec`s and `Rc`s, pattern matching a complex term can be difficult and verbose. This macro
 /// helps with that. The return type of this macro is an `Option` of a tree-like tuple. The
-/// structure of the tree will depend on the pattern passed, and the leaf nodes will be `&Term`s. An
-/// optional flag "RETURN_RCS" can be passed, in which case the leaf nodes will instead be
-/// `&ByRefRc<Term>`s.
+/// structure of the tree will depend on the pattern passed, and the leaf nodes will be `&Term`s.
+/// An optional flag "RETURN_RCS" can be passed, in which case the leaf nodes will instead be
+/// `&Rc<Term>`s.
 macro_rules! match_term {
     (true = $var:expr $(, $flag:ident)?) => {
         if $var.is_bool_true() { Some(()) } else { None }
@@ -77,8 +77,7 @@ macro_rules! match_term {
     (@GET_VARIANT >=)       => { Operator::GreaterEq };
 }
 
-/// A macro to help build new terms. Note that this macro will construct subterms by calling
-/// `ByRefRc::new` and does not make use of hash consing.
+/// A macro to help build new terms.
 macro_rules! build_term {
     ($pool:expr, {$terminal:expr}) => { $terminal };
     ($pool:expr, ($op:tt $($args:tt)+)) => {{
@@ -165,31 +164,22 @@ mod tests {
             b,
             &Term::Op(
                 Operator::Sub,
-                vec![
-                    ByRefRc::new(terminal!(int 2)),
-                    ByRefRc::new(terminal!(int 2)),
-                ],
+                vec![Rc::new(terminal!(int 2)), Rc::new(terminal!(int 2)),],
             ),
         );
         assert_deep_eq!(
             c,
             &Term::Op(
                 Operator::Mult,
-                vec![
-                    ByRefRc::new(terminal!(int 1)),
-                    ByRefRc::new(terminal!(int 5)),
-                ],
+                vec![Rc::new(terminal!(int 1)), Rc::new(terminal!(int 5)),],
             ),
         );
 
-        // Make sure that when "RETURN_RCS" flag is passed, the macro returns `&ByRefRc<Term>`
-        // instead of `&Term`
+        // Make sure that when "RETURN_RCS" flag is passed, the macro returns `&Rc<Term>` instead
+        // of `&Term`
         let term = parse_term("(= (not false) (=> true false) (or false false))");
-        let _: (
-            &ByRefRc<_>,
-            (&ByRefRc<_>, &ByRefRc<_>),
-            (&ByRefRc<_>, &ByRefRc<_>),
-        ) = match_term!((= (not a) (=> b c) (or d e)) = &term, RETURN_RCS).unwrap();
+        let _: (&Rc<_>, (&Rc<_>, &Rc<_>), (&Rc<_>, &Rc<_>)) =
+            match_term!((= (not a) (=> b c) (or d e)) = &term, RETURN_RCS).unwrap();
 
         // Test the "..." pattern
         let term = parse_term("(not (and true false true))");

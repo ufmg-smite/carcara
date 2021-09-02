@@ -48,7 +48,7 @@ fn flatten_sum(term: &Term) -> Vec<(&Term, bool)> {
 /// * An application of the "<", ">", "<=" or ">=" operators
 /// * The negation of an application of any of these operator
 /// * The negation of an application of the "=" operator
-fn negate_disequality(term: &Term) -> Option<(Operator, &[ByRefRc<Term>])> {
+fn negate_disequality(term: &Term) -> Option<(Operator, &[Rc<Term>])> {
     // TODO: Add tests for this
     use Operator::*;
 

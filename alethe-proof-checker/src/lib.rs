@@ -1,3 +1,5 @@
+#![deny(clippy::disallowed_method)]
+
 extern crate ahash;
 extern crate num_bigint;
 extern crate num_integer;

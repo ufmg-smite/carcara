@@ -33,13 +33,13 @@ macro_rules! simplify {
 }
 
 fn generic_simplify_rule(
-    conclusion: &[ByRefRc<Term>],
+    conclusion: &[Rc<Term>],
     pool: &mut TermPool,
-    simplify_function: fn(&Term, &mut TermPool) -> Option<ByRefRc<Term>>,
+    simplify_function: fn(&Term, &mut TermPool) -> Option<Rc<Term>>,
 ) -> Option<()> {
     rassert!(conclusion.len() == 1);
 
-    let mut simplify_until_fixed_point = |term: &ByRefRc<Term>, goal: &ByRefRc<Term>| {
+    let mut simplify_until_fixed_point = |term: &Rc<Term>, goal: &Rc<Term>| {
         let mut current = term.clone();
         let mut seen = AHashSet::new();
         loop {
@@ -135,7 +135,7 @@ pub fn eq_simplify(args: RuleArgs) -> Option<()> {
 
 /// Used for both the "and_simplify" and "or_simplify" rules, depending on `rule_kind`. `rule_kind`
 /// has to be either `Operator::And` or `Operator::Or`.
-fn generic_and_or_simplify(conclusion: &[ByRefRc<Term>], rule_kind: Operator) -> Option<()> {
+fn generic_and_or_simplify(conclusion: &[Rc<Term>], rule_kind: Operator) -> Option<()> {
     rassert!(conclusion.len() == 1);
 
     // The "skip term" is the term that represents the empty conjunction or disjunction, and can be
@@ -359,18 +359,14 @@ pub fn qnt_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 
 /// Used for both the "sum_simplify" and "prod_simplify" rules, depending on `rule_kind`.
 /// `rule_kind` has to be either `Operator::Add` or `Operator::Mult`.
-fn generic_sum_prod_simplify_rule(
-    ts: &ByRefRc<Term>,
-    u: &ByRefRc<Term>,
-    rule_kind: Operator,
-) -> Option<()> {
+fn generic_sum_prod_simplify_rule(ts: &Rc<Term>, u: &Rc<Term>, rule_kind: Operator) -> Option<()> {
     /// Checks if the u term is valid and extracts from it the leading constant and the remaining
     /// arguments.
     fn unwrap_u_term<'a>(
-        u: &'a ByRefRc<Term>,
+        u: &'a Rc<Term>,
         identity_value: &BigRational,
         rule_kind: Operator,
-    ) -> Option<(BigRational, &'a [ByRefRc<Term>])> {
+    ) -> Option<(BigRational, &'a [Rc<Term>])> {
         let args = match u.as_ref() {
             Term::Op(op, args) if *op == rule_kind => args,
 
@@ -462,7 +458,7 @@ pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     // Despite being separate rules in the documentation, this rule is used to do the job of both
     // the "minus_simplify" and the "unary_minus_simplify" rules
 
-    fn check(t: &ByRefRc<Term>, u: &ByRefRc<Term>) -> Option<()> {
+    fn check(t: &Rc<Term>, u: &Rc<Term>) -> Option<()> {
         // First case of "unary_minus_simplify"
         match match_term!((-(-t)) = t, RETURN_RCS) {
             Some(t) if t == u => return Some(()),
@@ -541,8 +537,8 @@ pub fn comp_simplify(args: RuleArgs) -> Option<()> {
 
 struct AcSimp<'a> {
     pool: &'a mut TermPool,
-    equality_cache: AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
-    flattening_cache: AHashMap<ByRefRc<Term>, ByRefRc<Term>>,
+    equality_cache: AHashSet<(Rc<Term>, Rc<Term>)>,
+    flattening_cache: AHashMap<Rc<Term>, Rc<Term>>,
 }
 
 impl<'a> AcSimp<'a> {
@@ -554,7 +550,7 @@ impl<'a> AcSimp<'a> {
         }
     }
 
-    fn flatten_operation(&mut self, term: &ByRefRc<Term>) -> ByRefRc<Term> {
+    fn flatten_operation(&mut self, term: &Rc<Term>) -> Rc<Term> {
         if let Some(t) = self.flattening_cache.get(term) {
             return t.clone();
         }
@@ -602,11 +598,11 @@ impl<'a> AcSimp<'a> {
         result
     }
 
-    fn eq_args(&mut self, a: &[ByRefRc<Term>], b: &[ByRefRc<Term>]) -> bool {
+    fn eq_args(&mut self, a: &[Rc<Term>], b: &[Rc<Term>]) -> bool {
         a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| self.eq(a, b))
     }
 
-    fn eq(&mut self, a: &ByRefRc<Term>, b: &ByRefRc<Term>) -> bool {
+    fn eq(&mut self, a: &Rc<Term>, b: &Rc<Term>) -> bool {
         if a == b || self.equality_cache.contains(&(a.clone(), b.clone())) {
             return true;
         }

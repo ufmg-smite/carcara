@@ -106,10 +106,7 @@ fn test_arithmetic_ops() {
             "(+ 2 3)",
             Term::Op(
                 Operator::Add,
-                vec![
-                    ByRefRc::new(terminal!(int 2)),
-                    ByRefRc::new(terminal!(int 3)),
-                ],
+                vec![Rc::new(terminal!(int 2)), Rc::new(terminal!(int 3))],
             ),
         ),
         (
@@ -117,30 +114,27 @@ fn test_arithmetic_ops() {
             Term::Op(
                 Operator::Mult,
                 vec![
-                    ByRefRc::new(terminal!(int 2)),
-                    ByRefRc::new(terminal!(int 3)),
-                    ByRefRc::new(terminal!(int 5)),
-                    ByRefRc::new(terminal!(int 7)),
+                    Rc::new(terminal!(int 2)),
+                    Rc::new(terminal!(int 3)),
+                    Rc::new(terminal!(int 5)),
+                    Rc::new(terminal!(int 7)),
                 ],
             ),
         ),
         (
             "(- 5)",
-            Term::Op(Operator::Sub, vec![ByRefRc::new(terminal!(int 5))]),
+            Term::Op(Operator::Sub, vec![Rc::new(terminal!(int 5))]),
         ),
         (
             "(- (+ 1 1) 2)",
             Term::Op(
                 Operator::Sub,
                 vec![
-                    ByRefRc::new(Term::Op(
+                    Rc::new(Term::Op(
                         Operator::Add,
-                        vec![
-                            ByRefRc::new(terminal!(int 1)),
-                            ByRefRc::new(terminal!(int 1)),
-                        ],
+                        vec![Rc::new(terminal!(int 1)), Rc::new(terminal!(int 1))],
                     )),
-                    ByRefRc::new(terminal!(int 2)),
+                    Rc::new(terminal!(int 2)),
                 ],
             ),
         ),
@@ -160,8 +154,8 @@ fn test_logic_ops() {
             Term::Op(
                 Operator::And,
                 vec![
-                    ByRefRc::new(terminal!(bool true)),
-                    ByRefRc::new(terminal!(bool false)),
+                    Rc::new(terminal!(bool true)),
+                    Rc::new(terminal!(bool false)),
                 ],
             ),
         ),
@@ -170,27 +164,27 @@ fn test_logic_ops() {
             Term::Op(
                 Operator::Or,
                 vec![
-                    ByRefRc::new(terminal!(bool true)),
-                    ByRefRc::new(terminal!(bool true)),
-                    ByRefRc::new(terminal!(bool false)),
+                    Rc::new(terminal!(bool true)),
+                    Rc::new(terminal!(bool true)),
+                    Rc::new(terminal!(bool false)),
                 ],
             ),
         ),
         (
             "(and true)",
-            Term::Op(Operator::And, vec![ByRefRc::new(terminal!(bool true))]),
+            Term::Op(Operator::And, vec![Rc::new(terminal!(bool true))]),
         ),
         (
             "(or true (and false false))",
             Term::Op(
                 Operator::Or,
                 vec![
-                    ByRefRc::new(terminal!(bool true)),
-                    ByRefRc::new(Term::Op(
+                    Rc::new(terminal!(bool true)),
+                    Rc::new(Term::Op(
                         Operator::And,
                         vec![
-                            ByRefRc::new(terminal!(bool false)),
-                            ByRefRc::new(terminal!(bool false)),
+                            Rc::new(terminal!(bool false)),
+                            Rc::new(terminal!(bool false)),
                         ],
                     )),
                 ],
@@ -201,9 +195,9 @@ fn test_logic_ops() {
             Term::Op(
                 Operator::Xor,
                 vec![
-                    ByRefRc::new(terminal!(bool true)),
-                    ByRefRc::new(terminal!(bool false)),
-                    ByRefRc::new(terminal!(bool false)),
+                    Rc::new(terminal!(bool true)),
+                    Rc::new(terminal!(bool false)),
+                    Rc::new(terminal!(bool false)),
                 ],
             ),
         ),
@@ -211,24 +205,18 @@ fn test_logic_ops() {
             "(= 2 3)",
             Term::Op(
                 Operator::Equals,
-                vec![
-                    ByRefRc::new(terminal!(int 2)),
-                    ByRefRc::new(terminal!(int 3)),
-                ],
+                vec![Rc::new(terminal!(int 2)), Rc::new(terminal!(int 3))],
             ),
         ),
         (
             "(not false)",
-            Term::Op(Operator::Not, vec![ByRefRc::new(terminal!(bool false))]),
+            Term::Op(Operator::Not, vec![Rc::new(terminal!(bool false))]),
         ),
         (
             "(distinct 4 2)",
             Term::Op(
                 Operator::Distinct,
-                vec![
-                    ByRefRc::new(terminal!(int 4)),
-                    ByRefRc::new(terminal!(int 2)),
-                ],
+                vec![Rc::new(terminal!(int 4)), Rc::new(terminal!(int 2))],
             ),
         ),
         (
@@ -236,15 +224,12 @@ fn test_logic_ops() {
             Term::Op(
                 Operator::Implies,
                 vec![
-                    ByRefRc::new(Term::Op(
+                    Rc::new(Term::Op(
                         Operator::Equals,
-                        vec![
-                            ByRefRc::new(terminal!(int 0)),
-                            ByRefRc::new(terminal!(int 1)),
-                        ],
+                        vec![Rc::new(terminal!(int 0)), Rc::new(terminal!(int 1))],
                     )),
-                    ByRefRc::new(terminal!(bool true)),
-                    ByRefRc::new(terminal!(bool false)),
+                    Rc::new(terminal!(bool true)),
+                    Rc::new(terminal!(bool false)),
                 ],
             ),
         ),
@@ -290,9 +275,9 @@ fn test_ite() {
             Term::Op(
                 Operator::Ite,
                 vec![
-                    ByRefRc::new(terminal!(bool true)),
-                    ByRefRc::new(terminal!(int 2)),
-                    ByRefRc::new(terminal!(int 3)),
+                    Rc::new(terminal!(bool true)),
+                    Rc::new(terminal!(int 2)),
+                    Rc::new(terminal!(int 3)),
                 ],
             ),
         ),
@@ -301,14 +286,14 @@ fn test_ite() {
             Term::Op(
                 Operator::Ite,
                 vec![
-                    ByRefRc::new(parse_term("(not true)")),
-                    ByRefRc::new(terminal!(int 2)),
-                    ByRefRc::new(Term::Op(
+                    Rc::new(parse_term("(not true)")),
+                    Rc::new(terminal!(int 2)),
+                    Rc::new(Term::Op(
                         Operator::Ite,
                         vec![
-                            ByRefRc::new(terminal!(bool false)),
-                            ByRefRc::new(terminal!(int 2)),
-                            ByRefRc::new(terminal!(int 1)),
+                            Rc::new(terminal!(bool false)),
+                            Rc::new(terminal!(int 2)),
+                            Rc::new(terminal!(int 1)),
                         ],
                     )),
                 ],
@@ -344,7 +329,7 @@ fn test_quantifiers() {
             Term::Quant(
                 Quantifier::Exists,
                 vec![("p".into(), Term::BOOL_SORT.clone().into())],
-                ByRefRc::new(terminal!(var "p"; BOOL_SORT)),
+                Rc::new(terminal!(var "p"; BOOL_SORT)),
             ),
         ),
         (
@@ -355,10 +340,10 @@ fn test_quantifiers() {
                     ("x".into(), Term::REAL_SORT.clone().into()),
                     ("y".into(), Term::REAL_SORT.clone().into()),
                 ],
-                ByRefRc::new(Term::Op(
+                Rc::new(Term::Op(
                     Operator::Equals,
                     vec![
-                        ByRefRc::new(Term::Op(
+                        Rc::new(Term::Op(
                             Operator::Add,
                             vec![
                                 terminal!(var "x"; REAL_SORT).into(),
@@ -387,8 +372,8 @@ fn test_let_terms() {
         (
             "(let ((p false)) p)",
             Term::Let(
-                vec![("p".into(), ByRefRc::new(terminal!(bool false)))],
-                ByRefRc::new(terminal!(var "p"; BOOL_SORT)),
+                vec![("p".into(), Rc::new(terminal!(bool false)))],
+                Rc::new(terminal!(var "p"; BOOL_SORT)),
             ),
         ),
         (
@@ -398,7 +383,7 @@ fn test_let_terms() {
                     ("x".into(), terminal!(int 1).into()),
                     ("y".into(), terminal!(int 2).into()),
                 ],
-                ByRefRc::new(Term::Op(
+                Rc::new(Term::Op(
                     Operator::Add,
                     vec![
                         terminal!(var "x"; INT_SORT).into(),
@@ -424,9 +409,9 @@ fn test_annotated_terms() {
             Term::Op(
                 Operator::Ite,
                 vec![
-                    ByRefRc::new(terminal!(bool true)),
-                    ByRefRc::new(terminal!(int 2)),
-                    ByRefRc::new(terminal!(int 3)),
+                    Rc::new(terminal!(bool true)),
+                    Rc::new(terminal!(int 2)),
+                    Rc::new(terminal!(int 3)),
                 ],
             ),
         ),
@@ -481,7 +466,7 @@ fn test_declare_sort() {
         "x",
     );
     let expected_sort = Term::Sort(Sort::Atom("T".to_string(), Vec::new()));
-    assert_deep_eq!(&terminal!(var "x"; ByRefRc::new(expected_sort)), &got);
+    assert_deep_eq!(&terminal!(var "x"; Rc::new(expected_sort)), &got);
 }
 
 #[test]
@@ -520,7 +505,7 @@ fn test_step() {
         &proof.0[0],
         &ProofCommand::Step(ProofStep {
             index: "t1".into(),
-            clause: vec![ByRefRc::new(parse_term("(= (+ 2 3) (- 1 2))"))],
+            clause: vec![Rc::new(parse_term("(= (+ 2 3) (- 1 2))"))],
             rule: "rule-name".into(),
             premises: Vec::new(),
             args: Vec::new(),
@@ -552,7 +537,7 @@ fn test_step() {
                     terminal!(string "three"),
                 ]
                 .into_iter()
-                .map(|term| ProofArg::Term(ByRefRc::new(term)))
+                .map(|term| ProofArg::Term(Rc::new(term)))
                 .collect()
             },
         })
@@ -572,7 +557,7 @@ fn test_step() {
                     ("c", parse_term("(* 6 7)")),
                 ]
                 .into_iter()
-                .map(|(name, term)| ProofArg::Assign(name.into(), ByRefRc::new(term)))
+                .map(|(name, term)| ProofArg::Assign(name.into(), Rc::new(term)))
                 .collect()
             },
         })
@@ -585,7 +570,7 @@ fn test_step() {
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: vec![0, 1, 2],
-            args: vec![ProofArg::Term(ByRefRc::new(terminal!(int 42)))],
+            args: vec![ProofArg::Term(Rc::new(terminal!(int 42)))],
         })
     );
 }

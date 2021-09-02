@@ -2,6 +2,7 @@
 
 #[macro_use]
 mod macros;
+mod rc;
 mod subterms;
 #[cfg(test)]
 mod tests;
@@ -12,73 +13,17 @@ use ahash::{AHashMap, AHashSet};
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
+pub use rc::Rc;
 use std::{
-    borrow::Borrow,
     fmt::{self, Debug},
     hash::Hash,
-    ops::Deref,
-    rc,
 };
 
-/// An `Rc` where equality and hashing are done by reference, instead of by value
-#[derive(Clone, Eq)]
-pub struct ByRefRc<T>(rc::Rc<T>);
-
-impl<T> PartialEq for ByRefRc<T> {
-    fn eq(&self, other: &Self) -> bool {
-        rc::Rc::ptr_eq(&self.0, &other.0)
-    }
-}
-
-impl<T> Hash for ByRefRc<T> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        rc::Rc::as_ptr(&self.0).hash(state)
-    }
-}
-
-impl<T> Deref for ByRefRc<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.as_ref()
-    }
-}
-
-impl<T> AsRef<T> for ByRefRc<T> {
-    fn as_ref(&self) -> &T {
-        self.0.as_ref()
-    }
-}
-
-impl<T> Borrow<T> for ByRefRc<T> {
-    fn borrow(&self) -> &T {
-        self.0.as_ref()
-    }
-}
-
-impl<T> From<T> for ByRefRc<T> {
-    fn from(value: T) -> Self {
-        ByRefRc::new(value)
-    }
-}
-
-impl<T: Debug> Debug for ByRefRc<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self.0)
-    }
-}
-
-impl<T> ByRefRc<T> {
-    pub fn new(value: T) -> Self {
-        Self(rc::Rc::new(value))
-    }
-}
-
 pub struct TermPool {
-    pub terms: AHashMap<Term, ByRefRc<Term>>,
-    pub free_vars_cache: AHashMap<ByRefRc<Term>, AHashSet<String>>,
-    bool_true: ByRefRc<Term>,
-    bool_false: ByRefRc<Term>,
+    pub terms: AHashMap<Term, Rc<Term>>,
+    pub free_vars_cache: AHashMap<Rc<Term>, AHashSet<String>>,
+    bool_true: Rc<Term>,
+    bool_false: Rc<Term>,
 }
 
 impl Default for TermPool {
@@ -110,50 +55,50 @@ impl TermPool {
         }
     }
 
-    pub fn bool_true(&self) -> ByRefRc<Term> {
+    pub fn bool_true(&self) -> Rc<Term> {
         self.bool_true.clone()
     }
 
-    pub fn bool_false(&self) -> ByRefRc<Term> {
+    pub fn bool_false(&self) -> Rc<Term> {
         self.bool_false.clone()
     }
 
-    pub fn bool_constant(&self, value: bool) -> ByRefRc<Term> {
+    pub fn bool_constant(&self, value: bool) -> Rc<Term> {
         match value {
             true => self.bool_true(),
             false => self.bool_false(),
         }
     }
 
-    fn add_term_to_map(terms_map: &mut AHashMap<Term, ByRefRc<Term>>, term: Term) -> ByRefRc<Term> {
+    fn add_term_to_map(terms_map: &mut AHashMap<Term, Rc<Term>>, term: Term) -> Rc<Term> {
         use std::collections::hash_map::Entry;
 
         match terms_map.entry(term) {
             Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
             Entry::Vacant(vacant_entry) => {
                 let term = vacant_entry.key().clone();
-                vacant_entry.insert(ByRefRc::new(term)).clone()
+                vacant_entry.insert(Rc::new(term)).clone()
             }
         }
     }
 
-    /// Takes a term and returns a `ByRefRc` referencing it. If the term was not originally in the
+    /// Takes a term and returns an `Rc` referencing it. If the term was not originally in the
     /// terms hash map, it is added to it.
-    pub fn add_term(&mut self, term: Term) -> ByRefRc<Term> {
+    pub fn add_term(&mut self, term: Term) -> Rc<Term> {
         Self::add_term_to_map(&mut self.terms, term)
     }
 
     // Takes a vector of terms and calls `add_term` on each.
-    pub fn add_all(&mut self, terms: Vec<Term>) -> Vec<ByRefRc<Term>> {
+    pub fn add_all(&mut self, terms: Vec<Term>) -> Vec<Rc<Term>> {
         terms.into_iter().map(|t| self.add_term(t)).collect()
     }
 
     fn apply_substitutions_rec<'a>(
         &mut self,
-        term: &'a ByRefRc<Term>,
-        substitutions: &AHashMap<ByRefRc<Term>, ByRefRc<Term>>,
-        cache: &mut AHashMap<ByRefRc<Term>, ByRefRc<Term>>,
-    ) -> ByRefRc<Term> {
+        term: &'a Rc<Term>,
+        substitutions: &AHashMap<Rc<Term>, Rc<Term>>,
+        cache: &mut AHashMap<Rc<Term>, Rc<Term>>,
+    ) -> Rc<Term> {
         macro_rules! apply_to_sequence {
             ($sequence:expr) => {
                 $sequence
@@ -199,14 +144,14 @@ impl TermPool {
     /// variables with the associated term.
     pub fn apply_substitutions<'a>(
         &mut self,
-        term: &'a ByRefRc<Term>,
-        substitutions: &AHashMap<ByRefRc<Term>, ByRefRc<Term>>,
-    ) -> ByRefRc<Term> {
+        term: &'a Rc<Term>,
+        substitutions: &AHashMap<Rc<Term>, Rc<Term>>,
+    ) -> Rc<Term> {
         self.apply_substitutions_rec(term, substitutions, &mut AHashMap::new())
     }
 
     /// Returns an `AHashSet` containing all the free variables in this term.
-    pub fn free_vars<'t>(&mut self, term: &'t ByRefRc<Term>) -> &AHashSet<String> {
+    pub fn free_vars<'t>(&mut self, term: &'t Rc<Term>) -> &AHashSet<String> {
         // Here, I would like to do
         // ```
         // if let Some(vars) = self.free_vars_cache.get(term) {
@@ -267,7 +212,7 @@ pub struct Proof(pub Vec<ProofCommand>);
 #[derive(Debug, PartialEq)]
 pub enum ProofCommand {
     /// An "assume" command, of the form "(assume <symbol> <term>)".
-    Assume(ByRefRc<Term>),
+    Assume(Rc<Term>),
 
     /// A "step" command.
     Step(ProofStep),
@@ -275,7 +220,7 @@ pub enum ProofCommand {
     /// A subproof.
     Subproof {
         commands: Vec<ProofCommand>,
-        assignment_args: Vec<(String, ByRefRc<Term>)>,
+        assignment_args: Vec<(String, Rc<Term>)>,
         variable_args: Vec<SortedVar>,
     },
 }
@@ -285,7 +230,7 @@ pub enum ProofCommand {
 #[derive(Debug, PartialEq)]
 pub struct ProofStep {
     pub index: String,
-    pub clause: Vec<ByRefRc<Term>>,
+    pub clause: Vec<Rc<Term>>,
     pub rule: String,
     pub premises: Vec<usize>,
     pub args: Vec<ProofArg>,
@@ -295,10 +240,10 @@ pub struct ProofStep {
 #[derive(Debug, PartialEq)]
 pub enum ProofArg {
     /// An argument that is just a term.
-    Term(ByRefRc<Term>),
+    Term(Rc<Term>),
 
     /// An argument of the form `(:= <symbol> <term>)`.
-    Assign(String, ByRefRc<Term>),
+    Assign(String, Rc<Term>),
 }
 
 /// A function definition. Functions are defined using the "function-def" command, of the form
@@ -306,7 +251,7 @@ pub enum ProofArg {
 /// during parsing, so these commands don't appear in the final AST.
 pub struct FunctionDef {
     pub params: Vec<SortedVar>,
-    pub body: ByRefRc<Term>,
+    pub body: Rc<Term>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -361,17 +306,17 @@ impl_str_conversion_traits!(Operator {
     Store: "store",
 });
 
-pub type SortedVar = (String, ByRefRc<Term>);
+pub type SortedVar = (String, Rc<Term>);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Sort {
-    Function(Vec<ByRefRc<Term>>),
-    Atom(String, Vec<ByRefRc<Term>>),
+    Function(Vec<Rc<Term>>),
+    Atom(String, Vec<Rc<Term>>),
     Bool,
     Int,
     Real,
     String,
-    Array(ByRefRc<Term>, ByRefRc<Term>),
+    Array(Rc<Term>, Rc<Term>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -397,22 +342,22 @@ pub enum Term {
     Terminal(Terminal),
 
     /// An application of a function to one or more terms.
-    App(ByRefRc<Term>, Vec<ByRefRc<Term>>),
+    App(Rc<Term>, Vec<Rc<Term>>),
 
     /// An application of a bulit-in operator to one or more terms.
-    Op(Operator, Vec<ByRefRc<Term>>),
+    Op(Operator, Vec<Rc<Term>>),
 
     /// A sort.
     Sort(Sort),
 
     /// A quantifier binder term.
-    Quant(Quantifier, Vec<SortedVar>, ByRefRc<Term>),
+    Quant(Quantifier, Vec<SortedVar>, Rc<Term>),
 
     /// A "choice" term.
-    Choice(SortedVar, ByRefRc<Term>),
+    Choice(SortedVar, Rc<Term>),
 
     /// A "let" binder term.
-    Let(Vec<SortedVar>, ByRefRc<Term>),
+    Let(Vec<SortedVar>, Rc<Term>),
     // TODO: "match" binder terms
 }
 
@@ -586,7 +531,7 @@ impl Term {
 
     /// Tries to unwrap a quantifier term, returning the `Quantifier`, the bindings and the inner
     /// term. Returns `None` if term is not a quantifier term.
-    pub fn unwrap_quant(&self) -> Option<(Quantifier, &Vec<SortedVar>, &ByRefRc<Term>)> {
+    pub fn unwrap_quant(&self) -> Option<(Quantifier, &Vec<SortedVar>, &Rc<Term>)> {
         match self {
             Term::Quant(q, b, t) => Some((*q, b, t)),
             _ => None,
@@ -672,7 +617,7 @@ pub enum Terminal {
     Integer(BigInt),
     Real(BigRational),
     String(String),
-    Var(Identifier, ByRefRc<Term>),
+    Var(Identifier, Rc<Term>),
 }
 
 impl Debug for Terminal {
@@ -705,7 +650,7 @@ pub enum Index {
 
 /// A trait that implements less strict definitions of equality for terms. This trait represents
 /// two definitions of equality that differ from `PartialEq`:
-/// - `DeepEq::eq` implements a "deep" equality, meaning that it compares `ByRefRc`s by value,
+/// - `DeepEq::eq` implements a "deep" equality, meaning that it compares `ast::Rc`s by value,
 /// instead of by reference
 /// - `DeepEq::eq_modulo_reordering` is also a "deep" equality, but it considers "=" terms that are
 /// "reflections" of each other as equal, meaning the terms (= a b) and (= b a) are considered
@@ -723,16 +668,16 @@ pub trait DeepEq {
         a: &Self,
         b: &Self,
         is_mod_reordering: bool,
-        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+        cache: &mut AHashSet<(Rc<Term>, Rc<Term>)>,
     ) -> bool;
 }
 
-impl DeepEq for ByRefRc<Term> {
+impl DeepEq for Rc<Term> {
     fn eq_impl(
         a: &Self,
         b: &Self,
         is_mod_reordering: bool,
-        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+        cache: &mut AHashSet<(Rc<Term>, Rc<Term>)>,
     ) -> bool {
         a == b || cache.contains(&(a.clone(), b.clone())) || {
             let result = DeepEq::eq_impl(a.as_ref(), b.as_ref(), is_mod_reordering, cache);
@@ -749,7 +694,7 @@ impl DeepEq for Term {
         a: &Self,
         b: &Self,
         is_mod_reordering: bool,
-        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+        cache: &mut AHashSet<(Rc<Term>, Rc<Term>)>,
     ) -> bool {
         match (a, b) {
             (Term::App(f_a, args_a), Term::App(f_b, args_b)) => {
@@ -800,7 +745,7 @@ impl DeepEq for Sort {
         a: &Self,
         b: &Self,
         is_mod_reordering: bool,
-        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+        cache: &mut AHashSet<(Rc<Term>, Rc<Term>)>,
     ) -> bool {
         match (a, b) {
             (Sort::Function(sorts_a), Sort::Function(sorts_b)) => {
@@ -827,7 +772,7 @@ impl DeepEq for ProofArg {
         a: &Self,
         b: &Self,
         is_mod_reordering: bool,
-        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+        cache: &mut AHashSet<(Rc<Term>, Rc<Term>)>,
     ) -> bool {
         match (a, b) {
             (ProofArg::Term(a), ProofArg::Term(b)) => {
@@ -846,7 +791,7 @@ impl DeepEq for ProofCommand {
         a: &Self,
         b: &Self,
         is_mod_reordering: bool,
-        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+        cache: &mut AHashSet<(Rc<Term>, Rc<Term>)>,
     ) -> bool {
         match (a, b) {
             (ProofCommand::Assume(a), ProofCommand::Assume(b)) => {
@@ -865,7 +810,7 @@ impl DeepEq for ProofStep {
         a: &Self,
         b: &Self,
         is_mod_reordering: bool,
-        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+        cache: &mut AHashSet<(Rc<Term>, Rc<Term>)>,
     ) -> bool {
         DeepEq::eq_impl(&a.clause, &b.clause, is_mod_reordering, cache)
             && a.rule == b.rule
@@ -879,7 +824,7 @@ impl<T: DeepEq> DeepEq for &T {
         a: &Self,
         b: &Self,
         is_mod_reordering: bool,
-        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+        cache: &mut AHashSet<(Rc<Term>, Rc<Term>)>,
     ) -> bool {
         DeepEq::eq_impl(*a, *b, is_mod_reordering, cache)
     }
@@ -890,7 +835,7 @@ impl<T: DeepEq> DeepEq for Vec<T> {
         a: &Self,
         b: &Self,
         is_mod_reordering: bool,
-        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+        cache: &mut AHashSet<(Rc<Term>, Rc<Term>)>,
     ) -> bool {
         a.len() == b.len()
             && a.iter()
@@ -904,7 +849,7 @@ impl<T: DeepEq> DeepEq for (T, T) {
         a: &Self,
         b: &Self,
         is_mod_reordering: bool,
-        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+        cache: &mut AHashSet<(Rc<Term>, Rc<Term>)>,
     ) -> bool {
         DeepEq::eq_impl(&a.0, &b.0, is_mod_reordering, cache)
             && DeepEq::eq_impl(&a.1, &b.1, is_mod_reordering, cache)
@@ -916,7 +861,7 @@ impl DeepEq for SortedVar {
         a: &Self,
         b: &Self,
         is_mod_reordering: bool,
-        cache: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
+        cache: &mut AHashSet<(Rc<Term>, Rc<Term>)>,
     ) -> bool {
         a.0 == b.0 && DeepEq::eq_impl(&a.1, &b.1, is_mod_reordering, cache)
     }

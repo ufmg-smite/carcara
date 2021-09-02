@@ -129,12 +129,8 @@ pub fn r#let(
     to_option(premises.next().is_none())
 }
 
-fn extract_points(quant: Quantifier, term: &Term) -> AHashSet<(ByRefRc<Term>, ByRefRc<Term>)> {
-    fn find_points(
-        acc: &mut AHashSet<(ByRefRc<Term>, ByRefRc<Term>)>,
-        polarity: bool,
-        term: &Term,
-    ) {
+fn extract_points(quant: Quantifier, term: &Term) -> AHashSet<(Rc<Term>, Rc<Term>)> {
+    fn find_points(acc: &mut AHashSet<(Rc<Term>, Rc<Term>)>, polarity: bool, term: &Term) {
         if let Some(inner) = term.remove_negation() {
             return find_points(acc, !polarity, inner);
         }

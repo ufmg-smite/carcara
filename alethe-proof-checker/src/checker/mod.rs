@@ -36,9 +36,9 @@ impl Correctness {
 type CheckerResult = Result<Correctness, CheckerError>;
 
 struct Context {
-    substitutions: AHashMap<ByRefRc<Term>, ByRefRc<Term>>,
-    substitutions_until_fixed_point: AHashMap<ByRefRc<Term>, ByRefRc<Term>>,
-    cumulative_substitutions: AHashMap<ByRefRc<Term>, ByRefRc<Term>>,
+    substitutions: AHashMap<Rc<Term>, Rc<Term>>,
+    substitutions_until_fixed_point: AHashMap<Rc<Term>, Rc<Term>>,
+    cumulative_substitutions: AHashMap<Rc<Term>, Rc<Term>>,
     bindings: AHashSet<SortedVar>,
 }
 
@@ -164,7 +164,7 @@ impl<'c> ProofChecker<'c> {
 
     fn build_context(
         &mut self,
-        assignment_args: &[(String, ByRefRc<Term>)],
+        assignment_args: &[(String, Rc<Term>)],
         variable_args: &[SortedVar],
     ) -> Context {
         // Since some rules (like "refl") need to apply substitutions until a fixed point, we

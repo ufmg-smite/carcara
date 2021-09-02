@@ -19,8 +19,8 @@ pub fn parse_problem_proof<T: BufRead>(problem: T, proof: T) -> ParserResult<(Pr
     Parser::with_state(proof, problem_parser.state)?.parse_proof()
 }
 
-type AnchorCommand = (String, Vec<(String, ByRefRc<Term>)>, Vec<SortedVar>);
-type StepCommand = (Vec<ByRefRc<Term>>, String, Vec<String>, Vec<ProofArg>);
+type AnchorCommand = (String, Vec<(String, Rc<Term>)>, Vec<SortedVar>);
+type StepCommand = (Vec<Rc<Term>>, String, Vec<String>, Vec<ProofArg>);
 
 struct SymbolTable<K, V> {
     scopes: Vec<AHashMap<K, V>>,
@@ -67,7 +67,7 @@ impl<K, V> Default for SymbolTable<K, V> {
 
 #[derive(Default)]
 struct ParserState {
-    sorts_symbol_table: SymbolTable<Identifier, ByRefRc<Term>>,
+    sorts_symbol_table: SymbolTable<Identifier, Rc<Term>>,
     function_defs: AHashMap<String, FunctionDef>,
     term_pool: TermPool,
     sort_declarations: AHashMap<String, usize>,
@@ -116,12 +116,12 @@ impl<R: BufRead> Parser<R> {
     }
 
     /// Shortcut for `self.state.term_pool.add_term`.
-    fn add_term(&mut self, term: Term) -> ByRefRc<Term> {
+    fn add_term(&mut self, term: Term) -> Rc<Term> {
         self.state.term_pool.add_term(term)
     }
 
     /// Shortcut for `self.state.term_pool.add_all`.
-    fn add_all(&mut self, term: Vec<Term>) -> Vec<ByRefRc<Term>> {
+    fn add_all(&mut self, term: Vec<Term>) -> Vec<Rc<Term>> {
         self.state.term_pool.add_all(term)
     }
 
@@ -556,9 +556,7 @@ impl<R: BufRead> Parser<R> {
         Ok((end_step_index, assignment_args, variable_args))
     }
 
-    fn parse_anchor_argument(
-        &mut self,
-    ) -> ParserResult<Either<(SortedVar, ByRefRc<Term>), SortedVar>> {
+    fn parse_anchor_argument(&mut self) -> ParserResult<Either<(SortedVar, Rc<Term>), SortedVar>> {
         self.expect_token(Token::OpenParen)?;
         Ok(if self.current_token == Token::Keyword("=".into()) {
             self.next_token()?;
@@ -598,7 +596,7 @@ impl<R: BufRead> Parser<R> {
 
     /// Parses a "declare-fun" proof command. Returns the function name and a term representing its
     /// sort. This method assumes that the "(" and "declare-fun" tokens were already consumed.
-    fn parse_declare_fun(&mut self) -> ParserResult<(String, ByRefRc<Term>)> {
+    fn parse_declare_fun(&mut self) -> ParserResult<(String, Rc<Term>)> {
         let name = self.expect_symbol()?;
         let sort = {
             self.expect_token(Token::OpenParen)?;
@@ -652,13 +650,13 @@ impl<R: BufRead> Parser<R> {
     }
 
     /// Parses a clause of the form "(cl <term>*)".
-    fn parse_clause(&mut self) -> ParserResult<Vec<ByRefRc<Term>>> {
+    fn parse_clause(&mut self) -> ParserResult<Vec<Rc<Term>>> {
         self.expect_token(Token::OpenParen)?;
         self.expect_token(Token::ReservedWord(Reserved::Cl))?;
         let terms = self
             .parse_sequence(Self::parse_term, false)?
             .into_iter()
-            .map(|term| -> ParserResult<ByRefRc<Term>> {
+            .map(|term| -> ParserResult<Rc<Term>> {
                 SortError::assert_eq(Term::BOOL_SORT, term.sort())
                     .map_err(|err| self.err(err.into()))?;
                 Ok(self.add_term(term))
@@ -867,9 +865,8 @@ impl<R: BufRead> Parser<R> {
                         .collect()
                 };
 
-                // Since `apply_substitutions` returns a `ByRefRc<Term>`, we have to go
-                // into the inner term and clone it, even though it is already added to the
-                // term pool
+                // Since `apply_substitutions` returns an `Rc<Term>`, we have to go into the inner
+                // term and clone it, even though it is already added to the term pool
                 Ok(self
                     .state
                     .term_pool

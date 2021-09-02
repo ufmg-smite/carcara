@@ -114,12 +114,7 @@ pub fn nary_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     // nested term would be the left-hand arugment of the result term. In the base case, the
     // function will be called with the terms (=> s) and s, and it only needs to compare the
     // two "s"s
-    fn check_assoc(
-        op: Operator,
-        args: &[ByRefRc<Term>],
-        result_term: &Term,
-        is_right: bool,
-    ) -> bool {
+    fn check_assoc(op: Operator, args: &[Rc<Term>], result_term: &Term, is_right: bool) -> bool {
         let (head, tail) = match args {
             [] => return false,
             [t] => return t.as_ref() == result_term,
@@ -181,13 +176,13 @@ pub fn nary_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 }
 
 /// Applies the simplification steps for the "bfun_elim" rule.
-fn apply_bfun_elim(pool: &mut TermPool, term: &ByRefRc<Term>) -> ByRefRc<Term> {
+fn apply_bfun_elim(pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
     /// The first simplification step, that expands quantifiers over boolean variables.
     fn first_step(
         pool: &mut TermPool,
         bindigns: &[SortedVar],
-        term: &ByRefRc<Term>,
-        acc: &mut Vec<ByRefRc<Term>>,
+        term: &Rc<Term>,
+        acc: &mut Vec<Rc<Term>>,
     ) {
         let var = match bindigns {
             [.., var] if var.1.as_ref() == Term::BOOL_SORT => pool.add_term(var.clone().into()),
@@ -207,7 +202,7 @@ fn apply_bfun_elim(pool: &mut TermPool, term: &ByRefRc<Term>) -> ByRefRc<Term> {
 
     /// The second simplification step, that expands function applications over non-constant boolean
     /// arguments into "ite" terms.
-    fn second_step(pool: &mut TermPool, term: &ByRefRc<Term>, processed: usize) -> ByRefRc<Term> {
+    fn second_step(pool: &mut TermPool, term: &Rc<Term>, processed: usize) -> Rc<Term> {
         if let Term::App(f, args) = term.as_ref() {
             for i in processed..args.len() {
                 if args[i].sort() == Term::BOOL_SORT

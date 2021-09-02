@@ -77,11 +77,7 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> 
 }
 
 /// Converts a term into negation normal form, expanding all connectives.
-fn negation_normal_form(
-    pool: &mut TermPool,
-    term: &ByRefRc<Term>,
-    polarity: bool,
-) -> ByRefRc<Term> {
+fn negation_normal_form(pool: &mut TermPool, term: &Rc<Term>, polarity: bool) -> Rc<Term> {
     if let Some(inner) = match_term!((not t) = term, RETURN_RCS) {
         negation_normal_form(pool, inner, !polarity)
     } else if let Term::Op(op @ (Operator::And | Operator::Or), args) = term.as_ref() {
@@ -141,7 +137,7 @@ fn negation_normal_form(
 
 /// This represents a formula in conjunctive normal form, that is, it is a conjunction of clauses,
 /// which are disjunctions of literals
-type CnfFormula = Vec<Vec<ByRefRc<Term>>>;
+type CnfFormula = Vec<Vec<Rc<Term>>>;
 
 /// Applies the distribution rules into a disjunction of formulae in conjunctive normal form. More
 /// precisely, this takes the disjunction `P v Q v R v ...`, where
@@ -181,11 +177,10 @@ fn distribute(formulae: &[CnfFormula]) -> CnfFormula {
 
 /// Prenex all universal quantifiers in a term. This doesn't prenex existential quantifiers. This
 /// assumes the term is in negation normal form.
-fn prenex_forall<C: Extend<SortedVar>>(
-    pool: &mut TermPool,
-    acc: &mut C,
-    term: &ByRefRc<Term>,
-) -> ByRefRc<Term> {
+fn prenex_forall<C>(pool: &mut TermPool, acc: &mut C, term: &Rc<Term>) -> Rc<Term>
+where
+    C: Extend<SortedVar>,
+{
     match term.as_ref() {
         // This function assumes that the term is already in negation normal form, so any term
         // other than a conjunction, disjunction, or a universal quantifier is considered a literal
@@ -203,7 +198,7 @@ fn prenex_forall<C: Extend<SortedVar>>(
 
 /// Converts a term into a formula in conjunctive normal form. This assumes the term is already in
 /// negation normal form.
-fn conjunctive_normal_form(term: &ByRefRc<Term>) -> CnfFormula {
+fn conjunctive_normal_form(term: &Rc<Term>) -> CnfFormula {
     match term.as_ref() {
         Term::Op(Operator::And, args) => {
             // If the term is a conjunction, we just convert every argument into conjunctive normal
@@ -412,7 +407,7 @@ mod tests {
         use super::*;
         use crate::parser::tests::parse_term_with_definitions;
 
-        fn to_cnf_term(pool: &mut TermPool, term: &ByRefRc<Term>) -> ByRefRc<Term> {
+        fn to_cnf_term(pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
             let nnf = negation_normal_form(pool, term, true);
             let mut bindings = Vec::new();
             let prenexed = prenex_forall(pool, &mut bindings, &nnf);

@@ -65,8 +65,8 @@ pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     /// "eq_congruent_pred", we cannot just use the `generic_congruent_rule` function
     fn check_cong<'a>(
         premises: &[Option<(&'a Term, &'a Term)>],
-        f_args: &[ByRefRc<Term>],
-        g_args: &[ByRefRc<Term>],
+        f_args: &[Rc<Term>],
+        g_args: &[Rc<Term>],
     ) -> bool {
         let mut premises = premises.iter().peekable();
         for (f_arg, g_arg) in f_args.iter().zip(g_args) {
