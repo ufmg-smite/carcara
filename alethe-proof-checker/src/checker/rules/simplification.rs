@@ -359,7 +359,11 @@ pub fn qnt_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 
 /// Used for both the "sum_simplify" and "prod_simplify" rules, depending on `rule_kind`.
 /// `rule_kind` has to be either `Operator::Add` or `Operator::Mult`.
-fn generic_sum_prod_simplify_rule(conclusion: &[ByRefRc<Term>], rule_kind: Operator) -> Option<()> {
+fn generic_sum_prod_simplify_rule(
+    ts: &ByRefRc<Term>,
+    u: &ByRefRc<Term>,
+    rule_kind: Operator,
+) -> Option<()> {
     /// Checks if the u term is valid and extracts from it the leading constant and the remaining
     /// arguments.
     fn unwrap_u_term<'a>(
@@ -374,7 +378,7 @@ fn generic_sum_prod_simplify_rule(conclusion: &[ByRefRc<Term>], rule_kind: Opera
             // term. That term might be a regular term or the leading constant, depending on if u
             // is a constant or not
             _ => {
-                return Some(match u.as_number() {
+                return Some(match u.as_fraction() {
                     Some(u) => (u, &[]),
                     None => (identity_value.clone(), std::slice::from_ref(u)),
                 });
@@ -383,11 +387,11 @@ fn generic_sum_prod_simplify_rule(conclusion: &[ByRefRc<Term>], rule_kind: Opera
 
         // We check if there are any constants in u (aside from the leading constant). If
         // there are any, we know this u term is invalid, so we can return `None`
-        if args[1..].iter().any(|t| t.is_number()) {
+        if args[1..].iter().any(|t| t.as_fraction().is_some()) {
             return None;
         }
 
-        match args[0].as_number() {
+        match args[0].as_fraction() {
             // If the leading constant is the identity value, it should have been omitted
             Some(constant) if constant == *identity_value => None,
             Some(constant) => Some((constant, &args[1..])),
@@ -395,40 +399,30 @@ fn generic_sum_prod_simplify_rule(conclusion: &[ByRefRc<Term>], rule_kind: Opera
         }
     }
 
-    rassert!(conclusion.len() == 1);
-
     let identity_value = match rule_kind {
         Operator::Add => BigRational::zero(),
         Operator::Mult => BigRational::one(),
         _ => unreachable!(),
     };
 
-    let (first, second) = match_term!((= first second) = conclusion[0].as_ref(), RETURN_RCS)?;
-    let (ts, (u_constant, u_args)) = {
-        // Since the ts and u terms may be in either order, we have to try to validate both options
-        // to find out which term is which
-        let try_order = |ts, u| {
-            let ts = match (ts as &ByRefRc<Term>).as_ref() {
-                Term::Op(op, args) if *op == rule_kind => args,
-                _ => return None,
-            };
-            Some((ts.as_slice(), unwrap_u_term(u, &identity_value, rule_kind)?))
-        };
-        try_order(first, second).or_else(|| try_order(second, first))?
+    let (u_constant, u_args) = unwrap_u_term(u, &identity_value, rule_kind)?;
+
+    let ts = match ts.as_ref() {
+        Term::Op(op, args) if *op == rule_kind => args.as_slice(),
+        _ => return None,
     };
 
     let mut result = Vec::with_capacity(ts.len());
-    let mut constant_total = identity_value;
+    let mut constant_total = identity_value.clone();
 
     // First, we go through the t_i terms, adding/multiplying all the constants we find together,
     // and push the non-constant terms to the `result` vector
     for t in ts {
-        match (t.as_ref(), rule_kind) {
-            (Term::Terminal(Terminal::Real(r)), Operator::Add) => constant_total += r,
-            (Term::Terminal(Terminal::Real(r)), Operator::Mult) => constant_total *= r,
-            (Term::Terminal(Terminal::Integer(i)), Operator::Add) => constant_total += i,
-            (Term::Terminal(Terminal::Integer(i)), Operator::Mult) => constant_total *= i,
-            (t, _) => {
+        match (t.as_fraction(), rule_kind) {
+            (Some(r), Operator::Add) => constant_total += r,
+            (Some(r), Operator::Mult) => constant_total *= r,
+            (Some(_), _) => unreachable!(),
+            (None, _) => {
                 result.push(t);
                 continue; // Since `constant_total` didn't change, we can skip the check
             }
@@ -441,12 +435,27 @@ fn generic_sum_prod_simplify_rule(conclusion: &[ByRefRc<Term>], rule_kind: Opera
         }
     }
 
+    // This covers a tricky edge case that happens when the only non-constant term in `ts` is also a
+    // valid application of the rule operator. For example:
+    //     (step t1 (cl
+    //         (= (* 1 (* 2 x)) (* 2 x))
+    //     ) :rule prod_simplify)
+    // In this step, the term "(* 2 x)" on the right-hand side should be interpreted as an atom,
+    // but since it is a valid `u` term, it is unwrapped such that `u_constant` is 2 and `u_args`
+    // is "x". To handle this, we first check if the expected result is just one term, and try to
+    // interpret `u` as that term.
+    if result.len() == 1 && constant_total == identity_value && u == result[0] {
+        return Some(());
+    }
+
     // Finally, we verify that the constant and the remaining arguments are what we expect
-    to_option(u_constant == constant_total && u_args.iter().map(ByRefRc::as_ref).eq(result))
+    to_option(u_constant == constant_total && u_args.iter().eq(result))
 }
 
 pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    generic_sum_prod_simplify_rule(conclusion, Operator::Mult)
+    let (first, second) = match_term!((= first second) = conclusion[0].as_ref(), RETURN_RCS)?;
+    generic_sum_prod_simplify_rule(first, second, Operator::Mult)
+        .or_else(|| generic_sum_prod_simplify_rule(second, first, Operator::Mult))
 }
 
 pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
@@ -485,7 +494,9 @@ pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 }
 
 pub fn sum_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    generic_sum_prod_simplify_rule(conclusion, Operator::Add)
+    let (first, second) = match_term!((= first second) = conclusion[0].as_ref(), RETURN_RCS)?;
+    generic_sum_prod_simplify_rule(first, second, Operator::Add)
+        .or_else(|| generic_sum_prod_simplify_rule(second, first, Operator::Add))
 }
 
 pub fn comp_simplify(args: RuleArgs) -> Option<()> {
