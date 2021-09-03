@@ -121,7 +121,9 @@ fn test_metrics() {
                 .sqrt()
                 / n as f64,
         );
-        assert_eq!(expected_std, metrics.standard_deviation);
+        let delta =
+            (expected_std.as_nanos() as i128 - metrics.standard_deviation.as_nanos() as i128).abs();
+        assert!(delta < 2);
 
         let expected_max = data.iter().max().unwrap();
         let expected_min = data.iter().min().unwrap();
