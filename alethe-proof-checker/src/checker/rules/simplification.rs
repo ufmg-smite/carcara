@@ -352,8 +352,7 @@ pub fn bool_simplify(args: RuleArgs) -> Option<()> {
 pub fn qnt_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1);
     let (left, right) = match_term!((= l r) = conclusion[0], RETURN_RCS)?;
-    let (q, _, inner) = left.unwrap_quant()?;
-    rassert!(q == Quantifier::Forall);
+    let (_, _, inner) = left.unwrap_quant()?;
     to_option((inner.is_bool_false() || inner.is_bool_true()) && right == inner)
 }
 
