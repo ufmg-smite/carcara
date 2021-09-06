@@ -474,7 +474,7 @@ pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
         if t_1 == t_2 {
             return to_option(u.as_number()?.is_zero());
         }
-        to_option(match (t_1.as_number(), t_2.as_number()) {
+        to_option(match (t_1.as_signed_number(), t_2.as_signed_number()) {
             (_, Some(z)) if z.is_zero() => u == t_1,
             (Some(z), _) if z.is_zero() => match_term!((-t) = u, RETURN_RCS)? == t_2,
             (Some(t_1), Some(t_2)) => u.as_signed_number()? == t_1 - t_2,
