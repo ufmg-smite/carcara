@@ -131,8 +131,14 @@ pub fn r#let(
 
 fn extract_points(quant: Quantifier, term: &Term) -> AHashSet<(Rc<Term>, Rc<Term>)> {
     fn find_points(acc: &mut AHashSet<(Rc<Term>, Rc<Term>)>, polarity: bool, term: &Term) {
+        // This does not make use of a cache, so there may be performance issues
+        // TODO: Measure the performance of this function, and see if a cache is needed
+
         if let Some(inner) = term.remove_negation() {
             return find_points(acc, !polarity, inner);
+        }
+        if let Some((_, _, inner)) = term.unwrap_quant() {
+            return find_points(acc, polarity, inner);
         }
         match polarity {
             true => {
