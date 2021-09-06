@@ -70,6 +70,12 @@ pub fn ite_simplify(args: RuleArgs) -> Option<()> {
             // ite phi t t => t
             (ite phi t t): (_, t_1, t_2) if t_1 == t_2 => t_1.clone(),
 
+            // ite psi true false => psi
+            (ite psi true false): (psi, _, _) => psi.clone(),
+
+            // ite psi false true => ¬psi
+            (ite psi false true): (psi, _, _) => build_term!(pool, (not {psi.clone()})),
+
             // ite ¬phi t_1 t_2 => ite phi t_2 t_1
             (ite (not phi) t_1 t_2): (phi, t_1, t_2) => {
                 build_term!(pool, (ite {phi.clone()} {t_2.clone()} {t_1.clone()}))
@@ -84,12 +90,6 @@ pub fn ite_simplify(args: RuleArgs) -> Option<()> {
             (ite phi t_1 (ite phi t_2 t_3)): (phi_1, t_1, (phi_2, _, t_3)) if phi_1 == phi_2 => {
                 build_term!(pool, (ite {phi_1.clone()} {t_1.clone()} {t_3.clone()}))
             },
-
-            // ite psi true false => psi
-            (ite psi true false): (psi, _, _) => psi.clone(),
-
-            // ite psi false true => ¬psi
-            (ite psi false true): (psi, _, _) => build_term!(pool, (not {psi.clone()})),
 
             // ite psi true phi => psi v phi
             (ite psi true phi): (psi, _, phi) => {
@@ -688,7 +688,7 @@ mod tests {
                 "(step t1 (cl (= (ite a b true) (or (not a) b))) :rule ite_simplify)": true,
             }
             "Multiple transformations" {
-                "(step t1 (cl (= (ite (not a) false true) a)) :rule ite_simplify)": true,
+                "(step t1 (cl (= (ite (not a) false true) (not (not a)))) :rule ite_simplify)": true,
                 "(step t1 (cl (= (ite a (ite a d c) d) d)) :rule ite_simplify)": true,
                 "(step t1 (cl (= (ite a (ite true b c) (ite true b c)) b))
                     :rule ite_simplify)": true,
