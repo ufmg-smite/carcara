@@ -55,6 +55,32 @@ pub fn or_neg(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
         .map(|_| ())
 }
 
+pub fn xor_pos1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    rassert!(conclusion.len() == 3);
+    let (phi_1, phi_2) = match_term!((not (xor phi_1 phi_2)) = conclusion[0])?;
+    to_option(phi_1 == conclusion[1].as_ref() && phi_2 == conclusion[2].as_ref())
+}
+
+pub fn xor_pos2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    rassert!(conclusion.len() == 3);
+    let (phi_1, phi_2) = match_term!((not (xor phi_1 phi_2)) = conclusion[0])?;
+    to_option(
+        phi_1 == conclusion[1].remove_negation()? && phi_2 == conclusion[2].remove_negation()?,
+    )
+}
+
+pub fn xor_neg1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    rassert!(conclusion.len() == 3);
+    let (phi_1, phi_2) = match_term!((xor phi_1 phi_2) = conclusion[0])?;
+    to_option(phi_1 == conclusion[1].as_ref() && phi_2 == conclusion[2].remove_negation()?)
+}
+
+pub fn xor_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    rassert!(conclusion.len() == 3);
+    let (phi_1, phi_2) = match_term!((xor phi_1 phi_2) = conclusion[0])?;
+    to_option(phi_1 == conclusion[1].remove_negation()? && phi_2 == conclusion[2].as_ref())
+}
+
 pub fn implies_pos(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 3);
     let (phi_1, phi_2) = match_term!((not (=> phi_1 phi_2)) = conclusion[0])?;
@@ -431,6 +457,95 @@ mod tests {
                 "(step t1 (cl (or p q r) (not s)) :rule or_neg)": false,
                 "(step t1 (cl (or p (not q) r) (not q)) :rule or_neg)": false,
 
+            }
+        }
+    }
+
+    #[test]
+    fn xor_pos1() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (not (xor p q)) p q) :rule xor_pos1)": true,
+                "(step t1 (cl (not (xor (not p) q)) (not p) q) :rule xor_pos1)": true,
+            }
+            "Term in clause is not of the correct form" {
+                "(step t1 (cl (xor p q) p q) :rule xor_pos1)": false,
+                "(step t1 (cl (and p q) p q) :rule xor_pos1)": false,
+            }
+            "Terms don't match" {
+                "(step t1 (cl (not (xor p q)) q p) :rule xor_pos1)": false,
+                "(step t1 (cl (not (xor (not p) q)) p (not q)) :rule xor_pos1)": false,
+            }
+        }
+    }
+
+    #[test]
+    fn xor_pos2() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (not (xor p q)) (not p) (not q)) :rule xor_pos2)": true,
+                "(step t1 (cl (not (xor (not p) q)) (not (not p)) (not q)) :rule xor_pos2)": true,
+            }
+            "Term in clause is not of the correct form" {
+                "(step t1 (cl (xor p q) (not p) (not q)) :rule xor_pos2)": false,
+                "(step t1 (cl (and p q) (not p) (not q)) :rule xor_pos2)": false,
+                "(step t1 (cl (not (xor p q)) p (not q)) :rule xor_pos2)": false,
+            }
+            "Terms don't match" {
+                "(step t1 (cl (not (xor p q)) (not q) (not q)) :rule xor_pos2)": false,
+                "(step t1 (cl (not (xor p q)) (not p) (not p)) :rule xor_pos2)": false,
+                "(step t1 (cl (not (xor p (not q))) (not p) q) :rule xor_pos2)": false,
+            }
+        }
+    }
+
+    #[test]
+    fn xor_neg1() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (xor p q) p (not q)) :rule xor_neg1)": true,
+                "(step t1 (cl (xor p (not q)) p (not (not q))) :rule xor_neg1)": true,
+            }
+            "Term in clause is not of the correct form" {
+                "(step t1 (cl (xor p (not q)) p q) :rule xor_neg1)": false,
+                "(step t1 (cl (not (xor p q)) p (not q)) :rule xor_neg1)": false,
+            }
+            "Terms don't match" {
+                "(step t1 (cl (xor p q) q (not p)) :rule xor_neg1)": false,
+                "(step t1 (cl (xor p q) p (not p)) :rule xor_neg1)": false,
+            }
+        }
+    }
+
+    #[test]
+    fn xor_neg2() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (xor p q) (not p) q) :rule xor_neg2)": true,
+                "(step t1 (cl (xor (not p) q) (not (not p)) q) :rule xor_neg2)": true,
+            }
+            "Term in clause is not of the correct form" {
+                "(step t1 (cl (not (xor p q)) (not p) q) :rule xor_neg2)": false,
+            }
+            "Terms don't match" {
+                "(step t1 (cl (xor p q) (not q) p) :rule xor_neg2)": false,
+                "(step t1 (cl (xor p q) (not p) p) :rule xor_neg2)": false,
             }
         }
     }
