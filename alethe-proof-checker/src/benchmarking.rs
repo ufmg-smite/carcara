@@ -4,6 +4,7 @@ use std::{
     fmt,
     fs::File,
     io::BufReader,
+    path::PathBuf,
     time::{Duration, Instant},
 };
 
@@ -212,11 +213,13 @@ impl BenchmarkResults {
 }
 
 pub fn run_benchmark(
-    instances: &[(String, String)],
+    instances: &[(PathBuf, PathBuf)],
     num_runs: usize,
 ) -> Result<BenchmarkResults, crate::Error> {
     let mut result = BenchmarkResults::new();
     for (problem_file, proof_file) in instances {
+        let proof_file_name = proof_file.to_str().unwrap();
+
         for i in 0..num_runs {
             let total_time = Instant::now();
             let parsing_time = Instant::now();
@@ -231,7 +234,7 @@ pub fn run_benchmark(
                 skip_unknown_rules: false,
                 allow_test_rule: false,
                 statistics: Some(checker::CheckerStatistics {
-                    file_name: proof_file,
+                    file_name: proof_file_name,
                     checking_time: &mut checking_time,
                     step_time: &mut result.step_time,
                     step_time_by_file: &mut result.step_time_by_file,
@@ -241,7 +244,7 @@ pub fn run_benchmark(
             let _ = checker::ProofChecker::new(pool, config).check(&proof)?;
             let total_time = total_time.elapsed();
 
-            let run_id = (proof_file.clone(), i);
+            let run_id = (proof_file_name.to_string(), i);
             result.parsing.add(&run_id, parsing_time);
             result.checking.add(&run_id, checking_time);
             result

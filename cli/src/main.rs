@@ -1,5 +1,7 @@
 extern crate clap;
 
+mod path_args;
+
 use ahash::AHashSet;
 use alethe_proof_checker::{
     benchmarking, check,
@@ -8,21 +10,12 @@ use alethe_proof_checker::{
     Error,
 };
 use clap::{App, AppSettings, Arg, ArgGroup, ArgMatches, SubCommand};
+use path_args::{get_instances_from_paths, infer_problem_path};
 use std::{
     fs::File,
     io::{BufReader, Write},
     path::PathBuf,
 };
-
-fn infer_problem_path(proof_path: impl Into<PathBuf>) -> Option<PathBuf> {
-    const SMT_FILE_EXTENSIONS: [&str; 3] = ["smt", "smt2", "smt_in"];
-
-    let mut path: PathBuf = proof_path.into();
-    while !SMT_FILE_EXTENSIONS.contains(&path.extension()?.to_str()?) {
-        path.set_extension("");
-    }
-    Some(path)
-}
 
 fn app() -> App<'static, 'static> {
     let subcommands = vec![
@@ -147,21 +140,7 @@ fn parse_subcommand(matches: &ArgMatches) -> Result<(), Error> {
 fn bench_subcommand(matches: &ArgMatches) -> Result<(), Error> {
     // TODO: Add better error handling
     let num_runs = matches.value_of("num-runs").unwrap().parse().unwrap();
-    let instances: Vec<_> = matches
-        .values_of("files")
-        .unwrap()
-        .filter_map(|proof_file| {
-            let problem_file =
-                infer_problem_path(proof_file).and_then(|p| Some(p.to_str()?.to_string()));
-            if problem_file.is_none() {
-                println!(
-                    "Couldn't infer problem file for proof file \"{}\", skipping",
-                    proof_file
-                )
-            }
-            Some((problem_file?, proof_file.to_string()))
-        })
-        .collect();
+    let instances = get_instances_from_paths(matches.values_of("files").unwrap())?;
 
     if instances.is_empty() {
         println!("No files left, exiting");
@@ -213,10 +192,12 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), Error> {
 }
 
 fn progress_report_subcommand(matches: &ArgMatches) -> Result<(), Error> {
-    let files = matches
-        .values_of("files")
-        .map(Iterator::collect::<Vec<_>>)
-        .unwrap_or_default();
+    let instances = get_instances_from_paths(matches.values_of("files").unwrap()).unwrap();
+    let files: Vec<_> = instances
+        .iter()
+        .map(|(_problem, proof)| proof.to_str().unwrap())
+        .collect();
+
     let quiet = matches.is_present("quiet");
     if matches.is_present("by-files") {
         report_by_files(&files, quiet)?;
