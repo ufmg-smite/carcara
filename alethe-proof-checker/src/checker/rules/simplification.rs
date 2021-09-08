@@ -1072,7 +1072,7 @@ mod tests {
                 "(step t1 (cl (= (forall ((x Int) (p Bool)) true) true)) :rule qnt_simplify)": true,
             }
             "Quantifier is not \"forall\"" {
-                "(step t1 (cl (= (exists ((x Int)) false) false)) :rule qnt_simplify)": false,
+                "(step t1 (cl (= (exists ((x Int)) false) false)) :rule qnt_simplify)": true,
             }
             "Inner term is not boolean constant" {
                 "(step t1 (cl (= (forall ((x Int)) (not false)) true)) :rule qnt_simplify)": false,
