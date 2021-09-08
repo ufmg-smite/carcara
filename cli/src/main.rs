@@ -1,5 +1,6 @@
 extern crate clap;
 
+mod error;
 mod path_args;
 
 use ahash::AHashSet;
@@ -7,9 +8,9 @@ use alethe_proof_checker::{
     benchmarking, check,
     checker::{Correctness, ProofChecker},
     parser::{error::ParserResult, lexer, parse_problem_proof},
-    Error,
 };
 use clap::{App, AppSettings, Arg, ArgGroup, ArgMatches, SubCommand};
+use error::CliError;
 use path_args::{get_instances_from_paths, infer_problem_path};
 use std::{
     fs::File,
@@ -90,9 +91,9 @@ fn app() -> App<'static, 'static> {
         .subcommands(subcommands)
 }
 
-fn main() -> Result<(), Error> {
-    let matches = app().get_matches();
-
+fn run_app(matches: &ArgMatches) -> Result<(), CliError> {
+    // Instead of just returning a `Result` from `main`, we move most of the behaviour into a
+    // separate function so we can control how errors are printed to the user.
     if let Some(matches) = matches.subcommand_matches("check") {
         check_subcommand(matches)
     } else if let Some(matches) = matches.subcommand_matches("parse") {
@@ -106,40 +107,50 @@ fn main() -> Result<(), Error> {
     }
 }
 
-fn check_subcommand(matches: &ArgMatches) -> Result<(), Error> {
-    let proof_file = matches.value_of("proof-file").unwrap();
-    let problem_file = matches
-        .value_of("problem-file")
-        .map(PathBuf::from)
-        .or_else(|| infer_problem_path(proof_file))
-        .expect("Couldn't infer original problem file");
+fn main() {
+    let matches = app().get_matches();
+    if let Err(e) = run_app(&matches) {
+        // TODO: Add proper error logging
+        eprintln!("[error] {:?}", e);
+        std::process::exit(1);
+    }
+}
+
+fn check_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
+    let proof_file = PathBuf::from(matches.value_of("proof-file").unwrap());
+    let problem_file = match matches.value_of("problem-file") {
+        Some(p) => PathBuf::from(p),
+        None => infer_problem_path(&proof_file)?,
+    };
     let skip = matches.is_present("skip-unknown-rules");
-    match check(problem_file, PathBuf::from(proof_file), skip, false)? {
+    match check(problem_file, proof_file, skip, false)? {
         Correctness::True => println!("true"),
         Correctness::False(s, r) => println!("false ({}, {})", s, r),
     }
     Ok(())
 }
 
-fn parse_subcommand(matches: &ArgMatches) -> Result<(), Error> {
-    let proof_file = matches.value_of("proof-file").unwrap();
-    let problem_file = matches
-        .value_of("problem-file")
-        .map(PathBuf::from)
-        .or_else(|| infer_problem_path(proof_file))
-        .expect("Couldn't infer original problem file");
+fn parse_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
+    let proof_file = PathBuf::from(matches.value_of("proof-file").unwrap());
+    let problem_file = match matches.value_of("problem-file") {
+        Some(p) => PathBuf::from(p),
+        None => infer_problem_path(&proof_file)?,
+    };
     let (problem, proof) = (
         BufReader::new(File::open(problem_file)?),
         BufReader::new(File::open(proof_file)?),
     );
-    let (proof, _) = parse_problem_proof(problem, proof)?;
+    let (proof, _) =
+        parse_problem_proof(problem, proof).map_err(alethe_proof_checker::Error::from)?;
     println!("{:#?}", proof);
     Ok(())
 }
 
-fn bench_subcommand(matches: &ArgMatches) -> Result<(), Error> {
-    // TODO: Add better error handling
-    let num_runs = matches.value_of("num-runs").unwrap().parse().unwrap();
+fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
+    let num_runs = matches.value_of("num-runs").unwrap();
+    let num_runs = num_runs
+        .parse()
+        .map_err(|_| CliError::InvalidArgument(num_runs.to_string()))?;
     let instances = get_instances_from_paths(matches.values_of("files").unwrap())?;
 
     if instances.is_empty() {
@@ -191,12 +202,16 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), Error> {
     Ok(())
 }
 
-fn progress_report_subcommand(matches: &ArgMatches) -> Result<(), Error> {
-    let instances = get_instances_from_paths(matches.values_of("files").unwrap()).unwrap();
+fn progress_report_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
+    let instances = get_instances_from_paths(matches.values_of("files").unwrap())?;
     let files: Vec<_> = instances
         .iter()
-        .map(|(_problem, proof)| proof.to_str().unwrap())
-        .collect();
+        .map(|(_problem, proof)| {
+            proof
+                .to_str()
+                .ok_or_else(|| CliError::InvalidProofFile(proof.clone()))
+        })
+        .collect::<Result<_, _>>()?;
 
     let quiet = matches.is_present("quiet");
     if matches.is_present("by-files") {
