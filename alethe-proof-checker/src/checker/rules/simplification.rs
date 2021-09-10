@@ -39,23 +39,28 @@ fn generic_simplify_rule(
 ) -> Option<()> {
     rassert!(conclusion.len() == 1);
 
-    let mut simplify_until_fixed_point = |term: &Rc<Term>, goal: &Rc<Term>| {
+    let mut simplify_until_fixed_point = |term: &Rc<Term>, goal: &Rc<Term>| -> Option<bool> {
         let mut current = term.clone();
         let mut seen = AHashSet::new();
         loop {
             if !seen.insert(current.clone()) {
-                panic!("Cycle detected in simplification rule!")
+                log::error!("cycle detected in simplification rule");
+                return None;
             }
-            let next = simplify_function(&current, pool)?;
-            if next == *goal {
-                return Some(());
+            match simplify_function(&current, pool) {
+                Some(next) => {
+                    if next == *goal {
+                        return Some(true);
+                    }
+                    current = next;
+                }
+                None => return Some(false),
             }
-            current = next;
         }
     };
 
     let (left, right) = match_term!((= phi psi) = conclusion[0].as_ref(), RETURN_RCS)?;
-    simplify_until_fixed_point(left, right).or_else(|| simplify_until_fixed_point(right, left))
+    to_option(simplify_until_fixed_point(left, right)? || simplify_until_fixed_point(right, left)?)
 }
 
 pub fn ite_simplify(args: RuleArgs) -> Option<()> {

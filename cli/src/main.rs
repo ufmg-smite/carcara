@@ -1,6 +1,5 @@
-extern crate clap;
-
 mod error;
+mod logger;
 mod path_args;
 
 use ahash::AHashSet;
@@ -125,9 +124,9 @@ fn run_app(matches: &ArgMatches) -> Result<(), CliError> {
 
 fn main() {
     let matches = app().get_matches();
+    logger::init();
     if let Err(e) = run_app(&matches) {
-        // TODO: Add proper error logging
-        eprintln!("[error] {:?}", e);
+        log::error!("{:?}", e);
         std::process::exit(1);
     }
 }
@@ -170,7 +169,7 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
     let instances = get_instances_from_paths(matches.values_of("files").unwrap())?;
 
     if instances.is_empty() {
-        println!("No files left, exiting");
+        log::warn!("no files passed");
         return Ok(());
     }
 
@@ -228,6 +227,10 @@ fn progress_report_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
                 .ok_or_else(|| CliError::InvalidProofFile(proof.clone()))
         })
         .collect::<Result<_, _>>()?;
+
+    if instances.is_empty() {
+        log::warn!("no files passed");
+    }
 
     let quiet = matches.is_present("quiet");
     if matches.is_present("by-files") {

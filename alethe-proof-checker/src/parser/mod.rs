@@ -38,9 +38,12 @@ impl<K, V> SymbolTable<K, V> {
     fn pop_scope(&mut self) {
         match self.scopes.len() {
             0 => unreachable!(),
-            1 => panic!("cannot pop last scope in symbol table"),
+            1 => {
+                log::error!("cannot pop last scope in symbol table");
+                panic!()
+            }
             _ => {
-                self.scopes.pop().expect("no scopes in symbol table");
+                self.scopes.pop().unwrap();
             }
         }
     }
@@ -52,10 +55,7 @@ impl<K: Eq + Hash, V> SymbolTable<K, V> {
     }
 
     fn insert(&mut self, key: K, value: V) {
-        self.scopes
-            .last_mut()
-            .expect("no scopes in symbol table")
-            .insert(key, value);
+        self.scopes.last_mut().unwrap().insert(key, value);
     }
 }
 
