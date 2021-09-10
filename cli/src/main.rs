@@ -19,12 +19,20 @@ use std::{
 };
 
 fn app() -> App<'static, 'static> {
+    const PROBLEM_FILE_HELP: &str =
+        "The original problem file. If this argument is not present, it will be inferred from the \
+        proof file";
+
     let subcommands = vec![
         SubCommand::with_name("check")
             .about("Checks a proof file")
             .setting(AppSettings::DisableVersion)
-            .arg(Arg::with_name("proof-file").required(true))
-            .arg(Arg::with_name("problem-file"))
+            .arg(
+                Arg::with_name("proof-file")
+                    .required(true)
+                    .help("The proof file to be checked"),
+            )
+            .arg(Arg::with_name("problem-file").help(PROBLEM_FILE_HELP))
             .arg(
                 Arg::with_name("skip-unknown-rules")
                     .short("s")
@@ -34,8 +42,12 @@ fn app() -> App<'static, 'static> {
         SubCommand::with_name("parse")
             .about("Parses a proof file and prints the AST")
             .setting(AppSettings::DisableVersion)
-            .arg(Arg::with_name("proof-file").required(true))
-            .arg(Arg::with_name("problem-file")),
+            .arg(
+                Arg::with_name("proof-file")
+                    .required(true)
+                    .help("The proof file to be parsed"),
+            )
+            .arg(Arg::with_name("problem-file").help(PROBLEM_FILE_HELP)),
         SubCommand::with_name("bench")
             .about("Checks a series of proof files and records performance statistics")
             .setting(AppSettings::DisableVersion)
@@ -47,8 +59,9 @@ fn app() -> App<'static, 'static> {
                     .help("Number of times to run the benchmark for each file"),
             )
             .arg(Arg::with_name("files").multiple(true).required(true).help(
-                "The proof files to be checked. The problem files will be inferred from the \
-                proof files",
+                "The proof files with which the benchkmark will be run. If a directory is passed, \
+                the checker will recursively find all '.proof' files in the directory. The problem \
+                files will be inferred from the proof files",
             )),
         SubCommand::with_name("progress-report")
             .setting(AppSettings::DisableVersion)
@@ -83,7 +96,10 @@ fn app() -> App<'static, 'static> {
                     .long("--quiet")
                     .help("Print only one character per file/rule"),
             )
-            .arg(Arg::with_name("files").multiple(true)),
+            .arg(Arg::with_name("files").multiple(true).help(
+                "The proof files with which the progress report will be run. If a directory is \
+                passed, the checker will recursively find all '.proof' files in the directory",
+            )),
     ];
     App::new("Alethe proof checker")
         .version("0.1.0")
