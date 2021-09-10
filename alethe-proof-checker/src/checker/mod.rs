@@ -273,6 +273,7 @@ impl<'c> ProofChecker<'c> {
             "distinct_elim" => clausification::distinct_elim,
             "la_rw_eq" => linear_arithmetic::la_rw_eq,
             "la_generic" => linear_arithmetic::la_generic,
+            "lia_generic" => linear_arithmetic::lia_generic,
             "la_disequality" => linear_arithmetic::la_disequality,
             "forall_inst" => quantifier::forall_inst,
             "qnt_join" => quantifier::qnt_join,
