@@ -126,6 +126,13 @@ impl TermPool {
                 self.add_term(Term::Op(*op, new_args))
             }
             Term::Quant(q, b, t) => {
+                for var in b {
+                    let term: Term = var.clone().into();
+                    if substitutions.contains_key(&term) {
+                        log::error!("trying to substitute bound variable: {}", var.0);
+                        panic!();
+                    }
+                }
                 let new_term = self.apply_substitutions_rec(t, substitutions, cache);
                 self.add_term(Term::Quant(*q, b.clone(), new_term))
             }
