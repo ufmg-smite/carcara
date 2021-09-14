@@ -296,6 +296,8 @@ impl<'c> ProofChecker<'c> {
             "not_equiv2" => tautology::not_equiv2,
             "ite1" => tautology::ite1,
             "ite2" => tautology::ite2,
+            "not_ite1" => tautology::not_ite1,
+            "not_ite2" => tautology::not_ite2,
             "ite_intro" => tautology::ite_intro,
             "contraction" => resolution::contraction,
             "connective_def" => tautology::connective_def,
