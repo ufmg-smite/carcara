@@ -1,4 +1,4 @@
-use crate::{checker, parser::parse_problem_proof};
+use crate::{checker, parser::parse_instance};
 use ahash::AHashMap;
 use std::{
     fmt,
@@ -223,7 +223,7 @@ pub fn run_benchmark(
         for i in 0..num_runs {
             let total_time = Instant::now();
             let parsing_time = Instant::now();
-            let (proof, pool) = parse_problem_proof(
+            let (proof, pool) = parse_instance(
                 BufReader::new(File::open(problem_file)?),
                 BufReader::new(File::open(proof_file)?),
             )?;

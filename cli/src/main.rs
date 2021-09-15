@@ -6,7 +6,7 @@ use ahash::AHashSet;
 use alethe_proof_checker::{
     benchmarking, check,
     checker::{Correctness, ProofChecker},
-    parser::{error::ParserResult, lexer, parse_problem_proof},
+    parser::{error::ParserResult, lexer, parse_instance},
 };
 use clap::{App, AppSettings, Arg, ArgGroup, ArgMatches, SubCommand};
 use error::CliError;
@@ -155,8 +155,7 @@ fn parse_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         BufReader::new(File::open(problem_file)?),
         BufReader::new(File::open(proof_file)?),
     );
-    let (proof, _) =
-        parse_problem_proof(problem, proof).map_err(alethe_proof_checker::Error::from)?;
+    let (proof, _) = parse_instance(problem, proof).map_err(alethe_proof_checker::Error::from)?;
     println!("{:#?}", proof);
     Ok(())
 }

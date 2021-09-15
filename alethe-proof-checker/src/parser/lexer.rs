@@ -40,6 +40,7 @@ pub enum Reserved {
     DeclareFun,  // declare-fun
     DeclareSort, // declare-sort
     DefineFun,   // define-fun
+    Assert,      // assert
 }
 
 impl_str_conversion_traits!(Reserved {
@@ -58,6 +59,7 @@ impl_str_conversion_traits!(Reserved {
     DeclareFun: "declare-fun",
     DeclareSort: "declare-sort",
     DefineFun: "define-fun",
+    Assert: "assert",
 });
 
 pub type Position = (usize, usize);

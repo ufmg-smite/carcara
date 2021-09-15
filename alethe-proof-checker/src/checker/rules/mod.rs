@@ -55,13 +55,13 @@ macro_rules! rassert {
 fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
     use crate::{
         checker::{Config, Correctness, ProofChecker},
-        parser::parse_problem_proof,
+        parser::parse_instance,
     };
     use std::io::Cursor;
 
     for (i, (proof, expected)) in cases.iter().enumerate() {
         // This parses the definitions again for every case, which is not ideal
-        let (parsed, pool) = parse_problem_proof(Cursor::new(definitions), Cursor::new(proof))
+        let (parsed, pool) = parse_instance(Cursor::new(definitions), Cursor::new(proof))
             .unwrap_or_else(|e| panic!("parser error during test \"{}\": {:?}", test_name, e));
         let mut checker = ProofChecker::new(
             pool,

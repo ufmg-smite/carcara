@@ -28,10 +28,10 @@ pub fn parse_term_with_definitions(definitions: &str, term: &str) -> Term {
 }
 
 pub fn parse_proof(input: &str) -> Proof {
-    Parser::new(input.as_bytes())
-        .and_then(Parser::parse_proof)
-        .expect(ERROR_MESSAGE)
-        .0
+    let commands = Parser::new(input.as_bytes())
+        .and_then(|mut p| p.parse_proof())
+        .expect(ERROR_MESSAGE);
+    Proof { premises: AHashSet::new(), commands }
 }
 
 fn run_parser_tests(cases: &[(&str, Term)]) {
@@ -499,10 +499,10 @@ fn test_step() {
         (step t5 (cl) :rule rule-name :premises (t1 t2 t3) :args (42))
     ";
     let proof = parse_proof(input);
-    assert_eq!(proof.0.len(), 5);
+    assert_eq!(proof.commands.len(), 5);
 
     assert_deep_eq!(
-        &proof.0[0],
+        &proof.commands[0],
         &ProofCommand::Step(ProofStep {
             index: "t1".into(),
             clause: vec![Rc::new(parse_term("(= (+ 2 3) (- 1 2))"))],
@@ -513,7 +513,7 @@ fn test_step() {
     );
 
     assert_deep_eq!(
-        &proof.0[1],
+        &proof.commands[1],
         &ProofCommand::Step(ProofStep {
             index: "t2".into(),
             clause: Vec::new(),
@@ -524,7 +524,7 @@ fn test_step() {
     );
 
     assert_deep_eq!(
-        &proof.0[2],
+        &proof.commands[2],
         &ProofCommand::Step(ProofStep {
             index: "t3".into(),
             clause: Vec::new(),
@@ -544,7 +544,7 @@ fn test_step() {
     );
 
     assert_deep_eq!(
-        &proof.0[3],
+        &proof.commands[3],
         &ProofCommand::Step(ProofStep {
             index: "t4".into(),
             clause: Vec::new(),
@@ -564,7 +564,7 @@ fn test_step() {
     );
 
     assert_deep_eq!(
-        &proof.0[4],
+        &proof.commands[4],
         &ProofCommand::Step(ProofStep {
             index: "t5".into(),
             clause: Vec::new(),

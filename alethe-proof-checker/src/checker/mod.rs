@@ -74,7 +74,7 @@ impl<'c> ProofChecker<'c> {
         // we check the subproofs iteratively, instead of recursively
 
         // A stack of the subproof commands, and the index of the command being currently checked
-        let mut commands_stack = vec![(0, proof.0.as_slice())];
+        let mut commands_stack = vec![(0, proof.commands.as_slice())];
 
         while let Some(&(i, commands)) = commands_stack.last() {
             if i == commands.len() {

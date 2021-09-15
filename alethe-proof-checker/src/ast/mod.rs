@@ -213,7 +213,10 @@ impl TermPool {
 
 /// A proof in the Alethe Proof Format.
 #[derive(Debug)]
-pub struct Proof(pub Vec<ProofCommand>);
+pub struct Proof {
+    pub premises: AHashSet<Rc<Term>>,
+    pub commands: Vec<ProofCommand>,
+}
 
 /// A proof command.
 #[derive(Debug, PartialEq)]

@@ -5,18 +5,21 @@ pub mod lexer;
 pub mod tests;
 
 use crate::{ast::*, utils::Either};
-use ahash::AHashMap;
+use ahash::{AHashMap, AHashSet};
 use error::*;
 use lexer::*;
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 use std::{hash::Hash, io::BufRead, str::FromStr};
 
-pub fn parse_problem_proof<T: BufRead>(problem: T, proof: T) -> ParserResult<(Proof, TermPool)> {
+pub fn parse_instance<T: BufRead>(problem: T, proof: T) -> ParserResult<(Proof, TermPool)> {
     let mut problem_parser = Parser::new(problem)?;
-    problem_parser.parse_problem()?;
+    let premises = problem_parser.parse_problem()?;
+    let mut proof_parser = Parser::with_state(proof, problem_parser.state)?;
 
-    Parser::with_state(proof, problem_parser.state)?.parse_proof()
+    let commands = proof_parser.parse_proof()?;
+    let proof = Proof { premises, commands };
+    Ok((proof, proof_parser.state.term_pool))
 }
 
 type AnchorCommand = (String, Vec<(String, Rc<Term>)>, Vec<SortedVar>);
@@ -320,7 +323,9 @@ impl<R: BufRead> Parser<R> {
 
     /// Reads an SMT-LIB script and parses the declarations and definitions. Ignores all other
     /// SMT-LIB script commands.
-    pub fn parse_problem(&mut self) -> ParserResult<()> {
+    pub fn parse_problem(&mut self) -> ParserResult<AHashSet<Rc<Term>>> {
+        let mut premises = AHashSet::new();
+
         while self.current_token != Token::Eof {
             self.expect_token(Token::OpenParen)?;
             match self.next_token()? {
@@ -341,6 +346,11 @@ impl<R: BufRead> Parser<R> {
                     self.state.function_defs.insert(name, func_def);
                     continue;
                 }
+                Token::ReservedWord(Reserved::Assert) => {
+                    let term = self.parse_term()?;
+                    self.expect_token(Token::CloseParen)?;
+                    premises.insert(self.add_term(term));
+                }
                 _ => {
                     // If the command is not a declaration or definition, we just ignore it. We do
                     // that by reading tokens until the command parenthesis is closed
@@ -356,11 +366,11 @@ impl<R: BufRead> Parser<R> {
                 }
             }
         }
-        Ok(())
+        Ok(premises)
     }
 
     /// Parses a proof.
-    pub fn parse_proof(mut self) -> ParserResult<(Proof, TermPool)> {
+    pub fn parse_proof(&mut self) -> ParserResult<Vec<ProofCommand>> {
         // To avoid stack overflows in proofs with many nested subproofs, we parse the subproofs
         // iteratively, instead of recursively
         let mut commands_stack = vec![Vec::new()];
@@ -461,7 +471,7 @@ impl<R: BufRead> Parser<R> {
         }
         match commands_stack.len() {
             0 => unreachable!(),
-            1 => Ok((Proof(commands_stack.pop().unwrap()), self.state.term_pool)),
+            1 => Ok(commands_stack.pop().unwrap()),
 
             // If there is more than one vector in the commands stack, we are inside a subproof
             // that should be closed before the outer proof is finished
