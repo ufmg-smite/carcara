@@ -41,6 +41,7 @@ pub enum ErrorKind {
     RepeatedStepIndex(String),
     InvalidSortArity(BigInt),
     LastSubproofStepIsNotStep,
+    UnknownAttribute(String),
     NotYetImplemented,
 }
 

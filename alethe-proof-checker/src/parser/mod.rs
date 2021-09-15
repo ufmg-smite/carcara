@@ -795,21 +795,28 @@ impl<R: BufRead> Parser<R> {
         self.parse_sequence(
             |p| {
                 let attribute = p.expect_keyword()?;
-                if attribute.as_str() == "named" {
-                    // If the term has a "named" attribute, we introduce a new nullary function
-                    // definition that maps the name to the term
-                    let name = p.expect_symbol()?;
-                    p.state.function_defs.insert(
-                        name,
-                        FunctionDef {
-                            params: Vec::new(),
-                            body: inner.clone(),
-                        },
-                    );
-                } else if let Token::Symbol(_) = p.current_token {
-                    p.next_token()?;
+                match attribute.as_str() {
+                    "named" => {
+                        // If the term has a "named" attribute, we introduce a new nullary function
+                        // definition that maps the name to the term
+                        let name = p.expect_symbol()?;
+                        p.state.function_defs.insert(
+                            name,
+                            FunctionDef {
+                                params: Vec::new(),
+                                body: inner.clone(),
+                            },
+                        );
+                        Ok(())
+                    }
+                    "pattern" => {
+                        // We just ignore the values of "pattern" attributes
+                        p.expect_token(Token::OpenParen)?;
+                        p.parse_sequence(Parser::parse_term, true)?;
+                        Ok(())
+                    }
+                    _ => Err(p.err(ErrorKind::UnknownAttribute(attribute))),
                 }
-                Ok(())
             },
             true,
         )?;
