@@ -817,7 +817,6 @@ impl<R: BufRead> Parser<R> {
                     Reserved::Bang => self.parse_annotated_term(),
                     Reserved::Let => self.parse_let_term(),
                     _ => Err(self.err(ErrorKind::UnexpectedToken(Token::ReservedWord(reserved)))),
-                    // _ => Err(self.err(ErrorKind::NotYetImplemented)),
                 }
             }
             // Here, I would like to use an `if let` guard, like:
