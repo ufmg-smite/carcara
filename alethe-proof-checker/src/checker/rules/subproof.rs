@@ -9,9 +9,11 @@ pub fn subproof(RuleArgs { conclusion, subproof_commands, .. }: RuleArgs) -> Opt
 
     rassert!(conclusion.len() == assumptions.len() + 1); // Currently, this is always true
 
-    for (assumption, term) in assumptions.iter().zip(conclusion) {
+    for (assumption, t) in assumptions.iter().zip(conclusion) {
         match assumption {
-            ProofCommand::Assume(t) => rassert!(t.as_ref() == term.remove_negation()?),
+            ProofCommand::Assume { index: _, term } => {
+                rassert!(term.as_ref() == t.remove_negation()?)
+            }
             _ => return None,
         };
     }

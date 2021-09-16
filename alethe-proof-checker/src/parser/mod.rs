@@ -403,7 +403,10 @@ impl<R: BufRead> Parser<R> {
         while self.current_token != Token::Eof {
             self.expect_token(Token::OpenParen)?;
             let (index, command) = match self.next_token()? {
-                Token::ReservedWord(Reserved::Assume) => self.parse_assume_command()?,
+                Token::ReservedWord(Reserved::Assume) => {
+                    let (index, term) = self.parse_assume_command()?;
+                    (index.clone(), ProofCommand::Assume { index, term })
+                }
                 Token::ReservedWord(Reserved::Step) => {
                     let (index, (clause, rule, premises, args)) = self.parse_step_command()?;
 
@@ -504,13 +507,13 @@ impl<R: BufRead> Parser<R> {
 
     /// Parses an "assume" proof command. This method assumes that the "(" and "assume" tokens were
     /// already consumed.
-    fn parse_assume_command(&mut self) -> ParserResult<(String, ProofCommand)> {
+    fn parse_assume_command(&mut self) -> ParserResult<(String, Rc<Term>)> {
         let index = self.expect_symbol()?;
         let term = self.parse_term()?;
         SortError::assert_eq(Term::BOOL_SORT, term.sort()).map_err(|err| self.err(err.into()))?;
         let term = self.add_term(term);
         self.expect_token(Token::CloseParen)?;
-        Ok((index, ProofCommand::Assume(term)))
+        Ok((index, term))
     }
 
     /// Parses a "step" proof command. This method assumes that the "(" and "step" tokens were

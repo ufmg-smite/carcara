@@ -222,7 +222,7 @@ pub struct Proof {
 #[derive(Debug, PartialEq)]
 pub enum ProofCommand {
     /// An "assume" command, of the form "(assume <symbol> <term>)".
-    Assume(Rc<Term>),
+    Assume { index: String, term: Rc<Term> },
 
     /// A "step" command.
     Step(ProofStep),
@@ -823,9 +823,10 @@ impl DeepEq for ProofCommand {
         cache: &mut AHashSet<(Rc<Term>, Rc<Term>)>,
     ) -> bool {
         match (a, b) {
-            (ProofCommand::Assume(a), ProofCommand::Assume(b)) => {
-                DeepEq::eq_impl(a, b, config, cache)
-            }
+            (
+                ProofCommand::Assume { index: a_index, term: a_term },
+                ProofCommand::Assume { index: b_index, term: b_term },
+            ) => a_index == b_index && DeepEq::eq_impl(a_term, b_term, config, cache),
             (ProofCommand::Step(a), ProofCommand::Step(b)) => DeepEq::eq_impl(a, b, config, cache),
             _ => false,
         }
