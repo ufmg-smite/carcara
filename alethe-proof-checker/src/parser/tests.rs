@@ -405,6 +405,10 @@ fn test_annotated_terms() {
         ("(! 0 :named foo)", terminal!(int 0)),
         ("(! (! 0 :named foo) :named bar)", terminal!(int 0)),
         (
+            "(! (! 0 :pattern ((+ 1 0) 3)) :named bar)",
+            terminal!(int 0),
+        ),
+        (
             "(ite (! true :named baz) 2 3)",
             Term::Op(
                 Operator::Ite,
@@ -425,7 +429,11 @@ fn test_annotated_terms() {
         ParserError(ErrorKind::UnexpectedToken(_), _),
     ));
     assert!(matches!(
-        parse_term_err("(! true :too_many_values 1 2 3)"),
+        parse_term_err("(! true :unknown)"),
+        ParserError(ErrorKind::UnknownAttribute(_), _),
+    ));
+    assert!(matches!(
+        parse_term_err("(! true :named 1 2 3)"),
         ParserError(ErrorKind::UnexpectedToken(_), _),
     ));
 }
