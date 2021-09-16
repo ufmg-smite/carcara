@@ -83,6 +83,7 @@ pub struct Parser<R> {
     lexer: Lexer<R>,
     current_token: Token,
     state: ParserState,
+    disable_sort_checking: bool,
 }
 
 impl<R: BufRead> Parser<R> {
@@ -104,7 +105,12 @@ impl<R: BufRead> Parser<R> {
     fn with_state(input: R, state: ParserState) -> ParserResult<Self> {
         let mut lexer = Lexer::new(input)?;
         let current_token = lexer.next_token()?;
-        Ok(Parser { lexer, current_token, state })
+        Ok(Parser {
+            lexer,
+            current_token,
+            state,
+            disable_sort_checking: false,
+        })
     }
 
     /// Advances the parser one token, and returns the previous `current_token`.
@@ -150,38 +156,38 @@ impl<R: BufRead> Parser<R> {
         Ok(Term::Terminal(Terminal::Var(iden, sort.clone())))
     }
 
-    /// Constructs and sort checks an operation term.
-    fn make_op(&mut self, op: Operator, args: Vec<Term>) -> Result<Term, ErrorKind> {
-        let sorts: Vec<_> = args.iter().map(Term::sort).collect();
+    /// Performs the sort checking for an operation term.
+    fn sort_check_op(&mut self, op: Operator, args: &[Rc<Term>]) -> Result<(), ErrorKind> {
+        let sorts: Vec<_> = args.iter().map(|t| t.sort()).collect();
         match op {
             Operator::Not => {
-                ErrorKind::assert_num_of_args(&args, 1)?;
+                ErrorKind::assert_num_of_args(args, 1)?;
                 SortError::assert_eq(Term::BOOL_SORT, sorts[0])?;
             }
             Operator::Implies => {
-                ErrorKind::assert_num_of_args_range(&args, 2..)?;
+                ErrorKind::assert_num_of_args_range(args, 2..)?;
                 for s in sorts {
                     SortError::assert_eq(Term::BOOL_SORT, s)?;
                 }
             }
             Operator::Or | Operator::And | Operator::Xor => {
                 // These operators can be called with only one argument
-                ErrorKind::assert_num_of_args_range(&args, 1..)?;
+                ErrorKind::assert_num_of_args_range(args, 1..)?;
                 for s in sorts {
                     SortError::assert_eq(Term::BOOL_SORT, s)?;
                 }
             }
             Operator::Equals | Operator::Distinct => {
-                ErrorKind::assert_num_of_args_range(&args, 2..)?;
+                ErrorKind::assert_num_of_args_range(args, 2..)?;
                 SortError::assert_all_eq(&sorts)?;
             }
             Operator::Ite => {
-                ErrorKind::assert_num_of_args(&args, 3)?;
+                ErrorKind::assert_num_of_args(args, 3)?;
                 SortError::assert_eq(Term::BOOL_SORT, sorts[0])?;
                 SortError::assert_eq(sorts[1], sorts[2])?;
             }
             Operator::Add | Operator::Mult | Operator::IntDiv | Operator::RealDiv => {
-                ErrorKind::assert_num_of_args_range(&args, 2..)?;
+                ErrorKind::assert_num_of_args_range(args, 2..)?;
 
                 // All the arguments must have the same sort, and it must be either Int or Real
                 SortError::assert_one_of(&[Term::INT_SORT, Term::REAL_SORT], sorts[0])?;
@@ -190,18 +196,18 @@ impl<R: BufRead> Parser<R> {
             Operator::Sub => {
                 // The "-" operator, in particular, can be called with only one argument, in which
                 // case it means negation instead of subtraction
-                ErrorKind::assert_num_of_args_range(&args, 1..)?;
+                ErrorKind::assert_num_of_args_range(args, 1..)?;
                 SortError::assert_one_of(&[Term::INT_SORT, Term::REAL_SORT], sorts[0])?;
                 SortError::assert_all_eq(&sorts)?;
             }
             Operator::LessThan | Operator::GreaterThan | Operator::LessEq | Operator::GreaterEq => {
-                ErrorKind::assert_num_of_args_range(&args, 2..)?;
+                ErrorKind::assert_num_of_args_range(args, 2..)?;
                 // All the arguments must be either Int or Real sorted, but they don't need to all
                 // have the same sort
                 SortError::assert_one_of(&[Term::INT_SORT, Term::REAL_SORT], sorts[0])?;
             }
             Operator::Select => {
-                ErrorKind::assert_num_of_args(&args, 2)?;
+                ErrorKind::assert_num_of_args(args, 2)?;
                 match sorts[0] {
                     Term::Sort(Sort::Array(_, _)) => (),
                     got => {
@@ -220,7 +226,7 @@ impl<R: BufRead> Parser<R> {
                 }
             }
             Operator::Store => {
-                ErrorKind::assert_num_of_args(&args, 3)?;
+                ErrorKind::assert_num_of_args(args, 3)?;
                 match sorts[0] {
                     Term::Sort(Sort::Array(x, y)) => {
                         SortError::assert_eq(x, sorts[1])?;
@@ -239,27 +245,37 @@ impl<R: BufRead> Parser<R> {
                 }
             }
         }
+        Ok(())
+    }
+
+    /// Constructs and sort checks an operation term.
+    fn make_op(&mut self, op: Operator, args: Vec<Term>) -> Result<Term, ErrorKind> {
         let args = self.add_all(args);
+        if !self.disable_sort_checking {
+            self.sort_check_op(op, &args)?;
+        }
         Ok(Term::Op(op, args))
     }
 
     /// Constructs and sort checks an application term.
     fn make_app(&mut self, function: Term, args: Vec<Term>) -> Result<Term, ErrorKind> {
-        let sorts = {
-            let function_sort = function.sort();
-            if let Term::Sort(Sort::Function(sorts)) = function_sort {
-                sorts
-            } else {
-                // Function does not have function sort
-                return Err(ErrorKind::SortError(SortError::Expected {
-                    expected: Term::Sort(Sort::Function(Vec::new())),
-                    got: function_sort.clone(),
-                }));
+        if !self.disable_sort_checking {
+            let sorts = {
+                let function_sort = function.sort();
+                if let Term::Sort(Sort::Function(sorts)) = function_sort {
+                    sorts
+                } else {
+                    // Function does not have function sort
+                    return Err(ErrorKind::SortError(SortError::Expected {
+                        expected: Term::Sort(Sort::Function(Vec::new())),
+                        got: function_sort.clone(),
+                    }));
+                }
+            };
+            ErrorKind::assert_num_of_args(&args, sorts.len() - 1)?;
+            for i in 0..args.len() {
+                SortError::assert_eq(sorts[i].as_ref(), args[i].sort())?;
             }
-        };
-        ErrorKind::assert_num_of_args(&args, sorts.len() - 1)?;
-        for i in 0..args.len() {
-            SortError::assert_eq(sorts[i].as_ref(), args[i].sort())?;
         }
         let function = self.add_term(function);
         let args = self.add_all(args);
@@ -347,7 +363,14 @@ impl<R: BufRead> Parser<R> {
                     continue;
                 }
                 Token::ReservedWord(Reserved::Assert) => {
-                    let term = self.parse_term()?;
+                    // In the original problem files, real constants that have integer values are
+                    // sometimes printed as integers. That is, "1" instead of "1.0". This means the
+                    // parser infers the wrong sort for these terms, which eventually leads to sort
+                    // errors. Since these terms are only used by the checker to see if the proof's
+                    // "assume"s match the problem's "assert"s, we don't need to check their sort
+                    // now -- if they really contain a sort error, it will be caught when parsing
+                    // the proof. So, when parsing these terms, we don't perform the sort checking.
+                    let term = self.parse_term_unchecked()?;
                     self.expect_token(Token::CloseParen)?;
                     premises.insert(self.add_term(term));
                 }
@@ -735,6 +758,14 @@ impl<R: BufRead> Parser<R> {
             Token::OpenParen => self.parse_application(),
             other => Err(self.unexpected_token(other)),
         }
+    }
+
+    /// Parses a term, without performing any sort checking.
+    fn parse_term_unchecked(&mut self) -> ParserResult<Term> {
+        self.disable_sort_checking = true;
+        let result = self.parse_term();
+        self.disable_sort_checking = false;
+        result
     }
 
     fn parse_quantifier(&mut self, quantifier: Quantifier) -> ParserResult<Term> {
