@@ -116,7 +116,34 @@ impl<'c> ProofChecker<'c> {
                     self.add_statistics_measurement(&step_index, "anchor*", time);
                     continue;
                 }
-                ProofCommand::Assume(_) => Ok(Correctness::True),
+                ProofCommand::Assume(t) => {
+                    // TODO: Make benchmark record time taken checking "assume" commands
+
+                    // Some subproofs contain "assume" commands inside them. These don't refer
+                    // to the original problem premises, so we ignore the "assume" command if
+                    // it is inside a subproof. Since the unit tests for the rules don't define the
+                    // original problem, but sometimes use "assume" commands, we also skip the
+                    // command if we are in a testing context.
+                    if self.config.allow_test_rule || commands_stack.len() > 1 {
+                        Ok(Correctness::True)
+                    } else {
+                        // Because of the way real numerical constants are printed in the original
+                        // problem premises, the sorts in the premises may be wrong. In order to
+                        // account for that, we have to use `DeepEq::eq_modulo_numerical_sorts` to
+                        // find the premise term that matches this "assume" term.
+                        let is_valid = proof.premises.contains(t)
+                            || proof
+                                .premises
+                                .iter()
+                                .any(|u| DeepEq::eq_modulo_numerical_sorts(t, u));
+                        if is_valid {
+                            Ok(Correctness::True)
+                        } else {
+                            // TODO: Store assume command index in `ProofCommand`
+                            Ok(Correctness::False(String::new(), "assume".into()))
+                        }
+                    }
+                }
             }?;
             if !correctness.as_bool() {
                 return Ok(correctness);
