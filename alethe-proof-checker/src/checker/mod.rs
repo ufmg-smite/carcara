@@ -127,15 +127,11 @@ impl<'c> ProofChecker<'c> {
                     let result = if self.config.allow_test_rule || commands_stack.len() > 1 {
                         Ok(Correctness::True)
                     } else {
-                        // Because of the way real numerical constants are printed in the original
-                        // problem premises, the sorts in the premises may be wrong. In order to
-                        // account for that, we have to use `DeepEq::eq_modulo_numerical_sorts` to
-                        // find the premise term that matches this "assume" term.
                         let is_valid = proof.premises.contains(term)
                             || proof
                                 .premises
                                 .iter()
-                                .any(|u| DeepEq::eq_modulo_numerical_sorts(term, u));
+                                .any(|u| DeepEq::eq_modulo_reordering(term, u));
                         if is_valid {
                             Ok(Correctness::True)
                         } else {

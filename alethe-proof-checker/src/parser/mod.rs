@@ -9,6 +9,7 @@ use ahash::{AHashMap, AHashSet};
 use error::*;
 use lexer::*;
 use num_bigint::BigInt;
+use num_rational::BigRational;
 use num_traits::ToPrimitive;
 use std::{hash::Hash, io::BufRead, str::FromStr};
 
@@ -83,7 +84,7 @@ pub struct Parser<R> {
     lexer: Lexer<R>,
     current_token: Token,
     state: ParserState,
-    disable_sort_checking: bool,
+    interpret_integers_as_reals: bool,
 }
 
 impl<R: BufRead> Parser<R> {
@@ -109,7 +110,7 @@ impl<R: BufRead> Parser<R> {
             lexer,
             current_token,
             state,
-            disable_sort_checking: false,
+            interpret_integers_as_reals: false,
         })
     }
 
@@ -251,31 +252,27 @@ impl<R: BufRead> Parser<R> {
     /// Constructs and sort checks an operation term.
     fn make_op(&mut self, op: Operator, args: Vec<Term>) -> Result<Term, ErrorKind> {
         let args = self.add_all(args);
-        if !self.disable_sort_checking {
-            self.sort_check_op(op, &args)?;
-        }
+        self.sort_check_op(op, &args)?;
         Ok(Term::Op(op, args))
     }
 
     /// Constructs and sort checks an application term.
     fn make_app(&mut self, function: Term, args: Vec<Term>) -> Result<Term, ErrorKind> {
-        if !self.disable_sort_checking {
-            let sorts = {
-                let function_sort = function.sort();
-                if let Term::Sort(Sort::Function(sorts)) = function_sort {
-                    sorts
-                } else {
-                    // Function does not have function sort
-                    return Err(ErrorKind::SortError(SortError::Expected {
-                        expected: Term::Sort(Sort::Function(Vec::new())),
-                        got: function_sort.clone(),
-                    }));
-                }
-            };
-            ErrorKind::assert_num_of_args(&args, sorts.len() - 1)?;
-            for i in 0..args.len() {
-                SortError::assert_eq(sorts[i].as_ref(), args[i].sort())?;
+        let sorts = {
+            let function_sort = function.sort();
+            if let Term::Sort(Sort::Function(sorts)) = function_sort {
+                sorts
+            } else {
+                // Function does not have function sort
+                return Err(ErrorKind::SortError(SortError::Expected {
+                    expected: Term::Sort(Sort::Function(Vec::new())),
+                    got: function_sort.clone(),
+                }));
             }
+        };
+        ErrorKind::assert_num_of_args(&args, sorts.len() - 1)?;
+        for i in 0..args.len() {
+            SortError::assert_eq(sorts[i].as_ref(), args[i].sort())?;
         }
         let function = self.add_term(function);
         let args = self.add_all(args);
@@ -363,20 +360,35 @@ impl<R: BufRead> Parser<R> {
                     continue;
                 }
                 Token::ReservedWord(Reserved::Assert) => {
-                    // In the original problem files, real constants that have integer values are
-                    // sometimes printed as integers. That is, "1" instead of "1.0". This means the
-                    // parser infers the wrong sort for these terms, which eventually leads to sort
-                    // errors. Since these terms are only used by the checker to see if the proof's
-                    // "assume"s match the problem's "assert"s, we don't need to check their sort
-                    // now -- if they really contain a sort error, it will be caught when parsing
-                    // the proof. So, when parsing these terms, we don't perform the sort checking.
-                    let term = self.parse_term_unchecked()?;
+                    let term = self.parse_term()?;
                     self.expect_token(Token::CloseParen)?;
                     premises.insert(self.add_term(term));
                 }
+                Token::Symbol(s) if s == "set-logic" => {
+                    let logic = self.expect_symbol()?;
+
+                    // When the problem's logic contains real numbers but not integers, integer
+                    // literals should be parsed as reals. For instance, "1" should be interpreted
+                    // as "1.0".
+                    self.interpret_integers_as_reals = match logic.as_str() {
+                        "LRA" | "QF_LRA" | "QF_NRA" | "QF_RDL" | "QF_UFLRA" | "QF_UFNRA"
+                        | "UFLRA" => true,
+
+                        "AUFLIA" | "AUFLIRA" | "AUFNIRA" | "LIA" | "QF_ABV" | "QF_AUFBV"
+                        | "QF_AUFLIA" | "QF_AX" | "QF_BV" | "QF_IDL" | "QF_LIA" | "QF_NIA"
+                        | "QF_UF" | "QF_UFBV" | "QF_UFIDL" | "QF_UFLIA" | "UFNIA" => false,
+
+                        other => {
+                            log::warn!("unknown logic: {}", other);
+                            false
+                        }
+                    };
+
+                    self.expect_token(Token::CloseParen)?;
+                }
                 _ => {
-                    // If the command is not a declaration or definition, we just ignore it. We do
-                    // that by reading tokens until the command parenthesis is closed
+                    // If the command is not one of the commands we care about, we just ignore it.
+                    // We do that by reading tokens until the command parenthesis is closed
                     let mut parens_depth = 1;
                     while parens_depth > 0 {
                         parens_depth += match self.next_token()? {
@@ -740,6 +752,9 @@ impl<R: BufRead> Parser<R> {
     /// Parses a term.
     pub fn parse_term(&mut self) -> ParserResult<Term> {
         match self.next_token()? {
+            Token::Numeral(n) if self.interpret_integers_as_reals => {
+                Ok(terminal!(real BigRational::from_integer(n)))
+            }
             Token::Numeral(n) => Ok(terminal!(int n)),
             Token::Decimal(r) => Ok(terminal!(real r)),
             Token::String(s) => Ok(terminal!(string s)),
@@ -761,14 +776,6 @@ impl<R: BufRead> Parser<R> {
             Token::OpenParen => self.parse_application(),
             other => Err(self.unexpected_token(other)),
         }
-    }
-
-    /// Parses a term, without performing any sort checking.
-    fn parse_term_unchecked(&mut self) -> ParserResult<Term> {
-        self.disable_sort_checking = true;
-        let result = self.parse_term();
-        self.disable_sort_checking = false;
-        result
     }
 
     fn parse_quantifier(&mut self, quantifier: Quantifier) -> ParserResult<Term> {
