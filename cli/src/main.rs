@@ -8,6 +8,7 @@ use alethe_proof_checker::{
     checker::{Correctness, ProofChecker},
     parser::{error::ParserResult, lexer, parse_instance},
 };
+use ansi_term::Color;
 use clap::{App, AppSettings, Arg, ArgGroup, ArgMatches, SubCommand};
 use error::CliError;
 use path_args::{get_instances_from_paths, infer_problem_path};
@@ -238,7 +239,7 @@ fn progress_report_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         report_by_rules(&files, quiet)?;
     } else if matches.is_present("by-files-and-rules") {
         for file in files {
-            println!("\x1b[0;0m{}:", file);
+            println!("{}:", file);
             report_by_rules(&[file], quiet)?;
             println!();
         }
@@ -271,12 +272,15 @@ fn get_used_rules(file_path: &str) -> ParserResult<Vec<String>> {
 }
 
 fn print_report_entry(s: &str, success: bool, quiet: bool) {
-    print!("{}", if success { "\x1b[1;32m" } else { "\x1b[0;31m" });
+    let style = match success {
+        true => Color::Green.bold(),
+        false => Color::Red.normal(),
+    };
     if quiet {
-        print!(".");
+        print!("{}", style.paint("."));
         std::io::stdout().flush().unwrap();
     } else {
-        println!("{}", s);
+        println!("{}", style.paint(s));
     }
 }
 
@@ -293,7 +297,7 @@ fn report_by_files(files: &[&str], quiet: bool) -> ParserResult<()> {
         println!();
     }
     println!(
-        "\x1b[0;0m{} / {} files with all rules implemented",
+        "{} / {} files with all rules implemented",
         implemented,
         files.len()
     );
@@ -319,10 +323,6 @@ fn report_by_rules(files: &[&str], quiet: bool) -> ParserResult<()> {
     if quiet {
         println!();
     }
-    println!(
-        "\x1b[0;0m{} / {} rules implemented",
-        implemented,
-        seen.len()
-    );
+    println!("{} / {} rules implemented", implemented, seen.len());
     Ok(())
 }

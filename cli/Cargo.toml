@@ -14,3 +14,4 @@ alethe-proof-checker = { path = "../alethe-proof-checker" }
 ahash = "0.7.4"
 clap = "2.33.3"
 log = { version = "0.4.14", features = ["std"] }
+ansi_term = "0.11"

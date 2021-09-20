@@ -32,6 +32,7 @@ version = "0.1.0"
 dependencies = [
  "ahash",
  "alethe-proof-checker",
+ "ansi_term",
  "clap",
  "log",
 ]
