@@ -88,7 +88,7 @@ impl TermPool {
         Self::add_term_to_map(&mut self.terms, term)
     }
 
-    // Takes a vector of terms and calls `add_term` on each.
+    /// Takes a vector of terms and calls `add_term` on each.
     pub fn add_all(&mut self, terms: Vec<Term>) -> Vec<Rc<Term>> {
         terms.into_iter().map(|t| self.add_term(t)).collect()
     }
