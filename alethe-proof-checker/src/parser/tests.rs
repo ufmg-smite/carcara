@@ -8,6 +8,8 @@ pub fn parse_term(input: &str) -> Term {
     Parser::new(input.as_bytes())
         .and_then(|mut p| p.parse_term())
         .expect(ERROR_MESSAGE)
+        .as_ref()
+        .clone()
 }
 
 pub fn parse_term_err(input: &str) -> ParserError {
@@ -24,7 +26,11 @@ pub fn parse_term_with_definitions(definitions: &str, term: &str) -> Term {
     // To keep the definitions and delcarations, we transfer the parser state to the new
     // parser.
     let mut new_parser = Parser::with_state(term.as_bytes(), parser.state).expect(ERROR_MESSAGE);
-    new_parser.parse_term().expect(ERROR_MESSAGE)
+    new_parser
+        .parse_term()
+        .expect(ERROR_MESSAGE)
+        .as_ref()
+        .clone()
 }
 
 pub fn parse_proof(input: &str) -> Proof {
@@ -60,14 +66,14 @@ fn test_hash_consing() {
     let mut parser = Parser::new(input.as_bytes()).unwrap();
     parser.parse_term().unwrap();
 
-    // We expect this input to result in 6 unique terms after parsing:
+    // We expect this input to result in 7 unique terms after parsing:
     //   1
     //   2
     //   (+ 1 2)
     //   (/ (+ 1 2) (+ 1 2))
     //   (- (+ 1 2) (/ ...))
     //   (* 2 2)
-    // Note that the outer term (- (- ...) (* 2 2)) is not added to the hash map
+    //   (- (- ...) (* 2 2))
     let expected = vec![
         // The "Bool" sort and the boolean constants "true" and "false" are always added to the
         // terms map
@@ -80,6 +86,7 @@ fn test_hash_consing() {
         "(/ (+ 1 2) (+ 1 2))",
         "(- (+ 1 2) (/ (+ 1 2) (+ 1 2)))",
         "(* 2 2)",
+        "(- (- (+ 1 2) (/ (+ 1 2) (+ 1 2))) (* 2 2))",
     ]
     .into_iter()
     .collect::<AHashSet<&str>>();
