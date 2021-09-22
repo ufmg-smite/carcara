@@ -361,6 +361,22 @@ pub fn qnt_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     to_option((inner.is_bool_false() || inner.is_bool_true()) && right == inner)
 }
 
+pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    rassert!(conclusion.len() == 1);
+    let (left, right) = match_term!((= l r) = conclusion[0], RETURN_RCS)?;
+    let (t_1, t_2) = match_term!((div n d) = left, RETURN_RCS)
+        .or_else(|| match_term!((/ n d) = left, RETURN_RCS))?;
+
+    if t_1 == t_2 {
+        to_option(right.as_signed_number()?.is_one())
+    } else if t_2.as_number().map_or(false, |n| n.is_one()) {
+        to_option(right == t_1)
+    } else {
+        let result = t_1.as_signed_number()? / t_2.as_signed_number()?;
+        to_option(right.as_fraction()? == result)
+    }
+}
+
 /// Used for both the "sum_simplify" and "prod_simplify" rules, depending on `rule_kind`.
 /// `rule_kind` has to be either `Operator::Add` or `Operator::Mult`.
 fn generic_sum_prod_simplify_rule(ts: &Rc<Term>, u: &Rc<Term>, rule_kind: Operator) -> Option<()> {

@@ -334,6 +334,7 @@ impl<'c> ProofChecker<'c> {
             "equiv_simplify" => simplification::equiv_simplify,
             "bool_simplify" => simplification::bool_simplify,
             "qnt_simplify" => simplification::qnt_simplify,
+            "div_simplify" => simplification::div_simplify,
             "prod_simplify" => simplification::prod_simplify,
             "minus_simplify" => simplification::minus_simplify,
             "sum_simplify" => simplification::sum_simplify,
