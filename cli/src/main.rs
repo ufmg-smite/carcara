@@ -92,8 +92,8 @@ fn app() -> App<'static, 'static> {
             )
             .arg(
                 Arg::with_name("quiet")
-                    .short("-q")
-                    .long("--quiet")
+                    .short("q")
+                    .long("quiet")
                     .help("Print only one character per file/rule"),
             )
             .arg(Arg::with_name("files").multiple(true).help(
@@ -105,6 +105,13 @@ fn app() -> App<'static, 'static> {
         .version("0.1.0")
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .subcommands(subcommands)
+        .arg(
+            Arg::with_name("log-level")
+                .long("log")
+                .possible_values(&["off", "error", "warn", "info"])
+                .default_value("warn")
+                .help("Sets the maximum logging level"),
+        )
 }
 
 fn run_app(matches: &ArgMatches) -> Result<(), CliError> {
@@ -124,8 +131,17 @@ fn run_app(matches: &ArgMatches) -> Result<(), CliError> {
 }
 
 fn main() {
+    use log::LevelFilter;
+
     let matches = app().get_matches();
-    logger::init();
+    let level = match matches.value_of("log-level") {
+        Some("off") => LevelFilter::Off,
+        Some("error") => LevelFilter::Error,
+        Some("warn") => LevelFilter::Warn,
+        Some("info") => LevelFilter::Info,
+        _ => unreachable!(),
+    };
+    logger::init(level);
     if let Err(e) = run_app(&matches) {
         log::error!("{:?}", e);
         std::process::exit(1);

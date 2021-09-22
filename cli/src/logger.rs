@@ -28,7 +28,7 @@ impl Log for Logger {
     fn flush(&self) {}
 }
 
-pub fn init() {
+pub fn init(max_level: LevelFilter) {
     log::set_boxed_logger(Box::new(Logger {})).expect("couldn't set up logger");
-    log::set_max_level(LevelFilter::Info);
+    log::set_max_level(max_level);
 }
