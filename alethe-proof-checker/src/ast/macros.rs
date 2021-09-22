@@ -109,8 +109,8 @@ macro_rules! terminal {
     (var $e:expr ; $sort:expr) => {
         Term::Terminal(Terminal::Var(Identifier::Simple($e.into()), $sort))
     };
-    (bool true) => { terminal!(var "true"; BOOL_SORT) };
-    (bool false) => { terminal!(var "false"; BOOL_SORT) };
+    (bool true) => { terminal!(var "true"; Rc::new(Term::Sort(Sort::Bool))) };
+    (bool false) => { terminal!(var "false"; Rc::new(Term::Sort(Sort::Bool))) };
 }
 
 /// Implements `FromStr` and `Debug` for an enum, given a string representation for each variant.
@@ -219,12 +219,12 @@ mod tests {
             pool.add_term(terminal!(int 3)),
         );
         let (a, b) = (
-            pool.add_term(terminal!(var "a"; INT_SORT)),
-            pool.add_term(terminal!(var "b"; INT_SORT)),
+            pool.add_term(terminal!(var "a"; Rc::new(Term::Sort(Sort::Int)))),
+            pool.add_term(terminal!(var "b"; Rc::new(Term::Sort(Sort::Int)))),
         );
         let (p, q) = (
-            pool.add_term(terminal!(var "p"; BOOL_SORT)),
-            pool.add_term(terminal!(var "q"; BOOL_SORT)),
+            pool.add_term(terminal!(var "p"; Rc::new(Term::Sort(Sort::Bool)))),
+            pool.add_term(terminal!(var "q"; Rc::new(Term::Sort(Sort::Bool)))),
         );
         let (r#true, r#false) = (pool.bool_true(), pool.bool_false());
 

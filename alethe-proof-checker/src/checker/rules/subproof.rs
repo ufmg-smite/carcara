@@ -120,7 +120,7 @@ pub fn r#let(
 
     let mut premises = premises.iter();
     for (x, t) in let_bindings {
-        let x_term = terminal!(var x; pool.add_term(t.sort().clone()));
+        let x_term = terminal!(var x; pool.add_term(Term::Sort(t.sort().clone())));
         let s = substitutions.get(&pool.add_term(x_term))?;
         if s != t {
             let premise = premises.next()?;

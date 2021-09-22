@@ -35,7 +35,7 @@ impl Default for TermPool {
 impl TermPool {
     pub fn new() -> Self {
         let mut terms = AHashMap::new();
-        let bool_sort = Self::add_term_to_map(&mut terms, Term::BOOL_SORT.clone());
+        let bool_sort = Self::add_term_to_map(&mut terms, Term::Sort(Sort::Bool));
         let bool_true = Self::add_term_to_map(
             &mut terms,
             Term::Terminal(Terminal::Var(
@@ -378,28 +378,16 @@ impl From<SortedVar> for Term {
 }
 
 impl Term {
-    /// The "Bool" built-in sort.
-    pub const BOOL_SORT: &'static Term = &Term::Sort(Sort::Bool);
-
-    /// The "Int" built-in sort.
-    pub const INT_SORT: &'static Term = &Term::Sort(Sort::Int);
-
-    /// The "Real" built-in sort.
-    pub const REAL_SORT: &'static Term = &Term::Sort(Sort::Real);
-
-    /// The "String" built-in sort.
-    pub const STRING_SORT: &'static Term = &Term::Sort(Sort::String);
-
     /// Returns the sort of this term. For operations and application terms, this method assumes that
     /// the arguments' sorts have already been checked, and are correct. If `self` is a sort, this
     /// method does nothing and returns `self`.
-    pub fn sort(&self) -> &Term {
+    pub fn sort(&self) -> &Sort {
         match self {
             Term::Terminal(t) => match t {
-                Terminal::Integer(_) => Term::INT_SORT,
-                Terminal::Real(_) => Term::REAL_SORT,
-                Terminal::String(_) => Term::STRING_SORT,
-                Terminal::Var(_, sort) => sort.as_ref(),
+                Terminal::Integer(_) => &Sort::Int,
+                Terminal::Real(_) => &Sort::Real,
+                Terminal::String(_) => &Sort::String,
+                Terminal::Var(_, sort) => sort.as_sort().unwrap(),
             },
             Term::Op(op, args) => match op {
                 Operator::Not
@@ -412,7 +400,7 @@ impl Term {
                 | Operator::LessThan
                 | Operator::GreaterThan
                 | Operator::LessEq
-                | Operator::GreaterEq => Term::BOOL_SORT,
+                | Operator::GreaterEq => &Sort::Bool,
                 Operator::Ite => args[1].sort(),
                 Operator::Add
                 | Operator::Sub
@@ -420,22 +408,21 @@ impl Term {
                 | Operator::IntDiv
                 | Operator::RealDiv => args[0].sort(),
                 Operator::Select => match args[0].sort() {
-                    Term::Sort(Sort::Array(_, y)) => y,
+                    Sort::Array(_, y) => y.as_sort().unwrap(),
                     _ => unreachable!(),
                 },
                 Operator::Store => args[0].sort(),
             },
             Term::App(f, _) => {
                 let function_sort = f.sort();
-                if let Term::Sort(Sort::Function(sorts)) = function_sort {
-                    sorts.last().unwrap()
-                } else {
-                    unreachable!() // We assume that the function is correctly sorted
+                match function_sort {
+                    Sort::Function(sorts) => sorts.last().unwrap().as_sort().unwrap(),
+                    _ => unreachable!(), // We assume that the function is correctly sorted
                 }
             }
-            sort @ Term::Sort(_) => sort,
-            Term::Quant(_, _, _) => Term::BOOL_SORT,
-            Term::Choice((_, sort), _) => sort,
+            Term::Sort(sort) => sort,
+            Term::Quant(_, _, _) => &Sort::Bool,
+            Term::Choice((_, sort), _) => sort.as_sort().unwrap(),
             Term::Let(_, inner) => inner.sort(),
         }
     }
@@ -539,6 +526,13 @@ impl Term {
         }
     }
 
+    pub fn as_sort(&self) -> Option<&Sort> {
+        match self {
+            Term::Sort(s) => Some(s),
+            _ => None,
+        }
+    }
+
     /// Tries to unwrap a quantifier term, returning the `Quantifier`, the bindings and the inner
     /// term. Returns `None` if term is not a quantifier term.
     pub fn unwrap_quant(&self) -> Option<(Quantifier, &Vec<SortedVar>, &Rc<Term>)> {
@@ -550,12 +544,12 @@ impl Term {
 
     /// Returns `true` if the term is the boolean constant "true".
     pub fn is_bool_true(&self) -> bool {
-        self.sort() == Term::BOOL_SORT && self.as_var() == Some("true")
+        *self.sort() == Sort::Bool && self.as_var() == Some("true")
     }
 
     /// Returns `true` if the term is the boolean constant "false".
     pub fn is_bool_false(&self) -> bool {
-        self.sort() == Term::BOOL_SORT && self.as_var() == Some("false")
+        *self.sort() == Sort::Bool && self.as_var() == Some("false")
     }
 }
 

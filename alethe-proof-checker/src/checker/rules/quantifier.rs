@@ -21,7 +21,7 @@ pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> Option<
                 ProofArg::Assign(name, value) => (name, value),
                 ProofArg::Term(_) => return None,
             };
-            let arg_sort = pool.add_term(arg_value.sort().clone());
+            let arg_sort = pool.add_term(Term::Sort(arg_value.sort().clone()));
             rassert!(bindings.remove(&(arg_name.clone(), arg_sort.clone())));
 
             let ident_term = (arg_name.clone(), arg_sort).into();
@@ -116,7 +116,7 @@ fn negation_normal_form(pool: &mut TermPool, term: &Rc<Term>, polarity: bool) ->
         pool.add_term(Term::Quant(quant, bindings.clone(), inner))
     } else {
         if let Some((p, q)) = match_term!((= p q) = term, RETURN_RCS) {
-            if p.sort() == Term::BOOL_SORT {
+            if *p.sort() == Sort::Bool {
                 let a = negation_normal_form(pool, p, !polarity);
                 let b = negation_normal_form(pool, q, polarity);
                 let c = negation_normal_form(pool, q, !polarity);

@@ -1,5 +1,5 @@
 use super::lexer::{Position, Token};
-use crate::ast::{Identifier, Term};
+use crate::ast::{Identifier, Sort};
 use num_bigint::BigInt;
 use std::io;
 use std::ops::RangeFrom;
@@ -93,13 +93,13 @@ impl PartialEq for ParserIoError {
 
 #[derive(Debug, PartialEq)]
 pub enum SortError {
-    Expected { expected: Term, got: Term },
-    ExpectedOneOf { possibilities: Vec<Term>, got: Term },
+    Expected { expected: Sort, got: Sort },
+    ExpectedOneOf { possibilities: Vec<Sort>, got: Sort },
 }
 
 impl SortError {
     /// Returns an `Expected` sort error if `got` does not equal `expected`.
-    pub fn assert_eq(expected: &Term, got: &Term) -> Result<(), Self> {
+    pub fn assert_eq(expected: &Sort, got: &Sort) -> Result<(), Self> {
         if expected == got {
             Ok(())
         } else {
@@ -112,7 +112,7 @@ impl SortError {
 
     /// Makes sure all terms in `sequence` are equal to each other, otherwise returns an `Expected`
     /// error.
-    pub fn assert_all_eq(sequence: &[&Term]) -> Result<(), Self> {
+    pub fn assert_all_eq(sequence: &[&Sort]) -> Result<(), Self> {
         for i in 1..sequence.len() {
             Self::assert_eq(sequence[i - 1], sequence[i])?;
         }
@@ -120,11 +120,11 @@ impl SortError {
     }
 
     /// Returns an `ExpectedOneOf` sort error if `got` is not in `possibilities`.
-    pub fn assert_one_of(possibilities: &[&Term], got: &Term) -> Result<(), Self> {
-        match possibilities.iter().find(|&&s| s == got) {
+    pub fn assert_one_of(possibilities: &[Sort], got: &Sort) -> Result<(), Self> {
+        match possibilities.iter().find(|&s| s == got) {
             Some(_) => Ok(()),
             None => Err(Self::ExpectedOneOf {
-                possibilities: possibilities.iter().map(|t| (*t).clone()).collect(),
+                possibilities: possibilities.to_vec(),
                 got: got.clone(),
             }),
         }

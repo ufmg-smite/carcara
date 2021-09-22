@@ -204,7 +204,7 @@ impl<'c> ProofChecker<'c> {
         // we use the current state of the hash map to transform "(f y)" into "(f z)". The
         // resulting hash map will then contain "(:= y z)" and "(:= x (f z))"
         for (var, value) in assignment_args.iter() {
-            let var_term = terminal!(var var; self.pool.add_term(value.sort().clone()));
+            let var_term = terminal!(var var; self.pool.add_term(Term::Sort(value.sort().clone())));
             let var_term = self.pool.add_term(var_term);
             substitutions.insert(var_term.clone(), value.clone());
 

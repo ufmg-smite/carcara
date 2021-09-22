@@ -92,11 +92,10 @@ impl<R: BufRead> Parser<R> {
     /// there is an IO or lexer error on the first token.
     pub fn new(input: R) -> ParserResult<Self> {
         let mut state = ParserState::default();
-        let builtins = vec![("true", Term::BOOL_SORT), ("false", Term::BOOL_SORT)];
-        for (iden, sort) in builtins {
-            let iden = Identifier::Simple(iden.into());
-            let sort = state.term_pool.add_term(sort.clone());
-            state.sorts_symbol_table.insert(iden, sort);
+        let bool_sort = state.term_pool.add_term(Term::Sort(Sort::Bool));
+        for iden in ["true", "false"] {
+            let iden = Identifier::Simple(iden.to_string());
+            state.sorts_symbol_table.insert(iden, bool_sort.clone());
         }
         Parser::with_state(input, state)
     }
@@ -164,19 +163,19 @@ impl<R: BufRead> Parser<R> {
         match op {
             Operator::Not => {
                 ErrorKind::assert_num_of_args(&args, 1)?;
-                SortError::assert_eq(Term::BOOL_SORT, sorts[0])?;
+                SortError::assert_eq(&Sort::Bool, sorts[0])?;
             }
             Operator::Implies => {
                 ErrorKind::assert_num_of_args_range(&args, 2..)?;
                 for s in sorts {
-                    SortError::assert_eq(Term::BOOL_SORT, s)?;
+                    SortError::assert_eq(&Sort::Bool, s)?;
                 }
             }
             Operator::Or | Operator::And | Operator::Xor => {
                 // These operators can be called with only one argument
                 ErrorKind::assert_num_of_args_range(&args, 1..)?;
                 for s in sorts {
-                    SortError::assert_eq(Term::BOOL_SORT, s)?;
+                    SortError::assert_eq(&Sort::Bool, s)?;
                 }
             }
             Operator::Equals | Operator::Distinct => {
@@ -185,42 +184,42 @@ impl<R: BufRead> Parser<R> {
             }
             Operator::Ite => {
                 ErrorKind::assert_num_of_args(&args, 3)?;
-                SortError::assert_eq(Term::BOOL_SORT, sorts[0])?;
+                SortError::assert_eq(&Sort::Bool, sorts[0])?;
                 SortError::assert_eq(sorts[1], sorts[2])?;
             }
             Operator::Add | Operator::Mult | Operator::IntDiv | Operator::RealDiv => {
                 ErrorKind::assert_num_of_args_range(&args, 2..)?;
 
                 // All the arguments must have the same sort, and it must be either Int or Real
-                SortError::assert_one_of(&[Term::INT_SORT, Term::REAL_SORT], sorts[0])?;
+                SortError::assert_one_of(&[Sort::Int, Sort::Real], sorts[0])?;
                 SortError::assert_all_eq(&sorts)?;
             }
             Operator::Sub => {
                 // The "-" operator, in particular, can be called with only one argument, in which
                 // case it means negation instead of subtraction
                 ErrorKind::assert_num_of_args_range(&args, 1..)?;
-                SortError::assert_one_of(&[Term::INT_SORT, Term::REAL_SORT], sorts[0])?;
+                SortError::assert_one_of(&[Sort::Int, Sort::Real], sorts[0])?;
                 SortError::assert_all_eq(&sorts)?;
             }
             Operator::LessThan | Operator::GreaterThan | Operator::LessEq | Operator::GreaterEq => {
                 ErrorKind::assert_num_of_args_range(&args, 2..)?;
                 // All the arguments must be either Int or Real sorted, but they don't need to all
                 // have the same sort
-                SortError::assert_one_of(&[Term::INT_SORT, Term::REAL_SORT], sorts[0])?;
+                SortError::assert_one_of(&[Sort::Int, Sort::Real], sorts[0])?;
             }
             Operator::Select => {
                 ErrorKind::assert_num_of_args(&args, 2)?;
                 match sorts[0] {
-                    Term::Sort(Sort::Array(_, _)) => (),
+                    Sort::Array(_, _) => (),
                     got => {
                         // Instead of creating some special case for sort errors with parametric
                         // sorts, we just create a sort "Y" to represent the sort parameter. We
                         // infer the "X" sort from the second operator argument. This may be
                         // changed later
-                        let x = self.add_term(sorts[1].clone());
+                        let x = self.add_term(Term::Sort(sorts[1].clone()));
                         let y = self.add_term(Term::Sort(Sort::Atom("Y".to_string(), Vec::new())));
                         return Err(SortError::Expected {
-                            expected: Term::Sort(Sort::Array(x, y)),
+                            expected: Sort::Array(x, y),
                             got: got.clone(),
                         }
                         .into());
@@ -230,16 +229,16 @@ impl<R: BufRead> Parser<R> {
             Operator::Store => {
                 ErrorKind::assert_num_of_args(&args, 3)?;
                 match sorts[0] {
-                    Term::Sort(Sort::Array(x, y)) => {
-                        SortError::assert_eq(x, sorts[1])?;
-                        SortError::assert_eq(y, sorts[2])?;
+                    Sort::Array(x, y) => {
+                        SortError::assert_eq(x.as_sort().unwrap(), sorts[1])?;
+                        SortError::assert_eq(y.as_sort().unwrap(), sorts[2])?;
                     }
                     got => {
                         return Err(SortError::Expected {
-                            expected: Term::Sort(Sort::Array(
-                                self.add_term(sorts[0].clone()),
-                                self.add_term(sorts[1].clone()),
-                            )),
+                            expected: Sort::Array(
+                                self.add_term(Term::Sort(sorts[0].clone())),
+                                self.add_term(Term::Sort(sorts[1].clone())),
+                            ),
                             got: got.clone(),
                         }
                         .into());
@@ -254,19 +253,19 @@ impl<R: BufRead> Parser<R> {
     fn make_app(&mut self, function: Rc<Term>, args: Vec<Rc<Term>>) -> Result<Rc<Term>, ErrorKind> {
         let sorts = {
             let function_sort = function.sort();
-            if let Term::Sort(Sort::Function(sorts)) = function_sort {
+            if let Sort::Function(sorts) = function_sort {
                 sorts
             } else {
                 // Function does not have function sort
                 return Err(ErrorKind::SortError(SortError::Expected {
-                    expected: Term::Sort(Sort::Function(Vec::new())),
+                    expected: Sort::Function(Vec::new()),
                     got: function_sort.clone(),
                 }));
             }
         };
         ErrorKind::assert_num_of_args(&args, sorts.len() - 1)?;
         for i in 0..args.len() {
-            SortError::assert_eq(sorts[i].as_ref(), args[i].sort())?;
+            SortError::assert_eq(sorts[i].as_sort().unwrap(), args[i].sort())?;
         }
         Ok(self.add_term(Term::App(function, args)))
     }
@@ -514,7 +513,7 @@ impl<R: BufRead> Parser<R> {
     fn parse_assume_command(&mut self) -> ParserResult<(String, Rc<Term>)> {
         let index = self.expect_symbol()?;
         let term = self.parse_term()?;
-        SortError::assert_eq(Term::BOOL_SORT, term.sort()).map_err(|err| self.err(err.into()))?;
+        SortError::assert_eq(&Sort::Bool, term.sort()).map_err(|err| self.err(err.into()))?;
         self.expect_token(Token::CloseParen)?;
         Ok((index, term))
     }
@@ -614,7 +613,7 @@ impl<R: BufRead> Parser<R> {
                 }
                 _ => {
                     let term = self.parse_term()?;
-                    SortError::assert_eq(term.sort(), sort.as_ref())
+                    SortError::assert_eq(term.sort(), sort.as_sort().unwrap())
                         .map_err(|err| self.err(err.into()))?;
                     term
                 }
@@ -682,7 +681,8 @@ impl<R: BufRead> Parser<R> {
 
         self.expect_token(Token::CloseParen)?;
 
-        SortError::assert_eq(&return_sort, body.sort()).map_err(|err| self.err(err.into()))?;
+        SortError::assert_eq(return_sort.as_sort().unwrap(), body.sort())
+            .map_err(|err| self.err(err.into()))?;
         Ok((name, FunctionDef { params, body }))
     }
 
@@ -694,7 +694,7 @@ impl<R: BufRead> Parser<R> {
             .parse_sequence(Self::parse_term, false)?
             .into_iter()
             .map(|term| -> ParserResult<Rc<Term>> {
-                SortError::assert_eq(Term::BOOL_SORT, term.sort())
+                SortError::assert_eq(&Sort::Bool, term.sort())
                     .map_err(|err| self.err(err.into()))?;
                 Ok(term)
             })
@@ -782,7 +782,7 @@ impl<R: BufRead> Parser<R> {
             true,
         )?;
         let term = self.parse_term()?;
-        SortError::assert_eq(Term::BOOL_SORT, term.sort()).map_err(|e| self.err(e.into()))?;
+        SortError::assert_eq(&Sort::Bool, term.sort()).map_err(|e| self.err(e.into()))?;
         self.state.sorts_symbol_table.pop_scope();
         self.expect_token(Token::CloseParen)?;
         Ok(self.add_term(Term::Quant(quantifier, bindings, term)))
@@ -806,7 +806,7 @@ impl<R: BufRead> Parser<R> {
                 p.expect_token(Token::OpenParen)?;
                 let name = p.expect_symbol()?;
                 let value = p.parse_term()?;
-                let sort = p.add_term(value.sort().clone());
+                let sort = p.add_term(Term::Sort(value.sort().clone()));
                 p.insert_sorted_var((name.clone(), sort));
                 p.expect_token(Token::CloseParen)?;
                 Ok((name, value))
@@ -887,7 +887,7 @@ impl<R: BufRead> Parser<R> {
                 ErrorKind::assert_num_of_args(&args, func.params.len())
                     .map_err(|err| self.err(err))?;
                 for (arg, param) in args.iter().zip(func.params.iter()) {
-                    SortError::assert_eq(param.1.as_ref(), arg.sort())
+                    SortError::assert_eq(param.1.as_sort().unwrap(), arg.sort())
                         .map_err(|err| self.err(err.into()))?;
                 }
 

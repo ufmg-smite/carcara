@@ -13,7 +13,7 @@ pub fn distinct_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
             to_option(got == (a, b) || got == (b, a))
         }
         args => {
-            if args[0].sort() == Term::BOOL_SORT {
+            if *args[0].sort() == Sort::Bool {
                 // If there are more than two boolean arguments to the distinct operator, the
                 // second term must be "false"
                 return to_option(second_term.is_bool_false());
@@ -185,7 +185,7 @@ fn apply_bfun_elim(pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
         acc: &mut Vec<Rc<Term>>,
     ) {
         let var = match bindigns {
-            [.., var] if var.1.as_ref() == Term::BOOL_SORT => pool.add_term(var.clone().into()),
+            [.., var] if var.1.as_sort() == Some(&Sort::Bool) => pool.add_term(var.clone().into()),
             [rest @ .., _] => return first_step(pool, rest, term, acc),
             [] => {
                 acc.push(term.clone());
@@ -205,7 +205,7 @@ fn apply_bfun_elim(pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
     fn second_step(pool: &mut TermPool, term: &Rc<Term>, processed: usize) -> Rc<Term> {
         if let Term::App(f, args) = term.as_ref() {
             for i in processed..args.len() {
-                if args[i].sort() == Term::BOOL_SORT
+                if *args[i].sort() == Sort::Bool
                     && !args[i].is_bool_false()
                     && !args[i].is_bool_true()
                 {
@@ -255,7 +255,7 @@ fn apply_bfun_elim(pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
             let new_bindings: Vec<_> = bindings
                 .iter()
                 .cloned()
-                .filter(|(_, sort)| sort.as_ref() != Term::BOOL_SORT)
+                .filter(|(_, sort)| *sort.as_sort().unwrap() != Sort::Bool)
                 .collect();
             if new_bindings.is_empty() {
                 op_term

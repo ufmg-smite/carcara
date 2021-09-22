@@ -245,10 +245,7 @@ fn test_logic_ops() {
     assert!(matches!(
         parse_term_err("(or true 1.2)"),
         ParserError(
-            ErrorKind::SortError(SortError::Expected {
-                expected: Term::Sort(Sort::Bool),
-                ..
-            }),
+            ErrorKind::SortError(SortError::Expected { expected: Sort::Bool, .. }),
             _
         ),
     ));
@@ -315,10 +312,7 @@ fn test_ite() {
     assert!(matches!(
         parse_term_err("(ite 0 1 2)"),
         ParserError(
-            ErrorKind::SortError(SortError::Expected {
-                expected: Term::Sort(Sort::Bool),
-                ..
-            }),
+            ErrorKind::SortError(SortError::Expected { expected: Sort::Bool, .. }),
             _
         ),
     ));
@@ -335,8 +329,8 @@ fn test_quantifiers() {
             "(exists ((p Bool)) p)",
             Term::Quant(
                 Quantifier::Exists,
-                vec![("p".into(), Term::BOOL_SORT.clone().into())],
-                Rc::new(terminal!(var "p"; BOOL_SORT)),
+                vec![("p".into(), Term::Sort(Sort::Bool).into())],
+                Rc::new(terminal!(var "p"; Rc::new(Term::Sort(Sort::Bool)))),
             ),
         ),
         (
@@ -344,8 +338,8 @@ fn test_quantifiers() {
             Term::Quant(
                 Quantifier::Forall,
                 vec![
-                    ("x".into(), Term::REAL_SORT.clone().into()),
-                    ("y".into(), Term::REAL_SORT.clone().into()),
+                    ("x".into(), Rc::new(Term::Sort(Sort::Real))),
+                    ("y".into(), Rc::new(Term::Sort(Sort::Real))),
                 ],
                 Rc::new(Term::Op(
                     Operator::Equals,
@@ -353,8 +347,8 @@ fn test_quantifiers() {
                         Rc::new(Term::Op(
                             Operator::Add,
                             vec![
-                                terminal!(var "x"; REAL_SORT).into(),
-                                terminal!(var "y"; REAL_SORT).into(),
+                                terminal!(var "x"; Rc::new(Term::Sort(Sort::Real))).into(),
+                                terminal!(var "y"; Rc::new(Term::Sort(Sort::Real))).into(),
                             ],
                         )),
                         terminal!(real 0 / 1).into(),
@@ -380,7 +374,7 @@ fn test_let_terms() {
             "(let ((p false)) p)",
             Term::Let(
                 vec![("p".into(), Rc::new(terminal!(bool false)))],
-                Rc::new(terminal!(var "p"; BOOL_SORT)),
+                Rc::new(terminal!(var "p"; Rc::new(Term::Sort(Sort::Bool)))),
             ),
         ),
         (
@@ -393,8 +387,8 @@ fn test_let_terms() {
                 Rc::new(Term::Op(
                     Operator::Add,
                     vec![
-                        terminal!(var "x"; INT_SORT).into(),
-                        terminal!(var "y"; INT_SORT).into(),
+                        terminal!(var "x"; Rc::new(Term::Sort(Sort::Int))).into(),
+                        terminal!(var "y"; Rc::new(Term::Sort(Sort::Int))).into(),
                     ],
                 )),
             ),
@@ -460,7 +454,7 @@ fn test_declare_fun() {
     );
 
     let got = parse_term_with_definitions("(declare-fun x () Real)", "x");
-    assert_deep_eq!(&terminal!(var "x"; REAL_SORT), &got);
+    assert_deep_eq!(&terminal!(var "x"; Rc::new(Term::Sort(Sort::Real))), &got);
 }
 
 #[test]
