@@ -156,7 +156,8 @@ impl<'a> LinearComb<'a> {
     /// Finds the greatest common divisor of the coefficients in the linear combination. Returns
     /// `None` if the linear combination is empty, or if any of the coefficients is not an integer.
     fn coefficients_gcd(&self) -> Option<BigInt> {
-        self.0
+        let mut coefficients = self
+            .0
             .iter()
             .map(|(_, coeff)| {
                 if coeff.is_integer() {
@@ -165,9 +166,11 @@ impl<'a> LinearComb<'a> {
                     None
                 }
             })
-            .collect::<Option<Vec<_>>>()?
-            .into_iter()
-            .reduce(num_integer::gcd)
+            .collect::<Option<Vec<_>>>()?;
+        if self.1.is_integer() && !self.1.is_zero() {
+            coefficients.push(self.1.to_integer().abs())
+        }
+        coefficients.into_iter().reduce(num_integer::gcd)
     }
 }
 
@@ -197,9 +200,10 @@ fn strengthen(op: Operator, disequality: &mut LinearComb, a: &BigRational) -> Op
         // This is a stronger statement, and follows from the original disequality. Importantly,
         // this strengthening is sometimes necessary to check some "la_generic" steps. To find the
         // value by which we should divide we have to take the greatest common divisor of the
-        // coefficients, as this makes sure all coefficients will continue being integers after the
-        // division. This strengthening is still valid because, since the variables are integers,
-        // the result of their linear combination will always be a multiple of their GCD.
+        // coefficients (including the constant value on the right-hand side), as this makes sure
+        // all coefficients will continue being integers after the division. This strengthening is
+        // still valid because, since the variables are integers, the result of their linear
+        // combination will always be a multiple of their GCD.
         Operator::GreaterThan if is_integer => {
             // Instead of dividing and then multiplying back, we just multiply the "+ 1"
             // that is added by the strengthening rule
