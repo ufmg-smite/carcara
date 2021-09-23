@@ -322,6 +322,71 @@ pub fn la_disequality(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     to_option(t1_1 == t1_2 && t1_2 == t1_3 && t2_1 == t2_2 && t2_2 == t2_3)
 }
 
+pub fn la_tautology(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+    rassert!(conclusion.len() == 1);
+
+    if let Some((first, second)) = match_term!((or phi_1 phi_2) = conclusion[0], RETURN_RCS) {
+        // If the conclusion if of the second form, there are 5 possible cases:
+        let first_case = || {
+            let (s_1, d_1) = match_term!((not (<= s d1)) = first, RETURN_RCS)?;
+            let (s_2, d_2) = match_term!((<= s d2) = second, RETURN_RCS)?;
+            to_option(s_1 == s_2 && d_1.as_signed_number()? <= d_2.as_signed_number()?)
+        };
+        let second_case = || {
+            let (s_1, d_1) = match_term!((<= s d1) = first, RETURN_RCS)?;
+            let (s_2, d_2) = match_term!((not (<= s d2)) = second, RETURN_RCS)?;
+            to_option(s_1 == s_2 && d_1 == d_2)
+        };
+        let third_case = || {
+            let (s_1, d_1) = match_term!((not (<= s d1)) = first, RETURN_RCS)?;
+            let (s_2, d_2) = match_term!((>= s d2) = second, RETURN_RCS)?;
+            to_option(s_1 == s_2 && d_1.as_signed_number()? >= d_2.as_signed_number()?)
+        };
+        let fourth_case = || {
+            let (s_1, d_1) = match_term!((>= s d1) = first, RETURN_RCS)?;
+            let (s_2, d_2) = match_term!((not (>= s d2)) = second, RETURN_RCS)?;
+            to_option(s_1 == s_2 && d_1 == d_2)
+        };
+        let fifth_case = || {
+            let (s_1, d_1) = match_term!((not (<= s d1)) = first, RETURN_RCS)?;
+            let (s_2, d_2) = match_term!((not (>= s d2)) = second, RETURN_RCS)?;
+            to_option(s_1 == s_2 && d_1.as_signed_number()? < d_2.as_signed_number()?)
+        };
+        first_case()
+            .or_else(second_case)
+            .or_else(third_case)
+            .or_else(fourth_case)
+            .or_else(fifth_case)
+    } else {
+        // If the conclusion if of the first form, we apply steps 1 through 3 from "la_generic"
+
+        // Steps 1 and 2: Negate the disequality
+        let (mut op, args) = negate_disequality(&conclusion[0])?;
+        let (s1, s2) = match args {
+            [s1, s2] => (LinearComb::from_term(s1)?, LinearComb::from_term(s2)?),
+            _ => return None,
+        };
+
+        // Step 3: Move all non constant terms to the left side, and the d terms to the right.
+        let mut disequality = s1.sub(s2);
+        disequality.1 = -disequality.1;
+
+        // If the operator is < or <=, we flip the disequality so it is > or >=
+        if op == Operator::LessThan {
+            disequality.neg();
+            op = Operator::GreaterThan;
+        } else if op == Operator::LessEq {
+            disequality.neg();
+            op = Operator::GreaterEq;
+        }
+
+        rassert!(disequality.0.is_empty());
+        to_option(
+            disequality.1.is_positive() || op == Operator::GreaterThan && disequality.1.is_zero(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

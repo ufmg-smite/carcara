@@ -299,6 +299,7 @@ impl<'c> ProofChecker<'c> {
             "la_generic" => linear_arithmetic::la_generic,
             "lia_generic" => linear_arithmetic::lia_generic,
             "la_disequality" => linear_arithmetic::la_disequality,
+            "la_tautology" => linear_arithmetic::la_tautology,
             "forall_inst" => quantifier::forall_inst,
             "qnt_join" => quantifier::qnt_join,
             "qnt_rm_unused" => quantifier::qnt_rm_unused,
