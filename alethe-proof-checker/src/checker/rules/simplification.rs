@@ -1105,6 +1105,33 @@ mod tests {
     }
 
     #[test]
+    fn div_simplify() {
+        test_cases! {
+            definitions = "
+                (declare-fun n () Int)
+                (declare-fun x () Real)
+            ",
+            "Transformation #1" {
+                "(step t1 (cl (= (div 1 1) 1)) :rule div_simplify)": true,
+                "(step t1 (cl (= (div n n) 1)) :rule div_simplify)": true,
+                "(step t1 (cl (= (/ x x) 1.0)) :rule div_simplify)": true,
+                "(step t1 (cl (= (/ x x) (/ x x))) :rule div_simplify)": false,
+            }
+            "Transformation #2" {
+                "(step t1 (cl (= (div 2 1) 2)) :rule div_simplify)": true,
+                "(step t1 (cl (= (div n 1) n)) :rule div_simplify)": true,
+                "(step t1 (cl (= (/ x 1.0) x)) :rule div_simplify)": true,
+            }
+            "Transformation #3" {
+                "(step t1 (cl (= (div 4 2) 2)) :rule div_simplify)": true,
+                "(step t1 (cl (= (div 27 9) 3)) :rule div_simplify)": true,
+                "(step t1 (cl (= (/ 1.0 2.0) 0.5)) :rule div_simplify)": true,
+                "(step t1 (cl (= (/ 2.0 20.0) (/ 1.0 10.0))) :rule div_simplify)": true,
+            }
+        }
+    }
+
+    #[test]
     fn prod_simplify() {
         test_cases! {
             definitions = "
