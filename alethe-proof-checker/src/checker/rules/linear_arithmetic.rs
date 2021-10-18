@@ -338,7 +338,7 @@ pub fn la_tautology(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
             to_option(s_1 == s_2 && d_1 == d_2)
         };
         let third_case = || {
-            let (s_1, d_1) = match_term!((not (<= s d1)) = first, RETURN_RCS)?;
+            let (s_1, d_1) = match_term!((not (>= s d1)) = first, RETURN_RCS)?;
             let (s_2, d_2) = match_term!((>= s d2) = second, RETURN_RCS)?;
             to_option(s_1 == s_2 && d_1.as_signed_number()? >= d_2.as_signed_number()?)
         };
