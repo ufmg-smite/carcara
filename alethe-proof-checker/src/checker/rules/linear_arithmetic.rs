@@ -14,35 +14,6 @@ pub fn la_rw_eq(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     to_option(t_1 == t_2 && t_2 == t_3 && u_1 == u_2 && u_2 == u_3)
 }
 
-/// Takes a nested sequence of additions, subtractions and negations, and flattens it to a list of
-/// terms and the polarity that they appear in. For example, the term "(+ (- x y) (+ (- z) w))" is
-/// flattened to `[(x, true), (y, false), (z, false), (w, true)]`, where `true` representes
-/// positive polarity.
-fn flatten_sum(term: &Term) -> Vec<(&Term, bool)> {
-    // TODO: Add tests for this
-    // TODO: Add support for distributing numerical constant multiplications. For example, this
-    // function should transform the term "(* 2 (+ (* 22 x) y 4))" into "(+ (* 44 x) (* 2 y) 8)".
-    // Maybe it is more natural to merge this term with `LinearComb::from_term`.
-
-    if let Some(args) = match_term!((+ ...) = term) {
-        args.iter().flat_map(|t| flatten_sum(t.as_ref())).collect()
-    } else if let Some(t) = match_term!((-t) = term) {
-        let mut result = flatten_sum(t);
-        result.iter_mut().for_each(|item| item.1 = !item.1);
-        result
-    } else if let Some(args) = match_term!((- ...) = term) {
-        let mut result = flatten_sum(&args[0]);
-        result.extend(args[1..].iter().flat_map(|t| {
-            flatten_sum(t.as_ref())
-                .into_iter()
-                .map(|(t, polarity)| (t, !polarity))
-        }));
-        result
-    } else {
-        vec![(term, true)]
-    }
-}
-
 /// Takes a disequality term and returns its negation, represented by an operator and arguments.
 /// The disequality can be:
 /// * An application of the "<", ">", "<=" or ">=" operators
@@ -82,31 +53,55 @@ impl<'a> LinearComb<'a> {
         Self(AHashMap::new(), BigRational::zero())
     }
 
-    /// Builds a linear combination from a term.
-    fn from_term(term: &'a Term) -> Option<Self> {
-        let mut result = Self(AHashMap::new(), BigRational::zero());
-        for (arg, polarity) in flatten_sum(term) {
-            let polarity_coeff = match polarity {
-                true => BigRational::one(),
-                false => -BigRational::one(),
-            };
-            match match_term!((* a b) = arg) {
-                Some((a, b)) => {
-                    let (var, coeff) = match (a.as_fraction(), b.as_fraction()) {
-                        (None, None) => (arg, BigRational::one()),
-                        (None, Some(r)) => (a, r),
-                        (Some(r), None) => (b, r),
-                        (Some(_), Some(_)) => return None,
-                    };
-                    result.insert(var, coeff * polarity_coeff);
+    /// Builds a linear combination from a term. Takes a term with nested additions, subtractions
+    /// and multiplications, and flattens it to linear combination, calculating the coefficient of
+    /// each atom.
+    fn from_term(term: &'a Rc<Term>) -> Self {
+        // TODO: Add a cache to make this traverse the term as DAG, instead of a tree.
+        fn flatten(term: &Rc<Term>) -> Vec<(BigRational, &Rc<Term>)> {
+            match term.as_ref() {
+                Term::Op(Operator::Add, args) => args.iter().flat_map(flatten).collect(),
+                Term::Op(Operator::Sub, args) if args.len() == 1 => {
+                    let mut result = flatten(&args[0]);
+                    for (inner_coeff, _) in result.iter_mut() {
+                        *inner_coeff *= -BigInt::one();
+                    }
+                    result
                 }
-                None => match arg.as_fraction() {
-                    Some(r) => result.1 += r * polarity_coeff,
-                    None => result.insert(arg, polarity_coeff),
-                },
-            };
+                Term::Op(Operator::Sub, args) => {
+                    let mut result = flatten(&args[0]);
+                    result.extend(
+                        args[1..]
+                            .iter()
+                            .flat_map(|a| flatten(a).into_iter().map(|(c, v)| (-c, v))),
+                    );
+                    result
+                }
+                Term::Op(Operator::Mult, args) if args.len() == 2 => {
+                    let (var, coeff) = match (args[0].as_fraction(), args[1].as_fraction()) {
+                        (None, None) => (term, BigRational::one()),
+                        (None, Some(coeff)) => (&args[0], coeff),
+                        (Some(coeff), _) => (&args[1], coeff),
+                    };
+                    let mut result = flatten(var);
+                    for (inner_coeff, _) in result.iter_mut() {
+                        *inner_coeff *= &coeff
+                    }
+                    result
+                }
+                _ => vec![(BigRational::one(), term)],
+            }
         }
-        Some(result)
+
+        let mut result = Self(AHashMap::new(), BigRational::zero());
+        for (coeff, var) in flatten(term) {
+            if let Some(r) = var.as_fraction() {
+                result.1 += r * coeff;
+            } else {
+                result.insert(var, coeff)
+            }
+        }
+        result
     }
 
     fn insert(&mut self, key: &'a Term, value: BigRational) {
@@ -236,7 +231,7 @@ pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> Option<()> {
             // Steps 1 and 2: Negate the disequality
             let (mut op, args) = negate_disequality(phi)?;
             let (s1, s2) = match args {
-                [s1, s2] => (LinearComb::from_term(s1)?, LinearComb::from_term(s2)?),
+                [s1, s2] => (LinearComb::from_term(s1), LinearComb::from_term(s2)),
                 _ => return None,
             };
 
@@ -363,7 +358,7 @@ pub fn la_tautology(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
         // Steps 1 and 2: Negate the disequality
         let (mut op, args) = negate_disequality(&conclusion[0])?;
         let (s1, s2) = match args {
-            [s1, s2] => (LinearComb::from_term(s1)?, LinearComb::from_term(s2)?),
+            [s1, s2] => (LinearComb::from_term(s1), LinearComb::from_term(s2)),
             _ => return None,
         };
 
