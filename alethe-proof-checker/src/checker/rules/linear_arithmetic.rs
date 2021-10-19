@@ -485,4 +485,35 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn la_tautology() {
+        test_cases! {
+            definitions = "
+                (declare-fun n () Int)
+                (declare-fun x () Real)
+            ",
+            "First form" {
+                "(step t1 (cl (<= n (+ 1 n))) :rule la_tautology)": true,
+                "(step t1 (cl (< (- n 1) n)) :rule la_tautology)": true,
+                "(step t1 (cl (not (<= n (- n 1)))) :rule la_tautology)": true,
+                "(step t1 (cl (< 0 (- (+ 1 n) n))) :rule la_tautology)": true,
+                "(step t1 (cl (not (<= (+ 1 n) (- (+ 1 n) 1)))) :rule la_tautology)": true,
+            }
+            "Second form" {
+                "(step t1 (cl (or (not (<= x 5.0)) (<= x 6.0))) :rule la_tautology)": true,
+
+                "(step t1 (cl (or (<= x 6.0) (not (<= x 6.0)))) :rule la_tautology)": true,
+                "(step t1 (cl (or (<= x 6.1) (not (<= x 6.0)))) :rule la_tautology)": false,
+
+                "(step t1 (cl (or (not (>= x 6.0)) (>= x 5.0))) :rule la_tautology)": true,
+
+                "(step t1 (cl (or (>= x 5.0) (not (>= x 5.0)))) :rule la_tautology)": true,
+                "(step t1 (cl (or (>= x 5.0) (not (>= x 5.1)))) :rule la_tautology)": false,
+
+                "(step t1 (cl (or (not (<= x 4.0)) (not (>= x 5.0)))) :rule la_tautology)": true,
+                "(step t1 (cl (or (not (<= x 5.0)) (not (>= x 5.0)))) :rule la_tautology)": false,
+            }
+        }
+    }
 }
