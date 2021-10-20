@@ -81,6 +81,46 @@ impl<K: Clone> Metrics<K> {
             None => self.max_min = Some(((key.clone(), value), (key.clone(), value))),
         }
     }
+
+    // TODO: Add tests to ensure this is numerically stable
+    fn combine(self, other: Self) -> Self {
+        match (self.count, other.count) {
+            (0, _) => return other,
+            (_, 0) => return self,
+            _ => (),
+        }
+        let total = self.total + other.total;
+        let count = self.count + other.count;
+        let mean = total / count as u32;
+
+        // To combine the two variances, we use a generalization of Welford's algorithm. See:
+        // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
+        let delta = other.mean.as_secs_f64() - self.mean.as_secs_f64();
+        let sum_of_squared_distances = self.sum_of_squared_distances
+            + other.sum_of_squared_distances
+            + delta * delta * (self.count * other.count / count) as f64;
+        let standard_deviation = Duration::from_secs_f64(sum_of_squared_distances.sqrt())
+            / std::cmp::max(1, count as u32 - 1);
+
+        let max_min = match (self.max_min, other.max_min) {
+            (a, None) => a,
+            (None, b) => b,
+            (Some((a_max, a_min)), Some((b_max, b_min))) => {
+                let max = if a_max.1 > b_max.1 { a_max } else { b_max };
+                let min = if a_min.1 < b_min.1 { a_min } else { b_min };
+                Some((max, min))
+            }
+        };
+
+        Self {
+            total,
+            count,
+            mean,
+            standard_deviation,
+            max_min,
+            sum_of_squared_distances,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -202,5 +242,38 @@ impl BenchmarkResults {
     /// For each rule, the time spent checking each step that uses that rule.
     pub fn step_time_by_rule(&self) -> &AHashMap<String, Metrics<StepId>> {
         &self.step_time_by_rule
+    }
+
+    /// Combines two `BenchmarkResults` into one.
+    pub fn combine(a: Self, b: Self) -> Self {
+        type MetricsMap = AHashMap<String, Metrics<StepId>>;
+
+        fn combine_map(mut a: MetricsMap, b: MetricsMap) -> MetricsMap {
+            use std::collections::hash_map::Entry;
+            for (k, v) in b {
+                match a.entry(k) {
+                    Entry::Occupied(mut e) => {
+                        // To take the old value from the entry without moving it entirely, we have
+                        // to insert something in its place, so we insert an empty `Metrics`
+                        let old = e.insert(Metrics::new());
+                        e.insert(old.combine(v));
+                    }
+                    Entry::Vacant(e) => {
+                        e.insert(v);
+                    }
+                }
+            }
+            a
+        }
+
+        Self {
+            parsing: a.parsing.combine(b.parsing),
+            checking: a.checking.combine(b.checking),
+            parsing_checking: a.parsing_checking.combine(b.parsing_checking),
+            total: a.total.combine(b.total),
+            step_time: a.step_time.combine(b.step_time),
+            step_time_by_file: combine_map(a.step_time_by_file, b.step_time_by_file),
+            step_time_by_rule: combine_map(a.step_time_by_rule, b.step_time_by_rule),
+        }
     }
 }

@@ -59,6 +59,13 @@ fn app() -> App<'static, 'static> {
                     .default_value("10")
                     .help("Number of times to run the benchmark for each file"),
             )
+            .arg(
+                Arg::with_name("num-jobs")
+                    .short("j")
+                    .long("jobs")
+                    .default_value("1")
+                    .help("Number of threads to use to run the benchmarks"),
+            )
             .arg(Arg::with_name("files").multiple(true).required(true).help(
                 "The proof files with which the benchkmark will be run. If a directory is passed, \
                 the checker will recursively find all '.proof' files in the directory. The problem \
@@ -183,6 +190,12 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
     let num_runs = num_runs
         .parse()
         .map_err(|_| CliError::InvalidArgument(num_runs.to_string()))?;
+
+    let num_jobs = matches.value_of("num-jobs").unwrap();
+    let num_jobs = num_jobs
+        .parse()
+        .map_err(|_| CliError::InvalidArgument(num_jobs.to_string()))?;
+
     let instances = get_instances_from_paths(matches.values_of("files").unwrap())?;
 
     if instances.is_empty() {
@@ -195,7 +208,7 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         instances.len(),
         num_runs
     );
-    let results = benchmarking::run_benchmark(&instances, num_runs)?;
+    let results = benchmarking::run_benchmark(&instances, num_runs, num_jobs)?;
 
     println!("parsing:            {}", results.parsing());
     println!("checking:           {}", results.checking());
