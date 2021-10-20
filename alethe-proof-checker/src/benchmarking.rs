@@ -1,12 +1,5 @@
-use crate::{checker, parser::parse_instance};
 use ahash::AHashMap;
-use std::{
-    fmt,
-    fs::File,
-    io::BufReader,
-    path::PathBuf,
-    time::{Duration, Instant},
-};
+use std::{fmt, time::Duration};
 
 #[derive(Debug)]
 pub struct Metrics<K> {
@@ -162,13 +155,13 @@ type RunId = (String, usize);
 
 #[derive(Debug, Default)]
 pub struct BenchmarkResults {
-    parsing: Metrics<RunId>,
-    checking: Metrics<RunId>,
-    parsing_checking: Metrics<RunId>,
-    total: Metrics<RunId>,
-    pub(crate) step_time: Metrics<StepId>,
-    pub(crate) step_time_by_file: AHashMap<String, Metrics<StepId>>,
-    pub(crate) step_time_by_rule: AHashMap<String, Metrics<StepId>>,
+    pub parsing: Metrics<RunId>,
+    pub checking: Metrics<RunId>,
+    pub parsing_checking: Metrics<RunId>,
+    pub total: Metrics<RunId>,
+    pub step_time: Metrics<StepId>,
+    pub step_time_by_file: AHashMap<String, Metrics<StepId>>,
+    pub step_time_by_rule: AHashMap<String, Metrics<StepId>>,
 }
 
 impl BenchmarkResults {
@@ -210,48 +203,4 @@ impl BenchmarkResults {
     pub fn step_time_by_rule(&self) -> &AHashMap<String, Metrics<StepId>> {
         &self.step_time_by_rule
     }
-}
-
-pub fn run_benchmark(
-    instances: &[(PathBuf, PathBuf)],
-    num_runs: usize,
-) -> Result<BenchmarkResults, crate::Error> {
-    let mut result = BenchmarkResults::new();
-    for (problem_file, proof_file) in instances {
-        let proof_file_name = proof_file.to_str().unwrap();
-
-        for i in 0..num_runs {
-            let total_time = Instant::now();
-            let parsing_time = Instant::now();
-            let (proof, pool) = parse_instance(
-                BufReader::new(File::open(problem_file)?),
-                BufReader::new(File::open(proof_file)?),
-            )?;
-            let parsing_time = parsing_time.elapsed();
-
-            let mut checking_time = Duration::ZERO;
-            let config = checker::Config {
-                skip_unknown_rules: false,
-                allow_test_rule: false,
-                statistics: Some(checker::CheckerStatistics {
-                    file_name: proof_file_name,
-                    checking_time: &mut checking_time,
-                    step_time: &mut result.step_time,
-                    step_time_by_file: &mut result.step_time_by_file,
-                    step_time_by_rule: &mut result.step_time_by_rule,
-                }),
-            };
-            let _ = checker::ProofChecker::new(pool, config).check(&proof)?;
-            let total_time = total_time.elapsed();
-
-            let run_id = (proof_file_name.to_string(), i);
-            result.parsing.add(&run_id, parsing_time);
-            result.checking.add(&run_id, checking_time);
-            result
-                .parsing_checking
-                .add(&run_id, parsing_time + checking_time);
-            result.total.add(&run_id, total_time);
-        }
-    }
-    Ok(result)
 }

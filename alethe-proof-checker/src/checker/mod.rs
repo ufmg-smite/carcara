@@ -44,11 +44,11 @@ struct Context {
 
 #[derive(Debug)]
 pub struct CheckerStatistics<'s> {
-    pub(crate) file_name: &'s str,
-    pub(crate) checking_time: &'s mut Duration,
-    pub(crate) step_time: &'s mut Metrics<StepId>,
-    pub(crate) step_time_by_file: &'s mut AHashMap<String, Metrics<StepId>>,
-    pub(crate) step_time_by_rule: &'s mut AHashMap<String, Metrics<StepId>>,
+    pub file_name: &'s str,
+    pub checking_time: &'s mut Duration,
+    pub step_time: &'s mut Metrics<StepId>,
+    pub step_time_by_file: &'s mut AHashMap<String, Metrics<StepId>>,
+    pub step_time_by_rule: &'s mut AHashMap<String, Metrics<StepId>>,
 }
 
 #[derive(Debug, Default)]

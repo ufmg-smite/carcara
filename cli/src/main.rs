@@ -1,10 +1,11 @@
+mod benchmarking;
 mod error;
 mod logger;
 mod path_args;
 
 use ahash::AHashSet;
 use alethe_proof_checker::{
-    benchmarking, check,
+    check,
     checker::{Correctness, ProofChecker},
     parser::{error::ParserResult, lexer, parse_instance},
 };
