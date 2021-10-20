@@ -82,11 +82,22 @@ impl<K: Clone> Metrics<K> {
         }
     }
 
-    // TODO: Add tests to ensure this is numerically stable
+    /// Combines two metrics into one. If one the metrics has only one data point, this is
+    /// equivalent to `Metrics::add`. This is generally numerically stable if the metrics have many
+    /// data points, or exactly one. If one of the metrics is small, the error in the variance
+    /// introduced by using this method (as opposed to using `Metrics::add` on each data point) can
+    /// be as high as 30%.
     fn combine(self, other: Self) -> Self {
         match (self.count, other.count) {
             (0, _) => return other,
             (_, 0) => return self,
+            (1, _) => {
+                let mut result = other;
+                let only_entry = self.min();
+                result.add(&only_entry.0, only_entry.1);
+                return result;
+            }
+            (_, 1) => return other.combine(self),
             _ => (),
         }
         let total = self.total + other.total;
@@ -121,55 +132,6 @@ impl<K: Clone> Metrics<K> {
             sum_of_squared_distances,
         }
     }
-}
-
-#[cfg(test)]
-#[test]
-fn test_metrics() {
-    use rand::Rng;
-
-    fn run_tests(n: usize, max_value: u64) {
-        let mut rng = rand::thread_rng();
-        let mut data = Vec::with_capacity(n);
-        let mut metrics = Metrics::new();
-        for _ in 0..n {
-            let sample = Duration::from_nanos(rng.gen_range(0..max_value));
-            data.push(sample);
-            metrics.add(&(), sample)
-        }
-
-        let expected_total: Duration = data.iter().sum();
-        assert_eq!(expected_total, metrics.total);
-
-        let expected_mean = expected_total / n as u32;
-        assert_eq!(expected_mean, metrics.mean);
-
-        let mean_f64 = expected_mean.as_secs_f64();
-        let expected_std = Duration::from_secs_f64(
-            data.iter()
-                .map(|x| {
-                    let diff = x.as_secs_f64() - mean_f64;
-                    diff * diff
-                })
-                .sum::<f64>()
-                .sqrt()
-                / n as f64,
-        );
-        let delta =
-            (expected_std.as_nanos() as i128 - metrics.standard_deviation.as_nanos() as i128).abs();
-        assert!(delta < 2);
-
-        let expected_max = data.iter().max().unwrap();
-        let expected_min = data.iter().min().unwrap();
-        assert_eq!(*expected_max, metrics.max().1);
-        assert_eq!(*expected_min, metrics.min().1);
-    }
-
-    run_tests(100, 1_000);
-    run_tests(10_000, 1_000);
-    run_tests(1_000_000, 10);
-    run_tests(1_000_000, 100);
-    run_tests(1_000_000, 100_000);
 }
 
 impl<K> fmt::Display for Metrics<K> {
@@ -244,7 +206,8 @@ impl BenchmarkResults {
         &self.step_time_by_rule
     }
 
-    /// Combines two `BenchmarkResults` into one.
+    /// Combines two `BenchmarkResults` into one. This method is subject to some numerical
+    /// stability issues, as is described in `Metrics::combine`.
     pub fn combine(a: Self, b: Self) -> Self {
         type MetricsMap = AHashMap<String, Metrics<StepId>>;
 
@@ -275,5 +238,105 @@ impl BenchmarkResults {
             step_time_by_file: combine_map(a.step_time_by_file, b.step_time_by_file),
             step_time_by_rule: combine_map(a.step_time_by_rule, b.step_time_by_rule),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::Rng;
+
+    #[test]
+    fn test_metrics_add() {
+        fn run_tests(n: usize, max_value: u64) {
+            let mut rng = rand::thread_rng();
+            let mut data = Vec::with_capacity(n);
+            let mut metrics = Metrics::new();
+            for _ in 0..n {
+                let sample = Duration::from_nanos(rng.gen_range(0..max_value));
+                data.push(sample);
+                metrics.add(&(), sample)
+            }
+
+            let expected_total: Duration = data.iter().sum();
+            assert_eq!(expected_total, metrics.total);
+
+            let expected_mean = expected_total / n as u32;
+            assert_eq!(expected_mean, metrics.mean);
+
+            let mean_f64 = expected_mean.as_secs_f64();
+            let expected_std = Duration::from_secs_f64(
+                data.iter()
+                    .map(|x| {
+                        let diff = x.as_secs_f64() - mean_f64;
+                        diff * diff
+                    })
+                    .sum::<f64>()
+                    .sqrt()
+                    / n as f64,
+            );
+            let delta = (expected_std.as_nanos() as i128
+                - metrics.standard_deviation.as_nanos() as i128)
+                .abs();
+            assert!(delta < 2);
+
+            let expected_max = data.iter().max().unwrap();
+            let expected_min = data.iter().min().unwrap();
+            assert_eq!(*expected_max, metrics.max().1);
+            assert_eq!(*expected_min, metrics.min().1);
+        }
+
+        run_tests(100, 1_000);
+        run_tests(10_000, 1_000);
+        run_tests(1_000_000, 10);
+        run_tests(1_000_000, 100);
+        run_tests(1_000_000, 100_000);
+    }
+
+    #[test]
+    fn test_metrics_combine() {
+        fn run_tests(num_chunks: usize, chunk_size: usize, error_margin: f64) {
+            let mut rng = rand::thread_rng();
+            let mut overall_metrics = Metrics::new();
+            let mut combined_metrics = Metrics::new();
+            for _ in 0..num_chunks {
+                let mut chunk_metrics = Metrics::new();
+                for _ in 0..chunk_size {
+                    let sample = Duration::from_nanos(rng.gen_range(0..10_000));
+                    overall_metrics.add(&(), sample);
+                    chunk_metrics.add(&(), sample);
+                }
+                combined_metrics = combined_metrics.combine(chunk_metrics);
+            }
+
+            assert_eq!(combined_metrics.total, overall_metrics.total);
+            assert_eq!(combined_metrics.count, overall_metrics.count);
+            assert_eq!(combined_metrics.mean, overall_metrics.mean);
+
+            // Instead of comparing the standard deviations directly, we compare the
+            // `sum_of_squared_distances`, since it is (in theory) more accurate
+            let delta = combined_metrics.sum_of_squared_distances
+                - overall_metrics.sum_of_squared_distances;
+            let error = delta.abs() / overall_metrics.sum_of_squared_distances;
+            assert!(error < error_margin, "{} ({})", error, num_chunks);
+
+            assert_eq!(combined_metrics.max_min, overall_metrics.max_min);
+        }
+
+        // Depending on how big the chunks are, the numerical error may be bigger or smaller. For a
+        // small number of very large chunks, the error margin is pretty low
+        run_tests(100, 10_000, 1.0e-5);
+        run_tests(100, 1_000, 1.0e-5);
+
+        // As the chunks get smaller, the error increases rapidly
+        run_tests(1_000, 100, 0.0001);
+        run_tests(1_000, 50, 0.001);
+        run_tests(10_000, 10, 0.02);
+        run_tests(10_000, 5, 0.05);
+        run_tests(10_000, 2, 0.3); // The worst case happens when the chunk size is 2
+
+        // When the chunks are only one data entry in size, `Metrics::combine` simply calls
+        // `Metrics::add` with that entry, which makes the numerical error small again
+        run_tests(10_000, 1, 1.0e-6);
     }
 }
