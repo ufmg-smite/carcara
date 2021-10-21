@@ -57,7 +57,13 @@ impl<'a> LinearComb<'a> {
     /// and multiplications, and flattens it to linear combination, calculating the coefficient of
     /// each atom.
     fn from_term(term: &'a Rc<Term>) -> Self {
-        // TODO: Add a cache to make this traverse the term as DAG, instead of a tree.
+        // A note on performance: this function traverses the term recursively without making use
+        // of a cache, which means sometimes it has to recompute the result for the same term more
+        // than once. However, as the return type of this function can be very large (and would
+        // need to be cloned a lot when using a cache), making use of cache can actually make the
+        // performance of this function worse. Benchmarks show that it would more than double the
+        // average time of the "la_generic" rule, which makes extensive use of `LinerComb`s.
+        // Because of that, we prefer to not use a cache here, and traverse the term naively.
         fn flatten(term: &Rc<Term>) -> Vec<(BigRational, &Rc<Term>)> {
             match term.as_ref() {
                 Term::Op(Operator::Add, args) => args.iter().flat_map(flatten).collect(),
