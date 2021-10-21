@@ -46,71 +46,67 @@ fn negate_disequality(term: &Term) -> Option<(Operator, &[Rc<Term>])> {
 /// A linear combination, represented by a hash map from non-constant terms to their coefficients,
 /// plus a constant term. This is also used to represent a disequality, in which case the left side
 /// is the non-constant terms and their coefficients, and the right side is the constant term.
-struct LinearComb<'a>(AHashMap<&'a Term, BigRational>, BigRational);
+struct LinearComb(AHashMap<Rc<Term>, BigRational>, BigRational);
 
-impl<'a> LinearComb<'a> {
+impl LinearComb {
     fn new() -> Self {
         Self(AHashMap::new(), BigRational::zero())
+    }
+
+    /// Flattens a term and adds it to the linear combination, multiplying by the coefficient
+    /// `coeff`. This method is only intended to be used in `LinearComb::from_term`.
+    fn add_term(&mut self, term: &Rc<Term>, coeff: &BigRational) {
+        // A note on performance: this function traverses the term recursively without making use
+        // of a cache, which means sometimes it has to recompute the result for the same term more
+        // than once. However, an old implementation of this method that could use a cache showed
+        // that making use of one can actually make the performance of this function worse.
+        // Benchmarks showed that it would more than double the average time of the "la_generic"
+        // rule, which makes extensive use of `LinerComb`s. Because of that, we prefer to not use
+        // a cache here, and traverse the term naively.
+
+        match term.as_ref() {
+            Term::Op(Operator::Add, args) => {
+                for a in args {
+                    self.add_term(a, coeff)
+                }
+            }
+            Term::Op(Operator::Sub, args) if args.len() == 1 => {
+                self.add_term(&args[0], &-coeff);
+            }
+            Term::Op(Operator::Sub, args) => {
+                self.add_term(&args[0], coeff);
+                for a in &args[1..] {
+                    self.add_term(a, &-coeff);
+                }
+            }
+            Term::Op(Operator::Mult, args) if args.len() == 2 => {
+                let (var, inner_coeff) = match (args[0].as_fraction(), args[1].as_fraction()) {
+                    (None, Some(coeff)) => (&args[0], coeff),
+                    (Some(coeff), _) => (&args[1], coeff),
+                    (None, None) => return self.insert(term.clone(), coeff.clone()),
+                };
+                self.add_term(var, &(coeff * inner_coeff));
+            }
+            _ => {
+                if let Some(r) = term.as_fraction() {
+                    self.1 += coeff * r;
+                } else {
+                    self.insert(term.clone(), coeff.clone());
+                }
+            }
+        }
     }
 
     /// Builds a linear combination from a term. Takes a term with nested additions, subtractions
     /// and multiplications, and flattens it to linear combination, calculating the coefficient of
     /// each atom.
-    fn from_term(term: &'a Rc<Term>) -> Self {
-        // A note on performance: this function traverses the term recursively without making use
-        // of a cache, which means sometimes it has to recompute the result for the same term more
-        // than once. However, as the return type of this function can be very large (and would
-        // need to be cloned a lot when using a cache), making use of cache can actually make the
-        // performance of this function worse. Benchmarks show that it would more than double the
-        // average time of the "la_generic" rule, which makes extensive use of `LinerComb`s.
-        // Because of that, we prefer to not use a cache here, and traverse the term naively.
-        fn flatten(term: &Rc<Term>) -> Vec<(BigRational, &Rc<Term>)> {
-            match term.as_ref() {
-                Term::Op(Operator::Add, args) => args.iter().flat_map(flatten).collect(),
-                Term::Op(Operator::Sub, args) if args.len() == 1 => {
-                    let mut result = flatten(&args[0]);
-                    for (inner_coeff, _) in result.iter_mut() {
-                        *inner_coeff *= -BigInt::one();
-                    }
-                    result
-                }
-                Term::Op(Operator::Sub, args) => {
-                    let mut result = flatten(&args[0]);
-                    result.extend(
-                        args[1..]
-                            .iter()
-                            .flat_map(|a| flatten(a).into_iter().map(|(c, v)| (-c, v))),
-                    );
-                    result
-                }
-                Term::Op(Operator::Mult, args) if args.len() == 2 => {
-                    let (var, coeff) = match (args[0].as_fraction(), args[1].as_fraction()) {
-                        (None, None) => (term, BigRational::one()),
-                        (None, Some(coeff)) => (&args[0], coeff),
-                        (Some(coeff), _) => (&args[1], coeff),
-                    };
-                    let mut result = flatten(var);
-                    for (inner_coeff, _) in result.iter_mut() {
-                        *inner_coeff *= &coeff
-                    }
-                    result
-                }
-                _ => vec![(BigRational::one(), term)],
-            }
-        }
-
-        let mut result = Self(AHashMap::new(), BigRational::zero());
-        for (coeff, var) in flatten(term) {
-            if let Some(r) = var.as_fraction() {
-                result.1 += r * coeff;
-            } else {
-                result.insert(var, coeff)
-            }
-        }
+    fn from_term(term: &Rc<Term>) -> Self {
+        let mut result = Self::new();
+        result.add_term(term, &BigRational::one());
         result
     }
 
-    fn insert(&mut self, key: &'a Term, value: BigRational) {
+    fn insert(&mut self, key: Rc<Term>, value: BigRational) {
         use std::collections::hash_map::Entry;
 
         match self.0.entry(key) {
