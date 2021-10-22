@@ -176,7 +176,11 @@ pub fn nary_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 }
 
 /// Applies the simplification steps for the "bfun_elim" rule.
-fn apply_bfun_elim(pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
+fn apply_bfun_elim(
+    pool: &mut TermPool,
+    term: &Rc<Term>,
+    cache: &mut AHashMap<Rc<Term>, Rc<Term>>,
+) -> Rc<Term> {
     /// The first simplification step, that expands quantifiers over boolean variables.
     fn first_step(
         pool: &mut TermPool,
@@ -227,14 +231,24 @@ fn apply_bfun_elim(pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
         }
     }
 
-    match term.as_ref() {
+    if let Some(v) = cache.get(term) {
+        return v.clone();
+    }
+
+    let result = match term.as_ref() {
         Term::App(f, args) => {
-            let args = args.iter().map(|a| apply_bfun_elim(pool, a)).collect();
+            let args = args
+                .iter()
+                .map(|a| apply_bfun_elim(pool, a, cache))
+                .collect();
             let new_term = pool.add_term(Term::App(f.clone(), args));
             second_step(pool, &new_term, 0)
         }
         Term::Op(op, args) => {
-            let args = args.iter().map(|a| apply_bfun_elim(pool, a)).collect();
+            let args = args
+                .iter()
+                .map(|a| apply_bfun_elim(pool, a, cache))
+                .collect();
             pool.add_term(Term::Op(*op, args))
         }
         Term::Quant(q, bindings, inner) => {
@@ -250,7 +264,7 @@ fn apply_bfun_elim(pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
             } else {
                 pool.add_term(Term::Op(op, args))
             };
-            let op_term = apply_bfun_elim(pool, &op_term);
+            let op_term = apply_bfun_elim(pool, &op_term, cache);
 
             let new_bindings: Vec<_> = bindings
                 .iter()
@@ -264,21 +278,24 @@ fn apply_bfun_elim(pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
             }
         }
         Term::Choice(var, inner) => {
-            let inner = apply_bfun_elim(pool, inner);
+            let inner = apply_bfun_elim(pool, inner, cache);
             pool.add_term(Term::Choice(var.clone(), inner))
         }
         Term::Let(bindings, inner) => {
-            let inner = apply_bfun_elim(pool, inner);
+            let inner = apply_bfun_elim(pool, inner, cache);
             pool.add_term(Term::Let(bindings.clone(), inner))
         }
         _ => term.clone(),
-    }
+    };
+
+    cache.insert(term.clone(), result.clone());
+    result
 }
 
 pub fn bfun_elim(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1 && conclusion.len() == 1);
     let psi = get_single_term_from_command(premises[0])?;
-    to_option(conclusion[0] == apply_bfun_elim(pool, psi))
+    to_option(conclusion[0] == apply_bfun_elim(pool, psi, &mut AHashMap::new()))
 }
 
 #[cfg(test)]
