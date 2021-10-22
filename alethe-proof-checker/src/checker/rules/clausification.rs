@@ -175,74 +175,74 @@ pub fn nary_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     }
 }
 
+/// The first simplification step for "bfun_elim", that expands quantifiers over boolean variables.
+fn bfun_elim_first_step(
+    pool: &mut TermPool,
+    bindigns: &[SortedVar],
+    term: &Rc<Term>,
+    acc: &mut Vec<Rc<Term>>,
+) {
+    let var = match bindigns {
+        [.., var] if var.1.as_sort() == Some(&Sort::Bool) => pool.add_term(var.clone().into()),
+        [rest @ .., _] => return bfun_elim_first_step(pool, rest, term, acc),
+        [] => {
+            acc.push(term.clone());
+            return;
+        }
+    };
+    for value in [pool.bool_false(), pool.bool_true()] {
+        let mut subs = AHashMap::new();
+        subs.insert(var.clone(), value);
+        let term = pool.apply_substitutions(term, &subs);
+        bfun_elim_first_step(pool, &bindigns[..bindigns.len() - 1], &term, acc)
+    }
+}
+
+/// The second simplification step for "bfun_elim", that expands function applications over
+/// non-constant boolean arguments into "ite" terms.
+fn bfun_elim_second_step(
+    pool: &mut TermPool,
+    func: &Rc<Term>,
+    args: &[Rc<Term>],
+    processed: usize,
+) -> Rc<Term> {
+    for i in processed..args.len() {
+        if *args[i].sort() == Sort::Bool && !args[i].is_bool_false() && !args[i].is_bool_true() {
+            let mut ite_args = Vec::with_capacity(3);
+            ite_args.push(args[i].clone());
+
+            for bool_constant in [pool.bool_true(), pool.bool_false()] {
+                let mut new_args = args.to_vec();
+                new_args[i] = bool_constant;
+                let inner_term = bfun_elim_second_step(pool, func, &new_args, i + 1);
+                ite_args.push(inner_term)
+            }
+            return pool.add_term(Term::Op(Operator::Ite, ite_args));
+        }
+    }
+
+    // If there were no non-constant boolean arguments we don't need to expand the term into an ite
+    // term. So we just contruct the original application term and return it.
+    pool.add_term(Term::App(func.clone(), args.to_vec()))
+}
+
 /// Applies the simplification steps for the "bfun_elim" rule.
 fn apply_bfun_elim(
     pool: &mut TermPool,
     term: &Rc<Term>,
     cache: &mut AHashMap<Rc<Term>, Rc<Term>>,
 ) -> Rc<Term> {
-    /// The first simplification step, that expands quantifiers over boolean variables.
-    fn first_step(
-        pool: &mut TermPool,
-        bindigns: &[SortedVar],
-        term: &Rc<Term>,
-        acc: &mut Vec<Rc<Term>>,
-    ) {
-        let var = match bindigns {
-            [.., var] if var.1.as_sort() == Some(&Sort::Bool) => pool.add_term(var.clone().into()),
-            [rest @ .., _] => return first_step(pool, rest, term, acc),
-            [] => {
-                acc.push(term.clone());
-                return;
-            }
-        };
-        for value in [pool.bool_false(), pool.bool_true()] {
-            let mut subs = AHashMap::new();
-            subs.insert(var.clone(), value);
-            let term = pool.apply_substitutions(term, &subs);
-            first_step(pool, &bindigns[..bindigns.len() - 1], &term, acc)
-        }
-    }
-
-    /// The second simplification step, that expands function applications over non-constant boolean
-    /// arguments into "ite" terms.
-    fn second_step(pool: &mut TermPool, term: &Rc<Term>, processed: usize) -> Rc<Term> {
-        if let Term::App(f, args) = term.as_ref() {
-            for i in processed..args.len() {
-                if *args[i].sort() == Sort::Bool
-                    && !args[i].is_bool_false()
-                    && !args[i].is_bool_true()
-                {
-                    let mut ite_args = Vec::with_capacity(3);
-                    ite_args.push(args[i].clone());
-                    for bool_constant in [pool.bool_true(), pool.bool_false()] {
-                        let mut new_args = args.clone();
-                        new_args[i] = bool_constant;
-                        let inner_term = pool.add_term(Term::App(f.clone(), new_args));
-                        let inner_term = second_step(pool, &inner_term, i + 1);
-                        ite_args.push(inner_term)
-                    }
-                    return pool.add_term(Term::Op(Operator::Ite, ite_args));
-                }
-            }
-            term.clone()
-        } else {
-            unreachable!()
-        }
-    }
-
     if let Some(v) = cache.get(term) {
         return v.clone();
     }
 
     let result = match term.as_ref() {
         Term::App(f, args) => {
-            let args = args
+            let args: Vec<_> = args
                 .iter()
                 .map(|a| apply_bfun_elim(pool, a, cache))
                 .collect();
-            let new_term = pool.add_term(Term::App(f.clone(), args));
-            second_step(pool, &new_term, 0)
+            bfun_elim_second_step(pool, f, &args, 0)
         }
         Term::Op(op, args) => {
             let args = args
@@ -257,7 +257,7 @@ fn apply_bfun_elim(
                 Quantifier::Exists => Operator::Or,
             };
             let mut args = Vec::with_capacity(2usize.pow(bindings.len() as u32));
-            first_step(pool, bindings, inner, &mut args);
+            bfun_elim_first_step(pool, bindings, inner, &mut args);
 
             let op_term = if args.len() == 1 {
                 args.pop().unwrap()
