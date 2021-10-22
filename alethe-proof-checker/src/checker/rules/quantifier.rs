@@ -77,9 +77,18 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> 
 }
 
 /// Converts a term into negation normal form, expanding all connectives.
-fn negation_normal_form(pool: &mut TermPool, term: &Rc<Term>, polarity: bool) -> Rc<Term> {
-    if let Some(inner) = match_term!((not t) = term, RETURN_RCS) {
-        negation_normal_form(pool, inner, !polarity)
+fn negation_normal_form(
+    pool: &mut TermPool,
+    term: &Rc<Term>,
+    polarity: bool,
+    cache: &mut AHashMap<(Rc<Term>, bool), Rc<Term>>,
+) -> Rc<Term> {
+    if let Some(v) = cache.get(&(term.clone(), polarity)) {
+        return v.clone();
+    }
+
+    let result = if let Some(inner) = match_term!((not t) = term, RETURN_RCS) {
+        negation_normal_form(pool, inner, !polarity, cache)
     } else if let Term::Op(op @ (Operator::And | Operator::Or), args) = term.as_ref() {
         let op = match (op, polarity) {
             (op, true) => *op,
@@ -89,22 +98,22 @@ fn negation_normal_form(pool: &mut TermPool, term: &Rc<Term>, polarity: bool) ->
         };
         let args = args
             .iter()
-            .map(|a| negation_normal_form(pool, a, polarity))
+            .map(|a| negation_normal_form(pool, a, polarity, cache))
             .collect();
         pool.add_term(Term::Op(op, args))
     } else if let Some((p, q)) = match_term!((=> p q) = term, RETURN_RCS) {
-        let a = negation_normal_form(pool, p, !polarity);
-        let b = negation_normal_form(pool, q, polarity);
+        let a = negation_normal_form(pool, p, !polarity, cache);
+        let b = negation_normal_form(pool, q, polarity, cache);
 
         match polarity {
             true => build_term!(pool, (or {a} {b})),
             false => build_term!(pool, (and {a} {b})),
         }
     } else if let Some((p, q, r)) = match_term!((ite p q r) = term, RETURN_RCS) {
-        let a = negation_normal_form(pool, p, !polarity);
-        let b = negation_normal_form(pool, q, polarity);
-        let c = negation_normal_form(pool, p, polarity);
-        let d = negation_normal_form(pool, r, polarity);
+        let a = negation_normal_form(pool, p, !polarity, cache);
+        let b = negation_normal_form(pool, q, polarity, cache);
+        let c = negation_normal_form(pool, p, polarity, cache);
+        let d = negation_normal_form(pool, r, polarity, cache);
 
         match polarity {
             true => build_term!(pool, (and (or {a} {b}) (or {c} {d}))),
@@ -112,27 +121,28 @@ fn negation_normal_form(pool: &mut TermPool, term: &Rc<Term>, polarity: bool) ->
         }
     } else if let Some((quant, bindings, inner)) = term.unwrap_quant() {
         let quant = if !polarity { !quant } else { quant };
-        let inner = negation_normal_form(pool, inner, polarity);
+        let inner = negation_normal_form(pool, inner, polarity, cache);
         pool.add_term(Term::Quant(quant, bindings.clone(), inner))
     } else {
-        if let Some((p, q)) = match_term!((= p q) = term, RETURN_RCS) {
-            if *p.sort() == Sort::Bool {
-                let a = negation_normal_form(pool, p, !polarity);
-                let b = negation_normal_form(pool, q, polarity);
-                let c = negation_normal_form(pool, q, !polarity);
-                let d = negation_normal_form(pool, p, polarity);
-                return match polarity {
+        match match_term!((= p q) = term, RETURN_RCS) {
+            Some((left, right)) if *left.sort() == Sort::Bool => {
+                let a = negation_normal_form(pool, left, !polarity, cache);
+                let b = negation_normal_form(pool, right, polarity, cache);
+                let c = negation_normal_form(pool, right, !polarity, cache);
+                let d = negation_normal_form(pool, left, polarity, cache);
+                match polarity {
                     true => build_term!(pool, (and (or {a} {b}) (or {c} {d}))),
                     false => build_term!(pool, (or (and {a} {b}) (and {c} {d}))),
-                };
+                }
             }
+            _ => match polarity {
+                true => term.clone(),
+                false => build_term!(pool, (not {term.clone()})),
+            },
         }
-
-        match polarity {
-            true => term.clone(),
-            false => build_term!(pool, (not {term.clone()})),
-        }
-    }
+    };
+    cache.insert((term.clone(), polarity), result.clone());
+    result
 }
 
 /// This represents a formula in conjunctive normal form, that is, it is a conjunction of clauses,
@@ -230,7 +240,7 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> {
     let r_bindings = r_bindings.iter().cloned().collect::<AHashSet<_>>();
     let mut new_bindings = l_bindings.iter().cloned().collect::<AHashSet<_>>();
     let clauses: Vec<_> = {
-        let nnf = negation_normal_form(pool, phi, true);
+        let nnf = negation_normal_form(pool, phi, true, &mut AHashMap::new());
         let prenexed = prenex_forall(pool, &mut new_bindings, &nnf);
         let cnf = conjunctive_normal_form(&prenexed);
         cnf.into_iter()
@@ -408,7 +418,7 @@ mod tests {
         use crate::parser::tests::parse_term_with_definitions;
 
         fn to_cnf_term(pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
-            let nnf = negation_normal_form(pool, term, true);
+            let nnf = negation_normal_form(pool, term, true, &mut AHashMap::new());
             let mut bindings = Vec::new();
             let prenexed = prenex_forall(pool, &mut bindings, &nnf);
             let cnf = conjunctive_normal_form(&prenexed);
