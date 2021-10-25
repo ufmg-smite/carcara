@@ -11,9 +11,7 @@ pub fn subproof(RuleArgs { conclusion, subproof_commands, .. }: RuleArgs) -> Opt
 
     for (assumption, t) in assumptions.iter().zip(conclusion) {
         match assumption {
-            ProofCommand::Assume { index: _, term } => {
-                rassert!(term.as_ref() == t.remove_negation()?)
-            }
+            ProofCommand::Assume { index: _, term } => rassert!(term == t.remove_negation()?),
             _ => return None,
         };
     }
@@ -38,8 +36,7 @@ pub fn bind(
     // The last command in the subproof is the one we are currently checking, so we look at the one
     // before that
     let previous_command = &subproof_commands?[subproof_commands?.len() - 2];
-    let (phi, phi_prime) =
-        match_term!((= p q) = get_single_term_from_command(previous_command)?, RETURN_RCS)?;
+    let (phi, phi_prime) = match_term!((= p q) = get_single_term_from_command(previous_command)?)?;
 
     let (left, right) = match_term!((= l r) = conclusion[0])?;
 
@@ -103,7 +100,7 @@ pub fn r#let(
     // in it
     let substitutions = &context.last()?.substitutions;
 
-    let (let_term, u_prime) = match_term!((= l u) = conclusion[0], RETURN_RCS)?;
+    let (let_term, u_prime) = match_term!((= l u) = conclusion[0])?;
     let (let_bindings, u) = match let_term.as_ref() {
         Term::Let(b, t) => (b, t),
         _ => return None,
@@ -113,7 +110,7 @@ pub fn r#let(
     // subproof
     let previous_term =
         get_single_term_from_command(&subproof_commands?[subproof_commands?.len() - 2])?;
-    let (previous_u, previous_u_prime) = match_term!((= u u_prime) = previous_term, RETURN_RCS)?;
+    let (previous_u, previous_u_prime) = match_term!((= u u_prime) = previous_term)?;
     rassert!(u == previous_u && u_prime == previous_u_prime);
 
     rassert!(let_bindings.len() == substitutions.len());
@@ -131,8 +128,8 @@ pub fn r#let(
     to_option(premises.next().is_none())
 }
 
-fn extract_points(quant: Quantifier, term: &Term) -> AHashSet<(Rc<Term>, Rc<Term>)> {
-    fn find_points(acc: &mut AHashSet<(Rc<Term>, Rc<Term>)>, polarity: bool, term: &Term) {
+fn extract_points(quant: Quantifier, term: &Rc<Term>) -> AHashSet<(Rc<Term>, Rc<Term>)> {
+    fn find_points(acc: &mut AHashSet<(Rc<Term>, Rc<Term>)>, polarity: bool, term: &Rc<Term>) {
         // This does not make use of a cache, so there may be performance issues
         // TODO: Measure the performance of this function, and see if a cache is needed
 
@@ -144,21 +141,21 @@ fn extract_points(quant: Quantifier, term: &Term) -> AHashSet<(Rc<Term>, Rc<Term
         }
         match polarity {
             true => {
-                if let Some((x, t)) = match_term!((= x t) = term, RETURN_RCS) {
+                if let Some((x, t)) = match_term!((= x t) = term) {
                     acc.insert((x.clone(), t.clone()));
-                } else if let Some(args) = match_term!((and ...) = term, RETURN_RCS) {
+                } else if let Some(args) = match_term!((and ...) = term) {
                     for a in args {
-                        find_points(acc, true, a.as_ref())
+                        find_points(acc, true, a)
                     }
                 }
             }
             false => {
-                if let Some((p, q)) = match_term!((=> p q) = term, RETURN_RCS) {
+                if let Some((p, q)) = match_term!((=> p q) = term) {
                     find_points(acc, true, p);
                     find_points(acc, false, q);
-                } else if let Some(args) = match_term!((or ...) = term, RETURN_RCS) {
+                } else if let Some(args) = match_term!((or ...) = term) {
                     for a in args {
-                        find_points(acc, false, a.as_ref())
+                        find_points(acc, false, a)
                     }
                 }
             }
@@ -181,7 +178,7 @@ pub fn onepoint(
 ) -> Option<()> {
     rassert!(conclusion.len() == 1);
 
-    let (left, right) = match_term!((= l r) = conclusion[0], RETURN_RCS)?;
+    let (left, right) = match_term!((= l r) = conclusion[0])?;
     let (quant, l_bindings, left) = left.unwrap_quant()?;
     let (r_bindings, right) = match right.unwrap_quant() {
         Some((q, b, t)) => {
@@ -195,7 +192,7 @@ pub fn onepoint(
 
     let previous_term =
         get_single_term_from_command(&subproof_commands?[subproof_commands?.len() - 2])?;
-    let previous_equality = match_term!((= p q) = previous_term, RETURN_RCS)?;
+    let previous_equality = match_term!((= p q) = previous_term)?;
     rassert!(previous_equality == (left, right) || previous_equality == (right, left));
 
     let context = context.last()?;
@@ -285,7 +282,7 @@ fn generic_skolemization_rule(
             Term::Choice(var, inner) => {
                 // If the rule is "sko_forall", the predicate in the choice term is negated
                 let inner = if rule_type == Quantifier::Forall {
-                    match_term!((not t) = inner, RETURN_RCS)?
+                    inner.remove_negation()?
                 } else {
                     inner
                 };

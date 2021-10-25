@@ -13,9 +13,9 @@ macro_rules! simplify {
     //          (not c): (bind_c) if pred(bind_c) => bar,
     //      })
     // becomes:
-    //      match match_term!((or a b) = term, RETURN_RCS) {
+    //      match match_term!((or a b) = term) {
     //          Some((bind_a, bind_b)) => foo,
-    //          _ => match match_term!((not c) = term, RETURN_RCS) {
+    //          _ => match match_term!((not c) = term) {
     //              Some(bind_c) if pred(bind_c) => bar,
     //              _ => None,
     //          }
@@ -25,7 +25,7 @@ macro_rules! simplify {
         $pat:tt: $idens:tt $(if $guard:expr)? => $res:expr,
         $($rest:tt)*
      }) => {
-        match match_term!($pat = $term, RETURN_RCS) {
+        match match_term!($pat = $term) {
             Some($idens) $(if $guard)? => Some($res),
             _ => simplify!($term { $($rest)* }),
         }
@@ -59,7 +59,7 @@ fn generic_simplify_rule(
         }
     };
 
-    let (left, right) = match_term!((= phi psi) = conclusion[0].as_ref(), RETURN_RCS)?;
+    let (left, right) = match_term!((= phi psi) = conclusion[0].as_ref())?;
     to_option(simplify_until_fixed_point(left, right)? || simplify_until_fixed_point(right, left)?)
 }
 
@@ -159,7 +159,7 @@ fn generic_and_or_simplify(conclusion: &[Rc<Term>], rule_kind: Operator) -> Opti
         _ => unreachable!(),
     };
 
-    let (phis, result) = match_term!((= phi psi) = conclusion[0], RETURN_RCS)?;
+    let (phis, result) = match_term!((= phi psi) = conclusion[0])?;
     let mut phis = match phis.as_ref() {
         Term::Op(op, args) if *op == rule_kind => args.clone(),
         _ => return None,
@@ -356,16 +356,15 @@ pub fn bool_simplify(args: RuleArgs) -> Option<()> {
 
 pub fn qnt_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1);
-    let (left, right) = match_term!((= l r) = conclusion[0], RETURN_RCS)?;
+    let (left, right) = match_term!((= l r) = conclusion[0])?;
     let (_, _, inner) = left.unwrap_quant()?;
     to_option((inner.is_bool_false() || inner.is_bool_true()) && right == inner)
 }
 
 pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1);
-    let (left, right) = match_term!((= l r) = conclusion[0], RETURN_RCS)?;
-    let (t_1, t_2) = match_term!((div n d) = left, RETURN_RCS)
-        .or_else(|| match_term!((/ n d) = left, RETURN_RCS))?;
+    let (left, right) = match_term!((= l r) = conclusion[0])?;
+    let (t_1, t_2) = match_term!((div n d) = left).or_else(|| match_term!((/ n d) = left))?;
 
     if t_1 == t_2 {
         to_option(right.as_signed_number()?.is_one())
@@ -469,7 +468,7 @@ fn generic_sum_prod_simplify_rule(ts: &Rc<Term>, u: &Rc<Term>, rule_kind: Operat
 }
 
 pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    let (first, second) = match_term!((= first second) = conclusion[0].as_ref(), RETURN_RCS)?;
+    let (first, second) = match_term!((= first second) = conclusion[0].as_ref())?;
     generic_sum_prod_simplify_rule(first, second, Operator::Mult)
         .or_else(|| generic_sum_prod_simplify_rule(second, first, Operator::Mult))
 }
@@ -480,7 +479,7 @@ pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 
     fn check(t: &Rc<Term>, u: &Rc<Term>) -> Option<()> {
         // First case of "unary_minus_simplify"
-        match match_term!((-(-t)) = t, RETURN_RCS) {
+        match match_term!((-(-t)) = t) {
             Some(t) if t == u => return Some(()),
             _ => (),
         }
@@ -491,13 +490,13 @@ pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
             _ => (),
         }
 
-        let (t_1, t_2) = match_term!((- t_1 t_2) = t, RETURN_RCS)?;
+        let (t_1, t_2) = match_term!((- t_1 t_2) = t)?;
         if t_1 == t_2 {
             return to_option(u.as_number()?.is_zero());
         }
         to_option(match (t_1.as_signed_number(), t_2.as_signed_number()) {
             (_, Some(z)) if z.is_zero() => u == t_1,
-            (Some(z), _) if z.is_zero() => match_term!((-t) = u, RETURN_RCS)? == t_2,
+            (Some(z), _) if z.is_zero() => match_term!((-t) = u)? == t_2,
             (Some(t_1), Some(t_2)) => u.as_signed_number()? == t_1 - t_2,
             _ => false,
         })
@@ -505,12 +504,12 @@ pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 
     rassert!(conclusion.len() == 1);
 
-    let (left, right) = match_term!((= l r) = conclusion[0], RETURN_RCS)?;
+    let (left, right) = match_term!((= l r) = conclusion[0])?;
     check(left, right).or_else(|| check(right, left))
 }
 
 pub fn sum_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    let (first, second) = match_term!((= first second) = conclusion[0].as_ref(), RETURN_RCS)?;
+    let (first, second) = match_term!((= first second) = conclusion[0].as_ref())?;
     generic_sum_prod_simplify_rule(first, second, Operator::Add)
         .or_else(|| generic_sum_prod_simplify_rule(second, first, Operator::Add))
 }
@@ -657,7 +656,7 @@ impl<'a> AcSimp<'a> {
 
 pub fn ac_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1);
-    let (original, flattened) = match_term!((= psi phis) = conclusion[0], RETURN_RCS)?;
+    let (original, flattened) = match_term!((= psi phis) = conclusion[0])?;
     to_option(AcSimp::new(pool).eq(original, flattened))
 }
 

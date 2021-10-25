@@ -9,7 +9,7 @@ pub fn distinct_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     match distinct_args {
         [] | [_] => unreachable!(),
         [a, b] => {
-            let got = match_term!((not (= x y)) = second_term, RETURN_RCS)?;
+            let got = match_term!((not (= x y)) = second_term)?;
             to_option(got == (a, b) || got == (b, a))
         }
         args => {
@@ -23,7 +23,7 @@ pub fn distinct_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
             for i in 0..args.len() {
                 for j in i + 1..args.len() {
                     let (a, b) = (&args[i], &args[j]);
-                    let got = match_term!((not (= x y)) = got[k], RETURN_RCS)?;
+                    let got = match_term!((not (= x y)) = got[k])?;
                     to_option(got == (a, b) || got == (b, a))?;
                     k += 1;
                 }
@@ -49,7 +49,7 @@ pub fn not_or(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     let or_contents = match_term!((not (or ...)) = or_term)?;
     let conclusion = conclusion[0].remove_negation()?;
 
-    to_option(or_contents.iter().any(|t| t.as_ref() == conclusion))
+    to_option(or_contents.iter().any(|t| t == conclusion))
 }
 
 pub fn or(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
@@ -70,7 +70,7 @@ pub fn not_and(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
         conclusion
             .iter()
             .map(|t| t.remove_negation())
-            .eq(and_contents.iter().map(|t| Some(t.as_ref()))),
+            .eq(and_contents.iter().map(Some)),
     )
 }
 
@@ -78,14 +78,14 @@ pub fn implies(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1 && conclusion.len() == 2);
     let premise_term = get_single_term_from_command(premises[0])?;
     let (phi_1, phi_2) = match_term!((=> phi_1 phi_2) = premise_term)?;
-    to_option(phi_1 == conclusion[0].remove_negation()? && phi_2 == conclusion[1].as_ref())
+    to_option(phi_1 == conclusion[0].remove_negation()? && phi_2 == &conclusion[1])
 }
 
 pub fn not_implies1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1 && conclusion.len() == 1);
     let premise_term = get_single_term_from_command(premises[0])?;
     let (phi_1, _) = match_term!((not (=> phi_1 phi_2)) = premise_term)?;
-    to_option(phi_1 == conclusion[0].as_ref())
+    to_option(phi_1 == &conclusion[0])
 }
 
 pub fn not_implies2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
@@ -143,8 +143,8 @@ pub fn nary_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 
     rassert!(conclusion.len() == 1);
 
-    let (original, result) = match_term!((= o r) = conclusion[0].as_ref())?;
-    if let Term::Op(op, args) = original {
+    let (original, result) = match_term!((= o r) = conclusion[0])?;
+    if let Term::Op(op, args) = original.as_ref() {
         let case = match op {
             Operator::Equals => Case::Chainable,
             Operator::Add | Operator::Sub | Operator::Mult => Case::LeftAssoc,

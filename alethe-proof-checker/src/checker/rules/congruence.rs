@@ -24,8 +24,8 @@ pub fn eq_congruent_pred(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
         &conclusion[conclusion.len() - 1],
     );
     let conclusion = match p.remove_negation() {
-        Some(p) => (p, q.as_ref()),
-        None => (p.as_ref(), q.remove_negation()?),
+        Some(p) => (p, q),
+        None => (p, q.remove_negation()?),
     };
 
     generic_congruent_rule(premises, conclusion)
@@ -34,9 +34,9 @@ pub fn eq_congruent_pred(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 /// A function to check congruency. Useful for the "eq_congruent" and "eq_congruent_pred"
 /// rules. `premises` should be an iterator over the argument equalities, and `conclusion`
 /// should be the two function applications.
-fn generic_congruent_rule<'a, T>(premises: T, conclusion: (&Term, &Term)) -> Option<()>
+fn generic_congruent_rule<'a, T>(premises: T, conclusion: (&Rc<Term>, &Rc<Term>)) -> Option<()>
 where
-    T: Iterator<Item = Option<&'a Term>>,
+    T: Iterator<Item = Option<&'a Rc<Term>>>,
 {
     let mut ts = Vec::new();
     let mut us = Vec::new();
@@ -46,7 +46,8 @@ where
         us.push(u);
     }
 
-    let (f_args, g_args) = match conclusion {
+    let (p, q) = conclusion;
+    let (f_args, g_args) = match (p.as_ref(), q.as_ref()) {
         (Term::App(f, f_args), Term::App(g, g_args)) if f == g => (f_args, g_args),
         (Term::Op(f, f_args), Term::Op(g, g_args)) if f == g => (f_args, g_args),
         _ => return None,
@@ -54,7 +55,7 @@ where
     rassert!(f_args.len() == g_args.len() && f_args.len() == ts.len());
 
     for i in 0..ts.len() {
-        let expected = (f_args[i].as_ref(), g_args[i].as_ref());
+        let expected = (&f_args[i], &g_args[i]);
         rassert!(expected == (ts[i], us[i]) || expected == (us[i], ts[i]));
     }
     Some(())
@@ -64,7 +65,7 @@ pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     /// Since the semantics of this rule is slighty different from that of "eq_congruent" and
     /// "eq_congruent_pred", we cannot just use the `generic_congruent_rule` function
     fn check_cong<'a>(
-        premises: &[Option<(&'a Term, &'a Term)>],
+        premises: &[Option<(&'a Rc<Term>, &'a Rc<Term>)>],
         f_args: &[Rc<Term>],
         g_args: &[Rc<Term>],
     ) -> bool {
@@ -102,7 +103,8 @@ pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
         })
         .collect();
 
-    let (f_args, g_args) = match match_term!((= f g) = conclusion[0].as_ref())? {
+    let (f, g) = match_term!((= f g) = conclusion[0])?;
+    let (f_args, g_args) = match (f.as_ref(), g.as_ref()) {
         // Because of the way veriT handles equality terms, when the "cong" rule is called with two
         // equalities of two terms, the order of their arguments may be flipped. Because of that,
         // we have to treat this special case separately

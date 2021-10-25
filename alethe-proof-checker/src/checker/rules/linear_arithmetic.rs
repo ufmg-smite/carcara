@@ -33,7 +33,7 @@ fn negate_disequality(term: &Term) -> Option<(Operator, &[Rc<Term>])> {
         })
     }
 
-    if let Some(Term::Op(op, args)) = match_term!((not t) = term) {
+    if let Some(Term::Op(op, args)) = match_term!((not t) = term).map(Rc::as_ref) {
         if matches!(op, GreaterEq | LessEq | GreaterThan | LessThan | Equals) {
             return Some((*op, args));
         }
@@ -322,31 +322,31 @@ pub fn la_disequality(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 pub fn la_tautology(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1);
 
-    if let Some((first, second)) = match_term!((or phi_1 phi_2) = conclusion[0], RETURN_RCS) {
+    if let Some((first, second)) = match_term!((or phi_1 phi_2) = conclusion[0]) {
         // If the conclusion if of the second form, there are 5 possible cases:
         let first_case = || {
-            let (s_1, d_1) = match_term!((not (<= s d1)) = first, RETURN_RCS)?;
-            let (s_2, d_2) = match_term!((<= s d2) = second, RETURN_RCS)?;
+            let (s_1, d_1) = match_term!((not (<= s d1)) = first)?;
+            let (s_2, d_2) = match_term!((<= s d2) = second)?;
             to_option(s_1 == s_2 && d_1.as_signed_number()? <= d_2.as_signed_number()?)
         };
         let second_case = || {
-            let (s_1, d_1) = match_term!((<= s d1) = first, RETURN_RCS)?;
-            let (s_2, d_2) = match_term!((not (<= s d2)) = second, RETURN_RCS)?;
+            let (s_1, d_1) = match_term!((<= s d1) = first)?;
+            let (s_2, d_2) = match_term!((not (<= s d2)) = second)?;
             to_option(s_1 == s_2 && d_1 == d_2)
         };
         let third_case = || {
-            let (s_1, d_1) = match_term!((not (>= s d1)) = first, RETURN_RCS)?;
-            let (s_2, d_2) = match_term!((>= s d2) = second, RETURN_RCS)?;
+            let (s_1, d_1) = match_term!((not (>= s d1)) = first)?;
+            let (s_2, d_2) = match_term!((>= s d2) = second)?;
             to_option(s_1 == s_2 && d_1.as_signed_number()? >= d_2.as_signed_number()?)
         };
         let fourth_case = || {
-            let (s_1, d_1) = match_term!((>= s d1) = first, RETURN_RCS)?;
-            let (s_2, d_2) = match_term!((not (>= s d2)) = second, RETURN_RCS)?;
+            let (s_1, d_1) = match_term!((>= s d1) = first)?;
+            let (s_2, d_2) = match_term!((not (>= s d2)) = second)?;
             to_option(s_1 == s_2 && d_1 == d_2)
         };
         let fifth_case = || {
-            let (s_1, d_1) = match_term!((not (<= s d1)) = first, RETURN_RCS)?;
-            let (s_2, d_2) = match_term!((not (>= s d2)) = second, RETURN_RCS)?;
+            let (s_1, d_1) = match_term!((not (<= s d1)) = first)?;
+            let (s_2, d_2) = match_term!((not (>= s d2)) = second)?;
             to_option(s_1 == s_2 && d_1.as_signed_number()? < d_2.as_signed_number()?)
         };
         first_case()

@@ -435,30 +435,6 @@ impl Term {
         Subterms::new(self)
     }
 
-    /// Removes a leading negation from the term, if it exists. Same thing as `match_term!((not t)
-    /// = term)`.
-    pub fn remove_negation(&self) -> Option<&Self> {
-        match_term!((not t) = self)
-    }
-
-    /// Removes all leading negations from the term, and returns how many there were.
-    pub fn remove_all_negations(&self) -> (u32, &Term) {
-        let mut term = self;
-        let mut n = 0;
-        while let Some(t) = term.remove_negation() {
-            term = t;
-            n += 1;
-        }
-        (n, term)
-    }
-
-    /// Removes all leading negations from the term, and returns a boolean representing the term
-    /// polarity.
-    pub fn remove_all_negations_with_polarity(&self) -> (bool, &Term) {
-        let (n, term) = self.remove_all_negations();
-        (n % 2 == 0, term)
-    }
-
     /// Returns `true` if the term is an integer or real constant.
     pub fn is_number(&self) -> bool {
         matches!(
@@ -550,6 +526,32 @@ impl Term {
     /// Returns `true` if the term is the boolean constant "false".
     pub fn is_bool_false(&self) -> bool {
         *self.sort() == Sort::Bool && self.as_var() == Some("false")
+    }
+}
+
+impl Rc<Term> {
+    /// Removes a leading negation from the term, if it exists. Same thing as `match_term!((not t)
+    /// = term)`.
+    pub fn remove_negation(&self) -> Option<&Self> {
+        match_term!((not t) = self)
+    }
+
+    /// Removes all leading negations from the term, and returns how many there were.
+    pub fn remove_all_negations(&self) -> (u32, &Term) {
+        let mut term = self;
+        let mut n = 0;
+        while let Some(t) = term.remove_negation() {
+            term = t;
+            n += 1;
+        }
+        (n, term)
+    }
+
+    /// Removes all leading negations from the term, and returns a boolean representing the term
+    /// polarity.
+    pub fn remove_all_negations_with_polarity(&self) -> (bool, &Term) {
+        let (n, term) = self.remove_all_negations();
+        (n % 2 == 0, term)
     }
 }
 

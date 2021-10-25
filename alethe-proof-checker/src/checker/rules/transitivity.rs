@@ -3,7 +3,10 @@ use crate::ast::*;
 
 /// Function to find a transitive chain given a conclusion equality and a series of premise
 /// equalities.
-fn find_chain(conclusion: (&Term, &Term), premises: &mut [(&Term, &Term)]) -> Option<()> {
+fn find_chain(
+    conclusion: (&Rc<Term>, &Rc<Term>),
+    premises: &mut [(&Rc<Term>, &Rc<Term>)],
+) -> Option<()> {
     // When the conclusion is of the form (= a a), it is trivially valid
     if conclusion.0 == conclusion.1 {
         return Some(());

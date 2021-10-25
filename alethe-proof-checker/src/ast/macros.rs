@@ -1,8 +1,7 @@
 /// A macro to help deconstruct operation terms. Since a term holds references to other terms in
 /// `Vec`s and `Rc`s, pattern matching a complex term can be difficult and verbose. This macro
 /// helps with that. The return type of this macro is an `Option` of a tree-like tuple. The
-/// structure of the tree will depend on the pattern passed, and the leaf nodes will be `&Term`s.
-/// An optional flag "RETURN_RCS" can be passed, in which case the leaf nodes will instead be
+/// structure of the tree will depend on the pattern passed, and the leaf nodes will be
 /// `&Rc<Term>`s.
 macro_rules! match_term {
     (true = $var:expr $(, $flag:ident)?) => {
@@ -11,46 +10,30 @@ macro_rules! match_term {
     (false = $var:expr $(, $flag:ident)?) => {
         if $var.is_bool_false() { Some(()) } else { None }
     };
-    ($bind:ident = $var:expr) => { Some($var.as_ref()) };
-    ($bind:ident = $var:expr, RETURN_RCS) => { Some($var) };
-    (($op:tt $($args:tt)+) = $var:expr $(, $flag:ident)?) => {{
+    ($bind:ident = $var:expr) => { Some($var) };
+    (($op:tt $($args:tt)+) = $var:expr) => {{
         if let Term::Op(match_term!(@GET_VARIANT $op), args) = &$var as &Term {
-            match_term!(@ARGS ($($args)+) = args.as_slice() $(, $flag)?)
+            match_term!(@ARGS ($($args)+) = args.as_slice())
         } else {
             None
         }
     }};
 
-    (@ARGS (...) = $var:expr $(, $flag:ident)?) => { Some($var) };
-    (@ARGS ($arg:tt) = $var:expr $(, $flag:ident)?) => {
-        match_term!(@ARGS_IDENT (arg1: $arg) = $var $(, $flag)?)
+    (@ARGS (...) = $var:expr) => { Some($var) };
+    (@ARGS ($arg:tt) = $var:expr) => {
+        match_term!(@ARGS_IDENT (arg1: $arg) = $var)
     };
-    (@ARGS ($arg1:tt $arg2:tt) = $var:expr $(, $flag:ident)?) => {
-        match_term!(@ARGS_IDENT (arg1: $arg1, arg2: $arg2) = $var $(, $flag)?)
+    (@ARGS ($arg1:tt $arg2:tt) = $var:expr) => {
+        match_term!(@ARGS_IDENT (arg1: $arg1, arg2: $arg2) = $var)
     };
-    (@ARGS ($arg1:tt $arg2:tt $arg3:tt) = $var:expr $(, $flag:ident)?) => {
-        match_term!(@ARGS_IDENT (arg1: $arg1, arg2: $arg2, arg3: $arg3) = $var $(, $flag)?)
+    (@ARGS ($arg1:tt $arg2:tt $arg3:tt) = $var:expr) => {
+        match_term!(@ARGS_IDENT (arg1: $arg1, arg2: $arg2, arg3: $arg3) = $var)
     };
     (@ARGS_IDENT ( $($name:ident : $arg:tt),* ) = $var:expr) => {
         if let [$($name),*] = $var {
             #[allow(unused_parens)]
             #[allow(clippy::manual_map)]
             match ($(match_term!($arg = $name)),*) {
-                ($(Some($name)),*) => Some(($($name),*)),
-                _ => None,
-            }
-        } else {
-            None
-        }
-    };
-    // `macro_rules!` doesn't allow nested repetition, so I can't do
-    //   $(match_term!($arg = $name $(, $flag)?),*
-    // Instead, I have to repeat this case, adding the optional flag manually
-    (@ARGS_IDENT ( $($name:ident : $arg:tt),* ) = $var:expr, RETURN_RCS) => {
-        if let [$($name),*] = $var {
-            #[allow(unused_parens)]
-            #[allow(clippy::manual_map)]
-            match ($(match_term!($arg = $name, RETURN_RCS)),*) {
                 ($(Some($name)),*) => Some(($($name),*)),
                 _ => None,
             }
@@ -152,34 +135,28 @@ mod tests {
     fn test_match_term() {
         let term = parse_term("(= (= (not false) (= true false)) (not true))");
         let ((a, (b, c)), d) = match_term!((= (= (not a) (= b c)) (not d)) = &term).unwrap();
-        assert_deep_eq!(a, &terminal!(bool false));
-        assert_deep_eq!(b, &terminal!(bool true));
-        assert_deep_eq!(c, &terminal!(bool false));
-        assert_deep_eq!(d, &terminal!(bool true));
+        assert_deep_eq!(a.as_ref(), &terminal!(bool false));
+        assert_deep_eq!(b.as_ref(), &terminal!(bool true));
+        assert_deep_eq!(c.as_ref(), &terminal!(bool false));
+        assert_deep_eq!(d.as_ref(), &terminal!(bool true));
 
         let term = parse_term("(ite (not true) (- 2 2) (* 1 5))");
         let (a, b, c) = match_term!((ite (not a) b c) = &term).unwrap();
-        assert_deep_eq!(a, &terminal!(bool true));
+        assert_deep_eq!(a.as_ref(), &terminal!(bool true));
         assert_deep_eq!(
-            b,
+            b.as_ref(),
             &Term::Op(
                 Operator::Sub,
                 vec![Rc::new(terminal!(int 2)), Rc::new(terminal!(int 2)),],
             ),
         );
         assert_deep_eq!(
-            c,
+            c.as_ref(),
             &Term::Op(
                 Operator::Mult,
                 vec![Rc::new(terminal!(int 1)), Rc::new(terminal!(int 5)),],
             ),
         );
-
-        // Make sure that when "RETURN_RCS" flag is passed, the macro returns `&Rc<Term>` instead
-        // of `&Term`
-        let term = parse_term("(= (not false) (=> true false) (or false false))");
-        let _: (&Rc<_>, (&Rc<_>, &Rc<_>), (&Rc<_>, &Rc<_>)) =
-            match_term!((= (not a) (=> b c) (or d e)) = &term, RETURN_RCS).unwrap();
 
         // Test the "..." pattern
         let term = parse_term("(not (and true false true))");

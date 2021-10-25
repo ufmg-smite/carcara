@@ -5,7 +5,7 @@ use ahash::{AHashMap, AHashSet};
 pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1);
 
-    let (forall_term, substituted) = match_term!((or (not f) s) = conclusion[0], RETURN_RCS)?;
+    let (forall_term, substituted) = match_term!((or (not f) s) = conclusion[0])?;
     let (quant, bindings, original) = forall_term.unwrap_quant()?;
     rassert!(quant == Quantifier::Forall);
 
@@ -56,7 +56,7 @@ pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 1);
 
-    let (left, right) = match_term!((= l r) = conclusion[0], RETURN_RCS)?;
+    let (left, right) = match_term!((= l r) = conclusion[0])?;
     let (q_1, bindings_1, phi_1) = left.unwrap_quant()?;
     let (bindings_2, phi_2) = match right.unwrap_quant() {
         Some((q, b, t)) if q == q_1 => (b.as_slice(), t),
@@ -87,7 +87,7 @@ fn negation_normal_form(
         return v.clone();
     }
 
-    let result = if let Some(inner) = match_term!((not t) = term, RETURN_RCS) {
+    let result = if let Some(inner) = match_term!((not t) = term) {
         negation_normal_form(pool, inner, !polarity, cache)
     } else if let Term::Op(op @ (Operator::And | Operator::Or), args) = term.as_ref() {
         let op = match (op, polarity) {
@@ -101,7 +101,7 @@ fn negation_normal_form(
             .map(|a| negation_normal_form(pool, a, polarity, cache))
             .collect();
         pool.add_term(Term::Op(op, args))
-    } else if let Some((p, q)) = match_term!((=> p q) = term, RETURN_RCS) {
+    } else if let Some((p, q)) = match_term!((=> p q) = term) {
         let a = negation_normal_form(pool, p, !polarity, cache);
         let b = negation_normal_form(pool, q, polarity, cache);
 
@@ -109,7 +109,7 @@ fn negation_normal_form(
             true => build_term!(pool, (or {a} {b})),
             false => build_term!(pool, (and {a} {b})),
         }
-    } else if let Some((p, q, r)) = match_term!((ite p q r) = term, RETURN_RCS) {
+    } else if let Some((p, q, r)) = match_term!((ite p q r) = term) {
         let a = negation_normal_form(pool, p, !polarity, cache);
         let b = negation_normal_form(pool, q, polarity, cache);
         let c = negation_normal_form(pool, p, polarity, cache);
@@ -124,7 +124,7 @@ fn negation_normal_form(
         let inner = negation_normal_form(pool, inner, polarity, cache);
         pool.add_term(Term::Quant(quant, bindings.clone(), inner))
     } else {
-        match match_term!((= p q) = term, RETURN_RCS) {
+        match match_term!((= p q) = term) {
             Some((left, right)) if *left.sort() == Sort::Bool => {
                 let a = negation_normal_form(pool, left, !polarity, cache);
                 let b = negation_normal_form(pool, right, polarity, cache);

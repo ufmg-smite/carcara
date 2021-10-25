@@ -12,7 +12,7 @@ pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> Option<()> 
 
     let cumulative_substitutions = &context.last()?.cumulative_substitutions;
 
-    let (left, right) = match_term!((= l r) = conclusion[0], RETURN_RCS)?;
+    let (left, right) = match_term!((= l r) = conclusion[0])?;
 
     // In some cases, the substitution is only applied to the left or the right term, and in some
     // cases it is applied to both. To cover all cases, we must check all three possibilities. We

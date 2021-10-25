@@ -13,8 +13,7 @@ pub fn not_not(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 2);
 
     let p = match_term!((not (not (not p))) = conclusion[0])?;
-    let q = conclusion[1].as_ref();
-    to_option(p == q)
+    to_option(p == &conclusion[1])
 }
 
 pub fn and_pos(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
@@ -30,9 +29,7 @@ pub fn and_pos(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 pub fn and_neg(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() >= 2);
 
-    let and_contents = match_term!((and ...) = conclusion[0])?
-        .iter()
-        .map(|t| Some(t.as_ref()));
+    let and_contents = match_term!((and ...) = conclusion[0])?.iter().map(Some);
     let remaining = conclusion[1..].iter().map(|t| t.remove_negation());
     to_option(and_contents.eq(remaining))
 }
@@ -49,16 +46,13 @@ pub fn or_neg(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 
     let or_contents = match_term!((or ...) = conclusion[0])?;
     let other = conclusion[1].remove_negation()?;
-    or_contents
-        .iter()
-        .find(|&t| t.as_ref() == other)
-        .map(|_| ())
+    or_contents.iter().find(|&t| t == other).map(|_| ())
 }
 
 pub fn xor_pos1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 3);
     let (phi_1, phi_2) = match_term!((not (xor phi_1 phi_2)) = conclusion[0])?;
-    to_option(phi_1 == conclusion[1].as_ref() && phi_2 == conclusion[2].as_ref())
+    to_option(phi_1 == &conclusion[1] && phi_2 == &conclusion[2])
 }
 
 pub fn xor_pos2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
@@ -72,25 +66,25 @@ pub fn xor_pos2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 pub fn xor_neg1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 3);
     let (phi_1, phi_2) = match_term!((xor phi_1 phi_2) = conclusion[0])?;
-    to_option(phi_1 == conclusion[1].as_ref() && phi_2 == conclusion[2].remove_negation()?)
+    to_option(phi_1 == &conclusion[1] && phi_2 == conclusion[2].remove_negation()?)
 }
 
 pub fn xor_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 3);
     let (phi_1, phi_2) = match_term!((xor phi_1 phi_2) = conclusion[0])?;
-    to_option(phi_1 == conclusion[1].remove_negation()? && phi_2 == conclusion[2].as_ref())
+    to_option(phi_1 == conclusion[1].remove_negation()? && phi_2 == &conclusion[2])
 }
 
 pub fn implies_pos(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 3);
     let (phi_1, phi_2) = match_term!((not (=> phi_1 phi_2)) = conclusion[0])?;
-    to_option(phi_1 == conclusion[1].remove_negation()? && phi_2 == conclusion[2].as_ref())
+    to_option(phi_1 == conclusion[1].remove_negation()? && phi_2 == &conclusion[2])
 }
 
 pub fn implies_neg1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 2);
     let (phi_1, _) = match_term!((=> phi_1 phi_2) = conclusion[0])?;
-    to_option(phi_1 == conclusion[1].as_ref())
+    to_option(phi_1 == &conclusion[1])
 }
 
 pub fn implies_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
@@ -102,13 +96,13 @@ pub fn implies_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 pub fn equiv_pos1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 3);
     let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = conclusion[0])?;
-    to_option(phi_1 == conclusion[1].as_ref() && phi_2 == conclusion[2].remove_negation()?)
+    to_option(phi_1 == &conclusion[1] && phi_2 == conclusion[2].remove_negation()?)
 }
 
 pub fn equiv_pos2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 3);
     let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = conclusion[0])?;
-    to_option(phi_1 == conclusion[1].remove_negation()? && phi_2 == conclusion[2].as_ref())
+    to_option(phi_1 == conclusion[1].remove_negation()? && phi_2 == &conclusion[2])
 }
 
 pub fn equiv_neg1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
@@ -122,25 +116,25 @@ pub fn equiv_neg1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 pub fn equiv_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 3);
     let (phi_1, phi_2) = match_term!((= phi_1 phi_2) = conclusion[0])?;
-    to_option(phi_1 == conclusion[1].as_ref() && phi_2 == conclusion[2].as_ref())
+    to_option(phi_1 == &conclusion[1] && phi_2 == &conclusion[2])
 }
 
 pub fn ite_pos1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 3);
     let (phi_1, _, phi_3) = match_term!((not (ite phi_1 phi_2 phi_3)) = conclusion[0])?;
-    to_option(phi_1 == conclusion[1].as_ref() && phi_3 == conclusion[2].as_ref())
+    to_option(phi_1 == &conclusion[1] && phi_3 == &conclusion[2])
 }
 
 pub fn ite_pos2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 3);
     let (phi_1, phi_2, _) = match_term!((not (ite phi_1 phi_2 phi_3)) = conclusion[0])?;
-    to_option(phi_1 == conclusion[1].remove_negation()? && phi_2 == conclusion[2].as_ref())
+    to_option(phi_1 == conclusion[1].remove_negation()? && phi_2 == &conclusion[2])
 }
 
 pub fn ite_neg1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() == 3);
     let (phi_1, _, phi_3) = match_term!((ite phi_1 phi_2 phi_3) = conclusion[0])?;
-    to_option(phi_1 == conclusion[1].as_ref() && phi_3 == conclusion[2].remove_negation()?)
+    to_option(phi_1 == &conclusion[1] && phi_3 == conclusion[2].remove_negation()?)
 }
 
 pub fn ite_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
@@ -155,21 +149,21 @@ pub fn equiv1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1 && conclusion.len() == 2);
     let premise_term = get_single_term_from_command(premises[0])?;
     let (phi_1, phi_2) = match_term!((= phi_1 phi_2) = premise_term)?;
-    to_option(phi_1 == conclusion[0].remove_negation()? && phi_2 == conclusion[1].as_ref())
+    to_option(phi_1 == conclusion[0].remove_negation()? && phi_2 == &conclusion[1])
 }
 
 pub fn equiv2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1 && conclusion.len() == 2);
     let premise_term = get_single_term_from_command(premises[0])?;
     let (phi_1, phi_2) = match_term!((= phi_1 phi_2) = premise_term)?;
-    to_option(phi_1 == conclusion[0].as_ref() && phi_2 == conclusion[1].remove_negation()?)
+    to_option(phi_1 == &conclusion[0] && phi_2 == conclusion[1].remove_negation()?)
 }
 
 pub fn not_equiv1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1 && conclusion.len() == 2);
     let premise_term = get_single_term_from_command(premises[0])?;
     let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = premise_term)?;
-    to_option(phi_1 == conclusion[0].as_ref() && phi_2 == conclusion[1].as_ref())
+    to_option(phi_1 == &conclusion[0] && phi_2 == &conclusion[1])
 }
 
 pub fn not_equiv2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
@@ -187,7 +181,7 @@ pub fn ite1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     let premise_term = get_single_term_from_command(premises[0])?;
     let (phi_1, _, phi_3) = match_term!((ite phi_1 phi_2 phi_3) = premise_term)?;
 
-    to_option(phi_1 == conclusion[0].as_ref() && phi_3 == conclusion[1].as_ref())
+    to_option(phi_1 == &conclusion[0] && phi_3 == &conclusion[1])
 }
 
 pub fn ite2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
@@ -196,14 +190,14 @@ pub fn ite2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     let premise_term = get_single_term_from_command(premises[0])?;
     let (phi_1, phi_2, _) = match_term!((ite phi_1 phi_2 phi_3) = premise_term)?;
 
-    to_option(phi_1 == conclusion[0].remove_negation()? && phi_2 == conclusion[1].as_ref())
+    to_option(phi_1 == conclusion[0].remove_negation()? && phi_2 == &conclusion[1])
 }
 
 pub fn not_ite1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1 && conclusion.len() == 2);
     let premise_term = get_single_term_from_command(premises[0])?;
     let (phi_1, _, phi_3) = match_term!((not (ite phi_1 phi_2 phi_3)) = premise_term)?;
-    to_option(phi_1 == conclusion[0].as_ref() && phi_3 == conclusion[1].remove_negation()?)
+    to_option(phi_1 == &conclusion[0] && phi_3 == conclusion[1].remove_negation()?)
 }
 
 pub fn not_ite2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
@@ -239,7 +233,7 @@ pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     let us = match_term!((and ...) = right_side)?;
 
     // "us" must be a conjunction where the first term is the root term
-    rassert!(DeepEq::eq_modulo_reordering(us[0].as_ref(), root_term));
+    rassert!(DeepEq::eq_modulo_reordering(&us[0], root_term));
 
     let us = &us[1..];
 
@@ -258,7 +252,7 @@ pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
             // Since the (= r_1 s_1) and (= r_2 s_2) equalities may be flipped, we have to check
             // all four possibilities: neither are flipped, either one is flipped, or both are
             // flipped
-            let is_valid = |r_1, s_1, r_2, s_2: &Term| {
+            let is_valid = |r_1, s_1, r_2, s_2| {
                 // s_i == s_1 == s_2 == (ite cond r_1 r_2)
                 s_1 == s_2 && (cond, r_1, r_2) == s_i && match_term!((ite a b c) = s_1) == Some(s_i)
             };
@@ -295,11 +289,11 @@ pub fn connective_def(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
         //     ite phi_1 phi_2 phi_3 <-> (phi_1 -> phi_2) ^ (¬phi_1 -> ¬phi_3)
         let ((a, b), (c, d)) = match_term!((and (=> a b) (=> (not c) d)) = second)?;
         a == phi_1 && b == phi_2 && c == phi_1 && d == phi_3
-    } else if let Term::Quant(Quantifier::Exists, first_bindings, first_inner) = first {
+    } else if let Term::Quant(Quantifier::Exists, first_bindings, first_inner) = first.as_ref() {
         // This case of the "connective_def" rule is not documented, but appears in some examples
         // ∃ x_1, ..., x_n . phi <-> ¬(∀ x_1, ..., x_n . ¬phi)
         if let Some(Term::Quant(Quantifier::Forall, second_bindings, second_inner)) =
-            second.remove_negation()
+            second.remove_negation().map(Rc::as_ref)
         {
             first_bindings == second_bindings && second_inner.remove_negation() == Some(first_inner)
         } else {
