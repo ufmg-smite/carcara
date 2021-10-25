@@ -99,6 +99,7 @@ macro_rules! test_cases {
 // macro is declared
 pub(super) mod clausification;
 pub(super) mod congruence;
+pub(super) mod extras;
 pub(super) mod linear_arithmetic;
 pub(super) mod quantifier;
 pub(super) mod reflexivity;

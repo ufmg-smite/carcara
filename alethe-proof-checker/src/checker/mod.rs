@@ -350,6 +350,9 @@ impl<'c> ProofChecker<'c> {
             "onepoint" => subproof::onepoint,
             "sko_ex" => subproof::sko_ex,
             "sko_forall" => subproof::sko_forall,
+            "reordering" => extras::reordering,
+            "symm" => extras::symm,
+
             "trust_me" if allow_test_rule => |_| Some(()),
             _ => return None,
         })
