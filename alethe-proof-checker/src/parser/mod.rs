@@ -550,11 +550,11 @@ impl<R: BufRead> Parser<R> {
         // with an assumption index as its value. While the checker already has support this rule,
         // it still can't parse and interpret the ":discharge" attributes values properly, so we
         // are simply consuming and ignoring the attribute if it appears
+        // TODO: Add tests for this attribute
         if self.current_token == Token::Keyword("discharge".into()) {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
-            self.expect_symbol()?;
-            self.expect_token(Token::CloseParen)?;
+            self.parse_sequence(Self::expect_symbol, true)?;
         }
 
         self.expect_token(Token::CloseParen)?;
