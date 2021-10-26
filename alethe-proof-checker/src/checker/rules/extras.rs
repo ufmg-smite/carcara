@@ -19,14 +19,18 @@ pub fn symm(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
     rassert!(premises.len() == 1 && conclusion.len() == 1);
 
     let premise = get_single_term_from_command(premises[0])?;
-    if let Some((p_1, q_1)) = match_term!((= p q) = premise) {
-        let (q_2, p_2) = match_term!((= q p) = conclusion[0])?;
-        to_option(p_1 == p_2 && q_1 == q_2)
-    } else {
-        let (p_1, q_1) = match_term!((not (= q p)) = premise)?;
-        let (q_2, p_2) = match_term!((not (= q p)) = conclusion[0])?;
-        to_option(p_1 == p_2 && q_1 == q_2)
-    }
+    let (p_1, q_1) = match_term!((= p q) = premise)?;
+    let (q_2, p_2) = match_term!((= q p) = conclusion[0])?;
+    to_option(p_1 == p_2 && q_1 == q_2)
+}
+
+pub fn not_symm(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
+    rassert!(premises.len() == 1 && conclusion.len() == 1);
+
+    let premise = get_single_term_from_command(premises[0])?;
+    let (p_1, q_1) = match_term!((not (= p q)) = premise)?;
+    let (q_2, p_2) = match_term!((not (= q p)) = conclusion[0])?;
+    to_option(p_1 == p_2 && q_1 == q_2)
 }
 
 #[cfg(test)]
@@ -64,9 +68,29 @@ mod tests {
             "Simple working examples" {
                 "(assume h1 (= a b))
                 (step t1 (cl (= b a)) :rule symm :premises (h1))": true,
-
+            }
+            "Failing examples" {
                 "(assume h1 (not (= a b)))
-                (step t1 (cl (not (= b a))) :rule symm :premises (h1))": true,
+                (step t1 (cl (not (= b a))) :rule symm :premises (h1))": false,
+            }
+        }
+    }
+
+    #[test]
+    fn not_symm() {
+        test_cases! {
+            definitions = "
+                (declare-sort T 0)
+                (declare-fun a () T)
+                (declare-fun b () T)
+            ",
+            "Simple working examples" {
+                "(assume h1 (not (= a b)))
+                (step t1 (cl (not (= b a))) :rule not_symm :premises (h1))": true,
+            }
+            "Failing examples" {
+                "(assume h1 (= a b))
+                (step t1 (cl (= b a)) :rule not_symm :premises (h1))": false,
             }
         }
     }

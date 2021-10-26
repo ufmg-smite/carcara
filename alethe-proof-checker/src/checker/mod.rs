@@ -363,6 +363,7 @@ impl<'c> ProofChecker<'c> {
             "sko_forall" => subproof::sko_forall,
             "reordering" => extras::reordering,
             "symm" => extras::symm,
+            "not_symm" => extras::not_symm,
 
             "trust_me" if allow_test_rule => |_| Some(()),
             _ => return None,
