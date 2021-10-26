@@ -205,7 +205,9 @@ impl<R: BufRead> Parser<R> {
                 ErrorKind::assert_num_of_args_range(&args, 2..)?;
                 // All the arguments must be either Int or Real sorted, but they don't need to all
                 // have the same sort
-                SortError::assert_one_of(&[Sort::Int, Sort::Real], sorts[0])?;
+                for s in sorts {
+                    SortError::assert_one_of(&[Sort::Int, Sort::Real], s)?;
+                }
             }
             Operator::Select => {
                 ErrorKind::assert_num_of_args(&args, 2)?;
