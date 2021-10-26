@@ -10,6 +10,7 @@ mod utils;
 use checker::CheckerError;
 use parser::error::ParserError;
 use std::{
+    fmt,
     fs::File,
     io::{self, BufReader},
     path::Path,
@@ -36,6 +37,15 @@ impl From<CheckerError> for Error {
 impl From<io::Error> for Error {
     fn from(e: io::Error) -> Self {
         Self::Parser(e.into())
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Error::Parser(e) => write!(f, "parser error: {}", e),
+            Error::Checker(e) => write!(f, "checker error: {}", e),
+        }
     }
 }
 

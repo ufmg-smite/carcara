@@ -1,5 +1,5 @@
 use alethe_proof_checker::parser::error::ParserError;
-use std::{io, path::PathBuf};
+use std::{fmt, io, path::PathBuf};
 
 #[derive(Debug)]
 pub enum CliError {
@@ -24,5 +24,18 @@ impl From<alethe_proof_checker::Error> for CliError {
 impl From<ParserError> for CliError {
     fn from(e: ParserError) -> Self {
         Self::AletheError(e.into())
+    }
+}
+
+impl fmt::Display for CliError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            CliError::InvalidArgument(a) => write!(f, "invalid argument: {}", a),
+            CliError::InvalidProofFile(p) => {
+                write!(f, "{} is not a valid proof file", p.to_str().unwrap())
+            }
+            CliError::AletheError(e) => write!(f, "{}", e),
+            CliError::Io(e) => write!(f, "io error: {}", e),
+        }
     }
 }

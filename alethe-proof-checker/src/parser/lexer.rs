@@ -3,7 +3,7 @@ use num_rational::BigRational;
 use num_traits::Num;
 
 use std::{
-    fmt::Debug,
+    fmt,
     io::{self, BufRead},
     str::FromStr,
 };
@@ -21,6 +21,22 @@ pub enum Token {
     String(String),
     ReservedWord(Reserved),
     Eof,
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Token::OpenParen => write!(f, "("),
+            Token::CloseParen => write!(f, ")"),
+            Token::Symbol(s) => write!(f, "{}", s),
+            Token::Keyword(k) => write!(f, ":{}", k),
+            Token::Numeral(n) => write!(f, "{}", n),
+            Token::Decimal(r) => write!(f, "{}", r),
+            Token::String(s) => write!(f, "\"{}\"", s),
+            Token::ReservedWord(r) => write!(f, "{:?}", r),
+            Token::Eof => write!(f, "EOF"),
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -185,7 +201,7 @@ impl<R: BufRead> Lexer<R> {
             Some(c) if c.is_ascii_digit() => self.read_number(),
             Some(c) if Lexer::is_symbol_character(c) => self.read_simple_symbol(),
             None => Ok(Token::Eof),
-            other => Err(ParserError(
+            Some(other) => Err(ParserError(
                 ErrorKind::UnexpectedChar(other),
                 Some(self.position),
             )),
@@ -232,7 +248,8 @@ impl<R: BufRead> Lexer<R> {
         let base = match self.next_char()? {
             Some('b') => 2,
             Some('x') => 16,
-            other => {
+            None => return Err(ParserError(ErrorKind::EofInNumeral, Some(self.position))),
+            Some(other) => {
                 return Err(ParserError(
                     ErrorKind::UnexpectedChar(other),
                     Some(self.position),
@@ -394,12 +411,12 @@ mod tests {
 
         assert!(matches!(
             lex_one("#o123"),
-            Err(ParserError(ErrorKind::UnexpectedChar(Some('o')), _)),
+            Err(ParserError(ErrorKind::UnexpectedChar('o'), _)),
         ));
 
         assert!(matches!(
             lex_one("#"),
-            Err(ParserError(ErrorKind::UnexpectedChar(None), _)),
+            Err(ParserError(ErrorKind::EofInNumeral, _)),
         ));
     }
 

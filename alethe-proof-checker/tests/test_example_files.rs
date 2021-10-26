@@ -3,11 +3,9 @@ use std::{ffi::OsStr, fs, io, path::Path};
 
 fn test_file(problem_path: &Path, proof_path: &Path) {
     use checker::Correctness;
-    use parser::error::{ErrorKind, ParserError};
 
     match check(problem_path, proof_path, true, false) {
-        Ok(Correctness::True)
-        | Err(Error::Parser(ParserError(ErrorKind::NotYetImplemented, _))) => (),
+        Ok(Correctness::True) => (),
         Ok(Correctness::False(step, rule)) => panic!(
             "\ntest file \"{}\"\nfailed on step {}, with rule \"{}\"\n",
             &problem_path.to_str().unwrap(),

@@ -14,10 +14,7 @@ use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
 pub use rc::Rc;
-use std::{
-    fmt::{self, Debug},
-    hash::Hash,
-};
+use std::{fmt, hash::Hash};
 
 pub struct TermPool {
     pub terms: AHashMap<Term, Rc<Term>>,
@@ -329,6 +326,52 @@ pub enum Sort {
     Array(Rc<Term>, Rc<Term>),
 }
 
+impl fmt::Display for Sort {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Sort::Function(sorts) => match sorts.as_slice() {
+                [] => unreachable!(),
+                [ret] => write!(f, "<function () -> {}>", ret.as_sort().unwrap()),
+                [param, ret] => write!(
+                    f,
+                    "<function {} -> {}>",
+                    param.as_sort().unwrap(),
+                    ret.as_sort().unwrap()
+                ),
+                [first, rest @ .., ret] => {
+                    write!(f, "<function ({}", first.as_sort().unwrap())?;
+                    for p in rest {
+                        write!(f, " {}", p.as_sort().unwrap())?;
+                    }
+                    write!(f, " ) -> {}>", ret.as_sort().unwrap())
+                }
+            },
+            Sort::Atom(name, params) => {
+                if params.is_empty() {
+                    write!(f, "{}", name)
+                } else {
+                    write!(f, "({}", name)?;
+                    for p in params {
+                        let p = p.as_sort().unwrap();
+                        write!(f, " {}", p)?;
+                    }
+                    write!(f, ")")
+                }
+            }
+            Sort::Bool => write!(f, "Bool"),
+            Sort::Int => write!(f, "Int"),
+            Sort::Real => write!(f, "Real"),
+            Sort::String => write!(f, "String"),
+            Sort::Array(k, v) => write!(
+                f,
+                "(Array {} {})",
+                k.as_sort().unwrap(),
+                v.as_sort().unwrap()
+            ),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Quantifier {
     Forall,
@@ -555,12 +598,12 @@ impl Rc<Term> {
     }
 }
 
-impl Debug for Term {
+impl fmt::Debug for Term {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fn write_sequence<H, T>(f: &mut fmt::Formatter, head: H, tail: &[T]) -> fmt::Result
         where
-            H: Debug,
-            T: Debug,
+            H: fmt::Debug,
+            T: fmt::Debug,
         {
             write!(f, "({:?}", head)?;
             for e in tail {
@@ -626,8 +669,8 @@ pub enum Terminal {
     Var(Identifier, Rc<Term>),
 }
 
-impl Debug for Terminal {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Debug for Terminal {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Terminal::Integer(i) => write!(f, "{}", i),
             Terminal::Real(r) => write!(
@@ -648,10 +691,34 @@ pub enum Identifier {
     Indexed(String, Vec<Index>),
 }
 
+impl fmt::Display for Identifier {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Identifier::Simple(s) => write!(f, "{}", s),
+            Identifier::Indexed(s, indices) => {
+                write!(f, "(_ {}", s)?;
+                for i in indices {
+                    write!(f, " {}", i)?;
+                }
+                write!(f, ")")
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Index {
     Numeral(u64),
     Symbol(String),
+}
+
+impl fmt::Display for Index {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Index::Numeral(n) => write!(f, "{}", n),
+            Index::Symbol(s) => write!(f, "{}", s),
+        }
+    }
 }
 
 /// A trait that implements less strict definitions of equality for terms. This trait represents

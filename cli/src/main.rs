@@ -151,7 +151,7 @@ fn main() {
     };
     logger::init(level);
     if let Err(e) = run_app(&matches) {
-        log::error!("{:?}", e);
+        log::error!("{}", e);
         std::process::exit(1);
     }
 }

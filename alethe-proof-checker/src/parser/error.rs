@@ -1,14 +1,44 @@
 use super::lexer::{Position, Token};
 use crate::ast::{Identifier, Sort};
 use num_bigint::BigInt;
-use std::io;
-use std::ops::RangeFrom;
+use std::{fmt, io, ops::RangeFrom};
 
 /// A `Result` type alias for parser errors.
 pub type ParserResult<T> = Result<T, ParserError>;
 
 #[derive(Debug, PartialEq)]
 pub struct ParserError(pub ErrorKind, pub Option<Position>);
+
+impl fmt::Display for ParserError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self.0 {
+            ErrorKind::Io(e) => write!(f, "{}", e.0),
+            ErrorKind::UnexpectedChar(c) => write!(f, "unexpected character: '{}'", c),
+            ErrorKind::LeadingZero(s) => write!(f, "leading zero in numeral '{}'", s),
+            ErrorKind::BackslashInQuotedSymbol => write!(f, "quoted symbol contains backslash"),
+            ErrorKind::EofInQuotedSymbol => write!(f, "unexpected EOF in quoted symbol"),
+            ErrorKind::EofInString => write!(f, "unexpected EOF in string literal"),
+            ErrorKind::EofInNumeral => write!(f, "unexpected EOF in numeral"),
+            ErrorKind::UnexpectedToken(t) => write!(f, "unexpected token: '{}'", t),
+            ErrorKind::EmptySequence => write!(f, "expected non-empty sequence"),
+            ErrorKind::SortError(e) => write!(f, "sort error: {}", e),
+            ErrorKind::UndefinedIden(i) => write!(f, "identifier '{}' is not defined", i),
+            ErrorKind::UndefinedSort(s) => write!(f, "sort '{}' is not defined", s),
+            ErrorKind::UndefinedStepIndex(i) => write!(f, "step index '{}' is not defined", i),
+            ErrorKind::WrongNumberOfArgs(e, g) => write!(f, "expected {} arguments, got {}", e, g),
+            ErrorKind::RepeatedStepIndex(i) => write!(f, "step index '{}' was repeated", i),
+            ErrorKind::InvalidSortArity(n) => write!(f, "{} is not a valid sort arity", n),
+            ErrorKind::LastSubproofStepIsNotStep(i) => {
+                write!(f, "last command in subproof '{}' is not a step", i)
+            }
+            ErrorKind::UnknownAttribute(a) => write!(f, "unknown attribute: ':{}'", a),
+        }?;
+        if let Some((l, c)) = self.1 {
+            write!(f, " (on line {}, column {})", l, c)?;
+        }
+        Ok(())
+    }
+}
 
 impl<T: Into<ErrorKind>> From<T> for ParserError {
     fn from(err: T) -> Self {
@@ -26,11 +56,12 @@ impl<T: Into<ErrorKind>> From<(T, Position)> for ParserError {
 #[derive(Debug, PartialEq)]
 pub enum ErrorKind {
     Io(ParserIoError),
-    UnexpectedChar(Option<char>),
+    UnexpectedChar(char),
     LeadingZero(String),
     BackslashInQuotedSymbol,
     EofInQuotedSymbol,
     EofInString,
+    EofInNumeral,
     UnexpectedToken(Token),
     EmptySequence,
     SortError(SortError),
@@ -40,9 +71,8 @@ pub enum ErrorKind {
     WrongNumberOfArgs(usize, usize),
     RepeatedStepIndex(String),
     InvalidSortArity(BigInt),
-    LastSubproofStepIsNotStep,
+    LastSubproofStepIsNotStep(String),
     UnknownAttribute(String),
-    NotYetImplemented,
 }
 
 impl From<io::Error> for ErrorKind {
@@ -95,6 +125,27 @@ impl PartialEq for ParserIoError {
 pub enum SortError {
     Expected { expected: Sort, got: Sort },
     ExpectedOneOf { possibilities: Vec<Sort>, got: Sort },
+}
+
+impl fmt::Display for SortError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SortError::Expected { expected, got } => {
+                write!(f, "expected '{}', got '{}'", expected, got)
+            }
+            SortError::ExpectedOneOf { possibilities, got } => match possibilities.as_slice() {
+                [] => unreachable!(),
+                [p] => write!(f, "expected '{}', got '{}'", p, got),
+                [first, middle @ .., last] => {
+                    write!(f, "expected '{}'", first)?;
+                    for p in middle {
+                        write!(f, ", '{}'", p)?;
+                    }
+                    write!(f, "or '{}', got '{}'", last, got)
+                }
+            },
+        }
+    }
 }
 
 impl SortError {

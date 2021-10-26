@@ -6,11 +6,22 @@ use crate::{
 };
 use ahash::{AHashMap, AHashSet};
 use rules::{Rule, RuleArgs};
-use std::time::{Duration, Instant};
+use std::{
+    fmt,
+    time::{Duration, Instant},
+};
 
 #[derive(Debug)]
 pub enum CheckerError {
     UnknownRule(String),
+}
+
+impl fmt::Display for CheckerError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            CheckerError::UnknownRule(r) => write!(f, "unknown rule: '{}'", r),
+        }
+    }
 }
 
 /// Represents the correctness of a proof or a proof step.

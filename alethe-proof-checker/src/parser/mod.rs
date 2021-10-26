@@ -480,7 +480,7 @@ impl<R: BufRead> Parser<R> {
                 let commands = commands_stack.pop().unwrap();
                 match commands.last() {
                     Some(ProofCommand::Step(_)) => (),
-                    _ => return Err(self.err(ErrorKind::LastSubproofStepIsNotStep)),
+                    _ => return Err(self.err(ErrorKind::LastSubproofStepIsNotStep(index))),
                 };
                 end_step_stack.pop().unwrap();
                 let (assignment_args, variable_args) = subproof_args_stack.pop().unwrap();
