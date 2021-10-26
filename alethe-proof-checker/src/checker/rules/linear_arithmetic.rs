@@ -133,6 +133,16 @@ impl LinearComb {
     }
 
     fn mul(&mut self, scalar: &BigRational) {
+        if scalar.is_zero() {
+            self.0.clear();
+            self.1.set_zero();
+            return;
+        }
+
+        if scalar.is_one() {
+            return;
+        }
+
         for coeff in self.0.values_mut() {
             *coeff *= scalar;
         }
@@ -140,9 +150,11 @@ impl LinearComb {
     }
 
     fn neg(&mut self) {
-        // We multiply by -1 instead of using the unary "-" operator because that would require
-        // cloning. There is no simple way to negate in place
-        self.mul(&-BigRational::one());
+        for coeff in self.0.values_mut() {
+            // While cloning here seems bad, it is actually faster than the alternatives
+            *coeff = -coeff.clone();
+        }
+        self.1 = -self.1.clone()
     }
 
     fn sub(self, mut other: Self) -> Self {
@@ -153,26 +165,38 @@ impl LinearComb {
     /// Finds the greatest common divisor of the coefficients in the linear combination. Returns
     /// `None` if the linear combination is empty, or if any of the coefficients is not an integer.
     fn coefficients_gcd(&self) -> Option<BigInt> {
-        let mut coefficients = self
-            .0
-            .iter()
-            .map(|(_, coeff)| {
-                if coeff.is_integer() {
-                    Some(coeff.to_integer().abs())
-                } else {
-                    None
-                }
-            })
-            .collect::<Option<Vec<_>>>()?;
-        if self.1.is_integer() && !self.1.is_zero() {
-            coefficients.push(self.1.to_integer().abs())
+        if !self.1.is_integer() {
+            return None;
         }
-        coefficients.into_iter().reduce(num_integer::gcd)
+        let coefficients = self.0.iter().map(|(_, coeff)| {
+            if coeff.is_integer() {
+                Some(coeff.to_integer().abs())
+            } else {
+                None
+            }
+        });
+
+        let mut result = self.1.to_integer().abs();
+        for c in coefficients {
+            result = num_integer::gcd(c?, result);
+        }
+
+        // If the linear combination is all zeros, the result would also be zero. In that case, we
+        // have to return one instead
+        Some(std::cmp::max(BigInt::one(), result))
     }
 }
 
 fn strengthen(op: Operator, disequality: &mut LinearComb, a: &BigRational) -> Operator {
-    let is_integer = (&disequality.1 * a).is_integer();
+    // Multiplications are expensive, so we avoid them if we can
+    let is_integer = if a.is_zero() {
+        true
+    } else if a.is_one() {
+        disequality.1.is_integer()
+    } else {
+        (&disequality.1 * a).is_integer()
+    };
+
     match op {
         Operator::GreaterEq if is_integer => op,
 
