@@ -239,7 +239,11 @@ pub struct ProofStep {
     pub index: String,
     pub clause: Vec<Rc<Term>>,
     pub rule: String,
-    pub premises: Vec<usize>,
+
+    /// Premises are indexed with two indices: The first indicates the depth of the subproof (where
+    /// 0 is the root proof) and the second is the index of the command in that subproof.
+    pub premises: Vec<(usize, usize)>,
+
     pub args: Vec<ProofArg>,
 }
 

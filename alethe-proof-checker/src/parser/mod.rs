@@ -58,6 +58,14 @@ impl<K: Eq + Hash, V> SymbolTable<K, V> {
         self.scopes.iter().rev().find_map(|scope| scope.get(key))
     }
 
+    fn get_with_depth(&self, key: &K) -> Option<(usize, &V)> {
+        self.scopes
+            .iter()
+            .enumerate()
+            .rev()
+            .find_map(|(depth, scope)| scope.get(key).map(|v| (depth, v)))
+    }
+
     fn insert(&mut self, key: K, value: V) {
         self.scopes.last_mut().unwrap().insert(key, value);
     }
@@ -422,23 +430,15 @@ impl<R: BufRead> Parser<R> {
                 Token::ReservedWord(Reserved::Step) => {
                     let (index, (clause, rule, premises, args)) = self.parse_step_command()?;
 
-                    // If this is the last step in the subproof, we pop the top scope off of the
-                    // step indices symbol table before converting the premises into indices. We
-                    // must do this here because if the last step of a subproof has premises, they
-                    // refer to the outer scope, and not inside the subproof
-                    if end_step_stack.last() == Some(&index) {
-                        self.state.step_indices.pop_scope();
-                    }
-
-                    // For every premise index symbol, find the associated `usize` in the
-                    // `step_indices` hash map, or return an error
+                    // For every premise index symbol, find the associated premise index (depth and
+                    // command index) in the `step_indices` symbol table, or return an error
                     let premises: Vec<_> = premises
                         .into_iter()
                         .map(|index| {
                             self.state
                                 .step_indices
-                                .get(&index)
-                                .copied()
+                                .get_with_depth(&index)
+                                .map(|(d, &i)| (d, i))
                                 .ok_or(ParserError(
                                     // TODO: Make this error carry the position of the actual
                                     // premise token
@@ -490,11 +490,14 @@ impl<R: BufRead> Parser<R> {
             commands_stack.last_mut().unwrap().push(command);
             if end_step_stack.last() == Some(&index) {
                 // If this is the last step in a subproof, we need to pop all the subproof data off
-                // of the stacks and build the subproof command with it. We don't need to pop off
-                // the scope added to the step indices symbol table because that is done when the
-                // last step is being parsed. We just need to make sure that the last command is in
-                // fact a "step"
+                // of the stacks and build the subproof command with it
+                self.state.sorts_symbol_table.pop_scope();
+                self.state.step_indices.pop_scope();
                 let commands = commands_stack.pop().unwrap();
+                end_step_stack.pop().unwrap();
+                let (assignment_args, variable_args) = subproof_args_stack.pop().unwrap();
+
+                // We also need to make sure that the last command is in fact a "step"
                 match commands.last() {
                     Some(ProofCommand::Step(_)) => (),
                     _ => {
@@ -504,9 +507,7 @@ impl<R: BufRead> Parser<R> {
                         ))
                     }
                 };
-                end_step_stack.pop().unwrap();
-                let (assignment_args, variable_args) = subproof_args_stack.pop().unwrap();
-                self.state.sorts_symbol_table.pop_scope();
+
                 commands_stack
                     .last_mut()
                     .unwrap()

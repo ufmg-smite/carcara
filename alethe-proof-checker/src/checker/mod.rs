@@ -98,15 +98,15 @@ impl<'c> ProofChecker<'c> {
                 // The parser already ensures that the last command in a subproof is always a
                 // "step" command
                 ProofCommand::Step(step) if commands_stack.len() > 1 && i == commands.len() - 1 => {
+                    let correctness = self.check_step(step, &commands_stack, true)?;
+
                     // If this is the last command of a subproof, we have to pop the subproof
                     // commands off of the stack
                     commands_stack.pop();
-                    let correctness =
-                        self.check_step(step, commands_stack.last().unwrap().1, Some(commands))?;
                     self.context.pop();
                     Ok(correctness)
                 }
-                ProofCommand::Step(step) => self.check_step(step, commands, None),
+                ProofCommand::Step(step) => self.check_step(step, &commands_stack, false),
                 ProofCommand::Subproof {
                     commands: inner_commands,
                     assignment_args,
@@ -171,8 +171,8 @@ impl<'c> ProofChecker<'c> {
             premises,
             args,
         }: &'a ProofStep,
-        all_commands: &'a [ProofCommand],
-        subproof_commands: Option<&'a [ProofCommand]>,
+        commands_stack: &'a [(usize, &'a [ProofCommand])],
+        is_end_of_subproof: bool,
     ) -> CheckerResult {
         let time = Instant::now();
         let rule = match Self::get_rule(rule_name, self.config.allow_test_rule) {
@@ -180,7 +180,19 @@ impl<'c> ProofChecker<'c> {
             None if self.config.skip_unknown_rules => return Ok(Correctness::True),
             None => return Err(CheckerError::UnknownRule(rule_name.to_string())),
         };
-        let premises = premises.iter().map(|&i| &all_commands[i]).collect();
+        let premises = premises
+            .iter()
+            .map(|&(depth, i)| &commands_stack[depth].1[i])
+            .collect();
+
+        // If this step ends a subproof, it might need to implicitly reference the other commands
+        // in the subproof. Therefore, we pass them via the `subproof_commands` field
+        let subproof_commands = if is_end_of_subproof {
+            Some(commands_stack.last().unwrap().1)
+        } else {
+            None
+        };
+
         let rule_args = RuleArgs {
             conclusion: clause,
             premises,

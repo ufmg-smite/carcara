@@ -527,7 +527,7 @@ fn test_step() {
             index: "t2".into(),
             clause: Vec::new(),
             rule: "rule-name".into(),
-            premises: vec![0],
+            premises: vec![(0, 0)],
             args: Vec::new(),
         })
     );
@@ -578,8 +578,57 @@ fn test_step() {
             index: "t5".into(),
             clause: Vec::new(),
             rule: "rule-name".into(),
-            premises: vec![0, 1, 2],
+            premises: vec![(0, 0), (0, 1), (0, 2)],
             args: vec![ProofArg::Term(Rc::new(terminal!(int 42)))],
+        })
+    );
+}
+
+#[test]
+fn test_premises_in_subproofs() {
+    let input = "
+        (assume h1 true)
+        (assume h2 true)
+        (anchor :step t3)
+        (step t3.t1 (cl) :rule rule-name :premises (h1 h2))
+        (step t3.t2 (cl) :rule rule-name :premises (t3.t1 h1 h2))
+        (step t3 (cl) :rule rule-name :premises (h1 t3.t1 h2 t3.t2))
+    ";
+    let proof = parse_proof(input);
+    assert_eq!(proof.commands.len(), 3);
+    let subproof = match &proof.commands[2] {
+        ProofCommand::Subproof { commands, .. } => commands,
+        _ => panic!(),
+    };
+    assert_eq!(subproof.len(), 3);
+    assert_deep_eq!(
+        &subproof[0],
+        &ProofCommand::Step(ProofStep {
+            index: "t3.t1".into(),
+            clause: Vec::new(),
+            rule: "rule-name".into(),
+            premises: vec![(0, 0), (0, 1)],
+            args: Vec::new(),
+        })
+    );
+    assert_deep_eq!(
+        &subproof[1],
+        &ProofCommand::Step(ProofStep {
+            index: "t3.t2".into(),
+            clause: Vec::new(),
+            rule: "rule-name".into(),
+            premises: vec![(1, 0), (0, 0), (0, 1)],
+            args: Vec::new(),
+        })
+    );
+    assert_deep_eq!(
+        &subproof[2],
+        &ProofCommand::Step(ProofStep {
+            index: "t3.t3".into(),
+            clause: Vec::new(),
+            rule: "rule-name".into(),
+            premises: vec![(0, 0), (1, 0), (0, 1), (1, 1)],
+            args: Vec::new(),
         })
     );
 }
