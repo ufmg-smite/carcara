@@ -365,6 +365,8 @@ impl<'c> ProofChecker<'c> {
             "symm" => extras::symm,
             "not_symm" => extras::not_symm,
 
+            // TODO: Unify these two rules
+            "trust" => |_| Some(()),
             "trust_me" if allow_test_rule => |_| Some(()),
             _ => return None,
         })
