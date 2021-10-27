@@ -84,7 +84,7 @@ pub struct Lexer<R> {
     input: R,
     current_line: Option<std::vec::IntoIter<char>>,
     current_char: Option<char>,
-    pub position: Position,
+    position: Position,
 }
 
 impl<R: BufRead> Lexer<R> {
@@ -183,9 +183,10 @@ impl<R: BufRead> Lexer<R> {
         Ok(())
     }
 
-    pub fn next_token(&mut self) -> ParserResult<Token> {
+    pub fn next_token(&mut self) -> ParserResult<(Token, Position)> {
         self.consume_whitespace()?;
-        match self.current_char {
+        let start_position = self.position;
+        let token = match self.current_char {
             Some('(') => {
                 self.next_char()?;
                 Ok(Token::OpenParen)
@@ -205,7 +206,8 @@ impl<R: BufRead> Lexer<R> {
                 ErrorKind::UnexpectedChar(other),
                 Some(self.position),
             )),
-        }
+        }?;
+        Ok((token, start_position))
     }
 
     fn read_simple_symbol(&mut self) -> Result<Token, ParserError> {
@@ -319,14 +321,14 @@ mod tests {
 
     fn lex_one(input: &str) -> ParserResult<Token> {
         let mut lex = Lexer::new(std::io::Cursor::new(input)).map_err(|err| (err, (0, 0)))?;
-        lex.next_token()
+        lex.next_token().map(|(tk, _)| tk)
     }
 
     fn lex_all(input: &str) -> Vec<Token> {
         let mut lex = Lexer::new(std::io::Cursor::new(input)).expect("lexer error during test");
         let mut result = Vec::new();
         loop {
-            let tk = lex.next_token().expect("lexer error during test");
+            let tk = lex.next_token().expect("lexer error during test").0;
             if tk == Token::Eof {
                 break;
             }

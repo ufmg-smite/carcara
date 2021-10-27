@@ -83,6 +83,7 @@ struct ParserState {
 pub struct Parser<R> {
     lexer: Lexer<R>,
     current_token: Token,
+    current_position: Position,
     state: ParserState,
     interpret_integers_as_reals: bool,
 }
@@ -104,24 +105,24 @@ impl<R: BufRead> Parser<R> {
     /// is an IO or lexer error on the first token.
     fn with_state(input: R, state: ParserState) -> ParserResult<Self> {
         let mut lexer = Lexer::new(input)?;
-        let current_token = lexer.next_token()?;
+        let (current_token, current_position) = lexer.next_token()?;
         Ok(Parser {
             lexer,
             current_token,
+            current_position,
             state,
             interpret_integers_as_reals: false,
         })
     }
 
     /// Advances the parser one token, and returns the previous `current_token`.
-    fn next_token(&mut self) -> ParserResult<Token> {
-        let new = self.lexer.next_token()?;
-        Ok(std::mem::replace(&mut self.current_token, new))
-    }
+    fn next_token(&mut self) -> ParserResult<(Token, Position)> {
+        use std::mem::replace;
 
-    /// Helper method to build a parser error with the current lexer position.
-    fn err(&self, err: ErrorKind) -> ParserError {
-        ParserError(err, Some(self.lexer.position))
+        let (new_token, new_position) = self.lexer.next_token()?;
+        let old_token = replace(&mut self.current_token, new_token);
+        let old_position = replace(&mut self.current_position, new_position);
+        Ok((old_token, old_position))
     }
 
     /// Shortcut for `self.state.term_pool.add_term`.
@@ -142,8 +143,8 @@ impl<R: BufRead> Parser<R> {
     }
 
     /// Helper method to build a `ErrorKind::UnexpectedToken` error.
-    fn unexpected_token(&self, got: Token) -> ParserError {
-        self.err(ErrorKind::UnexpectedToken(got))
+    fn unexpected_token(&self, (token, pos): (Token, Position)) -> ParserError {
+        ParserError(ErrorKind::UnexpectedToken(token), Some(pos))
     }
 
     /// Constructs and sort checks a variable term.
@@ -275,7 +276,7 @@ impl<R: BufRead> Parser<R> {
     /// Consumes the current token if it equals `expected`. Returns an error otherwise.
     fn expect_token(&mut self, expected: Token) -> ParserResult<()> {
         let got = self.next_token()?;
-        if got == expected {
+        if got.0 == expected {
             Ok(())
         } else {
             Err(self.unexpected_token(got))
@@ -286,7 +287,7 @@ impl<R: BufRead> Parser<R> {
     /// error otherwise.
     fn expect_symbol(&mut self) -> ParserResult<String> {
         match self.next_token()? {
-            Token::Symbol(s) => Ok(s),
+            (Token::Symbol(s), _) => Ok(s),
             other => Err(self.unexpected_token(other)),
         }
     }
@@ -295,7 +296,7 @@ impl<R: BufRead> Parser<R> {
     /// error otherwise.
     fn expect_keyword(&mut self) -> ParserResult<String> {
         match self.next_token()? {
-            Token::Keyword(s) => Ok(s),
+            (Token::Keyword(s), _) => Ok(s),
             other => Err(self.unexpected_token(other)),
         }
     }
@@ -304,7 +305,7 @@ impl<R: BufRead> Parser<R> {
     /// error otherwise.
     fn expect_numeral(&mut self) -> ParserResult<BigInt> {
         match self.next_token()? {
-            Token::Numeral(n) => Ok(n),
+            (Token::Numeral(n), _) => Ok(n),
             other => Err(self.unexpected_token(other)),
         }
     }
@@ -320,7 +321,10 @@ impl<R: BufRead> Parser<R> {
             result.push(parse_func(self)?);
         }
         if non_empty && result.is_empty() {
-            Err(self.err(ErrorKind::EmptySequence))
+            Err(ParserError(
+                ErrorKind::EmptySequence,
+                Some(self.current_position),
+            ))
         } else {
             self.next_token()?; // Consume ")" token
             Ok(result)
@@ -334,7 +338,7 @@ impl<R: BufRead> Parser<R> {
 
         while self.current_token != Token::Eof {
             self.expect_token(Token::OpenParen)?;
-            match self.next_token()? {
+            match self.next_token()?.0 {
                 Token::ReservedWord(Reserved::DeclareFun) => {
                     let (name, sort) = self.parse_declare_fun()?;
                     self.insert_sorted_var((name, sort));
@@ -385,9 +389,11 @@ impl<R: BufRead> Parser<R> {
                     let mut parens_depth = 1;
                     while parens_depth > 0 {
                         parens_depth += match self.next_token()? {
-                            Token::OpenParen => 1,
-                            Token::CloseParen => -1,
-                            Token::Eof => return Err(self.unexpected_token(Token::Eof)),
+                            (Token::OpenParen, _) => 1,
+                            (Token::CloseParen, _) => -1,
+                            (Token::Eof, pos) => {
+                                return Err(self.unexpected_token((Token::Eof, pos)))
+                            }
                             _ => 0,
                         };
                     }
@@ -407,7 +413,8 @@ impl<R: BufRead> Parser<R> {
 
         while self.current_token != Token::Eof {
             self.expect_token(Token::OpenParen)?;
-            let (index, command) = match self.next_token()? {
+            let (token, position) = self.next_token()?;
+            let (index, command) = match token {
                 Token::ReservedWord(Reserved::Assume) => {
                     let (index, term) = self.parse_assume_command()?;
                     (index.clone(), ProofCommand::Assume { index, term })
@@ -432,7 +439,12 @@ impl<R: BufRead> Parser<R> {
                                 .step_indices
                                 .get(&index)
                                 .copied()
-                                .ok_or_else(|| self.err(ErrorKind::UndefinedStepIndex(index)))
+                                .ok_or(ParserError(
+                                    // TODO: Make this error carry the position of the actual
+                                    // premise token
+                                    ErrorKind::UndefinedStepIndex(index),
+                                    Some(position),
+                                ))
                         })
                         .collect::<Result<_, _>>()?;
 
@@ -466,10 +478,13 @@ impl<R: BufRead> Parser<R> {
                     subproof_args_stack.push((assignment_args, variable_args));
                     continue;
                 }
-                other => return Err(self.unexpected_token(other)),
+                _ => return Err(self.unexpected_token((token, position))),
             };
             if self.state.step_indices.get(&index).is_some() {
-                return Err(self.err(ErrorKind::RepeatedStepIndex(index)));
+                return Err(ParserError(
+                    ErrorKind::RepeatedStepIndex(index),
+                    Some(position),
+                ));
             }
 
             commands_stack.last_mut().unwrap().push(command);
@@ -482,7 +497,12 @@ impl<R: BufRead> Parser<R> {
                 let commands = commands_stack.pop().unwrap();
                 match commands.last() {
                     Some(ProofCommand::Step(_)) => (),
-                    _ => return Err(self.err(ErrorKind::LastSubproofStepIsNotStep(index))),
+                    _ => {
+                        return Err(ParserError(
+                            ErrorKind::LastSubproofStepIsNotStep(index),
+                            Some(position),
+                        ))
+                    }
                 };
                 end_step_stack.pop().unwrap();
                 let (assignment_args, variable_args) = subproof_args_stack.pop().unwrap();
@@ -506,7 +526,11 @@ impl<R: BufRead> Parser<R> {
 
             // If there is more than one vector in the commands stack, we are inside a subproof
             // that should be closed before the outer proof is finished
-            _ => Err(self.err(ErrorKind::UnexpectedToken(Token::Eof))),
+            _ => Err(ParserError(
+                // TODO: Make this a specialized error kind
+                ErrorKind::UnexpectedToken(Token::Eof),
+                Some(self.current_position),
+            )),
         }
     }
 
@@ -514,8 +538,7 @@ impl<R: BufRead> Parser<R> {
     /// already consumed.
     fn parse_assume_command(&mut self) -> ParserResult<(String, Rc<Term>)> {
         let index = self.expect_symbol()?;
-        let term = self.parse_term()?;
-        SortError::assert_eq(&Sort::Bool, term.sort()).map_err(|err| self.err(err.into()))?;
+        let term = self.parse_term_expecting_sort(&Sort::Bool)?;
         self.expect_token(Token::CloseParen)?;
         Ok((index, term))
     }
@@ -527,8 +550,8 @@ impl<R: BufRead> Parser<R> {
         let clause = self.parse_clause()?;
         self.expect_token(Token::Keyword("rule".into()))?;
         let rule = match self.next_token()? {
-            Token::Symbol(s) => s,
-            Token::ReservedWord(r) => format!("{:?}", r),
+            (Token::Symbol(s), _) => s,
+            (Token::ReservedWord(r), _) => format!("{:?}", r),
             other => return Err(self.unexpected_token(other)),
         };
 
@@ -606,19 +629,14 @@ impl<R: BufRead> Parser<R> {
             let b = match &self.current_token {
                 // If we encounter a symbol as the value of the assignment, we must check if there
                 // are any function definitions with that symbol. If there are, we consider the
-                // value a term insetad of a new variable
+                // value a term instead of a new variable
                 Token::Symbol(s) if !self.state.function_defs.contains_key(s) => {
                     let var = self.expect_symbol()?;
                     self.insert_sorted_var((var.clone(), sort.clone()));
                     let iden = Identifier::Simple(var);
                     self.add_term(Term::Terminal(Terminal::Var(iden, sort.clone())))
                 }
-                _ => {
-                    let term = self.parse_term()?;
-                    SortError::assert_eq(term.sort(), sort.as_sort().unwrap())
-                        .map_err(|err| self.err(err.into()))?;
-                    term
-                }
+                _ => self.parse_term_expecting_sort(sort.as_sort().unwrap())?,
             };
 
             self.expect_token(Token::CloseParen)?;
@@ -656,11 +674,13 @@ impl<R: BufRead> Parser<R> {
     /// assumes that the "(" and "declare-sort" tokens were already consumed.
     fn parse_declare_sort(&mut self) -> ParserResult<(String, usize)> {
         let name = self.expect_symbol()?;
+        let arity_pos = self.current_position;
         let arity = self.expect_numeral()?;
         self.expect_token(Token::CloseParen)?;
-        let arity = arity
-            .to_usize()
-            .ok_or_else(|| self.err(ErrorKind::InvalidSortArity(arity)))?;
+        let arity = arity.to_usize().ok_or(ParserError(
+            ErrorKind::InvalidSortArity(arity),
+            Some(arity_pos),
+        ))?;
         Ok((name, arity))
     }
 
@@ -678,13 +698,11 @@ impl<R: BufRead> Parser<R> {
         for var in &params {
             self.insert_sorted_var(var.clone());
         }
-        let body = self.parse_term()?;
+        let body = self.parse_term_expecting_sort(return_sort.as_sort().unwrap())?;
         self.state.sorts_symbol_table.pop_scope();
 
         self.expect_token(Token::CloseParen)?;
 
-        SortError::assert_eq(return_sort.as_sort().unwrap(), body.sort())
-            .map_err(|err| self.err(err.into()))?;
         Ok((name, FunctionDef { params, body }))
     }
 
@@ -692,16 +710,7 @@ impl<R: BufRead> Parser<R> {
     fn parse_clause(&mut self) -> ParserResult<Vec<Rc<Term>>> {
         self.expect_token(Token::OpenParen)?;
         self.expect_token(Token::ReservedWord(Reserved::Cl))?;
-        let terms = self
-            .parse_sequence(Self::parse_term, false)?
-            .into_iter()
-            .map(|term| -> ParserResult<Rc<Term>> {
-                SortError::assert_eq(&Sort::Bool, term.sort())
-                    .map_err(|err| self.err(err.into()))?;
-                Ok(term)
-            })
-            .collect::<Result<_, _>>()?;
-        Ok(terms)
+        self.parse_sequence(|p| p.parse_term_expecting_sort(&Sort::Bool), false)
     }
 
     /// Parses an argument for a "step" command.
@@ -743,13 +752,13 @@ impl<R: BufRead> Parser<R> {
     /// Parses a term.
     pub fn parse_term(&mut self) -> ParserResult<Rc<Term>> {
         let term = match self.next_token()? {
-            Token::Numeral(n) if self.interpret_integers_as_reals => {
+            (Token::Numeral(n), _) if self.interpret_integers_as_reals => {
                 terminal!(real BigRational::from_integer(n))
             }
-            Token::Numeral(n) => terminal!(int n),
-            Token::Decimal(r) => terminal!(real r),
-            Token::String(s) => terminal!(string s),
-            Token::Symbol(s) => {
+            (Token::Numeral(n), _) => terminal!(int n),
+            (Token::Decimal(r), _) => terminal!(real r),
+            (Token::String(s), _) => terminal!(string s),
+            (Token::Symbol(s), pos) => {
                 // Check to see if there is a nullary function defined with this name
                 return Ok(if let Some(func_def) = self.state.function_defs.get(&s) {
                     if func_def.params.is_empty() {
@@ -757,19 +766,29 @@ impl<R: BufRead> Parser<R> {
                         // added to the term pool
                         func_def.body.clone()
                     } else {
-                        return Err(
-                            self.err(ErrorKind::WrongNumberOfArgs(func_def.params.len(), 0))
-                        );
+                        return Err(ParserError(
+                            ErrorKind::WrongNumberOfArgs(func_def.params.len(), 0),
+                            Some(pos),
+                        ));
                     }
                 } else {
                     self.make_var(Identifier::Simple(s))
-                        .map_err(|err| self.err(err))?
+                        .map_err(|err| ParserError(err, Some(pos)))?
                 });
             }
-            Token::OpenParen => return self.parse_application(),
+            (Token::OpenParen, _) => return self.parse_application(),
             other => return Err(self.unexpected_token(other)),
         };
         Ok(self.add_term(term))
+    }
+
+    /// Parses a term and checks that its sort matches the expected sort. If not, returns an error.
+    fn parse_term_expecting_sort(&mut self, expected_sort: &Sort) -> ParserResult<Rc<Term>> {
+        let pos = self.current_position;
+        let term = self.parse_term()?;
+        SortError::assert_eq(expected_sort, term.sort())
+            .map_err(|e| ParserError(e.into(), Some(pos)))?;
+        Ok(term)
     }
 
     fn parse_quantifier(&mut self, quantifier: Quantifier) -> ParserResult<Rc<Term>> {
@@ -783,8 +802,7 @@ impl<R: BufRead> Parser<R> {
             },
             true,
         )?;
-        let term = self.parse_term()?;
-        SortError::assert_eq(&Sort::Bool, term.sort()).map_err(|e| self.err(e.into()))?;
+        let term = self.parse_term_expecting_sort(&Sort::Bool)?;
         self.state.sorts_symbol_table.pop_scope();
         self.expect_token(Token::CloseParen)?;
         Ok(self.add_term(Term::Quant(quantifier, bindings, term)))
@@ -825,6 +843,7 @@ impl<R: BufRead> Parser<R> {
         let inner = self.parse_term()?;
         self.parse_sequence(
             |p| {
+                let attribute_pos = p.current_position;
                 let attribute = p.expect_keyword()?;
                 match attribute.as_str() {
                     "named" => {
@@ -846,7 +865,10 @@ impl<R: BufRead> Parser<R> {
                         p.parse_sequence(Parser::parse_term, true)?;
                         Ok(())
                     }
-                    _ => Err(p.err(ErrorKind::UnknownAttribute(attribute))),
+                    _ => Err(ParserError(
+                        ErrorKind::UnknownAttribute(attribute),
+                        Some(attribute_pos),
+                    )),
                 }
             },
             true,
@@ -855,6 +877,7 @@ impl<R: BufRead> Parser<R> {
     }
 
     fn parse_application(&mut self) -> ParserResult<Rc<Term>> {
+        let head_pos = self.current_position;
         match &self.current_token {
             &Token::ReservedWord(reserved) => {
                 self.next_token()?;
@@ -864,7 +887,10 @@ impl<R: BufRead> Parser<R> {
                     Reserved::Choice => self.parse_choice_term(),
                     Reserved::Bang => self.parse_annotated_term(),
                     Reserved::Let => self.parse_let_term(),
-                    _ => Err(self.err(ErrorKind::UnexpectedToken(Token::ReservedWord(reserved)))),
+                    _ => Err(ParserError(
+                        ErrorKind::UnexpectedToken(Token::ReservedWord(reserved)),
+                        Some(head_pos),
+                    )),
                 }
             }
             // Here, I would like to use an `if let` guard, like:
@@ -877,7 +903,8 @@ impl<R: BufRead> Parser<R> {
                 let operator = Operator::from_str(s).unwrap();
                 self.next_token()?;
                 let args = self.parse_sequence(Self::parse_term, true)?;
-                self.make_op(operator, args).map_err(|err| self.err(err))
+                self.make_op(operator, args)
+                    .map_err(|err| ParserError(err, Some(head_pos)))
             }
             Token::Symbol(s) if self.state.function_defs.get(s).is_some() => {
                 let func_name = self.expect_symbol()?;
@@ -887,10 +914,10 @@ impl<R: BufRead> Parser<R> {
                 // If there is a function definition with this function name, we sort check
                 // the arguments and apply the definition by performing a beta reduction.
                 ErrorKind::assert_num_of_args(&args, func.params.len())
-                    .map_err(|err| self.err(err))?;
+                    .map_err(|err| ParserError(err, Some(head_pos)))?;
                 for (arg, param) in args.iter().zip(func.params.iter()) {
                     SortError::assert_eq(param.1.as_sort().unwrap(), arg.sort())
-                        .map_err(|err| self.err(err.into()))?;
+                        .map_err(|err| ParserError(err.into(), Some(head_pos)))?;
                 }
 
                 // Build a hash map of all the parameter names and the values they will
@@ -918,16 +945,18 @@ impl<R: BufRead> Parser<R> {
             _ => {
                 let func = self.parse_term()?;
                 let args = self.parse_sequence(Self::parse_term, true)?;
-                self.make_app(func, args).map_err(|err| self.err(err))
+                self.make_app(func, args)
+                    .map_err(|err| ParserError(err, Some(head_pos)))
             }
         }
     }
 
     /// Parses a sort.
     fn parse_sort(&mut self) -> ParserResult<Term> {
+        let pos = self.current_position;
         let (name, args) = match self.next_token()? {
-            Token::Symbol(s) => (s, Vec::new()),
-            Token::OpenParen => {
+            (Token::Symbol(s), _) => (s, Vec::new()),
+            (Token::OpenParen, _) => {
                 let name = self.expect_symbol()?;
                 let args = self.parse_sequence(Parser::parse_sort, true)?;
                 (name, self.add_all(args))
@@ -936,9 +965,10 @@ impl<R: BufRead> Parser<R> {
         };
 
         let sort = match name.as_str() {
-            "Bool" | "Int" | "Real" | "String" if !args.is_empty() => {
-                Err(self.err(ErrorKind::WrongNumberOfArgs(0, args.len())))
-            }
+            "Bool" | "Int" | "Real" | "String" if !args.is_empty() => Err(ParserError(
+                ErrorKind::WrongNumberOfArgs(0, args.len()),
+                Some(pos),
+            )),
             "Bool" => Ok(Sort::Bool),
             "Int" => Ok(Sort::Int),
             "Real" => Ok(Sort::Real),
@@ -946,12 +976,18 @@ impl<R: BufRead> Parser<R> {
 
             "Array" => match args.as_slice() {
                 [x, y] => Ok(Sort::Array(x.clone(), y.clone())),
-                _ => Err(self.err(ErrorKind::WrongNumberOfArgs(2, args.len()))),
+                _ => Err(ParserError(
+                    ErrorKind::WrongNumberOfArgs(2, args.len()),
+                    Some(pos),
+                )),
             },
             _ => match self.state.sort_declarations.get(&name) {
                 Some(arity) if *arity == args.len() => Ok(Sort::Atom(name, args)),
-                Some(arity) => Err(self.err(ErrorKind::WrongNumberOfArgs(*arity, args.len()))),
-                None => Err(self.err(ErrorKind::UndefinedSort(name))),
+                Some(arity) => Err(ParserError(
+                    ErrorKind::WrongNumberOfArgs(*arity, args.len()),
+                    Some(pos),
+                )),
+                None => Err(ParserError(ErrorKind::UndefinedSort(name), Some(pos))),
             },
         }?;
         Ok(Term::Sort(sort))
