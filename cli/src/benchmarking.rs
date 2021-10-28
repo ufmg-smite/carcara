@@ -26,7 +26,7 @@ fn run_instance(
         let mut checking_time = Duration::ZERO;
         let config = checker::Config {
             skip_unknown_rules: false,
-            allow_test_rule: false,
+            is_running_test: false,
             statistics: Some(checker::CheckerStatistics {
                 file_name: proof_file_name,
                 checking_time: &mut checking_time,

@@ -165,38 +165,38 @@ mod tests {
             ",
             "Simple working examples" {
                 "(assume h1 (not p))
-                (step t2 (cl p q) :rule trust_me)
+                (step t2 (cl p q) :rule trust)
                 (step t3 (cl q) :rule resolution :premises (h1 t2))": true,
 
                 "(assume h1 (not p))
                 (assume h2 (not q))
                 (assume h3 (not r))
-                (step t4 (cl p q r) :rule trust_me)
+                (step t4 (cl p q r) :rule trust)
                 (step t5 (cl) :rule resolution :premises (h1 h2 h3 t4))": true,
 
                 "(assume h1 (not p))
                 (assume h2 q)
-                (step t3 (cl p (not q)) :rule trust_me)
+                (step t3 (cl p (not q)) :rule trust)
                 (step t4 (cl) :rule resolution :premises (h1 h2 t3))": true,
             }
             "Missing term in final clause" {
                 "(assume h1 (not p))
-                (step t2 (cl p q r) :rule trust_me)
+                (step t2 (cl p q r) :rule trust)
                 (step t3 (cl q) :rule resolution :premises (h1 t2))": false,
             }
             "Extra term in final clause" {
                 "(assume h1 (not p))
-                (step t2 (cl p q r) :rule trust_me)
+                (step t2 (cl p q r) :rule trust)
                 (step t3 (cl p q r) :rule resolution :premises (h1 t2))": false,
             }
             "Term appears in final clause with wrong polarity" {
                 "(assume h1 (not p))
-                (step t2 (cl p q r) :rule trust_me)
+                (step t2 (cl p q r) :rule trust)
                 (step t3 (cl (not q) r) :rule resolution :premises (h1 t2))": false,
             }
             "Duplicate term in final clause" {
-                "(step t1 (cl q (not p)) :rule trust_me)
-                (step t2 (cl p q r) :rule trust_me)
+                "(step t1 (cl q (not p)) :rule trust)
+                (step t2 (cl p q r) :rule trust)
                 (step t3 (cl q q r) :rule resolution :premises (t1 t2))": true,
             }
             "Terms with leading negations" {
@@ -211,36 +211,36 @@ mod tests {
                     :rule resolution :premises (h1 h4))": true,
             }
             "Must use correct pivots" {
-                "(step t1 (cl (not q) (not (not p)) (not p)) :rule trust_me)
-                (step t2 (cl (not (not (not p))) p) :rule trust_me)
+                "(step t1 (cl (not q) (not (not p)) (not p)) :rule trust)
+                (step t2 (cl (not (not (not p))) p) :rule trust)
                 (step t3 (cl (not q) p (not p)) :rule resolution :premises (t1 t2))": true,
 
-                "(step t1 (cl (not q) (not (not p)) (not p)) :rule trust_me)
-                (step t2 (cl (not (not (not p))) p) :rule trust_me)
+                "(step t1 (cl (not q) (not (not p)) (not p)) :rule trust)
+                (step t2 (cl (not (not (not p))) p) :rule trust)
                 (step t3 (cl (not q) (not (not (not p))) (not (not p)))
                     :rule resolution :premises (t1 t2))": true,
 
-                "(step t1 (cl (not q) (not (not p)) (not p)) :rule trust_me)
-                (step t2 (cl (not (not (not p))) p) :rule trust_me)
+                "(step t1 (cl (not q) (not (not p)) (not p)) :rule trust)
+                (step t2 (cl (not (not (not p))) p) :rule trust)
                 (step t3 (cl (not q) p (not p) (not (not (not p))) (not (not p)))
                     :rule resolution :premises (t1 t2))": true,
             }
             "Weird behaviour where leading negations sometimes are added to conclusion" {
                 "(assume h1 (not p))
                 (assume h2 (= (not p) (not (not q))))
-                (step t3 (cl (not (= (not p) (not (not q)))) p q) :rule trust_me)
+                (step t3 (cl (not (= (not p) (not (not q)))) p q) :rule trust)
                 (step t4 (cl (not (not q))) :rule resolution :premises (h1 h2 t3))": true,
             }
             "Premise is \"(not true)\" and leads to empty conclusion clause" {
-                "(step t1 (cl (not true)) :rule trust_me)
+                "(step t1 (cl (not true)) :rule trust)
                 (step t2 (cl) :rule th_resolution :premises (t1))": true,
 
-                "(step t1 (cl false) :rule trust_me)
+                "(step t1 (cl false) :rule trust)
                 (step t2 (cl) :rule th_resolution :premises (t1))": false,
             }
             "Repeated premises" {
-                "(step t1 (cl (not r)) :rule trust_me)
-                (step t2 (cl p q r s) :rule trust_me)
+                "(step t1 (cl (not r)) :rule trust)
+                (step t2 (cl p q r s) :rule trust)
                 (step t3 (cl p q s) :rule th_resolution :premises (t1 t2 t2))": true,
             }
         }
@@ -256,27 +256,27 @@ mod tests {
                 (declare-fun s () Bool)
             ",
             "Simple working examples" {
-                "(step t1 (cl (not p) p) :rule trust_me)
+                "(step t1 (cl (not p) p) :rule trust)
                 (step t2 (cl true) :rule tautology :premises (t1))": true,
 
-                "(step t1 (cl p q (not q) r s) :rule trust_me)
+                "(step t1 (cl p q (not q) r s) :rule trust)
                 (step t2 (cl true) :rule tautology :premises (t1))": true,
 
-                "(step t1 (cl p (not (not s)) q r (not (not (not s)))) :rule trust_me)
+                "(step t1 (cl p (not (not s)) q r (not (not (not s)))) :rule trust)
                 (step t2 (cl true) :rule tautology  :premises (t1))": true,
             }
             "Conclusion is not \"true\"" {
-                "(step t1 (cl p q (not q) r s) :rule trust_me)
+                "(step t1 (cl p q (not q) r s) :rule trust)
                 (step t2 (cl false) :rule tautology :premises (t1))": false,
 
-                "(step t1 (cl p q (not q) r s) :rule trust_me)
+                "(step t1 (cl p q (not q) r s) :rule trust)
                 (step t2 (cl) :rule tautology :premises (t1))": false,
             }
             "Premise is not a tautology" {
-                "(step t1 (cl p) :rule trust_me)
+                "(step t1 (cl p) :rule trust)
                 (step t2 (cl true) :rule tautology :premises (t1))": false,
 
-                "(step t1 (cl p (not (not s)) q r s) :rule trust_me)
+                "(step t1 (cl p (not (not s)) q r s) :rule trust)
                 (step t2 (cl true) :rule tautology :premises (t1))": false,
             }
         }
@@ -292,13 +292,13 @@ mod tests {
                 (declare-fun s () Bool)
             ",
             "Simple working examples" {
-                "(step t1 (cl p q q r s s) :rule trust_me)
+                "(step t1 (cl p q q r s s) :rule trust)
                 (step t2 (cl p q r s) :rule contraction :premises (t1))": true,
 
-                "(step t1 (cl p p p q q r s s s) :rule trust_me)
+                "(step t1 (cl p p p q q r s s s) :rule trust)
                 (step t2 (cl p q r s) :rule contraction :premises (t1))": true,
 
-                "(step t1 (cl p q r s) :rule trust_me)
+                "(step t1 (cl p q r s) :rule trust)
                 (step t2 (cl p q r s) :rule contraction :premises (t1))": true,
             }
             "Number of premises != 1" {
@@ -313,22 +313,22 @@ mod tests {
                 (step t2 (cl q) :rule contraction :premises (h1))": true,
             }
             "Encountered wrong term" {
-                "(step t1 (cl p p q) :rule trust_me)
+                "(step t1 (cl p p q) :rule trust)
                 (step t2 (cl p r) :rule contraction :premises (t1))": false,
             }
             "Terms are not in correct order" {
-                "(step t1 (cl p q q r) :rule trust_me)
+                "(step t1 (cl p q q r) :rule trust)
                 (step t2 (cl p r q) :rule contraction :premises (t1))": false,
             }
             "Conclusion is missing terms" {
-                "(step t1 (cl p q q r) :rule trust_me)
+                "(step t1 (cl p q q r) :rule trust)
                 (step t2 (cl p r) :rule contraction :premises (t1))": false,
 
-                "(step t1 (cl p p q r) :rule trust_me)
+                "(step t1 (cl p p q r) :rule trust)
                 (step t2 (cl p q) :rule contraction :premises (t1))": false,
             }
             "Conclusion has extra term at the end" {
-                "(step t1 (cl p p q) :rule trust_me)
+                "(step t1 (cl p p q) :rule trust)
                 (step t2 (cl p q r s) :rule contraction :premises (t1))": false,
             }
         }

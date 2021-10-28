@@ -45,13 +45,13 @@ mod tests {
                 (declare-fun s () Bool)
             ",
             "Simple working examples" {
-                "(step t1 (cl p q r s) :rule trust_me)
+                "(step t1 (cl p q r s) :rule trust)
                 (step t2 (cl r q p s) :rule reordering :premises (t1))": true,
 
-                "(step t1 (cl p q q p r s) :rule trust_me)
+                "(step t1 (cl p q q p r s) :rule trust)
                 (step t2 (cl r q p p s q) :rule reordering :premises (t1))": true,
 
-                "(step t1 (cl) :rule trust_me)
+                "(step t1 (cl) :rule trust)
                 (step t2 (cl) :rule reordering :premises (t1))": true,
             }
         }

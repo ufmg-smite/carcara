@@ -53,7 +53,7 @@ pub fn check<P: AsRef<Path>>(
     problem_path: P,
     proof_path: P,
     skip_unknown_rules: bool,
-    allow_test_rule: bool,
+    is_running_test: bool,
 ) -> Result<checker::Correctness, Error> {
     let (proof, pool) = parser::parse_instance(
         BufReader::new(File::open(problem_path).unwrap()),
@@ -62,7 +62,7 @@ pub fn check<P: AsRef<Path>>(
 
     let config = checker::Config {
         skip_unknown_rules,
-        allow_test_rule,
+        is_running_test,
         statistics: None,
     };
     checker::ProofChecker::new(pool, config)

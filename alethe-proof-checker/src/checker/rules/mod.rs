@@ -67,7 +67,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
             pool,
             Config {
                 skip_unknown_rules: false,
-                allow_test_rule: true,
+                is_running_test: true,
                 statistics: None,
             },
         );

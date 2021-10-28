@@ -319,7 +319,7 @@ fn report_by_files(files: &[&str], quiet: bool) -> ParserResult<()> {
     for file in files {
         let all_implemented = get_used_rules(file)?
             .iter()
-            .all(|rule| ProofChecker::get_rule(rule, false).is_some());
+            .all(|rule| ProofChecker::get_rule(rule).is_some());
         print_report_entry(file, all_implemented, quiet);
         implemented += all_implemented as i32;
     }
@@ -345,7 +345,7 @@ fn report_by_rules(files: &[&str], quiet: bool) -> ParserResult<()> {
     for r in rules {
         let r = r?;
         if seen.insert(r.clone()) {
-            let success = ProofChecker::get_rule(&r, false).is_some();
+            let success = ProofChecker::get_rule(&r).is_some();
             print_report_entry(&r, success, quiet);
             implemented += success as i32;
         }

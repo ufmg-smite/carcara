@@ -376,7 +376,7 @@ mod tests {
                 (step t2 (cl r) :rule and :premises (h1 h2))": false,
             }
             "Premise clause has more than one term" {
-                "(step t1 (cl (and p q) (and r s)) :rule trust_me)
+                "(step t1 (cl (and p q) (and r s)) :rule trust)
                 (step t2 (cl p) :rule and :premises (t1))": false,
             }
             "Conclusion clause does not have exactly one term" {

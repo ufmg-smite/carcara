@@ -65,7 +65,7 @@ pub struct CheckerStatistics<'s> {
 #[derive(Debug, Default)]
 pub struct Config<'c> {
     pub skip_unknown_rules: bool,
-    pub allow_test_rule: bool,
+    pub is_running_test: bool,
     pub statistics: Option<CheckerStatistics<'c>>,
 }
 
@@ -135,7 +135,7 @@ impl<'c> ProofChecker<'c> {
                     // it is inside a subproof. Since the unit tests for the rules don't define the
                     // original problem, but sometimes use "assume" commands, we also skip the
                     // command if we are in a testing context.
-                    let result = if self.config.allow_test_rule || commands_stack.len() > 1 {
+                    let result = if self.config.is_running_test || commands_stack.len() > 1 {
                         Ok(Correctness::True)
                     } else {
                         let is_valid = proof.premises.contains(term)
@@ -175,7 +175,7 @@ impl<'c> ProofChecker<'c> {
         is_end_of_subproof: bool,
     ) -> CheckerResult {
         let time = Instant::now();
-        let rule = match Self::get_rule(rule_name, self.config.allow_test_rule) {
+        let rule = match Self::get_rule(rule_name) {
             Some(r) => r,
             None if self.config.skip_unknown_rules => return Ok(Correctness::True),
             None => return Err(CheckerError::UnknownRule(rule_name.to_string())),
@@ -288,7 +288,7 @@ impl<'c> ProofChecker<'c> {
         }
     }
 
-    pub fn get_rule(rule_name: &str, allow_test_rule: bool) -> Option<Rule> {
+    pub fn get_rule(rule_name: &str) -> Option<Rule> {
         use rules::*;
         Some(match rule_name {
             "true" => tautology::r#true,
@@ -377,9 +377,9 @@ impl<'c> ProofChecker<'c> {
             "symm" => extras::symm,
             "not_symm" => extras::not_symm,
 
-            // TODO: Unify these two rules
+            // Special rule that always checks as valid. It is mostly used in tests
             "trust" => |_| Some(()),
-            "trust_me" if allow_test_rule => |_| Some(()),
+
             _ => return None,
         })
     }
