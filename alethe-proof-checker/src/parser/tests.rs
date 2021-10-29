@@ -12,7 +12,7 @@ pub fn parse_term(input: &str) -> Term {
         .clone()
 }
 
-pub fn parse_term_err(input: &str) -> ParserError {
+pub fn parse_term_err(input: &str) -> Error {
     Parser::new(input.as_bytes())
         .and_then(|mut p| p.parse_term())
         .expect_err("expected error")
@@ -149,7 +149,7 @@ fn test_arithmetic_ops() {
 
     assert!(matches!(
         parse_term_err("(+ (- 1 2) (* 3.0 4.2))"),
-        ParserError(ErrorKind::SortError(SortError::Expected { .. }), _),
+        Error::Parser(ParserError::SortError(_), _),
     ));
 }
 
@@ -244,30 +244,27 @@ fn test_logic_ops() {
 
     assert!(matches!(
         parse_term_err("(or true 1.2)"),
-        ParserError(
-            ErrorKind::SortError(SortError::Expected { expected: Sort::Bool, .. }),
-            _
-        ),
+        Error::Parser(ParserError::SortError(_), _),
     ));
     assert!(matches!(
         parse_term_err("(= 10 10.0)"),
-        ParserError(ErrorKind::SortError(SortError::Expected { .. }), _),
+        Error::Parser(ParserError::SortError(_), _),
     ));
     assert!(matches!(
         parse_term_err("(not 1 2 3)"),
-        ParserError(ErrorKind::WrongNumberOfArgs(1, 3), _),
+        Error::Parser(ParserError::WrongNumberOfArgs(1, 3), _),
     ));
     assert!(matches!(
         parse_term_err("(distinct 2 1.0)"),
-        ParserError(ErrorKind::SortError(SortError::Expected { .. }), _),
+        Error::Parser(ParserError::SortError(_), _),
     ));
     assert!(matches!(
         parse_term_err("(distinct 0)"),
-        ParserError(ErrorKind::WrongNumberOfArgs(2, 1), _),
+        Error::Parser(ParserError::WrongNumberOfArgs(2, 1), _),
     ));
     assert!(matches!(
         parse_term_err("(=> true 0)"),
-        ParserError(ErrorKind::SortError(SortError::Expected { .. }), _),
+        Error::Parser(ParserError::SortError(_), _),
     ));
 }
 
@@ -307,18 +304,15 @@ fn test_ite() {
 
     assert!(matches!(
         parse_term_err("(ite true 0)"),
-        ParserError(ErrorKind::WrongNumberOfArgs(3, 2), _),
+        Error::Parser(ParserError::WrongNumberOfArgs(3, 2), _),
     ));
     assert!(matches!(
         parse_term_err("(ite 0 1 2)"),
-        ParserError(
-            ErrorKind::SortError(SortError::Expected { expected: Sort::Bool, .. }),
-            _
-        ),
+        Error::Parser(ParserError::SortError(_), _),
     ));
     assert!(matches!(
         parse_term_err("(ite false 10 10.0)"),
-        ParserError(ErrorKind::SortError(SortError::Expected { .. }), _),
+        Error::Parser(ParserError::SortError(_), _),
     ));
 }
 
@@ -359,11 +353,11 @@ fn test_quantifiers() {
     ]);
     assert!(matches!(
         parse_term_err("(exists () true)"),
-        ParserError(ErrorKind::EmptySequence, _),
+        Error::Parser(ParserError::EmptySequence, _),
     ));
     assert!(matches!(
         parse_term_err("(forall ((x Int)) (+ x x)"),
-        ParserError(ErrorKind::SortError(SortError::Expected { .. }), _),
+        Error::Parser(ParserError::SortError(_), _),
     ));
 }
 
@@ -396,7 +390,7 @@ fn test_let_terms() {
     ]);
     assert!(matches!(
         parse_term_err("(let () 0)"),
-        ParserError(ErrorKind::EmptySequence, _),
+        Error::Parser(ParserError::EmptySequence, _),
     ));
 }
 
@@ -423,19 +417,19 @@ fn test_annotated_terms() {
     ]);
     assert!(matches!(
         parse_term_err("(! true)"),
-        ParserError(ErrorKind::EmptySequence, _),
+        Error::Parser(ParserError::EmptySequence, _),
     ));
     assert!(matches!(
         parse_term_err("(! true not_a_keyword)"),
-        ParserError(ErrorKind::UnexpectedToken(_), _),
+        Error::Parser(ParserError::UnexpectedToken(_), _),
     ));
     assert!(matches!(
         parse_term_err("(! true :unknown)"),
-        ParserError(ErrorKind::UnknownAttribute(_), _),
+        Error::Parser(ParserError::UnknownAttribute(_), _),
     ));
     assert!(matches!(
         parse_term_err("(! true :named 1 2 3)"),
-        ParserError(ErrorKind::UnexpectedToken(_), _),
+        Error::Parser(ParserError::UnexpectedToken(_), _),
     ));
 }
 

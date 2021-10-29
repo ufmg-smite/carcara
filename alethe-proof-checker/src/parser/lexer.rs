@@ -1,14 +1,13 @@
+use super::error::ParserError;
+use crate::{AletheResult, Error};
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::Num;
-
 use std::{
     fmt,
     io::{self, BufRead},
     str::FromStr,
 };
-
-use super::error::*;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Token {
@@ -88,7 +87,7 @@ pub struct Lexer<R> {
 }
 
 impl<R: BufRead> Lexer<R> {
-    pub fn new(mut input: R) -> Result<Self, io::Error> {
+    pub fn new(mut input: R) -> io::Result<Self> {
         let mut buf = String::new();
         let read = input.read_line(&mut buf)?;
         if read == 0 {
@@ -110,7 +109,7 @@ impl<R: BufRead> Lexer<R> {
         }
     }
 
-    fn next_char(&mut self) -> Result<Option<char>, (io::Error, Position)> {
+    fn next_char(&mut self) -> io::Result<Option<char>> {
         // If there are no more characters in the current line, go to the next line
         if let Some(line) = &self.current_line {
             if line.as_slice().is_empty() {
@@ -128,12 +127,9 @@ impl<R: BufRead> Lexer<R> {
         Ok(old)
     }
 
-    fn next_line(&mut self) -> Result<(), (io::Error, Position)> {
+    fn next_line(&mut self) -> io::Result<()> {
         let mut buf = String::new();
-        let read = self
-            .input
-            .read_line(&mut buf)
-            .map_err(|io_err| (io_err, self.position))?;
+        let read = self.input.read_line(&mut buf)?;
         if read == 0 {
             self.current_line = None;
         } else {
@@ -145,10 +141,7 @@ impl<R: BufRead> Lexer<R> {
         Ok(())
     }
 
-    fn read_chars_while<P>(&mut self, predicate: P) -> Result<String, (io::Error, Position)>
-    where
-        P: Fn(char) -> bool,
-    {
+    fn read_chars_while<P: Fn(char) -> bool>(&mut self, predicate: P) -> io::Result<String> {
         let mut result = String::new();
         while let Some(c) = self.current_char {
             if !predicate(c) {
@@ -163,7 +156,7 @@ impl<R: BufRead> Lexer<R> {
     /// Specialized function to drop whitespace characters. Similar to calling
     /// `self.read_chars_while(char::is_whitespace)`, but doesn't allocate a string to store the
     /// result.
-    fn drop_while_whitespace(&mut self) -> Result<(), (io::Error, Position)> {
+    fn drop_while_whitespace(&mut self) -> io::Result<()> {
         while let Some(c) = self.current_char {
             if !c.is_whitespace() {
                 break;
@@ -173,7 +166,7 @@ impl<R: BufRead> Lexer<R> {
         Ok(())
     }
 
-    fn consume_whitespace(&mut self) -> Result<(), (io::Error, Position)> {
+    fn consume_whitespace(&mut self) -> io::Result<()> {
         self.drop_while_whitespace()?;
         while self.current_char == Some(';') {
             self.next_line()?;
@@ -183,7 +176,7 @@ impl<R: BufRead> Lexer<R> {
         Ok(())
     }
 
-    pub fn next_token(&mut self) -> ParserResult<(Token, Position)> {
+    pub fn next_token(&mut self) -> AletheResult<(Token, Position)> {
         self.consume_whitespace()?;
         let start_position = self.position;
         let token = match self.current_char {
@@ -202,15 +195,15 @@ impl<R: BufRead> Lexer<R> {
             Some(c) if c.is_ascii_digit() => self.read_number(),
             Some(c) if Lexer::is_symbol_character(c) => self.read_simple_symbol(),
             None => Ok(Token::Eof),
-            Some(other) => Err(ParserError(
-                ErrorKind::UnexpectedChar(other),
-                Some(self.position),
+            Some(other) => Err(Error::Parser(
+                ParserError::UnexpectedChar(other),
+                self.position,
             )),
         }?;
         Ok((token, start_position))
     }
 
-    fn read_simple_symbol(&mut self) -> Result<Token, ParserError> {
+    fn read_simple_symbol(&mut self) -> AletheResult<Token> {
         let symbol = self.read_chars_while(Lexer::is_symbol_character)?;
         if let Ok(reserved) = Reserved::from_str(&symbol) {
             Ok(Token::ReservedWord(reserved))
@@ -219,18 +212,15 @@ impl<R: BufRead> Lexer<R> {
         }
     }
 
-    fn read_quoted_symbol(&mut self) -> Result<Token, ParserError> {
+    fn read_quoted_symbol(&mut self) -> AletheResult<Token> {
         self.next_char()?; // Consume '|'
         let symbol = self.read_chars_while(|c| c != '|' && c != '\\')?;
         match self.current_char {
-            Some('\\') => Err(ParserError(
-                ErrorKind::BackslashInQuotedSymbol,
-                Some(self.position),
+            Some('\\') => Err(Error::Parser(
+                ParserError::BackslashInQuotedSymbol,
+                self.position,
             )),
-            None => Err(ParserError(
-                ErrorKind::EofInQuotedSymbol,
-                Some(self.position),
-            )),
+            None => Err(Error::Parser(ParserError::EofInQuotedSymbol, self.position)),
             Some('|') => {
                 self.next_char()?;
                 Ok(Token::Symbol(symbol))
@@ -239,22 +229,22 @@ impl<R: BufRead> Lexer<R> {
         }
     }
 
-    fn read_keyword(&mut self) -> Result<Token, ParserError> {
+    fn read_keyword(&mut self) -> AletheResult<Token> {
         self.next_char()?; // Consume ':'
         let symbol = self.read_chars_while(Lexer::is_symbol_character)?;
         Ok(Token::Keyword(symbol))
     }
 
-    fn read_number_with_base(&mut self) -> Result<Token, ParserError> {
+    fn read_number_with_base(&mut self) -> AletheResult<Token> {
         self.next_char()?; // Consume '#'
         let base = match self.next_char()? {
             Some('b') => 2,
             Some('x') => 16,
-            None => return Err(ParserError(ErrorKind::EofInNumeral, Some(self.position))),
+            None => return Err(Error::Parser(ParserError::EofInNumeral, self.position)),
             Some(other) => {
-                return Err(ParserError(
-                    ErrorKind::UnexpectedChar(other),
-                    Some(self.position),
+                return Err(Error::Parser(
+                    ParserError::UnexpectedChar(other),
+                    self.position,
                 ))
             }
         };
@@ -262,13 +252,13 @@ impl<R: BufRead> Lexer<R> {
         Ok(Token::Numeral(BigInt::from_str_radix(&s, base).unwrap()))
     }
 
-    fn read_number(&mut self) -> Result<Token, ParserError> {
+    fn read_number(&mut self) -> AletheResult<Token> {
         let int_part = self.read_chars_while(|c| c.is_ascii_digit())?;
 
         if int_part.len() > 1 && int_part.starts_with('0') {
-            return Err(ParserError(
-                ErrorKind::LeadingZero(int_part),
-                Some(self.position),
+            return Err(Error::Parser(
+                ParserError::LeadingZero(int_part),
+                self.position,
             ));
         }
 
@@ -284,13 +274,13 @@ impl<R: BufRead> Lexer<R> {
         }
     }
 
-    fn read_string(&mut self) -> Result<Token, ParserError> {
+    fn read_string(&mut self) -> AletheResult<Token> {
         self.next_char()?; // Consume '"'
         let mut result = String::new();
         loop {
             result += &self.read_chars_while(|c| c != '"')?;
             if self.current_char.is_none() {
-                return Err(ParserError(ErrorKind::EofInString, Some(self.position)));
+                return Err(Error::Parser(ParserError::EofInString, self.position));
             }
             self.next_char()?; // Consume '"'
             if self.current_char == Some('"') {
@@ -319,8 +309,8 @@ impl Lexer<()> {
 mod tests {
     use super::*;
 
-    fn lex_one(input: &str) -> ParserResult<Token> {
-        let mut lex = Lexer::new(std::io::Cursor::new(input)).map_err(|err| (err, (0, 0)))?;
+    fn lex_one(input: &str) -> AletheResult<Token> {
+        let mut lex = Lexer::new(std::io::Cursor::new(input))?;
         lex.next_token().map(|(tk, _)| tk)
     }
 
@@ -386,12 +376,12 @@ mod tests {
 
         assert!(matches!(
             lex_one("|\\|"),
-            Err(ParserError(ErrorKind::BackslashInQuotedSymbol, _))
+            Err(Error::Parser(ParserError::BackslashInQuotedSymbol, _))
         ));
 
         assert!(matches!(
             lex_one("|"),
-            Err(ParserError(ErrorKind::EofInQuotedSymbol, _))
+            Err(Error::Parser(ParserError::EofInQuotedSymbol, _))
         ));
     }
 
@@ -408,17 +398,17 @@ mod tests {
 
         assert!(matches!(
             lex_one("0123"),
-            Err(ParserError(ErrorKind::LeadingZero(_), _))
+            Err(Error::Parser(ParserError::LeadingZero(_), _))
         ));
 
         assert!(matches!(
             lex_one("#o123"),
-            Err(ParserError(ErrorKind::UnexpectedChar('o'), _)),
+            Err(Error::Parser(ParserError::UnexpectedChar('o'), _)),
         ));
 
         assert!(matches!(
             lex_one("#"),
-            Err(ParserError(ErrorKind::EofInNumeral, _)),
+            Err(Error::Parser(ParserError::EofInNumeral, _)),
         ));
     }
 
@@ -435,7 +425,7 @@ mod tests {
 
         assert!(matches!(
             lex_one("\""),
-            Err(ParserError(ErrorKind::EofInString, _))
+            Err(Error::Parser(ParserError::EofInString, _))
         ));
     }
 

@@ -9,6 +9,7 @@ mod utils;
 
 use checker::CheckerError;
 use parser::error::ParserError;
+use parser::lexer::Position;
 use std::{
     fmt,
     fs::File,
@@ -16,16 +17,13 @@ use std::{
     path::Path,
 };
 
+pub type AletheResult<T> = Result<T, Error>;
+
 #[derive(Debug)]
 pub enum Error {
-    Parser(ParserError),
+    Io(io::Error),
+    Parser(ParserError, Position),
     Checker(CheckerError),
-}
-
-impl From<ParserError> for Error {
-    fn from(e: ParserError) -> Self {
-        Self::Parser(e)
-    }
 }
 
 impl From<CheckerError> for Error {
@@ -36,14 +34,17 @@ impl From<CheckerError> for Error {
 
 impl From<io::Error> for Error {
     fn from(e: io::Error) -> Self {
-        Self::Parser(e.into())
+        Self::Io(e)
     }
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::Parser(e) => write!(f, "parser error: {}", e),
+            Error::Io(e) => write!(f, "IO error: {}", e),
+            Error::Parser(e, (l, c)) => {
+                write!(f, "parser error: {} (on line {}, column {})", e, l, c)
+            }
             Error::Checker(e) => write!(f, "checker error: {}", e),
         }
     }
@@ -56,8 +57,8 @@ pub fn check<P: AsRef<Path>>(
     is_running_test: bool,
 ) -> Result<checker::Correctness, Error> {
     let (proof, pool) = parser::parse_instance(
-        BufReader::new(File::open(problem_path).unwrap()),
-        BufReader::new(File::open(proof_path).unwrap()),
+        BufReader::new(File::open(problem_path)?),
+        BufReader::new(File::open(proof_path)?),
     )?;
 
     let config = checker::Config {

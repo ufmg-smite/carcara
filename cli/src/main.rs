@@ -7,7 +7,8 @@ use ahash::AHashSet;
 use alethe_proof_checker::{
     check,
     checker::{Correctness, ProofChecker},
-    parser::{error::ParserResult, lexer, parse_instance},
+    parser::{lexer, parse_instance},
+    AletheResult,
 };
 use ansi_term::Color;
 use clap::{App, AppSettings, Arg, ArgGroup, ArgMatches, SubCommand};
@@ -277,7 +278,7 @@ fn progress_report_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
     Ok(())
 }
 
-fn get_used_rules(file_path: &str) -> ParserResult<Vec<String>> {
+fn get_used_rules(file_path: &str) -> AletheResult<Vec<String>> {
     use lexer::{Lexer, Token};
 
     let file = File::open(file_path)?;
@@ -314,7 +315,7 @@ fn print_report_entry(s: &str, success: bool, quiet: bool) {
     }
 }
 
-fn report_by_files(files: &[&str], quiet: bool) -> ParserResult<()> {
+fn report_by_files(files: &[&str], quiet: bool) -> AletheResult<()> {
     let mut implemented = 0;
     for file in files {
         let all_implemented = get_used_rules(file)?
@@ -334,7 +335,7 @@ fn report_by_files(files: &[&str], quiet: bool) -> ParserResult<()> {
     Ok(())
 }
 
-fn report_by_rules(files: &[&str], quiet: bool) -> ParserResult<()> {
+fn report_by_rules(files: &[&str], quiet: bool) -> AletheResult<()> {
     let rules = files.iter().flat_map(|file| match get_used_rules(file) {
         Ok(rules) => rules.into_iter().map(Ok).collect(),
         Err(e) => vec![Err(e)],
