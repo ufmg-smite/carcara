@@ -40,22 +40,23 @@ impl fmt::Display for Token {
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum Reserved {
-    Underscore,  // _
-    Bang,        // !
-    As,          // as
-    Let,         // let
-    Exists,      // exists
-    Forall,      // forall
-    Match,       // match
-    Choice,      // choice
-    Cl,          // cl
-    Assume,      // assume
-    Step,        // step
-    Anchor,      // anchor
-    DeclareFun,  // declare-fun
-    DeclareSort, // declare-sort
-    DefineFun,   // define-fun
-    Assert,      // assert
+    Underscore,   // _
+    Bang,         // !
+    As,           // as
+    Let,          // let
+    Exists,       // exists
+    Forall,       // forall
+    Match,        // match
+    Choice,       // choice
+    Cl,           // cl
+    Assume,       // assume
+    Step,         // step
+    Anchor,       // anchor
+    DeclareFun,   // declare-fun
+    DeclareConst, // declare-const
+    DeclareSort,  // declare-sort
+    DefineFun,    // define-fun
+    Assert,       // assert
 }
 
 impl_str_conversion_traits!(Reserved {
@@ -72,6 +73,7 @@ impl_str_conversion_traits!(Reserved {
     Step: "step",
     Anchor: "anchor",
     DeclareFun: "declare-fun",
+    DeclareConst: "declare-const",
     DeclareSort: "declare-sort",
     DefineFun: "define-fun",
     Assert: "assert",

@@ -348,6 +348,14 @@ impl<R: BufRead> Parser<R> {
                     self.insert_sorted_var((name, sort));
                     continue;
                 }
+                Token::ReservedWord(Reserved::DeclareConst) => {
+                    let name = self.expect_symbol()?;
+                    let sort = self.parse_sort()?;
+                    let sort = self.add_term(sort);
+                    self.expect_token(Token::CloseParen)?;
+                    self.insert_sorted_var((name, sort));
+                    continue;
+                }
                 Token::ReservedWord(Reserved::DeclareSort) => {
                     let (name, arity) = self.parse_declare_sort()?;
                     // User declared sorts are represented with the `Atom` sort kind, and an
