@@ -84,30 +84,46 @@ pub fn resolution(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()>
         }
     }
 
-    // In some cases, when the result of the resolution is just one term, it may appear in the
-    // conclusion clause with an even number of leading negations added to it. The following is an
-    // example of this, adapted from a generated proof:
-    //
-    //     (step t1 (cl (not e)) :rule irrelevant)
-    //     (step t2 (cl (= (not e) (not (not f)))) :rule irrelevant)
-    //     (step t3 (cl (not (= (not e) (not (not f)))) e f) :rule irrelevant)
-    //     (step t4 (cl (not (not f))) :rule resolution :premises (t1 t2 t3))
-    //
-    // Usually, we would expect the clause in the t4 step to be (cl f).
-    if conclusion.len() == 1 {
-        let mut remaining_pivots = pivots.iter().filter(|&(_, eliminated)| !eliminated);
-        // Check if there is only one remaining pivot
-        if let Some(((i, pivot), _)) = remaining_pivots.next() {
-            if remaining_pivots.next().is_none() {
-                let (j, conclusion) = conclusion.into_iter().next().unwrap();
-                return to_option(conclusion == *pivot && (i % 2) == (j % 2));
-            }
-        }
-    }
+    // There are some special cases in the resolution rules that are valid, but leave a pivot
+    // remaining
+    let mut remaining_pivots = pivots.iter().filter(|&(_, eliminated)| !eliminated);
+    if let Some(((i, pivot), _)) = remaining_pivots.next() {
+        // If there is more than one pivot remaining, there is no special case, the rule is just
+        // invalid
+        rassert!(remaining_pivots.next().is_none());
 
-    // At the end, we expect all pivots to have been eliminated, and the working clause to be equal
-    // to the conclusion clause
-    to_option(pivots.iter().all(|(_, eliminated)| *eliminated) && working_clause == conclusion)
+        // First special case: when the result of the resolution is just one term, it may appear in
+        // the conclusion clause with an even number of leading negations added to it. The
+        // following is an example of this, adapted from a generated proof:
+        //
+        //     (step t1 (cl (not e)) :rule trust)
+        //     (step t2 (cl (= (not e) (not (not f)))) :rule trust)
+        //     (step t3 (cl (not (= (not e) (not (not f)))) e f) :rule trust)
+        //     (step t4 (cl (not (not f))) :rule resolution :premises (t1 t2 t3))
+        //
+        // Usually, we would expect the clause in the t4 step to be (cl f).
+        if conclusion.len() == 1 {
+            let (j, conclusion) = conclusion.into_iter().next().unwrap();
+            return to_option(conclusion == *pivot && (i % 2) == (j % 2));
+        }
+
+        // Second special case: when the result of the resolution is just the boolean constant
+        // "false", it may be implicitly eliminated. For example:
+        //
+        //     (step t1 (cl p q false) :rule trust)
+        //     (step t2 (cl (not p)) :rule trust)
+        //     (step t3 (cl (not q)) :rule trust)
+        //     (step t4 (cl) :rule resolution :premises (t1 t2 t3))
+        if conclusion.len() == 0 {
+            return to_option(*i == 0 && pivot.is_bool_false());
+        }
+
+        None // There are no more special cases
+    } else {
+        // This is the general case, where all pivots have been eliminated. In this case, the
+        // working clause should be equal to the conclusion clause
+        to_option(working_clause == conclusion)
+    }
 }
 
 pub fn tautology(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
@@ -234,14 +250,23 @@ mod tests {
             "Premise is \"(not true)\" and leads to empty conclusion clause" {
                 "(step t1 (cl (not true)) :rule trust)
                 (step t2 (cl) :rule th_resolution :premises (t1))": true,
-
-                "(step t1 (cl false) :rule trust)
-                (step t2 (cl) :rule th_resolution :premises (t1))": false,
             }
             "Repeated premises" {
                 "(step t1 (cl (not r)) :rule trust)
                 (step t2 (cl p q r s) :rule trust)
                 (step t3 (cl p q s) :rule th_resolution :premises (t1 t2 t2))": true,
+            }
+            "Implicit elimination of \"(cl false)\"" {
+                "(step t1 (cl p q false) :rule trust)
+                (step t2 (cl (not p)) :rule trust)
+                (step t3 (cl (not q)) :rule trust)
+                (step t4 (cl) :rule resolution :premises (t1 t2 t3))": true,
+
+                // This implicit elimination is allowed, but not required
+                "(step t1 (cl p q false) :rule trust)
+                (step t2 (cl (not p)) :rule trust)
+                (step t3 (cl (not q)) :rule trust)
+                (step t4 (cl false) :rule resolution :premises (t1 t2 t3))": true,
             }
         }
     }
