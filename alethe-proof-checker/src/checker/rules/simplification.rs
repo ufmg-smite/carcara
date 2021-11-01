@@ -199,7 +199,7 @@ fn generic_and_or_simplify(conclusion: &[Rc<Term>], rule_kind: Operator) -> Opti
     }
 
     // Finally, we check to see if the result was short-circuited
-    let seen: AHashSet<(bool, &Term)> = phis
+    let seen: AHashSet<(bool, &Rc<Term>)> = phis
         .iter()
         .map(|t| t.remove_all_negations_with_polarity())
         .collect();

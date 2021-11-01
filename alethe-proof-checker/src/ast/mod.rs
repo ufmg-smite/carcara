@@ -584,7 +584,7 @@ impl Rc<Term> {
     }
 
     /// Removes all leading negations from the term, and returns how many there were.
-    pub fn remove_all_negations(&self) -> (u32, &Term) {
+    pub fn remove_all_negations(&self) -> (u32, &Self) {
         let mut term = self;
         let mut n = 0;
         while let Some(t) = term.remove_negation() {
@@ -596,7 +596,7 @@ impl Rc<Term> {
 
     /// Removes all leading negations from the term, and returns a boolean representing the term
     /// polarity.
-    pub fn remove_all_negations_with_polarity(&self) -> (bool, &Term) {
+    pub fn remove_all_negations_with_polarity(&self) -> (bool, &Self) {
         let (n, term) = self.remove_all_negations();
         (n % 2 == 0, term)
     }
