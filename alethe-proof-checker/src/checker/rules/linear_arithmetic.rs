@@ -1,7 +1,8 @@
 use super::{to_option, RuleArgs};
-use crate::ast::*;
+use crate::{ast::*, utils::RawOps};
 use ahash::AHashMap;
 use num_bigint::BigInt;
+use num_integer::Integer;
 use num_rational::BigRational;
 use num_traits::{One, Signed, Zero};
 
@@ -45,7 +46,10 @@ fn negate_disequality(term: &Term) -> Option<(Operator, &[Rc<Term>])> {
 
 /// A linear combination, represented by a hash map from non-constant terms to their coefficients,
 /// plus a constant term. This is also used to represent a disequality, in which case the left side
-/// is the non-constant terms and their coefficients, and the right side is the constant term.
+/// is the non-constant terms and their coefficients, and the right side is the constant term. The
+/// methods that construct and manipulate `LinearComb`s use the operations implemented by the
+/// `RawOps` trait, and therefore don't reduce the fractions in `BigRational`s. This may lead to
+/// errors when using methods that assume these fractions were reduced.
 struct LinearComb(AHashMap<Rc<Term>, BigRational>, BigRational);
 
 impl LinearComb {
@@ -85,11 +89,11 @@ impl LinearComb {
                     (Some(coeff), _) => (&args[1], coeff),
                     (None, None) => return self.insert(term.clone(), coeff.clone()),
                 };
-                self.add_term(var, &(coeff * inner_coeff));
+                self.add_term(var, &coeff.raw_mul(&inner_coeff));
             }
             _ => {
                 if let Some(r) = term.as_fraction() {
-                    self.1 += coeff * r;
+                    self.1 = self.1.raw_add(&coeff.raw_mul(&r))
                 } else {
                     self.insert(term.clone(), coeff.clone());
                 }
@@ -111,7 +115,7 @@ impl LinearComb {
 
         match self.0.entry(key) {
             Entry::Occupied(mut e) => {
-                let new_value = e.get() + value;
+                let new_value = e.get().raw_add(&value);
                 if new_value.is_zero() {
                     e.remove();
                 } else {
@@ -128,7 +132,7 @@ impl LinearComb {
         for (var, coeff) in other.0 {
             self.insert(var, coeff)
         }
-        self.1 += other.1;
+        self.1 = self.1.raw_add(&other.1);
         self
     }
 
@@ -144,9 +148,9 @@ impl LinearComb {
         }
 
         for coeff in self.0.values_mut() {
-            *coeff *= scalar;
+            *coeff = coeff.raw_mul(scalar);
         }
-        self.1 *= scalar;
+        self.1 = self.1.raw_mul(scalar);
     }
 
     fn neg(&mut self) {
@@ -194,7 +198,11 @@ fn strengthen(op: Operator, disequality: &mut LinearComb, a: &BigRational) -> Op
     } else if a.is_one() {
         disequality.1.is_integer()
     } else {
-        (&disequality.1 * a).is_integer()
+        // This code is checking if `disequality.1 * a` is an integer, but `is_integer` assumes
+        // that the `BigRational` is reduced. We instead directly check if the numerator is a
+        // multiple of the denominator
+        let constant = disequality.1.raw_mul(a);
+        constant.numer().is_multiple_of(constant.denom())
     };
 
     match op {

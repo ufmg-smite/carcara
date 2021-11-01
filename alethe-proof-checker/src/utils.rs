@@ -1,4 +1,6 @@
 use ahash::AHashSet;
+use num_rational::BigRational;
+use num_traits::{One, Signed, Zero};
 use std::hash::Hash;
 
 /// An enum that can hold one of two types. Similar to `Result`, but doesn't imply that one of the
@@ -46,5 +48,38 @@ impl<T, I: Iterator<Item = T>> DedupIterator<T> for I {
         Self: Sized,
     {
         Dedup { seen: AHashSet::new(), iter: self }
+    }
+}
+
+/// A trait that implements addition and multiplication operations on `BigRational`s that don't
+/// reduce the fractions. This makes them much faster than the implementations of the `Add` and
+/// `Mul` traits, but may lead to errors when using methods that assume that the fractions are
+/// reduced.
+pub trait RawOps {
+    fn raw_add(&self, other: &Self) -> Self;
+
+    fn raw_mul(&self, other: &Self) -> Self;
+}
+
+impl RawOps for BigRational {
+    fn raw_add(&self, other: &Self) -> Self {
+        let denom = self.denom().abs() * other.denom().abs();
+        let numer_a = self.numer() * other.denom().abs();
+        let numer_b = other.numer() * self.denom().abs();
+        Self::new_raw(numer_a + numer_b, denom)
+    }
+
+    fn raw_mul(&self, other: &Self) -> Self {
+        if self.is_zero() || other.is_zero() {
+            Self::zero()
+        } else if self.is_one() {
+            other.clone()
+        } else if other.is_one() {
+            self.clone()
+        } else {
+            let numer = self.numer() * other.numer();
+            let denom = self.denom() * other.denom();
+            Self::new_raw(numer, denom)
+        }
     }
 }
