@@ -67,6 +67,15 @@ fn app() -> App<'static, 'static> {
                     .default_value("1")
                     .help("Number of threads to use to run the benchmarks"),
             )
+            .arg(
+                Arg::with_name("sort-by-total")
+                    .short("t")
+                    .long("sort-by-total")
+                    .help(
+                        "Show benchmark results sorted by total time taken, instead of by average \
+                        time taken",
+                    ),
+            )
             .arg(Arg::with_name("files").multiple(true).required(true).help(
                 "The proof files with which the benchkmark will be run. If a directory is passed, \
                 the checker will recursively find all '.proof' files in the directory. The problem \
@@ -197,6 +206,8 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         .parse()
         .map_err(|_| CliError::InvalidArgument(num_jobs.to_string()))?;
 
+    let sort_by_total = matches.is_present("sort-by-total");
+
     let instances = get_instances_from_paths(matches.values_of("files").unwrap())?;
 
     if instances.is_empty() {
@@ -218,10 +229,16 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
 
     let data_by_rule = results.step_time_by_rule();
     let mut data_by_rule: Vec<_> = data_by_rule.iter().collect();
-    data_by_rule.sort_by_key(|(_, m)| m.mean);
+    data_by_rule.sort_by_key(|(_, m)| if sort_by_total { m.total } else { m.mean });
+
     println!("by rule:");
     for (rule, data) in data_by_rule {
-        println!("    {: <18}{}", rule, data);
+        print!("    {: <18}", rule);
+        if sort_by_total {
+            println!("{:#}", data)
+        } else {
+            println!("{}", data)
+        }
     }
 
     println!("worst cases:");

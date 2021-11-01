@@ -136,7 +136,13 @@ impl<K: Clone> Metrics<K> {
 
 impl<K> fmt::Display for Metrics<K> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?} ± {:?}", self.mean, self.standard_deviation)
+        // If the "alternate" flag ('#') was set, we print the total, mean and count, instead of
+        // the mean and standard deviation.
+        if f.alternate() {
+            write!(f, "{:?} ({:?} * {})", self.total, self.mean, self.count)
+        } else {
+            write!(f, "{:?} ± {:?}", self.mean, self.standard_deviation)
+        }
     }
 }
 
