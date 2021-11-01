@@ -1,8 +1,12 @@
-use super::{get_single_term_from_command, to_option, RuleArgs};
+use super::{get_clause_from_command, get_single_term_from_command, to_option, RuleArgs};
 use crate::ast::*;
 use ahash::{AHashMap, AHashSet};
 
-pub fn subproof(RuleArgs { conclusion, subproof_commands, .. }: RuleArgs) -> Option<()> {
+pub fn subproof(
+    RuleArgs {
+        conclusion, pool, subproof_commands, ..
+    }: RuleArgs,
+) -> Option<()> {
     // TODO: We should get the series of assumptions from the ":discharge" attribute, but currently
     // we just take the first `conclusion.len() - 1` steps in the subproof.
     let assumptions = &subproof_commands?[..conclusion.len() - 1];
@@ -17,9 +21,15 @@ pub fn subproof(RuleArgs { conclusion, subproof_commands, .. }: RuleArgs) -> Opt
     }
 
     let previous_command = &subproof_commands?[subproof_commands?.len() - 2];
-    let phi = get_single_term_from_command(previous_command)?;
+    let phi = match get_clause_from_command(previous_command) {
+        // If the last command has an empty clause as it's conclusion, we expect `phi` to be the
+        // boolean constant `false`
+        [] => pool.bool_false(),
+        [t] => t.clone(),
+        _ => return None,
+    };
 
-    to_option(conclusion.last().unwrap() == phi)
+    to_option(*conclusion.last().unwrap() == phi)
 }
 
 pub fn bind(
