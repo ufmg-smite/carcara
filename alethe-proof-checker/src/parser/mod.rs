@@ -335,6 +335,21 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
+    fn read_until_close_parens(&mut self) -> AletheResult<()> {
+        let mut parens_depth = 1;
+        while parens_depth > 0 {
+            parens_depth += match self.next_token()? {
+                (Token::OpenParen, _) => 1,
+                (Token::CloseParen, _) => -1,
+                (Token::Eof, pos) => {
+                    return Err(Error::Parser(ParserError::UnexpectedToken(Token::Eof), pos))
+                }
+                _ => 0,
+            };
+        }
+        Ok(())
+    }
+
     /// Reads an SMT-LIB script and parses the declarations and definitions. Ignores all other
     /// SMT-LIB script commands.
     pub fn parse_problem(&mut self) -> AletheResult<AHashSet<Rc<Term>>> {
@@ -398,20 +413,7 @@ impl<R: BufRead> Parser<R> {
                 _ => {
                     // If the command is not one of the commands we care about, we just ignore it.
                     // We do that by reading tokens until the command parenthesis is closed
-                    let mut parens_depth = 1;
-                    while parens_depth > 0 {
-                        parens_depth += match self.next_token()? {
-                            (Token::OpenParen, _) => 1,
-                            (Token::CloseParen, _) => -1,
-                            (Token::Eof, pos) => {
-                                return Err(Error::Parser(
-                                    ParserError::UnexpectedToken(Token::Eof),
-                                    pos,
-                                ))
-                            }
-                            _ => 0,
-                        };
-                    }
+                    self.read_until_close_parens()?;
                 }
             }
         }
@@ -561,6 +563,13 @@ impl<R: BufRead> Parser<R> {
             (Token::ReservedWord(r), _) => format!("{:?}", r),
             (other, pos) => return Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),
         };
+
+        // If the rule is "trust", we read the rest of the "step" command, ignoring all arguments
+        // and premises
+        if rule == "trust" {
+            self.read_until_close_parens()?;
+            return Ok((step_index, (clause, rule, Vec::new(), Vec::new())));
+        }
 
         let premises = if self.current_token == Token::Keyword("premises".into()) {
             self.next_token()?;
