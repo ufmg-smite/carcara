@@ -28,7 +28,7 @@ fn test_subterms() {
 
             let root = parse_term_with_definitions(definitions, c[0]);
             let subterms = root.subterms();
-            let as_strings: Vec<_> = subterms.map(|t| format!("{:?}", t)).collect();
+            let as_strings: Vec<_> = subterms.map(|t| format!("{}", t)).collect();
             let got = as_strings.iter().map(String::as_str);
 
             assert!(expected.eq(got))

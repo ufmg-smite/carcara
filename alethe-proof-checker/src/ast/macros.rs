@@ -110,7 +110,7 @@ macro_rules! impl_str_conversion_traits {
             }
         }
 
-        impl std::fmt::Debug for $enum_name {
+        impl std::fmt::Display for $enum_name {
             fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
                 let s = match self {
                     $($enum_name::$variant => $str,)*

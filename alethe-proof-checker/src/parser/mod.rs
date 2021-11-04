@@ -560,7 +560,7 @@ impl<R: BufRead> Parser<R> {
         self.expect_token(Token::Keyword("rule".into()))?;
         let rule = match self.next_token()? {
             (Token::Symbol(s), _) => s,
-            (Token::ReservedWord(r), _) => format!("{:?}", r),
+            (Token::ReservedWord(r), _) => format!("{}", r),
             (other, pos) => return Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),
         };
 

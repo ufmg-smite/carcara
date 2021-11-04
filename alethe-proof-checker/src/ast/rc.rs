@@ -1,10 +1,4 @@
-use std::{
-    borrow::Borrow,
-    fmt::{self, Debug},
-    hash::Hash,
-    ops::Deref,
-    rc,
-};
+use std::{borrow::Borrow, fmt, hash::Hash, ops::Deref, rc};
 
 /// An `Rc` where equality and hashing are done by reference, instead of by value
 #[derive(Clone, Eq)]
@@ -48,9 +42,15 @@ impl<T> From<T> for Rc<T> {
     }
 }
 
-impl<T: Debug> Debug for Rc<T> {
+impl<T: fmt::Debug> fmt::Debug for Rc<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self.0)
+        fmt::Debug::fmt(&self.0, f)
+    }
+}
+
+impl<T: fmt::Display> fmt::Display for Rc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
     }
 }
 

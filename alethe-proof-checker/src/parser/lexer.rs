@@ -32,13 +32,13 @@ impl fmt::Display for Token {
             Token::Numeral(n) => write!(f, "{}", n),
             Token::Decimal(r) => write!(f, "{}", r),
             Token::String(s) => write!(f, "\"{}\"", s),
-            Token::ReservedWord(r) => write!(f, "{:?}", r),
+            Token::ReservedWord(r) => write!(f, "{}", r),
             Token::Eof => write!(f, "EOF"),
         }
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reserved {
     Underscore,   // _
     Bang,         // !

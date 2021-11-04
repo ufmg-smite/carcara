@@ -45,7 +45,7 @@ fn run_parser_tests(cases: &[(&str, Term)]) {
         let got = parse_term(case);
         assert!(
             DeepEq::eq(expected, &got),
-            "test case failed: {:?} != {:?}",
+            "test case failed: {} != {}",
             expected,
             got
         );
@@ -94,8 +94,8 @@ fn test_hash_consing() {
     assert_eq!(parser.state.term_pool.terms.len(), expected.len());
 
     for got in parser.state.term_pool.terms.keys() {
-        let formatted: &str = &format!("{:?}", got);
-        assert!(expected.contains(formatted), "{:?}", formatted)
+        let formatted: &str = &format!("{}", got);
+        assert!(expected.contains(formatted), "{}", formatted)
     }
 }
 
