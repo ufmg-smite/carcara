@@ -17,7 +17,7 @@ use path_args::{get_instances_from_paths, infer_problem_path};
 use std::{
     fs::File,
     io::{BufReader, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 fn app() -> App<'static, 'static> {
@@ -267,14 +267,7 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
 
 fn progress_report_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
     let instances = get_instances_from_paths(matches.values_of("files").unwrap())?;
-    let files: Vec<_> = instances
-        .iter()
-        .map(|(_problem, proof)| {
-            proof
-                .to_str()
-                .ok_or_else(|| CliError::InvalidProofFile(proof.clone()))
-        })
-        .collect::<Result<_, _>>()?;
+    let files: Vec<_> = instances.iter().map(|(_, proof)| proof.as_path()).collect();
 
     if instances.is_empty() {
         log::warn!("no files passed");
@@ -287,7 +280,7 @@ fn progress_report_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         report_by_rules(&files, quiet)?;
     } else if matches.is_present("by-files-and-rules") {
         for file in files {
-            println!("{}:", file);
+            println!("{}:", file.to_string_lossy());
             report_by_rules(&[file], quiet)?;
             println!();
         }
@@ -295,7 +288,7 @@ fn progress_report_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
     Ok(())
 }
 
-fn get_used_rules(file_path: &str) -> AletheResult<Vec<String>> {
+fn get_used_rules(file_path: &Path) -> AletheResult<Vec<String>> {
     use lexer::{Lexer, Token};
 
     let file = File::open(file_path)?;
@@ -332,13 +325,13 @@ fn print_report_entry(s: &str, success: bool, quiet: bool) {
     }
 }
 
-fn report_by_files(files: &[&str], quiet: bool) -> AletheResult<()> {
+fn report_by_files(files: &[&Path], quiet: bool) -> AletheResult<()> {
     let mut implemented = 0;
     for file in files {
         let all_implemented = get_used_rules(file)?
             .iter()
             .all(|rule| ProofChecker::get_rule(rule).is_some());
-        print_report_entry(file, all_implemented, quiet);
+        print_report_entry(&file.to_string_lossy(), all_implemented, quiet);
         implemented += all_implemented as i32;
     }
     if quiet {
@@ -352,7 +345,7 @@ fn report_by_files(files: &[&str], quiet: bool) -> AletheResult<()> {
     Ok(())
 }
 
-fn report_by_rules(files: &[&str], quiet: bool) -> AletheResult<()> {
+fn report_by_rules(files: &[&Path], quiet: bool) -> AletheResult<()> {
     let rules = files.iter().flat_map(|file| match get_used_rules(file) {
         Ok(rules) => rules.into_iter().map(Ok).collect(),
         Err(e) => vec![Err(e)],

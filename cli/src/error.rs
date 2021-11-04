@@ -4,7 +4,7 @@ use std::{fmt, io, path::PathBuf};
 pub enum CliError {
     AletheError(alethe_proof_checker::Error),
     InvalidArgument(String),
-    InvalidProofFile(PathBuf),
+    CantInferProblemFile(PathBuf),
 }
 
 impl From<io::Error> for CliError {
@@ -24,8 +24,8 @@ impl fmt::Display for CliError {
         match self {
             CliError::AletheError(e) => write!(f, "{}", e),
             CliError::InvalidArgument(a) => write!(f, "invalid argument: {}", a),
-            CliError::InvalidProofFile(p) => {
-                write!(f, "{} is not a valid proof file", p.to_str().unwrap())
+            CliError::CantInferProblemFile(p) => {
+                write!(f, "can't infer problem file: {}", p.to_string_lossy())
             }
         }
     }

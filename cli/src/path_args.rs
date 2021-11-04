@@ -13,7 +13,7 @@ pub fn infer_problem_path(proof_path: impl Into<PathBuf>) -> Result<PathBuf, Cli
         Some(path)
     }
     let proof_path: PathBuf = proof_path.into();
-    inner(proof_path.clone()).ok_or_else(|| CliError::InvalidProofFile(proof_path.clone()))
+    inner(proof_path.clone()).ok_or(CliError::CantInferProblemFile(proof_path))
 }
 
 fn get_instances_from_dir(
@@ -30,11 +30,10 @@ fn get_instances_from_dir(
         for entry in fs::read_dir(path)? {
             get_instances_from_dir(entry?.path(), acc)?;
         }
-    } else {
-        // `fs::metadata` follows symlinks, so this should only be reachable if the path is
-        // something weird like a device file
-        return Err(CliError::InvalidProofFile(path));
     }
+    // We ignore anything that `fs::metadata` doesn't report as either a file or a directory.
+    // `fs::metadata` follows symlinks, so this should only happen if the path is something weird
+    // like a device file
     Ok(())
 }
 
