@@ -39,13 +39,50 @@ impl<'a> PrettyPrint for AlethePrinter<'a> {
                 continue;
             }
             match &commands[i] {
-                ProofCommand::Assume { .. } => {
-                    // TODO: print assume commands
+                ProofCommand::Assume { index, term } => {
+                    write!(self.inner, "(assume {} {})", index, term)?
                 }
                 ProofCommand::Step(s) => self.write_step(s, &commands_stack)?,
-                ProofCommand::Subproof { commands: inner_commands, .. } => {
-                    // TODO: print anchor commands
+                ProofCommand::Subproof {
+                    commands: inner_commands,
+                    assignment_args,
+                    variable_args,
+                } => {
+                    let end_step_index = inner_commands
+                        .last()
+                        .and_then(|s| match s {
+                            ProofCommand::Step(s) => Some(s.index.clone()),
+                            _ => None,
+                        })
+                        .unwrap();
+                    write!(self.inner, "(anchor :step {}", end_step_index)?;
+
+                    if !variable_args.is_empty() || !assignment_args.is_empty() {
+                        write!(self.inner, " :args (")?;
+                        let mut is_first = true;
+                        for (name, sort) in variable_args {
+                            if !is_first {
+                                write!(self.inner, " ")?
+                            }
+                            is_first = false;
+                            write!(self.inner, "({} {})", name, sort)?
+                        }
+                        for (name, value) in assignment_args {
+                            if !is_first {
+                                write!(self.inner, " ")?
+                            }
+                            is_first = false;
+                            write!(self.inner, "(:= ({} {}) {})", name, value.sort(), value)?;
+                        }
+                        write!(self.inner, ")")?;
+                    }
+                    writeln!(self.inner, ")")?;
+
+                    // We increment this layer's index so when we comeback from the subproof and
+                    // pop the top layer, we are already on the next command after the subproof
+                    commands_stack.last_mut().unwrap().0 += 1;
                     commands_stack.push((0, inner_commands));
+                    continue;
                 }
             }
             writeln!(self.inner)?;
