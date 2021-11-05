@@ -223,10 +223,17 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
     );
     let results = benchmarking::run_benchmark(&instances, num_runs, num_jobs)?;
 
-    println!("parsing:            {}", results.parsing());
-    println!("checking:           {}", results.checking());
-    println!("parsing + checking: {}", results.parsing_checking());
-    println!("total:              {}", results.total());
+    if sort_by_total {
+        println!("parsing:            {:#}", results.parsing());
+        println!("checking:           {:#}", results.checking());
+        println!("parsing + checking: {:#}", results.parsing_checking());
+        println!("total:              {:#}", results.total());
+    } else {
+        println!("parsing:            {}", results.parsing());
+        println!("checking:           {}", results.checking());
+        println!("parsing + checking: {}", results.parsing_checking());
+        println!("total:              {}", results.total());
+    }
 
     let data_by_rule = results.step_time_by_rule();
     let mut data_by_rule: Vec<_> = data_by_rule.iter().collect();
