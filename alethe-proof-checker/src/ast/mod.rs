@@ -8,13 +8,14 @@ mod subterms;
 #[cfg(test)]
 mod tests;
 
+pub use printer::print_proof;
+pub use rc::Rc;
 pub use subterms::Subterms;
 
 use ahash::{AHashMap, AHashSet};
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
-pub use rc::Rc;
 use std::hash::Hash;
 
 pub struct TermPool {

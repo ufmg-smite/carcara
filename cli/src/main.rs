@@ -5,6 +5,7 @@ mod path_args;
 
 use ahash::AHashSet;
 use alethe_proof_checker::{
+    ast::print_proof,
     check,
     checker::{Correctness, ProofChecker},
     parser::{lexer, parse_instance},
@@ -191,7 +192,7 @@ fn parse_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         BufReader::new(File::open(proof_file)?),
     );
     let (proof, _) = parse_instance(problem, proof).map_err(alethe_proof_checker::Error::from)?;
-    println!("{:#?}", proof);
+    print_proof(&proof)?;
     Ok(())
 }
 
