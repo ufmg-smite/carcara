@@ -170,6 +170,7 @@ impl<'c> ProofChecker<'c> {
             rule: rule_name,
             premises,
             args,
+            discharge: _, // The discharge attribute is not used when checking
         }: &'a ProofStep,
         commands_stack: &'a [(usize, &'a [ProofCommand])],
         is_end_of_subproof: bool,

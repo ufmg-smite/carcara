@@ -512,6 +512,7 @@ fn test_step() {
             rule: "rule-name".into(),
             premises: Vec::new(),
             args: Vec::new(),
+            discharge: Vec::new(),
         })
     );
 
@@ -523,6 +524,7 @@ fn test_step() {
             rule: "rule-name".into(),
             premises: vec![(0, 0)],
             args: Vec::new(),
+            discharge: Vec::new(),
         })
     );
 
@@ -543,6 +545,7 @@ fn test_step() {
                 .map(|term| ProofArg::Term(Rc::new(term)))
                 .collect()
             },
+            discharge: Vec::new(),
         })
     );
 
@@ -563,6 +566,7 @@ fn test_step() {
                 .map(|(name, term)| ProofArg::Assign(name.into(), Rc::new(term)))
                 .collect()
             },
+            discharge: Vec::new(),
         })
     );
 
@@ -574,6 +578,7 @@ fn test_step() {
             rule: "rule-name".into(),
             premises: vec![(0, 0), (0, 1), (0, 2)],
             args: vec![ProofArg::Term(Rc::new(terminal!(int 42)))],
+            discharge: Vec::new(),
         })
     );
 }
@@ -603,6 +608,7 @@ fn test_premises_in_subproofs() {
             rule: "rule-name".into(),
             premises: vec![(0, 0), (0, 1)],
             args: Vec::new(),
+            discharge: Vec::new(),
         })
     );
     assert_deep_eq!(
@@ -613,6 +619,7 @@ fn test_premises_in_subproofs() {
             rule: "rule-name".into(),
             premises: vec![(1, 0), (0, 0), (0, 1)],
             args: Vec::new(),
+            discharge: Vec::new(),
         })
     );
     assert_deep_eq!(
@@ -623,6 +630,7 @@ fn test_premises_in_subproofs() {
             rule: "rule-name".into(),
             premises: vec![(0, 0), (1, 0), (0, 1), (1, 1)],
             args: Vec::new(),
+            discharge: Vec::new(),
         })
     );
 }

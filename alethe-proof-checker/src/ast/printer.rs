@@ -109,17 +109,11 @@ impl<'a> AlethePrinter<'a> {
         write!(self.inner, " :rule {}", step.rule)?;
 
         if let [head, tail @ ..] = step.premises.as_slice() {
-            write!(
-                self.inner,
-                " :premises ({}",
-                get_premise_index(*head, commands_stack)
-            )?;
+            let head = get_premise_index(*head, commands_stack);
+            write!(self.inner, " :premises ({}", head)?;
             for premise in tail {
-                write!(
-                    self.inner,
-                    " {}",
-                    get_premise_index(*premise, commands_stack)
-                )?;
+                let premise = get_premise_index(*premise, commands_stack);
+                write!(self.inner, " {}", premise)?;
             }
             write!(self.inner, ")")?;
         }
@@ -130,6 +124,14 @@ impl<'a> AlethePrinter<'a> {
             for arg in tail {
                 write!(self.inner, " ")?;
                 self.write_proof_arg(arg)?;
+            }
+            write!(self.inner, ")")?;
+        }
+
+        if let [head, tail @ ..] = step.discharge.as_slice() {
+            write!(self.inner, " :discharge ({}", head)?;
+            for index in tail {
+                write!(self.inner, " {}", index)?;
             }
             write!(self.inner, ")")?;
         }

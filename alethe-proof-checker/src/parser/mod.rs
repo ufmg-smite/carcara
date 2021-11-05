@@ -24,7 +24,13 @@ pub fn parse_instance<T: BufRead>(problem: T, proof: T) -> AletheResult<(Proof, 
 }
 
 type AnchorCommand = (String, Vec<(String, Rc<Term>)>, Vec<SortedVar>);
-type StepCommand = (Vec<Rc<Term>>, String, Vec<String>, Vec<ProofArg>);
+type StepCommand = (
+    Vec<Rc<Term>>, // Clause
+    String,        // Rule
+    Vec<String>,   // Premises
+    Vec<ProofArg>, // Arguments
+    Vec<String>,   // Discharge
+);
 
 struct SymbolTable<K, V> {
     scopes: Vec<AHashMap<K, V>>,
@@ -437,7 +443,8 @@ impl<R: BufRead> Parser<R> {
                     (index.clone(), ProofCommand::Assume { index, term })
                 }
                 Token::ReservedWord(Reserved::Step) => {
-                    let (index, (clause, rule, premises, args)) = self.parse_step_command()?;
+                    let (index, (clause, rule, premises, args, discharge)) =
+                        self.parse_step_command()?;
 
                     // For every premise index symbol, find the associated premise index (depth and
                     // command index) in the `step_indices` symbol table, or return an error
@@ -463,6 +470,7 @@ impl<R: BufRead> Parser<R> {
                         rule,
                         premises,
                         args,
+                        discharge,
                     };
                     (index, ProofCommand::Step(step))
                 }
@@ -568,7 +576,10 @@ impl<R: BufRead> Parser<R> {
         // and premises
         if rule == "trust" {
             self.read_until_close_parens()?;
-            return Ok((step_index, (clause, rule, Vec::new(), Vec::new())));
+            return Ok((
+                step_index,
+                (clause, rule, Vec::new(), Vec::new(), Vec::new()),
+            ));
         }
 
         let premises = if self.current_token == Token::Keyword("premises".into()) {
@@ -588,19 +599,20 @@ impl<R: BufRead> Parser<R> {
         };
 
         // In some steps (notably those with the "subproof" rule) a ":discharge" attribute appears,
-        // with an assumption index as its value. While the checker already has support this rule,
-        // it still can't parse and interpret the ":discharge" attributes values properly, so we
-        // are simply consuming and ignoring the attribute if it appears
-        // TODO: Add tests for this attribute
-        if self.current_token == Token::Keyword("discharge".into()) {
+        // with a sequence of assumption indices as its value. While the checker already has
+        // support this rule, it doesn't use these values to check it. These values are only used
+        // when printing a proof.
+        let discharge = if self.current_token == Token::Keyword("discharge".into()) {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
-            self.parse_sequence(Self::expect_symbol, true)?;
-        }
+            self.parse_sequence(Self::expect_symbol, true)?
+        } else {
+            Vec::new()
+        };
 
         self.expect_token(Token::CloseParen)?;
 
-        Ok((step_index, (clause, rule, premises, args)))
+        Ok((step_index, (clause, rule, premises, args, discharge)))
     }
 
     /// Parses an "anchor" proof command. This method assumes that the "(" and "anchor" tokens were
