@@ -7,7 +7,7 @@ use ahash::AHashSet;
 use alethe_proof_checker::{
     ast::print_proof,
     check,
-    checker::{Correctness, ProofChecker},
+    checker::ProofChecker,
     parser::{lexer, parse_instance},
     AletheResult,
 };
@@ -174,10 +174,8 @@ fn check_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         None => infer_problem_path(&proof_file)?,
     };
     let skip = matches.is_present("skip-unknown-rules");
-    match check(problem_file, proof_file, skip, false)? {
-        Correctness::True => println!("true"),
-        Correctness::False(s, r) => println!("false ({}, {})", s, r),
-    }
+    check(problem_file, proof_file, skip, false)?;
+    println!("true");
     Ok(())
 }
 

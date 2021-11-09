@@ -2,21 +2,12 @@ use alethe_proof_checker::*;
 use std::{ffi::OsStr, fs, io, path::Path};
 
 fn test_file(problem_path: &Path, proof_path: &Path) {
-    use checker::Correctness;
-
-    match check(problem_path, proof_path, true, false) {
-        Ok(Correctness::True) => (),
-        Ok(Correctness::False(step, rule)) => panic!(
-            "\ntest file \"{}\"\nfailed on step {}, with rule \"{}\"\n",
-            &problem_path.to_str().unwrap(),
-            step,
-            rule,
-        ),
-        Err(e) => panic!(
-            "\ntest file \"{}\"\nreturned error: {:?}\n",
+    if let Err(e) = check(problem_path, proof_path, true, false) {
+        panic!(
+            "\ntest file \"{}\"\nreturned error: {}\n",
             &problem_path.to_str().unwrap(),
             e,
-        ),
+        )
     }
 }
 

@@ -55,7 +55,7 @@ pub fn check<P: AsRef<Path>>(
     proof_path: P,
     skip_unknown_rules: bool,
     is_running_test: bool,
-) -> Result<checker::Correctness, Error> {
+) -> Result<(), Error> {
     let (proof, pool) = parser::parse_instance(
         BufReader::new(File::open(problem_path)?),
         BufReader::new(File::open(proof_path)?),

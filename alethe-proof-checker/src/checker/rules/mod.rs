@@ -1,7 +1,15 @@
 use super::Context;
 use crate::ast::*;
 
-pub type Rule = fn(RuleArgs) -> Option<()>;
+#[derive(Debug)]
+pub enum RuleError {
+    Unspecified,
+    UnknownRule,
+}
+
+pub type RuleResult = Result<(), RuleError>;
+
+pub type Rule = fn(RuleArgs) -> RuleResult;
 
 pub struct RuleArgs<'a> {
     pub(super) conclusion: &'a [Rc<Term>],
@@ -22,6 +30,14 @@ fn to_option(b: bool) -> Option<()> {
     match b {
         true => Some(()),
         false => None,
+    }
+}
+
+/// Converts a `bool` into an `RuleResult`.
+fn to_result(b: bool, e: RuleError) -> RuleResult {
+    match b {
+        true => Ok(()),
+        false => Err(e),
     }
 }
 
@@ -54,7 +70,7 @@ macro_rules! rassert {
 #[cfg(test)]
 fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
     use crate::{
-        checker::{Config, Correctness, ProofChecker},
+        checker::{Config, ProofChecker},
         parser::parse_instance,
     };
     use std::io::Cursor;
@@ -71,7 +87,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
                 statistics: None,
             },
         );
-        let got = matches!(checker.check(&parsed), Ok(Correctness::True));
+        let got = matches!(checker.check(&parsed), Ok(()));
         assert_eq!(
             *expected, got,
             "test case \"{}\" index {} failed",
