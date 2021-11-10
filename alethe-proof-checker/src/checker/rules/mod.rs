@@ -1,10 +1,43 @@
 use super::Context;
-use crate::ast::*;
+use crate::{ast::*, utils::Range};
+use std::fmt;
 
 #[derive(Debug)]
 pub enum RuleError {
     Unspecified,
+    Cong(congruence::CongruenceError),
+    WrongNumberOfPremises(Range, usize),
+    WrongLengthOfClause(Range, usize),
+    TermOfWrongForm(Rc<Term>),
     UnknownRule,
+}
+
+impl fmt::Display for RuleError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            RuleError::Unspecified => write!(f, "unspecified error"),
+            RuleError::Cong(e) => write!(f, "{}", e),
+            RuleError::WrongNumberOfPremises(expected, got) => {
+                write!(f, "expected {} premises, got {}", expected.to_text(), got)
+            }
+            RuleError::WrongLengthOfClause(expected, got) => {
+                write!(
+                    f,
+                    "expected {} terms in clause, got {}",
+                    expected.to_text(),
+                    got
+                )
+            }
+            RuleError::TermOfWrongForm(t) => write!(f, "term is of the wrong form: '{}'", t),
+            RuleError::UnknownRule => write!(f, "unknown rule"),
+        }
+    }
+}
+
+impl From<congruence::CongruenceError> for RuleError {
+    fn from(e: congruence::CongruenceError) -> Self {
+        Self::Cong(e)
+    }
 }
 
 pub type RuleResult = Result<(), RuleError>;
@@ -63,7 +96,13 @@ fn get_clause_from_command(command: &ProofCommand) -> &[Rc<Term>] {
 /// to `to_option(arg)?`, but much more readable.
 macro_rules! rassert {
     ($arg:expr) => {
-        to_option($arg)?
+        crate::checker::rules::to_option($arg)?
+    };
+    ($arg:expr, $err:expr) => {
+        match $arg {
+            true => Ok(()),
+            false => Err($err),
+        }?
     };
 }
 
@@ -87,7 +126,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
                 statistics: None,
             },
         );
-        let got = matches!(checker.check(&parsed), Ok(()));
+        let got = checker.check(&parsed).is_ok();
         assert_eq!(
             *expected, got,
             "test case \"{}\" index {} failed",

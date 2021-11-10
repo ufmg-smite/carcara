@@ -1,5 +1,52 @@
-use super::{get_single_term_from_command, to_option, RuleArgs};
+use super::{get_single_term_from_command, RuleArgs, RuleError, RuleResult};
 use crate::ast::*;
+use std::fmt;
+
+#[derive(Debug)]
+pub enum CongruenceError {
+    BadPremise(String),
+    TooManyPremises,
+    MissingPremise(Rc<Term>, Rc<Term>),
+    PremiseDoesntJustifyArgs {
+        args: (Rc<Term>, Rc<Term>),
+        premise: (Rc<Term>, Rc<Term>),
+    },
+    DifferentFunctions(Rc<Term>, Rc<Term>),
+    DifferentOperators(Operator, Operator),
+    DifferentNumberOfArguments(usize, usize),
+    NotApplicationOrOperation(Rc<Term>),
+}
+
+impl fmt::Display for CongruenceError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            CongruenceError::BadPremise(p) => write!(f, "bad premise: '{}'", p),
+            CongruenceError::TooManyPremises => write!(f, "too many premises"),
+            CongruenceError::MissingPremise(a, b) => write!(
+                f,
+                "no premise to justify equality of arguments '{}' and '{}'",
+                a, b
+            ),
+            CongruenceError::PremiseDoesntJustifyArgs { args, premise } => write!(
+                f,
+                "premise '(= {} {})' doesn't justify arguments '{}' and '{}'",
+                premise.0, premise.1, args.0, args.1
+            ),
+            CongruenceError::DifferentFunctions(a, b) => {
+                write!(f, "functions don't match: '{}' and '{}'", a, b)
+            }
+            CongruenceError::DifferentOperators(a, b) => {
+                write!(f, "operators don't match: '{}' and '{}'", a, b)
+            }
+            CongruenceError::DifferentNumberOfArguments(a, b) => {
+                write!(f, "different numbers of arguments: {} and {}", a, b)
+            }
+            CongruenceError::NotApplicationOrOperation(t) => {
+                write!(f, "term is not an application or operation: '{}'", t)
+            }
+        }
+    }
+}
 
 pub fn eq_congruent(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     rassert!(conclusion.len() >= 2);
@@ -61,49 +108,71 @@ where
     Some(())
 }
 
-pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    /// Since the semantics of this rule is slighty different from that of "eq_congruent" and
-    /// "eq_congruent_pred", we cannot just use the `generic_congruent_rule` function
-    fn check_cong<'a>(
-        premises: &[Option<(&'a Rc<Term>, &'a Rc<Term>)>],
-        f_args: &[Rc<Term>],
-        g_args: &[Rc<Term>],
-    ) -> bool {
-        let mut premises = premises.iter().peekable();
-        for (f_arg, g_arg) in f_args.iter().zip(g_args) {
-            let expected = (f_arg.as_ref(), g_arg.as_ref());
-            match premises.peek() {
-                // If the next premise can justify that the arguments are equal, we consume it. We
-                // prefer consuming the premise even if the arguments are directly equal
-                Some(Some((t, u))) if expected == (t, u) || expected == (u, t) => {
-                    premises.next();
+/// Since the semantics of the "cong" rule is slighty different from that of "eq_congruent" and
+/// "eq_congruent_pred", we cannot just use the `generic_congruent_rule` function
+fn check_cong<'a>(
+    premises: &[(&'a Rc<Term>, &'a Rc<Term>)],
+    f_args: &[Rc<Term>],
+    g_args: &[Rc<Term>],
+) -> RuleResult {
+    let mut premises = premises.iter().peekable();
+    for (f_arg, g_arg) in f_args.iter().zip(g_args) {
+        let expected = (f_arg.as_ref(), g_arg.as_ref());
+        match premises.peek() {
+            // If the next premise can justify that the arguments are equal, we consume it. We
+            // prefer consuming the premise even if the arguments are directly equal
+            Some((t, u)) if expected == (t, u) || expected == (u, t) => {
+                premises.next();
+            }
+
+            // If the arguments are directly equal, we simply continue to the next pair of
+            // arguments
+            _ if f_arg == g_arg => (),
+
+            // If the arguments are not directly equal, we needed a premise that can justify
+            // their equality, so now we return an error
+            None => {
+                return Err(CongruenceError::MissingPremise(f_arg.clone(), g_arg.clone()).into());
+            }
+            Some((t, u)) => {
+                return Err(CongruenceError::PremiseDoesntJustifyArgs {
+                    args: (f_arg.clone(), g_arg.clone()),
+                    premise: ((*t).clone(), (*u).clone()),
                 }
-                // If there are no more premises, or the next premise does not match the current
-                // arguments, the arguments need to be directly equal
-                None | Some(Some(_)) => {
-                    if f_arg != g_arg {
-                        return false;
-                    }
-                }
-                // If the inner option is `None`, it means the premise was of the wrong form
-                Some(None) => return false,
+                .into());
             }
         }
-
-        // At the end, all premises must have been consumed
-        premises.next().is_none()
     }
 
-    rassert!(!premises.is_empty() && conclusion.len() == 1);
+    // At the end, all premises must have been consumed
+    if premises.next().is_none() {
+        Ok(())
+    } else {
+        Err(CongruenceError::TooManyPremises.into())
+    }
+}
+
+pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    rassert!(
+        !premises.is_empty(),
+        RuleError::WrongNumberOfPremises((1..).into(), 0)
+    );
+    rassert!(
+        conclusion.len() == 1,
+        RuleError::WrongLengthOfClause(1.into(), conclusion.len())
+    );
 
     let premises: Vec<_> = premises
         .into_iter()
         .map(|command| {
-            get_single_term_from_command(command).and_then(|term| match_term!((= t u) = term))
+            get_single_term_from_command(command)
+                .and_then(|term| match_term!((= t u) = term))
+                .ok_or_else(|| CongruenceError::BadPremise(command.index().to_string()))
         })
-        .collect();
+        .collect::<Result<_, _>>()?;
 
-    let (f, g) = match_term!((= f g) = conclusion[0])?;
+    let (f, g) = match_term!((= f g) = conclusion[0])
+        .ok_or_else(|| RuleError::TermOfWrongForm(conclusion[0].clone()))?;
     let (f_args, g_args) = match (f.as_ref(), g.as_ref()) {
         // Because of the way veriT handles equality terms, when the "cong" rule is called with two
         // equalities of two terms, the order of their arguments may be flipped. Because of that,
@@ -115,20 +184,44 @@ pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
             // flipped, only g is flipped, or both f and g are flipped
             let f_args_flipped = [f_args[1].clone(), f_args[0].clone()];
             let g_args_flipped = [g_args[1].clone(), g_args[0].clone()];
-            return to_option(
-                check_cong(&premises, f_args, g_args)
-                    || check_cong(&premises, &f_args_flipped, g_args)
-                    || check_cong(&premises, f_args, &g_args_flipped)
-                    || check_cong(&premises, &f_args_flipped, &g_args_flipped),
-            );
+
+            // We store the result of the first possibility (when neither arguments are flipped),
+            // because, if the checking fails in the end, we use it to get more sensible error
+            // messages
+            let original_result = check_cong(&premises, f_args, g_args);
+            let any_valid = original_result.is_ok()
+                || check_cong(&premises, &f_args_flipped, g_args).is_ok()
+                || check_cong(&premises, f_args, &g_args_flipped).is_ok()
+                || check_cong(&premises, &f_args_flipped, &g_args_flipped).is_ok();
+            return if any_valid { Ok(()) } else { original_result };
         }
 
-        (Term::App(f, f_args), Term::App(g, g_args)) if f == g => (f_args, g_args),
-        (Term::Op(f, f_args), Term::Op(g, g_args)) if f == g => (f_args, g_args),
-        _ => return None,
-    };
-    rassert!(f_args.len() == g_args.len());
-    to_option(check_cong(&premises, f_args, g_args))
+        (Term::App(f, f_args), Term::App(g, g_args)) => {
+            if f == g {
+                Ok((f_args, g_args))
+            } else {
+                Err(CongruenceError::DifferentFunctions(f.clone(), g.clone()))
+            }
+        }
+        (Term::Op(f, f_args), Term::Op(g, g_args)) => {
+            if f == g {
+                Ok((f_args, g_args))
+            } else {
+                Err(CongruenceError::DifferentOperators(*f, *g))
+            }
+        }
+        (Term::Op(..) | Term::App(..), _) => {
+            // Note: this error also triggers when `f` is an operation and `g` an application, or
+            // vice-versa. This means the error message may be a bit confusing
+            Err(CongruenceError::NotApplicationOrOperation(g.clone()))
+        }
+        _ => Err(CongruenceError::NotApplicationOrOperation(f.clone())),
+    }?;
+    rassert!(
+        f_args.len() == g_args.len(),
+        CongruenceError::DifferentNumberOfArguments(f_args.len(), g_args.len())
+    );
+    check_cong(&premises, f_args, g_args)
 }
 
 #[cfg(test)]

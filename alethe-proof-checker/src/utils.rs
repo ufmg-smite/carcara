@@ -2,6 +2,7 @@ use ahash::AHashSet;
 use num_rational::BigRational;
 use num_traits::{One, Signed, Zero};
 use std::hash::Hash;
+use std::ops;
 
 /// An enum that can hold one of two types. Similar to `Result`, but doesn't imply that one of the
 /// variants is "better" than the other.
@@ -81,5 +82,51 @@ impl RawOps for BigRational {
             let denom = self.denom() * other.denom();
             Self::new_raw(numer, denom)
         }
+    }
+}
+
+// TODO: Document this struct
+#[derive(Debug)]
+pub struct Range(Option<usize>, Option<usize>);
+
+impl Range {
+    pub fn to_text(&self) -> String {
+        match self {
+            Range(Some(a), Some(b)) if a == b => format!("{}", a),
+            Range(Some(a), Some(b)) => format!("between {} and {}", a, b),
+            Range(Some(a), None) => format!("at least {}", a),
+            Range(None, Some(b)) => format!("up to {}", b),
+            Range(None, None) => "any number of".into(),
+        }
+    }
+}
+
+impl From<usize> for Range {
+    fn from(n: usize) -> Self {
+        Self(Some(n), Some(n))
+    }
+}
+
+impl From<ops::Range<usize>> for Range {
+    fn from(r: ops::Range<usize>) -> Self {
+        Self(Some(r.start), Some(r.end - 1))
+    }
+}
+
+impl From<ops::RangeFrom<usize>> for Range {
+    fn from(r: ops::RangeFrom<usize>) -> Self {
+        Self(Some(r.start), None)
+    }
+}
+
+impl From<ops::RangeFull> for Range {
+    fn from(_: ops::RangeFull) -> Self {
+        Self(None, None)
+    }
+}
+
+impl From<ops::RangeTo<usize>> for Range {
+    fn from(r: ops::RangeTo<usize>) -> Self {
+        Self(None, Some(r.end - 1))
     }
 }

@@ -20,14 +20,10 @@ pub struct CheckerError {
 
 impl fmt::Display for CheckerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.inner {
-            RuleError::UnknownRule => write!(f, "unknown rule")?,
-            RuleError::Unspecified => write!(f, "unspecified error")?,
-        }
         write!(
             f,
-            " (on step '{}', with rule '{}')",
-            self.step, self.rule_name
+            "{} (on step '{}', with rule '{}')",
+            self.inner, self.step, self.rule_name
         )
     }
 }
@@ -336,7 +332,7 @@ impl<'c> ProofChecker<'c> {
             "th_resolution" | "resolution" => to_new_format!(resolution::resolution),
             "refl" => to_new_format!(reflexivity::refl),
             "trans" => to_new_format!(transitivity::trans),
-            "cong" => to_new_format!(congruence::cong),
+            "cong" => congruence::cong,
             "and" => to_new_format!(clausification::and),
             "tautology" => to_new_format!(resolution::tautology),
             "not_or" => to_new_format!(clausification::not_or),

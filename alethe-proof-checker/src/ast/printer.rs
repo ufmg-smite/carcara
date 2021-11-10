@@ -10,6 +10,7 @@ fn get_premise_index<'a>(
     (depth, command_index): (usize, usize),
     commands_stack: &[(usize, &'a [ProofCommand])],
 ) -> &'a str {
+    // TODO: Use `ProofCommand::index`
     match &commands_stack[depth].1[command_index] {
         ProofCommand::Assume { index, .. } => index,
         ProofCommand::Step(s) => &s.index,

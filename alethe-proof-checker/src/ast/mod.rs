@@ -234,6 +234,16 @@ pub enum ProofCommand {
     },
 }
 
+impl ProofCommand {
+    pub fn index(&self) -> &str {
+        match self {
+            ProofCommand::Assume { index, .. } => index,
+            ProofCommand::Step(s) => &s.index,
+            ProofCommand::Subproof { commands, .. } => commands.last().unwrap().index(),
+        }
+    }
+}
+
 /// A "step" command, of the form `(step <symbol> <clause> :rule <symbol> [:premises (<symbol>+)]?
 /// [:args <proof_args>]?)`.
 #[derive(Debug, PartialEq)]
