@@ -60,6 +60,15 @@ macro_rules! match_term {
     (@GET_VARIANT >=)       => { Operator::GreaterEq };
 }
 
+/// A variant of `match_term` that returns a `Result<_, RuleError>` instead of an `Option`. The
+/// error returned is always `RuleError::TermOfWrongForm`.
+macro_rules! match_term_err {
+    ($pat:tt = $var:expr) => {{
+        let var = $var;
+        match_term!($pat = var).ok_or_else(|| RuleError::TermOfWrongForm(var.clone()))
+    }};
+}
+
 /// A macro to help build new terms.
 macro_rules! build_term {
     ($pool:expr, {$terminal:expr}) => { $terminal };

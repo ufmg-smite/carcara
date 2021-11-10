@@ -48,23 +48,31 @@ impl fmt::Display for CongruenceError {
     }
 }
 
-pub fn eq_congruent(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() >= 2);
+pub fn eq_congruent(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    rassert!(
+        conclusion.len() >= 2,
+        RuleError::WrongLengthOfClause((2..).into(), conclusion.len())
+    );
 
-    let premises = conclusion[..conclusion.len() - 1]
-        .iter()
-        .map(|t| t.remove_negation());
-    let conclusion = match_term!((= f g) = conclusion.last().unwrap())?;
+    let premises = conclusion[..conclusion.len() - 1].iter().map(|t| {
+        t.remove_negation()
+            .ok_or_else(|| RuleError::TermOfWrongForm(t.clone()))
+    });
+    let conclusion = match_term_err!((= f g) = conclusion.last().unwrap())?;
 
     generic_congruent_rule(premises, conclusion)
 }
 
-pub fn eq_congruent_pred(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() >= 3);
+pub fn eq_congruent_pred(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    rassert!(
+        conclusion.len() >= 3,
+        RuleError::WrongLengthOfClause((3..).into(), conclusion.len())
+    );
 
-    let premises = conclusion[..conclusion.len() - 2]
-        .iter()
-        .map(|t| t.remove_negation());
+    let premises = conclusion[..conclusion.len() - 2].iter().map(|t| {
+        t.remove_negation()
+            .ok_or_else(|| RuleError::TermOfWrongForm(t.clone()))
+    });
 
     let (p, q) = (
         &conclusion[conclusion.len() - 2],
@@ -72,7 +80,12 @@ pub fn eq_congruent_pred(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     );
     let conclusion = match p.remove_negation() {
         Some(p) => (p, q),
-        None => (p, q.remove_negation()?),
+        None => {
+            let q = q
+                .remove_negation()
+                .ok_or_else(|| RuleError::TermOfWrongForm(q.clone()))?;
+            (p, q)
+        }
     };
 
     generic_congruent_rule(premises, conclusion)
@@ -81,31 +94,55 @@ pub fn eq_congruent_pred(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
 /// A function to check congruency. Useful for the "eq_congruent" and "eq_congruent_pred"
 /// rules. `premises` should be an iterator over the argument equalities, and `conclusion`
 /// should be the two function applications.
-fn generic_congruent_rule<'a, T>(premises: T, conclusion: (&Rc<Term>, &Rc<Term>)) -> Option<()>
+fn generic_congruent_rule<'a, T>(premises: T, conclusion: (&Rc<Term>, &Rc<Term>)) -> RuleResult
 where
-    T: Iterator<Item = Option<&'a Rc<Term>>>,
+    T: Iterator<Item = Result<&'a Rc<Term>, RuleError>>,
 {
-    let mut ts = Vec::new();
-    let mut us = Vec::new();
-    for term in premises {
-        let (t, u) = match_term!((= t u) = term?)?;
-        ts.push(t);
-        us.push(u);
-    }
+    let premises: Vec<_> = premises
+        .map(|term| match_term_err!((= t u) = term?))
+        .collect::<Result<_, _>>()?;
 
     let (p, q) = conclusion;
     let (f_args, g_args) = match (p.as_ref(), q.as_ref()) {
-        (Term::App(f, f_args), Term::App(g, g_args)) if f == g => (f_args, g_args),
-        (Term::Op(f, f_args), Term::Op(g, g_args)) if f == g => (f_args, g_args),
-        _ => return None,
-    };
-    rassert!(f_args.len() == g_args.len() && f_args.len() == ts.len());
-
-    for i in 0..ts.len() {
-        let expected = (&f_args[i], &g_args[i]);
-        rassert!(expected == (ts[i], us[i]) || expected == (us[i], ts[i]));
+        (Term::App(f, f_args), Term::App(g, g_args)) => match f == g {
+            true => Ok((f_args, g_args)),
+            false => Err(CongruenceError::DifferentFunctions(f.clone(), g.clone())),
+        },
+        (Term::Op(f, f_args), Term::Op(g, g_args)) => match f == g {
+            true => Ok((f_args, g_args)),
+            false => Err(CongruenceError::DifferentOperators(*f, *g)),
+        },
+        (Term::Op(..) | Term::App(..), _) => {
+            Err(CongruenceError::NotApplicationOrOperation(q.clone()))
+        }
+        _ => Err(CongruenceError::NotApplicationOrOperation(p.clone())),
+    }?;
+    rassert!(
+        f_args.len() == g_args.len(),
+        CongruenceError::DifferentNumberOfArguments(f_args.len(), g_args.len())
+    );
+    {
+        // We check the number of premises in two steps, because the error is different if there
+        // too many or too few premises
+        let n = premises.len();
+        rassert!(n <= f_args.len(), CongruenceError::TooManyPremises);
+        rassert!(
+            n == f_args.len(),
+            CongruenceError::MissingPremise(f_args[n].clone(), g_args[n].clone())
+        );
     }
-    Some(())
+
+    for (i, (t, u)) in premises.into_iter().enumerate() {
+        let (f, g) = (&f_args[i], &g_args[i]);
+        rassert!(
+            (f, g) == (t, u) || (f, g) == (u, t),
+            CongruenceError::PremiseDoesntJustifyArgs {
+                args: (f.clone(), g.clone()),
+                premise: (t.clone(), u.clone())
+            }
+        );
+    }
+    Ok(())
 }
 
 /// Since the semantics of the "cong" rule is slighty different from that of "eq_congruent" and
@@ -171,8 +208,7 @@ pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
         })
         .collect::<Result<_, _>>()?;
 
-    let (f, g) = match_term!((= f g) = conclusion[0])
-        .ok_or_else(|| RuleError::TermOfWrongForm(conclusion[0].clone()))?;
+    let (f, g) = match_term_err!((= f g) = &conclusion[0])?;
     let (f_args, g_args) = match (f.as_ref(), g.as_ref()) {
         // Because of the way veriT handles equality terms, when the "cong" rule is called with two
         // equalities of two terms, the order of their arguments may be flipped. Because of that,
@@ -196,20 +232,14 @@ pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
             return if any_valid { Ok(()) } else { original_result };
         }
 
-        (Term::App(f, f_args), Term::App(g, g_args)) => {
-            if f == g {
-                Ok((f_args, g_args))
-            } else {
-                Err(CongruenceError::DifferentFunctions(f.clone(), g.clone()))
-            }
-        }
-        (Term::Op(f, f_args), Term::Op(g, g_args)) => {
-            if f == g {
-                Ok((f_args, g_args))
-            } else {
-                Err(CongruenceError::DifferentOperators(*f, *g))
-            }
-        }
+        (Term::App(f, f_args), Term::App(g, g_args)) => match f == g {
+            true => Ok((f_args, g_args)),
+            false => Err(CongruenceError::DifferentFunctions(f.clone(), g.clone())),
+        },
+        (Term::Op(f, f_args), Term::Op(g, g_args)) => match f == g {
+            true => Ok((f_args, g_args)),
+            false => Err(CongruenceError::DifferentOperators(*f, *g)),
+        },
         (Term::Op(..) | Term::App(..), _) => {
             // Note: this error also triggers when `f` is an operation and `g` an application, or
             // vice-versa. This means the error message may be a bit confusing
