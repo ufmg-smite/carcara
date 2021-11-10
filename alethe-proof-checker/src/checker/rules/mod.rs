@@ -6,6 +6,7 @@ use std::fmt;
 pub enum RuleError {
     Unspecified,
     Cong(congruence::CongruenceError),
+    ReflexivityFailed(Rc<Term>, Rc<Term>),
     WrongNumberOfPremises(Range, usize),
     WrongLengthOfClause(Range, usize),
     TermOfWrongForm(Rc<Term>),
@@ -17,6 +18,9 @@ impl fmt::Display for RuleError {
         match self {
             RuleError::Unspecified => write!(f, "unspecified error"),
             RuleError::Cong(e) => write!(f, "{}", e),
+            RuleError::ReflexivityFailed(a, b) => {
+                write!(f, "reflexivity failed with terms '{}' and '{}'", a, b)
+            }
             RuleError::WrongNumberOfPremises(expected, got) => {
                 write!(f, "expected {} premises, got {}", expected.to_text(), got)
             }

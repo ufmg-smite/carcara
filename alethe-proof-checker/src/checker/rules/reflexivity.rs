@@ -1,25 +1,34 @@
-use super::{to_option, RuleArgs};
+use super::{to_result, RuleArgs, RuleError, RuleResult};
 use crate::ast::*;
 
-pub fn eq_reflexive(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 1);
-    let (a, b) = match_term!((= a b) = conclusion[0])?;
-    to_option(a == b)
+pub fn eq_reflexive(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    rassert!(
+        conclusion.len() == 1,
+        RuleError::WrongLengthOfClause(1.into(), conclusion.len())
+    );
+    let (a, b) = match_term_err!((= a b) = &conclusion[0])?;
+    to_result(a == b, RuleError::ReflexivityFailed(a.clone(), b.clone()))
 }
 
-pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 1);
+pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> RuleResult {
+    rassert!(
+        conclusion.len() == 1,
+        RuleError::WrongLengthOfClause(1.into(), conclusion.len())
+    );
 
-    let (left, right) = match_term!((= l r) = conclusion[0])?;
+    let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
 
     // If the two terms are directly identical, we don't need to do any more work. We make sure to
     // do this check before we try to get the context substitutions, because "refl" can be used
     // outside of any subproof
     if left == right {
-        return Some(());
+        return Ok(());
     }
 
-    let cumulative_substitutions = &context.last()?.cumulative_substitutions;
+    let cumulative_substitutions = &context
+        .last()
+        .ok_or_else(|| RuleError::ReflexivityFailed(left.clone(), right.clone()))?
+        .cumulative_substitutions;
 
     // In some cases, the substitution is only applied to the left or the right term, and in some
     // cases it is applied to both. To cover all cases, we must check all three possibilities. We
@@ -30,7 +39,10 @@ pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> Option<()> 
         let new_right = pool.apply_substitutions(right, cumulative_substitutions);
         *left == new_right || new_left == new_right
     };
-    to_option(result)
+    to_result(
+        result,
+        RuleError::ReflexivityFailed(left.clone(), right.clone()),
+    )
 }
 
 #[cfg(test)]
