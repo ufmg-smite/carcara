@@ -7,6 +7,12 @@ pub enum RuleError {
     Unspecified,
     Cong(congruence::CongruenceError),
     ReflexivityFailed(Rc<Term>, Rc<Term>),
+    SimplificationFailed {
+        original: Rc<Term>,
+        result: Rc<Term>,
+        target: Rc<Term>,
+    },
+    CycleInSimplification(Rc<Term>),
     WrongNumberOfPremises(Range, usize),
     WrongLengthOfClause(Range, usize),
     TermOfWrongForm(Rc<Term>),
@@ -20,6 +26,16 @@ impl fmt::Display for RuleError {
             RuleError::Cong(e) => write!(f, "{}", e),
             RuleError::ReflexivityFailed(a, b) => {
                 write!(f, "reflexivity failed with terms '{}' and '{}'", a, b)
+            }
+            RuleError::SimplificationFailed { original, result, target } => {
+                write!(
+                    f,
+                    "simplifying '{}' resulted in '{}', expected result to be '{}'",
+                    original, result, target
+                )
+            }
+            RuleError::CycleInSimplification(t) => {
+                write!(f, "encountered cycle when simplifying term: '{}'", t)
             }
             RuleError::WrongNumberOfPremises(expected, got) => {
                 write!(f, "expected {} premises, got {}", expected.to_text(), got)

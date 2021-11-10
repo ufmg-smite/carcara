@@ -1,4 +1,4 @@
-use super::{to_option, RuleArgs};
+use super::{to_option, to_result, RuleArgs, RuleError, RuleResult};
 use crate::{ast::*, utils::DedupIterator};
 use ahash::{AHashMap, AHashSet};
 use num_rational::BigRational;
@@ -36,34 +36,49 @@ fn generic_simplify_rule(
     conclusion: &[Rc<Term>],
     pool: &mut TermPool,
     simplify_function: fn(&Term, &mut TermPool) -> Option<Rc<Term>>,
-) -> Option<()> {
-    rassert!(conclusion.len() == 1);
+) -> RuleResult {
+    rassert!(
+        conclusion.len() == 1,
+        RuleError::WrongLengthOfClause(1.into(), conclusion.len())
+    );
 
-    let mut simplify_until_fixed_point = |term: &Rc<Term>, goal: &Rc<Term>| -> Option<bool> {
-        let mut current = term.clone();
-        let mut seen = AHashSet::new();
-        loop {
-            if !seen.insert(current.clone()) {
-                log::error!("cycle detected in simplification rule");
-                return None;
-            }
-            match simplify_function(&current, pool) {
-                Some(next) => {
-                    if next == *goal {
-                        return Some(true);
-                    }
-                    current = next;
+    let mut simplify_until_fixed_point =
+        |term: &Rc<Term>, goal: &Rc<Term>| -> Result<Rc<Term>, RuleError> {
+            let mut current = term.clone();
+            let mut seen = AHashSet::new();
+            loop {
+                if !seen.insert(current.clone()) {
+                    return Err(RuleError::CycleInSimplification(current.clone()));
                 }
-                None => return Some(false),
+                match simplify_function(&current, pool) {
+                    Some(next) => {
+                        if next == *goal {
+                            return Ok(next);
+                        }
+                        current = next;
+                    }
+                    None => return Ok(current),
+                }
             }
-        }
-    };
+        };
 
-    let (left, right) = match_term!((= phi psi) = conclusion[0].as_ref())?;
-    to_option(simplify_until_fixed_point(left, right)? || simplify_until_fixed_point(right, left)?)
+    let (left, right) = match_term_err!((= phi psi) = &conclusion[0])?;
+
+    // Since equalities can be implicitly flipped, we have to check both possiblities. We store the
+    // result of the first simplification to use in the error if both of them fail.
+    let result = simplify_until_fixed_point(left, right)?;
+    let got = result == *right || simplify_until_fixed_point(right, left)? == *left;
+    to_result(
+        got,
+        RuleError::SimplificationFailed {
+            original: left.clone(),
+            result,
+            target: right.clone(),
+        },
+    )
 }
 
-pub fn ite_simplify(args: RuleArgs) -> Option<()> {
+pub fn ite_simplify(args: RuleArgs) -> RuleResult {
     generic_simplify_rule(args.conclusion, args.pool, |term, pool| {
         simplify!(term {
             // ite true t_1 t_2 => t_1
@@ -119,7 +134,7 @@ pub fn ite_simplify(args: RuleArgs) -> Option<()> {
     })
 }
 
-pub fn eq_simplify(args: RuleArgs) -> Option<()> {
+pub fn eq_simplify(args: RuleArgs) -> RuleResult {
     generic_simplify_rule(args.conclusion, args.pool, |term, pool| {
         simplify!(term {
             // t = t => true
@@ -229,7 +244,7 @@ pub fn or_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     generic_and_or_simplify(conclusion, Operator::Or)
 }
 
-pub fn not_simplify(args: RuleArgs) -> Option<()> {
+pub fn not_simplify(args: RuleArgs) -> RuleResult {
     generic_simplify_rule(args.conclusion, args.pool, |term, pool| {
         simplify!(term {
             // ¬(¬phi) => phi
@@ -244,7 +259,7 @@ pub fn not_simplify(args: RuleArgs) -> Option<()> {
     })
 }
 
-pub fn implies_simplify(args: RuleArgs) -> Option<()> {
+pub fn implies_simplify(args: RuleArgs) -> RuleResult {
     generic_simplify_rule(args.conclusion, args.pool, |term, pool| {
         simplify!(term {
             // ¬phi_1 -> ¬phi_2 => phi_2 -> phi_1
@@ -281,7 +296,7 @@ pub fn implies_simplify(args: RuleArgs) -> Option<()> {
     })
 }
 
-pub fn equiv_simplify(args: RuleArgs) -> Option<()> {
+pub fn equiv_simplify(args: RuleArgs) -> RuleResult {
     generic_simplify_rule(args.conclusion, args.pool, |term, pool| {
         simplify!(term {
             // ¬phi_1 = ¬phi_2 => phi_1 = phi_2
@@ -313,7 +328,7 @@ pub fn equiv_simplify(args: RuleArgs) -> Option<()> {
     })
 }
 
-pub fn bool_simplify(args: RuleArgs) -> Option<()> {
+pub fn bool_simplify(args: RuleArgs) -> RuleResult {
     generic_simplify_rule(args.conclusion, args.pool, |term, pool| {
         simplify!(term {
             // ¬(phi_1 -> phi_2) => (phi_1 ^ ¬phi_2)
@@ -514,7 +529,7 @@ pub fn sum_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
         .or_else(|| generic_sum_prod_simplify_rule(second, first, Operator::Add))
 }
 
-pub fn comp_simplify(args: RuleArgs) -> Option<()> {
+pub fn comp_simplify(args: RuleArgs) -> RuleResult {
     generic_simplify_rule(args.conclusion, args.pool, |term, pool| {
         simplify!(term {
             (< t_1 t_2): (t_1, t_2) => {
