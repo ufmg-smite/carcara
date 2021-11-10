@@ -12,7 +12,9 @@ macro_rules! match_term {
     };
     ($bind:ident = $var:expr) => { Some($var) };
     (($op:tt $($args:tt)+) = $var:expr) => {{
-        if let Term::Op(match_term!(@GET_VARIANT $op), args) = &$var as &Term {
+        if let $crate::ast::Term::Op(match_term!(@GET_VARIANT $op), args) =
+            &$var as &$crate::ast::Term
+        {
             match_term!(@ARGS ($($args)+) = args.as_slice())
         } else {
             None
@@ -41,23 +43,23 @@ macro_rules! match_term {
             None
         }
     };
-    (@GET_VARIANT not)      => { Operator::Not };
-    (@GET_VARIANT =>)       => { Operator::Implies };
-    (@GET_VARIANT and)      => { Operator::And };
-    (@GET_VARIANT or)       => { Operator::Or };
-    (@GET_VARIANT xor)      => { Operator::Xor };
-    (@GET_VARIANT =)        => { Operator::Equals };
-    (@GET_VARIANT distinct) => { Operator::Distinct };
-    (@GET_VARIANT ite)      => { Operator::Ite };
-    (@GET_VARIANT +)        => { Operator::Add };
-    (@GET_VARIANT -)        => { Operator::Sub };
-    (@GET_VARIANT *)        => { Operator::Mult };
-    (@GET_VARIANT div)      => { Operator::IntDiv };
-    (@GET_VARIANT /)        => { Operator::RealDiv };
-    (@GET_VARIANT <)        => { Operator::LessThan };
-    (@GET_VARIANT >)        => { Operator::GreaterThan };
-    (@GET_VARIANT <=)       => { Operator::LessEq };
-    (@GET_VARIANT >=)       => { Operator::GreaterEq };
+    (@GET_VARIANT not)      => { $crate::ast::Operator::Not };
+    (@GET_VARIANT =>)       => { $crate::ast::Operator::Implies };
+    (@GET_VARIANT and)      => { $crate::ast::Operator::And };
+    (@GET_VARIANT or)       => { $crate::ast::Operator::Or };
+    (@GET_VARIANT xor)      => { $crate::ast::Operator::Xor };
+    (@GET_VARIANT =)        => { $crate::ast::Operator::Equals };
+    (@GET_VARIANT distinct) => { $crate::ast::Operator::Distinct };
+    (@GET_VARIANT ite)      => { $crate::ast::Operator::Ite };
+    (@GET_VARIANT +)        => { $crate::ast::Operator::Add };
+    (@GET_VARIANT -)        => { $crate::ast::Operator::Sub };
+    (@GET_VARIANT *)        => { $crate::ast::Operator::Mult };
+    (@GET_VARIANT div)      => { $crate::ast::Operator::IntDiv };
+    (@GET_VARIANT /)        => { $crate::ast::Operator::RealDiv };
+    (@GET_VARIANT <)        => { $crate::ast::Operator::LessThan };
+    (@GET_VARIANT >)        => { $crate::ast::Operator::GreaterThan };
+    (@GET_VARIANT <=)       => { $crate::ast::Operator::LessEq };
+    (@GET_VARIANT >=)       => { $crate::ast::Operator::GreaterEq };
 }
 
 /// A variant of `match_term` that returns a `Result<_, RuleError>` instead of an `Option`. The
@@ -65,7 +67,8 @@ macro_rules! match_term {
 macro_rules! match_term_err {
     ($pat:tt = $var:expr) => {{
         let var = $var;
-        match_term!($pat = var).ok_or_else(|| RuleError::TermOfWrongForm(var.clone()))
+        match_term!($pat = var)
+            .ok_or_else(|| $crate::checker::rules::RuleError::TermOfWrongForm(var.clone()))
     }};
 }
 
@@ -73,7 +76,7 @@ macro_rules! match_term_err {
 macro_rules! build_term {
     ($pool:expr, {$terminal:expr}) => { $terminal };
     ($pool:expr, ($op:tt $($args:tt)+)) => {{
-        let term = Term::Op(
+        let term = $crate::ast::Term::Op(
             match_term!(@GET_VARIANT $op),
             vec![ $(build_term!($pool, $args)),+ ],
         );
@@ -84,25 +87,43 @@ macro_rules! build_term {
 /// Helper macro to construct `Terminal` terms.
 macro_rules! terminal {
     (int $e:expr) => {
-        Term::Terminal(Terminal::Integer($e.into()))
+        $crate::ast::Term::Terminal($crate::ast::Terminal::Integer($e.into()))
     };
     (real $num:literal / $denom:literal) => {
-        Term::Terminal(Terminal::Real(num_rational::Ratio::new($num.into(), $denom.into())))
+        $crate::ast::Term::Terminal($crate::ast::Terminal::Real(
+            num_rational::Ratio::new($num.into(), $denom.into())
+        ))
     };
     (real $e:expr) => {
-        Term::Terminal(Terminal::Real($e))
+        $crate::ast::Term::Terminal($crate::ast::Terminal::Real($e))
     };
     (string $e:expr) => {
-        Term::Terminal(Terminal::String($e.into()))
+        $crate::ast::Term::Terminal($crate::ast::Terminal::String($e.into()))
     };
     (var $e:expr ; $sort:ident) => {
-        Term::Terminal(Terminal::Var(Identifier::Simple($e.into()), Term::$sort.clone().into()))
+        $crate::ast::Term::Terminal($crate::ast::Terminal::Var(
+            $crate::ast::Identifier::Simple($e.into()),
+            $crate::ast::Term::$sort.clone().into()
+        ))
     };
     (var $e:expr ; $sort:expr) => {
-        Term::Terminal(Terminal::Var(Identifier::Simple($e.into()), $sort))
+        $crate::ast::Term::Terminal($crate::ast::Terminal::Var(
+            $crate::ast::Identifier::Simple($e.into()),
+            $sort
+        ))
     };
-    (bool true) => { terminal!(var "true"; Rc::new(Term::Sort(Sort::Bool))) };
-    (bool false) => { terminal!(var "false"; Rc::new(Term::Sort(Sort::Bool))) };
+    (bool true) => {
+        terminal!(
+            var "true";
+            $crate::ast::Rc::new($crate::ast::Term::Sort($crate::ast::Sort::Bool))
+        )
+    };
+    (bool false) => {
+        terminal!(
+            var "false";
+            $crate::ast::Rc::new($crate::ast::Term::Sort($crate::ast::Sort::Bool))
+        )
+    };
 }
 
 /// Implements `FromStr` and `Debug` for an enum, given a string representation for each variant.
@@ -132,7 +153,7 @@ macro_rules! impl_str_conversion_traits {
 
 #[cfg(test)]
 macro_rules! assert_deep_eq {
-    ($($input:tt)*) => { assert!(DeepEq::eq( $($input)* )) };
+    ($($input:tt)*) => { assert!($crate::ast::DeepEq::eq( $($input)* )) };
 }
 
 #[cfg(test)]

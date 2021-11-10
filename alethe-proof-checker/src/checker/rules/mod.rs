@@ -116,7 +116,7 @@ fn get_clause_from_command(command: &ProofCommand) -> &[Rc<Term>] {
 /// to `to_option(arg)?`, but much more readable.
 macro_rules! rassert {
     ($arg:expr) => {
-        crate::checker::rules::to_option($arg)?
+        $crate::checker::rules::to_option($arg)?
     };
     ($arg:expr, $err:expr) => {
         match $arg {
@@ -181,7 +181,7 @@ macro_rules! test_cases {
         $({
             let name: &str = $name;
             let cases = [ $(($proof, $exp),)* ];
-            crate::checker::rules::run_tests(name, definitions, &cases);
+            $crate::checker::rules::run_tests(name, definitions, &cases);
         })*
     }};
 }
