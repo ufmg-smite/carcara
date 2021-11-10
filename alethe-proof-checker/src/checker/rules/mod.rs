@@ -126,6 +126,22 @@ macro_rules! rassert {
     };
 }
 
+fn assert_clause_len<T: Into<Range>>(clause: &[Rc<Term>], range: T) -> RuleResult {
+    let range = range.into();
+    if !range.contains(clause.len()) {
+        return Err(RuleError::WrongLengthOfClause(range, clause.len()));
+    }
+    Ok(())
+}
+
+fn assert_num_premises<T: Into<Range>>(premises: &[&ProofCommand], range: T) -> RuleResult {
+    let range = range.into();
+    if !range.contains(premises.len()) {
+        return Err(RuleError::WrongNumberOfPremises(range, premises.len()));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
     use crate::{

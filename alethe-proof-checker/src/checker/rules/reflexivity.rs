@@ -1,20 +1,14 @@
-use super::{to_result, RuleArgs, RuleError, RuleResult};
+use super::{assert_clause_len, to_result, RuleArgs, RuleError, RuleResult};
 use crate::ast::*;
 
 pub fn eq_reflexive(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
-    rassert!(
-        conclusion.len() == 1,
-        RuleError::WrongLengthOfClause(1.into(), conclusion.len())
-    );
+    assert_clause_len(conclusion, 1)?;
     let (a, b) = match_term_err!((= a b) = &conclusion[0])?;
     to_result(a == b, RuleError::ReflexivityFailed(a.clone(), b.clone()))
 }
 
 pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> RuleResult {
-    rassert!(
-        conclusion.len() == 1,
-        RuleError::WrongLengthOfClause(1.into(), conclusion.len())
-    );
+    assert_clause_len(conclusion, 1)?;
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
 

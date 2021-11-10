@@ -1,4 +1,4 @@
-use super::{to_option, to_result, RuleArgs, RuleError, RuleResult};
+use super::{assert_clause_len, to_option, to_result, RuleArgs, RuleError, RuleResult};
 use crate::{ast::*, utils::DedupIterator};
 use ahash::{AHashMap, AHashSet};
 use num_rational::BigRational;
@@ -37,10 +37,7 @@ fn generic_simplify_rule(
     pool: &mut TermPool,
     simplify_function: fn(&Term, &mut TermPool) -> Option<Rc<Term>>,
 ) -> RuleResult {
-    rassert!(
-        conclusion.len() == 1,
-        RuleError::WrongLengthOfClause(1.into(), conclusion.len())
-    );
+    assert_clause_len(conclusion, 1)?;
 
     let mut simplify_until_fixed_point =
         |term: &Rc<Term>, goal: &Rc<Term>| -> Result<Rc<Term>, RuleError> {

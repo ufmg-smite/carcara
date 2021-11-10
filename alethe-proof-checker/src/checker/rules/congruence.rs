@@ -1,4 +1,7 @@
-use super::{get_single_term_from_command, RuleArgs, RuleError, RuleResult};
+use super::{
+    assert_clause_len, assert_num_premises, get_single_term_from_command, RuleArgs, RuleError,
+    RuleResult,
+};
 use crate::ast::*;
 use std::fmt;
 
@@ -49,10 +52,7 @@ impl fmt::Display for CongruenceError {
 }
 
 pub fn eq_congruent(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
-    rassert!(
-        conclusion.len() >= 2,
-        RuleError::WrongLengthOfClause((2..).into(), conclusion.len())
-    );
+    assert_clause_len(conclusion, 2..)?;
 
     let premises = conclusion[..conclusion.len() - 1].iter().map(|t| {
         t.remove_negation()
@@ -64,10 +64,7 @@ pub fn eq_congruent(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 }
 
 pub fn eq_congruent_pred(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
-    rassert!(
-        conclusion.len() >= 3,
-        RuleError::WrongLengthOfClause((3..).into(), conclusion.len())
-    );
+    assert_clause_len(conclusion, 3..)?;
 
     let premises = conclusion[..conclusion.len() - 2].iter().map(|t| {
         t.remove_negation()
@@ -190,14 +187,8 @@ fn check_cong<'a>(
 }
 
 pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
-    rassert!(
-        !premises.is_empty(),
-        RuleError::WrongNumberOfPremises((1..).into(), 0)
-    );
-    rassert!(
-        conclusion.len() == 1,
-        RuleError::WrongLengthOfClause(1.into(), conclusion.len())
-    );
+    assert_clause_len(conclusion, 1)?;
+    assert_num_premises(&premises, 1..)?;
 
     let premises: Vec<_> = premises
         .into_iter()

@@ -99,6 +99,10 @@ impl Range {
             Range(None, None) => "any number of".into(),
         }
     }
+
+    pub fn contains(&self, n: usize) -> bool {
+        self.0.map_or(true, |bound| n >= bound) && self.1.map_or(true, |bound| n <= bound)
+    }
 }
 
 impl From<usize> for Range {
