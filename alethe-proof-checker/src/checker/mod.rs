@@ -271,13 +271,13 @@ impl<'c> ProofChecker<'c> {
         }
 
         Some(match rule_name {
-            "true" => to_new_format!(tautology::r#true),
-            "false" => to_new_format!(tautology::r#false),
+            "true" => tautology::r#true,
+            "false" => tautology::r#false,
             "not_not" => tautology::not_not,
-            "and_pos" => to_new_format!(tautology::and_pos),
-            "and_neg" => to_new_format!(tautology::and_neg),
-            "or_pos" => to_new_format!(tautology::or_pos),
-            "or_neg" => to_new_format!(tautology::or_neg),
+            "and_pos" => tautology::and_pos,
+            "and_neg" => tautology::and_neg,
+            "or_pos" => tautology::or_pos,
+            "or_neg" => tautology::or_neg,
             "xor_pos1" => tautology::xor_pos1,
             "xor_pos2" => tautology::xor_pos2,
             "xor_neg1" => tautology::xor_neg1,

@@ -68,6 +68,14 @@ macro_rules! rassert {
     };
 }
 
+fn assert_num_premises<T: Into<Range>>(premises: &[&ProofCommand], range: T) -> RuleResult {
+    let range = range.into();
+    if !range.contains(premises.len()) {
+        return Err(CheckerError::WrongNumberOfPremises(range, premises.len()));
+    }
+    Ok(())
+}
+
 fn assert_clause_len<T: Into<Range>>(clause: &[Rc<Term>], range: T) -> RuleResult {
     let range = range.into();
     if !range.contains(clause.len()) {
@@ -76,10 +84,10 @@ fn assert_clause_len<T: Into<Range>>(clause: &[Rc<Term>], range: T) -> RuleResul
     Ok(())
 }
 
-fn assert_num_premises<T: Into<Range>>(premises: &[&ProofCommand], range: T) -> RuleResult {
+fn assert_operation_len<T: Into<Range>>(op: Operator, args: &[Rc<Term>], range: T) -> RuleResult {
     let range = range.into();
-    if !range.contains(premises.len()) {
-        return Err(CheckerError::WrongNumberOfPremises(range, premises.len()));
+    if !range.contains(args.len()) {
+        return Err(CheckerError::WrongNumberOfTermsInOp(op, range, args.len()));
     }
     Ok(())
 }

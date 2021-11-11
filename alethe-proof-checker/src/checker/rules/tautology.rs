@@ -2,14 +2,26 @@ use super::{
     assert_clause_len, assert_eq_terms, assert_num_premises, get_single_term_from_command,
     to_option, CheckerError, RuleArgs, RuleResult,
 };
-use crate::ast::*;
+use crate::{ast::*, checker::rules::assert_operation_len};
 
-pub fn r#true(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    to_option(conclusion.len() == 1 && conclusion[0].is_bool_true())
+pub fn r#true(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    if !conclusion[0].is_bool_true() {
+        return Err(CheckerError::ExpectedBoolConstant(
+            true,
+            conclusion[0].clone(),
+        ));
+    }
+    Ok(())
 }
 
-pub fn r#false(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    to_option(conclusion.len() == 1 && conclusion[0].remove_negation()?.is_bool_false())
+pub fn r#false(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let t = conclusion[0].remove_negation_err()?;
+    if !t.is_bool_false() {
+        return Err(CheckerError::ExpectedBoolConstant(false, t.clone()));
+    }
+    Ok(())
 }
 
 pub fn not_not(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
@@ -19,37 +31,56 @@ pub fn not_not(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_eq_terms(p, &conclusion[1])
 }
 
-pub fn and_pos(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 2);
+pub fn and_pos(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 2)?;
 
-    let and_contents = match_term!((not (and ...)) = conclusion[0])?;
-    and_contents
-        .iter()
-        .find(|&t| *t == conclusion[1])
-        .map(|_| ())
+    let and_contents = match_term_err!((not (and ...)) = &conclusion[0])?;
+    if !and_contents.contains(&conclusion[1]) {
+        return Err(CheckerError::TermDoesntApperInOp(
+            Operator::And,
+            conclusion[1].clone(),
+        ));
+    }
+    Ok(())
 }
 
-pub fn and_neg(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() >= 2);
+pub fn and_neg(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 2..)?;
 
-    let and_contents = match_term!((and ...) = conclusion[0])?.iter().map(Some);
-    let remaining = conclusion[1..].iter().map(|t| t.remove_negation());
-    to_option(and_contents.eq(remaining))
+    let and_contents = match_term_err!((and ...) = &conclusion[0])?;
+    assert_operation_len(Operator::And, and_contents, conclusion.len() - 1)?;
+
+    for (t, u) in and_contents.iter().zip(&conclusion[1..]) {
+        let u = u.remove_negation_err()?;
+        assert_eq_terms(t, u)?;
+    }
+    Ok(())
 }
 
-pub fn or_pos(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() >= 2);
+pub fn or_pos(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 2..)?;
 
-    let or_contents = match_term!((not (or ...)) = conclusion[0])?;
-    to_option(or_contents.iter().eq(&conclusion[1..]))
+    let or_contents = match_term_err!((not (or ...)) = &conclusion[0])?;
+    assert_operation_len(Operator::Or, or_contents, conclusion.len() - 1)?;
+
+    for (t, u) in or_contents.iter().zip(&conclusion[1..]) {
+        assert_eq_terms(t, u)?;
+    }
+    Ok(())
 }
 
-pub fn or_neg(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() >= 2);
+pub fn or_neg(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 2)?;
+    let or_contents = match_term_err!((or ...) = &conclusion[0])?;
+    let other = conclusion[1].remove_negation_err()?;
 
-    let or_contents = match_term!((or ...) = conclusion[0])?;
-    let other = conclusion[1].remove_negation()?;
-    or_contents.iter().find(|&t| t == other).map(|_| ())
+    if !or_contents.contains(other) {
+        return Err(CheckerError::TermDoesntApperInOp(
+            Operator::Or,
+            other.clone(),
+        ));
+    }
+    Ok(())
 }
 
 pub fn xor_pos1(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {

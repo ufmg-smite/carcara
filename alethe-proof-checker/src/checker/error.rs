@@ -14,9 +14,12 @@ pub enum CheckerError {
     CycleInSimplification(Rc<Term>),
     WrongNumberOfPremises(Range, usize),
     WrongLengthOfClause(Range, usize),
+    WrongNumberOfTermsInOp(Operator, Range, usize),
+    TermDoesntApperInOp(Operator, Rc<Term>),
     BadPremise(String), // TODO: This error is too general
     TermOfWrongForm(Rc<Term>),
     TermsNotEqual(Rc<Term>, Rc<Term>),
+    ExpectedBoolConstant(bool, Rc<Term>),
     UnknownRule,
 }
 
@@ -49,10 +52,25 @@ impl fmt::Display for CheckerError {
                     got
                 )
             }
+            CheckerError::WrongNumberOfTermsInOp(op, expected, got) => {
+                write!(
+                    f,
+                    "expected {} terms in '{}' term, got {}",
+                    expected.to_text(),
+                    op,
+                    got
+                )
+            }
+            CheckerError::TermDoesntApperInOp(op, t) => {
+                write!(f, "expected term '{}' to appear in '{}' term", t, op)
+            }
             CheckerError::BadPremise(p) => write!(f, "bad premise: '{}'", p),
             CheckerError::TermOfWrongForm(t) => write!(f, "term is of the wrong form: '{}'", t),
             CheckerError::TermsNotEqual(a, b) => {
                 write!(f, "expected terms to be equal: '{}' and '{}'", a, b)
+            }
+            CheckerError::ExpectedBoolConstant(b, t) => {
+                write!(f, "expected term '{}' to be boolean constant '{}'", t, b)
             }
             CheckerError::UnknownRule => write!(f, "unknown rule"),
         }
