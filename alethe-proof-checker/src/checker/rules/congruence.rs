@@ -7,7 +7,6 @@ use std::fmt;
 
 #[derive(Debug)]
 pub enum CongruenceError {
-    BadPremise(String),
     TooManyPremises,
     MissingPremise(Rc<Term>, Rc<Term>),
     PremiseDoesntJustifyArgs {
@@ -23,7 +22,6 @@ pub enum CongruenceError {
 impl fmt::Display for CongruenceError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            CongruenceError::BadPremise(p) => write!(f, "bad premise: '{}'", p),
             CongruenceError::TooManyPremises => write!(f, "too many premises"),
             CongruenceError::MissingPremise(a, b) => write!(
                 f,
@@ -195,7 +193,7 @@ pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
         .map(|command| {
             get_single_term_from_command(command)
                 .and_then(|term| match_term!((= t u) = term))
-                .ok_or_else(|| CongruenceError::BadPremise(command.index().to_string()))
+                .ok_or_else(|| RuleError::BadPremise(command.index().to_string()))
         })
         .collect::<Result<_, _>>()?;
 

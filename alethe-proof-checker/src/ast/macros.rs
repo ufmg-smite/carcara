@@ -68,7 +68,7 @@ macro_rules! match_term_err {
     ($pat:tt = $var:expr) => {{
         let var = $var;
         match_term!($pat = var)
-            .ok_or_else(|| $crate::checker::rules::RuleError::TermOfWrongForm(var.clone()))
+            .ok_or_else(|| $crate::checker::RuleError::TermOfWrongForm(var.clone()))
     }};
 }
 

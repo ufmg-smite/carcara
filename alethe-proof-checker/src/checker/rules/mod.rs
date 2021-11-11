@@ -15,7 +15,9 @@ pub enum RuleError {
     CycleInSimplification(Rc<Term>),
     WrongNumberOfPremises(Range, usize),
     WrongLengthOfClause(Range, usize),
+    BadPremise(String), // TODO: This error is too general
     TermOfWrongForm(Rc<Term>),
+    TermsNotEqual(Rc<Term>, Rc<Term>),
     UnknownRule,
 }
 
@@ -48,7 +50,11 @@ impl fmt::Display for RuleError {
                     got
                 )
             }
+            RuleError::BadPremise(p) => write!(f, "bad premise: '{}'", p),
             RuleError::TermOfWrongForm(t) => write!(f, "term is of the wrong form: '{}'", t),
+            RuleError::TermsNotEqual(a, b) => {
+                write!(f, "expected terms to be equal: '{}' and '{}'", a, b)
+            }
             RuleError::UnknownRule => write!(f, "unknown rule"),
         }
     }
@@ -138,6 +144,13 @@ fn assert_num_premises<T: Into<Range>>(premises: &[&ProofCommand], range: T) -> 
     let range = range.into();
     if !range.contains(premises.len()) {
         return Err(RuleError::WrongNumberOfPremises(range, premises.len()));
+    }
+    Ok(())
+}
+
+fn assert_eq_terms(a: &Rc<Term>, b: &Rc<Term>) -> RuleResult {
+    if a != b {
+        return Err(RuleError::TermsNotEqual(a.clone(), b.clone()));
     }
     Ok(())
 }

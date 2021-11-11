@@ -1,4 +1,7 @@
-use super::{get_single_term_from_command, to_option, RuleArgs};
+use super::{
+    assert_clause_len, assert_eq_terms, assert_num_premises, get_single_term_from_command,
+    to_option, RuleArgs, RuleError, RuleResult,
+};
 use crate::ast::*;
 
 pub fn r#true(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
@@ -9,11 +12,11 @@ pub fn r#false(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     to_option(conclusion.len() == 1 && conclusion[0].remove_negation()?.is_bool_false())
 }
 
-pub fn not_not(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 2);
+pub fn not_not(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 2)?;
 
-    let p = match_term!((not (not (not p))) = conclusion[0])?;
-    to_option(p == &conclusion[1])
+    let p = match_term_err!((not (not (not p))) = &conclusion[0])?;
+    assert_eq_terms(p, &conclusion[1])
 }
 
 pub fn and_pos(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
@@ -49,164 +52,186 @@ pub fn or_neg(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     or_contents.iter().find(|&t| t == other).map(|_| ())
 }
 
-pub fn xor_pos1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 3);
-    let (phi_1, phi_2) = match_term!((not (xor phi_1 phi_2)) = conclusion[0])?;
-    to_option(phi_1 == &conclusion[1] && phi_2 == &conclusion[2])
+pub fn xor_pos1(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 3)?;
+    let (phi_1, phi_2) = match_term_err!((not (xor phi_1 phi_2)) = &conclusion[0])?;
+    assert_eq_terms(phi_1, &conclusion[1])?;
+    assert_eq_terms(phi_2, &conclusion[2])
 }
 
-pub fn xor_pos2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 3);
-    let (phi_1, phi_2) = match_term!((not (xor phi_1 phi_2)) = conclusion[0])?;
-    to_option(
-        phi_1 == conclusion[1].remove_negation()? && phi_2 == conclusion[2].remove_negation()?,
-    )
+pub fn xor_pos2(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 3)?;
+    let (phi_1, phi_2) = match_term_err!((not (xor phi_1 phi_2)) = &conclusion[0])?;
+    assert_eq_terms(phi_1, conclusion[1].remove_negation_err()?)?;
+    assert_eq_terms(phi_2, conclusion[2].remove_negation_err()?)
 }
 
-pub fn xor_neg1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 3);
-    let (phi_1, phi_2) = match_term!((xor phi_1 phi_2) = conclusion[0])?;
-    to_option(phi_1 == &conclusion[1] && phi_2 == conclusion[2].remove_negation()?)
+pub fn xor_neg1(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 3)?;
+    let (phi_1, phi_2) = match_term_err!((xor phi_1 phi_2) = &conclusion[0])?;
+    assert_eq_terms(phi_1, &conclusion[1])?;
+    assert_eq_terms(phi_2, conclusion[2].remove_negation_err()?)
 }
 
-pub fn xor_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 3);
-    let (phi_1, phi_2) = match_term!((xor phi_1 phi_2) = conclusion[0])?;
-    to_option(phi_1 == conclusion[1].remove_negation()? && phi_2 == &conclusion[2])
+pub fn xor_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 3)?;
+    let (phi_1, phi_2) = match_term_err!((xor phi_1 phi_2) = &conclusion[0])?;
+    assert_eq_terms(phi_1, conclusion[1].remove_negation_err()?)?;
+    assert_eq_terms(phi_2, &conclusion[2])
 }
 
-pub fn implies_pos(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 3);
-    let (phi_1, phi_2) = match_term!((not (=> phi_1 phi_2)) = conclusion[0])?;
-    to_option(phi_1 == conclusion[1].remove_negation()? && phi_2 == &conclusion[2])
+pub fn implies_pos(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 3)?;
+    let (phi_1, phi_2) = match_term_err!((not (=> phi_1 phi_2)) = &conclusion[0])?;
+    assert_eq_terms(phi_1, conclusion[1].remove_negation_err()?)?;
+    assert_eq_terms(phi_2, &conclusion[2])
 }
 
-pub fn implies_neg1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 2);
-    let (phi_1, _) = match_term!((=> phi_1 phi_2) = conclusion[0])?;
-    to_option(phi_1 == &conclusion[1])
+pub fn implies_neg1(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 2)?;
+    let (phi_1, _) = match_term_err!((=> phi_1 phi_2) = &conclusion[0])?;
+    assert_eq_terms(phi_1, &conclusion[1])
 }
 
-pub fn implies_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 2);
-    let (_, phi_2) = match_term!((=> phi_1 phi_2) = conclusion[0])?;
-    to_option(phi_2 == conclusion[1].remove_negation()?)
+pub fn implies_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 2)?;
+    let (_, phi_2) = match_term_err!((=> phi_1 phi_2) = &conclusion[0])?;
+    assert_eq_terms(phi_2, conclusion[1].remove_negation_err()?)
 }
 
-pub fn equiv_pos1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 3);
-    let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = conclusion[0])?;
-    to_option(phi_1 == &conclusion[1] && phi_2 == conclusion[2].remove_negation()?)
+pub fn equiv_pos1(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 3)?;
+    let (phi_1, phi_2) = match_term_err!((not (= phi_1 phi_2)) = &conclusion[0])?;
+    assert_eq_terms(phi_1, &conclusion[1])?;
+    assert_eq_terms(phi_2, conclusion[2].remove_negation_err()?)
 }
 
-pub fn equiv_pos2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 3);
-    let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = conclusion[0])?;
-    to_option(phi_1 == conclusion[1].remove_negation()? && phi_2 == &conclusion[2])
+pub fn equiv_pos2(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 3)?;
+    let (phi_1, phi_2) = match_term_err!((not (= phi_1 phi_2)) = &conclusion[0])?;
+    assert_eq_terms(phi_1, conclusion[1].remove_negation_err()?)?;
+    assert_eq_terms(phi_2, &conclusion[2])
 }
 
-pub fn equiv_neg1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 3);
-    let (phi_1, phi_2) = match_term!((= phi_1 phi_2) = conclusion[0])?;
-    to_option(
-        phi_1 == conclusion[1].remove_negation()? && phi_2 == conclusion[2].remove_negation()?,
-    )
+pub fn equiv_neg1(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 3)?;
+    let (phi_1, phi_2) = match_term_err!((= phi_1 phi_2) = &conclusion[0])?;
+    assert_eq_terms(phi_1, conclusion[1].remove_negation_err()?)?;
+    assert_eq_terms(phi_2, conclusion[2].remove_negation_err()?)
 }
 
-pub fn equiv_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 3);
-    let (phi_1, phi_2) = match_term!((= phi_1 phi_2) = conclusion[0])?;
-    to_option(phi_1 == &conclusion[1] && phi_2 == &conclusion[2])
+pub fn equiv_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 3)?;
+    let (phi_1, phi_2) = match_term_err!((= phi_1 phi_2) = &conclusion[0])?;
+    assert_eq_terms(phi_1, &conclusion[1])?;
+    assert_eq_terms(phi_2, &conclusion[2])
 }
 
-pub fn ite_pos1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 3);
-    let (phi_1, _, phi_3) = match_term!((not (ite phi_1 phi_2 phi_3)) = conclusion[0])?;
-    to_option(phi_1 == &conclusion[1] && phi_3 == &conclusion[2])
+pub fn ite_pos1(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 3)?;
+    let (phi_1, _, phi_3) = match_term_err!((not (ite phi_1 phi_2 phi_3)) = &conclusion[0])?;
+    assert_eq_terms(phi_1, &conclusion[1])?;
+    assert_eq_terms(phi_3, &conclusion[2])
 }
 
-pub fn ite_pos2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 3);
-    let (phi_1, phi_2, _) = match_term!((not (ite phi_1 phi_2 phi_3)) = conclusion[0])?;
-    to_option(phi_1 == conclusion[1].remove_negation()? && phi_2 == &conclusion[2])
+pub fn ite_pos2(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 3)?;
+    let (phi_1, phi_2, _) = match_term_err!((not (ite phi_1 phi_2 phi_3)) = &conclusion[0])?;
+    assert_eq_terms(phi_1, conclusion[1].remove_negation_err()?)?;
+    assert_eq_terms(phi_2, &conclusion[2])
 }
 
-pub fn ite_neg1(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 3);
-    let (phi_1, _, phi_3) = match_term!((ite phi_1 phi_2 phi_3) = conclusion[0])?;
-    to_option(phi_1 == &conclusion[1] && phi_3 == conclusion[2].remove_negation()?)
+pub fn ite_neg1(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 3)?;
+    let (phi_1, _, phi_3) = match_term_err!((ite phi_1 phi_2 phi_3) = &conclusion[0])?;
+    assert_eq_terms(phi_1, &conclusion[1])?;
+    assert_eq_terms(phi_3, conclusion[2].remove_negation_err()?)
 }
 
-pub fn ite_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 3);
-    let (phi_1, phi_2, _) = match_term!((ite phi_1 phi_2 phi_3) = conclusion[0])?;
-    to_option(
-        phi_1 == conclusion[1].remove_negation()? && phi_2 == conclusion[2].remove_negation()?,
-    )
+pub fn ite_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 3)?;
+    let (phi_1, phi_2, _) = match_term_err!((ite phi_1 phi_2 phi_3) = &conclusion[0])?;
+    assert_eq_terms(phi_1, conclusion[1].remove_negation_err()?)?;
+    assert_eq_terms(phi_2, conclusion[2].remove_negation_err()?)
 }
 
-pub fn equiv1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    rassert!(premises.len() == 1 && conclusion.len() == 2);
-    let premise_term = get_single_term_from_command(premises[0])?;
-    let (phi_1, phi_2) = match_term!((= phi_1 phi_2) = premise_term)?;
-    to_option(phi_1 == conclusion[0].remove_negation()? && phi_2 == &conclusion[1])
+/// Helper function to get a single term from a command, or return a `RuleError::BadPremise` error
+/// if it doesn't succeed.
+fn get_premise_term(premise: &ProofCommand) -> Result<&Rc<Term>, RuleError> {
+    get_single_term_from_command(premise)
+        .ok_or_else(|| RuleError::BadPremise(premise.index().to_string()))
 }
 
-pub fn equiv2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    rassert!(premises.len() == 1 && conclusion.len() == 2);
-    let premise_term = get_single_term_from_command(premises[0])?;
-    let (phi_1, phi_2) = match_term!((= phi_1 phi_2) = premise_term)?;
-    to_option(phi_1 == &conclusion[0] && phi_2 == conclusion[1].remove_negation()?)
+pub fn equiv1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
+    assert_clause_len(conclusion, 2)?;
+    let premise_term = get_premise_term(premises[0])?;
+    let (phi_1, phi_2) = match_term_err!((= phi_1 phi_2) = premise_term)?;
+    assert_eq_terms(phi_1, conclusion[0].remove_negation_err()?)?;
+    assert_eq_terms(phi_2, &conclusion[1])
 }
 
-pub fn not_equiv1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    rassert!(premises.len() == 1 && conclusion.len() == 2);
-    let premise_term = get_single_term_from_command(premises[0])?;
-    let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = premise_term)?;
-    to_option(phi_1 == &conclusion[0] && phi_2 == &conclusion[1])
+pub fn equiv2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
+    assert_clause_len(conclusion, 2)?;
+    let premise_term = get_premise_term(premises[0])?;
+    let (phi_1, phi_2) = match_term_err!((= phi_1 phi_2) = premise_term)?;
+    assert_eq_terms(phi_1, &conclusion[0])?;
+    assert_eq_terms(phi_2, conclusion[1].remove_negation_err()?)
 }
 
-pub fn not_equiv2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    rassert!(premises.len() == 1 && conclusion.len() == 2);
-    let premise_term = get_single_term_from_command(premises[0])?;
-    let (phi_1, phi_2) = match_term!((not (= phi_1 phi_2)) = premise_term)?;
-    to_option(
-        phi_1 == conclusion[0].remove_negation()? && phi_2 == conclusion[1].remove_negation()?,
-    )
+pub fn not_equiv1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
+    assert_clause_len(conclusion, 2)?;
+    let premise_term = get_premise_term(premises[0])?;
+    let (phi_1, phi_2) = match_term_err!((not (= phi_1 phi_2)) = premise_term)?;
+    assert_eq_terms(phi_1, &conclusion[0])?;
+    assert_eq_terms(phi_2, &conclusion[1])
 }
 
-pub fn ite1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    rassert!(premises.len() == 1 && conclusion.len() == 2);
-
-    let premise_term = get_single_term_from_command(premises[0])?;
-    let (phi_1, _, phi_3) = match_term!((ite phi_1 phi_2 phi_3) = premise_term)?;
-
-    to_option(phi_1 == &conclusion[0] && phi_3 == &conclusion[1])
+pub fn not_equiv2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
+    assert_clause_len(conclusion, 2)?;
+    let premise_term = get_premise_term(premises[0])?;
+    let (phi_1, phi_2) = match_term_err!((not (= phi_1 phi_2)) = premise_term)?;
+    assert_eq_terms(phi_1, conclusion[0].remove_negation_err()?)?;
+    assert_eq_terms(phi_2, conclusion[1].remove_negation_err()?)
 }
 
-pub fn ite2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    rassert!(premises.len() == 1 && conclusion.len() == 2);
-
-    let premise_term = get_single_term_from_command(premises[0])?;
-    let (phi_1, phi_2, _) = match_term!((ite phi_1 phi_2 phi_3) = premise_term)?;
-
-    to_option(phi_1 == conclusion[0].remove_negation()? && phi_2 == &conclusion[1])
+pub fn ite1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
+    assert_clause_len(conclusion, 2)?;
+    let premise_term = get_premise_term(premises[0])?;
+    let (phi_1, _, phi_3) = match_term_err!((ite phi_1 phi_2 phi_3) = premise_term)?;
+    assert_eq_terms(phi_1, &conclusion[0])?;
+    assert_eq_terms(phi_3, &conclusion[1])
 }
 
-pub fn not_ite1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    rassert!(premises.len() == 1 && conclusion.len() == 2);
-    let premise_term = get_single_term_from_command(premises[0])?;
-    let (phi_1, _, phi_3) = match_term!((not (ite phi_1 phi_2 phi_3)) = premise_term)?;
-    to_option(phi_1 == &conclusion[0] && phi_3 == conclusion[1].remove_negation()?)
+pub fn ite2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
+    assert_clause_len(conclusion, 2)?;
+    let premise_term = get_premise_term(premises[0])?;
+    let (phi_1, phi_2, _) = match_term_err!((ite phi_1 phi_2 phi_3) = premise_term)?;
+    assert_eq_terms(phi_1, conclusion[0].remove_negation_err()?)?;
+    assert_eq_terms(phi_2, &conclusion[1])
 }
 
-pub fn not_ite2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    rassert!(premises.len() == 1 && conclusion.len() == 2);
-    let premise_term = get_single_term_from_command(premises[0])?;
-    let (phi_1, phi_2, _) = match_term!((not (ite phi_1 phi_2 phi_3)) = premise_term)?;
-    to_option(
-        phi_1 == conclusion[0].remove_negation()? && phi_2 == conclusion[1].remove_negation()?,
-    )
+pub fn not_ite1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
+    assert_clause_len(conclusion, 2)?;
+    let premise_term = get_premise_term(premises[0])?;
+    let (phi_1, _, phi_3) = match_term_err!((not (ite phi_1 phi_2 phi_3)) = premise_term)?;
+    assert_eq_terms(phi_1, &conclusion[0])?;
+    assert_eq_terms(phi_3, conclusion[1].remove_negation_err()?)
+}
+
+pub fn not_ite2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
+    assert_clause_len(conclusion, 2)?;
+    let premise_term = get_premise_term(premises[0])?;
+    let (phi_1, phi_2, _) = match_term_err!((not (ite phi_1 phi_2 phi_3)) = premise_term)?;
+    assert_eq_terms(phi_1, conclusion[0].remove_negation_err()?)?;
+    assert_eq_terms(phi_2, conclusion[1].remove_negation_err()?)
 }
 
 pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
