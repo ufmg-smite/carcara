@@ -1,6 +1,6 @@
 use super::{
-    assert_clause_len, assert_eq, assert_num_premises, get_single_term_from_command, to_option,
-    CheckerError, RuleArgs, RuleResult,
+    assert_clause_len, assert_eq, assert_num_premises, get_single_term_from_command, CheckerError,
+    RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::rules::assert_operation_len};
 
@@ -265,10 +265,10 @@ pub fn not_ite2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_eq(phi_2, conclusion[1].remove_negation_err()?)
 }
 
-pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 1);
+pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
 
-    let (root_term, right_side) = match_term!((= t u) = conclusion[0])?;
+    let (root_term, right_side) = match_term_err!((= t u) = &conclusion[0])?;
 
     // In some cases, no "ite" subterm is extracted from "t" (even if "t" has "ite" subterms), so
     // the conjunction in the right side of the equality has only one term: "t" itself, modulo
@@ -284,12 +284,15 @@ pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     // For cases like this, we first check if "t" equals the right side term modulo reordering of
     // equalities. If not, we unwrap the conjunction and continue checking the rule normally.
     if DeepEq::eq_modulo_reordering(root_term, right_side) {
-        return Some(());
+        return Ok(());
     }
-    let us = match_term!((and ...) = right_side)?;
+    let us = match_term_err!((and ...) = right_side)?;
 
     // "us" must be a conjunction where the first term is the root term
-    rassert!(DeepEq::eq_modulo_reordering(&us[0], root_term));
+    rassert!(
+        DeepEq::eq_modulo_reordering(&us[0], root_term),
+        CheckerError::TermsNotEqual(us[0].clone(), root_term.clone())
+    );
 
     let us = &us[1..];
 
@@ -299,7 +302,7 @@ pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
     // We assume that the "ite" terms appear in the conjunction in the same order as they
     // appear as subterms of the root term
     'outer: for u_i in &us[1..] {
-        let (cond, (a, b), (c, d)) = match_term!((ite cond (= a b) (= c d)) = u_i)?;
+        let (cond, (a, b), (c, d)) = match_term_err!((ite cond (= a b) (= c d)) = u_i)?;
 
         // For every term in "us", we find the next "ite" subterm that matches the expected form.
         // This is because some "ite" subterms may be skipped, and may not have a corresponding "u"
@@ -321,44 +324,56 @@ pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
                 continue 'outer;
             }
         }
-        return None;
+        return Err(CheckerError::IsNotIteSubterm(u_i.clone()));
     }
-    Some(())
+    Ok(())
 }
 
-pub fn connective_def(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 1);
+pub fn connective_def(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
 
-    let (first, second) = match_term!((= f s) = conclusion[0])?;
+    let (first, second) = match_term_err!((= f s) = &conclusion[0])?;
 
-    let result = if let Some((phi_1, phi_2)) = match_term!((xor phi_1 phi_2) = first) {
+    if let Some((phi_1, phi_2)) = match_term!((xor phi_1 phi_2) = first) {
         // phi_1 xor phi_2 <-> (¬phi_1 ^ phi_2) v (phi_1 ^ ¬phi_2)
-        let ((a, b), (c, d)) = match_term!((or (and (not a) b) (and c (not d))) = second)?;
-        a == phi_1 && b == phi_2 && c == phi_1 && d == phi_2
+        let ((a, b), (c, d)) = match_term_err!((or (and (not a) b) (and c (not d))) = second)?;
+        assert_eq(a, phi_1)?;
+        assert_eq(b, phi_2)?;
+        assert_eq(c, phi_1)?;
+        assert_eq(d, phi_2)
     } else if let Some((phi_1, phi_2)) = match_term!((= phi_1 phi_2) = first) {
         // (phi_1 <-> phi_2) <-> (phi_1 -> phi_2) ^ (phi_2 -> phi_1)
-        let ((a, b), (c, d)) = match_term!((and (=> a b) (=> c d)) = second)?;
-        a == phi_1 && b == phi_2 && c == phi_2 && d == phi_1
+        let ((a, b), (c, d)) = match_term_err!((and (=> a b) (=> c d)) = second)?;
+        assert_eq(a, phi_1)?;
+        assert_eq(b, phi_2)?;
+        assert_eq(c, phi_2)?;
+        assert_eq(d, phi_1)
     } else if let Some((phi_1, phi_2, phi_3)) = match_term!((ite phi_1 phi_2 phi_3) = first) {
         // ite phi_1 phi_2 phi_3 <-> (phi_1 -> phi_2) ^ (¬phi_1 -> phi_3)
         // Note: In the proofonomicon, this case is incorrectly documented as:
         //     ite phi_1 phi_2 phi_3 <-> (phi_1 -> phi_2) ^ (¬phi_1 -> ¬phi_3)
-        let ((a, b), (c, d)) = match_term!((and (=> a b) (=> (not c) d)) = second)?;
-        a == phi_1 && b == phi_2 && c == phi_1 && d == phi_3
+        let ((a, b), (c, d)) = match_term_err!((and (=> a b) (=> (not c) d)) = second)?;
+        assert_eq(a, phi_1)?;
+        assert_eq(b, phi_2)?;
+        assert_eq(c, phi_1)?;
+        assert_eq(d, phi_3)
     } else if let Term::Quant(Quantifier::Exists, first_bindings, first_inner) = first.as_ref() {
         // This case of the "connective_def" rule is not documented, but appears in some examples
         // ∃ x_1, ..., x_n . phi <-> ¬(∀ x_1, ..., x_n . ¬phi)
         if let Some(Term::Quant(Quantifier::Forall, second_bindings, second_inner)) =
             second.remove_negation().map(Rc::as_ref)
         {
-            first_bindings == second_bindings && second_inner.remove_negation() == Some(first_inner)
+            assert_eq(second_inner.remove_negation_err()?, first_inner)?;
+            if first_bindings != second_bindings {
+                return Err(CheckerError::BindingsNotEqual);
+            }
+            Ok(())
         } else {
-            false
+            Err(CheckerError::TermOfWrongForm(second.clone()))
         }
     } else {
-        false
-    };
-    to_option(result)
+        Err(CheckerError::TermIsNotConnective(first.clone()))
+    }
 }
 
 #[cfg(test)]

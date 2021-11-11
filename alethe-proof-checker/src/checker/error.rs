@@ -4,6 +4,8 @@ use std::fmt;
 #[derive(Debug)]
 pub enum CheckerError {
     Unspecified,
+
+    // Rule specific errors
     Cong(CongruenceError),
     ReflexivityFailed(Rc<Term>, Rc<Term>),
     SimplificationFailed {
@@ -12,6 +14,10 @@ pub enum CheckerError {
         target: Rc<Term>,
     },
     CycleInSimplification(Rc<Term>),
+    TermIsNotConnective(Rc<Term>),
+    IsNotIteSubterm(Rc<Term>),
+
+    // General errors
     WrongNumberOfPremises(Range, usize),
     WrongLengthOfClause(Range, usize),
     WrongNumberOfTermsInOp(Operator, Range, usize),
@@ -19,7 +25,9 @@ pub enum CheckerError {
     BadPremise(String), // TODO: This error is too general
     TermOfWrongForm(Rc<Term>),
     TermsNotEqual(Rc<Term>, Rc<Term>),
+    BindingsNotEqual,
     ExpectedBoolConstant(bool, Rc<Term>),
+
     UnknownRule,
 }
 
@@ -40,6 +48,14 @@ impl fmt::Display for CheckerError {
             }
             CheckerError::CycleInSimplification(t) => {
                 write!(f, "encountered cycle when simplifying term: '{}'", t)
+            }
+            CheckerError::TermIsNotConnective(t) => write!(f, "term '{}' is not a connective", t),
+            CheckerError::IsNotIteSubterm(t) => {
+                write!(
+                    f,
+                    "term '{}' does not appear as a subterm of the root term",
+                    t
+                )
             }
             CheckerError::WrongNumberOfPremises(expected, got) => {
                 write!(f, "expected {} premises, got {}", expected.to_text(), got)
@@ -69,6 +85,7 @@ impl fmt::Display for CheckerError {
             CheckerError::TermsNotEqual(a, b) => {
                 write!(f, "expected terms to be equal: '{}' and '{}'", a, b)
             }
+            CheckerError::BindingsNotEqual => write!(f, "quantifier bindings are not equal"),
             CheckerError::ExpectedBoolConstant(b, t) => {
                 write!(f, "expected term '{}' to be boolean constant '{}'", t, b)
             }
