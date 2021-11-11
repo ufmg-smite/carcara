@@ -369,7 +369,10 @@ pub fn connective_def(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
             }
             Ok(())
         } else {
-            Err(CheckerError::TermOfWrongForm(second.clone()))
+            Err(CheckerError::TermOfWrongForm(
+                "(not (forall ...))",
+                second.clone(),
+            ))
         }
     } else {
         Err(CheckerError::TermIsNotConnective(first.clone()))

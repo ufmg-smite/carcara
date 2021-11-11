@@ -67,8 +67,16 @@ macro_rules! match_term {
 macro_rules! match_term_err {
     ($pat:tt = $var:expr) => {{
         let var = $var;
-        match_term!($pat = var)
-            .ok_or_else(|| $crate::checker::error::CheckerError::TermOfWrongForm(var.clone()))
+        match_term!($pat = var).ok_or_else(|| {
+            // Note: Annoyingly, the `stringify!` macro can't fully keep whitespace when turning a
+            // token tree into a string. It will add spaces when they are required for the tokens
+            // to make sense, but remove any other whitespace. This means that, for instance, the
+            // token tree `(not (and ...))` will be stringified to "(not(and ...))". One way to
+            // solve this would be to create a procedural macro that uses the tokens `span` to
+            // infer how many characters there were between each token, and assume they were all
+            // spaces
+            $crate::checker::error::CheckerError::TermOfWrongForm(stringify!($pat), var.clone())
+        })
     }};
 }
 

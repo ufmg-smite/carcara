@@ -23,7 +23,7 @@ pub enum CheckerError {
     WrongNumberOfTermsInOp(Operator, Range, usize),
     TermDoesntApperInOp(Operator, Rc<Term>),
     BadPremise(String), // TODO: This error is too general
-    TermOfWrongForm(Rc<Term>),
+    TermOfWrongForm(&'static str, Rc<Term>),
     TermsNotEqual(Rc<Term>, Rc<Term>),
     BindingsNotEqual,
     ExpectedBoolConstant(bool, Rc<Term>),
@@ -81,7 +81,13 @@ impl fmt::Display for CheckerError {
                 write!(f, "expected term '{}' to appear in '{}' term", t, op)
             }
             CheckerError::BadPremise(p) => write!(f, "bad premise: '{}'", p),
-            CheckerError::TermOfWrongForm(t) => write!(f, "term is of the wrong form: '{}'", t),
+            CheckerError::TermOfWrongForm(pat, term) => {
+                write!(
+                    f,
+                    "term '{}' is of the wrong form, expected '{}'",
+                    term, pat
+                )
+            }
             CheckerError::TermsNotEqual(a, b) => {
                 write!(f, "expected terms to be equal: '{}' and '{}'", a, b)
             }

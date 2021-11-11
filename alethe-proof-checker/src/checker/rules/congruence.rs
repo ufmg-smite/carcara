@@ -7,10 +7,9 @@ use crate::{ast::*, checker::error::CongruenceError};
 pub fn eq_congruent(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 2..)?;
 
-    let premises = conclusion[..conclusion.len() - 1].iter().map(|t| {
-        t.remove_negation()
-            .ok_or_else(|| CheckerError::TermOfWrongForm(t.clone()))
-    });
+    let premises = conclusion[..conclusion.len() - 1]
+        .iter()
+        .map(|t| t.remove_negation_err());
     let conclusion = match_term_err!((= f g) = conclusion.last().unwrap())?;
 
     generic_congruent_rule(premises, conclusion)
@@ -19,10 +18,9 @@ pub fn eq_congruent(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 pub fn eq_congruent_pred(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 3..)?;
 
-    let premises = conclusion[..conclusion.len() - 2].iter().map(|t| {
-        t.remove_negation()
-            .ok_or_else(|| CheckerError::TermOfWrongForm(t.clone()))
-    });
+    let premises = conclusion[..conclusion.len() - 2]
+        .iter()
+        .map(|t| t.remove_negation_err());
 
     let (p, q) = (
         &conclusion[conclusion.len() - 2],
@@ -30,12 +28,7 @@ pub fn eq_congruent_pred(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     );
     let conclusion = match p.remove_negation() {
         Some(p) => (p, q),
-        None => {
-            let q = q
-                .remove_negation()
-                .ok_or_else(|| CheckerError::TermOfWrongForm(q.clone()))?;
-            (p, q)
-        }
+        None => (p, q.remove_negation_err()?),
     };
 
     generic_congruent_rule(premises, conclusion)
