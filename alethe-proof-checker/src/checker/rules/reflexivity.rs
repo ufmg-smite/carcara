@@ -1,9 +1,9 @@
-use super::{assert_clause_len, assert_eq_terms, to_result, CheckerError, RuleArgs, RuleResult};
+use super::{assert_clause_len, assert_eq, to_result, CheckerError, RuleArgs, RuleResult};
 
 pub fn eq_reflexive(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (a, b) = match_term_err!((= a b) = &conclusion[0])?;
-    assert_eq_terms(a, b)
+    assert_eq(a, b)
 }
 
 pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> RuleResult {

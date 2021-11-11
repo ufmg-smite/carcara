@@ -92,7 +92,7 @@ fn assert_operation_len<T: Into<Range>>(op: Operator, args: &[Rc<Term>], range: 
     Ok(())
 }
 
-fn assert_eq_terms(a: &Rc<Term>, b: &Rc<Term>) -> RuleResult {
+fn assert_eq(a: &Rc<Term>, b: &Rc<Term>) -> RuleResult {
     if a != b {
         return Err(CheckerError::TermsNotEqual(a.clone(), b.clone()));
     }
