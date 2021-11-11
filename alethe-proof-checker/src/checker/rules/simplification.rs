@@ -1,4 +1,4 @@
-use super::{assert_clause_len, to_option, to_result, RuleArgs, RuleError, RuleResult};
+use super::{assert_clause_len, to_option, to_result, CheckerError, RuleArgs, RuleResult};
 use crate::{ast::*, utils::DedupIterator};
 use ahash::{AHashMap, AHashSet};
 use num_rational::BigRational;
@@ -40,12 +40,12 @@ fn generic_simplify_rule(
     assert_clause_len(conclusion, 1)?;
 
     let mut simplify_until_fixed_point =
-        |term: &Rc<Term>, goal: &Rc<Term>| -> Result<Rc<Term>, RuleError> {
+        |term: &Rc<Term>, goal: &Rc<Term>| -> Result<Rc<Term>, CheckerError> {
             let mut current = term.clone();
             let mut seen = AHashSet::new();
             loop {
                 if !seen.insert(current.clone()) {
-                    return Err(RuleError::CycleInSimplification(current.clone()));
+                    return Err(CheckerError::CycleInSimplification(current.clone()));
                 }
                 match simplify_function(&current, pool) {
                     Some(next) => {
@@ -67,7 +67,7 @@ fn generic_simplify_rule(
     let got = result == *right || simplify_until_fixed_point(right, left)? == *left;
     to_result(
         got,
-        RuleError::SimplificationFailed {
+        CheckerError::SimplificationFailed {
             original: left.clone(),
             result,
             target: right.clone(),

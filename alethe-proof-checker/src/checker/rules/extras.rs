@@ -1,7 +1,6 @@
 //! This module contains rules that are not yet in the specification for the Alethe format.
 
 use super::{get_clause_from_command, get_single_term_from_command, to_option, RuleArgs};
-use crate::ast::*;
 use ahash::AHashSet;
 
 pub fn reordering(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {

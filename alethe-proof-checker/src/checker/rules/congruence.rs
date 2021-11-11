@@ -1,60 +1,15 @@
 use super::{
-    assert_clause_len, assert_num_premises, get_single_term_from_command, RuleArgs, RuleError,
+    assert_clause_len, assert_num_premises, get_single_term_from_command, CheckerError, RuleArgs,
     RuleResult,
 };
-use crate::ast::*;
-use std::fmt;
-
-#[derive(Debug)]
-pub enum CongruenceError {
-    TooManyPremises,
-    MissingPremise(Rc<Term>, Rc<Term>),
-    PremiseDoesntJustifyArgs {
-        args: (Rc<Term>, Rc<Term>),
-        premise: (Rc<Term>, Rc<Term>),
-    },
-    DifferentFunctions(Rc<Term>, Rc<Term>),
-    DifferentOperators(Operator, Operator),
-    DifferentNumberOfArguments(usize, usize),
-    NotApplicationOrOperation(Rc<Term>),
-}
-
-impl fmt::Display for CongruenceError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            CongruenceError::TooManyPremises => write!(f, "too many premises"),
-            CongruenceError::MissingPremise(a, b) => write!(
-                f,
-                "no premise to justify equality of arguments '{}' and '{}'",
-                a, b
-            ),
-            CongruenceError::PremiseDoesntJustifyArgs { args, premise } => write!(
-                f,
-                "premise '(= {} {})' doesn't justify arguments '{}' and '{}'",
-                premise.0, premise.1, args.0, args.1
-            ),
-            CongruenceError::DifferentFunctions(a, b) => {
-                write!(f, "functions don't match: '{}' and '{}'", a, b)
-            }
-            CongruenceError::DifferentOperators(a, b) => {
-                write!(f, "operators don't match: '{}' and '{}'", a, b)
-            }
-            CongruenceError::DifferentNumberOfArguments(a, b) => {
-                write!(f, "different numbers of arguments: {} and {}", a, b)
-            }
-            CongruenceError::NotApplicationOrOperation(t) => {
-                write!(f, "term is not an application or operation: '{}'", t)
-            }
-        }
-    }
-}
+use crate::{ast::*, checker::error::CongruenceError};
 
 pub fn eq_congruent(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 2..)?;
 
     let premises = conclusion[..conclusion.len() - 1].iter().map(|t| {
         t.remove_negation()
-            .ok_or_else(|| RuleError::TermOfWrongForm(t.clone()))
+            .ok_or_else(|| CheckerError::TermOfWrongForm(t.clone()))
     });
     let conclusion = match_term_err!((= f g) = conclusion.last().unwrap())?;
 
@@ -66,7 +21,7 @@ pub fn eq_congruent_pred(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 
     let premises = conclusion[..conclusion.len() - 2].iter().map(|t| {
         t.remove_negation()
-            .ok_or_else(|| RuleError::TermOfWrongForm(t.clone()))
+            .ok_or_else(|| CheckerError::TermOfWrongForm(t.clone()))
     });
 
     let (p, q) = (
@@ -78,7 +33,7 @@ pub fn eq_congruent_pred(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         None => {
             let q = q
                 .remove_negation()
-                .ok_or_else(|| RuleError::TermOfWrongForm(q.clone()))?;
+                .ok_or_else(|| CheckerError::TermOfWrongForm(q.clone()))?;
             (p, q)
         }
     };
@@ -91,7 +46,7 @@ pub fn eq_congruent_pred(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 /// should be the two function applications.
 fn generic_congruent_rule<'a, T>(premises: T, conclusion: (&Rc<Term>, &Rc<Term>)) -> RuleResult
 where
-    T: Iterator<Item = Result<&'a Rc<Term>, RuleError>>,
+    T: Iterator<Item = Result<&'a Rc<Term>, CheckerError>>,
 {
     let premises: Vec<_> = premises
         .map(|term| match_term_err!((= t u) = term?))
@@ -193,7 +148,7 @@ pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
         .map(|command| {
             get_single_term_from_command(command)
                 .and_then(|term| match_term!((= t u) = term))
-                .ok_or_else(|| RuleError::BadPremise(command.index().to_string()))
+                .ok_or_else(|| CheckerError::BadPremise(command.index().to_string()))
         })
         .collect::<Result<_, _>>()?;
 

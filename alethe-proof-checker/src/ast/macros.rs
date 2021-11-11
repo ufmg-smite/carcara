@@ -62,13 +62,13 @@ macro_rules! match_term {
     (@GET_VARIANT >=)       => { $crate::ast::Operator::GreaterEq };
 }
 
-/// A variant of `match_term` that returns a `Result<_, RuleError>` instead of an `Option`. The
-/// error returned is always `RuleError::TermOfWrongForm`.
+/// A variant of `match_term` that returns a `Result<_, CheckerError>` instead of an `Option`. The
+/// error returned is always `CheckerError::TermOfWrongForm`.
 macro_rules! match_term_err {
     ($pat:tt = $var:expr) => {{
         let var = $var;
         match_term!($pat = var)
-            .ok_or_else(|| $crate::checker::RuleError::TermOfWrongForm(var.clone()))
+            .ok_or_else(|| $crate::checker::error::CheckerError::TermOfWrongForm(var.clone()))
     }};
 }
 

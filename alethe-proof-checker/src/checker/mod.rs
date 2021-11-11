@@ -1,35 +1,15 @@
+pub mod error;
 mod rules;
 
 use crate::{
     ast::*,
     benchmarking::{Metrics, StepId},
+    AletheResult, Error,
 };
 use ahash::{AHashMap, AHashSet};
-pub use rules::RuleError;
-use rules::{Rule, RuleArgs};
-use std::{
-    fmt,
-    time::{Duration, Instant},
-};
-
-#[derive(Debug)]
-pub struct CheckerError {
-    inner: RuleError,
-    rule_name: String,
-    step: String,
-}
-
-impl fmt::Display for CheckerError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{} (on step '{}', with rule '{}')",
-            self.inner, self.step, self.rule_name
-        )
-    }
-}
-
-type CheckerResult = Result<(), CheckerError>;
+use error::CheckerError;
+use rules::{Rule, RuleArgs, RuleResult};
+use std::time::{Duration, Instant};
 
 struct Context {
     substitutions: AHashMap<Rc<Term>, Rc<Term>>,
@@ -65,7 +45,7 @@ impl<'c> ProofChecker<'c> {
         ProofChecker { pool, config, context: Vec::new() }
     }
 
-    pub fn check(&mut self, proof: &Proof) -> CheckerResult {
+    pub fn check(&mut self, proof: &Proof) -> AletheResult<()> {
         // Similarly to the parser, to avoid stack overflows in proofs with many nested subproofs,
         // we check the subproofs iteratively, instead of recursively
 
@@ -80,18 +60,24 @@ impl<'c> ProofChecker<'c> {
                 break;
             }
             match &commands[i] {
-                // The parser already ensures that the last command in a subproof is always a
-                // "step" command
-                ProofCommand::Step(step) if commands_stack.len() > 1 && i == commands.len() - 1 => {
-                    self.check_step(step, &commands_stack, true)?;
+                ProofCommand::Step(step) => {
+                    let is_end_of_subproof = commands_stack.len() > 1 && i == commands.len() - 1;
+                    self.check_step(step, &commands_stack, is_end_of_subproof)
+                        .map_err(|e| Error::Checker {
+                            inner: e,
+                            rule: step.rule.clone(),
+                            step: step.index.clone(),
+                        })?;
 
                     // If this is the last command of a subproof, we have to pop the subproof
-                    // commands off of the stack
-                    commands_stack.pop();
-                    self.context.pop();
+                    // commands off of the stack. The parser already ensures that the last command
+                    // in a subproof is always a "step" command
+                    if is_end_of_subproof {
+                        commands_stack.pop();
+                        self.context.pop();
+                    }
                     Ok(())
                 }
-                ProofCommand::Step(step) => self.check_step(step, &commands_stack, false),
                 ProofCommand::Subproof {
                     commands: inner_commands,
                     assignment_args,
@@ -131,10 +117,10 @@ impl<'c> ProofChecker<'c> {
                         if is_valid {
                             Ok(())
                         } else {
-                            Err(CheckerError {
+                            Err(Error::Checker {
                                 // TODO: Add specific error for this
-                                inner: RuleError::Unspecified,
-                                rule_name: "assume".into(),
+                                inner: CheckerError::Unspecified,
+                                rule: "assume".into(),
                                 step: index.clone(),
                             })
                         }
@@ -161,18 +147,12 @@ impl<'c> ProofChecker<'c> {
         }: &'a ProofStep,
         commands_stack: &'a [(usize, &'a [ProofCommand])],
         is_end_of_subproof: bool,
-    ) -> CheckerResult {
+    ) -> RuleResult {
         let time = Instant::now();
         let rule = match Self::get_rule(rule_name) {
             Some(r) => r,
             None if self.config.skip_unknown_rules => return Ok(()),
-            None => {
-                return Err(CheckerError {
-                    inner: RuleError::UnknownRule,
-                    rule_name: rule_name.clone(),
-                    step: index.clone(),
-                })
-            }
+            None => return Err(CheckerError::UnknownRule),
         };
         let premises = premises
             .iter()
@@ -195,11 +175,7 @@ impl<'c> ProofChecker<'c> {
             context: &self.context,
             subproof_commands,
         };
-        rule(rule_args).map_err(|e| CheckerError {
-            inner: e,
-            rule_name: rule_name.clone(),
-            step: index.clone(),
-        })?;
+        rule(rule_args)?;
         self.add_statistics_measurement(index, rule_name, time);
         Ok(())
     }
@@ -287,10 +263,10 @@ impl<'c> ProofChecker<'c> {
         use rules::*;
 
         // Converts a rule in the old format (returning `Option<()>`) to the new format (returning
-        // `RuleResult`) by adding a `RuleError::Unspecified` error
+        // `RuleResult`) by adding a `CheckerError::Unspecified` error
         macro_rules! to_new_format {
             ($old:expr) => {
-                |args| $old(args).ok_or(RuleError::Unspecified)
+                |args| $old(args).ok_or(CheckerError::Unspecified)
             };
         }
 

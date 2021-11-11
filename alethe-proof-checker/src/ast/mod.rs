@@ -12,7 +12,7 @@ pub use printer::print_proof;
 pub use rc::Rc;
 pub use subterms::Subterms;
 
-use crate::checker::RuleError;
+use crate::checker::error::CheckerError;
 use ahash::{AHashMap, AHashSet};
 use num_bigint::BigInt;
 use num_rational::BigRational;
@@ -559,8 +559,8 @@ impl Rc<Term> {
     }
 
     /// Removes a leading negation from the term, if it exists. If it doesn't, returns a
-    /// `RuleError::TermOfWrongForm` error. Same thing as `match_term_err!((not t) = term)`.
-    pub fn remove_negation_err(&self) -> Result<&Self, RuleError> {
+    /// `CheckerError::TermOfWrongForm` error. Same thing as `match_term_err!((not t) = term)`.
+    pub fn remove_negation_err(&self) -> Result<&Self, CheckerError> {
         match_term_err!((not t) = self)
     }
     /// Removes all leading negations from the term, and returns how many there were.

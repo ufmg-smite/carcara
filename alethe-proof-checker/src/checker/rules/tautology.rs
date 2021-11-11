@@ -1,6 +1,6 @@
 use super::{
     assert_clause_len, assert_eq_terms, assert_num_premises, get_single_term_from_command,
-    to_option, RuleArgs, RuleError, RuleResult,
+    to_option, CheckerError, RuleArgs, RuleResult,
 };
 use crate::ast::*;
 
@@ -155,11 +155,11 @@ pub fn ite_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_eq_terms(phi_2, conclusion[2].remove_negation_err()?)
 }
 
-/// Helper function to get a single term from a command, or return a `RuleError::BadPremise` error
+/// Helper function to get a single term from a command, or return a `CheckerError::BadPremise` error
 /// if it doesn't succeed.
-fn get_premise_term(premise: &ProofCommand) -> Result<&Rc<Term>, RuleError> {
+fn get_premise_term(premise: &ProofCommand) -> Result<&Rc<Term>, CheckerError> {
     get_single_term_from_command(premise)
-        .ok_or_else(|| RuleError::BadPremise(premise.index().to_string()))
+        .ok_or_else(|| CheckerError::BadPremise(premise.index().to_string()))
 }
 
 pub fn equiv1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {

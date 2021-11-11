@@ -1,10 +1,9 @@
-use super::{assert_clause_len, to_result, RuleArgs, RuleError, RuleResult};
-use crate::ast::*;
+use super::{assert_clause_len, assert_eq_terms, to_result, CheckerError, RuleArgs, RuleResult};
 
 pub fn eq_reflexive(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (a, b) = match_term_err!((= a b) = &conclusion[0])?;
-    to_result(a == b, RuleError::ReflexivityFailed(a.clone(), b.clone()))
+    assert_eq_terms(a, b)
 }
 
 pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> RuleResult {
@@ -21,7 +20,7 @@ pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> RuleResult 
 
     let cumulative_substitutions = &context
         .last()
-        .ok_or_else(|| RuleError::ReflexivityFailed(left.clone(), right.clone()))?
+        .ok_or_else(|| CheckerError::ReflexivityFailed(left.clone(), right.clone()))?
         .cumulative_substitutions;
 
     // In some cases, the substitution is only applied to the left or the right term, and in some
@@ -35,7 +34,7 @@ pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> RuleResult 
     };
     to_result(
         result,
-        RuleError::ReflexivityFailed(left.clone(), right.clone()),
+        CheckerError::ReflexivityFailed(left.clone(), right.clone()),
     )
 }
 

@@ -7,7 +7,7 @@ pub mod checker;
 pub mod parser;
 mod utils;
 
-use checker::CheckerError;
+use checker::error::CheckerError;
 use parser::error::ParserError;
 use parser::lexer::Position;
 use std::{
@@ -23,13 +23,11 @@ pub type AletheResult<T> = Result<T, Error>;
 pub enum Error {
     Io(io::Error),
     Parser(ParserError, Position),
-    Checker(CheckerError),
-}
-
-impl From<CheckerError> for Error {
-    fn from(e: CheckerError) -> Self {
-        Self::Checker(e)
-    }
+    Checker {
+        inner: CheckerError,
+        rule: String,
+        step: String,
+    },
 }
 
 impl From<io::Error> for Error {
@@ -45,7 +43,11 @@ impl fmt::Display for Error {
             Error::Parser(e, (l, c)) => {
                 write!(f, "parser error: {} (on line {}, column {})", e, l, c)
             }
-            Error::Checker(e) => write!(f, "checker error: {}", e),
+            Error::Checker { inner, rule, step } => write!(
+                f,
+                "checking failed on step '{}' with rule '{}': {}",
+                step, rule, inner
+            ),
         }
     }
 }
@@ -66,7 +68,5 @@ pub fn check<P: AsRef<Path>>(
         is_running_test,
         statistics: None,
     };
-    checker::ProofChecker::new(pool, config)
-        .check(&proof)
-        .map_err(Error::Checker)
+    checker::ProofChecker::new(pool, config).check(&proof)
 }

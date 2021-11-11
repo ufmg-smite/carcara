@@ -1,72 +1,8 @@
+use super::error::CheckerError;
 use super::Context;
 use crate::{ast::*, utils::Range};
-use std::fmt;
 
-#[derive(Debug)]
-pub enum RuleError {
-    Unspecified,
-    Cong(congruence::CongruenceError),
-    ReflexivityFailed(Rc<Term>, Rc<Term>),
-    SimplificationFailed {
-        original: Rc<Term>,
-        result: Rc<Term>,
-        target: Rc<Term>,
-    },
-    CycleInSimplification(Rc<Term>),
-    WrongNumberOfPremises(Range, usize),
-    WrongLengthOfClause(Range, usize),
-    BadPremise(String), // TODO: This error is too general
-    TermOfWrongForm(Rc<Term>),
-    TermsNotEqual(Rc<Term>, Rc<Term>),
-    UnknownRule,
-}
-
-impl fmt::Display for RuleError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            RuleError::Unspecified => write!(f, "unspecified error"),
-            RuleError::Cong(e) => write!(f, "{}", e),
-            RuleError::ReflexivityFailed(a, b) => {
-                write!(f, "reflexivity failed with terms '{}' and '{}'", a, b)
-            }
-            RuleError::SimplificationFailed { original, result, target } => {
-                write!(
-                    f,
-                    "simplifying '{}' resulted in '{}', expected result to be '{}'",
-                    original, result, target
-                )
-            }
-            RuleError::CycleInSimplification(t) => {
-                write!(f, "encountered cycle when simplifying term: '{}'", t)
-            }
-            RuleError::WrongNumberOfPremises(expected, got) => {
-                write!(f, "expected {} premises, got {}", expected.to_text(), got)
-            }
-            RuleError::WrongLengthOfClause(expected, got) => {
-                write!(
-                    f,
-                    "expected {} terms in clause, got {}",
-                    expected.to_text(),
-                    got
-                )
-            }
-            RuleError::BadPremise(p) => write!(f, "bad premise: '{}'", p),
-            RuleError::TermOfWrongForm(t) => write!(f, "term is of the wrong form: '{}'", t),
-            RuleError::TermsNotEqual(a, b) => {
-                write!(f, "expected terms to be equal: '{}' and '{}'", a, b)
-            }
-            RuleError::UnknownRule => write!(f, "unknown rule"),
-        }
-    }
-}
-
-impl From<congruence::CongruenceError> for RuleError {
-    fn from(e: congruence::CongruenceError) -> Self {
-        Self::Cong(e)
-    }
-}
-
-pub type RuleResult = Result<(), RuleError>;
+pub type RuleResult = Result<(), CheckerError>;
 
 pub type Rule = fn(RuleArgs) -> RuleResult;
 
@@ -93,7 +29,7 @@ fn to_option(b: bool) -> Option<()> {
 }
 
 /// Converts a `bool` into an `RuleResult`.
-fn to_result(b: bool, e: RuleError) -> RuleResult {
+fn to_result(b: bool, e: CheckerError) -> RuleResult {
     match b {
         true => Ok(()),
         false => Err(e),
@@ -135,7 +71,7 @@ macro_rules! rassert {
 fn assert_clause_len<T: Into<Range>>(clause: &[Rc<Term>], range: T) -> RuleResult {
     let range = range.into();
     if !range.contains(clause.len()) {
-        return Err(RuleError::WrongLengthOfClause(range, clause.len()));
+        return Err(CheckerError::WrongLengthOfClause(range, clause.len()));
     }
     Ok(())
 }
@@ -143,14 +79,14 @@ fn assert_clause_len<T: Into<Range>>(clause: &[Rc<Term>], range: T) -> RuleResul
 fn assert_num_premises<T: Into<Range>>(premises: &[&ProofCommand], range: T) -> RuleResult {
     let range = range.into();
     if !range.contains(premises.len()) {
-        return Err(RuleError::WrongNumberOfPremises(range, premises.len()));
+        return Err(CheckerError::WrongNumberOfPremises(range, premises.len()));
     }
     Ok(())
 }
 
 fn assert_eq_terms(a: &Rc<Term>, b: &Rc<Term>) -> RuleResult {
     if a != b {
-        return Err(RuleError::TermsNotEqual(a.clone(), b.clone()));
+        return Err(CheckerError::TermsNotEqual(a.clone(), b.clone()));
     }
     Ok(())
 }
