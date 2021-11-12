@@ -131,7 +131,7 @@ impl fmt::Display for CongruenceError {
             ),
             CongruenceError::PremiseDoesntJustifyArgs { args, premise } => write!(
                 f,
-                "premise '(= {} {})' doesn't justify arguments '{}' and '{}'",
+                "premise '(= {} {})' doesn't justify conclusion arguments '{}' and '{}'",
                 premise.0, premise.1, args.0, args.1
             ),
             CongruenceError::DifferentFunctions(a, b) => {
