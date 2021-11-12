@@ -106,6 +106,13 @@ fn assert_eq(a: &Rc<Term>, b: &Rc<Term>) -> RuleResult {
     Ok(())
 }
 
+fn assert_eq_modulo_reordering(a: &Rc<Term>, b: &Rc<Term>) -> RuleResult {
+    if !DeepEq::eq_modulo_reordering(a, b) {
+        return Err(CheckerError::TermsNotEqual(a.clone(), b.clone()));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
     use crate::{

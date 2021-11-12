@@ -1,6 +1,6 @@
 use super::{
-    assert_clause_len, assert_eq, assert_num_premises, assert_operation_len, get_premise_term,
-    to_option, CheckerError, RuleArgs, RuleResult,
+    assert_clause_len, assert_eq, assert_eq_modulo_reordering, assert_num_premises,
+    assert_operation_len, get_premise_term, to_option, CheckerError, RuleArgs, RuleResult,
 };
 use crate::ast::*;
 use ahash::AHashMap;
@@ -349,12 +349,10 @@ pub fn bfun_elim(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> RuleR
 
     let psi = get_premise_term(premises[0])?;
 
-    let got = apply_bfun_elim(pool, psi, &mut AHashMap::new());
-    rassert!(
-        DeepEq::eq_modulo_reordering(&conclusion[0], &got),
-        CheckerError::TermsNotEqual(conclusion[0].clone(), got)
-    );
-    Ok(())
+    assert_eq_modulo_reordering(
+        &conclusion[0],
+        &apply_bfun_elim(pool, psi, &mut AHashMap::new()),
+    )
 }
 
 #[cfg(test)]

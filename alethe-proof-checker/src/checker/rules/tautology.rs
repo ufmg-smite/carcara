@@ -1,6 +1,6 @@
 use super::{
-    assert_clause_len, assert_eq, assert_num_premises, get_premise_term, CheckerError, RuleArgs,
-    RuleResult,
+    assert_clause_len, assert_eq, assert_eq_modulo_reordering, assert_num_premises,
+    get_premise_term, CheckerError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::rules::assert_operation_len};
 
@@ -282,10 +282,7 @@ pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     let us = match_term_err!((and ...) = right_side)?;
 
     // "us" must be a conjunction where the first term is the root term
-    rassert!(
-        DeepEq::eq_modulo_reordering(&us[0], root_term),
-        CheckerError::TermsNotEqual(us[0].clone(), root_term.clone())
-    );
+    assert_eq_modulo_reordering(&us[0], root_term)?;
 
     let us = &us[1..];
 
