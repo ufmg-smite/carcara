@@ -54,6 +54,13 @@ fn get_clause_from_command(command: &ProofCommand) -> &[Rc<Term>] {
     }
 }
 
+/// Helper function to get a single term from a command, or return a `CheckerError::BadPremise` error
+/// if it doesn't succeed.
+fn get_premise_term(premise: &ProofCommand) -> Result<&Rc<Term>, CheckerError> {
+    get_single_term_from_command(premise)
+        .ok_or_else(|| CheckerError::BadPremise(premise.index().to_string()))
+}
+
 /// Asserts that the argument is true, and returns `None` otherwise. `rassert!(arg)` is identical
 /// to `to_option(arg)?`, but much more readable.
 macro_rules! rassert {

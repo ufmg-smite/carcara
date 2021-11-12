@@ -16,6 +16,7 @@ pub enum CheckerError {
     CycleInSimplification(Rc<Term>),
     TermIsNotConnective(Rc<Term>),
     IsNotIteSubterm(Rc<Term>),
+    BrokenTransitivityChain(Rc<Term>, Rc<Term>),
 
     // General errors
     WrongNumberOfPremises(Range, usize),
@@ -55,6 +56,13 @@ impl fmt::Display for CheckerError {
                     f,
                     "term '{}' does not appear as a subterm of the root term",
                     t
+                )
+            }
+            CheckerError::BrokenTransitivityChain(stopped, target) => {
+                write!(
+                    f,
+                    "broken transitivity chain: can't prove '(= {} {})'",
+                    stopped, target
                 )
             }
             CheckerError::WrongNumberOfPremises(expected, got) => {
