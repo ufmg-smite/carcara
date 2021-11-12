@@ -1,98 +1,149 @@
-use super::{get_single_term_from_command, to_option, RuleArgs};
+use super::{
+    assert_clause_len, assert_eq, assert_num_premises, assert_operation_len, get_premise_term,
+    to_option, CheckerError, RuleArgs, RuleResult,
+};
 use crate::ast::*;
 use ahash::AHashMap;
 
-pub fn distinct_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 1);
+pub fn distinct_elim(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
 
-    let (distinct_args, second_term) = match_term!((= (distinct ...) second) = conclusion[0])?;
+    let (distinct_args, second_term) = match_term_err!((= (distinct ...) second) = &conclusion[0])?;
     match distinct_args {
         [] | [_] => unreachable!(),
         [a, b] => {
-            let got = match_term!((not (= x y)) = second_term)?;
-            to_option(got == (a, b) || got == (b, a))
-        }
-        args => {
-            if *args[0].sort() == Sort::Bool {
-                // If there are more than two boolean arguments to the distinct operator, the
-                // second term must be "false"
-                return to_option(second_term.is_bool_false());
+            let got = match_term_err!((not (= x y)) = second_term)?;
+            if got == (a, b) || got == (b, a) {
+                Ok(())
+            } else {
+                let expected = build_term!(pool, (not (= {a.clone()} {b.clone()})));
+                Err(CheckerError::TermsNotEqual(second_term.clone(), expected))
             }
-            let got = match_term!((and ...) = second_term)?;
+        }
+        // If there are more than two boolean arguments to the distinct operator, the
+        // second term must be "false"
+        args if *args[0].sort() == Sort::Bool => {
+            if second_term.is_bool_false() {
+                Ok(())
+            } else {
+                Err(CheckerError::ExpectedBoolConstant(
+                    false,
+                    second_term.clone(),
+                ))
+            }
+        }
+
+        args => {
+            let n = args.len();
+            let and_args = match_term_err!((and ...) = second_term)?;
+            assert_operation_len(Operator::And, and_args, n * (n - 1) / 2)?;
+
             let mut k = 0;
-            for i in 0..args.len() {
-                for j in i + 1..args.len() {
+            for i in 0..n {
+                for j in (i + 1)..n {
                     let (a, b) = (&args[i], &args[j]);
-                    let got = match_term!((not (= x y)) = got[k])?;
-                    to_option(got == (a, b) || got == (b, a))?;
+                    let got = match_term_err!((not (= x y)) = &and_args[k])?;
+                    if !(got == (a, b) || got == (b, a)) {
+                        let expected = build_term!(pool, (not (= {a.clone()} {b.clone()})));
+                        return Err(CheckerError::TermsNotEqual(and_args[k].clone(), expected));
+                    }
                     k += 1;
                 }
             }
-            Some(())
+            Ok(())
         }
     }
 }
 
-pub fn and(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    rassert!(premises.len() == 1 && conclusion.len() == 1);
+pub fn and(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
+    assert_clause_len(conclusion, 1)?;
 
-    let and_term = get_single_term_from_command(premises[0])?;
-    let and_contents = match_term!((and ...) = and_term)?;
+    let and_term = get_premise_term(premises[0])?;
+    let and_contents = match_term_err!((and ...) = and_term)?;
 
-    to_option(and_contents.iter().any(|t| t == &conclusion[0]))
+    if !and_contents.contains(&conclusion[0]) {
+        return Err(CheckerError::TermDoesntApperInOp(
+            Operator::And,
+            conclusion[0].clone(),
+        ));
+    }
+    Ok(())
 }
 
-pub fn not_or(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    rassert!(premises.len() == 1 && conclusion.len() == 1);
+pub fn not_or(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
+    assert_clause_len(conclusion, 1)?;
 
-    let or_term = get_single_term_from_command(premises[0])?;
-    let or_contents = match_term!((not (or ...)) = or_term)?;
-    let conclusion = conclusion[0].remove_negation()?;
+    let or_term = get_premise_term(premises[0])?;
+    let or_contents = match_term_err!((not (or ...)) = or_term)?;
+    let conclusion = conclusion[0].remove_negation_err()?;
 
-    to_option(or_contents.iter().any(|t| t == conclusion))
+    if !or_contents.contains(conclusion) {
+        return Err(CheckerError::TermDoesntApperInOp(
+            Operator::Or,
+            conclusion.clone(),
+        ));
+    }
+    Ok(())
 }
 
-pub fn or(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    rassert!(premises.len() == 1);
+pub fn or(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
 
-    let or_term = get_single_term_from_command(premises[0])?;
-    let or_contents = match_term!((or ...) = or_term)?;
+    let or_term = get_premise_term(premises[0])?;
+    let or_contents = match_term_err!((or ...) = or_term)?;
 
-    to_option(or_contents == conclusion)
+    assert_clause_len(conclusion, or_contents.len())?;
+    for (t, u) in or_contents.iter().zip(conclusion) {
+        assert_eq(t, u)?;
+    }
+    Ok(())
 }
 
-pub fn not_and(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    rassert!(premises.len() == 1);
+pub fn not_and(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
 
-    let and_term = get_single_term_from_command(premises[0])?;
-    let and_contents = match_term!((not (and ...)) = and_term)?;
-    to_option(
-        conclusion
-            .iter()
-            .map(|t| t.remove_negation())
-            .eq(and_contents.iter().map(Some)),
-    )
+    let and_term = get_premise_term(premises[0])?;
+    let and_contents = match_term_err!((not (and ...)) = and_term)?;
+
+    assert_clause_len(conclusion, and_contents.len())?;
+    for (t, u) in and_contents.iter().zip(conclusion) {
+        let u = u.remove_negation_err()?;
+        assert_eq(t, u)?;
+    }
+    Ok(())
 }
 
-pub fn implies(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    rassert!(premises.len() == 1 && conclusion.len() == 2);
-    let premise_term = get_single_term_from_command(premises[0])?;
-    let (phi_1, phi_2) = match_term!((=> phi_1 phi_2) = premise_term)?;
-    to_option(phi_1 == conclusion[0].remove_negation()? && phi_2 == &conclusion[1])
+pub fn implies(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
+    assert_clause_len(conclusion, 2)?;
+
+    let premise_term = get_premise_term(premises[0])?;
+    let (phi_1, phi_2) = match_term_err!((=> phi_1 phi_2) = premise_term)?;
+
+    assert_eq(phi_1, conclusion[0].remove_negation_err()?)?;
+    assert_eq(phi_2, &conclusion[1])
 }
 
-pub fn not_implies1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    rassert!(premises.len() == 1 && conclusion.len() == 1);
-    let premise_term = get_single_term_from_command(premises[0])?;
-    let (phi_1, _) = match_term!((not (=> phi_1 phi_2)) = premise_term)?;
-    to_option(phi_1 == &conclusion[0])
+pub fn not_implies1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
+    assert_clause_len(conclusion, 1)?;
+
+    let premise_term = get_premise_term(premises[0])?;
+    let (phi_1, _) = match_term_err!((not (=> phi_1 phi_2)) = premise_term)?;
+
+    assert_eq(phi_1, &conclusion[0])
 }
 
-pub fn not_implies2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    rassert!(premises.len() == 1 && conclusion.len() == 1);
-    let premise_term = get_single_term_from_command(premises[0])?;
-    let (_, phi_2) = match_term!((not (=> phi_1 phi_2)) = premise_term)?;
-    to_option(phi_2 == conclusion[0].remove_negation()?)
+pub fn not_implies2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
+    assert_clause_len(conclusion, 1)?;
+
+    let premise_term = get_premise_term(premises[0])?;
+    let (_, phi_2) = match_term_err!((not (=> phi_1 phi_2)) = premise_term)?;
+
+    assert_eq(phi_2, conclusion[0].remove_negation_err()?)
 }
 
 pub fn nary_elim(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
@@ -292,10 +343,18 @@ fn apply_bfun_elim(
     result
 }
 
-pub fn bfun_elim(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> Option<()> {
-    rassert!(premises.len() == 1 && conclusion.len() == 1);
-    let psi = get_single_term_from_command(premises[0])?;
-    to_option(conclusion[0] == apply_bfun_elim(pool, psi, &mut AHashMap::new()))
+pub fn bfun_elim(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
+    assert_clause_len(conclusion, 1)?;
+
+    let psi = get_premise_term(premises[0])?;
+
+    let got = apply_bfun_elim(pool, psi, &mut AHashMap::new());
+    rassert!(
+        DeepEq::eq_modulo_reordering(&conclusion[0], &got),
+        CheckerError::TermsNotEqual(conclusion[0].clone(), got)
+    );
+    Ok(())
 }
 
 #[cfg(test)]
