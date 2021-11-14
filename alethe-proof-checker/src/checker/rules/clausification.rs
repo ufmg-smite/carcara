@@ -1,6 +1,6 @@
 use super::{
-    assert_clause_len, assert_eq, assert_eq_modulo_reordering, assert_num_premises,
-    assert_operation_len, get_premise_term, to_option, CheckerError, RuleArgs, RuleResult,
+    assert_clause_len, assert_eq, assert_num_premises, assert_operation_len, get_premise_term,
+    to_option, CheckerError, RuleArgs, RuleResult,
 };
 use crate::ast::*;
 use ahash::AHashMap;
@@ -17,7 +17,7 @@ pub fn distinct_elim(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
                 Ok(())
             } else {
                 let expected = build_term!(pool, (not (= {a.clone()} {b.clone()})));
-                Err(CheckerError::TermsNotEqual(second_term.clone(), expected))
+                Err(CheckerError::ExpectedTermToBe { expected, got: second_term.clone() })
             }
         }
         // If there are more than two boolean arguments to the distinct operator, the
@@ -45,7 +45,10 @@ pub fn distinct_elim(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
                     let got = match_term_err!((not (= x y)) = &and_args[k])?;
                     if !(got == (a, b) || got == (b, a)) {
                         let expected = build_term!(pool, (not (= {a.clone()} {b.clone()})));
-                        return Err(CheckerError::TermsNotEqual(and_args[k].clone(), expected));
+                        return Err(CheckerError::ExpectedTermToBe {
+                            expected,
+                            got: and_args[k].clone(),
+                        });
                     }
                     k += 1;
                 }
@@ -349,10 +352,14 @@ pub fn bfun_elim(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> RuleR
 
     let psi = get_premise_term(premises[0])?;
 
-    assert_eq_modulo_reordering(
-        &conclusion[0],
-        &apply_bfun_elim(pool, psi, &mut AHashMap::new()),
-    )
+    let expected = apply_bfun_elim(pool, psi, &mut AHashMap::new());
+    if !DeepEq::eq_modulo_reordering(&conclusion[0], &expected) {
+        return Err(CheckerError::ExpectedTermToBe {
+            expected,
+            got: conclusion[0].clone(),
+        });
+    }
+    Ok(())
 }
 
 #[cfg(test)]

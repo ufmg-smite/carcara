@@ -26,6 +26,12 @@ pub enum CheckerError {
     BadPremise(String), // TODO: This error is too general
     TermOfWrongForm(&'static str, Rc<Term>),
     TermsNotEqual(Rc<Term>, Rc<Term>),
+    ExpectedTermToBe {
+        // This error is very similar to `TermsNotEqual`, but the error message implies that a
+        // specific term was expected
+        expected: Rc<Term>,
+        got: Rc<Term>,
+    },
     BindingsNotEqual,
     ExpectedBoolConstant(bool, Rc<Term>),
 
@@ -98,6 +104,9 @@ impl fmt::Display for CheckerError {
             }
             CheckerError::TermsNotEqual(a, b) => {
                 write!(f, "expected terms to be equal: '{}' and '{}'", a, b)
+            }
+            CheckerError::ExpectedTermToBe { expected, got } => {
+                write!(f, "expected term '{}' to be '{}'", got, expected)
             }
             CheckerError::BindingsNotEqual => write!(f, "quantifier bindings are not equal"),
             CheckerError::ExpectedBoolConstant(b, t) => {
