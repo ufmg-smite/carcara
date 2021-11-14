@@ -10,6 +10,24 @@ macro_rules! match_term {
     (false = $var:expr $(, $flag:ident)?) => {
         if $var.is_bool_false() { Some(()) } else { None }
     };
+    ((forall ...) = $var:expr) => {
+        if let $crate::ast::Term::Quant($crate::ast::Quantifier::Forall, bindings, inner) =
+            &$var as &$crate::ast::Term
+        {
+            Some((bindings, inner))
+        } else {
+            None
+        }
+    };
+    ((exists ...) = $var:expr) => {
+        if let $crate::ast::Term::Quant($crate::ast::Quantifier::Exists, bindings, inner) =
+            &$var as &$crate::ast::Term
+        {
+            Some((bindings, inner))
+        } else {
+            None
+        }
+    };
     ($bind:ident = $var:expr) => { Some($var) };
     (($op:tt $($args:tt)+) = $var:expr) => {{
         if let $crate::ast::Term::Op(match_term!(@GET_VARIANT $op), args) =

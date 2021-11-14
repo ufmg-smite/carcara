@@ -347,23 +347,15 @@ pub fn connective_def(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         assert_eq(b, phi_2)?;
         assert_eq(c, phi_1)?;
         assert_eq(d, phi_3)
-    } else if let Term::Quant(Quantifier::Exists, first_bindings, first_inner) = first.as_ref() {
+    } else if let Some((first_bindings, first_inner)) = match_term!((exists ...) = first) {
         // This case of the "connective_def" rule is not documented, but appears in some examples
         // ∃ x_1, ..., x_n . phi <-> ¬(∀ x_1, ..., x_n . ¬phi)
-        if let Some(Term::Quant(Quantifier::Forall, second_bindings, second_inner)) =
-            second.remove_negation().map(Rc::as_ref)
-        {
-            assert_eq(second_inner.remove_negation_err()?, first_inner)?;
-            if first_bindings != second_bindings {
-                return Err(CheckerError::BindingsNotEqual);
-            }
-            Ok(())
-        } else {
-            Err(CheckerError::TermOfWrongForm(
-                "(not (forall ...))",
-                second.clone(),
-            ))
+        let (second_bindings, second_inner) = match_term_err!((not (forall ...)) = second)?;
+        assert_eq(second_inner.remove_negation_err()?, first_inner)?;
+        if first_bindings != second_bindings {
+            return Err(CheckerError::BindingsNotEqual);
         }
+        Ok(())
     } else {
         Err(CheckerError::TermIsNotConnective(first.clone()))
     }
