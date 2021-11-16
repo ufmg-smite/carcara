@@ -351,11 +351,8 @@ pub fn connective_def(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         // This case of the "connective_def" rule is not documented, but appears in some examples
         // ∃ x_1, ..., x_n . phi <-> ¬(∀ x_1, ..., x_n . ¬phi)
         let (second_bindings, second_inner) = match_term_err!((not (forall ...)) = second)?;
-        assert_eq(second_inner.remove_negation_err()?, first_inner)?;
-        if first_bindings != second_bindings {
-            return Err(CheckerError::BindingsNotEqual);
-        }
-        Ok(())
+        assert_eq(first_inner, second_inner.remove_negation_err()?)?;
+        assert_eq(first_bindings, second_bindings)
     } else {
         Err(CheckerError::TermIsNotConnective(first.clone()))
     }

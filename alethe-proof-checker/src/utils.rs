@@ -1,8 +1,8 @@
+use crate::ast::{BindingList, Quantifier, Rc, Term};
 use ahash::AHashSet;
 use num_rational::BigRational;
 use num_traits::{One, Signed, Zero};
-use std::hash::Hash;
-use std::ops;
+use std::{hash::Hash, ops};
 
 /// An enum that can hold one of two types. Similar to `Result`, but doesn't imply that one of the
 /// variants is "better" than the other.
@@ -133,4 +133,22 @@ impl From<ops::RangeTo<usize>> for Range {
     fn from(r: ops::RangeTo<usize>) -> Self {
         Self(None, Some(r.end - 1))
     }
+}
+
+/// Provides a pretty displayable name for a type. For example, the type name for `Rc<Term>` is
+/// "term".
+pub trait TypeName {
+    const NAME: &'static str;
+}
+
+impl TypeName for Rc<Term> {
+    const NAME: &'static str = "term";
+}
+
+impl TypeName for Quantifier {
+    const NAME: &'static str = "quantifier";
+}
+
+impl TypeName for BindingList {
+    const NAME: &'static str = "binding list";
 }

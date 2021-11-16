@@ -1,5 +1,6 @@
 use super::{
-    assert_clause_len, assert_eq, assert_num_args, to_result, CheckerError, RuleArgs, RuleResult,
+    assert_clause_len, assert_eq, assert_is_expected, assert_is_expected_modulo_reordering,
+    assert_num_args, to_result, CheckerError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::QuantifierError, utils::DedupIterator};
 use ahash::{AHashMap, AHashSet};
@@ -48,10 +49,7 @@ pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> RuleRes
 
     // Equalities may be reordered in the final term, so we use `DeepEq::eq_modulo_reordering`
     let expected = pool.apply_substitutions(original, &substitutions);
-    if !DeepEq::eq_modulo_reordering(&expected, substituted) {
-        return Err(CheckerError::ExpectedTermToBe { expected, got: substituted.clone() });
-    }
-    Ok(())
+    assert_is_expected_modulo_reordering(substituted, expected)
 }
 
 pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
@@ -63,10 +61,8 @@ pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     let (q_2, bindings_2, left) = unwrap_quant_err(left)?;
     let (q_3, bindings_3, right) = unwrap_quant_err(right)?;
 
-    rassert!(
-        q_1 == q_2 && q_2 == q_3,
-        QuantifierError::ExpectedSameQuantifiers
-    );
+    assert_eq(&q_1, &q_2)?;
+    assert_eq(&q_2, &q_3)?;
     assert_eq(left, right)?;
 
     let combined = bindings_1.iter().chain(bindings_2).dedup();
@@ -81,13 +77,19 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
     let (q_1, bindings_1, phi_1) = unwrap_quant_err(left)?;
+
+    // To return a reference from inside the match expression, I can't reference a value created in
+    // it. Therefore I can't inline this variable
+    let empty = BindingList(Vec::new());
     let (bindings_2, phi_2) = match right.unwrap_quant() {
-        Some((q, b, t)) if q == q_1 => (b.as_slice(), t),
-        Some(_) => return Err(QuantifierError::ExpectedSameQuantifiers.into()),
+        Some((q_2, b, t)) => {
+            assert_eq(&q_1, &q_2)?;
+            (b, t)
+        }
 
         // If the right-hand side term is not a quantifier, we consider it a quantifier with an
         // empty list of bindings
-        None => (&[] as _, right),
+        None => (&empty, right),
     };
     assert_eq(phi_1, phi_2)?;
 
@@ -98,13 +100,7 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
         .cloned()
         .collect();
 
-    to_result(
-        expected == bindings_2,
-        CheckerError::Quant(QuantifierError::ExpectedBindingsToBe {
-            expected: BindingList(expected),
-            got: BindingList(bindings_2.to_vec()),
-        }),
-    )
+    assert_is_expected(bindings_2, BindingList(expected))
 }
 
 /// Converts a term into negation normal form, expanding all connectives.
@@ -266,12 +262,8 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         let (r_q, r_b, phi_prime) = unwrap_quant_err(r)?;
 
         // We expect both quantifiers to be `forall`
-        for got in [l_q, r_q] {
-            rassert!(
-                got == Quantifier::Forall,
-                QuantifierError::ExpectedQuantifierToBe { expected: Quantifier::Forall, got }
-            );
-        }
+        assert_is_expected(&l_q, Quantifier::Forall)?;
+        assert_is_expected(&r_q, Quantifier::Forall)?;
 
         (l_b, phi, r_b, phi_prime)
     };

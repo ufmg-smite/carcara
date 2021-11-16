@@ -1,5 +1,7 @@
-use super::error::CheckerError;
-use super::Context;
+use super::{
+    error::{CheckerError, EqualityError},
+    Context,
+};
 use crate::{ast::*, utils::Range};
 
 pub type RuleResult = Result<(), CheckerError>;
@@ -107,16 +109,46 @@ fn assert_operation_len<T: Into<Range>>(op: Operator, args: &[Rc<Term>], range: 
     Ok(())
 }
 
-fn assert_eq(a: &Rc<Term>, b: &Rc<Term>) -> RuleResult {
+fn assert_eq<T>(a: &T, b: &T) -> RuleResult
+where
+    T: Eq + Clone,
+    EqualityError<T>: Into<CheckerError>,
+{
     if a != b {
-        return Err(CheckerError::TermsNotEqual(a.clone(), b.clone()));
+        return Err(EqualityError::ExpectedEqual(a.clone(), b.clone()).into());
     }
     Ok(())
 }
 
-fn assert_eq_modulo_reordering(a: &Rc<Term>, b: &Rc<Term>) -> RuleResult {
+fn assert_is_expected<T>(got: &T, expected: T) -> RuleResult
+where
+    T: Eq + Clone,
+    EqualityError<T>: Into<CheckerError>,
+{
+    if *got != expected {
+        return Err(EqualityError::ExpectedToBe { expected, got: got.clone() }.into());
+    }
+    Ok(())
+}
+
+fn assert_eq_modulo_reordering<T>(a: &T, b: &T) -> Result<(), CheckerError>
+where
+    T: Eq + Clone + DeepEq,
+    EqualityError<T>: Into<CheckerError>,
+{
     if !DeepEq::eq_modulo_reordering(a, b) {
-        return Err(CheckerError::TermsNotEqual(a.clone(), b.clone()));
+        return Err(EqualityError::ExpectedEqual(a.clone(), b.clone()).into());
+    }
+    Ok(())
+}
+
+fn assert_is_expected_modulo_reordering<T>(got: &T, expected: T) -> RuleResult
+where
+    T: Eq + Clone + DeepEq,
+    EqualityError<T>: Into<CheckerError>,
+{
+    if !DeepEq::eq_modulo_reordering(got, &expected) {
+        return Err(EqualityError::ExpectedToBe { expected, got: got.clone() }.into());
     }
     Ok(())
 }

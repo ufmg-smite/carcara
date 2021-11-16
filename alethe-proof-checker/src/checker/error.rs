@@ -1,4 +1,7 @@
-use crate::{ast::*, utils::Range};
+use crate::{
+    ast::*,
+    utils::{Range, TypeName},
+};
 use std::fmt;
 
 #[derive(Debug)]
@@ -27,16 +30,13 @@ pub enum CheckerError {
     TermDoesntApperInOp(Operator, Rc<Term>),
     BadPremise(String), // TODO: This error is too general
     TermOfWrongForm(&'static str, Rc<Term>),
-    TermsNotEqual(Rc<Term>, Rc<Term>),
-    ExpectedTermToBe {
-        // This error is very similar to `TermsNotEqual`, but the error message implies that a
-        // specific term was expected
-        expected: Rc<Term>,
-        got: Rc<Term>,
-    },
-    BindingsNotEqual,
     ExpectedBoolConstant(bool, Rc<Term>),
     ExpectedAssignStyleArg(Rc<Term>),
+
+    // Equality errors
+    TermEquality(EqualityError<Rc<Term>>),
+    QuantifierEquality(EqualityError<Quantifier>),
+    BindingListEquality(EqualityError<BindingList>),
 
     UnknownRule,
 }
@@ -109,13 +109,6 @@ impl fmt::Display for CheckerError {
                     term, pat
                 )
             }
-            CheckerError::TermsNotEqual(a, b) => {
-                write!(f, "expected terms to be equal: '{}' and '{}'", a, b)
-            }
-            CheckerError::ExpectedTermToBe { expected, got } => {
-                write!(f, "expected term '{}' to be '{}'", got, expected)
-            }
-            CheckerError::BindingsNotEqual => write!(f, "quantifier bindings are not equal"),
             CheckerError::ExpectedBoolConstant(b, t) => {
                 write!(f, "expected term '{}' to be boolean constant '{}'", t, b)
             }
@@ -126,8 +119,30 @@ impl fmt::Display for CheckerError {
                     t
                 )
             }
+            CheckerError::TermEquality(e) => write!(f, "{}", e),
+            CheckerError::QuantifierEquality(e) => write!(f, "{}", e),
+            CheckerError::BindingListEquality(e) => write!(f, "{}", e),
+
             CheckerError::UnknownRule => write!(f, "unknown rule"),
         }
+    }
+}
+
+impl From<EqualityError<Rc<Term>>> for CheckerError {
+    fn from(e: EqualityError<Rc<Term>>) -> Self {
+        Self::TermEquality(e)
+    }
+}
+
+impl From<EqualityError<Quantifier>> for CheckerError {
+    fn from(e: EqualityError<Quantifier>) -> Self {
+        Self::QuantifierEquality(e)
+    }
+}
+
+impl From<EqualityError<BindingList>> for CheckerError {
+    fn from(e: EqualityError<BindingList>) -> Self {
+        Self::BindingListEquality(e)
     }
 }
 
@@ -140,6 +155,26 @@ impl From<CongruenceError> for CheckerError {
 impl From<QuantifierError> for CheckerError {
     fn from(e: QuantifierError) -> Self {
         Self::Quant(e)
+    }
+}
+
+/// Errors in which we expected two things to be equal but they weren't.
+#[derive(Debug)]
+pub enum EqualityError<T> {
+    ExpectedEqual(T, T),
+    ExpectedToBe { expected: T, got: T },
+}
+
+impl<T: fmt::Display + TypeName> fmt::Display for EqualityError<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            EqualityError::ExpectedEqual(a, b) => {
+                write!(f, "expected {}s to be equal: '{}' and '{}'", T::NAME, a, b)
+            }
+            EqualityError::ExpectedToBe { expected, got } => {
+                write!(f, "expected {} '{}' to be '{}'", T::NAME, got, expected)
+            }
+        }
     }
 }
 
@@ -193,16 +228,7 @@ pub enum QuantifierError {
     NoBindingMatchesArg(String),
     NoArgGivenForBinding(String),
     ExpectedQuantifierTerm(Rc<Term>),
-    ExpectedSameQuantifiers,
-    ExpectedQuantifierToBe {
-        expected: Quantifier,
-        got: Quantifier,
-    },
     JoinFailed, // TODO: Store bindings in this error
-    ExpectedBindingsToBe {
-        expected: BindingList,
-        got: BindingList,
-    },
     CnfNewBindingIntroduced(String),
     CnfBindingIsMissing(String),
     ClauseDoesntAppearInCnf(Rc<Term>),
@@ -220,20 +246,11 @@ impl fmt::Display for QuantifierError {
             QuantifierError::ExpectedQuantifierTerm(t) => {
                 write!(f, "expected quantifier term, got '{}'", t)
             }
-            QuantifierError::ExpectedSameQuantifiers => {
-                write!(f, "expected terms to have the same quantifier")
-            }
-            QuantifierError::ExpectedQuantifierToBe { expected, got } => {
-                write!(f, "expected quantifier '{}' to be '{}'", got, expected)
-            }
             QuantifierError::JoinFailed => {
                 write!(
                     f,
                     "union of bindings in the left does not equal bindings in the right"
                 )
-            }
-            QuantifierError::ExpectedBindingsToBe { expected, got } => {
-                write!(f, "expected bindings '{}' to be '{}'", got, expected,)
             }
             QuantifierError::CnfNewBindingIntroduced(b) => {
                 write!(f, "unknown binding introduced in right-hand side: '{}'", b)
