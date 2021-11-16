@@ -1,15 +1,23 @@
-use super::{to_option, RuleArgs};
-use crate::{ast::*, utils::DedupIterator};
+use super::{
+    assert_clause_len, assert_eq, assert_num_args, to_result, CheckerError, RuleArgs, RuleResult,
+};
+use crate::{ast::*, checker::error::QuantifierError, utils::DedupIterator};
 use ahash::{AHashMap, AHashSet};
 
-pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 1);
+fn unwrap_quant_err(
+    term: &Rc<Term>,
+) -> Result<(Quantifier, &Vec<SortedVar>, &Rc<Term>), QuantifierError> {
+    term.unwrap_quant()
+        .ok_or_else(|| QuantifierError::ExpectedQuantifierTerm(term.clone()))
+}
 
-    let (forall_term, substituted) = match_term!((or (not f) s) = conclusion[0])?;
-    let (quant, bindings, original) = forall_term.unwrap_quant()?;
-    rassert!(quant == Quantifier::Forall);
+pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
 
-    rassert!(args.len() == bindings.len());
+    let ((bindings, original), substituted) =
+        match_term_err!((or (not (forall ...)) result) = &conclusion[0])?;
+
+    assert_num_args(args, bindings.len())?;
 
     // Since the bindings and arguments may not be in the same order, we collect the bindings into
     // a hash set, and remove each binding from it as we find the associated argument
@@ -19,60 +27,83 @@ pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> Option<
         .map(|arg| {
             let (arg_name, arg_value) = match arg {
                 ProofArg::Assign(name, value) => (name, value),
-                ProofArg::Term(_) => return None,
+                ProofArg::Term(t) => return Err(CheckerError::ExpectedAssignStyleArg(t.clone())),
             };
             let arg_sort = pool.add_term(Term::Sort(arg_value.sort().clone()));
-            rassert!(bindings.remove(&(arg_name.clone(), arg_sort.clone())));
+            rassert!(
+                bindings.remove(&(arg_name.clone(), arg_sort.clone())),
+                QuantifierError::NoBindingMatchesArg(arg_name.clone())
+            );
 
             let ident_term = (arg_name.clone(), arg_sort).into();
-            Some((pool.add_term(ident_term), arg_value.clone()))
+            Ok((pool.add_term(ident_term), arg_value.clone()))
         })
-        .collect::<Option<_>>()?;
+        .collect::<Result<_, _>>()?;
 
     // All bindings were accounted for in the arguments
-    rassert!(bindings.is_empty());
+    rassert!(
+        bindings.is_empty(),
+        QuantifierError::NoArgGivenForBinding(bindings.iter().next().unwrap().0.clone())
+    );
 
     // Equalities may be reordered in the final term, so we use `DeepEq::eq_modulo_reordering`
-    to_option(DeepEq::eq_modulo_reordering(
-        &pool.apply_substitutions(original, &substitutions),
-        substituted,
-    ))
+    let expected = pool.apply_substitutions(original, &substitutions);
+    if !DeepEq::eq_modulo_reordering(&expected, substituted) {
+        return Err(CheckerError::ExpectedTermToBe { expected, got: substituted.clone() });
+    }
+    Ok(())
 }
 
-pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 1);
+pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
 
-    let (left, right) = match_term!((= l r) = conclusion[0])?;
-    let (q_1, bindings_1, left) = left.unwrap_quant()?;
-    let (q_2, bindings_2, left) = left.unwrap_quant()?;
-    let (q_3, bindings_3, right) = right.unwrap_quant()?;
+    let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
 
-    rassert!(q_1 == q_2 && q_2 == q_3 && left == right);
+    let (q_1, bindings_1, left) = unwrap_quant_err(left)?;
+    let (q_2, bindings_2, left) = unwrap_quant_err(left)?;
+    let (q_3, bindings_3, right) = unwrap_quant_err(right)?;
+
+    rassert!(
+        q_1 == q_2 && q_2 == q_3,
+        QuantifierError::ExpectedSameQuantifiers
+    );
+    assert_eq(left, right)?;
 
     let combined = bindings_1.iter().chain(bindings_2).dedup();
-    to_option(bindings_3.iter().eq(combined))
+    to_result(
+        bindings_3.iter().eq(combined),
+        CheckerError::Quant(QuantifierError::JoinFailed),
+    )
 }
 
-pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 1);
+pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
 
-    let (left, right) = match_term!((= l r) = conclusion[0])?;
-    let (q_1, bindings_1, phi_1) = left.unwrap_quant()?;
+    let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
+    let (q_1, bindings_1, phi_1) = unwrap_quant_err(left)?;
     let (bindings_2, phi_2) = match right.unwrap_quant() {
         Some((q, b, t)) if q == q_1 => (b.as_slice(), t),
-        Some(_) => return None,
+        Some(_) => return Err(QuantifierError::ExpectedSameQuantifiers.into()),
 
         // If the right-hand side term is not a quantifier, we consider it a quantifier with an
         // empty list of bindings
         None => (&[] as _, right),
     };
-    rassert!(phi_1 == phi_2);
+    assert_eq(phi_1, phi_2)?;
+
     let free_vars = pool.free_vars(phi_1);
-    to_option(
-        bindings_1
-            .iter()
-            .filter(|(var, _)| free_vars.contains(var))
-            .eq(bindings_2),
+    let expected: Vec<_> = bindings_1
+        .iter()
+        .filter(|(var, _)| free_vars.contains(var))
+        .cloned()
+        .collect();
+
+    to_result(
+        expected == bindings_2,
+        CheckerError::Quant(QuantifierError::ExpectedBindingsToBe {
+            expected,
+            got: bindings_2.to_vec(),
+        }),
     )
 }
 
@@ -226,14 +257,22 @@ fn conjunctive_normal_form(term: &Rc<Term>) -> CnfFormula {
     }
 }
 
-pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 1);
+pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
 
     let (l_bindings, phi, r_bindings, phi_prime) = {
-        let (l, r) = match_term!((or (not l) r) = conclusion[0])?;
-        let (l_q, l_b, phi) = l.unwrap_quant()?;
-        let (r_q, r_b, phi_prime) = r.unwrap_quant()?;
-        rassert!(l_q == r_q && l_q == Quantifier::Forall);
+        let (l, r) = match_term_err!((or (not l) r) = &conclusion[0])?;
+        let (l_q, l_b, phi) = unwrap_quant_err(l)?;
+        let (r_q, r_b, phi_prime) = unwrap_quant_err(r)?;
+
+        // We expect both quantifiers to be `forall`
+        for got in [l_q, r_q] {
+            rassert!(
+                got == Quantifier::Forall,
+                QuantifierError::ExpectedQuantifierToBe { expected: Quantifier::Forall, got }
+            );
+        }
+
         (l_b, phi, r_b, phi_prime)
     };
 
@@ -251,21 +290,34 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> {
             })
             .collect()
     };
+
     // `new_bindings` contains all bindings that existed in the original term, plus all bindings
     // added by the prenexing step. All bindings in the right side must be in this set
-    rassert!(r_bindings.is_subset(&new_bindings));
+    if let Some((var, _)) = r_bindings.iter().find(|b| !new_bindings.contains(b)) {
+        return Err(CheckerError::Quant(
+            QuantifierError::CnfNewBindingIntroduced(var.clone()),
+        ));
+    }
 
-    to_option(clauses.iter().any(|term| {
-        // While all bindings in `r_bindings` must also be in `new_bindings`, the same is not true
-        // in the opposite direction. That is because some variables from the set may be omitted in
-        // the right-hand side quantifier if they don't appear in phi_prime as free variables
-        let free_vars = pool.free_vars(term);
-        let bindings_are_valid = new_bindings
-            .iter()
-            .all(|b| r_bindings.contains(b) || !free_vars.contains(&b.0));
+    let selected_clause = clauses
+        .iter()
+        .find(|&clause| clause == phi_prime)
+        .ok_or_else(|| QuantifierError::ClauseDoesntAppearInCnf(phi_prime.clone()))?;
 
-        term == phi_prime && bindings_are_valid
-    }))
+    let free_vars = pool.free_vars(selected_clause);
+
+    // While all bindings in `r_bindings` must also be in `new_bindings`, the same is not true in
+    // the opposite direction. That is because some variables from the set may be omitted in the
+    // right-hand side quantifier if they don't appear in phi_prime as free variables.  If there is
+    // a binding in the left side that is a free variable in the selected clause, but doesn't
+    // appear in the right-hand side bindings, we must return an error
+    if let Some((var, _)) = new_bindings
+        .iter()
+        .find(|b| free_vars.contains(&b.0) && !r_bindings.contains(b))
+    {
+        return Err(QuantifierError::CnfBindingIsMissing(var.clone()).into());
+    }
+    Ok(())
 }
 
 #[cfg(test)]

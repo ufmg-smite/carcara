@@ -91,6 +91,14 @@ fn assert_clause_len<T: Into<Range>>(clause: &[Rc<Term>], range: T) -> RuleResul
     Ok(())
 }
 
+fn assert_num_args<T: Into<Range>>(args: &[ProofArg], range: T) -> RuleResult {
+    let range = range.into();
+    if !range.contains(args.len()) {
+        return Err(CheckerError::WrongNumberOfArgs(range, args.len()));
+    }
+    Ok(())
+}
+
 fn assert_operation_len<T: Into<Range>>(op: Operator, args: &[Rc<Term>], range: T) -> RuleResult {
     let range = range.into();
     if !range.contains(args.len()) {

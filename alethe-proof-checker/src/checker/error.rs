@@ -7,6 +7,7 @@ pub enum CheckerError {
 
     // Rule specific errors
     Cong(CongruenceError),
+    Quant(QuantifierError),
     ReflexivityFailed(Rc<Term>, Rc<Term>),
     SimplificationFailed {
         original: Rc<Term>,
@@ -21,6 +22,7 @@ pub enum CheckerError {
     // General errors
     WrongNumberOfPremises(Range, usize),
     WrongLengthOfClause(Range, usize),
+    WrongNumberOfArgs(Range, usize),
     WrongNumberOfTermsInOp(Operator, Range, usize),
     TermDoesntApperInOp(Operator, Rc<Term>),
     BadPremise(String), // TODO: This error is too general
@@ -34,6 +36,7 @@ pub enum CheckerError {
     },
     BindingsNotEqual,
     ExpectedBoolConstant(bool, Rc<Term>),
+    ExpectedAssignStyleArg(Rc<Term>),
 
     UnknownRule,
 }
@@ -43,6 +46,7 @@ impl fmt::Display for CheckerError {
         match self {
             CheckerError::Unspecified => write!(f, "unspecified error"),
             CheckerError::Cong(e) => write!(f, "{}", e),
+            CheckerError::Quant(e) => write!(f, "{}", e),
             CheckerError::ReflexivityFailed(a, b) => {
                 write!(f, "reflexivity failed with terms '{}' and '{}'", a, b)
             }
@@ -82,6 +86,9 @@ impl fmt::Display for CheckerError {
                     got
                 )
             }
+            CheckerError::WrongNumberOfArgs(expected, got) => {
+                write!(f, "expected {} arguments, got {}", expected.to_text(), got)
+            }
             CheckerError::WrongNumberOfTermsInOp(op, expected, got) => {
                 write!(
                     f,
@@ -112,6 +119,13 @@ impl fmt::Display for CheckerError {
             CheckerError::ExpectedBoolConstant(b, t) => {
                 write!(f, "expected term '{}' to be boolean constant '{}'", t, b)
             }
+            CheckerError::ExpectedAssignStyleArg(t) => {
+                write!(
+                    f,
+                    "expected assign style '(:= ...)' argument, got term style argument: '{}'",
+                    t
+                )
+            }
             CheckerError::UnknownRule => write!(f, "unknown rule"),
         }
     }
@@ -120,6 +134,12 @@ impl fmt::Display for CheckerError {
 impl From<CongruenceError> for CheckerError {
     fn from(e: CongruenceError) -> Self {
         Self::Cong(e)
+    }
+}
+
+impl From<QuantifierError> for CheckerError {
+    fn from(e: QuantifierError) -> Self {
+        Self::Quant(e)
     }
 }
 
@@ -162,6 +182,94 @@ impl fmt::Display for CongruenceError {
             }
             CongruenceError::NotApplicationOrOperation(t) => {
                 write!(f, "term is not an application or operation: '{}'", t)
+            }
+        }
+    }
+}
+
+struct DisplayBindings<'a>(&'a [SortedVar]);
+
+impl<'a> fmt::Display for DisplayBindings<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // TODO: This is a duplicate of the code in `ast::printer::write_bindings`
+        match self.0 {
+            [] => write!(f, "()"),
+            [head, tail @ ..] => {
+                write!(f, "(({} {})", head.0, head.1)?;
+                for (var, term) in tail {
+                    write!(f, " ({} {})", var, term)?;
+                }
+                write!(f, ")")
+            }
+        }
+    }
+}
+
+/// Errors relevant to the rules dealing with quantifiers.
+#[derive(Debug)]
+pub enum QuantifierError {
+    NoBindingMatchesArg(String),
+    NoArgGivenForBinding(String),
+    ExpectedQuantifierTerm(Rc<Term>),
+    ExpectedSameQuantifiers,
+    ExpectedQuantifierToBe {
+        expected: Quantifier,
+        got: Quantifier,
+    },
+    JoinFailed, // TODO: Store bindings in this error
+    ExpectedBindingsToBe {
+        expected: Vec<SortedVar>,
+        got: Vec<SortedVar>,
+    },
+    CnfNewBindingIntroduced(String),
+    CnfBindingIsMissing(String),
+    ClauseDoesntAppearInCnf(Rc<Term>),
+}
+
+impl fmt::Display for QuantifierError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            QuantifierError::NoBindingMatchesArg(arg) => {
+                write!(f, "argument doesn't match any binding: '{}'", arg)
+            }
+            QuantifierError::NoArgGivenForBinding(b) => {
+                write!(f, "no argument was given for binding '{}'", b)
+            }
+            QuantifierError::ExpectedQuantifierTerm(t) => {
+                write!(f, "expected quantifier term, got '{}'", t)
+            }
+            QuantifierError::ExpectedSameQuantifiers => {
+                write!(f, "expected terms to have the same quantifier")
+            }
+            QuantifierError::ExpectedQuantifierToBe { expected, got } => {
+                write!(f, "expected quantifier '{}' to be '{}'", got, expected)
+            }
+            QuantifierError::JoinFailed => {
+                write!(
+                    f,
+                    "union of bindings in the left does not equal bindings in the right"
+                )
+            }
+            QuantifierError::ExpectedBindingsToBe { expected, got } => {
+                write!(
+                    f,
+                    "expected bindings '{}' to be '{}'",
+                    DisplayBindings(got),
+                    DisplayBindings(expected),
+                )
+            }
+            QuantifierError::CnfNewBindingIntroduced(b) => {
+                write!(f, "unknown binding introduced in right-hand side: '{}'", b)
+            }
+            QuantifierError::CnfBindingIsMissing(b) => {
+                write!(f, "binding is missing in right-hand side: '{}'", b)
+            }
+            QuantifierError::ClauseDoesntAppearInCnf(t) => {
+                write!(
+                    f,
+                    "result clause doensn't appear in CNF of original term: '{}'",
+                    t
+                )
             }
         }
     }
