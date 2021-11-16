@@ -323,7 +323,7 @@ fn test_quantifiers() {
             "(exists ((p Bool)) p)",
             Term::Quant(
                 Quantifier::Exists,
-                vec![("p".into(), Term::Sort(Sort::Bool).into())],
+                BindingList(vec![("p".into(), Term::Sort(Sort::Bool).into())]),
                 Rc::new(terminal!(var "p"; Rc::new(Term::Sort(Sort::Bool)))),
             ),
         ),
@@ -331,10 +331,10 @@ fn test_quantifiers() {
             "(forall ((x Real) (y Real)) (= (+ x y) 0.0))",
             Term::Quant(
                 Quantifier::Forall,
-                vec![
+                BindingList(vec![
                     ("x".into(), Rc::new(Term::Sort(Sort::Real))),
                     ("y".into(), Rc::new(Term::Sort(Sort::Real))),
-                ],
+                ]),
                 Rc::new(Term::Op(
                     Operator::Equals,
                     vec![
@@ -367,17 +367,17 @@ fn test_let_terms() {
         (
             "(let ((p false)) p)",
             Term::Let(
-                vec![("p".into(), Rc::new(terminal!(bool false)))],
+                BindingList(vec![("p".into(), Rc::new(terminal!(bool false)))]),
                 Rc::new(terminal!(var "p"; Rc::new(Term::Sort(Sort::Bool)))),
             ),
         ),
         (
             "(let ((x 1) (y 2)) (+ x y))",
             Term::Let(
-                vec![
+                BindingList(vec![
                     ("x".into(), terminal!(int 1).into()),
                     ("y".into(), terminal!(int 2).into()),
-                ],
+                ]),
                 Rc::new(Term::Op(
                     Operator::Add,
                     vec![

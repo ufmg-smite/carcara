@@ -309,7 +309,7 @@ fn generic_skolemization_rule(
             _ => return None,
         };
         rassert!(t_choice_var == x);
-        rassert!(t_bindings == &bindings[i + 1..]);
+        rassert!(t_bindings == &bindings.0[i + 1..]);
         rassert!(DeepEq::eq_modulo_reordering(t_inner, &current_phi));
 
         // For every binding we skolemize, we must apply another substitution to phi

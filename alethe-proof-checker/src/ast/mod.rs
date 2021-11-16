@@ -369,6 +369,37 @@ impl std::ops::Not for Quantifier {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct BindingList(pub Vec<SortedVar>);
+
+impl<'a> IntoIterator for &'a BindingList {
+    type Item = &'a SortedVar;
+
+    type IntoIter = std::slice::Iter<'a, SortedVar>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl BindingList {
+    pub fn iter(&self) -> std::slice::Iter<SortedVar> {
+        self.0.iter()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn as_slice(&self) -> &[SortedVar] {
+        self.0.as_slice()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Term {
     /// A terminal. This can be a constant or a variable.
     Terminal(Terminal),
@@ -383,13 +414,13 @@ pub enum Term {
     Sort(Sort),
 
     /// A quantifier binder term.
-    Quant(Quantifier, Vec<SortedVar>, Rc<Term>),
+    Quant(Quantifier, BindingList, Rc<Term>),
 
     /// A "choice" term.
     Choice(SortedVar, Rc<Term>),
 
     /// A "let" binder term.
-    Let(Vec<SortedVar>, Rc<Term>),
+    Let(BindingList, Rc<Term>),
     // TODO: "match" binder terms
 }
 
@@ -533,7 +564,7 @@ impl Term {
 
     /// Tries to unwrap a quantifier term, returning the `Quantifier`, the bindings and the inner
     /// term. Returns `None` if term is not a quantifier term.
-    pub fn unwrap_quant(&self) -> Option<(Quantifier, &Vec<SortedVar>, &Rc<Term>)> {
+    pub fn unwrap_quant(&self) -> Option<(Quantifier, &BindingList, &Rc<Term>)> {
         match self {
             Term::Quant(q, b, t) => Some((*q, b, t)),
             _ => None,
@@ -718,6 +749,17 @@ impl DeepEq for Sort {
             }
             _ => false,
         }
+    }
+}
+
+impl DeepEq for BindingList {
+    fn eq_impl(
+        a: &Self,
+        b: &Self,
+        is_mod_reordering: bool,
+        cache: &mut AHashSet<(Rc<Term>, Rc<Term>)>,
+    ) -> bool {
+        DeepEq::eq_impl(&a.0, &b.0, is_mod_reordering, cache)
     }
 }
 

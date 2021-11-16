@@ -833,7 +833,7 @@ impl<R: BufRead> Parser<R> {
         let term = self.parse_term_expecting_sort(&Sort::Bool)?;
         self.state.sorts_symbol_table.pop_scope();
         self.expect_token(Token::CloseParen)?;
-        Ok(self.add_term(Term::Quant(quantifier, bindings, term)))
+        Ok(self.add_term(Term::Quant(quantifier, BindingList(bindings), term)))
     }
 
     fn parse_choice_term(&mut self) -> AletheResult<Rc<Term>> {
@@ -864,7 +864,7 @@ impl<R: BufRead> Parser<R> {
         let inner = self.parse_term()?;
         self.expect_token(Token::CloseParen)?;
         self.state.sorts_symbol_table.pop_scope();
-        Ok(self.add_term(Term::Let(bindings, inner)))
+        Ok(self.add_term(Term::Let(BindingList(bindings), inner)))
     }
 
     fn parse_annotated_term(&mut self) -> AletheResult<Rc<Term>> {

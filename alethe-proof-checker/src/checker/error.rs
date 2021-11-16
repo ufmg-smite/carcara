@@ -1,7 +1,4 @@
-use crate::{
-    ast::{printer::DisplayBindingList, *},
-    utils::Range,
-};
+use crate::{ast::*, utils::Range};
 use std::fmt;
 
 #[derive(Debug)]
@@ -203,8 +200,8 @@ pub enum QuantifierError {
     },
     JoinFailed, // TODO: Store bindings in this error
     ExpectedBindingsToBe {
-        expected: Vec<SortedVar>,
-        got: Vec<SortedVar>,
+        expected: BindingList,
+        got: BindingList,
     },
     CnfNewBindingIntroduced(String),
     CnfBindingIsMissing(String),
@@ -236,12 +233,7 @@ impl fmt::Display for QuantifierError {
                 )
             }
             QuantifierError::ExpectedBindingsToBe { expected, got } => {
-                write!(
-                    f,
-                    "expected bindings '{}' to be '{}'",
-                    DisplayBindingList(got),
-                    DisplayBindingList(expected),
-                )
+                write!(f, "expected bindings '{}' to be '{}'", got, expected,)
             }
             QuantifierError::CnfNewBindingIntroduced(b) => {
                 write!(f, "unknown binding introduced in right-hand side: '{}'", b)

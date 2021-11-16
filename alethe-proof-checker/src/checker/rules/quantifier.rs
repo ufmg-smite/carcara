@@ -6,7 +6,7 @@ use ahash::{AHashMap, AHashSet};
 
 fn unwrap_quant_err(
     term: &Rc<Term>,
-) -> Result<(Quantifier, &Vec<SortedVar>, &Rc<Term>), QuantifierError> {
+) -> Result<(Quantifier, &BindingList, &Rc<Term>), QuantifierError> {
     term.unwrap_quant()
         .ok_or_else(|| QuantifierError::ExpectedQuantifierTerm(term.clone()))
 }
@@ -101,8 +101,8 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
     to_result(
         expected == bindings_2,
         CheckerError::Quant(QuantifierError::ExpectedBindingsToBe {
-            expected,
-            got: bindings_2.to_vec(),
+            expected: BindingList(expected),
+            got: BindingList(bindings_2.to_vec()),
         }),
     )
 }
@@ -490,7 +490,11 @@ mod tests {
             };
 
             if !bindings.is_empty() {
-                pool.add_term(Term::Quant(Quantifier::Forall, bindings, conjunctions))
+                pool.add_term(Term::Quant(
+                    Quantifier::Forall,
+                    BindingList(bindings),
+                    conjunctions,
+                ))
             } else {
                 conjunctions
             }

@@ -311,7 +311,7 @@ fn apply_bfun_elim(
                 Quantifier::Exists => Operator::Or,
             };
             let mut args = Vec::with_capacity(2usize.pow(bindings.len() as u32));
-            bfun_elim_first_step(pool, bindings, inner, &mut args);
+            bfun_elim_first_step(pool, bindings.as_slice(), inner, &mut args);
 
             let op_term = if args.len() == 1 {
                 args.pop().unwrap()
@@ -328,7 +328,7 @@ fn apply_bfun_elim(
             if new_bindings.is_empty() {
                 op_term
             } else {
-                pool.add_term(Term::Quant(*q, new_bindings, op_term))
+                pool.add_term(Term::Quant(*q, BindingList(new_bindings), op_term))
             }
         }
         Term::Choice(var, inner) => {
