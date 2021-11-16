@@ -1,4 +1,7 @@
-use crate::{ast::*, utils::Range};
+use crate::{
+    ast::{printer::DisplayBindingList, *},
+    utils::Range,
+};
 use std::fmt;
 
 #[derive(Debug)]
@@ -187,24 +190,6 @@ impl fmt::Display for CongruenceError {
     }
 }
 
-struct DisplayBindings<'a>(&'a [SortedVar]);
-
-impl<'a> fmt::Display for DisplayBindings<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO: This is a duplicate of the code in `ast::printer::write_bindings`
-        match self.0 {
-            [] => write!(f, "()"),
-            [head, tail @ ..] => {
-                write!(f, "(({} {})", head.0, head.1)?;
-                for (var, term) in tail {
-                    write!(f, " ({} {})", var, term)?;
-                }
-                write!(f, ")")
-            }
-        }
-    }
-}
-
 /// Errors relevant to the rules dealing with quantifiers.
 #[derive(Debug)]
 pub enum QuantifierError {
@@ -254,8 +239,8 @@ impl fmt::Display for QuantifierError {
                 write!(
                     f,
                     "expected bindings '{}' to be '{}'",
-                    DisplayBindings(got),
-                    DisplayBindings(expected),
+                    DisplayBindingList(got),
+                    DisplayBindingList(expected),
                 )
             }
             QuantifierError::CnfNewBindingIntroduced(b) => {

@@ -2,7 +2,7 @@
 
 #[macro_use]
 mod macros;
-mod printer;
+pub(crate) mod printer;
 mod rc;
 mod subterms;
 #[cfg(test)]

@@ -163,19 +163,6 @@ where
     write!(f, ")")
 }
 
-fn write_bindings(f: &mut fmt::Formatter, bindigns: &[(String, Rc<Term>)]) -> fmt::Result {
-    match bindigns {
-        [] => write!(f, "()"),
-        [head, tail @ ..] => {
-            write!(f, "(({} {})", head.0, head.1)?;
-            for (var, term) in tail {
-                write!(f, " ({} {})", var, term)?;
-            }
-            write!(f, ")")
-        }
-    }
-}
-
 impl fmt::Display for Term {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> fmt::Result {
         match self {
@@ -184,17 +171,19 @@ impl fmt::Display for Term {
             Term::Op(op, args) => write_s_expr(f, op, args),
             Term::Sort(sort) => write!(f, "{}", sort),
             Term::Quant(quantifier, bindings, term) => {
-                write!(f, "({} ", quantifier)?;
-                write_bindings(f, bindings)?;
-                write!(f, " {})", term)
+                write!(
+                    f,
+                    "({} {} {})",
+                    quantifier,
+                    DisplayBindingList(bindings),
+                    term
+                )
             }
             Term::Choice((symbol, sort), term) => {
                 write!(f, "(choice (({} {})) {})", symbol, sort, term)
             }
             Term::Let(bindings, term) => {
-                write!(f, "(let ")?;
-                write_bindings(f, bindings)?;
-                write!(f, " {})", term)
+                write!(f, "(let {} {})", DisplayBindingList(bindings), term)
             }
         }
     }
@@ -245,6 +234,24 @@ impl fmt::Display for Quantifier {
                 Quantifier::Exists => "exists",
             }
         )
+    }
+}
+
+/// A wrapper struct around a binding list that implements `fmt::Display`.
+pub(crate) struct DisplayBindingList<'a>(pub(crate) &'a [SortedVar]);
+
+impl<'a> fmt::Display for DisplayBindingList<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.0 {
+            [] => write!(f, "()"),
+            [head, tail @ ..] => {
+                write!(f, "(({} {})", head.0, head.1)?;
+                for (var, term) in tail {
+                    write!(f, " ({} {})", var, term)?;
+                }
+                write!(f, ")")
+            }
+        }
     }
 }
 
