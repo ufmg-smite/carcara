@@ -1,4 +1,4 @@
-use super::{assert_clause_len, to_option, to_result, CheckerError, RuleArgs, RuleResult};
+use super::{assert_clause_len, to_option, CheckerError, RuleArgs, RuleResult};
 use crate::{ast::*, utils::DedupIterator};
 use ahash::{AHashMap, AHashSet};
 use num_rational::BigRational;
@@ -65,14 +65,15 @@ fn generic_simplify_rule(
     // result of the first simplification to use in the error if both of them fail.
     let result = simplify_until_fixed_point(left, right)?;
     let got = result == *right || simplify_until_fixed_point(right, left)? == *left;
-    to_result(
+    rassert!(
         got,
         CheckerError::SimplificationFailed {
             original: left.clone(),
             result,
             target: right.clone(),
         },
-    )
+    );
+    Ok(())
 }
 
 pub fn ite_simplify(args: RuleArgs) -> RuleResult {

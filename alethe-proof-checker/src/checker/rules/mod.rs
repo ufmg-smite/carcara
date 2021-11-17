@@ -30,14 +30,6 @@ fn to_option(b: bool) -> Option<()> {
     }
 }
 
-/// Converts a `bool` into an `RuleResult`.
-fn to_result(b: bool, e: CheckerError) -> RuleResult {
-    match b {
-        true => Ok(()),
-        false => Err(e),
-    }
-}
-
 fn get_single_term_from_command(command: &ProofCommand) -> Option<&Rc<Term>> {
     match get_clause_from_command(command) {
         [t] => Some(t),
@@ -69,7 +61,7 @@ macro_rules! rassert {
     ($arg:expr) => {
         $crate::checker::rules::to_option($arg)?
     };
-    ($arg:expr, $err:expr) => {
+    ($arg:expr, $err:expr $(,)?) => {
         match $arg {
             true => Ok(()),
             false => Err($err),

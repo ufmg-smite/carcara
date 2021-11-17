@@ -1,6 +1,6 @@
 use super::{
     assert_clause_len, assert_eq, assert_is_expected, assert_is_expected_modulo_reordering,
-    assert_num_args, to_result, CheckerError, RuleArgs, RuleResult,
+    assert_num_args, CheckerError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::QuantifierError, utils::DedupIterator};
 use ahash::{AHashMap, AHashSet};
@@ -66,10 +66,8 @@ pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_eq(left, right)?;
 
     let combined = bindings_1.iter().chain(bindings_2).dedup();
-    to_result(
-        bindings_3.iter().eq(combined),
-        CheckerError::Quant(QuantifierError::JoinFailed),
-    )
+    rassert!(bindings_3.iter().eq(combined), QuantifierError::JoinFailed);
+    Ok(())
 }
 
 pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {

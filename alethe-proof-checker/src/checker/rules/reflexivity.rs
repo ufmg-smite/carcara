@@ -1,4 +1,4 @@
-use super::{assert_clause_len, assert_eq, to_result, CheckerError, RuleArgs, RuleResult};
+use super::{assert_clause_len, assert_eq, CheckerError, RuleArgs, RuleResult};
 
 pub fn eq_reflexive(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
@@ -32,10 +32,11 @@ pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> RuleResult 
         let new_right = pool.apply_substitutions(right, cumulative_substitutions);
         *left == new_right || new_left == new_right
     };
-    to_result(
+    rassert!(
         result,
         CheckerError::ReflexivityFailed(left.clone(), right.clone()),
-    )
+    );
+    Ok(())
 }
 
 #[cfg(test)]

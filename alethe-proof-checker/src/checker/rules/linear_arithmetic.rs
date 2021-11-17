@@ -1,4 +1,4 @@
-use super::{assert_clause_len, assert_eq, assert_num_args, to_result, RuleArgs, RuleResult};
+use super::{assert_clause_len, assert_eq, assert_num_args, RuleArgs, RuleResult};
 use crate::{
     ast::*,
     checker::error::{CheckerError, LinearArithmeticError},
@@ -347,10 +347,11 @@ pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
 
     // The left side must be empty (that is, equal to 0), and the final disequality must be
     // contradictory
-    to_result(
+    rassert!(
         left_side.is_empty() && !is_disequality_true,
-        LinearArithmeticError::DisequalityIsNotContradiction(*op, final_disequality.1).into(),
-    )
+        LinearArithmeticError::DisequalityIsNotContradiction(*op, final_disequality.1),
+    );
+    Ok(())
 }
 
 pub fn lia_generic(_: RuleArgs) -> RuleResult {
@@ -463,10 +464,11 @@ pub fn la_tautology(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         let is_disequality_true = disequality.0.is_empty()
             && (disequality.1.is_positive()
                 || op == Operator::GreaterThan && disequality.1.is_zero());
-        to_result(
+        rassert!(
             is_disequality_true,
-            LinearArithmeticError::DisequalityIsNotTautology(op, disequality).into(),
-        )
+            LinearArithmeticError::DisequalityIsNotTautology(op, disequality),
+        );
+        Ok(())
     }
 }
 
