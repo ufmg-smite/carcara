@@ -1,27 +1,34 @@
-use super::{to_option, RuleArgs};
-use crate::{ast::*, utils::RawOps};
+use super::{assert_clause_len, assert_eq, assert_num_args, to_result, RuleArgs, RuleResult};
+use crate::{
+    ast::*,
+    checker::error::{CheckerError, LinearArithmeticError},
+    utils::RawOps,
+};
 use ahash::AHashMap;
 use num_bigint::BigInt;
 use num_integer::Integer;
 use num_rational::BigRational;
 use num_traits::{One, Signed, Zero};
 
-pub fn la_rw_eq(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 1);
+pub fn la_rw_eq(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
 
-    let ((t_1, u_1), ((t_2, u_2), (u_3, t_3))) = match_term!(
-        (= (= t u) (and (<= t u) (<= u t))) = conclusion[0]
+    let ((t_1, u_1), ((t_2, u_2), (u_3, t_3))) = match_term_err!(
+        (= (= t u) (and (<= t u) (<= u t))) = &conclusion[0]
     )?;
-    to_option(t_1 == t_2 && t_2 == t_3 && u_1 == u_2 && u_2 == u_3)
+    assert_eq(t_1, t_2)?;
+    assert_eq(t_2, t_3)?;
+    assert_eq(u_1, u_2)?;
+    assert_eq(u_2, u_3)
 }
 
-/// Takes a disequality term and returns its negation, represented by an operator and arguments.
+/// Takes a disequality term and returns its negation, represented by an operator and two linear
+/// combinations.
 /// The disequality can be:
 /// * An application of the "<", ">", "<=" or ">=" operators
 /// * The negation of an application of any of these operator
 /// * The negation of an application of the "=" operator
-fn negate_disequality(term: &Term) -> Option<(Operator, &[Rc<Term>])> {
-    // TODO: Add tests for this
+fn negate_disequality(term: &Rc<Term>) -> Result<(Operator, LinearComb, LinearComb), CheckerError> {
     use Operator::*;
 
     fn negate_operator(op: Operator) -> Option<Operator> {
@@ -34,14 +41,24 @@ fn negate_disequality(term: &Term) -> Option<(Operator, &[Rc<Term>])> {
         })
     }
 
-    if let Some(Term::Op(op, args)) = match_term!((not t) = term).map(Rc::as_ref) {
-        if matches!(op, GreaterEq | LessEq | GreaterThan | LessThan | Equals) {
-            return Some((*op, args));
+    fn inner(term: &Rc<Term>) -> Option<(Operator, &[Rc<Term>])> {
+        if let Some(Term::Op(op, args)) = term.remove_negation().map(Rc::as_ref) {
+            if matches!(op, GreaterEq | LessEq | GreaterThan | LessThan | Equals) {
+                return Some((*op, args));
+            }
+        } else if let Term::Op(op, args) = term.as_ref() {
+            return Some((negate_operator(*op)?, args));
         }
-    } else if let Term::Op(op, args) = term {
-        return Some((negate_operator(*op)?, args));
+        None
     }
-    None
+
+    let (op, args) =
+        inner(term).ok_or_else(|| LinearArithmeticError::InvalidDisequalityOp(term.clone()))?;
+
+    match args {
+        [a, b] => Ok((op, LinearComb::from_term(a), LinearComb::from_term(b))),
+        _ => Err(LinearArithmeticError::TooManyArgsInDisequality(term.clone()).into()),
+    }
 }
 
 /// A linear combination, represented by a hash map from non-constant terms to their coefficients,
@@ -50,7 +67,11 @@ fn negate_disequality(term: &Term) -> Option<(Operator, &[Rc<Term>])> {
 /// methods that construct and manipulate `LinearComb`s use the operations implemented by the
 /// `RawOps` trait, and therefore don't reduce the fractions in `BigRational`s. This may lead to
 /// errors when using methods that assume these fractions were reduced.
-struct LinearComb(AHashMap<Rc<Term>, BigRational>, BigRational);
+#[derive(Debug)]
+pub struct LinearComb(
+    pub(crate) AHashMap<Rc<Term>, BigRational>,
+    pub(crate) BigRational,
+);
 
 impl LinearComb {
     fn new() -> Self {
@@ -249,25 +270,25 @@ fn strengthen(op: Operator, disequality: &mut LinearComb, a: &BigRational) -> Op
     }
 }
 
-pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == args.len());
+pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
+    assert_num_args(args, conclusion.len())?;
+
+    let args: Vec<_> = args
+        .iter()
+        .map(|a| match a {
+            ProofArg::Term(a) => a
+                .as_fraction()
+                .ok_or_else(|| LinearArithmeticError::TermIsNotNumber(a.clone()).into()),
+            ProofArg::Assign(n, v) => Err(CheckerError::ExpectedTermStyleArg(n.clone(), v.clone())),
+        })
+        .collect::<Result<_, _>>()?;
 
     let final_disequality = conclusion
         .iter()
         .zip(args)
-        .map(|(phi, a)| {
-            let phi = phi.as_ref();
-            let a = match a {
-                ProofArg::Term(a) => a.as_fraction()?,
-                ProofArg::Assign(_, _) => return None,
-            };
-
+        .map(|(phi, a)| -> Result<_, CheckerError> {
             // Steps 1 and 2: Negate the disequality
-            let (mut op, args) = negate_disequality(phi)?;
-            let (s1, s2) = match args {
-                [s1, s2] => (LinearComb::from_term(s1), LinearComb::from_term(s2)),
-                _ => return None,
-            };
+            let (mut op, s1, s2) = negate_disequality(phi)?;
 
             // Step 3: Move all non constant terms to the left side, and the d terms to the right.
             // We move everything to the left side by subtracting s2 from s1
@@ -293,11 +314,11 @@ pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> Option<()> {
             };
             disequality.mul(&a);
 
-            Some((op, disequality))
+            Ok((op, disequality))
         })
         .try_fold(
             (Operator::Equals, LinearComb::new()),
-            |(acc_op, acc), item| {
+            |(acc_op, acc), item| -> Result<_, CheckerError> {
                 let (op, diseq) = item?;
                 let new_acc = acc.add(diseq);
                 let new_op = match (acc_op, op) {
@@ -305,14 +326,11 @@ pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> Option<()> {
                     (Operator::Equals, Operator::GreaterThan) => Operator::GreaterThan,
                     _ => acc_op,
                 };
-                Some((new_op, new_acc))
+                Ok((new_op, new_acc))
             },
         )?;
 
-    let (op, LinearComb(left_side, right_side)) = final_disequality;
-
-    // The left side must be empty, that is, equal to 0
-    rassert!(left_side.is_empty());
+    let (op, LinearComb(left_side, right_side)) = &final_disequality;
 
     let is_disequality_true = {
         use std::cmp::Ordering;
@@ -320,18 +338,22 @@ pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> Option<()> {
 
         // If the operator encompasses the actual relationship between 0 and the right side, the
         // disequality is true
-        match BigRational::zero().cmp(&right_side) {
+        match BigRational::zero().cmp(right_side) {
             Ordering::Less => matches!(op, LessThan | LessEq),
             Ordering::Equal => matches!(op, LessEq | GreaterEq | Equals),
             Ordering::Greater => matches!(op, GreaterThan | GreaterEq),
         }
     };
 
-    // The final disequality must be contradictory
-    to_option(!is_disequality_true)
+    // The left side must be empty (that is, equal to 0), and the final disequality must be
+    // contradictory
+    to_result(
+        left_side.is_empty() && !is_disequality_true,
+        LinearArithmeticError::DisequalityIsNotContradiction(*op, final_disequality.1).into(),
+    )
 }
 
-pub fn lia_generic(_: RuleArgs) -> Option<()> {
+pub fn lia_generic(_: RuleArgs) -> RuleResult {
     // The "lia_generic" rule is very similar to the "la_generic" rule, but the additional
     // arguments aren't given. In order to properly check this rule, the checker would need to
     // infer these arguments, which would be very complicated and slow. Therefore, for now, we just
@@ -339,62 +361,90 @@ pub fn lia_generic(_: RuleArgs) -> Option<()> {
     // This would be done by constructing a problem in a format that cvc5 can solve, calling cvc5
     // with it, and parsing and checking the result proof.
     log::warn!("encountered \"lia_generic\" rule, ignoring");
-    Some(())
+    Ok(())
 }
 
-pub fn la_disequality(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 1);
+pub fn la_disequality(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
 
-    let ((t1_1, t2_1), (t1_2, t2_2), (t2_3, t1_3)) = match_term!(
-        (or (= t1 t2) (not (<= t1 t2)) (not (<= t2 t1))) = conclusion[0]
+    let ((t1_1, t2_1), (t1_2, t2_2), (t2_3, t1_3)) = match_term_err!(
+        (or (= t1 t2) (not (<= t1 t2)) (not (<= t2 t1))) = &conclusion[0]
     )?;
-    to_option(t1_1 == t1_2 && t1_2 == t1_3 && t2_1 == t2_2 && t2_2 == t2_3)
+    assert_eq(t1_1, t1_2)?;
+    assert_eq(t1_2, t1_3)?;
+    assert_eq(t2_1, t2_2)?;
+    assert_eq(t2_2, t2_3)
 }
 
-pub fn la_tautology(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 1);
+fn unwrap_signed_number(t: &Rc<Term>) -> Result<BigRational, LinearArithmeticError> {
+    t.as_signed_number()
+        .ok_or_else(|| LinearArithmeticError::TermIsNotNumber(t.clone()))
+}
+
+fn assert_less_than(a: &Rc<Term>, b: &Rc<Term>) -> RuleResult {
+    rassert!(
+        unwrap_signed_number(a)? < unwrap_signed_number(b)?,
+        LinearArithmeticError::ExpectedLessThan(a.clone(), b.clone())
+    );
+    Ok(())
+}
+
+fn assert_less_eq(a: &Rc<Term>, b: &Rc<Term>) -> RuleResult {
+    rassert!(
+        unwrap_signed_number(a)? <= unwrap_signed_number(b)?,
+        LinearArithmeticError::ExpectedLessEq(a.clone(), b.clone())
+    );
+    Ok(())
+}
+
+pub fn la_tautology(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
 
     if let Some((first, second)) = match_term!((or phi_1 phi_2) = conclusion[0]) {
         // If the conclusion if of the second form, there are 5 possible cases:
-        let first_case = || {
-            let (s_1, d_1) = match_term!((not (<= s d1)) = first)?;
-            let (s_2, d_2) = match_term!((<= s d2) = second)?;
-            to_option(s_1 == s_2 && d_1.as_signed_number()? <= d_2.as_signed_number()?)
-        };
-        let second_case = || {
-            let (s_1, d_1) = match_term!((<= s d1) = first)?;
-            let (s_2, d_2) = match_term!((not (<= s d2)) = second)?;
-            to_option(s_1 == s_2 && d_1 == d_2)
-        };
-        let third_case = || {
-            let (s_1, d_1) = match_term!((not (>= s d1)) = first)?;
-            let (s_2, d_2) = match_term!((>= s d2) = second)?;
-            to_option(s_1 == s_2 && d_1.as_signed_number()? >= d_2.as_signed_number()?)
-        };
-        let fourth_case = || {
-            let (s_1, d_1) = match_term!((>= s d1) = first)?;
-            let (s_2, d_2) = match_term!((not (>= s d2)) = second)?;
-            to_option(s_1 == s_2 && d_1 == d_2)
-        };
-        let fifth_case = || {
-            let (s_1, d_1) = match_term!((not (<= s d1)) = first)?;
-            let (s_2, d_2) = match_term!((not (>= s d2)) = second)?;
-            to_option(s_1 == s_2 && d_1.as_signed_number()? < d_2.as_signed_number()?)
-        };
-        first_case()
-            .or_else(second_case)
-            .or_else(third_case)
-            .or_else(fourth_case)
-            .or_else(fifth_case)
+        if let (Some((s_1, d_1)), Some((s_2, d_2))) = (
+            match_term!((not (<= s d1)) = first),
+            match_term!((<= s d2) = second),
+        ) {
+            // First case
+            assert_eq(s_1, s_2)?;
+            assert_less_eq(d_1, d_2)
+        } else if let (Some((s_1, d_1)), Some((s_2, d_2))) = (
+            match_term!((<= s d1) = first),
+            match_term!((not (<= s d2)) = second),
+        ) {
+            // Second case
+            assert_eq(s_1, s_2)?;
+            assert_eq(d_1, d_2)
+        } else if let (Some((s_1, d_1)), Some((s_2, d_2))) = (
+            match_term!((not (>= s d1)) = first),
+            match_term!((>= s d2) = second),
+        ) {
+            // Third case
+            assert_eq(s_1, s_2)?;
+            assert_less_eq(d_2, d_1)
+        } else if let (Some((s_1, d_1)), Some((s_2, d_2))) = (
+            match_term!((>= s d1) = first),
+            match_term!((not (>= s d2)) = second),
+        ) {
+            // Fourth case
+            assert_eq(s_1, s_2)?;
+            assert_eq(d_1, d_2)
+        } else if let (Some((s_1, d_1)), Some((s_2, d_2))) = (
+            match_term!((not (<= s d1)) = first),
+            match_term!((not (>= s d2)) = second),
+        ) {
+            // Fifth case
+            assert_eq(s_1, s_2)?;
+            assert_less_than(d_1, d_2)
+        } else {
+            Err(LinearArithmeticError::NotValidTautologyCase(conclusion[0].clone()).into())
+        }
     } else {
         // If the conclusion if of the first form, we apply steps 1 through 3 from "la_generic"
 
         // Steps 1 and 2: Negate the disequality
-        let (mut op, args) = negate_disequality(&conclusion[0])?;
-        let (s1, s2) = match args {
-            [s1, s2] => (LinearComb::from_term(s1), LinearComb::from_term(s2)),
-            _ => return None,
-        };
+        let (mut op, s1, s2) = negate_disequality(&conclusion[0])?;
 
         // Step 3: Move all non constant terms to the left side, and the d terms to the right.
         let mut disequality = s1.sub(s2);
@@ -409,9 +459,13 @@ pub fn la_tautology(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
             op = Operator::GreaterEq;
         }
 
-        rassert!(disequality.0.is_empty());
-        to_option(
-            disequality.1.is_positive() || op == Operator::GreaterThan && disequality.1.is_zero(),
+        // The final disequality should be tautological
+        let is_disequality_true = disequality.0.is_empty()
+            && (disequality.1.is_positive()
+                || op == Operator::GreaterThan && disequality.1.is_zero());
+        to_result(
+            is_disequality_true,
+            LinearArithmeticError::DisequalityIsNotTautology(op, disequality).into(),
         )
     }
 }

@@ -1,7 +1,10 @@
 use crate::{
     ast::*,
+    checker::rules::linear_arithmetic::LinearComb,
     utils::{Range, TypeName},
 };
+use num_rational::BigRational;
+use num_traits::One;
 use std::fmt;
 
 #[derive(Debug)]
@@ -11,6 +14,7 @@ pub enum CheckerError {
     // Rule specific errors
     Cong(CongruenceError),
     Quant(QuantifierError),
+    LinearArithmetic(LinearArithmeticError),
     ReflexivityFailed(Rc<Term>, Rc<Term>),
     SimplificationFailed {
         original: Rc<Term>,
@@ -31,6 +35,7 @@ pub enum CheckerError {
     BadPremise(String), // TODO: This error is too general
     TermOfWrongForm(&'static str, Rc<Term>),
     ExpectedBoolConstant(bool, Rc<Term>),
+    ExpectedTermStyleArg(String, Rc<Term>),
     ExpectedAssignStyleArg(Rc<Term>),
 
     // Equality errors
@@ -47,6 +52,7 @@ impl fmt::Display for CheckerError {
             CheckerError::Unspecified => write!(f, "unspecified error"),
             CheckerError::Cong(e) => write!(f, "{}", e),
             CheckerError::Quant(e) => write!(f, "{}", e),
+            CheckerError::LinearArithmetic(e) => write!(f, "{}", e),
             CheckerError::ReflexivityFailed(a, b) => {
                 write!(f, "reflexivity failed with terms '{}' and '{}'", a, b)
             }
@@ -112,6 +118,13 @@ impl fmt::Display for CheckerError {
             CheckerError::ExpectedBoolConstant(b, t) => {
                 write!(f, "expected term '{}' to be boolean constant '{}'", t, b)
             }
+            CheckerError::ExpectedTermStyleArg(name, value) => {
+                write!(
+                    f,
+                    "expected term style argument, got assign style argument: '(:= {} {})'",
+                    name, value
+                )
+            }
             CheckerError::ExpectedAssignStyleArg(t) => {
                 write!(
                     f,
@@ -155,6 +168,12 @@ impl From<CongruenceError> for CheckerError {
 impl From<QuantifierError> for CheckerError {
     fn from(e: QuantifierError) -> Self {
         Self::Quant(e)
+    }
+}
+
+impl From<LinearArithmeticError> for CheckerError {
+    fn from(e: LinearArithmeticError) -> Self {
+        Self::LinearArithmetic(e)
     }
 }
 
@@ -266,5 +285,100 @@ impl fmt::Display for QuantifierError {
                 )
             }
         }
+    }
+}
+
+/// Errors relevant to the linear arithmetic rules.
+#[derive(Debug)]
+pub enum LinearArithmeticError {
+    NotValidTautologyCase(Rc<Term>),
+    InvalidDisequalityOp(Rc<Term>),
+    TooManyArgsInDisequality(Rc<Term>),
+    TermIsNotNumber(Rc<Term>),
+    DisequalityIsNotContradiction(Operator, LinearComb),
+    DisequalityIsNotTautology(Operator, LinearComb),
+    ExpectedLessThan(Rc<Term>, Rc<Term>),
+    ExpectedLessEq(Rc<Term>, Rc<Term>),
+}
+
+impl fmt::Display for LinearArithmeticError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            LinearArithmeticError::NotValidTautologyCase(t) => {
+                write!(f, "term '{}' doesn't match any tautology case", t)
+            }
+            LinearArithmeticError::InvalidDisequalityOp(t) => {
+                write!(f, "term '{}' is not a valid disequality operation", t)
+            }
+            LinearArithmeticError::TooManyArgsInDisequality(t) => {
+                write!(f, "too many arguments in disequality '{}'", t)
+            }
+            LinearArithmeticError::TermIsNotNumber(t) => {
+                write!(f, "expected term '{}' to be a numerical constant", t)
+            }
+            LinearArithmeticError::DisequalityIsNotContradiction(op, comb) => {
+                write!(
+                    f,
+                    "final disequality is not contradictory: '{}'",
+                    DisplayLinearComb(op, comb)
+                )
+            }
+            LinearArithmeticError::DisequalityIsNotTautology(op, comb) => {
+                write!(
+                    f,
+                    "final disequality is not tautological: '{}'",
+                    DisplayLinearComb(op, comb)
+                )
+            }
+            LinearArithmeticError::ExpectedLessThan(a, b) => {
+                write!(f, "expected term '{}' to be less than term '{}'", a, b)
+            }
+            LinearArithmeticError::ExpectedLessEq(a, b) => {
+                write!(
+                    f,
+                    "expected term '{}' to be less than or equal to term '{}'",
+                    a, b
+                )
+            }
+        }
+    }
+}
+
+/// A wrapper struct that implements `fmt::Display` for linear combinations.
+struct DisplayLinearComb<'a>(&'a Operator, &'a LinearComb);
+
+impl<'a> fmt::Display for DisplayLinearComb<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fn ratio_to_float(r: &BigRational) -> f64 {
+            use num_traits::ToPrimitive;
+            r.numer().to_f64().unwrap() / r.denom().to_f64().unwrap()
+        }
+
+        fn write_var(
+            f: &mut fmt::Formatter,
+            (var, coeff): (&Rc<Term>, &BigRational),
+        ) -> fmt::Result {
+            if coeff.is_one() {
+                write!(f, "{}", var)
+            } else {
+                write!(f, "(* {:?} {})", ratio_to_float(coeff), var)
+            }
+        }
+
+        let DisplayLinearComb(op, LinearComb(vars, constant)) = self;
+        write!(f, "({} ", op)?;
+        match vars.len() {
+            0 => write!(f, "0.0"),
+            1 => write_var(f, vars.iter().next().unwrap()),
+            _ => {
+                write!(f, "(+")?;
+                for var in vars.iter() {
+                    write!(f, " ")?;
+                    write_var(f, var)?;
+                }
+                write!(f, ")")
+            }
+        }?;
+        write!(f, " {:?})", ratio_to_float(constant))
     }
 }
