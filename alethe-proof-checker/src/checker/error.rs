@@ -22,6 +22,7 @@ pub enum CheckerError {
         target: Rc<Term>,
     },
     CycleInSimplification(Rc<Term>),
+    SumProdSimplifyInvalidConclusion(Rc<Term>),
     TermIsNotConnective(Rc<Term>),
     IsNotIteSubterm(Rc<Term>),
     BrokenTransitivityChain(Rc<Term>, Rc<Term>),
@@ -76,6 +77,13 @@ impl fmt::Display for CheckerError {
             }
             CheckerError::CycleInSimplification(t) => {
                 write!(f, "encountered cycle when simplifying term: '{}'", t)
+            }
+            CheckerError::SumProdSimplifyInvalidConclusion(t) => {
+                write!(
+                    f,
+                    "'{}' is not a valid simplification result for this rule",
+                    t
+                )
             }
             CheckerError::TermIsNotConnective(t) => write!(f, "term '{}' is not a connective", t),
             CheckerError::IsNotIteSubterm(t) => {

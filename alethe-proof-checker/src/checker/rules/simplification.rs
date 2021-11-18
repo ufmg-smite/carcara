@@ -1,6 +1,6 @@
 use super::{
-    assert_clause_len, assert_eq, assert_is_bool_constant, to_option, CheckerError, EqualityError,
-    RuleArgs, RuleResult,
+    assert_clause_len, assert_eq, assert_is_bool_constant, CheckerError, EqualityError, RuleArgs,
+    RuleResult,
 };
 use crate::{ast::*, utils::DedupIterator};
 use ahash::{AHashMap, AHashSet};
@@ -429,54 +429,51 @@ pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 
 /// Used for both the "sum_simplify" and "prod_simplify" rules, depending on `rule_kind`.
 /// `rule_kind` has to be either `Operator::Add` or `Operator::Mult`.
-fn generic_sum_prod_simplify_rule(ts: &Rc<Term>, u: &Rc<Term>, rule_kind: Operator) -> Option<()> {
-    /// Checks if the u term is valid and extracts from it the leading constant and the remaining
-    /// arguments.
-    fn unwrap_u_term<'a>(
-        u: &'a Rc<Term>,
-        identity_value: &BigRational,
-        rule_kind: Operator,
-    ) -> Option<(BigRational, &'a [Rc<Term>])> {
-        let args = match u.as_ref() {
-            Term::Op(op, args) if *op == rule_kind => args,
-
-            // If u is not an application of the operator, we consider it a product/sum of a single
-            // term. That term might be a regular term or the leading constant, depending on if u
-            // is a constant or not
-            _ => {
-                return Some(match u.as_fraction() {
-                    Some(u) => (u, &[]),
-                    None => (identity_value.clone(), std::slice::from_ref(u)),
-                });
-            }
-        };
-
-        // We check if there are any constants in u (aside from the leading constant). If
-        // there are any, we know this u term is invalid, so we can return `None`
-        if args[1..].iter().any(|t| t.as_fraction().is_some()) {
-            return None;
-        }
-
-        match args[0].as_fraction() {
-            // If the leading constant is the identity value, it should have been omitted
-            Some(constant) if constant == *identity_value => None,
-            Some(constant) => Some((constant, &args[1..])),
-            None => Some((identity_value.clone(), args)),
-        }
-    }
-
+fn generic_sum_prod_simplify_rule(
+    pool: &mut TermPool,
+    ts: &Rc<Term>,
+    u: &Rc<Term>,
+    rule_kind: Operator,
+) -> RuleResult {
     let identity_value = match rule_kind {
         Operator::Add => BigRational::zero(),
         Operator::Mult => BigRational::one(),
         _ => unreachable!(),
     };
 
-    let (u_constant, u_args) = unwrap_u_term(u, &identity_value, rule_kind)?;
+    // Check if the u term is valid and extract from it the leading constant and the remaining
+    // arguments
+    let (u_constant, u_args) = match u.as_ref() {
+        Term::Op(op, args) if *op == rule_kind => {
+            // We check if there are any constants in u (aside from the leading constant). If there
+            // are any, we know this u term is invalid
+            if args[1..].iter().any(|t| t.as_fraction().is_some()) {
+                None
+            } else {
+                match args[0].as_fraction() {
+                    // If the leading constant is the identity value, it should have been omitted
+                    Some(constant) if constant == identity_value => None,
+                    Some(constant) => Some((constant, &args[1..])),
+                    None => Some((identity_value.clone(), args.as_slice())),
+                }
+            }
+        }
 
-    let ts = match ts.as_ref() {
-        Term::Op(op, args) if *op == rule_kind => args.as_slice(),
-        _ => return None,
-    };
+        // If u is not an application of the operator, we consider it a product/sum of a single
+        // term. That term might be a regular term or the leading constant, depending on if u
+        // is a constant or not
+        _ => Some(match u.as_fraction() {
+            Some(u) => (u, &[] as &[_]),
+            None => (identity_value.clone(), std::slice::from_ref(u)),
+        }),
+    }
+    .ok_or_else(|| CheckerError::SumProdSimplifyInvalidConclusion(u.clone()))?;
+
+    let ts = match rule_kind {
+        Operator::Add => match_term_err!((+ ...) = ts),
+        Operator::Mult => match_term_err!((* ...) = ts),
+        _ => unreachable!(),
+    }?;
 
     let mut result = Vec::with_capacity(ts.len());
     let mut constant_total = identity_value.clone();
@@ -511,17 +508,32 @@ fn generic_sum_prod_simplify_rule(ts: &Rc<Term>, u: &Rc<Term>, rule_kind: Operat
     // is "x". To handle this, we first check if the expected result is just one term, and try to
     // interpret `u` as that term.
     if result.len() == 1 && constant_total == identity_value && u == result[0] {
-        return Some(());
+        return Ok(());
     }
 
     // Finally, we verify that the constant and the remaining arguments are what we expect
-    to_option(u_constant == constant_total && u_args.iter().eq(result))
+    rassert!(u_constant == constant_total && u_args.iter().eq(result), {
+        let expected = {
+            let mut expected_args =
+                vec![pool.add_term(Term::Terminal(Terminal::Real(constant_total)))];
+            expected_args.extend(u_args.iter().cloned());
+            pool.add_term(Term::Op(rule_kind, expected_args))
+        };
+        EqualityError::ExpectedToBe { expected, got: u.clone() }
+    });
+    Ok(())
 }
 
-pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    let (first, second) = match_term!((= first second) = conclusion[0].as_ref())?;
-    generic_sum_prod_simplify_rule(first, second, Operator::Mult)
-        .or_else(|| generic_sum_prod_simplify_rule(second, first, Operator::Mult))
+pub fn prod_simplify(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (first, second) = match_term_err!((= first second) = &conclusion[0])?;
+
+    // Since the equality may be flipped, we need to test both possibilities. We first test the
+    // "reversed" one to make the error messages more reasonable in case both fail
+    if generic_sum_prod_simplify_rule(pool, second, first, Operator::Mult).is_ok() {
+        return Ok(());
+    }
+    generic_sum_prod_simplify_rule(pool, first, second, Operator::Mult)
 }
 
 pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
@@ -586,10 +598,16 @@ pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     check(t_1, t_2, right)
 }
 
-pub fn sum_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    let (first, second) = match_term!((= first second) = conclusion[0].as_ref())?;
-    generic_sum_prod_simplify_rule(first, second, Operator::Add)
-        .or_else(|| generic_sum_prod_simplify_rule(second, first, Operator::Add))
+pub fn sum_simplify(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (first, second) = match_term_err!((= first second) = &conclusion[0])?;
+
+    // Since the equality may be flipped, we need to test both possibilities. We first test the
+    // "reversed" one to make the error messages more reasonable in case both fail
+    if generic_sum_prod_simplify_rule(pool, second, first, Operator::Add).is_ok() {
+        return Ok(());
+    }
+    generic_sum_prod_simplify_rule(pool, first, second, Operator::Add)
 }
 
 pub fn comp_simplify(args: RuleArgs) -> RuleResult {
