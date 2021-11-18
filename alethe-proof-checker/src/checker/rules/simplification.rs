@@ -732,10 +732,14 @@ impl<'a> AcSimp<'a> {
     }
 }
 
-pub fn ac_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 1);
-    let (original, flattened) = match_term!((= psi phis) = conclusion[0])?;
-    to_option(AcSimp::new(pool).eq(original, flattened))
+pub fn ac_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (original, flattened) = match_term_err!((= psi phis) = &conclusion[0])?;
+    rassert!(
+        AcSimp::new(pool).eq(original, flattened),
+        CheckerError::AcSimpFailed(original.clone(), flattened.clone())
+    );
+    Ok(())
 }
 
 #[cfg(test)]

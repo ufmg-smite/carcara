@@ -344,7 +344,7 @@ impl<'c> ProofChecker<'c> {
             "sum_simplify" => to_new_format!(simplification::sum_simplify),
             "comp_simplify" => simplification::comp_simplify,
             "nary_elim" => to_new_format!(clausification::nary_elim),
-            "ac_simp" => to_new_format!(simplification::ac_simp),
+            "ac_simp" => simplification::ac_simp,
             "bfun_elim" => clausification::bfun_elim,
             "bind" => to_new_format!(subproof::bind),
             "qnt_cnf" => quantifier::qnt_cnf,

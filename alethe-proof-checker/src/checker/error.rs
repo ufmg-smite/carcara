@@ -26,6 +26,14 @@ pub enum CheckerError {
     IsNotIteSubterm(Rc<Term>),
     BrokenTransitivityChain(Rc<Term>, Rc<Term>),
 
+    // TODO: This error is not detailed enough. This is because the current implementation of the
+    // "ac_simp" rule does not compute the expected term explicitly. Instead, it expands the
+    // original term applying the simplification rules gradually, comparing it with the result term
+    // encountered in the conclusion. This is because there is a bug in veriT that causes the
+    // simplification to not be complete in some cases. Once this bug is solved, we can revert back
+    // to a simpler implementation of this rule, that would allow a more detailed error message
+    AcSimpFailed(Rc<Term>, Rc<Term>),
+
     // General errors
     WrongNumberOfPremises(Range, usize),
     WrongLengthOfClause(Range, usize),
@@ -82,6 +90,13 @@ impl fmt::Display for CheckerError {
                     f,
                     "broken transitivity chain: can't prove '(= {} {})'",
                     stopped, target
+                )
+            }
+            CheckerError::AcSimpFailed(original, target) => {
+                write!(
+                    f,
+                    "couldn't reach '{}' by simplifying '{}'",
+                    target, original
                 )
             }
             CheckerError::WrongNumberOfPremises(expected, got) => {
