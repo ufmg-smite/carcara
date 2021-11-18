@@ -1,4 +1,7 @@
-use super::{assert_clause_len, to_option, CheckerError, RuleArgs, RuleResult};
+use super::{
+    assert_clause_len, assert_eq, assert_is_bool_constant, to_option, CheckerError, EqualityError,
+    RuleArgs, RuleResult,
+};
 use crate::{ast::*, utils::DedupIterator};
 use ahash::{AHashMap, AHashSet};
 use num_rational::BigRational;
@@ -153,33 +156,35 @@ pub fn eq_simplify(args: RuleArgs) -> RuleResult {
 
 /// Used for both the "and_simplify" and "or_simplify" rules, depending on `rule_kind`. `rule_kind`
 /// has to be either `Operator::And` or `Operator::Or`.
-fn generic_and_or_simplify(conclusion: &[Rc<Term>], rule_kind: Operator) -> Option<()> {
-    rassert!(conclusion.len() == 1);
+fn generic_and_or_simplify(
+    pool: &mut TermPool,
+    conclusion: &[Rc<Term>],
+    rule_kind: Operator,
+) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
 
     // The "skip term" is the term that represents the empty conjunction or disjunction, and can be
     // skipped. This is "false" for conjunctions and "true" disjunctions
-    let is_skip_term = match rule_kind {
-        Operator::And => Term::is_bool_true,
-        Operator::Or => Term::is_bool_false,
+    let skip_term = match rule_kind {
+        Operator::And => true,
+        Operator::Or => false,
         _ => unreachable!(),
     };
 
     // The "short-circuit term" is the term that can short-circuit the conjunction or disjunction.
     // This is "true" for conjunctions and "false" disjunctions
-    let is_short_ciruit_term = match rule_kind {
-        Operator::And => Term::is_bool_false,
-        Operator::Or => Term::is_bool_true,
-        _ => unreachable!(),
-    };
+    let short_circuit_term = !skip_term;
 
-    let (phis, result) = match_term!((= phi psi) = conclusion[0])?;
-    let mut phis = match phis.as_ref() {
-        Term::Op(op, args) if *op == rule_kind => args.clone(),
-        _ => return None,
-    };
-    let result = match result.as_ref() {
+    let (phis, result_term) = match_term_err!((= phi psi) = &conclusion[0])?;
+    let mut phis = match rule_kind {
+        Operator::And => match_term_err!((and ...) = phis),
+        Operator::Or => match_term_err!((or ...) = phis),
+        _ => unreachable!(),
+    }?
+    .to_vec();
+    let result_args = match result_term.as_ref() {
         Term::Op(op, args) if *op == rule_kind => args,
-        _ => std::slice::from_ref(result),
+        _ => std::slice::from_ref(result_term),
     };
 
     // Sometimes, the "and_simplify" and "or_simplify" rules are used on a nested application of
@@ -197,9 +202,9 @@ fn generic_and_or_simplify(conclusion: &[Rc<Term>], rule_kind: Operator) -> Opti
     // allocation for the `phis` vector, it allows us to exit early in some cases, which overall
     // improves performance significantly. More importantly, it is necessary in some examples,
     // where not all steps of the simplification are applied
-    phis.retain(|t| !is_skip_term(t));
-    if result.iter().eq(&phis) {
-        return Some(());
+    phis.retain(|t| !t.is_bool_constant(skip_term));
+    if result_args.iter().eq(&phis) {
+        return Ok(());
     }
 
     // Then, we remove all duplicate terms. We do this in place to avoid another allocation.
@@ -207,8 +212,8 @@ fn generic_and_or_simplify(conclusion: &[Rc<Term>], rule_kind: Operator) -> Opti
     // after this step. This is also necessary in some examples
     let mut seen = AHashSet::with_capacity(phis.len());
     phis.retain(|t| seen.insert(t.clone()));
-    if result.iter().eq(&phis) {
-        return Some(());
+    if result_args.iter().eq(&phis) {
+        return Ok(());
     }
 
     // Finally, we check to see if the result was short-circuited
@@ -220,26 +225,43 @@ fn generic_and_or_simplify(conclusion: &[Rc<Term>], rule_kind: Operator) -> Opti
         // If the term is the "short-circuit term", or is the negation of a term previously
         // encountered, the result is short-circuited
         let (polarity, inner) = term.remove_all_negations_with_polarity();
-        if seen.contains(&(!polarity, inner)) || is_short_ciruit_term(term) {
-            return to_option(result.len() == 1 && is_short_ciruit_term(&result[0]));
+        if seen.contains(&(!polarity, inner)) || term.is_bool_constant(short_circuit_term) {
+            return if result_args.len() == 1 {
+                assert_is_bool_constant(&result_args[0], short_circuit_term)
+            } else {
+                Err(CheckerError::ExpectedBoolConstant(
+                    short_circuit_term,
+                    result_term.clone(),
+                ))
+            };
         }
     }
 
-    to_option(if phis.is_empty() {
+    if phis.is_empty() {
         // If the filtered conjunction or disjunction is empty, the expected result is just the
         // "skip term", which represents an empty conjunction or disjunction
-        result.len() == 1 && is_skip_term(&result[0])
+        if result_args.len() == 1 {
+            assert_is_bool_constant(&result_args[0], skip_term)
+        } else {
+            Err(CheckerError::ExpectedBoolConstant(
+                skip_term,
+                result_term.clone(),
+            ))
+        }
+    } else if result_args.iter().eq(&phis) {
+        Ok(())
     } else {
-        result.iter().eq(&phis)
-    })
+        let expected = pool.add_term(Term::Op(rule_kind, phis));
+        Err(EqualityError::ExpectedToBe { expected, got: result_term.clone() }.into())
+    }
 }
 
-pub fn and_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    generic_and_or_simplify(conclusion, Operator::And)
+pub fn and_simplify(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    generic_and_or_simplify(pool, conclusion, Operator::And)
 }
 
-pub fn or_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    generic_and_or_simplify(conclusion, Operator::Or)
+pub fn or_simplify(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    generic_and_or_simplify(pool, conclusion, Operator::Or)
 }
 
 pub fn not_simplify(args: RuleArgs) -> RuleResult {
@@ -367,25 +389,41 @@ pub fn bool_simplify(args: RuleArgs) -> RuleResult {
     })
 }
 
-pub fn qnt_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 1);
-    let (left, right) = match_term!((= l r) = conclusion[0])?;
-    let (_, _, inner) = left.unwrap_quant()?;
-    to_option((inner.is_bool_false() || inner.is_bool_true()) && right == inner)
+pub fn qnt_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
+    let (_, _, inner) = left.unwrap_quant_err()?;
+    rassert!(
+        inner.is_bool_false() || inner.is_bool_true(),
+        CheckerError::ExpectedAnyBoolConstant(inner.clone())
+    );
+    assert_eq(right, inner)?;
+    Ok(())
 }
 
-pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 1);
-    let (left, right) = match_term!((= l r) = conclusion[0])?;
-    let (t_1, t_2) = match_term!((div n d) = left).or_else(|| match_term!((/ n d) = left))?;
+pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
+    let (t_1, t_2) = match match_term!((div n d) = left) {
+        Some(v) => Ok(v),
+        None => match_term_err!((/ n d) = left),
+    }?;
 
     if t_1 == t_2 {
-        to_option(right.as_signed_number()?.is_one())
+        rassert!(
+            right.as_signed_number_err()?.is_one(),
+            CheckerError::ExpectedNumber(BigRational::one(), right.clone())
+        );
+        Ok(())
     } else if t_2.as_number().map_or(false, |n| n.is_one()) {
-        to_option(right == t_1)
+        assert_eq(right, t_1)
     } else {
-        let result = t_1.as_signed_number()? / t_2.as_signed_number()?;
-        to_option(right.as_fraction()? == result)
+        let expected = t_1.as_signed_number_err()? / t_2.as_signed_number_err()?;
+        rassert!(
+            right.as_fraction_err()? == expected,
+            CheckerError::ExpectedNumber(expected, right.clone())
+        );
+        Ok(())
     }
 }
 
@@ -486,39 +524,66 @@ pub fn prod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
         .or_else(|| generic_sum_prod_simplify_rule(second, first, Operator::Mult))
 }
 
-pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {
+pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     // Despite being separate rules in the documentation, this rule is used to do the job of both
     // the "minus_simplify" and the "unary_minus_simplify" rules
-
-    fn check(t: &Rc<Term>, u: &Rc<Term>) -> Option<()> {
+    fn try_unary_minus_simplify(t: &Rc<Term>, u: &Rc<Term>) -> bool {
         // First case of "unary_minus_simplify"
-        match match_term!((-(-t)) = t) {
-            Some(t) if t == u => return Some(()),
-            _ => (),
+        if match_term!((-(-t)) = t).map_or(false, |t| t == u) {
+            return true;
         }
 
         // Second case of "unary_minus_simplify"
         match (t.as_signed_number(), u.as_signed_number()) {
-            (Some(t), Some(u)) if t == u => return Some(()),
+            (Some(t), Some(u)) if t == u => return true,
             _ => (),
         }
 
-        let (t_1, t_2) = match_term!((- t_1 t_2) = t)?;
-        if t_1 == t_2 {
-            return to_option(u.as_number()?.is_zero());
-        }
-        to_option(match (t_1.as_signed_number(), t_2.as_signed_number()) {
-            (_, Some(z)) if z.is_zero() => u == t_1,
-            (Some(z), _) if z.is_zero() => match_term!((-t) = u)? == t_2,
-            (Some(t_1), Some(t_2)) => u.as_signed_number()? == t_1 - t_2,
-            _ => false,
-        })
+        false
     }
 
-    rassert!(conclusion.len() == 1);
+    fn check(t_1: &Rc<Term>, t_2: &Rc<Term>, u: &Rc<Term>) -> RuleResult {
+        if t_1 == t_2 {
+            rassert!(
+                u.as_number_err()?.is_zero(),
+                CheckerError::ExpectedNumber(BigRational::one(), u.clone()),
+            );
+            return Ok(());
+        }
+        match (t_1.as_signed_number(), t_2.as_signed_number()) {
+            (_, Some(z)) if z.is_zero() => assert_eq(u, t_1),
+            (Some(z), _) if z.is_zero() => assert_eq(match_term_err!((-t) = u)?, t_2),
+            (Some(t_1), Some(t_2)) => {
+                let expected = t_1 - t_2;
+                rassert!(
+                    u.as_signed_number_err()? == expected,
+                    CheckerError::ExpectedNumber(expected, u.clone())
+                );
+                Ok(())
+            }
 
-    let (left, right) = match_term!((= l r) = conclusion[0])?;
-    check(left, right).or_else(|| check(right, left))
+            // We expect at least one of the terms to be a number
+            _ => Err(CheckerError::ExpectedAnyNumber(t_2.clone())),
+        }
+    }
+
+    assert_clause_len(conclusion, 1)?;
+    let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
+
+    if try_unary_minus_simplify(left, right) || try_unary_minus_simplify(right, left) {
+        return Ok(());
+    }
+
+    // The equality in the conclusion may be flipped, but one of the terms in it must be of the
+    // form '(- t_1 t_2)'. We first check assuming that 't' is in the right. If that fails, we
+    // check the other case and return any error it finds
+    if let Some((t_1, t_2)) = match_term!((- t_1 t_2) = right) {
+        if check(t_1, t_2, left).is_ok() {
+            return Ok(());
+        }
+    }
+    let (t_1, t_2) = match_term_err!((- t_1 t_2) = left)?;
+    check(t_1, t_2, right)
 }
 
 pub fn sum_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> Option<()> {

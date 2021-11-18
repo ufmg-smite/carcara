@@ -35,6 +35,9 @@ pub enum CheckerError {
     BadPremise(String), // TODO: This error is too general
     TermOfWrongForm(&'static str, Rc<Term>),
     ExpectedBoolConstant(bool, Rc<Term>),
+    ExpectedAnyBoolConstant(Rc<Term>),
+    ExpectedNumber(BigRational, Rc<Term>),
+    ExpectedAnyNumber(Rc<Term>),
     ExpectedTermStyleArg(String, Rc<Term>),
     ExpectedAssignStyleArg(Rc<Term>),
 
@@ -117,6 +120,20 @@ impl fmt::Display for CheckerError {
             }
             CheckerError::ExpectedBoolConstant(b, t) => {
                 write!(f, "expected term '{}' to be boolean constant '{}'", t, b)
+            }
+            CheckerError::ExpectedAnyBoolConstant(t) => {
+                write!(f, "expected term '{}' to be a boolean constant", t)
+            }
+            CheckerError::ExpectedNumber(r, t) => {
+                write!(
+                    f,
+                    "expected term '{}' to be numerical constant {}",
+                    t,
+                    DisplayRatio(r)
+                )
+            }
+            CheckerError::ExpectedAnyNumber(t) => {
+                write!(f, "expected term '{}' to be a numerical constant", t)
             }
             CheckerError::ExpectedTermStyleArg(name, value) => {
                 write!(
@@ -294,7 +311,6 @@ pub enum LinearArithmeticError {
     NotValidTautologyCase(Rc<Term>),
     InvalidDisequalityOp(Rc<Term>),
     TooManyArgsInDisequality(Rc<Term>),
-    TermIsNotNumber(Rc<Term>),
     DisequalityIsNotContradiction(Operator, LinearComb),
     DisequalityIsNotTautology(Operator, LinearComb),
     ExpectedLessThan(Rc<Term>, Rc<Term>),
@@ -312,9 +328,6 @@ impl fmt::Display for LinearArithmeticError {
             }
             LinearArithmeticError::TooManyArgsInDisequality(t) => {
                 write!(f, "too many arguments in disequality '{}'", t)
-            }
-            LinearArithmeticError::TermIsNotNumber(t) => {
-                write!(f, "expected term '{}' to be a numerical constant", t)
             }
             LinearArithmeticError::DisequalityIsNotContradiction(op, comb) => {
                 write!(
@@ -344,16 +357,22 @@ impl fmt::Display for LinearArithmeticError {
     }
 }
 
+/// A wrapper struct that implements `fmt::Display` for `BigRational`s.
+struct DisplayRatio<'a>(&'a BigRational);
+
+impl<'a> fmt::Display for DisplayRatio<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use num_traits::ToPrimitive;
+        let float_value = self.0.numer().to_f64().unwrap() / self.0.denom().to_f64().unwrap();
+        write!(f, "{:?}", float_value)
+    }
+}
+
 /// A wrapper struct that implements `fmt::Display` for linear combinations.
 struct DisplayLinearComb<'a>(&'a Operator, &'a LinearComb);
 
 impl<'a> fmt::Display for DisplayLinearComb<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fn ratio_to_float(r: &BigRational) -> f64 {
-            use num_traits::ToPrimitive;
-            r.numer().to_f64().unwrap() / r.denom().to_f64().unwrap()
-        }
-
         fn write_var(
             f: &mut fmt::Formatter,
             (var, coeff): (&Rc<Term>, &BigRational),
@@ -361,7 +380,7 @@ impl<'a> fmt::Display for DisplayLinearComb<'a> {
             if coeff.is_one() {
                 write!(f, "{}", var)
             } else {
-                write!(f, "(* {:?} {})", ratio_to_float(coeff), var)
+                write!(f, "(* {} {})", DisplayRatio(coeff), var)
             }
         }
 
@@ -379,6 +398,6 @@ impl<'a> fmt::Display for DisplayLinearComb<'a> {
                 write!(f, ")")
             }
         }?;
-        write!(f, " {:?})", ratio_to_float(constant))
+        write!(f, " {})", DisplayRatio(constant))
     }
 }

@@ -145,6 +145,13 @@ where
     Ok(())
 }
 
+fn assert_is_bool_constant(got: &Rc<Term>, expected: bool) -> RuleResult {
+    if !got.is_bool_constant(expected) {
+        return Err(CheckerError::ExpectedBoolConstant(expected, got.clone()));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
     use crate::{

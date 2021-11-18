@@ -278,7 +278,7 @@ pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
         .map(|a| match a {
             ProofArg::Term(a) => a
                 .as_fraction()
-                .ok_or_else(|| LinearArithmeticError::TermIsNotNumber(a.clone()).into()),
+                .ok_or_else(|| CheckerError::ExpectedAnyNumber(a.clone())),
             ProofArg::Assign(n, v) => Err(CheckerError::ExpectedTermStyleArg(n.clone(), v.clone())),
         })
         .collect::<Result<_, _>>()?;
@@ -377,14 +377,9 @@ pub fn la_disequality(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_eq(t2_2, t2_3)
 }
 
-fn unwrap_signed_number(t: &Rc<Term>) -> Result<BigRational, LinearArithmeticError> {
-    t.as_signed_number()
-        .ok_or_else(|| LinearArithmeticError::TermIsNotNumber(t.clone()))
-}
-
 fn assert_less_than(a: &Rc<Term>, b: &Rc<Term>) -> RuleResult {
     rassert!(
-        unwrap_signed_number(a)? < unwrap_signed_number(b)?,
+        a.as_signed_number_err()? < b.as_signed_number_err()?,
         LinearArithmeticError::ExpectedLessThan(a.clone(), b.clone())
     );
     Ok(())
@@ -392,7 +387,7 @@ fn assert_less_than(a: &Rc<Term>, b: &Rc<Term>) -> RuleResult {
 
 fn assert_less_eq(a: &Rc<Term>, b: &Rc<Term>) -> RuleResult {
     rassert!(
-        unwrap_signed_number(a)? <= unwrap_signed_number(b)?,
+        a.as_signed_number_err()? <= b.as_signed_number_err()?,
         LinearArithmeticError::ExpectedLessEq(a.clone(), b.clone())
     );
     Ok(())

@@ -580,6 +580,14 @@ impl Term {
     pub fn is_bool_false(&self) -> bool {
         *self.sort() == Sort::Bool && self.as_var() == Some("false")
     }
+
+    /// Returns `true` if the term is the given boolean constant `b`.
+    pub fn is_bool_constant(&self, b: bool) -> bool {
+        match b {
+            true => self.is_bool_true(),
+            false => self.is_bool_false(),
+        }
+    }
 }
 
 impl Rc<Term> {
@@ -610,6 +618,32 @@ impl Rc<Term> {
     pub fn remove_all_negations_with_polarity(&self) -> (bool, &Self) {
         let (n, term) = self.remove_all_negations();
         (n % 2 == 0, term)
+    }
+
+    /// Similar to `Term::as_number`, but returns a `CheckerError` on failure.
+    pub fn as_number_err(&self) -> Result<BigRational, CheckerError> {
+        self.as_number()
+            .ok_or_else(|| CheckerError::ExpectedAnyNumber(self.clone()))
+    }
+
+    /// Similar to `Term::as_signed_number`, but returns a `CheckerError` on failure.
+    pub fn as_signed_number_err(&self) -> Result<BigRational, CheckerError> {
+        self.as_signed_number()
+            .ok_or_else(|| CheckerError::ExpectedAnyNumber(self.clone()))
+    }
+
+    /// Similar to `Term::as_fraction`, but returns a `CheckerError` on failure.
+    pub fn as_fraction_err(&self) -> Result<BigRational, CheckerError> {
+        self.as_fraction()
+            .ok_or_else(|| CheckerError::ExpectedAnyNumber(self.clone()))
+    }
+
+    /// Tries to unwrap a quantifier term, returning the `Quantifier`, the bindings and the inner
+    /// term. Returns a `CheckerError` if term is not a quantifier term.
+    pub fn unwrap_quant_err(&self) -> Result<(Quantifier, &BindingList, &Rc<Term>), CheckerError> {
+        use crate::checker::error::QuantifierError;
+        self.unwrap_quant()
+            .ok_or_else(|| QuantifierError::ExpectedQuantifierTerm(self.clone()).into())
     }
 }
 

@@ -5,13 +5,6 @@ use super::{
 use crate::{ast::*, checker::error::QuantifierError, utils::DedupIterator};
 use ahash::{AHashMap, AHashSet};
 
-fn unwrap_quant_err(
-    term: &Rc<Term>,
-) -> Result<(Quantifier, &BindingList, &Rc<Term>), QuantifierError> {
-    term.unwrap_quant()
-        .ok_or_else(|| QuantifierError::ExpectedQuantifierTerm(term.clone()))
-}
-
 pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
 
@@ -57,9 +50,9 @@ pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
 
-    let (q_1, bindings_1, left) = unwrap_quant_err(left)?;
-    let (q_2, bindings_2, left) = unwrap_quant_err(left)?;
-    let (q_3, bindings_3, right) = unwrap_quant_err(right)?;
+    let (q_1, bindings_1, left) = left.unwrap_quant_err()?;
+    let (q_2, bindings_2, left) = left.unwrap_quant_err()?;
+    let (q_3, bindings_3, right) = right.unwrap_quant_err()?;
 
     assert_eq(&q_1, &q_2)?;
     assert_eq(&q_2, &q_3)?;
@@ -74,7 +67,7 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
     assert_clause_len(conclusion, 1)?;
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
-    let (q_1, bindings_1, phi_1) = unwrap_quant_err(left)?;
+    let (q_1, bindings_1, phi_1) = left.unwrap_quant_err()?;
 
     // To return a reference from inside the match expression, I can't reference a value created in
     // it. Therefore I can't inline this variable
@@ -256,8 +249,8 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
     let (l_bindings, phi, r_bindings, phi_prime) = {
         let (l, r) = match_term_err!((or (not l) r) = &conclusion[0])?;
-        let (l_q, l_b, phi) = unwrap_quant_err(l)?;
-        let (r_q, r_b, phi_prime) = unwrap_quant_err(r)?;
+        let (l_q, l_b, phi) = l.unwrap_quant_err()?;
+        let (r_q, r_b, phi_prime) = r.unwrap_quant_err()?;
 
         // We expect both quantifiers to be `forall`
         assert_is_expected(&l_q, Quantifier::Forall)?;
