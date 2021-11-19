@@ -1,35 +1,53 @@
-use super::{get_clause_from_command, get_single_term_from_command, to_option, RuleArgs};
-use crate::ast::*;
+use super::{
+    assert_clause_len, assert_eq, assert_num_premises, assert_num_steps_in_subproof,
+    get_clause_from_command, get_premise_term, get_single_term_from_command, CheckerError,
+    EqualityError, RuleArgs, RuleResult,
+};
+use crate::{ast::*, checker::error::SubproofError};
 use ahash::{AHashMap, AHashSet};
 
 pub fn subproof(
     RuleArgs {
         conclusion, pool, subproof_commands, ..
     }: RuleArgs,
-) -> Option<()> {
+) -> RuleResult {
+    let subproof_commands = subproof_commands.ok_or(CheckerError::MustBeLastStepInSubproof)?;
+
     // TODO: We should get the series of assumptions from the ":discharge" attribute, but currently
     // we just take the first `conclusion.len() - 1` steps in the subproof.
-    let assumptions = &subproof_commands?[..conclusion.len() - 1];
+    assert_clause_len(conclusion, 1..)?;
+    let assumptions = &subproof_commands[..conclusion.len() - 1];
 
-    rassert!(conclusion.len() == assumptions.len() + 1); // Currently, this is always true
+    assert_clause_len(conclusion, assumptions.len() + 1)?; // Currently, this is always true
 
     for (assumption, t) in assumptions.iter().zip(conclusion) {
         match assumption {
-            ProofCommand::Assume { index: _, term } => rassert!(term == t.remove_negation()?),
-            _ => return None,
-        };
+            ProofCommand::Assume { index: _, term } => {
+                let t = t.remove_negation_err()?;
+                assert_eq(term, t)?;
+            }
+            other => {
+                return Err(SubproofError::DischargeMustBeAssume(other.index().to_string()).into())
+            }
+        }
     }
 
-    let previous_command = &subproof_commands?[subproof_commands?.len() - 2];
+    let previous_command = &subproof_commands[subproof_commands.len() - 2];
     let phi = match get_clause_from_command(previous_command) {
         // If the last command has an empty clause as it's conclusion, we expect `phi` to be the
         // boolean constant `false`
         [] => pool.bool_false(),
         [t] => t.clone(),
-        _ => return None,
+        other => {
+            return Err(CheckerError::WrongLengthOfPremiseClause(
+                previous_command.index().to_string(),
+                (..2).into(),
+                other.len(),
+            ))
+        }
     };
 
-    to_option(*conclusion.last().unwrap() == phi)
+    assert_eq(conclusion.last().unwrap(), &phi)
 }
 
 pub fn bind(
@@ -40,37 +58,44 @@ pub fn bind(
         subproof_commands,
         ..
     }: RuleArgs,
-) -> Option<()> {
-    rassert!(subproof_commands?.len() >= 2 && conclusion.len() == 1);
+) -> RuleResult {
+    let subproof_commands = subproof_commands.ok_or(CheckerError::MustBeLastStepInSubproof)?;
+
+    assert_clause_len(conclusion, 1)?;
+    assert_num_steps_in_subproof(subproof_commands, 2..)?;
 
     // The last command in the subproof is the one we are currently checking, so we look at the one
     // before that
-    let previous_command = &subproof_commands?[subproof_commands?.len() - 2];
-    let (phi, phi_prime) = match_term!((= p q) = get_single_term_from_command(previous_command)?)?;
+    let previous_command = &subproof_commands[subproof_commands.len() - 2];
+    let (phi, phi_prime) = match_term_err!((= p q) = get_premise_term(previous_command)?)?;
 
-    let (left, right) = match_term!((= l r) = conclusion[0])?;
+    let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
 
     // While the documentation indicates this rule is only called with "forall" quantifiers, in
     // some of the tests examples it is also called with the "exists" quantifier
-    let (l_quant, l_bindings, left) = left.unwrap_quant()?;
-    let (r_quant, r_bindings, right) = right.unwrap_quant()?;
-    rassert!(l_quant == r_quant);
+    let (l_quant, l_bindings, left) = left.unwrap_quant_err()?;
+    let (r_quant, r_bindings, right) = right.unwrap_quant_err()?;
+    assert_eq(&l_quant, &r_quant)?;
 
     let l_bindings: AHashSet<_> = l_bindings.iter().map(|(var, _)| var.as_str()).collect();
     let r_bindings: AHashSet<_> = r_bindings.iter().map(|(var, _)| var.as_str()).collect();
 
     // The terms in the quantifiers must be phi and phi'
-    rassert!(left == phi && right == phi_prime);
+    assert_eq(left, phi)?;
+    assert_eq(right, phi_prime)?;
 
     // None of the bindings in the right side can appear as free variables in phi
     let free_vars = pool.free_vars(phi);
-    rassert!(r_bindings
-        .difference(&l_bindings)
-        .all(|&y| !free_vars.contains(y)));
+    if let Some(y) = r_bindings
+        .iter()
+        .find(|&&y| free_vars.contains(y) && !l_bindings.contains(y))
+    {
+        return Err(SubproofError::BindBindingIsFreeVarInPhi(y.to_string()).into());
+    }
 
     // Since we are closing a subproof, we only care about the substitutions that were introduced
     // in it
-    let context = context.last()?;
+    let context = context.last().unwrap();
 
     // The quantifier binders must be the xs and ys of the context substitutions
     let (xs, ys): (AHashSet<_>, AHashSet<_>) = context
@@ -87,11 +112,20 @@ pub fn bind(
                 .map(|(var, _)| (var.as_str(), var.as_str())),
         )
         .unzip();
-    to_option(
-        l_bindings.len() == r_bindings.len()
-            && l_bindings.is_subset(&xs)
-            && r_bindings.is_subset(&ys),
-    )
+
+    rassert!(
+        l_bindings.len() == r_bindings.len(),
+        SubproofError::BindDifferentNumberOfBindings(l_bindings.len(), r_bindings.len())
+    );
+
+    // `l_bindings` should be a subset of `xs` and `r_bindigns` should be a subset of `ys`
+    if let Some(x) = l_bindings.iter().find(|&&x| !xs.contains(x)) {
+        return Err(SubproofError::BindingIsNotInContext(x.to_string()).into());
+    }
+    if let Some(y) = r_bindings.iter().find(|&&y| !ys.contains(y)) {
+        return Err(SubproofError::BindingIsNotInContext(y.to_string()).into());
+    }
+    Ok(())
 }
 
 pub fn r#let(
@@ -103,39 +137,60 @@ pub fn r#let(
         subproof_commands,
         ..
     }: RuleArgs,
-) -> Option<()> {
-    rassert!(conclusion.len() == 1);
+) -> RuleResult {
+    let subproof_commands = subproof_commands.ok_or(CheckerError::MustBeLastStepInSubproof)?;
+
+    assert_clause_len(conclusion, 1)?;
 
     // Since we are closing a subproof, we only care about the substitutions that were introduced
     // in it
-    let substitutions = &context.last()?.substitutions;
+    let substitutions = &context.last().unwrap().substitutions;
 
-    let (let_term, u_prime) = match_term!((= l u) = conclusion[0])?;
+    let (let_term, u_prime) = match_term_err!((= l u) = &conclusion[0])?;
     let (let_bindings, u) = match let_term.as_ref() {
         Term::Let(b, t) => (b, t),
-        _ => return None,
+        _ => return Err(CheckerError::TermOfWrongForm("(let ...)", let_term.clone())),
     };
 
     // The u and u' in the conclusion must match the u and u' in the previous command in the
     // subproof
-    let previous_term =
-        get_single_term_from_command(&subproof_commands?[subproof_commands?.len() - 2])?;
-    let (previous_u, previous_u_prime) = match_term!((= u u_prime) = previous_term)?;
-    rassert!(u == previous_u && u_prime == previous_u_prime);
+    let previous_term = get_premise_term(&subproof_commands[subproof_commands.len() - 2])?;
 
-    rassert!(let_bindings.len() == substitutions.len());
+    let (previous_u, previous_u_prime) = match_term_err!((= u u_prime) = previous_term)?;
+    assert_eq(u, previous_u)?;
+    assert_eq(u_prime, previous_u_prime)?;
 
-    let mut premises = premises.iter();
-    for (x, t) in let_bindings {
-        let x_term = terminal!(var x; pool.add_term(Term::Sort(t.sort().clone())));
-        let s = substitutions.get(&pool.add_term(x_term))?;
-        if s != t {
-            let premise = premises.next()?;
-            let premise_equality = match_term!((= a b) = get_single_term_from_command(premise)?)?;
-            rassert!(premise_equality == (s, t) || premise_equality == (t, s));
-        }
+    rassert!(
+        let_bindings.len() == substitutions.len(),
+        SubproofError::WrongNumberOfLetBindings(substitutions.len(), let_bindings.len())
+    );
+
+    let mut pairs: Vec<_> = let_bindings
+        .iter()
+        .map(|(x, t)| {
+            let sort = pool.add_term(Term::Sort(t.sort().clone()));
+            let x_term = pool.add_term((x.clone(), sort).into());
+            let s = substitutions
+                .get(&x_term)
+                .ok_or_else(|| SubproofError::BindingIsNotInContext(x.clone()))?;
+            Ok((s, t))
+        })
+        .collect::<Result<_, CheckerError>>()?;
+    pairs.retain(|(s, t)| s != t); // The pairs where s == t don't need a premise to justify them
+
+    assert_num_premises(&premises, pairs.len())?;
+
+    for (premise, (s, t)) in premises.iter().zip(pairs) {
+        let (a, b) = match_term_err!((= a b) = get_premise_term(premise)?)?;
+        rassert!(
+            (a, b) == (s, t) || (a, b) == (t, s),
+            SubproofError::PremiseDoesntJustifyLet {
+                substitution: (s.clone(), t.clone()),
+                premise: (a.clone(), b.clone()),
+            }
+        );
     }
-    to_option(premises.next().is_none())
+    Ok(())
 }
 
 fn extract_points(quant: Quantifier, term: &Rc<Term>) -> AHashSet<(Rc<Term>, Rc<Term>)> {
@@ -185,37 +240,44 @@ pub fn onepoint(
         subproof_commands,
         ..
     }: RuleArgs,
-) -> Option<()> {
-    rassert!(conclusion.len() == 1);
+) -> RuleResult {
+    let subproof_commands = subproof_commands.ok_or(CheckerError::MustBeLastStepInSubproof)?;
 
-    let (left, right) = match_term!((= l r) = conclusion[0])?;
-    let (quant, l_bindings, left) = left.unwrap_quant()?;
+    assert_clause_len(conclusion, 1)?;
+
+    let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
+    let (quant, l_bindings, left) = left.unwrap_quant_err()?;
     let (r_bindings, right) = match right.unwrap_quant() {
         Some((q, b, t)) => {
-            rassert!(q == quant);
-            (b.as_slice(), t)
+            assert_eq(&q, &quant)?;
+            (b, t)
         }
         // If the right-hand side term is not a quantifier, that possibly means all quantifier
         // bindings were removed, so we consider it a quantifier with an empty list of bindings
-        None => (&[] as &[_], right),
+        None => (BindingList::EMPTY, right),
     };
 
-    let previous_term =
-        get_single_term_from_command(&subproof_commands?[subproof_commands?.len() - 2])?;
-    let previous_equality = match_term!((= p q) = previous_term)?;
-    rassert!(previous_equality == (left, right) || previous_equality == (right, left));
-
-    let context = context.last()?;
+    let previous_term = get_premise_term(&subproof_commands[subproof_commands.len() - 2])?;
+    let previous_equality = match_term_err!((= p q) = previous_term)?;
     rassert!(
-        context.bindings.len() == r_bindings.len()
-            && r_bindings.iter().all(|b| context.bindings.contains(b))
+        previous_equality == (left, right) || previous_equality == (right, left),
+        EqualityError::ExpectedToBe {
+            expected: previous_term.clone(),
+            got: conclusion[0].clone()
+        }
     );
 
-    let l_bindings: AHashSet<_> = l_bindings
+    let context = context.last().unwrap();
+
+    if let Some((var, _)) = r_bindings.iter().find(|b| !context.bindings.contains(b)) {
+        return Err(SubproofError::BindingIsNotInContext(var.clone()).into());
+    }
+
+    let l_bindings_set: AHashSet<_> = l_bindings
         .iter()
         .map(|var| pool.add_term(var.clone().into()))
         .collect();
-    let r_bindings: AHashSet<_> = r_bindings
+    let r_bindings_set: AHashSet<_> = r_bindings
         .iter()
         .map(|var| pool.add_term(var.clone().into()))
         .collect();
@@ -244,12 +306,26 @@ pub fn onepoint(
         .collect();
 
     // For each substitution (:= x t) in the context, the equality (= x t) must appear in phi
-    rassert!(context
+    if let Some((k, v)) = context
         .substitutions
         .iter()
-        .all(|(k, v)| points.contains(&(k.clone(), v.clone()))));
+        .find(|&(k, v)| !points.contains(&(k.clone(), v.clone())))
+    {
+        return Err(SubproofError::NoPointForSubstitution(k.clone(), v.clone()).into());
+    }
 
-    to_option(l_bindings == &r_bindings | &substitution_vars)
+    rassert!(l_bindings_set == &r_bindings_set | &substitution_vars, {
+        let expected: Vec<_> = l_bindings
+            .iter()
+            .filter(|&v| {
+                let t: Term = v.clone().into();
+                !context.substitutions.contains_key(&pool.add_term(t))
+            })
+            .cloned()
+            .collect();
+        SubproofError::OnePointWrongBindings(BindingList(expected))
+    });
+    Ok(())
 }
 
 fn generic_skolemization_rule(

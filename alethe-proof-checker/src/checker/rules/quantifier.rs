@@ -69,9 +69,6 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
     let (q_1, bindings_1, phi_1) = left.unwrap_quant_err()?;
 
-    // To return a reference from inside the match expression, I can't reference a value created in
-    // it. Therefore I can't inline this variable
-    let empty = BindingList(Vec::new());
     let (bindings_2, phi_2) = match right.unwrap_quant() {
         Some((q_2, b, t)) => {
             assert_eq(&q_1, &q_2)?;
@@ -80,7 +77,7 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
 
         // If the right-hand side term is not a quantifier, we consider it a quantifier with an
         // empty list of bindings
-        None => (&empty, right),
+        None => (BindingList::EMPTY, right),
     };
     assert_eq(phi_1, phi_2)?;
 

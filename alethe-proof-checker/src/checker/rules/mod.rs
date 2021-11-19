@@ -93,6 +93,17 @@ fn assert_num_args<T: Into<Range>>(args: &[ProofArg], range: T) -> RuleResult {
     Ok(())
 }
 
+fn assert_num_steps_in_subproof<T: Into<Range>>(subproof: &[ProofCommand], range: T) -> RuleResult {
+    let range = range.into();
+    if !range.contains(subproof.len()) {
+        return Err(CheckerError::WrongNumberOfStepsInSubproof(
+            range,
+            subproof.len(),
+        ));
+    }
+    Ok(())
+}
+
 fn assert_operation_len<T: Into<Range>>(op: Operator, args: &[Rc<Term>], range: T) -> RuleResult {
     let range = range.into();
     if !range.contains(args.len()) {

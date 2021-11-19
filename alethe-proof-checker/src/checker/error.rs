@@ -15,6 +15,7 @@ pub enum CheckerError {
     Cong(CongruenceError),
     Quant(QuantifierError),
     LinearArithmetic(LinearArithmeticError),
+    Subproof(SubproofError),
     ReflexivityFailed(Rc<Term>, Rc<Term>),
     SimplificationFailed {
         original: Rc<Term>,
@@ -39,9 +40,11 @@ pub enum CheckerError {
     WrongNumberOfPremises(Range, usize),
     WrongLengthOfClause(Range, usize),
     WrongNumberOfArgs(Range, usize),
+    WrongNumberOfStepsInSubproof(Range, usize),
     WrongNumberOfTermsInOp(Operator, Range, usize),
     TermDoesntApperInOp(Operator, Rc<Term>),
     BadPremise(String), // TODO: This error is too general
+    WrongLengthOfPremiseClause(String, Range, usize),
     TermOfWrongForm(&'static str, Rc<Term>),
     ExpectedBoolConstant(bool, Rc<Term>),
     ExpectedAnyBoolConstant(Rc<Term>),
@@ -49,6 +52,7 @@ pub enum CheckerError {
     ExpectedAnyNumber(Rc<Term>),
     ExpectedTermStyleArg(String, Rc<Term>),
     ExpectedAssignStyleArg(Rc<Term>),
+    MustBeLastStepInSubproof,
 
     // Equality errors
     TermEquality(EqualityError<Rc<Term>>),
@@ -65,6 +69,7 @@ impl fmt::Display for CheckerError {
             CheckerError::Cong(e) => write!(f, "{}", e),
             CheckerError::Quant(e) => write!(f, "{}", e),
             CheckerError::LinearArithmetic(e) => write!(f, "{}", e),
+            CheckerError::Subproof(e) => write!(f, "{}", e),
             CheckerError::ReflexivityFailed(a, b) => {
                 write!(f, "reflexivity failed with terms '{}' and '{}'", a, b)
             }
@@ -121,6 +126,14 @@ impl fmt::Display for CheckerError {
             CheckerError::WrongNumberOfArgs(expected, got) => {
                 write!(f, "expected {} arguments, got {}", expected.to_text(), got)
             }
+            CheckerError::WrongNumberOfStepsInSubproof(expected, got) => {
+                write!(
+                    f,
+                    "expected {} commands in subproof, got {}",
+                    expected.to_text(),
+                    got
+                )
+            }
             CheckerError::WrongNumberOfTermsInOp(op, expected, got) => {
                 write!(
                     f,
@@ -134,6 +147,15 @@ impl fmt::Display for CheckerError {
                 write!(f, "expected term '{}' to appear in '{}' term", t, op)
             }
             CheckerError::BadPremise(p) => write!(f, "bad premise: '{}'", p),
+            CheckerError::WrongLengthOfPremiseClause(index, expected, got) => {
+                write!(
+                    f,
+                    "expected {} terms in clause of step '{}', got {}",
+                    expected.to_text(),
+                    index,
+                    got
+                )
+            }
             CheckerError::TermOfWrongForm(pat, term) => {
                 write!(
                     f,
@@ -170,6 +192,12 @@ impl fmt::Display for CheckerError {
                     f,
                     "expected assign style '(:= ...)' argument, got term style argument: '{}'",
                     t
+                )
+            }
+            CheckerError::MustBeLastStepInSubproof => {
+                write!(
+                    f,
+                    "this rule can only be used in the last step of a subproof"
                 )
             }
             CheckerError::TermEquality(e) => write!(f, "{}", e),
@@ -214,6 +242,12 @@ impl From<QuantifierError> for CheckerError {
 impl From<LinearArithmeticError> for CheckerError {
     fn from(e: LinearArithmeticError) -> Self {
         Self::LinearArithmetic(e)
+    }
+}
+
+impl From<SubproofError> for CheckerError {
+    fn from(e: SubproofError) -> Self {
+        Self::Subproof(e)
     }
 }
 
@@ -374,6 +408,73 @@ impl fmt::Display for LinearArithmeticError {
                     f,
                     "expected term '{}' to be less than or equal to term '{}'",
                     a, b
+                )
+            }
+        }
+    }
+}
+
+/// Errors relevant to all rules that end subproofs (not just the "subproof" rule).
+#[derive(Debug)]
+pub enum SubproofError {
+    DischargeMustBeAssume(String),
+    BindBindingIsFreeVarInPhi(String),
+    BindDifferentNumberOfBindings(usize, usize),
+    BindingIsNotInContext(String),
+    WrongNumberOfLetBindings(usize, usize),
+    PremiseDoesntJustifyLet {
+        substitution: (Rc<Term>, Rc<Term>),
+        premise: (Rc<Term>, Rc<Term>),
+    },
+    NoPointForSubstitution(Rc<Term>, Rc<Term>),
+    OnePointWrongBindings(BindingList),
+}
+
+impl fmt::Display for SubproofError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SubproofError::DischargeMustBeAssume(index) => {
+                write!(f, "discharge must be 'assume' command: '{}'", index)
+            }
+            SubproofError::BindBindingIsFreeVarInPhi(var) => {
+                write!(f, "binding '{}' appears as free variable in phi", var)
+            }
+            SubproofError::BindDifferentNumberOfBindings(left, right) => {
+                write!(
+                    f,
+                    "right and left quantifiers have different number of bindings: {} and {}",
+                    left, right
+                )
+            }
+            SubproofError::BindingIsNotInContext(var) => {
+                write!(f, "binding '{}' was not introduced in context", var)
+            }
+            SubproofError::WrongNumberOfLetBindings(expected, got) => {
+                write!(
+                    f,
+                    "expected {} bindings in 'let' term, got {}",
+                    expected, got
+                )
+            }
+            SubproofError::PremiseDoesntJustifyLet { substitution, premise } => {
+                write!(
+                    f,
+                    "premise '(= {} {})' doesn't justify substitution of '{}' for '{}'",
+                    premise.0, premise.1, substitution.0, substitution.1
+                )
+            }
+            SubproofError::NoPointForSubstitution(k, v) => {
+                write!(
+                    f,
+                    "substitution '(:= {} {})' doesn't appear as a point in phi",
+                    k, v
+                )
+            }
+            SubproofError::OnePointWrongBindings(expected) => {
+                write!(
+                    f,
+                    "expected binding list in right-hand side to be '{}'",
+                    expected
                 )
             }
         }

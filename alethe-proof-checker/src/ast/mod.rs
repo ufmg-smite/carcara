@@ -382,6 +382,8 @@ impl<'a> IntoIterator for &'a BindingList {
 }
 
 impl BindingList {
+    pub const EMPTY: &'static Self = &BindingList(Vec::new());
+
     pub fn iter(&self) -> std::slice::Iter<SortedVar> {
         self.0.iter()
     }
