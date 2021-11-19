@@ -1,35 +1,48 @@
 //! This module contains rules that are not yet in the specification for the Alethe format.
 
-use super::{get_clause_from_command, get_single_term_from_command, to_option, RuleArgs};
+use super::{
+    assert_clause_len, assert_eq, assert_num_premises, get_clause_from_command, get_premise_term,
+    CheckerError, RuleArgs, RuleResult,
+};
 use ahash::AHashSet;
 
-pub fn reordering(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    rassert!(premises.len() == 1);
+pub fn reordering(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
 
     let premise = get_clause_from_command(premises[0]);
-    rassert!(premise.len() == conclusion.len());
+    assert_clause_len(conclusion, premise.len())?;
 
     let premise_set: AHashSet<_> = premise.iter().collect();
     let conclusion_set: AHashSet<_> = conclusion.iter().collect();
-    to_option(premise_set == conclusion_set)
+    if let Some(&t) = premise_set.difference(&conclusion_set).next() {
+        Err(CheckerError::ReorderingMissingTerm(t.clone()))
+    } else if let Some(&t) = conclusion_set.difference(&premise_set).next() {
+        Err(CheckerError::ReorderingExtraTerm(t.clone()))
+    } else {
+        Ok(())
+    }
 }
 
-pub fn symm(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    rassert!(premises.len() == 1 && conclusion.len() == 1);
+pub fn symm(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
+    assert_clause_len(conclusion, 1)?;
 
-    let premise = get_single_term_from_command(premises[0])?;
-    let (p_1, q_1) = match_term!((= p q) = premise)?;
-    let (q_2, p_2) = match_term!((= q p) = conclusion[0])?;
-    to_option(p_1 == p_2 && q_1 == q_2)
+    let premise = get_premise_term(premises[0])?;
+    let (p_1, q_1) = match_term_err!((= p q) = premise)?;
+    let (q_2, p_2) = match_term_err!((= q p) = &conclusion[0])?;
+    assert_eq(p_1, p_2)?;
+    assert_eq(q_1, q_2)
 }
 
-pub fn not_symm(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    rassert!(premises.len() == 1 && conclusion.len() == 1);
+pub fn not_symm(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
+    assert_clause_len(conclusion, 1)?;
 
-    let premise = get_single_term_from_command(premises[0])?;
-    let (p_1, q_1) = match_term!((not (= p q)) = premise)?;
-    let (q_2, p_2) = match_term!((not (= q p)) = conclusion[0])?;
-    to_option(p_1 == p_2 && q_1 == q_2)
+    let premise = get_premise_term(premises[0])?;
+    let (p_1, q_1) = match_term_err!((not (= p q)) = premise)?;
+    let (q_2, p_2) = match_term_err!((not (= q p)) = &conclusion[0])?;
+    assert_eq(p_1, p_2)?;
+    assert_eq(q_1, q_2)
 }
 
 #[cfg(test)]

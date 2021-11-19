@@ -353,9 +353,9 @@ impl<'c> ProofChecker<'c> {
             "onepoint" => subproof::onepoint,
             "sko_ex" => subproof::sko_ex,
             "sko_forall" => subproof::sko_forall,
-            "reordering" => to_new_format!(extras::reordering),
-            "symm" => to_new_format!(extras::symm),
-            "not_symm" => to_new_format!(extras::not_symm),
+            "reordering" => extras::reordering,
+            "symm" => extras::symm,
+            "not_symm" => extras::not_symm,
 
             // Special rule that always checks as valid. It is mostly used in tests
             "trust" => |_| Ok(()),

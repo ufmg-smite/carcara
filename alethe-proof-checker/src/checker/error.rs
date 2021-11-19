@@ -35,6 +35,8 @@ pub enum CheckerError {
     // simplification to not be complete in some cases. Once this bug is solved, we can revert back
     // to a simpler implementation of this rule, that would allow a more detailed error message
     AcSimpFailed(Rc<Term>, Rc<Term>),
+    ReorderingMissingTerm(Rc<Term>),
+    ReorderingExtraTerm(Rc<Term>),
 
     // General errors
     WrongNumberOfPremises(Range, usize),
@@ -111,6 +113,12 @@ impl fmt::Display for CheckerError {
                     "couldn't reach '{}' by simplifying '{}'",
                     target, original
                 )
+            }
+            CheckerError::ReorderingMissingTerm(t) => {
+                write!(f, "term '{}' is missing in conclusion clause", t)
+            }
+            CheckerError::ReorderingExtraTerm(t) => {
+                write!(f, "term '{}' was not expected in conclusion clause", t)
             }
             CheckerError::WrongNumberOfPremises(expected, got) => {
                 write!(f, "expected {} premises, got {}", expected.to_text(), got)
