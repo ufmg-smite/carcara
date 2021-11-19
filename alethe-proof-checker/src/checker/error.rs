@@ -12,6 +12,7 @@ pub enum CheckerError {
     Unspecified,
 
     // Rule specific errors
+    Resolution(ResolutionError),
     Cong(CongruenceError),
     Quant(QuantifierError),
     LinearArithmetic(LinearArithmeticError),
@@ -68,6 +69,7 @@ impl fmt::Display for CheckerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             CheckerError::Unspecified => write!(f, "unspecified error"),
+            CheckerError::Resolution(e) => write!(f, "{}", e),
             CheckerError::Cong(e) => write!(f, "{}", e),
             CheckerError::Quant(e) => write!(f, "{}", e),
             CheckerError::LinearArithmetic(e) => write!(f, "{}", e),
@@ -217,46 +219,26 @@ impl fmt::Display for CheckerError {
     }
 }
 
-impl From<EqualityError<Rc<Term>>> for CheckerError {
-    fn from(e: EqualityError<Rc<Term>>) -> Self {
-        Self::TermEquality(e)
-    }
+macro_rules! impl_from_for_checker_error {
+    ($($type:ty => $variant:ident,)*) => {$(
+        impl From<$type> for CheckerError {
+            fn from(e: $type) -> Self {
+                Self::$variant(e)
+            }
+        }
+    )*}
+
 }
 
-impl From<EqualityError<Quantifier>> for CheckerError {
-    fn from(e: EqualityError<Quantifier>) -> Self {
-        Self::QuantifierEquality(e)
-    }
-}
-
-impl From<EqualityError<BindingList>> for CheckerError {
-    fn from(e: EqualityError<BindingList>) -> Self {
-        Self::BindingListEquality(e)
-    }
-}
-
-impl From<CongruenceError> for CheckerError {
-    fn from(e: CongruenceError) -> Self {
-        Self::Cong(e)
-    }
-}
-
-impl From<QuantifierError> for CheckerError {
-    fn from(e: QuantifierError) -> Self {
-        Self::Quant(e)
-    }
-}
-
-impl From<LinearArithmeticError> for CheckerError {
-    fn from(e: LinearArithmeticError) -> Self {
-        Self::LinearArithmetic(e)
-    }
-}
-
-impl From<SubproofError> for CheckerError {
-    fn from(e: SubproofError) -> Self {
-        Self::Subproof(e)
-    }
+impl_from_for_checker_error! {
+    EqualityError<Rc<Term>> => TermEquality,
+    EqualityError<Quantifier> => QuantifierEquality,
+    EqualityError<BindingList> => BindingListEquality,
+    ResolutionError => Resolution,
+    CongruenceError => Cong,
+    QuantifierError => Quant,
+    LinearArithmeticError => LinearArithmetic,
+    SubproofError => Subproof,
 }
 
 /// Errors in which we expected two things to be equal but they weren't.
@@ -274,6 +256,29 @@ impl<T: fmt::Display + TypeName> fmt::Display for EqualityError<T> {
             }
             EqualityError::ExpectedToBe { expected, got } => {
                 write!(f, "expected {} '{}' to be '{}'", T::NAME, got, expected)
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ResolutionError {
+    TautologyFailed,
+    RemainingPivot(Rc<Term>),
+    ResolutionMissingTerm(Rc<Term>),
+}
+
+impl fmt::Display for ResolutionError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ResolutionError::TautologyFailed => write!(f, "couldn't find tautology in clause"),
+            ResolutionError::RemainingPivot(p) => write!(f, "pivot was not eliminated: '{}'", p),
+            ResolutionError::ResolutionMissingTerm(t) => {
+                write!(
+                    f,
+                    "term in conclusion was not produced by resolution: '{}'",
+                    t
+                )
             }
         }
     }

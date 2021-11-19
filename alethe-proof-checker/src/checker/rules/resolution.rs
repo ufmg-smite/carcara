@@ -1,15 +1,27 @@
-use super::{get_clause_from_command, get_single_term_from_command, to_option, RuleArgs};
-use crate::ast::*;
+use super::{
+    assert_clause_len, assert_is_bool_constant, assert_is_expected, assert_num_premises,
+    get_clause_from_command, get_single_term_from_command, RuleArgs, RuleResult,
+};
+use crate::{ast::*, checker::error::ResolutionError, utils::DedupIterator};
 use ahash::{AHashMap, AHashSet};
 use std::collections::hash_map::Entry;
 
-pub fn resolution(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
+/// Undoes the transformation done by `Rc<Term>::remove_all_negations`.
+fn unremove_all_negations(pool: &mut TermPool, (n, term): (i32, &Rc<Term>)) -> Rc<Term> {
+    let mut term = term.clone();
+    for _ in 0..n {
+        term = build_term!(pool, (not { term }));
+    }
+    term
+}
+
+pub fn resolution(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> RuleResult {
     // In some cases, this rule is used with a single premise "(not true)" to justify an empty
     // conclusion clause
     if conclusion.is_empty() && premises.len() == 1 {
         if let Some(t) = get_single_term_from_command(premises[0]) {
             if match_term!((not true) = t).is_some() {
-                return Some(());
+                return Ok(());
             }
         }
     }
@@ -87,47 +99,57 @@ pub fn resolution(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()>
     // There are some special cases in the resolution rules that are valid, but leave a pivot
     // remaining
     let mut remaining_pivots = pivots.iter().filter(|&(_, eliminated)| !eliminated);
+
     if let Some(((i, pivot), _)) = remaining_pivots.next() {
-        // If there is more than one pivot remaining, there is no special case, the rule is just
-        // invalid
-        rassert!(remaining_pivots.next().is_none());
-
-        // First special case: when the result of the resolution is just one term, it may appear in
-        // the conclusion clause with an even number of leading negations added to it. The
-        // following is an example of this, adapted from a generated proof:
-        //
-        //     (step t1 (cl (not e)) :rule trust)
-        //     (step t2 (cl (= (not e) (not (not f)))) :rule trust)
-        //     (step t3 (cl (not (= (not e) (not (not f)))) e f) :rule trust)
-        //     (step t4 (cl (not (not f))) :rule resolution :premises (t1 t2 t3))
-        //
-        // Usually, we would expect the clause in the t4 step to be (cl f).
-        if conclusion.len() == 1 {
-            let (j, conclusion) = conclusion.into_iter().next().unwrap();
-            return to_option(conclusion == *pivot && (i % 2) == (j % 2));
-        }
-
-        // Second special case: when the result of the resolution is just the boolean constant
-        // "false", it may be implicitly eliminated. For example:
-        //
+        // There is a special case in the resolution rules that is valid, but leaves a pivot
+        // remaining: when the result of the resolution is just the boolean constant "false", it
+        // may be implicitly eliminated. For example:
         //     (step t1 (cl p q false) :rule trust)
         //     (step t2 (cl (not p)) :rule trust)
         //     (step t3 (cl (not q)) :rule trust)
         //     (step t4 (cl) :rule resolution :premises (t1 t2 t3))
-        if conclusion.len() == 0 {
-            return to_option(*i == 0 && pivot.is_bool_false());
+        if conclusion.is_empty() && *i == 0 && pivot.is_bool_false() {
+            return Ok(());
         }
 
-        None // There are no more special cases
+        // There is another, similar, special case: when the result of the resolution is just one
+        // term, it may appear in the conclusion clause with an even number of leading negations
+        // added to it. The following is an example of this, adapted from a generated proof:
+        //     (step t1 (cl (not e)) :rule trust)
+        //     (step t2 (cl (= (not e) (not (not f)))) :rule trust)
+        //     (step t3 (cl (not (= (not e) (not (not f)))) e f) :rule trust)
+        //     (step t4 (cl (not (not f))) :rule resolution :premises (t1 t2 t3))
+        // Usually, we would expect the clause in the t4 step to be (cl f). This behaviour may be a
+        // bug in veriT, but it is still logically sound and happens often enough that it is useful
+        // to support it here
+        if conclusion.len() == 1 {
+            let (j, conclusion) = conclusion.into_iter().next().unwrap();
+            if conclusion == *pivot && (i % 2) == (j % 2) {
+                return Ok(());
+            }
+        }
+
+        let pivot = unremove_all_negations(pool, (*i, pivot));
+        Err(ResolutionError::RemainingPivot(pivot).into())
     } else {
         // This is the general case, where all pivots have been eliminated. In this case, the
         // working clause should be equal to the conclusion clause
-        to_option(working_clause == conclusion)
+        for t in conclusion {
+            // By construction, the working clause is a subset of the conclusion. Therefore, we
+            // only need to check that all terms in the conclusion are also in the working clause
+            if !working_clause.contains(&t) {
+                let t = unremove_all_negations(pool, t);
+                return Err(ResolutionError::ResolutionMissingTerm(t).into());
+            }
+        }
+        Ok(())
     }
 }
 
-pub fn tautology(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    rassert!(conclusion.len() == 1 && conclusion[0].is_bool_true() && premises.len() == 1);
+pub fn tautology(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
+    assert_clause_len(conclusion, 1)?;
+    assert_is_bool_constant(&conclusion[0], true)?;
 
     let premise = get_clause_from_command(premises[0]);
     let mut seen = AHashSet::with_capacity(premise.len());
@@ -136,36 +158,24 @@ pub fn tautology(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> 
         .map(|t| t.remove_all_negations_with_polarity());
     for (polarity, term) in with_negations_removed {
         if seen.contains(&(!polarity, term)) {
-            return Some(());
+            return Ok(());
         }
         seen.insert((polarity, term));
     }
-    None
+    Err(ResolutionError::TautologyFailed.into())
 }
 
-pub fn contraction(RuleArgs { conclusion, premises, .. }: RuleArgs) -> Option<()> {
-    rassert!(premises.len() == 1);
+pub fn contraction(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(&premises, 1)?;
 
     let premise_clause = get_clause_from_command(premises[0]);
+    let expected: Vec<_> = premise_clause.iter().dedup().collect();
+    assert_clause_len(conclusion, expected.len())?;
 
-    // This set will be populated with the terms we enconter as we iterate through the premise
-    let mut encountered = AHashSet::<&Term>::with_capacity(premise_clause.len());
-    let mut conclusion_iter = conclusion.iter();
-
-    for t in premise_clause {
-        // `AHashSet::insert` returns true if the inserted element was not in the set
-        let is_new_term = encountered.insert(t.as_ref());
-
-        // If the term in the premise clause has not been encountered before, we advance the
-        // conclusion clause iterator, and check if its next term is the encountered term
-        if is_new_term {
-            rassert!(conclusion_iter.next() == Some(t));
-        }
+    for (t, u) in conclusion.iter().zip(expected) {
+        assert_is_expected(t, u.clone())?;
     }
-
-    // At the end, the conclusion clause iterator must be empty, meaning all terms in the
-    // conclusion are in the premise
-    to_option(conclusion_iter.next().is_none())
+    Ok(())
 }
 
 #[cfg(test)]
