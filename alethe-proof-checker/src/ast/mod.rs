@@ -127,7 +127,7 @@ impl TermPool {
             }
             Term::Quant(q, b, t) => {
                 for var in b {
-                    let term: Term = var.clone().into();
+                    let term = self.add_term(var.clone().into());
                     if substitutions.contains_key(&term) {
                         log::error!("trying to substitute bound variable: {}", var.0);
                         panic!();
