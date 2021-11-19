@@ -1,7 +1,7 @@
 use super::{
-    assert_clause_len, assert_eq, assert_num_premises, assert_num_steps_in_subproof,
-    get_clause_from_command, get_premise_term, get_single_term_from_command, CheckerError,
-    EqualityError, RuleArgs, RuleResult,
+    assert_clause_len, assert_eq, assert_is_expected, assert_is_expected_modulo_reordering,
+    assert_num_premises, assert_num_steps_in_subproof, get_clause_from_command, get_premise_term,
+    CheckerError, EqualityError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::SubproofError};
 use ahash::{AHashMap, AHashSet};
@@ -337,18 +337,20 @@ fn generic_skolemization_rule(
         subproof_commands,
         ..
     }: RuleArgs,
-) -> Option<()> {
-    rassert!(conclusion.len() == 1);
+) -> RuleResult {
+    let subproof_commands = subproof_commands.ok_or(CheckerError::MustBeLastStepInSubproof)?;
 
-    let (left, psi) = match_term!((= l r) = conclusion[0])?;
+    assert_clause_len(conclusion, 1)?;
 
-    let (quant, bindings, phi) = left.unwrap_quant()?;
-    rassert!(quant == rule_type);
+    let (left, psi) = match_term_err!((= l r) = &conclusion[0])?;
 
-    let previous_term =
-        get_single_term_from_command(&subproof_commands?[subproof_commands?.len() - 2])?;
-    let previous_equality = match_term!((= p q) = previous_term)?;
-    rassert!(previous_equality == (phi, psi));
+    let (quant, bindings, phi) = left.unwrap_quant_err()?;
+    assert_is_expected(&quant, rule_type)?;
+
+    let previous_term = get_premise_term(&subproof_commands[subproof_commands.len() - 2])?;
+    let previous_equality = match_term_err!((= p q) = previous_term)?;
+    assert_eq(previous_equality.0, phi)?;
+    assert_eq(previous_equality.1, psi)?;
 
     let mut current_phi = phi.clone();
     // I have to extract the length into a separate variable (instead of just using it directly in
@@ -360,47 +362,49 @@ fn generic_skolemization_rule(
         current_phi = pool.apply_substitutions(&current_phi, &c.substitutions);
     }
 
-    let substitutions = &context.last()?.substitutions_until_fixed_point;
+    let substitutions = &context.last().unwrap().substitutions_until_fixed_point;
     for (i, x) in bindings.iter().enumerate() {
         let x_term = pool.add_term(Term::from(x.clone()));
-        let t = substitutions.get(&x_term)?;
-        let (t_choice_var, t_bindings, t_inner) = match t.as_ref() {
-            Term::Choice(var, inner) => {
-                // If the rule is "sko_forall", the predicate in the choice term is negated
-                let inner = if rule_type == Quantifier::Forall {
-                    inner.remove_negation()?
-                } else {
-                    inner
-                };
-                // If this is the last binding, all bindings were skolemized, so we don't need to
-                // unwrap any quantifier
-                if i == bindings.len() - 1 {
-                    (var, &[] as &[_], inner)
-                } else {
-                    let (q, b, t) = inner.unwrap_quant()?;
-                    rassert!(q == rule_type);
-                    (var, b.as_slice(), t)
-                }
+        let t = substitutions
+            .get(&x_term)
+            .ok_or_else(|| SubproofError::BindingIsNotInContext(x.0.clone()))?;
+
+        // To check that `t` is of the correct form, we construct the expected term and compare
+        // them
+        let expected = {
+            let mut inner = current_phi.clone();
+
+            // If this is the last binding, all bindings were skolemized, so we don't need to wrap
+            // the term in a quantifier
+            if i < bindings.len() - 1 {
+                inner = pool.add_term(Term::Quant(
+                    rule_type,
+                    BindingList(bindings.0[i + 1..].to_vec()),
+                    inner,
+                ))
             }
-            _ => return None,
+
+            // If the rule is "sko_forall", the predicate in the choice term should be negated
+            if rule_type == Quantifier::Forall {
+                inner = build_term!(pool, (not { inner }));
+            }
+            pool.add_term(Term::Choice(x.clone(), inner))
         };
-        rassert!(t_choice_var == x);
-        rassert!(t_bindings == &bindings.0[i + 1..]);
-        rassert!(DeepEq::eq_modulo_reordering(t_inner, &current_phi));
+        assert_is_expected_modulo_reordering(t, expected)?;
 
         // For every binding we skolemize, we must apply another substitution to phi
         let mut s = AHashMap::new();
         s.insert(x_term, t.clone());
         current_phi = pool.apply_substitutions(&current_phi, &s);
     }
-    Some(())
+    Ok(())
 }
 
-pub fn sko_ex(args: RuleArgs) -> Option<()> {
+pub fn sko_ex(args: RuleArgs) -> RuleResult {
     generic_skolemization_rule(Quantifier::Exists, args)
 }
 
-pub fn sko_forall(args: RuleArgs) -> Option<()> {
+pub fn sko_forall(args: RuleArgs) -> RuleResult {
     generic_skolemization_rule(Quantifier::Forall, args)
 }
 
