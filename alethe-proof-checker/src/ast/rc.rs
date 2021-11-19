@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, fmt, hash::Hash, ops::Deref, rc};
+use std::{fmt, hash::Hash, ops::Deref, rc};
 
 /// An `Rc` where equality and hashing are done by reference, instead of by value
 #[derive(Clone, Eq)]
@@ -24,14 +24,10 @@ impl<T> Deref for Rc<T> {
     }
 }
 
+// Note: Since `Eq` and `Hash` are implemented differently for `Rc<T>` than they are for `T`, we
+// _cannot_ implement `Borrow<T>` for `Rc<T>`
 impl<T> AsRef<T> for Rc<T> {
     fn as_ref(&self) -> &T {
-        self.0.as_ref()
-    }
-}
-
-impl<T> Borrow<T> for Rc<T> {
-    fn borrow(&self) -> &T {
         self.0.as_ref()
     }
 }
