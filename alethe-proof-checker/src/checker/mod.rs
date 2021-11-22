@@ -262,14 +262,6 @@ impl<'c> ProofChecker<'c> {
     pub fn get_rule(rule_name: &str) -> Option<Rule> {
         use rules::*;
 
-        // Converts a rule in the old format (returning `Option<()>`) to the new format (returning
-        // `RuleResult`) by adding a `CheckerError::Unspecified` error
-        macro_rules! to_new_format {
-            ($old:expr) => {
-                |args| $old(args).ok_or(CheckerError::Unspecified)
-            };
-        }
-
         Some(match rule_name {
             "true" => tautology::r#true,
             "false" => tautology::r#false,
@@ -343,7 +335,7 @@ impl<'c> ProofChecker<'c> {
             "minus_simplify" => simplification::minus_simplify,
             "sum_simplify" => simplification::sum_simplify,
             "comp_simplify" => simplification::comp_simplify,
-            "nary_elim" => to_new_format!(clausification::nary_elim),
+            "nary_elim" => clausification::nary_elim,
             "ac_simp" => simplification::ac_simp,
             "bfun_elim" => clausification::bfun_elim,
             "bind" => subproof::bind,

@@ -21,15 +21,6 @@ pub struct RuleArgs<'a> {
     pub(super) subproof_commands: Option<&'a [ProofCommand]>,
 }
 
-/// Converts a `bool` into an `Option<()>`.
-#[must_use]
-fn to_option(b: bool) -> Option<()> {
-    match b {
-        true => Some(()),
-        false => None,
-    }
-}
-
 fn get_single_term_from_command(command: &ProofCommand) -> Option<&Rc<Term>> {
     match get_clause_from_command(command) {
         [t] => Some(t),

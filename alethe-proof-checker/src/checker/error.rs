@@ -38,6 +38,7 @@ pub enum CheckerError {
     AcSimpFailed(Rc<Term>, Rc<Term>),
     ReorderingMissingTerm(Rc<Term>),
     ReorderingExtraTerm(Rc<Term>),
+    NotValidNaryTerm(Rc<Term>),
 
     // General errors
     WrongNumberOfPremises(Range, usize),
@@ -121,6 +122,9 @@ impl fmt::Display for CheckerError {
             }
             CheckerError::ReorderingExtraTerm(t) => {
                 write!(f, "term '{}' was not expected in conclusion clause", t)
+            }
+            CheckerError::NotValidNaryTerm(t) => {
+                write!(f, "term '{}' is not a valid n-ary operation", t)
             }
             CheckerError::WrongNumberOfPremises(expected, got) => {
                 write!(f, "expected {} premises, got {}", expected.to_text(), got)
