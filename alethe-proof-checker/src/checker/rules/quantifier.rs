@@ -41,7 +41,7 @@ pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> RuleRes
     );
 
     // Equalities may be reordered in the final term, so we use `DeepEq::eq_modulo_reordering`
-    let expected = pool.apply_substitutions(original, &substitutions);
+    let expected = pool.apply_substitutions(original, &substitutions)?;
     assert_is_expected_modulo_reordering(substituted, expected)
 }
 

@@ -27,9 +27,9 @@ pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> RuleResult 
     // cases it is applied to both. To cover all cases, we must check all three possibilities. We
     // don't compute the new left and right terms until they are needed, to avoid doing unnecessary
     // work
-    let new_left = pool.apply_substitutions(left, cumulative_substitutions);
+    let new_left = pool.apply_substitutions(left, cumulative_substitutions)?;
     let result = new_left == *right || {
-        let new_right = pool.apply_substitutions(right, cumulative_substitutions);
+        let new_right = pool.apply_substitutions(right, cumulative_substitutions)?;
         *left == new_right || new_left == new_right
     };
     rassert!(

@@ -1,5 +1,5 @@
 use super::lexer::Token;
-use crate::ast::{Identifier, Sort};
+use crate::ast::{Identifier, Sort, SubstitutionError};
 use num_bigint::BigInt;
 use std::{fmt, ops::RangeFrom};
 use thiserror::Error;
@@ -63,6 +63,9 @@ pub enum ParserError {
 
     #[error("unknown attribute: ':{0}'")]
     UnknownAttribute(String),
+
+    #[error("substitution error when applying function definition '{0}': {1}")]
+    BadFunctionDef(String, SubstitutionError),
 }
 
 impl ParserError {

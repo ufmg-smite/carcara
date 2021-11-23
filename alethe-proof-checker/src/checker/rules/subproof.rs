@@ -294,16 +294,17 @@ pub fn onepoint(
     let substitutions_clone = context.substitutions_until_fixed_point.clone();
 
     // Since a substitution may use a varibale introduced in a previous substitution, we apply the
-    // substitutions to the points in order to these variables. We also create a duplicate of every
-    // point in the reverse order, since the order of equalities may be flipped
+    // substitutions to the points in order to replace these variables by their value. We also
+    // create a duplicate of every point in the reverse order, since the order of equalities may be
+    // flipped
     let points: AHashSet<_> = points
         .into_iter()
-        .flat_map(|(x, t)| {
-            let new_t = pool.apply_substitutions(&t, &substitutions_clone);
-            let new_x = pool.apply_substitutions(&x, &substitutions_clone);
-            [(x, new_t), (t, new_x)]
+        .flat_map(|(x, t)| [(x.clone(), t.clone()), (t, x)])
+        .map(|(x, t)| {
+            let new_t = pool.apply_substitutions(&t, &substitutions_clone)?;
+            Ok((x, new_t))
         })
-        .collect();
+        .collect::<Result<_, CheckerError>>()?;
 
     // For each substitution (:= x t) in the context, the equality (= x t) must appear in phi
     if let Some((k, v)) = context
@@ -359,7 +360,7 @@ fn generic_skolemization_rule(
     for c in &context[..n - 1] {
         // Based on the test examples, we must first apply all previous context substitutions to
         // phi, before applying the substitutions present in the current context
-        current_phi = pool.apply_substitutions(&current_phi, &c.substitutions);
+        current_phi = pool.apply_substitutions(&current_phi, &c.substitutions)?;
     }
 
     let substitutions = &context.last().unwrap().substitutions_until_fixed_point;
@@ -395,7 +396,7 @@ fn generic_skolemization_rule(
         // For every binding we skolemize, we must apply another substitution to phi
         let mut s = AHashMap::new();
         s.insert(x_term, t.clone());
-        current_phi = pool.apply_substitutions(&current_phi, &s);
+        current_phi = pool.apply_substitutions(&current_phi, &s)?;
     }
     Ok(())
 }

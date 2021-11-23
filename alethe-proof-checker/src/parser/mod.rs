@@ -935,6 +935,7 @@ impl<R: BufRead> Parser<R> {
                     .map_err(|err| Error::Parser(err, head_pos))
             }
             Token::Symbol(s) if self.state.function_defs.get(s).is_some() => {
+                let head_pos = self.current_position;
                 let func_name = self.expect_symbol()?;
                 let args = self.parse_sequence(Self::parse_term, true)?;
                 let func = self.state.function_defs.get(&func_name).unwrap();
@@ -965,10 +966,15 @@ impl<R: BufRead> Parser<R> {
                         .collect()
                 };
 
-                Ok(self
+                let result = self
                     .state
                     .term_pool
-                    .apply_substitutions(&func.body, &substitutions))
+                    .apply_substitutions(&func.body, &substitutions)
+                    .map_err(|e| {
+                        Error::Parser(ParserError::BadFunctionDef(func_name, e), head_pos)
+                    })?;
+
+                Ok(result)
             }
             _ => {
                 let func = self.parse_term()?;

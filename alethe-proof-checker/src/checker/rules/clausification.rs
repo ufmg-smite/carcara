@@ -220,21 +220,22 @@ fn bfun_elim_first_step(
     bindigns: &[SortedVar],
     term: &Rc<Term>,
     acc: &mut Vec<Rc<Term>>,
-) {
+) -> Result<(), SubstitutionError> {
     let var = match bindigns {
         [.., var] if var.1.as_sort() == Some(&Sort::Bool) => pool.add_term(var.clone().into()),
         [rest @ .., _] => return bfun_elim_first_step(pool, rest, term, acc),
         [] => {
             acc.push(term.clone());
-            return;
+            return Ok(());
         }
     };
     for value in [pool.bool_false(), pool.bool_true()] {
         let mut subs = AHashMap::new();
         subs.insert(var.clone(), value);
-        let term = pool.apply_substitutions(term, &subs);
-        bfun_elim_first_step(pool, &bindigns[..bindigns.len() - 1], &term, acc)
+        let term = pool.apply_substitutions(term, &subs)?;
+        bfun_elim_first_step(pool, &bindigns[..bindigns.len() - 1], &term, acc)?
     }
+    Ok(())
 }
 
 /// The second simplification step for "bfun_elim", that expands function applications over
@@ -270,9 +271,9 @@ fn apply_bfun_elim(
     pool: &mut TermPool,
     term: &Rc<Term>,
     cache: &mut AHashMap<Rc<Term>, Rc<Term>>,
-) -> Rc<Term> {
+) -> Result<Rc<Term>, SubstitutionError> {
     if let Some(v) = cache.get(term) {
-        return v.clone();
+        return Ok(v.clone());
     }
 
     let result = match term.as_ref() {
@@ -280,14 +281,14 @@ fn apply_bfun_elim(
             let args: Vec<_> = args
                 .iter()
                 .map(|a| apply_bfun_elim(pool, a, cache))
-                .collect();
+                .collect::<Result<_, _>>()?;
             bfun_elim_second_step(pool, f, &args, 0)
         }
         Term::Op(op, args) => {
             let args = args
                 .iter()
                 .map(|a| apply_bfun_elim(pool, a, cache))
-                .collect();
+                .collect::<Result<_, _>>()?;
             pool.add_term(Term::Op(*op, args))
         }
         Term::Quant(q, bindings, inner) => {
@@ -296,14 +297,14 @@ fn apply_bfun_elim(
                 Quantifier::Exists => Operator::Or,
             };
             let mut args = Vec::with_capacity(2usize.pow(bindings.len() as u32));
-            bfun_elim_first_step(pool, bindings.as_slice(), inner, &mut args);
+            bfun_elim_first_step(pool, bindings.as_slice(), inner, &mut args)?;
 
             let op_term = if args.len() == 1 {
                 args.pop().unwrap()
             } else {
                 pool.add_term(Term::Op(op, args))
             };
-            let op_term = apply_bfun_elim(pool, &op_term, cache);
+            let op_term = apply_bfun_elim(pool, &op_term, cache)?;
 
             let new_bindings: Vec<_> = bindings
                 .iter()
@@ -317,18 +318,18 @@ fn apply_bfun_elim(
             }
         }
         Term::Choice(var, inner) => {
-            let inner = apply_bfun_elim(pool, inner, cache);
+            let inner = apply_bfun_elim(pool, inner, cache)?;
             pool.add_term(Term::Choice(var.clone(), inner))
         }
         Term::Let(bindings, inner) => {
-            let inner = apply_bfun_elim(pool, inner, cache);
+            let inner = apply_bfun_elim(pool, inner, cache)?;
             pool.add_term(Term::Let(bindings.clone(), inner))
         }
         _ => term.clone(),
     };
 
     cache.insert(term.clone(), result.clone());
-    result
+    Ok(result)
 }
 
 pub fn bfun_elim(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> RuleResult {
@@ -337,7 +338,7 @@ pub fn bfun_elim(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> RuleR
 
     let psi = get_premise_term(premises[0])?;
 
-    let expected = apply_bfun_elim(pool, psi, &mut AHashMap::new());
+    let expected = apply_bfun_elim(pool, psi, &mut AHashMap::new())?;
     assert_is_expected_modulo_reordering(&conclusion[0], expected)
 }
 

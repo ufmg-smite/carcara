@@ -84,18 +84,18 @@ impl<'c> ProofChecker<'c> {
                     variable_args,
                 } => {
                     let time = Instant::now();
-                    let new_context = self.build_context(assignment_args, variable_args);
+                    let step_index = commands[i].index();
+
+                    let new_context =
+                        self.build_context(assignment_args, variable_args)
+                            .map_err(|e| Error::Checker {
+                                inner: e.into(),
+                                rule: "anchor".into(),
+                                step: step_index.to_string(),
+                            })?;
                     self.context.push(new_context);
                     commands_stack.push((0, inner_commands));
-
-                    let step_index = inner_commands
-                        .last()
-                        .and_then(|s| match s {
-                            ProofCommand::Step(s) => Some(s.index.clone()),
-                            _ => None,
-                        })
-                        .unwrap_or_default();
-                    self.add_statistics_measurement(&step_index, "anchor*", time);
+                    self.add_statistics_measurement(step_index, "anchor*", time);
                     continue;
                 }
                 ProofCommand::Assume { index, term } => {
@@ -184,7 +184,7 @@ impl<'c> ProofChecker<'c> {
         &mut self,
         assignment_args: &[(String, Rc<Term>)],
         variable_args: &[SortedVar],
-    ) -> Context {
+    ) -> Result<Context, SubstitutionError> {
         // Since some rules (like "refl") need to apply substitutions until a fixed point, we
         // precompute these substitutions into a separate hash map. This assumes that the assignment
         // arguments are in the correct order.
@@ -204,7 +204,7 @@ impl<'c> ProofChecker<'c> {
 
             let new_value = self
                 .pool
-                .apply_substitutions(value, &substitutions_until_fixed_point);
+                .apply_substitutions(value, &substitutions_until_fixed_point)?;
             substitutions_until_fixed_point.insert(var_term, new_value);
         }
 
@@ -225,12 +225,12 @@ impl<'c> ProofChecker<'c> {
         }
 
         let bindings = variable_args.iter().cloned().collect();
-        Context {
+        Ok(Context {
             substitutions,
             substitutions_until_fixed_point,
             cumulative_substitutions,
             bindings,
-        }
+        })
     }
 
     fn add_statistics_measurement(&mut self, step_index: &str, rule: &str, start_time: Instant) {

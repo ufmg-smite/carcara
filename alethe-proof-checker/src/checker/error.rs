@@ -13,6 +13,9 @@ pub enum CheckerError {
     #[error("unspecified error")]
     Unspecified,
 
+    #[error(transparent)]
+    Substitution(#[from] SubstitutionError),
+
     // Rule specific errors
     #[error(transparent)]
     Resolution(#[from] ResolutionError),
