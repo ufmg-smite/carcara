@@ -71,6 +71,77 @@ pub fn trans(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     find_chain(conclusion, &mut premises)
 }
 
+/// Similar to `find_chain`, but reorders the step premise indices to match the found chain
+fn reconstruct_chain(
+    conclusion: (&Rc<Term>, &Rc<Term>),
+    premise_equalities: &mut [(&Rc<Term>, &Rc<Term>)],
+    premise_indices: &mut [(usize, usize)],
+) -> RuleResult {
+    if conclusion.0 == conclusion.1 {
+        return Ok(());
+    }
+
+    let (index, next_link) = premise_equalities
+        .iter()
+        .enumerate()
+        .find_map(|(i, &(t, u))| {
+            if t == conclusion.0 {
+                Some((i, u))
+            } else if u == conclusion.0 {
+                // TODO: Implement flipping of premise equalities. This will be done by
+                // introducing "symm" steps.
+                todo!()
+            } else {
+                None
+            }
+        })
+        .ok_or_else(|| {
+            let (a, b) = conclusion;
+            CheckerError::BrokenTransitivityChain(a.clone(), b.clone())
+        })?;
+
+    premise_equalities.swap(0, index);
+    premise_indices.swap(0, index);
+
+    reconstruct_chain(
+        (next_link, conclusion.1),
+        &mut premise_equalities[1..],
+        &mut premise_indices[1..],
+    )
+}
+
+#[allow(dead_code)]
+fn reconstruct_trans(
+    RuleArgs { conclusion, premises, .. }: RuleArgs,
+    command_index: String,
+) -> Result<ProofCommand, CheckerError> {
+    assert_clause_len(conclusion, 1)?;
+
+    let conclusion_equality = match_term_err!((= t u) = &conclusion[0])?;
+    let mut premise_equalities: Vec<_> = premises
+        .iter()
+        .map(|premise| match_term_err!((= t u) = get_premise_term(*premise)?))
+        .collect::<Result<_, _>>()?;
+
+    let mut new_premises: Vec<_> = premises.into_iter().map(|p| p.premise_index).collect();
+    reconstruct_chain(
+        conclusion_equality,
+        &mut premise_equalities,
+        &mut new_premises,
+    )?;
+
+    let new_step = ProofStep {
+        index: command_index,
+        clause: conclusion.to_vec(),
+        rule: "trans".into(),
+        premises: new_premises,
+        args: Vec::new(),
+        discharge: Vec::new(),
+    };
+
+    Ok(ProofCommand::Step(new_step))
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
