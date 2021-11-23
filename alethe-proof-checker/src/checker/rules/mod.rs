@@ -13,7 +13,7 @@ pub type Rule = fn(RuleArgs) -> RuleResult;
 
 pub struct RuleArgs<'a> {
     pub(super) conclusion: &'a [Rc<Term>],
-    pub(super) premises: Vec<&'a ProofCommand>,
+    pub(super) premises: Vec<Premise<'a>>,
     pub(super) args: &'a [ProofArg],
     pub(super) pool: &'a mut TermPool,
     pub(super) context: &'a mut [Context],
@@ -22,6 +22,12 @@ pub struct RuleArgs<'a> {
     // closing, because they may need to refer to some of them, and they are not given as premises.
     // If a rule is not ending a subproof, this should be `None`
     pub(super) subproof_commands: Option<&'a [ProofCommand]>,
+}
+
+#[derive(Clone, Copy)]
+pub struct Premise<'a> {
+    pub command: &'a ProofCommand,
+    pub premise_index: (usize, usize),
 }
 
 fn get_single_term_from_command(command: &ProofCommand) -> Option<&Rc<Term>> {
@@ -42,11 +48,11 @@ fn get_clause_from_command(command: &ProofCommand) -> &[Rc<Term>] {
     }
 }
 
-/// Helper function to get a single term from a command, or return a `CheckerError::BadPremise` error
-/// if it doesn't succeed.
-fn get_premise_term(premise: &ProofCommand) -> Result<&Rc<Term>, CheckerError> {
-    get_single_term_from_command(premise)
-        .ok_or_else(|| CheckerError::BadPremise(premise.index().to_string()))
+/// Helper function to get a single term from a premise, or return a `CheckerError::BadPremise`
+/// error if it doesn't succeed.
+fn get_premise_term(premise: Premise) -> Result<&Rc<Term>, CheckerError> {
+    get_single_term_from_command(&premise.command)
+        .ok_or_else(|| CheckerError::BadPremise(premise.command.index().to_string()))
 }
 
 /// Asserts that the argument is true, and returns `None` otherwise. `rassert!(arg)` is identical
@@ -63,7 +69,7 @@ macro_rules! rassert {
     };
 }
 
-fn assert_num_premises<T: Into<Range>>(premises: &[&ProofCommand], range: T) -> RuleResult {
+fn assert_num_premises<T: Into<Range>>(premises: &[Premise], range: T) -> RuleResult {
     let range = range.into();
     if !range.contains(premises.len()) {
         return Err(CheckerError::WrongNumberOfPremises(range, premises.len()));

@@ -9,7 +9,7 @@ use ahash::AHashSet;
 pub fn reordering(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_num_premises(&premises, 1)?;
 
-    let premise = get_clause_from_command(premises[0]);
+    let premise = get_clause_from_command(premises[0].command);
     assert_clause_len(conclusion, premise.len())?;
 
     let premise_set: AHashSet<_> = premise.iter().collect();

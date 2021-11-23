@@ -8,7 +8,7 @@ use crate::{
 };
 use ahash::{AHashMap, AHashSet};
 use error::CheckerError;
-use rules::{Rule, RuleArgs, RuleResult};
+use rules::{Premise, Rule, RuleArgs, RuleResult};
 use std::time::{Duration, Instant};
 
 struct Context {
@@ -156,7 +156,10 @@ impl<'c> ProofChecker<'c> {
         };
         let premises = premises
             .iter()
-            .map(|&(depth, i)| &commands_stack[depth].1[i])
+            .map(|&(depth, i)| {
+                let command = &commands_stack[depth].1[i];
+                Premise { command, premise_index: (depth, i) }
+            })
             .collect();
 
         // If this step ends a subproof, it might need to implicitly reference the other commands

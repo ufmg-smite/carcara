@@ -19,7 +19,7 @@ pub fn resolution(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> Rule
     // In some cases, this rule is used with a single premise `(not true)` to justify an empty
     // conclusion clause
     if conclusion.is_empty() && premises.len() == 1 {
-        if let Some(t) = get_single_term_from_command(premises[0]) {
+        if let Some(t) = get_single_term_from_command(premises[0].command) {
             if match_term!((not true) = t).is_some() {
                 return Ok(());
             }
@@ -54,8 +54,8 @@ pub fn resolution(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> Rule
     // be true for all pivots
     let mut pivots = AHashMap::new();
 
-    for command in premises {
-        let premise_clause = get_clause_from_command(command);
+    for premise in premises {
+        let premise_clause = get_clause_from_command(premise.command);
         for term in premise_clause {
             let (n, inner) = term.remove_all_negations();
             let n = n as i32;
@@ -151,7 +151,7 @@ pub fn tautology(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult 
     assert_clause_len(conclusion, 1)?;
     assert_is_bool_constant(&conclusion[0], true)?;
 
-    let premise = get_clause_from_command(premises[0]);
+    let premise = get_clause_from_command(premises[0].command);
     let mut seen = AHashSet::with_capacity(premise.len());
     let with_negations_removed = premise
         .iter()
@@ -168,7 +168,7 @@ pub fn tautology(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult 
 pub fn contraction(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_num_premises(&premises, 1)?;
 
-    let premise_clause = get_clause_from_command(premises[0]);
+    let premise_clause = get_clause_from_command(premises[0].command);
     let expected: Vec<_> = premise_clause.iter().dedup().collect();
     assert_clause_len(conclusion, expected.len())?;
 
