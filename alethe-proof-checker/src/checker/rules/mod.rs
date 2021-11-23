@@ -2,7 +2,10 @@ use super::{
     error::{CheckerError, EqualityError},
     Context,
 };
-use crate::{ast::*, utils::Range};
+use crate::{
+    ast::*,
+    utils::{Range, TypeName},
+};
 
 pub type RuleResult = Result<(), CheckerError>;
 
@@ -105,7 +108,7 @@ fn assert_operation_len<T: Into<Range>>(op: Operator, args: &[Rc<Term>], range: 
 
 fn assert_eq<T>(a: &T, b: &T) -> RuleResult
 where
-    T: Eq + Clone,
+    T: Eq + Clone + TypeName,
     EqualityError<T>: Into<CheckerError>,
 {
     if a != b {
@@ -116,7 +119,7 @@ where
 
 fn assert_is_expected<T>(got: &T, expected: T) -> RuleResult
 where
-    T: Eq + Clone,
+    T: Eq + Clone + TypeName,
     EqualityError<T>: Into<CheckerError>,
 {
     if *got != expected {
@@ -127,7 +130,7 @@ where
 
 fn assert_eq_modulo_reordering<T>(a: &T, b: &T) -> Result<(), CheckerError>
 where
-    T: Eq + Clone + DeepEq,
+    T: Eq + Clone + TypeName + DeepEq,
     EqualityError<T>: Into<CheckerError>,
 {
     if !DeepEq::eq_modulo_reordering(a, b) {
@@ -138,7 +141,7 @@ where
 
 fn assert_is_expected_modulo_reordering<T>(got: &T, expected: T) -> RuleResult
 where
-    T: Eq + Clone + DeepEq,
+    T: Eq + Clone + TypeName + DeepEq,
     EqualityError<T>: Into<CheckerError>,
 {
     if !DeepEq::eq_modulo_reordering(got, &expected) {

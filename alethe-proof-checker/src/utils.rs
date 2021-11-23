@@ -2,7 +2,7 @@ use crate::ast::{BindingList, Quantifier, Rc, Term};
 use ahash::AHashSet;
 use num_rational::BigRational;
 use num_traits::{One, Signed, Zero};
-use std::{hash::Hash, ops};
+use std::{fmt, hash::Hash, ops};
 
 /// An enum that can hold one of two types. Similar to `Result`, but doesn't imply that one of the
 /// variants is "better" than the other.
@@ -90,18 +90,20 @@ impl RawOps for BigRational {
 pub struct Range(Option<usize>, Option<usize>);
 
 impl Range {
-    pub fn to_text(&self) -> String {
-        match self {
-            Range(Some(a), Some(b)) if a == b => format!("{}", a),
-            Range(Some(a), Some(b)) => format!("between {} and {}", a, b),
-            Range(Some(a), None) => format!("at least {}", a),
-            Range(None, Some(b)) => format!("up to {}", b),
-            Range(None, None) => "any number of".into(),
-        }
-    }
-
     pub fn contains(&self, n: usize) -> bool {
         self.0.map_or(true, |bound| n >= bound) && self.1.map_or(true, |bound| n <= bound)
+    }
+}
+
+impl fmt::Display for Range {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Range(Some(a), Some(b)) if a == b => write!(f, "{}", a),
+            Range(Some(a), Some(b)) => write!(f, "between {} and {}", a, b),
+            Range(Some(a), None) => write!(f, "at least {}", a),
+            Range(None, Some(b)) => write!(f, "up to {}", b),
+            Range(None, None) => write!(f, "any number of"),
+        }
     }
 }
 

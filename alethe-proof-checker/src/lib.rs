@@ -11,45 +11,28 @@ use checker::error::CheckerError;
 use parser::error::ParserError;
 use parser::lexer::Position;
 use std::{
-    fmt,
     fs::File,
     io::{self, BufReader},
     path::Path,
 };
+use thiserror::Error;
 
 pub type AletheResult<T> = Result<T, Error>;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
-    Io(io::Error),
+    #[error("IO error: {0}")]
+    Io(#[from] io::Error),
+
+    #[error("parser error: {0} (on line {}, column {})", (.1).0, (.1).1)]
     Parser(ParserError, Position),
+
+    #[error("checking failed on step '{step}' with rule '{rule}': {inner}")]
     Checker {
         inner: CheckerError,
         rule: String,
         step: String,
     },
-}
-
-impl From<io::Error> for Error {
-    fn from(e: io::Error) -> Self {
-        Self::Io(e)
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Error::Io(e) => write!(f, "IO error: {}", e),
-            Error::Parser(e, (l, c)) => {
-                write!(f, "parser error: {} (on line {}, column {})", e, l, c)
-            }
-            Error::Checker { inner, rule, step } => write!(
-                f,
-                "checking failed on step '{}' with rule '{}': {}",
-                step, rule, inner
-            ),
-        }
-    }
 }
 
 pub fn check<P: AsRef<Path>>(

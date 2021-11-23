@@ -2,66 +2,67 @@ use super::lexer::Token;
 use crate::ast::{Identifier, Sort};
 use num_bigint::BigInt;
 use std::{fmt, ops::RangeFrom};
+use thiserror::Error;
 
 /// The error type for the parser and lexer.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Error, PartialEq)]
 pub enum ParserError {
+    #[error("unexpected character: '{0}'")]
     UnexpectedChar(char),
+
+    #[error("leading zero in numeral '{0}'")]
     LeadingZero(String),
+
+    #[error("quoted symbol contains backslash")]
     BackslashInQuotedSymbol,
+
+    #[error("unexpected EOF in quoted symbol")]
     EofInQuotedSymbol,
+
+    #[error("unexpected EOF in string literal")]
     EofInString,
+
+    #[error("unexpected EOF in numeral")]
     EofInNumeral,
+
+    #[error("unexpected token: '{0}'")]
     UnexpectedToken(Token),
+
+    #[error("expected non-empty sequence")]
     EmptySequence,
-    SortError(SortError),
+
+    #[error("sort error: {0}")]
+    SortError(#[from] SortError),
+
+    #[error("'{0}' is not a function sort")]
     NotAFunction(Sort),
+
+    #[error("identifier '{0}' is not defined")]
     UndefinedIden(Identifier),
+
+    #[error("sort '{0}' is not defined")]
     UndefinedSort(String),
+
+    #[error("step index '{0}' is not defined")]
     UndefinedStepIndex(String),
+
+    #[error("expected {0} arguments, got {1}")]
     WrongNumberOfArgs(usize, usize),
+
+    #[error("step index '{0}' was repeated")]
     RepeatedStepIndex(String),
+
+    #[error("{0} is not a valid sort arity")]
     InvalidSortArity(BigInt),
+
+    #[error("last command in subproof '{0}' is not a step")]
     LastSubproofStepIsNotStep(String),
+
+    #[error("subproof '{0}' was not closed")]
     UnclosedSubproof(String),
+
+    #[error("unknown attribute: ':{0}'")]
     UnknownAttribute(String),
-}
-
-impl From<SortError> for ParserError {
-    fn from(err: SortError) -> Self {
-        ParserError::SortError(err)
-    }
-}
-
-impl fmt::Display for ParserError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use ParserError::*;
-        match self {
-            UnexpectedChar(c) => write!(f, "unexpected character: '{}'", c),
-            LeadingZero(s) => write!(f, "leading zero in numeral '{}'", s),
-            BackslashInQuotedSymbol => write!(f, "quoted symbol contains backslash"),
-            EofInQuotedSymbol => write!(f, "unexpected EOF in quoted symbol"),
-            EofInString => write!(f, "unexpected EOF in string literal"),
-            EofInNumeral => write!(f, "unexpected EOF in numeral"),
-            UnexpectedToken(t) => write!(f, "unexpected token: '{}'", t),
-            EmptySequence => write!(f, "expected non-empty sequence"),
-            SortError(e) => write!(f, "sort error: {}", e),
-            NotAFunction(s) => write!(f, "'{}' is not a function sort", s),
-            UndefinedIden(i) => write!(f, "identifier '{}' is not defined", i),
-            UndefinedSort(s) => write!(f, "sort '{}' is not defined", s),
-            UndefinedStepIndex(i) => write!(f, "step index '{}' is not defined", i),
-            WrongNumberOfArgs(e, g) => {
-                write!(f, "expected {} arguments, got {}", e, g)
-            }
-            RepeatedStepIndex(i) => write!(f, "step index '{}' was repeated", i),
-            InvalidSortArity(n) => write!(f, "{} is not a valid sort arity", n),
-            LastSubproofStepIsNotStep(i) => {
-                write!(f, "last command in subproof '{}' is not a step", i)
-            }
-            UnclosedSubproof(i) => write!(f, "subproof '{}' was not closed", i),
-            UnknownAttribute(a) => write!(f, "unknown attribute: ':{}'", a),
-        }
-    }
 }
 
 impl ParserError {
@@ -88,7 +89,7 @@ impl ParserError {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Error, PartialEq)]
 pub struct SortError {
     pub expected: Vec<Sort>,
     pub got: Sort,
