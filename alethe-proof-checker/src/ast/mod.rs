@@ -4,12 +4,14 @@
 mod macros;
 pub(crate) mod printer;
 mod rc;
+mod substitution;
 mod subterms;
 #[cfg(test)]
 mod tests;
 
 pub use printer::print_proof;
 pub use rc::Rc;
+pub use substitution::SubstitutionError;
 pub use subterms::Subterms;
 
 use crate::checker::error::CheckerError;
@@ -18,14 +20,7 @@ use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
 use std::hash::Hash;
-use thiserror::Error;
-
-#[derive(Debug, PartialEq, Error)]
-#[error("trying to substitute bound variable '{var}', which is bound in term '{binding_term}'")]
-pub struct SubstitutionError {
-    pub var: String,
-    pub binding_term: Rc<Term>,
-}
+use substitution::Substitution;
 
 pub struct TermPool {
     pub terms: AHashMap<Term, Rc<Term>>,
@@ -101,62 +96,6 @@ impl TermPool {
         terms.into_iter().map(|t| self.add_term(t)).collect()
     }
 
-    fn apply_substitutions_rec<'a>(
-        &mut self,
-        term: &'a Rc<Term>,
-        substitutions: &AHashMap<Rc<Term>, Rc<Term>>,
-        cache: &mut AHashMap<Rc<Term>, Rc<Term>>,
-    ) -> Result<Rc<Term>, SubstitutionError> {
-        macro_rules! apply_to_sequence {
-            ($sequence:expr) => {
-                $sequence
-                    .iter()
-                    .map(|a| self.apply_substitutions_rec(a, substitutions, cache))
-                    .collect::<Result<Vec<_>, _>>()
-            };
-        }
-
-        if let Some(t) = cache.get(term) {
-            return Ok(t.clone());
-        }
-        if let Some(t) = substitutions.get(term) {
-            return Ok(t.clone());
-        }
-
-        let result = match term.as_ref() {
-            Term::App(func, args) => {
-                let new_args = apply_to_sequence!(args)?;
-                let new_func = self.apply_substitutions_rec(func, substitutions, cache)?;
-                self.add_term(Term::App(new_func, new_args))
-            }
-            Term::Op(op, args) => {
-                let new_args = apply_to_sequence!(args)?;
-                self.add_term(Term::Op(*op, new_args))
-            }
-            Term::Quant(q, b, t) => {
-                for var in b {
-                    let var_term = self.add_term(var.clone().into());
-                    if substitutions.contains_key(&var_term) {
-                        return Err(SubstitutionError {
-                            var: var.0.clone(),
-                            binding_term: term.clone(),
-                        });
-                    }
-                }
-                let new_term = self.apply_substitutions_rec(t, substitutions, cache)?;
-                self.add_term(Term::Quant(*q, b.clone(), new_term))
-            }
-            _ => term.clone(),
-        };
-
-        // Since frequently a term will have more than one identical subterms, we insert the
-        // calculated substitution in the cache hash map so it may be reused later. This means we
-        // don't re-visit already seen terms, so this method traverses the term as a DAG, not as a
-        // tree
-        cache.insert(term.clone(), result.clone());
-        Ok(result)
-    }
-
     /// Takes a term and a hash map of variables to terms and substitutes every ocurrence of those
     /// variables with the associated term.
     pub fn apply_substitutions<'a>(
@@ -164,7 +103,7 @@ impl TermPool {
         term: &'a Rc<Term>,
         substitutions: &AHashMap<Rc<Term>, Rc<Term>>,
     ) -> Result<Rc<Term>, SubstitutionError> {
-        self.apply_substitutions_rec(term, substitutions, &mut AHashMap::new())
+        Substitution::new(self, substitutions).apply(term)
     }
 
     /// Returns an `AHashSet` containing all the free variables in this term.
