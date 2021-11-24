@@ -289,10 +289,6 @@ pub fn onepoint(
 
     let points = extract_points(quant, left);
 
-    // We clone the substitutions so we don't pollute the hash map when applying the substitutions
-    // to `points`
-    let substitutions_clone = context.substitutions_until_fixed_point.clone();
-
     // Since a substitution may use a varibale introduced in a previous substitution, we apply the
     // substitutions to the points in order to replace these variables by their value. We also
     // create a duplicate of every point in the reverse order, since the order of equalities may be
@@ -301,7 +297,7 @@ pub fn onepoint(
         .into_iter()
         .flat_map(|(x, t)| [(x.clone(), t.clone()), (t, x)])
         .map(|(x, t)| {
-            let new_t = pool.apply_substitutions(&t, &substitutions_clone)?;
+            let new_t = pool.apply_substitutions(&t, &context.substitutions_until_fixed_point)?;
             Ok((x, new_t))
         })
         .collect::<Result<_, CheckerError>>()?;
