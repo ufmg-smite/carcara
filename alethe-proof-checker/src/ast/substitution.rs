@@ -78,3 +78,51 @@ impl<'a> Substitution<'a> {
         Ok(result)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::tests::{parse_definitions, parse_term_with_state};
+
+    fn run_test(definitions: &str, original: &str, x: &str, t: &str, result: &str) {
+        let mut state = parse_definitions(definitions);
+        let original = parse_term_with_state(&mut state, original);
+        let x = parse_term_with_state(&mut state, x);
+        let t = parse_term_with_state(&mut state, t);
+        let result = parse_term_with_state(&mut state, result);
+
+        let mut substitutions = AHashMap::new();
+        substitutions.insert(x, t);
+
+        let mut pool = state.term_pool;
+        let got = pool.apply_substitutions(&original, &substitutions).unwrap();
+
+        assert_eq!(&result, &got);
+    }
+
+    macro_rules! run_tests {
+        (
+            definitions = $defs:literal,
+            $($original:literal [$x:tt -> $t:tt] => $result:literal,)*
+        ) => {{
+            let definitions = $defs;
+            $(run_test(definitions, $original, stringify!($x), stringify!($t), $result);)*
+        }};
+    }
+
+    #[test]
+    fn test_substitutions() {
+        run_tests! {
+            definitions = "
+                (declare-fun x () Int)
+                (declare-fun y () Int)
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+            ",
+            "(+ 2 x)" [x -> y] => "(+ 2 y)",
+            "(+ 2 x)" [x -> (+ 3 4 5)] => "(+ 2 (+ 3 4 5))",
+            "(forall ((p Bool)) (and p q))" [q -> r] => "(forall ((p Bool)) (and p r))",
+        }
+    }
+}

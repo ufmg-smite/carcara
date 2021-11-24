@@ -33,6 +33,21 @@ pub fn parse_term_with_definitions(definitions: &str, term: &str) -> Term {
         .clone()
 }
 
+pub(crate) fn parse_definitions(definitions: &str) -> ParserState {
+    let mut parser = Parser::new(definitions.as_bytes()).expect(ERROR_MESSAGE);
+    parser.parse_problem().expect(ERROR_MESSAGE);
+    parser.state
+}
+
+pub(crate) fn parse_term_with_state(state: &mut ParserState, term: &str) -> Rc<Term> {
+    // This temporarily assigns `ParserState::default()` to `state`.
+    let owned_state = std::mem::take(state);
+    let mut parser = Parser::with_state(term.as_bytes(), owned_state).expect(ERROR_MESSAGE);
+    let term = parser.parse_term().expect(ERROR_MESSAGE);
+    *state = parser.state; // Restore the `state` variable
+    term
+}
+
 pub fn parse_proof(input: &str) -> Proof {
     let commands = Parser::new(input.as_bytes())
         .and_then(|mut p| p.parse_proof())

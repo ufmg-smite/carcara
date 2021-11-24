@@ -84,10 +84,10 @@ impl<K, V> Default for SymbolTable<K, V> {
 }
 
 #[derive(Default)]
-struct ParserState {
+pub(crate) struct ParserState {
     sorts_symbol_table: SymbolTable<Identifier, Rc<Term>>,
     function_defs: AHashMap<String, FunctionDef>,
-    term_pool: TermPool,
+    pub(crate) term_pool: TermPool,
     sort_declarations: AHashMap<String, usize>,
     step_indices: SymbolTable<String, usize>,
 }
