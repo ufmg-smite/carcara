@@ -1,13 +1,14 @@
-use super::{Rc, Term, TermPool};
+use super::{BindingList, Identifier, Rc, Term, TermPool, Terminal};
 use ahash::AHashMap;
 use thiserror::Error;
 
 #[derive(Debug, PartialEq, Error)]
-#[error("trying to substitute bound variable '{var}', which is bound in term '{binding_term}'")]
-pub struct SubstitutionError {
-    pub var: String,
-    pub binding_term: Rc<Term>,
+pub enum SubstitutionError {
+    #[error("can't rename binding '{0}' with term '{1}'")]
+    InvalidBindingRename(String, Rc<Term>),
 }
+
+type SubstitutionResult<T> = Result<T, SubstitutionError>;
 
 pub(super) struct Substitution<'a> {
     pool: &'a mut TermPool,
@@ -27,7 +28,7 @@ impl<'a> Substitution<'a> {
         }
     }
 
-    pub(super) fn apply(&mut self, term: &Rc<Term>) -> Result<Rc<Term>, SubstitutionError> {
+    pub(super) fn apply(&mut self, term: &Rc<Term>) -> SubstitutionResult<Rc<Term>> {
         macro_rules! apply_to_sequence {
             ($sequence:expr) => {
                 $sequence
@@ -55,18 +56,11 @@ impl<'a> Substitution<'a> {
                 self.pool.add_term(Term::Op(*op, new_args))
             }
             Term::Quant(q, b, t) => {
-                for var in b {
-                    let var_term = self.pool.add_term(var.clone().into());
-                    if self.substitutions.contains_key(&var_term) {
-                        return Err(SubstitutionError {
-                            var: var.0.clone(),
-                            binding_term: term.clone(),
-                        });
-                    }
-                }
+                let new_bindings = self.rename_quantifier_bindings(b)?;
                 let new_term = self.apply(t)?;
-                self.pool.add_term(Term::Quant(*q, b.clone(), new_term))
+                self.pool.add_term(Term::Quant(*q, new_bindings, new_term))
             }
+            // TODO: Handle "choice" and "let" terms
             _ => term.clone(),
         };
 
@@ -76,6 +70,35 @@ impl<'a> Substitution<'a> {
         // tree
         self.cache.insert(term.clone(), result.clone());
         Ok(result)
+    }
+
+    fn rename_quantifier_bindings(&mut self, b: &BindingList) -> SubstitutionResult<BindingList> {
+        b.iter()
+            .map(|var| {
+                // For each variable in the binding list, we see if the substitution will rename it
+                // or not
+                let var_term = self.pool.add_term(var.clone().into());
+                if let Some(value) = self.substitutions.get(&var_term) {
+                    if let Term::Terminal(Terminal::Var(Identifier::Simple(iden), sort)) =
+                        value.as_ref()
+                    {
+                        if sort == &var.1 {
+                            // If we are substituting one of the bound variables with a
+                            // different variable of the same sort, we rename it
+                            return Ok((iden.clone(), sort.clone()));
+                        }
+                    }
+                    // If we are substituting one of the bound variables with something
+                    // else, we can't simply rename it, so we return an error
+                    return Err(SubstitutionError::InvalidBindingRename(
+                        var.0.to_string(),
+                        value.clone(),
+                    ));
+                }
+                Ok(var.clone())
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map(BindingList)
     }
 }
 
