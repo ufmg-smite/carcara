@@ -1,4 +1,5 @@
 use crate::{
+    ast::printer::DisplayRatio,
     ast::*,
     checker::rules::linear_arithmetic::LinearComb,
     utils::{Range, TypeName},
@@ -272,17 +273,6 @@ pub enum SubproofError {
 
     #[error("expected binding list in right-hand side to be '{0}'")]
     OnePointWrongBindings(BindingList),
-}
-
-/// A wrapper struct that implements `fmt::Display` for `BigRational`s.
-struct DisplayRatio<'a>(&'a BigRational);
-
-impl<'a> fmt::Display for DisplayRatio<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use num_traits::ToPrimitive;
-        let float_value = self.0.numer().to_f64().unwrap() / self.0.denom().to_f64().unwrap();
-        write!(f, "{:?}", float_value)
-    }
 }
 
 /// A wrapper struct that implements `fmt::Display` for linear combinations.
