@@ -186,9 +186,23 @@ mod tests {
                 (declare-fun q () Bool)
                 (declare-fun r () Bool)
             ",
+            "x" [x -> x] => "x",
             "(+ 2 x)" [x -> y] => "(+ 2 y)",
             "(+ 2 x)" [x -> (+ 3 4 5)] => "(+ 2 (+ 3 4 5))",
             "(forall ((p Bool)) (and p q))" [q -> r] => "(forall ((p Bool)) (and p r))",
+
+            // Simple renaming
+            "(forall ((x Int)) (> x 0))" [x -> y] => "(forall ((y Int)) (> y 0))",
+
+            // Capture-avoidance
+            "(forall ((y Int)) (> y x))" [x -> y] => "(forall ((y@ Int)) (> y@ y))",
+            "(forall ((x Int) (y Int)) (= x y))" [x -> y] => "(forall ((y Int) (y@ Int)) (= y y@))",
+            "(forall ((y Int) (y@ Int)) (= x y y@))" [x -> y] =>
+                "(forall ((y@ Int) (y@@ Int)) (= y y@ y@@))",
+            "(forall ((x Int) (y Int)) (= x y))" [x -> x] => "(forall ((x Int) (y Int)) (= x y))",
+
+            // In theory, since x does not appear in this term, renaming y to y@ is unnecessary
+            "(forall ((y Int)) (> y 0))" [x -> x] => "(forall ((y@ Int)) (> y@ 0))",
         }
     }
 }
