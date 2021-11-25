@@ -202,7 +202,7 @@ mod tests {
             "(forall ((x Int) (y Int)) (= x y))" [x -> x] => "(forall ((x Int) (y Int)) (= x y))",
 
             // In theory, since x does not appear in this term, renaming y to y@ is unnecessary
-            "(forall ((y Int)) (> y 0))" [x -> x] => "(forall ((y@ Int)) (> y@ 0))",
+            "(forall ((y Int)) (> y 0))" [x -> y] => "(forall ((y@ Int)) (> y@ 0))",
         }
     }
 }
