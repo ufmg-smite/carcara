@@ -1,9 +1,12 @@
-use super::{BindingList, Identifier, Rc, Term, TermPool, Terminal};
+use super::{BindingList, Rc, Term, TermPool};
 use ahash::{AHashMap, AHashSet};
 use thiserror::Error;
 
 #[derive(Debug, PartialEq, Error)]
 pub enum SubstitutionError {
+    #[error("trying to substitute term '{0}' with a term of different sort: '{1}'")]
+    DifferentSorts(Rc<Term>, Rc<Term>),
+
     #[error("can't rename binding '{0}' with term '{1}'")]
     InvalidBindingRename(String, Rc<Term>),
 }
@@ -21,7 +24,13 @@ impl<'a> Substitution<'a> {
     pub(super) fn new(
         pool: &'a mut TermPool,
         substitutions: &'a AHashMap<Rc<Term>, Rc<Term>>,
-    ) -> Self {
+    ) -> SubstitutionResult<Self> {
+        for (k, v) in substitutions {
+            if k.sort() != v.sort() {
+                return Err(SubstitutionError::DifferentSorts(k.clone(), v.clone()));
+            }
+        }
+
         // In order to implement capture-avoidance, we need to know which variables may be captured
         // after applying the substitution. For example, consider the substitution { x -> y }. If x
         // and y are both variables, when applying the substitution to (forall ((x Int)) (= x y)),
@@ -37,12 +46,12 @@ impl<'a> Substitution<'a> {
                 _ => None,
             })
             .collect();
-        Self {
+        Ok(Self {
             pool,
             substitutions,
             substitution_image_vars,
             cache: AHashMap::new(),
-        }
+        })
     }
 
     pub(super) fn apply(&mut self, term: &Rc<Term>) -> SubstitutionResult<Rc<Term>> {
@@ -78,7 +87,7 @@ impl<'a> Substitution<'a> {
                     // If there are variables that would be captured by the substitution, we need
                     // to rename them first. For that, we create a new `Substitution` with the
                     // capture avoiding substitution and apply it to the outer term
-                    let mut sub = Substitution::new(self.pool, &capture_avoiding_substitution);
+                    let mut sub = Substitution::new(self.pool, &capture_avoiding_substitution)?;
                     let new_term = sub.apply(term)?;
                     self.apply(&new_term)?
                 } else {
@@ -101,28 +110,25 @@ impl<'a> Substitution<'a> {
 
     fn rename_quantifier_bindings(&mut self, b: &BindingList) -> SubstitutionResult<BindingList> {
         b.iter()
-            .map(|var| {
+            .map(|binding| {
                 // For each variable in the binding list, we see if the substitution will rename it
                 // or not
-                let var_term = self.pool.add_term(var.clone().into());
-                if let Some(value) = self.substitutions.get(&var_term) {
-                    if let Term::Terminal(Terminal::Var(Identifier::Simple(iden), sort)) =
-                        value.as_ref()
-                    {
-                        if sort == &var.1 {
-                            // If we are substituting one of the bound variables with a
-                            // different variable of the same sort, we rename it
-                            return Ok((iden.clone(), sort.clone()));
-                        }
+                let binding_term = self.pool.add_term(binding.clone().into());
+                if let Some(value) = self.substitutions.get(&binding_term) {
+                    if let Some(iden) = value.as_var() {
+                        // If we are substituting one of the bound variables with a
+                        // different variable of the same sort, we rename it. Note that the sort is
+                        // guaranteed to be the same because of the invariants of `Substitution`
+                        return Ok((iden.to_string(), binding.1.clone()));
                     }
                     // If we are substituting one of the bound variables with something
                     // else, we can't simply rename it, so we return an error
                     return Err(SubstitutionError::InvalidBindingRename(
-                        var.0.to_string(),
+                        binding.0.to_string(),
                         value.clone(),
                     ));
                 }
-                Ok(var.clone())
+                Ok(binding.clone())
             })
             .collect::<Result<Vec<_>, _>>()
             .map(BindingList)

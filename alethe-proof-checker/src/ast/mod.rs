@@ -103,7 +103,7 @@ impl TermPool {
         term: &'a Rc<Term>,
         substitutions: &AHashMap<Rc<Term>, Rc<Term>>,
     ) -> Result<Rc<Term>, SubstitutionError> {
-        Substitution::new(self, substitutions).apply(term)
+        Substitution::new(self, substitutions)?.apply(term)
     }
 
     /// Returns an `AHashSet` containing all the free variables in this term.
