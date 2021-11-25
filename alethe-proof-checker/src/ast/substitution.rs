@@ -1,5 +1,5 @@
 use super::{BindingList, Identifier, Rc, Term, TermPool, Terminal};
-use ahash::AHashMap;
+use ahash::{AHashMap, AHashSet};
 use thiserror::Error;
 
 #[derive(Debug, PartialEq, Error)]
@@ -13,6 +13,7 @@ type SubstitutionResult<T> = Result<T, SubstitutionError>;
 pub(super) struct Substitution<'a> {
     pool: &'a mut TermPool,
     substitutions: &'a AHashMap<Rc<Term>, Rc<Term>>,
+    substitution_image_vars: AHashSet<String>,
     cache: AHashMap<Rc<Term>, Rc<Term>>,
 }
 
@@ -21,9 +22,25 @@ impl<'a> Substitution<'a> {
         pool: &'a mut TermPool,
         substitutions: &'a AHashMap<Rc<Term>, Rc<Term>>,
     ) -> Self {
+        // In order to implement capture-avoidance, we need to know which variables may be captured
+        // after applying the substitution. For example, consider the substitution { x -> y }. If x
+        // and y are both variables, when applying the substitution to (forall ((x Int)) (= x y)),
+        // we would need to rename y to avoid a capture, because the substitution would rename the
+        // bound variable x to y. The resulting term should then be (forall ((y Int)) (= y y')). In
+        // order to prepare for that situation, we compute all entries in the substitution where
+        // both the orignal term and the reuslting term are variables. We take care to exclude
+        // identity entries, i.e., entries like x -> x.
+        let substitution_image_vars = substitutions
+            .iter()
+            .filter_map(|(k, v)| match (k.as_var(), v.as_var()) {
+                (Some(k), Some(v)) if k != v => Some(v.to_string()),
+                _ => None,
+            })
+            .collect();
         Self {
             pool,
             substitutions,
+            substitution_image_vars,
             cache: AHashMap::new(),
         }
     }
@@ -56,9 +73,19 @@ impl<'a> Substitution<'a> {
                 self.pool.add_term(Term::Op(*op, new_args))
             }
             Term::Quant(q, b, t) => {
-                let new_bindings = self.rename_quantifier_bindings(b)?;
-                let new_term = self.apply(t)?;
-                self.pool.add_term(Term::Quant(*q, new_bindings, new_term))
+                let capture_avoiding_substitution = self.capture_avoiding_substitution(b);
+                if !capture_avoiding_substitution.is_empty() {
+                    // If there are variables that would be captured by the substitution, we need
+                    // to rename them first. For that, we create a new `Substitution` with the
+                    // capture avoiding substitution and apply it to the outer term
+                    let mut sub = Substitution::new(self.pool, &capture_avoiding_substitution);
+                    let new_term = sub.apply(term)?;
+                    self.apply(&new_term)?
+                } else {
+                    let new_bindings = self.rename_quantifier_bindings(b)?;
+                    let new_term = self.apply(t)?;
+                    self.pool.add_term(Term::Quant(*q, new_bindings, new_term))
+                }
             }
             // TODO: Handle "choice" and "let" terms
             _ => term.clone(),
@@ -99,6 +126,22 @@ impl<'a> Substitution<'a> {
             })
             .collect::<Result<Vec<_>, _>>()
             .map(BindingList)
+    }
+
+    /// Returns a new substitution that renames all variables in the binding list that may be
+    /// captured by this substitution to a new, arbitrary name. The name chosen is the old name
+    /// with '@' appended.
+    fn capture_avoiding_substitution(&mut self, b: &BindingList) -> AHashMap<Rc<Term>, Rc<Term>> {
+        b.iter()
+            .filter_map(|(var, sort)| {
+                if !self.substitution_image_vars.contains(var) {
+                    return None;
+                }
+                let old = self.pool.add_term((var.clone(), sort.clone()).into());
+                let new = self.pool.add_term((var.clone() + "@", sort.clone()).into());
+                Some((old.into(), new.into()))
+            })
+            .collect()
     }
 }
 
