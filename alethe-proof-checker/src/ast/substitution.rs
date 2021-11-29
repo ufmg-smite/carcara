@@ -145,7 +145,7 @@ impl<'a> Substitution<'a> {
                 }
                 let old = self.pool.add_term((var.clone(), sort.clone()).into());
                 let new = self.pool.add_term((var.clone() + "@", sort.clone()).into());
-                Some((old.into(), new.into()))
+                Some((old, new))
             })
             .collect()
     }
