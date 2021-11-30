@@ -4,14 +4,18 @@ pub mod error;
 pub mod lexer;
 pub mod tests;
 
-use crate::{ast::*, utils::Either, AletheResult, Error};
+use crate::{
+    ast::*,
+    utils::{Either, SymbolTable},
+    AletheResult, Error,
+};
 use ahash::{AHashMap, AHashSet};
 use error::*;
 use lexer::*;
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
-use std::{hash::Hash, io::BufRead, str::FromStr};
+use std::{io::BufRead, str::FromStr};
 
 pub fn parse_instance<T: BufRead>(problem: T, proof: T) -> AletheResult<(Proof, TermPool)> {
     let mut problem_parser = Parser::new(problem)?;
@@ -31,58 +35,6 @@ type StepCommand = (
     Vec<ProofArg>, // Arguments
     Vec<String>,   // Discharge
 );
-
-struct SymbolTable<K, V> {
-    scopes: Vec<AHashMap<K, V>>,
-}
-
-impl<K, V> SymbolTable<K, V> {
-    fn new() -> Self {
-        Self { scopes: vec![AHashMap::new()] }
-    }
-
-    fn push_scope(&mut self) {
-        self.scopes.push(AHashMap::new());
-    }
-
-    fn pop_scope(&mut self) {
-        match self.scopes.len() {
-            0 => unreachable!(),
-            1 => {
-                log::error!("cannot pop last scope in symbol table");
-                panic!()
-            }
-            _ => {
-                self.scopes.pop().unwrap();
-            }
-        }
-    }
-}
-
-impl<K: Eq + Hash, V> SymbolTable<K, V> {
-    fn get(&self, key: &K) -> Option<&V> {
-        self.scopes.iter().rev().find_map(|scope| scope.get(key))
-    }
-
-    fn get_with_depth(&self, key: &K) -> Option<(usize, &V)> {
-        self.scopes
-            .iter()
-            .enumerate()
-            .rev()
-            .find_map(|(depth, scope)| scope.get(key).map(|v| (depth, v)))
-    }
-
-    fn insert(&mut self, key: K, value: V) {
-        self.scopes.last_mut().unwrap().insert(key, value);
-    }
-}
-
-impl<K, V> Default for SymbolTable<K, V> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[derive(Default)]
 pub(crate) struct ParserState {
     sorts_symbol_table: SymbolTable<Identifier, Rc<Term>>,
