@@ -59,7 +59,7 @@ fn run_parser_tests(cases: &[(&str, Term)]) {
     for (case, expected) in cases {
         let got = parse_term(case);
         assert!(
-            DeepEq::eq(expected, &got),
+            deep_eq(expected, &got),
             "test case failed: {} != {}",
             expected,
             got

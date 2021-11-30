@@ -113,7 +113,7 @@ impl<'c> ProofChecker<'c> {
                             || proof
                                 .premises
                                 .iter()
-                                .any(|u| DeepEq::eq_modulo_reordering(term, u));
+                                .any(|u| deep_eq_modulo_reordering(term, u));
                         if is_valid {
                             Ok(())
                         } else {

@@ -123,9 +123,9 @@ fn test_deep_eq() {
                 parse_term_with_definitions(definitions, b),
             );
             if is_mod_reordering {
-                assert!(DeepEq::eq_modulo_reordering(&a, &b))
+                assert_deep_eq_modulo_reordering!(&a, &b)
             } else {
-                assert!(DeepEq::eq(&a, &b))
+                assert_deep_eq!(&a, &b)
             }
         }
     }
