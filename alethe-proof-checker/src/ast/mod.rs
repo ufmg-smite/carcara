@@ -10,7 +10,7 @@ mod subterms;
 #[cfg(test)]
 mod tests;
 
-pub use deep_eq::{deep_eq, deep_eq_modulo_reordering, DeepEq};
+pub use deep_eq::{are_alpha_equivalent, deep_eq, deep_eq_modulo_reordering, DeepEq};
 pub use printer::print_proof;
 pub use rc::Rc;
 pub use substitution::SubstitutionError;

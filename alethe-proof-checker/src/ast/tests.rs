@@ -116,16 +116,24 @@ fn test_free_vars() {
 
 #[test]
 fn test_deep_eq() {
-    fn run_tests(definitions: &str, cases: &[(&str, &str)], is_mod_reordering: bool) {
+    enum TestType {
+        Normal,
+        ModReordering,
+        AlphaEquiv,
+    }
+
+    fn run_tests(definitions: &str, cases: &[(&str, &str)], test_type: TestType) {
         for (a, b) in cases {
             let (a, b) = (
                 parse_term_with_definitions(definitions, a),
                 parse_term_with_definitions(definitions, b),
             );
-            if is_mod_reordering {
-                assert_deep_eq_modulo_reordering!(&a, &b)
-            } else {
-                assert_deep_eq!(&a, &b)
+            match test_type {
+                TestType::Normal => assert_deep_eq!(&a, &b),
+                TestType::ModReordering => assert_deep_eq_modulo_reordering!(&a, &b),
+                TestType::AlphaEquiv => {
+                    assert!(super::deep_eq::are_alpha_equivalent(&a, &b), "{} {}", a, b)
+                }
             }
         }
     }
@@ -148,7 +156,7 @@ fn test_deep_eq() {
                 "(ite (and (not p) q) (* x y) (- 0 y))",
             ),
         ],
-        false,
+        TestType::Normal,
     );
     run_tests(
         definitions,
@@ -160,6 +168,30 @@ fn test_deep_eq() {
                 "(ite (= b a) (= (+ x y) x) (and p (not (= y x))))",
             ),
         ],
-        true,
+        TestType::ModReordering,
+    );
+    run_tests(
+        definitions,
+        &[
+            ("(= a b)", "(= b a)"),
+            ("(forall ((p Bool)) p)", "(forall ((q Bool)) q)"),
+            (
+                "(forall ((x Int) (y Int)) (< x y))",
+                "(forall ((y Int) (x Int)) (< y x))",
+            ),
+            (
+                "(forall ((p Bool)) (forall ((q Bool)) p))",
+                "(forall ((q Bool)) (forall ((p Bool)) q))",
+            ),
+            (
+                "(choice ((x Int)) (forall ((y Int)) (exists ((z Int)) (= x y z))))",
+                "(choice ((a Int)) (forall ((b Int)) (exists ((c Int)) (= a b c))))",
+            ),
+            (
+                "(let ((x 0) (y (+ x 2)) (z (< x y))) (and z (= x y)))",
+                "(let ((z 0) (x (+ z 2)) (y (< z x))) (and y (= z x)))",
+            ),
+        ],
+        TestType::AlphaEquiv,
     );
 }
