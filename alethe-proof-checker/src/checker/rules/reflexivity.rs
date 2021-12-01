@@ -18,8 +18,8 @@ pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> RuleResult 
         return Ok(());
     }
 
-    let cumulative_substitution = &context
-        .last()
+    let cumulative_substitution = &mut context
+        .last_mut()
         .ok_or_else(|| CheckerError::ReflexivityFailed(left.clone(), right.clone()))?
         .cumulative_substitution;
 
@@ -27,9 +27,9 @@ pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> RuleResult 
     // cases it is applied to both. To cover all cases, we must check all three possibilities. We
     // don't compute the new left and right terms until they are needed, to avoid doing unnecessary
     // work
-    let new_left = pool.apply_substitution(left, cumulative_substitution)?;
+    let new_left = cumulative_substitution.apply(pool, left)?;
     let result = new_left == *right || {
-        let new_right = pool.apply_substitution(right, cumulative_substitution)?;
+        let new_right = cumulative_substitution.apply(pool, right)?;
         *left == new_right || new_left == new_right
     };
     rassert!(

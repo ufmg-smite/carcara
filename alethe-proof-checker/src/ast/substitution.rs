@@ -10,8 +10,8 @@ pub enum SubstitutionError {
 
 type SubstitutionResult<T> = Result<T, SubstitutionError>;
 
-pub(super) struct Substitution {
-    map: AHashMap<Rc<Term>, Rc<Term>>,
+pub struct Substitution {
+    pub(crate) map: AHashMap<Rc<Term>, Rc<Term>>,
     // Variables that should be renamed to preserve capture-avoidance if they are bound by a binder
     // term
     should_be_renamed: AHashSet<String>,
@@ -19,10 +19,7 @@ pub(super) struct Substitution {
 }
 
 impl Substitution {
-    pub(super) fn new(
-        pool: &mut TermPool,
-        map: AHashMap<Rc<Term>, Rc<Term>>,
-    ) -> SubstitutionResult<Self> {
+    pub fn new(pool: &mut TermPool, map: AHashMap<Rc<Term>, Rc<Term>>) -> SubstitutionResult<Self> {
         for (k, v) in map.iter() {
             if k.sort() != v.sort() {
                 return Err(SubstitutionError::DifferentSorts(k.clone(), v.clone()));
@@ -63,11 +60,7 @@ impl Substitution {
         })
     }
 
-    pub(super) fn apply(
-        &mut self,
-        pool: &mut TermPool,
-        term: &Rc<Term>,
-    ) -> SubstitutionResult<Rc<Term>> {
+    pub fn apply(&mut self, pool: &mut TermPool, term: &Rc<Term>) -> SubstitutionResult<Rc<Term>> {
         macro_rules! apply_to_sequence {
             ($sequence:expr) => {
                 $sequence

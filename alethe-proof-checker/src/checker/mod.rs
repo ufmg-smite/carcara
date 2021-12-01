@@ -12,9 +12,9 @@ use rules::{Rule, RuleArgs, RuleResult};
 use std::time::{Duration, Instant};
 
 struct Context {
-    substitution: AHashMap<Rc<Term>, Rc<Term>>,
-    substitution_until_fixed_point: AHashMap<Rc<Term>, Rc<Term>>,
-    cumulative_substitution: AHashMap<Rc<Term>, Rc<Term>>,
+    substitution: Substitution,
+    substitution_until_fixed_point: Substitution,
+    cumulative_substitution: Substitution,
     bindings: AHashSet<SortedVar>,
 }
 
@@ -172,7 +172,7 @@ impl<'c> ProofChecker<'c> {
             premises,
             args,
             pool: &mut self.pool,
-            context: &self.context,
+            context: &mut self.context,
             subproof_commands,
         };
         rule(rule_args)?;
@@ -202,27 +202,40 @@ impl<'c> ProofChecker<'c> {
             let var_term = self.pool.add_term(var_term);
             substitution.insert(var_term.clone(), value.clone());
 
-            let new_value = self
-                .pool
-                .apply_substitution(value, &substitution_until_fixed_point)?;
+            // We use `mem::take` to "borrow" the hash map by value
+            let borrowed = std::mem::take(&mut substitution_until_fixed_point);
+
+            // Unfortunately, we have to create a new substitution every time to apply it to
+            // `value`. Ideally, `Substitution` should provide a method that allows us to extend an
+            // already existing substitution
+            let mut s = Substitution::new(&mut self.pool, borrowed)?;
+            let new_value = s.apply(&mut self.pool, value)?;
+
+            // We must remember to restore the value after borrowing it
+            substitution_until_fixed_point = s.map;
+
             substitution_until_fixed_point.insert(var_term, new_value);
         }
+        let substitution = Substitution::new(&mut self.pool, substitution)?;
+        let substitution_until_fixed_point =
+            Substitution::new(&mut self.pool, substitution_until_fixed_point)?;
 
         // Some rules (notably "refl") need to apply the substitutions introduced by all the
         // previous contexts instead of just the current one. Instead of doing this iteratively
         // everytime the rule is used, we precompute the cumulative substitutions of this context
         // and all the previous ones and store that in a hash map. This improves the performance of
         // these rules considerably
-        let mut cumulative_substitution = substitution_until_fixed_point.clone();
+        let mut cumulative_substitution = substitution_until_fixed_point.map.clone();
         if let Some(previous_context) = self.context.last() {
-            for (k, v) in previous_context.cumulative_substitution.iter() {
-                let value = match substitution_until_fixed_point.get(v) {
+            for (k, v) in previous_context.cumulative_substitution.map.iter() {
+                let value = match substitution_until_fixed_point.map.get(v) {
                     Some(new_value) => new_value,
                     None => v,
                 };
                 cumulative_substitution.insert(k.clone(), value.clone());
             }
         }
+        let cumulative_substitution = Substitution::new(&mut self.pool, cumulative_substitution)?;
 
         let bindings = variable_args.iter().cloned().collect();
         Ok(Context {

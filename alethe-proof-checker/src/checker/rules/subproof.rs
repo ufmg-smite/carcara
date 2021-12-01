@@ -100,6 +100,7 @@ pub fn bind(
     // The quantifier binders must be the xs and ys of the context substitution
     let (xs, ys): (AHashSet<_>, AHashSet<_>) = context
         .substitution
+        .map
         .iter()
         // We skip terms which are not simply variables
         .filter_map(|(x, y)| Some((x.as_var()?, y.as_var()?)))
@@ -161,8 +162,8 @@ pub fn r#let(
     assert_eq(u_prime, previous_u_prime)?;
 
     rassert!(
-        let_bindings.len() == substitution.len(),
-        SubproofError::WrongNumberOfLetBindings(substitution.len(), let_bindings.len())
+        let_bindings.len() == substitution.map.len(),
+        SubproofError::WrongNumberOfLetBindings(substitution.map.len(), let_bindings.len())
     );
 
     let mut pairs: Vec<_> = let_bindings
@@ -171,6 +172,7 @@ pub fn r#let(
             let sort = pool.add_term(Term::Sort(t.sort().clone()));
             let x_term = pool.add_term((x.clone(), sort).into());
             let s = substitution
+                .map
                 .get(&x_term)
                 .ok_or_else(|| SubproofError::BindingIsNotInContext(x.clone()))?;
             Ok((s, t))
@@ -267,7 +269,7 @@ pub fn onepoint(
         }
     );
 
-    let context = context.last().unwrap();
+    let context = context.last_mut().unwrap();
 
     if let Some((var, _)) = r_bindings.iter().find(|b| !context.bindings.contains(b)) {
         return Err(SubproofError::BindingIsNotInContext(var.clone()).into());
@@ -283,6 +285,7 @@ pub fn onepoint(
         .collect();
     let substitution_vars: AHashSet<_> = context
         .substitution
+        .map
         .iter()
         .map(|(k, _)| k.clone())
         .collect();
@@ -297,7 +300,7 @@ pub fn onepoint(
         .into_iter()
         .flat_map(|(x, t)| [(x.clone(), t.clone()), (t, x)])
         .map(|(x, t)| {
-            let new_t = pool.apply_substitution(&t, &context.substitution_until_fixed_point)?;
+            let new_t = context.substitution_until_fixed_point.apply(pool, &t)?;
             Ok((x, new_t))
         })
         .collect::<Result<_, CheckerError>>()?;
@@ -305,6 +308,7 @@ pub fn onepoint(
     // For each substitution (:= x t) in the context, the equality (= x t) must appear in phi
     if let Some((k, v)) = context
         .substitution
+        .map
         .iter()
         .find(|&(k, v)| !points.contains(&(k.clone(), v.clone())))
     {
@@ -316,7 +320,7 @@ pub fn onepoint(
             .iter()
             .filter(|&v| {
                 let t: Term = v.clone().into();
-                !context.substitution.contains_key(&pool.add_term(t))
+                !context.substitution.map.contains_key(&pool.add_term(t))
             })
             .cloned()
             .collect();
@@ -353,16 +357,17 @@ fn generic_skolemization_rule(
     // I have to extract the length into a separate variable (instead of just using it directly in
     // the slice index) to please the borrow checker
     let n = context.len();
-    for c in &context[..n - 1] {
+    for c in &mut context[..n - 1] {
         // Based on the test examples, we must first apply all previous context substitutions to
         // phi, before applying the substitution present in the current context
-        current_phi = pool.apply_substitution(&current_phi, &c.substitution)?;
+        current_phi = c.substitution.apply(pool, &current_phi)?;
     }
 
     let substitution = &context.last().unwrap().substitution_until_fixed_point;
     for (i, x) in bindings.iter().enumerate() {
         let x_term = pool.add_term(Term::from(x.clone()));
         let t = substitution
+            .map
             .get(&x_term)
             .ok_or_else(|| SubproofError::BindingIsNotInContext(x.0.clone()))?;
 
@@ -392,7 +397,7 @@ fn generic_skolemization_rule(
         // For every binding we skolemize, we must apply another substitution to phi
         let mut s = AHashMap::new();
         s.insert(x_term, t.clone());
-        current_phi = pool.apply_substitution(&current_phi, &s)?;
+        current_phi = Substitution::new(pool, s)?.apply(pool, &current_phi)?;
     }
     Ok(())
 }

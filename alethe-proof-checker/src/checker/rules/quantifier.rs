@@ -33,6 +33,7 @@ pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> RuleRes
             Ok((pool.add_term(ident_term), arg_value.clone()))
         })
         .collect::<Result<_, _>>()?;
+    let mut substitution = Substitution::new(pool, substitution)?;
 
     // All bindings were accounted for in the arguments
     rassert!(
@@ -41,7 +42,7 @@ pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> RuleRes
     );
 
     // Equalities may be reordered in the final term, so we use `DeepEq::eq_modulo_reordering`
-    let expected = pool.apply_substitution(original, &substitution)?;
+    let expected = substitution.apply(pool, original)?;
     assert_is_expected_modulo_reordering(substituted, expected)
 }
 

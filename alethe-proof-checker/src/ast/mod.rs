@@ -13,7 +13,7 @@ mod tests;
 pub use deep_eq::{are_alpha_equivalent, deep_eq, deep_eq_modulo_reordering, DeepEq};
 pub use printer::print_proof;
 pub use rc::Rc;
-pub use substitution::SubstitutionError;
+pub use substitution::{Substitution, SubstitutionError};
 pub use subterms::Subterms;
 
 use crate::checker::error::CheckerError;
@@ -22,7 +22,6 @@ use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
 use std::hash::Hash;
-use substitution::Substitution;
 
 pub struct TermPool {
     pub terms: AHashMap<Term, Rc<Term>>,
@@ -96,18 +95,6 @@ impl TermPool {
     /// Takes a vector of terms and calls `add_term` on each.
     pub fn add_all(&mut self, terms: Vec<Term>) -> Vec<Rc<Term>> {
         terms.into_iter().map(|t| self.add_term(t)).collect()
-    }
-
-    /// Takes a term and a hash map of variables to terms and substitutes every ocurrence of those
-    /// variables with the associated term.
-    pub fn apply_substitution<'a>(
-        &mut self,
-        term: &'a Rc<Term>,
-        substitution: &AHashMap<Rc<Term>, Rc<Term>>,
-    ) -> Result<Rc<Term>, SubstitutionError> {
-        // TODO: Store substitutions as `Substitution` structs instead of simple hash maps to avoid
-        // always having to create a new `Substitution` here
-        Substitution::new(self, substitution.clone())?.apply(self, term)
     }
 
     /// Returns an `AHashSet` containing all the free variables in this term.

@@ -918,13 +918,12 @@ impl<R: BufRead> Parser<R> {
                         .collect()
                 };
 
-                let result = self
-                    .state
-                    .term_pool
-                    .apply_substitution(&func.body, &substitution)
-                    .map_err(|e| {
-                        Error::Parser(ParserError::BadFunctionDef(func_name, e), head_pos)
-                    })?;
+                // Since we already checked the sorts of the arguments, creating and applying this
+                // substitution can never fail
+                let result = Substitution::new(&mut self.state.term_pool, substitution)
+                    .unwrap()
+                    .apply(&mut self.state.term_pool, &func.body)
+                    .unwrap();
 
                 Ok(result)
             }
