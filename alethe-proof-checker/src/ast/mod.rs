@@ -100,14 +100,14 @@ impl TermPool {
 
     /// Takes a term and a hash map of variables to terms and substitutes every ocurrence of those
     /// variables with the associated term.
-    pub fn apply_substitutions<'a>(
+    pub fn apply_substitution<'a>(
         &mut self,
         term: &'a Rc<Term>,
-        substitutions: &AHashMap<Rc<Term>, Rc<Term>>,
+        substitution: &AHashMap<Rc<Term>, Rc<Term>>,
     ) -> Result<Rc<Term>, SubstitutionError> {
         // TODO: Store substitutions as `Substitution` structs instead of simple hash maps to avoid
         // always having to create a new `Substitution` here
-        Substitution::new(self, substitutions.clone())?.apply(self, term)
+        Substitution::new(self, substitution.clone())?.apply(self, term)
     }
 
     /// Returns an `AHashSet` containing all the free variables in this term.

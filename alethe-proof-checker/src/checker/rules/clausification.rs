@@ -232,7 +232,7 @@ fn bfun_elim_first_step(
     for value in [pool.bool_false(), pool.bool_true()] {
         let mut subs = AHashMap::new();
         subs.insert(var.clone(), value);
-        let term = pool.apply_substitutions(term, &subs)?;
+        let term = pool.apply_substitution(term, &subs)?;
         bfun_elim_first_step(pool, &bindigns[..bindigns.len() - 1], &term, acc)?
     }
     Ok(())

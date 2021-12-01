@@ -97,9 +97,9 @@ pub fn bind(
     // in it
     let context = context.last().unwrap();
 
-    // The quantifier binders must be the xs and ys of the context substitutions
+    // The quantifier binders must be the xs and ys of the context substitution
     let (xs, ys): (AHashSet<_>, AHashSet<_>) = context
-        .substitutions
+        .substitution
         .iter()
         // We skip terms which are not simply variables
         .filter_map(|(x, y)| Some((x.as_var()?, y.as_var()?)))
@@ -144,7 +144,7 @@ pub fn r#let(
 
     // Since we are closing a subproof, we only care about the substitutions that were introduced
     // in it
-    let substitutions = &context.last().unwrap().substitutions;
+    let substitution = &context.last().unwrap().substitution;
 
     let (let_term, u_prime) = match_term_err!((= l u) = &conclusion[0])?;
     let (let_bindings, u) = match let_term.as_ref() {
@@ -161,8 +161,8 @@ pub fn r#let(
     assert_eq(u_prime, previous_u_prime)?;
 
     rassert!(
-        let_bindings.len() == substitutions.len(),
-        SubproofError::WrongNumberOfLetBindings(substitutions.len(), let_bindings.len())
+        let_bindings.len() == substitution.len(),
+        SubproofError::WrongNumberOfLetBindings(substitution.len(), let_bindings.len())
     );
 
     let mut pairs: Vec<_> = let_bindings
@@ -170,7 +170,7 @@ pub fn r#let(
         .map(|(x, t)| {
             let sort = pool.add_term(Term::Sort(t.sort().clone()));
             let x_term = pool.add_term((x.clone(), sort).into());
-            let s = substitutions
+            let s = substitution
                 .get(&x_term)
                 .ok_or_else(|| SubproofError::BindingIsNotInContext(x.clone()))?;
             Ok((s, t))
@@ -282,7 +282,7 @@ pub fn onepoint(
         .map(|var| pool.add_term(var.clone().into()))
         .collect();
     let substitution_vars: AHashSet<_> = context
-        .substitutions
+        .substitution
         .iter()
         .map(|(k, _)| k.clone())
         .collect();
@@ -290,21 +290,21 @@ pub fn onepoint(
     let points = extract_points(quant, left);
 
     // Since a substitution may use a varibale introduced in a previous substitution, we apply the
-    // substitutions to the points in order to replace these variables by their value. We also
+    // substitution to the points in order to replace these variables by their value. We also
     // create a duplicate of every point in the reverse order, since the order of equalities may be
     // flipped
     let points: AHashSet<_> = points
         .into_iter()
         .flat_map(|(x, t)| [(x.clone(), t.clone()), (t, x)])
         .map(|(x, t)| {
-            let new_t = pool.apply_substitutions(&t, &context.substitutions_until_fixed_point)?;
+            let new_t = pool.apply_substitution(&t, &context.substitution_until_fixed_point)?;
             Ok((x, new_t))
         })
         .collect::<Result<_, CheckerError>>()?;
 
     // For each substitution (:= x t) in the context, the equality (= x t) must appear in phi
     if let Some((k, v)) = context
-        .substitutions
+        .substitution
         .iter()
         .find(|&(k, v)| !points.contains(&(k.clone(), v.clone())))
     {
@@ -316,7 +316,7 @@ pub fn onepoint(
             .iter()
             .filter(|&v| {
                 let t: Term = v.clone().into();
-                !context.substitutions.contains_key(&pool.add_term(t))
+                !context.substitution.contains_key(&pool.add_term(t))
             })
             .cloned()
             .collect();
@@ -355,14 +355,14 @@ fn generic_skolemization_rule(
     let n = context.len();
     for c in &context[..n - 1] {
         // Based on the test examples, we must first apply all previous context substitutions to
-        // phi, before applying the substitutions present in the current context
-        current_phi = pool.apply_substitutions(&current_phi, &c.substitutions)?;
+        // phi, before applying the substitution present in the current context
+        current_phi = pool.apply_substitution(&current_phi, &c.substitution)?;
     }
 
-    let substitutions = &context.last().unwrap().substitutions_until_fixed_point;
+    let substitution = &context.last().unwrap().substitution_until_fixed_point;
     for (i, x) in bindings.iter().enumerate() {
         let x_term = pool.add_term(Term::from(x.clone()));
-        let t = substitutions
+        let t = substitution
             .get(&x_term)
             .ok_or_else(|| SubproofError::BindingIsNotInContext(x.0.clone()))?;
 
@@ -392,7 +392,7 @@ fn generic_skolemization_rule(
         // For every binding we skolemize, we must apply another substitution to phi
         let mut s = AHashMap::new();
         s.insert(x_term, t.clone());
-        current_phi = pool.apply_substitutions(&current_phi, &s)?;
+        current_phi = pool.apply_substitution(&current_phi, &s)?;
     }
     Ok(())
 }

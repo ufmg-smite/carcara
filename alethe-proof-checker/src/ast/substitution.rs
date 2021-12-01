@@ -11,7 +11,7 @@ pub enum SubstitutionError {
 type SubstitutionResult<T> = Result<T, SubstitutionError>;
 
 pub(super) struct Substitution {
-    substitutions: AHashMap<Rc<Term>, Rc<Term>>,
+    map: AHashMap<Rc<Term>, Rc<Term>>,
     // Variables that should be renamed to preserve capture-avoidance if they are bound by a binder
     // term
     should_be_renamed: AHashSet<String>,
@@ -21,9 +21,9 @@ pub(super) struct Substitution {
 impl Substitution {
     pub(super) fn new(
         pool: &mut TermPool,
-        substitutions: AHashMap<Rc<Term>, Rc<Term>>,
+        map: AHashMap<Rc<Term>, Rc<Term>>,
     ) -> SubstitutionResult<Self> {
-        for (k, v) in substitutions.iter() {
+        for (k, v) in map.iter() {
             if k.sort() != v.sort() {
                 return Err(SubstitutionError::DifferentSorts(k.clone(), v.clone()));
             }
@@ -46,7 +46,7 @@ impl Substitution {
         // See https://en.wikipedia.org/wiki/Lambda_calculus#Capture-avoiding_substitutions for
         // more details.
         let mut should_be_renamed = AHashSet::new();
-        for (x, t) in substitutions.iter() {
+        for (x, t) in map.iter() {
             if x == t {
                 continue; // We ignore reflexive substitutions
             }
@@ -57,7 +57,7 @@ impl Substitution {
         }
 
         Ok(Self {
-            substitutions,
+            map,
             should_be_renamed,
             cache: AHashMap::new(),
         })
@@ -80,7 +80,7 @@ impl Substitution {
         if let Some(t) = self.cache.get(term) {
             return Ok(t.clone());
         }
-        if let Some(t) = self.substitutions.get(term) {
+        if let Some(t) = self.map.get(term) {
             return Ok(t.clone());
         }
 
@@ -130,7 +130,7 @@ impl Substitution {
         pool: &mut TermPool,
         b: &BindingList,
     ) -> (BindingList, AHashMap<Rc<Term>, Rc<Term>>) {
-        let mut substitution = AHashMap::new();
+        let mut map = AHashMap::new();
         let mut new_vars = AHashSet::new();
         let new_binding_list = b
             .iter()
@@ -143,7 +143,7 @@ impl Substitution {
                     let new_var = var.clone() + "@";
                     let old = pool.add_term((var.clone(), value.clone()).into());
                     let new = pool.add_term((new_var.clone(), value.clone()).into());
-                    substitution.insert(old, new);
+                    map.insert(old, new);
                     new_vars.insert(new_var.clone());
 
                     // TODO: apply current substitution to `value`, if this is used in a `let` term
@@ -153,7 +153,7 @@ impl Substitution {
                 }
             })
             .collect();
-        (BindingList(new_binding_list), substitution)
+        (BindingList(new_binding_list), map)
     }
 }
 
@@ -169,11 +169,11 @@ mod tests {
         let t = parse_term_with_state(&mut state, t);
         let result = parse_term_with_state(&mut state, result);
 
-        let mut substitutions = AHashMap::new();
-        substitutions.insert(x, t);
+        let mut map = AHashMap::new();
+        map.insert(x, t);
 
         let mut pool = state.term_pool;
-        let got = Substitution::new(&mut pool, substitutions)
+        let got = Substitution::new(&mut pool, map)
             .unwrap()
             .apply(&mut pool, &original)
             .unwrap();

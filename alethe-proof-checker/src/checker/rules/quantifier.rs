@@ -16,7 +16,7 @@ pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> RuleRes
     // Since the bindings and arguments may not be in the same order, we collect the bindings into
     // a hash set, and remove each binding from it as we find the associated argument
     let mut bindings: AHashSet<_> = bindings.iter().cloned().collect();
-    let substitutions: AHashMap<_, _> = args
+    let substitution: AHashMap<_, _> = args
         .iter()
         .map(|arg| {
             let (arg_name, arg_value) = match arg {
@@ -41,7 +41,7 @@ pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> RuleRes
     );
 
     // Equalities may be reordered in the final term, so we use `DeepEq::eq_modulo_reordering`
-    let expected = pool.apply_substitutions(original, &substitutions)?;
+    let expected = pool.apply_substitution(original, &substitution)?;
     assert_is_expected_modulo_reordering(substituted, expected)
 }
 

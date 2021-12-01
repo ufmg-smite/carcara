@@ -12,24 +12,24 @@ pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> RuleResult 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
 
     // If the two terms are directly identical, we don't need to do any more work. We make sure to
-    // do this check before we try to get the context substitutions, because "refl" can be used
+    // do this check before we try to get the context substitution, because "refl" can be used
     // outside of any subproof
     if left == right {
         return Ok(());
     }
 
-    let cumulative_substitutions = &context
+    let cumulative_substitution = &context
         .last()
         .ok_or_else(|| CheckerError::ReflexivityFailed(left.clone(), right.clone()))?
-        .cumulative_substitutions;
+        .cumulative_substitution;
 
     // In some cases, the substitution is only applied to the left or the right term, and in some
     // cases it is applied to both. To cover all cases, we must check all three possibilities. We
     // don't compute the new left and right terms until they are needed, to avoid doing unnecessary
     // work
-    let new_left = pool.apply_substitutions(left, cumulative_substitutions)?;
+    let new_left = pool.apply_substitution(left, cumulative_substitution)?;
     let result = new_left == *right || {
-        let new_right = pool.apply_substitutions(right, cumulative_substitutions)?;
+        let new_right = pool.apply_substitution(right, cumulative_substitution)?;
         *left == new_right || new_left == new_right
     };
     rassert!(
@@ -104,7 +104,7 @@ mod tests {
                 (step t1.t1 (cl (= x z)) :rule refl)
                 (step t1 (cl) :rule trust)": true,
             }
-            "Terms aren't equal after applying context substitutions" {
+            "Terms aren't equal after applying context substitution" {
                 "(anchor :step t1 :args ((:= (x Real) y)))
                 (step t1 (cl (= x z)) :rule refl)": false,
             }

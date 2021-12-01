@@ -903,7 +903,7 @@ impl<R: BufRead> Parser<R> {
 
                 // Build a hash map of all the parameter names and the values they will
                 // take
-                let substitutions = {
+                let substitution = {
                     // We have to take a reference to the term pool here, so the closure in
                     // the `map` call later on doesn't have to capture all of `self`, and
                     // can just capture the term pool. We need this to please the borrow
@@ -921,7 +921,7 @@ impl<R: BufRead> Parser<R> {
                 let result = self
                     .state
                     .term_pool
-                    .apply_substitutions(&func.body, &substitutions)
+                    .apply_substitution(&func.body, &substitution)
                     .map_err(|e| {
                         Error::Parser(ParserError::BadFunctionDef(func_name, e), head_pos)
                     })?;

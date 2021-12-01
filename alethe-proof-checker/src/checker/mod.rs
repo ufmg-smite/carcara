@@ -12,9 +12,9 @@ use rules::{Rule, RuleArgs, RuleResult};
 use std::time::{Duration, Instant};
 
 struct Context {
-    substitutions: AHashMap<Rc<Term>, Rc<Term>>,
-    substitutions_until_fixed_point: AHashMap<Rc<Term>, Rc<Term>>,
-    cumulative_substitutions: AHashMap<Rc<Term>, Rc<Term>>,
+    substitution: AHashMap<Rc<Term>, Rc<Term>>,
+    substitution_until_fixed_point: AHashMap<Rc<Term>, Rc<Term>>,
+    cumulative_substitution: AHashMap<Rc<Term>, Rc<Term>>,
     bindings: AHashSet<SortedVar>,
 }
 
@@ -188,10 +188,10 @@ impl<'c> ProofChecker<'c> {
         // Since some rules (like "refl") need to apply substitutions until a fixed point, we
         // precompute these substitutions into a separate hash map. This assumes that the assignment
         // arguments are in the correct order.
-        let mut substitutions = AHashMap::new();
-        let mut substitutions_until_fixed_point = AHashMap::new();
+        let mut substitution = AHashMap::new();
+        let mut substitution_until_fixed_point = AHashMap::new();
 
-        // We build the `substitutions_until_fixed_point` hash map from the bottom up, by using the
+        // We build the `substitution_until_fixed_point` hash map from the bottom up, by using the
         // substitutions already introduced to transform the result of a new substitution before
         // inserting it into the hash map. So for instance, if the substitutions are "(:= y z)" and
         // "(:= x (f y))", we insert the first substitution, and then, when introducing the second,
@@ -200,12 +200,12 @@ impl<'c> ProofChecker<'c> {
         for (var, value) in assignment_args.iter() {
             let var_term = terminal!(var var; self.pool.add_term(Term::Sort(value.sort().clone())));
             let var_term = self.pool.add_term(var_term);
-            substitutions.insert(var_term.clone(), value.clone());
+            substitution.insert(var_term.clone(), value.clone());
 
             let new_value = self
                 .pool
-                .apply_substitutions(value, &substitutions_until_fixed_point)?;
-            substitutions_until_fixed_point.insert(var_term, new_value);
+                .apply_substitution(value, &substitution_until_fixed_point)?;
+            substitution_until_fixed_point.insert(var_term, new_value);
         }
 
         // Some rules (notably "refl") need to apply the substitutions introduced by all the
@@ -213,22 +213,22 @@ impl<'c> ProofChecker<'c> {
         // everytime the rule is used, we precompute the cumulative substitutions of this context
         // and all the previous ones and store that in a hash map. This improves the performance of
         // these rules considerably
-        let mut cumulative_substitutions = substitutions_until_fixed_point.clone();
+        let mut cumulative_substitution = substitution_until_fixed_point.clone();
         if let Some(previous_context) = self.context.last() {
-            for (k, v) in previous_context.cumulative_substitutions.iter() {
-                let value = match substitutions_until_fixed_point.get(v) {
+            for (k, v) in previous_context.cumulative_substitution.iter() {
+                let value = match substitution_until_fixed_point.get(v) {
                     Some(new_value) => new_value,
                     None => v,
                 };
-                cumulative_substitutions.insert(k.clone(), value.clone());
+                cumulative_substitution.insert(k.clone(), value.clone());
             }
         }
 
         let bindings = variable_args.iter().cloned().collect();
         Ok(Context {
-            substitutions,
-            substitutions_until_fixed_point,
-            cumulative_substitutions,
+            substitution,
+            substitution_until_fixed_point,
+            cumulative_substitution,
             bindings,
         })
     }
