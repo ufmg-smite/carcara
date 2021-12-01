@@ -10,21 +10,20 @@ pub enum SubstitutionError {
 
 type SubstitutionResult<T> = Result<T, SubstitutionError>;
 
-pub(super) struct Substitution<'a> {
-    pool: &'a mut TermPool,
-    substitutions: &'a AHashMap<Rc<Term>, Rc<Term>>,
+pub(super) struct Substitution {
+    substitutions: AHashMap<Rc<Term>, Rc<Term>>,
     // Variables that should be renamed to preserve capture-avoidance if they are bound by a binder
     // term
     should_be_renamed: AHashSet<String>,
     cache: AHashMap<Rc<Term>, Rc<Term>>,
 }
 
-impl<'a> Substitution<'a> {
+impl Substitution {
     pub(super) fn new(
-        pool: &'a mut TermPool,
-        substitutions: &'a AHashMap<Rc<Term>, Rc<Term>>,
+        pool: &mut TermPool,
+        substitutions: AHashMap<Rc<Term>, Rc<Term>>,
     ) -> SubstitutionResult<Self> {
-        for (k, v) in substitutions {
+        for (k, v) in substitutions.iter() {
             if k.sort() != v.sort() {
                 return Err(SubstitutionError::DifferentSorts(k.clone(), v.clone()));
             }
@@ -47,7 +46,7 @@ impl<'a> Substitution<'a> {
         // See https://en.wikipedia.org/wiki/Lambda_calculus#Capture-avoiding_substitutions for
         // more details.
         let mut should_be_renamed = AHashSet::new();
-        for (x, t) in substitutions {
+        for (x, t) in substitutions.iter() {
             if x == t {
                 continue; // We ignore reflexive substitutions
             }
@@ -58,19 +57,22 @@ impl<'a> Substitution<'a> {
         }
 
         Ok(Self {
-            pool,
             substitutions,
             should_be_renamed,
             cache: AHashMap::new(),
         })
     }
 
-    pub(super) fn apply(&mut self, term: &Rc<Term>) -> SubstitutionResult<Rc<Term>> {
+    pub(super) fn apply(
+        &mut self,
+        pool: &mut TermPool,
+        term: &Rc<Term>,
+    ) -> SubstitutionResult<Rc<Term>> {
         macro_rules! apply_to_sequence {
             ($sequence:expr) => {
                 $sequence
                     .iter()
-                    .map(|a| self.apply(a))
+                    .map(|a| self.apply(pool, a))
                     .collect::<Result<Vec<_>, _>>()
             };
         }
@@ -85,26 +87,26 @@ impl<'a> Substitution<'a> {
         let result = match term.as_ref() {
             Term::App(func, args) => {
                 let new_args = apply_to_sequence!(args)?;
-                let new_func = self.apply(func)?;
-                self.pool.add_term(Term::App(new_func, new_args))
+                let new_func = self.apply(pool, func)?;
+                pool.add_term(Term::App(new_func, new_args))
             }
             Term::Op(op, args) => {
                 let new_args = apply_to_sequence!(args)?;
-                self.pool.add_term(Term::Op(*op, new_args))
+                pool.add_term(Term::Op(*op, new_args))
             }
             Term::Quant(q, b, t) => {
-                let (new_bindings, renaming) = self.rename_bindings(b);
+                let (new_bindings, renaming) = self.rename_bindings(pool, b);
                 let new_term = if !renaming.is_empty() {
                     // If there are variables that would be captured by the substitution, we need
                     // to rename them first. For that, we create a new `Substitution` with the
                     // renaming substitution that was computed, and apply it to the inner term
-                    let mut renaming = Substitution::new(self.pool, &renaming)?;
-                    let renamed = renaming.apply(t)?;
-                    self.apply(&renamed)?
+                    let mut renaming = Substitution::new(pool, renaming)?;
+                    let renamed = renaming.apply(pool, t)?;
+                    self.apply(pool, &renamed)?
                 } else {
-                    self.apply(t)?
+                    self.apply(pool, t)?
                 };
-                self.pool.add_term(Term::Quant(*q, new_bindings, new_term))
+                pool.add_term(Term::Quant(*q, new_bindings, new_term))
             }
             // TODO: Handle "choice" and "let" terms
             _ => term.clone(),
@@ -123,7 +125,11 @@ impl<'a> Substitution<'a> {
     /// new binding list, with the bindings renamed. If no variable needs to be renamed, this just
     /// returns a clone of the binding list and an empty hash map. The name chosen when renaming a
     /// variable is the old name with '@' appended.
-    fn rename_bindings(&mut self, b: &BindingList) -> (BindingList, AHashMap<Rc<Term>, Rc<Term>>) {
+    fn rename_bindings(
+        &mut self,
+        pool: &mut TermPool,
+        b: &BindingList,
+    ) -> (BindingList, AHashMap<Rc<Term>, Rc<Term>>) {
         let mut substitution = AHashMap::new();
         let mut new_vars = AHashSet::new();
         let new_binding_list = b
@@ -135,8 +141,8 @@ impl<'a> Substitution<'a> {
                     // TODO: currently, there is no mechanism to avoid collisions when renaming the
                     // variables to the arbitrary name
                     let new_var = var.clone() + "@";
-                    let old = self.pool.add_term((var.clone(), value.clone()).into());
-                    let new = self.pool.add_term((new_var.clone(), value.clone()).into());
+                    let old = pool.add_term((var.clone(), value.clone()).into());
+                    let new = pool.add_term((new_var.clone(), value.clone()).into());
                     substitution.insert(old, new);
                     new_vars.insert(new_var.clone());
 
@@ -167,7 +173,10 @@ mod tests {
         substitutions.insert(x, t);
 
         let mut pool = state.term_pool;
-        let got = pool.apply_substitutions(&original, &substitutions).unwrap();
+        let got = Substitution::new(&mut pool, substitutions)
+            .unwrap()
+            .apply(&mut pool, &original)
+            .unwrap();
 
         assert_eq!(&result, &got);
     }

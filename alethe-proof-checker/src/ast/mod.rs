@@ -105,7 +105,9 @@ impl TermPool {
         term: &'a Rc<Term>,
         substitutions: &AHashMap<Rc<Term>, Rc<Term>>,
     ) -> Result<Rc<Term>, SubstitutionError> {
-        Substitution::new(self, substitutions)?.apply(term)
+        // TODO: Store substitutions as `Substitution` structs instead of simple hash maps to avoid
+        // always having to create a new `Substitution` here
+        Substitution::new(self, substitutions.clone())?.apply(self, term)
     }
 
     /// Returns an `AHashSet` containing all the free variables in this term.
