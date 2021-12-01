@@ -1,12 +1,26 @@
 use alethe_proof_checker::*;
 use std::{ffi::OsStr, fs, io, path::Path};
 
+fn get_truncated_message(e: &Error) -> String {
+    const ERROR_MESSAGE_LIMIT: usize = 350;
+    const TRUNCATION_MESSAGE: &str = "... (long message truncated)";
+    const TRUNCATION_LEN: usize = TRUNCATION_MESSAGE.as_bytes().len();
+
+    let mut error_message = format!("{}", e);
+
+    if error_message.len() > ERROR_MESSAGE_LIMIT + TRUNCATION_LEN {
+        error_message.truncate(ERROR_MESSAGE_LIMIT);
+        error_message.push_str(TRUNCATION_MESSAGE);
+    }
+    error_message
+}
+
 fn test_file(problem_path: &Path, proof_path: &Path) {
     if let Err(e) = check(problem_path, proof_path, true, false) {
         panic!(
             "\ntest file \"{}\"\nreturned error: {}\n",
             &problem_path.to_str().unwrap(),
-            e,
+            get_truncated_message(&e),
         )
     }
 }
