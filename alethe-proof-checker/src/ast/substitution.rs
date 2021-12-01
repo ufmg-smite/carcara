@@ -6,9 +6,6 @@ use thiserror::Error;
 pub enum SubstitutionError {
     #[error("trying to substitute term '{0}' with a term of different sort: '{1}'")]
     DifferentSorts(Rc<Term>, Rc<Term>),
-
-    #[error("can't rename binding '{0}' with term '{1}'")]
-    InvalidBindingRename(String, Rc<Term>),
 }
 
 type SubstitutionResult<T> = Result<T, SubstitutionError>;
@@ -16,7 +13,9 @@ type SubstitutionResult<T> = Result<T, SubstitutionError>;
 pub(super) struct Substitution<'a> {
     pool: &'a mut TermPool,
     substitutions: &'a AHashMap<Rc<Term>, Rc<Term>>,
-    substitution_image_vars: AHashSet<String>,
+    // Variables that should be renamed to preserve capture-avoidance if they are bound by a binder
+    // term
+    should_be_renamed: AHashSet<String>,
     cache: AHashMap<Rc<Term>, Rc<Term>>,
 }
 
@@ -31,25 +30,37 @@ impl<'a> Substitution<'a> {
             }
         }
 
-        // In order to implement capture-avoidance, we need to know which variables may be captured
-        // after applying the substitution. For example, consider the substitution { x -> y }. If x
-        // and y are both variables, when applying the substitution to (forall ((x Int)) (= x y)),
-        // we would need to rename y to avoid a capture, because the substitution would rename the
-        // bound variable x to y. The resulting term should then be (forall ((y Int)) (= y y')). In
-        // order to prepare for that situation, we compute all entries in the substitution where
-        // both the orignal term and the reuslting term are variables. We take care to exclude
-        // identity entries, i.e., entries like x -> x.
-        let substitution_image_vars = substitutions
-            .iter()
-            .filter_map(|(k, v)| match (k.as_var(), v.as_var()) {
-                (Some(k), Some(v)) if k != v => Some(v.to_string()),
-                _ => None,
-            })
-            .collect();
+        // To avoid captures when applying the substitution, we may need to rename some of the
+        // variables that are bound in the term.
+        //
+        // For example, consider the substitution `{x -> y}`. If `x` and `y` are both variables,
+        // when applying the substitution to `(forall ((y Int)) (= x y))`, we would need to rename
+        // `y` to avoid a capture, because the substitution would change the semantics of the term.
+        // The resulting term should then be `(forall ((y' Int)) (= y y'))`.
+        //
+        // More precisely, for a substitution `{x -> t}`, if a bound variable `y` satisfies one the
+        // following conditions, it must be renamed:
+        //
+        // * `y` = `x`
+        // * `y` appears in the free variables of `t`
+        //
+        // See https://en.wikipedia.org/wiki/Lambda_calculus#Capture-avoiding_substitutions for
+        // more details.
+        let mut should_be_renamed = AHashSet::new();
+        for (x, t) in substitutions {
+            if x == t {
+                continue; // We ignore reflexive substitutions
+            }
+            should_be_renamed.extend(pool.free_vars(t).iter().cloned());
+            if let Some(x) = x.as_var() {
+                should_be_renamed.insert(x.to_string());
+            }
+        }
+
         Ok(Self {
             pool,
             substitutions,
-            substitution_image_vars,
+            should_be_renamed,
             cache: AHashMap::new(),
         })
     }
@@ -82,19 +93,18 @@ impl<'a> Substitution<'a> {
                 self.pool.add_term(Term::Op(*op, new_args))
             }
             Term::Quant(q, b, t) => {
-                let capture_avoiding_substitution = self.capture_avoiding_substitution(b);
-                if !capture_avoiding_substitution.is_empty() {
+                let (new_bindings, renaming) = self.rename_bindings(b);
+                let new_term = if !renaming.is_empty() {
                     // If there are variables that would be captured by the substitution, we need
                     // to rename them first. For that, we create a new `Substitution` with the
-                    // capture avoiding substitution and apply it to the outer term
-                    let mut sub = Substitution::new(self.pool, &capture_avoiding_substitution)?;
-                    let new_term = sub.apply(term)?;
-                    self.apply(&new_term)?
+                    // renaming substitution that was computed, and apply it to the inner term
+                    let mut renaming = Substitution::new(self.pool, &renaming)?;
+                    let renamed = renaming.apply(t)?;
+                    self.apply(&renamed)?
                 } else {
-                    let new_bindings = self.rename_quantifier_bindings(b)?;
-                    let new_term = self.apply(t)?;
-                    self.pool.add_term(Term::Quant(*q, new_bindings, new_term))
-                }
+                    self.apply(t)?
+                };
+                self.pool.add_term(Term::Quant(*q, new_bindings, new_term))
             }
             // TODO: Handle "choice" and "let" terms
             _ => term.clone(),
@@ -108,46 +118,36 @@ impl<'a> Substitution<'a> {
         Ok(result)
     }
 
-    fn rename_quantifier_bindings(&mut self, b: &BindingList) -> SubstitutionResult<BindingList> {
-        b.iter()
-            .map(|binding| {
-                // For each variable in the binding list, we see if the substitution will rename it
-                // or not
-                let binding_term = self.pool.add_term(binding.clone().into());
-                if let Some(value) = self.substitutions.get(&binding_term) {
-                    if let Some(iden) = value.as_var() {
-                        // If we are substituting one of the bound variables with a
-                        // different variable of the same sort, we rename it. Note that the sort is
-                        // guaranteed to be the same because of the invariants of `Substitution`
-                        return Ok((iden.to_string(), binding.1.clone()));
-                    }
-                    // If we are substituting one of the bound variables with something
-                    // else, we can't simply rename it, so we return an error
-                    return Err(SubstitutionError::InvalidBindingRename(
-                        binding.0.to_string(),
-                        value.clone(),
-                    ));
-                }
-                Ok(binding.clone())
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map(BindingList)
-    }
+    /// Creates a new substitution that renames all variables in the binding list that may be
+    /// captured by this substitution to a new, arbitrary name. Returns that substitution, and the
+    /// new binding list, with the bindings renamed. If no variable needs to be renamed, this just
+    /// returns a clone of the binding list and an empty hash map. The name chosen when renaming a
+    /// variable is the old name with '@' appended.
+    fn rename_bindings(&mut self, b: &BindingList) -> (BindingList, AHashMap<Rc<Term>, Rc<Term>>) {
+        let mut substitution = AHashMap::new();
+        let mut new_vars = AHashSet::new();
+        let new_binding_list = b
+            .iter()
+            .map(|(var, value)| {
+                // If this is called with the binding list of a `let` term, `value` will be the
+                // value of the variable. Otherwise, it will be its sort
+                if self.should_be_renamed.contains(var) {
+                    // TODO: currently, there is no mechanism to avoid collisions when renaming the
+                    // variables to the arbitrary name
+                    let new_var = var.clone() + "@";
+                    let old = self.pool.add_term((var.clone(), value.clone()).into());
+                    let new = self.pool.add_term((new_var.clone(), value.clone()).into());
+                    substitution.insert(old, new);
+                    new_vars.insert(new_var.clone());
 
-    /// Returns a new substitution that renames all variables in the binding list that may be
-    /// captured by this substitution to a new, arbitrary name. The name chosen is the old name
-    /// with '@' appended.
-    fn capture_avoiding_substitution(&mut self, b: &BindingList) -> AHashMap<Rc<Term>, Rc<Term>> {
-        b.iter()
-            .filter_map(|(var, sort)| {
-                if !self.substitution_image_vars.contains(var) {
-                    return None;
+                    // TODO: apply current substitution to `value`, if this is used in a `let` term
+                    (new_var, value.clone())
+                } else {
+                    (var.clone(), value.clone())
                 }
-                let old = self.pool.add_term((var.clone(), sort.clone()).into());
-                let new = self.pool.add_term((var.clone() + "@", sort.clone()).into());
-                Some((old, new))
             })
-            .collect()
+            .collect();
+        (BindingList(new_binding_list), substitution)
     }
 }
 
@@ -198,14 +198,14 @@ mod tests {
             "(forall ((p Bool)) (and p q))" [q -> r] => "(forall ((p Bool)) (and p r))",
 
             // Simple renaming
-            "(forall ((x Int)) (> x 0))" [x -> y] => "(forall ((y Int)) (> y 0))",
+            "(forall ((x Int)) (> x 0))" [x -> y] => "(forall ((x@ Int)) (> x@ 0))",
 
             // Capture-avoidance
             "(forall ((y Int)) (> y x))" [x -> y] => "(forall ((y@ Int)) (> y@ y))",
-            "(forall ((x Int) (y Int)) (= x y))" [x -> y] => "(forall ((y Int) (y@ Int)) (= y y@))",
-            "(forall ((y Int) (y@ Int)) (= x y y@))" [x -> y] =>
-                "(forall ((y@ Int) (y@@ Int)) (= y y@ y@@))",
+            "(forall ((x Int) (y Int)) (= x y))" [x -> y] =>
+                "(forall ((x@ Int) (y@ Int)) (= x@ y@))",
             "(forall ((x Int) (y Int)) (= x y))" [x -> x] => "(forall ((x Int) (y Int)) (= x y))",
+            "(forall ((y Int)) (> y x))" [x -> (+ y 0)] => "(forall ((y@ Int)) (> y@ (+ y 0)))",
 
             // In theory, since x does not appear in this term, renaming y to y@ is unnecessary
             "(forall ((y Int)) (> y 0))" [x -> y] => "(forall ((y@ Int)) (> y@ 0))",
