@@ -28,8 +28,12 @@ pub fn deep_eq_modulo_reordering<T: DeepEq>(a: &T, b: &T) -> bool {
     DeepEq::eq(&mut DeepEqualityChecker::new(true, false), a, b)
 }
 
-pub fn are_alpha_equivalent<T: DeepEq>(a: &T, b: &T) -> bool {
-    DeepEq::eq(&mut DeepEqualityChecker::new(true, true), a, b)
+pub fn are_alpha_equivalent(a: &Rc<Term>, b: &Rc<Term>) -> bool {
+    // When we are checking for alpha-equivalence, we can't always assume that if `a` and `b` are
+    // identical, they are alpha-equivalent, so that optimization is not used in `DeepEq::eq`.
+    // However, here at the "root" level this assumption is valid, so we check if the terms are
+    // directly equal before doing anything else
+    a == b || DeepEq::eq(&mut DeepEqualityChecker::new(true, true), a, b)
 }
 
 pub struct DeepEqualityChecker {

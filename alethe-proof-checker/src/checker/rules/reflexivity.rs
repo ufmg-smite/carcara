@@ -1,4 +1,5 @@
 use super::{assert_clause_len, assert_eq, CheckerError, RuleArgs, RuleResult};
+use crate::ast::*;
 
 pub fn eq_reflexive(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
@@ -14,7 +15,7 @@ pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> RuleResult 
     // If the two terms are directly identical, we don't need to do any more work. We make sure to
     // do this check before we try to get the context substitution, because "refl" can be used
     // outside of any subproof
-    if left == right {
+    if are_alpha_equivalent(left, right) {
         return Ok(());
     }
 
@@ -28,9 +29,9 @@ pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> RuleResult 
     // don't compute the new left and right terms until they are needed, to avoid doing unnecessary
     // work
     let new_left = cumulative_substitution.apply(pool, left)?;
-    let result = new_left == *right || {
+    let result = are_alpha_equivalent(&new_left, right) || {
         let new_right = cumulative_substitution.apply(pool, right)?;
-        *left == new_right || new_left == new_right
+        are_alpha_equivalent(left, &new_right) || are_alpha_equivalent(&new_left, &new_right)
     };
     rassert!(
         result,
