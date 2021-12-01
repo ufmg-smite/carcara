@@ -230,9 +230,7 @@ fn bfun_elim_first_step(
         }
     };
     for value in [pool.bool_false(), pool.bool_true()] {
-        let mut substitution = AHashMap::new();
-        substitution.insert(var.clone(), value);
-        let mut substitution = Substitution::new(pool, substitution)?;
+        let mut substitution = Substitution::single(pool, var.clone(), value)?;
         let term = substitution.apply(pool, term)?;
         bfun_elim_first_step(pool, &bindigns[..bindigns.len() - 1], &term, acc)?
     }

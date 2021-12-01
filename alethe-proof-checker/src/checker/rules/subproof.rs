@@ -4,7 +4,7 @@ use super::{
     CheckerError, EqualityError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::SubproofError};
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashSet;
 
 pub fn subproof(
     RuleArgs {
@@ -395,9 +395,8 @@ fn generic_skolemization_rule(
         assert_is_expected_modulo_reordering(t, expected)?;
 
         // For every binding we skolemize, we must apply another substitution to phi
-        let mut s = AHashMap::new();
-        s.insert(x_term, t.clone());
-        current_phi = Substitution::new(pool, s)?.apply(pool, &current_phi)?;
+        let mut s = Substitution::single(pool, x_term, t.clone())?;
+        current_phi = s.apply(pool, &current_phi)?;
     }
     Ok(())
 }

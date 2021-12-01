@@ -188,8 +188,8 @@ impl<'c> ProofChecker<'c> {
         // Since some rules (like "refl") need to apply substitutions until a fixed point, we
         // precompute these substitutions into a separate hash map. This assumes that the assignment
         // arguments are in the correct order.
-        let mut substitution = AHashMap::new();
-        let mut substitution_until_fixed_point = AHashMap::new();
+        let mut substitution = Substitution::empty();
+        let mut substitution_until_fixed_point = Substitution::empty();
 
         // We build the `substitution_until_fixed_point` hash map from the bottom up, by using the
         // substitutions already introduced to transform the result of a new substitution before
@@ -200,25 +200,10 @@ impl<'c> ProofChecker<'c> {
         for (var, value) in assignment_args.iter() {
             let var_term = terminal!(var var; self.pool.add_term(Term::Sort(value.sort().clone())));
             let var_term = self.pool.add_term(var_term);
-            substitution.insert(var_term.clone(), value.clone());
-
-            // We use `mem::take` to "borrow" the hash map by value
-            let borrowed = std::mem::take(&mut substitution_until_fixed_point);
-
-            // Unfortunately, we have to create a new substitution every time to apply it to
-            // `value`. Ideally, `Substitution` should provide a method that allows us to extend an
-            // already existing substitution
-            let mut s = Substitution::new(&mut self.pool, borrowed)?;
-            let new_value = s.apply(&mut self.pool, value)?;
-
-            // We must remember to restore the value after borrowing it
-            substitution_until_fixed_point = s.map;
-
-            substitution_until_fixed_point.insert(var_term, new_value);
+            substitution.insert(&mut self.pool, var_term.clone(), value.clone())?;
+            let new_value = substitution_until_fixed_point.apply(&mut self.pool, value)?;
+            substitution_until_fixed_point.insert(&mut self.pool, var_term, new_value)?;
         }
-        let substitution = Substitution::new(&mut self.pool, substitution)?;
-        let substitution_until_fixed_point =
-            Substitution::new(&mut self.pool, substitution_until_fixed_point)?;
 
         // Some rules (notably "refl") need to apply the substitutions introduced by all the
         // previous contexts instead of just the current one. Instead of doing this iteratively

@@ -19,6 +19,20 @@ pub struct Substitution {
 }
 
 impl Substitution {
+    pub fn empty() -> Self {
+        Self {
+            map: AHashMap::new(),
+            should_be_renamed: AHashSet::new(),
+            cache: AHashMap::new(),
+        }
+    }
+
+    pub fn single(pool: &mut TermPool, x: Rc<Term>, t: Rc<Term>) -> SubstitutionResult<Self> {
+        let mut this = Self::empty();
+        this.insert(pool, x, t)?;
+        Ok(this)
+    }
+
     pub fn new(pool: &mut TermPool, map: AHashMap<Rc<Term>, Rc<Term>>) -> SubstitutionResult<Self> {
         for (k, v) in map.iter() {
             if k.sort() != v.sort() {
@@ -58,6 +72,29 @@ impl Substitution {
             should_be_renamed,
             cache: AHashMap::new(),
         })
+    }
+
+    /// Extends the substitution by adding a new mapping from `x` to `t`.
+    pub(crate) fn insert(
+        &mut self,
+        pool: &mut TermPool,
+        x: Rc<Term>,
+        t: Rc<Term>,
+    ) -> SubstitutionResult<()> {
+        if x.sort() != t.sort() {
+            return Err(SubstitutionError::DifferentSorts(x, t));
+        }
+
+        if x != t {
+            self.should_be_renamed
+                .extend(pool.free_vars(&t).iter().cloned());
+            if let Some(x) = x.as_var() {
+                self.should_be_renamed.insert(x.to_string());
+            }
+        }
+
+        self.map.insert(x, t);
+        Ok(())
     }
 
     pub fn apply(&mut self, pool: &mut TermPool, term: &Rc<Term>) -> SubstitutionResult<Rc<Term>> {
