@@ -132,6 +132,7 @@ fn test_deep_eq() {
                 TestType::Normal => assert_deep_eq!(&a, &b),
                 TestType::ModReordering => assert_deep_eq_modulo_reordering!(&a, &b),
                 TestType::AlphaEquiv => {
+                    let (a, b) = (a.into(), b.into());
                     assert!(super::deep_eq::are_alpha_equivalent(&a, &b), "{} {}", a, b)
                 }
             }
