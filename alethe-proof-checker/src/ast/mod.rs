@@ -118,15 +118,19 @@ impl TermPool {
         }
         let set = match term.as_ref() {
             Term::App(f, args) => {
-                let mut set = args
-                    .iter()
-                    .fold(AHashSet::new(), |acc, next| &acc | self.free_vars(next));
-                set.extend(self.free_vars(f).iter().map(Clone::clone));
+                let mut set = self.free_vars(f).clone();
+                for a in args {
+                    set.extend(self.free_vars(a).iter().cloned())
+                }
                 set
             }
-            Term::Op(_, args) => args
-                .iter()
-                .fold(AHashSet::new(), |acc, next| &acc | self.free_vars(next)),
+            Term::Op(_, args) => {
+                let mut set = AHashSet::new();
+                for a in args {
+                    set.extend(self.free_vars(a).iter().cloned())
+                }
+                set
+            }
             Term::Quant(_, bindings, inner) | Term::Let(bindings, inner) => {
                 let mut vars = self.free_vars(inner).clone();
                 for (s, _) in bindings {
