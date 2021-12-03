@@ -1,10 +1,13 @@
+//! In addition to the parser tests, this module contains some parsing functions that can be
+//! useful in tests, and are intended to be used in other modules.
 #![cfg(test)]
 
 use super::*;
 
 const ERROR_MESSAGE: &str = "parser error during test";
 
-pub fn parse_term(input: &str) -> Term {
+/// Parses a term from a `&str`. Panics if any error is encountered.
+pub(crate) fn parse_term(input: &str) -> Term {
     Parser::new(input.as_bytes())
         .and_then(|mut p| p.parse_term())
         .expect(ERROR_MESSAGE)
@@ -12,14 +15,17 @@ pub fn parse_term(input: &str) -> Term {
         .clone()
 }
 
-pub fn parse_term_err(input: &str) -> Error {
+/// Tries to parse a term from a `&str`, expecting it to fail. Returns the error encountered, or
+/// panics if no error is encountered.
+pub(crate) fn parse_term_err(input: &str) -> Error {
     Parser::new(input.as_bytes())
         .and_then(|mut p| p.parse_term())
         .expect_err("expected error")
 }
 
-/// Parses a series of definitions and declarations, and then parses a term and returns it.
-pub fn parse_term_with_definitions(definitions: &str, term: &str) -> Term {
+/// Parses a series of definitions and declarations, and then parses a term and returns it. Panics
+/// if any error is encountered.
+pub(crate) fn parse_term_with_definitions(definitions: &str, term: &str) -> Term {
     let mut parser = Parser::new(definitions.as_bytes()).expect(ERROR_MESSAGE);
     parser.parse_problem().expect(ERROR_MESSAGE);
 
@@ -33,12 +39,16 @@ pub fn parse_term_with_definitions(definitions: &str, term: &str) -> Term {
         .clone()
 }
 
+/// Parses a series of declarations and definitions from a `&str`, and returns the parser state
+/// after parsing.  Panics if any error is encountered.
 pub(crate) fn parse_definitions(definitions: &str) -> ParserState {
     let mut parser = Parser::new(definitions.as_bytes()).expect(ERROR_MESSAGE);
     parser.parse_problem().expect(ERROR_MESSAGE);
     parser.state
 }
 
+/// Parses a term from a `&str`, given a `ParserState` with the declarations and definitions
+/// necessary. Panics if any error is encountered.
 pub(crate) fn parse_term_with_state(state: &mut ParserState, term: &str) -> Rc<Term> {
     // This temporarily assigns `ParserState::default()` to `state`.
     let owned_state = std::mem::take(state);
@@ -48,7 +58,8 @@ pub(crate) fn parse_term_with_state(state: &mut ParserState, term: &str) -> Rc<T
     term
 }
 
-pub fn parse_proof(input: &str) -> Proof {
+/// Parses a proof from a `&str`. Panics if any error is encountered.
+pub(crate) fn parse_proof(input: &str) -> Proof {
     let commands = Parser::new(input.as_bytes())
         .and_then(|mut p| p.parse_proof())
         .expect(ERROR_MESSAGE);
@@ -267,7 +278,7 @@ fn test_logic_ops() {
     ));
     assert!(matches!(
         parse_term_err("(not 1 2 3)"),
-        Error::Parser(ParserError::WrongNumberOfArgs(1, 3), _),
+        Error::Parser(ParserError::WrongNumberOfArgs(_, 3), _),
     ));
     assert!(matches!(
         parse_term_err("(distinct 2 1.0)"),
@@ -275,7 +286,7 @@ fn test_logic_ops() {
     ));
     assert!(matches!(
         parse_term_err("(distinct 0)"),
-        Error::Parser(ParserError::WrongNumberOfArgs(2, 1), _),
+        Error::Parser(ParserError::WrongNumberOfArgs(_, 1), _),
     ));
     assert!(matches!(
         parse_term_err("(=> true 0)"),
@@ -319,7 +330,7 @@ fn test_ite() {
 
     assert!(matches!(
         parse_term_err("(ite true 0)"),
-        Error::Parser(ParserError::WrongNumberOfArgs(3, 2), _),
+        Error::Parser(ParserError::WrongNumberOfArgs(_, 2), _),
     ));
     assert!(matches!(
         parse_term_err("(ite 0 1 2)"),

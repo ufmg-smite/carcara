@@ -8,8 +8,8 @@ pub mod parser;
 mod utils;
 
 use checker::error::CheckerError;
-use parser::error::ParserError;
-use parser::lexer::Position;
+use parser::ParserError;
+use parser::Position;
 use std::{
     fs::File,
     io::{self, BufReader},

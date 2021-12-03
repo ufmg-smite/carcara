@@ -4,13 +4,7 @@ mod logger;
 mod path_args;
 
 use ahash::AHashSet;
-use alethe_proof_checker::{
-    ast::print_proof,
-    check,
-    checker::ProofChecker,
-    parser::{lexer, parse_instance},
-    AletheResult,
-};
+use alethe_proof_checker::{ast::print_proof, check, checker::ProofChecker, parser, AletheResult};
 use ansi_term::Color;
 use clap::{App, AppSettings, Arg, ArgGroup, ArgMatches, SubCommand};
 use error::CliError;
@@ -189,7 +183,8 @@ fn parse_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         BufReader::new(File::open(problem_file)?),
         BufReader::new(File::open(proof_file)?),
     );
-    let (proof, _) = parse_instance(problem, proof).map_err(alethe_proof_checker::Error::from)?;
+    let (proof, _) =
+        parser::parse_instance(problem, proof).map_err(alethe_proof_checker::Error::from)?;
     print_proof(&proof)?;
     Ok(())
 }
@@ -295,7 +290,7 @@ fn progress_report_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
 }
 
 fn get_used_rules(file_path: &Path) -> AletheResult<Vec<String>> {
-    use lexer::{Lexer, Token};
+    use parser::{Lexer, Token};
 
     let file = File::open(file_path)?;
     let mut lex = Lexer::new(BufReader::new(file))?;

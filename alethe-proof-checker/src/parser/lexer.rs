@@ -1,5 +1,4 @@
-use super::error::ParserError;
-use crate::{AletheResult, Error};
+use crate::{parser::ParserError, AletheResult, Error};
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::Num;
@@ -9,16 +8,38 @@ use std::{
     str::FromStr,
 };
 
+/// A token in the SMT-LIB and Alethe languages.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Token {
+    /// The `(` token.
     OpenParen,
+
+    /// The `)` token.
     CloseParen,
+
+    /// A symbol, that can be either simple or quoted. A simple symbol is a non-empty sequence of
+    /// letters, digits, or any of these characters: `+`, `-`, `/`, `*`, `=`, `%`, `?`, `!`, `.`,
+    /// `$`, `_`, `~`, `&`, `^`, `<`, `>`, or `@`. A quoted symbol is any sequence of characters
+    /// that starts and ends with `|`, and does not contain `|` or `\`.
     Symbol(String),
+
+    /// A keyword, which is a simple symbol preceded by `:`. This has the leading `:` character
+    /// removed.
     Keyword(String),
+
+    /// An integer numeral literal.
     Numeral(BigInt),
+
+    /// A decimal numeral literal.
     Decimal(BigRational),
+
+    /// A string literal.
     String(String),
+
+    /// A reserved word.
     ReservedWord(Reserved),
+
+    /// A signal token to indicate the end of the input.
     Eof,
 }
 
@@ -38,25 +59,59 @@ impl fmt::Display for Token {
     }
 }
 
+/// A reserved word in the SMT-LIB and Alethe lexicon.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reserved {
-    Underscore,   // _
-    Bang,         // !
-    As,           // as
-    Let,          // let
-    Exists,       // exists
-    Forall,       // forall
-    Match,        // match
-    Choice,       // choice
-    Cl,           // cl
-    Assume,       // assume
-    Step,         // step
-    Anchor,       // anchor
-    DeclareFun,   // declare-fun
-    DeclareConst, // declare-const
-    DeclareSort,  // declare-sort
-    DefineFun,    // define-fun
-    Assert,       // assert
+    /// The `_` reserved word.
+    Underscore,
+
+    /// The `!` reserved word.
+    Bang,
+
+    /// The `as` reserved word.
+    As,
+
+    /// The `let` reserved word.
+    Let,
+
+    /// The `exists` reserved word.
+    Exists,
+
+    /// The `forall` reserved word.
+    Forall,
+
+    /// The `match` reserved word.
+    Match,
+
+    /// The `choice` reserved word.
+    Choice,
+
+    /// The `cl` reserved word.
+    Cl,
+
+    /// The `assume` reserved word.
+    Assume,
+
+    /// The `step` reserved word.
+    Step,
+
+    /// The `anchor` reserved word.
+    Anchor,
+
+    /// The `declare-fun` reserved word.
+    DeclareFun,
+
+    /// The `declare-const` reserved word.
+    DeclareConst,
+
+    /// The `declare-sort` reserved word.
+    DeclareSort,
+
+    /// The `define-fun` reserved word.
+    DefineFun,
+
+    /// The `assert` reserved word.
+    Assert,
 }
 
 impl_str_conversion_traits!(Reserved {
@@ -79,8 +134,10 @@ impl_str_conversion_traits!(Reserved {
     Assert: "assert",
 });
 
+/// Represents a position (line and column numbers) in the source input.
 pub type Position = (usize, usize);
 
+/// A lexer for the Alethe proof format.
 pub struct Lexer<R> {
     input: R,
     current_line: Option<std::vec::IntoIter<char>>,
@@ -89,6 +146,8 @@ pub struct Lexer<R> {
 }
 
 impl<R: BufRead> Lexer<R> {
+    /// Constructs a new `Lexer` from a type that implements `BufRead`. This operation can fail if
+    /// there is an IO error on the first token.
     pub fn new(mut input: R) -> io::Result<Self> {
         let mut buf = String::new();
         let read = input.read_line(&mut buf)?;
@@ -111,6 +170,7 @@ impl<R: BufRead> Lexer<R> {
         }
     }
 
+    /// Advances the lexer by one character, and returns the previous `current_char`.
     fn next_char(&mut self) -> io::Result<Option<char>> {
         // If there are no more characters in the current line, go to the next line
         if let Some(line) = &self.current_line {
@@ -129,6 +189,7 @@ impl<R: BufRead> Lexer<R> {
         Ok(old)
     }
 
+    /// Advances the lexer by one line, discarding the remaining contents of the current line.
     fn next_line(&mut self) -> io::Result<()> {
         let mut buf = String::new();
         let read = self.input.read_line(&mut buf)?;
@@ -143,6 +204,9 @@ impl<R: BufRead> Lexer<R> {
         Ok(())
     }
 
+    /// Reads characters while the given predicate returns `true`, and stores them in a `String`.
+    /// At the end, all characters in the returned string will satisfy the predicate, and
+    /// `self.current_char` will be the first character that didn't satisfy the predicate.
     fn read_chars_while<P: Fn(char) -> bool>(&mut self, predicate: P) -> io::Result<String> {
         let mut result = String::new();
         while let Some(c) = self.current_char {
@@ -155,9 +219,9 @@ impl<R: BufRead> Lexer<R> {
         Ok(result)
     }
 
-    /// Specialized function to drop whitespace characters. Similar to calling
-    /// `self.read_chars_while(char::is_whitespace)`, but doesn't allocate a string to store the
-    /// result.
+    /// Reads and drops characters until a non-whitespace character is encountered. Similar to
+    /// calling `self.read_chars_while(char::is_whitespace)`, but this method doesn't allocate a
+    /// string to store the result.
     fn drop_while_whitespace(&mut self) -> io::Result<()> {
         while let Some(c) = self.current_char {
             if !c.is_whitespace() {
@@ -168,6 +232,7 @@ impl<R: BufRead> Lexer<R> {
         Ok(())
     }
 
+    /// Consumes all leading whitespace and comments in the input source.
     fn consume_whitespace(&mut self) -> io::Result<()> {
         self.drop_while_whitespace()?;
         while self.current_char == Some(';') {
@@ -178,6 +243,7 @@ impl<R: BufRead> Lexer<R> {
         Ok(())
     }
 
+    /// Reads a token from the input source.
     pub fn next_token(&mut self) -> AletheResult<(Token, Position)> {
         self.consume_whitespace()?;
         let start_position = self.position;
@@ -205,6 +271,7 @@ impl<R: BufRead> Lexer<R> {
         Ok((token, start_position))
     }
 
+    /// Reads a simple symbol from the input source.
     fn read_simple_symbol(&mut self) -> AletheResult<Token> {
         let symbol = self.read_chars_while(Lexer::is_symbol_character)?;
         if let Ok(reserved) = Reserved::from_str(&symbol) {
@@ -214,6 +281,7 @@ impl<R: BufRead> Lexer<R> {
         }
     }
 
+    /// Reads a quoted symbol from the input source.
     fn read_quoted_symbol(&mut self) -> AletheResult<Token> {
         self.next_char()?; // Consume '|'
         let symbol = self.read_chars_while(|c| c != '|' && c != '\\')?;
@@ -231,12 +299,15 @@ impl<R: BufRead> Lexer<R> {
         }
     }
 
+    /// Reads a keyword from the input source.
     fn read_keyword(&mut self) -> AletheResult<Token> {
         self.next_char()?; // Consume ':'
         let symbol = self.read_chars_while(Lexer::is_symbol_character)?;
         Ok(Token::Keyword(symbol))
     }
 
+    /// Reads a binary or hexadecimal literal, e.g. `#b0110` or `#x01Ab`. Returns an error if any
+    /// character other than `b` or `x` is encountered after the `#`.
     fn read_number_with_base(&mut self) -> AletheResult<Token> {
         self.next_char()?; // Consume '#'
         let base = match self.next_char()? {
@@ -254,6 +325,7 @@ impl<R: BufRead> Lexer<R> {
         Ok(Token::Numeral(BigInt::from_str_radix(&s, base).unwrap()))
     }
 
+    /// Reads an integer or decimal numerical literal.
     fn read_number(&mut self) -> AletheResult<Token> {
         let int_part = self.read_chars_while(|c| c.is_ascii_digit())?;
 
@@ -276,6 +348,7 @@ impl<R: BufRead> Lexer<R> {
         }
     }
 
+    /// Reads a string literal from the input source.
     fn read_string(&mut self) -> AletheResult<Token> {
         self.next_char()?; // Consume '"'
         let mut result = String::new();
@@ -297,6 +370,7 @@ impl<R: BufRead> Lexer<R> {
 }
 
 impl Lexer<()> {
+    /// Returns `true` if the character is a valid symbol character.
     fn is_symbol_character(ch: char) -> bool {
         match ch {
             ch if ch.is_ascii_alphanumeric() => true,

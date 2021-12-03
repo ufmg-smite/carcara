@@ -1,8 +1,11 @@
-//! A parser for the Alethe Proof Format.
+//! A parser for the Alethe proof format.
 
-pub mod error;
-pub mod lexer;
-pub mod tests;
+mod error;
+mod lexer;
+pub(crate) mod tests;
+
+pub use error::{ParserError, SortError};
+pub use lexer::{Lexer, Position, Reserved, Token};
 
 use crate::{
     ast::*,
@@ -10,13 +13,15 @@ use crate::{
     AletheResult, Error,
 };
 use ahash::{AHashMap, AHashSet};
-use error::*;
-use lexer::*;
+use error::assert_num_of_args;
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
 use std::{io::BufRead, str::FromStr};
 
+/// Parses an SMT problem instance (in the SMT-LIB format) and its associated proof (in the Alethe
+/// format). Returns the parsed proof, as well as the `TermPool` used in parsing. Can take any type
+/// that implements `BufRead`.
 pub fn parse_instance<T: BufRead>(problem: T, proof: T) -> AletheResult<(Proof, TermPool)> {
     let mut problem_parser = Parser::new(problem)?;
     let premises = problem_parser.parse_problem()?;
@@ -27,6 +32,7 @@ pub fn parse_instance<T: BufRead>(problem: T, proof: T) -> AletheResult<(Proof, 
     Ok((proof, proof_parser.state.term_pool))
 }
 
+// TODO: Make these type aliases be actual structs
 type AnchorCommand = (String, Vec<(String, Rc<Term>)>, Vec<SortedVar>);
 type StepCommand = (
     Vec<Rc<Term>>, // Clause
@@ -35,6 +41,9 @@ type StepCommand = (
     Vec<ProofArg>, // Arguments
     Vec<String>,   // Discharge
 );
+
+/// The state of the parser. This holds all the function, constant or sort declarations and
+/// definitions, as well as the term pool used by the parser.
 #[derive(Default)]
 pub(crate) struct ParserState {
     sorts_symbol_table: SymbolTable<Identifier, Rc<Term>>,
@@ -44,8 +53,7 @@ pub(crate) struct ParserState {
     step_indices: SymbolTable<String, usize>,
 }
 
-/// A parser for the Alethe Proof Format. The parser makes use of hash consing to reduce memory usage
-/// by sharing identical terms in the AST.
+/// A parser for the Alethe proof format.
 pub struct Parser<R> {
     lexer: Lexer<R>,
     current_token: Token,
@@ -68,7 +76,11 @@ impl<R: BufRead> Parser<R> {
     }
 
     /// Constructs a new `Parser` using an existing `ParserState`. This operation can fail if there
-    /// is an IO or lexer error on the first token.
+    /// is an IO or lexer error on the first token. This method is useful because the input source
+    /// is set when creating the parser and cannot be changed. In order to parse two or more inputs
+    /// (like when parsing an SMT-LIB problem instance and its Alethe proof) you can remove the
+    /// parser state after parsing the first input and create a new parser with it using this
+    /// method.
     fn with_state(input: R, state: ParserState) -> AletheResult<Self> {
         let mut lexer = Lexer::new(input)?;
         let (current_token, current_position) = lexer.next_token()?;
@@ -124,33 +136,33 @@ impl<R: BufRead> Parser<R> {
         let sorts: Vec<_> = args.iter().map(|t| t.sort()).collect();
         match op {
             Operator::Not => {
-                ParserError::assert_num_of_args(&args, 1)?;
+                assert_num_of_args(&args, 1)?;
                 SortError::assert_eq(&Sort::Bool, sorts[0])?;
             }
             Operator::Implies => {
-                ParserError::assert_num_of_args_range(&args, 2..)?;
+                assert_num_of_args(&args, 2..)?;
                 for s in sorts {
                     SortError::assert_eq(&Sort::Bool, s)?;
                 }
             }
             Operator::Or | Operator::And | Operator::Xor => {
                 // These operators can be called with only one argument
-                ParserError::assert_num_of_args_range(&args, 1..)?;
+                assert_num_of_args(&args, 1..)?;
                 for s in sorts {
                     SortError::assert_eq(&Sort::Bool, s)?;
                 }
             }
             Operator::Equals | Operator::Distinct => {
-                ParserError::assert_num_of_args_range(&args, 2..)?;
+                assert_num_of_args(&args, 2..)?;
                 SortError::assert_all_eq(&sorts)?;
             }
             Operator::Ite => {
-                ParserError::assert_num_of_args(&args, 3)?;
+                assert_num_of_args(&args, 3)?;
                 SortError::assert_eq(&Sort::Bool, sorts[0])?;
                 SortError::assert_eq(sorts[1], sorts[2])?;
             }
             Operator::Add | Operator::Mult | Operator::IntDiv | Operator::RealDiv => {
-                ParserError::assert_num_of_args_range(&args, 2..)?;
+                assert_num_of_args(&args, 2..)?;
 
                 // All the arguments must have the same sort, and it must be either Int or Real
                 SortError::assert_one_of(&[Sort::Int, Sort::Real], sorts[0])?;
@@ -159,12 +171,12 @@ impl<R: BufRead> Parser<R> {
             Operator::Sub => {
                 // The "-" operator, in particular, can be called with only one argument, in which
                 // case it means negation instead of subtraction
-                ParserError::assert_num_of_args_range(&args, 1..)?;
+                assert_num_of_args(&args, 1..)?;
                 SortError::assert_one_of(&[Sort::Int, Sort::Real], sorts[0])?;
                 SortError::assert_all_eq(&sorts)?;
             }
             Operator::LessThan | Operator::GreaterThan | Operator::LessEq | Operator::GreaterEq => {
-                ParserError::assert_num_of_args_range(&args, 2..)?;
+                assert_num_of_args(&args, 2..)?;
                 // All the arguments must be either Int or Real sorted, but they don't need to all
                 // have the same sort
                 for s in sorts {
@@ -172,7 +184,7 @@ impl<R: BufRead> Parser<R> {
                 }
             }
             Operator::Select => {
-                ParserError::assert_num_of_args(&args, 2)?;
+                assert_num_of_args(&args, 2)?;
                 match sorts[0] {
                     Sort::Array(_, _) => (),
                     got => {
@@ -191,7 +203,7 @@ impl<R: BufRead> Parser<R> {
                 }
             }
             Operator::Store => {
-                ParserError::assert_num_of_args(&args, 3)?;
+                assert_num_of_args(&args, 3)?;
                 match sorts[0] {
                     Sort::Array(x, y) => {
                         SortError::assert_eq(x.as_sort().unwrap(), sorts[1])?;
@@ -228,7 +240,7 @@ impl<R: BufRead> Parser<R> {
                 return Err(ParserError::NotAFunction(function_sort.clone()));
             }
         };
-        ParserError::assert_num_of_args(&args, sorts.len() - 1)?;
+        assert_num_of_args(&args, sorts.len() - 1)?;
         for i in 0..args.len() {
             SortError::assert_eq(sorts[i].as_sort().unwrap(), args[i].sort())?;
         }
@@ -293,6 +305,7 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
+    /// Consumes tokens until the matching closing parenthesis is reached.
     fn read_until_close_parens(&mut self) -> AletheResult<()> {
         let mut parens_depth = 1;
         while parens_depth > 0 {
@@ -308,8 +321,18 @@ impl<R: BufRead> Parser<R> {
         Ok(())
     }
 
-    /// Reads an SMT-LIB script and parses the declarations and definitions. Ignores all other
-    /// SMT-LIB script commands.
+    /// Reads an SMT-LIB script and parses the assertions, declarations and definitions. The
+    /// following commands are parsed:
+    ///
+    /// - `assert`
+    /// - `declare-const`
+    /// - `declare-fun`
+    /// - `declare-sort`
+    /// - `define-fun`
+    /// - `set-logic`
+    ///
+    /// All other commands are ignored. This method returns a hash set containing the premises
+    /// introduced in `assert` commands.
     pub fn parse_problem(&mut self) -> AletheResult<AHashSet<Rc<Term>>> {
         let mut premises = AHashSet::new();
 
@@ -346,9 +369,11 @@ impl<R: BufRead> Parser<R> {
                     self.expect_token(Token::CloseParen)?;
                     premises.insert(term);
                 }
+                // TODO: Make `set-logic` a reserved word
                 Token::Symbol(s) if s == "set-logic" => {
                     let logic = self.expect_symbol()?;
 
+                    // TODO: Detect this by searching for the character 'R' in the logic name
                     // When the problem's logic contains real numbers but not integers, integer
                     // literals should be parsed as reals. For instance, "1" should be interpreted
                     // as "1.0".
@@ -378,7 +403,8 @@ impl<R: BufRead> Parser<R> {
         Ok(premises)
     }
 
-    /// Parses a proof.
+    /// Parses a proof in the Alethe format. All function, constant and sort declarations needed
+    /// should already be in the parser state.
     pub fn parse_proof(&mut self) -> AletheResult<Vec<ProofCommand>> {
         // To avoid stack overflows in proofs with many nested subproofs, we parse the subproofs
         // iteratively, instead of recursively
@@ -569,9 +595,7 @@ impl<R: BufRead> Parser<R> {
 
     /// Parses an "anchor" proof command. This method assumes that the "(" and "anchor" tokens were
     /// already consumed. In order to parse the subproof arguments, this method pushes a new scope
-    /// into the sorts symbol table which must be removed after parsing the subproof. This method
-    /// returns the index of the step that will end the subproof, as well as the subproof
-    /// assignment and variable arguments.
+    /// into the sorts symbol table which must be removed after parsing the subproof.
     fn parse_anchor_command(&mut self) -> AletheResult<AnchorCommand> {
         self.expect_token(Token::Keyword("step".into()))?;
         let end_step_index = self.expect_symbol()?;
@@ -599,6 +623,8 @@ impl<R: BufRead> Parser<R> {
         Ok((end_step_index, assignment_args, variable_args))
     }
 
+    /// Parses an argument for an "anchor" proof command. This can be either a variable binding of
+    /// the form `(<symbol> <sort>)` or an assignment, of the form `(:= (<symbol> <sort>) <term>)`.
     fn parse_anchor_argument(&mut self) -> AletheResult<Either<(SortedVar, Rc<Term>), SortedVar>> {
         self.expect_token(Token::OpenParen)?;
         Ok(if self.current_token == Token::Keyword("=".into()) {
@@ -747,7 +773,7 @@ impl<R: BufRead> Parser<R> {
                         func_def.body.clone()
                     } else {
                         return Err(Error::Parser(
-                            ParserError::WrongNumberOfArgs(func_def.params.len(), 0),
+                            ParserError::WrongNumberOfArgs(func_def.params.len().into(), 0),
                             pos,
                         ));
                     }
@@ -771,6 +797,8 @@ impl<R: BufRead> Parser<R> {
         Ok(term)
     }
 
+    /// Parses a quantifier term. This method assumes that the "(" and quantifier tokens were
+    /// already consumed.
     fn parse_quantifier(&mut self, quantifier: Quantifier) -> AletheResult<Rc<Term>> {
         self.expect_token(Token::OpenParen)?;
         self.state.sorts_symbol_table.push_scope();
@@ -788,6 +816,8 @@ impl<R: BufRead> Parser<R> {
         Ok(self.add_term(Term::Quant(quantifier, BindingList(bindings), term)))
     }
 
+    /// Parses a "choice" term. This method assumes that the "(" and "choice" tokens were already
+    /// consumed.
     fn parse_choice_term(&mut self) -> AletheResult<Rc<Term>> {
         self.expect_token(Token::OpenParen)?;
         let var = self.parse_sorted_var()?;
@@ -798,6 +828,8 @@ impl<R: BufRead> Parser<R> {
         Ok(self.add_term(Term::Choice(var, inner)))
     }
 
+    /// Parses a "let" term. This method assumes that the "(" and "let" tokens were already
+    /// consumed.
     fn parse_let_term(&mut self) -> AletheResult<Rc<Term>> {
         self.expect_token(Token::OpenParen)?;
         self.state.sorts_symbol_table.push_scope();
@@ -819,6 +851,10 @@ impl<R: BufRead> Parser<R> {
         Ok(self.add_term(Term::Let(BindingList(bindings), inner)))
     }
 
+    /// Parses an annotated term, of the form `(! <term> <attribute>+)`. The two supported
+    /// attributes are `:named` and `:pattern`, though the latter is ignored. If any other
+    /// attribute is present, an error will be returned. This method assumes that the "(" and "!"
+    /// tokens were already consumed.
     fn parse_annotated_term(&mut self) -> AletheResult<Rc<Term>> {
         let inner = self.parse_term()?;
         self.parse_sequence(
@@ -856,6 +892,8 @@ impl<R: BufRead> Parser<R> {
         Ok(inner)
     }
 
+    /// Parses any term that starts with "(", that is, any term that is not a constant or a
+    /// variable. This method assumes that the "(" token was already consumed.
     fn parse_application(&mut self) -> AletheResult<Rc<Term>> {
         let head_pos = self.current_position;
         match &self.current_token {
@@ -894,7 +932,7 @@ impl<R: BufRead> Parser<R> {
 
                 // If there is a function definition with this function name, we sort check
                 // the arguments and apply the definition by performing a beta reduction.
-                ParserError::assert_num_of_args(&args, func.params.len())
+                assert_num_of_args(&args, func.params.len())
                     .map_err(|err| Error::Parser(err, head_pos))?;
                 for (arg, param) in args.iter().zip(func.params.iter()) {
                     SortError::assert_eq(param.1.as_sort().unwrap(), arg.sort())
@@ -951,7 +989,7 @@ impl<R: BufRead> Parser<R> {
 
         let sort = match name.as_str() {
             "Bool" | "Int" | "Real" | "String" if !args.is_empty() => Err(Error::Parser(
-                ParserError::WrongNumberOfArgs(0, args.len()),
+                ParserError::WrongNumberOfArgs(0.into(), args.len()),
                 pos,
             )),
             "Bool" => Ok(Sort::Bool),
@@ -962,14 +1000,14 @@ impl<R: BufRead> Parser<R> {
             "Array" => match args.as_slice() {
                 [x, y] => Ok(Sort::Array(x.clone(), y.clone())),
                 _ => Err(Error::Parser(
-                    ParserError::WrongNumberOfArgs(2, args.len()),
+                    ParserError::WrongNumberOfArgs(2.into(), args.len()),
                     pos,
                 )),
             },
             _ => match self.state.sort_declarations.get(&name) {
                 Some(arity) if *arity == args.len() => Ok(Sort::Atom(name, args)),
                 Some(arity) => Err(Error::Parser(
-                    ParserError::WrongNumberOfArgs(*arity, args.len()),
+                    ParserError::WrongNumberOfArgs((*arity).into(), args.len()),
                     pos,
                 )),
                 None => Err(Error::Parser(ParserError::UndefinedSort(name), pos)),
