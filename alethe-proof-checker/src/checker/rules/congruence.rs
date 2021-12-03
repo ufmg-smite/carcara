@@ -34,7 +34,7 @@ pub fn eq_congruent_pred(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     generic_congruent_rule(premises, conclusion)
 }
 
-/// A function to check congruency. Useful for the "eq_congruent" and "eq_congruent_pred"
+/// A function to check congruence. Useful for the "eq_congruent" and "eq_congruent_pred"
 /// rules. `premises` should be an iterator over the argument equalities, and `conclusion`
 /// should be the two function applications.
 fn generic_congruent_rule<'a, T>(premises: T, conclusion: (&Rc<Term>, &Rc<Term>)) -> RuleResult
@@ -88,7 +88,7 @@ where
     Ok(())
 }
 
-/// Since the semantics of the "cong" rule is slighty different from that of "eq_congruent" and
+/// Since the semantics of the "cong" rule is slightly different from that of "eq_congruent" and
 /// "eq_congruent_pred", we cannot just use the `generic_congruent_rule` function
 fn check_cong<'a>(
     premises: &[(&'a Rc<Term>, &'a Rc<Term>)],

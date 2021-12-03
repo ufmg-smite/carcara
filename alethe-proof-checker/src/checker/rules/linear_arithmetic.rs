@@ -26,7 +26,7 @@ pub fn la_rw_eq(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 /// combinations.
 /// The disequality can be:
 /// * An application of the "<", ">", "<=" or ">=" operators
-/// * The negation of an application of any of these operator
+/// * The negation of an application of one of these operators
 /// * The negation of an application of the "=" operator
 fn negate_disequality(term: &Rc<Term>) -> Result<(Operator, LinearComb, LinearComb), CheckerError> {
     use Operator::*;
