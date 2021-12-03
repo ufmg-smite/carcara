@@ -259,7 +259,7 @@ impl<'a> fmt::Display for DisplayRatio<'a> {
         let float_value = self.0.numer().to_f64().unwrap() / self.0.denom().to_f64().unwrap();
 
         // We use the `Debug` (that is, "{:?}") representation because it sets a minimum precision
-        // of 1 digit. That means we always print 1.0 as "1.0", instead of as "1"
+        // of 1 digit. That means we always print 1.0 as `1.0`, instead of as `1`
         write!(f, "{:?}", float_value)
     }
 }

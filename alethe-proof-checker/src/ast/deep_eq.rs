@@ -4,8 +4,8 @@
 //! - `eq` implements a "deep" equality, meaning that it compares `ast::Rc`s by value,
 //! instead of by reference.
 //!
-//! - `eq_modulo_reordering` is also a "deep" equality, but it considers "=" terms that are
-//! "reflections" of each other as equal, meaning the terms "(= a b)" and "(= b a)" are considered
+//! - `eq_modulo_reordering` is also a "deep" equality, but it considers `=` terms that are
+//! reflections of each other as equal, meaning the terms `(= a b)` and `(= b a)` are considered
 //! equal by this method.
 //!
 //! - `are_alpha_equivalent` compares terms by alpha-equivalence, meaning it implements equality of

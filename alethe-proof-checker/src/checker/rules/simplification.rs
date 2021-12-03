@@ -154,7 +154,7 @@ pub fn eq_simplify(args: RuleArgs) -> RuleResult {
     })
 }
 
-/// Used for both the "and_simplify" and "or_simplify" rules, depending on `rule_kind`. `rule_kind`
+/// Used for both the `and_simplify` and `or_simplify` rules, depending on `rule_kind`. `rule_kind`
 /// has to be either `Operator::And` or `Operator::Or`.
 fn generic_and_or_simplify(
     pool: &mut TermPool,
@@ -164,7 +164,7 @@ fn generic_and_or_simplify(
     assert_clause_len(conclusion, 1)?;
 
     // The "skip term" is the term that represents the empty conjunction or disjunction, and can be
-    // skipped. This is "false" for conjunctions and "true" disjunctions
+    // skipped. This is `false` for conjunctions and `true` disjunctions
     let skip_term = match rule_kind {
         Operator::And => true,
         Operator::Or => false,
@@ -172,7 +172,7 @@ fn generic_and_or_simplify(
     };
 
     // The "short-circuit term" is the term that can short-circuit the conjunction or disjunction.
-    // This is "true" for conjunctions and "false" disjunctions
+    // This is `true` for conjunctions and `false` disjunctions
     let short_circuit_term = !skip_term;
 
     let (phis, result_term) = match_term_err!((= phi psi) = &conclusion[0])?;
@@ -187,8 +187,8 @@ fn generic_and_or_simplify(
         _ => std::slice::from_ref(result_term),
     };
 
-    // Sometimes, the "and_simplify" and "or_simplify" rules are used on a nested application of
-    // the rule operator, where the outer operation only has one argument, e.g. "(and (and p q r)".
+    // Sometimes, the `and_simplify` and `or_simplify` rules are used on a nested application of
+    // the rule operator, where the outer operation only has one argument, e.g. `(and (and p q r)`.
     // If we encounter this, we remove the outer application
     if phis.len() == 1 {
         match phis[0].as_ref() {
@@ -427,7 +427,7 @@ pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     }
 }
 
-/// Used for both the "sum_simplify" and "prod_simplify" rules, depending on `rule_kind`.
+/// Used for both the `sum_simplify` and `prod_simplify` rules, depending on `rule_kind`.
 /// `rule_kind` has to be either `Operator::Add` or `Operator::Mult`.
 fn generic_sum_prod_simplify_rule(
     pool: &mut TermPool,
@@ -490,7 +490,7 @@ fn generic_sum_prod_simplify_rule(
                 continue; // Since `constant_total` didn't change, we can skip the check
             }
         }
-        // If the rule kind is "prod_simplify" and we find a zero, we can leave the loop early. We
+        // If the rule kind is `prod_simplify` and we find a zero, we can leave the loop early. We
         // also clear the `result` vector because we expect the u term to be just the zero constant
         if rule_kind == Operator::Mult && constant_total == BigRational::zero() {
             result.clear();
@@ -503,9 +503,9 @@ fn generic_sum_prod_simplify_rule(
     //     (step t1 (cl
     //         (= (* 1 (* 2 x)) (* 2 x))
     //     ) :rule prod_simplify)
-    // In this step, the term "(* 2 x)" on the right-hand side should be interpreted as an atom,
+    // In this step, the term `(* 2 x)` on the right-hand side should be interpreted as an atom,
     // but since it is a valid `u` term, it is unwrapped such that `u_constant` is 2 and `u_args`
-    // is "x". To handle this, we first check if the expected result is just one term, and try to
+    // is `x`. To handle this, we first check if the expected result is just one term, and try to
     // interpret `u` as that term.
     if result.len() == 1 && constant_total == identity_value && u == result[0] {
         return Ok(());
@@ -538,14 +538,14 @@ pub fn prod_simplify(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
 
 pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     // Despite being separate rules in the documentation, this rule is used to do the job of both
-    // the "minus_simplify" and the "unary_minus_simplify" rules
+    // the `minus_simplify` and the `unary_minus_simplify` rules
     fn try_unary_minus_simplify(t: &Rc<Term>, u: &Rc<Term>) -> bool {
-        // First case of "unary_minus_simplify"
+        // First case of `unary_minus_simplify`
         if match_term!((-(-t)) = t).map_or(false, |t| t == u) {
             return true;
         }
 
-        // Second case of "unary_minus_simplify"
+        // Second case of `unary_minus_simplify`
         match (t.as_signed_number(), u.as_signed_number()) {
             (Some(t), Some(u)) if t == u => return true,
             _ => (),

@@ -59,7 +59,7 @@ pub enum CheckerError {
     BrokenTransitivityChain(Rc<Term>, Rc<Term>),
 
     // TODO: This error is not detailed enough. This is because the current implementation of the
-    // "ac_simp" rule does not compute the expected term explicitly. Instead, it expands the
+    // `ac_simp` rule does not compute the expected term explicitly. Instead, it expands the
     // original term applying the simplification rules gradually, comparing it with the result term
     // encountered in the conclusion. This is because there is a bug in veriT that causes the
     // simplification to not be complete in some cases. Once this bug is solved, we can revert back
@@ -241,7 +241,7 @@ pub enum LinearArithmeticError {
     ExpectedLessEq(Rc<Term>, Rc<Term>),
 }
 
-/// Errors relevant to all rules that end subproofs (not just the "subproof" rule).
+/// Errors relevant to all rules that end subproofs (not just the `subproof` rule).
 #[derive(Debug, Error)]
 pub enum SubproofError {
     #[error("discharge must be 'assume' command: '{0}'")]

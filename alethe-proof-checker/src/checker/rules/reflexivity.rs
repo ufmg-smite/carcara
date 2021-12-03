@@ -13,7 +13,7 @@ pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> RuleResult 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
 
     // If the two terms are directly identical, we don't need to do any more work. We make sure to
-    // do this check before we try to get the context substitution, because "refl" can be used
+    // do this check before we try to get the context substitution, because `refl` can be used
     // outside of any subproof
     if are_alpha_equivalent(left, right) {
         return Ok(());

@@ -283,7 +283,7 @@ impl<R: BufRead> Lexer<R> {
 
     /// Reads a quoted symbol from the input source.
     fn read_quoted_symbol(&mut self) -> AletheResult<Token> {
-        self.next_char()?; // Consume '|'
+        self.next_char()?; // Consume `|`
         let symbol = self.read_chars_while(|c| c != '|' && c != '\\')?;
         match self.current_char {
             Some('\\') => Err(Error::Parser(
@@ -301,7 +301,7 @@ impl<R: BufRead> Lexer<R> {
 
     /// Reads a keyword from the input source.
     fn read_keyword(&mut self) -> AletheResult<Token> {
-        self.next_char()?; // Consume ':'
+        self.next_char()?; // Consume `:`
         let symbol = self.read_chars_while(Lexer::is_symbol_character)?;
         Ok(Token::Keyword(symbol))
     }
@@ -309,7 +309,7 @@ impl<R: BufRead> Lexer<R> {
     /// Reads a binary or hexadecimal literal, e.g. `#b0110` or `#x01Ab`. Returns an error if any
     /// character other than `b` or `x` is encountered after the `#`.
     fn read_number_with_base(&mut self) -> AletheResult<Token> {
-        self.next_char()?; // Consume '#'
+        self.next_char()?; // Consume `#`
         let base = match self.next_char()? {
             Some('b') => 2,
             Some('x') => 16,
@@ -350,14 +350,14 @@ impl<R: BufRead> Lexer<R> {
 
     /// Reads a string literal from the input source.
     fn read_string(&mut self) -> AletheResult<Token> {
-        self.next_char()?; // Consume '"'
+        self.next_char()?; // Consume `"`
         let mut result = String::new();
         loop {
             result += &self.read_chars_while(|c| c != '"')?;
             if self.current_char.is_none() {
                 return Err(Error::Parser(ParserError::EofInString, self.position));
             }
-            self.next_char()?; // Consume '"'
+            self.next_char()?; // Consume `"`
             if self.current_char == Some('"') {
                 self.next_char()?;
                 result.push('"');

@@ -169,7 +169,7 @@ impl<R: BufRead> Parser<R> {
                 SortError::assert_all_eq(&sorts)?;
             }
             Operator::Sub => {
-                // The "-" operator, in particular, can be called with only one argument, in which
+                // The `-` operator, in particular, can be called with only one argument, in which
                 // case it means negation instead of subtraction
                 assert_num_of_args(&args, 1..)?;
                 SortError::assert_one_of(&[Sort::Int, Sort::Real], sorts[0])?;
@@ -189,8 +189,8 @@ impl<R: BufRead> Parser<R> {
                     Sort::Array(_, _) => (),
                     got => {
                         // Instead of creating some special case for sort errors with parametric
-                        // sorts, we just create a sort "Y" to represent the sort parameter. We
-                        // infer the "X" sort from the second operator argument. This may be
+                        // sorts, we just create a sort `Y` to represent the sort parameter. We
+                        // infer the `X` sort from the second operator argument. This may be
                         // changed later
                         let x = self.add_term(Term::Sort(sorts[1].clone()));
                         let y = self.add_term(Term::Sort(Sort::Atom("Y".to_string(), Vec::new())));
@@ -285,7 +285,7 @@ impl<R: BufRead> Parser<R> {
     }
 
     /// Calls `parse_func` repeatedly until a closing parenthesis is reached. If `non_empty` is
-    /// true, empty sequences will result in an error. This method consumes the ending ")" token.
+    /// true, empty sequences will result in an error. This method consumes the ending `)` token.
     fn parse_sequence<T, F>(&mut self, mut parse_func: F, non_empty: bool) -> AletheResult<Vec<T>>
     where
         F: FnMut(&mut Self) -> AletheResult<T>,
@@ -300,7 +300,7 @@ impl<R: BufRead> Parser<R> {
                 self.current_position,
             ))
         } else {
-            self.next_token()?; // Consume ")" token
+            self.next_token()?; // Consume `)` token
             Ok(result)
         }
     }
@@ -375,8 +375,8 @@ impl<R: BufRead> Parser<R> {
 
                     // TODO: Detect this by searching for the character 'R' in the logic name
                     // When the problem's logic contains real numbers but not integers, integer
-                    // literals should be parsed as reals. For instance, "1" should be interpreted
-                    // as "1.0".
+                    // literals should be parsed as reals. For instance, `1` should be interpreted
+                    // as `1.0`.
                     self.interpret_integers_as_reals = match logic.as_str() {
                         "LRA" | "QF_LRA" | "QF_NRA" | "QF_RDL" | "QF_UFLRA" | "QF_UFNRA"
                         | "UFLRA" => true,
@@ -461,9 +461,9 @@ impl<R: BufRead> Parser<R> {
                     let (end_step_index, assignment_args, variable_args) =
                         self.parse_anchor_command()?;
 
-                    // When we encounter an "anchor" command, we push a new scope into the step
+                    // When we encounter an `anchor` command, we push a new scope into the step
                     // indices symbol table, a fresh commands vector into the commands stack for
-                    // the subproof to fill, and the "anchor" data (end step and arguments) into
+                    // the subproof to fill, and the `anchor` data (end step and arguments) into
                     // their respective stacks. All of this will be popped off at the end of the
                     // subproof. We don't need to push a new scope into the sorts symbol table
                     // because `Parser::parse_anchor_command` already does that for us
@@ -492,7 +492,7 @@ impl<R: BufRead> Parser<R> {
                 end_step_stack.pop().unwrap();
                 let (assignment_args, variable_args) = subproof_args_stack.pop().unwrap();
 
-                // We also need to make sure that the last command is in fact a "step"
+                // We also need to make sure that the last command is in fact a `step`
                 match commands.last() {
                     Some(ProofCommand::Step(_)) => (),
                     _ => {
@@ -529,7 +529,7 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
-    /// Parses an "assume" proof command. This method assumes that the "(" and "assume" tokens were
+    /// Parses an `assume` proof command. This method assumes that the `(` and `assume` tokens were
     /// already consumed.
     fn parse_assume_command(&mut self) -> AletheResult<(String, Rc<Term>)> {
         let index = self.expect_symbol()?;
@@ -538,7 +538,7 @@ impl<R: BufRead> Parser<R> {
         Ok((index, term))
     }
 
-    /// Parses a "step" proof command. This method assumes that the "(" and "step" tokens were
+    /// Parses a `step` proof command. This method assumes that the `(` and `step` tokens were
     /// already consumed.
     fn parse_step_command(&mut self) -> AletheResult<(String, StepCommand)> {
         let step_index = self.expect_symbol()?;
@@ -550,7 +550,7 @@ impl<R: BufRead> Parser<R> {
             (other, pos) => return Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),
         };
 
-        // If the rule is "trust", we read the rest of the "step" command, ignoring all arguments
+        // If the rule is `trust`, we read the rest of the `step` command, ignoring all arguments
         // and premises
         if rule == "trust" {
             self.read_until_close_parens()?;
@@ -576,7 +576,7 @@ impl<R: BufRead> Parser<R> {
             Vec::new()
         };
 
-        // In some steps (notably those with the "subproof" rule) a ":discharge" attribute appears,
+        // In some steps (notably those with the `subproof` rule) a `:discharge` attribute appears,
         // with a sequence of assumption indices as its value. While the checker already has
         // support this rule, it doesn't use these values to check it. These values are only used
         // when printing a proof.
@@ -593,7 +593,7 @@ impl<R: BufRead> Parser<R> {
         Ok((step_index, (clause, rule, premises, args, discharge)))
     }
 
-    /// Parses an "anchor" proof command. This method assumes that the "(" and "anchor" tokens were
+    /// Parses an `anchor` proof command. This method assumes that the `(` and `anchor` tokens were
     /// already consumed. In order to parse the subproof arguments, this method pushes a new scope
     /// into the sorts symbol table which must be removed after parsing the subproof.
     fn parse_anchor_command(&mut self) -> AletheResult<AnchorCommand> {
@@ -623,7 +623,7 @@ impl<R: BufRead> Parser<R> {
         Ok((end_step_index, assignment_args, variable_args))
     }
 
-    /// Parses an argument for an "anchor" proof command. This can be either a variable binding of
+    /// Parses an argument for an `anchor` proof command. This can be either a variable binding of
     /// the form `(<symbol> <sort>)` or an assignment, of the form `(:= (<symbol> <sort>) <term>)`.
     fn parse_anchor_argument(&mut self) -> AletheResult<Either<(SortedVar, Rc<Term>), SortedVar>> {
         self.expect_token(Token::OpenParen)?;
@@ -657,8 +657,8 @@ impl<R: BufRead> Parser<R> {
         })
     }
 
-    /// Parses a "declare-fun" proof command. Returns the function name and a term representing its
-    /// sort. This method assumes that the "(" and "declare-fun" tokens were already consumed.
+    /// Parses a `declare-fun` proof command. Returns the function name and a term representing its
+    /// sort. This method assumes that the `(` and `declare-fun` tokens were already consumed.
     fn parse_declare_fun(&mut self) -> AletheResult<(String, Rc<Term>)> {
         let name = self.expect_symbol()?;
         let sort = {
@@ -677,7 +677,7 @@ impl<R: BufRead> Parser<R> {
     }
 
     /// Parses a declare-sort proof command. Returns the sort name and its arity. This method
-    /// assumes that the "(" and "declare-sort" tokens were already consumed.
+    /// assumes that the `(` and `declare-sort` tokens were already consumed.
     fn parse_declare_sort(&mut self) -> AletheResult<(String, usize)> {
         let name = self.expect_symbol()?;
         let arity_pos = self.current_position;
@@ -690,8 +690,8 @@ impl<R: BufRead> Parser<R> {
         Ok((name, arity))
     }
 
-    /// Parses a "define-fun" proof command. Returns the function name and its definition. This
-    /// method assumes that the "(" and "define-fun" tokens were already consumed.
+    /// Parses a `define-fun` proof command. Returns the function name and its definition. This
+    /// method assumes that the `(` and `define-fun` tokens were already consumed.
     fn parse_define_fun(&mut self) -> AletheResult<(String, FunctionDef)> {
         let name = self.expect_symbol()?;
         self.expect_token(Token::OpenParen)?;
@@ -712,30 +712,30 @@ impl<R: BufRead> Parser<R> {
         Ok((name, FunctionDef { params, body }))
     }
 
-    /// Parses a clause of the form "(cl <term>*)".
+    /// Parses a clause of the form `(cl <term>*)`.
     fn parse_clause(&mut self) -> AletheResult<Vec<Rc<Term>>> {
         self.expect_token(Token::OpenParen)?;
         self.expect_token(Token::ReservedWord(Reserved::Cl))?;
         self.parse_sequence(|p| p.parse_term_expecting_sort(&Sort::Bool), false)
     }
 
-    /// Parses an argument for a "step" command.
+    /// Parses an argument for a `step` command.
     fn parse_proof_arg(&mut self) -> AletheResult<ProofArg> {
         if self.current_token == Token::OpenParen {
-            self.next_token()?; // Consume "(" token
+            self.next_token()?; // Consume `(` token
 
-            // If we encounter a "(" token, this could be an assignment argument of the form
-            // "(:= <symbol> <term>)", or a regular term that starts with "(". Note that the
-            // lexer reads ":=" as a keyword with contents "=".
+            // If we encounter a `(` token, this could be an assignment argument of the form
+            // `(:= <symbol> <term>)`, or a regular term that starts with `(`. Note that the
+            // lexer reads `:=` as a keyword with contents `=`.
             if self.current_token == Token::Keyword("=".into()) {
-                self.next_token()?; // Consume ":=" token
+                self.next_token()?; // Consume `:=` token
                 let name = self.expect_symbol()?;
                 let value = self.parse_term()?;
                 self.expect_token(Token::CloseParen)?;
                 Ok(ProofArg::Assign(name, value))
             } else {
-                // If the first token is not ":=", this argument is just a regular term. Since
-                // we already consumed the "(" token, we have to call `parse_application`
+                // If the first token is not `:=`, this argument is just a regular term. Since
+                // we already consumed the `(` token, we have to call `parse_application`
                 // instead of `parse_term`.
                 let term = self.parse_application()?;
                 Ok(ProofArg::Term(term))
@@ -746,7 +746,7 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
-    /// Parses a sorted variable of the form "(<symbol> <sort>)".
+    /// Parses a sorted variable of the form `(<symbol> <sort>)`.
     fn parse_sorted_var(&mut self) -> AletheResult<SortedVar> {
         self.expect_token(Token::OpenParen)?;
         let symbol = self.expect_symbol()?;
@@ -797,7 +797,7 @@ impl<R: BufRead> Parser<R> {
         Ok(term)
     }
 
-    /// Parses a quantifier term. This method assumes that the "(" and quantifier tokens were
+    /// Parses a quantifier term. This method assumes that the `(` and quantifier tokens were
     /// already consumed.
     fn parse_quantifier(&mut self, quantifier: Quantifier) -> AletheResult<Rc<Term>> {
         self.expect_token(Token::OpenParen)?;
@@ -816,7 +816,7 @@ impl<R: BufRead> Parser<R> {
         Ok(self.add_term(Term::Quant(quantifier, BindingList(bindings), term)))
     }
 
-    /// Parses a "choice" term. This method assumes that the "(" and "choice" tokens were already
+    /// Parses a `choice` term. This method assumes that the `(` and `choice` tokens were already
     /// consumed.
     fn parse_choice_term(&mut self) -> AletheResult<Rc<Term>> {
         self.expect_token(Token::OpenParen)?;
@@ -828,7 +828,7 @@ impl<R: BufRead> Parser<R> {
         Ok(self.add_term(Term::Choice(var, inner)))
     }
 
-    /// Parses a "let" term. This method assumes that the "(" and "let" tokens were already
+    /// Parses a `let` term. This method assumes that the `(` and `let` tokens were already
     /// consumed.
     fn parse_let_term(&mut self) -> AletheResult<Rc<Term>> {
         self.expect_token(Token::OpenParen)?;
@@ -853,7 +853,7 @@ impl<R: BufRead> Parser<R> {
 
     /// Parses an annotated term, of the form `(! <term> <attribute>+)`. The two supported
     /// attributes are `:named` and `:pattern`, though the latter is ignored. If any other
-    /// attribute is present, an error will be returned. This method assumes that the "(" and "!"
+    /// attribute is present, an error will be returned. This method assumes that the `(` and `!`
     /// tokens were already consumed.
     fn parse_annotated_term(&mut self) -> AletheResult<Rc<Term>> {
         let inner = self.parse_term()?;
@@ -863,7 +863,7 @@ impl<R: BufRead> Parser<R> {
                 let attribute = p.expect_keyword()?;
                 match attribute.as_str() {
                     "named" => {
-                        // If the term has a "named" attribute, we introduce a new nullary function
+                        // If the term has a `:named` attribute, we introduce a new nullary function
                         // definition that maps the name to the term
                         let name = p.expect_symbol()?;
                         p.state.function_defs.insert(
@@ -876,7 +876,7 @@ impl<R: BufRead> Parser<R> {
                         Ok(())
                     }
                     "pattern" => {
-                        // We just ignore the values of "pattern" attributes
+                        // We just ignore the values of `:pattern` attributes
                         p.expect_token(Token::OpenParen)?;
                         p.parse_sequence(Parser::parse_term, true)?;
                         Ok(())
@@ -892,8 +892,8 @@ impl<R: BufRead> Parser<R> {
         Ok(inner)
     }
 
-    /// Parses any term that starts with "(", that is, any term that is not a constant or a
-    /// variable. This method assumes that the "(" token was already consumed.
+    /// Parses any term that starts with `(`, that is, any term that is not a constant or a
+    /// variable. This method assumes that the `(` token was already consumed.
     fn parse_application(&mut self) -> AletheResult<Rc<Term>> {
         let head_pos = self.current_position;
         match &self.current_token {

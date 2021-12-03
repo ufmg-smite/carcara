@@ -16,7 +16,7 @@ fn unremove_all_negations(pool: &mut TermPool, (n, term): (i32, &Rc<Term>)) -> R
 }
 
 pub fn resolution(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> RuleResult {
-    // In some cases, this rule is used with a single premise "(not true)" to justify an empty
+    // In some cases, this rule is used with a single premise `(not true)` to justify an empty
     // conclusion clause
     if conclusion.is_empty() && premises.len() == 1 {
         if let Some(t) = get_single_term_from_command(premises[0]) {
@@ -102,7 +102,7 @@ pub fn resolution(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> Rule
 
     if let Some(((i, pivot), _)) = remaining_pivots.next() {
         // There is a special case in the resolution rules that is valid, but leaves a pivot
-        // remaining: when the result of the resolution is just the boolean constant "false", it
+        // remaining: when the result of the resolution is just the boolean constant `false`, it
         // may be implicitly eliminated. For example:
         //     (step t1 (cl p q false) :rule trust)
         //     (step t2 (cl (not p)) :rule trust)

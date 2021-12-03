@@ -161,10 +161,10 @@ pub struct Proof {
 /// A proof command.
 #[derive(Debug, PartialEq)]
 pub enum ProofCommand {
-    /// An "assume" command, of the form "(assume <symbol> <term>)".
+    /// An `assume` command, of the form `(assume <symbol> <term>)`.
     Assume { index: String, term: Rc<Term> },
 
-    /// A "step" command.
+    /// A `step` command.
     Step(ProofStep),
 
     /// A subproof.
@@ -185,7 +185,7 @@ impl ProofCommand {
     }
 }
 
-/// A "step" command, of the form `(step <symbol> <clause> :rule <symbol> [:premises (<symbol>+)]?
+/// A `step` command, of the form `(step <symbol> <clause> :rule <symbol> [:premises (<symbol>+)]?
 /// [:args <proof_args>]?)`.
 #[derive(Debug, PartialEq)]
 pub struct ProofStep {
@@ -199,16 +199,16 @@ pub struct ProofStep {
 
     pub args: Vec<ProofArg>,
 
-    // Currently, there is an issue with the ":discharge" attribute that is used by the "subproof"
-    // rule in which assumptions that should be printed as, e.g., "t1.h1", are printed as simply
-    // "h1". Because of that, we currently ignore the values of this attribute for the purpose of
+    // Currently, there is an issue with the `:discharge` attribute that is used by the `subproof`
+    // rule in which assumptions that should be printed as, e.g., `t1.h1`, are printed as simply
+    // `h1`. Because of that, we currently ignore the values of this attribute for the purpose of
     // actually checking the rule. However, to be able to print it correctly, we need to parse and
     // record these values. For now, they are simply stored as strings -- eventually, they will be
-    // stored using indices similarly to the ":premises" attribute
+    // stored using indices similarly to the `:premises` attribute
     pub discharge: Vec<String>,
 }
 
-/// An argument for a "step" or "anchor" command.
+/// An argument for a `step` or `anchor` command.
 #[derive(Debug, PartialEq)]
 pub enum ProofArg {
     /// An argument that is just a term.
@@ -218,7 +218,7 @@ pub enum ProofArg {
     Assign(String, Rc<Term>),
 }
 
-/// A function definition. Functions are defined using the "function-def" command, of the form
+/// A function definition. Functions are defined using the `function-def` command, of the form
 /// `(define-fun <symbol> (<sorted_var>*) <sort> <term>)`. These definitions are substituted in
 /// during parsing, so these commands don't appear in the final AST.
 pub struct FunctionDef {
@@ -358,12 +358,12 @@ pub enum Term {
     /// A quantifier binder term.
     Quant(Quantifier, BindingList, Rc<Term>),
 
-    /// A "choice" term.
+    /// A `choice` term.
     Choice(SortedVar, Rc<Term>),
 
-    /// A "let" binder term.
+    /// A `let` binder term.
     Let(BindingList, Rc<Term>),
-    // TODO: "match" binder terms
+    // TODO: `match` binder terms
 }
 
 impl From<SortedVar> for Term {
@@ -423,9 +423,10 @@ impl Term {
     }
 
     /// Returns an iterator over this term and all its subterms, in topological ordering. For
-    /// example, calling this method on the term (+ (f a b) 2) would return an iterator over the
-    /// terms (+ (f a b) 2), (f a b), f, a, b and 2. This method traverses the term as a DAG, and
-    /// the resulting iterator will not contain any duplicate terms. This ignores sort terms.
+    /// example, calling this method on the term `(+ (f a b) 2)` would return an iterator over the
+    /// terms `(+ (f a b) 2)`, `(f a b)`, `f`, `a`, `b` and `2`. This method traverses the term as
+    /// a DAG, and the resulting iterator will not contain any duplicate terms. This ignores sort
+    /// terms.
     pub fn subterms(&self) -> Subterms {
         Subterms::new(self)
     }
@@ -439,7 +440,7 @@ impl Term {
     }
 
     /// Returns `true` if the term is an integer or real constant, or one such constant negated
-    /// with the "-" operator.
+    /// with the `-` operator.
     pub fn is_signed_number(&self) -> bool {
         match match_term!((-x) = self) {
             Some(x) => x.is_number(),
@@ -458,8 +459,8 @@ impl Term {
     }
 
     /// Tries to extract a `BigRational` from a term, allowing negative values represented with the
-    /// unary "-" operator. Returns `Some` if the term is an integer or real constant, or one such
-    /// constant negated with the "-" operator.
+    /// unary `-` operator. Returns `Some` if the term is an integer or real constant, or one such
+    /// constant negated with the `-` operator.
     pub fn as_signed_number(&self) -> Option<BigRational> {
         match match_term!((-x) = self) {
             Some(x) => x.as_number().map(|r| -r),
@@ -469,9 +470,10 @@ impl Term {
 
     /// Tries to extract a `BigRational` from a term, allowing fractions. This method will return
     /// `Some` if the term is:
-    /// * A real or integer constant
-    /// * An application of the "/" or "div" operators on two real or integer constants
-    /// * An application of the unary "-" operator on one of the two previous cases
+    ///
+    /// - A real or integer constant
+    /// - An application of the `/` or `div` operators on two real or integer constants
+    /// - An application of the unary `-` operator on one of the two previous cases
     pub fn as_fraction(&self) -> Option<BigRational> {
         fn as_unsigned_fraction(term: &Term) -> Option<BigRational> {
             match term {
@@ -513,12 +515,12 @@ impl Term {
         }
     }
 
-    /// Returns `true` if the term is the boolean constant "true".
+    /// Returns `true` if the term is the boolean constant `true`.
     pub fn is_bool_true(&self) -> bool {
         *self.sort() == Sort::Bool && self.as_var() == Some("true")
     }
 
-    /// Returns `true` if the term is the boolean constant "false".
+    /// Returns `true` if the term is the boolean constant `false`.
     pub fn is_bool_false(&self) -> bool {
         *self.sort() == Sort::Bool && self.as_var() == Some("false")
     }

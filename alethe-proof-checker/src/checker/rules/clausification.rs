@@ -22,7 +22,7 @@ pub fn distinct_elim(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
             }
         }
         // If there are more than two boolean arguments to the distinct operator, the
-        // second term must be "false"
+        // second term must be `false`
         args if *args[0].sort() == Sort::Bool => {
             if second_term.is_bool_false() {
                 Ok(())
@@ -162,7 +162,7 @@ pub fn nary_elim(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     }
 
     /// A function to expand terms that fall in the right or left associative cases. For example,
-    /// the term "(=> p q r s)" will be expanded into the term "(=> p (=> q (=> r s)))".
+    /// the term `(=> p q r s)` will be expanded into the term `(=> p (=> q (=> r s)))`.
     fn expand_assoc(pool: &mut TermPool, op: Operator, args: &[Rc<Term>], case: Case) -> Rc<Term> {
         let (head, tail) = match args {
             [] => unreachable!(),
@@ -214,7 +214,7 @@ pub fn nary_elim(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_is_expected(result, expected)
 }
 
-/// The first simplification step for "bfun_elim", that expands quantifiers over boolean variables.
+/// The first simplification step for `bfun_elim`, that expands quantifiers over boolean variables.
 fn bfun_elim_first_step(
     pool: &mut TermPool,
     bindigns: &[SortedVar],
@@ -237,8 +237,8 @@ fn bfun_elim_first_step(
     Ok(())
 }
 
-/// The second simplification step for "bfun_elim", that expands function applications over
-/// non-constant boolean arguments into "ite" terms.
+/// The second simplification step for `bfun_elim`, that expands function applications over
+/// non-constant boolean arguments into `ite` terms.
 fn bfun_elim_second_step(
     pool: &mut TermPool,
     func: &Rc<Term>,
@@ -265,7 +265,7 @@ fn bfun_elim_second_step(
     pool.add_term(Term::App(func.clone(), args.to_vec()))
 }
 
-/// Applies the simplification steps for the "bfun_elim" rule.
+/// Applies the simplification steps for the `bfun_elim` rule.
 fn apply_bfun_elim(
     pool: &mut TermPool,
     term: &Rc<Term>,

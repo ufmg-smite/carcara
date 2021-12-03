@@ -101,7 +101,7 @@ fn test_hash_consing() {
     //   (* 2 2)
     //   (- (- ...) (* 2 2))
     let expected = vec![
-        // The "Bool" sort and the boolean constants "true" and "false" are always added to the
+        // The `Bool` sort and the boolean constants `true` and `false` are always added to the
         // terms map
         "Bool",
         "true",

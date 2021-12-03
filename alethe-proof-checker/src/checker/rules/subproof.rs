@@ -13,7 +13,7 @@ pub fn subproof(
 ) -> RuleResult {
     let subproof_commands = subproof_commands.ok_or(CheckerError::MustBeLastStepInSubproof)?;
 
-    // TODO: We should get the series of assumptions from the ":discharge" attribute, but currently
+    // TODO: We should get the series of assumptions from the `:discharge` attribute, but currently
     // we just take the first `conclusion.len() - 1` steps in the subproof.
     assert_clause_len(conclusion, 1..)?;
     let assumptions = &subproof_commands[..conclusion.len() - 1];
@@ -71,8 +71,8 @@ pub fn bind(
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
 
-    // While the documentation indicates this rule is only called with "forall" quantifiers, in
-    // some of the tests examples it is also called with the "exists" quantifier
+    // While the documentation indicates this rule is only called with `forall` quantifiers, in
+    // some of the tests examples it is also called with the `exists` quantifier
     let (l_quant, l_bindings, left) = left.unwrap_quant_err()?;
     let (r_quant, r_bindings, right) = right.unwrap_quant_err()?;
     assert_eq(&l_quant, &r_quant)?;
@@ -106,7 +106,7 @@ pub fn bind(
         .filter_map(|(x, y)| Some((x.as_var()?, y.as_var()?)))
         .chain(
             // Sometimes, the context bindings also appear as bindings in the quantifiers, so we
-            // include them in the "xs" and "ys"
+            // include them in the `xs` and `ys`
             context
                 .bindings
                 .iter()
@@ -386,7 +386,7 @@ fn generic_skolemization_rule(
                 ))
             }
 
-            // If the rule is "sko_forall", the predicate in the choice term should be negated
+            // If the rule is `sko_forall`, the predicate in the choice term should be negated
             if rule_type == Quantifier::Forall {
                 inner = build_term!(pool, (not { inner }));
             }
@@ -413,7 +413,7 @@ pub fn sko_forall(args: RuleArgs) -> RuleResult {
 mod tests {
     #[test]
     fn subproof() {
-        // TODO: When the ":discharge" attribute is properly implemented, change the examples to
+        // TODO: When the `:discharge` attribute is properly implemented, change the examples to
         // use it
         test_cases! {
             definitions = "

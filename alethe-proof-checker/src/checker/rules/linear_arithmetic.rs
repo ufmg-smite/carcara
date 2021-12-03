@@ -25,9 +25,10 @@ pub fn la_rw_eq(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 /// Takes a disequality term and returns its negation, represented by an operator and two linear
 /// combinations.
 /// The disequality can be:
-/// * An application of the "<", ">", "<=" or ">=" operators
-/// * The negation of an application of one of these operators
-/// * The negation of an application of the "=" operator
+///
+/// - An application of the `<`, `>`, `<=` or `>=` operators
+/// - The negation of an application of one of these operators
+/// - The negation of an application of the `=` operator
 fn negate_disequality(term: &Rc<Term>) -> Result<(Operator, LinearComb, LinearComb), CheckerError> {
     use Operator::*;
 
@@ -85,7 +86,7 @@ impl LinearComb {
         // of a cache, which means sometimes it has to recompute the result for the same term more
         // than once. However, an old implementation of this method that could use a cache showed
         // that making use of one can actually make the performance of this function worse.
-        // Benchmarks showed that it would more than double the average time of the "la_generic"
+        // Benchmarks showed that it would more than double the average time of the `la_generic`
         // rule, which makes extensive use of `LinerComb`s. Because of that, we prefer to not use
         // a cache here, and traverse the term naively.
 
@@ -248,7 +249,7 @@ fn strengthen(op: Operator, disequality: &mut LinearComb, a: &BigRational) -> Op
         //     -1 * n >= 2
         //     -2 * n >= 4
         // This is a stronger statement, and follows from the original disequality. Importantly,
-        // this strengthening is sometimes necessary to check some "la_generic" steps. To find the
+        // this strengthening is sometimes necessary to check some `la_generic` steps. To find the
         // value by which we should divide we have to take the greatest common divisor of the
         // coefficients (including the constant value on the right-hand side), as this makes sure
         // all coefficients will continue being integers after the division. This strengthening is
@@ -355,7 +356,7 @@ pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
 }
 
 pub fn lia_generic(_: RuleArgs) -> RuleResult {
-    // The "lia_generic" rule is very similar to the "la_generic" rule, but the additional
+    // The `lia_generic` rule is very similar to the `la_generic` rule, but the additional
     // arguments aren't given. In order to properly check this rule, the checker would need to
     // infer these arguments, which would be very complicated and slow. Therefore, for now, we just
     // ignore the rule and give a warning. Eventually, we plan to use cvc5 to help check this rule.
@@ -437,7 +438,7 @@ pub fn la_tautology(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
             Err(LinearArithmeticError::NotValidTautologyCase(conclusion[0].clone()).into())
         }
     } else {
-        // If the conclusion if of the first form, we apply steps 1 through 3 from "la_generic"
+        // If the conclusion is of the first form, we apply steps 1 through 3 from `la_generic`
 
         // Steps 1 and 2: Negate the disequality
         let (mut op, s1, s2) = negate_disequality(&conclusion[0])?;

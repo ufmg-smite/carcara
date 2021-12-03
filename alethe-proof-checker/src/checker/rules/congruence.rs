@@ -34,7 +34,7 @@ pub fn eq_congruent_pred(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     generic_congruent_rule(premises, conclusion)
 }
 
-/// A function to check congruence. Useful for the "eq_congruent" and "eq_congruent_pred"
+/// A function to check congruence. Useful for the `eq_congruent` and `eq_congruent_pred`
 /// rules. `premises` should be an iterator over the argument equalities, and `conclusion`
 /// should be the two function applications.
 fn generic_congruent_rule<'a, T>(premises: T, conclusion: (&Rc<Term>, &Rc<Term>)) -> RuleResult
@@ -88,8 +88,8 @@ where
     Ok(())
 }
 
-/// Since the semantics of the "cong" rule is slightly different from that of "eq_congruent" and
-/// "eq_congruent_pred", we cannot just use the `generic_congruent_rule` function
+/// Since the semantics of the `cong` rule is slightly different from that of `eq_congruent` and
+/// `eq_congruent_pred`, we cannot just use the `generic_congruent_rule` function
 fn check_cong<'a>(
     premises: &[(&'a Rc<Term>, &'a Rc<Term>)],
     f_args: &[Rc<Term>],
@@ -147,7 +147,7 @@ pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
 
     let (f, g) = match_term_err!((= f g) = &conclusion[0])?;
     let (f_args, g_args) = match (f.as_ref(), g.as_ref()) {
-        // Because of the way veriT handles equality terms, when the "cong" rule is called with two
+        // Because of the way veriT handles equality terms, when the `cong` rule is called with two
         // equalities of two terms, the order of their arguments may be flipped. Because of that,
         // we have to treat this special case separately
         (Term::Op(Operator::Equals, f_args), Term::Op(Operator::Equals, g_args))

@@ -263,25 +263,25 @@ pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 
     let (root_term, right_side) = match_term_err!((= t u) = &conclusion[0])?;
 
-    // In some cases, no "ite" subterm is extracted from "t" (even if "t" has "ite" subterms), so
-    // the conjunction in the right side of the equality has only one term: "t" itself, modulo
+    // In some cases, no `ite` subterm is extracted from `t` (even if `t` has `ite` subterms), so
+    // the conjunction in the right side of the equality has only one term: `t` itself, modulo
     // reordering of equalities. One example where this happens is the test file
     // SH_problems_all_filtered/isabelle-mirabelle/HOL-Library/smt_verit/x2020_07_23_15_09_29_511_18566192.smt_in.proof
-    // Step "t7" in that proof is:
+    // Step `t7` in that proof is:
     //     (step t7 (cl (=
     //         (= (times$ c$ (ite (< (g$ n$) 0.0) (- (g$ n$)) (g$ n$)))
     //            (times$ (ite (< (g$ n$) 0.0) (- (g$ n$)) (g$ n$)) c$))
     //         (= (times$ c$ (ite (< (g$ n$) 0.0) (- (g$ n$)) (g$ n$)))
     //            (times$ (ite (< (g$ n$) 0.0) (- (g$ n$)) (g$ n$)) c$))
     //     )) :rule ite_intro)
-    // For cases like this, we first check if "t" equals the right side term modulo reordering of
+    // For cases like this, we first check if `t` equals the right side term modulo reordering of
     // equalities. If not, we unwrap the conjunction and continue checking the rule normally.
     if deep_eq_modulo_reordering(root_term, right_side) {
         return Ok(());
     }
     let us = match_term_err!((and ...) = right_side)?;
 
-    // "us" must be a conjunction where the first term is the root term
+    // `us` must be a conjunction where the first term is the root term
     assert_eq_modulo_reordering(&us[0], root_term)?;
 
     let us = &us[1..];
@@ -289,13 +289,13 @@ pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     let subterms = root_term.subterms();
     let mut ite_subterms = subterms.filter_map(|term| match_term!((ite a b c) = term));
 
-    // We assume that the "ite" terms appear in the conjunction in the same order as they
+    // We assume that the `ite` terms appear in the conjunction in the same order as they
     // appear as subterms of the root term
     'outer: for u_i in &us[1..] {
         let (cond, (a, b), (c, d)) = match_term_err!((ite cond (= a b) (= c d)) = u_i)?;
 
-        // For every term in "us", we find the next "ite" subterm that matches the expected form.
-        // This is because some "ite" subterms may be skipped, and may not have a corresponding "u"
+        // For every term in `us`, we find the next `ite` subterm that matches the expected form.
+        // This is because some `ite` subterms may be skipped, and may not have a corresponding `u`
         // term
         for s_i in &mut ite_subterms {
             // Since the (= r_1 s_1) and (= r_2 s_2) equalities may be flipped, we have to check
@@ -348,8 +348,6 @@ pub fn connective_def(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         assert_eq(c, phi_1)?;
         assert_eq(d, phi_3)
     } else if let Some((first_bindings, first_inner)) = match_term!((exists ...) = first) {
-        // This case of the "connective_def" rule is not documented, but appears in some examples
-        // ∃ x_1, ..., x_n . phi <-> ¬(∀ x_1, ..., x_n . ¬phi)
         let (second_bindings, second_inner) = match_term_err!((not (forall ...)) = second)?;
         assert_eq(first_inner, second_inner.remove_negation_err()?)?;
         assert_eq(first_bindings, second_bindings)

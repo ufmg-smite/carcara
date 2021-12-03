@@ -51,8 +51,8 @@ impl Substitution {
         // More precisely, for a substitution `{x -> t}`, if a bound variable `y` satisfies one the
         // following conditions, it must be renamed:
         //
-        // * `y` = `x`
-        // * `y` appears in the free variables of `t`
+        // - `y` = `x`
+        // - `y` appears in the free variables of `t`
         //
         // See https://en.wikipedia.org/wiki/Lambda_calculus#Capture-avoiding_substitutions for
         // more details.
@@ -138,7 +138,7 @@ impl Substitution {
                 };
                 pool.add_term(Term::Quant(*q, new_bindings, new_term))
             }
-            // TODO: Handle "choice" and "let" terms
+            // TODO: Handle `choice` and `let` terms
             _ => term.clone(),
         };
 

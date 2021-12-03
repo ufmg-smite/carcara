@@ -89,7 +89,7 @@ macro_rules! match_term_err {
             // Note: Annoyingly, the `stringify!` macro can't fully keep whitespace when turning a
             // token tree into a string. It will add spaces when they are required for the tokens
             // to make sense, but remove any other whitespace. This means that, for instance, the
-            // token tree `(not (and ...))` will be stringified to "(not(and ...))". One way to
+            // token tree `(not (and ...))` will be stringified to `(not(and ...))`. One way to
             // solve this would be to create a procedural macro that uses the tokens `span` to
             // infer how many characters there were between each token, and assume they were all
             // spaces
@@ -219,7 +219,7 @@ mod tests {
             ),
         );
 
-        // Test the "..." pattern
+        // Test the `...` pattern
         let term = parse_term("(not (and true false true))");
         match match_term!((not (and ...)) = &term) {
             Some([a, b, c]) => {

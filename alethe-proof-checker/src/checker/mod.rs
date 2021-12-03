@@ -71,7 +71,7 @@ impl<'c> ProofChecker<'c> {
 
                     // If this is the last command of a subproof, we have to pop the subproof
                     // commands off of the stack. The parser already ensures that the last command
-                    // in a subproof is always a "step" command
+                    // in a subproof is always a `step` command
                     if is_end_of_subproof {
                         commands_stack.pop();
                         self.context.pop();
@@ -101,10 +101,10 @@ impl<'c> ProofChecker<'c> {
                 ProofCommand::Assume { index, term } => {
                     let time = Instant::now();
 
-                    // Some subproofs contain "assume" commands inside them. These don't refer
-                    // to the original problem premises, so we ignore the "assume" command if
+                    // Some subproofs contain `assume` commands inside them. These don't refer
+                    // to the original problem premises, so we ignore the `assume` command if
                     // it is inside a subproof. Since the unit tests for the rules don't define the
-                    // original problem, but sometimes use "assume" commands, we also skip the
+                    // original problem, but sometimes use `assume` commands, we also skip the
                     // command if we are in a testing context.
                     let result = if self.config.is_running_test || commands_stack.len() > 1 {
                         Ok(())
@@ -185,7 +185,7 @@ impl<'c> ProofChecker<'c> {
         assignment_args: &[(String, Rc<Term>)],
         variable_args: &[SortedVar],
     ) -> Result<Context, SubstitutionError> {
-        // Since some rules (like "refl") need to apply substitutions until a fixed point, we
+        // Since some rules (like `refl`) need to apply substitutions until a fixed point, we
         // precompute these substitutions into a separate hash map. This assumes that the assignment
         // arguments are in the correct order.
         let mut substitution = Substitution::empty();
@@ -193,10 +193,10 @@ impl<'c> ProofChecker<'c> {
 
         // We build the `substitution_until_fixed_point` hash map from the bottom up, by using the
         // substitutions already introduced to transform the result of a new substitution before
-        // inserting it into the hash map. So for instance, if the substitutions are "(:= y z)" and
-        // "(:= x (f y))", we insert the first substitution, and then, when introducing the second,
-        // we use the current state of the hash map to transform "(f y)" into "(f z)". The
-        // resulting hash map will then contain "(:= y z)" and "(:= x (f z))"
+        // inserting it into the hash map. So for instance, if the substitutions are `(:= y z)` and
+        // `(:= x (f y))`, we insert the first substitution, and then, when introducing the second,
+        // we use the current state of the hash map to transform `(f y)` into `(f z)`. The
+        // resulting hash map will then contain `(:= y z)` and `(:= x (f z))`
         for (var, value) in assignment_args.iter() {
             let var_term = terminal!(var var; self.pool.add_term(Term::Sort(value.sort().clone())));
             let var_term = self.pool.add_term(var_term);
@@ -205,7 +205,7 @@ impl<'c> ProofChecker<'c> {
             substitution_until_fixed_point.insert(&mut self.pool, var_term, new_value)?;
         }
 
-        // Some rules (notably "refl") need to apply the substitutions introduced by all the
+        // Some rules (notably `refl`) need to apply the substitutions introduced by all the
         // previous contexts instead of just the current one. Instead of doing this iteratively
         // everytime the rule is used, we precompute the cumulative substitutions of this context
         // and all the previous ones and store that in a hash map. This improves the performance of
