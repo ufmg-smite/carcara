@@ -112,6 +112,9 @@ pub enum Reserved {
 
     /// The `assert` reserved word.
     Assert,
+
+    /// The `set-logic` reserved word.
+    SetLogic,
 }
 
 impl_str_conversion_traits!(Reserved {
@@ -132,6 +135,7 @@ impl_str_conversion_traits!(Reserved {
     DeclareSort: "declare-sort",
     DefineFun: "define-fun",
     Assert: "assert",
+    SetLogic: "set-logic",
 });
 
 /// Represents a position (line and column numbers) in the source input.

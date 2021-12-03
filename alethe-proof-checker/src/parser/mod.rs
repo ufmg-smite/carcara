@@ -369,8 +369,7 @@ impl<R: BufRead> Parser<R> {
                     self.expect_token(Token::CloseParen)?;
                     premises.insert(term);
                 }
-                // TODO: Make `set-logic` a reserved word
-                Token::Symbol(s) if s == "set-logic" => {
+                Token::ReservedWord(Reserved::SetLogic) => {
                     let logic = self.expect_symbol()?;
 
                     // TODO: Detect this by searching for the character 'R' in the logic name
