@@ -198,19 +198,21 @@ impl Substitution {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::tests::{parse_definitions, parse_term_with_state};
+    use crate::parser::*;
 
     fn run_test(definitions: &str, original: &str, x: &str, t: &str, result: &str) {
-        let mut state = parse_definitions(definitions);
-        let original = parse_term_with_state(&mut state, original);
-        let x = parse_term_with_state(&mut state, x);
-        let t = parse_term_with_state(&mut state, t);
-        let result = parse_term_with_state(&mut state, result);
+        let mut parser = Parser::new(definitions.as_bytes()).unwrap();
+        parser.parse_problem().unwrap();
+
+        let [original, x, t, result] = [original, x, t, result].map(|s| {
+            parser.reset(s.as_bytes()).unwrap();
+            parser.parse_term().unwrap()
+        });
 
         let mut map = AHashMap::new();
         map.insert(x, t);
 
-        let mut pool = state.term_pool;
+        let mut pool = parser.term_pool();
         let got = Substitution::new(&mut pool, map)
             .unwrap()
             .apply(&mut pool, &original)

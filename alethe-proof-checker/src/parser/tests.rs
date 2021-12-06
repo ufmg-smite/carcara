@@ -28,34 +28,8 @@ pub(crate) fn parse_term_err(input: &str) -> Error {
 pub(crate) fn parse_term_with_definitions(definitions: &str, term: &str) -> Term {
     let mut parser = Parser::new(definitions.as_bytes()).expect(ERROR_MESSAGE);
     parser.parse_problem().expect(ERROR_MESSAGE);
-
-    // To keep the definitions and delcarations, we transfer the parser state to the new
-    // parser.
-    let mut new_parser = Parser::with_state(term.as_bytes(), parser.state).expect(ERROR_MESSAGE);
-    new_parser
-        .parse_term()
-        .expect(ERROR_MESSAGE)
-        .as_ref()
-        .clone()
-}
-
-/// Parses a series of declarations and definitions from a `&str`, and returns the parser state
-/// after parsing.  Panics if any error is encountered.
-pub(crate) fn parse_definitions(definitions: &str) -> ParserState {
-    let mut parser = Parser::new(definitions.as_bytes()).expect(ERROR_MESSAGE);
-    parser.parse_problem().expect(ERROR_MESSAGE);
-    parser.state
-}
-
-/// Parses a term from a `&str`, given a `ParserState` with the declarations and definitions
-/// necessary. Panics if any error is encountered.
-pub(crate) fn parse_term_with_state(state: &mut ParserState, term: &str) -> Rc<Term> {
-    // This temporarily assigns `ParserState::default()` to `state`.
-    let owned_state = std::mem::take(state);
-    let mut parser = Parser::with_state(term.as_bytes(), owned_state).expect(ERROR_MESSAGE);
-    let term = parser.parse_term().expect(ERROR_MESSAGE);
-    *state = parser.state; // Restore the `state` variable
-    term
+    parser.reset(term.as_bytes()).expect(ERROR_MESSAGE);
+    parser.parse_term().expect(ERROR_MESSAGE).as_ref().clone()
 }
 
 /// Parses a proof from a `&str`. Panics if any error is encountered.

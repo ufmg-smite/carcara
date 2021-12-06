@@ -43,10 +43,10 @@ struct AnchorCommand {
 /// The state of the parser. This holds all the function, constant or sort declarations and
 /// definitions, as well as the term pool used by the parser.
 #[derive(Default)]
-pub(crate) struct ParserState {
+struct ParserState {
     sorts_symbol_table: SymbolTable<Identifier, Rc<Term>>,
     function_defs: AHashMap<String, FunctionDef>,
-    pub(crate) term_pool: TermPool,
+    term_pool: TermPool,
     sort_declarations: AHashMap<String, usize>,
     step_indices: SymbolTable<String, usize>,
 }
@@ -70,25 +70,6 @@ impl<R: BufRead> Parser<R> {
             let iden = Identifier::Simple(iden.to_string());
             state.sorts_symbol_table.insert(iden, bool_sort.clone());
         }
-        let mut lexer = Lexer::new(input)?;
-        let (current_token, current_position) = lexer.next_token()?;
-        Ok(Parser {
-            lexer,
-            current_token,
-            current_position,
-            state,
-            interpret_integers_as_reals: false,
-        })
-    }
-
-    /// Constructs a new `Parser` using an existing `ParserState`. This operation can fail if there
-    /// is an IO or lexer error on the first token. This method is useful because the input source
-    /// is set when creating the parser and cannot be changed. In order to parse two or more inputs
-    /// (like when parsing an SMT-LIB problem instance and its Alethe proof) you can remove the
-    /// parser state after parsing the first input and create a new parser with it using this
-    /// method.
-    #[deprecated]
-    fn with_state(input: R, state: ParserState) -> AletheResult<Self> {
         let mut lexer = Lexer::new(input)?;
         let (current_token, current_position) = lexer.next_token()?;
         Ok(Parser {
