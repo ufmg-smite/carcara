@@ -32,15 +32,13 @@ pub fn parse_instance<T: BufRead>(problem: T, proof: T) -> AletheResult<(Proof, 
     Ok((proof, proof_parser.state.term_pool))
 }
 
-// TODO: Make these type aliases be actual structs
-type AnchorCommand = (String, Vec<(String, Rc<Term>)>, Vec<SortedVar>);
-type StepCommand = (
-    Vec<Rc<Term>>, // Clause
-    String,        // Rule
-    Vec<String>,   // Premises
-    Vec<ProofArg>, // Arguments
-    Vec<String>,   // Discharge
-);
+/// Represents a "raw" `anchor` command. This is only used while parsing, and does not appear in
+/// the final AST.
+struct AnchorCommand {
+    end_step_index: String,
+    assignment_args: Vec<(String, Rc<Term>)>,
+    variable_args: Vec<SortedVar>,
+}
 
 /// The state of the parser. This holds all the function, constant or sort declarations and
 /// definitions, as well as the term pool used by the parser.
@@ -420,36 +418,8 @@ impl<R: BufRead> Parser<R> {
                     (index.clone(), ProofCommand::Assume { index, term })
                 }
                 Token::ReservedWord(Reserved::Step) => {
-                    let (index, (clause, rule, premises, args, discharge)) =
-                        self.parse_step_command()?;
-
-                    // For every premise index symbol, find the associated premise index (depth and
-                    // command index) in the `step_indices` symbol table, or return an error
-                    let premises: Vec<_> = premises
-                        .into_iter()
-                        .map(|index| {
-                            self.state
-                                .step_indices
-                                .get_with_depth(&index)
-                                .map(|(d, &i)| (d, i))
-                                .ok_or(Error::Parser(
-                                    ParserError::UndefinedStepIndex(index),
-                                    // TODO: Make this error carry the position of the actual
-                                    // premise token
-                                    position,
-                                ))
-                        })
-                        .collect::<Result<_, _>>()?;
-
-                    let step = ProofStep {
-                        index: index.clone(),
-                        clause,
-                        rule,
-                        premises,
-                        args,
-                        discharge,
-                    };
-                    (index, ProofCommand::Step(step))
+                    let step = self.parse_step_command()?;
+                    (step.index.clone(), ProofCommand::Step(step))
                 }
                 Token::ReservedWord(Reserved::DefineFun) => {
                     let (name, func_def) = self.parse_define_fun()?;
@@ -457,8 +427,7 @@ impl<R: BufRead> Parser<R> {
                     continue;
                 }
                 Token::ReservedWord(Reserved::Anchor) => {
-                    let (end_step_index, assignment_args, variable_args) =
-                        self.parse_anchor_command()?;
+                    let anchor = self.parse_anchor_command()?;
 
                     // When we encounter an `anchor` command, we push a new scope into the step
                     // indices symbol table, a fresh commands vector into the commands stack for
@@ -468,8 +437,8 @@ impl<R: BufRead> Parser<R> {
                     // because `Parser::parse_anchor_command` already does that for us
                     self.state.step_indices.push_scope();
                     commands_stack.push(Vec::new());
-                    end_step_stack.push(end_step_index);
-                    subproof_args_stack.push((assignment_args, variable_args));
+                    end_step_stack.push(anchor.end_step_index);
+                    subproof_args_stack.push((anchor.assignment_args, anchor.variable_args));
                     continue;
                 }
                 _ => return Err(Error::Parser(ParserError::UnexpectedToken(token), position)),
@@ -539,8 +508,8 @@ impl<R: BufRead> Parser<R> {
 
     /// Parses a `step` proof command. This method assumes that the `(` and `step` tokens were
     /// already consumed.
-    fn parse_step_command(&mut self) -> AletheResult<(String, StepCommand)> {
-        let step_index = self.expect_symbol()?;
+    fn parse_step_command(&mut self) -> AletheResult<ProofStep> {
+        let index = self.expect_symbol()?;
         let clause = self.parse_clause()?;
         self.expect_token(Token::Keyword("rule".into()))?;
         let rule = match self.next_token()? {
@@ -553,16 +522,20 @@ impl<R: BufRead> Parser<R> {
         // and premises
         if rule == "trust" {
             self.read_until_close_parens()?;
-            return Ok((
-                step_index,
-                (clause, rule, Vec::new(), Vec::new(), Vec::new()),
-            ));
+            return Ok(ProofStep {
+                index,
+                clause,
+                rule,
+                premises: Vec::new(),
+                args: Vec::new(),
+                discharge: Vec::new(),
+            });
         }
 
         let premises = if self.current_token == Token::Keyword("premises".into()) {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
-            self.parse_sequence(Self::expect_symbol, true)?
+            self.parse_sequence(Self::parse_step_premise, true)?
         } else {
             Vec::new()
         };
@@ -589,7 +562,29 @@ impl<R: BufRead> Parser<R> {
 
         self.expect_token(Token::CloseParen)?;
 
-        Ok((step_index, (clause, rule, premises, args, discharge)))
+        Ok(ProofStep {
+            index,
+            clause,
+            rule,
+            premises,
+            args,
+            discharge,
+        })
+    }
+
+    /// Parses a premise for a `step` command. This already converts it into the depth and command
+    /// index used to reference commands in the AST.
+    fn parse_step_premise(&mut self) -> AletheResult<(usize, usize)> {
+        let position = self.current_position;
+        let index = self.expect_symbol()?;
+        self.state
+            .step_indices
+            .get_with_depth(&index)
+            .map(|(d, &i)| (d, i))
+            .ok_or(Error::Parser(
+                ParserError::UndefinedStepIndex(index),
+                position,
+            ))
     }
 
     /// Parses an `anchor` proof command. This method assumes that the `(` and `anchor` tokens were
@@ -619,7 +614,11 @@ impl<R: BufRead> Parser<R> {
             }
         }
         self.expect_token(Token::CloseParen)?;
-        Ok((end_step_index, assignment_args, variable_args))
+        Ok(AnchorCommand {
+            end_step_index,
+            assignment_args,
+            variable_args,
+        })
     }
 
     /// Parses an argument for an `anchor` proof command. This can be either a variable binding of
