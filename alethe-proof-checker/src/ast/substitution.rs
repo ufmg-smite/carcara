@@ -167,20 +167,28 @@ impl Substitution {
             .map(|(var, value)| {
                 // If this is called with the binding list of a `let` term, `value` will be the
                 // value of the variable. Otherwise, it will be its sort
-                if self.should_be_renamed.contains(var) {
-                    // TODO: currently, there is no mechanism to avoid collisions when renaming the
-                    // variables to the arbitrary name
-                    let new_var = var.clone() + "@";
+
+                let mut changed = false;
+                let mut new_var = var.clone();
+
+                // We keep adding `@`s to the variable name as long as it is necessary
+                while self.should_be_renamed.contains(&new_var) || new_vars.contains(&new_var) {
+                    new_var.push('@');
+                    changed = true;
+                }
+                if changed {
+                    // If the variable was renamed, we have to add this renaming to the resulting
+                    // substitution
+                    // TODO: This doesn't handle `let` terms correctly. In them, `value` is not a
+                    // the variable sort, so we need to get `value.sort()` instead.
                     let old = pool.add_term((var.clone(), value.clone()).into());
                     let new = pool.add_term((new_var.clone(), value.clone()).into());
                     map.insert(old, new);
                     new_vars.insert(new_var.clone());
-
-                    // TODO: apply current substitution to `value`, if this is used in a `let` term
-                    (new_var, value.clone())
-                } else {
-                    (var.clone(), value.clone())
                 }
+
+                // TODO: Apply current substitution to `value`, if this is used in a `let` term
+                (new_var, value.clone())
             })
             .collect();
         (BindingList(new_binding_list), map)
@@ -245,6 +253,14 @@ mod tests {
                 "(forall ((x@ Int) (y@ Int)) (= x@ y@))",
             "(forall ((x Int) (y Int)) (= x y))" [x -> x] => "(forall ((x Int) (y Int)) (= x y))",
             "(forall ((y Int)) (> y x))" [x -> (+ y 0)] => "(forall ((y@ Int)) (> y@ (+ y 0)))",
+            "(forall ((x Int) (x@ Int)) (= x x@))" [x -> y] =>
+                "(forall ((x@ Int) (x@@ Int)) (= x@ x@@))",
+            "(forall ((x Int) (x@ Int) (x@@ Int)) (= x x@ x@@))" [x -> y] =>
+                "(forall ((x@ Int) (x@@ Int) (x@@@ Int)) (= x@ x@@ x@@@))",
+
+            // The capture-avoidance may disambiguate repeated bindings
+            "(forall ((x Int) (x@ Int) (x@ Int)) (= x x@ x@))" [x -> y] =>
+                "(forall ((x@ Int) (x@@ Int) (x@@@ Int)) (= x@ x@@@ x@@@))",
 
             // In theory, since x does not appear in this term, renaming y to y@ is unnecessary
             "(forall ((y Int)) (> y 0))" [x -> y] => "(forall ((y@ Int)) (> y@ 0))",
