@@ -23,13 +23,13 @@ use std::{io::BufRead, str::FromStr};
 /// format). Returns the parsed proof, as well as the `TermPool` used in parsing. Can take any type
 /// that implements `BufRead`.
 pub fn parse_instance<T: BufRead>(problem: T, proof: T) -> AletheResult<(Proof, TermPool)> {
-    let mut problem_parser = Parser::new(problem)?;
-    let premises = problem_parser.parse_problem()?;
-    let mut proof_parser = Parser::with_state(proof, problem_parser.state)?;
+    let mut parser = Parser::new(problem)?;
+    let premises = parser.parse_problem()?;
+    parser.reset(proof)?;
+    let commands = parser.parse_proof()?;
 
-    let commands = proof_parser.parse_proof()?;
     let proof = Proof { premises, commands };
-    Ok((proof, proof_parser.state.term_pool))
+    Ok((proof, parser.term_pool()))
 }
 
 /// Represents a "raw" `anchor` command. This is only used while parsing, and does not appear in
@@ -70,7 +70,15 @@ impl<R: BufRead> Parser<R> {
             let iden = Identifier::Simple(iden.to_string());
             state.sorts_symbol_table.insert(iden, bool_sort.clone());
         }
-        Parser::with_state(input, state)
+        let mut lexer = Lexer::new(input)?;
+        let (current_token, current_position) = lexer.next_token()?;
+        Ok(Parser {
+            lexer,
+            current_token,
+            current_position,
+            state,
+            interpret_integers_as_reals: false,
+        })
     }
 
     /// Constructs a new `Parser` using an existing `ParserState`. This operation can fail if there
@@ -79,6 +87,7 @@ impl<R: BufRead> Parser<R> {
     /// (like when parsing an SMT-LIB problem instance and its Alethe proof) you can remove the
     /// parser state after parsing the first input and create a new parser with it using this
     /// method.
+    #[deprecated]
     fn with_state(input: R, state: ParserState) -> AletheResult<Self> {
         let mut lexer = Lexer::new(input)?;
         let (current_token, current_position) = lexer.next_token()?;
@@ -89,6 +98,23 @@ impl<R: BufRead> Parser<R> {
             state,
             interpret_integers_as_reals: false,
         })
+    }
+
+    /// Resets the parser position and sets its input to `input`. This keeps the parser state,
+    /// including all function, constant and sort declarations.
+    pub fn reset(&mut self, input: R) -> AletheResult<()> {
+        let mut lexer = Lexer::new(input)?;
+        let (current_token, current_position) = lexer.next_token()?;
+        self.lexer = lexer;
+        self.current_token = current_token;
+        self.current_position = current_position;
+        Ok(())
+    }
+
+    /// Takes the term pool used in parsing. This permanently moves the parser, so it cannot be
+    /// used after calling this method.
+    pub fn term_pool(self) -> TermPool {
+        self.state.term_pool
     }
 
     /// Advances the parser one token, and returns the previous `current_token`.
