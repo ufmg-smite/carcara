@@ -90,16 +90,15 @@ pub enum ParserError {
 }
 
 /// Returns an error if the length of `sequence` is not in the `expected` range.
-pub(crate) fn assert_num_of_args<T, R>(sequence: &[T], expected: R) -> Result<(), ParserError>
+pub(crate) fn assert_num_args<T, R>(sequence: &[T], range: R) -> Result<(), ParserError>
 where
     R: Into<Range>,
 {
-    let expected = expected.into();
-    let got = sequence.len();
-    if expected.contains(got) {
+    let range = range.into();
+    if range.contains(sequence.len()) {
         Ok(())
     } else {
-        Err(ParserError::WrongNumberOfArgs(expected, got))
+        Err(ParserError::WrongNumberOfArgs(range, sequence.len()))
     }
 }
 

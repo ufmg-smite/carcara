@@ -13,7 +13,7 @@ use crate::{
     AletheResult, Error,
 };
 use ahash::{AHashMap, AHashSet};
-use error::assert_num_of_args;
+use error::assert_num_args;
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
@@ -141,33 +141,33 @@ impl<R: BufRead> Parser<R> {
         let sorts: Vec<_> = args.iter().map(|t| t.sort()).collect();
         match op {
             Operator::Not => {
-                assert_num_of_args(&args, 1)?;
+                assert_num_args(&args, 1)?;
                 SortError::assert_eq(&Sort::Bool, sorts[0])?;
             }
             Operator::Implies => {
-                assert_num_of_args(&args, 2..)?;
+                assert_num_args(&args, 2..)?;
                 for s in sorts {
                     SortError::assert_eq(&Sort::Bool, s)?;
                 }
             }
             Operator::Or | Operator::And | Operator::Xor => {
                 // These operators can be called with only one argument
-                assert_num_of_args(&args, 1..)?;
+                assert_num_args(&args, 1..)?;
                 for s in sorts {
                     SortError::assert_eq(&Sort::Bool, s)?;
                 }
             }
             Operator::Equals | Operator::Distinct => {
-                assert_num_of_args(&args, 2..)?;
+                assert_num_args(&args, 2..)?;
                 SortError::assert_all_eq(&sorts)?;
             }
             Operator::Ite => {
-                assert_num_of_args(&args, 3)?;
+                assert_num_args(&args, 3)?;
                 SortError::assert_eq(&Sort::Bool, sorts[0])?;
                 SortError::assert_eq(sorts[1], sorts[2])?;
             }
             Operator::Add | Operator::Mult | Operator::IntDiv | Operator::RealDiv => {
-                assert_num_of_args(&args, 2..)?;
+                assert_num_args(&args, 2..)?;
 
                 // All the arguments must have the same sort, and it must be either Int or Real
                 SortError::assert_one_of(&[Sort::Int, Sort::Real], sorts[0])?;
@@ -176,12 +176,12 @@ impl<R: BufRead> Parser<R> {
             Operator::Sub => {
                 // The `-` operator, in particular, can be called with only one argument, in which
                 // case it means negation instead of subtraction
-                assert_num_of_args(&args, 1..)?;
+                assert_num_args(&args, 1..)?;
                 SortError::assert_one_of(&[Sort::Int, Sort::Real], sorts[0])?;
                 SortError::assert_all_eq(&sorts)?;
             }
             Operator::LessThan | Operator::GreaterThan | Operator::LessEq | Operator::GreaterEq => {
-                assert_num_of_args(&args, 2..)?;
+                assert_num_args(&args, 2..)?;
                 // All the arguments must be either Int or Real sorted, but they don't need to all
                 // have the same sort
                 for s in sorts {
@@ -189,7 +189,7 @@ impl<R: BufRead> Parser<R> {
                 }
             }
             Operator::Select => {
-                assert_num_of_args(&args, 2)?;
+                assert_num_args(&args, 2)?;
                 match sorts[0] {
                     Sort::Array(_, _) => (),
                     got => {
@@ -208,7 +208,7 @@ impl<R: BufRead> Parser<R> {
                 }
             }
             Operator::Store => {
-                assert_num_of_args(&args, 3)?;
+                assert_num_args(&args, 3)?;
                 match sorts[0] {
                     Sort::Array(x, y) => {
                         SortError::assert_eq(x.as_sort().unwrap(), sorts[1])?;
@@ -245,7 +245,7 @@ impl<R: BufRead> Parser<R> {
                 return Err(ParserError::NotAFunction(function_sort.clone()));
             }
         };
-        assert_num_of_args(&args, sorts.len() - 1)?;
+        assert_num_args(&args, sorts.len() - 1)?;
         for i in 0..args.len() {
             SortError::assert_eq(sorts[i].as_sort().unwrap(), args[i].sort())?;
         }
@@ -937,7 +937,7 @@ impl<R: BufRead> Parser<R> {
 
                 // If there is a function definition with this function name, we sort check
                 // the arguments and apply the definition by performing a beta reduction.
-                assert_num_of_args(&args, func.params.len())
+                assert_num_args(&args, func.params.len())
                     .map_err(|err| Error::Parser(err, head_pos))?;
                 for (arg, param) in args.iter().zip(func.params.iter()) {
                     SortError::assert_eq(param.1.as_sort().unwrap(), arg.sort())
