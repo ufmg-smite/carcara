@@ -4,7 +4,9 @@ mod logger;
 mod path_args;
 
 use ahash::AHashSet;
-use alethe_proof_checker::{ast::print_proof, check, checker::ProofChecker, parser, AletheResult};
+use alethe_proof_checker::{
+    ast::print_proof, check, check_and_reconstruct, checker::ProofChecker, parser, AletheResult,
+};
 use ansi_term::Color;
 use clap::{App, AppSettings, Arg, ArgGroup, ArgMatches, SubCommand};
 use error::CliError;
@@ -35,6 +37,11 @@ fn app() -> App<'static, 'static> {
                     .short("s")
                     .long("skip-unknown-rules")
                     .help("Skips rules that are not yet implemented"),
+            )
+            .arg(
+                Arg::with_name("reconstruct")
+                    .long("reconstruct")
+                    .help("Reconstruct proof with more fine-grained steps"),
             ),
         SubCommand::with_name("parse")
             .about("Parses a proof file and prints the AST")
@@ -168,8 +175,14 @@ fn check_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         None => infer_problem_path(&proof_file)?,
     };
     let skip = matches.is_present("skip-unknown-rules");
-    check(problem_file, proof_file, skip, false)?;
-    println!("true");
+
+    if matches.is_present("reconstruct") {
+        let reconstructed = check_and_reconstruct(problem_file, proof_file, skip)?;
+        print_proof(&reconstructed)?;
+    } else {
+        check(problem_file, proof_file, skip, false)?;
+        println!("true");
+    }
     Ok(())
 }
 
@@ -185,7 +198,7 @@ fn parse_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
     );
     let (proof, _) =
         parser::parse_instance(problem, proof).map_err(alethe_proof_checker::Error::from)?;
-    print_proof(&proof)?;
+    print_proof(&proof.commands)?;
     Ok(())
 }
 

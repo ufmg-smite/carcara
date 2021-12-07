@@ -1,9 +1,9 @@
 use crate::ast::*;
 use std::{fmt, io};
 
-pub fn print_proof(proof: &Proof) -> io::Result<()> {
+pub fn print_proof(commands: &[ProofCommand]) -> io::Result<()> {
     let mut stdout = io::stdout();
-    (AlethePrinter { inner: &mut stdout }).write_proof(proof)
+    (AlethePrinter { inner: &mut stdout }).write_proof(commands)
 }
 
 fn get_premise_index<'a>(
@@ -14,7 +14,7 @@ fn get_premise_index<'a>(
 }
 
 trait PrettyPrint {
-    fn write_proof(&mut self, proof: &Proof) -> io::Result<()>;
+    fn write_proof(&mut self, commands: &[ProofCommand]) -> io::Result<()>;
 }
 
 struct AlethePrinter<'a> {
@@ -22,10 +22,10 @@ struct AlethePrinter<'a> {
 }
 
 impl<'a> PrettyPrint for AlethePrinter<'a> {
-    fn write_proof(&mut self, proof: &Proof) -> io::Result<()> {
+    fn write_proof(&mut self, commands: &[ProofCommand]) -> io::Result<()> {
         // This iterates through the commands in a proof in a similar way as the checker, using an
         // explicit stack
-        let mut commands_stack = vec![(0, proof.commands.as_slice())];
+        let mut commands_stack = vec![(0, commands)];
         while let Some(&(i, commands)) = commands_stack.last() {
             if i == commands.len() {
                 commands_stack.pop();
