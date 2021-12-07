@@ -1,3 +1,4 @@
+pub mod builder;
 pub mod error;
 mod rules;
 
@@ -7,8 +8,9 @@ use crate::{
     AletheResult, Error,
 };
 use ahash::{AHashMap, AHashSet};
+use builder::ProofBuilder;
 use error::CheckerError;
-use rules::{Premise, Rule, RuleArgs, RuleResult};
+use rules::{Premise, ReconstructionRule, Rule, RuleArgs, RuleResult};
 use std::time::{Duration, Instant};
 
 struct Context {
@@ -32,6 +34,7 @@ pub struct Config<'c> {
     pub skip_unknown_rules: bool,
     pub is_running_test: bool,
     pub statistics: Option<CheckerStatistics<'c>>,
+    pub builder: Option<ProofBuilder>,
 }
 
 pub struct ProofChecker<'c> {
@@ -75,6 +78,9 @@ impl<'c> ProofChecker<'c> {
                     if is_end_of_subproof {
                         commands_stack.pop();
                         self.context.pop();
+                        if let Some(builder) = &mut self.config.builder {
+                            builder.close_subproof();
+                        }
                     }
                     Ok(())
                 }
@@ -95,6 +101,11 @@ impl<'c> ProofChecker<'c> {
                             })?;
                     self.context.push(new_context);
                     commands_stack.push((0, inner_commands));
+
+                    if let Some(builder) = &mut self.config.builder {
+                        builder.open_subproof(assignment_args.clone(), variable_args.clone());
+                    }
+
                     self.add_statistics_measurement(step_index, "anchor*", time);
                     continue;
                 }
@@ -125,6 +136,10 @@ impl<'c> ProofChecker<'c> {
                             })
                         }
                     };
+
+                    if let Some(builder) = &mut self.config.builder {
+                        builder.push_command(commands[i].clone());
+                    }
                     self.add_statistics_measurement(index, "assume*", time);
                     result
                 }
@@ -135,26 +150,29 @@ impl<'c> ProofChecker<'c> {
         Ok(())
     }
 
+    pub fn get_reconstructed_proof(&mut self) -> Vec<ProofCommand> {
+        self.config
+            .builder
+            .as_mut()
+            .expect("no proof builder")
+            .end()
+    }
+
     fn check_step<'a>(
         &mut self,
-        ProofStep {
-            index,
-            clause,
-            rule: rule_name,
-            premises,
-            args,
-            discharge: _, // The discharge attribute is not used when checking
-        }: &'a ProofStep,
+        step: &'a ProofStep,
         commands_stack: &'a [(usize, &'a [ProofCommand])],
         is_end_of_subproof: bool,
     ) -> RuleResult {
         let time = Instant::now();
-        let rule = match Self::get_rule(rule_name) {
+
+        let rule = match Self::get_rule(&step.rule) {
             Some(r) => r,
             None if self.config.skip_unknown_rules => return Ok(()),
             None => return Err(CheckerError::UnknownRule),
         };
-        let premises = premises
+        let premises = step
+            .premises
             .iter()
             .map(|&(depth, i)| {
                 let command = &commands_stack[depth].1[i];
@@ -171,15 +189,26 @@ impl<'c> ProofChecker<'c> {
         };
 
         let rule_args = RuleArgs {
-            conclusion: clause,
+            conclusion: &step.clause,
             premises,
-            args,
+            args: &step.args,
             pool: &mut self.pool,
             context: &mut self.context,
             subproof_commands,
         };
-        rule(rule_args)?;
-        self.add_statistics_measurement(index, rule_name, time);
+
+        if let Some(builder) = &mut self.config.builder {
+            if let Some(reconstruction_rule) = Self::get_reconstruction_rule(&step.rule) {
+                let reconstructed = reconstruction_rule(rule_args, step.index.clone())?;
+                builder.push_command(reconstructed);
+            } else {
+                rule(rule_args)?;
+                builder.push_command(ProofCommand::Step(step.clone()));
+            }
+        } else {
+            rule(rule_args)?;
+        }
+        self.add_statistics_measurement(&step.index, &step.rule, time);
         Ok(())
     }
 
@@ -353,6 +382,15 @@ impl<'c> ProofChecker<'c> {
             // Special rule that always checks as valid. It is mostly used in tests
             "trust" => |_| Ok(()),
 
+            _ => return None,
+        })
+    }
+
+    fn get_reconstruction_rule(rule_name: &str) -> Option<ReconstructionRule> {
+        use rules::*;
+
+        Some(match rule_name {
+            "trans" => transitivity::reconstruct_trans,
             _ => return None,
         })
     }

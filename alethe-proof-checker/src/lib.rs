@@ -50,6 +50,7 @@ pub fn check<P: AsRef<Path>>(
         skip_unknown_rules,
         is_running_test,
         statistics: None,
+        builder: None,
     };
     checker::ProofChecker::new(pool, config).check(&proof)
 }

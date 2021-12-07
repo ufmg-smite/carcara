@@ -33,7 +33,7 @@ pub struct Proof {
 }
 
 /// A proof command.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ProofCommand {
     /// An `assume` command, of the form `(assume <symbol> <term>)`.
     Assume { index: String, term: Rc<Term> },
@@ -61,7 +61,7 @@ impl ProofCommand {
 
 /// A `step` command, of the form `(step <symbol> <clause> :rule <symbol> [:premises (<symbol>+)]?
 /// [:args <proof_args>]?)`.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ProofStep {
     pub index: String,
     pub clause: Vec<Rc<Term>>,
@@ -83,7 +83,7 @@ pub struct ProofStep {
 }
 
 /// An argument for a `step` or `anchor` command.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ProofArg {
     /// An argument that is just a term.
     Term(Rc<Term>),

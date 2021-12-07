@@ -111,7 +111,7 @@ fn reconstruct_chain(
 }
 
 #[allow(dead_code)]
-fn reconstruct_trans(
+pub fn reconstruct_trans(
     RuleArgs { conclusion, premises, .. }: RuleArgs,
     command_index: String,
 ) -> Result<ProofCommand, CheckerError> {

@@ -11,6 +11,8 @@ pub type RuleResult = Result<(), CheckerError>;
 
 pub type Rule = fn(RuleArgs) -> RuleResult;
 
+pub type ReconstructionRule = fn(RuleArgs, String) -> Result<ProofCommand, CheckerError>;
+
 pub struct RuleArgs<'a> {
     pub(super) conclusion: &'a [Rc<Term>],
     pub(super) premises: Vec<Premise<'a>>,
