@@ -13,6 +13,12 @@ pub struct ProofBuilder {
     stack: Vec<Subproof>,
 }
 
+impl Default for ProofBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProofBuilder {
     pub fn new() -> Self {
         let root = Subproof {
