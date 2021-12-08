@@ -17,7 +17,7 @@ fn run_instance(
     for i in 0..num_runs {
         let total_time = Instant::now();
         let parsing_time = Instant::now();
-        let (proof, pool) = parse_instance(
+        let (proof, mut pool) = parse_instance(
             BufReader::new(File::open(problem_file)?),
             BufReader::new(File::open(proof_file)?),
         )?;
@@ -36,7 +36,7 @@ fn run_instance(
             }),
             builder: None,
         };
-        let _ = checker::ProofChecker::new(pool, config).check(&proof)?;
+        checker::ProofChecker::new(&mut pool, config).check(&proof)?;
         let total_time = total_time.elapsed();
 
         let run_id = (proof_file_name.to_string(), i);

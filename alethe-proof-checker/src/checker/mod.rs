@@ -38,13 +38,13 @@ pub struct Config<'c> {
 }
 
 pub struct ProofChecker<'c> {
-    pool: TermPool,
+    pool: &'c mut TermPool,
     config: Config<'c>,
     context: Vec<Context>,
 }
 
 impl<'c> ProofChecker<'c> {
-    pub fn new(pool: TermPool, config: Config<'c>) -> Self {
+    pub fn new(pool: &'c mut TermPool, config: Config<'c>) -> Self {
         ProofChecker { pool, config, context: Vec::new() }
     }
 
@@ -199,7 +199,7 @@ impl<'c> ProofChecker<'c> {
             conclusion: &step.clause,
             premises,
             args: &step.args,
-            pool: &mut self.pool,
+            pool: self.pool,
             context: &mut self.context,
             subproof_commands,
         };
@@ -240,9 +240,9 @@ impl<'c> ProofChecker<'c> {
         for (var, value) in assignment_args.iter() {
             let var_term = terminal!(var var; self.pool.add_term(Term::Sort(value.sort().clone())));
             let var_term = self.pool.add_term(var_term);
-            substitution.insert(&mut self.pool, var_term.clone(), value.clone())?;
+            substitution.insert(self.pool, var_term.clone(), value.clone())?;
             let new_value = substitution_until_fixed_point.apply(&mut self.pool, value)?;
-            substitution_until_fixed_point.insert(&mut self.pool, var_term, new_value)?;
+            substitution_until_fixed_point.insert(self.pool, var_term, new_value)?;
         }
 
         // Some rules (notably `refl`) need to apply the substitutions introduced by all the
@@ -260,7 +260,7 @@ impl<'c> ProofChecker<'c> {
                 cumulative_substitution.insert(k.clone(), value.clone());
             }
         }
-        let cumulative_substitution = Substitution::new(&mut self.pool, cumulative_substitution)?;
+        let cumulative_substitution = Substitution::new(self.pool, cumulative_substitution)?;
 
         let bindings = variable_args.iter().cloned().collect();
         Ok(Context {

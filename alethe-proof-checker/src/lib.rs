@@ -42,7 +42,7 @@ pub fn check<P: AsRef<Path>>(
     skip_unknown_rules: bool,
     is_running_test: bool,
 ) -> Result<(), Error> {
-    let (proof, pool) = parser::parse_instance(
+    let (proof, mut pool) = parser::parse_instance(
         BufReader::new(File::open(problem_path)?),
         BufReader::new(File::open(proof_path)?),
     )?;
@@ -53,7 +53,7 @@ pub fn check<P: AsRef<Path>>(
         statistics: None,
         builder: None,
     };
-    checker::ProofChecker::new(pool, config).check(&proof)
+    checker::ProofChecker::new(&mut pool, config).check(&proof)
 }
 
 pub fn check_and_reconstruct<P: AsRef<Path>>(
@@ -61,7 +61,7 @@ pub fn check_and_reconstruct<P: AsRef<Path>>(
     proof_path: P,
     skip_unknown_rules: bool,
 ) -> Result<Vec<ProofCommand>, Error> {
-    let (proof, pool) = parser::parse_instance(
+    let (proof, mut pool) = parser::parse_instance(
         BufReader::new(File::open(problem_path)?),
         BufReader::new(File::open(proof_path)?),
     )?;
@@ -72,7 +72,7 @@ pub fn check_and_reconstruct<P: AsRef<Path>>(
         statistics: None,
         builder: Some(Default::default()),
     };
-    let mut checker = checker::ProofChecker::new(pool, config);
+    let mut checker = checker::ProofChecker::new(&mut pool, config);
     checker.check(&proof)?;
     Ok(checker.get_reconstructed_proof())
 }
