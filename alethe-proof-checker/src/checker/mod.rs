@@ -34,18 +34,23 @@ pub struct Config<'c> {
     pub skip_unknown_rules: bool,
     pub is_running_test: bool,
     pub statistics: Option<CheckerStatistics<'c>>,
-    pub builder: Option<ProofBuilder>,
 }
 
 pub struct ProofChecker<'c> {
     pool: &'c mut TermPool,
     config: Config<'c>,
     context: Vec<Context>,
+    builder: Option<ProofBuilder>,
 }
 
 impl<'c> ProofChecker<'c> {
     pub fn new(pool: &'c mut TermPool, config: Config<'c>) -> Self {
-        ProofChecker { pool, config, context: Vec::new() }
+        ProofChecker {
+            pool,
+            config,
+            context: Vec::new(),
+            builder: None,
+        }
     }
 
     pub fn check(&mut self, proof: &Proof) -> AletheResult<()> {
@@ -83,7 +88,7 @@ impl<'c> ProofChecker<'c> {
                     if is_end_of_subproof {
                         commands_stack.pop();
                         self.context.pop();
-                        if let Some(builder) = &mut self.config.builder {
+                        if let Some(builder) = &mut self.builder {
                             builder.close_subproof();
                         }
                     }
@@ -107,7 +112,7 @@ impl<'c> ProofChecker<'c> {
                     self.context.push(new_context);
                     commands_stack.push((0, inner_commands));
 
-                    if let Some(builder) = &mut self.config.builder {
+                    if let Some(builder) = &mut self.builder {
                         builder.open_subproof(assignment_args.clone(), variable_args.clone());
                     }
 
@@ -142,7 +147,7 @@ impl<'c> ProofChecker<'c> {
                         }
                     };
 
-                    if let Some(builder) = &mut self.config.builder {
+                    if let Some(builder) = &mut self.builder {
                         builder.push_command(commands[i].clone());
                     }
                     self.add_statistics_measurement(index, "assume*", time);
@@ -155,12 +160,16 @@ impl<'c> ProofChecker<'c> {
         Ok(())
     }
 
-    pub fn get_reconstructed_proof(&mut self) -> Vec<ProofCommand> {
-        self.config
-            .builder
-            .as_mut()
-            .expect("no proof builder")
-            .end()
+    pub fn check_and_reconstruct(&mut self, proof: &Proof) -> AletheResult<Vec<ProofCommand>> {
+        self.builder = Some(ProofBuilder::new());
+        let result = self.check(proof);
+
+        // We reset `self.builder` before returning any errors encountered while checking so we
+        // don't leave the checker in an invalid state
+        let mut builder = self.builder.take().unwrap();
+        result?;
+
+        Ok(builder.end())
     }
 
     fn check_step<'a>(
@@ -204,7 +213,7 @@ impl<'c> ProofChecker<'c> {
             subproof_commands,
         };
 
-        if let Some(builder) = &mut self.config.builder {
+        if let Some(builder) = &mut self.builder {
             if let Some(reconstruction_rule) = Self::get_reconstruction_rule(&step.rule) {
                 let reconstructed =
                     reconstruction_rule(rule_args, step.index.clone(), current_depth)?;

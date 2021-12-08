@@ -34,7 +34,6 @@ fn run_instance(
                 step_time_by_file: &mut result.step_time_by_file,
                 step_time_by_rule: &mut result.step_time_by_rule,
             }),
-            builder: None,
         };
         checker::ProofChecker::new(&mut pool, config).check(&proof)?;
         let total_time = total_time.elapsed();

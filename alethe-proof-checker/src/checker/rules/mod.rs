@@ -183,7 +183,6 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
                 skip_unknown_rules: false,
                 is_running_test: true,
                 statistics: None,
-                builder: None,
             },
         );
         let got = checker.check(&parsed).is_ok();

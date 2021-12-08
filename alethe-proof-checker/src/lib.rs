@@ -51,7 +51,6 @@ pub fn check<P: AsRef<Path>>(
         skip_unknown_rules,
         is_running_test,
         statistics: None,
-        builder: None,
     };
     checker::ProofChecker::new(&mut pool, config).check(&proof)
 }
@@ -70,9 +69,6 @@ pub fn check_and_reconstruct<P: AsRef<Path>>(
         skip_unknown_rules,
         is_running_test: false,
         statistics: None,
-        builder: Some(Default::default()),
     };
-    let mut checker = checker::ProofChecker::new(&mut pool, config);
-    checker.check(&proof)?;
-    Ok(checker.get_reconstructed_proof())
+    checker::ProofChecker::new(&mut pool, config).check_and_reconstruct(&proof)
 }

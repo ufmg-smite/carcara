@@ -16,13 +16,9 @@ fn get_truncated_message(e: &Error) -> String {
 }
 
 fn run_test(problem_path: &Path, proof_path: &Path) -> AletheResult<()> {
-    let normal_config = || checker::Config {
+    let test_config = || checker::Config {
         skip_unknown_rules: true,
         ..Default::default()
-    };
-    let reconstructing_config = || checker::Config {
-        builder: Some(Default::default()),
-        ..normal_config()
     };
 
     let (proof, mut pool) = parser::parse_instance(
@@ -31,24 +27,20 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> AletheResult<()> {
     )?;
 
     // First, we check the proof normally
-    checker::ProofChecker::new(&mut pool, normal_config()).check(&proof)?;
+    checker::ProofChecker::new(&mut pool, test_config()).check(&proof)?;
 
     // Then, we check it while reconstructing the proof
-    let mut checker = checker::ProofChecker::new(&mut pool, reconstructing_config());
-    checker.check(&proof)?;
-    let reconstructed = ast::Proof {
-        premises: proof.premises,
-        commands: checker.get_reconstructed_proof(),
-    };
+    let mut checker = checker::ProofChecker::new(&mut pool, test_config());
+    let commands = checker.check_and_reconstruct(&proof)?;
+    let reconstructed = ast::Proof { premises: proof.premises, commands };
 
     // After that, we check the reconstructed proof normally, to make sure it is valid
-    checker::ProofChecker::new(&mut pool, normal_config()).check(&reconstructed)?;
+    checker::ProofChecker::new(&mut pool, test_config()).check(&reconstructed)?;
 
     // Finally, we reconstruct the already reconstructed proof, to make sure the reconstruction
     // step is idempotent
-    let mut checker = checker::ProofChecker::new(&mut pool, reconstructing_config());
-    checker.check(&reconstructed)?;
-    let reconstructed_twice = checker.get_reconstructed_proof();
+    let mut checker = checker::ProofChecker::new(&mut pool, test_config());
+    let reconstructed_twice = checker.check_and_reconstruct(&reconstructed)?;
     assert_eq!(reconstructed.commands, reconstructed_twice);
 
     Ok(())
