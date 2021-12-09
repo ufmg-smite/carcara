@@ -8,6 +8,7 @@ use alethe_proof_checker::{ast::print_proof, check, checker::ProofChecker, parse
 use ansi_term::Color;
 use clap::{App, AppSettings, Arg, ArgGroup, ArgMatches, SubCommand};
 use error::CliError;
+use git_version::git_version;
 use path_args::{get_instances_from_paths, infer_problem_path};
 use std::{
     fs::File,
@@ -15,7 +16,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-fn app() -> App<'static, 'static> {
+const GIT_COMMIT_HASH: &str = git_version!(fallback = "unknown");
+const GIT_BRANCH_NAME: &str = git_version!(args = ["--all"]);
+const APP_VERSION: Option<&str> = option_env!("CARGO_PKG_VERSION");
+
+fn app(version_string: &str) -> App<'static, '_> {
     const PROBLEM_FILE_HELP: &str =
         "The original problem file. If this argument is not present, it will be inferred from the \
         proof file";
@@ -115,7 +120,7 @@ fn app() -> App<'static, 'static> {
             )),
     ];
     App::new("Alethe proof checker")
-        .version("0.1.0")
+        .version(version_string)
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .subcommands(subcommands)
         .arg(
@@ -146,7 +151,16 @@ fn run_app(matches: &ArgMatches) -> Result<(), CliError> {
 fn main() {
     use log::LevelFilter;
 
-    let matches = app().get_matches();
+    let version_string = format!(
+        "{} [git {} {}]",
+        APP_VERSION.unwrap_or("unknown"),
+        // By default, `git describe` returns something like "heads/main". We ignore the "heads/"
+        // part to get only the branch name
+        &GIT_BRANCH_NAME[6..],
+        GIT_COMMIT_HASH
+    );
+
+    let matches = app(&version_string).get_matches();
     let level = match matches.value_of("log-level") {
         Some("off") => LevelFilter::Off,
         Some("error") => LevelFilter::Error,
