@@ -179,8 +179,12 @@ impl<'c> ProofChecker<'c> {
 
         let rule = match Self::get_rule(&step.rule) {
             Some(r) => r,
-            // TODO: reconstruct skipped steps
-            None if self.config.skip_unknown_rules => return Ok(()),
+            None if self.config.skip_unknown_rules => {
+                if let Some(builder) = &mut self.builder {
+                    builder.push_command(ProofCommand::Step(step.clone()));
+                }
+                return Ok(());
+            }
             None => return Err(CheckerError::UnknownRule),
         };
         let premises = step
