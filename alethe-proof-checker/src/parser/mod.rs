@@ -481,11 +481,11 @@ impl<R: BufRead> Parser<R> {
                 commands_stack
                     .last_mut()
                     .unwrap()
-                    .push(ProofCommand::Subproof {
+                    .push(ProofCommand::Subproof(Subproof {
                         commands,
                         assignment_args,
                         variable_args,
-                    })
+                    }))
             }
             self.state
                 .step_indices

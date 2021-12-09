@@ -36,12 +36,9 @@ impl<'a> PrettyPrint for AlethePrinter<'a> {
                     write!(self.inner, "(assume {} {})", index, term)?
                 }
                 ProofCommand::Step(s) => self.write_step(s, &commands_stack)?,
-                ProofCommand::Subproof {
-                    commands: inner_commands,
-                    assignment_args,
-                    variable_args,
-                } => {
-                    let end_step_index = inner_commands
+                ProofCommand::Subproof(s) => {
+                    let end_step_index = s
+                        .commands
                         .last()
                         .and_then(|s| match s {
                             ProofCommand::Step(s) => Some(s.index.clone()),
@@ -50,17 +47,17 @@ impl<'a> PrettyPrint for AlethePrinter<'a> {
                         .unwrap();
                     write!(self.inner, "(anchor :step {}", end_step_index)?;
 
-                    if !variable_args.is_empty() || !assignment_args.is_empty() {
+                    if !s.variable_args.is_empty() || !s.assignment_args.is_empty() {
                         write!(self.inner, " :args (")?;
                         let mut is_first = true;
-                        for (name, sort) in variable_args {
+                        for (name, sort) in &s.variable_args {
                             if !is_first {
                                 write!(self.inner, " ")?
                             }
                             is_first = false;
                             write!(self.inner, "({} {})", name, sort)?
                         }
-                        for (name, value) in assignment_args {
+                        for (name, value) in &s.assignment_args {
                             if !is_first {
                                 write!(self.inner, " ")?
                             }
@@ -74,7 +71,7 @@ impl<'a> PrettyPrint for AlethePrinter<'a> {
                     // We increment this layer's index so when we comeback from the subproof and
                     // pop the top layer, we are already on the next command after the subproof
                     commands_stack.last_mut().unwrap().0 += 1;
-                    commands_stack.push((0, inner_commands));
+                    commands_stack.push((0, &s.commands));
                     continue;
                 }
             }

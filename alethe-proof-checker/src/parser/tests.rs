@@ -596,7 +596,7 @@ fn test_premises_in_subproofs() {
     let proof = parse_proof(input);
     assert_eq!(proof.commands.len(), 3);
     let subproof = match &proof.commands[2] {
-        ProofCommand::Subproof { commands, .. } => commands,
+        ProofCommand::Subproof(s) => &s.commands,
         _ => panic!(),
     };
     assert_eq!(subproof.len(), 3);

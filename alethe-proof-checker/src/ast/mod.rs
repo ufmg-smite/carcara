@@ -42,11 +42,7 @@ pub enum ProofCommand {
     Step(ProofStep),
 
     /// A subproof.
-    Subproof {
-        commands: Vec<ProofCommand>,
-        assignment_args: Vec<(String, Rc<Term>)>,
-        variable_args: Vec<SortedVar>,
-    },
+    Subproof(Subproof),
 }
 
 impl ProofCommand {
@@ -54,7 +50,7 @@ impl ProofCommand {
         match self {
             ProofCommand::Assume { index, .. } => index,
             ProofCommand::Step(s) => &s.index,
-            ProofCommand::Subproof { commands, .. } => commands.last().unwrap().index(),
+            ProofCommand::Subproof(s) => s.commands.last().unwrap().index(),
         }
     }
 }
@@ -80,6 +76,15 @@ pub struct ProofStep {
     // record these values. For now, they are simply stored as strings -- eventually, they will be
     // stored using indices similarly to the `:premises` attribute
     pub discharge: Vec<String>,
+}
+
+/// A subproof. Subproofs are started by `anchor` commands, of the form `(anchor :step <symbol>
+/// [:args <proof_args>]?)`, which specifies which step ends the subproof.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Subproof {
+    pub commands: Vec<ProofCommand>,
+    pub assignment_args: Vec<(String, Rc<Term>)>,
+    pub variable_args: Vec<SortedVar>,
 }
 
 /// An argument for a `step` or `anchor` command.

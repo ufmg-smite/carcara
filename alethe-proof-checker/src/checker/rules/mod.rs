@@ -44,9 +44,7 @@ fn get_clause_from_command(command: &ProofCommand) -> &[Rc<Term>] {
         // `assume` premises are interpreted as a clause with a single term
         ProofCommand::Assume { index: _, term } => std::slice::from_ref(term),
         ProofCommand::Step(ProofStep { clause, .. }) => clause,
-        ProofCommand::Subproof { commands, .. } => {
-            get_clause_from_command(commands.last().unwrap())
-        }
+        ProofCommand::Subproof(s) => get_clause_from_command(s.commands.last().unwrap()),
     }
 }
 

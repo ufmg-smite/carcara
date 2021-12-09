@@ -196,7 +196,7 @@ pub fn reconstruct_trans(
             discharge: Vec::new(),
         }));
 
-        Ok(dbg!(ProofCommand::Subproof {
+        Ok(ProofCommand::Subproof(Subproof {
             commands: subproof_steps,
             assignment_args: Vec::new(),
             variable_args: Vec::new(),

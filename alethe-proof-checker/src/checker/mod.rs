@@ -94,26 +94,22 @@ impl<'c> ProofChecker<'c> {
                     }
                     Ok(())
                 }
-                ProofCommand::Subproof {
-                    commands: inner_commands,
-                    assignment_args,
-                    variable_args,
-                } => {
+                ProofCommand::Subproof(s) => {
                     let time = Instant::now();
                     let step_index = commands[i].index();
 
-                    let new_context =
-                        self.build_context(assignment_args, variable_args)
-                            .map_err(|e| Error::Checker {
-                                inner: e.into(),
-                                rule: "anchor".into(),
-                                step: step_index.to_string(),
-                            })?;
+                    let new_context = self
+                        .build_context(&s.assignment_args, &s.variable_args)
+                        .map_err(|e| Error::Checker {
+                            inner: e.into(),
+                            rule: "anchor".into(),
+                            step: step_index.to_string(),
+                        })?;
                     self.context.push(new_context);
-                    commands_stack.push((0, inner_commands));
+                    commands_stack.push((0, &s.commands));
 
                     if let Some(builder) = &mut self.builder {
-                        builder.open_subproof(assignment_args.clone(), variable_args.clone());
+                        builder.open_subproof(s.assignment_args.clone(), s.variable_args.clone());
                     }
 
                     self.add_statistics_measurement(step_index, "anchor*", time);

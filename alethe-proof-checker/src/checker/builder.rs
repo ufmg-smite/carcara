@@ -1,13 +1,5 @@
 use crate::ast::*;
 
-// TODO: Maybe unify this with `ast::ProofCommand::Subproof`
-#[derive(Debug)]
-pub struct Subproof {
-    commands: Vec<ProofCommand>,
-    assignment_args: Vec<(String, Rc<Term>)>,
-    variable_args: Vec<SortedVar>,
-}
-
 #[derive(Debug)]
 pub struct ProofBuilder {
     stack: Vec<Subproof>,
@@ -49,18 +41,7 @@ impl ProofBuilder {
         if self.stack.len() == 1 {
             return; // Can't close root subproof
         }
-        let Subproof {
-            commands,
-            assignment_args,
-            variable_args,
-        } = self.stack.pop().unwrap();
-
-        let command = ProofCommand::Subproof {
-            commands,
-            assignment_args,
-            variable_args,
-        };
-
+        let command = ProofCommand::Subproof(self.stack.pop().unwrap());
         self.push_command(command)
     }
 
