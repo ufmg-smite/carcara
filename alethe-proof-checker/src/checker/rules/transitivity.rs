@@ -65,7 +65,7 @@ pub fn trans(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     let conclusion = match_term_err!((= t u) = &conclusion[0])?;
     let mut premises: Vec<_> = premises
         .into_iter()
-        .map(|command| match_term_err!((= t u) = get_premise_term(command)?))
+        .map(|premise| match_term_err!((= t u) = get_premise_term(premise.command)?))
         .collect::<Result<_, _>>()?;
 
     find_chain(conclusion, &mut premises)
@@ -122,7 +122,7 @@ pub fn reconstruct_trans(
     let conclusion_equality = match_term_err!((= t u) = &conclusion[0])?;
     let mut premise_equalities: Vec<_> = premises
         .iter()
-        .map(|premise| match_term_err!((= t u) = get_premise_term(*premise)?))
+        .map(|premise| match_term_err!((= t u) = get_premise_term(premise.command)?))
         .collect::<Result<_, _>>()?;
 
     let mut new_premises: Vec<_> = premises.into_iter().map(|p| p.premise_index).collect();

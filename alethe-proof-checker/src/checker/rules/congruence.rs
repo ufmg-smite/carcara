@@ -138,7 +138,7 @@ pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     let premises: Vec<_> = premises
         .into_iter()
         .map(|premise| {
-            let term = get_premise_term(premise)?;
+            let term = get_premise_term(premise.command)?;
             match_term_err!((= t u) = term)
         })
         .collect::<Result<_, _>>()?;

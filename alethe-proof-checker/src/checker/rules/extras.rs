@@ -27,7 +27,7 @@ pub fn symm(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_num_premises(&premises, 1)?;
     assert_clause_len(conclusion, 1)?;
 
-    let premise = get_premise_term(premises[0])?;
+    let premise = get_premise_term(premises[0].command)?;
     let (p_1, q_1) = match_term_err!((= p q) = premise)?;
     let (q_2, p_2) = match_term_err!((= q p) = &conclusion[0])?;
     assert_eq(p_1, p_2)?;
@@ -38,7 +38,7 @@ pub fn not_symm(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_num_premises(&premises, 1)?;
     assert_clause_len(conclusion, 1)?;
 
-    let premise = get_premise_term(premises[0])?;
+    let premise = get_premise_term(premises[0].command)?;
     let (p_1, q_1) = match_term_err!((not (= p q)) = premise)?;
     let (q_2, p_2) = match_term_err!((not (= q p)) = &conclusion[0])?;
     assert_eq(p_1, p_2)?;
