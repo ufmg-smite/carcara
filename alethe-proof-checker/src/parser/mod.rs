@@ -718,10 +718,11 @@ impl<R: BufRead> Parser<R> {
     }
 
     /// Parses a clause of the form `(cl <term>*)`.
-    fn parse_clause(&mut self) -> AletheResult<Vec<Rc<Term>>> {
+    fn parse_clause(&mut self) -> AletheResult<Rc<[Rc<Term>]>> {
         self.expect_token(Token::OpenParen)?;
         self.expect_token(Token::ReservedWord(Reserved::Cl))?;
-        self.parse_sequence(|p| p.parse_term_expecting_sort(&Sort::Bool), false)
+        let vec = self.parse_sequence(|p| p.parse_term_expecting_sort(&Sort::Bool), false)?;
+        Ok(vec.into()) // Note: this moves the contents of the vector into a new allocation
     }
 
     /// Parses an argument for a `step` command.

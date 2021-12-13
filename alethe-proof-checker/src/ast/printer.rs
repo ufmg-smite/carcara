@@ -91,7 +91,7 @@ impl<'a> AlethePrinter<'a> {
     ) -> io::Result<()> {
         write!(self.inner, "(step {} (cl", step.index)?;
 
-        for t in &step.clause {
+        for t in step.clause.as_ref() {
             write!(self.inner, " {}", t)?;
         }
         write!(self.inner, ")")?;

@@ -226,12 +226,18 @@ impl<T: DeepEq> DeepEq for &T {
     }
 }
 
-impl<T: DeepEq> DeepEq for Vec<T> {
+impl<T: DeepEq> DeepEq for [T] {
     fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool {
         a.len() == b.len()
             && a.iter()
                 .zip(b.iter())
                 .all(|(a, b)| DeepEq::eq(checker, a, b))
+    }
+}
+
+impl<T: DeepEq> DeepEq for Vec<T> {
+    fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool {
+        DeepEq::eq(checker, a.as_slice(), b.as_slice())
     }
 }
 
@@ -274,7 +280,7 @@ impl DeepEq for ProofCommand {
 
 impl DeepEq for ProofStep {
     fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool {
-        DeepEq::eq(checker, &a.clause, &b.clause)
+        DeepEq::eq(checker, a.clause.as_ref(), b.clause.as_ref())
             && a.rule == b.rule
             && a.premises == b.premises
             && DeepEq::eq(checker, &a.args, &b.args)

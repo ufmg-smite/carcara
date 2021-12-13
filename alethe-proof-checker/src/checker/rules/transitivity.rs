@@ -146,7 +146,7 @@ pub fn reconstruct_trans(
     if should_flip.is_empty() {
         let new_step = ProofStep {
             index: command_index,
-            clause: conclusion.to_vec(),
+            clause: conclusion.into(),
             rule: "trans".into(),
             premises: new_premises,
             args: Vec::new(),
@@ -177,7 +177,7 @@ pub fn reconstruct_trans(
 
                 ProofCommand::Step(ProofStep {
                     index,
-                    clause: vec![conclusion],
+                    clause: vec![conclusion].into(),
                     rule: "symm".into(),
                     premises: vec![premise_index],
                     args: Vec::new(),
@@ -189,7 +189,7 @@ pub fn reconstruct_trans(
         // The last step in the subproof is the `trans` step itself
         subproof_steps.push(ProofCommand::Step(ProofStep {
             index: command_index,
-            clause: conclusion.to_vec(),
+            clause: conclusion.to_vec().into(), // TODO: Implement `From<&[T]>` for `Rc<[T]>`
             rule: "trans".into(),
             premises: new_premises,
             args: Vec::new(),

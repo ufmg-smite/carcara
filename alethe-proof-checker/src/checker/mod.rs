@@ -194,10 +194,10 @@ impl<'c> ProofChecker<'c> {
                 let command = &commands_stack[depth].1[i];
                 let clause: Rc<[_]> = match command {
                     ProofCommand::Assume { term, .. } => Rc::from([term.clone()]).to_rc_of_slice(),
-                    ProofCommand::Step(s) => s.clause.as_slice().into(),
+                    ProofCommand::Step(s) => s.clause.clone(),
                     ProofCommand::Subproof(s) => {
                         if let Some(ProofCommand::Step(s)) = s.commands.last() {
-                            s.clause.as_slice().into()
+                            s.clause.clone()
                         } else {
                             unreachable!()
                         }

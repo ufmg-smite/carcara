@@ -60,7 +60,7 @@ impl ProofCommand {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProofStep {
     pub index: String,
-    pub clause: Vec<Rc<Term>>,
+    pub clause: Rc<[Rc<Term>]>,
     pub rule: String,
 
     /// Premises are indexed with two indices: The first indicates the depth of the subproof (where
