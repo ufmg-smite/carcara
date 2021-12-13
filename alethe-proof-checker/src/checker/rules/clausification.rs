@@ -61,10 +61,10 @@ pub fn distinct_elim(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
 }
 
 pub fn and(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
-    assert_num_premises(&premises, 1)?;
+    assert_num_premises(premises, 1)?;
     assert_clause_len(conclusion, 1)?;
 
-    let and_term = get_premise_term(premises[0].command)?;
+    let and_term = get_premise_term(&premises[0])?;
     let and_contents = match_term_err!((and ...) = and_term)?;
 
     if !and_contents.contains(&conclusion[0]) {
@@ -77,10 +77,10 @@ pub fn and(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
 }
 
 pub fn not_or(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
-    assert_num_premises(&premises, 1)?;
+    assert_num_premises(premises, 1)?;
     assert_clause_len(conclusion, 1)?;
 
-    let or_term = get_premise_term(premises[0].command)?;
+    let or_term = get_premise_term(&premises[0])?;
     let or_contents = match_term_err!((not (or ...)) = or_term)?;
     let conclusion = conclusion[0].remove_negation_err()?;
 
@@ -94,9 +94,9 @@ pub fn not_or(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
 }
 
 pub fn or(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
-    assert_num_premises(&premises, 1)?;
+    assert_num_premises(premises, 1)?;
 
-    let or_term = get_premise_term(premises[0].command)?;
+    let or_term = get_premise_term(&premises[0])?;
     let or_contents = match_term_err!((or ...) = or_term)?;
 
     assert_clause_len(conclusion, or_contents.len())?;
@@ -107,9 +107,9 @@ pub fn or(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
 }
 
 pub fn not_and(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
-    assert_num_premises(&premises, 1)?;
+    assert_num_premises(premises, 1)?;
 
-    let and_term = get_premise_term(premises[0].command)?;
+    let and_term = get_premise_term(&premises[0])?;
     let and_contents = match_term_err!((not (and ...)) = and_term)?;
 
     assert_clause_len(conclusion, and_contents.len())?;
@@ -121,10 +121,10 @@ pub fn not_and(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
 }
 
 pub fn implies(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
-    assert_num_premises(&premises, 1)?;
+    assert_num_premises(premises, 1)?;
     assert_clause_len(conclusion, 2)?;
 
-    let premise_term = get_premise_term(premises[0].command)?;
+    let premise_term = get_premise_term(&premises[0])?;
     let (phi_1, phi_2) = match_term_err!((=> phi_1 phi_2) = premise_term)?;
 
     assert_eq(phi_1, conclusion[0].remove_negation_err()?)?;
@@ -132,20 +132,20 @@ pub fn implies(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
 }
 
 pub fn not_implies1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
-    assert_num_premises(&premises, 1)?;
+    assert_num_premises(premises, 1)?;
     assert_clause_len(conclusion, 1)?;
 
-    let premise_term = get_premise_term(premises[0].command)?;
+    let premise_term = get_premise_term(&premises[0])?;
     let (phi_1, _) = match_term_err!((not (=> phi_1 phi_2)) = premise_term)?;
 
     assert_eq(phi_1, &conclusion[0])
 }
 
 pub fn not_implies2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
-    assert_num_premises(&premises, 1)?;
+    assert_num_premises(premises, 1)?;
     assert_clause_len(conclusion, 1)?;
 
-    let premise_term = get_premise_term(premises[0].command)?;
+    let premise_term = get_premise_term(&premises[0])?;
     let (_, phi_2) = match_term_err!((not (=> phi_1 phi_2)) = premise_term)?;
 
     assert_eq(phi_2, conclusion[0].remove_negation_err()?)
@@ -332,10 +332,10 @@ fn apply_bfun_elim(
 }
 
 pub fn bfun_elim(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> RuleResult {
-    assert_num_premises(&premises, 1)?;
+    assert_num_premises(premises, 1)?;
     assert_clause_len(conclusion, 1)?;
 
-    let psi = get_premise_term(premises[0].command)?;
+    let psi = get_premise_term(&premises[0])?;
 
     let expected = apply_bfun_elim(pool, psi, &mut AHashMap::new())?;
     assert_is_expected_modulo_reordering(&conclusion[0], expected)

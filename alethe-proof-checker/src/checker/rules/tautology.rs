@@ -187,72 +187,72 @@ pub fn ite_neg2(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 }
 
 pub fn equiv1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
-    assert_num_premises(&premises, 1)?;
+    assert_num_premises(premises, 1)?;
     assert_clause_len(conclusion, 2)?;
-    let premise_term = get_premise_term(premises[0].command)?;
+    let premise_term = get_premise_term(&premises[0])?;
     let (phi_1, phi_2) = match_term_err!((= phi_1 phi_2) = premise_term)?;
     assert_eq(phi_1, conclusion[0].remove_negation_err()?)?;
     assert_eq(phi_2, &conclusion[1])
 }
 
 pub fn equiv2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
-    assert_num_premises(&premises, 1)?;
+    assert_num_premises(premises, 1)?;
     assert_clause_len(conclusion, 2)?;
-    let premise_term = get_premise_term(premises[0].command)?;
+    let premise_term = get_premise_term(&premises[0])?;
     let (phi_1, phi_2) = match_term_err!((= phi_1 phi_2) = premise_term)?;
     assert_eq(phi_1, &conclusion[0])?;
     assert_eq(phi_2, conclusion[1].remove_negation_err()?)
 }
 
 pub fn not_equiv1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
-    assert_num_premises(&premises, 1)?;
+    assert_num_premises(premises, 1)?;
     assert_clause_len(conclusion, 2)?;
-    let premise_term = get_premise_term(premises[0].command)?;
+    let premise_term = get_premise_term(&premises[0])?;
     let (phi_1, phi_2) = match_term_err!((not (= phi_1 phi_2)) = premise_term)?;
     assert_eq(phi_1, &conclusion[0])?;
     assert_eq(phi_2, &conclusion[1])
 }
 
 pub fn not_equiv2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
-    assert_num_premises(&premises, 1)?;
+    assert_num_premises(premises, 1)?;
     assert_clause_len(conclusion, 2)?;
-    let premise_term = get_premise_term(premises[0].command)?;
+    let premise_term = get_premise_term(&premises[0])?;
     let (phi_1, phi_2) = match_term_err!((not (= phi_1 phi_2)) = premise_term)?;
     assert_eq(phi_1, conclusion[0].remove_negation_err()?)?;
     assert_eq(phi_2, conclusion[1].remove_negation_err()?)
 }
 
 pub fn ite1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
-    assert_num_premises(&premises, 1)?;
+    assert_num_premises(premises, 1)?;
     assert_clause_len(conclusion, 2)?;
-    let premise_term = get_premise_term(premises[0].command)?;
+    let premise_term = get_premise_term(&premises[0])?;
     let (phi_1, _, phi_3) = match_term_err!((ite phi_1 phi_2 phi_3) = premise_term)?;
     assert_eq(phi_1, &conclusion[0])?;
     assert_eq(phi_3, &conclusion[1])
 }
 
 pub fn ite2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
-    assert_num_premises(&premises, 1)?;
+    assert_num_premises(premises, 1)?;
     assert_clause_len(conclusion, 2)?;
-    let premise_term = get_premise_term(premises[0].command)?;
+    let premise_term = get_premise_term(&premises[0])?;
     let (phi_1, phi_2, _) = match_term_err!((ite phi_1 phi_2 phi_3) = premise_term)?;
     assert_eq(phi_1, conclusion[0].remove_negation_err()?)?;
     assert_eq(phi_2, &conclusion[1])
 }
 
 pub fn not_ite1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
-    assert_num_premises(&premises, 1)?;
+    assert_num_premises(premises, 1)?;
     assert_clause_len(conclusion, 2)?;
-    let premise_term = get_premise_term(premises[0].command)?;
+    let premise_term = get_premise_term(&premises[0])?;
     let (phi_1, _, phi_3) = match_term_err!((not (ite phi_1 phi_2 phi_3)) = premise_term)?;
     assert_eq(phi_1, &conclusion[0])?;
     assert_eq(phi_3, conclusion[1].remove_negation_err()?)
 }
 
 pub fn not_ite2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
-    assert_num_premises(&premises, 1)?;
+    assert_num_premises(premises, 1)?;
     assert_clause_len(conclusion, 2)?;
-    let premise_term = get_premise_term(premises[0].command)?;
+    let premise_term = get_premise_term(&premises[0])?;
     let (phi_1, phi_2, _) = match_term_err!((not (ite phi_1 phi_2 phi_3)) = premise_term)?;
     assert_eq(phi_1, conclusion[0].remove_negation_err()?)?;
     assert_eq(phi_2, conclusion[1].remove_negation_err()?)

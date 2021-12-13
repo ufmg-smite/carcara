@@ -133,14 +133,11 @@ fn check_cong<'a>(
 
 pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
-    assert_num_premises(&premises, 1..)?;
+    assert_num_premises(premises, 1..)?;
 
     let premises: Vec<_> = premises
-        .into_iter()
-        .map(|premise| {
-            let term = get_premise_term(premise.command)?;
-            match_term_err!((= t u) = term)
-        })
+        .iter()
+        .map(|premise| match_term_err!((= t u) = get_premise_term(premise)?))
         .collect::<Result<_, _>>()?;
 
     let (f, g) = match_term_err!((= f g) = &conclusion[0])?;

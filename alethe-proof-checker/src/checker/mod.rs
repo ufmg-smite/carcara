@@ -187,12 +187,27 @@ impl<'c> ProofChecker<'c> {
             }
             None => return Err(CheckerError::UnknownRule),
         };
-        let premises = step
+        let premises: Vec<_> = step
             .premises
             .iter()
             .map(|&(depth, i)| {
                 let command = &commands_stack[depth].1[i];
-                Premise { command, premise_index: (depth, i) }
+                let clause: Rc<[_]> = match command {
+                    ProofCommand::Assume { term, .. } => Rc::from([term.clone()]).to_rc_of_slice(),
+                    ProofCommand::Step(s) => s.clause.as_slice().into(),
+                    ProofCommand::Subproof(s) => {
+                        if let Some(ProofCommand::Step(s)) = s.commands.last() {
+                            s.clause.as_slice().into()
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                };
+                Premise {
+                    clause,
+                    index: command.index().to_string(),
+                    premise_index: (depth, i),
+                }
             })
             .collect();
 
@@ -206,7 +221,7 @@ impl<'c> ProofChecker<'c> {
 
         let rule_args = RuleArgs {
             conclusion: &step.clause,
-            premises,
+            premises: &premises,
             args: &step.args,
             pool: self.pool,
             context: &mut self.context,
