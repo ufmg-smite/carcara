@@ -12,7 +12,8 @@
 //! terms modulo renaming of bound variables.
 
 use super::{
-    BindingList, Identifier, Operator, ProofArg, ProofCommand, ProofStep, Rc, Sort, Term, Terminal,
+    BindingList, Identifier, Operator, ProofArg, ProofCommand, ProofStep, Rc, Sort, Subproof, Term,
+    Terminal,
 };
 use crate::utils::SymbolTable;
 
@@ -273,6 +274,7 @@ impl DeepEq for ProofCommand {
                 ProofCommand::Assume { index: b_index, term: b_term },
             ) => a_index == b_index && DeepEq::eq(checker, a_term, b_term),
             (ProofCommand::Step(a), ProofCommand::Step(b)) => DeepEq::eq(checker, a, b),
+            (ProofCommand::Subproof(a), ProofCommand::Subproof(b)) => DeepEq::eq(checker, a, b),
             _ => false,
         }
     }
@@ -280,10 +282,20 @@ impl DeepEq for ProofCommand {
 
 impl DeepEq for ProofStep {
     fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool {
-        DeepEq::eq(checker, a.clause.as_ref(), b.clause.as_ref())
+        a.index == b.index
+            && DeepEq::eq(checker, a.clause.as_ref(), b.clause.as_ref())
             && a.rule == b.rule
             && a.premises == b.premises
             && DeepEq::eq(checker, &a.args, &b.args)
+            && a.discharge == b.discharge
+    }
+}
+
+impl DeepEq for Subproof {
+    fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool {
+        DeepEq::eq(checker, &a.commands, &b.commands)
+            && DeepEq::eq(checker, &a.assignment_args, &b.assignment_args)
+            && DeepEq::eq(checker, &a.variable_args, &b.variable_args)
     }
 }
 

@@ -41,7 +41,7 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> AletheResult<()> {
     // step is idempotent
     let mut checker = checker::ProofChecker::new(&mut pool, test_config());
     let reconstructed_twice = checker.check_and_reconstruct(&reconstructed)?;
-    assert_eq!(reconstructed.commands, reconstructed_twice);
+    assert!(ast::deep_eq(&reconstructed.commands, &reconstructed_twice));
 
     Ok(())
 }

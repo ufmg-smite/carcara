@@ -508,7 +508,7 @@ fn test_step() {
         &proof.commands[0],
         &ProofCommand::Step(ProofStep {
             index: "t1".into(),
-            clause: vec![Rc::new(parse_term("(= (+ 2 3) (- 1 2))"))],
+            clause: vec![Rc::new(parse_term("(= (+ 2 3) (- 1 2))"))].into(),
             rule: "rule-name".into(),
             premises: Vec::new(),
             args: Vec::new(),
@@ -520,7 +520,7 @@ fn test_step() {
         &proof.commands[1],
         &ProofCommand::Step(ProofStep {
             index: "t2".into(),
-            clause: Vec::new(),
+            clause: Vec::new().into(),
             rule: "rule-name".into(),
             premises: vec![(0, 0)],
             args: Vec::new(),
@@ -532,7 +532,7 @@ fn test_step() {
         &proof.commands[2],
         &ProofCommand::Step(ProofStep {
             index: "t3".into(),
-            clause: Vec::new(),
+            clause: Vec::new().into(),
             rule: "rule-name".into(),
             premises: Vec::new(),
             args: {
@@ -553,7 +553,7 @@ fn test_step() {
         &proof.commands[3],
         &ProofCommand::Step(ProofStep {
             index: "t4".into(),
-            clause: Vec::new(),
+            clause: Vec::new().into(),
             rule: "rule-name".into(),
             premises: Vec::new(),
             args: {
@@ -574,7 +574,7 @@ fn test_step() {
         &proof.commands[4],
         &ProofCommand::Step(ProofStep {
             index: "t5".into(),
-            clause: Vec::new(),
+            clause: Vec::new().into(),
             rule: "rule-name".into(),
             premises: vec![(0, 0), (0, 1), (0, 2)],
             args: vec![ProofArg::Term(Rc::new(terminal!(int 42)))],
@@ -604,7 +604,7 @@ fn test_premises_in_subproofs() {
         &subproof[0],
         &ProofCommand::Step(ProofStep {
             index: "t3.t1".into(),
-            clause: Vec::new(),
+            clause: Vec::new().into(),
             rule: "rule-name".into(),
             premises: vec![(0, 0), (0, 1)],
             args: Vec::new(),
@@ -615,7 +615,7 @@ fn test_premises_in_subproofs() {
         &subproof[1],
         &ProofCommand::Step(ProofStep {
             index: "t3.t2".into(),
-            clause: Vec::new(),
+            clause: Vec::new().into(),
             rule: "rule-name".into(),
             premises: vec![(1, 0), (0, 0), (0, 1)],
             args: Vec::new(),
@@ -625,8 +625,8 @@ fn test_premises_in_subproofs() {
     assert_deep_eq!(
         &subproof[2],
         &ProofCommand::Step(ProofStep {
-            index: "t3.t3".into(),
-            clause: Vec::new(),
+            index: "t3".into(),
+            clause: Vec::new().into(),
             rule: "rule-name".into(),
             premises: vec![(0, 0), (1, 0), (0, 1), (1, 1)],
             args: Vec::new(),
