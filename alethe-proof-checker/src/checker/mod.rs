@@ -61,7 +61,12 @@ impl<'c> ProofChecker<'c> {
             match command {
                 ProofCommand::Step(step) => {
                     let is_end_of_subproof = iter.is_end_step();
-                    self.check_step(step, iter.stack(), is_end_of_subproof, iter.nesting_depth())
+
+                    // If this step ends a subproof, it might need to implicitly reference the
+                    // other commands in the subproof
+                    let subproof_commands =
+                        is_end_of_subproof.then(|| iter.current_subproof().unwrap());
+                    self.check_step(step, subproof_commands)
                         .map_err(|e| Error::Checker {
                             inner: e,
                             rule: step.rule.clone(),
@@ -147,9 +152,7 @@ impl<'c> ProofChecker<'c> {
     fn check_step<'a>(
         &mut self,
         step: &'a ProofStep,
-        commands_stack: &'a [(usize, &'a [ProofCommand])],
-        is_end_of_subproof: bool,
-        current_depth: usize,
+        subproof_commands: Option<&'a [ProofCommand]>,
     ) -> RuleResult {
         let time = Instant::now();
 
@@ -164,14 +167,6 @@ impl<'c> ProofChecker<'c> {
             None => return Err(CheckerError::UnknownRule),
         };
 
-        // If this step ends a subproof, it might need to implicitly reference the other commands
-        // in the subproof. Therefore, we pass them via the `subproof_commands` field
-        let subproof_commands = if is_end_of_subproof {
-            Some(commands_stack.last().unwrap().1)
-        } else {
-            None
-        };
-
         let rule_args = RuleArgs {
             conclusion: &step.clause,
             premises: &step.premises,
@@ -183,8 +178,7 @@ impl<'c> ProofChecker<'c> {
 
         if let Some(builder) = &mut self.builder {
             if let Some(reconstruction_rule) = Self::get_reconstruction_rule(&step.rule) {
-                let reconstructed =
-                    reconstruction_rule(rule_args, step.index.clone(), current_depth)?;
+                let reconstructed = reconstruction_rule(rule_args, step.index.clone())?;
                 builder.push_command(reconstructed);
             } else {
                 rule(rule_args)?;

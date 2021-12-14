@@ -6,13 +6,6 @@ pub fn print_proof(commands: &[ProofCommand]) -> io::Result<()> {
     (AlethePrinter { inner: &mut stdout }).write_proof(commands)
 }
 
-fn get_premise_index<'a>(
-    (depth, command_index): (usize, usize),
-    commands_stack: &[(usize, &'a [ProofCommand])],
-) -> &'a str {
-    commands_stack[depth].1[command_index].index()
-}
-
 trait PrettyPrint {
     fn write_proof(&mut self, commands: &[ProofCommand]) -> io::Result<()>;
 }
@@ -23,13 +16,12 @@ struct AlethePrinter<'a> {
 
 impl<'a> PrettyPrint for AlethePrinter<'a> {
     fn write_proof(&mut self, commands: &[ProofCommand]) -> io::Result<()> {
-        let mut iter = ProofIter::new(commands);
-        while let Some(command) = iter.next() {
+        for command in ProofIter::new(commands) {
             match command {
                 ProofCommand::Assume { index, term } => {
                     write!(self.inner, "(assume {} {})", index, &term[0])?
                 }
-                ProofCommand::Step(s) => self.write_step(s, iter.stack())?,
+                ProofCommand::Step(s) => self.write_step(s)?,
                 ProofCommand::Subproof(s) => {
                     let end_step_index = s
                         .commands
@@ -71,11 +63,7 @@ impl<'a> PrettyPrint for AlethePrinter<'a> {
 }
 
 impl<'a> AlethePrinter<'a> {
-    fn write_step(
-        &mut self,
-        step: &ProofStep,
-        commands_stack: &[(usize, &[ProofCommand])],
-    ) -> io::Result<()> {
+    fn write_step(&mut self, step: &ProofStep) -> io::Result<()> {
         write!(self.inner, "(step {} (cl", step.index)?;
 
         for t in step.clause.as_ref() {

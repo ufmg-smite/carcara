@@ -11,13 +11,9 @@ impl<'a> ProofIter<'a> {
         Self { stack: vec![(0, commands)] }
     }
 
-    pub fn nesting_depth(&self) -> usize {
-        // The root proof is considered a nesting depth of 0
-        self.stack.len() - 1
-    }
-
     pub fn is_in_subproof(&self) -> bool {
-        self.nesting_depth() > 0
+        // The root proof is considered a nesting depth of 0
+        self.stack.len() > 1
     }
 
     pub fn is_end_step(&self) -> bool {
@@ -27,12 +23,8 @@ impl<'a> ProofIter<'a> {
         }
     }
 
-    // Currently, this method is only used to resolve premises when checking `ProofStep`s.
-    // Eventually, a better solution will be used, that doesn't need to know the entire stack to
-    // resolve premises
-    #[deprecated]
-    pub(crate) fn stack(&'a self) -> &'a [(usize, &'a [ProofCommand])] {
-        &self.stack
+    pub fn current_subproof(&self) -> Option<&[ProofCommand]> {
+        self.is_in_subproof().then(|| self.stack.last().unwrap().1)
     }
 }
 

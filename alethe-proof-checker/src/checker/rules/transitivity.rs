@@ -115,7 +115,6 @@ fn reconstruct_chain(
 pub fn reconstruct_trans(
     RuleArgs { conclusion, premises, pool, .. }: RuleArgs,
     command_index: String,
-    current_depth: usize,
 ) -> Result<ProofCommand, CheckerError> {
     assert_clause_len(conclusion, 1)?;
 

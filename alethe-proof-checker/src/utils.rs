@@ -84,14 +84,6 @@ impl<K: Eq + Hash, V> SymbolTable<K, V> {
         self.scopes.iter().rev().find_map(|scope| scope.get(key))
     }
 
-    pub fn get_with_depth(&self, key: &K) -> Option<(usize, &V)> {
-        self.scopes
-            .iter()
-            .enumerate()
-            .rev()
-            .find_map(|(depth, scope)| scope.get(key).map(|v| (depth, v)))
-    }
-
     pub fn insert(&mut self, key: K, value: V) {
         self.scopes.last_mut().unwrap().insert(key, value);
     }
