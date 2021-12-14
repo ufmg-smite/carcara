@@ -42,13 +42,9 @@ fn get_single_term_from_command(command: &ProofCommand) -> Option<&Rc<Term>> {
     }
 }
 
+#[deprecated = "use `ProofCommand::clause` instead"]
 fn get_clause_from_command(command: &ProofCommand) -> &[Rc<Term>] {
-    match command {
-        // `assume` premises are interpreted as a clause with a single term
-        ProofCommand::Assume { index: _, term } => std::slice::from_ref(term),
-        ProofCommand::Step(ProofStep { clause, .. }) => clause,
-        ProofCommand::Subproof(s) => get_clause_from_command(s.commands.last().unwrap()),
-    }
+    command.clause()
 }
 
 // TODO: This function is temporary

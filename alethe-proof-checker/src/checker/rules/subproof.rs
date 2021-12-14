@@ -24,7 +24,7 @@ pub fn subproof(
         match assumption {
             ProofCommand::Assume { index: _, term } => {
                 let t = t.remove_negation_err()?;
-                assert_eq(term, t)?;
+                assert_eq(&term[0], t)?;
             }
             other => {
                 return Err(SubproofError::DischargeMustBeAssume(other.index().to_string()).into())

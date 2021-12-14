@@ -33,7 +33,7 @@ impl<'a> PrettyPrint for AlethePrinter<'a> {
             }
             match &commands[i] {
                 ProofCommand::Assume { index, term } => {
-                    write!(self.inner, "(assume {} {})", index, term)?
+                    write!(self.inner, "(assume {} {})", index, &term[0])?
                 }
                 ProofCommand::Step(s) => self.write_step(s, &commands_stack)?,
                 ProofCommand::Subproof(s) => {

@@ -422,6 +422,7 @@ impl<R: BufRead> Parser<R> {
             let (index, command) = match token {
                 Token::ReservedWord(Reserved::Assume) => {
                     let (index, term) = self.parse_assume_command()?;
+                    let term = Rc::new([term]);
                     (index.clone(), ProofCommand::Assume { index, term })
                 }
                 Token::ReservedWord(Reserved::Step) => {

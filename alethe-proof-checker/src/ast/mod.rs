@@ -36,7 +36,13 @@ pub struct Proof {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProofCommand {
     /// An `assume` command, of the form `(assume <symbol> <term>)`.
-    Assume { index: String, term: Rc<Term> },
+    Assume {
+        index: String,
+
+        // We store the term as a reference counted one element array to be more uniform with how
+        // steps store their clause
+        term: Rc<[Rc<Term>; 1]>,
+    },
 
     /// A `step` command.
     Step(ProofStep),
@@ -51,6 +57,14 @@ impl ProofCommand {
             ProofCommand::Assume { index, .. } => index,
             ProofCommand::Step(s) => &s.index,
             ProofCommand::Subproof(s) => s.commands.last().unwrap().index(),
+        }
+    }
+
+    pub fn clause(&self) -> &[Rc<Term>] {
+        match self {
+            ProofCommand::Assume { term, .. } => term.as_ref(),
+            ProofCommand::Step(s) => s.clause.as_ref(),
+            ProofCommand::Subproof(s) => s.commands.last().unwrap().clause(),
         }
     }
 }

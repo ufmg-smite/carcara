@@ -126,6 +126,7 @@ impl<'c> ProofChecker<'c> {
                     let result = if self.config.is_running_test || commands_stack.len() > 1 {
                         Ok(())
                     } else {
+                        let term = &term[0];
                         let is_valid = proof.premises.contains(term)
                             || proof
                                 .premises
@@ -193,7 +194,7 @@ impl<'c> ProofChecker<'c> {
             .map(|&(depth, i)| {
                 let command = &commands_stack[depth].1[i];
                 let clause: Rc<[_]> = match command {
-                    ProofCommand::Assume { term, .. } => Rc::from([term.clone()]).to_rc_of_slice(),
+                    ProofCommand::Assume { term, .. } => term.clone().to_rc_of_slice(),
                     ProofCommand::Step(s) => s.clause.clone(),
                     ProofCommand::Subproof(s) => {
                         if let Some(ProofCommand::Step(s)) = s.commands.last() {
