@@ -23,19 +23,13 @@ struct AlethePrinter<'a> {
 
 impl<'a> PrettyPrint for AlethePrinter<'a> {
     fn write_proof(&mut self, commands: &[ProofCommand]) -> io::Result<()> {
-        // This iterates through the commands in a proof in a similar way as the checker, using an
-        // explicit stack
-        let mut commands_stack = vec![(0, commands)];
-        while let Some(&(i, commands)) = commands_stack.last() {
-            if i == commands.len() {
-                commands_stack.pop();
-                continue;
-            }
-            match &commands[i] {
+        let mut iter = ProofIter::new(commands);
+        while let Some(command) = iter.next() {
+            match command {
                 ProofCommand::Assume { index, term } => {
                     write!(self.inner, "(assume {} {})", index, &term[0])?
                 }
-                ProofCommand::Step(s) => self.write_step(s, &commands_stack)?,
+                ProofCommand::Step(s) => self.write_step(s, iter.stack())?,
                 ProofCommand::Subproof(s) => {
                     let end_step_index = s
                         .commands
@@ -66,17 +60,10 @@ impl<'a> PrettyPrint for AlethePrinter<'a> {
                         }
                         write!(self.inner, ")")?;
                     }
-                    writeln!(self.inner, ")")?;
-
-                    // We increment this layer's index so when we comeback from the subproof and
-                    // pop the top layer, we are already on the next command after the subproof
-                    commands_stack.last_mut().unwrap().0 += 1;
-                    commands_stack.push((0, &s.commands));
-                    continue;
+                    write!(self.inner, ")")?;
                 }
             }
             writeln!(self.inner)?;
-            commands_stack.last_mut().unwrap().0 += 1;
         }
 
         Ok(())

@@ -56,47 +56,31 @@ impl<'c> ProofChecker<'c> {
     pub fn check(&mut self, proof: &Proof) -> AletheResult<()> {
         // Similarly to the parser, to avoid stack overflows in proofs with many nested subproofs,
         // we check the subproofs iteratively, instead of recursively
-
-        // A stack of the subproof commands, and the index of the command being currently checked
-        let mut commands_stack = vec![(0, proof.commands.as_slice())];
-
-        while let Some(&(i, commands)) = commands_stack.last() {
-            if i == commands.len() {
-                // If we got to the end without popping the commands vector off the stack, we must
-                // not be in a subproof
-                assert!(commands_stack.len() == 1);
-                break;
-            }
-            match &commands[i] {
+        let mut iter = proof.iter();
+        while let Some(command) = iter.next() {
+            match command {
                 ProofCommand::Step(step) => {
-                    let is_end_of_subproof = commands_stack.len() > 1 && i == commands.len() - 1;
-                    self.check_step(
-                        step,
-                        &commands_stack,
-                        is_end_of_subproof,
-                        commands_stack.len() - 1,
-                    )
-                    .map_err(|e| Error::Checker {
-                        inner: e,
-                        rule: step.rule.clone(),
-                        step: step.index.clone(),
-                    })?;
+                    let is_end_of_subproof = iter.is_end_step();
+                    self.check_step(step, iter.stack(), is_end_of_subproof, iter.nesting_depth())
+                        .map_err(|e| Error::Checker {
+                            inner: e,
+                            rule: step.rule.clone(),
+                            step: step.index.clone(),
+                        })?;
 
                     // If this is the last command of a subproof, we have to pop the subproof
                     // commands off of the stack. The parser already ensures that the last command
                     // in a subproof is always a `step` command
                     if is_end_of_subproof {
-                        commands_stack.pop();
                         self.context.pop();
                         if let Some(builder) = &mut self.builder {
                             builder.close_subproof();
                         }
                     }
-                    Ok(())
                 }
                 ProofCommand::Subproof(s) => {
                     let time = Instant::now();
-                    let step_index = commands[i].index();
+                    let step_index = command.index();
 
                     let new_context = self
                         .build_context(&s.assignment_args, &s.variable_args)
@@ -106,14 +90,12 @@ impl<'c> ProofChecker<'c> {
                             step: step_index.to_string(),
                         })?;
                     self.context.push(new_context);
-                    commands_stack.push((0, &s.commands));
 
                     if let Some(builder) = &mut self.builder {
                         builder.open_subproof(s.assignment_args.clone(), s.variable_args.clone());
                     }
 
                     self.add_statistics_measurement(step_index, "anchor*", time);
-                    continue;
                 }
                 ProofCommand::Assume { index, term } => {
                     let time = Instant::now();
@@ -123,37 +105,30 @@ impl<'c> ProofChecker<'c> {
                     // it is inside a subproof. Since the unit tests for the rules don't define the
                     // original problem, but sometimes use `assume` commands, we also skip the
                     // command if we are in a testing context.
-                    let result = if self.config.is_running_test || commands_stack.len() > 1 {
-                        Ok(())
-                    } else {
+                    if !self.config.is_running_test && !iter.is_in_subproof() {
                         let term = &term[0];
                         let is_valid = proof.premises.contains(term)
                             || proof
                                 .premises
                                 .iter()
                                 .any(|u| deep_eq_modulo_reordering(term, u));
-                        if is_valid {
-                            Ok(())
-                        } else {
-                            Err(Error::Checker {
+                        if !is_valid {
+                            return Err(Error::Checker {
                                 // TODO: Add specific error for this
                                 inner: CheckerError::Unspecified,
                                 rule: "assume".into(),
                                 step: index.clone(),
-                            })
+                            });
                         }
                     };
 
                     if let Some(builder) = &mut self.builder {
-                        builder.push_command(commands[i].clone());
+                        builder.push_command(command.clone());
                     }
                     self.add_statistics_measurement(index, "assume*", time);
-                    result
                 }
-            }?;
-            commands_stack.last_mut().unwrap().0 += 1;
+            }
         }
-
         Ok(())
     }
 

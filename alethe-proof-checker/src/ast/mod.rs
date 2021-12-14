@@ -3,6 +3,7 @@
 #[macro_use]
 mod macros;
 mod deep_eq;
+mod iter;
 mod pool;
 pub(crate) mod printer;
 mod rc;
@@ -12,6 +13,7 @@ mod subterms;
 mod tests;
 
 pub use deep_eq::{are_alpha_equivalent, deep_eq, deep_eq_modulo_reordering, DeepEq};
+pub use iter::ProofIter;
 pub use pool::TermPool;
 pub use printer::print_proof;
 pub use rc::Rc;
@@ -30,6 +32,12 @@ use std::hash::Hash;
 pub struct Proof {
     pub premises: AHashSet<Rc<Term>>,
     pub commands: Vec<ProofCommand>,
+}
+
+impl Proof {
+    pub fn iter(&self) -> ProofIter {
+        ProofIter::new(&self.commands)
+    }
 }
 
 /// A proof command.
