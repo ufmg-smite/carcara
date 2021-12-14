@@ -1,7 +1,7 @@
 use super::{
     assert_clause_len, assert_eq, assert_is_expected, assert_is_expected_modulo_reordering,
-    assert_num_premises, assert_num_steps_in_subproof, get_clause_from_command, get_command_term,
-    get_premise_term, CheckerError, EqualityError, RuleArgs, RuleResult,
+    assert_num_premises, assert_num_steps_in_subproof, get_command_term, get_premise_term,
+    CheckerError, EqualityError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::SubproofError};
 use ahash::AHashSet;
@@ -33,7 +33,7 @@ pub fn subproof(
     }
 
     let previous_command = &subproof_commands[subproof_commands.len() - 2];
-    let phi = match get_clause_from_command(previous_command) {
+    let phi = match previous_command.clause() {
         // If the last command has an empty clause as it's conclusion, we expect `phi` to be the
         // boolean constant `false`
         [] => pool.bool_false(),

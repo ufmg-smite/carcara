@@ -35,23 +35,13 @@ pub struct Premise {
     pub premise_index: (usize, usize),
 }
 
-fn get_single_term_from_command(command: &ProofCommand) -> Option<&Rc<Term>> {
-    match get_clause_from_command(command) {
-        [t] => Some(t),
-        _ => None,
-    }
-}
-
-#[deprecated = "use `ProofCommand::clause` instead"]
-fn get_clause_from_command(command: &ProofCommand) -> &[Rc<Term>] {
-    command.clause()
-}
-
 // TODO: This function is temporary
 #[deprecated]
 fn get_command_term(command: &ProofCommand) -> Result<&Rc<Term>, CheckerError> {
-    get_single_term_from_command(command)
-        .ok_or_else(|| CheckerError::BadPremise(command.index().to_string()))
+    match command.clause() {
+        [t] => Ok(t),
+        _ => Err(CheckerError::BadPremise(command.index().to_string())),
+    }
 }
 
 /// Helper function to get a single term from a premise, or return a `CheckerError::BadPremise`
