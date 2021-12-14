@@ -86,11 +86,9 @@ impl<'a> AlethePrinter<'a> {
         write!(self.inner, " :rule {}", step.rule)?;
 
         if let [head, tail @ ..] = step.premises.as_slice() {
-            let head = get_premise_index(*head, commands_stack);
-            write!(self.inner, " :premises ({}", head)?;
+            write!(self.inner, " :premises ({}", head.index)?;
             for premise in tail {
-                let premise = get_premise_index(*premise, commands_stack);
-                write!(self.inner, " {}", premise)?;
+                write!(self.inner, " {}", premise.index)?;
             }
             write!(self.inner, ")")?;
         }

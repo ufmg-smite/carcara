@@ -492,6 +492,13 @@ fn test_define_fun() {
     assert_deep_eq!(&expected, &got);
 }
 
+fn command_to_premise(command: &ProofCommand) -> Premise {
+    Premise {
+        clause: command.clone_clause(),
+        index: command.index().to_string(),
+    }
+}
+
 #[test]
 fn test_step() {
     let input = "
@@ -522,7 +529,7 @@ fn test_step() {
             index: "t2".into(),
             clause: Vec::new().into(),
             rule: "rule-name".into(),
-            premises: vec![(0, 0)],
+            premises: vec![command_to_premise(&proof.commands[0])],
             args: Vec::new(),
             discharge: Vec::new(),
         })
@@ -576,7 +583,11 @@ fn test_step() {
             index: "t5".into(),
             clause: Vec::new().into(),
             rule: "rule-name".into(),
-            premises: vec![(0, 0), (0, 1), (0, 2)],
+            premises: vec![
+                command_to_premise(&proof.commands[0]),
+                command_to_premise(&proof.commands[1]),
+                command_to_premise(&proof.commands[2]),
+            ],
             args: vec![ProofArg::Term(Rc::new(terminal!(int 42)))],
             discharge: Vec::new(),
         })
@@ -606,7 +617,10 @@ fn test_premises_in_subproofs() {
             index: "t3.t1".into(),
             clause: Vec::new().into(),
             rule: "rule-name".into(),
-            premises: vec![(0, 0), (0, 1)],
+            premises: vec![
+                command_to_premise(&proof.commands[0]),
+                command_to_premise(&proof.commands[1]),
+            ],
             args: Vec::new(),
             discharge: Vec::new(),
         })
@@ -617,7 +631,11 @@ fn test_premises_in_subproofs() {
             index: "t3.t2".into(),
             clause: Vec::new().into(),
             rule: "rule-name".into(),
-            premises: vec![(1, 0), (0, 0), (0, 1)],
+            premises: vec![
+                command_to_premise(&subproof[0]),
+                command_to_premise(&proof.commands[0]),
+                command_to_premise(&proof.commands[1]),
+            ],
             args: Vec::new(),
             discharge: Vec::new(),
         })
@@ -628,7 +646,12 @@ fn test_premises_in_subproofs() {
             index: "t3".into(),
             clause: Vec::new().into(),
             rule: "rule-name".into(),
-            premises: vec![(0, 0), (1, 0), (0, 1), (1, 1)],
+            premises: vec![
+                command_to_premise(&proof.commands[0]),
+                command_to_premise(&subproof[0]),
+                command_to_premise(&proof.commands[1]),
+                command_to_premise(&subproof[1]),
+            ],
             args: Vec::new(),
             discharge: Vec::new(),
         })

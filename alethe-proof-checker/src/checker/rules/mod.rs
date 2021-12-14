@@ -26,15 +26,6 @@ pub struct RuleArgs<'a> {
     pub(super) subproof_commands: Option<&'a [ProofCommand]>,
 }
 
-#[derive(Clone)]
-pub struct Premise {
-    pub clause: Rc<[Rc<Term>]>,
-    pub index: String,
-
-    #[deprecated]
-    pub premise_index: (usize, usize),
-}
-
 // TODO: This function is temporary
 #[deprecated]
 fn get_command_term(command: &ProofCommand) -> Result<&Rc<Term>, CheckerError> {

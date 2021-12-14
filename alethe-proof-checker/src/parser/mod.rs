@@ -48,7 +48,7 @@ struct ParserState {
     function_defs: AHashMap<String, FunctionDef>,
     term_pool: TermPool,
     sort_declarations: AHashMap<String, usize>,
-    step_indices: SymbolTable<String, usize>,
+    step_indices: SymbolTable<String, Premise>,
 }
 
 /// A parser for the Alethe proof format.
@@ -458,6 +458,8 @@ impl<R: BufRead> Parser<R> {
                 ));
             }
 
+            let clause = command.clone_clause();
+
             commands_stack.last_mut().unwrap().push(command);
             if end_step_stack.last() == Some(&index) {
                 // If this is the last step in a subproof, we need to pop all the subproof data off
@@ -490,7 +492,7 @@ impl<R: BufRead> Parser<R> {
             }
             self.state
                 .step_indices
-                .insert(index, commands_stack.last().unwrap().len() - 1);
+                .insert(index.clone(), Premise { clause, index })
         }
         match commands_stack.len() {
             0 => unreachable!(),
@@ -582,13 +584,13 @@ impl<R: BufRead> Parser<R> {
 
     /// Parses a premise for a `step` command. This already converts it into the depth and command
     /// index used to reference commands in the AST.
-    fn parse_step_premise(&mut self) -> AletheResult<(usize, usize)> {
+    fn parse_step_premise(&mut self) -> AletheResult<Premise> {
         let position = self.current_position;
         let index = self.expect_symbol()?;
         self.state
             .step_indices
-            .get_with_depth(&index)
-            .map(|(d, &i)| (d, i))
+            .get(&index)
+            .cloned()
             .ok_or(Error::Parser(
                 ParserError::UndefinedStepIndex(index),
                 position,

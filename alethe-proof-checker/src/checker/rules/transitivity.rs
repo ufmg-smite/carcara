@@ -71,11 +71,11 @@ pub fn trans(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     find_chain(conclusion, &mut premises)
 }
 
-/// Similar to `find_chain`, but reorders the step premise indices to match the found chain
+/// Similar to `find_chain`, but reorders the step premises vector to match the found chain
 fn reconstruct_chain(
     conclusion: (&Rc<Term>, &Rc<Term>),
     premise_equalities: &mut [(&Rc<Term>, &Rc<Term>)],
-    premise_indices: &mut [(usize, usize)],
+    premises: &mut [Premise],
     should_flip: &mut Vec<bool>,
 ) -> RuleResult {
     if conclusion.0 == conclusion.1 {
@@ -102,12 +102,12 @@ fn reconstruct_chain(
         })?;
 
     premise_equalities.swap(0, index);
-    premise_indices.swap(0, index);
+    premises.swap(0, index);
 
     reconstruct_chain(
         (next_link, conclusion.1),
         &mut premise_equalities[1..],
-        &mut premise_indices[1..],
+        &mut premises[1..],
         should_flip,
     )
 }
@@ -125,7 +125,7 @@ pub fn reconstruct_trans(
         .map(|premise| match_term_err!((= t u) = get_premise_term(premise)?))
         .collect::<Result<_, _>>()?;
 
-    let mut new_premises: Vec<_> = premises.iter().map(|p| p.premise_index).collect();
+    let mut new_premises = premises.to_vec();
     let mut should_flip = Vec::with_capacity(new_premises.len());
     reconstruct_chain(
         conclusion_equality,
@@ -168,18 +168,24 @@ pub fn reconstruct_trans(
                 // premise in the `premise_equalities` and `new_premises` vectors
                 let (a, b) = premise_equalities[j];
                 let conclusion = build_term!(pool, (= {b.clone()} {a.clone()}));
-                let premise_index = new_premises[j];
+                let clause: Rc<[_]> = vec![conclusion].into();
                 let index = format!("{}.t{}", command_index, i + 1);
 
-                // We have to change the `new_premises` vector to use the new premise step we just
-                // created, instead of the old one that needed flipping
-                new_premises[j] = (current_depth + 1, i);
+                // We replace the premise in `new_premises[j]` to point to the command we are
+                // creating, and take the old premise to use as a premise for the new command.
+                let old_premise = std::mem::replace(
+                    &mut new_premises[j],
+                    Premise {
+                        clause: clause.clone(),
+                        index: index.clone(),
+                    },
+                );
 
                 ProofCommand::Step(ProofStep {
                     index,
-                    clause: vec![conclusion].into(),
+                    clause,
                     rule: "symm".into(),
-                    premises: vec![premise_index],
+                    premises: vec![old_premise],
                     args: Vec::new(),
                     discharge: Vec::new(),
                 })

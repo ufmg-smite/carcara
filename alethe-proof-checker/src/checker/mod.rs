@@ -10,7 +10,7 @@ use crate::{
 use ahash::{AHashMap, AHashSet};
 use builder::ProofBuilder;
 use error::CheckerError;
-use rules::{Premise, ReconstructionRule, Rule, RuleArgs, RuleResult};
+use rules::{ReconstructionRule, Rule, RuleArgs, RuleResult};
 use std::time::{Duration, Instant};
 
 struct Context {
@@ -163,29 +163,6 @@ impl<'c> ProofChecker<'c> {
             }
             None => return Err(CheckerError::UnknownRule),
         };
-        let premises: Vec<_> = step
-            .premises
-            .iter()
-            .map(|&(depth, i)| {
-                let command = &commands_stack[depth].1[i];
-                let clause: Rc<[_]> = match command {
-                    ProofCommand::Assume { term, .. } => term.clone().to_rc_of_slice(),
-                    ProofCommand::Step(s) => s.clause.clone(),
-                    ProofCommand::Subproof(s) => {
-                        if let Some(ProofCommand::Step(s)) = s.commands.last() {
-                            s.clause.clone()
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                };
-                Premise {
-                    clause,
-                    index: command.index().to_string(),
-                    premise_index: (depth, i),
-                }
-            })
-            .collect();
 
         // If this step ends a subproof, it might need to implicitly reference the other commands
         // in the subproof. Therefore, we pass them via the `subproof_commands` field
@@ -197,7 +174,7 @@ impl<'c> ProofChecker<'c> {
 
         let rule_args = RuleArgs {
             conclusion: &step.clause,
-            premises: &premises,
+            premises: &step.premises,
             args: &step.args,
             pool: self.pool,
             context: &mut self.context,
