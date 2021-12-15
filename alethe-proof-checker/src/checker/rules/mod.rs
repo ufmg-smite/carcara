@@ -26,15 +26,6 @@ pub struct RuleArgs<'a> {
     pub(super) subproof_commands: Option<&'a [ProofCommand]>,
 }
 
-// TODO: This function is temporary
-#[deprecated]
-fn get_command_term(command: &ProofCommand) -> Result<&Rc<Term>, CheckerError> {
-    match command.clause() {
-        [t] => Ok(t),
-        _ => Err(CheckerError::BadPremise(command.index().to_string())),
-    }
-}
-
 /// Helper function to get a single term from a premise, or return a `CheckerError::BadPremise`
 /// error if it doesn't succeed.
 fn get_premise_term(premise: &Premise) -> Result<&Rc<Term>, CheckerError> {
