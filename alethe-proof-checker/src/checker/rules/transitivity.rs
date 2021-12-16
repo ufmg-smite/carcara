@@ -136,82 +136,43 @@ pub fn reconstruct_trans(
         &mut should_flip,
     )?;
 
-    // To make things easier later, we convert `should_flip` from a vector of booleans into a
-    // vector of the indices of premises that should be flipped (indices refering to the
-    // `premise_equalities` and `new_premises` vectors)
-    let should_flip: Vec<_> = should_flip
-        .iter()
-        .enumerate()
-        .filter_map(|(i, &b)| b.then(|| i))
-        .collect();
-
-    if should_flip.is_empty() {
-        let new_step = ProofStep {
-            index: command_index,
-            clause: conclusion.into(),
-            rule: "trans".into(),
-            premises: new_premises,
-            args: Vec::new(),
-            discharge: Vec::new(),
-        };
-        builder.push_command(ProofCommand::Step(new_step));
-        Ok(())
-    } else {
-        // If there are any premises that need flipping, we need to create a new subproof, where we
-        // introduce `symm` steps to flip the needed equalities
-
-        // Each step in the subproof will be a `symm` step that takes one of the old premises and
-        // flips it
-        let mut subproof_steps: Vec<ProofCommand> = should_flip
+    // If there are any premises that need flipping, we need to introduce `symm` steps to flip the
+    // needed equalities
+    if !should_flip.is_empty() {
+        // To make things easier, we convert `should_flip` from a vector of booleans into a vector
+        // of the indices of premises that should be flipped (indices refering to the
+        // `premise_equalities` and `new_premises` vectors)
+        let should_flip: Vec<_> = should_flip
             .iter()
             .enumerate()
-            .map(|(i, &j)| {
-                // `i` is the index in the `should_flip` vector, only used to know the index in the
-                // subproof of the step we're creating. `j` is the index of the equality and the
-                // premise in the `premise_equalities` and `new_premises` vectors
-                let (a, b) = premise_equalities[j];
-                let conclusion = build_term!(pool, (= {b.clone()} {a.clone()}));
-                let clause: Rc<[_]> = vec![conclusion].into();
-                let index = format!("{}.t{}", command_index, i + 1);
-
-                // We replace the premise in `new_premises[j]` to point to the command we are
-                // creating, and take the old premise to use as a premise for the new command.
-                let old_premise = std::mem::replace(
-                    &mut new_premises[j],
-                    Premise {
-                        clause: clause.clone(),
-                        index: index.clone(),
-                    },
-                );
-
-                ProofCommand::Step(ProofStep {
-                    index,
-                    clause,
-                    rule: "symm".into(),
-                    premises: vec![old_premise],
-                    args: Vec::new(),
-                    discharge: Vec::new(),
-                })
-            })
+            .filter_map(|(i, &b)| b.then(|| i))
             .collect();
 
-        // The last step in the subproof is the `trans` step itself
-        subproof_steps.push(ProofCommand::Step(ProofStep {
-            index: command_index,
-            clause: conclusion.to_vec().into(), // TODO: Implement `From<&[T]>` for `Rc<[T]>`
-            rule: "trans".into(),
-            premises: new_premises,
-            args: Vec::new(),
-            discharge: Vec::new(),
-        }));
+        for (i, &j) in should_flip.iter().enumerate() {
+            // `i` is the index in the `should_flip` vector, only used to number the steps we are
+            // creating. `j` is the index of the equality and the premise in the
+            // `premise_equalities` and `new_premises` vectors
 
-        builder.push_command(ProofCommand::Subproof(Subproof {
-            commands: subproof_steps,
-            assignment_args: Vec::new(),
-            variable_args: Vec::new(),
-        }));
-        Ok(())
+            let (a, b) = premise_equalities[j];
+            new_premises[j] = builder.add_symm_step(
+                pool,
+                new_premises[j].clone(),
+                (a.clone(), b.clone()),
+                // TODO: Avoid collisions when creating this index
+                format!("{}.t{}", command_index, i + 1),
+            );
+        }
     }
+
+    builder.add_step(ProofStep {
+        index: command_index,
+        clause: conclusion.into(),
+        rule: "trans".into(),
+        premises: new_premises,
+        args: Vec::new(),
+        discharge: Vec::new(),
+    });
+    Ok(())
 }
 
 #[cfg(test)]

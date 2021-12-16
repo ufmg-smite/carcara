@@ -25,6 +25,30 @@ impl ProofBuilder {
         self.stack.last_mut().unwrap().commands.push(command)
     }
 
+    pub(super) fn add_step(&mut self, step: ProofStep) {
+        self.push_command(ProofCommand::Step(step))
+    }
+
+    pub(super) fn add_symm_step(
+        &mut self,
+        pool: &mut TermPool,
+        original_premise: Premise,
+        original_equality: (Rc<Term>, Rc<Term>),
+        index: String,
+    ) -> Premise {
+        let (a, b) = original_equality;
+        let clause: Rc<[_]> = vec![build_term!(pool, (= {b} {a}))].into();
+        self.add_step(ProofStep {
+            index: index.clone(),
+            clause: clause.clone(),
+            rule: "symm".into(),
+            premises: vec![original_premise],
+            args: Vec::new(),
+            discharge: Vec::new(),
+        });
+        Premise { clause, index }
+    }
+
     pub(super) fn open_subproof(
         &mut self,
         assignment_args: Vec<(String, Rc<Term>)>,
