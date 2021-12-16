@@ -178,8 +178,7 @@ impl<'c> ProofChecker<'c> {
 
         if let Some(builder) = &mut self.builder {
             if let Some(reconstruction_rule) = Self::get_reconstruction_rule(&step.rule) {
-                let reconstructed = reconstruction_rule(rule_args, step.index.clone())?;
-                builder.push_command(reconstructed);
+                reconstruction_rule(rule_args, step.index.clone(), builder)?;
             } else {
                 rule(rule_args)?;
                 builder.push_command(ProofCommand::Step(step.clone()));

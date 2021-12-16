@@ -1,6 +1,6 @@
 use super::{
     error::{CheckerError, EqualityError},
-    Context,
+    Context, ProofBuilder,
 };
 use crate::{
     ast::*,
@@ -11,7 +11,7 @@ pub type RuleResult = Result<(), CheckerError>;
 
 pub type Rule = fn(RuleArgs) -> RuleResult;
 
-pub type ReconstructionRule = fn(RuleArgs, String) -> Result<ProofCommand, CheckerError>;
+pub type ReconstructionRule = fn(RuleArgs, String, &mut ProofBuilder) -> RuleResult;
 
 pub struct RuleArgs<'a> {
     pub(super) conclusion: &'a [Rc<Term>],

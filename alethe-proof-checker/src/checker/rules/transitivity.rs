@@ -1,4 +1,6 @@
-use super::{assert_clause_len, get_premise_term, CheckerError, RuleArgs, RuleResult};
+use super::{
+    assert_clause_len, get_premise_term, CheckerError, ProofBuilder, RuleArgs, RuleResult,
+};
 use crate::ast::*;
 
 /// Function to find a transitive chain given a conclusion equality and a series of premise
@@ -115,7 +117,8 @@ fn reconstruct_chain(
 pub fn reconstruct_trans(
     RuleArgs { conclusion, premises, pool, .. }: RuleArgs,
     command_index: String,
-) -> Result<ProofCommand, CheckerError> {
+    builder: &mut ProofBuilder,
+) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
 
     let conclusion_equality = match_term_err!((= t u) = &conclusion[0])?;
@@ -151,7 +154,8 @@ pub fn reconstruct_trans(
             args: Vec::new(),
             discharge: Vec::new(),
         };
-        Ok(ProofCommand::Step(new_step))
+        builder.push_command(ProofCommand::Step(new_step));
+        Ok(())
     } else {
         // If there are any premises that need flipping, we need to create a new subproof, where we
         // introduce `symm` steps to flip the needed equalities
@@ -201,11 +205,12 @@ pub fn reconstruct_trans(
             discharge: Vec::new(),
         }));
 
-        Ok(ProofCommand::Subproof(Subproof {
+        builder.push_command(ProofCommand::Subproof(Subproof {
             commands: subproof_steps,
             assignment_args: Vec::new(),
             variable_args: Vec::new(),
-        }))
+        }));
+        Ok(())
     }
 }
 
