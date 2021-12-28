@@ -346,6 +346,7 @@ impl<'c> ProofChecker<'c> {
             "reordering" => extras::reordering,
             "symm" => extras::symm,
             "not_symm" => extras::not_symm,
+            "eq_symmetric" => extras::eq_symmetric,
 
             // Special rule that always checks as valid. It is mostly used in tests
             "trust" => |_| Ok(()),

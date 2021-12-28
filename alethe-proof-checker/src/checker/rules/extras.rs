@@ -45,6 +45,14 @@ pub fn not_symm(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_eq(q_1, q_2)
 }
 
+pub fn eq_symmetric(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 2)?;
+    let (t_1, u_1) = match_term_err!((not (= t u)) = &conclusion[0])?;
+    let (u_2, t_2) = match_term_err!((= u t) = &conclusion[1])?;
+    assert_eq(t_1, t_2)?;
+    assert_eq(u_1, u_2)
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -103,6 +111,25 @@ mod tests {
             "Failing examples" {
                 "(assume h1 (= a b))
                 (step t1 (cl (= b a)) :rule not_symm :premises (h1))": false,
+            }
+        }
+    }
+
+    #[test]
+    fn eq_symmetric() {
+        test_cases! {
+            definitions = "
+                (declare-sort T 0)
+                (declare-fun a () T)
+                (declare-fun b () T)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (not (= b a)) (= a b)) :rule eq_symmetric)": true,
+                "(step t1 (cl (not (= a a)) (= a a)) :rule eq_symmetric)": true,
+            }
+            "Failing examples" {
+                "(step t1 (cl (not (= a b)) (= a b)) :rule eq_symmetric)": false,
+                "(step t1 (cl (not (= a b)) (not (= b a))) :rule eq_symmetric)": false,
             }
         }
     }
