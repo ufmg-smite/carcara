@@ -28,7 +28,7 @@ pub struct RuleArgs<'a> {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Premise<'a> {
-    pub command: &'a ProofCommand,
+    pub command_index: &'a str,
     pub clause: &'a [Rc<Term>],
     pub premise_index: (usize, usize),
 }
@@ -36,25 +36,24 @@ pub struct Premise<'a> {
 impl<'a> Premise<'a> {
     pub fn new(premise_index: (usize, usize), command: &'a ProofCommand) -> Self {
         Self {
-            command,
+            command_index: command.index(),
             clause: command.clause(),
             premise_index,
         }
     }
 }
 
-fn get_single_term_from_command(command: &ProofCommand) -> Option<&Rc<Term>> {
-    match command.clause() {
-        [t] => Some(t),
-        _ => None,
-    }
-}
-
-/// Helper function to get a single term from a premise, or return a `CheckerError::BadPremise`
-/// error if it doesn't succeed.
+/// Helper function to get a single term from a premise, or return a
+/// `CheckerError::WrongLengthOfPremiseClause` error if it doesn't succeed.
 fn get_premise_term<'a>(premise: &Premise<'a>) -> Result<&'a Rc<Term>, CheckerError> {
-    get_single_term_from_command(premise.command)
-        .ok_or_else(|| CheckerError::BadPremise(premise.command.index().to_string()))
+    match premise.clause {
+        [t] => Ok(t),
+        cl => Err(CheckerError::WrongLengthOfPremiseClause(
+            premise.command_index.to_string(),
+            1.into(),
+            cl.len(),
+        )),
+    }
 }
 
 /// Asserts that the argument is true, and returns `None` otherwise. `rassert!(arg)` is identical

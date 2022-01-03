@@ -10,7 +10,11 @@ use ahash::AHashSet;
 fn get_command_term(command: &ProofCommand) -> Result<&Rc<Term>, CheckerError> {
     match command.clause() {
         [t] => Ok(t),
-        _ => Err(CheckerError::BadPremise(command.index().to_string())),
+        cl => Err(CheckerError::WrongLengthOfPremiseClause(
+            command.index().to_string(),
+            1.into(),
+            cl.len(),
+        )),
     }
 }
 
