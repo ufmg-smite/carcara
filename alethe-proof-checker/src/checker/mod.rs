@@ -10,7 +10,7 @@ use crate::{
 use ahash::{AHashMap, AHashSet};
 use builder::ProofBuilder;
 use error::CheckerError;
-use rules::{ReconstructionRule, Rule, RuleArgs, RuleResult};
+use rules::{Premise, ReconstructionRule, Rule, RuleArgs, RuleResult};
 use std::time::{Duration, Instant};
 
 struct Context {
@@ -66,7 +66,7 @@ impl<'c> ProofChecker<'c> {
                     // other commands in the subproof
                     let subproof_commands =
                         is_end_of_subproof.then(|| iter.current_subproof().unwrap());
-                    self.check_step(step, subproof_commands)
+                    self.check_step(step, subproof_commands, &iter)
                         .map_err(|e| Error::Checker {
                             inner: e,
                             rule: step.rule.clone(),
@@ -111,7 +111,6 @@ impl<'c> ProofChecker<'c> {
                     // original problem, but sometimes use `assume` commands, we also skip the
                     // command if we are in a testing context.
                     if !self.config.is_running_test && !iter.is_in_subproof() {
-                        let term = &term[0];
                         let is_valid = proof.premises.contains(term)
                             || proof
                                 .premises
@@ -153,6 +152,7 @@ impl<'c> ProofChecker<'c> {
         &mut self,
         step: &'a ProofStep,
         subproof_commands: Option<&'a [ProofCommand]>,
+        iter: &'a ProofIter<'a>,
     ) -> RuleResult {
         let time = Instant::now();
 
@@ -167,9 +167,18 @@ impl<'c> ProofChecker<'c> {
             None => return Err(CheckerError::UnknownRule),
         };
 
+        let premises: Vec<_> = step
+            .premises
+            .iter()
+            .map(|&p| {
+                let command = iter.get_premise(p);
+                Premise::new(p, command)
+            })
+            .collect();
+
         let rule_args = RuleArgs {
             conclusion: &step.clause,
-            premises: &step.premises,
+            premises: &premises,
             args: &step.args,
             pool: self.pool,
             context: &mut self.context,

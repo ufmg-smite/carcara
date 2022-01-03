@@ -26,6 +26,10 @@ impl<'a> ProofIter<'a> {
     pub fn current_subproof(&self) -> Option<&[ProofCommand]> {
         self.is_in_subproof().then(|| self.stack.last().unwrap().1)
     }
+
+    pub fn get_premise(&self, (depth, index): (usize, usize)) -> &ProofCommand {
+        &self.stack[depth].1[index]
+    }
 }
 
 impl<'a> Iterator for ProofIter<'a> {

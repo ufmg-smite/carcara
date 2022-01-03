@@ -16,12 +16,13 @@ struct AlethePrinter<'a> {
 
 impl<'a> PrettyPrint for AlethePrinter<'a> {
     fn write_proof(&mut self, commands: &[ProofCommand]) -> io::Result<()> {
-        for command in ProofIter::new(commands) {
+        let mut iter = ProofIter::new(commands);
+        while let Some(command) = iter.next() {
             match command {
                 ProofCommand::Assume { index, term } => {
-                    write!(self.inner, "(assume {} {})", index, &term[0])?
+                    write!(self.inner, "(assume {} {})", index, term)?
                 }
-                ProofCommand::Step(s) => self.write_step(s)?,
+                ProofCommand::Step(s) => self.write_step(&mut iter, s)?,
                 ProofCommand::Subproof(s) => {
                     let end_step_index = s
                         .commands
@@ -63,10 +64,10 @@ impl<'a> PrettyPrint for AlethePrinter<'a> {
 }
 
 impl<'a> AlethePrinter<'a> {
-    fn write_step(&mut self, step: &ProofStep) -> io::Result<()> {
+    fn write_step(&mut self, iter: &mut ProofIter, step: &ProofStep) -> io::Result<()> {
         write!(self.inner, "(step {} (cl", step.index)?;
 
-        for t in step.clause.as_ref() {
+        for t in &step.clause {
             write!(self.inner, " {}", t)?;
         }
         write!(self.inner, ")")?;
@@ -74,9 +75,13 @@ impl<'a> AlethePrinter<'a> {
         write!(self.inner, " :rule {}", step.rule)?;
 
         if let [head, tail @ ..] = step.premises.as_slice() {
-            write!(self.inner, " :premises ({}", head.index)?;
+            write!(
+                self.inner,
+                " :premises ({}",
+                iter.get_premise(*head).index()
+            )?;
             for premise in tail {
-                write!(self.inner, " {}", premise.index)?;
+                write!(self.inner, " {}", iter.get_premise(*premise).index())?;
             }
             write!(self.inner, ")")?;
         }

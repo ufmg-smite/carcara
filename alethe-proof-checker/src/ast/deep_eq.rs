@@ -272,7 +272,7 @@ impl DeepEq for ProofCommand {
             (
                 ProofCommand::Assume { index: a_index, term: a_term },
                 ProofCommand::Assume { index: b_index, term: b_term },
-            ) => a_index == b_index && DeepEq::eq(checker, &a_term[0], &b_term[0]),
+            ) => a_index == b_index && DeepEq::eq(checker, a_term, b_term),
             (ProofCommand::Step(a), ProofCommand::Step(b)) => DeepEq::eq(checker, a, b),
             (ProofCommand::Subproof(a), ProofCommand::Subproof(b)) => DeepEq::eq(checker, a, b),
             _ => false,
@@ -283,7 +283,7 @@ impl DeepEq for ProofCommand {
 impl DeepEq for ProofStep {
     fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool {
         a.index == b.index
-            && DeepEq::eq(checker, a.clause.as_ref(), b.clause.as_ref())
+            && DeepEq::eq(checker, &a.clause, &b.clause)
             && a.rule == b.rule
             && a.premises == b.premises
             && DeepEq::eq(checker, &a.args, &b.args)

@@ -48,7 +48,7 @@ struct ParserState {
     function_defs: AHashMap<String, FunctionDef>,
     term_pool: TermPool,
     sort_declarations: AHashMap<String, usize>,
-    step_indices: SymbolTable<String, Premise>,
+    step_indices: SymbolTable<String, usize>,
 }
 
 /// A parser for the Alethe proof format.
@@ -422,7 +422,6 @@ impl<R: BufRead> Parser<R> {
             let (index, command) = match token {
                 Token::ReservedWord(Reserved::Assume) => {
                     let (index, term) = self.parse_assume_command()?;
-                    let term = Rc::new([term]);
                     (index.clone(), ProofCommand::Assume { index, term })
                 }
                 Token::ReservedWord(Reserved::Step) => {
@@ -458,8 +457,6 @@ impl<R: BufRead> Parser<R> {
                 ));
             }
 
-            let clause = command.clone_clause();
-
             commands_stack.last_mut().unwrap().push(command);
             if end_step_stack.last() == Some(&index) {
                 // If this is the last step in a subproof, we need to pop all the subproof data off
@@ -492,7 +489,7 @@ impl<R: BufRead> Parser<R> {
             }
             self.state
                 .step_indices
-                .insert(index.clone(), Premise { clause, index })
+                .insert(index, commands_stack.last().unwrap().len() - 1);
         }
         match commands_stack.len() {
             0 => unreachable!(),
@@ -584,13 +581,13 @@ impl<R: BufRead> Parser<R> {
 
     /// Parses a premise for a `step` command. This already converts it into the depth and command
     /// index used to reference commands in the AST.
-    fn parse_step_premise(&mut self) -> AletheResult<Premise> {
+    fn parse_step_premise(&mut self) -> AletheResult<(usize, usize)> {
         let position = self.current_position;
         let index = self.expect_symbol()?;
         self.state
             .step_indices
-            .get(&index)
-            .cloned()
+            .get_with_depth(&index)
+            .map(|(d, &i)| (d, i))
             .ok_or(Error::Parser(
                 ParserError::UndefinedStepIndex(index),
                 position,
@@ -721,11 +718,10 @@ impl<R: BufRead> Parser<R> {
     }
 
     /// Parses a clause of the form `(cl <term>*)`.
-    fn parse_clause(&mut self) -> AletheResult<Rc<[Rc<Term>]>> {
+    fn parse_clause(&mut self) -> AletheResult<Vec<Rc<Term>>> {
         self.expect_token(Token::OpenParen)?;
         self.expect_token(Token::ReservedWord(Reserved::Cl))?;
-        let vec = self.parse_sequence(|p| p.parse_term_expecting_sort(&Sort::Bool), false)?;
-        Ok(vec.into()) // Note: this moves the contents of the vector into a new allocation
+        self.parse_sequence(|p| p.parse_term_expecting_sort(&Sort::Bool), false)
     }
 
     /// Parses an argument for a `step` command.

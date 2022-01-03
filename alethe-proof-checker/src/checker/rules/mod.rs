@@ -11,11 +11,11 @@ pub type RuleResult = Result<(), CheckerError>;
 
 pub type Rule = fn(RuleArgs) -> RuleResult;
 
-pub type ReconstructionRule = fn(RuleArgs, String, &mut ProofBuilder) -> RuleResult;
+pub type ReconstructionRule = fn(RuleArgs, String, &mut ProofBuilder) -> Result<(), CheckerError>;
 
 pub struct RuleArgs<'a> {
     pub(super) conclusion: &'a [Rc<Term>],
-    pub(super) premises: &'a [Premise],
+    pub(super) premises: &'a [Premise<'a>],
     pub(super) args: &'a [ProofArg],
     pub(super) pool: &'a mut TermPool,
     pub(super) context: &'a mut [Context],
@@ -26,13 +26,35 @@ pub struct RuleArgs<'a> {
     pub(super) subproof_commands: Option<&'a [ProofCommand]>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct Premise<'a> {
+    pub command: &'a ProofCommand,
+    pub clause: &'a [Rc<Term>],
+    pub premise_index: (usize, usize),
+}
+
+impl<'a> Premise<'a> {
+    pub fn new(premise_index: (usize, usize), command: &'a ProofCommand) -> Self {
+        Self {
+            command,
+            clause: command.clause(),
+            premise_index,
+        }
+    }
+}
+
+fn get_single_term_from_command(command: &ProofCommand) -> Option<&Rc<Term>> {
+    match command.clause() {
+        [t] => Some(t),
+        _ => None,
+    }
+}
+
 /// Helper function to get a single term from a premise, or return a `CheckerError::BadPremise`
 /// error if it doesn't succeed.
-fn get_premise_term(premise: &Premise) -> Result<&Rc<Term>, CheckerError> {
-    match premise.clause.as_ref() {
-        [t] => Ok(t),
-        _ => Err(CheckerError::BadPremise(premise.index.clone())),
-    }
+fn get_premise_term<'a>(premise: &Premise<'a>) -> Result<&'a Rc<Term>, CheckerError> {
+    get_single_term_from_command(premise.command)
+        .ok_or_else(|| CheckerError::BadPremise(premise.command.index().to_string()))
 }
 
 /// Asserts that the argument is true, and returns `None` otherwise. `rassert!(arg)` is identical

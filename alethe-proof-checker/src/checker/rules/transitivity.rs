@@ -77,7 +77,7 @@ pub fn trans(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
 fn reconstruct_chain(
     conclusion: (&Rc<Term>, &Rc<Term>),
     premise_equalities: &mut [(&Rc<Term>, &Rc<Term>)],
-    premises: &mut [Premise],
+    premises: &mut [(usize, usize)],
     should_flip: &mut Vec<bool>,
 ) -> RuleResult {
     if conclusion.0 == conclusion.1 {
@@ -127,7 +127,7 @@ pub fn reconstruct_trans(
         .map(|premise| match_term_err!((= t u) = get_premise_term(premise)?))
         .collect::<Result<_, _>>()?;
 
-    let mut new_premises = premises.to_vec();
+    let mut new_premises: Vec<_> = premises.iter().map(|p| p.premise_index).collect();
     let mut should_flip = Vec::with_capacity(new_premises.len());
     reconstruct_chain(
         conclusion_equality,
@@ -156,7 +156,7 @@ pub fn reconstruct_trans(
             let (a, b) = premise_equalities[j];
             new_premises[j] = builder.add_symm_step(
                 pool,
-                new_premises[j].clone(),
+                new_premises[j],
                 (a.clone(), b.clone()),
                 // TODO: Avoid collisions when creating this index
                 format!("{}.t{}", command_index, i + 1),

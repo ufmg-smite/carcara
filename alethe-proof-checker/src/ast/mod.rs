@@ -44,13 +44,7 @@ impl Proof {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProofCommand {
     /// An `assume` command, of the form `(assume <symbol> <term>)`.
-    Assume {
-        index: String,
-
-        // We store the term as a reference counted one element array to be more uniform with how
-        // steps store their clause
-        term: Rc<[Rc<Term>; 1]>,
-    },
+    Assume { index: String, term: Rc<Term> },
 
     /// A `step` command.
     Step(ProofStep),
@@ -70,17 +64,9 @@ impl ProofCommand {
 
     pub fn clause(&self) -> &[Rc<Term>] {
         match self {
-            ProofCommand::Assume { term, .. } => term.as_ref(),
-            ProofCommand::Step(s) => s.clause.as_ref(),
+            ProofCommand::Assume { index: _, term } => std::slice::from_ref(term),
+            ProofCommand::Step(ProofStep { clause, .. }) => clause,
             ProofCommand::Subproof(s) => s.commands.last().unwrap().clause(),
-        }
-    }
-
-    pub fn clone_clause(&self) -> Rc<[Rc<Term>]> {
-        match self {
-            ProofCommand::Assume { term, .. } => term.clone().to_rc_of_slice(),
-            ProofCommand::Step(s) => s.clause.clone(),
-            ProofCommand::Subproof(s) => s.commands.last().unwrap().clone_clause(),
         }
     }
 }
@@ -90,9 +76,13 @@ impl ProofCommand {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProofStep {
     pub index: String,
-    pub clause: Rc<[Rc<Term>]>,
+    pub clause: Vec<Rc<Term>>,
     pub rule: String,
-    pub premises: Vec<Premise>,
+
+    /// Premises are indexed with two indices: The first indicates the depth of the subproof (where
+    /// 0 is the root proof) and the second is the index of the command in that subproof.
+    pub premises: Vec<(usize, usize)>,
+
     pub args: Vec<ProofArg>,
 
     // Currently, there is an issue with the `:discharge` attribute that is used by the `subproof`
@@ -100,14 +90,8 @@ pub struct ProofStep {
     // `h1`. Because of that, we currently ignore the values of this attribute for the purpose of
     // actually checking the rule. However, to be able to print it correctly, we need to parse and
     // record these values. For now, they are simply stored as strings -- eventually, they will be
-    // stored in a way similar to the `:premises` attribute
+    // stored using indices similarly to the `:premises` attribute
     pub discharge: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Premise {
-    pub clause: Rc<[Rc<Term>]>,
-    pub index: String,
 }
 
 /// A subproof. Subproofs are started by `anchor` commands, of the form `(anchor :step <symbol>

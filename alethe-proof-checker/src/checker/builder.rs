@@ -1,5 +1,8 @@
 use crate::ast::*;
 
+// TODO: The proof reconstruction currently creates invalid premise references. We need to update
+// the premise indices that reference steps that were reconstructed into more than one step.
+
 #[derive(Debug)]
 pub struct ProofBuilder {
     stack: Vec<Subproof>,
@@ -21,32 +24,34 @@ impl ProofBuilder {
         Self { stack: vec![root] }
     }
 
-    pub(super) fn push_command(&mut self, command: ProofCommand) {
-        self.stack.last_mut().unwrap().commands.push(command)
+    pub(super) fn push_command(&mut self, command: ProofCommand) -> (usize, usize) {
+        let current_subproof_commands = &mut self.stack.last_mut().unwrap().commands;
+        let index = current_subproof_commands.len();
+        current_subproof_commands.push(command);
+        (self.stack.len() - 1, index)
     }
 
-    pub(super) fn add_step(&mut self, step: ProofStep) {
+    pub(super) fn add_step(&mut self, step: ProofStep) -> (usize, usize) {
         self.push_command(ProofCommand::Step(step))
     }
 
     pub(super) fn add_symm_step(
         &mut self,
         pool: &mut TermPool,
-        original_premise: Premise,
+        original_premise: (usize, usize),
         original_equality: (Rc<Term>, Rc<Term>),
         index: String,
-    ) -> Premise {
+    ) -> (usize, usize) {
         let (a, b) = original_equality;
-        let clause: Rc<[_]> = vec![build_term!(pool, (= {b} {a}))].into();
+        let clause = vec![build_term!(pool, (= {b} {a}))];
         self.add_step(ProofStep {
-            index: index.clone(),
-            clause: clause.clone(),
+            index,
+            clause,
             rule: "symm".into(),
             premises: vec![original_premise],
             args: Vec::new(),
             discharge: Vec::new(),
-        });
-        Premise { clause, index }
+        })
     }
 
     pub(super) fn open_subproof(
@@ -66,7 +71,7 @@ impl ProofBuilder {
             return; // Can't close root subproof
         }
         let command = ProofCommand::Subproof(self.stack.pop().unwrap());
-        self.push_command(command)
+        self.push_command(command);
     }
 
     pub(super) fn end(&mut self) -> Vec<ProofCommand> {
