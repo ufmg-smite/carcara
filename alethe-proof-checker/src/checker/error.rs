@@ -17,6 +17,9 @@ pub enum CheckerError {
     #[error(transparent)]
     Substitution(#[from] SubstitutionError),
 
+    #[error("term '{0}' was not in original problem's assumptions")]
+    Assume(Rc<Term>),
+
     // Rule specific errors
     #[error(transparent)]
     Resolution(#[from] ResolutionError),
@@ -203,8 +206,12 @@ pub enum QuantifierError {
     #[error("expected quantifier term, got '{0}'")]
     ExpectedQuantifierTerm(Rc<Term>),
 
-    #[error("union of bindings in the left does not equal bindings in the right")]
-    JoinFailed, // TODO: Store bindings in this error
+    #[error("union of bindings '{left_outer}' and '{left_inner}' does not equal '{right}'")]
+    JoinFailed {
+        left_outer: BindingList,
+        left_inner: BindingList,
+        right: BindingList,
+    },
 
     #[error("unknown binding introduced in right-hand side: '{0}'")]
     CnfNewBindingIntroduced(String),

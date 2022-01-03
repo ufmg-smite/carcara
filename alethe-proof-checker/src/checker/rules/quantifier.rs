@@ -60,7 +60,14 @@ pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_eq(left, right)?;
 
     let combined = bindings_1.iter().chain(bindings_2).dedup();
-    rassert!(bindings_3.iter().eq(combined), QuantifierError::JoinFailed);
+    rassert!(
+        bindings_3.iter().eq(combined),
+        QuantifierError::JoinFailed {
+            left_outer: bindings_1.clone(),
+            left_inner: bindings_2.clone(),
+            right: bindings_3.clone()
+        }
+    );
     Ok(())
 }
 

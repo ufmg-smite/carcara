@@ -118,8 +118,7 @@ impl<'c> ProofChecker<'c> {
                             Ok(())
                         } else {
                             Err(Error::Checker {
-                                // TODO: Add specific error for this
-                                inner: CheckerError::Unspecified,
+                                inner: CheckerError::Assume(term.clone()),
                                 rule: "assume".into(),
                                 step: index.clone(),
                             })
