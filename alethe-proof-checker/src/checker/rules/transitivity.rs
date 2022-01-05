@@ -136,16 +136,16 @@ pub fn reconstruct_trans(
         &mut should_flip,
     )?;
 
+    // The length of `should_flip` may be smaller than that of `new_premises`. This can happen
+    // if there are premises in the step which are not needed to complete the transitivity
+    // chain. In that case, we simply remove them in the reconstructed step.
+    new_premises.truncate(should_flip.len());
+
     // If there are any premises that need flipping, we need to introduce `symm` steps to flip the
     // needed equalities
     let mut index_in_subproof = 0;
     for i in 0..new_premises.len() {
-        // The lenght of `should_flip` may be smaller than that of `new_premises`. This can happen
-        // if there are premises in the step which are not needed to complete the transitivity
-        // chain. In that case, we consider that theses premises don't need flipping. Ideally, we
-        // should remove them in the reconstructed step.
-        let should_flip = should_flip.get(i) == Some(&true);
-        new_premises[i] = if should_flip {
+        new_premises[i] = if should_flip[i] {
             let (a, b) = premise_equalities[i];
             index_in_subproof += 1;
             builder.add_symm_step(
