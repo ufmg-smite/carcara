@@ -127,7 +127,7 @@ impl<'c> ProofChecker<'c> {
                     };
 
                     if let Some(builder) = &mut self.builder {
-                        builder.push_command(command.clone());
+                        builder.push_command(command.clone(), false);
                     }
                     self.add_statistics_measurement(index, "assume*", time);
                 }
@@ -160,7 +160,9 @@ impl<'c> ProofChecker<'c> {
             Some(r) => r,
             None if self.config.skip_unknown_rules => {
                 if let Some(builder) = &mut self.builder {
-                    builder.push_command(ProofCommand::Step(step.clone()));
+                    let mut step = step.clone();
+                    builder.map_all_premises(&mut step);
+                    builder.add_step(step, false);
                 }
                 return Ok(());
             }
@@ -190,7 +192,9 @@ impl<'c> ProofChecker<'c> {
                 reconstruction_rule(rule_args, step.index.clone(), builder)?;
             } else {
                 rule(rule_args)?;
-                builder.push_command(ProofCommand::Step(step.clone()));
+                let mut step = step.clone();
+                builder.map_all_premises(&mut step);
+                builder.add_step(step, false);
             }
         } else {
             rule(rule_args)?;

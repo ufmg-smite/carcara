@@ -96,7 +96,7 @@ pub struct ProofStep {
 
 /// A subproof. Subproofs are started by `anchor` commands, of the form `(anchor :step <symbol>
 /// [:args <proof_args>]?)`, which specifies which step ends the subproof.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Subproof {
     pub commands: Vec<ProofCommand>,
     pub assignment_args: Vec<(String, Rc<Term>)>,

@@ -138,40 +138,39 @@ pub fn reconstruct_trans(
 
     // If there are any premises that need flipping, we need to introduce `symm` steps to flip the
     // needed equalities
-    if !should_flip.is_empty() {
-        // To make things easier, we convert `should_flip` from a vector of booleans into a vector
-        // of the indices of premises that should be flipped (indices refering to the
-        // `premise_equalities` and `new_premises` vectors)
-        let should_flip: Vec<_> = should_flip
-            .iter()
-            .enumerate()
-            .filter_map(|(i, &b)| b.then(|| i))
-            .collect();
-
-        for (i, &j) in should_flip.iter().enumerate() {
-            // `i` is the index in the `should_flip` vector, only used to number the steps we are
-            // creating. `j` is the index of the equality and the premise in the
-            // `premise_equalities` and `new_premises` vectors
-
-            let (a, b) = premise_equalities[j];
-            new_premises[j] = builder.add_symm_step(
+    let mut index_in_subproof = 0;
+    for i in 0..new_premises.len() {
+        // The lenght of `should_flip` may be smaller than that of `new_premises`. This can happen
+        // if there are premises in the step which are not needed to complete the transitivity
+        // chain. In that case, we consider that theses premises don't need flipping. Ideally, we
+        // should remove them in the reconstructed step.
+        let should_flip = should_flip.get(i) == Some(&true);
+        new_premises[i] = if should_flip {
+            let (a, b) = premise_equalities[i];
+            index_in_subproof += 1;
+            builder.add_symm_step(
                 pool,
-                new_premises[j],
+                new_premises[i],
                 (a.clone(), b.clone()),
                 // TODO: Avoid collisions when creating this index
-                format!("{}.t{}", command_index, i + 1),
-            );
-        }
+                format!("{}.t{}", command_index, index_in_subproof),
+            )
+        } else {
+            // If the premise didn't need flipping, we just need to map its index to the new
+            // index in the reconstructed proof
+            builder.map_index(new_premises[i])
+        };
     }
 
-    builder.add_step(ProofStep {
+    let reconstructed = ProofStep {
         index: command_index,
         clause: conclusion.into(),
         rule: "trans".into(),
         premises: new_premises,
         args: Vec::new(),
         discharge: Vec::new(),
-    });
+    };
+    builder.add_step(reconstructed, false);
     Ok(())
 }
 
