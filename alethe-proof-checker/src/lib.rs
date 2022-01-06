@@ -7,6 +7,7 @@ pub mod checker;
 pub mod parser;
 mod utils;
 
+use ast::ProofCommand;
 use checker::error::CheckerError;
 use parser::ParserError;
 use parser::Position;
@@ -41,7 +42,7 @@ pub fn check<P: AsRef<Path>>(
     skip_unknown_rules: bool,
     is_running_test: bool,
 ) -> Result<(), Error> {
-    let (proof, pool) = parser::parse_instance(
+    let (proof, mut pool) = parser::parse_instance(
         BufReader::new(File::open(problem_path)?),
         BufReader::new(File::open(proof_path)?),
     )?;
@@ -51,5 +52,25 @@ pub fn check<P: AsRef<Path>>(
         is_running_test,
         statistics: None,
     };
-    checker::ProofChecker::new(pool, config).check(&proof)
+    checker::ProofChecker::new(&mut pool, config).check(&proof)
+}
+
+pub fn check_and_reconstruct<P: AsRef<Path>>(
+    problem_path: P,
+    proof_path: P,
+    skip_unknown_rules: bool,
+) -> Result<Vec<ProofCommand>, Error> {
+    let (proof, mut pool) = parser::parse_instance(
+        BufReader::new(File::open(problem_path)?),
+        BufReader::new(File::open(proof_path)?),
+    )?;
+
+    let config = checker::Config {
+        skip_unknown_rules,
+        is_running_test: false,
+        statistics: None,
+    };
+    checker::ProofChecker::new(&mut pool, config)
+        .check_and_reconstruct(proof)
+        .map(|p| p.commands)
 }

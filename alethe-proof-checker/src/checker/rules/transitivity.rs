@@ -1,4 +1,6 @@
-use super::{assert_clause_len, get_premise_term, CheckerError, RuleArgs, RuleResult};
+use super::{
+    assert_clause_len, get_premise_term, CheckerError, Reconstructor, RuleArgs, RuleResult,
+};
 use crate::ast::*;
 
 /// Function to find a transitive chain given a conclusion equality and a series of premise
@@ -64,11 +66,111 @@ pub fn trans(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
 
     let conclusion = match_term_err!((= t u) = &conclusion[0])?;
     let mut premises: Vec<_> = premises
-        .into_iter()
-        .map(|command| match_term_err!((= t u) = get_premise_term(command)?))
+        .iter()
+        .map(|premise| match_term_err!((= t u) = get_premise_term(premise)?))
         .collect::<Result<_, _>>()?;
 
     find_chain(conclusion, &mut premises)
+}
+
+/// Similar to `find_chain`, but reorders the step premises vector to match the found chain
+fn reconstruct_chain(
+    conclusion: (&Rc<Term>, &Rc<Term>),
+    premise_equalities: &mut [(&Rc<Term>, &Rc<Term>)],
+    premises: &mut [(usize, usize)],
+    should_flip: &mut Vec<bool>,
+) -> RuleResult {
+    if conclusion.0 == conclusion.1 {
+        return Ok(());
+    }
+
+    let (index, next_link) = premise_equalities
+        .iter()
+        .enumerate()
+        .find_map(|(i, &(t, u))| {
+            if t == conclusion.0 {
+                should_flip.push(false);
+                Some((i, u))
+            } else if u == conclusion.0 {
+                should_flip.push(true);
+                Some((i, t))
+            } else {
+                None
+            }
+        })
+        .ok_or_else(|| {
+            let (a, b) = conclusion;
+            CheckerError::BrokenTransitivityChain(a.clone(), b.clone())
+        })?;
+
+    premise_equalities.swap(0, index);
+    premises.swap(0, index);
+
+    reconstruct_chain(
+        (next_link, conclusion.1),
+        &mut premise_equalities[1..],
+        &mut premises[1..],
+        should_flip,
+    )
+}
+
+pub fn reconstruct_trans(
+    RuleArgs { conclusion, premises, pool, .. }: RuleArgs,
+    command_index: String,
+    reconstructor: &mut Reconstructor,
+) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+
+    let conclusion_equality = match_term_err!((= t u) = &conclusion[0])?;
+    let mut premise_equalities: Vec<_> = premises
+        .iter()
+        .map(|premise| match_term_err!((= t u) = get_premise_term(premise)?))
+        .collect::<Result<_, _>>()?;
+
+    let mut new_premises: Vec<_> = premises.iter().map(|p| p.premise_index).collect();
+    let mut should_flip = Vec::with_capacity(new_premises.len());
+    reconstruct_chain(
+        conclusion_equality,
+        &mut premise_equalities,
+        &mut new_premises,
+        &mut should_flip,
+    )?;
+
+    // The length of `should_flip` may be smaller than that of `new_premises`. This can happen
+    // if there are premises in the step which are not needed to complete the transitivity
+    // chain. In that case, we simply remove them in the reconstructed step.
+    new_premises.truncate(should_flip.len());
+
+    // If there are any premises that need flipping, we need to introduce `symm` steps to flip the
+    // needed equalities
+    let mut index_in_subproof = 0;
+    for i in 0..new_premises.len() {
+        new_premises[i] = if should_flip[i] {
+            let (a, b) = premise_equalities[i];
+            index_in_subproof += 1;
+            reconstructor.add_symm_step(
+                pool,
+                new_premises[i],
+                (a.clone(), b.clone()),
+                // TODO: Avoid collisions when creating this index
+                format!("{}.t{}", command_index, index_in_subproof),
+            )
+        } else {
+            // If the premise didn't need flipping, we just need to map its index to the new
+            // index in the reconstructed proof
+            reconstructor.map_index(new_premises[i])
+        };
+    }
+
+    reconstructor.push_reconstructed_step(ProofStep {
+        index: command_index,
+        clause: conclusion.into(),
+        rule: "trans".into(),
+        premises: new_premises,
+        args: Vec::new(),
+        discharge: Vec::new(),
+    });
+    Ok(())
 }
 
 #[cfg(test)]

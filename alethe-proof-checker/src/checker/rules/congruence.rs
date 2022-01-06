@@ -1,6 +1,5 @@
 use super::{
-    assert_clause_len, assert_num_premises, get_single_term_from_command, CheckerError, RuleArgs,
-    RuleResult,
+    assert_clause_len, assert_num_premises, get_premise_term, CheckerError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::CongruenceError};
 
@@ -134,15 +133,11 @@ fn check_cong<'a>(
 
 pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
-    assert_num_premises(&premises, 1..)?;
+    assert_num_premises(premises, 1..)?;
 
     let premises: Vec<_> = premises
-        .into_iter()
-        .map(|command| {
-            get_single_term_from_command(command)
-                .and_then(|term| match_term!((= t u) = term))
-                .ok_or_else(|| CheckerError::BadPremise(command.index().to_string()))
-        })
+        .iter()
+        .map(|premise| match_term_err!((= t u) = get_premise_term(premise)?))
         .collect::<Result<_, _>>()?;
 
     let (f, g) = match_term_err!((= f g) = &conclusion[0])?;

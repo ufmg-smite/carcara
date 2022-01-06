@@ -1,10 +1,22 @@
 use super::{
     assert_clause_len, assert_eq, assert_is_expected, assert_is_expected_modulo_reordering,
-    assert_num_premises, assert_num_steps_in_subproof, get_clause_from_command, get_premise_term,
-    CheckerError, EqualityError, RuleArgs, RuleResult,
+    assert_num_premises, assert_num_steps_in_subproof, get_premise_term, CheckerError,
+    EqualityError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::SubproofError};
 use ahash::AHashSet;
+
+/// Similar to `get_premise_term`, but takes a `ProofCommand` instead of a `Premise`.
+fn get_command_term(command: &ProofCommand) -> Result<&Rc<Term>, CheckerError> {
+    match command.clause() {
+        [t] => Ok(t),
+        cl => Err(CheckerError::WrongLengthOfPremiseClause(
+            command.index().to_string(),
+            1.into(),
+            cl.len(),
+        )),
+    }
+}
 
 pub fn subproof(
     RuleArgs {
@@ -33,7 +45,7 @@ pub fn subproof(
     }
 
     let previous_command = &subproof_commands[subproof_commands.len() - 2];
-    let phi = match get_clause_from_command(previous_command) {
+    let phi = match previous_command.clause() {
         // If the last command has an empty clause as it's conclusion, we expect `phi` to be the
         // boolean constant `false`
         [] => pool.bool_false(),
@@ -67,7 +79,7 @@ pub fn bind(
     // The last command in the subproof is the one we are currently checking, so we look at the one
     // before that
     let previous_command = &subproof_commands[subproof_commands.len() - 2];
-    let (phi, phi_prime) = match_term_err!((= p q) = get_premise_term(previous_command)?)?;
+    let (phi, phi_prime) = match_term_err!((= p q) = get_command_term(previous_command)?)?;
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
 
@@ -155,7 +167,7 @@ pub fn r#let(
 
     // The u and u' in the conclusion must match the u and u' in the previous command in the
     // subproof
-    let previous_term = get_premise_term(&subproof_commands[subproof_commands.len() - 2])?;
+    let previous_term = get_command_term(&subproof_commands[subproof_commands.len() - 2])?;
 
     let (previous_u, previous_u_prime) = match_term_err!((= u u_prime) = previous_term)?;
     assert_eq(u, previous_u)?;
@@ -180,7 +192,7 @@ pub fn r#let(
         .collect::<Result<_, CheckerError>>()?;
     pairs.retain(|(s, t)| s != t); // The pairs where s == t don't need a premise to justify them
 
-    assert_num_premises(&premises, pairs.len())?;
+    assert_num_premises(premises, pairs.len())?;
 
     for (premise, (s, t)) in premises.iter().zip(pairs) {
         let (a, b) = match_term_err!((= a b) = get_premise_term(premise)?)?;
@@ -259,7 +271,7 @@ pub fn onepoint(
         None => (BindingList::EMPTY, right),
     };
 
-    let previous_term = get_premise_term(&subproof_commands[subproof_commands.len() - 2])?;
+    let previous_term = get_command_term(&subproof_commands[subproof_commands.len() - 2])?;
     let previous_equality = match_term_err!((= p q) = previous_term)?;
     rassert!(
         previous_equality == (left, right) || previous_equality == (right, left),
@@ -348,7 +360,7 @@ fn generic_skolemization_rule(
     let (quant, bindings, phi) = left.unwrap_quant_err()?;
     assert_is_expected(&quant, rule_type)?;
 
-    let previous_term = get_premise_term(&subproof_commands[subproof_commands.len() - 2])?;
+    let previous_term = get_command_term(&subproof_commands[subproof_commands.len() - 2])?;
     let previous_equality = match_term_err!((= p q) = previous_term)?;
     assert_eq(previous_equality.0, phi)?;
     assert_eq(previous_equality.1, psi)?;

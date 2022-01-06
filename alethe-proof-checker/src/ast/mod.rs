@@ -3,6 +3,7 @@
 #[macro_use]
 mod macros;
 mod deep_eq;
+mod iter;
 mod pool;
 pub(crate) mod printer;
 mod rc;
@@ -12,6 +13,7 @@ mod subterms;
 mod tests;
 
 pub use deep_eq::{are_alpha_equivalent, deep_eq, deep_eq_modulo_reordering, DeepEq};
+pub use iter::ProofIter;
 pub use pool::TermPool;
 pub use printer::print_proof;
 pub use rc::Rc;
@@ -26,14 +28,20 @@ use num_traits::ToPrimitive;
 use std::hash::Hash;
 
 /// A proof in the Alethe Proof Format.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Proof {
     pub premises: AHashSet<Rc<Term>>,
     pub commands: Vec<ProofCommand>,
 }
 
+impl Proof {
+    pub fn iter(&self) -> ProofIter {
+        ProofIter::new(&self.commands)
+    }
+}
+
 /// A proof command.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ProofCommand {
     /// An `assume` command, of the form `(assume <symbol> <term>)`.
     Assume { index: String, term: Rc<Term> },
@@ -42,11 +50,7 @@ pub enum ProofCommand {
     Step(ProofStep),
 
     /// A subproof.
-    Subproof {
-        commands: Vec<ProofCommand>,
-        assignment_args: Vec<(String, Rc<Term>)>,
-        variable_args: Vec<SortedVar>,
-    },
+    Subproof(Subproof),
 }
 
 impl ProofCommand {
@@ -54,14 +58,22 @@ impl ProofCommand {
         match self {
             ProofCommand::Assume { index, .. } => index,
             ProofCommand::Step(s) => &s.index,
-            ProofCommand::Subproof { commands, .. } => commands.last().unwrap().index(),
+            ProofCommand::Subproof(s) => s.commands.last().unwrap().index(),
+        }
+    }
+
+    pub fn clause(&self) -> &[Rc<Term>] {
+        match self {
+            ProofCommand::Assume { index: _, term } => std::slice::from_ref(term),
+            ProofCommand::Step(ProofStep { clause, .. }) => clause,
+            ProofCommand::Subproof(s) => s.commands.last().unwrap().clause(),
         }
     }
 }
 
 /// A `step` command, of the form `(step <symbol> <clause> :rule <symbol> [:premises (<symbol>+)]?
 /// [:args <proof_args>]?)`.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ProofStep {
     pub index: String,
     pub clause: Vec<Rc<Term>>,
@@ -82,8 +94,17 @@ pub struct ProofStep {
     pub discharge: Vec<String>,
 }
 
+/// A subproof. Subproofs are started by `anchor` commands, of the form `(anchor :step <symbol>
+/// [:args <proof_args>]?)`, which specifies which step ends the subproof.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Subproof {
+    pub commands: Vec<ProofCommand>,
+    pub assignment_args: Vec<(String, Rc<Term>)>,
+    pub variable_args: Vec<SortedVar>,
+}
+
 /// An argument for a `step` or `anchor` command.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ProofArg {
     /// An argument that is just a term.
     Term(Rc<Term>),

@@ -1,6 +1,6 @@
 use super::{
     error::{CheckerError, EqualityError},
-    Context,
+    Context, Reconstructor,
 };
 use crate::{
     ast::*,
@@ -11,9 +11,11 @@ pub type RuleResult = Result<(), CheckerError>;
 
 pub type Rule = fn(RuleArgs) -> RuleResult;
 
+pub type ReconstructionRule = fn(RuleArgs, String, &mut Reconstructor) -> Result<(), CheckerError>;
+
 pub struct RuleArgs<'a> {
     pub(super) conclusion: &'a [Rc<Term>],
-    pub(super) premises: Vec<&'a ProofCommand>,
+    pub(super) premises: &'a [Premise<'a>],
     pub(super) args: &'a [ProofArg],
     pub(super) pool: &'a mut TermPool,
     pub(super) context: &'a mut [Context],
@@ -24,29 +26,34 @@ pub struct RuleArgs<'a> {
     pub(super) subproof_commands: Option<&'a [ProofCommand]>,
 }
 
-fn get_single_term_from_command(command: &ProofCommand) -> Option<&Rc<Term>> {
-    match get_clause_from_command(command) {
-        [t] => Some(t),
-        _ => None,
-    }
+#[derive(Debug, Clone, Copy)]
+pub struct Premise<'a> {
+    pub command_index: &'a str,
+    pub clause: &'a [Rc<Term>],
+    pub premise_index: (usize, usize),
 }
 
-fn get_clause_from_command(command: &ProofCommand) -> &[Rc<Term>] {
-    match command {
-        // `assume` premises are interpreted as a clause with a single term
-        ProofCommand::Assume { index: _, term } => std::slice::from_ref(term),
-        ProofCommand::Step(ProofStep { clause, .. }) => clause,
-        ProofCommand::Subproof { commands, .. } => {
-            get_clause_from_command(commands.last().unwrap())
+impl<'a> Premise<'a> {
+    pub fn new(premise_index: (usize, usize), command: &'a ProofCommand) -> Self {
+        Self {
+            command_index: command.index(),
+            clause: command.clause(),
+            premise_index,
         }
     }
 }
 
-/// Helper function to get a single term from a command, or return a `CheckerError::BadPremise` error
-/// if it doesn't succeed.
-fn get_premise_term(premise: &ProofCommand) -> Result<&Rc<Term>, CheckerError> {
-    get_single_term_from_command(premise)
-        .ok_or_else(|| CheckerError::BadPremise(premise.index().to_string()))
+/// Helper function to get a single term from a premise, or return a
+/// `CheckerError::WrongLengthOfPremiseClause` error if it doesn't succeed.
+fn get_premise_term<'a>(premise: &Premise<'a>) -> Result<&'a Rc<Term>, CheckerError> {
+    match premise.clause {
+        [t] => Ok(t),
+        cl => Err(CheckerError::WrongLengthOfPremiseClause(
+            premise.command_index.to_string(),
+            1.into(),
+            cl.len(),
+        )),
+    }
 }
 
 /// Asserts that the argument is true, and returns `None` otherwise. `rassert!(arg)` is identical
@@ -63,7 +70,7 @@ macro_rules! rassert {
     };
 }
 
-fn assert_num_premises<T: Into<Range>>(premises: &[&ProofCommand], range: T) -> RuleResult {
+fn assert_num_premises<T: Into<Range>>(premises: &[Premise], range: T) -> RuleResult {
     let range = range.into();
     if !range.contains(premises.len()) {
         return Err(CheckerError::WrongNumberOfPremises(range, premises.len()));
@@ -167,10 +174,10 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
 
     for (i, (proof, expected)) in cases.iter().enumerate() {
         // This parses the definitions again for every case, which is not ideal
-        let (parsed, pool) = parse_instance(Cursor::new(definitions), Cursor::new(proof))
+        let (parsed, mut pool) = parse_instance(Cursor::new(definitions), Cursor::new(proof))
             .unwrap_or_else(|e| panic!("parser error during test \"{}\": {}", test_name, e));
         let mut checker = ProofChecker::new(
-            pool,
+            &mut pool,
             Config {
                 skip_unknown_rules: false,
                 is_running_test: true,

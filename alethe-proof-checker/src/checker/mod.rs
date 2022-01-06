@@ -1,4 +1,5 @@
 pub mod error;
+pub mod reconstruction;
 mod rules;
 
 use crate::{
@@ -8,7 +9,8 @@ use crate::{
 };
 use ahash::{AHashMap, AHashSet};
 use error::CheckerError;
-use rules::{Rule, RuleArgs, RuleResult};
+use reconstruction::Reconstructor;
+use rules::{Premise, ReconstructionRule, Rule, RuleArgs, RuleResult};
 use std::time::{Duration, Instant};
 
 struct Context {
@@ -22,6 +24,7 @@ struct Context {
 pub struct CheckerStatistics<'s> {
     pub file_name: &'s str,
     pub checking_time: &'s mut Duration,
+    pub reconstructing_time: &'s mut Duration,
     pub step_time: &'s mut Metrics<StepId>,
     pub step_time_by_file: &'s mut AHashMap<String, Metrics<StepId>>,
     pub step_time_by_rule: &'s mut AHashMap<String, Metrics<StepId>>,
@@ -35,34 +38,36 @@ pub struct Config<'c> {
 }
 
 pub struct ProofChecker<'c> {
-    pool: TermPool,
+    pool: &'c mut TermPool,
     config: Config<'c>,
     context: Vec<Context>,
+    reconstructor: Option<Reconstructor>,
 }
 
 impl<'c> ProofChecker<'c> {
-    pub fn new(pool: TermPool, config: Config<'c>) -> Self {
-        ProofChecker { pool, config, context: Vec::new() }
+    pub fn new(pool: &'c mut TermPool, config: Config<'c>) -> Self {
+        ProofChecker {
+            pool,
+            config,
+            context: Vec::new(),
+            reconstructor: None,
+        }
     }
 
     pub fn check(&mut self, proof: &Proof) -> AletheResult<()> {
         // Similarly to the parser, to avoid stack overflows in proofs with many nested subproofs,
         // we check the subproofs iteratively, instead of recursively
-
-        // A stack of the subproof commands, and the index of the command being currently checked
-        let mut commands_stack = vec![(0, proof.commands.as_slice())];
-
-        while let Some(&(i, commands)) = commands_stack.last() {
-            if i == commands.len() {
-                // If we got to the end without popping the commands vector off the stack, we must
-                // not be in a subproof
-                assert!(commands_stack.len() == 1);
-                break;
-            }
-            match &commands[i] {
+        let mut iter = proof.iter();
+        while let Some(command) = iter.next() {
+            match command {
                 ProofCommand::Step(step) => {
-                    let is_end_of_subproof = commands_stack.len() > 1 && i == commands.len() - 1;
-                    self.check_step(step, &commands_stack, is_end_of_subproof)
+                    let is_end_of_subproof = iter.is_end_step();
+
+                    // If this step ends a subproof, it might need to implicitly reference the
+                    // other commands in the subproof
+                    let subproof_commands =
+                        is_end_of_subproof.then(|| iter.current_subproof().unwrap());
+                    self.check_step(step, subproof_commands, &iter)
                         .map_err(|e| Error::Checker {
                             inner: e,
                             rule: step.rule.clone(),
@@ -73,30 +78,30 @@ impl<'c> ProofChecker<'c> {
                     // commands off of the stack. The parser already ensures that the last command
                     // in a subproof is always a `step` command
                     if is_end_of_subproof {
-                        commands_stack.pop();
                         self.context.pop();
+                        if let Some(reconstructor) = &mut self.reconstructor {
+                            reconstructor.close_subproof();
+                        }
                     }
-                    Ok(())
                 }
-                ProofCommand::Subproof {
-                    commands: inner_commands,
-                    assignment_args,
-                    variable_args,
-                } => {
+                ProofCommand::Subproof(s) => {
                     let time = Instant::now();
-                    let step_index = commands[i].index();
+                    let step_index = command.index();
 
-                    let new_context =
-                        self.build_context(assignment_args, variable_args)
-                            .map_err(|e| Error::Checker {
-                                inner: e.into(),
-                                rule: "anchor".into(),
-                                step: step_index.to_string(),
-                            })?;
+                    let new_context = self
+                        .build_context(&s.assignment_args, &s.variable_args)
+                        .map_err(|e| Error::Checker {
+                            inner: e.into(),
+                            rule: "anchor".into(),
+                            step: step_index.to_string(),
+                        })?;
                     self.context.push(new_context);
-                    commands_stack.push((0, inner_commands));
+
+                    if let Some(reconstructor) = &mut self.reconstructor {
+                        reconstructor.open_subproof();
+                    }
+
                     self.add_statistics_measurement(step_index, "anchor*", time);
-                    continue;
                 }
                 ProofCommand::Assume { index, term } => {
                     let time = Instant::now();
@@ -106,76 +111,96 @@ impl<'c> ProofChecker<'c> {
                     // it is inside a subproof. Since the unit tests for the rules don't define the
                     // original problem, but sometimes use `assume` commands, we also skip the
                     // command if we are in a testing context.
-                    let result = if self.config.is_running_test || commands_stack.len() > 1 {
-                        Ok(())
-                    } else {
+                    if !self.config.is_running_test && !iter.is_in_subproof() {
                         let is_valid = proof.premises.contains(term)
                             || proof
                                 .premises
                                 .iter()
                                 .any(|u| deep_eq_modulo_reordering(term, u));
-                        if is_valid {
-                            Ok(())
-                        } else {
-                            Err(Error::Checker {
+                        if !is_valid {
+                            return Err(Error::Checker {
                                 inner: CheckerError::Assume(term.clone()),
                                 rule: "assume".into(),
                                 step: index.clone(),
-                            })
+                            });
                         }
                     };
-                    self.add_statistics_measurement(index, "assume*", time);
-                    result
-                }
-            }?;
-            commands_stack.last_mut().unwrap().0 += 1;
-        }
 
+                    if let Some(reconstructor) = &mut self.reconstructor {
+                        reconstructor.signal_unchanged();
+                    }
+                    self.add_statistics_measurement(index, "assume*", time);
+                }
+            }
+        }
         Ok(())
+    }
+
+    pub fn check_and_reconstruct(&mut self, mut proof: Proof) -> AletheResult<Proof> {
+        self.reconstructor = Some(Reconstructor::new());
+        let result = self.check(&proof);
+
+        // We reset `self.reconstructor` before returning any errors encountered while checking so
+        // we don't leave the checker in an invalid state
+        let mut reconstructor = self.reconstructor.take().unwrap();
+        result?;
+
+        let reconstructing_time = Instant::now();
+        proof.commands = reconstructor.end(proof.commands);
+        if let Some(stats) = &mut self.config.statistics {
+            *stats.reconstructing_time += reconstructing_time.elapsed();
+        }
+        Ok(proof)
     }
 
     fn check_step<'a>(
         &mut self,
-        ProofStep {
-            index,
-            clause,
-            rule: rule_name,
-            premises,
-            args,
-            discharge: _, // The discharge attribute is not used when checking
-        }: &'a ProofStep,
-        commands_stack: &'a [(usize, &'a [ProofCommand])],
-        is_end_of_subproof: bool,
+        step: &'a ProofStep,
+        subproof_commands: Option<&'a [ProofCommand]>,
+        iter: &'a ProofIter<'a>,
     ) -> RuleResult {
         let time = Instant::now();
-        let rule = match Self::get_rule(rule_name) {
+
+        let rule = match Self::get_rule(&step.rule) {
             Some(r) => r,
-            None if self.config.skip_unknown_rules => return Ok(()),
+            None if self.config.skip_unknown_rules => {
+                if let Some(reconstructor) = &mut self.reconstructor {
+                    reconstructor.signal_unchanged();
+                }
+                return Ok(());
+            }
             None => return Err(CheckerError::UnknownRule),
         };
-        let premises = premises
+
+        let premises: Vec<_> = step
+            .premises
             .iter()
-            .map(|&(depth, i)| &commands_stack[depth].1[i])
+            .map(|&p| {
+                let command = iter.get_premise(p);
+                Premise::new(p, command)
+            })
             .collect();
 
-        // If this step ends a subproof, it might need to implicitly reference the other commands
-        // in the subproof. Therefore, we pass them via the `subproof_commands` field
-        let subproof_commands = if is_end_of_subproof {
-            Some(commands_stack.last().unwrap().1)
-        } else {
-            None
-        };
-
         let rule_args = RuleArgs {
-            conclusion: clause,
-            premises,
-            args,
-            pool: &mut self.pool,
+            conclusion: &step.clause,
+            premises: &premises,
+            args: &step.args,
+            pool: self.pool,
             context: &mut self.context,
             subproof_commands,
         };
-        rule(rule_args)?;
-        self.add_statistics_measurement(index, rule_name, time);
+
+        if let Some(reconstructor) = &mut self.reconstructor {
+            if let Some(reconstruction_rule) = Self::get_reconstruction_rule(&step.rule) {
+                reconstruction_rule(rule_args, step.index.clone(), reconstructor)?;
+            } else {
+                rule(rule_args)?;
+                reconstructor.signal_unchanged();
+            }
+        } else {
+            rule(rule_args)?;
+        }
+        self.add_statistics_measurement(&step.index, &step.rule, time);
         Ok(())
     }
 
@@ -199,9 +224,9 @@ impl<'c> ProofChecker<'c> {
         for (var, value) in assignment_args.iter() {
             let var_term = terminal!(var var; self.pool.add_term(Term::Sort(value.sort().clone())));
             let var_term = self.pool.add_term(var_term);
-            substitution.insert(&mut self.pool, var_term.clone(), value.clone())?;
+            substitution.insert(self.pool, var_term.clone(), value.clone())?;
             let new_value = substitution_until_fixed_point.apply(&mut self.pool, value)?;
-            substitution_until_fixed_point.insert(&mut self.pool, var_term, new_value)?;
+            substitution_until_fixed_point.insert(self.pool, var_term, new_value)?;
         }
 
         // Some rules (notably `refl`) need to apply the substitutions introduced by all the
@@ -219,7 +244,7 @@ impl<'c> ProofChecker<'c> {
                 cumulative_substitution.insert(k.clone(), value.clone());
             }
         }
-        let cumulative_substitution = Substitution::new(&mut self.pool, cumulative_substitution)?;
+        let cumulative_substitution = Substitution::new(self.pool, cumulative_substitution)?;
 
         let bindings = variable_args.iter().cloned().collect();
         Ok(Context {
@@ -350,6 +375,15 @@ impl<'c> ProofChecker<'c> {
             // Special rule that always checks as valid. It is mostly used in tests
             "trust" => |_| Ok(()),
 
+            _ => return None,
+        })
+    }
+
+    fn get_reconstruction_rule(rule_name: &str) -> Option<ReconstructionRule> {
+        use rules::*;
+
+        Some(match rule_name {
+            "trans" => transitivity::reconstruct_trans,
             _ => return None,
         })
     }

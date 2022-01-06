@@ -4,7 +4,9 @@ mod logger;
 mod path_args;
 
 use ahash::AHashSet;
-use alethe_proof_checker::{ast::print_proof, check, checker::ProofChecker, parser, AletheResult};
+use alethe_proof_checker::{
+    ast::print_proof, check, check_and_reconstruct, checker::ProofChecker, parser, AletheResult,
+};
 use ansi_term::Color;
 use clap::{App, AppSettings, Arg, ArgGroup, ArgMatches, SubCommand};
 use error::CliError;
@@ -40,6 +42,11 @@ fn app(version_string: &str) -> App<'static, '_> {
                     .short("s")
                     .long("skip-unknown-rules")
                     .help("Skips rules that are not yet implemented"),
+            )
+            .arg(
+                Arg::with_name("reconstruct")
+                    .long("reconstruct")
+                    .help("Reconstruct proof with more fine-grained steps"),
             ),
         SubCommand::with_name("parse")
             .about("Parses a proof file and prints the AST")
@@ -66,6 +73,11 @@ fn app(version_string: &str) -> App<'static, '_> {
                     .long("jobs")
                     .default_value("1")
                     .help("Number of threads to use to run the benchmarks"),
+            )
+            .arg(
+                Arg::with_name("reconstruct")
+                    .long("reconstruct")
+                    .help("Also reconstruct each proof in addition to parsing and checking"),
             )
             .arg(
                 Arg::with_name("sort-by-total")
@@ -182,8 +194,14 @@ fn check_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         None => infer_problem_path(&proof_file)?,
     };
     let skip = matches.is_present("skip-unknown-rules");
-    check(problem_file, proof_file, skip, false)?;
-    println!("true");
+
+    if matches.is_present("reconstruct") {
+        let reconstructed = check_and_reconstruct(problem_file, proof_file, skip)?;
+        print_proof(&reconstructed)?;
+    } else {
+        check(problem_file, proof_file, skip, false)?;
+        println!("true");
+    }
     Ok(())
 }
 
@@ -199,7 +217,7 @@ fn parse_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
     );
     let (proof, _) =
         parser::parse_instance(problem, proof).map_err(alethe_proof_checker::Error::from)?;
-    print_proof(&proof)?;
+    print_proof(&proof.commands)?;
     Ok(())
 }
 
@@ -215,6 +233,7 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         .map_err(|_| CliError::InvalidArgument(num_jobs.to_string()))?;
 
     let sort_by_total = matches.is_present("sort-by-total");
+    let reconstruct = matches.is_present("reconstruct");
 
     let instances = get_instances_from_paths(matches.values_of("files").unwrap())?;
 
@@ -228,19 +247,30 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         instances.len(),
         num_runs
     );
-    let results = benchmarking::run_benchmark(&instances, num_runs, num_jobs)?;
+    let results = benchmarking::run_benchmark(&instances, num_runs, num_jobs, reconstruct)?;
 
-    if sort_by_total {
-        println!("parsing:            {:#}", results.parsing());
-        println!("checking:           {:#}", results.checking());
-        println!("parsing + checking: {:#}", results.parsing_checking());
-        println!("total:              {:#}", results.total());
-    } else {
-        println!("parsing:            {}", results.parsing());
-        println!("checking:           {}", results.checking());
-        println!("parsing + checking: {}", results.parsing_checking());
-        println!("total:              {}", results.total());
+    let [parsing, checking, reconstructing, accounted_for, total] = [
+        results.parsing(),
+        results.checking(),
+        results.reconstructing(),
+        results.total_accounted_for(),
+        results.total(),
+    ]
+    .map(|m| {
+        if sort_by_total {
+            format!("{:#}", m)
+        } else {
+            format!("{}", m)
+        }
+    });
+
+    println!("parsing:             {}", parsing);
+    println!("checking:            {}", checking);
+    if reconstruct {
+        println!("reconstructing:      {}", reconstructing);
     }
+    println!("total accounted for: {}", accounted_for);
+    println!("total:               {}", total);
 
     let data_by_rule = results.step_time_by_rule();
     let mut data_by_rule: Vec<_> = data_by_rule.iter().collect();

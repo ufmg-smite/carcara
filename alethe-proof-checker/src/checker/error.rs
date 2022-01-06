@@ -98,9 +98,6 @@ pub enum CheckerError {
     #[error("expected term '{1}' to appear in '{0}' term")]
     TermDoesntApperInOp(Operator, Rc<Term>),
 
-    #[error("bad premise: '{0}'")]
-    BadPremise(String), // TODO: This error is too general
-
     #[error("expected {1} terms in clause of step '{0}', got {2}")]
     WrongLengthOfPremiseClause(String, Range, usize),
 

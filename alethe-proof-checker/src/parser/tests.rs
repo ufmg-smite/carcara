@@ -596,7 +596,7 @@ fn test_premises_in_subproofs() {
     let proof = parse_proof(input);
     assert_eq!(proof.commands.len(), 3);
     let subproof = match &proof.commands[2] {
-        ProofCommand::Subproof { commands, .. } => commands,
+        ProofCommand::Subproof(s) => &s.commands,
         _ => panic!(),
     };
     assert_eq!(subproof.len(), 3);
@@ -625,7 +625,7 @@ fn test_premises_in_subproofs() {
     assert_deep_eq!(
         &subproof[2],
         &ProofCommand::Step(ProofStep {
-            index: "t3.t3".into(),
+            index: "t3".into(),
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: vec![(0, 0), (1, 0), (0, 1), (1, 1)],
