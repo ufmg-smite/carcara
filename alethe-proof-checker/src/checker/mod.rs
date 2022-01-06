@@ -9,7 +9,7 @@ use crate::{
 };
 use ahash::{AHashMap, AHashSet};
 use error::CheckerError;
-use reconstruction::ProofBuilder;
+use reconstruction::Reconstructor;
 use rules::{Premise, ReconstructionRule, Rule, RuleArgs, RuleResult};
 use std::time::{Duration, Instant};
 
@@ -40,7 +40,7 @@ pub struct ProofChecker<'c> {
     pool: &'c mut TermPool,
     config: Config<'c>,
     context: Vec<Context>,
-    builder: Option<ProofBuilder>,
+    reconstructor: Option<Reconstructor>,
 }
 
 impl<'c> ProofChecker<'c> {
@@ -49,7 +49,7 @@ impl<'c> ProofChecker<'c> {
             pool,
             config,
             context: Vec::new(),
-            builder: None,
+            reconstructor: None,
         }
     }
 
@@ -78,8 +78,8 @@ impl<'c> ProofChecker<'c> {
                     // in a subproof is always a `step` command
                     if is_end_of_subproof {
                         self.context.pop();
-                        if let Some(builder) = &mut self.builder {
-                            builder.close_subproof();
+                        if let Some(reconstructor) = &mut self.reconstructor {
+                            reconstructor.close_subproof();
                         }
                     }
                 }
@@ -96,8 +96,8 @@ impl<'c> ProofChecker<'c> {
                         })?;
                     self.context.push(new_context);
 
-                    if let Some(builder) = &mut self.builder {
-                        builder.open_subproof();
+                    if let Some(reconstructor) = &mut self.reconstructor {
+                        reconstructor.open_subproof();
                     }
 
                     self.add_statistics_measurement(step_index, "anchor*", time);
@@ -126,8 +126,8 @@ impl<'c> ProofChecker<'c> {
                         }
                     };
 
-                    if let Some(builder) = &mut self.builder {
-                        builder.signal_unchanged();
+                    if let Some(reconstructor) = &mut self.reconstructor {
+                        reconstructor.signal_unchanged();
                     }
                     self.add_statistics_measurement(index, "assume*", time);
                 }
@@ -137,15 +137,15 @@ impl<'c> ProofChecker<'c> {
     }
 
     pub fn check_and_reconstruct(&mut self, mut proof: Proof) -> AletheResult<Proof> {
-        self.builder = Some(ProofBuilder::new());
+        self.reconstructor = Some(Reconstructor::new());
         let result = self.check(&proof);
 
-        // We reset `self.builder` before returning any errors encountered while checking so we
-        // don't leave the checker in an invalid state
-        let mut builder = self.builder.take().unwrap();
+        // We reset `self.reconstructor` before returning any errors encountered while checking so
+        // we don't leave the checker in an invalid state
+        let mut reconstructor = self.reconstructor.take().unwrap();
         result?;
 
-        proof.commands = builder.end(proof.commands);
+        proof.commands = reconstructor.end(proof.commands);
         Ok(proof)
     }
 
@@ -160,8 +160,8 @@ impl<'c> ProofChecker<'c> {
         let rule = match Self::get_rule(&step.rule) {
             Some(r) => r,
             None if self.config.skip_unknown_rules => {
-                if let Some(builder) = &mut self.builder {
-                    builder.signal_unchanged();
+                if let Some(reconstructor) = &mut self.reconstructor {
+                    reconstructor.signal_unchanged();
                 }
                 return Ok(());
             }
@@ -186,12 +186,12 @@ impl<'c> ProofChecker<'c> {
             subproof_commands,
         };
 
-        if let Some(builder) = &mut self.builder {
+        if let Some(reconstructor) = &mut self.reconstructor {
             if let Some(reconstruction_rule) = Self::get_reconstruction_rule(&step.rule) {
-                reconstruction_rule(rule_args, step.index.clone(), builder)?;
+                reconstruction_rule(rule_args, step.index.clone(), reconstructor)?;
             } else {
                 rule(rule_args)?;
-                builder.signal_unchanged();
+                reconstructor.signal_unchanged();
             }
         } else {
             rule(rule_args)?;

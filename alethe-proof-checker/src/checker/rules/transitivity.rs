@@ -1,5 +1,5 @@
 use super::{
-    assert_clause_len, get_premise_term, CheckerError, ProofBuilder, RuleArgs, RuleResult,
+    assert_clause_len, get_premise_term, CheckerError, Reconstructor, RuleArgs, RuleResult,
 };
 use crate::ast::*;
 
@@ -117,7 +117,7 @@ fn reconstruct_chain(
 pub fn reconstruct_trans(
     RuleArgs { conclusion, premises, pool, .. }: RuleArgs,
     command_index: String,
-    builder: &mut ProofBuilder,
+    reconstructor: &mut Reconstructor,
 ) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
 
@@ -148,7 +148,7 @@ pub fn reconstruct_trans(
         new_premises[i] = if should_flip[i] {
             let (a, b) = premise_equalities[i];
             index_in_subproof += 1;
-            builder.add_symm_step(
+            reconstructor.add_symm_step(
                 pool,
                 new_premises[i],
                 (a.clone(), b.clone()),
@@ -158,11 +158,11 @@ pub fn reconstruct_trans(
         } else {
             // If the premise didn't need flipping, we just need to map its index to the new
             // index in the reconstructed proof
-            builder.map_index(new_premises[i])
+            reconstructor.map_index(new_premises[i])
         };
     }
 
-    builder.push_reconstructed_step(ProofStep {
+    reconstructor.push_reconstructed_step(ProofStep {
         index: command_index,
         clause: conclusion.into(),
         rule: "trans".into(),
