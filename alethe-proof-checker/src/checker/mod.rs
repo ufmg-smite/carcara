@@ -1,5 +1,5 @@
-pub mod builder;
 pub mod error;
+pub mod reconstruction;
 mod rules;
 
 use crate::{
@@ -8,8 +8,8 @@ use crate::{
     AletheResult, Error,
 };
 use ahash::{AHashMap, AHashSet};
-use builder::ProofBuilder;
 use error::CheckerError;
+use reconstruction::ProofBuilder;
 use rules::{Premise, ReconstructionRule, Rule, RuleArgs, RuleResult};
 use std::time::{Duration, Instant};
 
