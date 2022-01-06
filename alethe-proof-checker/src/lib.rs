@@ -70,5 +70,7 @@ pub fn check_and_reconstruct<P: AsRef<Path>>(
         is_running_test: false,
         statistics: None,
     };
-    checker::ProofChecker::new(&mut pool, config).check_and_reconstruct(&proof)
+    checker::ProofChecker::new(&mut pool, config)
+        .check_and_reconstruct(proof)
+        .map(|p| p.commands)
 }

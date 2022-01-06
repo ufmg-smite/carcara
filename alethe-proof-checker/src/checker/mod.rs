@@ -97,7 +97,7 @@ impl<'c> ProofChecker<'c> {
                     self.context.push(new_context);
 
                     if let Some(builder) = &mut self.builder {
-                        builder.open_subproof(s.assignment_args.clone(), s.variable_args.clone());
+                        builder.open_subproof();
                     }
 
                     self.add_statistics_measurement(step_index, "anchor*", time);
@@ -127,7 +127,7 @@ impl<'c> ProofChecker<'c> {
                     };
 
                     if let Some(builder) = &mut self.builder {
-                        builder.push_command(command.clone(), false);
+                        builder.signal_unchanged();
                     }
                     self.add_statistics_measurement(index, "assume*", time);
                 }
@@ -136,16 +136,17 @@ impl<'c> ProofChecker<'c> {
         Ok(())
     }
 
-    pub fn check_and_reconstruct(&mut self, proof: &Proof) -> AletheResult<Vec<ProofCommand>> {
+    pub fn check_and_reconstruct(&mut self, mut proof: Proof) -> AletheResult<Proof> {
         self.builder = Some(ProofBuilder::new());
-        let result = self.check(proof);
+        let result = self.check(&proof);
 
         // We reset `self.builder` before returning any errors encountered while checking so we
         // don't leave the checker in an invalid state
         let mut builder = self.builder.take().unwrap();
         result?;
 
-        Ok(builder.end())
+        proof.commands = builder.end(proof.commands);
+        Ok(proof)
     }
 
     fn check_step<'a>(
@@ -160,9 +161,7 @@ impl<'c> ProofChecker<'c> {
             Some(r) => r,
             None if self.config.skip_unknown_rules => {
                 if let Some(builder) = &mut self.builder {
-                    let mut step = step.clone();
-                    builder.map_all_premises(&mut step);
-                    builder.add_step(step, false);
+                    builder.signal_unchanged();
                 }
                 return Ok(());
             }
@@ -192,9 +191,7 @@ impl<'c> ProofChecker<'c> {
                 reconstruction_rule(rule_args, step.index.clone(), builder)?;
             } else {
                 rule(rule_args)?;
-                let mut step = step.clone();
-                builder.map_all_premises(&mut step);
-                builder.add_step(step, false);
+                builder.signal_unchanged();
             }
         } else {
             rule(rule_args)?;

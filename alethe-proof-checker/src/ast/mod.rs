@@ -28,7 +28,7 @@ use num_traits::ToPrimitive;
 use std::hash::Hash;
 
 /// A proof in the Alethe Proof Format.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Proof {
     pub premises: AHashSet<Rc<Term>>,
     pub commands: Vec<ProofCommand>,

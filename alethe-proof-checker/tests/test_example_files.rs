@@ -31,8 +31,7 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> AletheResult<()> {
 
     // Then, we check it while reconstructing the proof
     let mut checker = checker::ProofChecker::new(&mut pool, test_config());
-    let commands = checker.check_and_reconstruct(&proof)?;
-    let reconstructed = ast::Proof { premises: proof.premises, commands };
+    let reconstructed = checker.check_and_reconstruct(proof)?;
 
     // After that, we check the reconstructed proof normally, to make sure it is valid
     checker::ProofChecker::new(&mut pool, test_config()).check(&reconstructed)?;
@@ -40,8 +39,8 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> AletheResult<()> {
     // Finally, we reconstruct the already reconstructed proof, to make sure the reconstruction
     // step is idempotent
     let mut checker = checker::ProofChecker::new(&mut pool, test_config());
-    let reconstructed_twice = checker.check_and_reconstruct(&reconstructed)?;
-    assert_eq!(reconstructed.commands, reconstructed_twice);
+    let reconstructed_twice = checker.check_and_reconstruct(reconstructed.clone())?;
+    assert_eq!(reconstructed.commands, reconstructed_twice.commands);
 
     Ok(())
 }

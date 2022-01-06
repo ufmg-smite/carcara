@@ -162,15 +162,14 @@ pub fn reconstruct_trans(
         };
     }
 
-    let reconstructed = ProofStep {
+    builder.push_reconstructed_step(ProofStep {
         index: command_index,
         clause: conclusion.into(),
         rule: "trans".into(),
         premises: new_premises,
         args: Vec::new(),
         discharge: Vec::new(),
-    };
-    builder.add_step(reconstructed, false);
+    });
     Ok(())
 }
 
