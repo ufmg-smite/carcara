@@ -165,7 +165,8 @@ type RunId = (String, usize);
 pub struct BenchmarkResults {
     pub parsing: Metrics<RunId>,
     pub checking: Metrics<RunId>,
-    pub parsing_checking: Metrics<RunId>,
+    pub reconstructing: Metrics<RunId>,
+    pub total_accounted_for: Metrics<RunId>,
     pub total: Metrics<RunId>,
     pub step_time: Metrics<StepId>,
     pub step_time_by_file: AHashMap<String, Metrics<StepId>>,
@@ -187,12 +188,17 @@ impl BenchmarkResults {
         &self.checking
     }
 
-    /// The combined time per run to parse and check all the steps in the proof.
-    pub fn parsing_checking(&self) -> &Metrics<RunId> {
-        &self.parsing_checking
+    /// The time per run to reconstruct the proof.
+    pub fn reconstructing(&self) -> &Metrics<RunId> {
+        &self.reconstructing
     }
 
-    /// The total time spent per run. Should be pretty similar to `total_parsing_checking_time`.
+    /// The combined time per run to parse, check, and reconstruct all the steps in the proof.
+    pub fn total_accounted_for(&self) -> &Metrics<RunId> {
+        &self.total_accounted_for
+    }
+
+    /// The total time spent per run. Should be pretty similar to `total_accounted_for`.
     pub fn total(&self) -> &Metrics<RunId> {
         &self.total
     }
@@ -238,7 +244,8 @@ impl BenchmarkResults {
         Self {
             parsing: a.parsing.combine(b.parsing),
             checking: a.checking.combine(b.checking),
-            parsing_checking: a.parsing_checking.combine(b.parsing_checking),
+            reconstructing: a.reconstructing.combine(b.reconstructing),
+            total_accounted_for: a.total_accounted_for.combine(b.total_accounted_for),
             total: a.total.combine(b.total),
             step_time: a.step_time.combine(b.step_time),
             step_time_by_file: combine_map(a.step_time_by_file, b.step_time_by_file),

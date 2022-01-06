@@ -10,6 +10,7 @@ use std::{
 fn run_instance(
     (problem_file, proof_file): &(PathBuf, PathBuf),
     num_runs: usize,
+    reconstruct: bool,
 ) -> Result<BenchmarkResults, alethe_proof_checker::Error> {
     let mut result = BenchmarkResults::new();
     let proof_file_name = proof_file.to_str().unwrap();
@@ -24,26 +25,36 @@ fn run_instance(
         let parsing_time = parsing_time.elapsed();
 
         let mut checking_time = Duration::ZERO;
+        let mut reconstructing_time = Duration::ZERO;
         let config = checker::Config {
             skip_unknown_rules: false,
             is_running_test: false,
             statistics: Some(checker::CheckerStatistics {
                 file_name: proof_file_name,
                 checking_time: &mut checking_time,
+                reconstructing_time: &mut reconstructing_time,
                 step_time: &mut result.step_time,
                 step_time_by_file: &mut result.step_time_by_file,
                 step_time_by_rule: &mut result.step_time_by_rule,
             }),
         };
-        checker::ProofChecker::new(&mut pool, config).check(&proof)?;
+
+        let mut checker = checker::ProofChecker::new(&mut pool, config);
+        if reconstruct {
+            checker.check_and_reconstruct(proof)?;
+        } else {
+            checker.check(&proof)?;
+        }
+
         let total_time = total_time.elapsed();
 
         let run_id = (proof_file_name.to_string(), i);
         result.parsing.add(&run_id, parsing_time);
         result.checking.add(&run_id, checking_time);
+        result.reconstructing.add(&run_id, reconstructing_time);
         result
-            .parsing_checking
-            .add(&run_id, parsing_time + checking_time);
+            .total_accounted_for
+            .add(&run_id, parsing_time + checking_time + reconstructing_time);
         result.total.add(&run_id, total_time);
     }
     Ok(result)
@@ -53,6 +64,7 @@ pub fn run_benchmark(
     instances: &[(PathBuf, PathBuf)],
     num_runs: usize,
     num_jobs: usize,
+    reconstruct: bool,
 ) -> Result<BenchmarkResults, alethe_proof_checker::Error> {
     // Configure rayon to use the right number of threads and to reserve enough stack space for
     // them
@@ -65,7 +77,7 @@ pub fn run_benchmark(
     let result = instances
         .par_iter()
         .map(|instance| {
-            run_instance(instance, num_runs).unwrap_or_else(|e| {
+            run_instance(instance, num_runs, reconstruct).unwrap_or_else(|e| {
                 log::error!(
                     "encountered error in instance {}: {:?}",
                     instance.1.to_str().unwrap(),

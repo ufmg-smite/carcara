@@ -24,6 +24,7 @@ struct Context {
 pub struct CheckerStatistics<'s> {
     pub file_name: &'s str,
     pub checking_time: &'s mut Duration,
+    pub reconstructing_time: &'s mut Duration,
     pub step_time: &'s mut Metrics<StepId>,
     pub step_time_by_file: &'s mut AHashMap<String, Metrics<StepId>>,
     pub step_time_by_rule: &'s mut AHashMap<String, Metrics<StepId>>,
@@ -145,7 +146,11 @@ impl<'c> ProofChecker<'c> {
         let mut reconstructor = self.reconstructor.take().unwrap();
         result?;
 
+        let reconstructing_time = Instant::now();
         proof.commands = reconstructor.end(proof.commands);
+        if let Some(stats) = &mut self.config.statistics {
+            *stats.reconstructing_time += reconstructing_time.elapsed();
+        }
         Ok(proof)
     }
 

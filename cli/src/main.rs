@@ -70,6 +70,11 @@ fn app() -> App<'static, 'static> {
                     .help("Number of threads to use to run the benchmarks"),
             )
             .arg(
+                Arg::with_name("reconstruct")
+                    .long("reconstruct")
+                    .help("Also reconstruct each proof in addition to parsing and checking"),
+            )
+            .arg(
                 Arg::with_name("sort-by-total")
                     .short("t")
                     .long("sort-by-total")
@@ -214,6 +219,7 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         .map_err(|_| CliError::InvalidArgument(num_jobs.to_string()))?;
 
     let sort_by_total = matches.is_present("sort-by-total");
+    let reconstruct = matches.is_present("reconstruct");
 
     let instances = get_instances_from_paths(matches.values_of("files").unwrap())?;
 
@@ -227,19 +233,30 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         instances.len(),
         num_runs
     );
-    let results = benchmarking::run_benchmark(&instances, num_runs, num_jobs)?;
+    let results = benchmarking::run_benchmark(&instances, num_runs, num_jobs, reconstruct)?;
 
-    if sort_by_total {
-        println!("parsing:            {:#}", results.parsing());
-        println!("checking:           {:#}", results.checking());
-        println!("parsing + checking: {:#}", results.parsing_checking());
-        println!("total:              {:#}", results.total());
-    } else {
-        println!("parsing:            {}", results.parsing());
-        println!("checking:           {}", results.checking());
-        println!("parsing + checking: {}", results.parsing_checking());
-        println!("total:              {}", results.total());
+    let [parsing, checking, reconstructing, accounted_for, total] = [
+        results.parsing(),
+        results.checking(),
+        results.reconstructing(),
+        results.total_accounted_for(),
+        results.total(),
+    ]
+    .map(|m| {
+        if sort_by_total {
+            format!("{:#}", m)
+        } else {
+            format!("{}", m)
+        }
+    });
+
+    println!("parsing:             {}", parsing);
+    println!("checking:            {}", checking);
+    if reconstruct {
+        println!("reconstructing:      {}", reconstructing);
     }
+    println!("total accounted for: {}", accounted_for);
+    println!("total:               {}", total);
 
     let data_by_rule = results.step_time_by_rule();
     let mut data_by_rule: Vec<_> = data_by_rule.iter().collect();
