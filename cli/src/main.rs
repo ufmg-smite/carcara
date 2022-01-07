@@ -199,7 +199,7 @@ fn check_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         let reconstructed = check_and_reconstruct(problem_file, proof_file, skip)?;
         print_proof(&reconstructed)?;
     } else {
-        check(problem_file, proof_file, skip, false)?;
+        check(problem_file, proof_file, skip)?;
         println!("true");
     }
     Ok(())
