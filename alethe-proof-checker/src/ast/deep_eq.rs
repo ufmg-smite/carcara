@@ -353,13 +353,7 @@ impl AlphaEquivalenceChecker {
         *current += 1;
     }
 
-    fn check(&self, a: &String, b: &String) -> bool {
-        // Clippy complains that I should take `&str` instead of `&String` here, but I need to pass
-        // these values to `SymbolTable::get`, which takes a `&K`, where in this case `K` is
-        // `String`.  I should probably make `SymbolTable::get` take a `impl Borrow<K>`, but for
-        // now I will just ignore the lint
-        #![allow(clippy::ptr_arg)]
-
+    fn check(&self, a: &str, b: &str) -> bool {
         match (self.indices.0.get(a), self.indices.1.get(b)) {
             // If both a and b are free variables, they need to have the same name
             (None, None) => a == b,

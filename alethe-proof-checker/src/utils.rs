@@ -2,7 +2,7 @@ use crate::ast::{BindingList, Quantifier, Rc, Term};
 use ahash::{AHashMap, AHashSet};
 use num_rational::BigRational;
 use num_traits::{One, Signed, Zero};
-use std::{fmt, hash::Hash, ops};
+use std::{borrow::Borrow, fmt, hash::Hash, ops};
 
 /// An enum that can hold one of two types. Similar to `Result`, but doesn't imply that one of the
 /// variants is "better" than the other.
@@ -80,7 +80,11 @@ impl<K, V> SymbolTable<K, V> {
 }
 
 impl<K: Eq + Hash, V> SymbolTable<K, V> {
-    pub fn get(&self, key: &K) -> Option<&V> {
+    pub fn get<Q>(&self, key: &Q) -> Option<&V>
+    where
+        K: Borrow<Q>,
+        Q: Eq + Hash + ?Sized,
+    {
         self.scopes.iter().rev().find_map(|scope| scope.get(key))
     }
 
