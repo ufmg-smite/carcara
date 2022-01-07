@@ -236,7 +236,7 @@ impl BindingList {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Term {
     /// A terminal. This can be a constant or a variable.
     Terminal(Terminal),
