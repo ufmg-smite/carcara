@@ -1,2 +1,6 @@
 [workspace]
 members = ["alethe-proof-checker", "cli"]
+
+[profile.release]
+debug = 1
+incremental = true
