@@ -158,7 +158,10 @@ pub enum ResolutionError {
     RemainingPivot(Rc<Term>),
 
     #[error("term in conclusion was not produced by resolution: '{0}'")]
-    ResolutionMissingTerm(Rc<Term>),
+    ExtraTermInConclusion(Rc<Term>),
+
+    #[error("term produced by resolution is missing in conclusion: '{0}'")]
+    MissingTermInConclusion(Rc<Term>),
 
     #[error("pivot was not found in clause: '{0}'")]
     PivotNotFound(Rc<Term>),

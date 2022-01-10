@@ -145,7 +145,7 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
             // only need to check that all terms in the conclusion are also in the working clause
             if !working_clause.contains(&(i, t)) {
                 let t = unremove_all_negations(pool, (i as u32, t));
-                return Err(ResolutionError::ResolutionMissingTerm(t).into());
+                return Err(ResolutionError::ExtraTermInConclusion(t).into());
             }
         }
         Ok(())
@@ -193,12 +193,11 @@ fn resolution_with_args(
 
     if let Some(extra) = conclusion.difference(&current).next() {
         let extra = unremove_all_negations(pool, *extra);
-        return Err(ResolutionError::ResolutionMissingTerm(extra).into());
+        return Err(ResolutionError::ExtraTermInConclusion(extra).into());
     }
     if let Some(missing) = current.difference(&conclusion).next() {
         let missing = unremove_all_negations(pool, *missing);
-        // TODO: For clarity, use a different error for this
-        return Err(ResolutionError::RemainingPivot(missing).into());
+        return Err(ResolutionError::MissingTermInConclusion(missing).into());
     }
     Ok(())
 }
