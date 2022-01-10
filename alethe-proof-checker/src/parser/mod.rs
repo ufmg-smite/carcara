@@ -376,26 +376,12 @@ impl<R: BufRead> Parser<R> {
                 }
                 Token::ReservedWord(Reserved::SetLogic) => {
                     let logic = self.expect_symbol()?;
+                    self.expect_token(Token::CloseParen)?;
 
-                    // TODO: Detect this by searching for the character 'R' in the logic name
                     // When the problem's logic contains real numbers but not integers, integer
                     // literals should be parsed as reals. For instance, `1` should be interpreted
                     // as `1.0`.
-                    self.interpret_integers_as_reals = match logic.as_str() {
-                        "LRA" | "QF_LRA" | "QF_NRA" | "QF_RDL" | "QF_UFLRA" | "QF_UFNRA"
-                        | "UFLRA" => true,
-
-                        "AUFLIA" | "AUFLIRA" | "AUFNIRA" | "LIA" | "QF_ABV" | "QF_AUFBV"
-                        | "QF_AUFLIA" | "QF_AX" | "QF_BV" | "QF_IDL" | "QF_LIA" | "QF_NIA"
-                        | "QF_UF" | "QF_UFBV" | "QF_UFIDL" | "QF_UFLIA" | "UFNIA" => false,
-
-                        other => {
-                            log::warn!("unknown logic: {}", other);
-                            false
-                        }
-                    };
-
-                    self.expect_token(Token::CloseParen)?;
+                    self.interpret_integers_as_reals = logic.contains('R') && !logic.contains('I');
                 }
                 _ => {
                     // If the command is not one of the commands we care about, we just ignore it.
