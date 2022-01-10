@@ -1,6 +1,6 @@
 use super::{
-    assert_clause_len, assert_is_bool_constant, assert_is_expected, assert_num_premises, RuleArgs,
-    RuleResult,
+    assert_clause_len, assert_is_bool_constant, assert_is_expected, assert_num_args,
+    assert_num_premises, CheckerError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::ResolutionError, utils::DedupIterator};
 use ahash::{AHashMap, AHashSet};
@@ -15,7 +15,14 @@ fn unremove_all_negations(pool: &mut TermPool, (n, term): (i32, &Rc<Term>)) -> R
     term
 }
 
-pub fn resolution(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> RuleResult {
+pub fn resolution(rule_args: RuleArgs) -> RuleResult {
+    if !rule_args.args.is_empty() {
+        // If the rule was given arguments, we redirect to the variant of "resolution" that takes
+        // the pivots as arguments
+        return resolution_with_args(rule_args);
+    }
+    let RuleArgs { conclusion, premises, pool, .. } = rule_args;
+
     // In some cases, this rule is used with a single premise `(not true)` to justify an empty
     // conclusion clause
     if conclusion.is_empty() && premises.len() == 1 {
@@ -142,6 +149,94 @@ pub fn resolution(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> Rule
             }
         }
         Ok(())
+    }
+}
+
+// TODO: Add tests for resolution with arguments
+fn resolution_with_args(
+    RuleArgs {
+        conclusion, premises, args, pool, ..
+    }: RuleArgs,
+) -> RuleResult {
+    assert_num_premises(premises, 1..)?;
+    let num_steps = premises.len() - 1;
+    assert_num_args(args, num_steps * 2)?;
+
+    let args: Vec<_> = args
+        .chunks(2)
+        .map(|chunk| {
+            let pivot = chunk[0].as_term()?.remove_all_negations();
+            let polarity = chunk[1].as_term()?;
+            let polarity = if polarity.is_bool_true() {
+                true
+            } else if polarity.is_bool_false() {
+                false
+            } else {
+                return Err(CheckerError::ExpectedAnyBoolConstant(polarity.clone()));
+            };
+            Ok((pivot, polarity))
+        })
+        .collect::<Result<_, _>>()?;
+
+    let mut current: AHashSet<_> = premises[0]
+        .clause
+        .iter()
+        .map(|t| t.remove_all_negations())
+        .collect();
+    for (premise, (pivot, polarity)) in premises[1..].iter().zip(args) {
+        binary_resolution(&mut current, premise.clause, pivot, polarity)
+    }
+
+    let conclusion: AHashSet<_> = conclusion
+        .iter()
+        .map(|t| t.remove_all_negations())
+        .collect();
+
+    if let Some((i, extra)) = conclusion.difference(&current).next() {
+        let extra = unremove_all_negations(pool, (*i as i32, extra));
+        return Err(ResolutionError::ResolutionMissingTerm(extra).into());
+    }
+    if let Some((i, missing)) = current.difference(&conclusion).next() {
+        let missing = unremove_all_negations(pool, (*i as i32, missing));
+        // TODO: For clarity, use a different error for this
+        return Err(ResolutionError::RemainingPivot(missing).into());
+    }
+    Ok(())
+}
+
+fn binary_resolution<'a>(
+    current: &mut AHashSet<(u32, &'a Rc<Term>)>,
+    next: &'a [Rc<Term>],
+    pivot: (u32, &'a Rc<Term>),
+    is_pivot_in_current: bool,
+) {
+    // TODO: Add proper error handling
+    let negated_pivot = (pivot.0 + 1, pivot.1);
+    let removed = current.remove(&if is_pivot_in_current {
+        pivot
+    } else {
+        negated_pivot
+    });
+    if !removed {
+        panic!("not found in current")
+    }
+
+    let expected = if is_pivot_in_current {
+        negated_pivot
+    } else {
+        pivot
+    };
+    let mut found = false;
+    for t in next {
+        let t = t.remove_all_negations();
+        if t == expected {
+            found = true;
+        } else {
+            current.insert(t);
+        }
+    }
+    if !found {
+        panic!("not found in next")
     }
 }
 
