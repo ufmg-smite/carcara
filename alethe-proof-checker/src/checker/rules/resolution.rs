@@ -7,7 +7,7 @@ use ahash::{AHashMap, AHashSet};
 use std::collections::hash_map::Entry;
 
 /// Undoes the transformation done by `Rc<Term>::remove_all_negations`.
-fn unremove_all_negations(pool: &mut TermPool, (n, term): (i32, &Rc<Term>)) -> Rc<Term> {
+fn unremove_all_negations(pool: &mut TermPool, (n, term): (u32, &Rc<Term>)) -> Rc<Term> {
     let mut term = term.clone();
     for _ in 0..n {
         term = build_term!(pool, (not { term }));
@@ -135,16 +135,16 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
             }
         }
 
-        let pivot = unremove_all_negations(pool, (*i, pivot));
+        let pivot = unremove_all_negations(pool, (*i as u32, pivot));
         Err(ResolutionError::RemainingPivot(pivot).into())
     } else {
         // This is the general case, where all pivots have been eliminated. In this case, the
         // working clause should be equal to the conclusion clause
-        for t in conclusion {
+        for (i, t) in conclusion {
             // By construction, the working clause is a subset of the conclusion. Therefore, we
             // only need to check that all terms in the conclusion are also in the working clause
-            if !working_clause.contains(&t) {
-                let t = unremove_all_negations(pool, t);
+            if !working_clause.contains(&(i, t)) {
+                let t = unremove_all_negations(pool, (i as u32, t));
                 return Err(ResolutionError::ResolutionMissingTerm(t).into());
             }
         }
@@ -184,7 +184,7 @@ fn resolution_with_args(
         .map(|t| t.remove_all_negations())
         .collect();
     for (premise, (pivot, polarity)) in premises[1..].iter().zip(args) {
-        binary_resolution(&mut current, premise.clause, pivot, polarity)
+        binary_resolution(pool, &mut current, premise.clause, pivot, polarity)?;
     }
 
     let conclusion: AHashSet<_> = conclusion
@@ -192,12 +192,12 @@ fn resolution_with_args(
         .map(|t| t.remove_all_negations())
         .collect();
 
-    if let Some((i, extra)) = conclusion.difference(&current).next() {
-        let extra = unremove_all_negations(pool, (*i as i32, extra));
+    if let Some(extra) = conclusion.difference(&current).next() {
+        let extra = unremove_all_negations(pool, *extra);
         return Err(ResolutionError::ResolutionMissingTerm(extra).into());
     }
-    if let Some((i, missing)) = current.difference(&conclusion).next() {
-        let missing = unremove_all_negations(pool, (*i as i32, missing));
+    if let Some(missing) = current.difference(&conclusion).next() {
+        let missing = unremove_all_negations(pool, *missing);
         // TODO: For clarity, use a different error for this
         return Err(ResolutionError::RemainingPivot(missing).into());
     }
@@ -205,39 +205,37 @@ fn resolution_with_args(
 }
 
 fn binary_resolution<'a>(
+    pool: &mut TermPool,
     current: &mut AHashSet<(u32, &'a Rc<Term>)>,
     next: &'a [Rc<Term>],
     pivot: (u32, &'a Rc<Term>),
     is_pivot_in_current: bool,
-) {
-    // TODO: Add proper error handling
+) -> Result<(), ResolutionError> {
     let negated_pivot = (pivot.0 + 1, pivot.1);
-    let removed = current.remove(&if is_pivot_in_current {
-        pivot
+    let (pivot_in_current, pivot_in_next) = if is_pivot_in_current {
+        (pivot, negated_pivot)
     } else {
-        negated_pivot
-    });
-    if !removed {
-        panic!("not found in current")
+        (negated_pivot, pivot)
+    };
+    if !current.remove(&pivot_in_current) {
+        let p = unremove_all_negations(pool, pivot_in_current);
+        return Err(ResolutionError::PivotNotFound(p));
     }
 
-    let expected = if is_pivot_in_current {
-        negated_pivot
-    } else {
-        pivot
-    };
     let mut found = false;
     for t in next {
         let t = t.remove_all_negations();
-        if t == expected {
+        if t == pivot_in_next {
             found = true;
         } else {
             current.insert(t);
         }
     }
     if !found {
-        panic!("not found in next")
+        let p = unremove_all_negations(pool, pivot_in_next);
+        return Err(ResolutionError::PivotNotFound(p));
     }
+    Ok(())
 }
 
 pub fn tautology(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
