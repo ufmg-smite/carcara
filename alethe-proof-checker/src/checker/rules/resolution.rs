@@ -152,7 +152,6 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
     }
 }
 
-// TODO: Add tests for resolution with arguments
 fn resolution_with_args(
     RuleArgs {
         conclusion, premises, args, pool, ..
@@ -279,6 +278,8 @@ mod tests {
                 (declare-fun q () Bool)
                 (declare-fun r () Bool)
                 (declare-fun s () Bool)
+                (declare-fun t () Bool)
+                (declare-fun u () Bool)
             ",
             "Simple working examples" {
                 "(assume h1 (not p))
@@ -368,6 +369,25 @@ mod tests {
                 (step t2 (cl (not p)) :rule trust)
                 (step t3 (cl (not q)) :rule trust)
                 (step t4 (cl false) :rule resolution :premises (t1 t2 t3))": true,
+            }
+            "Pivots given in arguments" {
+                "(step t1 (cl p q r) :rule trust)
+                (step t2 (cl (not q) s) :rule trust)
+                (step t3 (cl p r s) :rule resolution :premises (t1 t2) :args (q true))": true,
+
+                "(step t1 (cl p (not q) r) :rule trust)
+                (step t2 (cl (not r) s q) :rule trust)
+                (step t3 (cl p r (not r) s)
+                    :rule resolution :premises (t1 t2) :args (q false))": true,
+
+                "(step t1 (cl p q) :rule trust)
+                (step t2 (cl (not q) (not r)) :rule trust)
+                (step t3 (cl (not s) (not (not r)) t) :rule trust)
+                (step t4 (cl s (not t) u) :rule trust)
+                (step t5 (cl p t (not t) u)
+                    :rule resolution
+                    :premises (t1 t2 t3 t4)
+                    :args (q true (not r) true s false))": true,
             }
         }
     }
