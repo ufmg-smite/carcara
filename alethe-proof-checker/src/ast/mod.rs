@@ -113,6 +113,26 @@ pub enum ProofArg {
     Assign(String, Rc<Term>),
 }
 
+impl ProofArg {
+    /// If this argument is a "term style" argument, extracts that term from it. Otherwise, returns
+    /// an error.
+    pub fn as_term(&self) -> Result<&Rc<Term>, CheckerError> {
+        match self {
+            ProofArg::Term(t) => Ok(t),
+            ProofArg::Assign(s, t) => Err(CheckerError::ExpectedTermStyleArg(s.clone(), t.clone())),
+        }
+    }
+
+    /// If this argument is an "assign style" argument, extracts the variable name and the value
+    /// term from it. Otherwise, returns an error.
+    pub fn as_assign(&self) -> Result<(&String, &Rc<Term>), CheckerError> {
+        match self {
+            ProofArg::Assign(s, t) => Ok((s, t)),
+            ProofArg::Term(t) => Err(CheckerError::ExpectedAssignStyleArg(t.clone())),
+        }
+    }
+}
+
 /// A function definition. Functions are defined using the `function-def` command, of the form
 /// `(define-fun <symbol> (<sorted_var>*) <sort> <term>)`. These definitions are substituted in
 /// during parsing, so these commands don't appear in the final AST.

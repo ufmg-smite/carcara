@@ -19,10 +19,7 @@ pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> RuleRes
     let substitution: AHashMap<_, _> = args
         .iter()
         .map(|arg| {
-            let (arg_name, arg_value) = match arg {
-                ProofArg::Assign(name, value) => (name, value),
-                ProofArg::Term(t) => return Err(CheckerError::ExpectedAssignStyleArg(t.clone())),
-            };
+            let (arg_name, arg_value) = arg.as_assign()?;
             let arg_sort = pool.add_term(Term::Sort(arg_value.sort().clone()));
             rassert!(
                 bindings.remove(&(arg_name.clone(), arg_sort.clone())),
@@ -32,7 +29,7 @@ pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> RuleRes
             let ident_term = (arg_name.clone(), arg_sort).into();
             Ok((pool.add_term(ident_term), arg_value.clone()))
         })
-        .collect::<Result<_, _>>()?;
+        .collect::<Result<_, CheckerError>>()?;
     let mut substitution = Substitution::new(pool, substitution)?;
 
     // All bindings were accounted for in the arguments
