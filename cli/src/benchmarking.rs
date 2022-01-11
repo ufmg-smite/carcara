@@ -10,6 +10,7 @@ use std::{
 fn run_instance(
     (problem_file, proof_file): &(PathBuf, PathBuf),
     num_runs: usize,
+    apply_function_defs: bool,
     reconstruct: bool,
 ) -> Result<BenchmarkResults, alethe_proof_checker::Error> {
     let mut result = BenchmarkResults::new();
@@ -21,6 +22,7 @@ fn run_instance(
         let (proof, mut pool) = parse_instance(
             BufReader::new(File::open(problem_file)?),
             BufReader::new(File::open(proof_file)?),
+            apply_function_defs,
         )?;
         let parsing_time = parsing_time.elapsed();
 
@@ -64,6 +66,7 @@ pub fn run_benchmark(
     instances: &[(PathBuf, PathBuf)],
     num_runs: usize,
     num_jobs: usize,
+    apply_function_defs: bool,
     reconstruct: bool,
 ) -> Result<BenchmarkResults, alethe_proof_checker::Error> {
     // Configure rayon to use the right number of threads and to reserve enough stack space for
@@ -77,7 +80,7 @@ pub fn run_benchmark(
     let result = instances
         .par_iter()
         .map(|instance| {
-            run_instance(instance, num_runs, reconstruct).unwrap_or_else(|e| {
+            run_instance(instance, num_runs, apply_function_defs, reconstruct).unwrap_or_else(|e| {
                 log::error!(
                     "encountered error in instance {}: {:?}",
                     instance.1.to_str().unwrap(),

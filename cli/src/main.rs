@@ -38,6 +38,15 @@ fn app(version_string: &str) -> App<'static, '_> {
             )
             .arg(Arg::with_name("problem-file").help(PROBLEM_FILE_HELP))
             .arg(
+                Arg::with_name("dont-apply-function-defs")
+                    .long("dont-apply-function-defs")
+                    .help(
+                        "Don't apply function definitions introduced by `define-fun`s and \
+                        `:named` attributes. Instead, interpret them as a function declaration \
+                        and an `assert` that defines the function to be equal to its body",
+                    ),
+            )
+            .arg(
                 Arg::with_name("skip-unknown-rules")
                     .short("s")
                     .long("skip-unknown-rules")
@@ -56,7 +65,16 @@ fn app(version_string: &str) -> App<'static, '_> {
                     .required(true)
                     .help("The proof file to be parsed"),
             )
-            .arg(Arg::with_name("problem-file").help(PROBLEM_FILE_HELP)),
+            .arg(Arg::with_name("problem-file").help(PROBLEM_FILE_HELP))
+            .arg(
+                Arg::with_name("dont-apply-function-defs")
+                    .long("dont-apply-function-defs")
+                    .help(
+                        "Don't apply function definitions introduced by `define-fun`s and \
+                        `:named` attributes. Instead, interpret them as a function declaration \
+                        and an `assert` that defines the function to be equal to its body",
+                    ),
+            ),
         SubCommand::with_name("bench")
             .about("Checks a series of proof files and records performance statistics")
             .setting(AppSettings::DisableVersion)
@@ -73,6 +91,15 @@ fn app(version_string: &str) -> App<'static, '_> {
                     .long("jobs")
                     .default_value("1")
                     .help("Number of threads to use to run the benchmarks"),
+            )
+            .arg(
+                Arg::with_name("dont-apply-function-defs")
+                    .long("dont-apply-function-defs")
+                    .help(
+                        "Don't apply function definitions introduced by `define-fun`s and \
+                        `:named` attributes. Instead, interpret them as a function declaration \
+                        and an `assert` that defines the function to be equal to its body",
+                    ),
             )
             .arg(
                 Arg::with_name("reconstruct")
@@ -194,12 +221,14 @@ fn check_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         None => infer_problem_path(&proof_file)?,
     };
     let skip = matches.is_present("skip-unknown-rules");
+    let apply_function_defs = !matches.is_present("dont-apply-function-defs");
 
     if matches.is_present("reconstruct") {
-        let reconstructed = check_and_reconstruct(problem_file, proof_file, skip)?;
+        let reconstructed =
+            check_and_reconstruct(problem_file, proof_file, apply_function_defs, skip)?;
         print_proof(&reconstructed)?;
     } else {
-        check(problem_file, proof_file, skip)?;
+        check(problem_file, proof_file, apply_function_defs, skip)?;
         println!("true");
     }
     Ok(())
@@ -211,12 +240,14 @@ fn parse_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         Some(p) => PathBuf::from(p),
         None => infer_problem_path(&proof_file)?,
     };
+    let apply_function_defs = !matches.is_present("dont-apply-function-defs");
+
     let (problem, proof) = (
         BufReader::new(File::open(problem_file)?),
         BufReader::new(File::open(proof_file)?),
     );
-    let (proof, _) =
-        parser::parse_instance(problem, proof).map_err(alethe_proof_checker::Error::from)?;
+    let (proof, _) = parser::parse_instance(problem, proof, apply_function_defs)
+        .map_err(alethe_proof_checker::Error::from)?;
     print_proof(&proof.commands)?;
     Ok(())
 }
@@ -232,6 +263,7 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         .parse()
         .map_err(|_| CliError::InvalidArgument(num_jobs.to_string()))?;
 
+    let apply_function_defs = !matches.is_present("dont-apply-function-defs");
     let sort_by_total = matches.is_present("sort-by-total");
     let reconstruct = matches.is_present("reconstruct");
 
@@ -247,7 +279,13 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         instances.len(),
         num_runs
     );
-    let results = benchmarking::run_benchmark(&instances, num_runs, num_jobs, reconstruct)?;
+    let results = benchmarking::run_benchmark(
+        &instances,
+        num_runs,
+        num_jobs,
+        apply_function_defs,
+        reconstruct,
+    )?;
 
     let [parsing, checking, reconstructing, accounted_for, total] = [
         results.parsing(),

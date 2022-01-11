@@ -22,8 +22,12 @@ use std::{io::BufRead, str::FromStr};
 /// Parses an SMT problem instance (in the SMT-LIB format) and its associated proof (in the Alethe
 /// format). Returns the parsed proof, as well as the `TermPool` used in parsing. Can take any type
 /// that implements `BufRead`.
-pub fn parse_instance<T: BufRead>(problem: T, proof: T) -> AletheResult<(Proof, TermPool)> {
-    let mut parser = Parser::new(problem)?;
+pub fn parse_instance<T: BufRead>(
+    problem: T,
+    proof: T,
+    apply_function_defs: bool,
+) -> AletheResult<(Proof, TermPool)> {
+    let mut parser = Parser::new(problem, apply_function_defs)?;
     let premises = parser.parse_problem()?;
     parser.reset(proof)?;
     let commands = parser.parse_proof()?;
@@ -58,14 +62,14 @@ pub struct Parser<R> {
     current_position: Position,
     state: ParserState,
     interpret_integers_as_reals: bool,
-    apply_define_funs: bool,
+    apply_function_defs: bool,
     premises: Option<AHashSet<Rc<Term>>>,
 }
 
 impl<R: BufRead> Parser<R> {
     /// Constructs a new `Parser` from a type that implements `BufRead`. This operation can fail if
     /// there is an IO or lexer error on the first token.
-    pub fn new(input: R) -> AletheResult<Self> {
+    pub fn new(input: R, apply_function_defs: bool) -> AletheResult<Self> {
         let mut state = ParserState::default();
         let bool_sort = state.term_pool.add_term(Term::Sort(Sort::Bool));
         for iden in ["true", "false"] {
@@ -80,7 +84,7 @@ impl<R: BufRead> Parser<R> {
             current_position,
             state,
             interpret_integers_as_reals: false,
-            apply_define_funs: true,
+            apply_function_defs,
             premises: None,
         })
     }
@@ -134,11 +138,11 @@ impl<R: BufRead> Parser<R> {
             .insert(Identifier::Simple(symbol), sort)
     }
 
-    /// Adds a new function definition. If we are parsing the problem and `self.apply_define_funs`
-    /// is `false`, this instead adds the function name to the symbol table and adds a new premise
-    /// that defines the function.
+    /// Adds a new function definition. If we are parsing the problem and
+    /// `self.apply_function_defs` is `false`, this instead adds the function name to the symbol
+    /// table and adds a new premise that defines the function.
     fn add_function_def(&mut self, name: String, func_def: FunctionDef) {
-        if self.is_parsing_problem() && !self.apply_define_funs {
+        if self.is_parsing_problem() && !self.apply_function_defs {
             if !func_def.params.is_empty() {
                 todo!("implement `lambda` terms")
             }
@@ -446,7 +450,7 @@ impl<R: BufRead> Parser<R> {
                 }
                 Token::ReservedWord(Reserved::DefineFun) => {
                     let (name, func_def) = self.parse_define_fun()?;
-                    self.state.function_defs.insert(name, func_def);
+                    self.add_function_def(name, func_def);
                     continue;
                 }
                 Token::ReservedWord(Reserved::Anchor) => {

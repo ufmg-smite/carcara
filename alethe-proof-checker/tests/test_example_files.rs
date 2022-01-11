@@ -24,6 +24,7 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> AletheResult<()> {
     let (proof, mut pool) = parser::parse_instance(
         io::BufReader::new(fs::File::open(problem_path)?),
         io::BufReader::new(fs::File::open(proof_path)?),
+        true,
     )?;
 
     // First, we check the proof normally

@@ -39,11 +39,13 @@ pub enum Error {
 pub fn check<P: AsRef<Path>>(
     problem_path: P,
     proof_path: P,
+    apply_function_defs: bool,
     skip_unknown_rules: bool,
 ) -> Result<(), Error> {
     let (proof, mut pool) = parser::parse_instance(
         BufReader::new(File::open(problem_path)?),
         BufReader::new(File::open(proof_path)?),
+        apply_function_defs,
     )?;
 
     let config = checker::Config {
@@ -57,11 +59,13 @@ pub fn check<P: AsRef<Path>>(
 pub fn check_and_reconstruct<P: AsRef<Path>>(
     problem_path: P,
     proof_path: P,
+    apply_function_defs: bool,
     skip_unknown_rules: bool,
 ) -> Result<Vec<ProofCommand>, Error> {
     let (proof, mut pool) = parser::parse_instance(
         BufReader::new(File::open(problem_path)?),
         BufReader::new(File::open(proof_path)?),
+        apply_function_defs,
     )?;
 
     let config = checker::Config {
