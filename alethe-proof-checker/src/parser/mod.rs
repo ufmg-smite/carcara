@@ -58,6 +58,7 @@ pub struct Parser<R> {
     current_position: Position,
     state: ParserState,
     interpret_integers_as_reals: bool,
+    apply_define_funs: bool,
 }
 
 impl<R: BufRead> Parser<R> {
@@ -78,6 +79,7 @@ impl<R: BufRead> Parser<R> {
             current_position,
             state,
             interpret_integers_as_reals: false,
+            apply_define_funs: true,
         })
     }
 
@@ -366,7 +368,21 @@ impl<R: BufRead> Parser<R> {
                 }
                 Token::ReservedWord(Reserved::DefineFun) => {
                     let (name, func_def) = self.parse_define_fun()?;
-                    self.state.function_defs.insert(name, func_def);
+                    if self.apply_define_funs {
+                        self.state.function_defs.insert(name, func_def);
+                    } else {
+                        if !func_def.params.is_empty() {
+                            todo!("implement `lambda` terms")
+                        }
+                        let lambda_term = func_def.body;
+                        let sort = self.add_term(Term::Sort(lambda_term.sort().clone()));
+                        let var = (name, sort);
+                        self.insert_sorted_var(var.clone());
+                        let var_term = self.add_term(var.into());
+                        let assertion_term =
+                            self.add_term(Term::Op(Operator::Equals, vec![var_term, lambda_term]));
+                        premises.insert(assertion_term);
+                    }
                     continue;
                 }
                 Token::ReservedWord(Reserved::Assert) => {
@@ -759,8 +775,6 @@ impl<R: BufRead> Parser<R> {
                 // Check to see if there is a nullary function defined with this name
                 return Ok(if let Some(func_def) = self.state.function_defs.get(&s) {
                     if func_def.params.is_empty() {
-                        // This has to clone the function body term, even though it is already
-                        // added to the term pool
                         func_def.body.clone()
                     } else {
                         return Err(Error::Parser(
@@ -854,6 +868,8 @@ impl<R: BufRead> Parser<R> {
                 let attribute = p.expect_keyword()?;
                 match attribute.as_str() {
                     "named" => {
+                        // TODO: don't add a function definition if we are parsing the problem and
+                        // `self.apply_define_funs` is `false`
                         // If the term has a `:named` attribute, we introduce a new nullary function
                         // definition that maps the name to the term
                         let name = p.expect_symbol()?;
