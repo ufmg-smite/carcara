@@ -23,29 +23,28 @@ const GIT_BRANCH_NAME: &str = git_version!(args = ["--all"]);
 const APP_VERSION: Option<&str> = option_env!("CARGO_PKG_VERSION");
 
 fn app(version_string: &str) -> App<'static, '_> {
-    const PROBLEM_FILE_HELP: &str =
+    let proof_file = Arg::with_name("proof-file")
+        .required(true)
+        .help("The proof file to be checked");
+    let problem_file = Arg::with_name("problem-file").help(
         "The original problem file. If this argument is not present, it will be inferred from the \
-        proof file";
+        proof file",
+    );
+    let dont_apply_function_defs = Arg::with_name("dont-apply-function-defs")
+        .long("dont-apply-function-defs")
+        .help(
+            "Don't apply function definitions introduced by `define-fun`s and `:named` \
+            attributes. Instead, interpret them as a function declaration and an `assert` that \
+            defines the function to be equal to its body",
+        );
 
     let subcommands = vec![
         SubCommand::with_name("check")
             .about("Checks a proof file")
             .setting(AppSettings::DisableVersion)
-            .arg(
-                Arg::with_name("proof-file")
-                    .required(true)
-                    .help("The proof file to be checked"),
-            )
-            .arg(Arg::with_name("problem-file").help(PROBLEM_FILE_HELP))
-            .arg(
-                Arg::with_name("dont-apply-function-defs")
-                    .long("dont-apply-function-defs")
-                    .help(
-                        "Don't apply function definitions introduced by `define-fun`s and \
-                        `:named` attributes. Instead, interpret them as a function declaration \
-                        and an `assert` that defines the function to be equal to its body",
-                    ),
-            )
+            .arg(proof_file.clone())
+            .arg(problem_file.clone())
+            .arg(dont_apply_function_defs.clone())
             .arg(
                 Arg::with_name("skip-unknown-rules")
                     .short("s")
@@ -60,21 +59,9 @@ fn app(version_string: &str) -> App<'static, '_> {
         SubCommand::with_name("parse")
             .about("Parses a proof file and prints the AST")
             .setting(AppSettings::DisableVersion)
-            .arg(
-                Arg::with_name("proof-file")
-                    .required(true)
-                    .help("The proof file to be parsed"),
-            )
-            .arg(Arg::with_name("problem-file").help(PROBLEM_FILE_HELP))
-            .arg(
-                Arg::with_name("dont-apply-function-defs")
-                    .long("dont-apply-function-defs")
-                    .help(
-                        "Don't apply function definitions introduced by `define-fun`s and \
-                        `:named` attributes. Instead, interpret them as a function declaration \
-                        and an `assert` that defines the function to be equal to its body",
-                    ),
-            ),
+            .arg(proof_file.clone())
+            .arg(problem_file.clone())
+            .arg(dont_apply_function_defs.clone()),
         SubCommand::with_name("bench")
             .about("Checks a series of proof files and records performance statistics")
             .setting(AppSettings::DisableVersion)
@@ -92,15 +79,7 @@ fn app(version_string: &str) -> App<'static, '_> {
                     .default_value("1")
                     .help("Number of threads to use to run the benchmarks"),
             )
-            .arg(
-                Arg::with_name("dont-apply-function-defs")
-                    .long("dont-apply-function-defs")
-                    .help(
-                        "Don't apply function definitions introduced by `define-fun`s and \
-                        `:named` attributes. Instead, interpret them as a function declaration \
-                        and an `assert` that defines the function to be equal to its body",
-                    ),
-            )
+            .arg(dont_apply_function_defs.clone())
             .arg(
                 Arg::with_name("reconstruct")
                     .long("reconstruct")
