@@ -59,6 +59,7 @@ pub struct Parser<R> {
     state: ParserState,
     interpret_integers_as_reals: bool,
     apply_define_funs: bool,
+    premises: Option<AHashSet<Rc<Term>>>,
 }
 
 impl<R: BufRead> Parser<R> {
@@ -80,6 +81,7 @@ impl<R: BufRead> Parser<R> {
             state,
             interpret_integers_as_reals: false,
             apply_define_funs: true,
+            premises: None,
         })
     }
 
@@ -98,6 +100,11 @@ impl<R: BufRead> Parser<R> {
     /// used after calling this method.
     pub fn term_pool(self) -> TermPool {
         self.state.term_pool
+    }
+
+    /// Returns `true` if the parser is currently parsing a SMT-LIB problem, and `false` otherwise.
+    fn is_parsing_problem(&self) -> bool {
+        self.premises.is_some()
     }
 
     /// Advances the parser one token, and returns the previous `current_token`.
@@ -125,6 +132,27 @@ impl<R: BufRead> Parser<R> {
         self.state
             .sorts_symbol_table
             .insert(Identifier::Simple(symbol), sort)
+    }
+
+    /// Adds a new function definition. If we are parsing the problem and `self.apply_define_funs`
+    /// is `false`, this instead adds the function name to the symbol table and adds a new premise
+    /// that defines the function.
+    fn add_function_def(&mut self, name: String, func_def: FunctionDef) {
+        if self.is_parsing_problem() && !self.apply_define_funs {
+            if !func_def.params.is_empty() {
+                todo!("implement `lambda` terms")
+            }
+            let lambda_term = func_def.body;
+            let sort = self.add_term(Term::Sort(lambda_term.sort().clone()));
+            let var = (name, sort);
+            self.insert_sorted_var(var.clone());
+            let var_term = self.add_term(var.into());
+            let assertion_term =
+                self.add_term(Term::Op(Operator::Equals, vec![var_term, lambda_term]));
+            self.premises.as_mut().unwrap().insert(assertion_term);
+        } else {
+            self.state.function_defs.insert(name, func_def);
+        }
     }
 
     /// Constructs and sort checks a variable term.
@@ -341,7 +369,7 @@ impl<R: BufRead> Parser<R> {
     /// All other commands are ignored. This method returns a hash set containing the premises
     /// introduced in `assert` commands.
     pub fn parse_problem(&mut self) -> AletheResult<AHashSet<Rc<Term>>> {
-        let mut premises = AHashSet::new();
+        self.premises = Some(AHashSet::new());
 
         while self.current_token != Token::Eof {
             self.expect_token(Token::OpenParen)?;
@@ -368,27 +396,13 @@ impl<R: BufRead> Parser<R> {
                 }
                 Token::ReservedWord(Reserved::DefineFun) => {
                     let (name, func_def) = self.parse_define_fun()?;
-                    if self.apply_define_funs {
-                        self.state.function_defs.insert(name, func_def);
-                    } else {
-                        if !func_def.params.is_empty() {
-                            todo!("implement `lambda` terms")
-                        }
-                        let lambda_term = func_def.body;
-                        let sort = self.add_term(Term::Sort(lambda_term.sort().clone()));
-                        let var = (name, sort);
-                        self.insert_sorted_var(var.clone());
-                        let var_term = self.add_term(var.into());
-                        let assertion_term =
-                            self.add_term(Term::Op(Operator::Equals, vec![var_term, lambda_term]));
-                        premises.insert(assertion_term);
-                    }
+                    self.add_function_def(name, func_def);
                     continue;
                 }
                 Token::ReservedWord(Reserved::Assert) => {
                     let term = self.parse_term()?;
                     self.expect_token(Token::CloseParen)?;
-                    premises.insert(term);
+                    self.premises.as_mut().unwrap().insert(term);
                 }
                 Token::ReservedWord(Reserved::SetLogic) => {
                     let logic = self.expect_symbol()?;
@@ -406,7 +420,7 @@ impl<R: BufRead> Parser<R> {
                 }
             }
         }
-        Ok(premises)
+        Ok(self.premises.take().unwrap())
     }
 
     /// Parses a proof in the Alethe format. All function, constant and sort declarations needed
@@ -868,18 +882,14 @@ impl<R: BufRead> Parser<R> {
                 let attribute = p.expect_keyword()?;
                 match attribute.as_str() {
                     "named" => {
-                        // TODO: don't add a function definition if we are parsing the problem and
-                        // `self.apply_define_funs` is `false`
                         // If the term has a `:named` attribute, we introduce a new nullary function
                         // definition that maps the name to the term
                         let name = p.expect_symbol()?;
-                        p.state.function_defs.insert(
-                            name,
-                            FunctionDef {
-                                params: Vec::new(),
-                                body: inner.clone(),
-                            },
-                        );
+                        let func_def = FunctionDef {
+                            params: Vec::new(),
+                            body: inner.clone(),
+                        };
+                        p.add_function_def(name, func_def);
                         Ok(())
                     }
                     "pattern" => {
