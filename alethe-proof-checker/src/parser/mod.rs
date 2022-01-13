@@ -127,8 +127,13 @@ impl<R: BufRead> Parser<R> {
     }
 
     /// Shortcut for `self.state.term_pool.add_all`.
-    fn add_all(&mut self, term: Vec<Term>) -> Vec<Rc<Term>> {
-        self.state.term_pool.add_all(term)
+    fn add_all(&mut self, terms: Vec<Term>) -> Vec<Rc<Term>> {
+        self.state.term_pool.add_all(terms)
+    }
+
+    /// Shortcut for `self.state.term_pool.sort`.
+    fn sort(&self, term: &Rc<Term>) -> &Sort {
+        self.state.term_pool.sort(term)
     }
 
     /// Helper method to insert a `SortedVar` into the parser symbol table.
@@ -147,7 +152,7 @@ impl<R: BufRead> Parser<R> {
                 todo!("implement `lambda` terms")
             }
             let lambda_term = func_def.body;
-            let sort = self.add_term(Term::Sort(lambda_term.sort().clone()));
+            let sort = self.add_term(Term::Sort(self.sort(&lambda_term).clone()));
             let var = (name, sort);
             self.insert_sorted_var(var.clone());
             let var_term = self.add_term(var.into());
@@ -172,7 +177,7 @@ impl<R: BufRead> Parser<R> {
 
     /// Constructs and sort checks an operation term.
     fn make_op(&mut self, op: Operator, args: Vec<Rc<Term>>) -> Result<Rc<Term>, ParserError> {
-        let sorts: Vec<_> = args.iter().map(|t| t.sort()).collect();
+        let sorts: Vec<_> = args.iter().map(|t| self.sort(t)).collect();
         match op {
             Operator::Not => {
                 assert_num_args(&args, 1)?;
@@ -231,11 +236,13 @@ impl<R: BufRead> Parser<R> {
                         // sorts, we just create a sort `Y` to represent the sort parameter. We
                         // infer the `X` sort from the second operator argument. This may be
                         // changed later
-                        let x = self.add_term(Term::Sort(sorts[1].clone()));
+                        let got = got.clone();
+                        let x = sorts[1].clone();
+                        let x = self.add_term(Term::Sort(x));
                         let y = self.add_term(Term::Sort(Sort::Atom("Y".to_string(), Vec::new())));
                         return Err(SortError {
                             expected: vec![Sort::Array(x, y)],
-                            got: got.clone(),
+                            got,
                         }
                         .into());
                     }
@@ -249,12 +256,11 @@ impl<R: BufRead> Parser<R> {
                         SortError::assert_eq(y.as_sort().unwrap(), sorts[2])?;
                     }
                     got => {
+                        let got = got.clone();
+                        let [x, y] = [sorts[0], sorts[1]].map(|s| Term::Sort(s.clone()));
                         return Err(SortError {
-                            expected: vec![Sort::Array(
-                                self.add_term(Term::Sort(sorts[0].clone())),
-                                self.add_term(Term::Sort(sorts[1].clone())),
-                            )],
-                            got: got.clone(),
+                            expected: vec![Sort::Array(self.add_term(x), self.add_term(y))],
+                            got,
                         }
                         .into());
                     }
@@ -271,7 +277,7 @@ impl<R: BufRead> Parser<R> {
         args: Vec<Rc<Term>>,
     ) -> Result<Rc<Term>, ParserError> {
         let sorts = {
-            let function_sort = function.sort();
+            let function_sort = self.sort(&function);
             if let Sort::Function(sorts) = function_sort {
                 sorts
             } else {
@@ -281,7 +287,7 @@ impl<R: BufRead> Parser<R> {
         };
         assert_num_args(&args, sorts.len() - 1)?;
         for i in 0..args.len() {
-            SortError::assert_eq(sorts[i].as_sort().unwrap(), args[i].sort())?;
+            SortError::assert_eq(sorts[i].as_sort().unwrap(), self.sort(&args[i]))?;
         }
         Ok(self.add_term(Term::App(function, args)))
     }
@@ -815,7 +821,7 @@ impl<R: BufRead> Parser<R> {
     fn parse_term_expecting_sort(&mut self, expected_sort: &Sort) -> AletheResult<Rc<Term>> {
         let pos = self.current_position;
         let term = self.parse_term()?;
-        SortError::assert_eq(expected_sort, term.sort())
+        SortError::assert_eq(expected_sort, self.sort(&term))
             .map_err(|e| Error::Parser(e.into(), pos))?;
         Ok(term)
     }
@@ -861,7 +867,7 @@ impl<R: BufRead> Parser<R> {
                 p.expect_token(Token::OpenParen)?;
                 let name = p.expect_symbol()?;
                 let value = p.parse_term()?;
-                let sort = p.add_term(Term::Sort(value.sort().clone()));
+                let sort = p.add_term(Term::Sort(p.sort(&value).clone()));
                 p.insert_sorted_var((name.clone(), sort));
                 p.expect_token(Token::CloseParen)?;
                 Ok((name, value))
@@ -956,7 +962,7 @@ impl<R: BufRead> Parser<R> {
                 assert_num_args(&args, func.params.len())
                     .map_err(|err| Error::Parser(err, head_pos))?;
                 for (arg, param) in args.iter().zip(func.params.iter()) {
-                    SortError::assert_eq(param.1.as_sort().unwrap(), arg.sort())
+                    SortError::assert_eq(param.1.as_sort().unwrap(), self.sort(arg))
                         .map_err(|err| Error::Parser(err.into(), head_pos))?;
                 }
 

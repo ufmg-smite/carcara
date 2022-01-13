@@ -4,6 +4,7 @@ use ahash::{AHashMap, AHashSet};
 pub struct TermPool {
     pub(crate) terms: AHashMap<Term, Rc<Term>>,
     free_vars_cache: AHashMap<Rc<Term>, AHashSet<String>>,
+    sorts_cache: AHashMap<Rc<Term>, Sort>,
     bool_true: Rc<Term>,
     bool_false: Rc<Term>,
 }
@@ -17,21 +18,27 @@ impl Default for TermPool {
 impl TermPool {
     pub fn new() -> Self {
         let mut terms = AHashMap::new();
+        let mut sorts_cache = AHashMap::new();
         let bool_sort = Self::add_term_to_map(&mut terms, Term::Sort(Sort::Bool));
-        let bool_true = Self::add_term_to_map(
-            &mut terms,
-            Term::Terminal(Terminal::Var(
-                Identifier::Simple("true".into()),
-                bool_sort.clone(),
-            )),
-        );
-        let bool_false = Self::add_term_to_map(
-            &mut terms,
-            Term::Terminal(Terminal::Var(Identifier::Simple("false".into()), bool_sort)),
-        );
+
+        let [bool_true, bool_false] = ["true", "false"].map(|b| {
+            Self::add_term_to_map(
+                &mut terms,
+                Term::Terminal(Terminal::Var(
+                    Identifier::Simple(b.into()),
+                    bool_sort.clone(),
+                )),
+            )
+        });
+
+        sorts_cache.insert(bool_false.clone(), Sort::Bool);
+        sorts_cache.insert(bool_true.clone(), Sort::Bool);
+        sorts_cache.insert(bool_sort, Sort::Bool);
+
         Self {
             terms,
             free_vars_cache: AHashMap::new(),
+            sorts_cache,
             bool_true,
             bool_false,
         }
@@ -65,14 +72,24 @@ impl TermPool {
     }
 
     /// Takes a term and returns an `Rc` referencing it. If the term was not originally in the
-    /// terms hash map, it is added to it.
+    /// terms hash map, it is added to it. This also adds the term's sort to the sort cache.
     pub fn add_term(&mut self, term: Term) -> Rc<Term> {
-        Self::add_term_to_map(&mut self.terms, term)
+        let term = Self::add_term_to_map(&mut self.terms, term);
+        if !self.sorts_cache.contains_key(&term) {
+            self.sorts_cache
+                .insert(term.clone(), term.raw_sort_with_cache(&self.sorts_cache));
+        }
+        term
     }
 
     /// Takes a vector of terms and calls `add_term` on each.
     pub fn add_all(&mut self, terms: Vec<Term>) -> Vec<Rc<Term>> {
         terms.into_iter().map(|t| self.add_term(t)).collect()
+    }
+
+    /// Returns the cached sort of the term.
+    pub fn sort(&self, term: &Rc<Term>) -> &Sort {
+        &self.sorts_cache[term]
     }
 
     /// Returns an `AHashSet` containing all the free variables in this term.

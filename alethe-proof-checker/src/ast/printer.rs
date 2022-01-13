@@ -49,7 +49,7 @@ impl<'a> PrettyPrint for AlethePrinter<'a> {
                                 write!(self.inner, " ")?
                             }
                             is_first = false;
-                            write!(self.inner, "(:= ({} {}) {})", name, value.sort(), value)?;
+                            write!(self.inner, "(:= ({} {}) {})", name, value.raw_sort(), value)?;
                         }
                         write!(self.inner, ")")?;
                     }

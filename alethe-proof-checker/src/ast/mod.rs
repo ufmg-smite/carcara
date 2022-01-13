@@ -21,7 +21,7 @@ pub use substitution::{Substitution, SubstitutionError};
 pub use subterms::Subterms;
 
 use crate::checker::error::CheckerError;
-use ahash::AHashSet;
+use ahash::{AHashMap, AHashSet};
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
@@ -288,55 +288,6 @@ impl From<SortedVar> for Term {
 }
 
 impl Term {
-    /// Returns the sort of this term. For operations and application terms, this method assumes that
-    /// the arguments' sorts have already been checked, and are correct. If `self` is a sort, this
-    /// method does nothing and returns `self`.
-    pub fn sort(&self) -> &Sort {
-        match self {
-            Term::Terminal(t) => match t {
-                Terminal::Integer(_) => &Sort::Int,
-                Terminal::Real(_) => &Sort::Real,
-                Terminal::String(_) => &Sort::String,
-                Terminal::Var(_, sort) => sort.as_sort().unwrap(),
-            },
-            Term::Op(op, args) => match op {
-                Operator::Not
-                | Operator::Implies
-                | Operator::And
-                | Operator::Or
-                | Operator::Xor
-                | Operator::Equals
-                | Operator::Distinct
-                | Operator::LessThan
-                | Operator::GreaterThan
-                | Operator::LessEq
-                | Operator::GreaterEq => &Sort::Bool,
-                Operator::Ite => args[1].sort(),
-                Operator::Add
-                | Operator::Sub
-                | Operator::Mult
-                | Operator::IntDiv
-                | Operator::RealDiv => args[0].sort(),
-                Operator::Select => match args[0].sort() {
-                    Sort::Array(_, y) => y.as_sort().unwrap(),
-                    _ => unreachable!(),
-                },
-                Operator::Store => args[0].sort(),
-            },
-            Term::App(f, _) => {
-                let function_sort = f.sort();
-                match function_sort {
-                    Sort::Function(sorts) => sorts.last().unwrap().as_sort().unwrap(),
-                    _ => unreachable!(), // We assume that the function is correctly sorted
-                }
-            }
-            Term::Sort(sort) => sort,
-            Term::Quant(_, _, _) => &Sort::Bool,
-            Term::Choice((_, sort), _) => sort.as_sort().unwrap(),
-            Term::Let(_, inner) => inner.sort(),
-        }
-    }
-
     /// Returns an iterator over this term and all its subterms, in topological ordering. For
     /// example, calling this method on the term `(+ (f a b) 2)` would return an iterator over the
     /// terms `(+ (f a b) 2)`, `(f a b)`, `f`, `a`, `b` and `2`. This method traverses the term as
@@ -432,12 +383,20 @@ impl Term {
 
     /// Returns `true` if the term is the boolean constant `true`.
     pub fn is_bool_true(&self) -> bool {
-        *self.sort() == Sort::Bool && self.as_var() == Some("true")
+        if let Term::Terminal(Terminal::Var(Identifier::Simple(name), sort)) = self {
+            sort.as_sort() == Some(&Sort::Bool) && name == "true"
+        } else {
+            false
+        }
     }
 
     /// Returns `true` if the term is the boolean constant `false`.
     pub fn is_bool_false(&self) -> bool {
-        *self.sort() == Sort::Bool && self.as_var() == Some("false")
+        if let Term::Terminal(Terminal::Var(Identifier::Simple(name), sort)) = self {
+            sort.as_sort() == Some(&Sort::Bool) && name == "false"
+        } else {
+            false
+        }
     }
 
     /// Returns `true` if the term is the given boolean constant `b`.
@@ -450,6 +409,65 @@ impl Term {
 }
 
 impl Rc<Term> {
+    /// Returns the sort of this term. For operations and application terms, this method assumes
+    /// that the arguments' sorts have already been checked, and are correct. If `self` is a sort,
+    /// this method does nothing and returns `self`. This does not make use of a cache -- if
+    /// possible, prefer to use `TermPool::sort`.
+    pub fn raw_sort(&self) -> Sort {
+        self.raw_sort_with_cache(&AHashMap::new())
+    }
+
+    /// Returns the sort of this term, possibly using the given cache to avoid computation. This
+    /// method does not actually modify the cache to add the result it computed.
+    fn raw_sort_with_cache(&self, cache: &AHashMap<Rc<Term>, Sort>) -> Sort {
+        if let Some(s) = cache.get(self) {
+            return s.clone();
+        }
+
+        match self.as_ref() {
+            Term::Terminal(t) => match t {
+                Terminal::Integer(_) => Sort::Int,
+                Terminal::Real(_) => Sort::Real,
+                Terminal::String(_) => Sort::String,
+                Terminal::Var(_, sort) => sort.as_sort().unwrap().clone(),
+            },
+            Term::Op(op, args) => match op {
+                Operator::Not
+                | Operator::Implies
+                | Operator::And
+                | Operator::Or
+                | Operator::Xor
+                | Operator::Equals
+                | Operator::Distinct
+                | Operator::LessThan
+                | Operator::GreaterThan
+                | Operator::LessEq
+                | Operator::GreaterEq => Sort::Bool,
+                Operator::Ite => args[1].raw_sort_with_cache(cache),
+                Operator::Add
+                | Operator::Sub
+                | Operator::Mult
+                | Operator::IntDiv
+                | Operator::RealDiv => args[0].raw_sort_with_cache(cache),
+                Operator::Select => match args[0].raw_sort_with_cache(cache) {
+                    Sort::Array(_, y) => y.as_sort().unwrap().clone(),
+                    _ => unreachable!(),
+                },
+                Operator::Store => args[0].raw_sort_with_cache(cache),
+            },
+            Term::App(f, _) => {
+                match f.raw_sort_with_cache(cache) {
+                    Sort::Function(sorts) => sorts.last().unwrap().as_sort().unwrap().clone(),
+                    _ => unreachable!(), // We assume that the function is correctly sorted
+                }
+            }
+            Term::Sort(sort) => sort.clone(),
+            Term::Quant(_, _, _) => Sort::Bool,
+            Term::Choice((_, sort), _) => sort.as_sort().unwrap().clone(),
+            Term::Let(_, inner) => inner.raw_sort_with_cache(cache),
+        }
+    }
+
     /// Removes a leading negation from the term, if it exists. Same thing as `match_term!((not t)
     /// = term)`.
     pub fn remove_negation(&self) -> Option<&Self> {

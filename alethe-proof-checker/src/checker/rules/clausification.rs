@@ -23,7 +23,7 @@ pub fn distinct_elim(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
         }
         // If there are more than two boolean arguments to the distinct operator, the
         // second term must be `false`
-        args if *args[0].sort() == Sort::Bool => {
+        args if *pool.sort(&args[0]) == Sort::Bool => {
             if second_term.is_bool_false() {
                 Ok(())
             } else {
@@ -246,7 +246,8 @@ fn bfun_elim_second_step(
     processed: usize,
 ) -> Rc<Term> {
     for i in processed..args.len() {
-        if *args[i].sort() == Sort::Bool && !args[i].is_bool_false() && !args[i].is_bool_true() {
+        if *pool.sort(&args[i]) == Sort::Bool && !args[i].is_bool_false() && !args[i].is_bool_true()
+        {
             let mut ite_args = Vec::with_capacity(3);
             ite_args.push(args[i].clone());
 

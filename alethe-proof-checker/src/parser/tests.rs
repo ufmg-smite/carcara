@@ -32,6 +32,19 @@ pub(crate) fn parse_term_with_definitions(definitions: &str, term: &str) -> Term
     parser.parse_term().expect(ERROR_MESSAGE).as_ref().clone()
 }
 
+/// Parses a series of definitions and declarations, and then parses a term and returns it. Also
+/// returns the `TermPool` used in parsing. Panics if any error is encountered.
+pub(crate) fn parse_term_with_definitions_pool(
+    definitions: &str,
+    term: &str,
+) -> (Rc<Term>, TermPool) {
+    let mut parser = Parser::new(definitions.as_bytes(), true).expect(ERROR_MESSAGE);
+    parser.parse_problem().expect(ERROR_MESSAGE);
+    parser.reset(term.as_bytes()).expect(ERROR_MESSAGE);
+    let term = parser.parse_term().expect(ERROR_MESSAGE);
+    (term, parser.term_pool())
+}
+
 /// Parses a proof from a `&str`. Panics if any error is encountered.
 pub(crate) fn parse_proof(input: &str) -> Proof {
     let commands = Parser::new(input.as_bytes(), true)

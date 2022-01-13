@@ -20,7 +20,7 @@ pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> RuleRes
         .iter()
         .map(|arg| {
             let (arg_name, arg_value) = arg.as_assign()?;
-            let arg_sort = pool.add_term(Term::Sort(arg_value.sort().clone()));
+            let arg_sort = pool.add_term(Term::Sort(pool.sort(arg_value).clone()));
             rassert!(
                 bindings.remove(&(arg_name.clone(), arg_sort.clone())),
                 QuantifierError::NoBindingMatchesArg(arg_name.clone())
@@ -145,7 +145,7 @@ fn negation_normal_form(
         pool.add_term(Term::Quant(quant, bindings.clone(), inner))
     } else {
         match match_term!((= p q) = term) {
-            Some((left, right)) if *left.sort() == Sort::Bool => {
+            Some((left, right)) if *pool.sort(left) == Sort::Bool => {
                 let a = negation_normal_form(pool, left, !polarity, cache);
                 let b = negation_normal_form(pool, right, polarity, cache);
                 let c = negation_normal_form(pool, right, !polarity, cache);
@@ -452,7 +452,7 @@ mod tests {
     #[test]
     fn conjunctive_normal_form() {
         use super::*;
-        use crate::parser::tests::parse_term_with_definitions;
+        use crate::parser::tests::*;
 
         fn to_cnf_term(pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
             let nnf = negation_normal_form(pool, term, true, &mut AHashMap::new());
@@ -487,8 +487,7 @@ mod tests {
 
         fn run_tests(definitions: &str, cases: &[(&str, &str)]) {
             for &(term, expected) in cases {
-                let mut pool = TermPool::new();
-                let term = pool.add_term(parse_term_with_definitions(definitions, term));
+                let (term, mut pool) = parse_term_with_definitions_pool(definitions, term);
                 let got = to_cnf_term(&mut pool, &term);
                 let expected = parse_term_with_definitions(definitions, expected);
                 assert_deep_eq!(&expected, got.as_ref());

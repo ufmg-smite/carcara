@@ -222,7 +222,8 @@ impl<'c> ProofChecker<'c> {
         // we use the current state of the hash map to transform `(f y)` into `(f z)`. The
         // resulting hash map will then contain `(:= y z)` and `(:= x (f z))`
         for (var, value) in assignment_args.iter() {
-            let var_term = terminal!(var var; self.pool.add_term(Term::Sort(value.sort().clone())));
+            let sort = Term::Sort(self.pool.sort(value).clone());
+            let var_term = terminal!(var var; self.pool.add_term(sort));
             let var_term = self.pool.add_term(var_term);
             substitution.insert(self.pool, var_term.clone(), value.clone())?;
             let new_value = substitution_until_fixed_point.apply(&mut self.pool, value)?;

@@ -35,7 +35,7 @@ impl Substitution {
 
     pub fn new(pool: &mut TermPool, map: AHashMap<Rc<Term>, Rc<Term>>) -> SubstitutionResult<Self> {
         for (k, v) in map.iter() {
-            if k.sort() != v.sort() {
+            if pool.sort(k) != pool.sort(v) {
                 return Err(SubstitutionError::DifferentSorts(k.clone(), v.clone()));
             }
         }
@@ -81,7 +81,7 @@ impl Substitution {
         x: Rc<Term>,
         t: Rc<Term>,
     ) -> SubstitutionResult<()> {
-        if x.sort() != t.sort() {
+        if pool.sort(&x) != pool.sort(&t) {
             return Err(SubstitutionError::DifferentSorts(x, t));
         }
 
