@@ -857,6 +857,25 @@ impl<R: BufRead> Parser<R> {
         Ok(self.add_term(Term::Choice(var, inner)))
     }
 
+    /// Parses a `lambda` term. This method assumes that the `(` and `let` tokens were already
+    /// consumed.
+    fn parse_lambda_term(&mut self) -> AletheResult<Rc<Term>> {
+        self.expect_token(Token::OpenParen)?;
+        self.state.symbol_table.push_scope();
+        let bindings = self.parse_sequence(
+            |p| {
+                let var = p.parse_sorted_var()?;
+                p.insert_sorted_var(var.clone());
+                Ok(var)
+            },
+            true,
+        )?;
+        let body = self.parse_term()?;
+        self.state.symbol_table.pop_scope();
+        self.expect_token(Token::CloseParen)?;
+        Ok(self.add_term(Term::Lambda(BindingList(bindings), body)))
+    }
+
     /// Parses a `let` term. This method assumes that the `(` and `let` tokens were already
     /// consumed.
     fn parse_let_term(&mut self) -> AletheResult<Rc<Term>> {
@@ -930,6 +949,7 @@ impl<R: BufRead> Parser<R> {
                     Reserved::Exists => self.parse_quantifier(Quantifier::Exists),
                     Reserved::Forall => self.parse_quantifier(Quantifier::Forall),
                     Reserved::Choice => self.parse_choice_term(),
+                    Reserved::Lambda => self.parse_lambda_term(),
                     Reserved::Bang => self.parse_annotated_term(),
                     Reserved::Let => self.parse_let_term(),
                     _ => Err(Error::Parser(

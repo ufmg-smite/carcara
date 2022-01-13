@@ -86,6 +86,9 @@ pub enum Reserved {
     /// The `choice` reserved word.
     Choice,
 
+    /// The `lambda` reserved word.
+    Lambda,
+
     /// The `cl` reserved word.
     Cl,
 
@@ -126,6 +129,7 @@ impl_str_conversion_traits!(Reserved {
     Forall: "forall",
     Match: "match",
     Choice: "choice",
+    Lambda: "lambda",
     Cl: "cl",
     Assume: "assume",
     Step: "step",
