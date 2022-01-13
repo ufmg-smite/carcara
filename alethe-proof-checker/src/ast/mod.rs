@@ -278,6 +278,9 @@ pub enum Term {
 
     /// A `let` binder term.
     Let(BindingList, Rc<Term>),
+
+    /// A `lambda` term.
+    Lambda(BindingList, Rc<Term>),
     // TODO: `match` binder terms
 }
 

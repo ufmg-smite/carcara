@@ -146,6 +146,9 @@ impl fmt::Display for Term {
             Term::Let(bindings, term) => {
                 write!(f, "(let {} {})", bindings, term)
             }
+            Term::Lambda(bindings, term) => {
+                write!(f, "(lambda {} {})", bindings, term)
+            }
         }
     }
 }

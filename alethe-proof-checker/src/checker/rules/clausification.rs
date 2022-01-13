@@ -325,6 +325,10 @@ fn apply_bfun_elim(
             let inner = apply_bfun_elim(pool, inner, cache)?;
             pool.add_term(Term::Let(bindings.clone(), inner))
         }
+        Term::Lambda(bindings, inner) => {
+            let inner = apply_bfun_elim(pool, inner, cache)?;
+            pool.add_term(Term::Lambda(bindings.clone(), inner))
+        }
         _ => term.clone(),
     };
 

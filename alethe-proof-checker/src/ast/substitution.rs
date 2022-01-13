@@ -138,7 +138,7 @@ impl Substitution {
                 };
                 pool.add_term(Term::Quant(*q, new_bindings, new_term))
             }
-            // TODO: Handle `choice` and `let` terms
+            // TODO: Handle `choice`, `let` and `lambda` terms
             _ => term.clone(),
         };
 

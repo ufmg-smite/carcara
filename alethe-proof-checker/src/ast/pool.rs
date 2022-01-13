@@ -140,6 +140,13 @@ impl TermPool {
             Term::Quant(_, _, _) => Sort::Bool,
             Term::Choice((_, sort), _) => sort.as_sort().unwrap().clone(),
             Term::Let(_, inner) => self.compute_sort(inner).clone(),
+            Term::Lambda(bindings, body) => {
+                let mut result: Vec<_> =
+                    bindings.iter().map(|(_name, sort)| sort.clone()).collect();
+                let return_sort = Term::Sort(self.compute_sort(body).clone());
+                result.push(self.add_term(return_sort));
+                Sort::Function(result)
+            }
         };
         self.sorts_cache.insert(term.clone(), result);
         &self.sorts_cache[term]
@@ -179,7 +186,9 @@ impl TermPool {
                 }
                 set
             }
-            Term::Quant(_, bindings, inner) | Term::Let(bindings, inner) => {
+            Term::Quant(_, bindings, inner)
+            | Term::Let(bindings, inner)
+            | Term::Lambda(bindings, inner) => {
                 let mut vars = self.free_vars(inner).clone();
                 for (s, _) in bindings {
                     vars.remove(s.as_str());
