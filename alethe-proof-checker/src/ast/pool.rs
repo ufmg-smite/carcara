@@ -75,10 +75,7 @@ impl TermPool {
     /// terms hash map, it is added to it. This also adds the term's sort to the sort cache.
     pub fn add_term(&mut self, term: Term) -> Rc<Term> {
         let term = Self::add_term_to_map(&mut self.terms, term);
-        if !self.sorts_cache.contains_key(&term) {
-            self.sorts_cache
-                .insert(term.clone(), term.raw_sort_with_cache(&self.sorts_cache));
-        }
+        self.compute_sort(&term);
         term
     }
 
@@ -87,8 +84,64 @@ impl TermPool {
         terms.into_iter().map(|t| self.add_term(t)).collect()
     }
 
-    /// Returns the cached sort of the term.
+    /// Returns the sort of this term. For operations and application terms, this method assumes
+    /// that the arguments' sorts have already been checked, and are correct. If `term` is itself a
+    /// sort, this simply returns that sort.
     pub fn sort(&self, term: &Rc<Term>) -> &Sort {
+        &self.sorts_cache[term]
+    }
+
+    /// Computes the sort of a term and adds it to the sort cache.
+    fn compute_sort<'a, 'b: 'a>(&'a mut self, term: &'b Rc<Term>) -> &'a Sort {
+        use super::Operator;
+
+        if self.sorts_cache.contains_key(term) {
+            return &self.sorts_cache[term];
+        }
+
+        let result = match term.as_ref() {
+            Term::Terminal(t) => match t {
+                Terminal::Integer(_) => Sort::Int,
+                Terminal::Real(_) => Sort::Real,
+                Terminal::String(_) => Sort::String,
+                Terminal::Var(_, sort) => sort.as_sort().unwrap().clone(),
+            },
+            Term::Op(op, args) => match op {
+                Operator::Not
+                | Operator::Implies
+                | Operator::And
+                | Operator::Or
+                | Operator::Xor
+                | Operator::Equals
+                | Operator::Distinct
+                | Operator::LessThan
+                | Operator::GreaterThan
+                | Operator::LessEq
+                | Operator::GreaterEq => Sort::Bool,
+                Operator::Ite => self.compute_sort(&args[1]).clone(),
+                Operator::Add
+                | Operator::Sub
+                | Operator::Mult
+                | Operator::IntDiv
+                | Operator::RealDiv => self.compute_sort(&args[0]).clone(),
+                Operator::Select => match self.compute_sort(&args[0]) {
+                    Sort::Array(_, y) => y.as_sort().unwrap().clone(),
+                    _ => unreachable!(),
+                },
+                Operator::Store => self.compute_sort(&args[0]).clone(),
+            },
+            Term::App(f, _) => {
+                match self.compute_sort(f) {
+                    Sort::Function(sorts) => sorts.last().unwrap().as_sort().unwrap().clone(),
+                    _ => unreachable!(), // We assume that the function is correctly sorted
+                }
+            }
+            Term::Sort(sort) => sort.clone(),
+            Term::Quant(_, _, _) => Sort::Bool,
+            Term::Choice((_, sort), _) => sort.as_sort().unwrap().clone(),
+            Term::Let(_, inner) => self.compute_sort(inner).clone(),
+        };
+        self.sorts_cache.insert(term.clone(), result);
         &self.sorts_cache[term]
     }
 

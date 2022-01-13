@@ -21,7 +21,7 @@ pub use substitution::{Substitution, SubstitutionError};
 pub use subterms::Subterms;
 
 use crate::checker::error::CheckerError;
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashSet;
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
@@ -409,63 +409,10 @@ impl Term {
 }
 
 impl Rc<Term> {
-    /// Returns the sort of this term. For operations and application terms, this method assumes
-    /// that the arguments' sorts have already been checked, and are correct. If `self` is a sort,
-    /// this method does nothing and returns `self`. This does not make use of a cache -- if
-    /// possible, prefer to use `TermPool::sort`.
+    /// Returns the sort of this term. This does not make use of a cache -- if possible, prefer to
+    /// use `TermPool::sort`.
     pub fn raw_sort(&self) -> Sort {
-        self.raw_sort_with_cache(&AHashMap::new())
-    }
-
-    /// Returns the sort of this term, possibly using the given cache to avoid computation. This
-    /// method does not actually modify the cache to add the result it computed.
-    fn raw_sort_with_cache(&self, cache: &AHashMap<Rc<Term>, Sort>) -> Sort {
-        if let Some(s) = cache.get(self) {
-            return s.clone();
-        }
-
-        match self.as_ref() {
-            Term::Terminal(t) => match t {
-                Terminal::Integer(_) => Sort::Int,
-                Terminal::Real(_) => Sort::Real,
-                Terminal::String(_) => Sort::String,
-                Terminal::Var(_, sort) => sort.as_sort().unwrap().clone(),
-            },
-            Term::Op(op, args) => match op {
-                Operator::Not
-                | Operator::Implies
-                | Operator::And
-                | Operator::Or
-                | Operator::Xor
-                | Operator::Equals
-                | Operator::Distinct
-                | Operator::LessThan
-                | Operator::GreaterThan
-                | Operator::LessEq
-                | Operator::GreaterEq => Sort::Bool,
-                Operator::Ite => args[1].raw_sort_with_cache(cache),
-                Operator::Add
-                | Operator::Sub
-                | Operator::Mult
-                | Operator::IntDiv
-                | Operator::RealDiv => args[0].raw_sort_with_cache(cache),
-                Operator::Select => match args[0].raw_sort_with_cache(cache) {
-                    Sort::Array(_, y) => y.as_sort().unwrap().clone(),
-                    _ => unreachable!(),
-                },
-                Operator::Store => args[0].raw_sort_with_cache(cache),
-            },
-            Term::App(f, _) => {
-                match f.raw_sort_with_cache(cache) {
-                    Sort::Function(sorts) => sorts.last().unwrap().as_sort().unwrap().clone(),
-                    _ => unreachable!(), // We assume that the function is correctly sorted
-                }
-            }
-            Term::Sort(sort) => sort.clone(),
-            Term::Quant(_, _, _) => Sort::Bool,
-            Term::Choice((_, sort), _) => sort.as_sort().unwrap().clone(),
-            Term::Let(_, inner) => inner.raw_sort_with_cache(cache),
-        }
+        TermPool::new().sort(self).clone()
     }
 
     /// Removes a leading negation from the term, if it exists. Same thing as `match_term!((not t)
