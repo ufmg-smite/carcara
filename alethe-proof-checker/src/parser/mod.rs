@@ -48,7 +48,7 @@ struct AnchorCommand {
 /// definitions, as well as the term pool used by the parser.
 #[derive(Default)]
 struct ParserState {
-    sorts_symbol_table: SymbolTable<Identifier, Rc<Term>>,
+    symbol_table: SymbolTable<Identifier, Rc<Term>>,
     function_defs: AHashMap<String, FunctionDef>,
     term_pool: TermPool,
     sort_declarations: AHashMap<String, usize>,
@@ -74,7 +74,7 @@ impl<R: BufRead> Parser<R> {
         let bool_sort = state.term_pool.add_term(Term::Sort(Sort::Bool));
         for iden in ["true", "false"] {
             let iden = Identifier::Simple(iden.to_string());
-            state.sorts_symbol_table.insert(iden, bool_sort.clone());
+            state.symbol_table.insert(iden, bool_sort.clone());
         }
         let mut lexer = Lexer::new(input)?;
         let (current_token, current_position) = lexer.next_token()?;
@@ -139,7 +139,7 @@ impl<R: BufRead> Parser<R> {
     /// Helper method to insert a `SortedVar` into the parser symbol table.
     fn insert_sorted_var(&mut self, (symbol, sort): SortedVar) {
         self.state
-            .sorts_symbol_table
+            .symbol_table
             .insert(Identifier::Simple(symbol), sort)
     }
 
@@ -168,7 +168,7 @@ impl<R: BufRead> Parser<R> {
     fn make_var(&mut self, iden: Identifier) -> Result<Rc<Term>, ParserError> {
         let sort = self
             .state
-            .sorts_symbol_table
+            .symbol_table
             .get(&iden)
             .ok_or_else(|| ParserError::UndefinedIden(iden.clone()))?
             .clone();
@@ -463,11 +463,11 @@ impl<R: BufRead> Parser<R> {
                     let anchor = self.parse_anchor_command()?;
 
                     // When we encounter an `anchor` command, we push a new scope into the step
-                    // indices symbol table, a fresh commands vector into the commands stack for
-                    // the subproof to fill, and the `anchor` data (end step and arguments) into
-                    // their respective stacks. All of this will be popped off at the end of the
-                    // subproof. We don't need to push a new scope into the sorts symbol table
-                    // because `Parser::parse_anchor_command` already does that for us
+                    // indices symbol table, a fresh commands vector into the commands stack for the
+                    // subproof to fill, and the `anchor` data (end step and arguments) into their
+                    // respective stacks. All of this will be popped off at the end of the subproof.
+                    // We don't need to push a new scope into the symbol table because
+                    // `Parser::parse_anchor_command` already does that for us
                     self.state.step_indices.push_scope();
                     commands_stack.push(Vec::new());
                     end_step_stack.push(anchor.end_step_index);
@@ -487,7 +487,7 @@ impl<R: BufRead> Parser<R> {
             if end_step_stack.last() == Some(&index) {
                 // If this is the last step in a subproof, we need to pop all the subproof data off
                 // of the stacks and build the subproof command with it
-                self.state.sorts_symbol_table.pop_scope();
+                self.state.symbol_table.pop_scope();
                 self.state.step_indices.pop_scope();
                 let commands = commands_stack.pop().unwrap();
                 end_step_stack.pop().unwrap();
@@ -622,14 +622,14 @@ impl<R: BufRead> Parser<R> {
 
     /// Parses an `anchor` proof command. This method assumes that the `(` and `anchor` tokens were
     /// already consumed. In order to parse the subproof arguments, this method pushes a new scope
-    /// into the sorts symbol table which must be removed after parsing the subproof.
+    /// into the symbol table which must be removed after parsing the subproof.
     fn parse_anchor_command(&mut self) -> AletheResult<AnchorCommand> {
         self.expect_token(Token::Keyword("step".into()))?;
         let end_step_index = self.expect_symbol()?;
 
-        // We have to push a new scope into the sorts symbol table in order to parse the subproof
+        // We have to push a new scope into the symbol table in order to parse the subproof
         // arguments
-        self.state.sorts_symbol_table.push_scope();
+        self.state.symbol_table.push_scope();
 
         let mut assignment_args = Vec::new();
         let mut variable_args = Vec::new();
@@ -731,12 +731,12 @@ impl<R: BufRead> Parser<R> {
 
         // In order to correctly parse the function body, we push a new scope to the symbol table
         // and add the functions arguments to it.
-        self.state.sorts_symbol_table.push_scope();
+        self.state.symbol_table.push_scope();
         for var in &params {
             self.insert_sorted_var(var.clone());
         }
         let body = self.parse_term_expecting_sort(return_sort.as_sort().unwrap())?;
-        self.state.sorts_symbol_table.pop_scope();
+        self.state.symbol_table.pop_scope();
 
         self.expect_token(Token::CloseParen)?;
 
@@ -830,7 +830,7 @@ impl<R: BufRead> Parser<R> {
     /// already consumed.
     fn parse_quantifier(&mut self, quantifier: Quantifier) -> AletheResult<Rc<Term>> {
         self.expect_token(Token::OpenParen)?;
-        self.state.sorts_symbol_table.push_scope();
+        self.state.symbol_table.push_scope();
         let bindings = self.parse_sequence(
             |p| {
                 let var = p.parse_sorted_var()?;
@@ -840,7 +840,7 @@ impl<R: BufRead> Parser<R> {
             true,
         )?;
         let term = self.parse_term_expecting_sort(&Sort::Bool)?;
-        self.state.sorts_symbol_table.pop_scope();
+        self.state.symbol_table.pop_scope();
         self.expect_token(Token::CloseParen)?;
         Ok(self.add_term(Term::Quant(quantifier, BindingList(bindings), term)))
     }
@@ -861,7 +861,7 @@ impl<R: BufRead> Parser<R> {
     /// consumed.
     fn parse_let_term(&mut self) -> AletheResult<Rc<Term>> {
         self.expect_token(Token::OpenParen)?;
-        self.state.sorts_symbol_table.push_scope();
+        self.state.symbol_table.push_scope();
         let bindings = self.parse_sequence(
             |p| {
                 p.expect_token(Token::OpenParen)?;
@@ -876,7 +876,7 @@ impl<R: BufRead> Parser<R> {
         )?;
         let inner = self.parse_term()?;
         self.expect_token(Token::CloseParen)?;
-        self.state.sorts_symbol_table.pop_scope();
+        self.state.symbol_table.pop_scope();
         Ok(self.add_term(Term::Let(BindingList(bindings), inner)))
     }
 
