@@ -6,13 +6,39 @@ use super::*;
 
 const ERROR_MESSAGE: &str = "parser error during test";
 
+pub(crate) struct TestParser<'a> {
+    inner: Parser<&'a [u8]>,
+}
+
+impl<'a> TestParser<'a> {
+    pub(crate) fn new(definitions: &'a str) -> Self {
+        let mut inner = Parser::new(definitions.as_bytes(), true).expect(ERROR_MESSAGE);
+        inner.parse_problem().expect(ERROR_MESSAGE);
+        Self { inner }
+    }
+
+    fn reset(&mut self, input: &'a str) {
+        self.inner.reset(input.as_bytes()).expect(ERROR_MESSAGE);
+    }
+
+    pub(crate) fn parse_term(&mut self, input: &'a str) -> Rc<Term> {
+        self.reset(input);
+        self.inner.parse_term().expect(ERROR_MESSAGE)
+    }
+
+    pub(crate) fn parse_proof(&mut self, input: &'a str) -> Vec<ProofCommand> {
+        self.reset(input);
+        self.inner.parse_proof().expect(ERROR_MESSAGE)
+    }
+
+    pub(crate) fn term_pool(self) -> TermPool {
+        self.inner.term_pool()
+    }
+}
+
 /// Parses a term from a `&str`. Panics if any error is encountered.
 pub(crate) fn parse_term(input: &str) -> Term {
-    Parser::new(input.as_bytes(), true)
-        .and_then(|mut p| p.parse_term())
-        .expect(ERROR_MESSAGE)
-        .as_ref()
-        .clone()
+    TestParser::new("").parse_term(input).as_ref().clone()
 }
 
 /// Tries to parse a term from a `&str`, expecting it to fail. Returns the error encountered, or
@@ -25,31 +51,29 @@ pub(crate) fn parse_term_err(input: &str) -> Error {
 
 /// Parses a series of definitions and declarations, and then parses a term and returns it. Panics
 /// if any error is encountered.
+#[deprecated]
 pub(crate) fn parse_term_with_definitions(definitions: &str, term: &str) -> Term {
-    let mut parser = Parser::new(definitions.as_bytes(), true).expect(ERROR_MESSAGE);
-    parser.parse_problem().expect(ERROR_MESSAGE);
-    parser.reset(term.as_bytes()).expect(ERROR_MESSAGE);
-    parser.parse_term().expect(ERROR_MESSAGE).as_ref().clone()
+    TestParser::new(definitions)
+        .parse_term(term)
+        .as_ref()
+        .clone()
 }
 
 /// Parses a series of definitions and declarations, and then parses a term and returns it. Also
 /// returns the `TermPool` used in parsing. Panics if any error is encountered.
+#[deprecated]
 pub(crate) fn parse_term_with_definitions_pool(
     definitions: &str,
     term: &str,
 ) -> (Rc<Term>, TermPool) {
-    let mut parser = Parser::new(definitions.as_bytes(), true).expect(ERROR_MESSAGE);
-    parser.parse_problem().expect(ERROR_MESSAGE);
-    parser.reset(term.as_bytes()).expect(ERROR_MESSAGE);
-    let term = parser.parse_term().expect(ERROR_MESSAGE);
+    let mut parser = TestParser::new(definitions);
+    let term = parser.parse_term(term);
     (term, parser.term_pool())
 }
 
 /// Parses a proof from a `&str`. Panics if any error is encountered.
 pub(crate) fn parse_proof(input: &str) -> Proof {
-    let commands = Parser::new(input.as_bytes(), true)
-        .and_then(|mut p| p.parse_proof())
-        .expect(ERROR_MESSAGE);
+    let commands = TestParser::new("").parse_proof(input);
     Proof { premises: AHashSet::new(), commands }
 }
 
