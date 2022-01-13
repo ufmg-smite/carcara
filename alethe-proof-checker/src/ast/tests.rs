@@ -1,5 +1,4 @@
-use super::*;
-use crate::parser::tests::{parse_term, parse_term_with_definitions};
+use crate::parser::tests::{parse_term, TestParser};
 use ahash::AHashSet;
 
 #[test]
@@ -26,7 +25,7 @@ fn test_subterms() {
         for c in cases {
             let expected = c.iter().copied();
 
-            let root = parse_term_with_definitions(definitions, c[0]);
+            let root = TestParser::new(definitions).parse_term(c[0]);
             let subterms = root.subterms();
             let as_strings: Vec<_> = subterms.map(|t| format!("{}", t)).collect();
             let got = as_strings.iter().map(String::as_str);
@@ -81,16 +80,13 @@ fn test_subterms() {
 fn test_free_vars() {
     fn run_tests(definitions: &str, cases: &[(&str, &[&str])]) {
         for &(term, expected) in cases {
-            let root = parse_term_with_definitions(definitions, term);
+            let mut parser = TestParser::new(definitions);
+            let root = parser.parse_term(term);
             let expected = expected
                 .iter()
                 .map(|&s| s.to_string())
                 .collect::<AHashSet<_>>();
-
-            // Since we are only using the term pool as a cache for `free_vars`, it doesn't need to
-            // actually hold the terms, meaning we can just use an empty pool.
-            let mut pool = TermPool::new();
-            let root = pool.add_term(root);
+            let mut pool = parser.term_pool();
 
             assert_eq!(&expected, pool.free_vars(&root))
         }
@@ -124,16 +120,13 @@ fn test_deep_eq() {
 
     fn run_tests(definitions: &str, cases: &[(&str, &str)], test_type: TestType) {
         for (a, b) in cases {
-            let (a, b) = (
-                parse_term_with_definitions(definitions, a),
-                parse_term_with_definitions(definitions, b),
-            );
+            let mut parser = TestParser::new(definitions);
+            let (a, b) = (parser.parse_term(a), parser.parse_term(b));
             match test_type {
                 TestType::Normal => assert_deep_eq!(&a, &b),
                 TestType::ModReordering => assert_deep_eq_modulo_reordering!(&a, &b),
                 TestType::AlphaEquiv => {
-                    let (a, b) = (a.into(), b.into());
-                    assert!(super::deep_eq::are_alpha_equivalent(&a, &b), "{} {}", a, b)
+                    assert!(super::deep_eq::are_alpha_equivalent(&a, &b))
                 }
             }
         }

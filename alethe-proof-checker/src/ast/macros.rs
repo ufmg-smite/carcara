@@ -190,7 +190,7 @@ macro_rules! assert_deep_eq_modulo_reordering {
 #[cfg(test)]
 mod tests {
     use crate::ast::*;
-    use crate::parser::tests::{parse_term, parse_term_with_definitions};
+    use crate::parser::tests::{parse_term, TestParser};
 
     #[test]
     fn test_match_term() {
@@ -298,7 +298,7 @@ mod tests {
         ];
 
         for (s, got) in &cases {
-            let expected = parse_term_with_definitions(definitions, s);
+            let expected = TestParser::new(definitions).parse_term(s);
             assert_deep_eq!(&expected, got)
         }
     }

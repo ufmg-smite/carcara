@@ -487,10 +487,11 @@ mod tests {
 
         fn run_tests(definitions: &str, cases: &[(&str, &str)]) {
             for &(term, expected) in cases {
-                let (term, mut pool) = parse_term_with_definitions_pool(definitions, term);
-                let got = to_cnf_term(&mut pool, &term);
-                let expected = parse_term_with_definitions(definitions, expected);
-                assert_deep_eq!(&expected, got.as_ref());
+                let mut parser = TestParser::new(definitions);
+                let term = parser.parse_term(term);
+                let expected = parser.parse_term(expected);
+                let got = to_cnf_term(&mut parser.term_pool(), &term);
+                assert_eq!(expected, got);
             }
         }
 

@@ -49,28 +49,6 @@ pub(crate) fn parse_term_err(input: &str) -> Error {
         .expect_err("expected error")
 }
 
-/// Parses a series of definitions and declarations, and then parses a term and returns it. Panics
-/// if any error is encountered.
-#[deprecated]
-pub(crate) fn parse_term_with_definitions(definitions: &str, term: &str) -> Term {
-    TestParser::new(definitions)
-        .parse_term(term)
-        .as_ref()
-        .clone()
-}
-
-/// Parses a series of definitions and declarations, and then parses a term and returns it. Also
-/// returns the `TermPool` used in parsing. Panics if any error is encountered.
-#[deprecated]
-pub(crate) fn parse_term_with_definitions_pool(
-    definitions: &str,
-    term: &str,
-) -> (Rc<Term>, TermPool) {
-    let mut parser = TestParser::new(definitions);
-    let term = parser.parse_term(term);
-    (term, parser.term_pool())
-}
-
 /// Parses a proof from a `&str`. Panics if any error is encountered.
 pub(crate) fn parse_proof(input: &str) -> Proof {
     let commands = TestParser::new("").parse_proof(input);
@@ -472,59 +450,54 @@ fn test_annotated_terms() {
 
 #[test]
 fn test_declare_fun() {
-    parse_term_with_definitions(
-        "(declare-fun f (Bool Int Real) Real)",
-        "(f false 42 3.14159)",
-    );
+    TestParser::new("(declare-fun f (Bool Int Real) Real)").parse_term("(f false 42 3.14159)");
 
-    parse_term_with_definitions(
+    TestParser::new(
         "(declare-fun y () Real)
-         (declare-fun f (Real) Int)
-         (declare-fun g (Int Int) Bool)",
-        "(g (f y) 0)",
-    );
+        (declare-fun f (Real) Int)
+        (declare-fun g (Int Int) Bool)",
+    )
+    .parse_term("(g (f y) 0)");
 
-    let got = parse_term_with_definitions("(declare-fun x () Real)", "x");
+    let got = TestParser::new("(declare-fun x () Real)").parse_term("x");
     assert_deep_eq!(&terminal!(var "x"; Rc::new(Term::Sort(Sort::Real))), &got);
 }
 
 #[test]
 fn test_declare_sort() {
-    parse_term_with_definitions(
+    TestParser::new(
         "(declare-sort T 0)
-         (declare-sort U 0)
-         (declare-sort Y 0)
-         (declare-fun t () T)
-         (declare-fun u () U)
-         (declare-fun f (T U) Y)",
-        "(f t u)",
-    );
+        (declare-sort U 0)
+        (declare-sort Y 0)
+        (declare-fun t () T)
+        (declare-fun u () U)
+        (declare-fun f (T U) Y)",
+    )
+    .parse_term("(f t u)");
 
-    let got = parse_term_with_definitions(
+    let got = TestParser::new(
         "(declare-sort T 0)
-         (declare-fun x () T)",
-        "x",
-    );
+        (declare-fun x () T)",
+    )
+    .parse_term("x");
     let expected_sort = Term::Sort(Sort::Atom("T".to_string(), Vec::new()));
     assert_deep_eq!(&terminal!(var "x"; Rc::new(expected_sort)), &got);
 }
 
 #[test]
 fn test_define_fun() {
-    let got = parse_term_with_definitions(
-        "(define-fun add ((a Int) (b Int)) Int (+ a b))",
-        "(add 2 3)",
-    );
+    let got =
+        TestParser::new("(define-fun add ((a Int) (b Int)) Int (+ a b))").parse_term("(add 2 3)");
     assert_deep_eq!(&parse_term("(+ 2 3)"), &got);
 
-    let got = parse_term_with_definitions("(define-fun x () Int 2)", "(+ x 3)");
+    let got = TestParser::new("(define-fun x () Int 2)").parse_term("(+ x 3)");
     assert_deep_eq!(&parse_term("(+ 2 3)"), &got);
 
-    let got = parse_term_with_definitions(
+    let got = TestParser::new(
         "(define-fun f ((x Int)) Int (+ x 1))
          (define-fun g ((a Int) (b Int)) Int (* (f a) (f b)))",
-        "(g 2 3)",
-    );
+    )
+    .parse_term("(g 2 3)");
     let expected = parse_term("(* (+ 2 1) (+ 3 1))");
     assert_deep_eq!(&expected, &got);
 }
