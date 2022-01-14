@@ -148,10 +148,11 @@ impl<R: BufRead> Parser<R> {
     /// table and adds a new premise that defines the function.
     fn add_function_def(&mut self, name: String, func_def: FunctionDef) {
         if self.is_parsing_problem() && !self.apply_function_defs {
-            if !func_def.params.is_empty() {
-                todo!("implement `lambda` terms")
-            }
-            let lambda_term = func_def.body;
+            let lambda_term = if func_def.params.is_empty() {
+                func_def.body
+            } else {
+                self.add_term(Term::Lambda(BindingList(func_def.params), func_def.body))
+            };
             let sort = self.add_term(Term::Sort(self.sort(&lambda_term).clone()));
             let var = (name, sort);
             self.insert_sorted_var(var.clone());
