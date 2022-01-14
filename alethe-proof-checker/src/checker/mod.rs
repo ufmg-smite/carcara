@@ -377,6 +377,11 @@ impl<'c> ProofChecker<'c> {
             // Special rule that always checks as valid. It is mostly used in tests
             "trust" => |_| Ok(()),
 
+            // The Alethe specification does not yet describe how this more strict version of the
+            // resolution rule will be called. Until that is decided and added to the specification,
+            // we define a new specialized rule that calls it
+            "strict_resolution" => resolution::strict_resolution,
+
             _ => return None,
         })
     }

@@ -1,13 +1,47 @@
 use super::{
-    assert_clause_len, assert_is_bool_constant, assert_is_expected, assert_num_args,
-    assert_num_premises, CheckerError, RuleArgs, RuleResult,
+    assert_clause_len, assert_eq, assert_is_bool_constant, assert_is_expected, assert_num_args,
+    assert_num_premises, CheckerError, Premise, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::ResolutionError, utils::DedupIterator};
 use ahash::{AHashMap, AHashSet};
-use std::collections::hash_map::Entry;
+use std::{collections::hash_map::Entry, iter::FromIterator};
+
+type ResolutionTerm<'a> = (u32, &'a Rc<Term>);
+
+/// A collection that can be used as a clause during resolution.
+trait ClauseCollection<'a>: FromIterator<ResolutionTerm<'a>> {
+    fn insert_term(&mut self, item: ResolutionTerm<'a>);
+
+    fn remove_term(&mut self, item: &ResolutionTerm<'a>) -> bool;
+}
+
+impl<'a> ClauseCollection<'a> for Vec<ResolutionTerm<'a>> {
+    fn insert_term(&mut self, item: ResolutionTerm<'a>) {
+        self.push(item)
+    }
+
+    fn remove_term(&mut self, item: &ResolutionTerm<'a>) -> bool {
+        if let Some(pos) = self.iter().position(|x| x == item) {
+            self.remove(pos);
+            true
+        } else {
+            false
+        }
+    }
+}
+
+impl<'a> ClauseCollection<'a> for AHashSet<ResolutionTerm<'a>> {
+    fn insert_term(&mut self, item: ResolutionTerm<'a>) {
+        self.insert(item);
+    }
+
+    fn remove_term(&mut self, item: &ResolutionTerm<'a>) -> bool {
+        self.remove(item)
+    }
+}
 
 /// Undoes the transformation done by `Rc<Term>::remove_all_negations`.
-fn unremove_all_negations(pool: &mut TermPool, (n, term): (u32, &Rc<Term>)) -> Rc<Term> {
+fn unremove_all_negations(pool: &mut TermPool, (n, term): ResolutionTerm) -> Rc<Term> {
     let mut term = term.clone();
     for _ in 0..n {
         term = build_term!(pool, (not { term }));
@@ -157,6 +191,44 @@ fn resolution_with_args(
         conclusion, premises, args, pool, ..
     }: RuleArgs,
 ) -> RuleResult {
+    let resolution_result = apply_generic_resolution::<AHashSet<_>>(premises, args, pool)?;
+
+    let conclusion: AHashSet<_> = conclusion
+        .iter()
+        .map(|t| t.remove_all_negations())
+        .collect();
+
+    if let Some(extra) = conclusion.difference(&resolution_result).next() {
+        let extra = unremove_all_negations(pool, *extra);
+        return Err(ResolutionError::ExtraTermInConclusion(extra).into());
+    }
+    if let Some(missing) = resolution_result.difference(&conclusion).next() {
+        let missing = unremove_all_negations(pool, *missing);
+        return Err(ResolutionError::MissingTermInConclusion(missing).into());
+    }
+    Ok(())
+}
+
+pub fn strict_resolution(
+    RuleArgs {
+        conclusion, premises, args, pool, ..
+    }: RuleArgs,
+) -> RuleResult {
+    let resolution_result = apply_generic_resolution::<Vec<_>>(premises, args, pool)?;
+
+    for (t, u) in resolution_result.into_iter().zip(conclusion) {
+        if t != u.remove_all_negations() {
+            assert_eq(&unremove_all_negations(pool, t), u)?;
+        }
+    }
+    Ok(())
+}
+
+fn apply_generic_resolution<'a, C: ClauseCollection<'a>>(
+    premises: &'a [Premise],
+    args: &'a [ProofArg],
+    pool: &mut TermPool,
+) -> Result<C, CheckerError> {
     assert_num_premises(premises, 1..)?;
     let num_steps = premises.len() - 1;
     assert_num_args(args, num_steps * 2)?;
@@ -177,36 +249,24 @@ fn resolution_with_args(
         })
         .collect::<Result<_, _>>()?;
 
-    let mut current: AHashSet<_> = premises[0]
+    let mut current = premises[0]
         .clause
         .iter()
         .map(|t| t.remove_all_negations())
         .collect();
+
     for (premise, (pivot, polarity)) in premises[1..].iter().zip(args) {
         binary_resolution(pool, &mut current, premise.clause, pivot, polarity)?;
     }
 
-    let conclusion: AHashSet<_> = conclusion
-        .iter()
-        .map(|t| t.remove_all_negations())
-        .collect();
-
-    if let Some(extra) = conclusion.difference(&current).next() {
-        let extra = unremove_all_negations(pool, *extra);
-        return Err(ResolutionError::ExtraTermInConclusion(extra).into());
-    }
-    if let Some(missing) = current.difference(&conclusion).next() {
-        let missing = unremove_all_negations(pool, *missing);
-        return Err(ResolutionError::MissingTermInConclusion(missing).into());
-    }
-    Ok(())
+    Ok(current)
 }
 
-fn binary_resolution<'a>(
+fn binary_resolution<'a, C: ClauseCollection<'a>>(
     pool: &mut TermPool,
-    current: &mut AHashSet<(u32, &'a Rc<Term>)>,
+    current: &mut C,
     next: &'a [Rc<Term>],
-    pivot: (u32, &'a Rc<Term>),
+    pivot: ResolutionTerm<'a>,
     is_pivot_in_current: bool,
 ) -> Result<(), ResolutionError> {
     let negated_pivot = (pivot.0 + 1, pivot.1);
@@ -215,7 +275,7 @@ fn binary_resolution<'a>(
     } else {
         (negated_pivot, pivot)
     };
-    if !current.remove(&pivot_in_current) {
+    if !current.remove_term(&pivot_in_current) {
         let p = unremove_all_negations(pool, pivot_in_current);
         return Err(ResolutionError::PivotNotFound(p));
     }
@@ -223,10 +283,10 @@ fn binary_resolution<'a>(
     let mut found = false;
     for t in next {
         let t = t.remove_all_negations();
-        if t == pivot_in_next {
+        if !found && t == pivot_in_next {
             found = true;
         } else {
-            current.insert(t);
+            current.insert_term(t);
         }
     }
     if !found {
