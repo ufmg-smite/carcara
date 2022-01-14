@@ -36,8 +36,16 @@ impl<'a> SubtermsInner<'a> {
         let children: Box<dyn Iterator<Item = _>> = match root {
             Term::App(f, args) => Box::new(iter::once(f).chain(args.iter())),
             Term::Op(_, args) => Box::new(args.iter()),
-            Term::Quant(_, _, t) => Box::new(iter::once(t)),
-            _ => Box::new(iter::empty()),
+            Term::Quant(_, _, t) | Term::Choice(_, t) | Term::Lambda(_, t) => {
+                Box::new(iter::once(t))
+            }
+            Term::Let(bindings, inner) => Box::new(
+                bindings
+                    .iter()
+                    .map(|(_name, value)| value)
+                    .chain(iter::once(inner)),
+            ),
+            Term::Terminal(_) | Term::Sort(_) => Box::new(iter::empty()),
         };
         Self {
             root,

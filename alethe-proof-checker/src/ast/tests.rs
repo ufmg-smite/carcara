@@ -35,9 +35,9 @@ fn test_subterms() {
     }
     run_tests(
         "(declare-fun f (Int Int) Int)
-            (declare-fun a () Int)
-            (declare-fun b () Int)
-            (declare-fun c () Int)",
+        (declare-fun a () Int)
+        (declare-fun b () Int)
+        (declare-fun c () Int)",
         &[
             &["(= 0 1)", "0", "1"],
             &["(f a b)", "f", "a", "b"],
@@ -72,6 +72,18 @@ fn test_subterms() {
                 "a",
                 "b",
             ],
+            &["(exists ((x Int)) false)", "false"],
+            &["(forall ((p Bool)) (= 0 1))", "(= 0 1)", "0", "1"],
+            &["(choice ((y Real)) (= 0 1))", "(= 0 1)", "0", "1"],
+            &[
+                "(let ((p false) (q (= 0 1))) true)",
+                "false",
+                "(= 0 1)",
+                "0",
+                "1",
+                "true",
+            ],
+            &["(lambda ((x Int) (y Int)) (+ 1 2))", "(+ 1 2)", "1", "2"],
         ],
     )
 }
