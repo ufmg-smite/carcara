@@ -325,6 +325,7 @@ impl<'c> ProofChecker<'c> {
             "refl" => reflexivity::refl,
             "trans" => transitivity::trans,
             "cong" => congruence::cong,
+            "ho_cong" => congruence::ho_cong,
             "and" => clausification::and,
             "tautology" => resolution::tautology,
             "not_or" => clausification::not_or,

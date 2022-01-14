@@ -89,13 +89,12 @@ where
 
 /// Since the semantics of the `cong` rule is slightly different from that of `eq_congruent` and
 /// `eq_congruent_pred`, we cannot just use the `generic_congruent_rule` function
-fn check_cong<'a>(
-    premises: &[(&'a Rc<Term>, &'a Rc<Term>)],
-    f_args: &[Rc<Term>],
-    g_args: &[Rc<Term>],
-) -> RuleResult {
+fn check_cong<'a, I>(premises: &[(&'a Rc<Term>, &'a Rc<Term>)], f_args: I, g_args: I) -> RuleResult
+where
+    I: IntoIterator<Item = &'a Rc<Term>>,
+{
     let mut premises = premises.iter().peekable();
-    for (f_arg, g_arg) in f_args.iter().zip(g_args) {
+    for (f_arg, g_arg) in f_args.into_iter().zip(g_args) {
         let expected = (f_arg.as_ref(), g_arg.as_ref());
         match premises.peek() {
             // If the next premise can justify that the arguments are equal, we consume it. We
@@ -150,17 +149,17 @@ pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
         {
             // We have to test all four possibilites: neither f nor g are flipped, only f is
             // flipped, only g is flipped, or both f and g are flipped
-            let f_args_flipped = [f_args[1].clone(), f_args[0].clone()];
-            let g_args_flipped = [g_args[1].clone(), g_args[0].clone()];
+            let f_args_flipped: &[_] = &[f_args[1].clone(), f_args[0].clone()];
+            let g_args_flipped: &[_] = &[g_args[1].clone(), g_args[0].clone()];
 
             // We store the result of the first possibility (when neither arguments are flipped),
             // because, if the checking fails in the end, we use it to get more sensible error
             // messages
             let original_result = check_cong(&premises, f_args, g_args);
             let any_valid = original_result.is_ok()
-                || check_cong(&premises, &f_args_flipped, g_args).is_ok()
-                || check_cong(&premises, f_args, &g_args_flipped).is_ok()
-                || check_cong(&premises, &f_args_flipped, &g_args_flipped).is_ok();
+                || check_cong(&premises, f_args_flipped, g_args.as_slice()).is_ok()
+                || check_cong(&premises, f_args.as_slice(), g_args_flipped).is_ok()
+                || check_cong(&premises, f_args_flipped, g_args_flipped).is_ok();
             return if any_valid { Ok(()) } else { original_result };
         }
 
@@ -183,6 +182,33 @@ pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
         f_args.len() == g_args.len(),
         CongruenceError::DifferentNumberOfArguments(f_args.len(), g_args.len())
     );
+    check_cong(&premises, f_args, g_args)
+}
+
+pub fn ho_cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    use std::iter::once;
+
+    assert_clause_len(conclusion, 1)?;
+    assert_num_premises(premises, 1..)?;
+
+    let premises: Vec<_> = premises
+        .iter()
+        .map(|premise| match_term_err!((= t u) = get_premise_term(premise)?))
+        .collect::<Result<_, _>>()?;
+
+    let (f, g) = match_term_err!((= f g) = &conclusion[0])?;
+    let (f_args, g_args) = match (f.as_ref(), g.as_ref()) {
+        (Term::App(f, f_args), Term::App(g, g_args)) => {
+            rassert!(
+                f_args.len() == g_args.len(),
+                CongruenceError::DifferentNumberOfArguments(f_args.len(), g_args.len())
+            );
+            Ok((once(f).chain(f_args.iter()), once(g).chain(g_args.iter())))
+        }
+        (Term::App(..), _) => Err(CongruenceError::NotApplicationOrOperation(g.clone())),
+        _ => Err(CongruenceError::NotApplicationOrOperation(f.clone())),
+    }?;
+
     check_cong(&premises, f_args, g_args)
 }
 
@@ -404,6 +430,35 @@ mod tests {
 
                 "(assume h1 (= a b)) (assume h2 (= c d))
                 (step t3 (cl (= (= c a) (= d b))) :rule cong :premises (h1 h2))": true,
+            }
+        }
+    }
+
+    #[test]
+    fn ho_cong() {
+        test_cases! {
+            definitions = "
+                (declare-sort T 0)
+                (declare-fun a () T)
+                (declare-fun b () T)
+                (declare-fun f (T Int) T)
+                (declare-fun g (T Int) T)
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+            ",
+            "Simple working examples" {
+                "(assume h1 (= f g))
+                (assume h2 (= a b))
+                (step t3 (cl (= (f a 0) (g b 0))) :rule ho_cong :premises (h1 h2))": true,
+
+                "(assume h1 (= f (lambda ((a T) (x Int)) a)))
+                (assume h2 (= 0 1))
+                (step t3 (cl (= (f b 0) ((lambda ((a T) (x Int)) a) b 1)))
+                    :rule ho_cong :premises (h1 h2))": true,
+            }
+            "Can't be used with operators" {
+                "(assume h1 (= p q))
+                (step t3 (cl (= (and p true) (and q true))) :rule ho_cong :premises (h1))": false,
             }
         }
     }
