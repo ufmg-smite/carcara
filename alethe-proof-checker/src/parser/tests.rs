@@ -377,6 +377,40 @@ fn test_quantifiers() {
 }
 
 #[test]
+fn test_choice_terms() {
+    run_parser_tests(&[
+        (
+            "(choice ((p Bool)) p)",
+            Term::Choice(
+                ("p".into(), Rc::new(Term::Sort(Sort::Bool))),
+                Rc::new(terminal!(var "p"; Rc::new(Term::Sort(Sort::Bool)))),
+            ),
+        ),
+        (
+            "(choice ((x Int)) (= x 0))",
+            Term::Choice(
+                ("x".into(), Rc::new(Term::Sort(Sort::Int))),
+                Rc::new(Term::Op(
+                    Operator::Equals,
+                    vec![
+                        terminal!(var "x"; Rc::new(Term::Sort(Sort::Int))).into(),
+                        terminal!(int 0).into(),
+                    ],
+                )),
+            ),
+        ),
+    ]);
+    assert!(matches!(
+        parse_term_err("(choice () false)"),
+        Error::Parser(ParserError::UnexpectedToken(_), _),
+    ));
+    assert!(matches!(
+        parse_term_err("(choice ((x Int) (y Int)) (= x y))"),
+        Error::Parser(ParserError::UnexpectedToken(_), _),
+    ));
+}
+
+#[test]
 fn test_let_terms() {
     run_parser_tests(&[
         (
@@ -406,6 +440,43 @@ fn test_let_terms() {
     assert!(matches!(
         parse_term_err("(let () 0)"),
         Error::Parser(ParserError::EmptySequence, _),
+    ));
+}
+
+#[test]
+fn test_lambda_terms() {
+    run_parser_tests(&[
+        (
+            "(lambda ((x Int)) x)",
+            Term::Lambda(
+                BindingList(vec![("x".into(), Rc::new(Term::Sort(Sort::Int)))]),
+                Rc::new(terminal!(var "x"; Rc::new(Term::Sort(Sort::Int)))),
+            ),
+        ),
+        (
+            "(lambda ((x Int) (y Int)) (+ x y))",
+            Term::Lambda(
+                BindingList(vec![
+                    ("x".into(), Rc::new(Term::Sort(Sort::Int))),
+                    ("y".into(), Rc::new(Term::Sort(Sort::Int))),
+                ]),
+                Rc::new(Term::Op(
+                    Operator::Add,
+                    vec![
+                        terminal!(var "x"; Rc::new(Term::Sort(Sort::Int))).into(),
+                        terminal!(var "y"; Rc::new(Term::Sort(Sort::Int))).into(),
+                    ],
+                )),
+            ),
+        ),
+    ]);
+    assert!(matches!(
+        parse_term_err("(lambda () false)"),
+        Error::Parser(ParserError::EmptySequence, _),
+    ));
+    assert!(matches!(
+        parse_term_err("((lambda ((x Int)) (+ x 1)) false)"),
+        Error::Parser(ParserError::SortError(_), _),
     ));
 }
 
