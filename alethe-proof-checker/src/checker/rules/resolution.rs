@@ -466,6 +466,68 @@ mod tests {
     }
 
     #[test]
+    fn strict_resolution() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+                (declare-fun r () Bool)
+                (declare-fun s () Bool)
+                (declare-fun t () Bool)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl p q r) :rule trust)
+                (step t2 (cl s (not r) t) :rule trust)
+                (step t3 (cl p q s t)
+                    :rule strict_resolution
+                    :premises (t1 t2)
+                    :args (r true))": true,
+            }
+            "No implicit reordering" {
+                "(step t1 (cl p q r) :rule trust)
+                (step t2 (cl s (not r) t) :rule trust)
+                (step t3 (cl t s q p)
+                    :rule strict_resolution
+                    :premises (t1 t2)
+                    :args (r true))": false,
+
+                "(step t1 (cl p q) :rule trust)
+                (step t2 (cl r (not q) s) :rule trust)
+                (step t3 (cl (not r) t) :rule trust)
+                (step t4 (cl p t s)
+                    :rule strict_resolution
+                    :premises (t1 t2 t3)
+                    :args (q true r true))": false,
+            }
+            "No implicit removal of duplicates" {
+                "(step t1 (cl p q r) :rule trust)
+                (step t2 (cl (not q) s) :rule trust)
+                (step t3 (cl (not r) s) :rule trust)
+                (step t4 (cl p s s)
+                    :rule strict_resolution
+                    :premises (t1 t2 t3)
+                    :args (q true r true))": true,
+
+                "(step t1 (cl p q r) :rule trust)
+                (step t2 (cl (not q) s) :rule trust)
+                (step t3 (cl (not r) s) :rule trust)
+                (step t4 (cl p s)
+                    :rule strict_resolution
+                    :premises (t1 t2 t3)
+                    :args (q true r true))": false,
+
+                // Duplicates also can't be implicitly introduced
+                "(step t1 (cl p q r) :rule trust)
+                (step t2 (cl s (not r) t) :rule trust)
+                (step t3 (cl p q s t s)
+                    :rule strict_resolution
+                    :premises (t1 t2)
+                    :args (r true))": false,
+            }
+        }
+    }
+
+    #[test]
     fn tautology() {
         test_cases! {
             definitions = "
