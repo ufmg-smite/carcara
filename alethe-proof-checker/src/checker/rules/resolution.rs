@@ -214,14 +214,28 @@ pub fn strict_resolution(
         conclusion, premises, args, pool, ..
     }: RuleArgs,
 ) -> RuleResult {
+    use std::cmp::Ordering;
+
     let resolution_result = apply_generic_resolution::<Vec<_>>(premises, args, pool)?;
 
-    for (t, u) in resolution_result.into_iter().zip(conclusion) {
-        if t != u.remove_all_negations() {
-            assert_eq(&unremove_all_negations(pool, t), u)?;
+    match conclusion.len().cmp(&resolution_result.len()) {
+        Ordering::Less => {
+            let missing = unremove_all_negations(pool, resolution_result[conclusion.len()]);
+            Err(ResolutionError::MissingTermInConclusion(missing).into())
+        }
+        Ordering::Greater => {
+            let extra = conclusion[resolution_result.len()].clone();
+            Err(ResolutionError::ExtraTermInConclusion(extra).into())
+        }
+        Ordering::Equal => {
+            for (t, u) in resolution_result.into_iter().zip(conclusion) {
+                if t != u.remove_all_negations() {
+                    assert_eq(&unremove_all_negations(pool, t), u)?;
+                }
+            }
+            Ok(())
         }
     }
-    Ok(())
 }
 
 fn apply_generic_resolution<'a, C: ClauseCollection<'a>>(
