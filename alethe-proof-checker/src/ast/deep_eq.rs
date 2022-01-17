@@ -178,16 +178,15 @@ impl DeepEq for Term {
                 (a, b) => a == b,
             },
             (Term::Quant(q_a, _, _), Term::Quant(q_b, _, _)) if q_a != q_b => false,
-            (Term::Quant(_, a_binds, a), Term::Quant(_, b_binds, b)) => {
+            (Term::Quant(_, a_binds, a), Term::Quant(_, b_binds, b))
+            | (Term::Let(a_binds, a), Term::Let(b_binds, b))
+            | (Term::Lambda(a_binds, a), Term::Lambda(b_binds, b)) => {
                 checker.check_binder(a_binds, b_binds, a, b)
             }
             (Term::Choice(a_var, a), Term::Choice(b_var, b)) => {
                 let a_binds = BindingList(vec![a_var.clone()]);
                 let b_binds = BindingList(vec![b_var.clone()]);
                 checker.check_binder(&a_binds, &b_binds, a, b)
-            }
-            (Term::Let(a_binds, a), Term::Let(b_binds, b)) => {
-                checker.check_binder(a_binds, b_binds, a, b)
             }
             _ => false,
         }
