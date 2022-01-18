@@ -6,12 +6,12 @@ use super::*;
 
 const ERROR_MESSAGE: &str = "parser error during test";
 
-pub(crate) struct TestParser<'a> {
+pub struct TestParser<'a> {
     inner: Parser<&'a [u8]>,
 }
 
 impl<'a> TestParser<'a> {
-    pub(crate) fn new(definitions: &'a str) -> Self {
+    pub fn new(definitions: &'a str) -> Self {
         let mut inner = Parser::new(definitions.as_bytes(), true).expect(ERROR_MESSAGE);
         inner.parse_problem().expect(ERROR_MESSAGE);
         Self { inner }
@@ -21,36 +21,36 @@ impl<'a> TestParser<'a> {
         self.inner.reset(input.as_bytes()).expect(ERROR_MESSAGE);
     }
 
-    pub(crate) fn parse_term(&mut self, input: &'a str) -> Rc<Term> {
+    pub fn parse_term(&mut self, input: &'a str) -> Rc<Term> {
         self.reset(input);
         self.inner.parse_term().expect(ERROR_MESSAGE)
     }
 
-    pub(crate) fn parse_proof(&mut self, input: &'a str) -> Vec<ProofCommand> {
+    pub fn parse_proof(&mut self, input: &'a str) -> Vec<ProofCommand> {
         self.reset(input);
         self.inner.parse_proof().expect(ERROR_MESSAGE)
     }
 
-    pub(crate) fn term_pool(self) -> TermPool {
+    pub fn term_pool(self) -> TermPool {
         self.inner.term_pool()
     }
 }
 
 /// Parses a term from a `&str`. Panics if any error is encountered.
-pub(crate) fn parse_term(input: &str) -> Term {
+pub fn parse_term(input: &str) -> Term {
     TestParser::new("").parse_term(input).as_ref().clone()
 }
 
 /// Tries to parse a term from a `&str`, expecting it to fail. Returns the error encountered, or
 /// panics if no error is encountered.
-pub(crate) fn parse_term_err(input: &str) -> Error {
+pub fn parse_term_err(input: &str) -> Error {
     Parser::new(input.as_bytes(), true)
         .and_then(|mut p| p.parse_term())
         .expect_err("expected error")
 }
 
 /// Parses a proof from a `&str`. Panics if any error is encountered.
-pub(crate) fn parse_proof(input: &str) -> Proof {
+pub fn parse_proof(input: &str) -> Proof {
     let commands = TestParser::new("").parse_proof(input);
     Proof { premises: AHashSet::new(), commands }
 }

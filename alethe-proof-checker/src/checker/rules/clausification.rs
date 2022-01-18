@@ -180,7 +180,7 @@ pub fn nary_elim(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         let new_args = match case {
             Case::RightAssoc => vec![head.clone(), nested],
             Case::LeftAssoc => vec![nested, head.clone()],
-            _ => unreachable!(),
+            Case::Chainable => unreachable!(),
         };
         pool.add_term(Term::Op(op, new_args))
     }

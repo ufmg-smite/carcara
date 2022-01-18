@@ -126,15 +126,15 @@ impl Substitution {
             }
             Term::Quant(q, b, t) => {
                 let (new_bindings, renaming) = self.rename_bindings(pool, b);
-                let new_term = if !renaming.is_empty() {
+                let new_term = if renaming.is_empty() {
+                    self.apply(pool, t)?
+                } else {
                     // If there are variables that would be captured by the substitution, we need
                     // to rename them first. For that, we create a new `Substitution` with the
                     // renaming substitution that was computed, and apply it to the inner term
                     let mut renaming = Substitution::new(pool, renaming)?;
                     let renamed = renaming.apply(pool, t)?;
                     self.apply(pool, &renamed)?
-                } else {
-                    self.apply(pool, t)?
                 };
                 pool.add_term(Term::Quant(*q, new_bindings, new_term))
             }

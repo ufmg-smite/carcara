@@ -81,7 +81,7 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
     // can only determine this by looking at the conlcusion and using it to derive the pivots.
     let conclusion: AHashSet<_> = conclusion
         .iter()
-        .map(|t| t.remove_all_negations())
+        .map(Rc::remove_all_negations)
         .map(|(n, t)| (n as i32, t))
         .collect();
 
@@ -193,10 +193,7 @@ fn resolution_with_args(
 ) -> RuleResult {
     let resolution_result = apply_generic_resolution::<AHashSet<_>>(premises, args, pool)?;
 
-    let conclusion: AHashSet<_> = conclusion
-        .iter()
-        .map(|t| t.remove_all_negations())
-        .collect();
+    let conclusion: AHashSet<_> = conclusion.iter().map(Rc::remove_all_negations).collect();
 
     if let Some(extra) = conclusion.difference(&resolution_result).next() {
         let extra = unremove_all_negations(pool, *extra);
@@ -266,7 +263,7 @@ fn apply_generic_resolution<'a, C: ClauseCollection<'a>>(
     let mut current = premises[0]
         .clause
         .iter()
-        .map(|t| t.remove_all_negations())
+        .map(Rc::remove_all_negations)
         .collect();
 
     for (premise, (pivot, polarity)) in premises[1..].iter().zip(args) {
@@ -317,9 +314,7 @@ pub fn tautology(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult 
 
     let premise = premises[0].clause;
     let mut seen = AHashSet::with_capacity(premise.len());
-    let with_negations_removed = premise
-        .iter()
-        .map(|t| t.remove_all_negations_with_polarity());
+    let with_negations_removed = premise.iter().map(Rc::remove_all_negations_with_polarity);
     for (polarity, term) in with_negations_removed {
         if seen.contains(&(!polarity, term)) {
             return Ok(());

@@ -219,7 +219,7 @@ fn generic_and_or_simplify(
     // Finally, we check to see if the result was short-circuited
     let seen: AHashSet<(bool, &Rc<Term>)> = phis
         .iter()
-        .map(|t| t.remove_all_negations_with_polarity())
+        .map(Rc::remove_all_negations_with_polarity)
         .collect();
     for term in &phis {
         // If the term is the "short-circuit term", or is the negation of a term previously

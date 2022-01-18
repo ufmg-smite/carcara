@@ -140,7 +140,7 @@ fn negation_normal_form(
             false => build_term!(pool, (or (and {a} {b}) (and {c} {d}))),
         }
     } else if let Some((quant, bindings, inner)) = term.unwrap_quant() {
-        let quant = if !polarity { !quant } else { quant };
+        let quant = if polarity { quant } else { !quant };
         let inner = negation_normal_form(pool, inner, polarity, cache);
         pool.add_term(Term::Quant(quant, bindings.clone(), inner))
     } else {
@@ -474,14 +474,14 @@ mod tests {
                 pool.add_term(Term::Op(Operator::And, clauses))
             };
 
-            if !bindings.is_empty() {
+            if bindings.is_empty() {
+                conjunctions
+            } else {
                 pool.add_term(Term::Quant(
                     Quantifier::Forall,
                     BindingList(bindings),
                     conjunctions,
                 ))
-            } else {
-                conjunctions
             }
         }
 

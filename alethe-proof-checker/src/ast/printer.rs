@@ -236,7 +236,7 @@ impl fmt::Display for Sort {
 }
 
 /// A wrapper struct that implements `fmt::Display` for `BigRational`s.
-pub(crate) struct DisplayRatio<'a>(pub(crate) &'a BigRational);
+pub struct DisplayRatio<'a>(pub &'a BigRational);
 
 impl<'a> fmt::Display for DisplayRatio<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

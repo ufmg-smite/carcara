@@ -355,6 +355,8 @@ pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
 }
 
 pub fn lia_generic(_: RuleArgs) -> RuleResult {
+    #![allow(clippy::unnecessary_wraps)]
+
     // The `lia_generic` rule is very similar to the `la_generic` rule, but the additional
     // arguments aren't given. In order to properly check this rule, the checker would need to
     // infer these arguments, which would be very complicated and slow. Therefore, for now, we just

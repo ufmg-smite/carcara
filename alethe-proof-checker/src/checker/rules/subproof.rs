@@ -98,7 +98,7 @@ pub fn bind(
 
     // None of the bindings in the right side can appear as free variables in phi
     let free_vars = pool.free_vars(phi);
-    if let Some(y) = r_bindings
+    if let Some(&y) = r_bindings
         .iter()
         .find(|&&y| free_vars.contains(y) && !l_bindings.contains(y))
     {
@@ -132,10 +132,10 @@ pub fn bind(
     );
 
     // `l_bindings` should be a subset of `xs` and `r_bindigns` should be a subset of `ys`
-    if let Some(x) = l_bindings.iter().find(|&&x| !xs.contains(x)) {
+    if let Some(&x) = l_bindings.iter().find(|&&x| !xs.contains(x)) {
         return Err(SubproofError::BindingIsNotInContext(x.to_string()).into());
     }
-    if let Some(y) = r_bindings.iter().find(|&&y| !ys.contains(y)) {
+    if let Some(&y) = r_bindings.iter().find(|&&y| !ys.contains(y)) {
         return Err(SubproofError::BindingIsNotInContext(y.to_string()).into());
     }
     Ok(())

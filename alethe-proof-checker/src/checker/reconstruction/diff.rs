@@ -67,7 +67,7 @@ pub fn apply_diff(root: ProofDiff, proof: Vec<ProofCommand>) -> Vec<ProofCommand
             }
             _ => {
                 if let ProofCommand::Step(s) = &mut command {
-                    for p in s.premises.iter_mut() {
+                    for p in &mut s.premises {
                         let (depth, i) = *p;
                         *p = (depth, stack[depth].new_indices[i]);
                     }

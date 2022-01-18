@@ -8,7 +8,7 @@ pub fn eq_congruent(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 
     let premises = conclusion[..conclusion.len() - 1]
         .iter()
-        .map(|t| t.remove_negation_err());
+        .map(Rc::remove_negation_err);
     let conclusion = match_term_err!((= f g) = conclusion.last().unwrap())?;
 
     generic_congruent_rule(premises, conclusion)
@@ -19,7 +19,7 @@ pub fn eq_congruent_pred(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 
     let premises = conclusion[..conclusion.len() - 2]
         .iter()
-        .map(|t| t.remove_negation_err());
+        .map(Rc::remove_negation_err);
 
     let (p, q) = (
         &conclusion[conclusion.len() - 2],

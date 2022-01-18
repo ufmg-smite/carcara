@@ -90,7 +90,7 @@ pub enum ParserError {
 }
 
 /// Returns an error if the length of `sequence` is not in the `expected` range.
-pub(crate) fn assert_num_args<T, R>(sequence: &[T], range: R) -> Result<(), ParserError>
+pub fn assert_num_args<T, R>(sequence: &[T], range: R) -> Result<(), ParserError>
 where
     R: Into<Range>,
 {
