@@ -96,7 +96,7 @@ impl Reconstructor {
             diff: Vec::new(),
             new_indices: Vec::new(),
             current_offset: 0,
-        })
+        });
     }
 
     pub(super) fn close_subproof(&mut self) {
@@ -115,7 +115,7 @@ impl Reconstructor {
 
     pub(super) fn end(&mut self, original: Vec<ProofCommand>) -> Vec<ProofCommand> {
         if self.stack.len() != 1 {
-            panic!("trying to end proof building before closing subproof")
+            panic!("trying to end proof building before closing subproof");
         }
         let Frame { diff, new_indices, .. } = self.stack.pop().unwrap();
         let diff = ProofDiff { commands: diff, new_indices };

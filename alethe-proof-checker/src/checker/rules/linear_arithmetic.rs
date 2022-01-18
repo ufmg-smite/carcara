@@ -93,7 +93,7 @@ impl LinearComb {
         match term.as_ref() {
             Term::Op(Operator::Add, args) => {
                 for a in args {
-                    self.add_term(a, coeff)
+                    self.add_term(a, coeff);
                 }
             }
             Term::Op(Operator::Sub, args) if args.len() == 1 => {
@@ -115,7 +115,7 @@ impl LinearComb {
             }
             _ => {
                 if let Some(r) = term.as_fraction() {
-                    self.1 = self.1.raw_add(&coeff.raw_mul(&r))
+                    self.1 = self.1.raw_add(&coeff.raw_mul(&r));
                 } else {
                     self.insert(term.clone(), coeff.clone());
                 }
@@ -152,7 +152,7 @@ impl LinearComb {
 
     fn add(mut self, other: Self) -> Self {
         for (var, coeff) in other.0 {
-            self.insert(var, coeff)
+            self.insert(var, coeff);
         }
         self.1 = self.1.raw_add(&other.1);
         self
@@ -180,7 +180,7 @@ impl LinearComb {
             // While cloning here seems bad, it is actually faster than the alternatives
             *coeff = -coeff.clone();
         }
-        self.1 = -self.1.clone()
+        self.1 = -self.1.clone();
     }
 
     fn sub(self, mut other: Self) -> Self {

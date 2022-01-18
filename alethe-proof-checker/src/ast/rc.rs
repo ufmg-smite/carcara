@@ -21,7 +21,7 @@ impl<T: ?Sized> PartialEq for Rc<T> {
 
 impl<T: ?Sized> Hash for Rc<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        rc::Rc::as_ptr(&self.0).hash(state)
+        rc::Rc::as_ptr(&self.0).hash(state);
     }
 }
 

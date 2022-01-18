@@ -70,7 +70,7 @@ impl<K, V> SymbolTable<K, V> {
             0 => unreachable!(),
             1 => {
                 log::error!("cannot pop last scope in symbol table");
-                panic!()
+                panic!();
             }
             _ => {
                 self.scopes.pop().unwrap();

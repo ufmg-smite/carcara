@@ -224,7 +224,7 @@ fn extract_points(quant: Quantifier, term: &Rc<Term>) -> AHashSet<(Rc<Term>, Rc<
                     acc.insert((x.clone(), t.clone()));
                 } else if let Some(args) = match_term!((and ...) = term) {
                     for a in args {
-                        find_points(acc, true, a)
+                        find_points(acc, true, a);
                     }
                 }
             }
@@ -234,7 +234,7 @@ fn extract_points(quant: Quantifier, term: &Rc<Term>) -> AHashSet<(Rc<Term>, Rc<
                     find_points(acc, false, q);
                 } else if let Some(args) = match_term!((or ...) = term) {
                     for a in args {
-                        find_points(acc, false, a)
+                        find_points(acc, false, a);
                     }
                 }
             }
@@ -395,7 +395,7 @@ fn generic_skolemization_rule(
                     rule_type,
                     BindingList(bindings.0[i + 1..].to_vec()),
                     inner,
-                ))
+                ));
             }
 
             // If the rule is `sko_forall`, the predicate in the choice term should be negated

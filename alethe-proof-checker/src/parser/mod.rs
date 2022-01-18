@@ -140,7 +140,7 @@ impl<R: BufRead> Parser<R> {
     fn insert_sorted_var(&mut self, (symbol, sort): SortedVar) {
         self.state
             .symbol_table
-            .insert(Identifier::Simple(symbol), sort)
+            .insert(Identifier::Simple(symbol), sort);
     }
 
     /// Adds a new function definition. If we are parsing the problem and
@@ -512,7 +512,7 @@ impl<R: BufRead> Parser<R> {
                         commands,
                         assignment_args,
                         variable_args,
-                    }))
+                    }));
             }
             self.state
                 .step_indices

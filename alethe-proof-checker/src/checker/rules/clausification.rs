@@ -232,7 +232,7 @@ fn bfun_elim_first_step(
     for value in [pool.bool_false(), pool.bool_true()] {
         let mut substitution = Substitution::single(pool, var.clone(), value)?;
         let term = substitution.apply(pool, term)?;
-        bfun_elim_first_step(pool, &bindigns[..bindigns.len() - 1], &term, acc)?
+        bfun_elim_first_step(pool, &bindigns[..bindigns.len() - 1], &term, acc)?;
     }
     Ok(())
 }
@@ -255,7 +255,7 @@ fn bfun_elim_second_step(
                 let mut new_args = args.to_vec();
                 new_args[i] = bool_constant;
                 let inner_term = bfun_elim_second_step(pool, func, &new_args, i + 1);
-                ite_args.push(inner_term)
+                ite_args.push(inner_term);
             }
             return pool.add_term(Term::Op(Operator::Ite, ite_args));
         }

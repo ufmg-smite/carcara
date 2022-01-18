@@ -299,7 +299,7 @@ mod tests {
 
         for (s, got) in &cases {
             let expected = TestParser::new(definitions).parse_term(s);
-            assert_deep_eq!(&expected, got)
+            assert_deep_eq!(&expected, got);
         }
     }
 }

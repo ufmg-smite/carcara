@@ -17,7 +17,7 @@ trait ClauseCollection<'a>: FromIterator<ResolutionTerm<'a>> {
 
 impl<'a> ClauseCollection<'a> for Vec<ResolutionTerm<'a>> {
     fn insert_term(&mut self, item: ResolutionTerm<'a>) {
-        self.push(item)
+        self.push(item);
     }
 
     fn remove_term(&mut self, item: &ResolutionTerm<'a>) -> bool {

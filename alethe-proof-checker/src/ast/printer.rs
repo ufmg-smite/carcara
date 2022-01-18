@@ -20,7 +20,7 @@ impl<'a> PrettyPrint for AlethePrinter<'a> {
         while let Some(command) = iter.next() {
             match command {
                 ProofCommand::Assume { index, term } => {
-                    write!(self.inner, "(assume {} {})", index, term)?
+                    write!(self.inner, "(assume {} {})", index, term)?;
                 }
                 ProofCommand::Step(s) => self.write_step(&mut iter, s)?,
                 ProofCommand::Subproof(s) => {
@@ -39,14 +39,14 @@ impl<'a> PrettyPrint for AlethePrinter<'a> {
                         let mut is_first = true;
                         for (name, sort) in &s.variable_args {
                             if !is_first {
-                                write!(self.inner, " ")?
+                                write!(self.inner, " ")?;
                             }
                             is_first = false;
-                            write!(self.inner, "({} {})", name, sort)?
+                            write!(self.inner, "({} {})", name, sort)?;
                         }
                         for (name, value) in &s.assignment_args {
                             if !is_first {
-                                write!(self.inner, " ")?
+                                write!(self.inner, " ")?;
                             }
                             is_first = false;
                             write!(self.inner, "(:= ({} {}) {})", name, value.raw_sort(), value)?;

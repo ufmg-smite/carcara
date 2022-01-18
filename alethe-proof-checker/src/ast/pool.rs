@@ -175,14 +175,14 @@ impl TermPool {
             Term::App(f, args) => {
                 let mut set = self.free_vars(f).clone();
                 for a in args {
-                    set.extend(self.free_vars(a).iter().cloned())
+                    set.extend(self.free_vars(a).iter().cloned());
                 }
                 set
             }
             Term::Op(_, args) => {
                 let mut set = AHashSet::new();
                 for a in args {
-                    set.extend(self.free_vars(a).iter().cloned())
+                    set.extend(self.free_vars(a).iter().cloned());
                 }
                 set
             }

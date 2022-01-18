@@ -110,7 +110,7 @@ fn test_hash_consing() {
 
     for got in parser.state.term_pool.terms.keys() {
         let formatted: &str = &format!("{}", got);
-        assert!(expected.contains(formatted), "{}", formatted)
+        assert!(expected.contains(formatted), "{}", formatted);
     }
 }
 

@@ -278,7 +278,7 @@ mod tests {
             for _ in 0..n {
                 let sample = Duration::from_nanos(rng.gen_range(0..max_value));
                 data.push(sample);
-                metrics.add(&(), sample)
+                metrics.add(&(), sample);
             }
 
             let expected_total: Duration = data.iter().sum();

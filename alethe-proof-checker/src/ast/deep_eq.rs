@@ -99,7 +99,7 @@ impl DeepEqualityChecker {
                 self.alpha_equiv_checker
                     .as_mut()
                     .unwrap()
-                    .insert(a_var.0.clone(), b_var.0.clone())
+                    .insert(a_var.0.clone(), b_var.0.clone());
             }
             if !DeepEq::eq(self, a_inner, b_inner) {
                 return false;

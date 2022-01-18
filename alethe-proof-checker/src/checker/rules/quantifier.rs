@@ -197,7 +197,7 @@ fn distribute(formulae: &[CnfFormula]) -> CnfFormula {
                     let mut result = Vec::with_capacity(head_clause.len() + tail_clause.len());
                     result.extend(head_clause.iter().cloned());
                     result.extend(tail_clause.iter().cloned());
-                    acc.push(result)
+                    acc.push(result);
                 }
             }
             acc

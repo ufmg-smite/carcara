@@ -30,7 +30,7 @@ fn test_subterms() {
             let as_strings: Vec<_> = subterms.map(|t| format!("{}", t)).collect();
             let got = as_strings.iter().map(String::as_str);
 
-            assert!(expected.eq(got))
+            assert!(expected.eq(got));
         }
     }
     run_tests(
@@ -85,7 +85,7 @@ fn test_subterms() {
             ],
             &["(lambda ((x Int) (y Int)) (+ 1 2))", "(+ 1 2)", "1", "2"],
         ],
-    )
+    );
 }
 
 #[test]
@@ -100,7 +100,7 @@ fn test_free_vars() {
                 .collect::<AHashSet<_>>();
             let mut pool = parser.term_pool();
 
-            assert_eq!(&expected, pool.free_vars(&root))
+            assert_eq!(&expected, pool.free_vars(&root));
         }
     }
     run_tests(
@@ -119,7 +119,7 @@ fn test_free_vars() {
             ("(and (forall ((a Int)) (= a 0)) (= a 0))", &["a"]),
             ("(and (= a 0) (forall ((a Int)) (= a 0)))", &["a"]),
         ],
-    )
+    );
 }
 
 #[test]
@@ -138,7 +138,7 @@ fn test_deep_eq() {
                 TestType::Normal => assert_deep_eq!(&a, &b),
                 TestType::ModReordering => assert_deep_eq_modulo_reordering!(&a, &b),
                 TestType::AlphaEquiv => {
-                    assert!(super::deep_eq::are_alpha_equivalent(&a, &b))
+                    assert!(super::deep_eq::are_alpha_equivalent(&a, &b));
                 }
             }
         }
