@@ -345,7 +345,7 @@ fn progress_report_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         report_by_rules(&files, quiet)?;
     } else if matches.is_present("by-files-and-rules") {
         for file in files {
-            println!("{}:", file.to_string_lossy());
+            println!("{}:", file.display());
             report_by_rules(&[file], quiet)?;
             println!();
         }
@@ -396,7 +396,8 @@ fn report_by_files(files: &[&Path], quiet: bool) -> AletheResult<()> {
         let all_implemented = get_used_rules(file)?
             .iter()
             .all(|rule| ProofChecker::get_rule(rule).is_some());
-        print_report_entry(&file.to_string_lossy(), all_implemented, quiet);
+        let file = file.display().to_string();
+        print_report_entry(&file, all_implemented, quiet);
         implemented += all_implemented as i32;
     }
     if quiet {

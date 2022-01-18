@@ -25,7 +25,7 @@ impl fmt::Display for CliError {
             CliError::AletheError(e) => write!(f, "{}", e),
             CliError::InvalidArgument(a) => write!(f, "invalid argument: {}", a),
             CliError::CantInferProblemFile(p) => {
-                write!(f, "can't infer problem file: {}", p.to_string_lossy())
+                write!(f, "can't infer problem file: {}", p.display())
             }
         }
     }
