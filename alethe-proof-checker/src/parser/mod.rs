@@ -73,7 +73,7 @@ impl<R: BufRead> Parser<R> {
         let mut state = ParserState::default();
         let bool_sort = state.term_pool.add_term(Term::Sort(Sort::Bool));
         for iden in ["true", "false"] {
-            let iden = Identifier::Simple(iden.to_string());
+            let iden = Identifier::Simple(iden.to_owned());
             state.symbol_table.insert(iden, bool_sort.clone());
         }
         let mut lexer = Lexer::new(input)?;
@@ -240,7 +240,7 @@ impl<R: BufRead> Parser<R> {
                         let got = got.clone();
                         let x = sorts[1].clone();
                         let x = self.add_term(Term::Sort(x));
-                        let y = self.add_term(Term::Sort(Sort::Atom("Y".to_string(), Vec::new())));
+                        let y = self.add_term(Term::Sort(Sort::Atom("Y".to_owned(), Vec::new())));
                         return Err(SortError {
                             expected: vec![Sort::Array(x, y)],
                             got,

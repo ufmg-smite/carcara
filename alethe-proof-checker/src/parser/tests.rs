@@ -551,7 +551,7 @@ fn test_declare_sort() {
         (declare-fun x () T)",
     )
     .parse_term("x");
-    let expected_sort = Term::Sort(Sort::Atom("T".to_string(), Vec::new()));
+    let expected_sort = Term::Sort(Sort::Atom("T".to_owned(), Vec::new()));
     assert_deep_eq!(&terminal!(var "x"; Rc::new(expected_sort)), &got);
 }
 

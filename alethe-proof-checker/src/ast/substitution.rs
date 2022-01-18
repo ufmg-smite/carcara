@@ -63,7 +63,7 @@ impl Substitution {
             }
             should_be_renamed.extend(pool.free_vars(t).iter().cloned());
             if let Some(x) = x.as_var() {
-                should_be_renamed.insert(x.to_string());
+                should_be_renamed.insert(x.to_owned());
             }
         }
 
@@ -89,7 +89,7 @@ impl Substitution {
             self.should_be_renamed
                 .extend(pool.free_vars(&t).iter().cloned());
             if let Some(x) = x.as_var() {
-                self.should_be_renamed.insert(x.to_string());
+                self.should_be_renamed.insert(x.to_owned());
             }
         }
 

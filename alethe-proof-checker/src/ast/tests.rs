@@ -96,7 +96,7 @@ fn test_free_vars() {
             let root = parser.parse_term(term);
             let expected = expected
                 .iter()
-                .map(|&s| s.to_string())
+                .map(|&s| s.to_owned())
                 .collect::<AHashSet<_>>();
             let mut pool = parser.term_pool();
 

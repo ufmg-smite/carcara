@@ -11,7 +11,7 @@ fn get_command_term(command: &ProofCommand) -> Result<&Rc<Term>, CheckerError> {
     match command.clause() {
         [t] => Ok(t),
         cl => Err(CheckerError::WrongLengthOfPremiseClause(
-            command.index().to_string(),
+            command.index().to_owned(),
             1.into(),
             cl.len(),
         )),
@@ -39,7 +39,7 @@ pub fn subproof(
                 assert_eq(term, t)?;
             }
             other => {
-                return Err(SubproofError::DischargeMustBeAssume(other.index().to_string()).into())
+                return Err(SubproofError::DischargeMustBeAssume(other.index().to_owned()).into())
             }
         }
     }
@@ -52,7 +52,7 @@ pub fn subproof(
         [t] => t.clone(),
         other => {
             return Err(CheckerError::WrongLengthOfPremiseClause(
-                previous_command.index().to_string(),
+                previous_command.index().to_owned(),
                 (..2).into(),
                 other.len(),
             ))
@@ -102,7 +102,7 @@ pub fn bind(
         .iter()
         .find(|&&y| free_vars.contains(y) && !l_bindings.contains(y))
     {
-        return Err(SubproofError::BindBindingIsFreeVarInPhi(y.to_string()).into());
+        return Err(SubproofError::BindBindingIsFreeVarInPhi(y.to_owned()).into());
     }
 
     // Since we are closing a subproof, we only care about the substitutions that were introduced
@@ -133,10 +133,10 @@ pub fn bind(
 
     // `l_bindings` should be a subset of `xs` and `r_bindigns` should be a subset of `ys`
     if let Some(&x) = l_bindings.iter().find(|&&x| !xs.contains(x)) {
-        return Err(SubproofError::BindingIsNotInContext(x.to_string()).into());
+        return Err(SubproofError::BindingIsNotInContext(x.to_owned()).into());
     }
     if let Some(&y) = r_bindings.iter().find(|&&y| !ys.contains(y)) {
-        return Err(SubproofError::BindingIsNotInContext(y.to_string()).into());
+        return Err(SubproofError::BindingIsNotInContext(y.to_owned()).into());
     }
     Ok(())
 }

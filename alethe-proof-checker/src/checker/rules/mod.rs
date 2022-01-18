@@ -49,7 +49,7 @@ fn get_premise_term<'a>(premise: &Premise<'a>) -> Result<&'a Rc<Term>, CheckerEr
     match premise.clause {
         [t] => Ok(t),
         cl => Err(CheckerError::WrongLengthOfPremiseClause(
-            premise.command_index.to_string(),
+            premise.command_index.to_owned(),
             1.into(),
             cl.len(),
         )),

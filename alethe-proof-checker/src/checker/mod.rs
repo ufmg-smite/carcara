@@ -93,7 +93,7 @@ impl<'c> ProofChecker<'c> {
                         .map_err(|e| Error::Checker {
                             inner: e.into(),
                             rule: "anchor".into(),
-                            step: step_index.to_string(),
+                            step: step_index.to_owned(),
                         })?;
                     self.context.push(new_context);
 
@@ -259,9 +259,9 @@ impl<'c> ProofChecker<'c> {
     fn add_statistics_measurement(&mut self, step_index: &str, rule: &str, start_time: Instant) {
         if let Some(stats) = &mut self.config.statistics {
             let measurement = start_time.elapsed();
-            let file_name = stats.file_name.to_string();
-            let step_index = step_index.to_string();
-            let rule = rule.to_string();
+            let file_name = stats.file_name.to_owned();
+            let step_index = step_index.to_owned();
+            let rule = rule.to_owned();
             let id = StepId {
                 file: file_name.clone().into_boxed_str(),
                 step_index: step_index.into_boxed_str(),
