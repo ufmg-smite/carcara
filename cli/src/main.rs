@@ -250,7 +250,6 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
 
     if instances.is_empty() {
         log::warn!("no files passed");
-        return Ok(());
     }
 
     println!(
@@ -264,7 +263,11 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         num_jobs,
         apply_function_defs,
         reconstruct,
-    )?;
+    );
+    if results.is_empty() {
+        println!("no benchmark data collected");
+        return Ok(());
+    }
 
     let [parsing, checking, reconstructing, accounted_for, total] = [
         results.parsing(),

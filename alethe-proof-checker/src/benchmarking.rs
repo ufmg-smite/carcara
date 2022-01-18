@@ -37,6 +37,11 @@ impl<K: Clone> Metrics<K> {
         Default::default()
     }
 
+    /// Return `true` if the `Metrics` have no entries.
+    pub fn is_empty(&self) -> bool {
+        self.count == 0
+    }
+
     pub fn max(&self) -> &(K, Duration) {
         &self.max_min.as_ref().unwrap().0
     }
@@ -176,6 +181,11 @@ pub struct BenchmarkResults {
 impl BenchmarkResults {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    /// Return `true` if the results have no entries.
+    pub fn is_empty(&self) -> bool {
+        self.total.is_empty()
     }
 
     /// The time per run to completely parse the proof.

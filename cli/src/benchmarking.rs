@@ -68,7 +68,7 @@ pub fn run_benchmark(
     num_jobs: usize,
     apply_function_defs: bool,
     reconstruct: bool,
-) -> Result<BenchmarkResults, alethe_proof_checker::Error> {
+) -> BenchmarkResults {
     // Configure rayon to use the right number of threads and to reserve enough stack space for
     // them
     rayon::ThreadPoolBuilder::new()
@@ -82,7 +82,7 @@ pub fn run_benchmark(
         .map(|instance| {
             run_instance(instance, num_runs, apply_function_defs, reconstruct).unwrap_or_else(|e| {
                 log::error!(
-                    "encountered error in instance {}: {:?}",
+                    "encountered error in instance {}: {}",
                     instance.1.to_str().unwrap(),
                     e
                 );
@@ -91,5 +91,5 @@ pub fn run_benchmark(
         })
         .reduce(BenchmarkResults::new, BenchmarkResults::combine);
 
-    Ok(result)
+    result
 }
