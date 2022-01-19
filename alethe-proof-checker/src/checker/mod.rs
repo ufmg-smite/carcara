@@ -390,6 +390,7 @@ impl<'c> ProofChecker<'c> {
         use rules::*;
 
         Some(match rule_name {
+            "eq_transitive" => transitivity::reconstruct_eq_transitive,
             "trans" => transitivity::reconstruct_trans,
             _ => return None,
         })

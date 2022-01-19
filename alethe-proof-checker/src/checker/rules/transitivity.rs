@@ -107,6 +107,69 @@ pub fn eq_transitive(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     find_chain(chain_conclusion, &mut premises)
 }
 
+pub fn reconstruct_eq_transitive(
+    RuleArgs { conclusion, .. }: RuleArgs,
+    command_index: String,
+    reconstructor: &mut Reconstructor,
+) -> RuleResult {
+    assert_clause_len(conclusion, 3..)?;
+    let n = conclusion.len();
+
+    // The last term in the conclusion clause should be an equality, and it will be the conclusion
+    // of the transitive chain
+    let conclusion_equality = match_term_err!((= t u) = conclusion.last().unwrap())?;
+
+    // The first `conclusion.len()` - 1 terms in the conclusion clause must be a sequence of
+    // inequalites, and they will be the premises of the transitive chain
+    let mut premise_equalities: Vec<_> = conclusion[..n - 1]
+        .iter()
+        .map(|term| match_term_err!((not (= t u)) = term))
+        .collect::<Result<_, _>>()?;
+
+    let mut new_clause: Vec<_> = conclusion.to_vec();
+    let (needs_reordering, num_needed, should_flip) = reconstruct_chain(
+        conclusion_equality,
+        &mut premise_equalities,
+        &mut new_clause[..n - 1],
+    )?;
+
+    if num_needed != n - 1 {
+        // TODO: implement removal of unnecessary premises
+        reconstructor.signal_unchanged();
+        return Ok(());
+    }
+
+    if !should_flip.is_empty() {
+        // TODO: implement flipping of premises
+        reconstructor.signal_unchanged();
+        return Ok(());
+    }
+
+    if needs_reordering {
+        let new_step = reconstructor.add_new_step(ProofStep {
+            index: command_index.clone() + ".t1",
+            clause: new_clause,
+            rule: "eq_transitive".to_owned(),
+            premises: Vec::new(),
+            args: Vec::new(),
+            discharge: Vec::new(),
+        });
+
+        reconstructor.push_reconstructed_step(ProofStep {
+            index: command_index,
+            clause: conclusion.to_vec(),
+            rule: "reordering".to_owned(),
+            premises: vec![new_step],
+            args: Vec::new(),
+            discharge: Vec::new(),
+        });
+    } else {
+        reconstructor.signal_unchanged();
+    }
+
+    Ok(())
+}
+
 pub fn trans(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
 
