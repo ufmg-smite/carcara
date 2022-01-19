@@ -44,6 +44,52 @@ fn find_chain(
     find_chain((eq.1, conclusion.1), &mut premises[1..])
 }
 
+/// Similar to `find_chain`, but reorders the a premises vector to match the found chain. In
+/// `trans`, this is used to reorder the step premises vector; in `eq_transitive`, it is used to
+/// reorder the clause. This returns a boolean indicating whether any reordering was needed, a
+/// `usize` indicating how many premises are needed to prove the conclusion, and a vector of indices
+/// of the premise equalities that need to be flipped.
+fn reconstruct_chain<'a, T>(
+    mut conclusion: (&'a Rc<Term>, &'a Rc<Term>),
+    premise_equalities: &mut [(&'a Rc<Term>, &'a Rc<Term>)],
+    premises: &mut [T],
+) -> Result<(bool, usize, Vec<usize>), CheckerError> {
+    let mut reordered = false;
+    let mut should_flip = Vec::with_capacity(premise_equalities.len());
+    let mut i = 0;
+    loop {
+        if conclusion.0 == conclusion.1 {
+            return Ok((reordered, i, should_flip));
+        }
+
+        let (found_index, next_link) = premise_equalities[i..]
+            .iter()
+            .enumerate()
+            .find_map(|(j, &(t, u))| {
+                if t == conclusion.0 {
+                    Some((j + i, u))
+                } else if u == conclusion.0 {
+                    should_flip.push(i);
+                    Some((j + i, t))
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| {
+                let (a, b) = conclusion;
+                CheckerError::BrokenTransitivityChain(a.clone(), b.clone())
+            })?;
+
+        if found_index != i {
+            premise_equalities.swap(i, found_index);
+            premises.swap(i, found_index);
+            reordered = true;
+        }
+        conclusion = (next_link, conclusion.1);
+        i += 1;
+    }
+}
+
 pub fn eq_transitive(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 3..)?;
 
@@ -73,47 +119,6 @@ pub fn trans(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     find_chain(conclusion, &mut premises)
 }
 
-/// Similar to `find_chain`, but reorders the step premises vector to match the found chain
-fn reconstruct_chain(
-    conclusion: (&Rc<Term>, &Rc<Term>),
-    premise_equalities: &mut [(&Rc<Term>, &Rc<Term>)],
-    premises: &mut [(usize, usize)],
-    should_flip: &mut Vec<bool>,
-) -> RuleResult {
-    if conclusion.0 == conclusion.1 {
-        return Ok(());
-    }
-
-    let (index, next_link) = premise_equalities
-        .iter()
-        .enumerate()
-        .find_map(|(i, &(t, u))| {
-            if t == conclusion.0 {
-                should_flip.push(false);
-                Some((i, u))
-            } else if u == conclusion.0 {
-                should_flip.push(true);
-                Some((i, t))
-            } else {
-                None
-            }
-        })
-        .ok_or_else(|| {
-            let (a, b) = conclusion;
-            CheckerError::BrokenTransitivityChain(a.clone(), b.clone())
-        })?;
-
-    premise_equalities.swap(0, index);
-    premises.swap(0, index);
-
-    reconstruct_chain(
-        (next_link, conclusion.1),
-        &mut premise_equalities[1..],
-        &mut premises[1..],
-        should_flip,
-    )
-}
-
 pub fn reconstruct_trans(
     RuleArgs { conclusion, premises, pool, .. }: RuleArgs,
     command_index: String,
@@ -128,18 +133,26 @@ pub fn reconstruct_trans(
         .collect::<Result<_, _>>()?;
 
     let mut new_premises: Vec<_> = premises.iter().map(|p| p.premise_index).collect();
-    let mut should_flip = Vec::with_capacity(new_premises.len());
-    reconstruct_chain(
+    let (_, num_needed, should_flip) = reconstruct_chain(
         conclusion_equality,
         &mut premise_equalities,
         &mut new_premises,
-        &mut should_flip,
     )?;
 
-    // The length of `should_flip` may be smaller than that of `new_premises`. This can happen
-    // if there are premises in the step which are not needed to complete the transitivity
-    // chain. In that case, we simply remove them in the reconstructed step.
-    new_premises.truncate(should_flip.len());
+    // If there are any premises in the step which are not needed to complete the transitivity
+    // chain, we simply remove them in the reconstructed step.
+    new_premises.truncate(num_needed);
+
+    // To make things easier later, we change `should_flip` to be a vector of booleans instead of a
+    // vector of indices. Now, `should_flip[i]` indicates whether the i-th premise needs to be
+    // flipped.
+    let should_flip = {
+        let mut new = vec![false; num_needed];
+        for i in should_flip {
+            new[i] = true;
+        }
+        new
+    };
 
     // If there are any premises that need flipping, we need to introduce `symm` steps to flip the
     // needed equalities
