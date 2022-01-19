@@ -156,17 +156,17 @@ pub fn reconstruct_trans(
 
     // If there are any premises that need flipping, we need to introduce `symm` steps to flip the
     // needed equalities
-    let mut index_in_subproof = 0;
+    let mut num_added = 0;
     for i in 0..new_premises.len() {
         new_premises[i] = if should_flip[i] {
             let (a, b) = premise_equalities[i];
-            index_in_subproof += 1;
+            num_added += 1;
             reconstructor.add_symm_step(
                 pool,
                 new_premises[i],
                 (a.clone(), b.clone()),
                 // TODO: Avoid collisions when creating this index
-                format!("{}.t{}", command_index, index_in_subproof),
+                format!("{}.t{}", command_index, num_added),
             )
         } else {
             // If the premise didn't need flipping, we just need to map its index to the new
