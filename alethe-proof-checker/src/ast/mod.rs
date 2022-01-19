@@ -291,6 +291,14 @@ impl From<SortedVar> for Term {
 }
 
 impl Term {
+    /// Returns the sort of this term. This does not make use of a cache -- if possible, prefer to
+    /// use `TermPool::sort`.
+    pub fn raw_sort(&self) -> Sort {
+        let mut pool = TermPool::new();
+        let added = pool.add_term(self.clone());
+        pool.sort(&added).clone()
+    }
+
     /// Returns an iterator over this term and all its subterms, in topological ordering. For
     /// example, calling this method on the term `(+ (f a b) 2)` would return an iterator over the
     /// terms `(+ (f a b) 2)`, `(f a b)`, `f`, `a`, `b` and `2`. This method traverses the term as
@@ -412,12 +420,6 @@ impl Term {
 }
 
 impl Rc<Term> {
-    /// Returns the sort of this term. This does not make use of a cache -- if possible, prefer to
-    /// use `TermPool::sort`.
-    pub fn raw_sort(&self) -> Sort {
-        TermPool::new().sort(self).clone()
-    }
-
     /// Removes a leading negation from the term, if it exists. Same thing as `match_term!((not t)
     /// = term)`.
     pub fn remove_negation(&self) -> Option<&Self> {
