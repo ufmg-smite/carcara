@@ -53,6 +53,16 @@ pub fn eq_symmetric(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_eq(u_1, u_2)
 }
 
+pub fn or_intro(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(premises, 1)?;
+    let premise = premises[0].clause;
+    assert_clause_len(conclusion, premise.len()..)?;
+    for (t, u) in premise.iter().zip(conclusion) {
+        assert_eq(t, u)?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -130,6 +140,31 @@ mod tests {
             "Failing examples" {
                 "(step t1 (cl (not (= a b)) (= a b)) :rule eq_symmetric)": false,
                 "(step t1 (cl (not (= a b)) (not (= b a))) :rule eq_symmetric)": false,
+            }
+        }
+    }
+
+    #[test]
+    fn or_intro() {
+        test_cases! {
+            definitions = "
+            (declare-fun a () Bool)
+            (declare-fun b () Bool)
+            (declare-fun c () Bool)
+        ",
+            "Simple working examples" {
+                "(step t1 (cl a b) :rule trust)
+                (step t2 (cl a b c) :rule or_intro :premises (t1))": true,
+
+                "(step t1 (cl) :rule trust)
+                (step t2 (cl a b) :rule or_intro :premises (t1))": true,
+            }
+            "Failing examples" {
+                "(step t1 (cl a b) :rule trust)
+                (step t2 (cl a c b) :rule or_intro :premises (t1))": false,
+
+                "(step t1 (cl a b c) :rule trust)
+                (step t2 (cl a b) :rule or_intro :premises (t1))": false,
             }
         }
     }

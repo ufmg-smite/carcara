@@ -373,6 +373,7 @@ impl<'c> ProofChecker<'c> {
             "symm" => extras::symm,
             "not_symm" => extras::not_symm,
             "eq_symmetric" => extras::eq_symmetric,
+            "or_intro" => extras::or_intro,
 
             // Special rule that always checks as valid. It is mostly used in tests
             "trust" => |_| Ok(()),
