@@ -108,7 +108,7 @@ pub fn eq_transitive(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 }
 
 pub fn reconstruct_eq_transitive(
-    RuleArgs { conclusion, .. }: RuleArgs,
+    RuleArgs { conclusion, pool, .. }: RuleArgs,
     command_index: String,
     reconstructor: &mut Reconstructor,
 ) -> RuleResult {
@@ -133,41 +133,126 @@ pub fn reconstruct_eq_transitive(
         &mut new_clause[..n - 1],
     )?;
 
+    if !needs_reordering && num_needed == n - 1 && should_flip.is_empty() {
+        reconstructor.signal_unchanged();
+        return Ok(());
+    }
+
+    for &i in &should_flip {
+        new_clause[i] = if let Some((a, b)) = match_term!((not (= a b)) = &new_clause[i]) {
+            build_term!(pool, (not (= {b.clone()} {a.clone()})))
+        } else {
+            panic!()
+        };
+    }
+
     if num_needed != n - 1 {
         // TODO: implement removal of unnecessary premises
         reconstructor.signal_unchanged();
         return Ok(());
     }
 
+    let new_eq_transitive_step = reconstructor.add_new_step(ProofStep {
+        index: command_index.clone() + ".t1",
+        clause: new_clause.clone(),
+        rule: "eq_transitive".to_owned(),
+        premises: Vec::new(),
+        args: Vec::new(),
+        discharge: Vec::new(),
+    });
+    let mut latest_step = new_eq_transitive_step;
+
     if !should_flip.is_empty() {
-        // TODO: implement flipping of premises
-        reconstructor.signal_unchanged();
-        return Ok(());
+        let resolution_step = flip_eq_transitive_premises(
+            pool,
+            reconstructor,
+            new_eq_transitive_step,
+            &new_clause,
+            &command_index,
+            &should_flip,
+        );
+        latest_step = resolution_step;
     }
 
-    if needs_reordering {
-        let new_step = reconstructor.add_new_step(ProofStep {
-            index: command_index.clone() + ".t1",
-            clause: new_clause,
-            rule: "eq_transitive".to_owned(),
-            premises: Vec::new(),
-            args: Vec::new(),
-            discharge: Vec::new(),
-        });
-
-        reconstructor.push_reconstructed_step(ProofStep {
-            index: command_index,
-            clause: conclusion.to_vec(),
-            rule: "reordering".to_owned(),
-            premises: vec![new_step],
-            args: Vec::new(),
-            discharge: Vec::new(),
-        });
-    } else {
-        reconstructor.signal_unchanged();
-    }
-
+    reconstructor.push_reconstructed_step(ProofStep {
+        index: command_index,
+        clause: conclusion.to_vec(),
+        rule: "reordering".to_owned(),
+        premises: vec![latest_step],
+        args: Vec::new(),
+        discharge: Vec::new(),
+    });
     Ok(())
+}
+
+fn flip_eq_transitive_premises(
+    pool: &mut TermPool,
+    reconstructor: &mut Reconstructor,
+    new_eq_transitive_step: (usize, usize),
+    new_clause: &[Rc<Term>],
+    original_index: &str,
+    should_flip: &[usize],
+) -> (usize, usize) {
+    let mut num_added = 1;
+    let resolution_pivots: Vec<_> = should_flip
+        .iter()
+        .map(|&i| {
+            let (a, b) = match_term!((not (= a b)) = new_clause[i]).unwrap();
+            let pivot = build_term!(pool, (= {a.clone()} {b.clone()}));
+            let to_introduce = build_term!(pool, (not (= {b.clone()} {a.clone()})));
+            let clause = vec![to_introduce.clone(), pivot.clone()];
+            num_added += 1;
+            let new_step = reconstructor.add_new_step(ProofStep {
+                index: format!("{}.t{}", original_index, num_added),
+                clause,
+                rule: "eq_symmetric".to_owned(),
+                premises: Vec::new(),
+                args: Vec::new(),
+                discharge: Vec::new(),
+            });
+            (new_step, pivot, to_introduce)
+        })
+        .collect();
+
+    let clause = {
+        let should_flip = {
+            let mut new = vec![false; new_clause.len()];
+            for &i in should_flip {
+                new[i] = true;
+            }
+            new
+        };
+        let mut original: Vec<_> = new_clause
+            .iter()
+            .enumerate()
+            .filter(|&(i, _)| !should_flip[i])
+            .map(|(_, t)| t.clone())
+            .collect();
+        original.extend(
+            resolution_pivots
+                .iter()
+                .map(|(_, _, to_introduce)| to_introduce.clone()),
+        );
+        original
+    };
+    let mut premises = vec![new_eq_transitive_step];
+    premises.extend(resolution_pivots.iter().map(|&(index, _, _)| index));
+    let args: Vec<_> = resolution_pivots
+        .into_iter()
+        .flat_map(|(_, pivot, _)| [pivot, pool.bool_false()])
+        .map(ProofArg::Term)
+        .collect();
+
+    num_added += 1;
+    let final_step = reconstructor.add_new_step(ProofStep {
+        index: format!("{}.t{}", original_index, num_added),
+        clause,
+        rule: "strict_resolution".to_owned(),
+        premises,
+        args,
+        discharge: Vec::new(),
+    });
+    final_step
 }
 
 pub fn trans(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
