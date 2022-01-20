@@ -71,7 +71,7 @@ impl<'c> ProofChecker<'c> {
                         .map_err(|e| Error::Checker {
                             inner: e,
                             rule: step.rule.clone(),
-                            step: step.index.clone(),
+                            step: step.id.clone(),
                         })?;
 
                     // If this is the last command of a subproof, we have to pop the subproof
@@ -86,14 +86,14 @@ impl<'c> ProofChecker<'c> {
                 }
                 ProofCommand::Subproof(s) => {
                     let time = Instant::now();
-                    let step_index = command.index();
+                    let step_id = command.id();
 
                     let new_context = self
                         .build_context(&s.assignment_args, &s.variable_args)
                         .map_err(|e| Error::Checker {
                             inner: e.into(),
                             rule: "anchor".into(),
-                            step: step_index.to_owned(),
+                            step: step_id.to_owned(),
                         })?;
                     self.context.push(new_context);
 
@@ -101,9 +101,9 @@ impl<'c> ProofChecker<'c> {
                         reconstructor.open_subproof();
                     }
 
-                    self.add_statistics_measurement(step_index, "anchor*", time);
+                    self.add_statistics_measurement(step_id, "anchor*", time);
                 }
-                ProofCommand::Assume { index, term } => {
+                ProofCommand::Assume { id, term } => {
                     let time = Instant::now();
 
                     // Some subproofs contain `assume` commands inside them. These don't refer
@@ -121,7 +121,7 @@ impl<'c> ProofChecker<'c> {
                             return Err(Error::Checker {
                                 inner: CheckerError::Assume(term.clone()),
                                 rule: "assume".into(),
-                                step: index.clone(),
+                                step: id.clone(),
                             });
                         }
                     };
@@ -129,7 +129,7 @@ impl<'c> ProofChecker<'c> {
                     if let Some(reconstructor) = &mut self.reconstructor {
                         reconstructor.signal_unchanged();
                     }
-                    self.add_statistics_measurement(index, "assume*", time);
+                    self.add_statistics_measurement(id, "assume*", time);
                 }
             }
         }
@@ -192,7 +192,7 @@ impl<'c> ProofChecker<'c> {
 
         if let Some(reconstructor) = &mut self.reconstructor {
             if let Some(reconstruction_rule) = Self::get_reconstruction_rule(&step.rule) {
-                reconstruction_rule(rule_args, step.index.clone(), reconstructor)?;
+                reconstruction_rule(rule_args, step.id.clone(), reconstructor)?;
             } else {
                 rule(rule_args)?;
                 reconstructor.signal_unchanged();
@@ -200,7 +200,7 @@ impl<'c> ProofChecker<'c> {
         } else {
             rule(rule_args)?;
         }
-        self.add_statistics_measurement(&step.index, &step.rule, time);
+        self.add_statistics_measurement(&step.id, &step.rule, time);
         Ok(())
     }
 
@@ -256,15 +256,14 @@ impl<'c> ProofChecker<'c> {
         })
     }
 
-    fn add_statistics_measurement(&mut self, step_index: &str, rule: &str, start_time: Instant) {
+    fn add_statistics_measurement(&mut self, step_id: &str, rule: &str, start_time: Instant) {
         if let Some(stats) = &mut self.config.statistics {
             let measurement = start_time.elapsed();
             let file_name = stats.file_name.to_owned();
-            let step_index = step_index.to_owned();
             let rule = rule.to_owned();
             let id = StepId {
                 file: file_name.clone().into_boxed_str(),
-                step_index: step_index.into_boxed_str(),
+                step_id: step_id.into(),
                 rule: rule.clone().into_boxed_str(),
             };
             stats.step_time.add(&id, measurement);

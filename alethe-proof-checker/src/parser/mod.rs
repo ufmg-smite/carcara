@@ -39,7 +39,7 @@ pub fn parse_instance<T: BufRead>(
 /// Represents a "raw" `anchor` command. This is only used while parsing, and does not appear in
 /// the final AST.
 struct AnchorCommand {
-    end_step_index: String,
+    end_step_id: String,
     assignment_args: Vec<(String, Rc<Term>)>,
     variable_args: Vec<SortedVar>,
 }
@@ -52,7 +52,7 @@ struct ParserState {
     function_defs: AHashMap<String, FunctionDef>,
     term_pool: TermPool,
     sort_declarations: AHashMap<String, usize>,
-    step_indices: SymbolTable<String, usize>,
+    step_ids: SymbolTable<String, usize>,
 }
 
 /// A parser for the Alethe proof format.
@@ -446,14 +446,14 @@ impl<R: BufRead> Parser<R> {
         while self.current_token != Token::Eof {
             self.expect_token(Token::OpenParen)?;
             let (token, position) = self.next_token()?;
-            let (index, command) = match token {
+            let (id, command) = match token {
                 Token::ReservedWord(Reserved::Assume) => {
-                    let (index, term) = self.parse_assume_command()?;
-                    (index.clone(), ProofCommand::Assume { index, term })
+                    let (id, term) = self.parse_assume_command()?;
+                    (id.clone(), ProofCommand::Assume { id, term })
                 }
                 Token::ReservedWord(Reserved::Step) => {
                     let step = self.parse_step_command()?;
-                    (step.index.clone(), ProofCommand::Step(step))
+                    (step.id.clone(), ProofCommand::Step(step))
                 }
                 Token::ReservedWord(Reserved::DefineFun) => {
                     let (name, func_def) = self.parse_define_fun()?;
@@ -463,33 +463,30 @@ impl<R: BufRead> Parser<R> {
                 Token::ReservedWord(Reserved::Anchor) => {
                     let anchor = self.parse_anchor_command()?;
 
-                    // When we encounter an `anchor` command, we push a new scope into the step
-                    // indices symbol table, a fresh commands vector into the commands stack for the
+                    // When we encounter an `anchor` command, we push a new scope into the step ids
+                    // symbol table, a fresh commands vector into the commands stack for the
                     // subproof to fill, and the `anchor` data (end step and arguments) into their
                     // respective stacks. All of this will be popped off at the end of the subproof.
                     // We don't need to push a new scope into the symbol table because
                     // `Parser::parse_anchor_command` already does that for us
-                    self.state.step_indices.push_scope();
+                    self.state.step_ids.push_scope();
                     commands_stack.push(Vec::new());
-                    end_step_stack.push(anchor.end_step_index);
+                    end_step_stack.push(anchor.end_step_id);
                     subproof_args_stack.push((anchor.assignment_args, anchor.variable_args));
                     continue;
                 }
                 _ => return Err(Error::Parser(ParserError::UnexpectedToken(token), position)),
             };
-            if self.state.step_indices.get(&index).is_some() {
-                return Err(Error::Parser(
-                    ParserError::RepeatedStepIndex(index),
-                    position,
-                ));
+            if self.state.step_ids.get(&id).is_some() {
+                return Err(Error::Parser(ParserError::RepeatedStepIndex(id), position));
             }
 
             commands_stack.last_mut().unwrap().push(command);
-            if end_step_stack.last() == Some(&index) {
+            if end_step_stack.last() == Some(&id) {
                 // If this is the last step in a subproof, we need to pop all the subproof data off
                 // of the stacks and build the subproof command with it
                 self.state.symbol_table.pop_scope();
-                self.state.step_indices.pop_scope();
+                self.state.step_ids.pop_scope();
                 let commands = commands_stack.pop().unwrap();
                 end_step_stack.pop().unwrap();
                 let (assignment_args, variable_args) = subproof_args_stack.pop().unwrap();
@@ -499,7 +496,7 @@ impl<R: BufRead> Parser<R> {
                     Some(ProofCommand::Step(_)) => (),
                     _ => {
                         return Err(Error::Parser(
-                            ParserError::LastSubproofStepIsNotStep(index),
+                            ParserError::LastSubproofStepIsNotStep(id),
                             position,
                         ))
                     }
@@ -515,8 +512,8 @@ impl<R: BufRead> Parser<R> {
                     }));
             }
             self.state
-                .step_indices
-                .insert(index, commands_stack.last().unwrap().len() - 1);
+                .step_ids
+                .insert(id, commands_stack.last().unwrap().len() - 1);
         }
         match commands_stack.len() {
             0 => unreachable!(),
@@ -534,16 +531,16 @@ impl<R: BufRead> Parser<R> {
     /// Parses an `assume` proof command. This method assumes that the `(` and `assume` tokens were
     /// already consumed.
     fn parse_assume_command(&mut self) -> AletheResult<(String, Rc<Term>)> {
-        let index = self.expect_symbol()?;
+        let id = self.expect_symbol()?;
         let term = self.parse_term_expecting_sort(&Sort::Bool)?;
         self.expect_token(Token::CloseParen)?;
-        Ok((index, term))
+        Ok((id, term))
     }
 
     /// Parses a `step` proof command. This method assumes that the `(` and `step` tokens were
     /// already consumed.
     fn parse_step_command(&mut self) -> AletheResult<ProofStep> {
-        let index = self.expect_symbol()?;
+        let id = self.expect_symbol()?;
         let clause = self.parse_clause()?;
         self.expect_token(Token::Keyword("rule".into()))?;
         let rule = match self.next_token()? {
@@ -557,7 +554,7 @@ impl<R: BufRead> Parser<R> {
         if rule == "trust" {
             self.read_until_close_parens()?;
             return Ok(ProofStep {
-                index,
+                id,
                 clause,
                 rule,
                 premises: Vec::new(),
@@ -583,9 +580,9 @@ impl<R: BufRead> Parser<R> {
         };
 
         // In some steps (notably those with the `subproof` rule) a `:discharge` attribute appears,
-        // with a sequence of assumption indices as its value. While the checker already has
-        // support this rule, it doesn't use these values to check it. These values are only used
-        // when printing a proof.
+        // with a sequence of assumption ids as its value. While the checker already has support
+        // this rule, it doesn't use these values to check it. These values are only used when
+        // printing a proof.
         let discharge = if self.current_token == Token::Keyword("discharge".into()) {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
@@ -597,7 +594,7 @@ impl<R: BufRead> Parser<R> {
         self.expect_token(Token::CloseParen)?;
 
         Ok(ProofStep {
-            index,
+            id,
             clause,
             rule,
             premises,
@@ -610,15 +607,12 @@ impl<R: BufRead> Parser<R> {
     /// index used to reference commands in the AST.
     fn parse_step_premise(&mut self) -> AletheResult<(usize, usize)> {
         let position = self.current_position;
-        let index = self.expect_symbol()?;
+        let id = self.expect_symbol()?;
         self.state
-            .step_indices
-            .get_with_depth(&index)
+            .step_ids
+            .get_with_depth(&id)
             .map(|(d, &i)| (d, i))
-            .ok_or(Error::Parser(
-                ParserError::UndefinedStepIndex(index),
-                position,
-            ))
+            .ok_or(Error::Parser(ParserError::UndefinedStepIndex(id), position))
     }
 
     /// Parses an `anchor` proof command. This method assumes that the `(` and `anchor` tokens were
@@ -626,7 +620,7 @@ impl<R: BufRead> Parser<R> {
     /// into the symbol table which must be removed after parsing the subproof.
     fn parse_anchor_command(&mut self) -> AletheResult<AnchorCommand> {
         self.expect_token(Token::Keyword("step".into()))?;
-        let end_step_index = self.expect_symbol()?;
+        let end_step_id = self.expect_symbol()?;
 
         // We have to push a new scope into the symbol table in order to parse the subproof
         // arguments
@@ -649,7 +643,7 @@ impl<R: BufRead> Parser<R> {
         }
         self.expect_token(Token::CloseParen)?;
         Ok(AnchorCommand {
-            end_step_index,
+            end_step_id,
             assignment_args,
             variable_args,
         })

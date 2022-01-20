@@ -109,7 +109,7 @@ pub fn eq_transitive(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 
 pub fn reconstruct_eq_transitive(
     RuleArgs { conclusion, pool, .. }: RuleArgs,
-    command_index: String,
+    command_id: String,
     reconstructor: &mut Reconstructor,
 ) -> RuleResult {
     assert_clause_len(conclusion, 3..)?;
@@ -156,7 +156,7 @@ pub fn reconstruct_eq_transitive(
     };
 
     let new_eq_transitive_step = ProofStep {
-        index: reconstructor.get_new_index(&command_index),
+        id: reconstructor.get_new_id(&command_id),
         clause: new_clause.clone(),
         rule: "eq_transitive".to_owned(),
         premises: Vec::new(),
@@ -173,7 +173,7 @@ pub fn reconstruct_eq_transitive(
             reconstructor,
             new_eq_transitive_step,
             &latest_clause,
-            &command_index,
+            &command_id,
             &should_flip,
         );
         latest_step_index = step;
@@ -184,7 +184,7 @@ pub fn reconstruct_eq_transitive(
         let mut clause = latest_clause;
         clause.extend(not_needed.into_iter());
         let or_intro_step = ProofStep {
-            index: reconstructor.get_new_index(&command_index),
+            id: reconstructor.get_new_id(&command_id),
             clause,
             rule: "or_intro".to_owned(),
             premises: vec![latest_step_index],
@@ -195,7 +195,7 @@ pub fn reconstruct_eq_transitive(
     }
 
     reconstructor.push_reconstructed_step(ProofStep {
-        index: command_index,
+        id: command_id,
         clause: conclusion.to_vec(),
         rule: "reordering".to_owned(),
         premises: vec![latest_step_index],
@@ -210,7 +210,7 @@ fn flip_eq_transitive_premises(
     reconstructor: &mut Reconstructor,
     new_eq_transitive_step: (usize, usize),
     new_clause: &[Rc<Term>],
-    original_index: &str,
+    original_id: &str,
     should_flip: &[usize],
 ) -> (Vec<Rc<Term>>, (usize, usize)) {
     let resolution_pivots: Vec<_> = should_flip
@@ -221,7 +221,7 @@ fn flip_eq_transitive_premises(
             let to_introduce = build_term!(pool, (not (= {b.clone()} {a.clone()})));
             let clause = vec![to_introduce.clone(), pivot.clone()];
             let new_step = ProofStep {
-                index: reconstructor.get_new_index(original_index),
+                id: reconstructor.get_new_id(original_id),
                 clause,
                 rule: "eq_symmetric".to_owned(),
                 premises: Vec::new(),
@@ -262,7 +262,7 @@ fn flip_eq_transitive_premises(
         .collect();
 
     let final_step = ProofStep {
-        index: reconstructor.get_new_index(original_index),
+        id: reconstructor.get_new_id(original_id),
         clause: clause.clone(),
         rule: "strict_resolution".to_owned(),
         premises,
@@ -286,7 +286,7 @@ pub fn trans(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
 
 pub fn reconstruct_trans(
     RuleArgs { conclusion, premises, pool, .. }: RuleArgs,
-    command_index: String,
+    command_id: String,
     reconstructor: &mut Reconstructor,
 ) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
@@ -297,7 +297,7 @@ pub fn reconstruct_trans(
         .map(|premise| match_term_err!((= t u) = get_premise_term(premise)?))
         .collect::<Result<_, _>>()?;
 
-    let mut new_premises: Vec<_> = premises.iter().map(|p| p.premise_index).collect();
+    let mut new_premises: Vec<_> = premises.iter().map(|p| p.index).collect();
     let (_, num_needed, should_flip) = reconstruct_chain(
         conclusion_equality,
         &mut premise_equalities,
@@ -324,8 +324,8 @@ pub fn reconstruct_trans(
     for i in 0..new_premises.len() {
         new_premises[i] = if should_flip[i] {
             let (a, b) = premise_equalities[i];
-            let index = reconstructor.get_new_index(&command_index);
-            reconstructor.add_symm_step(pool, new_premises[i], (a.clone(), b.clone()), index)
+            let id = reconstructor.get_new_id(&command_id);
+            reconstructor.add_symm_step(pool, new_premises[i], (a.clone(), b.clone()), id)
         } else {
             // If the premise didn't need flipping, we just need to map its index to the new
             // index in the reconstructed proof
@@ -334,7 +334,7 @@ pub fn reconstruct_trans(
     }
 
     reconstructor.push_reconstructed_step(ProofStep {
-        index: command_index,
+        id: command_id,
         clause: conclusion.into(),
         rule: "trans".into(),
         premises: new_premises,

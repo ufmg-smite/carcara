@@ -28,17 +28,17 @@ pub struct RuleArgs<'a> {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Premise<'a> {
-    pub command_index: &'a str,
+    pub id: &'a str,
     pub clause: &'a [Rc<Term>],
-    pub premise_index: (usize, usize),
+    pub index: (usize, usize),
 }
 
 impl<'a> Premise<'a> {
-    pub fn new(premise_index: (usize, usize), command: &'a ProofCommand) -> Self {
+    pub fn new(index: (usize, usize), command: &'a ProofCommand) -> Self {
         Self {
-            command_index: command.index(),
+            id: command.id(),
             clause: command.clause(),
-            premise_index,
+            index,
         }
     }
 }
@@ -49,7 +49,7 @@ fn get_premise_term<'a>(premise: &Premise<'a>) -> Result<&'a Rc<Term>, CheckerEr
     match premise.clause {
         [t] => Ok(t),
         cl => Err(CheckerError::WrongLengthOfPremiseClause(
-            premise.command_index.to_owned(),
+            premise.id.to_owned(),
             1.into(),
             cl.len(),
         )),

@@ -48,8 +48,8 @@ impl Reconstructor {
         (self.stack.len() - 1, index)
     }
 
-    pub(super) fn get_new_index(&mut self, root_index: &str) -> String {
-        format!("{}.t{}", root_index, self.accumulator.len() + 1)
+    pub(super) fn get_new_id(&mut self, root_id: &str) -> String {
+        format!("{}.t{}", root_id, self.accumulator.len() + 1)
     }
 
     pub(super) fn push_reconstructed_step(&mut self, step: ProofStep) -> (usize, usize) {
@@ -80,12 +80,12 @@ impl Reconstructor {
         pool: &mut TermPool,
         original_premise: (usize, usize),
         original_equality: (Rc<Term>, Rc<Term>),
-        index: String,
+        id: String,
     ) -> (usize, usize) {
         let (a, b) = original_equality;
         let clause = vec![build_term!(pool, (= {b} {a}))];
         let step = ProofStep {
-            index,
+            id,
             clause,
             rule: "symm".into(),
             premises: vec![self.map_index(original_premise)],

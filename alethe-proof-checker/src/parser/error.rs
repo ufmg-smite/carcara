@@ -59,16 +59,16 @@ pub enum ParserError {
     #[error("sort '{0}' is not defined")]
     UndefinedSort(String),
 
-    /// The parser encountered a step index that was not defined.
-    #[error("step index '{0}' is not defined")]
+    /// The parser encountered a step id that was not defined.
+    #[error("step id '{0}' is not defined")]
     UndefinedStepIndex(String),
 
     /// The wrong number of arguments was given to a function, operator or sort.
     #[error("expected {0} arguments, got {1}")]
     WrongNumberOfArgs(Range, usize),
 
-    /// A step index was used in more than one step.
-    #[error("step index '{0}' was repeated")]
+    /// A step id was used in more than one step.
+    #[error("step id '{0}' was repeated")]
     RepeatedStepIndex(String),
 
     /// The number given as the arity in a `declare-sort` command is too large. This only happens

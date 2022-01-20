@@ -154,13 +154,13 @@ impl<K> fmt::Display for Metrics<K> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StepId {
     pub(crate) file: Box<str>,
-    pub(crate) step_index: Box<str>,
+    pub(crate) step_id: Box<str>,
     pub(crate) rule: Box<str>,
 }
 
 impl fmt::Display for StepId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}:{} ({})", self.file, self.step_index, self.rule)
+        write!(f, "{}:{} ({})", self.file, self.step_id, self.rule)
     }
 }
 

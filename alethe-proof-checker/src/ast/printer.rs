@@ -19,20 +19,12 @@ impl<'a> PrettyPrint for AlethePrinter<'a> {
         let mut iter = ProofIter::new(commands);
         while let Some(command) = iter.next() {
             match command {
-                ProofCommand::Assume { index, term } => {
-                    write!(self.inner, "(assume {} {})", index, term)?;
+                ProofCommand::Assume { id, term } => {
+                    write!(self.inner, "(assume {} {})", id, term)?;
                 }
                 ProofCommand::Step(s) => self.write_step(&mut iter, s)?,
                 ProofCommand::Subproof(s) => {
-                    let end_step_index = s
-                        .commands
-                        .last()
-                        .and_then(|s| match s {
-                            ProofCommand::Step(s) => Some(s.index.clone()),
-                            _ => None,
-                        })
-                        .unwrap();
-                    write!(self.inner, "(anchor :step {}", end_step_index)?;
+                    write!(self.inner, "(anchor :step {}", command.id())?;
 
                     if !s.variable_args.is_empty() || !s.assignment_args.is_empty() {
                         write!(self.inner, " :args (")?;
@@ -65,7 +57,7 @@ impl<'a> PrettyPrint for AlethePrinter<'a> {
 
 impl<'a> AlethePrinter<'a> {
     fn write_step(&mut self, iter: &mut ProofIter, step: &ProofStep) -> io::Result<()> {
-        write!(self.inner, "(step {} (cl", step.index)?;
+        write!(self.inner, "(step {} (cl", step.id)?;
 
         for t in &step.clause {
             write!(self.inner, " {}", t)?;
@@ -75,13 +67,9 @@ impl<'a> AlethePrinter<'a> {
         write!(self.inner, " :rule {}", step.rule)?;
 
         if let [head, tail @ ..] = step.premises.as_slice() {
-            write!(
-                self.inner,
-                " :premises ({}",
-                iter.get_premise(*head).index()
-            )?;
+            write!(self.inner, " :premises ({}", iter.get_premise(*head).id())?;
             for premise in tail {
-                write!(self.inner, " {}", iter.get_premise(*premise).index())?;
+                write!(self.inner, " {}", iter.get_premise(*premise).id())?;
             }
             write!(self.inner, ")")?;
         }
@@ -98,8 +86,8 @@ impl<'a> AlethePrinter<'a> {
 
         if let [head, tail @ ..] = step.discharge.as_slice() {
             write!(self.inner, " :discharge ({}", head)?;
-            for index in tail {
-                write!(self.inner, " {}", index)?;
+            for id in tail {
+                write!(self.inner, " {}", id)?;
             }
             write!(self.inner, ")")?;
         }

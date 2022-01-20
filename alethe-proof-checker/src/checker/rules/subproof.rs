@@ -11,7 +11,7 @@ fn get_command_term(command: &ProofCommand) -> Result<&Rc<Term>, CheckerError> {
     match command.clause() {
         [t] => Ok(t),
         cl => Err(CheckerError::WrongLengthOfPremiseClause(
-            command.index().to_owned(),
+            command.id().to_owned(),
             1.into(),
             cl.len(),
         )),
@@ -34,13 +34,11 @@ pub fn subproof(
 
     for (assumption, t) in assumptions.iter().zip(conclusion) {
         match assumption {
-            ProofCommand::Assume { index: _, term } => {
+            ProofCommand::Assume { id: _, term } => {
                 let t = t.remove_negation_err()?;
                 assert_eq(term, t)?;
             }
-            other => {
-                return Err(SubproofError::DischargeMustBeAssume(other.index().to_owned()).into())
-            }
+            other => return Err(SubproofError::DischargeMustBeAssume(other.id().to_owned()).into()),
         }
     }
 
@@ -52,7 +50,7 @@ pub fn subproof(
         [t] => t.clone(),
         other => {
             return Err(CheckerError::WrongLengthOfPremiseClause(
-                previous_command.index().to_owned(),
+                previous_command.id().to_owned(),
                 (..2).into(),
                 other.len(),
             ))

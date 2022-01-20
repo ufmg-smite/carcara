@@ -44,7 +44,7 @@ impl Proof {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProofCommand {
     /// An `assume` command, of the form `(assume <symbol> <term>)`.
-    Assume { index: String, term: Rc<Term> },
+    Assume { id: String, term: Rc<Term> },
 
     /// A `step` command.
     Step(ProofStep),
@@ -54,17 +54,17 @@ pub enum ProofCommand {
 }
 
 impl ProofCommand {
-    pub fn index(&self) -> &str {
+    pub fn id(&self) -> &str {
         match self {
-            ProofCommand::Assume { index, .. } => index,
-            ProofCommand::Step(s) => &s.index,
-            ProofCommand::Subproof(s) => s.commands.last().unwrap().index(),
+            ProofCommand::Assume { id, .. } => id,
+            ProofCommand::Step(s) => &s.id,
+            ProofCommand::Subproof(s) => s.commands.last().unwrap().id(),
         }
     }
 
     pub fn clause(&self) -> &[Rc<Term>] {
         match self {
-            ProofCommand::Assume { index: _, term } => std::slice::from_ref(term),
+            ProofCommand::Assume { id: _, term } => std::slice::from_ref(term),
             ProofCommand::Step(ProofStep { clause, .. }) => clause,
             ProofCommand::Subproof(s) => s.commands.last().unwrap().clause(),
         }
@@ -75,7 +75,7 @@ impl ProofCommand {
 /// [:args <proof_args>]?)`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProofStep {
-    pub index: String,
+    pub id: String,
     pub clause: Vec<Rc<Term>>,
     pub rule: String,
 
