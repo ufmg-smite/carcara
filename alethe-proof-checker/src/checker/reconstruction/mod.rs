@@ -48,6 +48,10 @@ impl Reconstructor {
         (self.stack.len() - 1, index)
     }
 
+    pub(super) fn get_new_index(&mut self, root_index: &str) -> String {
+        format!("{}.t{}", root_index, self.accumulator.len() + 1)
+    }
+
     pub(super) fn push_reconstructed_step(&mut self, step: ProofStep) -> (usize, usize) {
         let reconstruction = {
             let mut added = std::mem::take(&mut self.accumulator);

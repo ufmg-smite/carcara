@@ -152,14 +152,15 @@ pub fn reconstruct_eq_transitive(
         return Ok(());
     }
 
-    let new_eq_transitive_step = reconstructor.add_new_step(ProofStep {
-        index: command_index.clone() + ".t1",
+    let new_eq_transitive_step = ProofStep {
+        index: reconstructor.get_new_index(&command_index),
         clause: new_clause.clone(),
         rule: "eq_transitive".to_owned(),
         premises: Vec::new(),
         args: Vec::new(),
         discharge: Vec::new(),
-    });
+    };
+    let new_eq_transitive_step = reconstructor.add_new_step(new_eq_transitive_step);
     let mut latest_step = new_eq_transitive_step;
 
     if !should_flip.is_empty() {
@@ -193,7 +194,6 @@ fn flip_eq_transitive_premises(
     original_index: &str,
     should_flip: &[usize],
 ) -> (usize, usize) {
-    let mut num_added = 1;
     let resolution_pivots: Vec<_> = should_flip
         .iter()
         .map(|&i| {
@@ -201,16 +201,15 @@ fn flip_eq_transitive_premises(
             let pivot = build_term!(pool, (= {a.clone()} {b.clone()}));
             let to_introduce = build_term!(pool, (not (= {b.clone()} {a.clone()})));
             let clause = vec![to_introduce.clone(), pivot.clone()];
-            num_added += 1;
-            let new_step = reconstructor.add_new_step(ProofStep {
-                index: format!("{}.t{}", original_index, num_added),
+            let new_step = ProofStep {
+                index: reconstructor.get_new_index(original_index),
                 clause,
                 rule: "eq_symmetric".to_owned(),
                 premises: Vec::new(),
                 args: Vec::new(),
                 discharge: Vec::new(),
-            });
-            (new_step, pivot, to_introduce)
+            };
+            (reconstructor.add_new_step(new_step), pivot, to_introduce)
         })
         .collect();
 
@@ -243,16 +242,15 @@ fn flip_eq_transitive_premises(
         .map(ProofArg::Term)
         .collect();
 
-    num_added += 1;
-    let final_step = reconstructor.add_new_step(ProofStep {
-        index: format!("{}.t{}", original_index, num_added),
+    let final_step = ProofStep {
+        index: reconstructor.get_new_index(original_index),
         clause,
         rule: "strict_resolution".to_owned(),
         premises,
         args,
         discharge: Vec::new(),
-    });
-    final_step
+    };
+    reconstructor.add_new_step(final_step)
 }
 
 pub fn trans(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
@@ -304,18 +302,11 @@ pub fn reconstruct_trans(
 
     // If there are any premises that need flipping, we need to introduce `symm` steps to flip the
     // needed equalities
-    let mut num_added = 0;
     for i in 0..new_premises.len() {
         new_premises[i] = if should_flip[i] {
             let (a, b) = premise_equalities[i];
-            num_added += 1;
-            reconstructor.add_symm_step(
-                pool,
-                new_premises[i],
-                (a.clone(), b.clone()),
-                // TODO: Avoid collisions when creating this index
-                format!("{}.t{}", command_index, num_added),
-            )
+            let index = reconstructor.get_new_index(&command_index);
+            reconstructor.add_symm_step(pool, new_premises[i], (a.clone(), b.clone()), index)
         } else {
             // If the premise didn't need flipping, we just need to map its index to the new
             // index in the reconstructed proof
