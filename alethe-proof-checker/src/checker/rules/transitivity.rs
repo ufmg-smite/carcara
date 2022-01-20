@@ -146,11 +146,14 @@ pub fn reconstruct_eq_transitive(
         };
     }
 
-    if num_needed != n - 1 {
-        // TODO: implement removal of unnecessary premises
-        reconstructor.signal_unchanged();
-        return Ok(());
-    }
+    let not_needed = if num_needed == n - 1 {
+        Vec::new()
+    } else {
+        let conclusion = new_clause.pop().unwrap();
+        let not_needed = new_clause.split_off(num_needed);
+        new_clause.push(conclusion);
+        not_needed
+    };
 
     let new_eq_transitive_step = ProofStep {
         index: reconstructor.get_new_index(&command_index),
@@ -161,25 +164,41 @@ pub fn reconstruct_eq_transitive(
         discharge: Vec::new(),
     };
     let new_eq_transitive_step = reconstructor.add_new_step(new_eq_transitive_step);
-    let mut latest_step = new_eq_transitive_step;
+    let mut latest_step_index = new_eq_transitive_step;
+    let mut latest_clause = new_clause;
 
     if !should_flip.is_empty() {
-        let resolution_step = flip_eq_transitive_premises(
+        let (clause, step) = flip_eq_transitive_premises(
             pool,
             reconstructor,
             new_eq_transitive_step,
-            &new_clause,
+            &latest_clause,
             &command_index,
             &should_flip,
         );
-        latest_step = resolution_step;
+        latest_step_index = step;
+        latest_clause = clause;
+    }
+
+    if !not_needed.is_empty() {
+        let mut clause = latest_clause;
+        clause.extend(not_needed.into_iter());
+        let or_intro_step = ProofStep {
+            index: reconstructor.get_new_index(&command_index),
+            clause,
+            rule: "or_intro".to_owned(),
+            premises: vec![latest_step_index],
+            args: Vec::new(),
+            discharge: Vec::new(),
+        };
+        latest_step_index = reconstructor.add_new_step(or_intro_step);
     }
 
     reconstructor.push_reconstructed_step(ProofStep {
         index: command_index,
         clause: conclusion.to_vec(),
         rule: "reordering".to_owned(),
-        premises: vec![latest_step],
+        premises: vec![latest_step_index],
         args: Vec::new(),
         discharge: Vec::new(),
     });
@@ -193,7 +212,7 @@ fn flip_eq_transitive_premises(
     new_clause: &[Rc<Term>],
     original_index: &str,
     should_flip: &[usize],
-) -> (usize, usize) {
+) -> (Vec<Rc<Term>>, (usize, usize)) {
     let resolution_pivots: Vec<_> = should_flip
         .iter()
         .map(|&i| {
@@ -244,13 +263,13 @@ fn flip_eq_transitive_premises(
 
     let final_step = ProofStep {
         index: reconstructor.get_new_index(original_index),
-        clause,
+        clause: clause.clone(),
         rule: "strict_resolution".to_owned(),
         premises,
         args,
         discharge: Vec::new(),
     };
-    reconstructor.add_new_step(final_step)
+    (clause, reconstructor.add_new_step(final_step))
 }
 
 pub fn trans(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
