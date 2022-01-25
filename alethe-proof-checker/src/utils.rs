@@ -52,6 +52,7 @@ impl<T, I: Iterator<Item = T>> DedupIterator<T> for I {
     }
 }
 
+#[derive(Debug)]
 pub struct SymbolTable<K, V> {
     scopes: Vec<AHashMap<K, V>>,
 }

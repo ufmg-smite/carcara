@@ -1,16 +1,17 @@
 use crate::ast::*;
 use std::{iter, vec};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct ProofDiff {
     pub commands: Vec<(usize, CommandDiff)>,
-    pub new_indices: Vec<usize>,
+    pub new_indices: Vec<(usize, usize)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum CommandDiff {
     Step(Vec<ProofCommand>),
     Subproof(ProofDiff),
+    Delete,
 }
 
 pub fn apply_diff(root: ProofDiff, proof: Vec<ProofCommand>) -> Vec<ProofCommand> {
@@ -18,7 +19,7 @@ pub fn apply_diff(root: ProofDiff, proof: Vec<ProofCommand>) -> Vec<ProofCommand
         result: Subproof,
         commands: iter::Enumerate<vec::IntoIter<ProofCommand>>,
         diff_iter: vec::IntoIter<(usize, CommandDiff)>,
-        new_indices: Vec<usize>,
+        new_indices: Vec<(usize, usize)>,
     }
     let mut stack = vec![Frame {
         result: Subproof::default(),
@@ -62,14 +63,15 @@ pub fn apply_diff(root: ProofDiff, proof: Vec<ProofCommand>) -> Vec<ProofCommand
                     (ProofCommand::Step(_), CommandDiff::Step(mut reconstruction)) => {
                         f.result.commands.append(&mut reconstruction);
                     }
+                    (_, CommandDiff::Delete) => (),
                     _ => panic!("invalid diff!"),
                 }
             }
             _ => {
                 if let ProofCommand::Step(s) = &mut command {
-                    for p in &mut s.premises {
+                    for p in &mut s.premises.iter_mut().chain(s.discharge.iter_mut()) {
                         let (depth, i) = *p;
-                        *p = (depth, stack[depth].new_indices[i]);
+                        *p = stack[depth].new_indices[i];
                     }
                 }
                 stack.last_mut().unwrap().result.commands.push(command);
