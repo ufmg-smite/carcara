@@ -88,7 +88,11 @@ impl<K: Eq + Hash, V> SymbolTable<K, V> {
         self.scopes.iter().rev().find_map(|scope| scope.get(key))
     }
 
-    pub fn get_with_depth(&self, key: &K) -> Option<(usize, &V)> {
+    pub fn get_with_depth<Q>(&self, key: &Q) -> Option<(usize, &V)>
+    where
+        K: Borrow<Q>,
+        Q: Eq + Hash + ?Sized,
+    {
         self.scopes
             .iter()
             .enumerate()
