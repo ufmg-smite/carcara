@@ -579,14 +579,12 @@ impl<R: BufRead> Parser<R> {
             Vec::new()
         };
 
-        // In some steps (notably those with the `subproof` rule) a `:discharge` attribute appears,
-        // with a sequence of assumption ids as its value. While the checker already has support
-        // this rule, it doesn't use these values to check it. These values are only used when
-        // printing a proof.
+        // For some rules (notable the `subproof` rule), there is also a `:discharge` attribute that
+        // takes a series of command ids, in addition to the regular premises
         let discharge = if self.current_token == Token::Keyword("discharge".into()) {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
-            self.parse_sequence(Self::expect_symbol, true)?
+            self.parse_sequence(|p| p.parse_discharge_premise(&id), true)?
         } else {
             Vec::new()
         };
@@ -611,6 +609,22 @@ impl<R: BufRead> Parser<R> {
         self.state
             .step_ids
             .get_with_depth(&id)
+            .map(|(d, &i)| (d, i))
+            .ok_or(Error::Parser(ParserError::UndefinedStepIndex(id), position))
+    }
+
+    /// Parses an argument for the `:discharge` attribute. Due to a bug in veriT, commands local to
+    /// the current subproof are passed by their "relative" id. That is, the command `t5.t4.h2` is
+    /// passed as simply `h2`. This behaviour is not present in other SMT solvers, like cvc5. To
+    /// work around that, this function tries to find the command considering both possibilities.
+    fn parse_discharge_premise(&mut self, root_id: &str) -> AletheResult<(usize, usize)> {
+        let position = self.current_position;
+        let id = self.expect_symbol()?;
+        let absolute_id = format!("{}.{}", root_id, &id);
+        self.state
+            .step_ids
+            .get_with_depth(&absolute_id)
+            .or_else(|| self.state.step_ids.get_with_depth(&id))
             .map(|(d, &i)| (d, i))
             .ok_or(Error::Parser(ParserError::UndefinedStepIndex(id), position))
     }

@@ -24,6 +24,7 @@ pub struct RuleArgs<'a> {
     // closing, because they may need to refer to some of them, and they are not given as premises.
     // If a rule is not ending a subproof, this should be `None`
     pub(super) subproof_commands: Option<&'a [ProofCommand]>,
+    pub(super) discharge: &'a [&'a ProofCommand],
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -85,13 +85,8 @@ pub struct ProofStep {
 
     pub args: Vec<ProofArg>,
 
-    // Currently, there is an issue with the `:discharge` attribute that is used by the `subproof`
-    // rule in which assumptions that should be printed as, e.g., `t1.h1`, are printed as simply
-    // `h1`. Because of that, we currently ignore the values of this attribute for the purpose of
-    // actually checking the rule. However, to be able to print it correctly, we need to parse and
-    // record these values. For now, they are simply stored as strings -- eventually, they will be
-    // stored using indices similarly to the `:premises` attribute
-    pub discharge: Vec<String>,
+    /// Commands passed to the `:discharge` attribute are indexed similarly to premises
+    pub discharge: Vec<(usize, usize)>,
 }
 
 /// A subproof. Subproofs are started by `anchor` commands, of the form `(anchor :step <symbol>

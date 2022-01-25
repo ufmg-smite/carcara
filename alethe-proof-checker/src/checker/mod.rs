@@ -180,6 +180,11 @@ impl<'c> ProofChecker<'c> {
                 Premise::new(p, command)
             })
             .collect();
+        let discharge: Vec<_> = step
+            .discharge
+            .iter()
+            .map(|&i| iter.get_premise(i))
+            .collect();
 
         let rule_args = RuleArgs {
             conclusion: &step.clause,
@@ -188,6 +193,7 @@ impl<'c> ProofChecker<'c> {
             pool: self.pool,
             context: &mut self.context,
             subproof_commands,
+            discharge: &discharge,
         };
 
         if let Some(reconstructor) = &mut self.reconstructor {

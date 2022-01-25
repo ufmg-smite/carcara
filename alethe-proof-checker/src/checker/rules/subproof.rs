@@ -20,19 +20,18 @@ fn get_command_term(command: &ProofCommand) -> Result<&Rc<Term>, CheckerError> {
 
 pub fn subproof(
     RuleArgs {
-        conclusion, pool, subproof_commands, ..
+        conclusion,
+        pool,
+        subproof_commands,
+        discharge,
+        ..
     }: RuleArgs,
 ) -> RuleResult {
     let subproof_commands = subproof_commands.ok_or(CheckerError::MustBeLastStepInSubproof)?;
 
-    // TODO: We should get the series of assumptions from the `:discharge` attribute, but currently
-    // we just take the first `conclusion.len() - 1` steps in the subproof.
-    assert_clause_len(conclusion, 1..)?;
-    let assumptions = &subproof_commands[..conclusion.len() - 1];
+    assert_clause_len(conclusion, discharge.len() + 1)?;
 
-    assert_clause_len(conclusion, assumptions.len() + 1)?; // Currently, this is always true
-
-    for (assumption, t) in assumptions.iter().zip(conclusion) {
+    for (assumption, t) in discharge.iter().zip(conclusion) {
         match assumption {
             ProofCommand::Assume { id: _, term } => {
                 let t = t.remove_negation_err()?;
@@ -423,8 +422,6 @@ pub fn sko_forall(args: RuleArgs) -> RuleResult {
 mod tests {
     #[test]
     fn subproof() {
-        // TODO: When the `:discharge` attribute is properly implemented, change the examples to
-        // use it
         test_cases! {
             definitions = "
                 (declare-fun p () Bool)
@@ -436,39 +433,44 @@ mod tests {
                 "(anchor :step t1)
                 (assume t1.h1 p)
                 (step t1.t2 (cl q) :rule trust)
-                (step t1 (cl (not p) q) :rule subproof)": true,
+                (step t1 (cl (not p) q) :rule subproof :discharge (t1.h1))": true,
 
                 "(anchor :step t1)
                 (assume t1.h1 p)
-                (assume t1.h2 q)
-                (step t1.t3 (cl (= r s)) :rule trust)
-                (step t1 (cl (not p) (not q) (= r s)) :rule subproof)": true,
+                (step t1.t2 (cl) :rule trust)
+                (assume t1.h3 q)
+                (step t1.t4 (cl (= r s)) :rule trust)
+                (step t1 (cl (not p) (not q) (= r s))
+                    :rule subproof :discharge (t1.h1 t1.h3))": true,
             }
             "Missing assumption" {
                 "(anchor :step t1)
                 (assume t1.h1 p)
                 (step t1.t2 (cl (= r s)) :rule trust)
-                (step t1 (cl (not p) (not q) (= r s)) :rule subproof)": false,
+                (step t1 (cl (not p) (not q) (= r s)) :rule subproof :discharge (t1.h1))": false,
             }
             "Assumption terms don't match" {
                 "(anchor :step t1)
                 (assume t1.h1 p)
                 (assume t1.h2 q)
                 (step t1.t3 (cl (= r s)) :rule trust)
-                (step t1 (cl (not q) (not p) (= r s)) :rule subproof)": false,
+                (step t1 (cl (not q) (not p) (= r s))
+                    :rule subproof :discharge (t1.h1 t1.h2))": false,
 
                 "(anchor :step t1)
                 (assume t1.h1 (or p q))
                 (assume t1.h2 (= p q))
                 (step t1.t3 (cl (= r s)) :rule trust)
-                (step t1 (cl (not (and p q)) (not (= q p)) (= r s)) :rule subproof)": false,
+                (step t1 (cl (not (and p q)) (not (= q p)) (= r s))
+                    :rule subproof :discharge (t1.h1 t1.h2))": false,
             }
             "Conclusion terms don't match" {
                 "(anchor :step t1)
                 (assume t1.h1 p)
                 (assume t1.h2 q)
                 (step t1.t3 (cl (= r s)) :rule trust)
-                (step t1 (cl (not p) (not q) (= s r)) :rule subproof)": false,
+                (step t1 (cl (not p) (not q) (= s r))
+                    :rule subproof :discharge (t1.h1 t1.h2))": false,
             }
         }
     }

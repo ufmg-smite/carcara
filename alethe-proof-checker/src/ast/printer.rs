@@ -85,9 +85,9 @@ impl<'a> AlethePrinter<'a> {
         }
 
         if let [head, tail @ ..] = step.discharge.as_slice() {
-            write!(self.inner, " :discharge ({}", head)?;
+            write!(self.inner, " :discharge ({}", iter.get_premise(*head).id())?;
             for id in tail {
-                write!(self.inner, " {}", id)?;
+                write!(self.inner, " {}", iter.get_premise(*id).id())?;
             }
             write!(self.inner, ")")?;
         }
