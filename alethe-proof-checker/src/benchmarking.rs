@@ -176,6 +176,12 @@ pub struct BenchmarkResults {
     pub step_time: Metrics<StepId>,
     pub step_time_by_file: AHashMap<String, Metrics<StepId>>,
     pub step_time_by_rule: AHashMap<String, Metrics<StepId>>,
+
+    pub num_assumes: usize,
+    pub num_easy_assumes: usize,
+    pub max_deep_eq_depth: usize,
+    pub sum_deep_eq_depth: usize,
+    pub num_deep_eq: usize,
 }
 
 impl BenchmarkResults {
@@ -260,6 +266,12 @@ impl BenchmarkResults {
             step_time: a.step_time.combine(b.step_time),
             step_time_by_file: combine_map(a.step_time_by_file, b.step_time_by_file),
             step_time_by_rule: combine_map(a.step_time_by_rule, b.step_time_by_rule),
+
+            num_assumes: a.num_assumes + b.num_assumes,
+            num_easy_assumes: a.num_easy_assumes + b.num_easy_assumes,
+            max_deep_eq_depth: std::cmp::max(a.max_deep_eq_depth, b.max_deep_eq_depth),
+            sum_deep_eq_depth: a.sum_deep_eq_depth + b.sum_deep_eq_depth,
+            num_deep_eq: a.num_deep_eq + b.num_deep_eq,
         }
     }
 }

@@ -28,6 +28,12 @@ pub struct CheckerStatistics<'s> {
     pub step_time: &'s mut Metrics<StepId>,
     pub step_time_by_file: &'s mut AHashMap<String, Metrics<StepId>>,
     pub step_time_by_rule: &'s mut AHashMap<String, Metrics<StepId>>,
+
+    pub num_assumes: &'s mut usize,
+    pub num_easy_assumes: &'s mut usize,
+    pub max_deep_eq_depth: &'s mut usize,
+    pub sum_deep_eq_depth: &'s mut usize,
+    pub num_deep_eq: &'s mut usize,
 }
 
 #[derive(Debug, Default)]
@@ -106,25 +112,7 @@ impl<'c> ProofChecker<'c> {
                 ProofCommand::Assume { id, term } => {
                     let time = Instant::now();
 
-                    // Some subproofs contain `assume` commands inside them. These don't refer
-                    // to the original problem premises, so we ignore the `assume` command if
-                    // it is inside a subproof. Since the unit tests for the rules don't define the
-                    // original problem, but sometimes use `assume` commands, we also skip the
-                    // command if we are in a testing context.
-                    if !self.config.is_running_test && !iter.is_in_subproof() {
-                        let is_valid = proof.premises.contains(term)
-                            || proof
-                                .premises
-                                .iter()
-                                .any(|u| deep_eq_modulo_reordering(term, u));
-                        if !is_valid {
-                            return Err(Error::Checker {
-                                inner: CheckerError::Assume(term.clone()),
-                                rule: "assume".into(),
-                                step: id.clone(),
-                            });
-                        }
-                    };
+                    self.check_assume(id, term, &proof.premises, &iter)?;
 
                     if let Some(reconstructor) = &mut self.reconstructor {
                         reconstructor.signal_unchanged(command.clause());
@@ -151,6 +139,52 @@ impl<'c> ProofChecker<'c> {
             *stats.reconstructing_time += reconstructing_time.elapsed();
         }
         Ok(proof)
+    }
+
+    fn check_assume(
+        &mut self,
+        id: &str,
+        term: &Rc<Term>,
+        premises: &AHashSet<Rc<Term>>,
+        iter: &ProofIter,
+    ) -> AletheResult<()> {
+        // Some subproofs contain `assume` commands inside them. These don't refer
+        // to the original problem premises, so we ignore the `assume` command if
+        // it is inside a subproof. Since the unit tests for the rules don't define the
+        // original problem, but sometimes use `assume` commands, we also skip the
+        // command if we are in a testing context.
+        if self.config.is_running_test || iter.is_in_subproof() {
+            return Ok(());
+        }
+
+        if let Some(s) = &mut self.config.statistics {
+            *s.num_assumes += 1;
+        }
+
+        if premises.contains(term) {
+            if let Some(s) = &mut self.config.statistics {
+                *s.num_easy_assumes += 1;
+            }
+            return Ok(());
+        }
+
+        for p in premises {
+            let (result, depth) = tracing_deep_eq(term, p);
+            if let Some(s) = &mut self.config.statistics {
+                *s.max_deep_eq_depth = std::cmp::max(*s.max_deep_eq_depth, depth);
+                *s.sum_deep_eq_depth += depth;
+                *s.num_deep_eq += 1;
+            }
+            if result {
+                return Ok(());
+            }
+        }
+
+        Err(Error::Checker {
+            inner: CheckerError::Assume(term.clone()),
+            rule: "assume".into(),
+            step: id.to_owned(),
+        })
     }
 
     fn check_step<'a>(

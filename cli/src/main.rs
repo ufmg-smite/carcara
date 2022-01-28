@@ -327,6 +327,26 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         "    file overall:    {} ({:?})",
         worst_file_total.0 .0, worst_file_total.1
     );
+
+    let num_hard_assumes = results.num_assumes - results.num_easy_assumes;
+    let percent_easy = (results.num_easy_assumes as f64) * 100.0 / (results.num_assumes as f64);
+    let percent_hard = (num_hard_assumes as f64) * 100.0 / (results.num_assumes as f64);
+    println!("        number of assumes: {}", results.num_assumes);
+    println!(
+        "                   (easy): {} ({:.02}%)",
+        results.num_easy_assumes, percent_easy
+    );
+    println!(
+        "                   (hard): {} ({:.02}%)",
+        num_hard_assumes, percent_hard
+    );
+    println!("  max deep equality depth: {}", results.max_deep_eq_depth);
+    println!("total deep equality depth: {}", results.sum_deep_eq_depth);
+    println!("number of deep equalities: {}", results.num_deep_eq);
+    println!(
+        "  avg deep equality depth: {:.5}",
+        (results.sum_deep_eq_depth as f64) / (results.num_deep_eq as f64)
+    );
     Ok(())
 }
 

@@ -28,6 +28,12 @@ fn run_instance(
 
         let mut checking_time = Duration::ZERO;
         let mut reconstructing_time = Duration::ZERO;
+
+        let mut num_assumes = 0;
+        let mut num_easy_assumes = 0;
+        let mut max_deep_eq_depth = 0;
+        let mut sum_deep_eq_depth = 0;
+        let mut num_deep_eq = 0;
         let config = checker::Config {
             skip_unknown_rules: false,
             is_running_test: false,
@@ -38,6 +44,12 @@ fn run_instance(
                 step_time: &mut result.step_time,
                 step_time_by_file: &mut result.step_time_by_file,
                 step_time_by_rule: &mut result.step_time_by_rule,
+
+                num_assumes: &mut num_assumes,
+                num_easy_assumes: &mut num_easy_assumes,
+                max_deep_eq_depth: &mut max_deep_eq_depth,
+                sum_deep_eq_depth: &mut sum_deep_eq_depth,
+                num_deep_eq: &mut num_deep_eq,
             }),
         };
 
@@ -58,6 +70,12 @@ fn run_instance(
             .total_accounted_for
             .add(&run_id, parsing_time + checking_time + reconstructing_time);
         result.total.add(&run_id, total_time);
+
+        result.num_assumes += num_assumes;
+        result.num_easy_assumes += num_easy_assumes;
+        result.max_deep_eq_depth = std::cmp::max(result.max_deep_eq_depth, max_deep_eq_depth);
+        result.sum_deep_eq_depth += sum_deep_eq_depth;
+        result.num_deep_eq += num_deep_eq;
     }
     Ok(result)
 }
