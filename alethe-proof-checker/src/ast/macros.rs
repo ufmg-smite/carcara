@@ -179,12 +179,20 @@ macro_rules! impl_str_conversion_traits {
 
 #[cfg(test)]
 macro_rules! assert_deep_eq {
-    ($($input:tt)*) => { assert!($crate::ast::deep_eq( $($input)* )) };
+    ($($input:tt)*) => {{
+        let mut time = std::time::Duration::ZERO;
+        let (a, b) = ($($input)*);
+        assert!($crate::ast::deep_eq(a, b, &mut time))
+    }};
 }
 
 #[cfg(test)]
 macro_rules! assert_deep_eq_modulo_reordering {
-    ($($input:tt)*) => { assert!($crate::ast::deep_eq_modulo_reordering( $($input)* )) };
+    ($($input:tt)*) => {{
+        let mut time = std::time::Duration::ZERO;
+        let (a, b) = ($($input)*);
+        assert!($crate::ast::deep_eq_modulo_reordering(a, b, &mut time))
+    }};
 }
 
 #[cfg(test)]

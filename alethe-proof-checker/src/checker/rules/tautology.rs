@@ -258,7 +258,7 @@ pub fn not_ite2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_eq(phi_2, conclusion[1].remove_negation_err()?)
 }
 
-pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+pub fn ite_intro(RuleArgs { conclusion, deep_eq_time, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
 
     let (root_term, right_side) = match_term_err!((= t u) = &conclusion[0])?;
@@ -276,13 +276,13 @@ pub fn ite_intro(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     //     )) :rule ite_intro)
     // For cases like this, we first check if `t` equals the right side term modulo reordering of
     // equalities. If not, we unwrap the conjunction and continue checking the rule normally.
-    if deep_eq_modulo_reordering(root_term, right_side) {
+    if deep_eq_modulo_reordering(root_term, right_side, deep_eq_time) {
         return Ok(());
     }
     let us = match_term_err!((and ...) = right_side)?;
 
     // `us` must be a conjunction where the first term is the root term
-    assert_eq_modulo_reordering(&us[0], root_term)?;
+    assert_eq_modulo_reordering(&us[0], root_term, deep_eq_time)?;
 
     let us = &us[1..];
 

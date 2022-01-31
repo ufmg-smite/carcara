@@ -29,6 +29,7 @@ fn run_instance(
         let mut checking_time = Duration::ZERO;
         let mut reconstructing_time = Duration::ZERO;
 
+        let mut deep_eq_time = Duration::ZERO;
         let mut num_assumes = 0;
         let mut num_easy_assumes = 0;
         let mut max_deep_eq_depth = 0;
@@ -45,6 +46,7 @@ fn run_instance(
                 step_time_by_file: &mut result.step_time_by_file,
                 step_time_by_rule: &mut result.step_time_by_rule,
 
+                deep_eq_time: &mut deep_eq_time,
                 num_assumes: &mut num_assumes,
                 num_easy_assumes: &mut num_easy_assumes,
                 max_deep_eq_depth: &mut max_deep_eq_depth,
@@ -71,6 +73,7 @@ fn run_instance(
             .add(&run_id, parsing_time + checking_time + reconstructing_time);
         result.total.add(&run_id, total_time);
 
+        result.deep_eq_time.add(&run_id, deep_eq_time);
         result.num_assumes += num_assumes;
         result.num_easy_assumes += num_easy_assumes;
         result.max_deep_eq_depth = std::cmp::max(result.max_deep_eq_depth, max_deep_eq_depth);

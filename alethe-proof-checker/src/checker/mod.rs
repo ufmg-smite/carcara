@@ -29,6 +29,7 @@ pub struct CheckerStatistics<'s> {
     pub step_time_by_file: &'s mut AHashMap<String, Metrics<StepId>>,
     pub step_time_by_rule: &'s mut AHashMap<String, Metrics<StepId>>,
 
+    pub deep_eq_time: &'s mut Duration,
     pub num_assumes: &'s mut usize,
     pub num_easy_assumes: &'s mut usize,
     pub max_deep_eq_depth: &'s mut usize,
@@ -168,8 +169,9 @@ impl<'c> ProofChecker<'c> {
             return Ok(());
         }
 
+        let mut deep_eq_time = Duration::ZERO;
         for p in premises {
-            let (result, depth) = tracing_deep_eq(term, p);
+            let (result, depth) = tracing_deep_eq(term, p, &mut deep_eq_time);
             if let Some(s) = &mut self.config.statistics {
                 *s.max_deep_eq_depth = std::cmp::max(*s.max_deep_eq_depth, depth);
                 *s.sum_deep_eq_depth += depth;
@@ -178,6 +180,9 @@ impl<'c> ProofChecker<'c> {
             if result {
                 return Ok(());
             }
+        }
+        if let Some(stats) = &mut self.config.statistics {
+            *stats.deep_eq_time += deep_eq_time
         }
 
         Err(Error::Checker {
@@ -219,6 +224,7 @@ impl<'c> ProofChecker<'c> {
             .iter()
             .map(|&i| iter.get_premise(i))
             .collect();
+        let mut deep_eq_time = Duration::ZERO;
 
         let rule_args = RuleArgs {
             conclusion: &step.clause,
@@ -228,6 +234,7 @@ impl<'c> ProofChecker<'c> {
             context: &mut self.context,
             subproof_commands,
             discharge: &discharge,
+            deep_eq_time: &mut deep_eq_time,
         };
 
         if let Some(reconstructor) = &mut self.reconstructor {
@@ -241,6 +248,9 @@ impl<'c> ProofChecker<'c> {
             rule(rule_args)?;
         }
         self.add_statistics_measurement(&step.id, &step.rule, time);
+        if let Some(stats) = &mut self.config.statistics {
+            *stats.deep_eq_time += deep_eq_time
+        }
         Ok(())
     }
 

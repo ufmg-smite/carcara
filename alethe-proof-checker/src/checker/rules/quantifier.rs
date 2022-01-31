@@ -5,7 +5,15 @@ use super::{
 use crate::{ast::*, checker::error::QuantifierError, utils::DedupIterator};
 use ahash::{AHashMap, AHashSet};
 
-pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> RuleResult {
+pub fn forall_inst(
+    RuleArgs {
+        conclusion,
+        args,
+        pool,
+        deep_eq_time,
+        ..
+    }: RuleArgs,
+) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
 
     let ((bindings, original), substituted) =
@@ -40,7 +48,7 @@ pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> RuleRes
 
     // Equalities may be reordered in the final term, so we use `DeepEq::eq_modulo_reordering`
     let expected = substitution.apply(pool, original)?;
-    assert_is_expected_modulo_reordering(substituted, expected)
+    assert_is_expected_modulo_reordering(substituted, expected, deep_eq_time)
 }
 
 pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {

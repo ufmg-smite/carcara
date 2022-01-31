@@ -336,14 +336,22 @@ fn apply_bfun_elim(
     Ok(result)
 }
 
-pub fn bfun_elim(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> RuleResult {
+pub fn bfun_elim(
+    RuleArgs {
+        conclusion,
+        premises,
+        pool,
+        deep_eq_time,
+        ..
+    }: RuleArgs,
+) -> RuleResult {
     assert_num_premises(premises, 1)?;
     assert_clause_len(conclusion, 1)?;
 
     let psi = get_premise_term(&premises[0])?;
 
     let expected = apply_bfun_elim(pool, psi, &mut AHashMap::new())?;
-    assert_is_expected_modulo_reordering(&conclusion[0], expected)
+    assert_is_expected_modulo_reordering(&conclusion[0], expected, deep_eq_time)
 }
 
 #[cfg(test)]

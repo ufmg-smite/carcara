@@ -289,6 +289,7 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
     if reconstruct {
         println!("reconstructing:      {}", reconstructing);
     }
+    println!("on deep equality:    {}", results.deep_eq_time);
     println!("total accounted for: {}", accounted_for);
     println!("total:               {}", total);
 

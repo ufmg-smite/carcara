@@ -16,31 +16,47 @@ use super::{
     Terminal,
 };
 use crate::utils::SymbolTable;
+use std::time::{Duration, Instant};
 
 pub trait DeepEq {
     fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool;
 }
 
-pub fn deep_eq<T: DeepEq>(a: &T, b: &T) -> bool {
-    DeepEq::eq(&mut DeepEqualityChecker::new(false, false), a, b)
+pub fn deep_eq<T: DeepEq>(a: &T, b: &T, time: &mut Duration) -> bool {
+    let start = Instant::now();
+    let result = DeepEq::eq(&mut DeepEqualityChecker::new(false, false), a, b);
+    *time += start.elapsed();
+    result
 }
 
-pub fn deep_eq_modulo_reordering<T: DeepEq>(a: &T, b: &T) -> bool {
-    DeepEq::eq(&mut DeepEqualityChecker::new(true, false), a, b)
+pub fn deep_eq_modulo_reordering<T: DeepEq>(a: &T, b: &T, time: &mut Duration) -> bool {
+    let start = Instant::now();
+    let result = DeepEq::eq(&mut DeepEqualityChecker::new(true, false), a, b);
+    *time += start.elapsed();
+    result
 }
 
-pub fn tracing_deep_eq(a: &Rc<Term>, b: &Rc<Term>) -> (bool, usize) {
+pub fn tracing_deep_eq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> (bool, usize) {
+    let start = Instant::now();
+
     let mut checker = DeepEqualityChecker::new(true, false);
     let result = DeepEq::eq(&mut checker, a, b);
+
+    *time += start.elapsed();
     (result, checker.max_depth)
 }
 
-pub fn are_alpha_equivalent(a: &Rc<Term>, b: &Rc<Term>) -> bool {
+pub fn are_alpha_equivalent(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> bool {
+    let start = Instant::now();
+
     // When we are checking for alpha-equivalence, we can't always assume that if `a` and `b` are
     // identical, they are alpha-equivalent, so that optimization is not used in `DeepEq::eq`.
     // However, here at the "root" level this assumption is valid, so we check if the terms are
     // directly equal before doing anything else
-    a == b || DeepEq::eq(&mut DeepEqualityChecker::new(true, true), a, b)
+    let result = a == b || DeepEq::eq(&mut DeepEqualityChecker::new(true, true), a, b);
+
+    *time += start.elapsed();
+    result
 }
 
 pub struct DeepEqualityChecker {

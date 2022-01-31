@@ -7,7 +7,15 @@ pub fn eq_reflexive(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_eq(a, b)
 }
 
-pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> RuleResult {
+pub fn refl(
+    RuleArgs {
+        conclusion,
+        pool,
+        context,
+        deep_eq_time,
+        ..
+    }: RuleArgs,
+) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
@@ -15,7 +23,7 @@ pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> RuleResult 
     // If the two terms are directly identical, we don't need to do any more work. We make sure to
     // do this check before we try to get the context substitution, because `refl` can be used
     // outside of any subproof
-    if are_alpha_equivalent(left, right) {
+    if are_alpha_equivalent(left, right, deep_eq_time) {
         return Ok(());
     }
 
@@ -29,9 +37,10 @@ pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> RuleResult 
     // don't compute the new left and right terms until they are needed, to avoid doing unnecessary
     // work
     let new_left = cumulative_substitution.apply(pool, left)?;
-    let result = are_alpha_equivalent(&new_left, right) || {
+    let result = are_alpha_equivalent(&new_left, right, deep_eq_time) || {
         let new_right = cumulative_substitution.apply(pool, right)?;
-        are_alpha_equivalent(left, &new_right) || are_alpha_equivalent(&new_left, &new_right)
+        are_alpha_equivalent(left, &new_right, deep_eq_time)
+            || are_alpha_equivalent(&new_left, &new_right, deep_eq_time)
     };
     rassert!(
         result,

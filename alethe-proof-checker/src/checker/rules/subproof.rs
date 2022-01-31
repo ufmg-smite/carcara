@@ -345,6 +345,7 @@ fn generic_skolemization_rule(
         pool,
         context,
         subproof_commands,
+        deep_eq_time,
         ..
     }: RuleArgs,
 ) -> RuleResult {
@@ -401,7 +402,7 @@ fn generic_skolemization_rule(
             }
             pool.add_term(Term::Choice(x.clone(), inner))
         };
-        assert_is_expected_modulo_reordering(t, expected)?;
+        assert_is_expected_modulo_reordering(t, expected, deep_eq_time)?;
 
         // For every binding we skolemize, we must apply another substitution to phi
         let mut s = Substitution::single(pool, x_term, t.clone())?;
