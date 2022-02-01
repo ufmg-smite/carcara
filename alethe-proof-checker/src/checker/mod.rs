@@ -32,9 +32,7 @@ pub struct CheckerStatistics<'s> {
     pub deep_eq_time: &'s mut Duration,
     pub num_assumes: &'s mut usize,
     pub num_easy_assumes: &'s mut usize,
-    pub max_deep_eq_depth: &'s mut usize,
-    pub sum_deep_eq_depth: &'s mut usize,
-    pub num_deep_eq: &'s mut usize,
+    pub deep_eq_depths: &'s mut Vec<usize>,
 }
 
 #[derive(Debug, Default)]
@@ -173,16 +171,14 @@ impl<'c> ProofChecker<'c> {
         for p in premises {
             let (result, depth) = tracing_deep_eq(term, p, &mut deep_eq_time);
             if let Some(s) = &mut self.config.statistics {
-                *s.max_deep_eq_depth = std::cmp::max(*s.max_deep_eq_depth, depth);
-                *s.sum_deep_eq_depth += depth;
-                *s.num_deep_eq += 1;
+                s.deep_eq_depths.push(depth);
             }
             if result {
                 return Ok(());
             }
         }
         if let Some(stats) = &mut self.config.statistics {
-            *stats.deep_eq_time += deep_eq_time
+            *stats.deep_eq_time += deep_eq_time;
         }
 
         Err(Error::Checker {
@@ -249,7 +245,7 @@ impl<'c> ProofChecker<'c> {
         }
         self.add_statistics_measurement(&step.id, &step.rule, time);
         if let Some(stats) = &mut self.config.statistics {
-            *stats.deep_eq_time += deep_eq_time
+            *stats.deep_eq_time += deep_eq_time;
         }
         Ok(())
     }

@@ -180,9 +180,7 @@ pub struct BenchmarkResults {
     pub deep_eq_time: Metrics<RunId>,
     pub num_assumes: usize,
     pub num_easy_assumes: usize,
-    pub max_deep_eq_depth: usize,
-    pub sum_deep_eq_depth: usize,
-    pub num_deep_eq: usize,
+    pub deep_eq_depths: Vec<usize>,
 }
 
 impl BenchmarkResults {
@@ -271,9 +269,12 @@ impl BenchmarkResults {
             deep_eq_time: a.deep_eq_time.combine(b.deep_eq_time),
             num_assumes: a.num_assumes + b.num_assumes,
             num_easy_assumes: a.num_easy_assumes + b.num_easy_assumes,
-            max_deep_eq_depth: std::cmp::max(a.max_deep_eq_depth, b.max_deep_eq_depth),
-            sum_deep_eq_depth: a.sum_deep_eq_depth + b.sum_deep_eq_depth,
-            num_deep_eq: a.num_deep_eq + b.num_deep_eq,
+
+            deep_eq_depths: {
+                let mut result = a.deep_eq_depths;
+                result.extend(b.deep_eq_depths);
+                result
+            },
         }
     }
 }

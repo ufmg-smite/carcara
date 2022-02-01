@@ -332,22 +332,50 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
     let num_hard_assumes = results.num_assumes - results.num_easy_assumes;
     let percent_easy = (results.num_easy_assumes as f64) * 100.0 / (results.num_assumes as f64);
     let percent_hard = (num_hard_assumes as f64) * 100.0 / (results.num_assumes as f64);
-    println!("        number of assumes: {}", results.num_assumes);
+    println!("          number of assumes: {}", results.num_assumes);
     println!(
-        "                   (easy): {} ({:.02}%)",
+        "                     (easy): {} ({:.02}%)",
         results.num_easy_assumes, percent_easy
     );
     println!(
-        "                   (hard): {} ({:.02}%)",
+        "                     (hard): {} ({:.02}%)",
         num_hard_assumes, percent_hard
     );
-    println!("  max deep equality depth: {}", results.max_deep_eq_depth);
-    println!("total deep equality depth: {}", results.sum_deep_eq_depth);
-    println!("number of deep equalities: {}", results.num_deep_eq);
-    println!(
-        "  avg deep equality depth: {:.5}",
-        (results.sum_deep_eq_depth as f64) / (results.num_deep_eq as f64)
-    );
+
+    let mut depths = results.deep_eq_depths;
+    if !depths.is_empty() {
+        let max_depth = depths.iter().copied().max().unwrap();
+        let sum_depth: usize = depths.iter().sum();
+        let avg_depth = (sum_depth as f64) / (depths.len() as f64);
+        depths.sort_unstable();
+        let mid = depths.len() / 2;
+        let median_depth = if depths.len() % 2 == 1 {
+            depths[mid] as f64
+        } else {
+            ((depths[mid - 1] + depths[mid]) as f64) / 2.0
+        };
+
+        let std = if depths.len() == 1 {
+            0.0
+        } else {
+            let var: f64 = depths
+                .iter()
+                .map(|&d| (d as f64 - avg_depth) * (d as f64 - avg_depth))
+                .sum();
+            (var / (depths.len() as f64 - 1.0)).sqrt()
+        };
+
+        println!("    max deep equality depth: {}", max_depth);
+        println!("  total deep equality depth: {}", sum_depth);
+        println!("  number of deep equalities: {}", depths.len());
+        println!(
+            "number of 1-depth deep eqs.: {}",
+            depths.iter().filter(|&&d| d == 1).count()
+        );
+        println!("                 mean depth: {:.5}", avg_depth);
+        println!("               median depth: {:.5}", median_depth);
+        println!("standard deviation of depth: {:.5}", std);
+    }
     Ok(())
 }
 

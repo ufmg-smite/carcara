@@ -32,9 +32,7 @@ fn run_instance(
         let mut deep_eq_time = Duration::ZERO;
         let mut num_assumes = 0;
         let mut num_easy_assumes = 0;
-        let mut max_deep_eq_depth = 0;
-        let mut sum_deep_eq_depth = 0;
-        let mut num_deep_eq = 0;
+        let mut deep_eq_depths = Vec::new();
         let config = checker::Config {
             skip_unknown_rules: false,
             is_running_test: false,
@@ -49,9 +47,7 @@ fn run_instance(
                 deep_eq_time: &mut deep_eq_time,
                 num_assumes: &mut num_assumes,
                 num_easy_assumes: &mut num_easy_assumes,
-                max_deep_eq_depth: &mut max_deep_eq_depth,
-                sum_deep_eq_depth: &mut sum_deep_eq_depth,
-                num_deep_eq: &mut num_deep_eq,
+                deep_eq_depths: &mut deep_eq_depths,
             }),
         };
 
@@ -76,9 +72,7 @@ fn run_instance(
         result.deep_eq_time.add(&run_id, deep_eq_time);
         result.num_assumes += num_assumes;
         result.num_easy_assumes += num_easy_assumes;
-        result.max_deep_eq_depth = std::cmp::max(result.max_deep_eq_depth, max_deep_eq_depth);
-        result.sum_deep_eq_depth += sum_deep_eq_depth;
-        result.num_deep_eq += num_deep_eq;
+        result.deep_eq_depths.extend(deep_eq_depths);
     }
     Ok(result)
 }
