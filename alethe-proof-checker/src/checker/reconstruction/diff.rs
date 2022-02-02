@@ -1,13 +1,13 @@
 use crate::ast::*;
 use std::{iter, vec};
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ProofDiff {
     pub commands: Vec<(usize, CommandDiff)>,
     pub new_indices: Vec<(usize, usize)>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum CommandDiff {
     Step(Vec<ProofCommand>),
     Subproof(ProofDiff),

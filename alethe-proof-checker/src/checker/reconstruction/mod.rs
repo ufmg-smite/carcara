@@ -1,7 +1,9 @@
 mod diff;
+mod pruning;
 
 use crate::{ast::*, utils::SymbolTable};
 use diff::{apply_diff, CommandDiff, ProofDiff};
+use pruning::prune_proof;
 
 #[derive(Debug, Default)]
 struct Frame {
@@ -172,6 +174,7 @@ impl Reconstructor {
         }
         let Frame { diff, new_indices, .. } = self.stack.pop().unwrap();
         let diff = ProofDiff { commands: diff, new_indices };
-        apply_diff(diff, original)
+        let reconstructed = apply_diff(diff, original);
+        apply_diff(prune_proof(&reconstructed), reconstructed)
     }
 }
