@@ -7,7 +7,7 @@ use diff::{apply_diff, CommandDiff, ProofDiff};
 struct Frame {
     diff: Vec<(usize, CommandDiff)>,
     new_indices: Vec<(usize, usize)>,
-    current_offset: usize,
+    current_offset: isize,
     subproof_length: usize,
 }
 
@@ -49,7 +49,7 @@ impl Reconstructor {
         }
 
         let frame = self.top_frame();
-        let index = frame.new_indices.len() + frame.current_offset;
+        let index = (frame.new_indices.len() as isize + frame.current_offset) as usize;
         frame.current_offset += 1;
         self.seen_clauses.insert(step.clause.clone(), index);
         self.accumulator.push(ProofCommand::Step(step));
@@ -70,7 +70,7 @@ impl Reconstructor {
         let depth = self.stack.len() - 1;
         let frame = self.top_frame();
         let old_index = frame.new_indices.len();
-        let new_index = old_index + frame.current_offset;
+        let new_index = (old_index as isize + frame.current_offset) as usize;
         frame.new_indices.push((depth, new_index));
 
         frame.diff.push((old_index, reconstruction));
@@ -82,7 +82,7 @@ impl Reconstructor {
         let depth = self.stack.len() - 1;
         let frame = self.top_frame();
         let old_index = frame.new_indices.len();
-        let new_index = old_index + frame.current_offset;
+        let new_index = (old_index as isize + frame.current_offset) as usize;
         frame.new_indices.push((depth, new_index));
 
         if let Some((depth, &index)) = self.seen_clauses.get_with_depth(clause) {
@@ -149,7 +149,7 @@ impl Reconstructor {
         let depth = self.stack.len() - 1;
         let frame = self.top_frame();
         let old_index = frame.new_indices.len();
-        let new_index = old_index + frame.current_offset;
+        let new_index = (old_index as isize + frame.current_offset) as usize;
         frame.new_indices.push((depth, new_index));
 
         let last_command_index = inner.new_indices.len() - 1;
