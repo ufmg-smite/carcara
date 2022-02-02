@@ -69,6 +69,21 @@ impl ProofCommand {
             ProofCommand::Subproof(s) => s.commands.last().unwrap().clause(),
         }
     }
+
+    /// Returns `true` if the command is an `assume` command.
+    pub fn is_assume(&self) -> bool {
+        matches!(self, ProofCommand::Assume { .. })
+    }
+
+    /// Returns `true` if the command is a `step` command.
+    pub fn is_step(&self) -> bool {
+        matches!(self, ProofCommand::Step(_))
+    }
+
+    /// Returns `true` if the command is a subproof.
+    pub fn is_subproof(&self) -> bool {
+        matches!(self, ProofCommand::Subproof(_))
+    }
 }
 
 /// A `step` command, of the form `(step <symbol> <clause> :rule <symbol> [:premises (<symbol>+)]?
