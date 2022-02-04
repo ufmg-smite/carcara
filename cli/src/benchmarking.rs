@@ -30,6 +30,7 @@ fn run_instance(
         let mut reconstructing_time = Duration::ZERO;
 
         let mut deep_eq_time = Duration::ZERO;
+        let mut assume_time = Duration::ZERO;
         let mut num_assumes = 0;
         let mut num_easy_assumes = 0;
         let mut deep_eq_depths = Vec::new();
@@ -45,6 +46,7 @@ fn run_instance(
                 step_time_by_rule: &mut result.step_time_by_rule,
 
                 deep_eq_time: &mut deep_eq_time,
+                assume_time: &mut assume_time,
                 num_assumes: &mut num_assumes,
                 num_easy_assumes: &mut num_easy_assumes,
                 deep_eq_depths: &mut deep_eq_depths,
@@ -70,6 +72,7 @@ fn run_instance(
         result.total.add(&run_id, total_time);
 
         result.deep_eq_time.add(&run_id, deep_eq_time);
+        result.assume_time.add(&run_id, assume_time);
         result.num_assumes += num_assumes;
         result.num_easy_assumes += num_easy_assumes;
         result.deep_eq_depths.extend(deep_eq_depths);

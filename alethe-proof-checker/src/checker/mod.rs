@@ -30,6 +30,7 @@ pub struct CheckerStatistics<'s> {
     pub step_time_by_rule: &'s mut AHashMap<String, Metrics<StepId>>,
 
     pub deep_eq_time: &'s mut Duration,
+    pub assume_time: &'s mut Duration,
     pub num_assumes: &'s mut usize,
     pub num_easy_assumes: &'s mut usize,
     pub deep_eq_depths: &'s mut Vec<usize>,
@@ -115,6 +116,9 @@ impl<'c> ProofChecker<'c> {
 
                     if let Some(reconstructor) = &mut self.reconstructor {
                         reconstructor.signal_unchanged(command.clause());
+                    }
+                    if let Some(stats) = &mut self.config.statistics {
+                        *stats.assume_time += time.elapsed();
                     }
                     self.add_statistics_measurement(id, "assume*", time);
                 }

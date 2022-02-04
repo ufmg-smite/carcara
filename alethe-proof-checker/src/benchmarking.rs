@@ -178,6 +178,7 @@ pub struct BenchmarkResults {
     pub step_time_by_rule: AHashMap<String, Metrics<StepId>>,
 
     pub deep_eq_time: Metrics<RunId>,
+    pub assume_time: Metrics<RunId>,
     pub num_assumes: usize,
     pub num_easy_assumes: usize,
     pub deep_eq_depths: Vec<usize>,
@@ -267,6 +268,7 @@ impl BenchmarkResults {
             step_time_by_rule: combine_map(a.step_time_by_rule, b.step_time_by_rule),
 
             deep_eq_time: a.deep_eq_time.combine(b.deep_eq_time),
+            assume_time: a.assume_time.combine(b.assume_time),
             num_assumes: a.num_assumes + b.num_assumes,
             num_easy_assumes: a.num_easy_assumes + b.num_easy_assumes,
 
