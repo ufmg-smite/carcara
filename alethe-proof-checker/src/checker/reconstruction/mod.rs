@@ -13,6 +13,19 @@ struct Frame {
     subproof_length: usize,
 }
 
+impl Frame {
+    fn current_index(&self) -> usize {
+        self.new_indices.len()
+    }
+
+    fn push_new_index(&mut self, current_depth: usize) -> (usize, usize) {
+        let old_index = self.current_index();
+        let new_index = (self.current_index() as isize + self.current_offset) as usize;
+        self.new_indices.push((current_depth, new_index));
+        (old_index, new_index)
+    }
+}
+
 #[derive(Debug)]
 pub struct Reconstructor {
     stack: Vec<Frame>,
@@ -39,6 +52,10 @@ impl Reconstructor {
         self.stack.last_mut().unwrap()
     }
 
+    fn depth(&self) -> usize {
+        self.stack.len() - 1
+    }
+
     /// Maps the index of a command in the original proof to the index of that command in the
     /// reconstructed proof, taking into account the offset created by new steps introduced.
     pub(super) fn map_index(&self, (depth, i): (usize, usize)) -> (usize, usize) {
@@ -55,7 +72,7 @@ impl Reconstructor {
         frame.current_offset += 1;
         self.seen_clauses.insert(step.clause.clone(), index);
         self.accumulator.push(ProofCommand::Step(step));
-        (self.stack.len() - 1, index)
+        (self.depth(), index)
     }
 
     pub(super) fn get_new_id(&mut self, root_id: &str) -> String {
@@ -69,23 +86,19 @@ impl Reconstructor {
             CommandDiff::Step(added)
         };
 
-        let depth = self.stack.len() - 1;
+        let depth = self.depth();
         let frame = self.top_frame();
-        let old_index = frame.new_indices.len();
-        let new_index = (old_index as isize + frame.current_offset) as usize;
-        frame.new_indices.push((depth, new_index));
+        let (old_index, new_index) = frame.push_new_index(depth);
 
         frame.diff.push((old_index, reconstruction));
 
-        (self.stack.len() - 1, new_index)
+        (self.depth(), new_index)
     }
 
     pub(super) fn signal_unchanged(&mut self, clause: &[Rc<Term>]) {
-        let depth = self.stack.len() - 1;
+        let depth = self.depth();
         let frame = self.top_frame();
-        let old_index = frame.new_indices.len();
-        let new_index = (old_index as isize + frame.current_offset) as usize;
-        frame.new_indices.push((depth, new_index));
+        let (old_index, new_index) = frame.push_new_index(depth);
 
         if let Some((depth, &index)) = self.seen_clauses.get_with_depth(clause) {
             // If this command is the second to last in a subproof, it may be implicitly used by the
@@ -97,7 +110,7 @@ impl Reconstructor {
                 // reference used in the last step of the outer subproof
                 let closes_subproof_that_must_be_kept = if depth >= 2 {
                     let outer_frame = &self.stack[depth - 1];
-                    let index_in_outer = outer_frame.new_indices.len();
+                    let index_in_outer = outer_frame.current_index();
                     index_in_outer + 2 == outer_frame.subproof_length
                 } else {
                     false
@@ -148,13 +161,11 @@ impl Reconstructor {
         self.seen_clauses.pop_scope();
         let inner = self.stack.pop().expect("can't close root subproof");
 
-        let depth = self.stack.len() - 1;
+        let depth = self.depth();
         let frame = self.top_frame();
-        let old_index = frame.new_indices.len();
-        let new_index = (old_index as isize + frame.current_offset) as usize;
-        frame.new_indices.push((depth, new_index));
+        let (old_index, _) = frame.push_new_index(depth);
 
-        let last_command_index = inner.new_indices.len() - 1;
+        let last_command_index = inner.current_index() - 1;
         let diff = if inner.diff.last() == Some(&(last_command_index, CommandDiff::Delete)) {
             CommandDiff::Delete
         } else {
@@ -169,7 +180,7 @@ impl Reconstructor {
     }
 
     pub(super) fn end(&mut self, original: Vec<ProofCommand>) -> Vec<ProofCommand> {
-        if self.stack.len() != 1 {
+        if self.depth() != 0 {
             panic!("trying to end proof building before closing subproof");
         }
         let Frame { diff, new_indices, .. } = self.stack.pop().unwrap();
