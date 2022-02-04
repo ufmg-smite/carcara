@@ -1,20 +1,58 @@
 use ahash::AHashMap;
-use std::{fmt, time::Duration};
+use std::{
+    fmt,
+    ops::{Add, AddAssign},
+    time::Duration,
+};
+
+pub trait MetricsUnit: Copy + Default + Add<Output = Self> + AddAssign + PartialOrd {
+    fn as_f64(&self) -> f64;
+    fn from_f64(x: f64) -> Self;
+    fn div_u32(self, rhs: u32) -> Self;
+}
+
+impl MetricsUnit for Duration {
+    fn as_f64(&self) -> f64 {
+        self.as_secs_f64()
+    }
+
+    fn from_f64(x: f64) -> Self {
+        Self::from_secs_f64(x)
+    }
+
+    fn div_u32(self, rhs: u32) -> Self {
+        self / rhs
+    }
+}
+
+impl MetricsUnit for f64 {
+    fn as_f64(&self) -> f64 {
+        *self
+    }
+
+    fn from_f64(x: f64) -> Self {
+        x
+    }
+
+    fn div_u32(self, rhs: u32) -> Self {
+        self / (rhs as f64)
+    }
+}
 
 #[derive(Debug)]
-pub struct Metrics<K> {
-    pub total: Duration,
+pub struct Metrics<K, T = Duration> {
+    pub total: T,
     pub count: usize,
-    pub mean: Duration,
-    pub standard_deviation: Duration,
-    pub max_min: Option<((K, Duration), (K, Duration))>,
+    pub mean: T,
+    pub standard_deviation: T,
+    pub max_min: Option<((K, T), (K, T))>,
 
     /// This is equal to the sum of the square distances of every sample to the mean, that is,
     /// `variance * (n - 1)`. This is used to calculate the standard deviation.
     sum_of_squared_distances: f64,
 }
 
-impl<K> Default for Metrics<K> {
+impl<K, T: MetricsUnit> Default for Metrics<K, T> {
     // Ideally, I would like to just `#[derive(Default)]`, but because of a quirk in how `derive`
     // works, that would require the type parameter `K` to always be `Default` as well, even though
     // it is not necessary. Therefore, I have to implement `Default` manually. For more info, see:
@@ -22,17 +60,17 @@ impl<K> Default for Metrics<K> {
 
     fn default() -> Self {
         Self {
-            total: Duration::ZERO,
+            total: T::default(),
             count: 0,
-            mean: Duration::ZERO,
-            standard_deviation: Duration::ZERO,
+            mean: T::default(),
+            standard_deviation: T::default(),
             max_min: None,
             sum_of_squared_distances: 0.0,
         }
     }
 }
 
-impl<K: Clone> Metrics<K> {
+impl<K: Clone, T: MetricsUnit> Metrics<K, T> {
     pub fn new() -> Self {
         Default::default()
     }
@@ -42,11 +80,11 @@ impl<K: Clone> Metrics<K> {
         self.count == 0
     }
 
-    pub fn max(&self) -> &(K, Duration) {
+    pub fn max(&self) -> &(K, T) {
         &self.max_min.as_ref().unwrap().0
     }
 
-    pub fn min(&self) -> &(K, Duration) {
+    pub fn min(&self) -> &(K, T) {
         &self.max_min.as_ref().unwrap().1
     }
 
@@ -54,24 +92,21 @@ impl<K: Clone> Metrics<K> {
     /// new mean, standard deviation, etc. For simplicity, these are calculated every time a new
     /// sample is added, which means you can stop adding samples at any time and the metrics will
     /// always be valid.
-    pub fn add(&mut self, key: &K, value: Duration) {
-        let old_mean_f64 = self.mean.as_secs_f64();
+    pub fn add(&mut self, key: &K, value: T) {
+        let old_mean_f64 = self.mean.as_f64();
 
-        // Since the total is a `Duration`, which is represented using integers, we don't have to
-        // worry about the numerical stability of calculating the mean like this
         self.total += value;
         self.count += 1;
-        self.mean = self.total / self.count as u32;
+        self.mean = self.total.div_u32(self.count as u32);
 
-        let new_mean_f64 = self.mean.as_secs_f64();
+        let new_mean_f64 = self.mean.as_f64();
 
         // We calculate the new variance using Welford's algorithm. See:
         // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
-        let variance_delta =
-            (value.as_secs_f64() - new_mean_f64) * (value.as_secs_f64() - old_mean_f64);
+        let variance_delta = (value.as_f64() - new_mean_f64) * (value.as_f64() - old_mean_f64);
         self.sum_of_squared_distances += variance_delta;
-        self.standard_deviation = Duration::from_secs_f64(self.sum_of_squared_distances.sqrt())
-            / std::cmp::max(1, self.count as u32 - 1);
+        self.standard_deviation = T::from_f64(self.sum_of_squared_distances.sqrt())
+            .div_u32(std::cmp::max(1, self.count as u32 - 1));
 
         match &mut self.max_min {
             Some((max, min)) => {
@@ -107,16 +142,16 @@ impl<K: Clone> Metrics<K> {
         }
         let total = self.total + other.total;
         let count = self.count + other.count;
-        let mean = total / count as u32;
+        let mean = total.div_u32(count as u32);
 
         // To combine the two variances, we use a generalization of Welford's algorithm. See:
         // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
-        let delta = other.mean.as_secs_f64() - self.mean.as_secs_f64();
+        let delta = other.mean.as_f64() - self.mean.as_f64();
         let sum_of_squared_distances = self.sum_of_squared_distances
             + other.sum_of_squared_distances
             + delta * delta * (self.count * other.count / count) as f64;
-        let standard_deviation = Duration::from_secs_f64(sum_of_squared_distances.sqrt())
-            / std::cmp::max(1, count as u32 - 1);
+        let standard_deviation = T::from_f64(sum_of_squared_distances.sqrt())
+            .div_u32(std::cmp::max(1, count as u32 - 1));
 
         let max_min = match (self.max_min, other.max_min) {
             (a, None) => a,
@@ -139,14 +174,22 @@ impl<K: Clone> Metrics<K> {
     }
 }
 
-impl<K> fmt::Display for Metrics<K> {
+impl<K> fmt::Display for Metrics<K, Duration> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // If the "alternate" flag ('#') was set, we print the total, mean and count, instead of
-        // the mean and standard deviation.
         if f.alternate() {
             write!(f, "{:?} ({:?} * {})", self.total, self.mean, self.count)
         } else {
             write!(f, "{:?} ± {:?}", self.mean, self.standard_deviation)
+        }
+    }
+}
+
+impl<K> fmt::Display for Metrics<K, f64> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if f.alternate() {
+            write!(f, "{:.04} ({:.04} * {})", self.total, self.mean, self.count)
+        } else {
+            write!(f, "{:.04} ± {:.04}", self.mean, self.standard_deviation)
         }
     }
 }
