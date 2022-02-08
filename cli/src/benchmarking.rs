@@ -73,6 +73,12 @@ fn run_instance(
 
         result.deep_eq_time.add(&run_id, deep_eq_time);
         result.assume_time.add(&run_id, assume_time);
+
+        let deep_eq_ratio = deep_eq_time.as_secs_f64() / checking_time.as_secs_f64();
+        let assume_ratio = assume_time.as_secs_f64() / checking_time.as_secs_f64();
+        result.deep_eq_time_ratio.add(&run_id, deep_eq_ratio);
+        result.assume_time_ratio.add(&run_id, assume_ratio);
+
         result.num_assumes += num_assumes;
         result.num_easy_assumes += num_easy_assumes;
         result.deep_eq_depths.extend(deep_eq_depths);

@@ -289,7 +289,18 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
     if reconstruct {
         println!("reconstructing:      {}", reconstructing);
     }
-    println!("on deep equality:    {}", results.deep_eq_time);
+    println!(
+        "on assume:           {} ({:.02}% of checking time)",
+        results.assume_time,
+        100.0 * results.assume_time.mean.as_secs_f64() / results.checking().mean.as_secs_f64(),
+    );
+    println!("assume ratio:        {}", results.assume_time_ratio);
+    println!(
+        "on deep equality:    {} ({:.02}% of checking time)",
+        results.deep_eq_time,
+        100.0 * results.deep_eq_time.mean.as_secs_f64() / results.checking().mean.as_secs_f64(),
+    );
+    println!("deep equality ratio: {}", results.deep_eq_time_ratio);
     println!("total accounted for: {}", accounted_for);
     println!("total:               {}", total);
 
@@ -321,6 +332,20 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
     println!(
         "    file (checking): {} ({:?})",
         worst_file_checking.0 .0, worst_file_checking.1
+    );
+
+    let worst_file_assume = results.assume_time_ratio.max();
+    println!(
+        "    file (assume):   {} ({:.04}%)",
+        worst_file_assume.0 .0,
+        worst_file_assume.1 * 100.0
+    );
+
+    let worst_file_deep_eq = results.deep_eq_time_ratio.max();
+    println!(
+        "    file (deep_eq):  {} ({:.04}%)",
+        worst_file_deep_eq.0 .0,
+        worst_file_deep_eq.1 * 100.0
     );
 
     let worst_file_total = results.total().max();
