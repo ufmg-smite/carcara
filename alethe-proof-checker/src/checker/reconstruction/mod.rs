@@ -48,12 +48,38 @@ impl Reconstructor {
         }
     }
 
-    fn top_frame(&mut self) -> &mut Frame {
+    fn top_frame(&self) -> &Frame {
+        self.stack.last().unwrap()
+    }
+
+    fn top_frame_mut(&mut self) -> &mut Frame {
         self.stack.last_mut().unwrap()
     }
 
     fn depth(&self) -> usize {
         self.stack.len() - 1
+    }
+
+    /// Returns `true` if the command on the current frame at index `index` cannot be deleted.
+    fn must_keep(&self, index: usize) -> bool {
+        // If the command is the second to last in a subproof, it may be implicitly used by the last
+        // step in the subproof, so we cannot delete it
+        if index + 2 == self.top_frame().subproof_length {
+            return true;
+        }
+
+        // We must also consider the edge case when the step closes a subproof that
+        // is itself the second to last command in an outer subproof. If we delete this
+        // step, the inner subproof will also be deleted, which will invalidate the implicit
+        // reference used in the last step of the outer subproof
+        let depth = self.depth();
+        if depth >= 2 {
+            let outer_frame = &self.stack[depth - 1];
+            let index_in_outer = outer_frame.current_index();
+            index_in_outer + 2 == outer_frame.subproof_length
+        } else {
+            false
+        }
     }
 
     /// Maps the index of a command in the original proof to the index of that command in the
@@ -67,7 +93,7 @@ impl Reconstructor {
             return (d, i);
         }
 
-        let frame = self.top_frame();
+        let frame = self.top_frame_mut();
         let index = (frame.new_indices.len() as isize + frame.current_offset) as usize;
         frame.current_offset += 1;
         self.seen_clauses.insert(step.clause.clone(), index);
@@ -80,6 +106,9 @@ impl Reconstructor {
     }
 
     pub(super) fn push_reconstructed_step(&mut self, step: ProofStep) -> (usize, usize) {
+        // TODO: discard reconstructed steps that inroduce already seen conclusions (and can be
+        // deleted)
+
         let reconstruction = {
             let mut added = std::mem::take(&mut self.accumulator);
             added.push(ProofCommand::Step(step));
@@ -87,7 +116,7 @@ impl Reconstructor {
         };
 
         let depth = self.depth();
-        let frame = self.top_frame();
+        let frame = self.top_frame_mut();
         let (old_index, new_index) = frame.push_new_index(depth);
 
         frame.diff.push((old_index, reconstruction));
@@ -95,32 +124,17 @@ impl Reconstructor {
         (self.depth(), new_index)
     }
 
-    pub(super) fn signal_unchanged(&mut self, clause: &[Rc<Term>]) {
+    pub(super) fn unchanged(&mut self, clause: &[Rc<Term>]) {
         let depth = self.depth();
-        let frame = self.top_frame();
+        let frame = self.top_frame_mut();
         let (old_index, new_index) = frame.push_new_index(depth);
 
         if let Some((depth, &index)) = self.seen_clauses.get_with_depth(clause) {
-            // If this command is the second to last in a subproof, it may be implicitly used by the
-            // last step in the subproof, so we cannot delete it
-            if old_index + 2 != self.top_frame().subproof_length {
-                // We must also consider the edge case when the current step closes a subproof that
-                // is itself the second to last command in an outer subproof. If we delete this
-                // step, the inner subproof will also be deleted, which will invalidate the implicit
-                // reference used in the last step of the outer subproof
-                let closes_subproof_that_must_be_kept = if depth >= 2 {
-                    let outer_frame = &self.stack[depth - 1];
-                    let index_in_outer = outer_frame.current_index();
-                    index_in_outer + 2 == outer_frame.subproof_length
-                } else {
-                    false
-                };
-                if !closes_subproof_that_must_be_kept {
-                    let frame = self.top_frame();
-                    frame.new_indices[old_index] = (depth, index);
-                    frame.diff.push((old_index, CommandDiff::Delete));
-                    frame.current_offset -= 1;
-                }
+            if !self.must_keep(old_index) {
+                let frame = self.top_frame_mut();
+                frame.new_indices[old_index] = (depth, index);
+                frame.diff.push((old_index, CommandDiff::Delete));
+                frame.current_offset -= 1;
             }
         } else {
             self.seen_clauses.insert(clause.to_vec(), new_index);
@@ -162,7 +176,7 @@ impl Reconstructor {
         let inner = self.stack.pop().expect("can't close root subproof");
 
         let depth = self.depth();
-        let frame = self.top_frame();
+        let frame = self.top_frame_mut();
         let (old_index, _) = frame.push_new_index(depth);
 
         let last_command_index = inner.current_index() - 1;

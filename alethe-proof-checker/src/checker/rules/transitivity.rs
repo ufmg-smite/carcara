@@ -134,7 +134,7 @@ pub fn reconstruct_eq_transitive(
     )?;
 
     if !needs_reordering && num_needed == n - 1 && should_flip.is_empty() {
-        reconstructor.signal_unchanged(conclusion);
+        reconstructor.unchanged(conclusion);
         return Ok(());
     }
 

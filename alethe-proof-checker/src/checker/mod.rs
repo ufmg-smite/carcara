@@ -127,7 +127,7 @@ impl<'c> ProofChecker<'c> {
                     };
 
                     if let Some(reconstructor) = &mut self.reconstructor {
-                        reconstructor.signal_unchanged(command.clause());
+                        reconstructor.unchanged(command.clause());
                     }
                     self.add_statistics_measurement(id, "assume*", time);
                 }
@@ -165,7 +165,7 @@ impl<'c> ProofChecker<'c> {
             Some(r) => r,
             None if self.config.skip_unknown_rules => {
                 if let Some(reconstructor) = &mut self.reconstructor {
-                    reconstructor.signal_unchanged(&step.clause);
+                    reconstructor.unchanged(&step.clause);
                 }
                 return Ok(());
             }
@@ -201,7 +201,7 @@ impl<'c> ProofChecker<'c> {
                 reconstruction_rule(rule_args, step.id.clone(), reconstructor)?;
             } else {
                 rule(rule_args)?;
-                reconstructor.signal_unchanged(&step.clause);
+                reconstructor.unchanged(&step.clause);
             }
         } else {
             rule(rule_args)?;
