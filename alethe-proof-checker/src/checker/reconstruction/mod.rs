@@ -124,13 +124,14 @@ impl Reconstructor {
         (self.depth(), new_index)
     }
 
-    pub(super) fn unchanged(&mut self, clause: &[Rc<Term>]) {
+    fn push_command(&mut self, clause: &[Rc<Term>], is_assume: bool) {
         let depth = self.depth();
         let frame = self.top_frame_mut();
         let (old_index, new_index) = frame.push_new_index(depth);
 
         if let Some((depth, &index)) = self.seen_clauses.get_with_depth(clause) {
-            if !self.must_keep(old_index) {
+            let must_keep = self.must_keep(old_index) || is_assume && depth > 0;
+            if !must_keep {
                 let frame = self.top_frame_mut();
                 frame.new_indices[old_index] = (depth, index);
                 frame.diff.push((old_index, CommandDiff::Delete));
@@ -139,6 +140,14 @@ impl Reconstructor {
         } else {
             self.seen_clauses.insert(clause.to_vec(), new_index);
         }
+    }
+
+    pub(super) fn assume(&mut self, term: &Rc<Term>) {
+        self.push_command(std::slice::from_ref(term), true);
+    }
+
+    pub(super) fn unchanged(&mut self, clause: &[Rc<Term>]) {
+        self.push_command(clause, false);
     }
 
     pub(super) fn add_symm_step(

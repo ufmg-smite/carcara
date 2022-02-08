@@ -127,7 +127,7 @@ impl<'c> ProofChecker<'c> {
                     };
 
                     if let Some(reconstructor) = &mut self.reconstructor {
-                        reconstructor.unchanged(command.clause());
+                        reconstructor.assume(term);
                     }
                     self.add_statistics_measurement(id, "assume*", time);
                 }
