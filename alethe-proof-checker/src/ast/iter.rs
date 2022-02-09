@@ -11,9 +11,13 @@ impl<'a> ProofIter<'a> {
         Self { stack: vec![(0, commands)] }
     }
 
-    pub fn is_in_subproof(&self) -> bool {
+    pub fn depth(&self) -> usize {
         // The root proof is considered a nesting depth of 0
-        self.stack.len() > 1
+        self.stack.len() - 1
+    }
+
+    pub fn is_in_subproof(&self) -> bool {
+        self.depth() > 0
     }
 
     pub fn is_end_step(&self) -> bool {

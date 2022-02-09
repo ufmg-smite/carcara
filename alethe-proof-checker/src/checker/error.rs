@@ -89,9 +89,6 @@ pub enum CheckerError {
     #[error("expected {0} arguments, got {1}")]
     WrongNumberOfArgs(Range, usize),
 
-    #[error("expected {0} commands in subproof, got {1}")]
-    WrongNumberOfStepsInSubproof(Range, usize),
-
     #[error("expected {1} terms in '{0}' term, got {2}")]
     WrongNumberOfTermsInOp(Operator, Range, usize),
 

@@ -20,10 +20,10 @@ pub struct RuleArgs<'a> {
     pub(super) pool: &'a mut TermPool,
     pub(super) context: &'a mut [Context],
 
-    // For rules that end a subproof, we need to pass all the commands of the subproof that it is
-    // closing, because they may need to refer to some of them, and they are not given as premises.
-    // If a rule is not ending a subproof, this should be `None`
-    pub(super) subproof_commands: Option<&'a [ProofCommand]>,
+    // For rules that end a subproof, we need to pass the previous command in the subproof that it
+    // is closing, because it may be implicitly referenced, and it is not given as premises. If a
+    // rule is not ending a subproof, this should be `None`.
+    pub(super) previous_command: Option<Premise<'a>>,
     pub(super) discharge: &'a [&'a ProofCommand],
 }
 
@@ -91,17 +91,6 @@ fn assert_num_args<T: Into<Range>>(args: &[ProofArg], range: T) -> RuleResult {
     let range = range.into();
     if !range.contains(args.len()) {
         return Err(CheckerError::WrongNumberOfArgs(range, args.len()));
-    }
-    Ok(())
-}
-
-fn assert_num_steps_in_subproof<T: Into<Range>>(subproof: &[ProofCommand], range: T) -> RuleResult {
-    let range = range.into();
-    if !range.contains(subproof.len()) {
-        return Err(CheckerError::WrongNumberOfStepsInSubproof(
-            range,
-            subproof.len(),
-        ));
     }
     Ok(())
 }

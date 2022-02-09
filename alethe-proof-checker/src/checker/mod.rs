@@ -64,10 +64,17 @@ impl<'c> ProofChecker<'c> {
                     let is_end_of_subproof = iter.is_end_step();
 
                     // If this step ends a subproof, it might need to implicitly reference the
-                    // other commands in the subproof
-                    let subproof_commands =
-                        is_end_of_subproof.then(|| iter.current_subproof().unwrap());
-                    self.check_step(step, subproof_commands, &iter)
+                    // previous command in the subproof
+                    let previous_command = if is_end_of_subproof {
+                        let subproof = iter.current_subproof().unwrap();
+                        let index = subproof.len() - 2;
+                        subproof
+                            .get(index)
+                            .map(|command| Premise::new((iter.depth(), index), command))
+                    } else {
+                        None
+                    };
+                    self.check_step(step, previous_command, &iter)
                         .map_err(|e| Error::Checker {
                             inner: e,
                             rule: step.rule.clone(),
@@ -156,7 +163,7 @@ impl<'c> ProofChecker<'c> {
     fn check_step<'a>(
         &mut self,
         step: &'a ProofStep,
-        subproof_commands: Option<&'a [ProofCommand]>,
+        previous_command: Option<Premise<'a>>,
         iter: &'a ProofIter<'a>,
     ) -> RuleResult {
         let time = Instant::now();
@@ -192,7 +199,7 @@ impl<'c> ProofChecker<'c> {
             args: &step.args,
             pool: self.pool,
             context: &mut self.context,
-            subproof_commands,
+            previous_command,
             discharge: &discharge,
         };
 
