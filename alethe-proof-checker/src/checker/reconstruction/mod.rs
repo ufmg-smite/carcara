@@ -150,6 +150,8 @@ impl Reconstructor {
         self.push_command(clause, false);
     }
 
+    /// Adds a `symm` step that flips the equality of the given premise. The `original_premise`
+    /// index must already be mapped to the new index space.
     pub(super) fn add_symm_step(
         &mut self,
         pool: &mut TermPool,
@@ -163,7 +165,7 @@ impl Reconstructor {
             id,
             clause,
             rule: "symm".into(),
-            premises: vec![self.map_index(original_premise)],
+            premises: vec![original_premise],
             args: Vec::new(),
             discharge: Vec::new(),
         };

@@ -308,6 +308,10 @@ pub fn reconstruct_trans(
     // chain, we simply remove them in the reconstructed step.
     new_premises.truncate(num_needed);
 
+    for p in &mut new_premises {
+        *p = reconstructor.map_index(*p);
+    }
+
     // To make things easier later, we change `should_flip` to be a vector of booleans instead of a
     // vector of indices. Now, `should_flip[i]` indicates whether the i-th premise needs to be
     // flipped.
@@ -322,15 +326,12 @@ pub fn reconstruct_trans(
     // If there are any premises that need flipping, we need to introduce `symm` steps to flip the
     // needed equalities
     for i in 0..new_premises.len() {
-        new_premises[i] = if should_flip[i] {
+        if should_flip[i] {
             let (a, b) = premise_equalities[i];
             let id = reconstructor.get_new_id(&command_id);
-            reconstructor.add_symm_step(pool, new_premises[i], (a.clone(), b.clone()), id)
-        } else {
-            // If the premise didn't need flipping, we just need to map its index to the new
-            // index in the reconstructed proof
-            reconstructor.map_index(new_premises[i])
-        };
+            new_premises[i] =
+                reconstructor.add_symm_step(pool, new_premises[i], (a.clone(), b.clone()), id);
+        }
     }
 
     reconstructor.push_reconstructed_step(ProofStep {
