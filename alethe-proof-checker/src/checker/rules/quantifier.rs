@@ -38,7 +38,8 @@ pub fn forall_inst(RuleArgs { conclusion, args, pool, .. }: RuleArgs) -> RuleRes
         QuantifierError::NoArgGivenForBinding(bindings.iter().next().unwrap().0.clone())
     );
 
-    // Equalities may be reordered in the final term, so we use `DeepEq::eq_modulo_reordering`
+    // Equalities may be reordered in the final term, so we need to use deep equality modulo
+    // reordering
     let expected = substitution.apply(pool, original)?;
     assert_is_expected_modulo_reordering(substituted, expected)
 }
