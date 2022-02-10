@@ -28,9 +28,9 @@ pub fn refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> RuleResult 
     // cases it is applied to both. To cover all cases, we must check all three possibilities. We
     // don't compute the new left and right terms until they are needed, to avoid doing unnecessary
     // work
-    let new_left = cumulative_substitution.apply(pool, left)?;
+    let new_left = cumulative_substitution.apply(pool, left);
     let result = are_alpha_equivalent(&new_left, right) || {
-        let new_right = cumulative_substitution.apply(pool, right)?;
+        let new_right = cumulative_substitution.apply(pool, right);
         are_alpha_equivalent(left, &new_right) || are_alpha_equivalent(&new_left, &new_right)
     };
     rassert!(

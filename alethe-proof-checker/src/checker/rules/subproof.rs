@@ -291,10 +291,10 @@ pub fn onepoint(
         .into_iter()
         .flat_map(|(x, t)| [(x.clone(), t.clone()), (t, x)])
         .map(|(x, t)| {
-            let new_t = context.substitution_until_fixed_point.apply(pool, &t)?;
-            Ok((x, new_t))
+            let new_t = context.substitution_until_fixed_point.apply(pool, &t);
+            (x, new_t)
         })
-        .collect::<Result<_, CheckerError>>()?;
+        .collect();
 
     // For each substitution (:= x t) in the context, the equality (= x t) must appear in phi
     if let Some((k, v)) = context
@@ -351,7 +351,7 @@ fn generic_skolemization_rule(
     for c in &mut context[..n - 1] {
         // Based on the test examples, we must first apply all previous context substitutions to
         // phi, before applying the substitution present in the current context
-        current_phi = c.substitution.apply(pool, &current_phi)?;
+        current_phi = c.substitution.apply(pool, &current_phi);
     }
 
     let substitution = &context.last().unwrap().substitution_until_fixed_point;
@@ -387,7 +387,7 @@ fn generic_skolemization_rule(
 
         // For every binding we skolemize, we must apply another substitution to phi
         let mut s = Substitution::single(pool, x_term, t.clone())?;
-        current_phi = s.apply(pool, &current_phi)?;
+        current_phi = s.apply(pool, &current_phi);
     }
     Ok(())
 }

@@ -1,4 +1,4 @@
-use super::{BindingList, Rc, Term, TermPool};
+use super::{BindingList, Rc, SortedVar, Term, TermPool};
 use ahash::{AHashMap, AHashSet};
 use thiserror::Error;
 
@@ -74,6 +74,10 @@ impl Substitution {
         })
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+
     /// Extends the substitution by adding a new mapping from `x` to `t`.
     pub(crate) fn insert(
         &mut self,
@@ -97,49 +101,52 @@ impl Substitution {
         Ok(())
     }
 
-    pub fn apply(&mut self, pool: &mut TermPool, term: &Rc<Term>) -> SubstitutionResult<Rc<Term>> {
+    pub fn apply(&mut self, pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
         macro_rules! apply_to_sequence {
             ($sequence:expr) => {
                 $sequence
                     .iter()
                     .map(|a| self.apply(pool, a))
-                    .collect::<Result<Vec<_>, _>>()
+                    .collect::<Vec<_>>()
             };
         }
 
         if let Some(t) = self.cache.get(term) {
-            return Ok(t.clone());
+            return t.clone();
         }
         if let Some(t) = self.map.get(term) {
-            return Ok(t.clone());
+            return t.clone();
         }
 
         let result = match term.as_ref() {
             Term::App(func, args) => {
-                let new_args = apply_to_sequence!(args)?;
-                let new_func = self.apply(pool, func)?;
+                let new_args = apply_to_sequence!(args);
+                let new_func = self.apply(pool, func);
                 pool.add_term(Term::App(new_func, new_args))
             }
             Term::Op(op, args) => {
-                let new_args = apply_to_sequence!(args)?;
+                let new_args = apply_to_sequence!(args);
                 pool.add_term(Term::Op(*op, new_args))
             }
             Term::Quant(q, b, t) => {
-                let (new_bindings, renaming) = self.rename_bindings(pool, b);
-                let new_term = if renaming.is_empty() {
-                    self.apply(pool, t)?
-                } else {
-                    // If there are variables that would be captured by the substitution, we need
-                    // to rename them first. For that, we create a new `Substitution` with the
-                    // renaming substitution that was computed, and apply it to the inner term
-                    let mut renaming = Substitution::new(pool, renaming)?;
-                    let renamed = renaming.apply(pool, t)?;
-                    self.apply(pool, &renamed)?
-                };
+                let (new_bindings, new_term) = self.apply_to_binder(pool, b.as_ref(), t, false);
                 pool.add_term(Term::Quant(*q, new_bindings, new_term))
             }
-            // TODO: Handle `choice`, `let` and `lambda` terms
-            _ => term.clone(),
+            Term::Choice(var, t) => {
+                let (mut new_bindings, new_term) =
+                    self.apply_to_binder(pool, std::slice::from_ref(var), t, false);
+                let new_var = new_bindings.0.pop().unwrap();
+                pool.add_term(Term::Choice(new_var, new_term))
+            }
+            Term::Let(b, t) => {
+                let (new_bindings, new_term) = self.apply_to_binder(pool, b.as_ref(), t, true);
+                pool.add_term(Term::Let(new_bindings, new_term))
+            }
+            Term::Lambda(b, t) => {
+                let (new_bindings, new_term) = self.apply_to_binder(pool, b.as_ref(), t, true);
+                pool.add_term(Term::Lambda(new_bindings, new_term))
+            }
+            Term::Terminal(_) | Term::Sort(_) => term.clone(),
         };
 
         // Since frequently a term will have more than one identical subterms, we insert the
@@ -147,26 +154,53 @@ impl Substitution {
         // don't re-visit already seen terms, so this method traverses the term as a DAG, not as a
         // tree
         self.cache.insert(term.clone(), result.clone());
-        Ok(result)
+        result
+    }
+
+    fn apply_to_binder(
+        &mut self,
+        pool: &mut TermPool,
+        binding_list: &[SortedVar],
+        inner: &Rc<Term>,
+        is_value_list: bool,
+    ) -> (BindingList, Rc<Term>) {
+        let (new_bindings, mut renaming) =
+            self.rename_binding_list(pool, binding_list, is_value_list);
+        let new_term = if renaming.is_empty() {
+            self.apply(pool, inner)
+        } else {
+            // If there are variables that would be captured by the substitution, we need
+            // to rename them first
+            let renamed = renaming.apply(pool, inner);
+            self.apply(pool, &renamed)
+        };
+        (new_bindings, new_term)
     }
 
     /// Creates a new substitution that renames all variables in the binding list that may be
     /// captured by this substitution to a new, arbitrary name. Returns that substitution, and the
     /// new binding list, with the bindings renamed. If no variable needs to be renamed, this just
-    /// returns a clone of the binding list and an empty hash map. The name chosen when renaming a
-    /// variable is the old name with '@' appended.
-    fn rename_bindings(
+    /// returns a clone of the binding list and an empty substitution. The name chosen when renaming
+    /// a variable is the old name with '@' appended. If the binding list is a "value" list, like in
+    /// a `let` or `lambda` term, `is_value_list` should be true.
+    fn rename_binding_list(
         &mut self,
         pool: &mut TermPool,
-        b: &BindingList,
-    ) -> (BindingList, AHashMap<Rc<Term>, Rc<Term>>) {
-        let mut map = AHashMap::new();
+        binding_list: &[SortedVar],
+        is_value_list: bool,
+    ) -> (BindingList, Self) {
+        let mut new_substitution = Self::empty();
         let mut new_vars = AHashSet::new();
-        let new_binding_list = b
+        let new_binding_list = binding_list
             .iter()
             .map(|(var, value)| {
-                // If this is called with the binding list of a `let` term, `value` will be the
-                // value of the variable. Otherwise, it will be its sort
+                // If the binding list is a "sort" binding list, then `value` will be the variable's
+                // sort. Otherwise, we need to get the sort of `value`
+                let sort = if is_value_list {
+                    pool.add_term(Term::Sort(pool.sort(value).clone()))
+                } else {
+                    value.clone()
+                };
 
                 let mut changed = false;
                 let mut new_var = var.clone();
@@ -179,19 +213,26 @@ impl Substitution {
                 if changed {
                     // If the variable was renamed, we have to add this renaming to the resulting
                     // substitution
-                    // TODO: This doesn't handle `let` terms correctly. In them, `value` is not a
-                    // the variable sort, so we need to get `value.sort()` instead.
-                    let old = pool.add_term((var.clone(), value.clone()).into());
-                    let new = pool.add_term((new_var.clone(), value.clone()).into());
-                    map.insert(old, new);
+                    let old = pool.add_term((var.clone(), sort.clone()).into());
+                    let new = pool.add_term((new_var.clone(), sort).into());
+
+                    // We can safely unwrap here because `old` and `new` are guaranteed to have the
+                    // same sort
+                    new_substitution.insert(pool, old, new).unwrap();
                     new_vars.insert(new_var.clone());
                 }
 
-                // TODO: Apply current substitution to `value`, if this is used in a `let` term
-                (new_var, value.clone())
+                // If the binding list is a "value" list, we need to apply the current substitution
+                // to each variable's value
+                let new_value = if is_value_list {
+                    new_substitution.apply(pool, value)
+                } else {
+                    value.clone()
+                };
+                (new_var, new_value)
             })
             .collect();
-        (BindingList(new_binding_list), map)
+        (BindingList(new_binding_list), new_substitution)
     }
 }
 
@@ -215,8 +256,7 @@ mod tests {
         let mut pool = parser.term_pool();
         let got = Substitution::new(&mut pool, map)
             .unwrap()
-            .apply(&mut pool, &original)
-            .unwrap();
+            .apply(&mut pool, &original);
 
         assert_eq!(&result, &got);
     }
@@ -266,6 +306,8 @@ mod tests {
 
             // In theory, since x does not appear in this term, renaming y to y@ is unnecessary
             "(forall ((y Int)) (> y 0))" [x -> y] => "(forall ((y@ Int)) (> y@ 0))",
+
+            // TODO: Add tests for `choice`, `let`, and `lambda` terms
         }
     }
 }

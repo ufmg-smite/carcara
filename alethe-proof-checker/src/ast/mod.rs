@@ -236,6 +236,12 @@ impl std::ops::Not for Quantifier {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BindingList(pub Vec<SortedVar>);
 
+impl AsRef<[SortedVar]> for BindingList {
+    fn as_ref(&self) -> &[SortedVar] {
+        &self.0
+    }
+}
+
 impl<'a> IntoIterator for &'a BindingList {
     type Item = &'a SortedVar;
 

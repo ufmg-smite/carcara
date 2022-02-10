@@ -1012,12 +1012,11 @@ impl<R: BufRead> Parser<R> {
                         .collect()
                 };
 
-                // Since we already checked the sorts of the arguments, creating and applying this
-                // substitution can never fail
+                // Since we already checked the sorts of the arguments, creating this substitution
+                // can never fail
                 let result = Substitution::new(&mut self.state.term_pool, substitution)
                     .unwrap()
-                    .apply(&mut self.state.term_pool, &func.body)
-                    .unwrap();
+                    .apply(&mut self.state.term_pool, &func.body);
 
                 Ok(result)
             }
