@@ -39,8 +39,21 @@ impl MetricsUnit for f64 {
     }
 }
 
+pub trait Metrics<K, T: MetricsUnit> {
+    fn add_sample(&mut self, key: &K, value: T);
+    fn combine(self, other: Self) -> Self;
+    fn is_empty(&self) -> bool;
+
+    fn max(&self) -> &(K, T);
+    fn min(&self) -> &(K, T);
+    fn total(&self) -> T;
+    fn count(&self) -> usize;
+    fn mean(&self) -> T;
+    fn standard_deviation(&self) -> T;
+}
+
 #[derive(Debug)]
-pub struct Metrics<K, T = Duration> {
+pub struct OnlineMetrics<K, T = Duration> {
     pub total: T,
     pub count: usize,
     pub mean: T,
@@ -52,7 +65,13 @@ pub struct Metrics<K, T = Duration> {
     sum_of_squared_distances: f64,
 }
 
-impl<K, T: MetricsUnit> Default for Metrics<K, T> {
+impl<K, T: MetricsUnit> OnlineMetrics<K, T> {
+    pub fn new() -> Self {
+        Default::default()
+    }
+}
+
+impl<K, T: MetricsUnit> Default for OnlineMetrics<K, T> {
     // Ideally, I would like to just `#[derive(Default)]`, but because of a quirk in how `derive`
     // works, that would require the type parameter `K` to always be `Default` as well, even though
     // it is not necessary. Therefore, I have to implement `Default` manually. For more info, see:
@@ -70,29 +89,12 @@ impl<K, T: MetricsUnit> Default for Metrics<K, T> {
     }
 }
 
-impl<K: Clone, T: MetricsUnit> Metrics<K, T> {
-    pub fn new() -> Self {
-        Default::default()
-    }
-
-    /// Return `true` if the `Metrics` have no entries.
-    pub fn is_empty(&self) -> bool {
-        self.count == 0
-    }
-
-    pub fn max(&self) -> &(K, T) {
-        &self.max_min.as_ref().unwrap().0
-    }
-
-    pub fn min(&self) -> &(K, T) {
-        &self.max_min.as_ref().unwrap().1
-    }
-
+impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OnlineMetrics<K, T> {
     /// Adds a new sample to the metrics. This updates all the fields of the struct to equal the
     /// new mean, standard deviation, etc. For simplicity, these are calculated every time a new
     /// sample is added, which means you can stop adding samples at any time and the metrics will
     /// always be valid.
-    pub fn add(&mut self, key: &K, value: T) {
+    fn add_sample(&mut self, key: &K, value: T) {
         let old_mean_f64 = self.mean.as_f64();
 
         self.total += value;
@@ -123,10 +125,10 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> {
     }
 
     /// Combines two metrics into one. If one the metrics has only one data point, this is
-    /// equivalent to `Metrics::add`. This is generally numerically stable if the metrics have many
-    /// data points, or exactly one. If one of the metrics is small, the error in the variance
-    /// introduced by using this method (as opposed to using `Metrics::add` on each data point) can
-    /// be as high as 30%.
+    /// equivalent to `Metrics::add_sample`. This is generally numerically stable if the metrics
+    /// have many data points, or exactly one. If one of the metrics is small, the error in the
+    /// variance introduced by using this method (as opposed to using `Metrics::add_sample` on each
+    /// data point) can be as high as 30%.
     fn combine(self, other: Self) -> Self {
         match (self.count, other.count) {
             (0, _) => return other,
@@ -134,7 +136,7 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> {
             (1, _) => {
                 let mut result = other;
                 let only_entry = self.min();
-                result.add(&only_entry.0, only_entry.1);
+                result.add_sample(&only_entry.0, only_entry.1);
                 return result;
             }
             (_, 1) => return other.combine(self),
@@ -172,9 +174,37 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> {
             sum_of_squared_distances,
         }
     }
+
+    fn is_empty(&self) -> bool {
+        self.count == 0
+    }
+
+    fn max(&self) -> &(K, T) {
+        &self.max_min.as_ref().unwrap().0
+    }
+
+    fn min(&self) -> &(K, T) {
+        &self.max_min.as_ref().unwrap().1
+    }
+
+    fn total(&self) -> T {
+        self.total
+    }
+
+    fn count(&self) -> usize {
+        self.count
+    }
+
+    fn mean(&self) -> T {
+        self.mean
+    }
+
+    fn standard_deviation(&self) -> T {
+        self.standard_deviation
+    }
 }
 
-impl<K> fmt::Display for Metrics<K, Duration> {
+impl<K> fmt::Display for OnlineMetrics<K, Duration> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if f.alternate() {
             write!(f, "{:?} ({:?} * {})", self.total, self.mean, self.count)
@@ -184,7 +214,7 @@ impl<K> fmt::Display for Metrics<K, Duration> {
     }
 }
 
-impl<K> fmt::Display for Metrics<K, f64> {
+impl<K> fmt::Display for OnlineMetrics<K, f64> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if f.alternate() {
             write!(f, "{:.04} ({:.04} * {})", self.total, self.mean, self.count)
@@ -211,19 +241,19 @@ type RunId = (String, usize);
 
 #[derive(Debug, Default)]
 pub struct BenchmarkResults {
-    pub parsing: Metrics<RunId>,
-    pub checking: Metrics<RunId>,
-    pub reconstructing: Metrics<RunId>,
-    pub total_accounted_for: Metrics<RunId>,
-    pub total: Metrics<RunId>,
-    pub step_time: Metrics<StepId>,
-    pub step_time_by_file: AHashMap<String, Metrics<StepId>>,
-    pub step_time_by_rule: AHashMap<String, Metrics<StepId>>,
+    pub parsing: OnlineMetrics<RunId>,
+    pub checking: OnlineMetrics<RunId>,
+    pub reconstructing: OnlineMetrics<RunId>,
+    pub total_accounted_for: OnlineMetrics<RunId>,
+    pub total: OnlineMetrics<RunId>,
+    pub step_time: OnlineMetrics<StepId>,
+    pub step_time_by_file: AHashMap<String, OnlineMetrics<StepId>>,
+    pub step_time_by_rule: AHashMap<String, OnlineMetrics<StepId>>,
 
-    pub deep_eq_time: Metrics<RunId>,
-    pub deep_eq_time_ratio: Metrics<RunId, f64>,
-    pub assume_time: Metrics<RunId>,
-    pub assume_time_ratio: Metrics<RunId, f64>,
+    pub deep_eq_time: OnlineMetrics<RunId>,
+    pub deep_eq_time_ratio: OnlineMetrics<RunId, f64>,
+    pub assume_time: OnlineMetrics<RunId>,
+    pub assume_time_ratio: OnlineMetrics<RunId, f64>,
     pub num_assumes: usize,
     pub num_easy_assumes: usize,
     pub deep_eq_depths: Vec<usize>,
@@ -240,49 +270,49 @@ impl BenchmarkResults {
     }
 
     /// The time per run to completely parse the proof.
-    pub fn parsing(&self) -> &Metrics<RunId> {
+    pub fn parsing(&self) -> &OnlineMetrics<RunId> {
         &self.parsing
     }
 
     /// The time per run to check all the steps in the proof.
-    pub fn checking(&self) -> &Metrics<RunId> {
+    pub fn checking(&self) -> &OnlineMetrics<RunId> {
         &self.checking
     }
 
     /// The time per run to reconstruct the proof.
-    pub fn reconstructing(&self) -> &Metrics<RunId> {
+    pub fn reconstructing(&self) -> &OnlineMetrics<RunId> {
         &self.reconstructing
     }
 
     /// The combined time per run to parse, check, and reconstruct all the steps in the proof.
-    pub fn total_accounted_for(&self) -> &Metrics<RunId> {
+    pub fn total_accounted_for(&self) -> &OnlineMetrics<RunId> {
         &self.total_accounted_for
     }
 
     /// The total time spent per run. Should be pretty similar to `total_accounted_for`.
-    pub fn total(&self) -> &Metrics<RunId> {
+    pub fn total(&self) -> &OnlineMetrics<RunId> {
         &self.total
     }
 
     /// The time spent checking each step.
-    pub fn step_time(&self) -> &Metrics<StepId> {
+    pub fn step_time(&self) -> &OnlineMetrics<StepId> {
         &self.step_time
     }
 
     /// For each file, the time spent checking each step in the file.
-    pub fn step_time_by_file(&self) -> &AHashMap<String, Metrics<StepId>> {
+    pub fn step_time_by_file(&self) -> &AHashMap<String, OnlineMetrics<StepId>> {
         &self.step_time_by_file
     }
 
     /// For each rule, the time spent checking each step that uses that rule.
-    pub fn step_time_by_rule(&self) -> &AHashMap<String, Metrics<StepId>> {
+    pub fn step_time_by_rule(&self) -> &AHashMap<String, OnlineMetrics<StepId>> {
         &self.step_time_by_rule
     }
 
     /// Combines two `BenchmarkResults` into one. This method is subject to some numerical
     /// stability issues, as is described in `Metrics::combine`.
     pub fn combine(a: Self, b: Self) -> Self {
-        type MetricsMap = AHashMap<String, Metrics<StepId>>;
+        type MetricsMap = AHashMap<String, OnlineMetrics<StepId>>;
 
         fn combine_map(mut a: MetricsMap, b: MetricsMap) -> MetricsMap {
             use std::collections::hash_map::Entry;
@@ -291,7 +321,7 @@ impl BenchmarkResults {
                     Entry::Occupied(mut e) => {
                         // To take the old value from the entry without moving it entirely, we have
                         // to insert something in its place, so we insert an empty `Metrics`
-                        let old = e.insert(Metrics::new());
+                        let old = e.insert(OnlineMetrics::new());
                         e.insert(old.combine(v));
                     }
                     Entry::Vacant(e) => {
@@ -338,11 +368,11 @@ mod tests {
         fn run_tests(n: usize, max_value: u64) {
             let mut rng = rand::thread_rng();
             let mut data = Vec::with_capacity(n);
-            let mut metrics = Metrics::new();
+            let mut metrics = OnlineMetrics::new();
             for _ in 0..n {
                 let sample = Duration::from_nanos(rng.gen_range(0..max_value));
                 data.push(sample);
-                metrics.add(&(), sample);
+                metrics.add_sample(&(), sample);
             }
 
             let expected_total: Duration = data.iter().sum();
@@ -384,14 +414,14 @@ mod tests {
     fn test_metrics_combine() {
         fn run_tests(num_chunks: usize, chunk_size: usize, error_margin: f64) {
             let mut rng = rand::thread_rng();
-            let mut overall_metrics = Metrics::new();
-            let mut combined_metrics = Metrics::new();
+            let mut overall_metrics = OnlineMetrics::new();
+            let mut combined_metrics = OnlineMetrics::new();
             for _ in 0..num_chunks {
-                let mut chunk_metrics = Metrics::new();
+                let mut chunk_metrics = OnlineMetrics::new();
                 for _ in 0..chunk_size {
                     let sample = Duration::from_nanos(rng.gen_range(0..10_000));
-                    overall_metrics.add(&(), sample);
-                    chunk_metrics.add(&(), sample);
+                    overall_metrics.add_sample(&(), sample);
+                    chunk_metrics.add_sample(&(), sample);
                 }
                 combined_metrics = combined_metrics.combine(chunk_metrics);
             }

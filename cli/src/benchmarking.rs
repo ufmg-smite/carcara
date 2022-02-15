@@ -1,4 +1,8 @@
-use alethe_proof_checker::{benchmarking::BenchmarkResults, checker, parser::parse_instance};
+use alethe_proof_checker::{
+    benchmarking::{BenchmarkResults, Metrics},
+    checker,
+    parser::parse_instance,
+};
 use rayon::prelude::*;
 use std::{
     fs::File,
@@ -63,21 +67,23 @@ fn run_instance(
         let total_time = total_time.elapsed();
 
         let run_id = (proof_file_name.to_string(), i);
-        result.parsing.add(&run_id, parsing_time);
-        result.checking.add(&run_id, checking_time);
-        result.reconstructing.add(&run_id, reconstructing_time);
+        result.parsing.add_sample(&run_id, parsing_time);
+        result.checking.add_sample(&run_id, checking_time);
+        result
+            .reconstructing
+            .add_sample(&run_id, reconstructing_time);
         result
             .total_accounted_for
-            .add(&run_id, parsing_time + checking_time + reconstructing_time);
-        result.total.add(&run_id, total_time);
+            .add_sample(&run_id, parsing_time + checking_time + reconstructing_time);
+        result.total.add_sample(&run_id, total_time);
 
-        result.deep_eq_time.add(&run_id, deep_eq_time);
-        result.assume_time.add(&run_id, assume_time);
+        result.deep_eq_time.add_sample(&run_id, deep_eq_time);
+        result.assume_time.add_sample(&run_id, assume_time);
 
         let deep_eq_ratio = deep_eq_time.as_secs_f64() / checking_time.as_secs_f64();
         let assume_ratio = assume_time.as_secs_f64() / checking_time.as_secs_f64();
-        result.deep_eq_time_ratio.add(&run_id, deep_eq_ratio);
-        result.assume_time_ratio.add(&run_id, assume_ratio);
+        result.deep_eq_time_ratio.add_sample(&run_id, deep_eq_ratio);
+        result.assume_time_ratio.add_sample(&run_id, assume_ratio);
 
         result.num_assumes += num_assumes;
         result.num_easy_assumes += num_easy_assumes;

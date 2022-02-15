@@ -5,7 +5,8 @@ mod path_args;
 
 use ahash::AHashSet;
 use alethe_proof_checker::{
-    ast::print_proof, check, check_and_reconstruct, checker::ProofChecker, parser, AletheResult,
+    ast::print_proof, benchmarking::Metrics, check, check_and_reconstruct, checker::ProofChecker,
+    parser, AletheResult,
 };
 use ansi_term::Color;
 use clap::{App, AppSettings, Arg, ArgGroup, ArgMatches, SubCommand};

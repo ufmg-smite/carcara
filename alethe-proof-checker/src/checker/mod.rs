@@ -4,7 +4,7 @@ mod rules;
 
 use crate::{
     ast::*,
-    benchmarking::{Metrics, StepId},
+    benchmarking::{Metrics, OnlineMetrics, StepId},
     AletheResult, Error,
 };
 use ahash::{AHashMap, AHashSet};
@@ -25,9 +25,9 @@ pub struct CheckerStatistics<'s> {
     pub file_name: &'s str,
     pub checking_time: &'s mut Duration,
     pub reconstructing_time: &'s mut Duration,
-    pub step_time: &'s mut Metrics<StepId>,
-    pub step_time_by_file: &'s mut AHashMap<String, Metrics<StepId>>,
-    pub step_time_by_rule: &'s mut AHashMap<String, Metrics<StepId>>,
+    pub step_time: &'s mut OnlineMetrics<StepId>,
+    pub step_time_by_file: &'s mut AHashMap<String, OnlineMetrics<StepId>>,
+    pub step_time_by_rule: &'s mut AHashMap<String, OnlineMetrics<StepId>>,
 
     pub deep_eq_time: &'s mut Duration,
     pub assume_time: &'s mut Duration,
@@ -316,17 +316,17 @@ impl<'c> ProofChecker<'c> {
                 step_id: step_id.into(),
                 rule: rule.clone().into_boxed_str(),
             };
-            stats.step_time.add(&id, measurement);
+            stats.step_time.add_sample(&id, measurement);
             stats
                 .step_time_by_file
                 .entry(file_name)
                 .or_default()
-                .add(&id, measurement);
+                .add_sample(&id, measurement);
             stats
                 .step_time_by_rule
                 .entry(rule)
                 .or_default()
-                .add(&id, measurement);
+                .add_sample(&id, measurement);
             *stats.checking_time += measurement;
         }
     }
