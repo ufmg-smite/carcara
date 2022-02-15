@@ -1,11 +1,14 @@
 use ahash::AHashMap;
 use std::{
-    fmt,
-    ops::{Add, AddAssign},
+    cmp, fmt,
+    iter::Sum,
+    ops::{Add, AddAssign, Sub},
     time::Duration,
 };
 
-pub trait MetricsUnit: Copy + Default + Add<Output = Self> + AddAssign + PartialOrd {
+pub trait MetricsUnit:
+    Copy + Default + PartialOrd + Add<Output = Self> + AddAssign + Sum + Sub<Output = Self>
+{
     fn as_f64(&self) -> f64;
     fn from_f64(x: f64) -> Self;
     fn div_u32(self, rhs: u32) -> Self;
@@ -108,7 +111,7 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OnlineMetrics<K, T> {
         let variance_delta = (value.as_f64() - new_mean_f64) * (value.as_f64() - old_mean_f64);
         self.sum_of_squared_distances += variance_delta;
         self.standard_deviation = T::from_f64(self.sum_of_squared_distances.sqrt())
-            .div_u32(std::cmp::max(1, self.count as u32 - 1));
+            .div_u32(cmp::max(1, self.count as u32 - 1));
 
         match &mut self.max_min {
             Some((max, min)) => {
@@ -152,8 +155,8 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OnlineMetrics<K, T> {
         let sum_of_squared_distances = self.sum_of_squared_distances
             + other.sum_of_squared_distances
             + delta * delta * (self.count * other.count / count) as f64;
-        let standard_deviation = T::from_f64(sum_of_squared_distances.sqrt())
-            .div_u32(std::cmp::max(1, count as u32 - 1));
+        let standard_deviation =
+            T::from_f64(sum_of_squared_distances.sqrt()).div_u32(cmp::max(1, count as u32 - 1));
 
         let max_min = match (self.max_min, other.max_min) {
             (a, None) => a,
@@ -221,6 +224,77 @@ impl<K> fmt::Display for OnlineMetrics<K, f64> {
         } else {
             write!(f, "{:.04} ± {:.04}", self.mean, self.standard_deviation)
         }
+    }
+}
+
+pub struct OfflineMetrics<K, T = Duration> {
+    data: Vec<(K, T)>,
+}
+
+impl<K, T: MetricsUnit> OfflineMetrics<K, T> {
+    pub fn new() -> Self {
+        Default::default()
+    }
+}
+
+impl<K, T: MetricsUnit> Default for OfflineMetrics<K, T> {
+    fn default() -> Self {
+        Self { data: Vec::new() }
+    }
+}
+
+impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OfflineMetrics<K, T> {
+    fn add_sample(&mut self, key: &K, value: T) {
+        self.data.push((key.clone(), value));
+    }
+
+    fn combine(mut self, mut other: Self) -> Self {
+        self.data.append(&mut other.data);
+        self
+    }
+
+    fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
+    fn max(&self) -> &(K, T) {
+        self.data
+            .iter()
+            .max_by(|a, b| PartialOrd::partial_cmp(&a.1, &b.1).unwrap_or(cmp::Ordering::Equal))
+            .unwrap()
+    }
+
+    fn min(&self) -> &(K, T) {
+        self.data
+            .iter()
+            .min_by(|a, b| PartialOrd::partial_cmp(&a.1, &b.1).unwrap_or(cmp::Ordering::Equal))
+            .unwrap()
+    }
+
+    fn total(&self) -> T {
+        self.data.iter().map(|(_, v)| *v).sum()
+    }
+
+    fn count(&self) -> usize {
+        self.data.len()
+    }
+
+    fn mean(&self) -> T {
+        self.total().div_u32(self.count() as u32)
+    }
+
+    fn standard_deviation(&self) -> T {
+        let mean = self.mean();
+        let sum_of_squared_distances: f64 = self
+            .data
+            .iter()
+            .map(|&(_, v)| {
+                let delta = (v - mean).as_f64();
+                delta * delta
+            })
+            .sum();
+        let variance = sum_of_squared_distances / (cmp::max(1, self.count() - 1) as f64);
+        T::from_f64(variance.sqrt())
     }
 }
 
