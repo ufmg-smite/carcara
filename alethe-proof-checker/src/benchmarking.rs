@@ -54,11 +54,11 @@ pub trait Metrics<K, T: MetricsUnit> {
 
 #[derive(Debug)]
 pub struct OnlineMetrics<K, T = Duration> {
-    pub total: T,
-    pub count: usize,
-    pub mean: T,
-    pub standard_deviation: T,
-    pub max_min: Option<((K, T), (K, T))>,
+    total: T,
+    count: usize,
+    mean: T,
+    standard_deviation: T,
+    max_min: Option<((K, T), (K, T))>,
 
     /// This is equal to the sum of the square distances of every sample to the mean, that is,
     /// `variance * (n - 1)`. This is used to calculate the standard deviation.

@@ -293,13 +293,13 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
     println!(
         "on assume:           {} ({:.02}% of checking time)",
         results.assume_time,
-        100.0 * results.assume_time.mean.as_secs_f64() / results.checking().mean.as_secs_f64(),
+        100.0 * results.assume_time.mean().as_secs_f64() / results.checking().mean().as_secs_f64(),
     );
     println!("assume ratio:        {}", results.assume_time_ratio);
     println!(
         "on deep equality:    {} ({:.02}% of checking time)",
         results.deep_eq_time,
-        100.0 * results.deep_eq_time.mean.as_secs_f64() / results.checking().mean.as_secs_f64(),
+        100.0 * results.deep_eq_time.mean().as_secs_f64() / results.checking().mean().as_secs_f64(),
     );
     println!("deep equality ratio: {}", results.deep_eq_time_ratio);
     println!("total accounted for: {}", accounted_for);
@@ -307,7 +307,7 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
 
     let data_by_rule = results.step_time_by_rule();
     let mut data_by_rule: Vec<_> = data_by_rule.iter().collect();
-    data_by_rule.sort_by_key(|(_, m)| if sort_by_total { m.total } else { m.mean });
+    data_by_rule.sort_by_key(|(_, m)| if sort_by_total { m.total() } else { m.mean() });
 
     println!("by rule:");
     for (rule, data) in data_by_rule {
