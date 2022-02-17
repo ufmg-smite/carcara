@@ -1,5 +1,5 @@
 use alethe_proof_checker::{
-    benchmarking::{BenchmarkResults, Metrics},
+    benchmarking::{Metrics, OnlineBenchmarkResults},
     checker,
     parser::parse_instance,
 };
@@ -16,8 +16,8 @@ fn run_instance(
     num_runs: usize,
     apply_function_defs: bool,
     reconstruct: bool,
-) -> Result<BenchmarkResults, alethe_proof_checker::Error> {
-    let mut result = BenchmarkResults::new();
+) -> Result<OnlineBenchmarkResults, alethe_proof_checker::Error> {
+    let mut result = OnlineBenchmarkResults::new();
     let proof_file_name = proof_file.to_str().unwrap();
 
     for i in 0..num_runs {
@@ -98,7 +98,7 @@ pub fn run_benchmark(
     num_jobs: usize,
     apply_function_defs: bool,
     reconstruct: bool,
-) -> BenchmarkResults {
+) -> OnlineBenchmarkResults {
     // Configure rayon to use the right number of threads and to reserve enough stack space for
     // them
     rayon::ThreadPoolBuilder::new()
@@ -116,10 +116,10 @@ pub fn run_benchmark(
                     instance.1.to_str().unwrap(),
                     e
                 );
-                BenchmarkResults::new()
+                OnlineBenchmarkResults::new()
             })
         })
-        .reduce(BenchmarkResults::new, BenchmarkResults::combine);
+        .reduce(OnlineBenchmarkResults::new, OnlineBenchmarkResults::combine);
 
     result
 }

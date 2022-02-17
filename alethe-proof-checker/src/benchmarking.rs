@@ -298,6 +298,28 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OfflineMetrics<K, T> {
     }
 }
 
+fn combine_map<K, V, M>(mut a: AHashMap<String, M>, b: AHashMap<String, M>) -> AHashMap<String, M>
+where
+    V: MetricsUnit,
+    M: Metrics<K, V> + Default,
+{
+    use std::collections::hash_map::Entry;
+    for (k, v) in b {
+        match a.entry(k) {
+            Entry::Occupied(mut e) => {
+                // To take the old value from the entry without moving it entirely, we have
+                // to insert something in its place, so we insert an empty `M`
+                let old = e.insert(M::default());
+                e.insert(old.combine(v));
+            }
+            Entry::Vacant(e) => {
+                e.insert(v);
+            }
+        }
+    }
+    a
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StepId {
     pub(crate) file: Box<str>,
@@ -313,27 +335,40 @@ impl fmt::Display for StepId {
 
 type RunId = (String, usize);
 
+// Higher kinded types would be very useful here. Ideally, I would like `BenchmarkResults` to be
+// generic on any kind that implements `Metrics`, like `OnlineMetrics` or `OfflineMetrics`.
 #[derive(Debug, Default)]
-pub struct BenchmarkResults {
-    pub parsing: OnlineMetrics<RunId>,
-    pub checking: OnlineMetrics<RunId>,
-    pub reconstructing: OnlineMetrics<RunId>,
-    pub total_accounted_for: OnlineMetrics<RunId>,
-    pub total: OnlineMetrics<RunId>,
-    pub step_time: OnlineMetrics<StepId>,
-    pub step_time_by_file: AHashMap<String, OnlineMetrics<StepId>>,
-    pub step_time_by_rule: AHashMap<String, OnlineMetrics<StepId>>,
+pub struct BenchmarkResults<ByRun, ByStep, ByRunF64> {
+    pub parsing: ByRun,
+    pub checking: ByRun,
+    pub reconstructing: ByRun,
+    pub total_accounted_for: ByRun,
+    pub total: ByRun,
+    pub step_time: ByStep,
+    pub step_time_by_file: AHashMap<String, ByStep>,
+    pub step_time_by_rule: AHashMap<String, ByStep>,
 
-    pub deep_eq_time: OnlineMetrics<RunId>,
-    pub deep_eq_time_ratio: OnlineMetrics<RunId, f64>,
-    pub assume_time: OnlineMetrics<RunId>,
-    pub assume_time_ratio: OnlineMetrics<RunId, f64>,
+    pub deep_eq_time: ByRun,
+    pub deep_eq_time_ratio: ByRunF64,
+    pub assume_time: ByRun,
+    pub assume_time_ratio: ByRunF64,
     pub num_assumes: usize,
     pub num_easy_assumes: usize,
     pub deep_eq_depths: Vec<usize>,
 }
 
-impl BenchmarkResults {
+pub type OnlineBenchmarkResults =
+    BenchmarkResults<OnlineMetrics<RunId>, OnlineMetrics<StepId>, OnlineMetrics<RunId, f64>>;
+
+pub type OfflineBenchmarkResults =
+    BenchmarkResults<OfflineMetrics<RunId>, OfflineMetrics<StepId>, OfflineMetrics<RunId, f64>>;
+
+impl<ByRun, ByStep, ByRunF64> BenchmarkResults<ByRun, ByStep, ByRunF64>
+where
+    ByRun: Metrics<RunId, Duration> + Default,
+    ByStep: Metrics<StepId, Duration> + Default,
+    ByRunF64: Metrics<RunId, f64> + Default,
+{
     pub fn new() -> Self {
         Default::default()
     }
@@ -344,68 +379,48 @@ impl BenchmarkResults {
     }
 
     /// The time per run to completely parse the proof.
-    pub fn parsing(&self) -> &OnlineMetrics<RunId> {
+    pub fn parsing(&self) -> &ByRun {
         &self.parsing
     }
 
     /// The time per run to check all the steps in the proof.
-    pub fn checking(&self) -> &OnlineMetrics<RunId> {
+    pub fn checking(&self) -> &ByRun {
         &self.checking
     }
 
     /// The time per run to reconstruct the proof.
-    pub fn reconstructing(&self) -> &OnlineMetrics<RunId> {
+    pub fn reconstructing(&self) -> &ByRun {
         &self.reconstructing
     }
 
     /// The combined time per run to parse, check, and reconstruct all the steps in the proof.
-    pub fn total_accounted_for(&self) -> &OnlineMetrics<RunId> {
+    pub fn total_accounted_for(&self) -> &ByRun {
         &self.total_accounted_for
     }
 
     /// The total time spent per run. Should be pretty similar to `total_accounted_for`.
-    pub fn total(&self) -> &OnlineMetrics<RunId> {
+    pub fn total(&self) -> &ByRun {
         &self.total
     }
 
     /// The time spent checking each step.
-    pub fn step_time(&self) -> &OnlineMetrics<StepId> {
+    pub fn step_time(&self) -> &ByStep {
         &self.step_time
     }
 
     /// For each file, the time spent checking each step in the file.
-    pub fn step_time_by_file(&self) -> &AHashMap<String, OnlineMetrics<StepId>> {
+    pub fn step_time_by_file(&self) -> &AHashMap<String, ByStep> {
         &self.step_time_by_file
     }
 
     /// For each rule, the time spent checking each step that uses that rule.
-    pub fn step_time_by_rule(&self) -> &AHashMap<String, OnlineMetrics<StepId>> {
+    pub fn step_time_by_rule(&self) -> &AHashMap<String, ByStep> {
         &self.step_time_by_rule
     }
 
     /// Combines two `BenchmarkResults` into one. This method is subject to some numerical
     /// stability issues, as is described in `Metrics::combine`.
     pub fn combine(a: Self, b: Self) -> Self {
-        type MetricsMap = AHashMap<String, OnlineMetrics<StepId>>;
-
-        fn combine_map(mut a: MetricsMap, b: MetricsMap) -> MetricsMap {
-            use std::collections::hash_map::Entry;
-            for (k, v) in b {
-                match a.entry(k) {
-                    Entry::Occupied(mut e) => {
-                        // To take the old value from the entry without moving it entirely, we have
-                        // to insert something in its place, so we insert an empty `Metrics`
-                        let old = e.insert(OnlineMetrics::new());
-                        e.insert(old.combine(v));
-                    }
-                    Entry::Vacant(e) => {
-                        e.insert(v);
-                    }
-                }
-            }
-            a
-        }
-
         Self {
             parsing: a.parsing.combine(b.parsing),
             checking: a.checking.combine(b.checking),
@@ -429,6 +444,48 @@ impl BenchmarkResults {
                 result
             },
         }
+    }
+}
+
+pub trait CollectResults {
+    fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration);
+    fn add_assume_measurement(&mut self, file: &str, id: &str, is_easy: bool, time: Duration);
+    fn add_deep_eq_depth(&mut self, depth: usize);
+}
+
+impl<ByRun, ByStep, ByRunF64> CollectResults for BenchmarkResults<ByRun, ByStep, ByRunF64>
+where
+    ByRun: Metrics<RunId, Duration> + Default,
+    ByStep: Metrics<StepId, Duration> + Default,
+    ByRunF64: Metrics<RunId, f64> + Default,
+{
+    fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration) {
+        let file = file.to_owned();
+        let rule = rule.to_owned();
+        let id = StepId {
+            file: file.clone().into_boxed_str(),
+            step_id: step_id.into(),
+            rule: rule.clone().into_boxed_str(),
+        };
+        self.step_time.add_sample(&id, time);
+        self.step_time_by_file
+            .entry(file)
+            .or_default()
+            .add_sample(&id, time);
+        self.step_time_by_rule
+            .entry(rule)
+            .or_default()
+            .add_sample(&id, time);
+    }
+
+    fn add_assume_measurement(&mut self, file: &str, id: &str, is_easy: bool, time: Duration) {
+        self.num_assumes += 1;
+        self.num_easy_assumes += is_easy as usize;
+        self.add_step_measurement(file, id, "assume*", time);
+    }
+
+    fn add_deep_eq_depth(&mut self, depth: usize) {
+        self.deep_eq_depths.push(depth);
     }
 }
 
