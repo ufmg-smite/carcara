@@ -289,7 +289,7 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OfflineMetrics<K, T> {
             .data
             .iter()
             .map(|&(_, v)| {
-                let delta = (v - mean).as_f64();
+                let delta = if v > mean { v - mean } else { mean - v }.as_f64();
                 delta * delta
             })
             .sum();
