@@ -22,6 +22,7 @@ fn run_instance(
 
     for i in 0..num_runs {
         let total_time = Instant::now();
+
         let parsing_time = Instant::now();
         let (proof, mut pool) = parse_instance(
             BufReader::new(File::open(problem_file)?),
@@ -30,39 +31,30 @@ fn run_instance(
         )?;
         let parsing_time = parsing_time.elapsed();
 
-        let mut checking_time = Duration::ZERO;
-        let mut reconstructing_time = Duration::ZERO;
-
+        let mut reconstruction_time = Duration::ZERO;
         let mut deep_eq_time = Duration::ZERO;
         let mut assume_time = Duration::ZERO;
-        let mut num_assumes = 0;
-        let mut num_easy_assumes = 0;
-        let mut deep_eq_depths = Vec::new();
+
         let config = checker::Config {
             skip_unknown_rules: false,
             is_running_test: false,
             statistics: Some(checker::CheckerStatistics {
                 file_name: proof_file_name,
-                checking_time: &mut checking_time,
-                reconstructing_time: &mut reconstructing_time,
-                step_time: &mut result.step_time,
-                step_time_by_file: &mut result.step_time_by_file,
-                step_time_by_rule: &mut result.step_time_by_rule,
-
+                reconstruction_time: &mut reconstruction_time,
                 deep_eq_time: &mut deep_eq_time,
                 assume_time: &mut assume_time,
-                num_assumes: &mut num_assumes,
-                num_easy_assumes: &mut num_easy_assumes,
-                deep_eq_depths: &mut deep_eq_depths,
+                results: &mut result,
             }),
         };
-
         let mut checker = checker::ProofChecker::new(&mut pool, config);
+
+        let checking_time = Instant::now();
         if reconstruct {
             checker.check_and_reconstruct(proof)?;
         } else {
             checker.check(&proof)?;
         }
+        let checking_time = checking_time.elapsed();
 
         let total_time = total_time.elapsed();
 
@@ -71,10 +63,10 @@ fn run_instance(
         result.checking.add_sample(&run_id, checking_time);
         result
             .reconstructing
-            .add_sample(&run_id, reconstructing_time);
+            .add_sample(&run_id, reconstruction_time);
         result
             .total_accounted_for
-            .add_sample(&run_id, parsing_time + checking_time + reconstructing_time);
+            .add_sample(&run_id, parsing_time + checking_time);
         result.total.add_sample(&run_id, total_time);
 
         result.deep_eq_time.add_sample(&run_id, deep_eq_time);
@@ -84,10 +76,6 @@ fn run_instance(
         let assume_ratio = assume_time.as_secs_f64() / checking_time.as_secs_f64();
         result.deep_eq_time_ratio.add_sample(&run_id, deep_eq_ratio);
         result.assume_time_ratio.add_sample(&run_id, assume_ratio);
-
-        result.num_assumes += num_assumes;
-        result.num_easy_assumes += num_easy_assumes;
-        result.deep_eq_depths.extend(deep_eq_depths);
     }
     Ok(result)
 }
