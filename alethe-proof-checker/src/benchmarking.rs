@@ -9,36 +9,58 @@ use std::{
 pub trait MetricsUnit:
     Copy + Default + PartialOrd + Add<Output = Self> + AddAssign + Sum + Sub<Output = Self>
 {
+    type MeanType: MetricsUnit;
+
     fn as_f64(&self) -> f64;
-    fn from_f64(x: f64) -> Self;
-    fn div_u32(self, rhs: u32) -> Self;
+    fn from_f64(x: f64) -> Self::MeanType;
+    fn div_u32(self, rhs: u32) -> Self::MeanType;
 }
 
 impl MetricsUnit for Duration {
+    type MeanType = Self;
+
     fn as_f64(&self) -> f64 {
         self.as_secs_f64()
     }
 
-    fn from_f64(x: f64) -> Self {
+    fn from_f64(x: f64) -> Self::MeanType {
         Self::from_secs_f64(x)
     }
 
-    fn div_u32(self, rhs: u32) -> Self {
+    fn div_u32(self, rhs: u32) -> Self::MeanType {
         self / rhs
     }
 }
 
 impl MetricsUnit for f64 {
+    type MeanType = Self;
+
     fn as_f64(&self) -> f64 {
         *self
     }
 
-    fn from_f64(x: f64) -> Self {
+    fn from_f64(x: f64) -> Self::MeanType {
         x
     }
 
-    fn div_u32(self, rhs: u32) -> Self {
+    fn div_u32(self, rhs: u32) -> Self::MeanType {
         self / (rhs as f64)
+    }
+}
+
+impl MetricsUnit for usize {
+    type MeanType = f64;
+
+    fn as_f64(&self) -> f64 {
+        *self as f64
+    }
+
+    fn from_f64(x: f64) -> Self::MeanType {
+        x
+    }
+
+    fn div_u32(self, rhs: u32) -> Self::MeanType {
+        (self / rhs as usize) as Self::MeanType
     }
 }
 
@@ -51,16 +73,16 @@ pub trait Metrics<K, T: MetricsUnit> {
     fn min(&self) -> &(K, T);
     fn total(&self) -> T;
     fn count(&self) -> usize;
-    fn mean(&self) -> T;
-    fn standard_deviation(&self) -> T;
+    fn mean(&self) -> T::MeanType;
+    fn standard_deviation(&self) -> T::MeanType;
 }
 
 #[derive(Debug)]
-pub struct OnlineMetrics<K, T = Duration> {
+pub struct OnlineMetrics<K, T: MetricsUnit = Duration> {
     total: T,
     count: usize,
-    mean: T,
-    standard_deviation: T,
+    mean: T::MeanType,
+    standard_deviation: T::MeanType,
     max_min: Option<((K, T), (K, T))>,
 
     /// This is equal to the sum of the square distances of every sample to the mean, that is,
@@ -84,8 +106,8 @@ impl<K, T: MetricsUnit> Default for OnlineMetrics<K, T> {
         Self {
             total: T::default(),
             count: 0,
-            mean: T::default(),
-            standard_deviation: T::default(),
+            mean: T::MeanType::default(),
+            standard_deviation: T::MeanType::default(),
             max_min: None,
             sum_of_squared_distances: 0.0,
         }
@@ -110,8 +132,8 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OnlineMetrics<K, T> {
         // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
         let variance_delta = (value.as_f64() - new_mean_f64) * (value.as_f64() - old_mean_f64);
         self.sum_of_squared_distances += variance_delta;
-        self.standard_deviation = T::from_f64(self.sum_of_squared_distances.sqrt())
-            .div_u32(cmp::max(1, self.count as u32 - 1));
+        let count = cmp::max(2, self.count) - 1;
+        self.standard_deviation = T::from_f64(self.sum_of_squared_distances.sqrt() / count as f64);
 
         match &mut self.max_min {
             Some((max, min)) => {
@@ -156,7 +178,7 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OnlineMetrics<K, T> {
             + other.sum_of_squared_distances
             + delta * delta * (self.count * other.count / count) as f64;
         let standard_deviation =
-            T::from_f64(sum_of_squared_distances.sqrt()).div_u32(cmp::max(1, count as u32 - 1));
+            T::from_f64(sum_of_squared_distances.sqrt() / (cmp::max(2, count) - 1) as f64);
 
         let max_min = match (self.max_min, other.max_min) {
             (a, None) => a,
@@ -198,11 +220,11 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OnlineMetrics<K, T> {
         self.count
     }
 
-    fn mean(&self) -> T {
+    fn mean(&self) -> T::MeanType {
         self.mean
     }
 
-    fn standard_deviation(&self) -> T {
+    fn standard_deviation(&self) -> T::MeanType {
         self.standard_deviation
     }
 }
@@ -279,21 +301,21 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OfflineMetrics<K, T> {
         self.data.len()
     }
 
-    fn mean(&self) -> T {
+    fn mean(&self) -> T::MeanType {
         self.total().div_u32(self.count() as u32)
     }
 
-    fn standard_deviation(&self) -> T {
+    fn standard_deviation(&self) -> T::MeanType {
         let mean = self.mean();
         let sum_of_squared_distances: f64 = self
             .data
             .iter()
             .map(|&(_, v)| {
-                let delta = if v > mean { v - mean } else { mean - v }.as_f64();
+                let delta = v.as_f64() - mean.as_f64();
                 delta * delta
             })
             .sum();
-        let variance = sum_of_squared_distances / (cmp::max(1, self.count() - 1) as f64);
+        let variance = sum_of_squared_distances / (cmp::max(2, self.count()) - 1) as f64;
         T::from_f64(variance.sqrt())
     }
 }
@@ -332,11 +354,11 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for NullMetrics {
         null_metrics_panic()
     }
 
-    fn mean(&self) -> T {
+    fn mean(&self) -> T::MeanType {
         null_metrics_panic()
     }
 
-    fn standard_deviation(&self) -> T {
+    fn standard_deviation(&self) -> T::MeanType {
         null_metrics_panic()
     }
 }
