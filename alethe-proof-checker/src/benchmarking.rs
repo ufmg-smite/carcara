@@ -14,6 +14,7 @@ pub trait MetricsUnit:
     fn as_f64(&self) -> f64;
     fn from_f64(x: f64) -> Self::MeanType;
     fn div_u32(self, rhs: u32) -> Self::MeanType;
+    fn display(&self, f: &mut fmt::Formatter) -> fmt::Result;
 }
 
 impl MetricsUnit for Duration {
@@ -29,6 +30,10 @@ impl MetricsUnit for Duration {
 
     fn div_u32(self, rhs: u32) -> Self::MeanType {
         self / rhs
+    }
+
+    fn display(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
@@ -46,6 +51,10 @@ impl MetricsUnit for f64 {
     fn div_u32(self, rhs: u32) -> Self::MeanType {
         self / (rhs as f64)
     }
+
+    fn display(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:.04}", self)
+    }
 }
 
 impl MetricsUnit for usize {
@@ -62,9 +71,21 @@ impl MetricsUnit for usize {
     fn div_u32(self, rhs: u32) -> Self::MeanType {
         (self / rhs as usize) as Self::MeanType
     }
+
+    fn display(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
 }
 
-pub trait Metrics<K, T: MetricsUnit> {
+struct DisplayUnit<T: MetricsUnit>(T);
+
+impl<T: MetricsUnit> fmt::Display for DisplayUnit<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.display(f)
+    }
+}
+
+pub trait Metrics<K, T: MetricsUnit>: fmt::Display {
     fn add_sample(&mut self, key: &K, value: T);
     fn combine(self, other: Self) -> Self;
     fn is_empty(&self) -> bool;
@@ -75,6 +96,29 @@ pub trait Metrics<K, T: MetricsUnit> {
     fn count(&self) -> usize;
     fn mean(&self) -> T::MeanType;
     fn standard_deviation(&self) -> T::MeanType;
+}
+
+fn display_metrics<K, T, M>(metrics: &M, f: &mut fmt::Formatter) -> fmt::Result
+where
+    T: MetricsUnit,
+    M: Metrics<K, T>,
+{
+    if f.alternate() {
+        write!(
+            f,
+            "{} ({} * {})",
+            DisplayUnit(metrics.total()),
+            DisplayUnit(metrics.mean()),
+            DisplayUnit(metrics.count())
+        )
+    } else {
+        write!(
+            f,
+            "{} ± {}",
+            DisplayUnit(metrics.mean()),
+            DisplayUnit(metrics.standard_deviation())
+        )
+    }
 }
 
 #[derive(Debug)]
@@ -111,6 +155,12 @@ impl<K, T: MetricsUnit> Default for OnlineMetrics<K, T> {
             max_min: None,
             sum_of_squared_distances: 0.0,
         }
+    }
+}
+
+impl<K: Clone, T: MetricsUnit> fmt::Display for OnlineMetrics<K, T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        display_metrics(self, f)
     }
 }
 
@@ -229,26 +279,6 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OnlineMetrics<K, T> {
     }
 }
 
-impl<K> fmt::Display for OnlineMetrics<K, Duration> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if f.alternate() {
-            write!(f, "{:?} ({:?} * {})", self.total, self.mean, self.count)
-        } else {
-            write!(f, "{:?} ± {:?}", self.mean, self.standard_deviation)
-        }
-    }
-}
-
-impl<K> fmt::Display for OnlineMetrics<K, f64> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if f.alternate() {
-            write!(f, "{:.04} ({:.04} * {})", self.total, self.mean, self.count)
-        } else {
-            write!(f, "{:.04} ± {:.04}", self.mean, self.standard_deviation)
-        }
-    }
-}
-
 pub struct OfflineMetrics<K, T = Duration> {
     data: Vec<(K, T)>,
 }
@@ -262,6 +292,12 @@ impl<K, T: MetricsUnit> OfflineMetrics<K, T> {
 impl<K, T: MetricsUnit> Default for OfflineMetrics<K, T> {
     fn default() -> Self {
         Self { data: Vec::new() }
+    }
+}
+
+impl<K: Clone, T: MetricsUnit> fmt::Display for OfflineMetrics<K, T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        display_metrics(self, f)
     }
 }
 
@@ -322,6 +358,12 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OfflineMetrics<K, T> {
 
 #[derive(Debug, Default)]
 pub struct NullMetrics;
+
+impl fmt::Display for NullMetrics {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "<null>")
+    }
+}
 
 fn null_metrics_panic() -> ! {
     panic!("trying to extract data from null metrics")
