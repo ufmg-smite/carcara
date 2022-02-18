@@ -445,7 +445,7 @@ type RunId = (String, usize);
 // Higher kinded types would be very useful here. Ideally, I would like `BenchmarkResults` to be
 // generic on any kind that implements `Metrics`, like `OnlineMetrics` or `OfflineMetrics`.
 #[derive(Debug, Default)]
-pub struct BenchmarkResults<ByRun, ByStep, ByRunF64> {
+pub struct BenchmarkResults<ByRun, ByStep, ByRunF64, ByDeepEq> {
     pub parsing: ByRun,
     pub checking: ByRun,
     pub reconstructing: ByRun,
@@ -459,22 +459,32 @@ pub struct BenchmarkResults<ByRun, ByStep, ByRunF64> {
     pub deep_eq_time_ratio: ByRunF64,
     pub assume_time: ByRun,
     pub assume_time_ratio: ByRunF64,
+
+    pub deep_eq_depths: ByDeepEq,
     pub num_assumes: usize,
     pub num_easy_assumes: usize,
-    pub deep_eq_depths: Vec<usize>,
 }
 
-pub type OnlineBenchmarkResults =
-    BenchmarkResults<OnlineMetrics<RunId>, OnlineMetrics<StepId>, OnlineMetrics<RunId, f64>>;
+pub type OnlineBenchmarkResults = BenchmarkResults<
+    OnlineMetrics<RunId>,
+    OnlineMetrics<StepId>,
+    OnlineMetrics<RunId, f64>,
+    OnlineMetrics<(), usize>,
+>;
 
-pub type OfflineBenchmarkResults =
-    BenchmarkResults<OfflineMetrics<RunId>, OfflineMetrics<StepId>, OfflineMetrics<RunId, f64>>;
+pub type OfflineBenchmarkResults = BenchmarkResults<
+    OfflineMetrics<RunId>,
+    OfflineMetrics<StepId>,
+    OfflineMetrics<RunId, f64>,
+    OfflineMetrics<(), usize>,
+>;
 
-impl<ByRun, ByStep, ByRunF64> BenchmarkResults<ByRun, ByStep, ByRunF64>
+impl<ByRun, ByStep, ByRunF64, ByDeepEq> BenchmarkResults<ByRun, ByStep, ByRunF64, ByDeepEq>
 where
     ByRun: Metrics<RunId, Duration> + Default,
     ByStep: Metrics<StepId, Duration> + Default,
     ByRunF64: Metrics<RunId, f64> + Default,
+    ByDeepEq: Metrics<(), usize> + Default,
 {
     pub fn new() -> Self {
         Default::default()
@@ -542,14 +552,10 @@ where
             deep_eq_time_ratio: a.deep_eq_time_ratio.combine(b.deep_eq_time_ratio),
             assume_time: a.assume_time.combine(b.assume_time),
             assume_time_ratio: a.assume_time_ratio.combine(b.assume_time_ratio),
+
+            deep_eq_depths: a.deep_eq_depths.combine(b.deep_eq_depths),
             num_assumes: a.num_assumes + b.num_assumes,
             num_easy_assumes: a.num_easy_assumes + b.num_easy_assumes,
-
-            deep_eq_depths: {
-                let mut result = a.deep_eq_depths;
-                result.extend(b.deep_eq_depths);
-                result
-            },
         }
     }
 }
@@ -560,11 +566,13 @@ pub trait CollectResults {
     fn add_deep_eq_depth(&mut self, depth: usize);
 }
 
-impl<ByRun, ByStep, ByRunF64> CollectResults for BenchmarkResults<ByRun, ByStep, ByRunF64>
+impl<ByRun, ByStep, ByRunF64, ByDeepEq> CollectResults
+    for BenchmarkResults<ByRun, ByStep, ByRunF64, ByDeepEq>
 where
     ByRun: Metrics<RunId, Duration> + Default,
     ByStep: Metrics<StepId, Duration> + Default,
     ByRunF64: Metrics<RunId, f64> + Default,
+    ByDeepEq: Metrics<(), usize> + Default,
 {
     fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration) {
         let file = file.to_owned();
@@ -592,7 +600,7 @@ where
     }
 
     fn add_deep_eq_depth(&mut self, depth: usize) {
-        self.deep_eq_depths.push(depth);
+        self.deep_eq_depths.add_sample(&(), depth);
     }
 }
 

@@ -368,39 +368,16 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         num_hard_assumes, percent_hard
     );
 
-    let mut depths = results.deep_eq_depths;
+    let depths = results.deep_eq_depths;
     if !depths.is_empty() {
-        let max_depth = depths.iter().copied().max().unwrap();
-        let sum_depth: usize = depths.iter().sum();
-        let avg_depth = (sum_depth as f64) / (depths.len() as f64);
-        depths.sort_unstable();
-        let mid = depths.len() / 2;
-        let median_depth = if depths.len() % 2 == 1 {
-            depths[mid] as f64
-        } else {
-            ((depths[mid - 1] + depths[mid]) as f64) / 2.0
-        };
-
-        let std = if depths.len() == 1 {
-            0.0
-        } else {
-            let var: f64 = depths
-                .iter()
-                .map(|&d| (d as f64 - avg_depth) * (d as f64 - avg_depth))
-                .sum();
-            (var / (depths.len() as f64 - 1.0)).sqrt()
-        };
-
-        println!("    max deep equality depth: {}", max_depth);
-        println!("  total deep equality depth: {}", sum_depth);
-        println!("  number of deep equalities: {}", depths.len());
+        println!("    max deep equality depth: {}", depths.max().1);
+        println!("  total deep equality depth: {}", depths.total());
+        println!("  number of deep equalities: {}", depths.count());
+        println!("                 mean depth: {:.4}", depths.mean());
         println!(
-            "number of 1-depth deep eqs.: {}",
-            depths.iter().filter(|&&d| d == 1).count()
+            "standard deviation of depth: {:.4}",
+            depths.standard_deviation()
         );
-        println!("                 mean depth: {:.5}", avg_depth);
-        println!("               median depth: {:.5}", median_depth);
-        println!("standard deviation of depth: {:.5}", std);
     }
     Ok(())
 }
