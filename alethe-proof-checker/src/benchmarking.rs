@@ -298,6 +298,49 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OfflineMetrics<K, T> {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct NullMetrics;
+
+fn null_metrics_panic() -> ! {
+    panic!("trying to extract data from null metrics")
+}
+
+impl<K: Clone, T: MetricsUnit> Metrics<K, T> for NullMetrics {
+    fn add_sample(&mut self, _: &K, _: T) {}
+
+    fn combine(self, _: Self) -> Self {
+        self
+    }
+
+    fn is_empty(&self) -> bool {
+        true
+    }
+
+    fn max(&self) -> &(K, T) {
+        null_metrics_panic()
+    }
+
+    fn min(&self) -> &(K, T) {
+        null_metrics_panic()
+    }
+
+    fn total(&self) -> T {
+        null_metrics_panic()
+    }
+
+    fn count(&self) -> usize {
+        null_metrics_panic()
+    }
+
+    fn mean(&self) -> T {
+        null_metrics_panic()
+    }
+
+    fn standard_deviation(&self) -> T {
+        null_metrics_panic()
+    }
+}
+
 fn combine_map<K, V, M>(mut a: AHashMap<String, M>, b: AHashMap<String, M>) -> AHashMap<String, M>
 where
     V: MetricsUnit,
