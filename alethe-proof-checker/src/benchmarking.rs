@@ -148,7 +148,6 @@ pub struct OnlineMetrics<K, T: MetricsUnit = Duration> {
     total: T,
     count: usize,
     mean: T::MeanType,
-    standard_deviation: T::MeanType,
     max_min: Option<((K, T), (K, T))>,
 
     /// This is equal to the sum of the square distances of every sample to the mean, that is,
@@ -173,7 +172,6 @@ impl<K, T: MetricsUnit> Default for OnlineMetrics<K, T> {
             total: T::default(),
             count: 0,
             mean: T::MeanType::default(),
-            standard_deviation: T::MeanType::default(),
             max_min: None,
             sum_of_squared_distances: 0.0,
         }
@@ -203,8 +201,6 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OnlineMetrics<K, T> {
         let variance_delta =
             value.mean_diff(self.mean).as_f64() * value.mean_diff(old_mean).as_f64();
         self.sum_of_squared_distances += variance_delta;
-        let count = cmp::max(2, self.count) - 1;
-        self.standard_deviation = T::from_f64(self.sum_of_squared_distances.sqrt() / count as f64);
 
         match &mut self.max_min {
             Some((max, min)) => {
@@ -248,8 +244,6 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OnlineMetrics<K, T> {
         let sum_of_squared_distances = self.sum_of_squared_distances
             + other.sum_of_squared_distances
             + delta * delta * (self.count * other.count / count) as f64;
-        let standard_deviation =
-            T::from_f64(sum_of_squared_distances.sqrt() / (cmp::max(2, count) - 1) as f64);
 
         let max_min = match (self.max_min, other.max_min) {
             (a, None) => a,
@@ -265,7 +259,6 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OnlineMetrics<K, T> {
             total,
             count,
             mean,
-            standard_deviation,
             max_min,
             sum_of_squared_distances,
         }
@@ -296,7 +289,8 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OnlineMetrics<K, T> {
     }
 
     fn standard_deviation(&self) -> T::MeanType {
-        self.standard_deviation
+        let count = cmp::max(2, self.count) - 1;
+        T::from_f64((self.sum_of_squared_distances / count as f64).sqrt())
     }
 }
 
