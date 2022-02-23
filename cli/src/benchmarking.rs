@@ -1,5 +1,5 @@
 use alethe_proof_checker::{
-    benchmarking::{Metrics, OnlineBenchmarkResults},
+    benchmarking::{CollectResults, OnlineBenchmarkResults, RunMeasurement},
     checker,
     parser::parse_instance,
 };
@@ -21,61 +21,54 @@ fn run_instance(
     let proof_file_name = proof_file.to_str().unwrap();
 
     for i in 0..num_runs {
-        let total_time = Instant::now();
+        let total = Instant::now();
 
-        let parsing_time = Instant::now();
+        let parsing = Instant::now();
         let (proof, mut pool) = parse_instance(
             BufReader::new(File::open(problem_file)?),
             BufReader::new(File::open(proof_file)?),
             apply_function_defs,
         )?;
-        let parsing_time = parsing_time.elapsed();
+        let parsing = parsing.elapsed();
 
-        let mut reconstruction_time = Duration::ZERO;
-        let mut deep_eq_time = Duration::ZERO;
-        let mut assume_time = Duration::ZERO;
+        let mut reconstruction = Duration::ZERO;
+        let mut deep_eq = Duration::ZERO;
+        let mut assume = Duration::ZERO;
 
         let config = checker::Config {
             skip_unknown_rules: false,
             is_running_test: false,
             statistics: Some(checker::CheckerStatistics {
                 file_name: proof_file_name,
-                reconstruction_time: &mut reconstruction_time,
-                deep_eq_time: &mut deep_eq_time,
-                assume_time: &mut assume_time,
+                reconstruction_time: &mut reconstruction,
+                deep_eq_time: &mut deep_eq,
+                assume_time: &mut assume,
                 results: &mut result,
             }),
         };
         let mut checker = checker::ProofChecker::new(&mut pool, config);
 
-        let checking_time = Instant::now();
+        let checking = Instant::now();
         if reconstruct {
             checker.check_and_reconstruct(proof)?;
         } else {
             checker.check(&proof)?;
         }
-        let checking_time = checking_time.elapsed();
+        let checking = checking.elapsed();
 
-        let total_time = total_time.elapsed();
+        let total = total.elapsed();
 
-        let run_id = (proof_file_name.to_string(), i);
-        result.parsing.add_sample(&run_id, parsing_time);
-        result.checking.add_sample(&run_id, checking_time);
-        result
-            .reconstructing
-            .add_sample(&run_id, reconstruction_time);
-        result
-            .total_accounted_for
-            .add_sample(&run_id, parsing_time + checking_time);
-        result.total.add_sample(&run_id, total_time);
-
-        result.deep_eq_time.add_sample(&run_id, deep_eq_time);
-        result.assume_time.add_sample(&run_id, assume_time);
-
-        let deep_eq_ratio = deep_eq_time.as_secs_f64() / checking_time.as_secs_f64();
-        let assume_ratio = assume_time.as_secs_f64() / checking_time.as_secs_f64();
-        result.deep_eq_time_ratio.add_sample(&run_id, deep_eq_ratio);
-        result.assume_time_ratio.add_sample(&run_id, assume_ratio);
+        result.add_run_measurement(
+            &(proof_file_name.to_string(), i),
+            RunMeasurement {
+                parsing,
+                checking,
+                reconstruction,
+                total,
+                deep_eq,
+                assume,
+            },
+        );
     }
     Ok(result)
 }

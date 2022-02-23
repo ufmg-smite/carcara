@@ -162,10 +162,21 @@ where
     }
 }
 
+#[derive(Debug, Default)]
+pub struct RunMeasurement {
+    pub parsing: Duration,
+    pub checking: Duration,
+    pub reconstruction: Duration,
+    pub total: Duration,
+    pub deep_eq: Duration,
+    pub assume: Duration,
+}
+
 pub trait CollectResults {
     fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration);
     fn add_assume_measurement(&mut self, file: &str, id: &str, is_easy: bool, time: Duration);
     fn add_deep_eq_depth(&mut self, depth: usize);
+    fn add_run_measurement(&mut self, id: &RunId, measurement: RunMeasurement);
 }
 
 impl<ByRun, ByStep, ByRunF64, ByDeepEq> CollectResults
@@ -203,5 +214,30 @@ where
 
     fn add_deep_eq_depth(&mut self, depth: usize) {
         self.deep_eq_depths.add_sample(&(), depth);
+    }
+
+    fn add_run_measurement(&mut self, id: &RunId, measurement: RunMeasurement) {
+        let RunMeasurement {
+            parsing,
+            checking,
+            reconstruction,
+            total,
+            deep_eq,
+            assume,
+        } = measurement;
+
+        self.parsing.add_sample(id, parsing);
+        self.checking.add_sample(id, checking);
+        self.reconstructing.add_sample(id, reconstruction);
+        self.total_accounted_for.add_sample(id, parsing + checking);
+        self.total.add_sample(id, total);
+
+        self.deep_eq_time.add_sample(id, deep_eq);
+        self.assume_time.add_sample(id, assume);
+
+        let deep_eq_ratio = deep_eq.as_secs_f64() / checking.as_secs_f64();
+        let assume_ratio = assume.as_secs_f64() / checking.as_secs_f64();
+        self.deep_eq_time_ratio.add_sample(id, deep_eq_ratio);
+        self.assume_time_ratio.add_sample(id, assume_ratio);
     }
 }
