@@ -628,53 +628,92 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::Rng;
+    use rand::{prelude::ThreadRng, Rng};
+
+    trait IsClose {
+        fn is_close(&self, other: Self) -> bool;
+    }
+
+    macro_rules! assert_is_close {
+        ($a:expr, $b:expr $(,)?) => {
+            assert!(($a).is_close($b), "{:?} != {:?}", $a, $b)
+        };
+    }
+
+    impl IsClose for Duration {
+        fn is_close(&self, other: Self) -> bool {
+            self.abs_diff(other).as_nanos() <= 2
+        }
+    }
+
+    impl IsClose for f64 {
+        fn is_close(&self, other: Self) -> bool {
+            const EPSILON: f64 = 1.0e-6;
+            (*self - other).abs() < EPSILON
+        }
+    }
+
+    impl IsClose for usize {
+        fn is_close(&self, other: Self) -> bool {
+            *self == other
+        }
+    }
+
+    fn usize_generator(max_value: usize) -> impl Fn(&mut ThreadRng) -> usize {
+        move |rng| rng.gen_range(0..max_value)
+    }
+
+    fn duration_generator(max_value: u64) -> impl Fn(&mut ThreadRng) -> Duration {
+        move |rng| Duration::from_nanos(rng.gen_range(0..max_value))
+    }
+
+    fn f64_generator(max_value: f64) -> impl Fn(&mut ThreadRng) -> f64 {
+        move |rng| rng.gen_range(0.0..max_value)
+    }
 
     #[test]
     fn test_metrics_add() {
-        fn run_tests(n: usize, max_value: u64) {
+        fn run_tests<T, F>(n: usize, get_random: F)
+        where
+            T: MetricsUnit + fmt::Debug + PartialEq + IsClose,
+            T::MeanType: fmt::Debug + IsClose,
+            F: Fn(&mut ThreadRng) -> T,
+        {
             let mut rng = rand::thread_rng();
-            let mut data = Vec::with_capacity(n);
-            let mut metrics = OnlineMetrics::new();
+            let mut offline = OfflineMetrics::new();
+            let mut online = OnlineMetrics::new();
+
             for _ in 0..n {
-                let sample = Duration::from_nanos(rng.gen_range(0..max_value));
-                data.push(sample);
-                metrics.add_sample(&(), sample);
+                let sample = get_random(&mut rng);
+                offline.add_sample(&(), sample);
+                online.add_sample(&(), sample);
             }
 
-            let expected_total: Duration = data.iter().sum();
-            assert_eq!(expected_total, metrics.total);
+            assert_is_close!(offline.total(), online.total());
+            assert_is_close!(offline.mean(), online.mean());
+            assert_is_close!(offline.standard_deviation(), online.standard_deviation());
 
-            let expected_mean = expected_total / n as u32;
-            assert_eq!(expected_mean, metrics.mean);
-
-            let mean_f64 = expected_mean.as_secs_f64();
-            let expected_std = Duration::from_secs_f64(
-                data.iter()
-                    .map(|x| {
-                        let diff = x.as_secs_f64() - mean_f64;
-                        diff * diff
-                    })
-                    .sum::<f64>()
-                    .sqrt()
-                    / n as f64,
-            );
-            let delta = (expected_std.as_nanos() as i128
-                - metrics.standard_deviation.as_nanos() as i128)
-                .abs();
-            assert!(delta < 2);
-
-            let expected_max = data.iter().max().unwrap();
-            let expected_min = data.iter().min().unwrap();
-            assert_eq!(*expected_max, metrics.max().1);
-            assert_eq!(*expected_min, metrics.min().1);
+            assert_is_close!(offline.min().1, online.min().1);
+            assert_is_close!(offline.max().1, online.max().1);
         }
 
-        run_tests(100, 1_000);
-        run_tests(10_000, 1_000);
-        run_tests(1_000_000, 10);
-        run_tests(1_000_000, 100);
-        run_tests(1_000_000, 100_000);
+        run_tests(100, duration_generator(1_000));
+        run_tests(10_000, duration_generator(1_000));
+        run_tests(1_000_000, duration_generator(10));
+        run_tests(1_000_000, duration_generator(100));
+        run_tests(1_000_000, duration_generator(100_000));
+
+        run_tests(100, f64_generator(1_000.0));
+        run_tests(10_000, f64_generator(1_000.0));
+        run_tests(1_000_000, f64_generator(10.0));
+        run_tests(1_000_000, f64_generator(100.0));
+        run_tests(1_000_000, f64_generator(100_000.0));
+
+        run_tests(100, usize_generator(1_000));
+        run_tests(10_000, usize_generator(1_000));
+        run_tests(1_000_000, usize_generator(10));
+        run_tests(1_000_000, usize_generator(100));
+        run_tests(1_000_000, usize_generator(100_000));
     }
 
     #[test]
