@@ -14,7 +14,17 @@ pub trait MetricsUnit:
     fn as_f64(&self) -> f64;
     fn from_f64(x: f64) -> Self::MeanType;
     fn div_u32(self, rhs: u32) -> Self::MeanType;
+    fn mean_diff(self, mean: Self::MeanType) -> Self::MeanType;
+
     fn display(&self, f: &mut fmt::Formatter) -> fmt::Result;
+
+    fn abs_diff(self, other: Self) -> Self {
+        if self > other {
+            self - other
+        } else {
+            other - self
+        }
+    }
 }
 
 impl MetricsUnit for Duration {
@@ -30,6 +40,10 @@ impl MetricsUnit for Duration {
 
     fn div_u32(self, rhs: u32) -> Self::MeanType {
         self / rhs
+    }
+
+    fn mean_diff(self, mean: Self::MeanType) -> Self::MeanType {
+        self.abs_diff(mean)
     }
 
     fn display(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -52,6 +66,10 @@ impl MetricsUnit for f64 {
         self / (rhs as f64)
     }
 
+    fn mean_diff(self, mean: Self::MeanType) -> Self::MeanType {
+        self - mean
+    }
+
     fn display(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:.04}", self)
     }
@@ -69,7 +87,11 @@ impl MetricsUnit for usize {
     }
 
     fn div_u32(self, rhs: u32) -> Self::MeanType {
-        (self / rhs as usize) as Self::MeanType
+        self as f64 / rhs as f64
+    }
+
+    fn mean_diff(self, mean: Self::MeanType) -> Self::MeanType {
+        (self as f64) - mean
     }
 
     fn display(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -170,17 +192,16 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OnlineMetrics<K, T> {
     /// sample is added, which means you can stop adding samples at any time and the metrics will
     /// always be valid.
     fn add_sample(&mut self, key: &K, value: T) {
-        let old_mean_f64 = self.mean.as_f64();
+        let old_mean = self.mean;
 
         self.total += value;
         self.count += 1;
         self.mean = self.total.div_u32(self.count as u32);
 
-        let new_mean_f64 = self.mean.as_f64();
-
         // We calculate the new variance using Welford's algorithm. See:
         // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
-        let variance_delta = (value.as_f64() - new_mean_f64) * (value.as_f64() - old_mean_f64);
+        let variance_delta =
+            value.mean_diff(self.mean).as_f64() * value.mean_diff(old_mean).as_f64();
         self.sum_of_squared_distances += variance_delta;
         let count = cmp::max(2, self.count) - 1;
         self.standard_deviation = T::from_f64(self.sum_of_squared_distances.sqrt() / count as f64);
@@ -223,7 +244,7 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OnlineMetrics<K, T> {
 
         // To combine the two variances, we use a generalization of Welford's algorithm. See:
         // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
-        let delta = other.mean.as_f64() - self.mean.as_f64();
+        let delta = other.mean.abs_diff(self.mean).as_f64();
         let sum_of_squared_distances = self.sum_of_squared_distances
             + other.sum_of_squared_distances
             + delta * delta * (self.count * other.count / count) as f64;
@@ -347,7 +368,7 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OfflineMetrics<K, T> {
             .data
             .iter()
             .map(|&(_, v)| {
-                let delta = v.as_f64() - mean.as_f64();
+                let delta = v.mean_diff(mean).as_f64();
                 delta * delta
             })
             .sum();
