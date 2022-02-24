@@ -1,23 +1,23 @@
 use alethe_proof_checker::{
-    benchmarking::{CollectResults, OnlineBenchmarkResults, RunMeasurement},
+    benchmarking::{CollectResults, CsvBenchmarkResults, OnlineBenchmarkResults, RunMeasurement},
     checker,
     parser::parse_instance,
 };
 use rayon::prelude::*;
 use std::{
     fs::File,
-    io::BufReader,
+    io::{self, BufReader},
     path::PathBuf,
     time::{Duration, Instant},
 };
 
-fn run_instance(
+fn run_instance<T: CollectResults + Default>(
     (problem_file, proof_file): &(PathBuf, PathBuf),
     num_runs: usize,
     apply_function_defs: bool,
     reconstruct: bool,
-) -> Result<OnlineBenchmarkResults, alethe_proof_checker::Error> {
-    let mut result = OnlineBenchmarkResults::new();
+) -> Result<T, alethe_proof_checker::Error> {
+    let mut result = T::default();
     let proof_file_name = proof_file.to_str().unwrap();
 
     for i in 0..num_runs {
@@ -73,6 +73,14 @@ fn run_instance(
     Ok(result)
 }
 
+fn configure_rayon(num_jobs: usize) {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(num_jobs)
+        .stack_size(64 * 1024 * 1024) // Some test examples need up to 64 MiB of stack size
+        .build_global()
+        .unwrap();
+}
+
 pub fn run_benchmark(
     instances: &[(PathBuf, PathBuf)],
     num_runs: usize,
@@ -80,13 +88,7 @@ pub fn run_benchmark(
     apply_function_defs: bool,
     reconstruct: bool,
 ) -> OnlineBenchmarkResults {
-    // Configure rayon to use the right number of threads and to reserve enough stack space for
-    // them
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(num_jobs)
-        .stack_size(64 * 1024 * 1024) // Some test examples need up to 64 MiB of stack size
-        .build_global()
-        .unwrap();
+    configure_rayon(num_jobs);
 
     let result = instances
         .par_iter()
@@ -103,4 +105,31 @@ pub fn run_benchmark(
         .reduce(OnlineBenchmarkResults::new, OnlineBenchmarkResults::combine);
 
     result
+}
+
+pub fn run_csv_benchmark(
+    instances: &[(PathBuf, PathBuf)],
+    num_runs: usize,
+    num_jobs: usize,
+    apply_function_defs: bool,
+    reconstruct: bool,
+    dest: &mut dyn io::Write,
+) -> io::Result<()> {
+    configure_rayon(num_jobs);
+
+    let result = instances
+        .par_iter()
+        .map(|instance| {
+            run_instance(instance, num_runs, apply_function_defs, reconstruct).unwrap_or_else(|e| {
+                log::error!(
+                    "encountered error in instance {}: {}",
+                    instance.1.to_str().unwrap(),
+                    e
+                );
+                CsvBenchmarkResults::new()
+            })
+        })
+        .reduce(CsvBenchmarkResults::new, CsvBenchmarkResults::combine);
+
+    result.write_csv(dest)
 }

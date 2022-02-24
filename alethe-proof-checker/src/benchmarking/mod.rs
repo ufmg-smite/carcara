@@ -5,7 +5,7 @@ mod tests;
 pub use metrics::*;
 
 use ahash::AHashMap;
-use std::{fmt, time::Duration};
+use std::{fmt, io, time::Duration};
 
 fn combine_map<K, V, M>(mut a: AHashMap<String, M>, b: AHashMap<String, M>) -> AHashMap<String, M>
 where
@@ -43,6 +43,16 @@ impl fmt::Display for StepId {
 }
 
 type RunId = (String, usize);
+
+#[derive(Debug, Default)]
+pub struct RunMeasurement {
+    pub parsing: Duration,
+    pub checking: Duration,
+    pub reconstruction: Duration,
+    pub total: Duration,
+    pub deep_eq: Duration,
+    pub assume: Duration,
+}
 
 // Higher kinded types would be very useful here. Ideally, I would like `BenchmarkResults` to be
 // generic on any kind that implements `Metrics`, like `OnlineMetrics` or `OfflineMetrics`.
@@ -162,14 +172,53 @@ where
     }
 }
 
-#[derive(Debug, Default)]
-pub struct RunMeasurement {
-    pub parsing: Duration,
-    pub checking: Duration,
-    pub reconstruction: Duration,
-    pub total: Duration,
-    pub deep_eq: Duration,
-    pub assume: Duration,
+#[derive(Default)]
+pub struct CsvBenchmarkResults {
+    map: AHashMap<RunId, RunMeasurement>,
+}
+
+impl CsvBenchmarkResults {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn combine(mut a: Self, b: Self) -> Self {
+        // This assumes that the same key never appears in both `a` and `b`. This should be the case
+        // in benchmarks anyway
+        a.map.extend(b.map);
+        a
+    }
+
+    pub fn write_csv(self, dest: &mut dyn io::Write) -> io::Result<()> {
+        writeln!(
+            dest,
+            "proof_file,run_id,parsing,checking,reconstruction,total_accounted_for,\
+            total,deep_eq,deep_eq_ratio,assume,assume_ratio"
+        )?;
+
+        for (id, m) in self.map {
+            let total_accounted_for = m.parsing + m.checking;
+            let deep_eq_ratio = m.deep_eq.as_secs_f64() / m.checking.as_secs_f64();
+            let assume_ratio = m.assume.as_secs_f64() / m.checking.as_secs_f64();
+            writeln!(
+                dest,
+                "{},{},{},{},{},{},{},{},{},{},{}",
+                id.0,
+                id.1,
+                m.parsing.as_nanos(),
+                m.checking.as_nanos(),
+                m.reconstruction.as_nanos(),
+                total_accounted_for.as_nanos(),
+                m.total.as_nanos(),
+                m.deep_eq.as_nanos(),
+                deep_eq_ratio,
+                m.assume.as_nanos(),
+                assume_ratio,
+            )?;
+        }
+
+        Ok(())
+    }
 }
 
 pub trait CollectResults {
@@ -239,5 +288,15 @@ where
         let assume_ratio = assume.as_secs_f64() / checking.as_secs_f64();
         self.deep_eq_time_ratio.add_sample(id, deep_eq_ratio);
         self.assume_time_ratio.add_sample(id, assume_ratio);
+    }
+}
+
+impl CollectResults for CsvBenchmarkResults {
+    fn add_step_measurement(&mut self, _: &str, _: &str, _: &str, _: Duration) {}
+    fn add_assume_measurement(&mut self, _: &str, _: &str, _: bool, _: Duration) {}
+    fn add_deep_eq_depth(&mut self, _: usize) {}
+
+    fn add_run_measurement(&mut self, id: &RunId, measurement: RunMeasurement) {
+        self.map.insert(id.clone(), measurement);
     }
 }

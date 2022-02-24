@@ -95,6 +95,12 @@ fn app(version_string: &str) -> App<'static, '_> {
                         time taken",
                     ),
             )
+            .arg(
+                Arg::with_name("dump-to-csv")
+                    .long("dump-to-csv")
+                    .takes_value(true)
+                    .help("Dump results to given csv file instead of printing to screen"),
+            )
             .arg(Arg::with_name("files").multiple(true).required(true).help(
                 "The proof files with which the benchkmark will be run. If a directory is passed, \
                 the checker will recursively find all '.proof' files in the directory. The problem \
@@ -247,6 +253,11 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
     let sort_by_total = matches.is_present("sort-by-total");
     let reconstruct = matches.is_present("reconstruct");
 
+    let out_csv_file = match matches.value_of("dump-to-csv") {
+        Some(f) => Some(File::create(f)?),
+        None => None,
+    };
+
     let instances = get_instances_from_paths(matches.values_of("files").unwrap())?;
 
     if instances.is_empty() {
@@ -258,6 +269,19 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         instances.len(),
         num_runs
     );
+
+    if let Some(mut file) = out_csv_file {
+        benchmarking::run_csv_benchmark(
+            &instances,
+            num_runs,
+            num_jobs,
+            apply_function_defs,
+            reconstruct,
+            &mut file,
+        )?;
+        return Ok(());
+    }
+
     let results = benchmarking::run_benchmark(
         &instances,
         num_runs,
