@@ -77,9 +77,9 @@ fn app(version_string: &str) -> App<'static, '_> {
                     .help("Number of times to run the benchmark for each file"),
             )
             .arg(
-                Arg::with_name("num-jobs")
+                Arg::with_name("num-threads")
                     .short("j")
-                    .long("jobs")
+                    .long("num-threads")
                     .default_value("1")
                     .help("Number of threads to use to run the benchmarks"),
             )
@@ -247,10 +247,10 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         .parse()
         .map_err(|_| CliError::InvalidArgument(num_runs.to_string()))?;
 
-    let num_jobs = matches.value_of("num-jobs").unwrap();
-    let num_jobs = num_jobs
+    let num_threads = matches.value_of("num-threads").unwrap();
+    let num_threads = num_threads
         .parse()
-        .map_err(|_| CliError::InvalidArgument(num_jobs.to_string()))?;
+        .map_err(|_| CliError::InvalidArgument(num_threads.to_string()))?;
 
     let apply_function_defs = !matches.is_present("dont-apply-function-defs");
     let sort_by_total = matches.is_present("sort-by-total");
@@ -277,7 +277,7 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         benchmarking::run_csv_benchmark(
             &instances,
             num_runs,
-            num_jobs,
+            num_threads,
             apply_function_defs,
             reconstruct,
             &mut file,
@@ -288,7 +288,7 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
     let results: OnlineBenchmarkResults = benchmarking::run_benchmark(
         &instances,
         num_runs,
-        num_jobs,
+        num_threads,
         apply_function_defs,
         reconstruct,
     );

@@ -146,7 +146,7 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
 pub fn run_csv_benchmark(
     instances: &[(PathBuf, PathBuf)],
     num_runs: usize,
-    num_jobs: usize,
+    num_threads: usize,
     apply_function_defs: bool,
     reconstruct: bool,
     dest: &mut dyn io::Write,
@@ -154,7 +154,7 @@ pub fn run_csv_benchmark(
     let result: CsvBenchmarkResults = run_benchmark(
         instances,
         num_runs,
-        num_jobs,
+        num_threads,
         apply_function_defs,
         reconstruct,
     );
