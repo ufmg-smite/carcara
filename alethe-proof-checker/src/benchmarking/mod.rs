@@ -146,30 +146,6 @@ where
     pub fn step_time_by_rule(&self) -> &AHashMap<String, ByStep> {
         &self.step_time_by_rule
     }
-
-    /// Combines two `BenchmarkResults` into one. This method is subject to some numerical
-    /// stability issues, as is described in `Metrics::combine`.
-    pub fn combine(a: Self, b: Self) -> Self {
-        Self {
-            parsing: a.parsing.combine(b.parsing),
-            checking: a.checking.combine(b.checking),
-            reconstructing: a.reconstructing.combine(b.reconstructing),
-            total_accounted_for: a.total_accounted_for.combine(b.total_accounted_for),
-            total: a.total.combine(b.total),
-            step_time: a.step_time.combine(b.step_time),
-            step_time_by_file: combine_map(a.step_time_by_file, b.step_time_by_file),
-            step_time_by_rule: combine_map(a.step_time_by_rule, b.step_time_by_rule),
-
-            deep_eq_time: a.deep_eq_time.combine(b.deep_eq_time),
-            deep_eq_time_ratio: a.deep_eq_time_ratio.combine(b.deep_eq_time_ratio),
-            assume_time: a.assume_time.combine(b.assume_time),
-            assume_time_ratio: a.assume_time_ratio.combine(b.assume_time_ratio),
-
-            deep_eq_depths: a.deep_eq_depths.combine(b.deep_eq_depths),
-            num_assumes: a.num_assumes + b.num_assumes,
-            num_easy_assumes: a.num_easy_assumes + b.num_easy_assumes,
-        }
-    }
 }
 
 #[derive(Default)]
@@ -180,13 +156,6 @@ pub struct CsvBenchmarkResults {
 impl CsvBenchmarkResults {
     pub fn new() -> Self {
         Default::default()
-    }
-
-    pub fn combine(mut a: Self, b: Self) -> Self {
-        // This assumes that the same key never appears in both `a` and `b`. This should be the case
-        // in benchmarks anyway
-        a.map.extend(b.map);
-        a
     }
 
     pub fn write_csv(self, dest: &mut dyn io::Write) -> io::Result<()> {
@@ -226,6 +195,10 @@ pub trait CollectResults {
     fn add_assume_measurement(&mut self, file: &str, id: &str, is_easy: bool, time: Duration);
     fn add_deep_eq_depth(&mut self, depth: usize);
     fn add_run_measurement(&mut self, id: &RunId, measurement: RunMeasurement);
+
+    fn combine(a: Self, b: Self) -> Self
+    where
+        Self: Sized;
 }
 
 impl<ByRun, ByStep, ByRunF64, ByDeepEq> CollectResults
@@ -289,6 +262,28 @@ where
         self.deep_eq_time_ratio.add_sample(id, deep_eq_ratio);
         self.assume_time_ratio.add_sample(id, assume_ratio);
     }
+
+    fn combine(a: Self, b: Self) -> Self {
+        Self {
+            parsing: a.parsing.combine(b.parsing),
+            checking: a.checking.combine(b.checking),
+            reconstructing: a.reconstructing.combine(b.reconstructing),
+            total_accounted_for: a.total_accounted_for.combine(b.total_accounted_for),
+            total: a.total.combine(b.total),
+            step_time: a.step_time.combine(b.step_time),
+            step_time_by_file: combine_map(a.step_time_by_file, b.step_time_by_file),
+            step_time_by_rule: combine_map(a.step_time_by_rule, b.step_time_by_rule),
+
+            deep_eq_time: a.deep_eq_time.combine(b.deep_eq_time),
+            deep_eq_time_ratio: a.deep_eq_time_ratio.combine(b.deep_eq_time_ratio),
+            assume_time: a.assume_time.combine(b.assume_time),
+            assume_time_ratio: a.assume_time_ratio.combine(b.assume_time_ratio),
+
+            deep_eq_depths: a.deep_eq_depths.combine(b.deep_eq_depths),
+            num_assumes: a.num_assumes + b.num_assumes,
+            num_easy_assumes: a.num_easy_assumes + b.num_easy_assumes,
+        }
+    }
 }
 
 impl CollectResults for CsvBenchmarkResults {
@@ -298,5 +293,12 @@ impl CollectResults for CsvBenchmarkResults {
 
     fn add_run_measurement(&mut self, id: &RunId, measurement: RunMeasurement) {
         self.map.insert(id.clone(), measurement);
+    }
+
+    fn combine(mut a: Self, b: Self) -> Self {
+        // This assumes that the same key never appears in both `a` and `b`. This should be the case
+        // in benchmarks anyway
+        a.map.extend(b.map);
+        a
     }
 }

@@ -5,7 +5,10 @@ mod path_args;
 
 use ahash::AHashSet;
 use alethe_proof_checker::{
-    ast::print_proof, benchmarking::Metrics, check, check_and_reconstruct, checker::ProofChecker,
+    ast::print_proof,
+    benchmarking::{Metrics, OnlineBenchmarkResults},
+    check, check_and_reconstruct,
+    checker::ProofChecker,
     parser, AletheResult,
 };
 use ansi_term::Color;
@@ -282,7 +285,7 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         return Ok(());
     }
 
-    let results = benchmarking::run_benchmark(
+    let results: OnlineBenchmarkResults = benchmarking::run_benchmark(
         &instances,
         num_runs,
         num_jobs,

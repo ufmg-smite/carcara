@@ -13,7 +13,7 @@ path = "src/main.rs"
 alethe-proof-checker = { path = "../alethe-proof-checker" }
 ahash = "0.7.4"
 clap = "2.33.3"
+crossbeam = "0.8"
 log = { version = "0.4.14", features = ["std"] }
 ansi_term = "0.11"
-rayon = "1.5.1"
 git-version = "0.3.5"
