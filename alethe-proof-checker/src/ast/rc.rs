@@ -71,7 +71,7 @@ impl<T: ?Sized + fmt::Display> fmt::Display for Rc<T> {
 
 impl<T> Rc<T> {
     pub fn new(value: T) -> Self {
-        #[allow(clippy::disallowed_method)]
+        #[allow(clippy::disallowed_methods)]
         Self(rc::Rc::new(value))
     }
 }
