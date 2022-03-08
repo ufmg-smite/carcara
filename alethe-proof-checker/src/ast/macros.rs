@@ -179,12 +179,12 @@ macro_rules! impl_str_conversion_traits {
 
 #[cfg(test)]
 macro_rules! assert_deep_eq {
-    ($($input:tt)*) => { assert!($crate::ast::deep_eq( $($input)* )) };
+    ($($input:tt)*) => { assert!($crate::ast::deep_eq($($input)*)) };
 }
 
 #[cfg(test)]
 macro_rules! assert_deep_eq_modulo_reordering {
-    ($($input:tt)*) => { assert!($crate::ast::deep_eq_modulo_reordering( $($input)* )) };
+    ($($input:tt)*) => { assert!($crate::ast::deep_eq_modulo_reordering($($input)*)) };
 }
 
 #[cfg(test)]

@@ -5,7 +5,11 @@ mod path_args;
 
 use ahash::AHashSet;
 use alethe_proof_checker::{
-    ast::print_proof, check, check_and_reconstruct, checker::ProofChecker, parser, AletheResult,
+    ast::print_proof,
+    benchmarking::{Metrics, OnlineBenchmarkResults},
+    check, check_and_reconstruct,
+    checker::ProofChecker,
+    parser, AletheResult,
 };
 use ansi_term::Color;
 use clap::{App, AppSettings, Arg, ArgGroup, ArgMatches, SubCommand};
@@ -73,9 +77,9 @@ fn app(version_string: &str) -> App<'static, '_> {
                     .help("Number of times to run the benchmark for each file"),
             )
             .arg(
-                Arg::with_name("num-jobs")
+                Arg::with_name("num-threads")
                     .short("j")
-                    .long("jobs")
+                    .long("num-threads")
                     .default_value("1")
                     .help("Number of threads to use to run the benchmarks"),
             )
@@ -93,6 +97,12 @@ fn app(version_string: &str) -> App<'static, '_> {
                         "Show benchmark results sorted by total time taken, instead of by average \
                         time taken",
                     ),
+            )
+            .arg(
+                Arg::with_name("dump-to-csv")
+                    .long("dump-to-csv")
+                    .takes_value(true)
+                    .help("Dump results to given csv file instead of printing to screen"),
             )
             .arg(Arg::with_name("files").multiple(true).required(true).help(
                 "The proof files with which the benchkmark will be run. If a directory is passed, \
@@ -237,14 +247,19 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         .parse()
         .map_err(|_| CliError::InvalidArgument(num_runs.to_string()))?;
 
-    let num_jobs = matches.value_of("num-jobs").unwrap();
-    let num_jobs = num_jobs
+    let num_threads = matches.value_of("num-threads").unwrap();
+    let num_threads = num_threads
         .parse()
-        .map_err(|_| CliError::InvalidArgument(num_jobs.to_string()))?;
+        .map_err(|_| CliError::InvalidArgument(num_threads.to_string()))?;
 
     let apply_function_defs = !matches.is_present("dont-apply-function-defs");
     let sort_by_total = matches.is_present("sort-by-total");
     let reconstruct = matches.is_present("reconstruct");
+
+    let out_csv_file = match matches.value_of("dump-to-csv") {
+        Some(f) => Some(File::create(f)?),
+        None => None,
+    };
 
     let instances = get_instances_from_paths(matches.values_of("files").unwrap())?;
 
@@ -257,10 +272,23 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         instances.len(),
         num_runs
     );
-    let results = benchmarking::run_benchmark(
+
+    if let Some(mut file) = out_csv_file {
+        benchmarking::run_csv_benchmark(
+            &instances,
+            num_runs,
+            num_threads,
+            apply_function_defs,
+            reconstruct,
+            &mut file,
+        )?;
+        return Ok(());
+    }
+
+    let results: OnlineBenchmarkResults = benchmarking::run_benchmark(
         &instances,
         num_runs,
-        num_jobs,
+        num_threads,
         apply_function_defs,
         reconstruct,
     );
@@ -289,12 +317,24 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
     if reconstruct {
         println!("reconstructing:      {}", reconstructing);
     }
+    println!(
+        "on assume:           {} ({:.02}% of checking time)",
+        results.assume_time,
+        100.0 * results.assume_time.mean().as_secs_f64() / results.checking().mean().as_secs_f64(),
+    );
+    println!("assume ratio:        {}", results.assume_time_ratio);
+    println!(
+        "on deep equality:    {} ({:.02}% of checking time)",
+        results.deep_eq_time,
+        100.0 * results.deep_eq_time.mean().as_secs_f64() / results.checking().mean().as_secs_f64(),
+    );
+    println!("deep equality ratio: {}", results.deep_eq_time_ratio);
     println!("total accounted for: {}", accounted_for);
     println!("total:               {}", total);
 
     let data_by_rule = results.step_time_by_rule();
     let mut data_by_rule: Vec<_> = data_by_rule.iter().collect();
-    data_by_rule.sort_by_key(|(_, m)| if sort_by_total { m.total } else { m.mean });
+    data_by_rule.sort_by_key(|(_, m)| if sort_by_total { m.total() } else { m.mean() });
 
     println!("by rule:");
     for (rule, data) in data_by_rule {
@@ -322,11 +362,50 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
         worst_file_checking.0 .0, worst_file_checking.1
     );
 
+    let worst_file_assume = results.assume_time_ratio.max();
+    println!(
+        "    file (assume):   {} ({:.04}%)",
+        worst_file_assume.0 .0,
+        worst_file_assume.1 * 100.0
+    );
+
+    let worst_file_deep_eq = results.deep_eq_time_ratio.max();
+    println!(
+        "    file (deep_eq):  {} ({:.04}%)",
+        worst_file_deep_eq.0 .0,
+        worst_file_deep_eq.1 * 100.0
+    );
+
     let worst_file_total = results.total().max();
     println!(
         "    file overall:    {} ({:?})",
         worst_file_total.0 .0, worst_file_total.1
     );
+
+    let num_hard_assumes = results.num_assumes - results.num_easy_assumes;
+    let percent_easy = (results.num_easy_assumes as f64) * 100.0 / (results.num_assumes as f64);
+    let percent_hard = (num_hard_assumes as f64) * 100.0 / (results.num_assumes as f64);
+    println!("          number of assumes: {}", results.num_assumes);
+    println!(
+        "                     (easy): {} ({:.02}%)",
+        results.num_easy_assumes, percent_easy
+    );
+    println!(
+        "                     (hard): {} ({:.02}%)",
+        num_hard_assumes, percent_hard
+    );
+
+    let depths = results.deep_eq_depths;
+    if !depths.is_empty() {
+        println!("    max deep equality depth: {}", depths.max().1);
+        println!("  total deep equality depth: {}", depths.total());
+        println!("  number of deep equalities: {}", depths.count());
+        println!("                 mean depth: {:.4}", depths.mean());
+        println!(
+            "standard deviation of depth: {:.4}",
+            depths.standard_deviation()
+        );
+    }
     Ok(())
 }
 

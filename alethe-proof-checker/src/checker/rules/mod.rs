@@ -6,6 +6,7 @@ use crate::{
     ast::*,
     utils::{Range, TypeName},
 };
+use std::time::Duration;
 
 pub type RuleResult = Result<(), CheckerError>;
 
@@ -25,6 +26,8 @@ pub struct RuleArgs<'a> {
     // rule is not ending a subproof, this should be `None`.
     pub(super) previous_command: Option<Premise<'a>>,
     pub(super) discharge: &'a [&'a ProofCommand],
+
+    pub(super) deep_eq_time: &'a mut Duration,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -125,23 +128,23 @@ where
     Ok(())
 }
 
-fn assert_eq_modulo_reordering<T>(a: &T, b: &T) -> Result<(), CheckerError>
+fn assert_eq_modulo_reordering<T>(a: &T, b: &T, time: &mut Duration) -> Result<(), CheckerError>
 where
     T: Eq + Clone + TypeName + DeepEq,
     EqualityError<T>: Into<CheckerError>,
 {
-    if !deep_eq_modulo_reordering(a, b) {
+    if !timed_deep_eq_modulo_reordering(a, b, time) {
         return Err(EqualityError::ExpectedEqual(a.clone(), b.clone()).into());
     }
     Ok(())
 }
 
-fn assert_is_expected_modulo_reordering<T>(got: &T, expected: T) -> RuleResult
+fn assert_is_expected_modulo_reordering<T>(got: &T, expected: T, time: &mut Duration) -> RuleResult
 where
     T: Eq + Clone + TypeName + DeepEq,
     EqualityError<T>: Into<CheckerError>,
 {
-    if !deep_eq_modulo_reordering(got, &expected) {
+    if !timed_deep_eq_modulo_reordering(got, &expected, time) {
         return Err(EqualityError::ExpectedToBe { expected, got: got.clone() }.into());
     }
     Ok(())

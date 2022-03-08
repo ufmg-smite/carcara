@@ -16,10 +16,13 @@ fn get_truncated_message(e: &Error) -> String {
 }
 
 fn run_test(problem_path: &Path, proof_path: &Path) -> AletheResult<()> {
-    let test_config = || checker::Config {
-        skip_unknown_rules: true,
-        ..Default::default()
-    };
+    fn test_config<'a>() -> checker::Config<'a> {
+        checker::Config {
+            skip_unknown_rules: true,
+            is_running_test: false,
+            statistics: None,
+        }
+    }
 
     let (proof, mut pool) = parser::parse_instance(
         io::BufReader::new(fs::File::open(problem_path)?),

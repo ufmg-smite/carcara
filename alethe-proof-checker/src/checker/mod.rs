@@ -2,16 +2,15 @@ pub mod error;
 pub mod reconstruction;
 mod rules;
 
-use crate::{
-    ast::*,
-    benchmarking::{Metrics, StepId},
-    AletheResult, Error,
-};
-use ahash::{AHashMap, AHashSet};
+use crate::{ast::*, benchmarking::CollectResults, AletheResult, Error};
+use ahash::AHashSet;
 use error::CheckerError;
 use reconstruction::Reconstructor;
 use rules::{Premise, ReconstructionRule, Rule, RuleArgs, RuleResult};
-use std::time::{Duration, Instant};
+use std::{
+    fmt,
+    time::{Duration, Instant},
+};
 
 struct Context {
     substitution: Substitution,
@@ -20,14 +19,25 @@ struct Context {
     bindings: AHashSet<SortedVar>,
 }
 
-#[derive(Debug)]
 pub struct CheckerStatistics<'s> {
     pub file_name: &'s str,
-    pub checking_time: &'s mut Duration,
-    pub reconstructing_time: &'s mut Duration,
-    pub step_time: &'s mut Metrics<StepId>,
-    pub step_time_by_file: &'s mut AHashMap<String, Metrics<StepId>>,
-    pub step_time_by_rule: &'s mut AHashMap<String, Metrics<StepId>>,
+    pub reconstruction_time: &'s mut Duration,
+    pub deep_eq_time: &'s mut Duration,
+    pub assume_time: &'s mut Duration,
+    pub results: &'s mut dyn CollectResults,
+}
+
+impl fmt::Debug for CheckerStatistics<'_> {
+    // Since `self.results` does not implement `Debug`, we can't just `#[derive(Debug)]` and instead
+    // have to implement it manually, removing that field.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CheckerStatistics")
+            .field("file_name", &self.file_name)
+            .field("reconstruction_time", &self.reconstruction_time)
+            .field("deep_eq_time", &self.deep_eq_time)
+            .field("assume_time", &self.assume_time)
+            .finish()
+    }
 }
 
 #[derive(Debug, Default)]
@@ -108,35 +118,21 @@ impl<'c> ProofChecker<'c> {
                         reconstructor.open_subproof(s.commands.len());
                     }
 
-                    self.add_statistics_measurement(step_id, "anchor*", time);
+                    if let Some(s) = &mut self.config.statistics {
+                        s.results.add_step_measurement(
+                            s.file_name,
+                            step_id,
+                            "anchor*",
+                            time.elapsed(),
+                        );
+                    }
                 }
                 ProofCommand::Assume { id, term } => {
-                    let time = Instant::now();
-
-                    // Some subproofs contain `assume` commands inside them. These don't refer
-                    // to the original problem premises, so we ignore the `assume` command if
-                    // it is inside a subproof. Since the unit tests for the rules don't define the
-                    // original problem, but sometimes use `assume` commands, we also skip the
-                    // command if we are in a testing context.
-                    if !self.config.is_running_test && !iter.is_in_subproof() {
-                        let is_valid = proof.premises.contains(term)
-                            || proof
-                                .premises
-                                .iter()
-                                .any(|u| deep_eq_modulo_reordering(term, u));
-                        if !is_valid {
-                            return Err(Error::Checker {
-                                inner: CheckerError::Assume(term.clone()),
-                                rule: "assume".into(),
-                                step: id.clone(),
-                            });
-                        }
-                    };
+                    self.check_assume(id, term, &proof.premises, &iter)?;
 
                     if let Some(reconstructor) = &mut self.reconstructor {
                         reconstructor.assume(term);
                     }
-                    self.add_statistics_measurement(id, "assume*", time);
                 }
             }
         }
@@ -152,12 +148,72 @@ impl<'c> ProofChecker<'c> {
         let mut reconstructor = self.reconstructor.take().unwrap();
         result?;
 
-        let reconstructing_time = Instant::now();
+        let reconstruction_time = Instant::now();
         proof.commands = reconstructor.end(proof.commands);
         if let Some(stats) = &mut self.config.statistics {
-            *stats.reconstructing_time += reconstructing_time.elapsed();
+            *stats.reconstruction_time += reconstruction_time.elapsed();
         }
         Ok(proof)
+    }
+
+    fn check_assume(
+        &mut self,
+        id: &str,
+        term: &Rc<Term>,
+        premises: &AHashSet<Rc<Term>>,
+        iter: &ProofIter,
+    ) -> AletheResult<()> {
+        let time = Instant::now();
+
+        // Some subproofs contain `assume` commands inside them. These don't refer
+        // to the original problem premises, so we ignore the `assume` command if
+        // it is inside a subproof. Since the unit tests for the rules don't define the
+        // original problem, but sometimes use `assume` commands, we also skip the
+        // command if we are in a testing context.
+        if self.config.is_running_test || iter.is_in_subproof() {
+            return Ok(());
+        }
+
+        if premises.contains(term) {
+            if let Some(s) = &mut self.config.statistics {
+                let time = time.elapsed();
+                *s.assume_time += time;
+                s.results
+                    .add_assume_measurement(s.file_name, id, true, time);
+            }
+            return Ok(());
+        }
+
+        let mut found = false;
+        let mut deep_eq_time = Duration::ZERO;
+        for p in premises {
+            let (result, depth) = tracing_deep_eq(term, p, &mut deep_eq_time);
+            if let Some(s) = &mut self.config.statistics {
+                s.results.add_deep_eq_depth(depth);
+            }
+            if result {
+                found = true;
+                break;
+            }
+        }
+
+        if let Some(s) = &mut self.config.statistics {
+            let time = time.elapsed();
+            *s.assume_time += time;
+            *s.deep_eq_time += deep_eq_time;
+            s.results
+                .add_assume_measurement(s.file_name, id, false, time);
+        }
+
+        if found {
+            Ok(())
+        } else {
+            Err(Error::Checker {
+                inner: CheckerError::Assume(term.clone()),
+                rule: "assume".into(),
+                step: id.to_owned(),
+            })
+        }
     }
 
     fn check_step<'a>(
@@ -192,6 +248,7 @@ impl<'c> ProofChecker<'c> {
             .iter()
             .map(|&i| iter.get_premise(i))
             .collect();
+        let mut deep_eq_time = Duration::ZERO;
 
         let rule_args = RuleArgs {
             conclusion: &step.clause,
@@ -201,6 +258,7 @@ impl<'c> ProofChecker<'c> {
             context: &mut self.context,
             previous_command,
             discharge: &discharge,
+            deep_eq_time: &mut deep_eq_time,
         };
 
         if let Some(reconstructor) = &mut self.reconstructor {
@@ -213,7 +271,12 @@ impl<'c> ProofChecker<'c> {
         } else {
             rule(rule_args)?;
         }
-        self.add_statistics_measurement(&step.id, &step.rule, time);
+
+        if let Some(s) = &mut self.config.statistics {
+            s.results
+                .add_step_measurement(s.file_name, &step.id, &step.rule, time.elapsed());
+            *s.deep_eq_time += deep_eq_time;
+        }
         Ok(())
     }
 
@@ -267,31 +330,6 @@ impl<'c> ProofChecker<'c> {
             cumulative_substitution,
             bindings,
         })
-    }
-
-    fn add_statistics_measurement(&mut self, step_id: &str, rule: &str, start_time: Instant) {
-        if let Some(stats) = &mut self.config.statistics {
-            let measurement = start_time.elapsed();
-            let file_name = stats.file_name.to_owned();
-            let rule = rule.to_owned();
-            let id = StepId {
-                file: file_name.clone().into_boxed_str(),
-                step_id: step_id.into(),
-                rule: rule.clone().into_boxed_str(),
-            };
-            stats.step_time.add(&id, measurement);
-            stats
-                .step_time_by_file
-                .entry(file_name)
-                .or_default()
-                .add(&id, measurement);
-            stats
-                .step_time_by_rule
-                .entry(rule)
-                .or_default()
-                .add(&id, measurement);
-            *stats.checking_time += measurement;
-        }
     }
 
     pub fn get_rule(rule_name: &str) -> Option<Rule> {
