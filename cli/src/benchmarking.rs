@@ -54,10 +54,14 @@ fn run_job<T: CollectResults + Default>(
     let mut checker = checker::ProofChecker::new(&mut pool, config);
 
     let checking = Instant::now();
+
+    // If any errors are encountered when checking a proof, we still want to record the data from
+    // the steps that were run, so we ignore checker errors.
+    #[allow(unused_must_use)]
     if reconstruct {
-        checker.check_and_reconstruct(proof)?;
+        checker.check_and_reconstruct(proof);
     } else {
-        checker.check(&proof)?;
+        checker.check(&proof);
     }
     let checking = checking.elapsed();
 
@@ -89,7 +93,6 @@ fn worker_thread<T: CollectResults + Default>(
         if let Err(e) = run_job(&mut results, job, apply_function_defs, reconstruct) {
             log::error!("worker thread #{} encountered an error", thread_index);
             log::error!("{}", e);
-            return T::default();
         }
     }
 
