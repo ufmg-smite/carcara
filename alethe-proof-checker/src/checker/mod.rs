@@ -302,7 +302,7 @@ impl<'c> ProofChecker<'c> {
             let var_term = terminal!(var var; self.pool.add_term(sort));
             let var_term = self.pool.add_term(var_term);
             substitution.insert(self.pool, var_term.clone(), value.clone())?;
-            let new_value = substitution_until_fixed_point.apply(&mut self.pool, value);
+            let new_value = substitution_until_fixed_point.apply(self.pool, value);
             substitution_until_fixed_point.insert(self.pool, var_term, new_value)?;
         }
 

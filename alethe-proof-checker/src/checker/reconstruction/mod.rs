@@ -205,9 +205,10 @@ impl Reconstructor {
     }
 
     pub(super) fn end(&mut self, original: Vec<ProofCommand>) -> Vec<ProofCommand> {
-        if self.depth() != 0 {
-            panic!("trying to end proof building before closing subproof");
-        }
+        assert!(
+            self.depth() == 0,
+            "trying to end proof building before closing subproof"
+        );
         let Frame { diff, new_indices, .. } = self.stack.pop().unwrap();
         let diff = ProofDiff { commands: diff, new_indices };
         let reconstructed = apply_diff(diff, original);
