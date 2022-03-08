@@ -22,18 +22,26 @@ pub trait DeepEq {
     fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool;
 }
 
-pub fn deep_eq<T: DeepEq>(a: &T, b: &T, time: &mut Duration) -> bool {
+pub fn timed_deep_eq<T: DeepEq>(a: &T, b: &T, time: &mut Duration) -> bool {
     let start = Instant::now();
-    let result = DeepEq::eq(&mut DeepEqualityChecker::new(false, false), a, b);
+    let result = deep_eq(a, b);
     *time += start.elapsed();
     result
 }
 
-pub fn deep_eq_modulo_reordering<T: DeepEq>(a: &T, b: &T, time: &mut Duration) -> bool {
+pub fn timed_deep_eq_modulo_reordering<T: DeepEq>(a: &T, b: &T, time: &mut Duration) -> bool {
     let start = Instant::now();
-    let result = DeepEq::eq(&mut DeepEqualityChecker::new(true, false), a, b);
+    let result = deep_eq_modulo_reordering(a, b);
     *time += start.elapsed();
     result
+}
+
+pub fn deep_eq<T: DeepEq>(a: &T, b: &T) -> bool {
+    DeepEq::eq(&mut DeepEqualityChecker::new(false, false), a, b)
+}
+
+pub fn deep_eq_modulo_reordering<T: DeepEq>(a: &T, b: &T) -> bool {
+    DeepEq::eq(&mut DeepEqualityChecker::new(true, false), a, b)
 }
 
 pub fn tracing_deep_eq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> (bool, usize) {

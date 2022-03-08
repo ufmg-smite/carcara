@@ -58,9 +58,8 @@ pub fn parse_proof(input: &str) -> Proof {
 fn run_parser_tests(cases: &[(&str, Term)]) {
     for (case, expected) in cases {
         let got = parse_term(case);
-        let mut time = std::time::Duration::ZERO;
         assert!(
-            deep_eq(expected, &got, &mut time),
+            deep_eq(expected, &got),
             "test case failed: {} != {}",
             expected,
             got

@@ -13,7 +13,8 @@ mod subterms;
 mod tests;
 
 pub use deep_eq::{
-    are_alpha_equivalent, deep_eq, deep_eq_modulo_reordering, tracing_deep_eq, DeepEq,
+    are_alpha_equivalent, deep_eq, deep_eq_modulo_reordering, timed_deep_eq,
+    timed_deep_eq_modulo_reordering, tracing_deep_eq, DeepEq,
 };
 pub use iter::ProofIter;
 pub use pool::TermPool;

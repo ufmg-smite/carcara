@@ -144,7 +144,7 @@ where
     T: Eq + Clone + TypeName + DeepEq,
     EqualityError<T>: Into<CheckerError>,
 {
-    if !deep_eq_modulo_reordering(a, b, time) {
+    if !timed_deep_eq_modulo_reordering(a, b, time) {
         return Err(EqualityError::ExpectedEqual(a.clone(), b.clone()).into());
     }
     Ok(())
@@ -155,7 +155,7 @@ where
     T: Eq + Clone + TypeName + DeepEq,
     EqualityError<T>: Into<CheckerError>,
 {
-    if !deep_eq_modulo_reordering(got, &expected, time) {
+    if !timed_deep_eq_modulo_reordering(got, &expected, time) {
         return Err(EqualityError::ExpectedToBe { expected, got: got.clone() }.into());
     }
     Ok(())

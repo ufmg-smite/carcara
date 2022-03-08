@@ -276,7 +276,7 @@ pub fn ite_intro(RuleArgs { conclusion, deep_eq_time, .. }: RuleArgs) -> RuleRes
     //     )) :rule ite_intro)
     // For cases like this, we first check if `t` equals the right side term modulo reordering of
     // equalities. If not, we unwrap the conjunction and continue checking the rule normally.
-    if deep_eq_modulo_reordering(root_term, right_side, deep_eq_time) {
+    if timed_deep_eq_modulo_reordering(root_term, right_side, deep_eq_time) {
         return Ok(());
     }
     let us = match_term_err!((and ...) = right_side)?;
