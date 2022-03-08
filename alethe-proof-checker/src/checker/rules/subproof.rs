@@ -1,6 +1,6 @@
 use super::{
-    assert_clause_len, assert_eq, assert_is_expected, assert_is_expected_modulo_reordering,
-    assert_num_premises, get_premise_term, CheckerError, EqualityError, RuleArgs, RuleResult,
+    assert_clause_len, assert_eq, assert_is_expected, assert_num_premises, get_premise_term,
+    CheckerError, EqualityError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::SubproofError};
 use ahash::AHashSet;
@@ -384,7 +384,9 @@ fn generic_skolemization_rule(
             }
             pool.add_term(Term::Choice(x.clone(), inner))
         };
-        assert_is_expected_modulo_reordering(t, expected, deep_eq_time)?;
+        if !are_alpha_equivalent(t, &expected, deep_eq_time) {
+            return Err(EqualityError::ExpectedEqual(t.clone(), expected).into());
+        }
 
         // For every binding we skolemize, we must apply another substitution to phi
         let mut s = Substitution::single(pool, x_term, t.clone())?;
