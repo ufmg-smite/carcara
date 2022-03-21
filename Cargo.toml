@@ -4,3 +4,9 @@ members = ["alethe-proof-checker", "cli"]
 [profile.release]
 debug = 1
 incremental = true
+
+[profile.release-lto]
+inherits = "release"
+debug = 0
+incremental = false
+lto = true
