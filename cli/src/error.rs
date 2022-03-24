@@ -3,7 +3,6 @@ use std::{fmt, io, path::PathBuf};
 #[derive(Debug)]
 pub enum CliError {
     AletheError(alethe_proof_checker::Error),
-    InvalidArgument(String),
     CantInferProblemFile(PathBuf),
 }
 
@@ -23,7 +22,6 @@ impl fmt::Display for CliError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             CliError::AletheError(e) => write!(f, "{}", e),
-            CliError::InvalidArgument(a) => write!(f, "invalid argument: {}", a),
             CliError::CantInferProblemFile(p) => {
                 write!(f, "can't infer problem file: {}", p.display())
             }

@@ -13,7 +13,8 @@ path = "src/main.rs"
 [dependencies]
 alethe-proof-checker = { path = "../alethe-proof-checker" }
 ahash = "0.7.4"
-clap = "2.33.3"
+clap = { version = "3.1.6", features = ["derive"] }
+const_format = "0.2.22"
 crossbeam = "0.8"
 log = { version = "0.4.14", features = ["std"] }
 ansi_term = "0.11"

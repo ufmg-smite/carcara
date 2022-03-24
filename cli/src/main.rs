@@ -1,268 +1,190 @@
+#![allow(deprecated)]
+
 mod benchmarking;
 mod error;
 mod logger;
 mod path_args;
 
-use ahash::AHashSet;
 use alethe_proof_checker::{
     ast::print_proof,
     benchmarking::{Metrics, OnlineBenchmarkResults},
-    check, check_and_reconstruct,
-    checker::ProofChecker,
-    parser, AletheResult,
+    check, check_and_reconstruct, parser,
 };
-use ansi_term::Color;
-use clap::{App, AppSettings, Arg, ArgGroup, ArgMatches, SubCommand};
+use clap::{ArgEnum, Args, Parser, Subcommand};
+use const_format::{formatcp, str_index};
 use error::CliError;
 use git_version::git_version;
 use path_args::{get_instances_from_paths, infer_problem_path};
-use std::{
-    fs::File,
-    io::{BufReader, Write},
-    path::{Path, PathBuf},
-};
+use std::{fs::File, io::BufReader, path::PathBuf};
 
 const GIT_COMMIT_HASH: &str = git_version!(fallback = "unknown");
 const GIT_BRANCH_NAME: &str = git_version!(args = ["--all"]);
-const APP_VERSION: Option<&str> = option_env!("CARGO_PKG_VERSION");
+const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-fn app(version_string: &str) -> App<'static, '_> {
-    let proof_file = Arg::with_name("proof-file")
-        .required(true)
-        .help("The proof file to be checked");
-    let problem_file = Arg::with_name("problem-file").help(
-        "The original problem file. If this argument is not present, it will be inferred from the \
-        proof file",
-    );
-    let dont_apply_function_defs = Arg::with_name("dont-apply-function-defs")
-        .long("dont-apply-function-defs")
-        .help(
-            "Don't apply function definitions introduced by `define-fun`s and `:named` \
-            attributes. Instead, interpret them as a function declaration and an `assert` that \
-            defines the function to be equal to its body",
-        );
+const VERSION_STRING: &str = formatcp!(
+    "{} [git {} {}]",
+    APP_VERSION,
+    // By default, `git describe` returns something like "heads/main". We ignore the "heads/" part
+    // to get only the branch name
+    str_index!(GIT_BRANCH_NAME, 6..),
+    GIT_COMMIT_HASH,
+);
 
-    let subcommands = vec![
-        SubCommand::with_name("check")
-            .about("Checks a proof file")
-            .setting(AppSettings::DisableVersion)
-            .arg(proof_file.clone())
-            .arg(problem_file.clone())
-            .arg(dont_apply_function_defs.clone())
-            .arg(
-                Arg::with_name("skip-unknown-rules")
-                    .short("s")
-                    .long("skip-unknown-rules")
-                    .help("Skips rules that are not yet implemented"),
-            )
-            .arg(
-                Arg::with_name("reconstruct")
-                    .long("reconstruct")
-                    .help("Reconstruct proof with more fine-grained steps"),
-            ),
-        SubCommand::with_name("parse")
-            .about("Parses a proof file and prints the AST")
-            .setting(AppSettings::DisableVersion)
-            .arg(proof_file.clone())
-            .arg(problem_file.clone())
-            .arg(dont_apply_function_defs.clone()),
-        SubCommand::with_name("bench")
-            .about("Checks a series of proof files and records performance statistics")
-            .setting(AppSettings::DisableVersion)
-            .arg(
-                Arg::with_name("num-runs")
-                    .short("n")
-                    .long("num-runs")
-                    .default_value("10")
-                    .help("Number of times to run the benchmark for each file"),
-            )
-            .arg(
-                Arg::with_name("num-threads")
-                    .short("j")
-                    .long("num-threads")
-                    .default_value("1")
-                    .help("Number of threads to use to run the benchmarks"),
-            )
-            .arg(dont_apply_function_defs.clone())
-            .arg(
-                Arg::with_name("reconstruct")
-                    .long("reconstruct")
-                    .help("Also reconstruct each proof in addition to parsing and checking"),
-            )
-            .arg(
-                Arg::with_name("sort-by-total")
-                    .short("t")
-                    .long("sort-by-total")
-                    .help(
-                        "Show benchmark results sorted by total time taken, instead of by average \
-                        time taken",
-                    ),
-            )
-            .arg(
-                Arg::with_name("dump-to-csv")
-                    .long("dump-to-csv")
-                    .takes_value(true)
-                    .help("Dump results to given csv file instead of printing to screen"),
-            )
-            .arg(Arg::with_name("files").multiple(true).required(true).help(
-                "The proof files with which the benchkmark will be run. If a directory is passed, \
-                the checker will recursively find all '.proof' files in the directory. The problem \
-                files will be inferred from the proof files",
-            )),
-        SubCommand::with_name("progress-report")
-            .setting(AppSettings::DisableVersion)
-            .setting(AppSettings::DeriveDisplayOrder)
-            .about("Prints a progress report on which rules are implemented")
-            .arg(
-                Arg::with_name("by-files")
-                    .short("f")
-                    .long("by-files")
-                    .help("Reports which files have all rules implemented"),
-            )
-            .arg(
-                Arg::with_name("by-rules")
-                    .short("r")
-                    .long("by-rules")
-                    .help("Reports which rules in the given files are implemented"),
-            )
-            .arg(
-                Arg::with_name("by-files-and-rules")
-                    .short("a")
-                    .long("by-files-and-rules")
-                    .help("For every file given, reports which rules are implemented"),
-            )
-            .group(
-                ArgGroup::with_name("mode")
-                    .args(&["by-files", "by-rules", "by-files-and-rules"])
-                    .required(true),
-            )
-            .arg(
-                Arg::with_name("quiet")
-                    .short("q")
-                    .long("quiet")
-                    .help("Print only one character per file/rule"),
-            )
-            .arg(Arg::with_name("files").multiple(true).help(
-                "The proof files with which the progress report will be run. If a directory is \
-                passed, the checker will recursively find all '.proof' files in the directory",
-            )),
-    ];
-    App::new("Alethe proof checker")
-        .version(version_string)
-        .setting(AppSettings::SubcommandRequiredElseHelp)
-        .subcommands(subcommands)
-        .arg(
-            Arg::with_name("log-level")
-                .long("log")
-                .possible_values(&["off", "error", "warn", "info"])
-                .default_value("warn")
-                .help("Sets the maximum logging level"),
-        )
+#[derive(Parser)]
+#[clap(name = "alethe-proof-checker", version = VERSION_STRING)]
+struct Cli {
+    #[clap(subcommand)]
+    command: Command,
+
+    /// Sets the maximum logging level.
+    #[clap(arg_enum, long = "log", default_value_t = LogLevel::Warn)]
+    log_level: LogLevel,
 }
 
-fn run_app(matches: &ArgMatches) -> Result<(), CliError> {
-    // Instead of just returning a `Result` from `main`, we move most of the behaviour into a
-    // separate function so we can control how errors are printed to the user.
-    if let Some(matches) = matches.subcommand_matches("check") {
-        check_subcommand(matches)
-    } else if let Some(matches) = matches.subcommand_matches("parse") {
-        parse_subcommand(matches)
-    } else if let Some(matches) = matches.subcommand_matches("bench") {
-        bench_subcommand(matches)
-    } else if let Some(matches) = matches.subcommand_matches("progress-report") {
-        progress_report_subcommand(matches)
-    } else {
-        unreachable!()
+#[derive(Subcommand)]
+enum Command {
+    /// Parses a proof file and prints the AST.
+    Parse(ParsingOptions),
+
+    /// Checks a proof file.
+    Check(CheckingOptions),
+
+    /// Checks and reconstructs a proof file.
+    Reconstruct(CheckingOptions),
+
+    /// Checks a series of proof files and records performance statistics.
+    Bench(BenchmarkOptions),
+}
+
+#[derive(Args)]
+struct ParsingOptions {
+    /// The proof file to be checked
+    proof_file: String,
+
+    /// The original problem file. If this argument is not present, it will be inferred from the
+    /// proof file.
+    problem_file: Option<String>,
+
+    /// Don't apply function definitions introduced by `define-fun`s and `:named` attributes.
+    /// Instead, interpret them as a function declaration and an `assert` that defines the function
+    /// to be equal to its body.
+    #[clap(long)]
+    dont_apply_function_defs: bool,
+}
+
+#[derive(Args)]
+struct CheckingOptions {
+    #[clap(flatten)]
+    parsing: ParsingOptions,
+
+    /// Skips rules that are not implemented.
+    #[clap(short, long)]
+    skip_unknown_rules: bool,
+}
+
+#[derive(Args)]
+struct BenchmarkOptions {
+    /// Number of times to run the benchmark for each file.
+    #[clap(short, long, default_value_t = 10)]
+    num_runs: usize,
+
+    /// Number of threads to use when running the benchmark.
+    #[clap(short = 'j', long, default_value_t = 1)]
+    num_threads: usize,
+
+    /// Also reconstruct each proof in addition to parsing and checking.
+    #[clap(long)]
+    reconstruct: bool,
+
+    /// Show benchmark results sorted by total time taken, instead of by average time taken.
+    #[clap(short = 't', long)]
+    sort_by_total: bool,
+
+    /// Dump results to given csv file instead of printing to screen.
+    #[clap(long = "dump-to-csv")]
+    out_csv_file: Option<String>,
+
+    /// The proof files on which the benchkmark will be run. If a directory is passed, the checker
+    /// will recursively find all '.proof' files in the directory. The problem files will be
+    /// inferred from the proof files.
+    files: Vec<String>,
+}
+
+#[derive(ArgEnum, Clone)]
+enum LogLevel {
+    Off,
+    Error,
+    Warn,
+    Info,
+}
+
+impl From<LogLevel> for log::LevelFilter {
+    fn from(l: LogLevel) -> Self {
+        match l {
+            LogLevel::Off => Self::Off,
+            LogLevel::Error => Self::Error,
+            LogLevel::Warn => Self::Warn,
+            LogLevel::Info => Self::Info,
+        }
     }
 }
 
 fn main() {
-    use log::LevelFilter;
+    let cli = Cli::parse();
+    logger::init(cli.log_level.into());
 
-    let version_string = format!(
-        "{} [git {} {}]",
-        APP_VERSION.unwrap_or("unknown"),
-        // By default, `git describe` returns something like "heads/main". We ignore the "heads/"
-        // part to get only the branch name
-        &GIT_BRANCH_NAME[6..],
-        GIT_COMMIT_HASH
-    );
-
-    let matches = app(&version_string).get_matches();
-    let level = match matches.value_of("log-level") {
-        Some("off") => LevelFilter::Off,
-        Some("error") => LevelFilter::Error,
-        Some("warn") => LevelFilter::Warn,
-        Some("info") => LevelFilter::Info,
-        _ => unreachable!(),
+    let result = match cli.command {
+        Command::Parse(options) => parse_command(options),
+        Command::Check(options) => check_command(options, false),
+        Command::Reconstruct(options) => check_command(options, true),
+        Command::Bench(options) => bench_command(options),
     };
-    logger::init(level);
-    if let Err(e) = run_app(&matches) {
+    if let Err(e) = result {
         log::error!("{}", e);
         std::process::exit(1);
     }
 }
 
-fn check_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
-    let proof_file = PathBuf::from(matches.value_of("proof-file").unwrap());
-    let problem_file = match matches.value_of("problem-file") {
+fn get_instance(options: ParsingOptions) -> Result<(PathBuf, PathBuf), CliError> {
+    let proof_file = PathBuf::from(options.proof_file);
+    let problem_file = match options.problem_file {
         Some(p) => PathBuf::from(p),
         None => infer_problem_path(&proof_file)?,
     };
-    let skip = matches.is_present("skip-unknown-rules");
-    let apply_function_defs = !matches.is_present("dont-apply-function-defs");
-
-    if matches.is_present("reconstruct") {
-        let reconstructed =
-            check_and_reconstruct(problem_file, proof_file, apply_function_defs, skip)?;
-        print_proof(&reconstructed)?;
-    } else {
-        check(problem_file, proof_file, apply_function_defs, skip)?;
-        println!("true");
-    }
-    Ok(())
+    Ok((problem_file, proof_file))
 }
 
-fn parse_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
-    let proof_file = PathBuf::from(matches.value_of("proof-file").unwrap());
-    let problem_file = match matches.value_of("problem-file") {
-        Some(p) => PathBuf::from(p),
-        None => infer_problem_path(&proof_file)?,
-    };
-    let apply_function_defs = !matches.is_present("dont-apply-function-defs");
-
+fn parse_command(options: ParsingOptions) -> Result<(), CliError> {
+    let apply_function_defs = !options.dont_apply_function_defs;
+    let (problem_file, proof_file) = get_instance(options)?;
     let (problem, proof) = (
         BufReader::new(File::open(problem_file)?),
         BufReader::new(File::open(proof_file)?),
     );
+
     let (proof, _) = parser::parse_instance(problem, proof, apply_function_defs)
         .map_err(alethe_proof_checker::Error::from)?;
     print_proof(&proof.commands)?;
     Ok(())
 }
 
-fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
-    let num_runs = matches.value_of("num-runs").unwrap();
-    let num_runs = num_runs
-        .parse()
-        .map_err(|_| CliError::InvalidArgument(num_runs.to_string()))?;
+fn check_command(options: CheckingOptions, reconstruct: bool) -> Result<(), CliError> {
+    let apply_function_defs = !options.parsing.dont_apply_function_defs;
+    let (problem, proof) = get_instance(options.parsing)?;
+    let skip = options.skip_unknown_rules;
 
-    let num_threads = matches.value_of("num-threads").unwrap();
-    let num_threads = num_threads
-        .parse()
-        .map_err(|_| CliError::InvalidArgument(num_threads.to_string()))?;
+    if reconstruct {
+        let reconstructed = check_and_reconstruct(problem, proof, apply_function_defs, skip)?;
+        print_proof(&reconstructed)?;
+    } else {
+        check(problem, proof, apply_function_defs, skip)?;
+        println!("true");
+    }
+    Ok(())
+}
 
-    let apply_function_defs = !matches.is_present("dont-apply-function-defs");
-    let sort_by_total = matches.is_present("sort-by-total");
-    let reconstruct = matches.is_present("reconstruct");
-
-    let out_csv_file = match matches.value_of("dump-to-csv") {
-        Some(f) => Some(File::create(f)?),
-        None => None,
-    };
-
-    let instances = get_instances_from_paths(matches.values_of("files").unwrap())?;
-
+fn bench_command(options: BenchmarkOptions) -> Result<(), CliError> {
+    let instances = get_instances_from_paths(options.files.iter().map(|s| s.as_str()))?;
     if instances.is_empty() {
         log::warn!("no files passed");
     }
@@ -270,16 +192,17 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
     println!(
         "running benchmark on {} files, doing {} runs each",
         instances.len(),
-        num_runs
+        options.num_runs
     );
 
-    if let Some(mut file) = out_csv_file {
+    if let Some(file) = options.out_csv_file {
+        let mut file = File::create(file)?;
         benchmarking::run_csv_benchmark(
             &instances,
-            num_runs,
-            num_threads,
-            apply_function_defs,
-            reconstruct,
+            options.num_runs,
+            options.num_threads,
+            false,
+            options.reconstruct,
             &mut file,
         )?;
         return Ok(());
@@ -287,16 +210,23 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
 
     let results: OnlineBenchmarkResults = benchmarking::run_benchmark(
         &instances,
-        num_runs,
-        num_threads,
-        apply_function_defs,
-        reconstruct,
+        options.num_runs,
+        options.num_threads,
+        false,
+        options.reconstruct,
     );
     if results.is_empty() {
         println!("no benchmark data collected");
         return Ok(());
     }
 
+    print_benchmark_results(results, options.sort_by_total)
+}
+
+fn print_benchmark_results(
+    results: OnlineBenchmarkResults,
+    sort_by_total: bool,
+) -> Result<(), CliError> {
     let [parsing, checking, reconstructing, accounted_for, total] = [
         results.parsing(),
         results.checking(),
@@ -314,7 +244,7 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
 
     println!("parsing:             {}", parsing);
     println!("checking:            {}", checking);
-    if reconstruct {
+    if !reconstructing.is_empty() {
         println!("reconstructing:      {}", reconstructing);
     }
     println!(
@@ -406,109 +336,5 @@ fn bench_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
             depths.standard_deviation()
         );
     }
-    Ok(())
-}
-
-fn progress_report_subcommand(matches: &ArgMatches) -> Result<(), CliError> {
-    let instances = get_instances_from_paths(matches.values_of("files").unwrap())?;
-    let files: Vec<_> = instances.iter().map(|(_, proof)| proof.as_path()).collect();
-
-    if instances.is_empty() {
-        log::warn!("no files passed");
-    }
-
-    let quiet = matches.is_present("quiet");
-    if matches.is_present("by-files") {
-        report_by_files(&files, quiet)?;
-    } else if matches.is_present("by-rules") {
-        report_by_rules(&files, quiet)?;
-    } else if matches.is_present("by-files-and-rules") {
-        for file in files {
-            println!("{}:", file.display());
-            report_by_rules(&[file], quiet)?;
-            println!();
-        }
-    }
-    Ok(())
-}
-
-fn get_used_rules(file_path: &Path) -> AletheResult<Vec<String>> {
-    use parser::{Lexer, Token};
-
-    let file = File::open(file_path)?;
-    let mut lex = Lexer::new(BufReader::new(file))?;
-    let mut result = Vec::new();
-    loop {
-        let (tk, _) = lex.next_token()?;
-        match tk {
-            Token::Eof => break,
-            Token::Keyword(s) if &s == "rule" => {
-                let rule_name = match lex.next_token()? {
-                    (Token::Symbol(s), _) => s,
-                    (Token::ReservedWord(r), _) => format!("{:?}", r),
-                    _ => continue,
-                };
-                result.push(rule_name)
-            }
-            _ => (),
-        }
-    }
-    Ok(result)
-}
-
-fn print_report_entry(s: &str, success: bool, quiet: bool) {
-    let style = match success {
-        true => Color::Green.bold(),
-        false => Color::Red.normal(),
-    };
-    if quiet {
-        print!("{}", style.paint("."));
-        std::io::stdout().flush().unwrap();
-    } else {
-        println!("{}", style.paint(s));
-    }
-}
-
-fn report_by_files(files: &[&Path], quiet: bool) -> AletheResult<()> {
-    let mut implemented = 0;
-    for file in files {
-        let all_implemented = get_used_rules(file)?
-            .iter()
-            .all(|rule| ProofChecker::get_rule(rule).is_some());
-        let file = file.display().to_string();
-        print_report_entry(&file, all_implemented, quiet);
-        implemented += all_implemented as i32;
-    }
-    if quiet {
-        println!();
-    }
-    println!(
-        "{} / {} files with all rules implemented",
-        implemented,
-        files.len()
-    );
-    Ok(())
-}
-
-fn report_by_rules(files: &[&Path], quiet: bool) -> AletheResult<()> {
-    let rules = files.iter().flat_map(|file| match get_used_rules(file) {
-        Ok(rules) => rules.into_iter().map(Ok).collect(),
-        Err(e) => vec![Err(e)],
-    });
-
-    let mut seen = AHashSet::new();
-    let mut implemented = 0;
-    for r in rules {
-        let r = r?;
-        if seen.insert(r.clone()) {
-            let success = ProofChecker::get_rule(&r).is_some();
-            print_report_entry(&r, success, quiet);
-            implemented += success as i32;
-        }
-    }
-    if quiet {
-        println!();
-    }
-    println!("{} / {} rules implemented", implemented, seen.len());
     Ok(())
 }
