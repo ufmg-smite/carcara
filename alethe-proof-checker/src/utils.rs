@@ -86,6 +86,11 @@ impl<K: Eq + Hash, V> SymbolTable<K, V> {
         K: Borrow<Q>,
         Q: Eq + Hash + ?Sized,
     {
+        // Note: If there are a lot of scopes in the symbol table, this can be a big performance
+        // bottleneck. As currently implemented, this function needs to hash the key once for every
+        // scope. The ideal way of solving this would be to hash the key once, and reuse that hash
+        // to access the entry in each scope. To do that, we could use the `HashMap::raw_entry`
+        // method, but it is currently nightly-only.
         self.scopes.iter().rev().find_map(|scope| scope.get(key))
     }
 
