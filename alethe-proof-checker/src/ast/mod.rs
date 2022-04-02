@@ -23,6 +23,8 @@ pub use rc::Rc;
 pub use substitution::{Substitution, SubstitutionError};
 pub use subterms::Subterms;
 
+pub(crate) use deep_eq::DeepEqualityChecker;
+
 use crate::checker::error::CheckerError;
 use ahash::AHashSet;
 use num_bigint::BigInt;

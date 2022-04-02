@@ -60,7 +60,10 @@ pub fn apply_diff(root: ProofDiff, proof: Vec<ProofCommand>) -> Vec<ProofCommand
                         };
                         stack.push(new_frame);
                     }
-                    (ProofCommand::Step(_), CommandDiff::Step(mut reconstruction)) => {
+                    (
+                        ProofCommand::Step(_) | ProofCommand::Assume { .. },
+                        CommandDiff::Step(mut reconstruction),
+                    ) => {
                         f.result.commands.append(&mut reconstruction);
                     }
                     (_, CommandDiff::Delete) => (),

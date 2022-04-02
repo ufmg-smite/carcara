@@ -1,7 +1,9 @@
+mod deep_eq;
 mod diff;
 mod pruning;
 
 use crate::{ast::*, utils::SymbolTable};
+use deep_eq::DeepEqReconstructor;
 use diff::{apply_diff, CommandDiff, ProofDiff};
 use pruning::prune_proof;
 
@@ -88,17 +90,21 @@ impl Reconstructor {
         self.stack[depth].new_indices[i]
     }
 
-    pub(super) fn add_new_step(&mut self, step: ProofStep) -> (usize, usize) {
-        if let Some((d, &i)) = self.seen_clauses.get_with_depth(&step.clause) {
+    fn add_new_command(&mut self, command: ProofCommand) -> (usize, usize) {
+        if let Some((d, &i)) = self.seen_clauses.get_with_depth(command.clause()) {
             return (d, i);
         }
 
         let frame = self.top_frame_mut();
         let index = (frame.new_indices.len() as isize + frame.current_offset) as usize;
         frame.current_offset += 1;
-        self.seen_clauses.insert(step.clause.clone(), index);
-        self.accumulator.push(ProofCommand::Step(step));
+        self.seen_clauses.insert(command.clause().to_vec(), index);
+        self.accumulator.push(command);
         (self.depth(), index)
+    }
+
+    pub(super) fn add_new_step(&mut self, step: ProofStep) -> (usize, usize) {
+        self.add_new_command(ProofCommand::Step(step))
     }
 
     pub(super) fn get_new_id(&mut self, root_id: &str) -> String {
@@ -109,6 +115,7 @@ impl Reconstructor {
         // TODO: discard reconstructed steps that inroduce already seen conclusions (and can be
         // deleted)
 
+        let clause = step.clause.clone();
         let reconstruction = {
             let mut added = std::mem::take(&mut self.accumulator);
             added.push(ProofCommand::Step(step));
@@ -121,6 +128,7 @@ impl Reconstructor {
 
         frame.diff.push((old_index, reconstruction));
 
+        self.seen_clauses.insert(clause, new_index);
         (self.depth(), new_index)
     }
 
@@ -170,6 +178,64 @@ impl Reconstructor {
             discharge: Vec::new(),
         };
         self.add_new_step(step)
+    }
+
+    /// Adds a `refl` step that asserts that the given term is equal to itself.
+    pub(super) fn add_refl_step(
+        &mut self,
+        pool: &mut TermPool,
+        term: Rc<Term>,
+        id: String,
+    ) -> (usize, usize) {
+        let clause = vec![build_term!(pool, (= {term.clone()} {term}))];
+        let step = ProofStep {
+            id,
+            clause,
+            rule: "refl".into(),
+            premises: Vec::new(),
+            args: Vec::new(),
+            discharge: Vec::new(),
+        };
+        self.add_new_step(step)
+    }
+
+    pub(super) fn reconstruct_assume(
+        &mut self,
+        pool: &mut TermPool,
+        premise: Rc<Term>,
+        term: Rc<Term>,
+        id: &str,
+    ) -> (usize, usize) {
+        let new_assume = self.add_new_command(ProofCommand::Assume {
+            id: id.to_owned(),
+            term: premise.clone(),
+        });
+        let equality_step = {
+            let mut r = DeepEqReconstructor::new(self, id);
+            r.reconstruct(pool, premise.clone(), term.clone())
+        };
+        let equiv1_step = {
+            let new_id = self.get_new_id(id);
+            let clause = vec![build_term!(pool, (not { premise })), term.clone()];
+            self.add_new_step(ProofStep {
+                id: new_id,
+                clause,
+                rule: "equiv1".to_owned(),
+                premises: vec![equality_step],
+                args: Vec::new(),
+                discharge: Vec::new(),
+            })
+        };
+
+        let new_id = self.get_new_id(id);
+        self.push_reconstructed_step(ProofStep {
+            id: new_id,
+            clause: vec![term],
+            rule: "resolution".to_owned(),
+            premises: vec![new_assume, equiv1_step],
+            args: Vec::new(), // TODO: Add args
+            discharge: Vec::new(),
+        })
     }
 
     pub(super) fn open_subproof(&mut self, length: usize) {

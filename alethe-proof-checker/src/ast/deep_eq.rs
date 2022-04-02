@@ -98,7 +98,7 @@ pub struct DeepEqualityChecker {
 }
 
 impl DeepEqualityChecker {
-    fn new(is_mod_reordering: bool, is_alpha_equivalence: bool) -> Self {
+    pub fn new(is_mod_reordering: bool, is_alpha_equivalence: bool) -> Self {
         Self {
             is_mod_reordering,
             cache: SymbolTable::new(),

@@ -129,10 +129,6 @@ impl<'c> ProofChecker<'c> {
                 }
                 ProofCommand::Assume { id, term } => {
                     self.check_assume(id, term, &proof.premises, &iter)?;
-
-                    if let Some(reconstructor) = &mut self.reconstructor {
-                        reconstructor.assume(term);
-                    }
                 }
             }
         }
@@ -171,6 +167,9 @@ impl<'c> ProofChecker<'c> {
         // original problem, but sometimes use `assume` commands, we also skip the
         // command if we are in a testing context.
         if self.config.is_running_test || iter.is_in_subproof() {
+            if let Some(reconstructor) = &mut self.reconstructor {
+                reconstructor.assume(term);
+            }
             return Ok(());
         }
 
@@ -181,10 +180,13 @@ impl<'c> ProofChecker<'c> {
                 s.results
                     .add_assume_measurement(s.file_name, id, true, time);
             }
+            if let Some(reconstructor) = &mut self.reconstructor {
+                reconstructor.assume(term);
+            }
             return Ok(());
         }
 
-        let mut found = false;
+        let mut found = None;
         let mut deep_eq_time = Duration::ZERO;
         for p in premises {
             let (result, depth) = tracing_deep_eq(term, p, &mut deep_eq_time);
@@ -192,7 +194,7 @@ impl<'c> ProofChecker<'c> {
                 s.results.add_deep_eq_depth(depth);
             }
             if result {
-                found = true;
+                found = Some(p.clone());
                 break;
             }
         }
@@ -205,7 +207,10 @@ impl<'c> ProofChecker<'c> {
                 .add_assume_measurement(s.file_name, id, false, time);
         }
 
-        if found {
+        if let Some(p) = found {
+            if let Some(reconstructor) = &mut self.reconstructor {
+                reconstructor.reconstruct_assume(self.pool, p, term.clone(), id);
+            }
             Ok(())
         } else {
             Err(Error::Checker {
