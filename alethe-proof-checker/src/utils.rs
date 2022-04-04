@@ -1,8 +1,13 @@
 use crate::ast::{BindingList, Quantifier, Rc, Term};
-use ahash::{AHashMap, AHashSet};
+use ahash::{AHashMap, AHashSet, AHasher};
 use num_rational::BigRational;
 use num_traits::{One, Signed, Zero};
-use std::{borrow::Borrow, fmt, hash::Hash, ops};
+use std::{
+    borrow::Borrow,
+    fmt,
+    hash::{Hash, Hasher},
+    ops,
+};
 
 /// An enum that can hold one of two types. Similar to `Result`, but doesn't imply that one of the
 /// variants is "better" than the other.
@@ -52,6 +57,43 @@ impl<T, I: Iterator<Item = T>> DedupIterator<T> for I {
     }
 }
 
+pub struct HashCache<T> {
+    hash: u64,
+    value: T,
+}
+
+impl<T: PartialEq> PartialEq for HashCache<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+impl<T: Eq> Eq for HashCache<T> {}
+
+impl<T: Hash> Hash for HashCache<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u64(self.hash);
+    }
+}
+
+impl<T: Eq + Hash> HashCache<T> {
+    pub fn new(value: T) -> Self {
+        let mut hasher = AHasher::default();
+        value.hash(&mut hasher);
+        Self { hash: hasher.finish(), value }
+    }
+
+    pub fn unwrap(self) -> T {
+        self.value
+    }
+}
+
+impl<T> AsRef<T> for HashCache<T> {
+    fn as_ref(&self) -> &T {
+        &self.value
+    }
+}
+
 #[derive(Debug)]
 pub struct SymbolTable<K, V> {
     scopes: Vec<AHashMap<K, V>>,
@@ -90,7 +132,9 @@ impl<K: Eq + Hash, V> SymbolTable<K, V> {
         // bottleneck. As currently implemented, this function needs to hash the key once for every
         // scope. The ideal way of solving this would be to hash the key once, and reuse that hash
         // to access the entry in each scope. To do that, we could use the `HashMap::raw_entry`
-        // method, but it is currently nightly-only.
+        // method, but it is currently nightly-only. Another way to mitigate this issue is to use
+        // the `HashCache<T>` struct to wrap the key values in the symbol table. This allows the key
+        // to only be hashed once, and that value is stored and reused in the struct.
         self.scopes.iter().rev().find_map(|scope| scope.get(key))
     }
 

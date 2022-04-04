@@ -9,7 +9,7 @@ pub use lexer::{Lexer, Position, Reserved, Token};
 
 use crate::{
     ast::*,
-    utils::{Either, SymbolTable},
+    utils::{Either, HashCache, SymbolTable},
     AletheResult, Error,
 };
 use ahash::{AHashMap, AHashSet};
@@ -48,11 +48,11 @@ struct AnchorCommand {
 /// definitions, as well as the term pool used by the parser.
 #[derive(Default)]
 struct ParserState {
-    symbol_table: SymbolTable<Identifier, Rc<Term>>,
+    symbol_table: SymbolTable<HashCache<Identifier>, Rc<Term>>,
     function_defs: AHashMap<String, FunctionDef>,
     term_pool: TermPool,
     sort_declarations: AHashMap<String, usize>,
-    step_ids: SymbolTable<String, usize>,
+    step_ids: SymbolTable<HashCache<String>, usize>,
 }
 
 /// A parser for the Alethe proof format.
@@ -73,7 +73,7 @@ impl<R: BufRead> Parser<R> {
         let mut state = ParserState::default();
         let bool_sort = state.term_pool.add_term(Term::Sort(Sort::Bool));
         for iden in ["true", "false"] {
-            let iden = Identifier::Simple(iden.to_owned());
+            let iden = HashCache::new(Identifier::Simple(iden.to_owned()));
             state.symbol_table.insert(iden, bool_sort.clone());
         }
         let mut lexer = Lexer::new(input)?;
@@ -140,7 +140,7 @@ impl<R: BufRead> Parser<R> {
     fn insert_sorted_var(&mut self, (symbol, sort): SortedVar) {
         self.state
             .symbol_table
-            .insert(Identifier::Simple(symbol), sort);
+            .insert(HashCache::new(Identifier::Simple(symbol)), sort);
     }
 
     /// Adds a new function definition. If we are parsing the problem and
@@ -167,13 +167,12 @@ impl<R: BufRead> Parser<R> {
 
     /// Constructs and sort checks a variable term.
     fn make_var(&mut self, iden: Identifier) -> Result<Rc<Term>, ParserError> {
-        let sort = self
-            .state
-            .symbol_table
-            .get(&iden)
-            .ok_or_else(|| ParserError::UndefinedIden(iden.clone()))?
-            .clone();
-        Ok(self.add_term(Term::Terminal(Terminal::Var(iden, sort))))
+        let cached = HashCache::new(iden);
+        let sort = match self.state.symbol_table.get(&cached) {
+            Some(s) => s.clone(),
+            None => return Err(ParserError::UndefinedIden(cached.unwrap())),
+        };
+        Ok(self.add_term(Term::Terminal(Terminal::Var(cached.unwrap(), sort))))
     }
 
     /// Constructs and sort checks an operation term.
@@ -477,12 +476,16 @@ impl<R: BufRead> Parser<R> {
                 }
                 _ => return Err(Error::Parser(ParserError::UnexpectedToken(token), position)),
             };
+            let id = HashCache::new(id);
             if self.state.step_ids.get(&id).is_some() {
-                return Err(Error::Parser(ParserError::RepeatedStepIndex(id), position));
+                return Err(Error::Parser(
+                    ParserError::RepeatedStepIndex(id.unwrap()),
+                    position,
+                ));
             }
 
             commands_stack.last_mut().unwrap().push(command);
-            if end_step_stack.last() == Some(&id) {
+            if end_step_stack.last() == Some(id.as_ref()) {
                 // If this is the last step in a subproof, we need to pop all the subproof data off
                 // of the stacks and build the subproof command with it
                 self.state.symbol_table.pop_scope();
@@ -496,7 +499,7 @@ impl<R: BufRead> Parser<R> {
                     Some(ProofCommand::Step(_)) => (),
                     _ => {
                         return Err(Error::Parser(
-                            ParserError::LastSubproofStepIsNotStep(id),
+                            ParserError::LastSubproofStepIsNotStep(id.unwrap()),
                             position,
                         ))
                     }
@@ -605,12 +608,12 @@ impl<R: BufRead> Parser<R> {
     /// index used to reference commands in the AST.
     fn parse_step_premise(&mut self) -> AletheResult<(usize, usize)> {
         let position = self.current_position;
-        let id = self.expect_symbol()?;
+        let id = HashCache::new(self.expect_symbol()?);
         self.state
             .step_ids
             .get_with_depth(&id)
             .map(|(d, &i)| (d, i))
-            .ok_or(Error::Parser(ParserError::UndefinedStepIndex(id), position))
+            .ok_or_else(|| Error::Parser(ParserError::UndefinedStepIndex(id.unwrap()), position))
     }
 
     /// Parses an argument for the `:discharge` attribute. Due to a bug in veriT, commands local to
@@ -621,12 +624,14 @@ impl<R: BufRead> Parser<R> {
         let position = self.current_position;
         let id = self.expect_symbol()?;
         let absolute_id = format!("{}.{}", root_id, &id);
+        let id = HashCache::new(id);
+        let absolute_id = HashCache::new(absolute_id);
         self.state
             .step_ids
             .get_with_depth(&absolute_id)
             .or_else(|| self.state.step_ids.get_with_depth(&id))
             .map(|(d, &i)| (d, i))
-            .ok_or(Error::Parser(ParserError::UndefinedStepIndex(id), position))
+            .ok_or_else(|| Error::Parser(ParserError::UndefinedStepIndex(id.unwrap()), position))
     }
 
     /// Parses an `anchor` proof command. This method assumes that the `(` and `anchor` tokens were
