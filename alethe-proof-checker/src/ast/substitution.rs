@@ -14,7 +14,7 @@ pub struct Substitution {
     pub(crate) map: AHashMap<Rc<Term>, Rc<Term>>,
     // Variables that should be renamed to preserve capture-avoidance if they are bound by a binder
     // term
-    should_be_renamed: AHashSet<String>,
+    should_be_renamed: AHashSet<Rc<Term>>,
     cache: AHashMap<Rc<Term>, Rc<Term>>,
 }
 
@@ -62,8 +62,8 @@ impl Substitution {
                 continue; // We ignore reflexive substitutions
             }
             should_be_renamed.extend(pool.free_vars(t).iter().cloned());
-            if let Some(x) = x.as_var() {
-                should_be_renamed.insert(x.to_owned());
+            if x.is_var() {
+                should_be_renamed.insert(x.clone());
             }
         }
 
@@ -92,8 +92,8 @@ impl Substitution {
         if x != t {
             self.should_be_renamed
                 .extend(pool.free_vars(&t).iter().cloned());
-            if let Some(x) = x.as_var() {
-                self.should_be_renamed.insert(x.to_owned());
+            if x.is_var() {
+                self.should_be_renamed.insert(x.clone());
             }
         }
 
@@ -206,10 +206,17 @@ impl Substitution {
                 let mut new_var = var.clone();
 
                 // We keep adding `@`s to the variable name as long as it is necessary
-                while self.should_be_renamed.contains(&new_var) || new_vars.contains(&new_var) {
+                loop {
+                    if !new_vars.contains(&new_var) {
+                        let new_term = pool.add_term((new_var.clone(), sort.clone()).into());
+                        if !self.should_be_renamed.contains(&new_term) {
+                            break;
+                        }
+                    }
                     new_var.push('@');
                     changed = true;
                 }
+
                 if changed {
                     // If the variable was renamed, we have to add this renaming to the resulting
                     // substitution

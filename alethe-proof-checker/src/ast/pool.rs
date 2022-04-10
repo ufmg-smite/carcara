@@ -3,7 +3,7 @@ use ahash::{AHashMap, AHashSet};
 
 pub struct TermPool {
     pub(crate) terms: AHashMap<Term, Rc<Term>>,
-    free_vars_cache: AHashMap<Rc<Term>, AHashSet<String>>,
+    free_vars_cache: AHashMap<Rc<Term>, AHashSet<Rc<Term>>>,
     sorts_cache: AHashMap<Rc<Term>, Sort>,
     bool_true: Rc<Term>,
     bool_false: Rc<Term>,
@@ -153,7 +153,7 @@ impl TermPool {
     }
 
     /// Returns an `AHashSet` containing all the free variables in this term.
-    pub fn free_vars<'t>(&mut self, term: &'t Rc<Term>) -> &AHashSet<String> {
+    pub fn free_vars<'t>(&mut self, term: &'t Rc<Term>) -> &AHashSet<Rc<Term>> {
         // Here, I would like to do
         // ```
         // if let Some(vars) = self.free_vars_cache.get(term) {
@@ -186,23 +186,33 @@ impl TermPool {
                 }
                 set
             }
-            Term::Quant(_, bindings, inner)
-            | Term::Let(bindings, inner)
-            | Term::Lambda(bindings, inner) => {
+            Term::Quant(_, bindings, inner) | Term::Lambda(bindings, inner) => {
                 let mut vars = self.free_vars(inner).clone();
-                for (s, _) in bindings {
-                    vars.remove(s.as_str());
+                for bound_var in bindings {
+                    let term = self.add_term(bound_var.clone().into());
+                    vars.remove(&term);
                 }
                 vars
             }
-            Term::Choice((bound_var, _), inner) => {
+            Term::Let(bindings, inner) => {
                 let mut vars = self.free_vars(inner).clone();
-                vars.remove(bound_var.as_str());
+                for (var, value) in bindings {
+                    let sort = Term::Sort(self.sort(value).clone());
+                    let sort = self.add_term(sort);
+                    let term = self.add_term((var.clone(), sort).into());
+                    vars.remove(&term);
+                }
                 vars
             }
-            Term::Terminal(Terminal::Var(Identifier::Simple(var), _)) => {
+            Term::Choice(bound_var, inner) => {
+                let mut vars = self.free_vars(inner).clone();
+                let term = self.add_term(bound_var.clone().into());
+                vars.remove(&term);
+                vars
+            }
+            Term::Terminal(Terminal::Var(Identifier::Simple(_), _)) => {
                 let mut set = AHashSet::with_capacity(1);
-                set.insert(var.clone());
+                set.insert(term.clone());
                 set
             }
             Term::Terminal(_) | Term::Sort(_) => AHashSet::new(),

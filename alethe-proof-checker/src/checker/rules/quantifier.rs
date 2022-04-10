@@ -95,10 +95,15 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
     };
     assert_eq(phi_1, phi_2)?;
 
-    let free_vars = pool.free_vars(phi_1);
+    // Cloning here may be unnecessary
+    let free_vars = pool.free_vars(phi_1).clone();
+
     let expected: Vec<_> = bindings_1
         .iter()
-        .filter(|(var, _)| free_vars.contains(var))
+        .filter(|&var| {
+            let var = pool.add_term(var.clone().into());
+            free_vars.contains(&var)
+        })
         .cloned()
         .collect();
 
@@ -298,18 +303,19 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         .find(|&clause| clause == phi_prime)
         .ok_or_else(|| QuantifierError::ClauseDoesntAppearInCnf(phi_prime.clone()))?;
 
-    let free_vars = pool.free_vars(selected_clause);
+    // Cloning here may be unnecessary
+    let free_vars = pool.free_vars(selected_clause).clone();
 
     // While all bindings in `r_bindings` must also be in `new_bindings`, the same is not true in
     // the opposite direction. That is because some variables from the set may be omitted in the
     // right-hand side quantifier if they don't appear in phi_prime as free variables.  If there is
     // a binding in the left side that is a free variable in the selected clause, but doesn't
     // appear in the right-hand side bindings, we must return an error
-    if let Some((var, _)) = new_bindings
-        .iter()
-        .find(|b| free_vars.contains(&b.0) && !r_bindings.contains(b))
-    {
-        return Err(QuantifierError::CnfBindingIsMissing(var.clone()).into());
+    let found = new_bindings.into_iter().find(|var| {
+        !r_bindings.contains(var) && free_vars.contains(&pool.add_term(var.clone().into()))
+    });
+    if let Some((var, _)) = found {
+        return Err(QuantifierError::CnfBindingIsMissing(var).into());
     }
     Ok(())
 }

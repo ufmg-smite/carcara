@@ -388,6 +388,14 @@ impl Term {
         }
     }
 
+    /// Returns `true` if the term is a variable.
+    pub fn is_var(&self) -> bool {
+        matches!(
+            self,
+            Term::Terminal(Terminal::Var(Identifier::Simple(_), _))
+        )
+    }
+
     /// Tries to extract the variable name from a term. Returns `Some` if the term is a variable
     /// with a simple identifier.
     pub fn as_var(&self) -> Option<&str> {

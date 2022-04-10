@@ -68,8 +68,11 @@ pub fn bind(
     let (r_quant, r_bindings, right) = right.unwrap_quant_err()?;
     assert_eq(&l_quant, &r_quant)?;
 
-    let l_bindings: AHashSet<_> = l_bindings.iter().map(|(var, _)| var.as_str()).collect();
-    let r_bindings: AHashSet<_> = r_bindings.iter().map(|(var, _)| var.as_str()).collect();
+    let [l_bindings, r_bindings] = [l_bindings, r_bindings].map(|b| {
+        b.iter()
+            .map(|var| pool.add_term(var.clone().into()))
+            .collect::<AHashSet<_>>()
+    });
 
     // The terms in the quantifiers must be phi and phi'
     assert_eq(left, phi)?;
@@ -77,11 +80,12 @@ pub fn bind(
 
     // None of the bindings in the right side can appear as free variables in phi
     let free_vars = pool.free_vars(phi);
-    if let Some(&y) = r_bindings
+    if let Some(y) = r_bindings
         .iter()
-        .find(|&&y| free_vars.contains(y) && !l_bindings.contains(y))
+        .find(|&y| free_vars.contains(y) && !l_bindings.contains(y))
     {
-        return Err(SubproofError::BindBindingIsFreeVarInPhi(y.to_owned()).into());
+        let y = y.as_var().unwrap().to_owned();
+        return Err(SubproofError::BindBindingIsFreeVarInPhi(y).into());
     }
 
     // Since we are closing a subproof, we only care about the substitutions that were introduced
@@ -94,14 +98,15 @@ pub fn bind(
         .map
         .iter()
         // We skip terms which are not simply variables
-        .filter_map(|(x, y)| Some((x.as_var()?, y.as_var()?)))
+        .filter(|&(x, y)| x.is_var() && y.is_var())
+        .map(|(x, y)| (x.clone(), y.clone()))
         .chain(
             // Sometimes, the context bindings also appear as bindings in the quantifiers, so we
             // include them in the `xs` and `ys`
-            context
-                .bindings
-                .iter()
-                .map(|(var, _)| (var.as_str(), var.as_str())),
+            context.bindings.iter().map(|var| {
+                let term = pool.add_term(var.clone().into());
+                (term.clone(), term)
+            }),
         )
         .unzip();
 
@@ -111,11 +116,13 @@ pub fn bind(
     );
 
     // `l_bindings` should be a subset of `xs` and `r_bindigns` should be a subset of `ys`
-    if let Some(&x) = l_bindings.iter().find(|&&x| !xs.contains(x)) {
-        return Err(SubproofError::BindingIsNotInContext(x.to_owned()).into());
+    if let Some(x) = l_bindings.iter().find(|&x| !xs.contains(x)) {
+        let x = x.as_var().unwrap().to_owned();
+        return Err(SubproofError::BindingIsNotInContext(x).into());
     }
-    if let Some(&y) = r_bindings.iter().find(|&&y| !ys.contains(y)) {
-        return Err(SubproofError::BindingIsNotInContext(y.to_owned()).into());
+    if let Some(y) = r_bindings.iter().find(|&y| !ys.contains(y)) {
+        let y = y.as_var().unwrap().to_owned();
+        return Err(SubproofError::BindingIsNotInContext(y).into());
     }
     Ok(())
 }
