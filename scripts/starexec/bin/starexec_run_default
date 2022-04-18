@@ -1,0 +1,3 @@
+#!/usr/bin/sh
+
+./alethe-proof-checker check $1
