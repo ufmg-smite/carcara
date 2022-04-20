@@ -1,6 +1,9 @@
 #!/usr/bin/bash
 
-RUSTFLAGS="-C target-cpu=sandybridge" cargo build \
+docker build -t starexec .
+cargo clean
+
+RUSTFLAGS="-C target-cpu=sandybridge" cross build \
     --target=x86_64-unknown-linux-gnu \
     --profile release-lto \
     || exit 1
