@@ -14,7 +14,7 @@ pub struct Substitution {
     pub(crate) map: AHashMap<Rc<Term>, Rc<Term>>,
     // Variables that should be renamed to preserve capture-avoidance if they are bound by a binder
     // term
-    should_be_renamed: AHashSet<Rc<Term>>,
+    should_be_renamed: Option<AHashSet<Rc<Term>>>,
     cache: AHashMap<Rc<Term>, Rc<Term>>,
 }
 
@@ -22,7 +22,7 @@ impl Substitution {
     pub fn empty() -> Self {
         Self {
             map: AHashMap::new(),
-            should_be_renamed: AHashSet::new(),
+            should_be_renamed: None,
             cache: AHashMap::new(),
         }
     }
@@ -40,36 +40,9 @@ impl Substitution {
             }
         }
 
-        // To avoid captures when applying the substitution, we may need to rename some of the
-        // variables that are bound in the term.
-        //
-        // For example, consider the substitution `{x -> y}`. If `x` and `y` are both variables,
-        // when applying the substitution to `(forall ((y Int)) (= x y))`, we would need to rename
-        // `y` to avoid a capture, because the substitution would change the semantics of the term.
-        // The resulting term should then be `(forall ((y' Int)) (= y y'))`.
-        //
-        // More precisely, for a substitution `{x -> t}`, if a bound variable `y` satisfies one the
-        // following conditions, it must be renamed:
-        //
-        // - `y` = `x`
-        // - `y` appears in the free variables of `t`
-        //
-        // See https://en.wikipedia.org/wiki/Lambda_calculus#Capture-avoiding_substitutions for
-        // more details.
-        let mut should_be_renamed = AHashSet::new();
-        for (x, t) in map.iter() {
-            if x == t {
-                continue; // We ignore reflexive substitutions
-            }
-            should_be_renamed.extend(pool.free_vars(t).iter().cloned());
-            if x.is_var() {
-                should_be_renamed.insert(x.clone());
-            }
-        }
-
         Ok(Self {
             map,
-            should_be_renamed,
+            should_be_renamed: None,
             cache: AHashMap::new(),
         })
     }
@@ -89,16 +62,51 @@ impl Substitution {
             return Err(SubstitutionError::DifferentSorts(x, t));
         }
 
-        if x != t {
-            self.should_be_renamed
-                .extend(pool.free_vars(&t).iter().cloned());
-            if x.is_var() {
-                self.should_be_renamed.insert(x.clone());
+        if let Some(should_be_renamed) = &mut self.should_be_renamed {
+            if x != t {
+                should_be_renamed.extend(pool.free_vars(&t).iter().cloned());
+                if x.is_var() {
+                    should_be_renamed.insert(x.clone());
+                }
             }
         }
 
         self.map.insert(x, t);
         Ok(())
+    }
+
+    fn compute_should_be_renamed(&mut self, pool: &mut TermPool) {
+        if self.should_be_renamed.is_some() {
+            return;
+        }
+
+        // To avoid captures when applying the substitution, we may need to rename some of the
+        // variables that are bound in the term.
+        //
+        // For example, consider the substitution `{x -> y}`. If `x` and `y` are both variables,
+        // when applying the substitution to `(forall ((y Int)) (= x y))`, we would need to rename
+        // `y` to avoid a capture, because the substitution would change the semantics of the term.
+        // The resulting term should then be `(forall ((y' Int)) (= y y'))`.
+        //
+        // More precisely, for a substitution `{x -> t}`, if a bound variable `y` satisfies one the
+        // following conditions, it must be renamed:
+        //
+        // - `y` = `x`
+        // - `y` appears in the free variables of `t`
+        //
+        // See https://en.wikipedia.org/wiki/Lambda_calculus#Capture-avoiding_substitutions for
+        // more details.
+        let mut should_be_renamed = AHashSet::new();
+        for (x, t) in self.map.iter() {
+            if x == t {
+                continue; // We ignore reflexive substitutions
+            }
+            should_be_renamed.extend(pool.free_vars(t).iter().cloned());
+            if x.is_var() {
+                should_be_renamed.insert(x.clone());
+            }
+        }
+        self.should_be_renamed = Some(should_be_renamed);
     }
 
     pub fn apply(&mut self, pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
@@ -164,6 +172,8 @@ impl Substitution {
         inner: &Rc<Term>,
         is_value_list: bool,
     ) -> (BindingList, Rc<Term>) {
+        self.compute_should_be_renamed(pool);
+
         let (new_bindings, mut renaming) =
             self.rename_binding_list(pool, binding_list, is_value_list);
         let new_term = if renaming.is_empty() {
@@ -209,7 +219,7 @@ impl Substitution {
                 loop {
                     if !new_vars.contains(&new_var) {
                         let new_term = pool.add_term((new_var.clone(), sort.clone()).into());
-                        if !self.should_be_renamed.contains(&new_term) {
+                        if !self.should_be_renamed.as_ref().unwrap().contains(&new_term) {
                             break;
                         }
                     }
