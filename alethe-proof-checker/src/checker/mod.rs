@@ -118,11 +118,15 @@ impl<'c> ProofChecker<'c> {
                         reconstructor.open_subproof(s.commands.len());
                     }
 
-                    if let Some(s) = &mut self.config.statistics {
-                        s.results.add_step_measurement(
-                            s.file_name,
+                    if let Some(stats) = &mut self.config.statistics {
+                        let rule_name = match s.commands.last() {
+                            Some(ProofCommand::Step(step)) => format!("anchor({})", &step.rule),
+                            _ => "anchor".to_owned(),
+                        };
+                        stats.results.add_step_measurement(
+                            stats.file_name,
                             step_id,
-                            "anchor*",
+                            &rule_name,
                             time.elapsed(),
                         );
                     }
