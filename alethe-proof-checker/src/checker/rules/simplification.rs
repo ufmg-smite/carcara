@@ -650,114 +650,65 @@ pub fn comp_simplify(args: RuleArgs) -> RuleResult {
     })
 }
 
-struct AcSimp<'a> {
-    pool: &'a mut TermPool,
-    equality_cache: AHashSet<(Rc<Term>, Rc<Term>)>,
-    flattening_cache: AHashMap<Rc<Term>, Rc<Term>>,
-}
-
-impl<'a> AcSimp<'a> {
-    fn new(pool: &'a mut TermPool) -> Self {
-        Self {
-            pool,
-            equality_cache: AHashSet::new(),
-            flattening_cache: AHashMap::new(),
-        }
+fn apply_ac_simp(
+    pool: &mut TermPool,
+    cache: &mut AHashMap<Rc<Term>, Rc<Term>>,
+    term: &Rc<Term>,
+) -> Rc<Term> {
+    if let Some(t) = cache.get(term) {
+        return t.clone();
     }
-
-    fn flatten_operation(&mut self, term: &Rc<Term>) -> Rc<Term> {
-        if let Some(t) = self.flattening_cache.get(term) {
-            return t.clone();
-        }
-        let result = match term.as_ref() {
-            Term::Op(op @ (Operator::And | Operator::Or), args) => {
-                let args: Vec<_> = args
-                    .iter()
-                    .flat_map(|term| {
-                        let term = self.flatten_operation(term);
-                        match term.as_ref() {
-                            Term::Op(inner_op, inner_args) if inner_op == op => inner_args.clone(),
-                            _ => vec![term.clone()],
-                        }
-                    })
-                    .dedup()
-                    .collect();
-                if args.len() == 1 {
-                    return args[0].clone();
-                } else {
-                    Term::Op(*op, args)
-                }
-            }
-            Term::Op(op, args) => {
-                let args = args
-                    .iter()
-                    .map(|term| self.flatten_operation(term))
-                    .collect();
+    let result = match term.as_ref() {
+        Term::Op(op @ (Operator::And | Operator::Or), args) => {
+            let args: Vec<_> = args
+                .iter()
+                .flat_map(|term| {
+                    let term = apply_ac_simp(pool, cache, term);
+                    match term.as_ref() {
+                        Term::Op(inner_op, inner_args) if inner_op == op => inner_args.clone(),
+                        _ => vec![term.clone()],
+                    }
+                })
+                .dedup()
+                .collect();
+            if args.len() == 1 {
+                return args[0].clone();
+            } else {
                 Term::Op(*op, args)
             }
-            Term::App(func, args) => {
-                let args = args
-                    .iter()
-                    .map(|term| self.flatten_operation(term))
-                    .collect();
-                Term::App(func.clone(), args)
-            }
-            Term::Quant(q, bindings, inner) => {
-                Term::Quant(*q, bindings.clone(), self.flatten_operation(inner))
-            }
-            Term::Let(binding, inner) => Term::Let(binding.clone(), self.flatten_operation(inner)),
-            _ => return term.clone(),
-        };
-        let result = self.pool.add_term(result);
-        self.flattening_cache.insert(term.clone(), result.clone());
-        result
-    }
-
-    fn eq_args(&mut self, a: &[Rc<Term>], b: &[Rc<Term>]) -> bool {
-        a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| self.eq(a, b))
-    }
-
-    fn eq(&mut self, a: &Rc<Term>, b: &Rc<Term>) -> bool {
-        if a == b || self.equality_cache.contains(&(a.clone(), b.clone())) {
-            return true;
         }
-
-        let result = match (a.as_ref(), b.as_ref()) {
-            (Term::App(f_a, args_a), Term::App(f_b, args_b)) => {
-                self.eq(f_a, f_b) && self.eq_args(args_a, args_b)
-            }
-            (Term::Op(Operator::And | Operator::Or, _), _)
-                if {
-                    let a_flattened = self.flatten_operation(a);
-                    &a_flattened == b
-                } =>
-            {
-                true
-            }
-            (Term::Op(op_a, args_a), Term::Op(op_b, args_b)) => {
-                op_a == op_b && self.eq_args(args_a, args_b)
-            }
-            (Term::Quant(q_a, binds_a, a), Term::Quant(q_b, binds_b, b)) => {
-                q_a == q_b && binds_a == binds_b && self.eq(a, b)
-            }
-            (Term::Let(binds_a, a), Term::Let(binds_b, b)) => binds_a == binds_b && self.eq(a, b),
-            _ => false,
-        };
-        if result {
-            self.equality_cache.insert((a.clone(), b.clone()));
+        Term::Op(op, args) => {
+            let args = args
+                .iter()
+                .map(|term| apply_ac_simp(pool, cache, term))
+                .collect();
+            Term::Op(*op, args)
         }
-        result
-    }
+        Term::App(func, args) => {
+            let args = args
+                .iter()
+                .map(|term| apply_ac_simp(pool, cache, term))
+                .collect();
+            Term::App(func.clone(), args)
+        }
+        Term::Quant(q, bindings, inner) => {
+            Term::Quant(*q, bindings.clone(), apply_ac_simp(pool, cache, inner))
+        }
+        Term::Let(binding, inner) => Term::Let(binding.clone(), apply_ac_simp(pool, cache, inner)),
+        _ => return term.clone(),
+    };
+    let result = pool.add_term(result);
+    cache.insert(term.clone(), result.clone());
+    result
 }
 
 pub fn ac_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (original, flattened) = match_term_err!((= psi phis) = &conclusion[0])?;
-    rassert!(
-        AcSimp::new(pool).eq(original, flattened),
-        CheckerError::AcSimpFailed(original.clone(), flattened.clone())
-    );
-    Ok(())
+    assert_eq(
+        flattened,
+        &apply_ac_simp(pool, &mut AHashMap::new(), original),
+    )
 }
 
 #[cfg(test)]

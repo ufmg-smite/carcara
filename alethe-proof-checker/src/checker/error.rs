@@ -61,15 +61,6 @@ pub enum CheckerError {
     #[error("broken transitivity chain: can't prove '(= {0} {1})'")]
     BrokenTransitivityChain(Rc<Term>, Rc<Term>),
 
-    // TODO: This error is not detailed enough. This is because the current implementation of the
-    // `ac_simp` rule does not compute the expected term explicitly. Instead, it expands the
-    // original term applying the simplification rules gradually, comparing it with the result term
-    // encountered in the conclusion. This is because there is a bug in veriT that causes the
-    // simplification to not be complete in some cases. Once this bug is solved, we can revert back
-    // to a simpler implementation of this rule, that would allow a more detailed error message
-    #[error("couldn't reach '{0}' by simplifying '{1}'")]
-    AcSimpFailed(Rc<Term>, Rc<Term>),
-
     #[error("term '{0}' is missing in conclusion clause")]
     ReorderingMissingTerm(Rc<Term>),
 
