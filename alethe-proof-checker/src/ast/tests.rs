@@ -95,13 +95,14 @@ fn test_free_vars() {
             let mut parser = TestParser::new(definitions);
             let root = parser.parse_term(term);
             let mut pool = parser.term_pool();
-            let got: Vec<_> = pool
+            let expected: AHashSet<_> = expected.iter().copied().collect();
+            let got: AHashSet<_> = pool
                 .free_vars(&root)
                 .iter()
                 .map(|t| t.as_var().unwrap())
                 .collect();
 
-            assert_eq!(expected, &got);
+            assert_eq!(expected, got);
         }
     }
     run_tests(
