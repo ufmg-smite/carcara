@@ -1,6 +1,6 @@
 use super::{
     error::{CheckerError, EqualityError},
-    Context, Reconstructor,
+    ContextStack, Reconstructor,
 };
 use crate::{
     ast::*,
@@ -19,7 +19,7 @@ pub struct RuleArgs<'a> {
     pub(super) premises: &'a [Premise<'a>],
     pub(super) args: &'a [ProofArg],
     pub(super) pool: &'a mut TermPool,
-    pub(super) context: &'a mut [Context],
+    pub(super) context: &'a mut ContextStack,
 
     // For rules that end a subproof, we need to pass the previous command in the subproof that it
     // is closing, because it may be implicitly referenced, and it is not given as premises. If a

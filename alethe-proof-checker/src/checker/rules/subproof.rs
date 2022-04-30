@@ -353,13 +353,15 @@ fn generic_skolemization_rule(
     assert_eq(previous_equality.1, psi)?;
 
     let mut current_phi = phi.clone();
-    // I have to extract the length into a separate variable (instead of just using it directly in
-    // the slice index) to please the borrow checker
-    let n = context.len();
-    for c in &mut context[..n - 1] {
-        // Based on the test examples, we must first apply all previous context substitutions to
-        // phi, before applying the substitution present in the current context
-        current_phi = c.substitution.apply(pool, &current_phi);
+    if context.len() >= 2 {
+        context.catch_up_cumulative(pool)?;
+        current_phi = context
+            .get_mut(context.len() - 2)
+            .unwrap()
+            .cumulative_substitution
+            .as_mut()
+            .unwrap()
+            .apply(pool, &current_phi);
     }
 
     let substitution = &context.last().unwrap().substitution_until_fixed_point;

@@ -27,10 +27,13 @@ pub fn refl(
         return Ok(());
     }
 
-    let cumulative_substitution = &mut context
+    context.catch_up_cumulative(pool)?;
+    let cumulative_substitution = context
         .last_mut()
         .ok_or_else(|| CheckerError::ReflexivityFailed(left.clone(), right.clone()))?
-        .cumulative_substitution;
+        .cumulative_substitution
+        .as_mut()
+        .unwrap();
 
     // In some cases, the substitution is only applied to the left or the right term, and in some
     // cases it is applied to both. To cover all cases, we must check all three possibilities. We

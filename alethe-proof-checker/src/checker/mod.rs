@@ -1,9 +1,11 @@
+mod context;
 pub mod error;
 pub mod reconstruction;
 mod rules;
 
 use crate::{ast::*, benchmarking::CollectResults, AletheResult, Error};
 use ahash::AHashSet;
+use context::*;
 use error::CheckerError;
 use reconstruction::Reconstructor;
 use rules::{Premise, ReconstructionRule, Rule, RuleArgs, RuleResult};
@@ -11,13 +13,6 @@ use std::{
     fmt,
     time::{Duration, Instant},
 };
-
-struct Context {
-    substitution: Substitution,
-    substitution_until_fixed_point: Substitution,
-    cumulative_substitution: Substitution,
-    bindings: AHashSet<SortedVar>,
-}
 
 pub struct CheckerStatistics<'s> {
     pub file_name: &'s str,
@@ -50,7 +45,7 @@ pub struct Config<'c> {
 pub struct ProofChecker<'c> {
     pool: &'c mut TermPool,
     config: Config<'c>,
-    context: Vec<Context>,
+    context: ContextStack,
     reconstructor: Option<Reconstructor>,
 }
 
@@ -59,7 +54,7 @@ impl<'c> ProofChecker<'c> {
         ProofChecker {
             pool,
             config,
-            context: Vec::new(),
+            context: ContextStack::new(),
             reconstructor: None,
         }
     }
@@ -105,14 +100,13 @@ impl<'c> ProofChecker<'c> {
                     let time = Instant::now();
                     let step_id = command.id();
 
-                    let new_context = self
-                        .build_context(&s.assignment_args, &s.variable_args)
+                    self.context
+                        .push(self.pool, &s.assignment_args, &s.variable_args)
                         .map_err(|e| Error::Checker {
                             inner: e.into(),
                             rule: "anchor".into(),
                             step: step_id.to_owned(),
                         })?;
-                    self.context.push(new_context);
 
                     if let Some(reconstructor) = &mut self.reconstructor {
                         reconstructor.open_subproof(s.commands.len());
@@ -287,58 +281,6 @@ impl<'c> ProofChecker<'c> {
             *s.deep_eq_time += deep_eq_time;
         }
         Ok(())
-    }
-
-    fn build_context(
-        &mut self,
-        assignment_args: &[(String, Rc<Term>)],
-        variable_args: &[SortedVar],
-    ) -> Result<Context, SubstitutionError> {
-        // Since some rules (like `refl`) need to apply substitutions until a fixed point, we
-        // precompute these substitutions into a separate hash map. This assumes that the assignment
-        // arguments are in the correct order.
-        let mut substitution = Substitution::empty();
-        let mut substitution_until_fixed_point = Substitution::empty();
-
-        // We build the `substitution_until_fixed_point` hash map from the bottom up, by using the
-        // substitutions already introduced to transform the result of a new substitution before
-        // inserting it into the hash map. So for instance, if the substitutions are `(:= y z)` and
-        // `(:= x (f y))`, we insert the first substitution, and then, when introducing the second,
-        // we use the current state of the hash map to transform `(f y)` into `(f z)`. The
-        // resulting hash map will then contain `(:= y z)` and `(:= x (f z))`
-        for (var, value) in assignment_args.iter() {
-            let sort = Term::Sort(self.pool.sort(value).clone());
-            let var_term = terminal!(var var; self.pool.add_term(sort));
-            let var_term = self.pool.add_term(var_term);
-            substitution.insert(self.pool, var_term.clone(), value.clone())?;
-            let new_value = substitution_until_fixed_point.apply(self.pool, value);
-            substitution_until_fixed_point.insert(self.pool, var_term, new_value)?;
-        }
-
-        // Some rules (notably `refl`) need to apply the substitutions introduced by all the
-        // previous contexts instead of just the current one. Instead of doing this iteratively
-        // everytime the rule is used, we precompute the cumulative substitutions of this context
-        // and all the previous ones and store that in a hash map. This improves the performance of
-        // these rules considerably
-        let mut cumulative_substitution = substitution_until_fixed_point.map.clone();
-        if let Some(previous_context) = self.context.last() {
-            for (k, v) in previous_context.cumulative_substitution.map.iter() {
-                let value = match substitution_until_fixed_point.map.get(v) {
-                    Some(new_value) => new_value,
-                    None => v,
-                };
-                cumulative_substitution.insert(k.clone(), value.clone());
-            }
-        }
-        let cumulative_substitution = Substitution::new(self.pool, cumulative_substitution)?;
-
-        let bindings = variable_args.iter().cloned().collect();
-        Ok(Context {
-            substitution,
-            substitution_until_fixed_point,
-            cumulative_substitution,
-            bindings,
-        })
     }
 
     pub fn get_rule(rule_name: &str) -> Option<Rule> {
