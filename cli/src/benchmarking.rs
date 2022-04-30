@@ -55,13 +55,13 @@ fn run_job<T: CollectResults + Default>(
 
     let checking = Instant::now();
 
-    // If any errors are encountered when checking a proof, we still want to record the data from
-    // the steps that were run, so we ignore checker errors.
-    #[allow(unused_must_use)]
+    // If any errors are encountered when checking a proof, we return from this function and do not
+    // record the `RunMeasurement`. However, the data for each individual step is recorded as they
+    // are checked, so any steps that were run before the error will be recorded.
     if reconstruct {
-        checker.check_and_reconstruct(proof);
+        checker.check_and_reconstruct(proof)?;
     } else {
-        checker.check(&proof);
+        checker.check(&proof)?;
     }
     let checking = checking.elapsed();
 
@@ -82,7 +82,6 @@ fn run_job<T: CollectResults + Default>(
 }
 
 fn worker_thread<T: CollectResults + Default>(
-    thread_index: usize,
     jobs_queue: &ArrayQueue<JobDescriptor>,
     apply_function_defs: bool,
     reconstruct: bool,
@@ -90,9 +89,8 @@ fn worker_thread<T: CollectResults + Default>(
     let mut results = T::default();
 
     while let Some(job) = jobs_queue.pop() {
-        if let Err(e) = run_job(&mut results, job, apply_function_defs, reconstruct) {
-            log::error!("worker thread #{} encountered an error", thread_index);
-            log::error!("{}", e);
+        if run_job(&mut results, job, apply_function_defs, reconstruct).is_err() {
+            log::error!("encountered error in file '{}'", job.proof_file.display());
         }
     }
 
@@ -127,11 +125,11 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
         // `join` them
         #[allow(clippy::needless_collect)]
         let workers: Vec<_> = (0..num_threads)
-            .map(|i| {
+            .map(|_| {
                 s.builder()
                     .stack_size(STACK_SIZE)
                     .spawn(move |_| {
-                        worker_thread::<T>(i, jobs_queue, apply_function_defs, reconstruct)
+                        worker_thread::<T>(jobs_queue, apply_function_defs, reconstruct)
                     })
                     .unwrap()
             })
