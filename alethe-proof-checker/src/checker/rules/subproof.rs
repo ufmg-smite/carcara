@@ -3,7 +3,7 @@ use super::{
     CheckerError, EqualityError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::SubproofError};
-use ahash::AHashSet;
+use ahash::{AHashMap, AHashSet};
 
 pub fn subproof(
     RuleArgs {
@@ -94,8 +94,7 @@ pub fn bind(
 
     // The quantifier binders must be the xs and ys of the context substitution
     let (xs, ys): (AHashSet<_>, AHashSet<_>) = context
-        .substitution
-        .map
+        .mappings
         .iter()
         // We skip terms which are not simply variables
         .filter(|&(x, y)| x.is_var() && y.is_var())
@@ -143,7 +142,8 @@ pub fn r#let(
 
     // Since we are closing a subproof, we only care about the substitutions that were introduced
     // in it
-    let substitution = &context.last().unwrap().substitution;
+    let substitution: AHashMap<Rc<Term>, Rc<Term>> =
+        context.last().unwrap().mappings.iter().cloned().collect();
 
     let (let_term, u_prime) = match_term_err!((= l u) = &conclusion[0])?;
     let (let_bindings, u) = match let_term.as_ref() {
@@ -160,8 +160,8 @@ pub fn r#let(
     assert_eq(u_prime, previous_u_prime)?;
 
     rassert!(
-        let_bindings.len() == substitution.map.len(),
-        SubproofError::WrongNumberOfLetBindings(substitution.map.len(), let_bindings.len())
+        let_bindings.len() == substitution.len(),
+        SubproofError::WrongNumberOfLetBindings(substitution.len(), let_bindings.len())
     );
 
     let mut pairs: Vec<_> = let_bindings
@@ -170,7 +170,6 @@ pub fn r#let(
             let sort = pool.add_term(Term::Sort(pool.sort(t).clone()));
             let x_term = pool.add_term((x.clone(), sort).into());
             let s = substitution
-                .map
                 .get(&x_term)
                 .ok_or_else(|| SubproofError::BindingIsNotInContext(x.clone()))?;
             Ok((s, t))
@@ -267,6 +266,7 @@ pub fn onepoint(
         }
     );
 
+    context.catch_up_cumulative(pool)?;
     let context = context.last_mut().unwrap();
 
     if let Some((var, _)) = r_bindings.iter().find(|b| !context.bindings.contains(b)) {
@@ -281,12 +281,7 @@ pub fn onepoint(
         .iter()
         .map(|var| pool.add_term(var.clone().into()))
         .collect();
-    let substitution_vars: AHashSet<_> = context
-        .substitution
-        .map
-        .iter()
-        .map(|(k, _)| k.clone())
-        .collect();
+    let substitution_vars: AHashSet<_> = context.mappings.iter().map(|(k, _)| k.clone()).collect();
 
     let points = extract_points(quant, left);
 
@@ -298,17 +293,20 @@ pub fn onepoint(
         .into_iter()
         .flat_map(|(x, t)| [(x.clone(), t.clone()), (t, x)])
         .map(|(x, t)| {
-            let new_t = context.substitution_until_fixed_point.apply(pool, &t);
+            let new_t = context
+                .cumulative_substitution
+                .as_mut()
+                .unwrap()
+                .apply(pool, &t);
             (x, new_t)
         })
         .collect();
 
     // For each substitution (:= x t) in the context, the equality (= x t) must appear in phi
     if let Some((k, v)) = context
-        .substitution
-        .map
+        .mappings
         .iter()
-        .find(|&(k, v)| !points.contains(&(k.clone(), v.clone())))
+        .find(|(k, v)| !points.contains(&(k.clone(), v.clone())))
     {
         return Err(SubproofError::NoPointForSubstitution(k.clone(), v.clone()).into());
     }
@@ -317,8 +315,8 @@ pub fn onepoint(
         let expected: Vec<_> = l_bindings
             .iter()
             .filter(|&v| {
-                let t: Term = v.clone().into();
-                !context.substitution.map.contains_key(&pool.add_term(t))
+                let t = pool.add_term(v.clone().into());
+                !context.mappings.iter().any(|(k, _)| *k == t)
             })
             .cloned()
             .collect();
@@ -364,11 +362,11 @@ fn generic_skolemization_rule(
             .apply(pool, &current_phi);
     }
 
-    let substitution = &context.last().unwrap().substitution_until_fixed_point;
+    let substitution: AHashMap<Rc<Term>, Rc<Term>> =
+        context.last().unwrap().mappings.iter().cloned().collect();
     for (i, x) in bindings.iter().enumerate() {
         let x_term = pool.add_term(Term::from(x.clone()));
         let t = substitution
-            .map
             .get(&x_term)
             .ok_or_else(|| SubproofError::BindingIsNotInContext(x.0.clone()))?;
 

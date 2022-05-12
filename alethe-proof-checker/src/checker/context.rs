@@ -2,10 +2,9 @@ use crate::ast::*;
 use ahash::AHashSet;
 
 pub struct Context {
-    pub substitution: Substitution,
-    pub substitution_until_fixed_point: Substitution,
-    pub cumulative_substitution: Option<Substitution>,
+    pub mappings: Vec<(Rc<Term>, Rc<Term>)>,
     pub bindings: AHashSet<SortedVar>,
+    pub cumulative_substitution: Option<Substitution>,
 }
 
 #[derive(Default)]
@@ -62,12 +61,19 @@ impl ContextStack {
             substitution_until_fixed_point.insert(pool, var_term, new_value)?;
         }
 
+        let mappings = assignment_args
+            .iter()
+            .map(|(var, value)| {
+                let sort = Term::Sort(pool.sort(value).clone());
+                let var_term = (var.clone(), pool.add_term(sort)).into();
+                (pool.add_term(var_term), value.clone())
+            })
+            .collect();
         let bindings = variable_args.iter().cloned().collect();
         self.stack.push(Context {
-            substitution,
-            substitution_until_fixed_point,
-            cumulative_substitution: None,
+            mappings,
             bindings,
+            cumulative_substitution: None,
         });
         Ok(())
     }
@@ -80,15 +86,15 @@ impl ContextStack {
 
     pub fn catch_up_cumulative(&mut self, pool: &mut TermPool) -> Result<(), SubstitutionError> {
         for i in self.num_cumulative_calculated..self.stack.len() {
-            let until_fixed_point = &self.stack[i].substitution_until_fixed_point.map;
-            let mut cumulative_substitution = until_fixed_point.clone();
+            let simultaneous = build_simultaneous_substitution(pool, &self.stack[i].mappings).map;
+            let mut cumulative_substitution = simultaneous.clone();
 
             if let Some(previous_context) = self.stack.get(i - 1) {
                 let previous_substitution =
                     previous_context.cumulative_substitution.as_ref().unwrap();
 
                 for (k, v) in previous_substitution.map.iter() {
-                    let value = match until_fixed_point.get(v) {
+                    let value = match simultaneous.get(v) {
                         Some(new_value) => new_value,
                         None => v,
                     };
@@ -101,4 +107,26 @@ impl ContextStack {
         }
         Ok(())
     }
+}
+
+fn build_simultaneous_substitution(
+    pool: &mut TermPool,
+    mappings: &[(Rc<Term>, Rc<Term>)],
+) -> Substitution {
+    let mut result = Substitution::empty();
+
+    // We build the simultaneous substitution from the bottom up, by using the mappings already
+    // introduced to transform the result of a new mapping before inserting it into the
+    // substitution. So for instance, if the mappings are `y -> z` and `x -> (f y)`, we insert the
+    // first mapping, and then, when introducing the second, we use the current state of the
+    // substitution to transform `(f y)` into `(f z)`. The result will then contain `y -> z` and
+    // `x -> (f z)`.
+    for (var, value) in mappings {
+        let new_value = result.apply(pool, value);
+
+        // We can unwrap here safely because, by construction, the sort of `var` is the
+        // same as the sort of `new_value`
+        result.insert(pool, var.clone(), new_value).unwrap();
+    }
+    result
 }
