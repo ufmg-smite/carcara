@@ -127,6 +127,10 @@ impl DeepEqualityChecker {
             // Then, we check that the binding lists and the inner terms are equivalent
             for (a_var, b_var) in a_binds.iter().zip(b_binds.iter()) {
                 if !DeepEq::eq(self, &a_var.1, &b_var.1) {
+                    // We must remember to pop the frames from the alpha equivalence checker and
+                    // cache stack here, so as not to leave them in a corrupted state
+                    self.alpha_equiv_checker.as_mut().unwrap().pop();
+                    self.cache.pop_scope();
                     return false;
                 }
                 // We also insert each variable in the binding lists into the alpha-equivalence
@@ -136,14 +140,13 @@ impl DeepEqualityChecker {
                     .unwrap()
                     .insert(a_var.0.clone(), b_var.0.clone());
             }
-            if !DeepEq::eq(self, a_inner, b_inner) {
-                return false;
-            }
+            let result = DeepEq::eq(self, a_inner, b_inner);
 
             // Finally, we pop the scopes we pushed
             self.alpha_equiv_checker.as_mut().unwrap().pop();
             self.cache.pop_scope();
-            true
+
+            result
         } else {
             DeepEq::eq(self, a_binds, b_binds) && DeepEq::eq(self, a_inner, b_inner)
         }
