@@ -47,6 +47,7 @@ pub struct ProofChecker<'c> {
     config: Config<'c>,
     context: ContextStack,
     reconstructor: Option<Reconstructor>,
+    reached_empty_clause: bool,
 }
 
 impl<'c> ProofChecker<'c> {
@@ -56,6 +57,7 @@ impl<'c> ProofChecker<'c> {
             config,
             context: ContextStack::new(),
             reconstructor: None,
+            reached_empty_clause: false,
         }
     }
 
@@ -95,6 +97,10 @@ impl<'c> ProofChecker<'c> {
                             reconstructor.close_subproof();
                         }
                     }
+
+                    if step.clause.is_empty() {
+                        self.reached_empty_clause = true;
+                    }
                 }
                 ProofCommand::Subproof(s) => {
                     let time = Instant::now();
@@ -130,7 +136,11 @@ impl<'c> ProofChecker<'c> {
                 }
             }
         }
-        Ok(())
+        if self.config.is_running_test || self.reached_empty_clause {
+            Ok(())
+        } else {
+            Err(Error::DoesNotReachEmptyClause)
+        }
     }
 
     pub fn check_and_reconstruct(&mut self, mut proof: Proof) -> AletheResult<Proof> {

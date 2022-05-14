@@ -68,6 +68,11 @@ pub enum Error {
         rule: String,
         step: String,
     },
+
+    // While this is a kind of checking error, it does not happen in a specific step like all other
+    // checker errors, so we model it as a different variant
+    #[error("checker error: proof does not conclude empty clause")]
+    DoesNotReachEmptyClause,
 }
 
 pub fn check<P: AsRef<Path>>(
