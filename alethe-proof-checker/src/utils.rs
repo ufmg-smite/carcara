@@ -1,7 +1,8 @@
 use crate::ast::{BindingList, Quantifier, Rc, Term};
 use ahash::{AHashMap, AHashSet, AHasher};
+use num_bigint::BigInt;
 use num_rational::BigRational;
-use num_traits::{One, Signed, Zero};
+use num_traits::{One, Zero};
 use std::{
     borrow::Borrow,
     fmt,
@@ -161,22 +162,60 @@ impl<K, V> Default for SymbolTable<K, V> {
     }
 }
 
+/// Temporarily takes a value from a mutable reference, calls a function on it by value, and stores
+/// the result back in the mutable reference.
+///
+/// # Safety
+///
+/// For this function to be safe, the passed function may never panic, as it would leave the
+/// reference in an invalid state.
+unsafe fn steal<T, F: FnOnce(T) -> T>(reference: &mut T, function: F) {
+    use std::ptr;
+
+    let result = function(ptr::read(reference));
+    ptr::write(reference, result);
+}
+
 /// A trait that implements addition and multiplication operations on `BigRational`s that don't
 /// reduce the fractions. This makes them much faster than the implementations of the `Add` and
 /// `Mul` traits, but may lead to errors when using methods that assume that the fractions are
 /// reduced.
 pub trait RawOps {
-    fn raw_add(&self, other: &Self) -> Self;
+    fn raw_add(self, other: Self) -> Self;
+
+    fn raw_add_inplace(&mut self, other: Self);
 
     fn raw_mul(&self, other: &Self) -> Self;
+
+    fn raw_mul_inplace(&mut self, other: &Self);
+
+    fn raw_neg(&mut self);
 }
 
 impl RawOps for BigRational {
-    fn raw_add(&self, other: &Self) -> Self {
-        let denom = self.denom().abs() * other.denom().abs();
-        let numer_a = self.numer() * other.denom().abs();
-        let numer_b = other.numer() * self.denom().abs();
+    fn raw_add(self, other: Self) -> Self {
+        fn abs(value: BigInt) -> BigInt {
+            let (_, value) = value.into_parts();
+            BigInt::from_biguint(num_bigint::Sign::Plus, value)
+        }
+
+        let (self_numer, self_denom) = self.into();
+        let (other_numer, other_denom) = other.into();
+
+        let (self_denom, other_denom) = (abs(self_denom), abs(other_denom));
+
+        let numer_a = self_numer * &other_denom;
+        let numer_b = other_numer * &self_denom;
+        let denom = self_denom * other_denom;
+
         Self::new_raw(numer_a + numer_b, denom)
+    }
+
+    fn raw_add_inplace(&mut self, other: Self) {
+        // Safety: We can safely call `steal` here because `raw_add` never panics
+        unsafe {
+            steal(self, |this| this.raw_add(other));
+        }
     }
 
     fn raw_mul(&self, other: &Self) -> Self {
@@ -190,6 +229,38 @@ impl RawOps for BigRational {
             let numer = self.numer() * other.numer();
             let denom = self.denom() * other.denom();
             Self::new_raw(numer, denom)
+        }
+    }
+
+    fn raw_mul_inplace(&mut self, other: &Self) {
+        // Safety: We can safely call `steal` here because the passed closure can never panic
+        unsafe {
+            steal(self, |this| {
+                if this.is_zero() || other.is_zero() {
+                    Self::zero()
+                } else if other.is_one() {
+                    this
+                } else if this.is_one() {
+                    other.clone()
+                } else {
+                    let (numer, denom) = this.into();
+                    let numer = numer * other.numer();
+                    let denom = denom * other.denom();
+                    Self::new_raw(numer, denom)
+                }
+            });
+        }
+    }
+
+    fn raw_neg(&mut self) {
+        // Safety: We can safely call `steal` here because the passed closure can never panic
+        unsafe {
+            steal(self, |this| {
+                let (numer, denom) = this.into();
+                let (sign, numer) = numer.into_parts();
+                let numer = BigInt::from_biguint(-sign, numer);
+                Self::new_raw(numer, denom)
+            });
         }
     }
 }

@@ -5,7 +5,7 @@ use crate::{
     utils::RawOps,
 };
 use ahash::AHashMap;
-use num_bigint::BigInt;
+use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use num_rational::BigRational;
 use num_traits::{One, Signed, Zero};
@@ -106,16 +106,18 @@ impl LinearComb {
                 }
             }
             Term::Op(Operator::Mult, args) if args.len() == 2 => {
-                let (var, inner_coeff) = match (args[0].as_fraction(), args[1].as_fraction()) {
+                let (var, mut inner_coeff) = match (args[0].as_fraction(), args[1].as_fraction()) {
                     (None, Some(coeff)) => (&args[0], coeff),
                     (Some(coeff), _) => (&args[1], coeff),
                     (None, None) => return self.insert(term.clone(), coeff.clone()),
                 };
-                self.add_term(var, &coeff.raw_mul(&inner_coeff));
+                inner_coeff.raw_mul_inplace(coeff);
+                self.add_term(var, &inner_coeff);
             }
             _ => {
-                if let Some(r) = term.as_fraction() {
-                    self.1 = self.1.raw_add(&coeff.raw_mul(&r));
+                if let Some(mut r) = term.as_fraction() {
+                    r.raw_mul_inplace(coeff);
+                    self.1.raw_add_inplace(r);
                 } else {
                     self.insert(term.clone(), coeff.clone());
                 }
@@ -137,11 +139,9 @@ impl LinearComb {
 
         match self.0.entry(key) {
             Entry::Occupied(mut e) => {
-                let new_value = e.get().raw_add(&value);
-                if new_value.is_zero() {
+                e.get_mut().raw_add_inplace(value);
+                if e.get().is_zero() {
                     e.remove();
-                } else {
-                    e.insert(new_value);
                 }
             }
             Entry::Vacant(e) => {
@@ -154,7 +154,7 @@ impl LinearComb {
         for (var, coeff) in other.0 {
             self.insert(var, coeff);
         }
-        self.1 = self.1.raw_add(&other.1);
+        self.1 = self.1.raw_add(other.1);
         self
     }
 
@@ -170,17 +170,16 @@ impl LinearComb {
         }
 
         for coeff in self.0.values_mut() {
-            *coeff = coeff.raw_mul(scalar);
+            coeff.raw_mul_inplace(scalar);
         }
-        self.1 = self.1.raw_mul(scalar);
+        self.1.raw_mul_inplace(scalar);
     }
 
     fn neg(&mut self) {
         for coeff in self.0.values_mut() {
-            // While cloning here seems bad, it is actually faster than the alternatives
-            *coeff = -coeff.clone();
+            coeff.raw_neg();
         }
-        self.1 = -self.1.clone();
+        self.1.raw_neg();
     }
 
     fn sub(self, mut other: Self) -> Self {
@@ -189,27 +188,28 @@ impl LinearComb {
     }
 
     /// Finds the greatest common divisor of the coefficients in the linear combination. Returns
-    /// `None` if the linear combination is empty, or if any of the coefficients is not an integer.
-    fn coefficients_gcd(&self) -> Option<BigInt> {
+    /// 1 if the linear combination is empty, or if any of the coefficients is not an integer.
+    fn coefficients_gcd(&self) -> BigUint {
         if !self.1.is_integer() {
-            return None;
+            return BigUint::one();
         }
-        let coefficients = self.0.iter().map(|(_, coeff)| {
-            if coeff.is_integer() {
-                Some(coeff.to_integer().abs())
-            } else {
-                None
-            }
-        });
 
-        let mut result = self.1.to_integer().abs();
-        for c in coefficients {
-            result = num_integer::gcd(c?, result);
+        let (_, mut result) = self.1.to_integer().into_parts();
+        for (_, coeff) in self.0.iter() {
+            if result.is_one() {
+                return BigUint::one();
+            }
+            if coeff.is_integer() {
+                let (_, coeff) = coeff.to_integer().into_parts();
+                result = num_integer::gcd(coeff, result);
+            } else {
+                return BigUint::one();
+            }
         }
 
         // If the linear combination is all zeros, the result would also be zero. In that case, we
         // have to return one instead
-        Some(std::cmp::max(BigInt::one(), result))
+        std::cmp::max(BigUint::one(), result)
     }
 }
 
@@ -258,7 +258,7 @@ fn strengthen(op: Operator, disequality: &mut LinearComb, a: &BigRational) -> Op
         Operator::GreaterThan if is_integer => {
             // Instead of dividing and then multiplying back, we just multiply the "+ 1"
             // that is added by the strengthening rule
-            let increment = disequality.coefficients_gcd().unwrap_or_else(BigInt::one);
+            let increment: BigInt = disequality.coefficients_gcd().into();
             disequality.1 = disequality.1.floor() + increment;
             Operator::GreaterEq
         }
