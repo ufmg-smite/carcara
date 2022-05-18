@@ -104,7 +104,7 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
     apply_function_defs: bool,
     reconstruct: bool,
 ) -> T {
-    const STACK_SIZE: usize = 64 * 1024 * 1024;
+    const STACK_SIZE: usize = 128 * 1024 * 1024;
 
     let jobs_queue = ArrayQueue::new(instances.len() * num_runs);
     for run_index in 0..num_runs {
