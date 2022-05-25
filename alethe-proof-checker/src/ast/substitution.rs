@@ -137,22 +137,21 @@ impl Substitution {
                 pool.add_term(Term::Op(*op, new_args))
             }
             Term::Quant(q, b, t) => {
-                let (new_bindings, new_term) = self.apply_to_binder(pool, b.as_ref(), t, false);
-                pool.add_term(Term::Quant(*q, new_bindings, new_term))
+                self.apply_to_binder(pool, term, b.as_ref(), t, false, |b, t| {
+                    Term::Quant(*q, b, t)
+                })
             }
-            Term::Choice(var, t) => {
-                let (mut new_bindings, new_term) =
-                    self.apply_to_binder(pool, std::slice::from_ref(var), t, false);
-                let new_var = new_bindings.0.pop().unwrap();
-                pool.add_term(Term::Choice(new_var, new_term))
-            }
-            Term::Let(b, t) => {
-                let (new_bindings, new_term) = self.apply_to_binder(pool, b.as_ref(), t, true);
-                pool.add_term(Term::Let(new_bindings, new_term))
-            }
+            Term::Choice(var, t) => self.apply_to_binder(
+                pool,
+                term,
+                std::slice::from_ref(var),
+                t,
+                true,
+                |mut b, t| Term::Choice(b.0.pop().unwrap(), t),
+            ),
+            Term::Let(b, t) => self.apply_to_binder(pool, term, b.as_ref(), t, true, Term::Let),
             Term::Lambda(b, t) => {
-                let (new_bindings, new_term) = self.apply_to_binder(pool, b.as_ref(), t, true);
-                pool.add_term(Term::Lambda(new_bindings, new_term))
+                self.apply_to_binder(pool, term, b.as_ref(), t, true, Term::Lambda)
             }
             Term::Terminal(_) | Term::Sort(_) => term.clone(),
         };
@@ -165,14 +164,58 @@ impl Substitution {
         result
     }
 
-    fn apply_to_binder(
+    fn can_skip_instead_of_renaming(
+        &self,
+        pool: &mut TermPool,
+        binding_list: &[SortedVar],
+    ) -> bool {
+        // Note: this method assumes that `binding_list` is a "sort" binding list. "Value" lists add
+        // some complications that are currently not supported. For example, the variable in the
+        // domain of the substitution might be used in the value of a binding in the binding list,
+        // and the behaviour of the susbstitution may change if this use is before or after the
+        // varibale is bound in the list.
+
+        if self.map.len() != 1 {
+            return false;
+        }
+        let x = self.map.iter().next().unwrap().0.as_var().unwrap();
+
+        let mut should_be_renamed = binding_list.iter().filter(|&var| {
+            let t = pool.add_term(var.clone().into());
+            self.should_be_renamed.as_ref().unwrap().contains(&t)
+        });
+
+        // In order for skipping to be possible, there should be only one variable in the binding
+        // list that would be renamed, and that variable must be the variable in the domain of the
+        // substitution
+        should_be_renamed.next().map(|(var, _)| var.as_ref()) == Some(x)
+            && should_be_renamed.next().is_none()
+    }
+
+    fn apply_to_binder<F: Fn(BindingList, Rc<Term>) -> Term>(
         &mut self,
         pool: &mut TermPool,
+        original_term: &Rc<Term>,
         binding_list: &[SortedVar],
         inner: &Rc<Term>,
         is_value_list: bool,
-    ) -> (BindingList, Rc<Term>) {
+        build_function: F,
+    ) -> Rc<Term> {
         self.compute_should_be_renamed(pool);
+
+        // In some situations, if the substitution has only one mapping (say, `x -> t`) we can skip
+        // applying the substitution to a binder term altogether. This can happen if the variable
+        // `x` appears in the binding list, while none of the free variables of `t` appear.
+        // Normally, we would rename `x` to avoid shadowing before applying the substitution, but we
+        // could instead remove the relevant mapping from the substitution, and add it back after
+        // applying the substitution to the binder term. In this case, as there is only one mapping,
+        // we can just skip the substitution entirely, which is way faster in some cases. In
+        // particular, the skolemization rules require this optimization to have acceptable
+        // performance. Currently, this kind of skipping in only supported for "sort" binding lists,
+        // meaning quantifier and `choice` terms.
+        if !is_value_list && self.can_skip_instead_of_renaming(pool, binding_list) {
+            return original_term.clone();
+        }
 
         let (new_bindings, mut renaming) =
             self.rename_binding_list(pool, binding_list, is_value_list);
@@ -184,7 +227,7 @@ impl Substitution {
             let renamed = renaming.apply(pool, inner);
             self.apply(pool, &renamed)
         };
-        (new_bindings, new_term)
+        pool.add_term(build_function(new_bindings, new_term))
     }
 
     /// Creates a new substitution that renames all variables in the binding list that may be
@@ -304,7 +347,10 @@ mod tests {
             "(forall ((p Bool)) (and p q))" [q -> r] => "(forall ((p Bool)) (and p r))",
 
             // Simple renaming
-            "(forall ((x Int)) (> x 0))" [x -> y] => "(forall ((x@ Int)) (> x@ 0))",
+            "(forall ((y Int)) (> y 0))" [x -> y] => "(forall ((y@ Int)) (> y@ 0))",
+
+            // Renaming may be skipped
+            "(forall ((x Int)) (> x 0))" [x -> y] => "(forall ((x Int)) (> x 0))",
 
             // Capture-avoidance
             "(forall ((y Int)) (> y x))" [x -> y] => "(forall ((y@ Int)) (> y@ y))",
@@ -312,14 +358,15 @@ mod tests {
                 "(forall ((x@ Int) (y@ Int)) (= x@ y@))",
             "(forall ((x Int) (y Int)) (= x y))" [x -> x] => "(forall ((x Int) (y Int)) (= x y))",
             "(forall ((y Int)) (> y x))" [x -> (+ y 0)] => "(forall ((y@ Int)) (> y@ (+ y 0)))",
-            "(forall ((x Int) (x@ Int)) (= x x@))" [x -> y] =>
-                "(forall ((x@ Int) (x@@ Int)) (= x@ x@@))",
-            "(forall ((x Int) (x@ Int) (x@@ Int)) (= x x@ x@@))" [x -> y] =>
-                "(forall ((x@ Int) (x@@ Int) (x@@@ Int)) (= x@ x@@ x@@@))",
+
+            "(forall ((y Int) (y@ Int)) (= y y@))" [x -> y] =>
+                "(forall ((y@ Int) (y@@ Int)) (= y@ y@@))",
+            "(forall ((y Int) (y@ Int) (y@@ Int)) (= y y@ y@@))" [x -> y] =>
+                "(forall ((y@ Int) (y@@ Int) (y@@@ Int)) (= y@ y@@ y@@@))",
 
             // The capture-avoidance may disambiguate repeated bindings
-            "(forall ((x Int) (x@ Int) (x@ Int)) (= x x@ x@))" [x -> y] =>
-                "(forall ((x@ Int) (x@@ Int) (x@@@ Int)) (= x@ x@@@ x@@@))",
+            "(forall ((y Int) (y@ Int) (y@ Int)) (= y y@ y@))" [x -> y] =>
+                "(forall ((y@ Int) (y@@ Int) (y@@@ Int)) (= y@ y@@@ y@@@))",
 
             // In theory, since x does not appear in this term, renaming y to y@ is unnecessary
             "(forall ((y Int)) (> y 0))" [x -> y] => "(forall ((y@ Int)) (> y@ 0))",
