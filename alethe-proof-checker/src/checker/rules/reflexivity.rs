@@ -27,21 +27,17 @@ pub fn refl(
         return Ok(());
     }
 
-    context.catch_up_cumulative(pool)?;
-    let cumulative_substitution = context
-        .last_mut()
-        .ok_or_else(|| CheckerError::ReflexivityFailed(left.clone(), right.clone()))?
-        .cumulative_substitution
-        .as_mut()
-        .unwrap();
+    if context.is_empty() {
+        return Err(CheckerError::ReflexivityFailed(left.clone(), right.clone()));
+    }
 
     // In some cases, the substitution is only applied to the left or the right term, and in some
     // cases it is applied to both. To cover all cases, we must check all three possibilities. We
     // don't compute the new left and right terms until they are needed, to avoid doing unnecessary
     // work
-    let new_left = cumulative_substitution.apply(pool, left);
+    let new_left = context.apply(pool, left);
     let result = are_alpha_equivalent(&new_left, right, deep_eq_time) || {
-        let new_right = cumulative_substitution.apply(pool, right);
+        let new_right = context.apply(pool, right);
         are_alpha_equivalent(left, &new_right, deep_eq_time)
             || are_alpha_equivalent(&new_left, &new_right, deep_eq_time)
     };

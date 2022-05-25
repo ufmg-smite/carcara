@@ -266,10 +266,11 @@ pub fn onepoint(
         }
     );
 
-    context.catch_up_cumulative(pool)?;
-    let context = context.last_mut().unwrap();
-
-    if let Some((var, _)) = r_bindings.iter().find(|b| !context.bindings.contains(b)) {
+    let last_context = context.last_mut().unwrap();
+    if let Some((var, _)) = r_bindings
+        .iter()
+        .find(|b| !last_context.bindings.contains(b))
+    {
         return Err(SubproofError::BindingIsNotInContext(var.clone()).into());
     }
 
@@ -281,7 +282,11 @@ pub fn onepoint(
         .iter()
         .map(|var| pool.add_term(var.clone().into()))
         .collect();
-    let substitution_vars: AHashSet<_> = context.mappings.iter().map(|(k, _)| k.clone()).collect();
+    let substitution_vars: AHashSet<_> = last_context
+        .mappings
+        .iter()
+        .map(|(k, _)| k.clone())
+        .collect();
 
     let points = extract_points(quant, left);
 
@@ -292,18 +297,12 @@ pub fn onepoint(
     let points: AHashSet<_> = points
         .into_iter()
         .flat_map(|(x, t)| [(x.clone(), t.clone()), (t, x)])
-        .map(|(x, t)| {
-            let new_t = context
-                .cumulative_substitution
-                .as_mut()
-                .unwrap()
-                .apply(pool, &t);
-            (x, new_t)
-        })
+        .map(|(x, t)| (x, context.apply(pool, &t)))
         .collect();
 
+    let last_context = context.last_mut().unwrap();
     // For each substitution (:= x t) in the context, the equality (= x t) must appear in phi
-    if let Some((k, v)) = context
+    if let Some((k, v)) = last_context
         .mappings
         .iter()
         .find(|(k, v)| !points.contains(&(k.clone(), v.clone())))
@@ -316,7 +315,7 @@ pub fn onepoint(
             .iter()
             .filter(|&v| {
                 let t = pool.add_term(v.clone().into());
-                !context.mappings.iter().any(|(k, _)| *k == t)
+                !last_context.mappings.iter().any(|(k, _)| *k == t)
             })
             .cloned()
             .collect();
@@ -352,14 +351,7 @@ fn generic_skolemization_rule(
 
     let mut current_phi = phi.clone();
     if context.len() >= 2 {
-        context.catch_up_cumulative(pool)?;
-        current_phi = context
-            .get_mut(context.len() - 2)
-            .unwrap()
-            .cumulative_substitution
-            .as_mut()
-            .unwrap()
-            .apply(pool, &current_phi);
+        current_phi = context.apply_previous(pool, &current_phi);
     }
 
     let substitution: AHashMap<Rc<Term>, Rc<Term>> =

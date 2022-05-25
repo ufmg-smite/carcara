@@ -22,16 +22,16 @@ impl ContextStack {
         self.stack.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn last(&self) -> Option<&Context> {
         self.stack.last()
     }
 
     pub fn last_mut(&mut self) -> Option<&mut Context> {
         self.stack.last_mut()
-    }
-
-    pub fn get_mut(&mut self, index: usize) -> Option<&mut Context> {
-        self.stack.get_mut(index)
     }
 
     pub fn push(
@@ -84,8 +84,8 @@ impl ContextStack {
             std::cmp::min(self.num_cumulative_calculated, self.stack.len());
     }
 
-    pub fn catch_up_cumulative(&mut self, pool: &mut TermPool) -> Result<(), SubstitutionError> {
-        for i in self.num_cumulative_calculated..self.stack.len() {
+    fn catch_up_cumulative(&mut self, pool: &mut TermPool, up_to: usize) {
+        for i in self.num_cumulative_calculated..std::cmp::max(up_to + 1, self.len()) {
             let simultaneous = build_simultaneous_substitution(pool, &self.stack[i].mappings).map;
             let mut cumulative_substitution = simultaneous.clone();
 
@@ -102,10 +102,27 @@ impl ContextStack {
                 }
             }
             self.stack[i].cumulative_substitution =
-                Some(Substitution::new(pool, cumulative_substitution)?);
+                Some(Substitution::new(pool, cumulative_substitution).unwrap());
             self.num_cumulative_calculated = i + 1;
         }
-        Ok(())
+    }
+
+    fn get_substitution(&mut self, pool: &mut TermPool, index: usize) -> &mut Substitution {
+        assert!(index < self.len());
+        self.catch_up_cumulative(pool, index);
+        self.stack[index].cumulative_substitution.as_mut().unwrap()
+    }
+
+    pub fn apply_previous(&mut self, pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
+        assert!(self.len() >= 2);
+        self.get_substitution(pool, self.len() - 2)
+            .apply(pool, term)
+    }
+
+    pub fn apply(&mut self, pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
+        assert!(!self.is_empty());
+        self.get_substitution(pool, self.len() - 1)
+            .apply(pool, term)
     }
 }
 
