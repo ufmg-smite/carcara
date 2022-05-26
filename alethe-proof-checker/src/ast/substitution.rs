@@ -51,20 +51,24 @@ impl Substitution {
         self.map.is_empty()
     }
 
-    /// Extends the substitution by adding a new mapping from `x` to `t`.
+    /// Extends the substitution by adding a new mapping from `x` to `t`. `x` must be a variable
+    /// term.
     pub(crate) fn insert(
         &mut self,
         pool: &mut TermPool,
         x: Rc<Term>,
         t: Rc<Term>,
     ) -> SubstitutionResult<()> {
+        assert!(x.is_var());
+
         if pool.sort(&x) != pool.sort(&t) {
             return Err(SubstitutionError::DifferentSorts(x, t));
         }
 
-        // Introducing new mappings may invalidate previously defined cache entries, so we need to
-        // clear the cache
-        self.cache.clear();
+        // Introducing new mappings may invalidate previously defined cache entries. In particular,
+        // if a term contains `x` as a free variable, the result of applying the substitution to it
+        // may be different after adding the `x -> t` mapping, so we remove these cache entries.
+        self.cache.retain(|k, _| !pool.free_vars(k).contains(&x));
 
         if let Some(should_be_renamed) = &mut self.should_be_renamed {
             if x != t {
