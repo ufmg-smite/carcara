@@ -62,6 +62,10 @@ impl Substitution {
             return Err(SubstitutionError::DifferentSorts(x, t));
         }
 
+        // Introducing new mappings may invalidate previously defined cache entries, so we need to
+        // clear the cache
+        self.cache.clear();
+
         if let Some(should_be_renamed) = &mut self.should_be_renamed {
             if x != t {
                 should_be_renamed.extend(pool.free_vars(&t).iter().cloned());
