@@ -115,11 +115,11 @@ macro_rules! terminal {
     (int $e:expr) => {
         $crate::ast::Term::Terminal($crate::ast::Terminal::Integer($e.into()))
     };
-    (real $num:literal / $denom:literal) => {
-        $crate::ast::Term::Terminal($crate::ast::Terminal::Real(
-            num_rational::Ratio::new($num.into(), $denom.into())
-        ))
-    };
+    (real $num:literal / $denom:literal) => {{
+        let num: rug::Integer = $num.into();
+        let denom: rug::Integer = $denom.into();
+        $crate::ast::Term::Terminal($crate::ast::Terminal::Real((num, denom).into()))
+    }};
     (real $e:expr) => {
         $crate::ast::Term::Terminal($crate::ast::Terminal::Real($e))
     };

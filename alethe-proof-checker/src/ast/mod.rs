@@ -27,9 +27,8 @@ pub(crate) use deep_eq::DeepEqualityChecker;
 
 use crate::checker::error::CheckerError;
 use ahash::AHashSet;
-use num_bigint::BigInt;
-use num_rational::BigRational;
-use num_traits::ToPrimitive;
+use rug::Integer;
+use rug::Rational;
 use std::hash::Hash;
 
 /// A proof in the Alethe Proof Format.
@@ -346,34 +345,34 @@ impl Term {
         }
     }
 
-    /// Tries to extract a `BigRational` from a term. Returns `Some` if the term is an integer or
-    /// real constant.
-    pub fn as_number(&self) -> Option<BigRational> {
+    /// Tries to extract a `Rational` from a term. Returns `Some` if the term is an integer or real
+    /// constant.
+    pub fn as_number(&self) -> Option<Rational> {
         match self {
             Term::Terminal(Terminal::Real(r)) => Some(r.clone()),
-            Term::Terminal(Terminal::Integer(i)) => Some(BigRational::from_integer(i.clone())),
+            Term::Terminal(Terminal::Integer(i)) => Some(i.clone().into()),
             _ => None,
         }
     }
 
-    /// Tries to extract a `BigRational` from a term, allowing negative values represented with the
+    /// Tries to extract a `Rational` from a term, allowing negative values represented with the
     /// unary `-` operator. Returns `Some` if the term is an integer or real constant, or one such
     /// constant negated with the `-` operator.
-    pub fn as_signed_number(&self) -> Option<BigRational> {
+    pub fn as_signed_number(&self) -> Option<Rational> {
         match match_term!((-x) = self) {
             Some(x) => x.as_number().map(|r| -r),
             None => self.as_number(),
         }
     }
 
-    /// Tries to extract a `BigRational` from a term, allowing fractions. This method will return
+    /// Tries to extract a `Rational` from a term, allowing fractions. This method will return
     /// `Some` if the term is:
     ///
     /// - A real or integer constant
     /// - An application of the `/` or `div` operators on two real or integer constants
     /// - An application of the unary `-` operator on one of the two previous cases
-    pub fn as_fraction(&self) -> Option<BigRational> {
-        fn as_unsigned_fraction(term: &Term) -> Option<BigRational> {
+    pub fn as_fraction(&self) -> Option<Rational> {
+        fn as_unsigned_fraction(term: &Term) -> Option<Rational> {
             match term {
                 Term::Op(Operator::IntDiv | Operator::RealDiv, args) if args.len() == 2 => {
                     Some(args[0].as_signed_number()? / args[1].as_signed_number()?)
@@ -479,19 +478,19 @@ impl Rc<Term> {
     }
 
     /// Similar to `Term::as_number`, but returns a `CheckerError` on failure.
-    pub fn as_number_err(&self) -> Result<BigRational, CheckerError> {
+    pub fn as_number_err(&self) -> Result<Rational, CheckerError> {
         self.as_number()
             .ok_or_else(|| CheckerError::ExpectedAnyNumber(self.clone()))
     }
 
     /// Similar to `Term::as_signed_number`, but returns a `CheckerError` on failure.
-    pub fn as_signed_number_err(&self) -> Result<BigRational, CheckerError> {
+    pub fn as_signed_number_err(&self) -> Result<Rational, CheckerError> {
         self.as_signed_number()
             .ok_or_else(|| CheckerError::ExpectedAnyNumber(self.clone()))
     }
 
     /// Similar to `Term::as_fraction`, but returns a `CheckerError` on failure.
-    pub fn as_fraction_err(&self) -> Result<BigRational, CheckerError> {
+    pub fn as_fraction_err(&self) -> Result<Rational, CheckerError> {
         self.as_fraction()
             .ok_or_else(|| CheckerError::ExpectedAnyNumber(self.clone()))
     }
@@ -507,8 +506,8 @@ impl Rc<Term> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Terminal {
-    Integer(BigInt),
-    Real(BigRational),
+    Integer(Integer),
+    Real(Rational),
     String(String),
     Var(Identifier, Rc<Term>),
 }

@@ -1,7 +1,5 @@
 use crate::{parser::ParserError, AletheResult, Error};
-use num_bigint::BigInt;
-use num_rational::BigRational;
-use num_traits::Num;
+use rug::{ops::Pow, Integer, Rational};
 use std::{
     fmt,
     io::{self, BufRead},
@@ -28,10 +26,10 @@ pub enum Token {
     Keyword(String),
 
     /// An integer numeral literal.
-    Numeral(BigInt),
+    Numeral(Integer),
 
     /// A decimal numeral literal.
-    Decimal(BigRational),
+    Decimal(Rational),
 
     /// A string literal.
     String(String),
@@ -329,8 +327,8 @@ impl<R: BufRead> Lexer<R> {
                 ))
             }
         };
-        let s = self.read_chars_while(|c| c.is_digit(base))?;
-        Ok(Token::Numeral(BigInt::from_str_radix(&s, base).unwrap()))
+        let s = self.read_chars_while(|c| c.is_digit(base as u32))?;
+        Ok(Token::Numeral(Integer::from_str_radix(&s, base).unwrap()))
     }
 
     /// Reads an integer or decimal numerical literal.
@@ -347,9 +345,9 @@ impl<R: BufRead> Lexer<R> {
         if self.current_char == Some('.') {
             self.next_char()?;
             let frac_part = self.read_chars_while(|c| c.is_ascii_digit())?;
-            let denom = BigInt::from(10).pow(frac_part.len() as u32);
-            let numer = (int_part + &frac_part).parse::<BigInt>().unwrap();
-            let r = BigRational::new(numer, denom);
+            let denom = Integer::from(10u32).pow(frac_part.len() as u32);
+            let numer = (int_part + &frac_part).parse::<Integer>().unwrap();
+            let r = (numer, denom).into();
             Ok(Token::Decimal(r))
         } else {
             Ok(Token::Numeral(int_part.parse().unwrap()))
@@ -474,7 +472,7 @@ mod tests {
         let input = "42 3.14159 #b101010 #x0ff";
         let expected = vec![
             Token::Numeral(42.into()),
-            Token::Decimal(BigRational::new(314_159.into(), 100_000.into())),
+            Token::Decimal((314_159, 100_000).into()),
             Token::Numeral(42.into()),
             Token::Numeral(255.into()),
         ];

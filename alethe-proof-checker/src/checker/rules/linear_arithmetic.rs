@@ -2,13 +2,9 @@ use super::{assert_clause_len, assert_eq, assert_num_args, RuleArgs, RuleResult}
 use crate::{
     ast::*,
     checker::error::{CheckerError, LinearArithmeticError},
-    utils::RawOps,
 };
 use ahash::AHashMap;
-use num_bigint::{BigInt, BigUint};
-use num_integer::Integer;
-use num_rational::BigRational;
-use num_traits::{One, Signed, Zero};
+use rug::{ops::NegAssign, Integer, Rational};
 
 pub fn la_rw_eq(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
@@ -64,24 +60,18 @@ fn negate_disequality(term: &Rc<Term>) -> Result<(Operator, LinearComb, LinearCo
 
 /// A linear combination, represented by a hash map from non-constant terms to their coefficients,
 /// plus a constant term. This is also used to represent a disequality, in which case the left side
-/// is the non-constant terms and their coefficients, and the right side is the constant term. The
-/// methods that construct and manipulate `LinearComb`s use the operations implemented by the
-/// `RawOps` trait, and therefore don't reduce the fractions in `BigRational`s. This may lead to
-/// errors when using methods that assume these fractions were reduced.
+/// is the non-constant terms and their coefficients, and the right side is the constant term.
 #[derive(Debug)]
-pub struct LinearComb(
-    pub(crate) AHashMap<Rc<Term>, BigRational>,
-    pub(crate) BigRational,
-);
+pub struct LinearComb(pub(crate) AHashMap<Rc<Term>, Rational>, pub(crate) Rational);
 
 impl LinearComb {
     fn new() -> Self {
-        Self(AHashMap::new(), BigRational::zero())
+        Self(AHashMap::new(), Rational::new())
     }
 
     /// Flattens a term and adds it to the linear combination, multiplying by the coefficient
     /// `coeff`. This method is only intended to be used in `LinearComb::from_term`.
-    fn add_term(&mut self, term: &Rc<Term>, coeff: &BigRational) {
+    fn add_term(&mut self, term: &Rc<Term>, coeff: &Rational) {
         // A note on performance: this function traverses the term recursively without making use
         // of a cache, which means sometimes it has to recompute the result for the same term more
         // than once. However, an old implementation of this method that could use a cache showed
@@ -97,12 +87,12 @@ impl LinearComb {
                 }
             }
             Term::Op(Operator::Sub, args) if args.len() == 1 => {
-                self.add_term(&args[0], &-coeff);
+                self.add_term(&args[0], &coeff.as_neg());
             }
             Term::Op(Operator::Sub, args) => {
                 self.add_term(&args[0], coeff);
                 for a in &args[1..] {
-                    self.add_term(a, &-coeff);
+                    self.add_term(a, &coeff.as_neg());
                 }
             }
             Term::Op(Operator::Mult, args) if args.len() == 2 => {
@@ -111,13 +101,13 @@ impl LinearComb {
                     (Some(coeff), _) => (&args[1], coeff),
                     (None, None) => return self.insert(term.clone(), coeff.clone()),
                 };
-                inner_coeff.raw_mul_inplace(coeff);
+                inner_coeff *= coeff;
                 self.add_term(var, &inner_coeff);
             }
             _ => {
                 if let Some(mut r) = term.as_fraction() {
-                    r.raw_mul_inplace(coeff);
-                    self.1.raw_add_inplace(r);
+                    r *= coeff;
+                    self.1 += r;
                 } else {
                     self.insert(term.clone(), coeff.clone());
                 }
@@ -130,17 +120,17 @@ impl LinearComb {
     /// each atom.
     fn from_term(term: &Rc<Term>) -> Self {
         let mut result = Self::new();
-        result.add_term(term, &BigRational::one());
+        result.add_term(term, &Rational::from(1));
         result
     }
 
-    fn insert(&mut self, key: Rc<Term>, value: BigRational) {
+    fn insert(&mut self, key: Rc<Term>, value: Rational) {
         use std::collections::hash_map::Entry;
 
         match self.0.entry(key) {
             Entry::Occupied(mut e) => {
-                e.get_mut().raw_add_inplace(value);
-                if e.get().is_zero() {
+                *e.get_mut() += value;
+                if *e.get() == 0 {
                     e.remove();
                 }
             }
@@ -154,32 +144,32 @@ impl LinearComb {
         for (var, coeff) in other.0 {
             self.insert(var, coeff);
         }
-        self.1 = self.1.raw_add(other.1);
+        self.1 += other.1;
         self
     }
 
-    fn mul(&mut self, scalar: &BigRational) {
-        if scalar.is_zero() {
+    fn mul(&mut self, scalar: &Rational) {
+        if *scalar == 0 {
             self.0.clear();
-            self.1.set_zero();
+            self.1 = Rational::new();
             return;
         }
 
-        if scalar.is_one() {
+        if *scalar == 1 {
             return;
         }
 
         for coeff in self.0.values_mut() {
-            coeff.raw_mul_inplace(scalar);
+            *coeff *= scalar;
         }
-        self.1.raw_mul_inplace(scalar);
+        self.1 *= scalar;
     }
 
     fn neg(&mut self) {
         for coeff in self.0.values_mut() {
-            coeff.raw_neg();
+            coeff.neg_assign();
         }
-        self.1.raw_neg();
+        self.1.neg_assign();
     }
 
     fn sub(self, mut other: Self) -> Self {
@@ -189,42 +179,37 @@ impl LinearComb {
 
     /// Finds the greatest common divisor of the coefficients in the linear combination. Returns
     /// 1 if the linear combination is empty, or if any of the coefficients is not an integer.
-    fn coefficients_gcd(&self) -> BigUint {
+    fn coefficients_gcd(&self) -> Integer {
         if !self.1.is_integer() {
-            return BigUint::one();
+            return Integer::from(1);
         }
 
-        let (_, mut result) = self.1.to_integer().into_parts();
+        let mut result = self.1.numer().clone();
         for (_, coeff) in self.0.iter() {
-            if result.is_one() {
-                return BigUint::one();
+            if result == 1 {
+                return Integer::from(1);
             }
             if coeff.is_integer() {
-                let (_, coeff) = coeff.to_integer().into_parts();
-                result = num_integer::gcd(coeff, result);
+                result.gcd_mut(coeff.numer());
             } else {
-                return BigUint::one();
+                return Integer::from(1);
             }
         }
 
         // If the linear combination is all zeros, the result would also be zero. In that case, we
         // have to return one instead
-        std::cmp::max(BigUint::one(), result)
+        std::cmp::max(Integer::from(1), result)
     }
 }
 
-fn strengthen(op: Operator, disequality: &mut LinearComb, a: &BigRational) -> Operator {
+fn strengthen(op: Operator, disequality: &mut LinearComb, a: &Rational) -> Operator {
     // Multiplications are expensive, so we avoid them if we can
-    let is_integer = if a.is_zero() {
+    let is_integer = if *a == 0 {
         true
-    } else if a.is_one() {
+    } else if *a == 1 {
         disequality.1.is_integer()
     } else {
-        // This code is checking if `disequality.1 * a` is an integer, but `is_integer` assumes
-        // that the `BigRational` is reduced. We instead directly check if the numerator is a
-        // multiple of the denominator
-        let constant = disequality.1.raw_mul(a);
-        constant.numer().is_multiple_of(constant.denom())
+        (disequality.1.clone() * a).is_integer()
     };
 
     match op {
@@ -258,12 +243,13 @@ fn strengthen(op: Operator, disequality: &mut LinearComb, a: &BigRational) -> Op
         Operator::GreaterThan if is_integer => {
             // Instead of dividing and then multiplying back, we just multiply the "+ 1"
             // that is added by the strengthening rule
-            let increment: BigInt = disequality.coefficients_gcd().into();
-            disequality.1 = disequality.1.floor() + increment;
+            disequality.1.floor_mut();
+            disequality.1 += disequality.coefficients_gcd();
             Operator::GreaterEq
         }
         Operator::GreaterThan | Operator::GreaterEq => {
-            disequality.1 = disequality.1.floor() + BigRational::one();
+            disequality.1.floor_mut();
+            disequality.1 += 1;
             Operator::GreaterEq
         }
         Operator::LessThan | Operator::LessEq => unreachable!(),
@@ -338,7 +324,7 @@ pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
 
         // If the operator encompasses the actual relationship between 0 and the right side, the
         // disequality is true
-        match BigRational::zero().cmp(right_side) {
+        match Rational::new().cmp(right_side) {
             Ordering::Less => matches!(op, LessThan | LessEq),
             Ordering::Equal => matches!(op, LessEq | GreaterEq | Equals),
             Ordering::Greater => matches!(op, GreaterThan | GreaterEq),
@@ -459,8 +445,7 @@ pub fn la_tautology(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 
         // The final disequality should be tautological
         let is_disequality_true = disequality.0.is_empty()
-            && (disequality.1.is_positive()
-                || op == Operator::GreaterThan && disequality.1.is_zero());
+            && (disequality.1 > 0 || op == Operator::GreaterThan && disequality.1 == 0);
         rassert!(
             is_disequality_true,
             LinearArithmeticError::DisequalityIsNotTautology(op, disequality),

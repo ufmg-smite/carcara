@@ -3,7 +3,7 @@ use crate::{
     parser::Token,
     utils::Range,
 };
-use num_bigint::BigInt;
+use rug::Integer;
 use std::fmt;
 use thiserror::Error;
 
@@ -74,7 +74,7 @@ pub enum ParserError {
     /// The number given as the arity in a `declare-sort` command is too large. This only happens
     /// if the number is too big to fit in a `usize`, so it almost never happens.
     #[error("{0} is not a valid sort arity")]
-    InvalidSortArity(BigInt),
+    InvalidSortArity(Integer),
 
     /// The last command in a subproof is not a `step` command.
     #[error("last command in subproof '{0}' is not a step")]

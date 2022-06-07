@@ -10,10 +10,7 @@ rust-version = "1.59"
 [dependencies]
 ahash = "0.7.4"
 log = "0.4.14"
-num-bigint = "0.4.0"
-num-integer = "0.1.44"
-num-rational = "0.4.0"
-num-traits = "0.2.14"
+rug = "1.16.0"
 thiserror = "1.0.30"
 
 [features]

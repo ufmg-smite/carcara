@@ -14,9 +14,7 @@ use crate::{
 };
 use ahash::{AHashMap, AHashSet};
 use error::assert_num_args;
-use num_bigint::BigInt;
-use num_rational::BigRational;
-use num_traits::ToPrimitive;
+use rug::Integer;
 use std::{io::BufRead, str::FromStr};
 
 /// Parses an SMT problem instance (in the SMT-LIB format) and its associated proof (in the Alethe
@@ -320,9 +318,9 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
-    /// Consumes the current token if it is a numeral, and returns the inner `BigInt`. Returns an
+    /// Consumes the current token if it is a numeral, and returns the inner `Integer`. Returns an
     /// error otherwise.
-    fn expect_numeral(&mut self) -> AletheResult<BigInt> {
+    fn expect_numeral(&mut self) -> AletheResult<Integer> {
         match self.next_token()? {
             (Token::Numeral(n), _) => Ok(n),
             (other, pos) => Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),
@@ -804,7 +802,7 @@ impl<R: BufRead> Parser<R> {
     pub fn parse_term(&mut self) -> AletheResult<Rc<Term>> {
         let term = match self.next_token()? {
             (Token::Numeral(n), _) if self.interpret_integers_as_reals => {
-                terminal!(real BigRational::from_integer(n))
+                terminal!(real n.into())
             }
             (Token::Numeral(n), _) => terminal!(int n),
             (Token::Decimal(r), _) => terminal!(real r),

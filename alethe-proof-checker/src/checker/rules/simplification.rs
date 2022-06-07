@@ -4,8 +4,7 @@ use super::{
 };
 use crate::{ast::*, utils::DedupIterator};
 use ahash::{AHashMap, AHashSet};
-use num_rational::BigRational;
-use num_traits::{One, Zero};
+use rug::Rational;
 
 /// A macro to define the possible transformations for a "simplify" rule.
 macro_rules! simplify {
@@ -411,11 +410,11 @@ pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 
     if t_1 == t_2 {
         rassert!(
-            right.as_signed_number_err()?.is_one(),
-            CheckerError::ExpectedNumber(BigRational::one(), right.clone())
+            right.as_signed_number_err()? == 1,
+            CheckerError::ExpectedNumber(Rational::new(), right.clone())
         );
         Ok(())
-    } else if t_2.as_number().map_or(false, |n| n.is_one()) {
+    } else if t_2.as_number().map_or(false, |n| n == 1) {
         assert_eq(right, t_1)
     } else {
         let expected = t_1.as_signed_number_err()? / t_2.as_signed_number_err()?;
@@ -436,8 +435,8 @@ fn generic_sum_prod_simplify_rule(
     rule_kind: Operator,
 ) -> RuleResult {
     let identity_value = match rule_kind {
-        Operator::Add => BigRational::zero(),
-        Operator::Mult => BigRational::one(),
+        Operator::Add => Rational::new(),
+        Operator::Mult => Rational::from(1),
         _ => unreachable!(),
     };
 
@@ -492,7 +491,7 @@ fn generic_sum_prod_simplify_rule(
         }
         // If the rule kind is `prod_simplify` and we find a zero, we can leave the loop early. We
         // also clear the `result` vector because we expect the u term to be just the zero constant
-        if rule_kind == Operator::Mult && constant_total == BigRational::zero() {
+        if rule_kind == Operator::Mult && constant_total == 0 {
             result.clear();
             break;
         }
@@ -557,14 +556,14 @@ pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     fn check(t_1: &Rc<Term>, t_2: &Rc<Term>, u: &Rc<Term>) -> RuleResult {
         if t_1 == t_2 {
             rassert!(
-                u.as_number_err()?.is_zero(),
-                CheckerError::ExpectedNumber(BigRational::one(), u.clone()),
+                u.as_number_err()? == 0,
+                CheckerError::ExpectedNumber(Rational::from(1), u.clone()),
             );
             return Ok(());
         }
         match (t_1.as_signed_number(), t_2.as_signed_number()) {
-            (_, Some(z)) if z.is_zero() => assert_eq(u, t_1),
-            (Some(z), _) if z.is_zero() => assert_eq(match_term_err!((-t) = u)?, t_2),
+            (_, Some(z)) if z == 0 => assert_eq(u, t_1),
+            (Some(z), _) if z == 0 => assert_eq(match_term_err!((-t) = u)?, t_2),
             (Some(t_1), Some(t_2)) => {
                 let expected = t_1 - t_2;
                 rassert!(

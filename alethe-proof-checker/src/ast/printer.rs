@@ -151,7 +151,7 @@ impl fmt::Display for Terminal {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Terminal::Integer(i) => write!(f, "{}", i),
-            Terminal::Real(r) => write!(f, "{}", DisplayRatio(r)),
+            Terminal::Real(r) => write!(f, "{:?}", r.to_f64()),
             Terminal::String(s) => write!(f, "\"{}\"", s),
             Terminal::Var(iden, _) => write!(f, "{}", iden),
         }
@@ -220,18 +220,5 @@ impl fmt::Display for Sort {
             Sort::String => write!(f, "String"),
             Sort::Array(x, y) => write_s_expr(f, "Array", &[x, y]),
         }
-    }
-}
-
-/// A wrapper struct that implements `fmt::Display` for `BigRational`s.
-pub struct DisplayRatio<'a>(pub &'a BigRational);
-
-impl<'a> fmt::Display for DisplayRatio<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let float_value = self.0.numer().to_f64().unwrap() / self.0.denom().to_f64().unwrap();
-
-        // We use the `Debug` (that is, "{:?}") representation because it sets a minimum precision
-        // of 1 digit. That means we always print 1.0 as `1.0`, instead of as `1`
-        write!(f, "{:?}", float_value)
     }
 }

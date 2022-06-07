@@ -1,11 +1,9 @@
 use crate::{
-    ast::printer::DisplayRatio,
     ast::*,
     checker::rules::linear_arithmetic::LinearComb,
     utils::{Range, TypeName},
 };
-use num_rational::BigRational;
-use num_traits::One;
+use rug::Rational;
 use std::fmt;
 use thiserror::Error;
 
@@ -98,8 +96,8 @@ pub enum CheckerError {
     #[error("expected term '{0}' to be a boolean constant")]
     ExpectedAnyBoolConstant(Rc<Term>),
 
-    #[error("expected term '{1}' to be numerical constant {}", DisplayRatio(.0))]
-    ExpectedNumber(BigRational, Rc<Term>),
+    #[error("expected term '{1}' to be numerical constant {:?}", .0.to_f64())]
+    ExpectedNumber(Rational, Rc<Term>),
 
     #[error("expected term '{0}' to be a numerical constant")]
     ExpectedAnyNumber(Rc<Term>),
@@ -278,14 +276,11 @@ struct DisplayLinearComb<'a>(&'a Operator, &'a LinearComb);
 
 impl<'a> fmt::Display for DisplayLinearComb<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fn write_var(
-            f: &mut fmt::Formatter,
-            (var, coeff): (&Rc<Term>, &BigRational),
-        ) -> fmt::Result {
-            if coeff.is_one() {
+        fn write_var(f: &mut fmt::Formatter, (var, coeff): (&Rc<Term>, &Rational)) -> fmt::Result {
+            if *coeff == 1i32 {
                 write!(f, "{}", var)
             } else {
-                write!(f, "(* {} {})", DisplayRatio(coeff), var)
+                write!(f, "(* {:?} {})", coeff.to_f64(), var)
             }
         }
 
@@ -303,6 +298,6 @@ impl<'a> fmt::Display for DisplayLinearComb<'a> {
                 write!(f, ")")
             }
         }?;
-        write!(f, " {})", DisplayRatio(constant))
+        write!(f, " {:?})", constant.to_f64())
     }
 }
