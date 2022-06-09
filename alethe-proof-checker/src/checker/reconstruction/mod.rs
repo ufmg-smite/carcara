@@ -199,6 +199,7 @@ impl Reconstructor {
         self.add_new_step(step)
     }
 
+    #[allow(dead_code)]
     pub(super) fn reconstruct_assume(
         &mut self,
         pool: &mut TermPool,

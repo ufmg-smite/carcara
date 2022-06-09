@@ -215,9 +215,9 @@ impl<'c> ProofChecker<'c> {
                 .add_assume_measurement(s.file_name, id, false, time);
         }
 
-        if let Some(p) = found {
+        if found.is_some() {
             if let Some(reconstructor) = &mut self.reconstructor {
-                reconstructor.reconstruct_assume(self.pool, p, term.clone(), id);
+                reconstructor.assume(term);
             }
             Ok(())
         } else {
