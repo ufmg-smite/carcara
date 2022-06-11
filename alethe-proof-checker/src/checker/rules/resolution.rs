@@ -56,7 +56,14 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
         return resolution_with_args(rule_args);
     }
     let RuleArgs { conclusion, premises, pool, .. } = rule_args;
+    resolution_impl(conclusion, premises, pool)
+}
 
+fn resolution_impl(
+    conclusion: &[Rc<Term>],
+    premises: &[Premise],
+    pool: &mut TermPool,
+) -> RuleResult {
     // In some cases, this rule is used with a single premise `(not true)` to justify an empty
     // conclusion clause
     if conclusion.is_empty() && premises.len() == 1 {
@@ -76,9 +83,9 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
     //     (step t2 (cl (not (not (not p))) p) :rule irrelevant)
     //     (step t3 (cl (not q) p (not p)) :rule resolution :premises (t1 t2))
     //
-    // Without looking at the conclusion, it is unclear if the (not p) term should be removed by
-    // the p term, if the (not (not p)) should be removed by the (not (not (not p))), or both. We
-    // can only determine this by looking at the conlcusion and using it to derive the pivots.
+    // Without looking at the conclusion, it is unclear if the (not p) term should be removed by the
+    // p term, or if the (not (not p)) should be removed by the (not (not (not p))). We can only
+    // determine this by looking at the conlcusion and using it to derive the pivots.
     let conclusion: AHashSet<_> = conclusion
         .iter()
         .map(Rc::remove_all_negations)
@@ -96,6 +103,13 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
     let mut pivots = AHashMap::new();
 
     for premise in premises {
+        // Only one pivot may be eliminated per clause. This restriction is required so logically
+        // unsound proofs like this one are not considered valid:
+        //
+        //     (step t1 (cl (= false true) (not false) (not true)) :rule equiv_neg1)
+        //     (step t2 (cl (= false true) false true) :rule equiv_neg2)
+        //     (step t3 (cl (= false true)) :rule resolution :premises (t1 t2))
+        let mut eliminated_clause_pivot = false;
         for term in premise.clause {
             let (n, inner) = term.remove_all_negations();
             let n = n as i32;
@@ -122,16 +136,21 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
                 }
                 Entry::Vacant(_) => false,
             };
-            let eliminated = try_eliminate(below) || try_eliminate(above);
-            if !eliminated {
-                if conclusion.contains(&(n, inner)) {
-                    working_clause.insert((n, inner));
-                } else {
-                    // If the term is not in the conclusion clause, it must be a pivot. If it was
-                    // not already in the pivots set, we insert `false`, to indicate that it was
-                    // not yet eliminated
-                    pivots.entry((n, inner)).or_insert(false);
-                }
+
+            // Only one pivot may be elminated per clause, so if we already found this clauses'
+            // pivot, we don't try to eliminate the term
+            let eliminated =
+                !eliminated_clause_pivot && (try_eliminate(below) || try_eliminate(above));
+
+            if eliminated {
+                eliminated_clause_pivot = true;
+            } else if conclusion.contains(&(n, inner)) {
+                working_clause.insert((n, inner));
+            } else {
+                // If the term is not in the conclusion clause, it must be a pivot. If it was
+                // not already in the pivots set, we insert `false`, to indicate that it was
+                // not yet eliminated
+                pivots.entry((n, inner)).or_insert(false);
             }
         }
     }
@@ -184,6 +203,23 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
         }
         Ok(())
     }
+}
+
+pub fn th_resolution(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> RuleResult {
+    // In the way that it's currently implemented in veriT, `th_resolution` steps may be given
+    // premises in the reversed order. This would cause some of these steps to be considered invalid
+    // by the checker because of the restriction that each clause can only eliminate one pivot. To
+    // account for that, we first check the step with the given premise order, and then with the
+    // premise list reversed.
+    // TODO: Ideally, we should also check _all_ permutations of the premise list, to detect any
+    // case that may be valid.
+
+    if resolution_impl(conclusion, premises, pool).is_ok() {
+        return Ok(());
+    }
+
+    let reversed: Vec<_> = premises.iter().copied().rev().collect();
+    resolution_impl(conclusion, &reversed, pool)
 }
 
 fn resolution_with_args(
@@ -354,16 +390,11 @@ mod tests {
                 (step t2 (cl p q) :rule trust)
                 (step t3 (cl q) :rule resolution :premises (h1 t2))": true,
 
-                "(assume h1 (not p))
-                (assume h2 (not q))
-                (assume h3 (not r))
-                (step t4 (cl p q r) :rule trust)
-                (step t5 (cl) :rule resolution :premises (h1 h2 h3 t4))": true,
-
-                "(assume h1 (not p))
-                (assume h2 q)
-                (step t3 (cl p (not q)) :rule trust)
-                (step t4 (cl) :rule resolution :premises (h1 h2 t3))": true,
+                "(step t1 (cl (not p) (not q) (not r)) :rule trust)
+                (step t2 (cl p) :rule trust)
+                (step t3 (cl q) :rule trust)
+                (step t4 (cl r) :rule trust)
+                (step t5 (cl) :rule resolution :premises (t1 t2 t3 t4))": true,
             }
             "Missing term in final clause" {
                 "(assume h1 (not p))
@@ -413,9 +444,8 @@ mod tests {
             }
             "Weird behaviour where leading negations sometimes are added to conclusion" {
                 "(assume h1 (not p))
-                (assume h2 (= (not p) (not (not q))))
-                (step t3 (cl (not (= (not p) (not (not q)))) p q) :rule trust)
-                (step t4 (cl (not (not q))) :rule resolution :premises (h1 h2 t3))": true,
+                (step t2 (cl p q) :rule trust)
+                (step t3 (cl (not (not q))) :rule resolution :premises (h1 t2))": true,
             }
             "Premise is \"(not true)\" and leads to empty conclusion clause" {
                 "(step t1 (cl (not true)) :rule trust)
@@ -456,6 +486,24 @@ mod tests {
                     :rule resolution
                     :premises (t1 t2 t3 t4)
                     :args (q true (not r) true s false))": true,
+            }
+            "Only one pivot eliminated per clause" {
+                "(step t1 (cl p q r) :rule trust)
+                (step t2 (cl (not q) (not r)) :rule trust)
+                (step t3 (cl p) :rule resolution :premises (t1 t2))": false,
+            }
+            "`th_resolution` may receive premises in wrong order" {
+                "(step t1 (cl (not p) (not q) (not r)) :rule trust)
+                (step t2 (cl p) :rule trust)
+                (step t3 (cl q) :rule trust)
+                (step t4 (cl r) :rule trust)
+                (step t5 (cl) :rule th_resolution :premises (t4 t3 t2 t1))": true,
+
+                "(step t1 (cl (not p) (not q) (not r)) :rule trust)
+                (step t2 (cl p) :rule trust)
+                (step t3 (cl q) :rule trust)
+                (step t4 (cl r) :rule trust)
+                (step t5 (cl) :rule th_resolution :premises (t1 t2 t3 t4))": true,
             }
         }
     }
