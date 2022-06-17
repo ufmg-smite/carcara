@@ -7,13 +7,6 @@ use std::{
     ops,
 };
 
-/// An enum that can hold one of two types. Similar to `Result`, but doesn't imply that one of the
-/// variants is "better" than the other.
-pub enum Either<T, U> {
-    Left(T),
-    Right(U),
-}
-
 /// An iterator that removes duplicate elements from `iter`. This will yield the elements in
 /// `iter` in order, skipping elements that have already been seen before.
 pub struct Dedup<T, I> {

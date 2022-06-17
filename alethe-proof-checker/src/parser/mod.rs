@@ -9,7 +9,7 @@ pub use lexer::{Lexer, Position, Reserved, Token};
 
 use crate::{
     ast::*,
-    utils::{Either, HashCache, SymbolTable},
+    utils::{HashCache, SymbolTable},
     AletheResult, Error,
 };
 use ahash::{AHashMap, AHashSet};
@@ -40,6 +40,13 @@ struct AnchorCommand {
     end_step_id: String,
     assignment_args: Vec<(String, Rc<Term>)>,
     variable_args: Vec<SortedVar>,
+}
+
+/// Represents a "raw" `anchor` argument. This is only used while parsing, and does not appear in
+/// the final AST.
+enum AnchorArg {
+    Assign(String, Rc<Term>),
+    Variable(SortedVar),
 }
 
 /// The state of the parser. This holds all the function, constant or sort declarations and
@@ -651,10 +658,8 @@ impl<R: BufRead> Parser<R> {
             let args = self.parse_sequence(Parser::parse_anchor_argument, true)?;
             for a in args {
                 match a {
-                    Either::Left(((a, _), b)) => {
-                        assignment_args.push((a.clone(), b));
-                    }
-                    Either::Right(var) => variable_args.push(var.clone()),
+                    AnchorArg::Assign(var, value) => assignment_args.push((var.clone(), value)),
+                    AnchorArg::Variable(var) => variable_args.push(var.clone()),
                 }
             }
         }
@@ -667,36 +672,25 @@ impl<R: BufRead> Parser<R> {
     }
 
     /// Parses an argument for an `anchor` proof command. This can be either a variable binding of
-    /// the form `(<symbol> <sort>)` or an assignment, of the form `(:= (<symbol> <sort>) <term>)`.
-    fn parse_anchor_argument(&mut self) -> AletheResult<Either<(SortedVar, Rc<Term>), SortedVar>> {
+    /// the form `(<symbol> <sort>)` or an assignment, of the form `(:= <symbol> <term>)`.
+    fn parse_anchor_argument(&mut self) -> AletheResult<AnchorArg> {
         self.expect_token(Token::OpenParen)?;
         Ok(if self.current_token == Token::Keyword("=".into()) {
             self.next_token()?;
-            let (a, sort) = self.parse_sorted_var()?;
-            self.insert_sorted_var((a.clone(), sort.clone()));
-
-            let b = match &self.current_token {
-                // If we encounter a symbol as the value of the assignment, we must check if there
-                // are any function definitions with that symbol. If there are, we consider the
-                // value a term instead of a new variable
-                Token::Symbol(s) if !self.state.function_defs.contains_key(s) => {
-                    let var = self.expect_symbol()?;
-                    self.insert_sorted_var((var.clone(), sort.clone()));
-                    let iden = Identifier::Simple(var);
-                    self.add_term(Term::Terminal(Terminal::Var(iden, sort.clone())))
-                }
-                _ => self.parse_term_expecting_sort(sort.as_sort().unwrap())?,
-            };
-
+            let var = self.expect_symbol()?;
+            let value = self.parse_term()?;
+            let sort = Term::Sort(self.sort(&value).clone());
+            let sort = self.add_term(sort);
+            self.insert_sorted_var((var.clone(), sort));
             self.expect_token(Token::CloseParen)?;
-            Either::Left(((a, sort), b))
+            AnchorArg::Assign(var, value)
         } else {
             let symbol = self.expect_symbol()?;
             let sort = self.parse_sort()?;
             let var = (symbol, self.add_term(sort));
             self.insert_sorted_var(var.clone());
             self.expect_token(Token::CloseParen)?;
-            Either::Right(var)
+            AnchorArg::Variable(var)
         })
     }
 
