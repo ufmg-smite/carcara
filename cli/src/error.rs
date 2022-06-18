@@ -4,7 +4,10 @@ use std::{fmt, io, path::PathBuf};
 pub enum CliError {
     AletheError(alethe_proof_checker::Error),
     CantInferProblemFile(PathBuf),
+    BothFilesStdin,
 }
+
+pub type CliResult<T> = Result<T, CliError>;
 
 impl From<io::Error> for CliError {
     fn from(e: io::Error) -> Self {
@@ -25,6 +28,7 @@ impl fmt::Display for CliError {
             CliError::CantInferProblemFile(p) => {
                 write!(f, "can't infer problem file: {}", p.display())
             }
+            CliError::BothFilesStdin => write!(f, "problem and proof files can't both be `-`"),
         }
     }
 }

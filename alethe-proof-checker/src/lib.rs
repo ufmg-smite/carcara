@@ -45,11 +45,7 @@ use ast::ProofCommand;
 use checker::error::CheckerError;
 use parser::ParserError;
 use parser::Position;
-use std::{
-    fs::File,
-    io::{self, BufReader},
-    path::Path,
-};
+use std::io;
 use thiserror::Error;
 
 pub type AletheResult<T> = Result<T, Error>;
@@ -75,17 +71,13 @@ pub enum Error {
     DoesNotReachEmptyClause,
 }
 
-pub fn check<P: AsRef<Path>>(
-    problem_path: P,
-    proof_path: P,
+pub fn check<T: io::BufRead>(
+    problem: T,
+    proof: T,
     apply_function_defs: bool,
     skip_unknown_rules: bool,
 ) -> Result<(), Error> {
-    let (proof, mut pool) = parser::parse_instance(
-        BufReader::new(File::open(problem_path)?),
-        BufReader::new(File::open(proof_path)?),
-        apply_function_defs,
-    )?;
+    let (proof, mut pool) = parser::parse_instance(problem, proof, apply_function_defs)?;
 
     let config = checker::Config {
         skip_unknown_rules,
@@ -95,17 +87,13 @@ pub fn check<P: AsRef<Path>>(
     checker::ProofChecker::new(&mut pool, config).check(&proof)
 }
 
-pub fn check_and_reconstruct<P: AsRef<Path>>(
-    problem_path: P,
-    proof_path: P,
+pub fn check_and_reconstruct<T: io::BufRead>(
+    problem: T,
+    proof: T,
     apply_function_defs: bool,
     skip_unknown_rules: bool,
 ) -> Result<Vec<ProofCommand>, Error> {
-    let (proof, mut pool) = parser::parse_instance(
-        BufReader::new(File::open(problem_path)?),
-        BufReader::new(File::open(proof_path)?),
-        apply_function_defs,
-    )?;
+    let (proof, mut pool) = parser::parse_instance(problem, proof, apply_function_defs)?;
 
     let config = checker::Config {
         skip_unknown_rules,

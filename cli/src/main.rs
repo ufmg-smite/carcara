@@ -12,10 +12,14 @@ use alethe_proof_checker::{
 };
 use clap::{ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
-use error::CliError;
+use error::{CliError, CliResult};
 use git_version::git_version;
 use path_args::{get_instances_from_paths, infer_problem_path};
-use std::{fs::File, io::BufReader, path::PathBuf};
+use std::{
+    fs::File,
+    io::{self, BufRead},
+    path::Path,
+};
 
 const GIT_COMMIT_HASH: &str = git_version!(fallback = "unknown");
 const GIT_BRANCH_NAME: &str = git_version!(args = ["--all"]);
@@ -145,30 +149,33 @@ fn main() {
     }
 }
 
-fn get_instance(options: ParsingOptions) -> Result<(PathBuf, PathBuf), CliError> {
-    let proof_file = PathBuf::from(options.proof_file);
-    let problem_file = match options.problem_file {
-        Some(p) => PathBuf::from(p),
-        None => infer_problem_path(&proof_file)?,
-    };
-    Ok((problem_file, proof_file))
+fn get_instance(options: ParsingOptions) -> CliResult<(Box<dyn BufRead>, Box<dyn BufRead>)> {
+    fn reader_from_path<P: AsRef<Path>>(path: P) -> CliResult<Box<dyn BufRead>> {
+        Ok(Box::new(io::BufReader::new(File::open(path)?)))
+    }
+
+    match (options.problem_file.as_deref(), options.proof_file.as_str()) {
+        (Some("-"), "-") | (None, "-") => Err(CliError::BothFilesStdin),
+        (Some(problem), "-") => Ok((reader_from_path(problem)?, Box::new(io::stdin().lock()))),
+        (Some("-"), proof) => Ok((Box::new(io::stdin().lock()), reader_from_path(proof)?)),
+        (Some(problem), proof) => Ok((reader_from_path(problem)?, reader_from_path(proof)?)),
+        (None, proof) => Ok((
+            reader_from_path(infer_problem_path(proof)?)?,
+            reader_from_path(proof)?,
+        )),
+    }
 }
 
-fn parse_command(options: ParsingOptions) -> Result<(), CliError> {
+fn parse_command(options: ParsingOptions) -> CliResult<()> {
     let apply_function_defs = !options.dont_apply_function_defs;
-    let (problem_file, proof_file) = get_instance(options)?;
-    let (problem, proof) = (
-        BufReader::new(File::open(problem_file)?),
-        BufReader::new(File::open(proof_file)?),
-    );
-
+    let (problem, proof) = get_instance(options)?;
     let (proof, _) = parser::parse_instance(problem, proof, apply_function_defs)
         .map_err(alethe_proof_checker::Error::from)?;
     print_proof(&proof.commands)?;
     Ok(())
 }
 
-fn check_command(options: CheckingOptions, reconstruct: bool) -> Result<(), CliError> {
+fn check_command(options: CheckingOptions, reconstruct: bool) -> CliResult<()> {
     let apply_function_defs = !options.parsing.dont_apply_function_defs;
     let (problem, proof) = get_instance(options.parsing)?;
     let skip = options.skip_unknown_rules;
@@ -183,7 +190,7 @@ fn check_command(options: CheckingOptions, reconstruct: bool) -> Result<(), CliE
     Ok(())
 }
 
-fn bench_command(options: BenchmarkOptions) -> Result<(), CliError> {
+fn bench_command(options: BenchmarkOptions) -> CliResult<()> {
     let instances = get_instances_from_paths(options.files.iter().map(|s| s.as_str()))?;
     if instances.is_empty() {
         log::warn!("no files passed");
@@ -223,10 +230,7 @@ fn bench_command(options: BenchmarkOptions) -> Result<(), CliError> {
     print_benchmark_results(results, options.sort_by_total)
 }
 
-fn print_benchmark_results(
-    results: OnlineBenchmarkResults,
-    sort_by_total: bool,
-) -> Result<(), CliError> {
+fn print_benchmark_results(results: OnlineBenchmarkResults, sort_by_total: bool) -> CliResult<()> {
     let [parsing, checking, reconstructing, accounted_for, total] = [
         results.parsing(),
         results.checking(),
