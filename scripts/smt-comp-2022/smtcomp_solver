@@ -1,0 +1,6 @@
+#!/usr/bin/bash
+
+# To make sure the proof is an s-expression, we insert a '(' before the first
+# assume command, and a ')' after the last line
+./veriT --disable-banner --proof-with-sharing --proof-prune --proof-merge --proof=- $1 \
+    | sed -e '0,/(assume /s//(\n&/' -e '$a)'
