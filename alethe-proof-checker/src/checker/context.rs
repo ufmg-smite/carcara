@@ -89,16 +89,18 @@ impl ContextStack {
             let simultaneous = build_simultaneous_substitution(pool, &self.stack[i].mappings).map;
             let mut cumulative_substitution = simultaneous.clone();
 
-            if let Some(previous_context) = self.stack.get(i - 1) {
-                let previous_substitution =
-                    previous_context.cumulative_substitution.as_ref().unwrap();
+            if i > 0 {
+                if let Some(previous_context) = self.stack.get(i - 1) {
+                    let previous_substitution =
+                        previous_context.cumulative_substitution.as_ref().unwrap();
 
-                for (k, v) in previous_substitution.map.iter() {
-                    let value = match simultaneous.get(v) {
-                        Some(new_value) => new_value,
-                        None => v,
-                    };
-                    cumulative_substitution.insert(k.clone(), value.clone());
+                    for (k, v) in previous_substitution.map.iter() {
+                        let value = match simultaneous.get(v) {
+                            Some(new_value) => new_value,
+                            None => v,
+                        };
+                        cumulative_substitution.insert(k.clone(), value.clone());
+                    }
                 }
             }
             self.stack[i].cumulative_substitution =
