@@ -580,7 +580,8 @@ fn test_step() {
         (step t2 (cl) :rule rule-name :premises (t1))
         (step t3 (cl) :rule rule-name :args (1 2.0 \"three\"))
         (step t4 (cl) :rule rule-name :args ((:= a 12) (:= b 3.14) (:= c (* 6 7))))
-        (step t5 (cl) :rule rule-name :premises (t1 t2 t3) :args (42))
+        (step t5 (cl) :rule rule-name :premises (t1 t2 t3) :args (42)
+            :ignore_this :and_this (blah blah 0 1))
     ";
     let proof = parse_proof(input);
     assert_eq!(proof.commands.len(), 5);

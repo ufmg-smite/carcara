@@ -371,6 +371,40 @@ impl<R: BufRead> Parser<R> {
         Ok(())
     }
 
+    /// Consumes and ignores attributes and their values until a closing parenthesis is reached.
+    fn ignore_remaining_attributes(&mut self) -> AletheResult<()> {
+        while let Token::Keyword(_) = self.current_token {
+            self.next_token()?;
+            match self.current_token {
+                // If we reached the closing parenthesis or the end of the file, we stop
+                Token::CloseParen | Token::Eof => break,
+
+                // If there is no value for this attribute, we may encounter the next attribute, in
+                // which case we must continue without consuming the keyword token
+                Token::Keyword(_) => (),
+
+                // If there is a single token as a value we consume it
+                Token::Symbol(_)
+                | Token::Numeral(_)
+                | Token::Decimal(_)
+                | Token::String(_)
+                | Token::ReservedWord(_) => {
+                    self.next_token()?;
+                }
+
+                // And if the value is an s-expression we read tokens until it's closed
+                Token::OpenParen => {
+                    self.next_token()?;
+                    self.read_until_close_parens()?;
+                }
+            }
+            if self.current_token == Token::CloseParen {
+                break;
+            }
+        }
+        Ok(())
+    }
+
     /// Reads an SMT-LIB script and parses the assertions, declarations and definitions. The
     /// following commands are parsed:
     ///
@@ -597,6 +631,7 @@ impl<R: BufRead> Parser<R> {
             Vec::new()
         };
 
+        self.ignore_remaining_attributes()?;
         self.expect_token(Token::CloseParen)?;
 
         Ok(ProofStep {
@@ -663,6 +698,7 @@ impl<R: BufRead> Parser<R> {
                 }
             }
         }
+        self.ignore_remaining_attributes()?;
         self.expect_token(Token::CloseParen)?;
         Ok(AnchorCommand {
             end_step_id,
