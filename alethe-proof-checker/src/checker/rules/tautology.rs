@@ -284,37 +284,24 @@ pub fn ite_intro(RuleArgs { conclusion, deep_eq_time, .. }: RuleArgs) -> RuleRes
     // `us` must be a conjunction where the first term is the root term
     assert_eq_modulo_reordering(&us[0], root_term, deep_eq_time)?;
 
-    let us = &us[1..];
-
-    let subterms = root_term.subterms();
-    let mut ite_subterms = subterms.filter_map(|term| match_term!((ite a b c) = term));
-
-    // We assume that the `ite` terms appear in the conjunction in the same order as they
-    // appear as subterms of the root term
-    'outer: for u_i in &us[1..] {
+    // The remaining terms in `us` should be of the correct form
+    for u_i in &us[1..] {
         let (cond, (a, b), (c, d)) = match_term_err!((ite cond (= a b) (= c d)) = u_i)?;
 
-        // For every term in `us`, we find the next `ite` subterm that matches the expected form.
-        // This is because some `ite` subterms may be skipped, and may not have a corresponding `u`
-        // term
-        for s_i in &mut ite_subterms {
-            // Since the (= r_1 s_1) and (= r_2 s_2) equalities may be flipped, we have to check
-            // all four possibilities: neither are flipped, either one is flipped, or both are
-            // flipped
-            let is_valid = |r_1, s_1, r_2, s_2| {
-                // s_i == s_1 == s_2 == (ite cond r_1 r_2)
-                s_1 == s_2 && (cond, r_1, r_2) == s_i && match_term!((ite a b c) = s_1) == Some(s_i)
-            };
-            let is_valid = is_valid(a, b, c, d)
-                || is_valid(b, a, c, d)
-                || is_valid(a, b, d, c)
-                || is_valid(b, a, d, c);
+        let is_valid = |r_1, s_1, r_2, s_2| {
+            // s_1 == s_2 == (ite cond r_1 r_2)
+            s_1 == s_2 && match_term!((ite a b c) = s_1) == Some((cond, r_1, r_2))
+        };
+        // Since the (= r_1 s_1) and (= r_2 s_2) equalities may be flipped, we have to check all
+        // four possibilities: neither are flipped, either one is flipped, or both are flipped
+        let is_valid = is_valid(a, b, c, d)
+            || is_valid(b, a, c, d)
+            || is_valid(a, b, d, c)
+            || is_valid(b, a, d, c);
 
-            if is_valid {
-                continue 'outer;
-            }
+        if !is_valid {
+            return Err(CheckerError::IsNotValidIteIntro(u_i.clone()));
         }
-        return Err(CheckerError::IsNotIteSubterm(u_i.clone()));
     }
     Ok(())
 }

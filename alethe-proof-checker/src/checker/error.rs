@@ -53,8 +53,8 @@ pub enum CheckerError {
     #[error("term '{0}' is not a connective")]
     TermIsNotConnective(Rc<Term>),
 
-    #[error("term '{0}' does not appear as a subterm of the root term")]
-    IsNotIteSubterm(Rc<Term>),
+    #[error("term '{0}' does not have the correct form for `ite_intro`")]
+    IsNotValidIteIntro(Rc<Term>),
 
     #[error("broken transitivity chain: can't prove '(= {0} {1})'")]
     BrokenTransitivityChain(Rc<Term>, Rc<Term>),
