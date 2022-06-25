@@ -106,12 +106,12 @@ mod tests {
                 "(anchor :step t1 :args ((z Real) (:= x z)))
                 (anchor :step t1.t1 :args ((z Real) (:= y z)))
                 (step t1.t1 (cl (= x y)) :rule refl)
-                (step t1 (cl) :rule trust)": true,
+                (step t1 (cl) :rule hole)": true,
 
                 "(anchor :step t1 :args ((y Real) (:= x y)))
                 (anchor :step t1.t1 :args ((z Real) (:= y z)))
                 (step t1.t1 (cl (= x z)) :rule refl)
-                (step t1 (cl) :rule trust)": true,
+                (step t1 (cl) :rule hole)": true,
             }
             "Terms aren't equal after applying context substitution" {
                 "(anchor :step t1 :args ((y Real) (:= x y)))

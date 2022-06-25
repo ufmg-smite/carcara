@@ -75,13 +75,13 @@ mod tests {
                 (declare-fun s () Bool)
             ",
             "Simple working examples" {
-                "(step t1 (cl p q r s) :rule trust)
+                "(step t1 (cl p q r s) :rule hole)
                 (step t2 (cl r q p s) :rule reordering :premises (t1))": true,
 
-                "(step t1 (cl p q q p r s) :rule trust)
+                "(step t1 (cl p q q p r s) :rule hole)
                 (step t2 (cl r q p p s q) :rule reordering :premises (t1))": true,
 
-                "(step t1 (cl) :rule trust)
+                "(step t1 (cl) :rule hole)
                 (step t2 (cl) :rule reordering :premises (t1))": true,
             }
         }
@@ -153,17 +153,17 @@ mod tests {
             (declare-fun c () Bool)
         ",
             "Simple working examples" {
-                "(step t1 (cl a b) :rule trust)
+                "(step t1 (cl a b) :rule hole)
                 (step t2 (cl a b c) :rule or_intro :premises (t1))": true,
 
-                "(step t1 (cl) :rule trust)
+                "(step t1 (cl) :rule hole)
                 (step t2 (cl a b) :rule or_intro :premises (t1))": true,
             }
             "Failing examples" {
-                "(step t1 (cl a b) :rule trust)
+                "(step t1 (cl a b) :rule hole)
                 (step t2 (cl a c b) :rule or_intro :premises (t1))": false,
 
-                "(step t1 (cl a b c) :rule trust)
+                "(step t1 (cl a b c) :rule hole)
                 (step t2 (cl a b) :rule or_intro :premises (t1))": false,
             }
         }

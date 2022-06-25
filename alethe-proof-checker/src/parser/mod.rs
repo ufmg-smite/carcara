@@ -69,6 +69,7 @@ pub struct Parser<R> {
     interpret_integers_as_reals: bool,
     apply_function_defs: bool,
     premises: Option<AHashSet<Rc<Term>>>,
+    has_seen_trust_rule: bool,
 }
 
 impl<R: BufRead> Parser<R> {
@@ -91,6 +92,7 @@ impl<R: BufRead> Parser<R> {
             interpret_integers_as_reals: false,
             apply_function_defs,
             premises: None,
+            has_seen_trust_rule: false,
         })
     }
 
@@ -591,9 +593,18 @@ impl<R: BufRead> Parser<R> {
             (other, pos) => return Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),
         };
 
-        // If the rule is `trust`, we read the rest of the `step` command, ignoring all arguments
-        // and premises
-        if rule == "trust" {
+        if rule == "trust" && !self.has_seen_trust_rule {
+            // We do this to avoid printing more than one warning message if there are multiple
+            // `trust` steps
+            self.has_seen_trust_rule = true;
+            log::warn!(
+                "`trust` rule is deprecated and will be removed in the future. Use `hole` instead"
+            );
+        }
+
+        // If the rule is `hole` or `trust`, we want to allow even invalid premises and arguments,
+        // so we read the rest of the `step` command without trying to parse anything
+        if rule == "hole" || rule == "trust" {
             self.read_until_close_parens()?;
             return Ok(ProofStep {
                 id,

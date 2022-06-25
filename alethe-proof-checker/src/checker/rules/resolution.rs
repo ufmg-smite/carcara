@@ -163,9 +163,9 @@ fn resolution_impl(
         // There is a special case in the resolution rules that is valid, but leaves a pivot
         // remaining: when the result of the resolution is just the boolean constant `false`, it
         // may be implicitly eliminated. For example:
-        //     (step t1 (cl p q false) :rule trust)
-        //     (step t2 (cl (not p)) :rule trust)
-        //     (step t3 (cl (not q)) :rule trust)
+        //     (step t1 (cl p q false) :rule hole)
+        //     (step t2 (cl (not p)) :rule hole)
+        //     (step t3 (cl (not q)) :rule hole)
         //     (step t4 (cl) :rule resolution :premises (t1 t2 t3))
         if conclusion.is_empty() && *i == 0 && pivot.is_bool_false() {
             return Ok(());
@@ -174,9 +174,9 @@ fn resolution_impl(
         // There is another, similar, special case: when the result of the resolution is just one
         // term, it may appear in the conclusion clause with an even number of leading negations
         // added to it. The following is an example of this, adapted from a generated proof:
-        //     (step t1 (cl (not e)) :rule trust)
-        //     (step t2 (cl (= (not e) (not (not f)))) :rule trust)
-        //     (step t3 (cl (not (= (not e) (not (not f)))) e f) :rule trust)
+        //     (step t1 (cl (not e)) :rule hole)
+        //     (step t2 (cl (= (not e) (not (not f)))) :rule hole)
+        //     (step t3 (cl (not (= (not e) (not (not f)))) e f) :rule hole)
         //     (step t4 (cl (not (not f))) :rule resolution :premises (t1 t2 t3))
         // Usually, we would expect the clause in the t4 step to be (cl f). This behaviour may be a
         // bug in veriT, but it is still logically sound and happens often enough that it is useful
@@ -387,33 +387,33 @@ mod tests {
             ",
             "Simple working examples" {
                 "(assume h1 (not p))
-                (step t2 (cl p q) :rule trust)
+                (step t2 (cl p q) :rule hole)
                 (step t3 (cl q) :rule resolution :premises (h1 t2))": true,
 
-                "(step t1 (cl (not p) (not q) (not r)) :rule trust)
-                (step t2 (cl p) :rule trust)
-                (step t3 (cl q) :rule trust)
-                (step t4 (cl r) :rule trust)
+                "(step t1 (cl (not p) (not q) (not r)) :rule hole)
+                (step t2 (cl p) :rule hole)
+                (step t3 (cl q) :rule hole)
+                (step t4 (cl r) :rule hole)
                 (step t5 (cl) :rule resolution :premises (t1 t2 t3 t4))": true,
             }
             "Missing term in final clause" {
                 "(assume h1 (not p))
-                (step t2 (cl p q r) :rule trust)
+                (step t2 (cl p q r) :rule hole)
                 (step t3 (cl q) :rule resolution :premises (h1 t2))": false,
             }
             "Extra term in final clause" {
                 "(assume h1 (not p))
-                (step t2 (cl p q r) :rule trust)
+                (step t2 (cl p q r) :rule hole)
                 (step t3 (cl p q r) :rule resolution :premises (h1 t2))": false,
             }
             "Term appears in final clause with wrong polarity" {
                 "(assume h1 (not p))
-                (step t2 (cl p q r) :rule trust)
+                (step t2 (cl p q r) :rule hole)
                 (step t3 (cl (not q) r) :rule resolution :premises (h1 t2))": false,
             }
             "Duplicate term in final clause" {
-                "(step t1 (cl q (not p)) :rule trust)
-                (step t2 (cl p q r) :rule trust)
+                "(step t1 (cl q (not p)) :rule hole)
+                (step t2 (cl p q r) :rule hole)
                 (step t3 (cl q q r) :rule resolution :premises (t1 t2))": true,
             }
             "Terms with leading negations" {
@@ -428,81 +428,81 @@ mod tests {
                     :rule resolution :premises (h1 h4))": true,
             }
             "Must use correct pivots" {
-                "(step t1 (cl (not q) (not (not p)) (not p)) :rule trust)
-                (step t2 (cl (not (not (not p))) p) :rule trust)
+                "(step t1 (cl (not q) (not (not p)) (not p)) :rule hole)
+                (step t2 (cl (not (not (not p))) p) :rule hole)
                 (step t3 (cl (not q) p (not p)) :rule resolution :premises (t1 t2))": true,
 
-                "(step t1 (cl (not q) (not (not p)) (not p)) :rule trust)
-                (step t2 (cl (not (not (not p))) p) :rule trust)
+                "(step t1 (cl (not q) (not (not p)) (not p)) :rule hole)
+                (step t2 (cl (not (not (not p))) p) :rule hole)
                 (step t3 (cl (not q) (not (not (not p))) (not (not p)))
                     :rule resolution :premises (t1 t2))": true,
 
-                "(step t1 (cl (not q) (not (not p)) (not p)) :rule trust)
-                (step t2 (cl (not (not (not p))) p) :rule trust)
+                "(step t1 (cl (not q) (not (not p)) (not p)) :rule hole)
+                (step t2 (cl (not (not (not p))) p) :rule hole)
                 (step t3 (cl (not q) p (not p) (not (not (not p))) (not (not p)))
                     :rule resolution :premises (t1 t2))": true,
             }
             "Weird behaviour where leading negations sometimes are added to conclusion" {
                 "(assume h1 (not p))
-                (step t2 (cl p q) :rule trust)
+                (step t2 (cl p q) :rule hole)
                 (step t3 (cl (not (not q))) :rule resolution :premises (h1 t2))": true,
             }
             "Premise is \"(not true)\" and leads to empty conclusion clause" {
-                "(step t1 (cl (not true)) :rule trust)
+                "(step t1 (cl (not true)) :rule hole)
                 (step t2 (cl) :rule th_resolution :premises (t1))": true,
             }
             "Repeated premises" {
-                "(step t1 (cl (not r)) :rule trust)
-                (step t2 (cl p q r s) :rule trust)
+                "(step t1 (cl (not r)) :rule hole)
+                (step t2 (cl p q r s) :rule hole)
                 (step t3 (cl p q s) :rule th_resolution :premises (t1 t2 t2))": true,
             }
             "Implicit elimination of \"(cl false)\"" {
-                "(step t1 (cl p q false) :rule trust)
-                (step t2 (cl (not p)) :rule trust)
-                (step t3 (cl (not q)) :rule trust)
+                "(step t1 (cl p q false) :rule hole)
+                (step t2 (cl (not p)) :rule hole)
+                (step t3 (cl (not q)) :rule hole)
                 (step t4 (cl) :rule resolution :premises (t1 t2 t3))": true,
 
                 // This implicit elimination is allowed, but not required
-                "(step t1 (cl p q false) :rule trust)
-                (step t2 (cl (not p)) :rule trust)
-                (step t3 (cl (not q)) :rule trust)
+                "(step t1 (cl p q false) :rule hole)
+                (step t2 (cl (not p)) :rule hole)
+                (step t3 (cl (not q)) :rule hole)
                 (step t4 (cl false) :rule resolution :premises (t1 t2 t3))": true,
             }
             "Pivots given in arguments" {
-                "(step t1 (cl p q r) :rule trust)
-                (step t2 (cl (not q) s) :rule trust)
+                "(step t1 (cl p q r) :rule hole)
+                (step t2 (cl (not q) s) :rule hole)
                 (step t3 (cl p r s) :rule resolution :premises (t1 t2) :args (q true))": true,
 
-                "(step t1 (cl p (not q) r) :rule trust)
-                (step t2 (cl (not r) s q) :rule trust)
+                "(step t1 (cl p (not q) r) :rule hole)
+                (step t2 (cl (not r) s q) :rule hole)
                 (step t3 (cl p r (not r) s)
                     :rule resolution :premises (t1 t2) :args (q false))": true,
 
-                "(step t1 (cl p q) :rule trust)
-                (step t2 (cl (not q) (not r)) :rule trust)
-                (step t3 (cl (not s) (not (not r)) t) :rule trust)
-                (step t4 (cl s (not t) u) :rule trust)
+                "(step t1 (cl p q) :rule hole)
+                (step t2 (cl (not q) (not r)) :rule hole)
+                (step t3 (cl (not s) (not (not r)) t) :rule hole)
+                (step t4 (cl s (not t) u) :rule hole)
                 (step t5 (cl p t (not t) u)
                     :rule resolution
                     :premises (t1 t2 t3 t4)
                     :args (q true (not r) true s false))": true,
             }
             "Only one pivot eliminated per clause" {
-                "(step t1 (cl p q r) :rule trust)
-                (step t2 (cl (not q) (not r)) :rule trust)
+                "(step t1 (cl p q r) :rule hole)
+                (step t2 (cl (not q) (not r)) :rule hole)
                 (step t3 (cl p) :rule resolution :premises (t1 t2))": false,
             }
             "`th_resolution` may receive premises in wrong order" {
-                "(step t1 (cl (not p) (not q) (not r)) :rule trust)
-                (step t2 (cl p) :rule trust)
-                (step t3 (cl q) :rule trust)
-                (step t4 (cl r) :rule trust)
+                "(step t1 (cl (not p) (not q) (not r)) :rule hole)
+                (step t2 (cl p) :rule hole)
+                (step t3 (cl q) :rule hole)
+                (step t4 (cl r) :rule hole)
                 (step t5 (cl) :rule th_resolution :premises (t4 t3 t2 t1))": true,
 
-                "(step t1 (cl (not p) (not q) (not r)) :rule trust)
-                (step t2 (cl p) :rule trust)
-                (step t3 (cl q) :rule trust)
-                (step t4 (cl r) :rule trust)
+                "(step t1 (cl (not p) (not q) (not r)) :rule hole)
+                (step t2 (cl p) :rule hole)
+                (step t3 (cl q) :rule hole)
+                (step t4 (cl r) :rule hole)
                 (step t5 (cl) :rule th_resolution :premises (t1 t2 t3 t4))": true,
             }
         }
@@ -519,49 +519,49 @@ mod tests {
                 (declare-fun t () Bool)
             ",
             "Simple working examples" {
-                "(step t1 (cl p q r) :rule trust)
-                (step t2 (cl s (not r) t) :rule trust)
+                "(step t1 (cl p q r) :rule hole)
+                (step t2 (cl s (not r) t) :rule hole)
                 (step t3 (cl p q s t)
                     :rule strict_resolution
                     :premises (t1 t2)
                     :args (r true))": true,
             }
             "No implicit reordering" {
-                "(step t1 (cl p q r) :rule trust)
-                (step t2 (cl s (not r) t) :rule trust)
+                "(step t1 (cl p q r) :rule hole)
+                (step t2 (cl s (not r) t) :rule hole)
                 (step t3 (cl t s q p)
                     :rule strict_resolution
                     :premises (t1 t2)
                     :args (r true))": false,
 
-                "(step t1 (cl p q) :rule trust)
-                (step t2 (cl r (not q) s) :rule trust)
-                (step t3 (cl (not r) t) :rule trust)
+                "(step t1 (cl p q) :rule hole)
+                (step t2 (cl r (not q) s) :rule hole)
+                (step t3 (cl (not r) t) :rule hole)
                 (step t4 (cl p t s)
                     :rule strict_resolution
                     :premises (t1 t2 t3)
                     :args (q true r true))": false,
             }
             "No implicit removal of duplicates" {
-                "(step t1 (cl p q r) :rule trust)
-                (step t2 (cl (not q) s) :rule trust)
-                (step t3 (cl (not r) s) :rule trust)
+                "(step t1 (cl p q r) :rule hole)
+                (step t2 (cl (not q) s) :rule hole)
+                (step t3 (cl (not r) s) :rule hole)
                 (step t4 (cl p s s)
                     :rule strict_resolution
                     :premises (t1 t2 t3)
                     :args (q true r true))": true,
 
-                "(step t1 (cl p q r) :rule trust)
-                (step t2 (cl (not q) s) :rule trust)
-                (step t3 (cl (not r) s) :rule trust)
+                "(step t1 (cl p q r) :rule hole)
+                (step t2 (cl (not q) s) :rule hole)
+                (step t3 (cl (not r) s) :rule hole)
                 (step t4 (cl p s)
                     :rule strict_resolution
                     :premises (t1 t2 t3)
                     :args (q true r true))": false,
 
                 // Duplicates also can't be implicitly introduced
-                "(step t1 (cl p q r) :rule trust)
-                (step t2 (cl s (not r) t) :rule trust)
+                "(step t1 (cl p q r) :rule hole)
+                (step t2 (cl s (not r) t) :rule hole)
                 (step t3 (cl p q s t s)
                     :rule strict_resolution
                     :premises (t1 t2)
@@ -580,27 +580,27 @@ mod tests {
                 (declare-fun s () Bool)
             ",
             "Simple working examples" {
-                "(step t1 (cl (not p) p) :rule trust)
+                "(step t1 (cl (not p) p) :rule hole)
                 (step t2 (cl true) :rule tautology :premises (t1))": true,
 
-                "(step t1 (cl p q (not q) r s) :rule trust)
+                "(step t1 (cl p q (not q) r s) :rule hole)
                 (step t2 (cl true) :rule tautology :premises (t1))": true,
 
-                "(step t1 (cl p (not (not s)) q r (not (not (not s)))) :rule trust)
+                "(step t1 (cl p (not (not s)) q r (not (not (not s)))) :rule hole)
                 (step t2 (cl true) :rule tautology  :premises (t1))": true,
             }
             "Conclusion is not \"true\"" {
-                "(step t1 (cl p q (not q) r s) :rule trust)
+                "(step t1 (cl p q (not q) r s) :rule hole)
                 (step t2 (cl false) :rule tautology :premises (t1))": false,
 
-                "(step t1 (cl p q (not q) r s) :rule trust)
+                "(step t1 (cl p q (not q) r s) :rule hole)
                 (step t2 (cl) :rule tautology :premises (t1))": false,
             }
             "Premise is not a tautology" {
-                "(step t1 (cl p) :rule trust)
+                "(step t1 (cl p) :rule hole)
                 (step t2 (cl true) :rule tautology :premises (t1))": false,
 
-                "(step t1 (cl p (not (not s)) q r s) :rule trust)
+                "(step t1 (cl p (not (not s)) q r s) :rule hole)
                 (step t2 (cl true) :rule tautology :premises (t1))": false,
             }
         }
@@ -616,13 +616,13 @@ mod tests {
                 (declare-fun s () Bool)
             ",
             "Simple working examples" {
-                "(step t1 (cl p q q r s s) :rule trust)
+                "(step t1 (cl p q q r s s) :rule hole)
                 (step t2 (cl p q r s) :rule contraction :premises (t1))": true,
 
-                "(step t1 (cl p p p q q r s s s) :rule trust)
+                "(step t1 (cl p p p q q r s s s) :rule hole)
                 (step t2 (cl p q r s) :rule contraction :premises (t1))": true,
 
-                "(step t1 (cl p q r s) :rule trust)
+                "(step t1 (cl p q r s) :rule hole)
                 (step t2 (cl p q r s) :rule contraction :premises (t1))": true,
             }
             "Number of premises != 1" {
@@ -637,22 +637,22 @@ mod tests {
                 (step t2 (cl q) :rule contraction :premises (h1))": true,
             }
             "Encountered wrong term" {
-                "(step t1 (cl p p q) :rule trust)
+                "(step t1 (cl p p q) :rule hole)
                 (step t2 (cl p r) :rule contraction :premises (t1))": false,
             }
             "Terms are not in correct order" {
-                "(step t1 (cl p q q r) :rule trust)
+                "(step t1 (cl p q q r) :rule hole)
                 (step t2 (cl p r q) :rule contraction :premises (t1))": false,
             }
             "Conclusion is missing terms" {
-                "(step t1 (cl p q q r) :rule trust)
+                "(step t1 (cl p q q r) :rule hole)
                 (step t2 (cl p r) :rule contraction :premises (t1))": false,
 
-                "(step t1 (cl p p q r) :rule trust)
+                "(step t1 (cl p p q r) :rule hole)
                 (step t2 (cl p q) :rule contraction :premises (t1))": false,
             }
             "Conclusion has extra term at the end" {
-                "(step t1 (cl p p q) :rule trust)
+                "(step t1 (cl p p q) :rule hole)
                 (step t2 (cl p q r s) :rule contraction :premises (t1))": false,
             }
         }

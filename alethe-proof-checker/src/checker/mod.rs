@@ -387,8 +387,9 @@ impl<'c> ProofChecker<'c> {
             "eq_symmetric" => extras::eq_symmetric,
             "or_intro" => extras::or_intro,
 
-            // Special rule that always checks as valid. It is mostly used in tests
-            "trust" => |_| Ok(()),
+            // Special rules that always check as valid, and are used to indicate holes in the
+            // proof.
+            "hole" | "trust" => |_| Ok(()),
 
             // The Alethe specification does not yet describe how this more strict version of the
             // resolution rule will be called. Until that is decided and added to the specification,

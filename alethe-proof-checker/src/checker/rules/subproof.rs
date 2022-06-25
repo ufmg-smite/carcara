@@ -416,35 +416,35 @@ mod tests {
             "Simple working examples" {
                 "(anchor :step t1)
                 (assume t1.h1 p)
-                (step t1.t2 (cl q) :rule trust)
+                (step t1.t2 (cl q) :rule hole)
                 (step t1 (cl (not p) q) :rule subproof :discharge (t1.h1))": true,
 
                 "(anchor :step t1)
                 (assume t1.h1 p)
-                (step t1.t2 (cl) :rule trust)
+                (step t1.t2 (cl) :rule hole)
                 (assume t1.h3 q)
-                (step t1.t4 (cl (= r s)) :rule trust)
+                (step t1.t4 (cl (= r s)) :rule hole)
                 (step t1 (cl (not p) (not q) (= r s))
                     :rule subproof :discharge (t1.h1 t1.h3))": true,
             }
             "Missing assumption" {
                 "(anchor :step t1)
                 (assume t1.h1 p)
-                (step t1.t2 (cl (= r s)) :rule trust)
+                (step t1.t2 (cl (= r s)) :rule hole)
                 (step t1 (cl (not p) (not q) (= r s)) :rule subproof :discharge (t1.h1))": false,
             }
             "Assumption terms don't match" {
                 "(anchor :step t1)
                 (assume t1.h1 p)
                 (assume t1.h2 q)
-                (step t1.t3 (cl (= r s)) :rule trust)
+                (step t1.t3 (cl (= r s)) :rule hole)
                 (step t1 (cl (not q) (not p) (= r s))
                     :rule subproof :discharge (t1.h1 t1.h2))": false,
 
                 "(anchor :step t1)
                 (assume t1.h1 (or p q))
                 (assume t1.h2 (= p q))
-                (step t1.t3 (cl (= r s)) :rule trust)
+                (step t1.t3 (cl (= r s)) :rule hole)
                 (step t1 (cl (not (and p q)) (not (= q p)) (= r s))
                     :rule subproof :discharge (t1.h1 t1.h2))": false,
             }
@@ -452,7 +452,7 @@ mod tests {
                 "(anchor :step t1)
                 (assume t1.h1 p)
                 (assume t1.h2 q)
-                (step t1.t3 (cl (= r s)) :rule trust)
+                (step t1.t3 (cl (= r s)) :rule hole)
                 (step t1 (cl (not p) (not q) (= s r))
                     :rule subproof :discharge (t1.h1 t1.h2))": false,
             }
@@ -471,48 +471,48 @@ mod tests {
             ",
             "Simple working examples" {
                 "(anchor :step t1 :args ((y Real) (:= x y)))
-                (step t1.t1 (cl (= p q)) :rule trust)
+                (step t1.t1 (cl (= p q)) :rule hole)
                 (step t1 (cl (= (forall ((x Real)) p) (forall ((y Real)) q))) :rule bind)": true,
 
                 "(anchor :step t1 :args ((y1 Real) (y2 Real) (:= x1 y1) (:= x2 y2)))
-                (step t1.t1 (cl (= (= x1 x2) (= y1 y2))) :rule trust)
+                (step t1.t1 (cl (= (= x1 x2) (= y1 y2))) :rule hole)
                 (step t1 (cl (= (forall ((x1 Real) (x2 Real)) (= x1 x2))
                     (forall ((y1 Real) (y2 Real)) (= y1 y2)))) :rule bind)": true,
             }
             "Examples with binding arguments" {
                 "(anchor :step t1 :args ((y Real) (z Real) (:= x y)))
-                (step t1.t1 (cl (= p q)) :rule trust)
+                (step t1.t1 (cl (= p q)) :rule hole)
                 (step t1 (cl (= (forall ((x Real) (z Real)) p)
                     (forall ((y Real) (z Real)) q))) :rule bind)": true,
             }
             "y_i appears in phi as a free variable" {
                 "(anchor :step t1 :args ((y Real) (:= x y)))
-                (step t1.t1 (cl (= (= y x) (= y y))) :rule trust)
+                (step t1.t1 (cl (= (= y x) (= y y))) :rule hole)
                 (step t1 (cl (= (forall ((x Real)) (= y x))
                     (forall ((y Real)) (= y y)))) :rule bind)": false,
 
                 "(anchor :step t1 :args ((y Real) (z Real) (:= x y)))
-                (step t1.t1 (cl (= (= y x) (= y y))) :rule trust)
+                (step t1.t1 (cl (= (= y x) (= y y))) :rule hole)
                 (step t1 (cl (= (forall ((z Real) (x Real)) (= y z))
                     (forall ((z Real) (y Real)) (= y z)))) :rule bind)": false,
             }
             "Terms in conclusion clause don't match terms in previous command" {
                 "(anchor :step t1 :args ((y Real) (:= x y)))
-                (step t1.t1 (cl (= p q)) :rule trust)
-                (step t1.t2 (cl (= r s)) :rule trust) ; This step shouldn't be here!
+                (step t1.t1 (cl (= p q)) :rule hole)
+                (step t1.t2 (cl (= r s)) :rule hole) ; This step shouldn't be here!
                 (step t1 (cl (= (forall ((x Real)) p) (forall ((y Real)) q))) :rule bind)": false,
 
                 "(anchor :step t1 :args ((y Real) (:= x y)))
-                (step t1.t1 (cl (= p q)) :rule trust)
+                (step t1.t1 (cl (= p q)) :rule hole)
                 (step t1 (cl (= (forall ((x Real)) q) (forall ((y Real)) p))) :rule bind)": false,
             }
             "Context substitutions don't match quantifier bindings" {
                 "(anchor :step t1 :args ((y Real) (:= x y)))
-                (step t1.t1 (cl (= p q)) :rule trust)
+                (step t1.t1 (cl (= p q)) :rule hole)
                 (step t1 (cl (= (forall ((y Real)) p) (forall ((x Real)) q))) :rule bind)": false,
 
                 "(anchor :step t1 :args ((y1 Real) (y2 Real) (:= x1 y1) (:= x2 y2)))
-                (step t1.t1 (cl (= (= x1 x2) (= y1 y2))) :rule trust)
+                (step t1.t1 (cl (= (= x1 x2) (= y1 y2))) :rule hole)
                 (step t1 (cl (= (forall ((x2 Real)) (= x1 x2))
                     (forall ((y1 Real) (y2 Real)) (= y1 y2)))) :rule bind)": false,
             }
@@ -533,47 +533,47 @@ mod tests {
                 (declare-fun z () Int)
             ",
             "Simple working examples" {
-                "(step t1 (cl (= i x)) :rule trust)
+                "(step t1 (cl (= i x)) :rule hole)
                 (anchor :step t2 :args ((x Int) (:= a x)))
-                (step t2.t1 (cl (= p q)) :rule trust)
+                (step t2.t1 (cl (= p q)) :rule hole)
                 (step t2 (cl (= (let ((a i)) p) q)) :rule let :premises (t1))": true,
 
-                "(step t1 (cl (= i x)) :rule trust)
-                (step t2 (cl (= k z)) :rule trust)
+                "(step t1 (cl (= i x)) :rule hole)
+                (step t2 (cl (= k z)) :rule hole)
                 (anchor :step t3 :args ((x Int) (y Int) (z Int) (:= a x) (:= b y) (:= c z)))
-                (step t3.t1 (cl (= p q)) :rule trust)
+                (step t3.t1 (cl (= p q)) :rule hole)
                 (step t3 (cl (= (let ((a i) (b y) (c k)) p) q)) :rule let :premises (t1 t2))": true,
             }
             "Premise equalities may be flipped" {
-                "(step t1 (cl (= x i)) :rule trust)
+                "(step t1 (cl (= x i)) :rule hole)
                 (anchor :step t2 :args ((x Int) (:= a x)))
-                (step t2.t1 (cl (= p q)) :rule trust)
+                (step t2.t1 (cl (= p q)) :rule hole)
                 (step t2 (cl (= (let ((a i)) p) q)) :rule let :premises (t1))": true,
             }
             "Wrong number of premises" {
-                "(step t1 (cl (= i x)) :rule trust)
+                "(step t1 (cl (= i x)) :rule hole)
                 (anchor :step t2 :args ((x Int) (y Int) (z Int) (:= a x) (:= b y) (:= c z)))
-                (step t2.t1 (cl (= p q)) :rule trust)
+                (step t2.t1 (cl (= p q)) :rule hole)
                 (step t2 (cl (= (let ((a i) (b y) (c k)) p) q)) :rule let :premises (t1))": false,
 
-                "(step t1 (cl (= i x)) :rule trust)
-                (step t2 (cl (= y y)) :rule trust)
-                (step t3 (cl (= k z)) :rule trust)
+                "(step t1 (cl (= i x)) :rule hole)
+                (step t2 (cl (= y y)) :rule hole)
+                (step t3 (cl (= k z)) :rule hole)
                 (anchor :step t4 :args ((x Int) (y Int) (z Int) (:= a x) (:= b y) (:= c z)))
-                (step t4.t1 (cl (= p q)) :rule trust)
+                (step t4.t1 (cl (= p q)) :rule hole)
                 (step t4 (cl (= (let ((a i) (b y) (c k)) p) q)) :rule let :premises (t1 t2))": false,
             }
             "Number of bindings is `let` term doesn't match number of substitutions in context" {
-                "(step t1 (cl (= i x)) :rule trust)
-                (step t2 (cl (= j y)) :rule trust)
+                "(step t1 (cl (= i x)) :rule hole)
+                (step t2 (cl (= j y)) :rule hole)
                 (anchor :step t3 :args ((x Int) (y Int) (z Int) (:= a x) (:= b y) (:= c z)))
-                (step t3.t1 (cl (= p q)) :rule trust)
+                (step t3.t1 (cl (= p q)) :rule hole)
                 (step t3 (cl (= (let ((a i) (b j)) p) q)) :rule let :premises (t1 t2))": false,
             }
             "u and u' don't match equality in previous command" {
-                "(step t1 (cl (= i x)) :rule trust)
+                "(step t1 (cl (= i x)) :rule hole)
                 (anchor :step t2 :args ((x Int) (:= a x)))
-                (step t2.t1 (cl (= p (= i j))) :rule trust)
+                (step t2.t1 (cl (= p (= i j))) :rule hole)
                 (step t2 (cl (= (let ((a i)) p) q)) :rule let :premises (t1))": false,
             }
         }
@@ -585,24 +585,24 @@ mod tests {
             definitions = "(declare-fun p () Bool)",
             "Simple working examples" {
                 "(anchor :step t1 :args ((t Int) (:= x t)))
-                (step t1.t1 (cl (= (=> (= x t) p) (=> (= t t) p))) :rule trust)
+                (step t1.t1 (cl (= (=> (= x t) p) (=> (= t t) p))) :rule hole)
                 (step t1 (cl (= (forall ((x Int)) (=> (= x t) p)) (=> (= t t) p)))
                     :rule onepoint)": true,
 
                 "(anchor :step t1 :args ((t Int) (:= x t)))
-                (step t1.t1 (cl (= (or (not (= x t)) p) (or (not (= t t)) p))) :rule trust)
+                (step t1.t1 (cl (= (or (not (= x t)) p) (or (not (= t t)) p))) :rule hole)
                 (step t1 (cl (= (forall ((x Int)) (or (not (= x t)) p)) (or (not (= t t)) p)))
                     :rule onepoint)": true,
 
                 "(anchor :step t1 :args ((t Int) (:= x t)))
-                (step t1.t1 (cl (= (and (= x t) p) (and (= t t) p))) :rule trust)
+                (step t1.t1 (cl (= (and (= x t) p) (and (= t t) p))) :rule hole)
                 (step t1 (cl (= (exists ((x Int)) (and (= x t) p)) (and (= t t) p)))
                     :rule onepoint)": true,
             }
             "Multiple quantifier bindings" {
                 "(anchor :step t1 :args ((x Int) (y Int) (t Int) (:= z t)))
                 (step t1.t1 (cl (= (=> (= z t) (= (+ x y) (+ z t)))
-                                   (=> (= t t) (= (+ x y) (+ t t))))) :rule trust)
+                                   (=> (= t t) (= (+ x y) (+ t t))))) :rule hole)
                 (step t1 (cl (=
                     (forall ((x Int) (y Int) (z Int)) (=> (= z t) (= (+ x y) (+ z t))))
                     (forall ((x Int) (y Int))         (=> (= t t) (= (+ x y) (+ t t))))
@@ -610,7 +610,7 @@ mod tests {
 
                 "(anchor :step t1 :args ((x Int) (y Int) (t Int) (:= z t)))
                 (step t1.t1 (cl (= (and (= z t) (= (+ x y) (+ z t)))
-                                   (and (= t t) (= (+ x y) (+ t t))))) :rule trust)
+                                   (and (= t t) (= (+ x y) (+ t t))))) :rule hole)
                 (step t1 (cl (=
                     (exists ((x Int) (y Int) (z Int)) (and (= z t) (= (+ x y) (+ z t))))
                     (exists ((x Int) (y Int))         (and (= t t) (= (+ x y) (+ t t))))
@@ -619,7 +619,7 @@ mod tests {
             "Multiple quantifier bindings eliminated" {
                 "(anchor :step t1 :args ((t Int) (u Int) (v Int) (:= x t) (:= y u) (:= z v)))
                 (step t1.t1 (cl (= (=> (= x t) (=> (= y u) (=> (= z v) p)))
-                                   (=> (= t t) (=> (= u u) (=> (= v v) p))))) :rule trust)
+                                   (=> (= t t) (=> (= u u) (=> (= v v) p))))) :rule hole)
                 (step t1 (cl (=
                     (forall ((x Int) (y Int) (z Int)) (=> (= x t) (=> (= y u) (=> (= z v) p))))
                     (=> (= t t) (=> (= u u) (=> (= v v) p)))
@@ -628,7 +628,7 @@ mod tests {
                 "(anchor :step t1 :args ((t Int) (u Int) (v Int) (:= x t) (:= y u) (:= z v)))
                 (step t1.t1 (cl (= (or (not (= x t)) (or (not (= y u)) (or (not (= z v)) p)))
                                    (or (not (= t t)) (or (not (= u u)) (or (not (= v v)) p)))
-                )) :rule trust)
+                )) :rule hole)
                 (step t1 (cl (=
                     (forall ((x Int) (y Int) (z Int))
                         (or (not (= x t)) (or (not (= y u)) (or (not (= z v)) p))))
@@ -637,7 +637,7 @@ mod tests {
 
                 "(anchor :step t1 :args ((t Int) (u Int) (v Int) (:= x t) (:= y u) (:= z v)))
                 (step t1.t1 (cl (= (=> (and (= x t) (and (= y u) (= z v))) p)
-                                   (=> (and (= t t) (and (= u u) (= v v))) p))) :rule trust)
+                                   (=> (and (= t t) (and (= u u) (= v v))) p))) :rule hole)
                 (step t1 (cl (=
                     (forall ((x Int) (y Int) (z Int)) (=> (and (= x t) (and (= y u) (= z v))) p))
                     (=> (and (= t t) (and (= u u) (= v v))) p)
@@ -645,7 +645,7 @@ mod tests {
 
                 "(anchor :step t1 :args ((t Int) (u Int) (v Int) (:= x t) (:= y u) (:= z v)))
                 (step t1.t1 (cl (= (and (= x t) (and (= y u) (and (= z v) p)))
-                                   (and (= t t) (and (= u u) (and (= v v) p))))) :rule trust)
+                                   (and (= t t) (and (= u u) (and (= v v) p))))) :rule hole)
                 (step t1 (cl (=
                     (exists ((x Int) (y Int) (z Int)) (and (= x t) (and (= y u) (and (= z v) p))))
                     (and (= t t) (and (= u u) (and (= v v) p)))
@@ -663,7 +663,7 @@ mod tests {
             ",
             "Simple working examples" {
                 "(anchor :step t1 :args ((:= x (choice ((x Int)) (p x)))))
-                (step t1.t1 (cl (= (p x) (p (choice ((x Int)) (p x))))) :rule trust)
+                (step t1.t1 (cl (= (p x) (p (choice ((x Int)) (p x))))) :rule hole)
                 (step t1 (cl (= (exists ((x Int)) (p x)) (p (choice ((x Int)) (p x)))))
                     :rule sko_ex)": true,
 
@@ -675,7 +675,7 @@ mod tests {
                     (= x y)
                     (= (choice ((x Int)) (exists ((y Int)) (= x y)))
                        (choice ((y Int)) (= (choice ((x Int)) (exists ((y Int)) (= x y))) y)))
-                )) :rule trust)
+                )) :rule hole)
                 (step t1 (cl (=
                     (exists ((x Int) (y Int)) (= x y))
                     (= (choice ((x Int)) (exists ((y Int)) (= x y)))
@@ -694,7 +694,7 @@ mod tests {
             ",
             "Simple working examples" {
                 "(anchor :step t1 :args ((:= x (choice ((x Int)) (not (p x))))))
-                (step t1.t1 (cl (= (p x) (p (choice ((x Int)) (not (p x)))))) :rule trust)
+                (step t1.t1 (cl (= (p x) (p (choice ((x Int)) (not (p x)))))) :rule hole)
                 (step t1 (cl (= (forall ((x Int)) (p x)) (p (choice ((x Int)) (not (p x))))))
                     :rule sko_forall)": true,
 
@@ -709,7 +709,7 @@ mod tests {
                     (= (choice ((x Int)) (not (forall ((y Int)) (= x y))))
                         (choice ((y Int))
                             (not (= (choice ((x Int)) (not (forall ((y Int)) (= x y)))) y))))
-                )) :rule trust)
+                )) :rule hole)
                 (step t1 (cl (=
                     (forall ((x Int) (y Int)) (= x y))
                     (= (choice ((x Int)) (not (forall ((y Int)) (= x y))))
