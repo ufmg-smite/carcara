@@ -256,6 +256,7 @@ fn print_benchmark_results(results: OnlineBenchmarkResults, sort_by_total: bool)
         results.assume_time,
         100.0 * results.assume_time.mean().as_secs_f64() / results.checking().mean().as_secs_f64(),
     );
+    println!("on assume (core):    {}", results.assume_core_time);
     println!("assume ratio:        {}", results.assume_time_ratio);
     println!(
         "on deep equality:    {} ({:.02}% of checking time)",

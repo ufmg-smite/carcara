@@ -39,6 +39,7 @@ fn run_job<T: CollectResults + Default>(
     let mut reconstruction = Duration::ZERO;
     let mut deep_eq = Duration::ZERO;
     let mut assume = Duration::ZERO;
+    let mut assume_core = Duration::ZERO;
 
     let config = checker::Config {
         skip_unknown_rules: false,
@@ -48,6 +49,7 @@ fn run_job<T: CollectResults + Default>(
             reconstruction_time: &mut reconstruction,
             deep_eq_time: &mut deep_eq,
             assume_time: &mut assume,
+            assume_core_time: &mut assume_core,
             results,
         }),
     };
@@ -76,6 +78,7 @@ fn run_job<T: CollectResults + Default>(
             total,
             deep_eq,
             assume,
+            assume_core,
         },
     );
     Ok(())

@@ -52,6 +52,7 @@ pub struct RunMeasurement {
     pub total: Duration,
     pub deep_eq: Duration,
     pub assume: Duration,
+    pub assume_core: Duration,
 }
 
 // Higher kinded types would be very useful here. Ideally, I would like `BenchmarkResults` to be
@@ -71,6 +72,7 @@ pub struct BenchmarkResults<ByRun, ByStep, ByRunF64, ByDeepEq> {
     pub deep_eq_time_ratio: ByRunF64,
     pub assume_time: ByRun,
     pub assume_time_ratio: ByRunF64,
+    pub assume_core_time: ByRun,
 
     pub deep_eq_depths: ByDeepEq,
     pub num_assumes: usize,
@@ -246,6 +248,7 @@ where
             total,
             deep_eq,
             assume,
+            assume_core,
         } = measurement;
 
         self.parsing.add_sample(id, parsing);
@@ -256,6 +259,7 @@ where
 
         self.deep_eq_time.add_sample(id, deep_eq);
         self.assume_time.add_sample(id, assume);
+        self.assume_core_time.add_sample(id, assume_core);
 
         let deep_eq_ratio = deep_eq.as_secs_f64() / checking.as_secs_f64();
         let assume_ratio = assume.as_secs_f64() / checking.as_secs_f64();
@@ -278,6 +282,7 @@ where
             deep_eq_time_ratio: a.deep_eq_time_ratio.combine(b.deep_eq_time_ratio),
             assume_time: a.assume_time.combine(b.assume_time),
             assume_time_ratio: a.assume_time_ratio.combine(b.assume_time_ratio),
+            assume_core_time: a.assume_core_time.combine(b.assume_core_time),
 
             deep_eq_depths: a.deep_eq_depths.combine(b.deep_eq_depths),
             num_assumes: a.num_assumes + b.num_assumes,

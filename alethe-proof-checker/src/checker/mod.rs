@@ -19,6 +19,10 @@ pub struct CheckerStatistics<'s> {
     pub reconstruction_time: &'s mut Duration,
     pub deep_eq_time: &'s mut Duration,
     pub assume_time: &'s mut Duration,
+
+    // This is the time to compare the `assume` term with the `assert` that matches it. That is,
+    // this excludes the time spent searching for the correct `assert` premise.
+    pub assume_core_time: &'s mut Duration,
     pub results: &'s mut dyn CollectResults,
 }
 
@@ -31,6 +35,7 @@ impl fmt::Debug for CheckerStatistics<'_> {
             .field("reconstruction_time", &self.reconstruction_time)
             .field("deep_eq_time", &self.deep_eq_time)
             .field("assume_time", &self.assume_time)
+            .field("assume_core_time", &self.assume_core_time)
             .finish()
     }
 }
@@ -196,12 +201,16 @@ impl<'c> ProofChecker<'c> {
 
         let mut found = None;
         let mut deep_eq_time = Duration::ZERO;
+        let mut core_time = Duration::ZERO;
         for p in premises {
-            let (result, depth) = tracing_deep_eq(term, p, &mut deep_eq_time);
+            let mut this_deep_eq_time = Duration::ZERO;
+            let (result, depth) = tracing_deep_eq(term, p, &mut this_deep_eq_time);
+            deep_eq_time += this_deep_eq_time;
             if let Some(s) = &mut self.config.statistics {
                 s.results.add_deep_eq_depth(depth);
             }
             if result {
+                core_time = this_deep_eq_time;
                 found = Some(p.clone());
                 break;
             }
@@ -210,6 +219,7 @@ impl<'c> ProofChecker<'c> {
         if let Some(s) = &mut self.config.statistics {
             let time = time.elapsed();
             *s.assume_time += time;
+            *s.assume_core_time += core_time;
             *s.deep_eq_time += deep_eq_time;
             s.results
                 .add_assume_measurement(s.file_name, id, false, time);
