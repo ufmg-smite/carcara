@@ -117,13 +117,16 @@ impl TermPool {
                 | Operator::LessThan
                 | Operator::GreaterThan
                 | Operator::LessEq
-                | Operator::GreaterEq => Sort::Bool,
+                | Operator::GreaterEq
+                | Operator::IsInt => Sort::Bool,
                 Operator::Ite => self.compute_sort(&args[1]).clone(),
                 Operator::Add
                 | Operator::Sub
                 | Operator::Mult
                 | Operator::IntDiv
                 | Operator::RealDiv => self.compute_sort(&args[0]).clone(),
+                Operator::ToReal => Sort::Real,
+                Operator::ToInt => Sort::Int,
                 Operator::Select => match self.compute_sort(&args[0]) {
                     Sort::Array(_, y) => y.as_sort().unwrap().clone(),
                     _ => unreachable!(),

@@ -177,6 +177,9 @@ pub enum Operator {
     GreaterThan,
     LessEq,
     GreaterEq,
+    ToReal,
+    ToInt,
+    IsInt,
 
     // Arrays
     Select,
@@ -202,6 +205,9 @@ impl_str_conversion_traits!(Operator {
     GreaterThan: ">",
     LessEq: "<=",
     GreaterEq: ">=",
+    ToReal: "to_real",
+    ToInt: "to_int",
+    IsInt: "is_int",
 
     Select: "select",
     Store: "store",

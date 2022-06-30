@@ -234,6 +234,14 @@ impl<R: BufRead> Parser<R> {
                     SortError::assert_one_of(&[Sort::Int, Sort::Real], s)?;
                 }
             }
+            Operator::ToReal => {
+                assert_num_args(&args, 1)?;
+                SortError::assert_eq(&Sort::Int, sorts[0])?;
+            }
+            Operator::ToInt | Operator::IsInt => {
+                assert_num_args(&args, 1)?;
+                SortError::assert_eq(&Sort::Real, sorts[0])?;
+            }
             Operator::Select => {
                 assert_num_args(&args, 2)?;
                 match sorts[0] {
