@@ -226,6 +226,15 @@ impl<R: BufRead> Parser<R> {
                 SortError::assert_one_of(&[Sort::Int, Sort::Real], sorts[0])?;
                 SortError::assert_all_eq(&sorts)?;
             }
+            Operator::Mod => {
+                assert_num_args(&args, 2)?;
+                SortError::assert_eq(&Sort::Int, sorts[0])?;
+                SortError::assert_eq(&Sort::Int, sorts[1])?;
+            }
+            Operator::Abs => {
+                assert_num_args(&args, 1)?;
+                SortError::assert_eq(&Sort::Int, sorts[0])?;
+            }
             Operator::LessThan | Operator::GreaterThan | Operator::LessEq | Operator::GreaterEq => {
                 assert_num_args(&args, 2..)?;
                 // All the arguments must be either Int or Real sorted, but they don't need to all

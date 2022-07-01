@@ -126,7 +126,7 @@ impl TermPool {
                 | Operator::IntDiv
                 | Operator::RealDiv => self.compute_sort(&args[0]).clone(),
                 Operator::ToReal => Sort::Real,
-                Operator::ToInt => Sort::Int,
+                Operator::Mod | Operator::Abs | Operator::ToInt => Sort::Int,
                 Operator::Select => match self.compute_sort(&args[0]) {
                     Sort::Array(_, y) => y.as_sort().unwrap().clone(),
                     _ => unreachable!(),
