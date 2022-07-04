@@ -288,9 +288,16 @@ pub fn ite_intro(RuleArgs { conclusion, deep_eq_time, .. }: RuleArgs) -> RuleRes
     for u_i in &us[1..] {
         let (cond, (a, b), (c, d)) = match_term_err!((ite cond (= a b) (= c d)) = u_i)?;
 
-        let is_valid = |r_1, s_1, r_2, s_2| {
+        let mut is_valid = |r_1, s_1, r_2, s_2| {
             // s_1 == s_2 == (ite cond r_1 r_2)
-            s_1 == s_2 && match_term!((ite a b c) = s_1) == Some((cond, r_1, r_2))
+            if timed_deep_eq_modulo_reordering(s_1, s_2, deep_eq_time) {
+                if let Some((a, b, c)) = match_term!((ite a b c) = s_1) {
+                    return timed_deep_eq_modulo_reordering(a, cond, deep_eq_time)
+                        && timed_deep_eq_modulo_reordering(b, r_1, deep_eq_time)
+                        && timed_deep_eq_modulo_reordering(c, r_2, deep_eq_time);
+                }
+            }
+            false
         };
         // Since the (= r_1 s_1) and (= r_2 s_2) equalities may be flipped, we have to check all
         // four possibilities: neither are flipped, either one is flipped, or both are flipped
