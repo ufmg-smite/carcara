@@ -500,15 +500,21 @@ impl<R: BufRead> Parser<R> {
         let mut end_step_stack = Vec::new();
         let mut subproof_args_stack = Vec::new();
 
+        let mut finished_assumes = false;
+
         while self.current_token != Token::Eof {
             self.expect_token(Token::OpenParen)?;
             let (token, position) = self.next_token()?;
             let (id, command) = match token {
                 Token::ReservedWord(Reserved::Assume) => {
                     let (id, term) = self.parse_assume_command()?;
+                    if end_step_stack.is_empty() && finished_assumes {
+                        log::warn!("`assume` command '{}' appears after `step` commands", &id);
+                    }
                     (id.clone(), ProofCommand::Assume { id, term })
                 }
                 Token::ReservedWord(Reserved::Step) => {
+                    finished_assumes = true;
                     let step = self.parse_step_command()?;
                     (step.id.clone(), ProofCommand::Step(step))
                 }
