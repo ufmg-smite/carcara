@@ -210,7 +210,7 @@ fn bench_command(options: BenchmarkOptions) -> CliResult<()> {
             false,
             options.reconstruct,
             &mut File::create("runs.csv")?,
-            &mut File::create("by_rule.csv")?,
+            &mut File::create("by-rule.csv")?,
         )?;
         return Ok(());
     }
