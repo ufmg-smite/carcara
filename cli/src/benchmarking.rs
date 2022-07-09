@@ -153,7 +153,8 @@ pub fn run_csv_benchmark(
     num_threads: usize,
     apply_function_defs: bool,
     reconstruct: bool,
-    dest: &mut dyn io::Write,
+    runs_dest: &mut dyn io::Write,
+    by_rule_dest: &mut dyn io::Write,
 ) -> io::Result<()> {
     let result: CsvBenchmarkResults = run_benchmark(
         instances,
@@ -163,5 +164,5 @@ pub fn run_csv_benchmark(
         reconstruct,
     );
 
-    result.write_csv(dest)
+    result.write_csv(runs_dest, by_rule_dest)
 }

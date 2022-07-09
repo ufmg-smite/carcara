@@ -301,6 +301,14 @@ impl<K, T: MetricsUnit> OfflineMetrics<K, T> {
     pub fn new() -> Self {
         Default::default()
     }
+
+    pub fn quartiles(&mut self) -> [&(K, T); 5] {
+        assert!(!self.data.is_empty());
+        self.data
+            .sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        let n = self.data.len();
+        [0, n / 4, n / 2, (n * 3) / 4, n - 1].map(|i| &self.data[i])
+    }
 }
 
 impl<K, T: MetricsUnit> Default for OfflineMetrics<K, T> {

@@ -152,7 +152,8 @@ where
 
 #[derive(Default)]
 pub struct CsvBenchmarkResults {
-    map: AHashMap<RunId, RunMeasurement>,
+    runs: AHashMap<RunId, RunMeasurement>,
+    step_time_by_rule: AHashMap<String, OfflineMetrics<StepId>>,
 }
 
 impl CsvBenchmarkResults {
@@ -160,14 +161,26 @@ impl CsvBenchmarkResults {
         Default::default()
     }
 
-    pub fn write_csv(self, dest: &mut dyn io::Write) -> io::Result<()> {
+    pub fn write_csv(
+        self,
+        runs_dest: &mut dyn io::Write,
+        by_rule_dest: &mut dyn io::Write,
+    ) -> io::Result<()> {
+        Self::write_runs_csv(self.runs, runs_dest)?;
+        Self::write_by_rule_csv(self.step_time_by_rule, by_rule_dest)
+    }
+
+    fn write_runs_csv(
+        data: AHashMap<RunId, RunMeasurement>,
+        dest: &mut dyn io::Write,
+    ) -> io::Result<()> {
         writeln!(
             dest,
             "proof_file,run_id,parsing,checking,reconstruction,total_accounted_for,\
             total,deep_eq,deep_eq_ratio,assume,assume_ratio"
         )?;
 
-        for (id, m) in self.map {
+        for (id, m) in data {
             let total_accounted_for = m.parsing + m.checking;
             let deep_eq_ratio = m.deep_eq.as_secs_f64() / m.checking.as_secs_f64();
             let assume_ratio = m.assume.as_secs_f64() / m.checking.as_secs_f64();
@@ -188,6 +201,37 @@ impl CsvBenchmarkResults {
             )?;
         }
 
+        Ok(())
+    }
+
+    fn write_by_rule_csv(
+        data: AHashMap<String, OfflineMetrics<StepId>>,
+        dest: &mut dyn io::Write,
+    ) -> io::Result<()> {
+        let mut data: Vec<_> = data.into_iter().collect();
+        data.sort_unstable_by_key(|m| m.1.total());
+
+        writeln!(
+            dest,
+            "rule,count,total,mean,min,first_quartile,median,third_quartile,max"
+        )?;
+        for (rule, mut m) in data {
+            let [min, first_quartile, median, third_quartile, max] =
+                m.quartiles().map(|(_, t)| t.as_nanos());
+            writeln!(
+                dest,
+                "{},{},{},{},{},{},{},{},{}",
+                rule,
+                m.count(),
+                m.total().as_nanos(),
+                m.mean().as_nanos(),
+                min,
+                first_quartile,
+                median,
+                third_quartile,
+                max,
+            )?;
+        }
         Ok(())
     }
 }
@@ -292,18 +336,30 @@ where
 }
 
 impl CollectResults for CsvBenchmarkResults {
-    fn add_step_measurement(&mut self, _: &str, _: &str, _: &str, _: Duration) {}
+    fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration) {
+        let id = StepId {
+            file: file.into(),
+            step_id: step_id.into(),
+            rule: rule.into(),
+        };
+        self.step_time_by_rule
+            .entry(rule.to_owned())
+            .or_default()
+            .add_sample(&id, time);
+    }
+
     fn add_assume_measurement(&mut self, _: &str, _: &str, _: bool, _: Duration) {}
     fn add_deep_eq_depth(&mut self, _: usize) {}
 
     fn add_run_measurement(&mut self, id: &RunId, measurement: RunMeasurement) {
-        self.map.insert(id.clone(), measurement);
+        self.runs.insert(id.clone(), measurement);
     }
 
     fn combine(mut a: Self, b: Self) -> Self {
-        // This assumes that the same key never appears in both `a` and `b`. This should be the case
+        // This assumes that the same run never appears in both `a` and `b`. This should be the case
         // in benchmarks anyway
-        a.map.extend(b.map);
+        a.runs.extend(b.runs);
+        a.step_time_by_rule = combine_map(a.step_time_by_rule, b.step_time_by_rule);
         a
     }
 }

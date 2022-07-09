@@ -104,9 +104,9 @@ struct BenchmarkOptions {
     #[clap(short = 't', long)]
     sort_by_total: bool,
 
-    /// Dump results to given csv file instead of printing to screen.
+    /// Dump results to csv files instead of printing to screen.
     #[clap(long = "dump-to-csv")]
-    out_csv_file: Option<String>,
+    dump_to_csv: bool,
 
     /// The proof files on which the benchkmark will be run. If a directory is passed, the checker
     /// will recursively find all '.proof' files in the directory. The problem files will be
@@ -202,15 +202,15 @@ fn bench_command(options: BenchmarkOptions) -> CliResult<()> {
         options.num_runs
     );
 
-    if let Some(file) = options.out_csv_file {
-        let mut file = File::create(file)?;
+    if options.dump_to_csv {
         benchmarking::run_csv_benchmark(
             &instances,
             options.num_runs,
             options.num_threads,
             false,
             options.reconstruct,
-            &mut file,
+            &mut File::create("runs.csv")?,
+            &mut File::create("by_rule.csv")?,
         )?;
         return Ok(());
     }
