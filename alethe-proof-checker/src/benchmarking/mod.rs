@@ -277,7 +277,7 @@ where
     fn add_assume_measurement(&mut self, file: &str, id: &str, is_easy: bool, time: Duration) {
         self.num_assumes += 1;
         self.num_easy_assumes += is_easy as usize;
-        self.add_step_measurement(file, id, "assume*", time);
+        self.add_step_measurement(file, id, "assume", time);
     }
 
     fn add_deep_eq_depth(&mut self, depth: usize) {
@@ -348,7 +348,10 @@ impl CollectResults for CsvBenchmarkResults {
             .add_sample(&id, time);
     }
 
-    fn add_assume_measurement(&mut self, _: &str, _: &str, _: bool, _: Duration) {}
+    fn add_assume_measurement(&mut self, file: &str, id: &str, _: bool, time: Duration) {
+        self.add_step_measurement(file, id, "assume", time);
+    }
+
     fn add_deep_eq_depth(&mut self, _: usize) {}
 
     fn add_run_measurement(&mut self, id: &RunId, measurement: RunMeasurement) {
