@@ -1,14 +1,14 @@
 mod context;
+pub mod elaboration;
 pub mod error;
-pub mod reconstruction;
 mod rules;
 
 use crate::{ast::*, benchmarking::CollectResults, AletheResult, Error};
 use ahash::AHashSet;
 use context::*;
+use elaboration::Elaborator;
 use error::CheckerError;
-use reconstruction::Reconstructor;
-use rules::{Premise, ReconstructionRule, Rule, RuleArgs, RuleResult};
+use rules::{ElaborationRule, Premise, Rule, RuleArgs, RuleResult};
 use std::{
     fmt,
     time::{Duration, Instant},
@@ -16,7 +16,7 @@ use std::{
 
 pub struct CheckerStatistics<'s> {
     pub file_name: &'s str,
-    pub reconstruction_time: &'s mut Duration,
+    pub elaboration_time: &'s mut Duration,
     pub deep_eq_time: &'s mut Duration,
     pub assume_time: &'s mut Duration,
 
@@ -32,7 +32,7 @@ impl fmt::Debug for CheckerStatistics<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CheckerStatistics")
             .field("file_name", &self.file_name)
-            .field("reconstruction_time", &self.reconstruction_time)
+            .field("elaboration_time", &self.elaboration_time)
             .field("deep_eq_time", &self.deep_eq_time)
             .field("assume_time", &self.assume_time)
             .field("assume_core_time", &self.assume_core_time)
@@ -51,7 +51,7 @@ pub struct ProofChecker<'c> {
     pool: &'c mut TermPool,
     config: Config<'c>,
     context: ContextStack,
-    reconstructor: Option<Reconstructor>,
+    elaborator: Option<Elaborator>,
     reached_empty_clause: bool,
 }
 
@@ -61,7 +61,7 @@ impl<'c> ProofChecker<'c> {
             pool,
             config,
             context: ContextStack::new(),
-            reconstructor: None,
+            elaborator: None,
             reached_empty_clause: false,
         }
     }
@@ -98,8 +98,8 @@ impl<'c> ProofChecker<'c> {
                     // in a subproof is always a `step` command
                     if is_end_of_subproof {
                         self.context.pop();
-                        if let Some(reconstructor) = &mut self.reconstructor {
-                            reconstructor.close_subproof();
+                        if let Some(elaborator) = &mut self.elaborator {
+                            elaborator.close_subproof();
                         }
                     }
 
@@ -119,8 +119,8 @@ impl<'c> ProofChecker<'c> {
                             step: step_id.to_owned(),
                         })?;
 
-                    if let Some(reconstructor) = &mut self.reconstructor {
-                        reconstructor.open_subproof(s.commands.len());
+                    if let Some(elaborator) = &mut self.elaborator {
+                        elaborator.open_subproof(s.commands.len());
                     }
 
                     if let Some(stats) = &mut self.config.statistics {
@@ -148,19 +148,19 @@ impl<'c> ProofChecker<'c> {
         }
     }
 
-    pub fn check_and_reconstruct(&mut self, mut proof: Proof) -> AletheResult<Proof> {
-        self.reconstructor = Some(Reconstructor::new());
+    pub fn check_and_elaborate(&mut self, mut proof: Proof) -> AletheResult<Proof> {
+        self.elaborator = Some(Elaborator::new());
         let result = self.check(&proof);
 
-        // We reset `self.reconstructor` before returning any errors encountered while checking so
-        // we don't leave the checker in an invalid state
-        let mut reconstructor = self.reconstructor.take().unwrap();
+        // We reset `self.elaborator` before returning any errors encountered while checking so we
+        // don't leave the checker in an invalid state
+        let mut elaborator = self.elaborator.take().unwrap();
         result?;
 
-        let reconstruction_time = Instant::now();
-        proof.commands = reconstructor.end(proof.commands);
+        let elaboration_time = Instant::now();
+        proof.commands = elaborator.end(proof.commands);
         if let Some(stats) = &mut self.config.statistics {
-            *stats.reconstruction_time += reconstruction_time.elapsed();
+            *stats.elaboration_time += elaboration_time.elapsed();
         }
         Ok(proof)
     }
@@ -180,8 +180,8 @@ impl<'c> ProofChecker<'c> {
         // original problem, but sometimes use `assume` commands, we also skip the
         // command if we are in a testing context.
         if self.config.is_running_test || iter.is_in_subproof() {
-            if let Some(reconstructor) = &mut self.reconstructor {
-                reconstructor.assume(term);
+            if let Some(elaborator) = &mut self.elaborator {
+                elaborator.assume(term);
             }
             return Ok(());
         }
@@ -193,8 +193,8 @@ impl<'c> ProofChecker<'c> {
                 s.results
                     .add_assume_measurement(s.file_name, id, true, time);
             }
-            if let Some(reconstructor) = &mut self.reconstructor {
-                reconstructor.assume(term);
+            if let Some(elaborator) = &mut self.elaborator {
+                elaborator.assume(term);
             }
             return Ok(());
         }
@@ -226,8 +226,8 @@ impl<'c> ProofChecker<'c> {
         }
 
         if found.is_some() {
-            if let Some(reconstructor) = &mut self.reconstructor {
-                reconstructor.assume(term);
+            if let Some(elaborator) = &mut self.elaborator {
+                elaborator.assume(term);
             }
             Ok(())
         } else {
@@ -250,8 +250,8 @@ impl<'c> ProofChecker<'c> {
         let rule = match Self::get_rule(&step.rule) {
             Some(r) => r,
             None if self.config.skip_unknown_rules => {
-                if let Some(reconstructor) = &mut self.reconstructor {
-                    reconstructor.unchanged(&step.clause);
+                if let Some(elaborator) = &mut self.elaborator {
+                    elaborator.unchanged(&step.clause);
                 }
                 return Ok(());
             }
@@ -284,12 +284,12 @@ impl<'c> ProofChecker<'c> {
             deep_eq_time: &mut deep_eq_time,
         };
 
-        if let Some(reconstructor) = &mut self.reconstructor {
-            if let Some(reconstruction_rule) = Self::get_reconstruction_rule(&step.rule) {
-                reconstruction_rule(rule_args, step.id.clone(), reconstructor)?;
+        if let Some(elaborator) = &mut self.elaborator {
+            if let Some(elaboration_rule) = Self::get_elaboration_rule(&step.rule) {
+                elaboration_rule(rule_args, step.id.clone(), elaborator)?;
             } else {
                 rule(rule_args)?;
-                reconstructor.unchanged(&step.clause);
+                elaborator.unchanged(&step.clause);
             }
         } else {
             rule(rule_args)?;
@@ -410,12 +410,12 @@ impl<'c> ProofChecker<'c> {
         })
     }
 
-    fn get_reconstruction_rule(rule_name: &str) -> Option<ReconstructionRule> {
+    fn get_elaboration_rule(rule_name: &str) -> Option<ElaborationRule> {
         use rules::*;
 
         Some(match rule_name {
-            "eq_transitive" => transitivity::reconstruct_eq_transitive,
-            "trans" => transitivity::reconstruct_trans,
+            "eq_transitive" => transitivity::elaborate_eq_transitive,
+            "trans" => transitivity::elaborate_trans,
             _ => return None,
         })
     }

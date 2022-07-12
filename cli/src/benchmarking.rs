@@ -22,7 +22,7 @@ fn run_job<T: CollectResults + Default>(
     results: &mut T,
     job: JobDescriptor,
     apply_function_defs: bool,
-    reconstruct: bool,
+    elaborate: bool,
 ) -> Result<(), alethe_proof_checker::Error> {
     let proof_file_name = job.proof_file.to_str().unwrap();
 
@@ -36,7 +36,7 @@ fn run_job<T: CollectResults + Default>(
     )?;
     let parsing = parsing.elapsed();
 
-    let mut reconstruction = Duration::ZERO;
+    let mut elaboration = Duration::ZERO;
     let mut deep_eq = Duration::ZERO;
     let mut assume = Duration::ZERO;
     let mut assume_core = Duration::ZERO;
@@ -46,7 +46,7 @@ fn run_job<T: CollectResults + Default>(
         is_running_test: false,
         statistics: Some(checker::CheckerStatistics {
             file_name: proof_file_name,
-            reconstruction_time: &mut reconstruction,
+            elaboration_time: &mut elaboration,
             deep_eq_time: &mut deep_eq,
             assume_time: &mut assume,
             assume_core_time: &mut assume_core,
@@ -60,8 +60,8 @@ fn run_job<T: CollectResults + Default>(
     // If any errors are encountered when checking a proof, we return from this function and do not
     // record the `RunMeasurement`. However, the data for each individual step is recorded as they
     // are checked, so any steps that were run before the error will be recorded.
-    if reconstruct {
-        checker.check_and_reconstruct(proof)?;
+    if elaborate {
+        checker.check_and_elaborate(proof)?;
     } else {
         checker.check(&proof)?;
     }
@@ -74,7 +74,7 @@ fn run_job<T: CollectResults + Default>(
         RunMeasurement {
             parsing,
             checking,
-            reconstruction,
+            elaboration,
             total,
             deep_eq,
             assume,
@@ -87,12 +87,12 @@ fn run_job<T: CollectResults + Default>(
 fn worker_thread<T: CollectResults + Default>(
     jobs_queue: &ArrayQueue<JobDescriptor>,
     apply_function_defs: bool,
-    reconstruct: bool,
+    elaborate: bool,
 ) -> T {
     let mut results = T::default();
 
     while let Some(job) = jobs_queue.pop() {
-        if run_job(&mut results, job, apply_function_defs, reconstruct).is_err() {
+        if run_job(&mut results, job, apply_function_defs, elaborate).is_err() {
             log::error!("encountered error in file '{}'", job.proof_file.display());
         }
     }
@@ -105,7 +105,7 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
     num_runs: usize,
     num_threads: usize,
     apply_function_defs: bool,
-    reconstruct: bool,
+    elaborate: bool,
 ) -> T {
     const STACK_SIZE: usize = 128 * 1024 * 1024;
 
@@ -131,9 +131,7 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
             .map(|_| {
                 s.builder()
                     .stack_size(STACK_SIZE)
-                    .spawn(move |_| {
-                        worker_thread::<T>(jobs_queue, apply_function_defs, reconstruct)
-                    })
+                    .spawn(move |_| worker_thread::<T>(jobs_queue, apply_function_defs, elaborate))
                     .unwrap()
             })
             .collect();
@@ -152,7 +150,7 @@ pub fn run_csv_benchmark(
     num_runs: usize,
     num_threads: usize,
     apply_function_defs: bool,
-    reconstruct: bool,
+    elaborate: bool,
     runs_dest: &mut dyn io::Write,
     by_rule_dest: &mut dyn io::Write,
 ) -> io::Result<()> {
@@ -161,7 +159,7 @@ pub fn run_csv_benchmark(
         num_runs,
         num_threads,
         apply_function_defs,
-        reconstruct,
+        elaborate,
     );
 
     result.write_csv(runs_dest, by_rule_dest)

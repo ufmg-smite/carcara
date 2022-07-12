@@ -2,15 +2,15 @@ use super::*;
 use crate::ast::*;
 use ahash::AHashMap;
 
-pub struct DeepEqReconstructor<'a> {
-    inner: &'a mut Reconstructor,
+pub struct DeepEqElaborator<'a> {
+    inner: &'a mut Elaborator,
     root_id: &'a str,
     cache: AHashMap<(Rc<Term>, Rc<Term>), (usize, usize)>,
     checker: DeepEqualityChecker,
 }
 
-impl<'a> DeepEqReconstructor<'a> {
-    pub fn new(inner: &'a mut Reconstructor, root_id: &'a str) -> Self {
+impl<'a> DeepEqElaborator<'a> {
+    pub fn new(inner: &'a mut Elaborator, root_id: &'a str) -> Self {
         let cache = AHashMap::new();
         let checker = DeepEqualityChecker::new(true, false);
         Self { inner, root_id, cache, checker }
@@ -18,7 +18,7 @@ impl<'a> DeepEqReconstructor<'a> {
 
     /// Takes two terms that are equal modulo reordering of equalities, and returns a premise that
     /// proves their equality.
-    pub fn reconstruct(&mut self, pool: &mut TermPool, a: Rc<Term>, b: Rc<Term>) -> (usize, usize) {
+    pub fn elaborate(&mut self, pool: &mut TermPool, a: Rc<Term>, b: Rc<Term>) -> (usize, usize) {
         // TODO: Make this method return an error instead of panicking if the terms aren't equal
 
         let key = (a, b);
@@ -57,23 +57,23 @@ impl<'a> DeepEqReconstructor<'a> {
                 self.build_cong(pool, (&a, &b), (a_args, b_args))
             }
 
-            // TODO: To reconstruct equalities with quantifiers, we will need to use a subproof
-            // ending in a `bind` step
+            // TODO: To elaborate equalities with quantifiers, we will need to use a subproof ending
+            // in a `bind` step
             (Term::Quant(_, _, _), Term::Quant(_, _, _)) => todo!(),
 
-            // TODO: To reconstruct equalities that use `let` terms, we will need to add a new rule
+            // TODO: To elaborate equalities that use `let` terms, we will need to add a new rule
             // called `bind_let`, similar to `bind`, that can introduce `let` binders
             (Term::Let(_, _), Term::Let(_, _)) => todo!(),
 
             // Since `choice` and `lambda` terms are not in the SMT-LIB standard, they cannot appear
-            // in the premises of a proof, so we would never need to reconstruct deep equalities
-            // that use these terms.
+            // in the premises of a proof, so we would never need to elaborate deep equalities that
+            // use these terms.
             (Term::Choice(_, _), Term::Choice(_, _)) => {
-                log::error!("Trying to reconstruct deep equality between `choice` terms");
+                log::error!("Trying to elaborate deep equality between `choice` terms");
                 panic!()
             }
             (Term::Lambda(_, _), Term::Lambda(_, _)) => {
-                log::error!("Trying to reconstruct deep equality between `lambda` terms");
+                log::error!("Trying to elaborate deep equality between `lambda` terms");
                 panic!()
             }
             _ => panic!("terms not equal!"),
@@ -94,7 +94,7 @@ impl<'a> DeepEqReconstructor<'a> {
                 if a == b {
                     None
                 } else {
-                    Some(self.reconstruct(pool, a.clone(), b.clone()))
+                    Some(self.elaborate(pool, a.clone(), b.clone()))
                 }
             })
             .collect();
@@ -126,7 +126,7 @@ impl<'a> DeepEqReconstructor<'a> {
         //
         // The more complex case happens when `x` is equal to `w` modulo reordering of equalities,
         // but they are not syntactically equal, or the same is true with `y` and `z`. In this case,
-        // we need to reconstruct the deep equality between `x` and `w` (or `y` and `z`), and from
+        // we need to elaborate the deep equality between `x` and `w` (or `y` and `z`), and from
         // that, prove that `(= (= x y) (= z w))`. We do that by first proving that `(= x w)` (1)
         // and `(= y z)` (2). Then, we introduce a `cong` step that uses (1) and (2) to show that
         // `(= (= x y) (= w z))` (3). After that, we add a `refl` step that derives
@@ -149,14 +149,14 @@ impl<'a> DeepEqReconstructor<'a> {
         // Note that in both cases we are using `refl` steps to prove that `(= (= x y) (= y x))`.
         // Checking these steps still requires deep equality modulo reordering of equalities, even
         // though it only requires checking to a very shallow depth. This somewhat defeats the
-        // purpose of reconstruction, so it may be changed in the future.
+        // purpose of elaboration, so it may be changed in the future.
 
         let mut cong_premises = Vec::new();
         if a_left != b_right {
-            cong_premises.push(self.reconstruct(pool, a_left, b_right.clone()));
+            cong_premises.push(self.elaborate(pool, a_left, b_right.clone()));
         }
         if a_right != b_left {
-            cong_premises.push(self.reconstruct(pool, a_right, b_left.clone()));
+            cong_premises.push(self.elaborate(pool, a_right, b_left.clone()));
         }
 
         // Both `a_left == b_right` and `a_right == b_left`, so we are in the simpler case

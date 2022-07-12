@@ -3,7 +3,7 @@ mod diff;
 mod pruning;
 
 use crate::{ast::*, utils::SymbolTable};
-use deep_eq::DeepEqReconstructor;
+use deep_eq::DeepEqElaborator;
 use diff::{apply_diff, CommandDiff, ProofDiff};
 use pruning::prune_proof;
 
@@ -29,19 +29,19 @@ impl Frame {
 }
 
 #[derive(Debug)]
-pub struct Reconstructor {
+pub struct Elaborator {
     stack: Vec<Frame>,
     seen_clauses: SymbolTable<Vec<Rc<Term>>, usize>,
     accumulator: Vec<ProofCommand>,
 }
 
-impl Default for Reconstructor {
+impl Default for Elaborator {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Reconstructor {
+impl Elaborator {
     pub fn new() -> Self {
         Self {
             stack: vec![Frame::default()],
@@ -85,7 +85,7 @@ impl Reconstructor {
     }
 
     /// Maps the index of a command in the original proof to the index of that command in the
-    /// reconstructed proof, taking into account the offset created by new steps introduced.
+    /// elaborated proof, taking into account the offset created by new steps introduced.
     pub(super) fn map_index(&self, (depth, i): (usize, usize)) -> (usize, usize) {
         self.stack[depth].new_indices[i]
     }
@@ -111,12 +111,12 @@ impl Reconstructor {
         format!("{}.t{}", root_id, self.accumulator.len() + 1)
     }
 
-    pub(super) fn push_reconstructed_step(&mut self, step: ProofStep) -> (usize, usize) {
-        // TODO: discard reconstructed steps that inroduce already seen conclusions (and can be
+    pub(super) fn push_elaborated_step(&mut self, step: ProofStep) -> (usize, usize) {
+        // TODO: discard elaborated steps that inroduce already seen conclusions (and can be
         // deleted)
 
         let clause = step.clause.clone();
-        let reconstruction = {
+        let elaboration = {
             let mut added = std::mem::take(&mut self.accumulator);
             added.push(ProofCommand::Step(step));
             CommandDiff::Step(added)
@@ -126,7 +126,7 @@ impl Reconstructor {
         let frame = self.top_frame_mut();
         let (old_index, new_index) = frame.push_new_index(depth);
 
-        frame.diff.push((old_index, reconstruction));
+        frame.diff.push((old_index, elaboration));
 
         self.seen_clauses.insert(clause, new_index);
         (self.depth(), new_index)
@@ -200,7 +200,7 @@ impl Reconstructor {
     }
 
     #[allow(dead_code)]
-    pub(super) fn reconstruct_assume(
+    pub(super) fn elaborate_assume(
         &mut self,
         pool: &mut TermPool,
         premise: Rc<Term>,
@@ -212,8 +212,8 @@ impl Reconstructor {
             term: premise.clone(),
         });
         let equality_step = {
-            let mut r = DeepEqReconstructor::new(self, id);
-            r.reconstruct(pool, premise.clone(), term.clone())
+            let mut r = DeepEqElaborator::new(self, id);
+            r.elaborate(pool, premise.clone(), term.clone())
         };
         let equiv1_step = {
             let new_id = self.get_new_id(id);
@@ -229,7 +229,7 @@ impl Reconstructor {
         };
 
         let new_id = self.get_new_id(id);
-        self.push_reconstructed_step(ProofStep {
+        self.push_elaborated_step(ProofStep {
             id: new_id,
             clause: vec![term],
             rule: "resolution".to_owned(),
@@ -278,7 +278,7 @@ impl Reconstructor {
         );
         let Frame { diff, new_indices, .. } = self.stack.pop().unwrap();
         let diff = ProofDiff { commands: diff, new_indices };
-        let reconstructed = apply_diff(diff, original);
-        apply_diff(prune_proof(&reconstructed), reconstructed)
+        let elaborated = apply_diff(diff, original);
+        apply_diff(prune_proof(&elaborated), elaborated)
     }
 }

@@ -1,6 +1,6 @@
 use super::{
     error::{CheckerError, EqualityError},
-    ContextStack, Reconstructor,
+    ContextStack, Elaborator,
 };
 use crate::{
     ast::*,
@@ -12,7 +12,7 @@ pub type RuleResult = Result<(), CheckerError>;
 
 pub type Rule = fn(RuleArgs) -> RuleResult;
 
-pub type ReconstructionRule = fn(RuleArgs, String, &mut Reconstructor) -> Result<(), CheckerError>;
+pub type ElaborationRule = fn(RuleArgs, String, &mut Elaborator) -> Result<(), CheckerError>;
 
 pub struct RuleArgs<'a> {
     pub(super) conclusion: &'a [Rc<Term>],

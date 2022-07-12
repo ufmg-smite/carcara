@@ -33,18 +33,18 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> AletheResult<()> {
     // First, we check the proof normally
     checker::ProofChecker::new(&mut pool, test_config()).check(&proof)?;
 
-    // Then, we check it while reconstructing the proof
+    // Then, we check it while elaborating the proof
     let mut checker = checker::ProofChecker::new(&mut pool, test_config());
-    let reconstructed = checker.check_and_reconstruct(proof)?;
+    let elaborated = checker.check_and_elaborate(proof)?;
 
-    // After that, we check the reconstructed proof normally, to make sure it is valid
-    checker::ProofChecker::new(&mut pool, test_config()).check(&reconstructed)?;
+    // After that, we check the elaborated proof normally, to make sure it is valid
+    checker::ProofChecker::new(&mut pool, test_config()).check(&elaborated)?;
 
-    // Finally, we reconstruct the already reconstructed proof, to make sure the reconstruction
-    // step is idempotent
+    // Finally, we elaborate the already elaborated proof, to make sure the elaboration step is
+    // idempotent
     let mut checker = checker::ProofChecker::new(&mut pool, test_config());
-    let reconstructed_twice = checker.check_and_reconstruct(reconstructed.clone())?;
-    assert_eq!(reconstructed.commands, reconstructed_twice.commands);
+    let elaborated_twice = checker.check_and_elaborate(elaborated.clone())?;
+    assert_eq!(elaborated.commands, elaborated_twice.commands);
 
     Ok(())
 }

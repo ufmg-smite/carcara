@@ -87,7 +87,7 @@ pub fn check<T: io::BufRead>(
     checker::ProofChecker::new(&mut pool, config).check(&proof)
 }
 
-pub fn check_and_reconstruct<T: io::BufRead>(
+pub fn check_and_elaborate<T: io::BufRead>(
     problem: T,
     proof: T,
     apply_function_defs: bool,
@@ -101,6 +101,6 @@ pub fn check_and_reconstruct<T: io::BufRead>(
         statistics: None,
     };
     checker::ProofChecker::new(&mut pool, config)
-        .check_and_reconstruct(proof)
+        .check_and_elaborate(proof)
         .map(|p| p.commands)
 }

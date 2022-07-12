@@ -62,9 +62,9 @@ pub fn apply_diff(root: ProofDiff, proof: Vec<ProofCommand>) -> Vec<ProofCommand
                     }
                     (
                         ProofCommand::Step(_) | ProofCommand::Assume { .. },
-                        CommandDiff::Step(mut reconstruction),
+                        CommandDiff::Step(mut elaboration),
                     ) => {
-                        f.result.commands.append(&mut reconstruction);
+                        f.result.commands.append(&mut elaboration);
                     }
                     (_, CommandDiff::Delete) => (),
                     _ => panic!("invalid diff!"),

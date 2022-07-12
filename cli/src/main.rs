@@ -8,7 +8,7 @@ mod path_args;
 use alethe_proof_checker::{
     ast::print_proof,
     benchmarking::{Metrics, OnlineBenchmarkResults},
-    check, check_and_reconstruct, parser,
+    check, check_and_elaborate, parser,
 };
 use clap::{ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -53,8 +53,8 @@ enum Command {
     /// Checks a proof file.
     Check(CheckingOptions),
 
-    /// Checks and reconstructs a proof file.
-    Reconstruct(CheckingOptions),
+    /// Checks and elaborates a proof file.
+    Elaborate(CheckingOptions),
 
     /// Checks a series of proof files and records performance statistics.
     Bench(BenchmarkOptions),
@@ -96,9 +96,9 @@ struct BenchmarkOptions {
     #[clap(short = 'j', long, default_value_t = 1)]
     num_threads: usize,
 
-    /// Also reconstruct each proof in addition to parsing and checking.
+    /// Also elaborate each proof in addition to parsing and checking.
     #[clap(long)]
-    reconstruct: bool,
+    elaborate: bool,
 
     /// Show benchmark results sorted by total time taken, instead of by average time taken.
     #[clap(short = 't', long)]
@@ -140,7 +140,7 @@ fn main() {
     let result = match cli.command {
         Command::Parse(options) => parse_command(options),
         Command::Check(options) => check_command(options, false),
-        Command::Reconstruct(options) => check_command(options, true),
+        Command::Elaborate(options) => check_command(options, true),
         Command::Bench(options) => bench_command(options),
     };
     if let Err(e) = result {
@@ -175,14 +175,14 @@ fn parse_command(options: ParsingOptions) -> CliResult<()> {
     Ok(())
 }
 
-fn check_command(options: CheckingOptions, reconstruct: bool) -> CliResult<()> {
+fn check_command(options: CheckingOptions, elaborate: bool) -> CliResult<()> {
     let apply_function_defs = !options.parsing.dont_apply_function_defs;
     let (problem, proof) = get_instance(options.parsing)?;
     let skip = options.skip_unknown_rules;
 
-    if reconstruct {
-        let reconstructed = check_and_reconstruct(problem, proof, apply_function_defs, skip)?;
-        print_proof(&reconstructed)?;
+    if elaborate {
+        let elaborated = check_and_elaborate(problem, proof, apply_function_defs, skip)?;
+        print_proof(&elaborated)?;
     } else {
         check(problem, proof, apply_function_defs, skip)?;
         println!("true");
@@ -208,7 +208,7 @@ fn bench_command(options: BenchmarkOptions) -> CliResult<()> {
             options.num_runs,
             options.num_threads,
             false,
-            options.reconstruct,
+            options.elaborate,
             &mut File::create("runs.csv")?,
             &mut File::create("by-rule.csv")?,
         )?;
@@ -220,7 +220,7 @@ fn bench_command(options: BenchmarkOptions) -> CliResult<()> {
         options.num_runs,
         options.num_threads,
         false,
-        options.reconstruct,
+        options.elaborate,
     );
     if results.is_empty() {
         println!("no benchmark data collected");
@@ -231,10 +231,10 @@ fn bench_command(options: BenchmarkOptions) -> CliResult<()> {
 }
 
 fn print_benchmark_results(results: OnlineBenchmarkResults, sort_by_total: bool) -> CliResult<()> {
-    let [parsing, checking, reconstructing, accounted_for, total] = [
+    let [parsing, checking, elaborating, accounted_for, total] = [
         results.parsing(),
         results.checking(),
-        results.reconstructing(),
+        results.elaborating(),
         results.total_accounted_for(),
         results.total(),
     ]
@@ -248,8 +248,8 @@ fn print_benchmark_results(results: OnlineBenchmarkResults, sort_by_total: bool)
 
     println!("parsing:             {}", parsing);
     println!("checking:            {}", checking);
-    if !reconstructing.is_empty() {
-        println!("reconstructing:      {}", reconstructing);
+    if !elaborating.is_empty() {
+        println!("elaborating:      {}", elaborating);
     }
     println!(
         "on assume:           {} ({:.02}% of checking time)",

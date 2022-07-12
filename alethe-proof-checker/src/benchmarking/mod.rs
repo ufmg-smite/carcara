@@ -48,7 +48,7 @@ type RunId = (String, usize);
 pub struct RunMeasurement {
     pub parsing: Duration,
     pub checking: Duration,
-    pub reconstruction: Duration,
+    pub elaboration: Duration,
     pub total: Duration,
     pub deep_eq: Duration,
     pub assume: Duration,
@@ -61,7 +61,7 @@ pub struct RunMeasurement {
 pub struct BenchmarkResults<ByRun, ByStep, ByRunF64, ByDeepEq> {
     pub parsing: ByRun,
     pub checking: ByRun,
-    pub reconstructing: ByRun,
+    pub elaborating: ByRun,
     pub total_accounted_for: ByRun,
     pub total: ByRun,
     pub step_time: ByStep,
@@ -119,12 +119,12 @@ where
         &self.checking
     }
 
-    /// The time per run to reconstruct the proof.
-    pub fn reconstructing(&self) -> &ByRun {
-        &self.reconstructing
+    /// The time per run to elaborate the proof.
+    pub fn elaborating(&self) -> &ByRun {
+        &self.elaborating
     }
 
-    /// The combined time per run to parse, check, and reconstruct all the steps in the proof.
+    /// The combined time per run to parse, check, and elaborate all the steps in the proof.
     pub fn total_accounted_for(&self) -> &ByRun {
         &self.total_accounted_for
     }
@@ -176,7 +176,7 @@ impl CsvBenchmarkResults {
     ) -> io::Result<()> {
         writeln!(
             dest,
-            "proof_file,run_id,parsing,checking,reconstruction,total_accounted_for,\
+            "proof_file,run_id,parsing,checking,elaboration,total_accounted_for,\
             total,deep_eq,deep_eq_ratio,assume,assume_ratio"
         )?;
 
@@ -191,7 +191,7 @@ impl CsvBenchmarkResults {
                 id.1,
                 m.parsing.as_nanos(),
                 m.checking.as_nanos(),
-                m.reconstruction.as_nanos(),
+                m.elaboration.as_nanos(),
                 total_accounted_for.as_nanos(),
                 m.total.as_nanos(),
                 m.deep_eq.as_nanos(),
@@ -288,7 +288,7 @@ where
         let RunMeasurement {
             parsing,
             checking,
-            reconstruction,
+            elaboration,
             total,
             deep_eq,
             assume,
@@ -297,7 +297,7 @@ where
 
         self.parsing.add_sample(id, parsing);
         self.checking.add_sample(id, checking);
-        self.reconstructing.add_sample(id, reconstruction);
+        self.elaborating.add_sample(id, elaboration);
         self.total_accounted_for.add_sample(id, parsing + checking);
         self.total.add_sample(id, total);
 
@@ -315,7 +315,7 @@ where
         Self {
             parsing: a.parsing.combine(b.parsing),
             checking: a.checking.combine(b.checking),
-            reconstructing: a.reconstructing.combine(b.reconstructing),
+            elaborating: a.elaborating.combine(b.elaborating),
             total_accounted_for: a.total_accounted_for.combine(b.total_accounted_for),
             total: a.total.combine(b.total),
             step_time: a.step_time.combine(b.step_time),
