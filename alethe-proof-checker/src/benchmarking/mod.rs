@@ -213,10 +213,10 @@ impl CsvBenchmarkResults {
 
         writeln!(
             dest,
-            "rule,count,total,mean,min,first_quartile,median,third_quartile,max"
+            "rule,count,total,mean,lower_whisker,first_quartile,median,third_quartile,upper_whisker"
         )?;
         for (rule, mut m) in data {
-            let [min, first_quartile, median, third_quartile, max] =
+            let [lower_whisker, first_quartile, median, third_quartile, upper_whisker] =
                 m.quartiles().map(|(_, t)| t.as_nanos());
             writeln!(
                 dest,
@@ -225,11 +225,11 @@ impl CsvBenchmarkResults {
                 m.count(),
                 m.total().as_nanos(),
                 m.mean().as_nanos(),
-                min,
+                lower_whisker,
                 first_quartile,
                 median,
                 third_quartile,
-                max,
+                upper_whisker,
             )?;
         }
         Ok(())

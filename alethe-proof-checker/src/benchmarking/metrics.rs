@@ -307,7 +307,7 @@ impl<K, T: MetricsUnit> OfflineMetrics<K, T> {
         self.data
             .sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
         let n = self.data.len();
-        [0, n / 4, n / 2, (n * 3) / 4, n - 1].map(|i| &self.data[i])
+        [n / 20, n / 4, n / 2, (n * 3) / 4, (n * 19) / 20].map(|i| &self.data[i])
     }
 }
 
