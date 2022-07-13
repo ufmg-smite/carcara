@@ -1,5 +1,5 @@
 mod context;
-pub mod elaboration;
+mod elaboration;
 pub mod error;
 mod rules;
 

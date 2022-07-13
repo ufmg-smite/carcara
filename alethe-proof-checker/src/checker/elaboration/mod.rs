@@ -88,7 +88,7 @@ impl Elaborator {
 
     /// Maps the index of a command in the original proof to the index of that command in the
     /// elaborated proof, taking into account the offset created by new steps introduced.
-    pub(super) fn map_index(&self, (depth, i): (usize, usize)) -> (usize, usize) {
+    pub fn map_index(&self, (depth, i): (usize, usize)) -> (usize, usize) {
         self.stack[depth].new_indices[i]
     }
 
@@ -105,15 +105,15 @@ impl Elaborator {
         (self.depth(), index)
     }
 
-    pub(super) fn add_new_step(&mut self, step: ProofStep) -> (usize, usize) {
+    pub fn add_new_step(&mut self, step: ProofStep) -> (usize, usize) {
         self.add_new_command(ProofCommand::Step(step))
     }
 
-    pub(super) fn get_new_id(&mut self, root_id: &str) -> String {
+    pub fn get_new_id(&mut self, root_id: &str) -> String {
         format!("{}.t{}", root_id, self.accumulator.top_frame_len() + 1)
     }
 
-    pub(super) fn push_elaborated_step(&mut self, step: ProofStep) -> (usize, usize) {
+    pub fn push_elaborated_step(&mut self, step: ProofStep) -> (usize, usize) {
         // TODO: discard elaborated steps that inroduce already seen conclusions (and can be
         // deleted)
 
@@ -152,17 +152,17 @@ impl Elaborator {
         }
     }
 
-    pub(super) fn assume(&mut self, term: &Rc<Term>) {
+    pub fn assume(&mut self, term: &Rc<Term>) {
         self.push_command(std::slice::from_ref(term), true);
     }
 
-    pub(super) fn unchanged(&mut self, clause: &[Rc<Term>]) {
+    pub fn unchanged(&mut self, clause: &[Rc<Term>]) {
         self.push_command(clause, false);
     }
 
     /// Adds a `symm` step that flips the equality of the given premise. The `original_premise`
     /// index must already be mapped to the new index space.
-    pub(super) fn add_symm_step(
+    pub fn add_symm_step(
         &mut self,
         pool: &mut TermPool,
         original_premise: (usize, usize),
@@ -183,7 +183,7 @@ impl Elaborator {
     }
 
     /// Adds a `refl` step that asserts that the given term is equal to itself.
-    pub(super) fn add_refl_step(
+    pub fn add_refl_step(
         &mut self,
         pool: &mut TermPool,
         term: Rc<Term>,
@@ -202,7 +202,7 @@ impl Elaborator {
     }
 
     #[allow(dead_code)]
-    pub(super) fn elaborate_assume(
+    pub fn elaborate_assume(
         &mut self,
         pool: &mut TermPool,
         premise: Rc<Term>,
@@ -241,7 +241,7 @@ impl Elaborator {
         })
     }
 
-    pub(super) fn open_subproof(&mut self, length: usize) {
+    pub fn open_subproof(&mut self, length: usize) {
         self.seen_clauses.push_scope();
         self.stack.push(Frame {
             diff: Vec::new(),
@@ -251,7 +251,7 @@ impl Elaborator {
         });
     }
 
-    pub(super) fn close_subproof(&mut self) {
+    pub fn close_subproof(&mut self) {
         self.seen_clauses.pop_scope();
         let inner = self.stack.pop().expect("can't close root subproof");
 
@@ -273,7 +273,7 @@ impl Elaborator {
         frame.diff.push((old_index, diff));
     }
 
-    pub(super) fn end(&mut self, original: Vec<ProofCommand>) -> Vec<ProofCommand> {
+    pub fn end(&mut self, original: Vec<ProofCommand>) -> Vec<ProofCommand> {
         assert!(
             self.depth() == 0,
             "trying to end proof building before closing subproof"
