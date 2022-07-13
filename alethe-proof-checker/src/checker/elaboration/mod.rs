@@ -1,8 +1,10 @@
+mod accumulator;
 mod deep_eq;
 mod diff;
 mod pruning;
 
 use crate::{ast::*, utils::SymbolTable};
+use accumulator::Accumulator;
 use deep_eq::DeepEqElaborator;
 use diff::{apply_diff, CommandDiff, ProofDiff};
 use pruning::prune_proof;
@@ -32,7 +34,7 @@ impl Frame {
 pub struct Elaborator {
     stack: Vec<Frame>,
     seen_clauses: SymbolTable<Vec<Rc<Term>>, usize>,
-    accumulator: Vec<ProofCommand>,
+    accumulator: Accumulator,
 }
 
 impl Default for Elaborator {
@@ -45,7 +47,7 @@ impl Elaborator {
     pub fn new() -> Self {
         Self {
             stack: vec![Frame::default()],
-            accumulator: Vec::new(),
+            accumulator: Accumulator::new(),
             seen_clauses: SymbolTable::new(),
         }
     }
@@ -99,7 +101,7 @@ impl Elaborator {
         let index = (frame.new_indices.len() as isize + frame.current_offset) as usize;
         frame.current_offset += 1;
         self.seen_clauses.insert(command.clause().to_vec(), index);
-        self.accumulator.push(command);
+        self.accumulator.push_command(command);
         (self.depth(), index)
     }
 
@@ -108,7 +110,7 @@ impl Elaborator {
     }
 
     pub(super) fn get_new_id(&mut self, root_id: &str) -> String {
-        format!("{}.t{}", root_id, self.accumulator.len() + 1)
+        format!("{}.t{}", root_id, self.accumulator.top_frame_len() + 1)
     }
 
     pub(super) fn push_elaborated_step(&mut self, step: ProofStep) -> (usize, usize) {
@@ -117,7 +119,7 @@ impl Elaborator {
 
         let clause = step.clause.clone();
         let elaboration = {
-            let mut added = std::mem::take(&mut self.accumulator);
+            let mut added = std::mem::take(&mut self.accumulator).end();
             added.push(ProofCommand::Step(step));
             CommandDiff::Step(added)
         };
