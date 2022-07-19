@@ -120,6 +120,50 @@ pub fn not_and(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     Ok(())
 }
 
+pub fn xor1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(premises, 1)?;
+    assert_clause_len(conclusion, 2)?;
+
+    let premise_term = get_premise_term(&premises[0])?;
+    let (phi_1, phi_2) = match_term_err!((xor phi_1 phi_2) = premise_term)?;
+
+    assert_eq(phi_1, &conclusion[0])?;
+    assert_eq(phi_2, &conclusion[1])
+}
+
+pub fn xor2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(premises, 1)?;
+    assert_clause_len(conclusion, 2)?;
+
+    let premise_term = get_premise_term(&premises[0])?;
+    let (phi_1, phi_2) = match_term_err!((xor phi_1 phi_2) = premise_term)?;
+
+    assert_eq(phi_1, conclusion[0].remove_negation_err()?)?;
+    assert_eq(phi_2, conclusion[1].remove_negation_err()?)
+}
+
+pub fn not_xor1(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(premises, 1)?;
+    assert_clause_len(conclusion, 2)?;
+
+    let premise_term = get_premise_term(&premises[0])?;
+    let (phi_1, phi_2) = match_term_err!((not (xor phi_1 phi_2)) = premise_term)?;
+
+    assert_eq(phi_1, &conclusion[0])?;
+    assert_eq(phi_2, conclusion[1].remove_negation_err()?)
+}
+
+pub fn not_xor2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(premises, 1)?;
+    assert_clause_len(conclusion, 2)?;
+
+    let premise_term = get_premise_term(&premises[0])?;
+    let (phi_1, phi_2) = match_term_err!((not (xor phi_1 phi_2)) = premise_term)?;
+
+    assert_eq(phi_1, conclusion[0].remove_negation_err()?)?;
+    assert_eq(phi_2, &conclusion[1])
+}
+
 pub fn implies(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_num_premises(premises, 1)?;
     assert_clause_len(conclusion, 2)?;
