@@ -365,6 +365,16 @@ pub fn la_disequality(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_eq(t2_2, t2_3)
 }
 
+pub fn la_totality(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+
+    let ((t1_1, t2_1), (t2_2, t1_2)) =
+        match_term_err!((or (<= t1 t2) (<= t2 t1)) = &conclusion[0])?;
+
+    assert_eq(t1_1, t1_2)?;
+    assert_eq(t2_1, t2_2)
+}
+
 fn assert_less_than(a: &Rc<Term>, b: &Rc<Term>) -> RuleResult {
     rassert!(
         a.as_signed_number_err()? < b.as_signed_number_err()?,
@@ -549,6 +559,27 @@ mod tests {
                     :rule la_disequality)": false,
                 "(step t1 (cl (or (= x y) (not (<= y x)) (not (<= y x))))
                     :rule la_disequality)": false,
+            }
+        }
+    }
+
+    #[test]
+    fn la_totality() {
+        test_cases! {
+            definitions = "
+                (declare-fun a () Int)
+                (declare-fun b () Int)
+                (declare-fun x () Real)
+                (declare-fun y () Real)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (or (<= a b) (<= b a))) :rule la_totality)": true,
+                "(step t1 (cl (or (<= x y) (<= y x))) :rule la_totality)": true,
+            }
+            "Clause term is not of the correct form" {
+                "(step t1 (cl (or (<= a b) (<= a b))) :rule la_totality)": false,
+                "(step t1 (cl (<= x y) (<= x y)) :rule la_totality)": false,
+                "(step t1 (cl (<= 0 1) (<= 0.0 1.0)) :rule la_totality)": false,
             }
         }
     }
