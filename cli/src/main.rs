@@ -1,5 +1,3 @@
-#![allow(deprecated)]
-
 mod benchmarking;
 mod error;
 mod logger;
