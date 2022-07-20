@@ -616,6 +616,121 @@ mod tests {
     }
 
     #[test]
+    fn xor1() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+            ",
+            "Simple working examples" {
+                "(assume h1 (xor p q))
+                (step t2 (cl p q) :rule xor1 :premises (h1))": true,
+            }
+            "Premise is of the wrong form" {
+                "(assume h1 (and p q))
+                (step t2 (cl p q) :rule xor1 :premises (h1))": false,
+            }
+            "Conclusion is of the wrong form" {
+                "(assume h1 (xor p q))
+                (step t2 (cl q p) :rule xor1 :premises (h1))": false,
+
+                "(assume h1 (xor p q))
+                (step t2 (cl (not p) (not q)) :rule xor1 :premises (h1))": false,
+            }
+        }
+    }
+
+    #[test]
+    fn xor2() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+            ",
+            "Simple working examples" {
+                "(assume h1 (xor p q))
+                (step t2 (cl (not p) (not q)) :rule xor2 :premises (h1))": true,
+
+                "(assume h1 (xor (not p) (not q)))
+                (step t2 (cl (not (not p)) (not (not q))) :rule xor2 :premises (h1))": true,
+            }
+            "Premise is of the wrong form" {
+                "(assume h1 (and p q))
+                (step t2 (cl (not p) (not q)) :rule xor2 :premises (h1))": false,
+            }
+            "Conclusion is of the wrong form" {
+                "(assume h1 (xor p q))
+                (step t2 (cl (not q) (not p)) :rule xor2 :premises (h1))": false,
+
+                "(assume h1 (xor (not p) (not q)))
+                (step t2 (cl p q) :rule xor2 :premises (h1))": false,
+            }
+        }
+    }
+
+    #[test]
+    fn not_xor1() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+            ",
+            "Simple working examples" {
+                "(assume h1 (not (xor p q)))
+                (step t2 (cl p (not q)) :rule not_xor1 :premises (h1))": true,
+
+                "(assume h1 (not (xor p (not q))))
+                (step t2 (cl p (not (not q))) :rule not_xor1 :premises (h1))": true,
+            }
+            "Premise is of the wrong form" {
+                "(assume h1 (xor p q))
+                (step t2 (cl p (not q)) :rule not_xor1 :premises (h1))": false,
+            }
+            "Conclusion is of the wrong form" {
+                "(assume h1 (not (xor p q)))
+                (step t2 (cl (not q) p) :rule not_xor1 :premises (h1))": false,
+
+                "(assume h1 (not (xor p q)))
+                (step t2 (cl (not p) q) :rule not_xor1 :premises (h1))": false,
+
+                "(assume h1 (not (xor p (not q))))
+                (step t2 (cl p q) :rule not_xor1 :premises (h1))": false,
+            }
+        }
+    }
+
+    #[test]
+    fn not_xor2() {
+        test_cases! {
+            definitions = "
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+            ",
+            "Simple working examples" {
+                "(assume h1 (not (xor p q)))
+                (step t2 (cl (not p) q) :rule not_xor2 :premises (h1))": true,
+
+                "(assume h1 (not (xor (not p) q)))
+                (step t2 (cl (not (not p)) q) :rule not_xor2 :premises (h1))": true,
+            }
+            "Premise is of the wrong form" {
+                "(assume h1 (xor p q))
+                (step t2 (cl (not p) q) :rule not_xor2 :premises (h1))": false,
+            }
+            "Conclusion is of the wrong form" {
+                "(assume h1 (not (xor p q)))
+                (step t2 (cl p (not q)) :rule not_xor2 :premises (h1))": false,
+
+                "(assume h1 (not (xor p q)))
+                (step t2 (cl (not q) p) :rule not_xor2 :premises (h1))": false,
+
+                "(assume h1 (not (xor (not p) q)))
+                (step t2 (cl p q) :rule not_xor2 :premises (h1))": false,
+            }
+        }
+    }
+
+    #[test]
     fn implies() {
         test_cases! {
             definitions = "
