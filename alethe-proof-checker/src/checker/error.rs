@@ -102,6 +102,12 @@ pub enum CheckerError {
     #[error("expected term '{0}' to be a numerical constant")]
     ExpectedAnyNumber(Rc<Term>),
 
+    #[error("expected quantifier term, got '{0}'")]
+    ExpectedQuantifierTerm(Rc<Term>),
+
+    #[error("expected 'let' term, got '{0}'")]
+    ExpectedLetTerm(Rc<Term>),
+
     #[error("expected term style argument, got assign style argument: '(:= {0} {1})'")]
     ExpectedTermStyleArg(String, Rc<Term>),
 
@@ -191,9 +197,6 @@ pub enum QuantifierError {
 
     #[error("no argument was given for binding '{0}'")]
     NoArgGivenForBinding(String),
-
-    #[error("expected quantifier term, got '{0}'")]
-    ExpectedQuantifierTerm(Rc<Term>),
 
     #[error("union of bindings '{left_outer}' and '{left_inner}' does not equal '{right}'")]
     JoinFailed {
