@@ -189,8 +189,8 @@ impl<'a> DeepEqElaborator<'a> {
         //
         // If `x` equals `w` syntactically, we can omit the derivation of step `t1`, and remove that
         // premise from step `t3`. We can do the same with step `t2` if `y` equals `z`
-        // syntactically. Of course, if both `x` == `w` and `y` == `z`, we fallback to simpler case,
-        // where we only need to introduce a `refl` step.
+        // syntactically. Of course, if both `x` == `w` and `y` == `z`, we fallback to the simpler
+        // case, where we only need to introduce a `refl` step.
         //
         // Note that in both cases we are using `refl` steps to prove that `(= (= x y) (= y x))`.
         // Checking these steps still requires deep equality modulo reordering of equalities, even
