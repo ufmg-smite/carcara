@@ -148,10 +148,10 @@ mod tests {
     fn or_intro() {
         test_cases! {
             definitions = "
-            (declare-fun a () Bool)
-            (declare-fun b () Bool)
-            (declare-fun c () Bool)
-        ",
+                (declare-fun a () Bool)
+                (declare-fun b () Bool)
+                (declare-fun c () Bool)
+            ",
             "Simple working examples" {
                 "(step t1 (cl a b) :rule hole)
                 (step t2 (cl a b c) :rule or_intro :premises (t1))": true,
