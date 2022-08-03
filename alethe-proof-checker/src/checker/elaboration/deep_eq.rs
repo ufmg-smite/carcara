@@ -57,9 +57,55 @@ impl<'a> DeepEqElaborator<'a> {
                 self.build_cong(pool, (&a, &b), (a_args, b_args))
             }
 
-            // TODO: To elaborate equalities with quantifiers, we will need to use a subproof ending
-            // in a `bind` step
-            (Term::Quant(_, _, _), Term::Quant(_, _, _)) => todo!(),
+            (Term::Quant(a_q, a_bindings, a_inner), Term::Quant(b_q, b_bindings, b_inner)) => {
+                assert_eq!(a_q, b_q);
+                assert_eq!(a_bindings, b_bindings);
+                let variable_args = a_bindings.as_slice().to_vec();
+                let assignment_args = a_bindings
+                    .iter()
+                    .map(|x| {
+                        let var = x.0.clone();
+                        let term = pool.add_term(x.clone().into());
+                        (var, term)
+                    })
+                    .collect();
+
+                self.inner.open_accumulator_subproof();
+
+                let inner_eq = self.elaborate(pool, a_inner.clone(), b_inner.clone());
+                if self.inner.accumulator.top_frame_len() == 0 {
+                    // The inner equality step may be skipped if it was already derived before. In
+                    // this case, the end step must have something to implicitly reference, so we
+                    // must add a step that copies that clause to inside the subproof. We do that
+                    // with a dummy `reordering` step.
+                    let id = self.inner.get_new_id(self.root_id);
+                    let clause = vec![build_term!(pool, (= {a_inner.clone()} {b_inner.clone()}))];
+                    self.inner.add_new_command(
+                        ProofCommand::Step(ProofStep {
+                            id,
+                            clause,
+                            rule: "reordering".to_owned(),
+                            premises: vec![inner_eq],
+                            args: Vec::new(),
+                            discharge: Vec::new(),
+                        }),
+                        true,
+                    );
+                }
+
+                let id = self.inner.get_new_id(self.root_id);
+                let clause = vec![build_term!(pool, (= {a.clone()} {b.clone()}))];
+                let end_step = ProofStep {
+                    id,
+                    clause,
+                    rule: "bind".to_owned(),
+                    premises: Vec::new(),
+                    args: Vec::new(),
+                    discharge: Vec::new(),
+                };
+                self.inner
+                    .close_accumulator_subproof(assignment_args, variable_args, end_step)
+            }
 
             // TODO: To elaborate equalities that use `let` terms, we will need to add a new rule
             // called `bind_let`, similar to `bind`, that can introduce `let` binders

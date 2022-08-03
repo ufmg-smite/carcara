@@ -92,25 +92,31 @@ impl Elaborator {
         self.stack[depth].new_indices[i]
     }
 
-    fn add_new_command(&mut self, command: ProofCommand) -> (usize, usize) {
-        if let Some((d, &i)) = self.seen_clauses.get_with_depth(command.clause()) {
-            return (d, i);
+    fn add_new_command(&mut self, command: ProofCommand, must_keep: bool) -> (usize, usize) {
+        if !must_keep {
+            if let Some((d, &i)) = self.seen_clauses.get_with_depth(command.clause()) {
+                return (d, i);
+            }
         }
 
-        let frame = self.top_frame_mut();
-        let index = (frame.new_indices.len() as isize + frame.current_offset) as usize;
-        frame.current_offset += 1;
+        let index = if self.accumulator.depth() == 0 {
+            let frame = self.top_frame_mut();
+            frame.current_offset += 1;
+            (frame.new_indices.len() as isize + frame.current_offset - 1) as usize
+        } else {
+            self.accumulator.top_frame_len()
+        };
         self.seen_clauses.insert(command.clause().to_vec(), index);
         self.accumulator.push_command(command);
-        (self.depth(), index)
+        (self.depth() + self.accumulator.depth(), index)
     }
 
     pub fn add_new_step(&mut self, step: ProofStep) -> (usize, usize) {
-        self.add_new_command(ProofCommand::Step(step))
+        self.add_new_command(ProofCommand::Step(step), false)
     }
 
     pub fn get_new_id(&mut self, root_id: &str) -> String {
-        format!("{}.t{}", root_id, self.accumulator.top_frame_len() + 1)
+        self.accumulator.next_id(root_id)
     }
 
     pub fn push_elaborated_step(&mut self, step: ProofStep) -> (usize, usize) {
@@ -132,6 +138,32 @@ impl Elaborator {
 
         self.seen_clauses.insert(clause, new_index);
         (self.depth(), new_index)
+    }
+
+    pub fn open_accumulator_subproof(&mut self) {
+        self.seen_clauses.push_scope();
+        self.accumulator.open_subproof();
+    }
+
+    pub fn close_accumulator_subproof(
+        &mut self,
+        assignment_args: Vec<(String, Rc<Term>)>,
+        variable_args: Vec<SortedVar>,
+        end_step: ProofStep,
+    ) -> (usize, usize) {
+        self.seen_clauses.pop_scope();
+
+        // If the end step clause was already seen, we must skip the subproof as a whole, and not
+        // just the end step itself
+        if let Some((d, &i)) = self.seen_clauses.get_with_depth(&end_step.clause) {
+            self.accumulator.drop_subproof();
+            return (d, i);
+        }
+        self.add_new_step(end_step);
+        let s = self
+            .accumulator
+            .close_subproof(assignment_args, variable_args);
+        self.add_new_command(s, true)
     }
 
     fn push_command(&mut self, clause: &[Rc<Term>], is_assume: bool) {
@@ -201,7 +233,6 @@ impl Elaborator {
         self.add_new_step(step)
     }
 
-    #[allow(dead_code)]
     pub fn elaborate_assume(
         &mut self,
         pool: &mut TermPool,
@@ -209,10 +240,13 @@ impl Elaborator {
         term: Rc<Term>,
         id: &str,
     ) -> (usize, usize) {
-        let new_assume = self.add_new_command(ProofCommand::Assume {
-            id: id.to_owned(),
-            term: premise.clone(),
-        });
+        let new_assume = self.add_new_command(
+            ProofCommand::Assume {
+                id: id.to_owned(),
+                term: premise.clone(),
+            },
+            false,
+        );
         let equality_step = {
             let mut r = DeepEqElaborator::new(self, id);
             r.elaborate(pool, premise.clone(), term.clone())

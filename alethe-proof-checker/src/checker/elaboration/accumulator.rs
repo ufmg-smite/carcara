@@ -1,4 +1,5 @@
 use crate::ast::*;
+use std::fmt::Write;
 
 #[derive(Debug, Default)]
 struct Frame {
@@ -24,39 +25,48 @@ impl Accumulator {
     }
 
     pub fn depth(&self) -> usize {
-        self.stack.len()
+        self.stack.len() - 1
     }
 
     pub fn top_frame_len(&self) -> usize {
         self.top_frame().commands.len()
     }
 
+    pub fn next_id(&self, root_id: &str) -> String {
+        let mut current = root_id.to_owned();
+        for f in &self.stack {
+            write!(&mut current, ".t{}", f.commands.len() + 1).unwrap();
+        }
+        current
+    }
+
     pub fn push_command(&mut self, command: ProofCommand) {
         self.top_frame_mut().commands.push(command);
     }
 
-    #[allow(dead_code)]
     pub fn open_subproof(&mut self) {
         self.stack.push(Frame::default());
     }
 
-    #[allow(dead_code)]
     pub fn close_subproof(
         &mut self,
         assignment_args: Vec<(String, Rc<Term>)>,
         variable_args: Vec<SortedVar>,
-    ) {
+    ) -> ProofCommand {
         let commands = self.stack.pop().unwrap().commands;
-        let subproof = Subproof {
+        ProofCommand::Subproof(Subproof {
             commands,
             assignment_args,
             variable_args,
-        };
-        self.push_command(ProofCommand::Subproof(subproof));
+        })
+    }
+
+    pub fn drop_subproof(&mut self) {
+        self.stack.pop();
     }
 
     pub fn end(mut self) -> Vec<ProofCommand> {
-        assert!(self.depth() == 1);
+        assert!(self.depth() == 0);
         self.stack.pop().unwrap().commands
     }
 }
