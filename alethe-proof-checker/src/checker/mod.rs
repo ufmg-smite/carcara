@@ -404,6 +404,7 @@ impl<'c> ProofChecker<'c> {
             "not_symm" => extras::not_symm,
             "eq_symmetric" => extras::eq_symmetric,
             "or_intro" => extras::or_intro,
+            "bind_let" => extras::bind_let,
 
             // Special rules that always check as valid, and are used to indicate holes in the
             // proof.

@@ -63,6 +63,23 @@ pub fn or_intro(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     Ok(())
 }
 
+pub fn bind_let(RuleArgs { conclusion, previous_command, .. }: RuleArgs) -> RuleResult {
+    let previous_command = previous_command.ok_or(CheckerError::MustBeLastStepInSubproof)?;
+
+    assert_clause_len(conclusion, 1)?;
+
+    let (phi, phi_prime) = match_term_err!((= p q) = get_premise_term(&previous_command)?)?;
+
+    let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
+
+    let (l_bindings, left) = left.unwrap_let_err()?;
+    let (r_bindings, right) = right.unwrap_let_err()?;
+
+    assert_eq(l_bindings, r_bindings)?;
+    assert_eq(left, phi)?;
+    assert_eq(right, phi_prime)
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -165,6 +182,37 @@ mod tests {
 
                 "(step t1 (cl a b c) :rule hole)
                 (step t2 (cl a b) :rule or_intro :premises (t1))": false,
+            }
+        }
+    }
+
+    #[test]
+    fn bind_let() {
+        test_cases! {
+            definitions = "",
+            "Simple working examples" {
+                "(anchor :step t1 :args ((x Int) (y Int)))
+                (step t1.t1 (cl (= x y)) :rule hole)
+                (step t1 (cl (= (let ((a 0)) x) (let ((a 0)) y))) :rule bind_let)": true,
+            }
+            "Premise if of the wrong form" {
+                "(anchor :step t1 :args ((x Int) (y Int)))
+                (step t1.t1 (cl (< (+ x y) 0)) :rule hole)
+                (step t1 (cl (= (let ((a 0)) x) (let ((a 0)) y))) :rule bind_let)": false,
+            }
+            "Premise doesn't justify inner terms' equality" {
+                "(anchor :step t1 :args ((x Int) (y Int)))
+                (step t1.t1 (cl (= x y)) :rule hole)
+                (step t1 (cl (= (let ((a 0)) a) (let ((a 0)) 0))) :rule bind_let)": false,
+
+                "(anchor :step t1 :args ((x Int) (y Int)))
+                (step t1.t1 (cl (= x y)) :rule hole)
+                (step t1 (cl (= (let ((a 0)) y) (let ((a 0)) x))) :rule bind_let)": false,
+            }
+            "Bindings can't be renamed" {
+                "(anchor :step t1 :args ((x Int) (y Int)))
+                (step t1.t1 (cl (= x y)) :rule hole)
+                (step t1 (cl (= (let ((a 0)) x) (let ((b 0)) y))) :rule bind_let)": false,
             }
         }
     }
