@@ -338,6 +338,11 @@ impl Term {
         Subterms::new(self)
     }
 
+    /// Returns `true` if the term is a terminal.
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, Term::Terminal(_))
+    }
+
     /// Returns `true` if the term is an integer or real constant.
     pub fn is_number(&self) -> bool {
         matches!(
@@ -414,6 +419,12 @@ impl Term {
         }
     }
 
+    /// Returns `true` if the term is a sort.
+    pub fn is_sort(&self) -> bool {
+        matches!(self, Term::Sort(_))
+    }
+
+    /// Tries to extract a sort from a term. Returns `Some` if the term is a sort.
     pub fn as_sort(&self) -> Option<&Sort> {
         match self {
             Term::Sort(s) => Some(s),
