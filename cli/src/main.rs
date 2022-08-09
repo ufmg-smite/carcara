@@ -169,7 +169,7 @@ fn parse_command(options: ParsingOptions) -> CliResult<()> {
     let (problem, proof) = get_instance(options)?;
     let (proof, _) = parser::parse_instance(problem, proof, apply_function_defs)
         .map_err(alethe_proof_checker::Error::from)?;
-    print_proof(&proof.commands)?;
+    print_proof(&proof.commands, true)?;
     Ok(())
 }
 
@@ -180,7 +180,7 @@ fn check_command(options: CheckingOptions, elaborate: bool) -> CliResult<()> {
 
     if elaborate {
         let elaborated = check_and_elaborate(problem, proof, apply_function_defs, skip)?;
-        print_proof(&elaborated)?;
+        print_proof(&elaborated, true)?;
     } else {
         check(problem, proof, apply_function_defs, skip)?;
         println!("true");

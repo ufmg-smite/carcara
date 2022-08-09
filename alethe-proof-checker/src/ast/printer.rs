@@ -1,26 +1,93 @@
 use crate::ast::*;
+use ahash::AHashMap;
 use std::{fmt, io};
 
-pub fn print_proof(commands: &[ProofCommand]) -> io::Result<()> {
+pub fn print_proof(commands: &[ProofCommand], use_sharing: bool) -> io::Result<()> {
     let mut stdout = io::stdout();
-    (AlethePrinter { inner: &mut stdout }).write_proof(commands)
+    let mut printer = AlethePrinter {
+        inner: &mut stdout,
+        term_indices: use_sharing.then(AHashMap::new),
+    };
+    printer.write_proof(commands)
 }
 
-trait PrettyPrint {
+trait PrintProof {
     fn write_proof(&mut self, commands: &[ProofCommand]) -> io::Result<()>;
 }
 
-struct AlethePrinter<'a> {
-    inner: &'a mut dyn io::Write,
+trait PrintWithSharing {
+    fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()>;
 }
 
-impl<'a> PrettyPrint for AlethePrinter<'a> {
+impl<T: PrintWithSharing> PrintWithSharing for &T {
+    fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
+        PrintWithSharing::print_with_sharing(*self, p)
+    }
+}
+
+impl PrintWithSharing for Rc<Term> {
+    fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
+        if let Some(indices) = &mut p.term_indices {
+            if !self.is_terminal() && !self.is_sort() {
+                return if let Some(i) = indices.get(self) {
+                    write!(p.inner, "@p_{}", i)
+                } else {
+                    let i = indices.len();
+                    indices.insert(self.clone(), i);
+                    write!(p.inner, "(! ")?;
+                    p.write_raw_term(self)?;
+                    write!(p.inner, " :named @p_{})", i)
+                };
+            }
+        }
+        p.write_raw_term(self)
+    }
+}
+
+impl PrintWithSharing for SortedVar {
+    fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
+        let (name, value) = self;
+        write!(p.inner, "({} ", name)?;
+        value.print_with_sharing(p)?;
+        write!(p.inner, ")")
+    }
+}
+
+impl PrintWithSharing for BindingList {
+    fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
+        match self.as_slice() {
+            [] => write!(p.inner, "()"),
+            [head, tail @ ..] => p.write_s_expr(head, tail),
+        }
+    }
+}
+
+macro_rules! impl_default_print_with_sharing {
+    ($($t:ty),* $(,)?) => {
+        $(impl PrintWithSharing for $t {
+            fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
+                write!(p.inner, "{}", self)
+            }
+        })*
+    }
+}
+
+impl_default_print_with_sharing!(Operator, str, String);
+
+struct AlethePrinter<'a> {
+    inner: &'a mut dyn io::Write,
+    term_indices: Option<AHashMap<Rc<Term>, usize>>,
+}
+
+impl<'a> PrintProof for AlethePrinter<'a> {
     fn write_proof(&mut self, commands: &[ProofCommand]) -> io::Result<()> {
         let mut iter = ProofIter::new(commands);
         while let Some(command) = iter.next() {
             match command {
                 ProofCommand::Assume { id, term } => {
-                    write!(self.inner, "(assume {} {})", id, term)?;
+                    write!(self.inner, "(assume {} ", id)?;
+                    term.print_with_sharing(self)?;
+                    write!(self.inner, ")")?;
                 }
                 ProofCommand::Step(s) => self.write_step(&mut iter, s)?,
                 ProofCommand::Subproof(s) => {
@@ -29,19 +96,21 @@ impl<'a> PrettyPrint for AlethePrinter<'a> {
                     if !s.variable_args.is_empty() || !s.assignment_args.is_empty() {
                         write!(self.inner, " :args (")?;
                         let mut is_first = true;
-                        for (name, sort) in &s.variable_args {
+                        for var in &s.variable_args {
                             if !is_first {
                                 write!(self.inner, " ")?;
                             }
                             is_first = false;
-                            write!(self.inner, "({} {})", name, sort)?;
+                            var.print_with_sharing(self)?;
                         }
                         for (name, value) in &s.assignment_args {
                             if !is_first {
                                 write!(self.inner, " ")?;
                             }
                             is_first = false;
-                            write!(self.inner, "(:= {} {})", name, value)?;
+                            write!(self.inner, "(:= {} ", name)?;
+                            value.print_with_sharing(self)?;
+                            write!(self.inner, ")")?;
                         }
                         write!(self.inner, ")")?;
                     }
@@ -56,11 +125,63 @@ impl<'a> PrettyPrint for AlethePrinter<'a> {
 }
 
 impl<'a> AlethePrinter<'a> {
+    fn write_s_expr<H, T>(&mut self, head: &H, tail: &[T]) -> io::Result<()>
+    where
+        H: PrintWithSharing + ?Sized,
+        T: PrintWithSharing,
+    {
+        write!(self.inner, "(")?;
+        head.print_with_sharing(self)?;
+        for t in tail {
+            write!(self.inner, " ")?;
+            t.print_with_sharing(self)?;
+        }
+        write!(self.inner, ")")
+    }
+
+    fn write_raw_term(&mut self, term: &Rc<Term>) -> io::Result<()> {
+        match term.as_ref() {
+            Term::Terminal(t) => write!(self.inner, "{}", t),
+            Term::App(func, args) => self.write_s_expr(func, args),
+            Term::Op(op, args) => self.write_s_expr(op, args),
+            Term::Sort(sort) => write!(self.inner, "{}", sort),
+            Term::Quant(quantifier, bindings, term) => {
+                write!(self.inner, "({} ", quantifier)?;
+                bindings.print_with_sharing(self)?;
+                write!(self.inner, " ")?;
+                term.print_with_sharing(self)?;
+                write!(self.inner, ")")
+            }
+            Term::Choice(var, term) => {
+                write!(self.inner, "(choice (")?;
+                var.print_with_sharing(self)?;
+                write!(self.inner, ") ")?;
+                term.print_with_sharing(self)?;
+                write!(self.inner, ")")
+            }
+            Term::Let(bindings, term) => {
+                write!(self.inner, "(let ")?;
+                bindings.print_with_sharing(self)?;
+                write!(self.inner, " ")?;
+                term.print_with_sharing(self)?;
+                write!(self.inner, ")")
+            }
+            Term::Lambda(bindings, term) => {
+                write!(self.inner, "(lambda ")?;
+                bindings.print_with_sharing(self)?;
+                write!(self.inner, " ")?;
+                term.print_with_sharing(self)?;
+                write!(self.inner, ")")
+            }
+        }
+    }
+
     fn write_step(&mut self, iter: &mut ProofIter, step: &ProofStep) -> io::Result<()> {
         write!(self.inner, "(step {} (cl", step.id)?;
 
         for t in &step.clause {
-            write!(self.inner, " {}", t)?;
+            write!(self.inner, " ")?;
+            t.print_with_sharing(self)?;
         }
         write!(self.inner, ")")?;
 
@@ -98,9 +219,11 @@ impl<'a> AlethePrinter<'a> {
 
     fn write_proof_arg(&mut self, arg: &ProofArg) -> io::Result<()> {
         match arg {
-            ProofArg::Term(t) => write!(self.inner, "{}", t),
+            ProofArg::Term(t) => t.print_with_sharing(self),
             ProofArg::Assign(name, value) => {
-                write!(self.inner, "(:= {} {})", name, value)
+                write!(self.inner, "(:= {} ", name)?;
+                value.print_with_sharing(self)?;
+                write!(self.inner, ")")
             }
         }
     }
@@ -119,7 +242,7 @@ where
 }
 
 impl fmt::Display for Term {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Term::Terminal(t) => write!(f, "{}", t),
             Term::App(func, args) => write_s_expr(f, func, args),
@@ -142,7 +265,7 @@ impl fmt::Display for Term {
 }
 
 impl fmt::Debug for Term {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(self, f)
     }
 }
