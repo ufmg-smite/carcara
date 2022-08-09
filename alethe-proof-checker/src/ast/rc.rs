@@ -74,4 +74,8 @@ impl<T> Rc<T> {
         #[allow(clippy::disallowed_methods)]
         Self(rc::Rc::new(value))
     }
+
+    pub fn strong_count(this: &Self) -> usize {
+        rc::Rc::strong_count(&this.0)
+    }
 }

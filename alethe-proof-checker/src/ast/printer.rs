@@ -28,7 +28,17 @@ impl<T: PrintWithSharing> PrintWithSharing for &T {
 impl PrintWithSharing for Rc<Term> {
     fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
         if let Some(indices) = &mut p.term_indices {
-            if !self.is_terminal() && !self.is_sort() {
+            // There are three cases where we don't use sharing when printing a term:
+            //
+            // - Terminal terms (e.g., integers, reals, variables, etc.) could in theory be shared,
+            // but, since they are very small, it's not worth it to give them a name.
+            //
+            // - Sorts are represented as terms, but they are not actually terms in the grammar, so
+            // we can't use the `(! ... :named ...)` syntax to give them a name.
+            //
+            // - If a term is only used once in the proof, there is no reason to give it a name. We
+            // detect this case by checking if the number of references to it's `Rc` is exaclty 1.
+            if !self.is_terminal() && !self.is_sort() && Rc::strong_count(self) > 1 {
                 return if let Some(i) = indices.get(self) {
                     write!(p.inner, "@p_{}", i)
                 } else {
