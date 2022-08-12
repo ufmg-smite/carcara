@@ -49,21 +49,21 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Parses a proof file and prints the AST.
-    Parse(ParsingOptions),
+    /// Parses a proof file and prints it back.
+    Parse(ParseOptions),
 
     /// Checks a proof file.
-    Check(CheckingOptions),
+    Check(CheckOptions),
 
     /// Checks and elaborates a proof file.
-    Elaborate(CheckingOptions),
+    Elaborate(ElaborateOptions),
 
     /// Checks a series of proof files and records performance statistics.
     Bench(BenchmarkOptions),
 }
 
 #[derive(Args)]
-struct ParsingOptions {
+struct InputOptions {
     /// The proof file to be checked
     proof_file: String,
 
@@ -79,13 +79,38 @@ struct ParsingOptions {
 }
 
 #[derive(Args)]
-struct CheckingOptions {
+struct PrintingOptions {
+    /// Use sharing when printing proof terms.
+    #[clap(long = "print-with-sharing")]
+    use_sharing: bool,
+}
+
+#[derive(Args)]
+struct ParseOptions {
     #[clap(flatten)]
-    parsing: ParsingOptions,
+    input: InputOptions,
+
+    #[clap(flatten)]
+    printing: PrintingOptions,
+}
+
+#[derive(Args)]
+struct CheckOptions {
+    #[clap(flatten)]
+    input: InputOptions,
 
     /// Skips rules that are not implemented.
     #[clap(short, long)]
     skip_unknown_rules: bool,
+}
+
+#[derive(Args)]
+struct ElaborateOptions {
+    #[clap(flatten)]
+    checking: CheckOptions,
+
+    #[clap(flatten)]
+    printing: PrintingOptions,
 }
 
 #[derive(Args)]
@@ -141,8 +166,8 @@ fn main() {
 
     let result = match cli.command {
         Command::Parse(options) => parse_command(options),
-        Command::Check(options) => check_command(options, false),
-        Command::Elaborate(options) => check_command(options, true),
+        Command::Check(options) => check_command(options),
+        Command::Elaborate(options) => elaborate_command(options),
         Command::Bench(options) => bench_command(options),
     };
     if let Err(e) = result {
@@ -151,7 +176,7 @@ fn main() {
     }
 }
 
-fn get_instance(options: ParsingOptions) -> CliResult<(Box<dyn BufRead>, Box<dyn BufRead>)> {
+fn get_instance(options: InputOptions) -> CliResult<(Box<dyn BufRead>, Box<dyn BufRead>)> {
     fn reader_from_path<P: AsRef<Path>>(path: P) -> CliResult<Box<dyn BufRead>> {
         Ok(Box::new(io::BufReader::new(File::open(path)?)))
     }
@@ -168,27 +193,40 @@ fn get_instance(options: ParsingOptions) -> CliResult<(Box<dyn BufRead>, Box<dyn
     }
 }
 
-fn parse_command(options: ParsingOptions) -> CliResult<()> {
-    let apply_function_defs = !options.dont_apply_function_defs;
-    let (problem, proof) = get_instance(options)?;
+fn parse_command(options: ParseOptions) -> CliResult<()> {
+    let apply_function_defs = !options.input.dont_apply_function_defs;
+    let (problem, proof) = get_instance(options.input)?;
     let (proof, _) = parser::parse_instance(problem, proof, apply_function_defs)
         .map_err(alethe_proof_checker::Error::from)?;
-    print_proof(&proof.commands, true)?;
+    print_proof(&proof.commands, options.printing.use_sharing)?;
     Ok(())
 }
 
-fn check_command(options: CheckingOptions, elaborate: bool) -> CliResult<()> {
-    let apply_function_defs = !options.parsing.dont_apply_function_defs;
-    let (problem, proof) = get_instance(options.parsing)?;
-    let skip = options.skip_unknown_rules;
+fn check_command(options: CheckOptions) -> CliResult<()> {
+    let apply_function_defs = !options.input.dont_apply_function_defs;
+    let (problem, proof) = get_instance(options.input)?;
 
-    if elaborate {
-        let elaborated = check_and_elaborate(problem, proof, apply_function_defs, skip)?;
-        print_proof(&elaborated, true)?;
-    } else {
-        check(problem, proof, apply_function_defs, skip)?;
-        println!("true");
-    }
+    check(
+        problem,
+        proof,
+        apply_function_defs,
+        options.skip_unknown_rules,
+    )?;
+    println!("true");
+    Ok(())
+}
+
+fn elaborate_command(options: ElaborateOptions) -> CliResult<()> {
+    let apply_function_defs = !options.checking.input.dont_apply_function_defs;
+    let (problem, proof) = get_instance(options.checking.input)?;
+
+    let elaborated = check_and_elaborate(
+        problem,
+        proof,
+        apply_function_defs,
+        options.checking.skip_unknown_rules,
+    )?;
+    print_proof(&elaborated, options.printing.use_sharing)?;
     Ok(())
 }
 
