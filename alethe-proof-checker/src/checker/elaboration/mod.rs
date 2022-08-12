@@ -145,11 +145,14 @@ impl Elaborator {
         self.accumulator.open_subproof();
     }
 
+    /// Closes a subproof in the accumulator. This method will overwrite the `id` in `end_step`, to
+    /// make sure it is the next `id` in the outer subproof.
     pub fn close_accumulator_subproof(
         &mut self,
         assignment_args: Vec<(String, Rc<Term>)>,
         variable_args: Vec<SortedVar>,
         end_step: ProofStep,
+        root_id: &str,
     ) -> (usize, usize) {
         self.seen_clauses.pop_scope();
 
@@ -162,7 +165,7 @@ impl Elaborator {
         self.add_new_step(end_step);
         let s = self
             .accumulator
-            .close_subproof(assignment_args, variable_args);
+            .close_subproof(assignment_args, variable_args, root_id);
         self.add_new_command(s, true)
     }
 

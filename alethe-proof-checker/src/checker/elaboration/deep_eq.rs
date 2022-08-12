@@ -73,15 +73,19 @@ impl<'a> DeepEqElaborator<'a> {
                 self.create_bind_subproof(pool, (a_inner.clone(), b_inner.clone()));
 
                 let end_step = ProofStep {
-                    id: self.inner.get_new_id(self.root_id),
+                    id: String::new(),
                     clause: vec![build_term!(pool, (= {a.clone()} {b.clone()}))],
                     rule: "bind".to_owned(),
                     premises: Vec::new(),
                     args: Vec::new(),
                     discharge: Vec::new(),
                 };
-                self.inner
-                    .close_accumulator_subproof(assignment_args, variable_args, end_step)
+                self.inner.close_accumulator_subproof(
+                    assignment_args,
+                    variable_args,
+                    end_step,
+                    self.root_id,
+                )
             }
 
             (Term::Let(a_bindings, a_inner), Term::Let(b_bindings, b_inner)) => {
@@ -97,15 +101,19 @@ impl<'a> DeepEqElaborator<'a> {
                 self.create_bind_subproof(pool, (a_inner.clone(), b_inner.clone()));
 
                 let end_step = ProofStep {
-                    id: self.inner.get_new_id(self.root_id),
+                    id: String::new(),
                     clause: vec![build_term!(pool, (= {a.clone()} {b.clone()}))],
                     rule: "bind_let".to_owned(),
                     premises: Vec::new(),
                     args: Vec::new(),
                     discharge: Vec::new(),
                 };
-                self.inner
-                    .close_accumulator_subproof(Vec::new(), variable_args, end_step)
+                self.inner.close_accumulator_subproof(
+                    Vec::new(),
+                    variable_args,
+                    end_step,
+                    self.root_id,
+                )
             }
 
             // Since `choice` and `lambda` terms are not in the SMT-LIB standard, they cannot appear

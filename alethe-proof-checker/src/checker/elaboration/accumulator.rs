@@ -52,8 +52,16 @@ impl Accumulator {
         &mut self,
         assignment_args: Vec<(String, Rc<Term>)>,
         variable_args: Vec<SortedVar>,
+        root_id: &str,
     ) -> ProofCommand {
-        let commands = self.stack.pop().unwrap().commands;
+        let mut commands = self.stack.pop().unwrap().commands;
+
+        // We overwrite the last step id to be correct in relation to the outer subproof
+        match commands.last_mut().unwrap() {
+            ProofCommand::Step(s) => s.id = self.next_id(root_id),
+            _ => unreachable!(),
+        }
+
         ProofCommand::Subproof(Subproof {
             commands,
             assignment_args,
