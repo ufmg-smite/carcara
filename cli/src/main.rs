@@ -8,7 +8,7 @@ use alethe_proof_checker::{
     benchmarking::{Metrics, OnlineBenchmarkResults},
     check, check_and_elaborate, parser,
 };
-use clap::{ArgEnum, Args, Parser, Subcommand};
+use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
 use error::{CliError, CliResult};
 use git_version::git_version;
@@ -33,13 +33,17 @@ const VERSION_STRING: &str = formatcp!(
 );
 
 #[derive(Parser)]
-#[clap(name = "alethe-proof-checker", version = VERSION_STRING)]
+#[clap(
+    name = "alethe-proof-checker",
+    version = VERSION_STRING,
+    setting = AppSettings::DeriveDisplayOrder
+)]
 struct Cli {
     #[clap(subcommand)]
     command: Command,
 
     /// Sets the maximum logging level.
-    #[clap(arg_enum, long = "log", default_value_t = LogLevel::Warn)]
+    #[clap(arg_enum, global = true, long = "log", default_value_t = LogLevel::Warn)]
     log_level: LogLevel,
 }
 
