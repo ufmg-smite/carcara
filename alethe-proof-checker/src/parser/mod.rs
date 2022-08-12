@@ -625,20 +625,6 @@ impl<R: BufRead> Parser<R> {
             );
         }
 
-        // If the rule is `hole` or `trust`, we want to allow even invalid premises and arguments,
-        // so we read the rest of the `step` command without trying to parse anything
-        if rule == "hole" || rule == "trust" {
-            self.read_until_close_parens()?;
-            return Ok(ProofStep {
-                id,
-                clause,
-                rule,
-                premises: Vec::new(),
-                args: Vec::new(),
-                discharge: Vec::new(),
-            });
-        }
-
         let premises = if self.current_token == Token::Keyword("premises".into()) {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
@@ -650,7 +636,15 @@ impl<R: BufRead> Parser<R> {
         let args = if self.current_token == Token::Keyword("args".into()) {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
-            self.parse_sequence(Self::parse_proof_arg, true)?
+
+            // If the rule is `hole` or `trust`, we want to allow any invalid arguments,
+            // so we read the rest of the `:args` attribute without trying to parse anything
+            if rule == "hole" || rule == "trust" {
+                self.read_until_close_parens()?;
+                Vec::new()
+            } else {
+                self.parse_sequence(Self::parse_proof_arg, true)?
+            }
         } else {
             Vec::new()
         };
