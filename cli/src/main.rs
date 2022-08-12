@@ -166,7 +166,18 @@ fn main() {
 
     let result = match cli.command {
         Command::Parse(options) => parse_command(options),
-        Command::Check(options) => check_command(options),
+        Command::Check(options) => {
+            match check_command(options) {
+                Ok(false) => println!("valid"),
+                Ok(true) => println!("holey"),
+                Err(e) => {
+                    log::error!("{}", e);
+                    println!("invalid");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
         Command::Elaborate(options) => elaborate_command(options),
         Command::Bench(options) => bench_command(options),
     };
@@ -202,7 +213,7 @@ fn parse_command(options: ParseOptions) -> CliResult<()> {
     Ok(())
 }
 
-fn check_command(options: CheckOptions) -> CliResult<()> {
+fn check_command(options: CheckOptions) -> CliResult<bool> {
     let apply_function_defs = !options.input.dont_apply_function_defs;
     let (problem, proof) = get_instance(options.input)?;
 
@@ -211,9 +222,8 @@ fn check_command(options: CheckOptions) -> CliResult<()> {
         proof,
         apply_function_defs,
         options.skip_unknown_rules,
-    )?;
-    println!("true");
-    Ok(())
+    )
+    .map_err(Into::into)
 }
 
 fn elaborate_command(options: ElaborateOptions) -> CliResult<()> {

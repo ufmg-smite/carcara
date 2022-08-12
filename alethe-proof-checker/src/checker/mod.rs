@@ -53,6 +53,7 @@ pub struct ProofChecker<'c> {
     context: ContextStack,
     elaborator: Option<Elaborator>,
     reached_empty_clause: bool,
+    is_holey: bool,
 }
 
 impl<'c> ProofChecker<'c> {
@@ -63,10 +64,11 @@ impl<'c> ProofChecker<'c> {
             context: ContextStack::new(),
             elaborator: None,
             reached_empty_clause: false,
+            is_holey: false,
         }
     }
 
-    pub fn check(&mut self, proof: &Proof) -> AletheResult<()> {
+    pub fn check(&mut self, proof: &Proof) -> AletheResult<bool> {
         // Similarly to the parser, to avoid stack overflows in proofs with many nested subproofs,
         // we check the subproofs iteratively, instead of recursively
         let mut iter = proof.iter();
@@ -142,7 +144,7 @@ impl<'c> ProofChecker<'c> {
             }
         }
         if self.config.is_running_test || self.reached_empty_clause {
-            Ok(())
+            Ok(self.is_holey)
         } else {
             Err(Error::DoesNotReachEmptyClause)
         }
@@ -250,6 +252,7 @@ impl<'c> ProofChecker<'c> {
         let rule = match Self::get_rule(&step.rule) {
             Some(r) => r,
             None if self.config.skip_unknown_rules => {
+                self.is_holey = true;
                 if let Some(elaborator) = &mut self.elaborator {
                     elaborator.unchanged(&step.clause);
                 }
@@ -257,6 +260,10 @@ impl<'c> ProofChecker<'c> {
             }
             None => return Err(CheckerError::UnknownRule),
         };
+
+        if step.rule == "hole" || step.rule == "trust" {
+            self.is_holey = true;
+        }
 
         let premises: Vec<_> = step
             .premises

@@ -76,7 +76,7 @@ pub fn check<T: io::BufRead>(
     proof: T,
     apply_function_defs: bool,
     skip_unknown_rules: bool,
-) -> Result<(), Error> {
+) -> Result<bool, Error> {
     let (proof, mut pool) = parser::parse_instance(problem, proof, apply_function_defs)?;
 
     let config = checker::Config {
