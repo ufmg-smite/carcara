@@ -70,6 +70,7 @@ impl<'a> DeepEqElaborator<'a> {
                     })
                     .collect();
 
+                self.inner.open_accumulator_subproof();
                 self.create_bind_subproof(pool, (a_inner.clone(), b_inner.clone()));
 
                 let end_step = ProofStep {
@@ -89,12 +90,31 @@ impl<'a> DeepEqElaborator<'a> {
             }
 
             (Term::Let(a_bindings, a_inner), Term::Let(b_bindings, b_inner)) => {
-                assert_eq!(a_bindings, b_bindings);
+                assert_eq!(a_bindings.len(), b_bindings.len());
+
                 let variable_args: Vec<_> = a_bindings
                     .iter()
                     .map(|(name, value)| {
                         let sort = Term::Sort(pool.sort(value).clone());
                         (name.clone(), pool.add_term(sort))
+                    })
+                    .collect();
+
+                self.inner.open_accumulator_subproof();
+
+                // The values of the binding lists in the `let` terms may not be syntatically
+                // identical, in which case we need to prove their equality so the `bind_let` step
+                // is valid.
+                let premises = a_bindings
+                    .iter()
+                    .zip(b_bindings)
+                    .filter_map(|(a, b)| {
+                        assert_eq!(a.0, b.0);
+                        if a.1 == b.1 {
+                            None
+                        } else {
+                            Some(self.elaborate(pool, a.1.clone(), b.1.clone()))
+                        }
                     })
                     .collect();
 
@@ -104,7 +124,7 @@ impl<'a> DeepEqElaborator<'a> {
                     id: String::new(),
                     clause: vec![build_term!(pool, (= {a.clone()} {b.clone()}))],
                     rule: "bind_let".to_owned(),
-                    premises: Vec::new(),
+                    premises,
                     args: Vec::new(),
                     discharge: Vec::new(),
                 };
@@ -259,12 +279,9 @@ impl<'a> DeepEqElaborator<'a> {
     }
 
     /// Creates the subproof for a `bind` or `bind_let` step, used to derive the equality of
-    /// quantifer or `let` terms. This opens an accumulator subproof that must be closed with
-    /// `Elaborator::close_accumulator_subproof`.
+    /// quantifer or `let` terms. This assumes the accumulator subproof has already been opened.
     fn create_bind_subproof(&mut self, pool: &mut TermPool, inner_equality: (Rc<Term>, Rc<Term>)) {
         let (a, b) = inner_equality;
-
-        self.inner.open_accumulator_subproof();
 
         let inner_eq = self.elaborate(pool, a.clone(), b.clone());
 
