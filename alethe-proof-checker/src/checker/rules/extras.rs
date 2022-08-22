@@ -195,7 +195,7 @@ mod tests {
                 (step t1.t1 (cl (= x y)) :rule hole)
                 (step t1 (cl (= (let ((a 0)) x) (let ((a 0)) y))) :rule bind_let)": true,
             }
-            "Premise if of the wrong form" {
+            "Premise is of the wrong form" {
                 "(anchor :step t1 :args ((x Int) (y Int)))
                 (step t1.t1 (cl (< (+ x y) 0)) :rule hole)
                 (step t1 (cl (= (let ((a 0)) x) (let ((a 0)) y))) :rule bind_let)": false,
