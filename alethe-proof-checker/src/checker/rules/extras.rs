@@ -1,8 +1,8 @@
 //! This module contains rules that are not yet in the specification for the Alethe format.
 
 use super::{
-    assert_clause_len, assert_eq, assert_num_premises, get_premise_term, CheckerError, RuleArgs,
-    RuleResult,
+    assert_clause_len, assert_eq, assert_num_premises, get_premise_term, CheckerError,
+    EqualityError, RuleArgs, RuleResult,
 };
 use ahash::AHashSet;
 
@@ -63,7 +63,14 @@ pub fn or_intro(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     Ok(())
 }
 
-pub fn bind_let(RuleArgs { conclusion, previous_command, .. }: RuleArgs) -> RuleResult {
+pub fn bind_let(
+    RuleArgs {
+        conclusion,
+        premises,
+        previous_command,
+        ..
+    }: RuleArgs,
+) -> RuleResult {
     let previous_command = previous_command.ok_or(CheckerError::MustBeLastStepInSubproof)?;
 
     assert_clause_len(conclusion, 1)?;
@@ -75,7 +82,29 @@ pub fn bind_let(RuleArgs { conclusion, previous_command, .. }: RuleArgs) -> Rule
     let (l_bindings, left) = left.unwrap_let_err()?;
     let (r_bindings, right) = right.unwrap_let_err()?;
 
-    assert_eq(l_bindings, r_bindings)?;
+    if l_bindings.len() != r_bindings.len() {
+        return Err(EqualityError::ExpectedEqual(l_bindings.clone(), r_bindings.clone()).into());
+    }
+
+    let mut premises_iter = premises
+        .iter()
+        .map(|p| match_term_err!((= t u) = get_premise_term(p)?))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter();
+    for (left, right) in l_bindings.iter().zip(r_bindings) {
+        if left.0 != right.0 {
+            return Err(
+                EqualityError::ExpectedEqual(l_bindings.clone(), r_bindings.clone()).into(),
+            );
+        }
+
+        // This will consume premises until it finds one that justifies the needed equality, so
+        // unnecessary premises are just ignored
+        if left.1 != right.1 && !premises_iter.any(|p| p == (&left.1, &right.1)) {
+            return Err(EqualityError::ExpectedEqual(left.1.clone(), right.1.clone()).into());
+        }
+    }
+
     assert_eq(left, phi)?;
     assert_eq(right, phi_prime)
 }
@@ -213,6 +242,13 @@ mod tests {
                 "(anchor :step t1 :args ((x Int) (y Int)))
                 (step t1.t1 (cl (= x y)) :rule hole)
                 (step t1 (cl (= (let ((a 0)) x) (let ((b 0)) y))) :rule bind_let)": false,
+            }
+            "Deep equality in variable values" {
+                "(anchor :step t1 :args ((x Int) (y Int)))
+                (step t1.t1 (cl (= (= 0 1) (= 1 0))) :rule hole)
+                (step t1.t2 (cl (= x y)) :rule hole)
+                (step t1 (cl (= (let ((a (= 0 1))) x) (let ((a (= 1 0))) y)))
+                    :rule bind_let :premises (t1.t1))": true,
             }
         }
     }
