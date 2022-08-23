@@ -246,9 +246,22 @@ where
 }
 
 fn quote_symbol(symbol: &str) -> Cow<str> {
+    use crate::parser::Reserved;
+    use std::str::FromStr;
+
     assert!(symbol.chars().all(|c| c != '|'));
 
-    if symbol.chars().any(|c| !is_symbol_character(c)) {
+    // Any symbol that:
+    // - is an empty string,
+    // - starts with a digit,
+    // - is a reserved word, or
+    // - contains non-symbol characters
+    // must be quoted
+    if symbol.is_empty()
+        || symbol.chars().next().unwrap().is_ascii_digit()
+        || Reserved::from_str(symbol).is_ok()
+        || symbol.chars().any(|c| !is_symbol_character(c))
+    {
         Cow::Owned(format!("|{}|", symbol))
     } else {
         Cow::Borrowed(symbol)
