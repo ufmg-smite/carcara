@@ -7,6 +7,16 @@ use std::{
     ops,
 };
 
+/// Returns `true` if the character is a valid symbol character in the SMT-LIB and Alethe languages.
+pub fn is_symbol_character(ch: char) -> bool {
+    match ch {
+        ch if ch.is_ascii_alphanumeric() => true,
+        '+' | '-' | '/' | '*' | '=' | '%' | '?' | '!' | '.' | '$' | '_' | '~' | '&' | '^' | '<'
+        | '>' | '@' => true,
+        _ => false,
+    }
+}
+
 /// An iterator that removes duplicate elements from `iter`. This will yield the elements in
 /// `iter` in order, skipping elements that have already been seen before.
 pub struct Dedup<T, I> {

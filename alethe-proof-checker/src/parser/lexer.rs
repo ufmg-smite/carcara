@@ -1,4 +1,4 @@
-use crate::{parser::ParserError, AletheResult, Error};
+use crate::{parser::ParserError, utils::is_symbol_character, AletheResult, Error};
 use rug::{ops::Pow, Integer, Rational};
 use std::{
     fmt,
@@ -267,7 +267,7 @@ impl<R: BufRead> Lexer<R> {
             Some(':') => self.read_keyword(),
             Some('#') => self.read_number_with_base(),
             Some(c) if c.is_ascii_digit() => self.read_number(),
-            Some(c) if Lexer::is_symbol_character(c) => self.read_simple_symbol(),
+            Some(c) if is_symbol_character(c) => self.read_simple_symbol(),
             None => Ok(Token::Eof),
             Some(other) => Err(Error::Parser(
                 ParserError::UnexpectedChar(other),
@@ -279,7 +279,7 @@ impl<R: BufRead> Lexer<R> {
 
     /// Reads a simple symbol from the input source.
     fn read_simple_symbol(&mut self) -> AletheResult<Token> {
-        let symbol = self.read_chars_while(Lexer::is_symbol_character)?;
+        let symbol = self.read_chars_while(is_symbol_character)?;
         if let Ok(reserved) = Reserved::from_str(&symbol) {
             Ok(Token::ReservedWord(reserved))
         } else {
@@ -308,7 +308,7 @@ impl<R: BufRead> Lexer<R> {
     /// Reads a keyword from the input source.
     fn read_keyword(&mut self) -> AletheResult<Token> {
         self.next_char()?; // Consume `:`
-        let symbol = self.read_chars_while(Lexer::is_symbol_character)?;
+        let symbol = self.read_chars_while(is_symbol_character)?;
         Ok(Token::Keyword(symbol))
     }
 
@@ -372,18 +372,6 @@ impl<R: BufRead> Lexer<R> {
             }
         }
         Ok(Token::String(result))
-    }
-}
-
-impl Lexer<()> {
-    /// Returns `true` if the character is a valid symbol character.
-    fn is_symbol_character(ch: char) -> bool {
-        match ch {
-            ch if ch.is_ascii_alphanumeric() => true,
-            '+' | '-' | '/' | '*' | '=' | '%' | '?' | '!' | '.' | '$' | '_' | '~' | '&' | '^'
-            | '<' | '>' | '@' => true,
-            _ => false,
-        }
     }
 }
 

@@ -1,6 +1,6 @@
-use crate::ast::*;
+use crate::{ast::*, utils::is_symbol_character};
 use ahash::AHashMap;
-use std::{fmt, io};
+use std::{borrow::Cow, fmt, io};
 
 pub fn print_proof(commands: &[ProofCommand], use_sharing: bool) -> io::Result<()> {
     let mut stdout = io::stdout();
@@ -57,7 +57,7 @@ impl PrintWithSharing for Rc<Term> {
 impl PrintWithSharing for SortedVar {
     fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
         let (name, value) = self;
-        write!(p.inner, "({} ", name)?;
+        write!(p.inner, "({} ", quote_symbol(name))?;
         value.print_with_sharing(p)?;
         write!(p.inner, ")")
     }
@@ -72,17 +72,11 @@ impl PrintWithSharing for BindingList {
     }
 }
 
-macro_rules! impl_default_print_with_sharing {
-    ($($t:ty),* $(,)?) => {
-        $(impl PrintWithSharing for $t {
-            fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
-                write!(p.inner, "{}", self)
-            }
-        })*
+impl PrintWithSharing for Operator {
+    fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
+        write!(p.inner, "{}", self)
     }
 }
-
-impl_default_print_with_sharing!(Operator, str, String);
 
 struct AlethePrinter<'a> {
     inner: &'a mut dyn io::Write,
@@ -251,6 +245,24 @@ where
     write!(f, ")")
 }
 
+fn quote_symbol(symbol: &str) -> Cow<str> {
+    assert!(symbol.chars().all(|c| c != '|'));
+
+    if symbol.chars().any(|c| !is_symbol_character(c)) {
+        Cow::Owned(format!("|{}|", symbol))
+    } else {
+        Cow::Borrowed(symbol)
+    }
+}
+
+fn escape_string(string: &str) -> Cow<str> {
+    if string.contains('"') {
+        Cow::Owned(string.replace('"', "\"\""))
+    } else {
+        Cow::Borrowed(string)
+    }
+}
+
 impl fmt::Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -285,7 +297,7 @@ impl fmt::Display for Terminal {
         match self {
             Terminal::Integer(i) => write!(f, "{}", i),
             Terminal::Real(r) => write!(f, "{:?}", r.to_f64()),
-            Terminal::String(s) => write!(f, "\"{}\"", s),
+            Terminal::String(s) => write!(f, "\"{}\"", escape_string(s)),
             Terminal::Var(iden, _) => write!(f, "{}", iden),
         }
     }
@@ -294,8 +306,10 @@ impl fmt::Display for Terminal {
 impl fmt::Display for Identifier {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Identifier::Simple(s) => write!(f, "{}", s),
-            Identifier::Indexed(s, indices) => write_s_expr(f, format!("_ {}", s), indices),
+            Identifier::Simple(s) => write!(f, "{}", quote_symbol(s)),
+            Identifier::Indexed(s, indices) => {
+                write_s_expr(f, format!("_ {}", quote_symbol(s)), indices)
+            }
         }
     }
 }
@@ -304,7 +318,7 @@ impl fmt::Display for Index {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Index::Numeral(n) => write!(f, "{}", n),
-            Index::Symbol(s) => write!(f, "{}", s),
+            Index::Symbol(s) => write!(f, "{}", quote_symbol(s)),
         }
     }
 }
@@ -327,9 +341,9 @@ impl fmt::Display for BindingList {
         match self.as_slice() {
             [] => write!(f, "()"),
             [head, tail @ ..] => {
-                write!(f, "(({} {})", head.0, head.1)?;
+                write!(f, "(({} {})", quote_symbol(&head.0), head.1)?;
                 for (var, term) in tail {
-                    write!(f, " ({} {})", var, term)?;
+                    write!(f, " ({} {})", quote_symbol(var), term)?;
                 }
                 write!(f, ")")
             }
@@ -344,8 +358,8 @@ impl fmt::Display for Sort {
             // importance
             Sort::Function(args) => write_s_expr(f, "Func", args),
             Sort::Atom(name, args) => match args.len() {
-                0 => write!(f, "{}", name),
-                _ => write_s_expr(f, name, args),
+                0 => write!(f, "{}", quote_symbol(name)),
+                _ => write_s_expr(f, quote_symbol(name), args),
             },
             Sort::Bool => write!(f, "Bool"),
             Sort::Int => write!(f, "Int"),
