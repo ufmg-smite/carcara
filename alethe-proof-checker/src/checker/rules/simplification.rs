@@ -343,6 +343,18 @@ pub fn equiv_simplify(args: RuleArgs) -> RuleResult {
 
             // phi = false => ¬phi
             (= phi_1 false): (phi_1, _) => build_term!(pool, (not {phi_1.clone()})),
+
+            // This is a special case for the `equiv_simplify` rule that was added to make
+            // elaboration of deep equalities less verbose. This transformation can very easily lead
+            // to cycles, so it must always be the last transformation rule. Unfortunately, this
+            // means that failed simplifications in the `equiv_simplify` rule will frequently reach
+            // this transformation and reach a cycle, in which case the error message may be a bit
+            // confusing.
+            //
+            // phi_1 = phi_2 => phi_2 = phi_1
+            (= phi_1 phi_2): (phi_1, phi_2) => {
+                build_term!(pool, (= {phi_2.clone()} {phi_1.clone()}))
+            },
         })
     })
 }
