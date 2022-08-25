@@ -192,15 +192,15 @@ impl<'a> DeepEqElaborator<'a> {
         //     b := (= z w)
         // The simpler case that we have to consider is when `x` equals `w` and `y` equals `z`
         // (syntactically), that is, if we just flip the `b` equality, the terms will be
-        // syntactically equal. In this case, we can simply introduce a `refl` step that derives
-        // `(= (= x y) (= y x))`.
+        // syntactically equal. In this case, we can simply introduce an `equiv_simplify` step that
+        // derives `(= (= x y) (= y x))`.
         //
         // The more complex case happens when `x` is equal to `w` modulo reordering of equalities,
         // but they are not syntactically equal, or the same is true with `y` and `z`. In this case,
         // we need to elaborate the deep equality between `x` and `w` (or `y` and `z`), and from
         // that, prove that `(= (= x y) (= z w))`. We do that by first proving that `(= x w)` (1)
         // and `(= y z)` (2). Then, we introduce a `cong` step that uses (1) and (2) to show that
-        // `(= (= x y) (= w z))` (3). After that, we add a `refl` step that derives
+        // `(= (= x y) (= w z))` (3). After that, we add an `equiv_simplify` step that derives
         // `(= (= w z) (= z w))` (4). Finally, we introduce a `trans` step with premises (3) and (4)
         // that proves `(= (= x y) (= z w))`. The general format looks like this:
         //
@@ -209,18 +209,13 @@ impl<'a> DeepEqElaborator<'a> {
         //     ...
         //     (step t2 (cl (= y z)) ...)
         //     (step t3 (cl (= (= x y) (= w z))) :rule cong :premises (t1 t2))
-        //     (step t4 (cl (= (= w z) (= z w))) :rule refl)
+        //     (step t4 (cl (= (= w z) (= z w))) :rule equiv_simplify)
         //     (step t5 (cl (= (= x y) (= z w))) :rule trans :premises (t3 t4))
         //
         // If `x` equals `w` syntactically, we can omit the derivation of step `t1`, and remove that
         // premise from step `t3`. We can do the same with step `t2` if `y` equals `z`
         // syntactically. Of course, if both `x` == `w` and `y` == `z`, we fallback to the simpler
-        // case, where we only need to introduce a `refl` step.
-        //
-        // Note that in both cases we are using `refl` steps to prove that `(= (= x y) (= y x))`.
-        // Checking these steps still requires deep equality modulo reordering of equalities, even
-        // though it only requires checking to a very shallow depth. This somewhat defeats the
-        // purpose of elaboration, so it may be changed in the future.
+        // case, where we only need to introduce an `equiv_simplify` step.
 
         let mut cong_premises = Vec::new();
         if a_left != b_right {
@@ -235,7 +230,7 @@ impl<'a> DeepEqElaborator<'a> {
             let step = ProofStep {
                 id: self.inner.get_new_id(self.root_id),
                 clause: vec![build_term!(pool, (= {a} {b}))],
-                rule: "refl".into(),
+                rule: "equiv_simplify".into(),
                 premises: Vec::new(),
                 args: Vec::new(),
                 discharge: Vec::new(),
@@ -257,10 +252,10 @@ impl<'a> DeepEqElaborator<'a> {
 
         let clause = vec![build_term!(pool, (= {b_flipped} {b.clone()}))];
         let id = self.inner.get_new_id(self.root_id);
-        let refl_step = self.inner.add_new_step(ProofStep {
+        let equiv_step = self.inner.add_new_step(ProofStep {
             id,
             clause,
-            rule: "refl".to_owned(),
+            rule: "equiv_simplify".to_owned(),
             premises: Vec::new(),
             args: Vec::new(),
             discharge: Vec::new(),
@@ -272,7 +267,7 @@ impl<'a> DeepEqElaborator<'a> {
             id,
             clause,
             rule: "trans".into(),
-            premises: vec![cong_step, refl_step],
+            premises: vec![cong_step, equiv_step],
             args: Vec::new(),
             discharge: Vec::new(),
         })
