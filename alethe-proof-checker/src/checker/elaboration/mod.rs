@@ -236,6 +236,17 @@ impl Elaborator {
         self.add_new_step(step)
     }
 
+    pub fn elaborate_deep_eq(
+        &mut self,
+        pool: &mut TermPool,
+        root_id: &str,
+        a: Rc<Term>,
+        b: Rc<Term>,
+        is_alpha_equivalence: bool,
+    ) -> (usize, usize) {
+        DeepEqElaborator::new(self, root_id, is_alpha_equivalence).elaborate(pool, a, b)
+    }
+
     pub fn elaborate_assume(
         &mut self,
         pool: &mut TermPool,
@@ -250,10 +261,7 @@ impl Elaborator {
             },
             false,
         );
-        let equality_step = {
-            let mut r = DeepEqElaborator::new(self, id);
-            r.elaborate(pool, premise.clone(), term.clone())
-        };
+        let equality_step = self.elaborate_deep_eq(pool, id, premise.clone(), term.clone(), false);
         let equiv1_step = {
             let new_id = self.get_new_id(id);
             let clause = vec![build_term!(pool, (not { premise })), term.clone()];
