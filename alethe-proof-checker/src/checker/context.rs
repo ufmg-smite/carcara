@@ -116,15 +116,21 @@ impl ContextStack {
     }
 
     pub fn apply_previous(&mut self, pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
-        assert!(self.len() >= 2);
-        self.get_substitution(pool, self.len() - 2)
-            .apply(pool, term)
+        if self.len() < 2 {
+            term.clone()
+        } else {
+            self.get_substitution(pool, self.len() - 2)
+                .apply(pool, term)
+        }
     }
 
     pub fn apply(&mut self, pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
-        assert!(!self.is_empty());
-        self.get_substitution(pool, self.len() - 1)
-            .apply(pool, term)
+        if self.is_empty() {
+            term.clone()
+        } else {
+            self.get_substitution(pool, self.len() - 1)
+                .apply(pool, term)
+        }
     }
 }
 
