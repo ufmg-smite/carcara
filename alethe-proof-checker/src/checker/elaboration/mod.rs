@@ -217,17 +217,17 @@ impl Elaborator {
         self.add_new_step(step)
     }
 
-    /// Adds a `refl` step that asserts that the given term is equal to itself.
+    /// Adds a `refl` step that asserts that the two given terms are equal.
     pub fn add_refl_step(
         &mut self,
         pool: &mut TermPool,
-        term: Rc<Term>,
+        a: Rc<Term>,
+        b: Rc<Term>,
         id: String,
     ) -> (usize, usize) {
-        let clause = vec![build_term!(pool, (= {term.clone()} {term}))];
         let step = ProofStep {
             id,
-            clause,
+            clause: vec![build_term!(pool, (= {a} {b}))],
             rule: "refl".into(),
             premises: Vec::new(),
             args: Vec::new(),

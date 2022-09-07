@@ -1,5 +1,5 @@
 use super::*;
-use crate::ast::*;
+use crate::{ast::*, checker::context::ContextStack, utils::DedupIterator};
 use ahash::AHashMap;
 
 pub struct DeepEqElaborator<'a> {
@@ -7,13 +7,18 @@ pub struct DeepEqElaborator<'a> {
     root_id: &'a str,
     cache: AHashMap<(Rc<Term>, Rc<Term>), (usize, usize)>,
     checker: DeepEqualityChecker,
+    context: Option<ContextStack>,
 }
 
 impl<'a> DeepEqElaborator<'a> {
-    pub fn new(inner: &'a mut Elaborator, root_id: &'a str) -> Self {
-        let cache = AHashMap::new();
-        let checker = DeepEqualityChecker::new(true, false);
-        Self { inner, root_id, cache, checker }
+    pub fn new(inner: &'a mut Elaborator, root_id: &'a str, is_alpha_equivalence: bool) -> Self {
+        Self {
+            inner,
+            root_id,
+            cache: AHashMap::new(),
+            checker: DeepEqualityChecker::new(true, is_alpha_equivalence),
+            context: is_alpha_equivalence.then(ContextStack::new),
+        }
     }
 
     /// Takes two terms that are equal modulo reordering of equalities, and returns a premise that
@@ -28,16 +33,14 @@ impl<'a> DeepEqElaborator<'a> {
         // We have to do this to avoid moving `a` and `b` when calling `self.cache.get`
         let (a, b) = key;
 
-        if a == b {
+        if self.directly_eq(pool, &a, &b) {
             let id = self.inner.get_new_id(self.root_id);
-            return self.inner.add_refl_step(pool, a, id);
+            return self.inner.add_refl_step(pool, a, b, id);
         }
 
         if let Some((a_left, a_right)) = match_term!((= x y) = a) {
             if let Some((b_left, b_right)) = match_term!((= x y) = b) {
-                if DeepEq::eq(&mut self.checker, a_left, b_right)
-                    && DeepEq::eq(&mut self.checker, a_right, b_left)
-                {
+                if self.deep_eq(pool, a_left, b_right) && self.deep_eq(pool, a_right, b_left) {
                     let [a_left, a_right, b_left, b_right] =
                         [a_left, a_right, b_left, b_right].map(Clone::clone);
                     return self.flip_equality(pool, (a, a_left, a_right), (b, b_left, b_right));
@@ -59,19 +62,50 @@ impl<'a> DeepEqElaborator<'a> {
 
             (Term::Quant(a_q, a_bindings, a_inner), Term::Quant(b_q, b_bindings, b_inner)) => {
                 assert_eq!(a_q, b_q);
-                assert_eq!(a_bindings, b_bindings);
-                let variable_args = a_bindings.as_slice().to_vec();
-                let assignment_args = a_bindings
-                    .iter()
-                    .map(|x| {
-                        let var = x.0.clone();
-                        let term = pool.add_term(x.clone().into());
-                        (var, term)
-                    })
-                    .collect();
+
+                let (variable_args, assignment_args) = match &mut self.context {
+                    None => {
+                        assert_eq!(a_bindings, b_bindings);
+                        let assignment_args: Vec<_> = a_bindings
+                            .iter()
+                            .map(|x| {
+                                let var = x.0.clone();
+                                let term = pool.add_term(x.clone().into());
+                                (var, term)
+                            })
+                            .collect();
+
+                        (a_bindings.as_slice().to_vec(), assignment_args)
+                    }
+                    Some(c) => {
+                        assert!(a_bindings
+                            .iter()
+                            .map(|(_, sort)| sort)
+                            .eq(b_bindings.iter().map(|(_, sort)| sort)));
+                        let variable_args: Vec<_> = a_bindings
+                            .iter()
+                            .chain(b_bindings)
+                            .dedup()
+                            .cloned()
+                            .collect();
+
+                        let assigment_args: Vec<_> = a_bindings
+                            .iter()
+                            .zip(b_bindings)
+                            .map(|((a_var, _), b)| (a_var.clone(), pool.add_term(b.clone().into())))
+                            .collect();
+
+                        c.push(pool, &assigment_args, &variable_args).unwrap();
+                        (variable_args, assigment_args)
+                    }
+                };
 
                 self.inner.open_accumulator_subproof();
                 self.create_bind_subproof(pool, (a_inner.clone(), b_inner.clone()));
+
+                if let Some(c) = &mut self.context {
+                    c.pop();
+                }
 
                 let end_step = ProofStep {
                     id: String::new(),
@@ -151,6 +185,23 @@ impl<'a> DeepEqElaborator<'a> {
         }
     }
 
+    /// Returns `true` if the terms are directly equal, modulo application of the current context.
+    fn directly_eq(&mut self, pool: &mut TermPool, a: &Rc<Term>, b: &Rc<Term>) -> bool {
+        match &mut self.context {
+            Some(c) => c.apply(pool, a) == *b,
+            None => a == b,
+        }
+    }
+
+    /// Returns `true` if the terms are equal modulo reordering of inequaliites, and modulo
+    /// application of the current context.
+    fn deep_eq(&mut self, pool: &mut TermPool, a: &Rc<Term>, b: &Rc<Term>) -> bool {
+        match &mut self.context {
+            Some(c) => DeepEq::eq(&mut self.checker, &c.apply(pool, a), b),
+            None => DeepEq::eq(&mut self.checker, a, b),
+        }
+    }
+
     fn build_cong(
         &mut self,
         pool: &mut TermPool,
@@ -173,7 +224,7 @@ impl<'a> DeepEqElaborator<'a> {
         let step = ProofStep {
             id,
             clause,
-            rule: "cong".into(),
+            rule: "cong".to_owned(),
             premises,
             args: Vec::new(),
             discharge: Vec::new(),
@@ -188,49 +239,44 @@ impl<'a> DeepEqElaborator<'a> {
         (b, b_left, b_right): (Rc<Term>, Rc<Term>, Rc<Term>),
     ) -> (usize, usize) {
         // Let's define:
-        //     a := (= x y),
-        //     b := (= z w)
-        // The simpler case that we have to consider is when `x` equals `w` and `y` equals `z`
-        // (syntactically), that is, if we just flip the `b` equality, the terms will be
+        //     a := (= x y)
+        //     b := (= y' x')
+        // The simpler case that we have to consider is when x equals x' and y equals y'
+        // (syntactically), that is, if we just flip the b equality, the terms will be
         // syntactically equal. In this case, we can simply introduce an `equiv_simplify` step that
         // derives `(= (= x y) (= y x))`.
         //
-        // The more complex case happens when `x` is equal to `w` modulo reordering of equalities,
-        // but they are not syntactically equal, or the same is true with `y` and `z`. In this case,
-        // we need to elaborate the deep equality between `x` and `w` (or `y` and `z`), and from
-        // that, prove that `(= (= x y) (= z w))`. We do that by first proving that `(= x w)` (1)
-        // and `(= y z)` (2). Then, we introduce a `cong` step that uses (1) and (2) to show that
-        // `(= (= x y) (= w z))` (3). After that, we add an `equiv_simplify` step that derives
-        // `(= (= w z) (= z w))` (4). Finally, we introduce a `trans` step with premises (3) and (4)
-        // that proves `(= (= x y) (= z w))`. The general format looks like this:
+        // The more complex case happens when x is equal to x', but they are not syntactically
+        // identical, or the same is true with y and y'. This can happen if they are equal modulo
+        // reordering of equalities, or if they are equal modulo the application of the current
+        // context (in the case of alpha equivalence).
+        //
+        // In this case, we need to elaborate the deep equality between x and x' (or y and y'), and
+        // from that, prove that `(= (= x y) (= y' x))`. We do that by first proving that `(= x x')`
+        // (1) and `(= y y')` (2). Then, we introduce a `cong` step that uses (1) and (2) to show
+        // that `(= (= x y) (= x' y'))` (3). After that, we add an `equiv_simplify` step that
+        // derives `(= (= x' y') (= y' x'))` (4). Finally, we introduce a `trans` step with premises
+        // (3) and (4) that proves `(= (= x y) (= y' x'))`. The general format looks like this:
         //
         //     ...
-        //     (step t1 (cl (= x w)) ...)
+        //     (step t1 (cl (= x x')) ...)
         //     ...
-        //     (step t2 (cl (= y z)) ...)
-        //     (step t3 (cl (= (= x y) (= w z))) :rule cong :premises (t1 t2))
-        //     (step t4 (cl (= (= w z) (= z w))) :rule equiv_simplify)
-        //     (step t5 (cl (= (= x y) (= z w))) :rule trans :premises (t3 t4))
+        //     (step t2 (cl (= y y')) ...)
+        //     (step t3 (cl (= (= x y) (= x' y'))) :rule cong :premises (t1 t2))
+        //     (step t4 (cl (= (= x' y') (= y' x'))) :rule equiv_simplify)
+        //     (step t5 (cl (= (= x y) (= y' x'))) :rule trans :premises (t3 t4))
         //
-        // If `x` equals `w` syntactically, we can omit the derivation of step `t1`, and remove that
-        // premise from step `t3`. We can do the same with step `t2` if `y` equals `z`
-        // syntactically. Of course, if both `x` == `w` and `y` == `z`, we fallback to the simpler
-        // case, where we only need to introduce an `equiv_simplify` step.
+        // If x equals x' syntactically, we can omit the derivation of step `t1`, and remove that
+        // premise from step `t3`. We can do the same with step `t2` if y equals y' syntactically.
+        // Of course, if both x == x' and y == y', we fallback to the simpler case, where we only
+        // need to introduce an `equiv_simplify` step.
 
-        let mut cong_premises = Vec::new();
-        if a_left != b_right {
-            cong_premises.push(self.elaborate(pool, a_left, b_right.clone()));
-        }
-        if a_right != b_left {
-            cong_premises.push(self.elaborate(pool, a_right, b_left.clone()));
-        }
-
-        // Both `a_left == b_right` and `a_right == b_left`, so we are in the simpler case
-        if cong_premises.is_empty() {
+        // Simpler case
+        if a_left == b_right && a_right == b_left {
             let step = ProofStep {
                 id: self.inner.get_new_id(self.root_id),
                 clause: vec![build_term!(pool, (= {a} {b}))],
-                rule: "equiv_simplify".into(),
+                rule: "equiv_simplify".to_owned(),
                 premises: Vec::new(),
                 args: Vec::new(),
                 discharge: Vec::new(),
@@ -238,35 +284,31 @@ impl<'a> DeepEqElaborator<'a> {
             return self.inner.add_new_step(step);
         }
 
-        let b_flipped = build_term!(pool, (= {b_right} {b_left}));
-        let clause = vec![build_term!(pool, (= {a.clone()} {b_flipped.clone()}))];
-        let id = self.inner.get_new_id(self.root_id);
-        let cong_step = self.inner.add_new_step(ProofStep {
-            id,
-            clause,
-            rule: "cong".into(),
-            premises: cong_premises,
-            args: Vec::new(),
-            discharge: Vec::new(),
-        });
+        // To create the `cong` step that derives `(= (= x y) (= x' y'))`, we use the `build_cong`
+        // method. This method also creates the steps that prove `(= x x')` and `(= y y')`, if
+        // needed.
+        let flipped_b = build_term!(pool, (= {b_right.clone()} {b_left.clone()}));
+        let cong_step = self.build_cong(
+            pool,
+            (&a, &flipped_b),
+            (&[a_left, a_right], &[b_right, b_left]),
+        );
 
-        let clause = vec![build_term!(pool, (= {b_flipped} {b.clone()}))];
         let id = self.inner.get_new_id(self.root_id);
         let equiv_step = self.inner.add_new_step(ProofStep {
             id,
-            clause,
+            clause: vec![build_term!(pool, (= {flipped_b} {b.clone()}))],
             rule: "equiv_simplify".to_owned(),
             premises: Vec::new(),
             args: Vec::new(),
             discharge: Vec::new(),
         });
 
-        let clause = vec![build_term!(pool, (= {a} {b}))];
         let id = self.inner.get_new_id(self.root_id);
         self.inner.add_new_step(ProofStep {
             id,
-            clause,
-            rule: "trans".into(),
+            clause: vec![build_term!(pool, (= {a} {b}))],
+            rule: "trans".to_owned(),
             premises: vec![cong_step, equiv_step],
             args: Vec::new(),
             discharge: Vec::new(),
