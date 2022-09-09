@@ -1,11 +1,14 @@
 use super::*;
-use crate::{ast::*, checker::context::ContextStack, utils::DedupIterator};
-use ahash::AHashMap;
+use crate::{
+    ast::*,
+    checker::context::ContextStack,
+    utils::{DedupIterator, SymbolTable},
+};
 
 pub struct DeepEqElaborator<'a> {
     inner: &'a mut Elaborator,
     root_id: &'a str,
-    cache: AHashMap<(Rc<Term>, Rc<Term>), (usize, usize)>,
+    cache: SymbolTable<(Rc<Term>, Rc<Term>), (usize, usize)>,
     checker: DeepEqualityChecker,
     context: Option<ContextStack>,
 }
@@ -15,7 +18,7 @@ impl<'a> DeepEqElaborator<'a> {
         Self {
             inner,
             root_id,
-            cache: AHashMap::new(),
+            cache: SymbolTable::new(),
             checker: DeepEqualityChecker::new(true, is_alpha_equivalence),
             context: is_alpha_equivalence.then(ContextStack::new),
         }
@@ -31,8 +34,13 @@ impl<'a> DeepEqElaborator<'a> {
             return *p;
         }
         // We have to do this to avoid moving `a` and `b` when calling `self.cache.get`
-        let (a, b) = key;
+        let (a, b) = key.clone();
+        let result = self.elaborate_impl(pool, a, b);
+        self.cache.insert(key, result);
+        result
+    }
 
+    fn elaborate_impl(&mut self, pool: &mut TermPool, a: Rc<Term>, b: Rc<Term>) -> (usize, usize) {
         if self.directly_eq(pool, &a, &b) {
             let id = self.inner.get_new_id(self.root_id);
             return self.inner.add_refl_step(pool, a, b, id);
@@ -100,26 +108,23 @@ impl<'a> DeepEqElaborator<'a> {
                     }
                 };
 
-                self.inner.open_accumulator_subproof();
+                self.open_subproof();
                 self.create_bind_subproof(pool, (a_inner.clone(), b_inner.clone()));
 
                 if let Some(c) = &mut self.context {
                     c.pop();
                 }
-
-                let end_step = ProofStep {
-                    id: String::new(),
-                    clause: vec![build_term!(pool, (= {a.clone()} {b.clone()}))],
-                    rule: "bind".to_owned(),
-                    premises: Vec::new(),
-                    args: Vec::new(),
-                    discharge: Vec::new(),
-                };
-                self.inner.close_accumulator_subproof(
+                self.close_subproof(
                     assignment_args,
                     variable_args,
-                    end_step,
-                    self.root_id,
+                    ProofStep {
+                        id: String::new(),
+                        clause: vec![build_term!(pool, (= {a.clone()} {b.clone()}))],
+                        rule: "bind".to_owned(),
+                        premises: Vec::new(),
+                        args: Vec::new(),
+                        discharge: Vec::new(),
+                    },
                 )
             }
 
@@ -134,7 +139,7 @@ impl<'a> DeepEqElaborator<'a> {
                     })
                     .collect();
 
-                self.inner.open_accumulator_subproof();
+                self.open_subproof();
 
                 // The values of the binding lists in the `let` terms may not be syntatically
                 // identical, in which case we need to prove their equality so the `bind_let` step
@@ -153,20 +158,17 @@ impl<'a> DeepEqElaborator<'a> {
                     .collect();
 
                 self.create_bind_subproof(pool, (a_inner.clone(), b_inner.clone()));
-
-                let end_step = ProofStep {
-                    id: String::new(),
-                    clause: vec![build_term!(pool, (= {a.clone()} {b.clone()}))],
-                    rule: "bind_let".to_owned(),
-                    premises,
-                    args: Vec::new(),
-                    discharge: Vec::new(),
-                };
-                self.inner.close_accumulator_subproof(
+                self.close_subproof(
                     Vec::new(),
                     variable_args,
-                    end_step,
-                    self.root_id,
+                    ProofStep {
+                        id: String::new(),
+                        clause: vec![build_term!(pool, (= {a.clone()} {b.clone()}))],
+                        rule: "bind_let".to_owned(),
+                        premises,
+                        args: Vec::new(),
+                        discharge: Vec::new(),
+                    },
                 )
             }
 
@@ -313,6 +315,26 @@ impl<'a> DeepEqElaborator<'a> {
             args: Vec::new(),
             discharge: Vec::new(),
         })
+    }
+
+    fn open_subproof(&mut self) {
+        self.cache.push_scope();
+        self.inner.open_accumulator_subproof();
+    }
+
+    fn close_subproof(
+        &mut self,
+        assignment_args: Vec<(String, Rc<Term>)>,
+        variable_args: Vec<SortedVar>,
+        end_step: ProofStep,
+    ) -> (usize, usize) {
+        self.cache.pop_scope();
+        self.inner.close_accumulator_subproof(
+            assignment_args,
+            variable_args,
+            end_step,
+            self.root_id,
+        )
     }
 
     /// Creates the subproof for a `bind` or `bind_let` step, used to derive the equality of
