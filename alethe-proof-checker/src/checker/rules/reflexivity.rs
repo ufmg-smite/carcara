@@ -1,4 +1,4 @@
-use super::{assert_clause_len, assert_eq, CheckerError, RuleArgs, RuleResult};
+use super::{assert_clause_len, assert_eq, CheckerError, Elaborator, RuleArgs, RuleResult};
 use crate::ast::*;
 
 pub fn eq_reflexive(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
@@ -45,6 +45,108 @@ pub fn refl(
         result,
         CheckerError::ReflexivityFailed(left.clone(), right.clone()),
     );
+    Ok(())
+}
+
+fn elaborate_equality(
+    elaborator: &mut Elaborator,
+    pool: &mut TermPool,
+    left: &Rc<Term>,
+    right: &Rc<Term>,
+    id: &str,
+    deep_eq_time: &mut std::time::Duration,
+) -> (usize, usize) {
+    let is_alpha_equivalence = !timed_deep_eq_modulo_reordering(left, right, deep_eq_time);
+    elaborator.elaborate_deep_eq(pool, id, left.clone(), right.clone(), is_alpha_equivalence)
+}
+
+pub fn elaborate_refl(
+    RuleArgs {
+        conclusion,
+        pool,
+        context,
+        deep_eq_time,
+        ..
+    }: RuleArgs,
+    command_id: String,
+    elaborator: &mut Elaborator,
+) -> RuleResult {
+    // TODO: Add support for cases where context application is needed
+
+    assert_clause_len(conclusion, 1)?;
+
+    let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
+
+    let new_left = context.apply(pool, left);
+    let new_right = context.apply(pool, right);
+
+    if left == right || new_left == *right || new_left == new_right {
+        elaborator.unchanged(conclusion);
+        return Ok(());
+    }
+
+    // There are three cases to consider when elaborating a `refl` step. In the simpler case, no
+    // context application is needed, and we can prove the equivalence of the left and right terms
+    // directly. In the second case, we need to first apply the context to the left term, using a
+    // `refl` step, and then prove the equivalence of the new left term with the right term. In the
+    // third case, we also need to apply the context to the right term, using another `refl` step.
+    if are_alpha_equivalent(left, right, deep_eq_time) {
+        let equality_step =
+            elaborate_equality(elaborator, pool, left, right, &command_id, deep_eq_time);
+        let id = elaborator.get_new_id(&command_id);
+
+        // TODO: Elaborating the deep equality will add new commands to the accumulator, but
+        // currently we can't push them as the elaborated step directly, so we need to add this
+        // dummy `reordering` step.
+        elaborator.push_elaborated_step(ProofStep {
+            id,
+            clause: conclusion.to_vec(),
+            rule: "reordering".to_owned(),
+            premises: vec![equality_step],
+            args: Vec::new(),
+            discharge: Vec::new(),
+        });
+    } else {
+        let id = elaborator.get_new_id(&command_id);
+        let first_step = elaborator.add_refl_step(pool, left.clone(), new_left.clone(), id);
+
+        let second_step = elaborate_equality(
+            elaborator,
+            pool,
+            &new_left,
+            right,
+            &command_id,
+            deep_eq_time,
+        );
+
+        if are_alpha_equivalent(&new_left, right, deep_eq_time) {
+            let id = elaborator.get_new_id(&command_id);
+            elaborator.push_elaborated_step(ProofStep {
+                id,
+                clause: conclusion.to_vec(),
+                rule: "trans".to_owned(),
+                premises: vec![first_step, second_step],
+                args: Vec::new(),
+                discharge: Vec::new(),
+            });
+        } else if are_alpha_equivalent(&new_left, &new_right, deep_eq_time) {
+            let id = elaborator.get_new_id(&command_id);
+            let third_step = elaborator.add_refl_step(pool, new_right.clone(), right.clone(), id);
+
+            let id = elaborator.get_new_id(&command_id);
+            elaborator.push_elaborated_step(ProofStep {
+                id,
+                clause: conclusion.to_vec(),
+                rule: "trans".to_owned(),
+                premises: vec![first_step, second_step, third_step],
+                args: Vec::new(),
+                discharge: Vec::new(),
+            });
+        } else {
+            return Err(CheckerError::ReflexivityFailed(left.clone(), right.clone()));
+        }
+    }
+
     Ok(())
 }
 
