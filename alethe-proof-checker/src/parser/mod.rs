@@ -24,14 +24,22 @@ pub fn parse_instance<T: BufRead>(
     problem: T,
     proof: T,
     apply_function_defs: bool,
-) -> AletheResult<(Proof, TermPool)> {
+) -> AletheResult<(ProblemPrelude, Proof, TermPool)> {
     let mut parser = Parser::new(problem, apply_function_defs)?;
-    let premises = parser.parse_problem()?;
+    let (prelude, premises) = parser.parse_problem()?;
     parser.reset(proof)?;
     let commands = parser.parse_proof()?;
 
     let proof = Proof { premises, commands };
-    Ok((proof, parser.term_pool()))
+    Ok((prelude, proof, parser.term_pool()))
+}
+
+#[derive(Debug, Default)]
+pub struct ProblemPrelude {
+    sort_declarations: Vec<(String, usize)>,
+    function_declarations: Vec<(String, Rc<Term>)>,
+    commands: Vec<Vec<Token>>,
+    logic: Option<String>,
 }
 
 /// Represents a "raw" `anchor` command. This is only used while parsing, and does not appear in
@@ -68,7 +76,7 @@ pub struct Parser<R> {
     state: ParserState,
     interpret_integers_as_reals: bool,
     apply_function_defs: bool,
-    premises: Option<AHashSet<Rc<Term>>>,
+    problem: Option<(ProblemPrelude, AHashSet<Rc<Term>>)>,
     has_seen_trust_rule: bool,
 }
 
@@ -91,7 +99,7 @@ impl<R: BufRead> Parser<R> {
             state,
             interpret_integers_as_reals: false,
             apply_function_defs,
-            premises: None,
+            problem: None,
             has_seen_trust_rule: false,
         })
     }
@@ -115,7 +123,7 @@ impl<R: BufRead> Parser<R> {
 
     /// Returns `true` if the parser is currently parsing a SMT-LIB problem, and `false` otherwise.
     fn is_parsing_problem(&self) -> bool {
-        self.premises.is_some()
+        self.problem.is_some()
     }
 
     /// Advances the parser one token, and returns the previous `current_token`.
@@ -150,6 +158,16 @@ impl<R: BufRead> Parser<R> {
             .insert(HashCache::new(Identifier::Simple(symbol)), sort);
     }
 
+    /// Shortuct for `self.problem.as_mut().unwrap().0`
+    fn prelude(&mut self) -> &mut ProblemPrelude {
+        &mut self.problem.as_mut().unwrap().0
+    }
+
+    /// Shortuct for `self.problem.as_mut().unwrap().1`
+    fn premises(&mut self) -> &mut AHashSet<Rc<Term>> {
+        &mut self.problem.as_mut().unwrap().1
+    }
+
     /// Adds a new function definition. If we are parsing the problem and
     /// `self.apply_function_defs` is `false`, this instead adds the function name to the symbol
     /// table and adds a new premise that defines the function.
@@ -166,7 +184,7 @@ impl<R: BufRead> Parser<R> {
             let var_term = self.add_term(var.into());
             let assertion_term =
                 self.add_term(Term::Op(Operator::Equals, vec![var_term, lambda_term]));
-            self.premises.as_mut().unwrap().insert(assertion_term);
+            self.premises().insert(assertion_term);
         } else {
             self.state.function_defs.insert(name, func_def);
         }
@@ -374,11 +392,13 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
-    /// Consumes tokens until the matching closing parenthesis is reached.
-    fn read_until_close_parens(&mut self) -> AletheResult<()> {
+    /// Reads tokens until the matching closing parenthesis is reached.
+    fn read_until_close_parens(&mut self) -> AletheResult<Vec<Token>> {
+        let mut result = Vec::new();
         let mut parens_depth = 1;
         while parens_depth > 0 {
-            parens_depth += match self.next_token()? {
+            let token = self.next_token()?;
+            parens_depth += match token {
                 (Token::OpenParen, _) => 1,
                 (Token::CloseParen, _) => -1,
                 (Token::Eof, pos) => {
@@ -386,7 +406,14 @@ impl<R: BufRead> Parser<R> {
                 }
                 _ => 0,
             };
+            result.push(token.0);
         }
+        Ok(result)
+    }
+
+    /// Consumes and drops tokens until the matching closing parenthesis is reached.
+    fn ignore_until_close_parens(&mut self) -> AletheResult<()> {
+        self.read_until_close_parens()?;
         Ok(())
     }
 
@@ -414,7 +441,7 @@ impl<R: BufRead> Parser<R> {
                 // And if the value is an s-expression we read tokens until it's closed
                 Token::OpenParen => {
                     self.next_token()?;
-                    self.read_until_close_parens()?;
+                    self.ignore_until_close_parens()?;
                 }
             }
             if self.current_token == Token::CloseParen {
@@ -436,15 +463,16 @@ impl<R: BufRead> Parser<R> {
     ///
     /// All other commands are ignored. This method returns a hash set containing the premises
     /// introduced in `assert` commands.
-    pub fn parse_problem(&mut self) -> AletheResult<AHashSet<Rc<Term>>> {
-        self.premises = Some(AHashSet::new());
+    pub fn parse_problem(&mut self) -> AletheResult<(ProblemPrelude, AHashSet<Rc<Term>>)> {
+        self.problem = Some((ProblemPrelude::default(), AHashSet::new()));
 
         while self.current_token != Token::Eof {
             self.expect_token(Token::OpenParen)?;
             match self.next_token()?.0 {
                 Token::ReservedWord(Reserved::DeclareFun) => {
                     let (name, sort) = self.parse_declare_fun()?;
-                    self.insert_sorted_var((name, sort));
+                    self.insert_sorted_var((name.clone(), sort.clone()));
+                    self.prelude().function_declarations.push((name, sort));
                     continue;
                 }
                 Token::ReservedWord(Reserved::DeclareConst) => {
@@ -452,11 +480,15 @@ impl<R: BufRead> Parser<R> {
                     let sort = self.parse_sort()?;
                     let sort = self.add_term(sort);
                     self.expect_token(Token::CloseParen)?;
-                    self.insert_sorted_var((name, sort));
+                    self.insert_sorted_var((name.clone(), sort.clone()));
+                    self.prelude().function_declarations.push((name, sort));
                     continue;
                 }
                 Token::ReservedWord(Reserved::DeclareSort) => {
                     let (name, arity) = self.parse_declare_sort()?;
+
+                    self.prelude().sort_declarations.push((name.clone(), arity));
+
                     // User declared sorts are represented with the `Atom` sort kind, and an
                     // argument which is a string terminal representing the sort name.
                     self.state.sort_declarations.insert(name, arity);
@@ -470,25 +502,31 @@ impl<R: BufRead> Parser<R> {
                 Token::ReservedWord(Reserved::Assert) => {
                     let term = self.parse_term()?;
                     self.expect_token(Token::CloseParen)?;
-                    self.premises.as_mut().unwrap().insert(term);
+                    self.premises().insert(term);
                 }
                 Token::ReservedWord(Reserved::SetLogic) => {
                     let logic = self.expect_symbol()?;
                     self.expect_token(Token::CloseParen)?;
+                    self.prelude().logic = Some(logic.clone());
 
                     // When the problem's logic contains real numbers but not integers, integer
                     // literals should be parsed as reals. For instance, `1` should be interpreted
                     // as `1.0`.
                     self.interpret_integers_as_reals = logic.contains('R') && !logic.contains('I');
                 }
+                Token::Symbol(s) if s == "set-info" || s == "set-option" => {
+                    let mut command = self.read_until_close_parens()?;
+                    command.pop(); // We don't need to store the closing parenthesis
+                    self.prelude().commands.push(command);
+                }
                 _ => {
                     // If the command is not one of the commands we care about, we just ignore it.
                     // We do that by reading tokens until the command parenthesis is closed
-                    self.read_until_close_parens()?;
+                    self.ignore_until_close_parens()?;
                 }
             }
         }
-        Ok(self.premises.take().unwrap())
+        Ok(self.problem.take().unwrap())
     }
 
     /// Parses a proof in the Alethe format. All function, constant and sort declarations needed
@@ -640,7 +678,7 @@ impl<R: BufRead> Parser<R> {
             // If the rule is `hole` or `trust`, we want to allow any invalid arguments,
             // so we read the rest of the `:args` attribute without trying to parse anything
             if rule == "hole" || rule == "trust" {
-                self.read_until_close_parens()?;
+                self.ignore_until_close_parens()?;
                 Vec::new()
             } else {
                 self.parse_sequence(Self::parse_proof_arg, true)?

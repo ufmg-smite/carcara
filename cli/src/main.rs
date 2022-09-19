@@ -207,7 +207,7 @@ fn get_instance(options: InputOptions) -> CliResult<(Box<dyn BufRead>, Box<dyn B
 fn parse_command(options: ParseOptions) -> CliResult<()> {
     let apply_function_defs = !options.input.dont_apply_function_defs;
     let (problem, proof) = get_instance(options.input)?;
-    let (proof, _) = parser::parse_instance(problem, proof, apply_function_defs)
+    let (_, proof, _) = parser::parse_instance(problem, proof, apply_function_defs)
         .map_err(alethe_proof_checker::Error::from)?;
     print_proof(&proof.commands, options.printing.use_sharing)?;
     Ok(())
