@@ -517,6 +517,7 @@ impl<R: BufRead> Parser<R> {
                 Token::Symbol(s) if s == "set-info" || s == "set-option" => {
                     let mut command = self.read_until_close_parens()?;
                     command.pop(); // We don't need to store the closing parenthesis
+                    command.insert(0, Token::Symbol(s));
                     self.prelude().commands.push(command);
                 }
                 _ => {
