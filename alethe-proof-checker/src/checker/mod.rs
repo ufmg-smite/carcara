@@ -437,3 +437,36 @@ impl<'c> ProofChecker<'c> {
         })
     }
 }
+
+pub fn generate_lia_smt_instances(
+    prelude: ProblemPrelude,
+    proof: &Proof,
+) -> AletheResult<Vec<(String, String)>> {
+    use std::fmt::Write;
+
+    let mut iter = proof.iter();
+    let mut result = Vec::new();
+    while let Some(command) = iter.next() {
+        if let ProofCommand::Step(step) = command {
+            if step.rule == "lia_generic" {
+                if iter.depth() > 0 {
+                    log::error!(
+                        "generating SMT instance for step inside subproof is not supported"
+                    );
+                    continue;
+                }
+
+                let mut problem = String::new();
+                write!(&mut problem, "{}", prelude).unwrap();
+                for term in &step.clause {
+                    writeln!(&mut problem, "(assert (not {}))", term).unwrap();
+                }
+                writeln!(&mut problem, "(check-sat)").unwrap();
+                writeln!(&mut problem, "(exit)").unwrap();
+
+                result.push((step.id.clone(), problem));
+            }
+        }
+    }
+    Ok(result)
+}

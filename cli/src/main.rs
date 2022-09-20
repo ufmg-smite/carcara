@@ -6,7 +6,7 @@ mod path_args;
 use alethe_proof_checker::{
     ast::print_proof,
     benchmarking::{Metrics, OnlineBenchmarkResults},
-    check, check_and_elaborate, parser,
+    check, check_and_elaborate, generate_lia_smt_instances, parser,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -60,6 +60,9 @@ enum Command {
 
     /// Checks a series of proof files and records performance statistics.
     Bench(BenchmarkOptions),
+
+    /// Generates the equivalent SMT instance for every `lia_generic` step in a proof.
+    GenerateLiaProblems(InputOptions),
 }
 
 #[derive(Args)]
@@ -180,6 +183,7 @@ fn main() {
         }
         Command::Elaborate(options) => elaborate_command(options),
         Command::Bench(options) => bench_command(options),
+        Command::GenerateLiaProblems(options) => generate_lia_problems_command(options),
     };
     if let Err(e) = result {
         log::error!("{}", e);
@@ -391,5 +395,22 @@ fn print_benchmark_results(results: OnlineBenchmarkResults, sort_by_total: bool)
             depths.standard_deviation()
         );
     }
+    Ok(())
+}
+
+fn generate_lia_problems_command(options: InputOptions) -> CliResult<()> {
+    use std::io::Write;
+
+    let root_file_name = options.proof_file.clone();
+    let apply_function_defs = !options.dont_apply_function_defs;
+    let (problem, proof) = get_instance(options)?;
+
+    let instances = generate_lia_smt_instances(problem, proof, apply_function_defs)?;
+    for (id, content) in instances {
+        let file_name = format!("{}.{}.lia_smt2", root_file_name, id);
+        let mut f = File::create(file_name)?;
+        write!(f, "{}", content)?;
+    }
+
     Ok(())
 }

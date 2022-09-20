@@ -104,3 +104,12 @@ pub fn check_and_elaborate<T: io::BufRead>(
         .check_and_elaborate(proof)
         .map(|p| p.commands)
 }
+
+pub fn generate_lia_smt_instances<T: io::BufRead>(
+    problem: T,
+    proof: T,
+    apply_function_defs: bool,
+) -> Result<Vec<(String, String)>, Error> {
+    let (prelude, proof, _) = parser::parse_instance(problem, proof, apply_function_defs)?;
+    checker::generate_lia_smt_instances(prelude, &proof)
+}
