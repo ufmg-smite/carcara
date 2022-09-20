@@ -34,14 +34,6 @@ pub fn parse_instance<T: BufRead>(
     Ok((prelude, proof, parser.term_pool()))
 }
 
-#[derive(Debug, Default)]
-pub struct ProblemPrelude {
-    sort_declarations: Vec<(String, usize)>,
-    function_declarations: Vec<(String, Rc<Term>)>,
-    commands: Vec<Vec<Token>>,
-    logic: Option<String>,
-}
-
 /// Represents a "raw" `anchor` command. This is only used while parsing, and does not appear in
 /// the final AST.
 struct AnchorCommand {

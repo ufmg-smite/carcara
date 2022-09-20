@@ -25,11 +25,19 @@ pub use subterms::Subterms;
 
 pub(crate) use deep_eq::DeepEqualityChecker;
 
-use crate::checker::error::CheckerError;
+use crate::{checker::error::CheckerError, parser::Token};
 use ahash::AHashSet;
 use rug::Integer;
 use rug::Rational;
 use std::hash::Hash;
+
+#[derive(Debug, Default)]
+pub struct ProblemPrelude {
+    pub(crate) sort_declarations: Vec<(String, usize)>,
+    pub(crate) function_declarations: Vec<(String, Rc<Term>)>,
+    pub(crate) commands: Vec<Vec<Token>>,
+    pub(crate) logic: Option<String>,
+}
 
 /// A proof in the Alethe Proof Format.
 #[derive(Debug, Clone)]
