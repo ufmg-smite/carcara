@@ -1,4 +1,4 @@
-use crate::{ast::*, utils::is_symbol_character};
+use crate::{ast::*, parser::Token, utils::is_symbol_character};
 use ahash::AHashMap;
 use std::{borrow::Cow, fmt, io};
 
@@ -380,5 +380,52 @@ impl fmt::Display for Sort {
             Sort::String => write!(f, "String"),
             Sort::Array(x, y) => write_s_expr(f, "Array", &[x, y]),
         }
+    }
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Token::OpenParen => write!(f, "("),
+            Token::CloseParen => write!(f, ")"),
+            Token::Symbol(s) => write!(f, "{}", quote_symbol(s)),
+            Token::Keyword(k) => write!(f, ":{}", k),
+            Token::Numeral(n) => write!(f, "{}", n),
+            Token::Decimal(r) => {
+                // This is a very hacky solution to make sure that the SMT-LIB version string is
+                // printed correctly when printing problem preludes
+                let r = (r.to_f64() * 1e15).round() / 1e15;
+                write!(f, "{}", r)
+            }
+            Token::String(s) => write!(f, "\"{}\"", escape_string(s)),
+            Token::ReservedWord(r) => write!(f, "{}", r),
+            Token::Eof => write!(f, "EOF"),
+        }
+    }
+}
+
+impl fmt::Display for ProblemPrelude {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "(set-logic {})", self.logic.as_deref().unwrap_or("ALL"))?;
+
+        for command in &self.commands {
+            write_s_expr(f, &command[0], &command[1..])?;
+            writeln!(f)?;
+        }
+
+        for (name, arity) in &self.sort_declarations {
+            writeln!(f, "(declare-sort {} {})", name, arity)?;
+        }
+
+        for (name, sort) in &self.function_declarations {
+            write!(f, "(declare-fun {} ", name)?;
+            if let Sort::Function(sorts) = sort.as_sort().unwrap() {
+                write_s_expr(f, &sorts[0], &sorts[1..sorts.len() - 1])?;
+                writeln!(f, " {})", sorts.last().unwrap())?;
+            } else {
+                writeln!(f, "() {})", sort)?;
+            }
+        }
+        Ok(())
     }
 }
