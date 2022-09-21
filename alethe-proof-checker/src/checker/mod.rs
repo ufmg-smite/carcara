@@ -458,9 +458,11 @@ pub fn generate_lia_smt_instances(
 
                 let mut problem = String::new();
                 write!(&mut problem, "{}", prelude).unwrap();
-                for term in &step.clause {
-                    writeln!(&mut problem, "(assert (not {}))", term).unwrap();
-                }
+
+                let mut bytes = Vec::new();
+                printer::write_lia_smt_instance(&mut bytes, &step.clause).unwrap();
+                write!(&mut problem, "{}", String::from_utf8(bytes).unwrap()).unwrap();
+
                 writeln!(&mut problem, "(check-sat)").unwrap();
                 writeln!(&mut problem, "(exit)").unwrap();
 

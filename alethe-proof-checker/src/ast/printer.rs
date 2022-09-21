@@ -11,6 +11,14 @@ pub fn print_proof(commands: &[ProofCommand], use_sharing: bool) -> io::Result<(
     printer.write_proof(commands)
 }
 
+pub fn write_lia_smt_instance(dest: &mut dyn io::Write, clause: &[Rc<Term>]) -> io::Result<()> {
+    let mut printer = AlethePrinter {
+        inner: dest,
+        term_indices: Some(AHashMap::new()),
+    };
+    printer.write_lia_smt_instance(clause)
+}
+
 trait PrintProof {
     fn write_proof(&mut self, commands: &[ProofCommand]) -> io::Result<()>;
 }
@@ -230,6 +238,15 @@ impl<'a> AlethePrinter<'a> {
                 write!(self.inner, ")")
             }
         }
+    }
+
+    fn write_lia_smt_instance(&mut self, clause: &[Rc<Term>]) -> io::Result<()> {
+        for term in clause {
+            write!(self.inner, "(assert (not ")?;
+            term.print_with_sharing(self)?;
+            write!(self.inner, "))")?;
+        }
+        Ok(())
     }
 }
 
