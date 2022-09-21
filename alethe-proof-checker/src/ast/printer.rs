@@ -7,6 +7,7 @@ pub fn print_proof(commands: &[ProofCommand], use_sharing: bool) -> io::Result<(
     let mut printer = AlethePrinter {
         inner: &mut stdout,
         term_indices: use_sharing.then(AHashMap::new),
+        term_sharing_variable_prefix: "@p_",
     };
     printer.write_proof(commands)
 }
@@ -15,6 +16,7 @@ pub fn write_lia_smt_instance(dest: &mut dyn io::Write, clause: &[Rc<Term>]) -> 
     let mut printer = AlethePrinter {
         inner: dest,
         term_indices: Some(AHashMap::new()),
+        term_sharing_variable_prefix: "p_",
     };
     printer.write_lia_smt_instance(clause)
 }
@@ -48,13 +50,13 @@ impl PrintWithSharing for Rc<Term> {
             // detect this case by checking if the number of references to it's `Rc` is exaclty 1.
             if !self.is_terminal() && !self.is_sort() && Rc::strong_count(self) > 1 {
                 return if let Some(i) = indices.get(self) {
-                    write!(p.inner, "@p_{}", i)
+                    write!(p.inner, "{}{}", p.term_sharing_variable_prefix, i)
                 } else {
                     let i = indices.len();
                     indices.insert(self.clone(), i);
                     write!(p.inner, "(! ")?;
                     p.write_raw_term(self)?;
-                    write!(p.inner, " :named @p_{})", i)
+                    write!(p.inner, " :named {}{})", p.term_sharing_variable_prefix, i)
                 };
             }
         }
@@ -89,6 +91,7 @@ impl PrintWithSharing for Operator {
 struct AlethePrinter<'a> {
     inner: &'a mut dyn io::Write,
     term_indices: Option<AHashMap<Rc<Term>, usize>>,
+    term_sharing_variable_prefix: &'static str,
 }
 
 impl<'a> PrintProof for AlethePrinter<'a> {
