@@ -71,8 +71,6 @@ pub fn elaborate_refl(
     command_id: String,
     elaborator: &mut Elaborator,
 ) -> RuleResult {
-    // TODO: Add support for cases where context application is needed
-
     assert_clause_len(conclusion, 1)?;
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
