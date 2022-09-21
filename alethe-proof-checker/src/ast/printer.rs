@@ -247,7 +247,7 @@ impl<'a> AlethePrinter<'a> {
         for term in clause {
             write!(self.inner, "(assert (not ")?;
             term.print_with_sharing(self)?;
-            write!(self.inner, "))")?;
+            writeln!(self.inner, "))")?;
         }
         Ok(())
     }
