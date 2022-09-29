@@ -108,16 +108,15 @@ pub fn elaborate_refl(
         let id = elaborator.get_new_id(&command_id);
         let first_step = elaborator.add_refl_step(pool, left.clone(), new_left.clone(), id);
 
-        let second_step = elaborate_equality(
-            elaborator,
-            pool,
-            &new_left,
-            right,
-            &command_id,
-            deep_eq_time,
-        );
-
         if are_alpha_equivalent(&new_left, right, deep_eq_time) {
+            let second_step = elaborate_equality(
+                elaborator,
+                pool,
+                &new_left,
+                right,
+                &command_id,
+                deep_eq_time,
+            );
             let id = elaborator.get_new_id(&command_id);
             elaborator.push_elaborated_step(ProofStep {
                 id,
@@ -128,6 +127,14 @@ pub fn elaborate_refl(
                 discharge: Vec::new(),
             });
         } else if are_alpha_equivalent(&new_left, &new_right, deep_eq_time) {
+            let second_step = elaborate_equality(
+                elaborator,
+                pool,
+                &new_left,
+                right,
+                &command_id,
+                deep_eq_time,
+            );
             let id = elaborator.get_new_id(&command_id);
             let third_step = elaborator.add_refl_step(pool, new_right.clone(), right.clone(), id);
 
