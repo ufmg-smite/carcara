@@ -21,7 +21,6 @@ struct JobDescriptor<'a> {
 fn run_job<T: CollectResults + Default>(
     results: &mut T,
     job: JobDescriptor,
-    apply_function_defs: bool,
     strict: bool,
     elaborate: bool,
 ) -> Result<(), alethe_proof_checker::Error> {
@@ -33,7 +32,7 @@ fn run_job<T: CollectResults + Default>(
     let (proof, mut pool) = parse_instance(
         BufReader::new(File::open(job.problem_file)?),
         BufReader::new(File::open(job.proof_file)?),
-        apply_function_defs,
+        true,
     )?;
     let parsing = parsing.elapsed();
 
@@ -88,14 +87,13 @@ fn run_job<T: CollectResults + Default>(
 
 fn worker_thread<T: CollectResults + Default>(
     jobs_queue: &ArrayQueue<JobDescriptor>,
-    apply_function_defs: bool,
     strict: bool,
     elaborate: bool,
 ) -> T {
     let mut results = T::default();
 
     while let Some(job) = jobs_queue.pop() {
-        if run_job(&mut results, job, apply_function_defs, strict, elaborate).is_err() {
+        if run_job(&mut results, job, strict, elaborate).is_err() {
             log::error!("encountered error in file '{}'", job.proof_file.display());
         }
     }
@@ -107,7 +105,6 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
     instances: &[(PathBuf, PathBuf)],
     num_runs: usize,
     num_threads: usize,
-    apply_function_defs: bool,
     strict: bool,
     elaborate: bool,
 ) -> T {
@@ -135,9 +132,7 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
             .map(|_| {
                 s.builder()
                     .stack_size(STACK_SIZE)
-                    .spawn(move |_| {
-                        worker_thread::<T>(jobs_queue, apply_function_defs, strict, elaborate)
-                    })
+                    .spawn(move |_| worker_thread::<T>(jobs_queue, strict, elaborate))
                     .unwrap()
             })
             .collect();
@@ -155,20 +150,12 @@ pub fn run_csv_benchmark(
     instances: &[(PathBuf, PathBuf)],
     num_runs: usize,
     num_threads: usize,
-    apply_function_defs: bool,
     strict: bool,
     elaborate: bool,
     runs_dest: &mut dyn io::Write,
     by_rule_dest: &mut dyn io::Write,
 ) -> io::Result<()> {
-    let result: CsvBenchmarkResults = run_benchmark(
-        instances,
-        num_runs,
-        num_threads,
-        apply_function_defs,
-        strict,
-        elaborate,
-    );
-
+    let result: CsvBenchmarkResults =
+        run_benchmark(instances, num_runs, num_threads, strict, elaborate);
     result.write_csv(runs_dest, by_rule_dest)
 }

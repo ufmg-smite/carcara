@@ -267,7 +267,6 @@ fn bench_command(options: BenchmarkOptions) -> CliResult<()> {
             &instances,
             options.num_runs,
             options.num_threads,
-            false,
             options.strict,
             options.elaborate,
             &mut File::create("runs.csv")?,
@@ -280,7 +279,6 @@ fn bench_command(options: BenchmarkOptions) -> CliResult<()> {
         &instances,
         options.num_runs,
         options.num_threads,
-        false,
         options.strict,
         options.elaborate,
     );
