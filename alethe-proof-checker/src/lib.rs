@@ -75,11 +75,13 @@ pub fn check<T: io::BufRead>(
     problem: T,
     proof: T,
     apply_function_defs: bool,
+    strict: bool,
     skip_unknown_rules: bool,
 ) -> Result<bool, Error> {
     let (proof, mut pool) = parser::parse_instance(problem, proof, apply_function_defs)?;
 
     let config = checker::Config {
+        strict,
         skip_unknown_rules,
         is_running_test: false,
         statistics: None,
@@ -91,11 +93,13 @@ pub fn check_and_elaborate<T: io::BufRead>(
     problem: T,
     proof: T,
     apply_function_defs: bool,
+    strict: bool,
     skip_unknown_rules: bool,
 ) -> Result<Vec<ProofCommand>, Error> {
     let (proof, mut pool) = parser::parse_instance(problem, proof, apply_function_defs)?;
 
     let config = checker::Config {
+        strict,
         skip_unknown_rules,
         is_running_test: false,
         statistics: None,

@@ -172,6 +172,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
         let mut checker = ProofChecker::new(
             &mut pool,
             Config {
+                strict: false,
                 skip_unknown_rules: false,
                 is_running_test: true,
                 statistics: None,

@@ -22,6 +22,7 @@ fn run_job<T: CollectResults + Default>(
     results: &mut T,
     job: JobDescriptor,
     apply_function_defs: bool,
+    strict: bool,
     elaborate: bool,
 ) -> Result<(), alethe_proof_checker::Error> {
     let proof_file_name = job.proof_file.to_str().unwrap();
@@ -42,6 +43,7 @@ fn run_job<T: CollectResults + Default>(
     let mut assume_core = Duration::ZERO;
 
     let config = checker::Config {
+        strict,
         skip_unknown_rules: false,
         is_running_test: false,
         statistics: Some(checker::CheckerStatistics {
@@ -87,12 +89,13 @@ fn run_job<T: CollectResults + Default>(
 fn worker_thread<T: CollectResults + Default>(
     jobs_queue: &ArrayQueue<JobDescriptor>,
     apply_function_defs: bool,
+    strict: bool,
     elaborate: bool,
 ) -> T {
     let mut results = T::default();
 
     while let Some(job) = jobs_queue.pop() {
-        if run_job(&mut results, job, apply_function_defs, elaborate).is_err() {
+        if run_job(&mut results, job, apply_function_defs, strict, elaborate).is_err() {
             log::error!("encountered error in file '{}'", job.proof_file.display());
         }
     }
@@ -105,6 +108,7 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
     num_runs: usize,
     num_threads: usize,
     apply_function_defs: bool,
+    strict: bool,
     elaborate: bool,
 ) -> T {
     const STACK_SIZE: usize = 128 * 1024 * 1024;
@@ -131,7 +135,9 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
             .map(|_| {
                 s.builder()
                     .stack_size(STACK_SIZE)
-                    .spawn(move |_| worker_thread::<T>(jobs_queue, apply_function_defs, elaborate))
+                    .spawn(move |_| {
+                        worker_thread::<T>(jobs_queue, apply_function_defs, strict, elaborate)
+                    })
                     .unwrap()
             })
             .collect();
@@ -150,6 +156,7 @@ pub fn run_csv_benchmark(
     num_runs: usize,
     num_threads: usize,
     apply_function_defs: bool,
+    strict: bool,
     elaborate: bool,
     runs_dest: &mut dyn io::Write,
     by_rule_dest: &mut dyn io::Write,
@@ -159,6 +166,7 @@ pub fn run_csv_benchmark(
         num_runs,
         num_threads,
         apply_function_defs,
+        strict,
         elaborate,
     );
 

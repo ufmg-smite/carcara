@@ -42,6 +42,7 @@ impl fmt::Debug for CheckerStatistics<'_> {
 
 #[derive(Debug, Default)]
 pub struct Config<'c> {
+    pub strict: bool,
     pub skip_unknown_rules: bool,
     pub is_running_test: bool,
     pub statistics: Option<CheckerStatistics<'c>>,
@@ -249,7 +250,7 @@ impl<'c> ProofChecker<'c> {
     ) -> RuleResult {
         let time = Instant::now();
 
-        let rule = match Self::get_rule(&step.rule) {
+        let rule = match Self::get_rule(&step.rule, self.config.strict) {
             Some(r) => r,
             None if self.config.skip_unknown_rules => {
                 self.is_holey = true;
@@ -310,7 +311,7 @@ impl<'c> ProofChecker<'c> {
         Ok(())
     }
 
-    pub fn get_rule(rule_name: &str) -> Option<Rule> {
+    pub fn get_rule(rule_name: &str, strict: bool) -> Option<Rule> {
         use rules::*;
 
         Some(match rule_name {
@@ -352,6 +353,7 @@ impl<'c> ProofChecker<'c> {
             "qnt_rm_unused" => quantifier::qnt_rm_unused,
             "resolution" => resolution::resolution,
             "th_resolution" => resolution::th_resolution,
+            "refl" if strict => reflexivity::strict_refl,
             "refl" => reflexivity::refl,
             "trans" => transitivity::trans,
             "cong" => congruence::cong,

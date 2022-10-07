@@ -99,8 +99,12 @@ struct CheckOptions {
     #[clap(flatten)]
     input: InputOptions,
 
-    /// Skips rules that are not implemented.
+    /// Enables the strict checking of certain rules.
     #[clap(short, long)]
+    strict: bool,
+
+    /// Skips rules that are not known by the checker.
+    #[clap(long)]
     skip_unknown_rules: bool,
 }
 
@@ -122,6 +126,10 @@ struct BenchmarkOptions {
     /// Number of threads to use when running the benchmark.
     #[clap(short = 'j', long, default_value_t = 1)]
     num_threads: usize,
+
+    /// Use strict checking in benchmarks
+    #[clap(short, long)]
+    strict: bool,
 
     /// Also elaborate each proof in addition to parsing and checking.
     #[clap(long)]
@@ -221,6 +229,7 @@ fn check_command(options: CheckOptions) -> CliResult<bool> {
         problem,
         proof,
         apply_function_defs,
+        options.strict,
         options.skip_unknown_rules,
     )
     .map_err(Into::into)
@@ -234,6 +243,7 @@ fn elaborate_command(options: ElaborateOptions) -> CliResult<()> {
         problem,
         proof,
         apply_function_defs,
+        options.checking.strict,
         options.checking.skip_unknown_rules,
     )?;
     print_proof(&elaborated, options.printing.use_sharing)?;
@@ -258,6 +268,7 @@ fn bench_command(options: BenchmarkOptions) -> CliResult<()> {
             options.num_runs,
             options.num_threads,
             false,
+            options.strict,
             options.elaborate,
             &mut File::create("runs.csv")?,
             &mut File::create("by-rule.csv")?,
@@ -270,6 +281,7 @@ fn bench_command(options: BenchmarkOptions) -> CliResult<()> {
         options.num_runs,
         options.num_threads,
         false,
+        options.strict,
         options.elaborate,
     );
     if results.is_empty() {

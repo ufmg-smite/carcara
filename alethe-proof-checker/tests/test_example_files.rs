@@ -18,6 +18,7 @@ fn get_truncated_message(e: &Error) -> String {
 fn run_test(problem_path: &Path, proof_path: &Path) -> AletheResult<()> {
     fn test_config<'a>() -> checker::Config<'a> {
         checker::Config {
+            strict: false,
             skip_unknown_rules: true,
             is_running_test: false,
             statistics: None,
