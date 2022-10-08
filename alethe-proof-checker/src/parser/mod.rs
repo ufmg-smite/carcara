@@ -506,12 +506,6 @@ impl<R: BufRead> Parser<R> {
                     // as `1.0`.
                     self.interpret_integers_as_reals = logic.contains('R') && !logic.contains('I');
                 }
-                Token::Symbol(s) if s == "set-info" || s == "set-option" => {
-                    let mut command = self.read_until_close_parens()?;
-                    command.pop(); // We don't need to store the closing parenthesis
-                    command.insert(0, Token::Symbol(s));
-                    self.prelude().commands.push(command);
-                }
                 _ => {
                     // If the command is not one of the commands we care about, we just ignore it.
                     // We do that by reading tokens until the command parenthesis is closed
