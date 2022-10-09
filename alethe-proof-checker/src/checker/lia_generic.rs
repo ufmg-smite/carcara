@@ -37,7 +37,7 @@ pub fn lia_generic(
         ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
         .map_err(LiaGenericError::FailedSpawnCvc5)?;
 
@@ -52,12 +52,12 @@ pub fn lia_generic(
         .map_err(LiaGenericError::FailedWaitForCvc5)?;
 
     if !output.status.success() {
-        let code = output.status.code();
-        return if code == Some(134) {
-            Err(LiaGenericError::Cvc5Timeout)
-        } else {
-            Err(LiaGenericError::Cvc5NonZeroExitCode(code))
-        };
+        if let Ok(s) = std::str::from_utf8(&output.stderr) {
+            if s.contains("cvc5 interrupted by timeout.") {
+                return Err(LiaGenericError::Cvc5Timeout);
+            }
+        }
+        return Err(LiaGenericError::Cvc5NonZeroExitCode(output.status.code()));
     }
 
     let mut proof = output.stdout.as_slice();
