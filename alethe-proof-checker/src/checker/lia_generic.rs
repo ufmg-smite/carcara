@@ -71,7 +71,7 @@ pub fn lia_generic(
         return Err(LiaGenericError::Cvc5OutputNotUnsat);
     }
 
-    let (prelude, proof, mut pool) = parser::parse_instance(problem.as_bytes(), proof, false)
+    let (prelude, proof, mut pool) = parser::parse_instance(problem.as_bytes(), proof, true)
         .map_err(|e| LiaGenericError::InnerProofError(Box::new(e)))?;
 
     let config = Config {
