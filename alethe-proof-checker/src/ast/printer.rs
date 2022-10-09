@@ -1,4 +1,8 @@
-use crate::{ast::*, parser::Token, utils::is_symbol_character};
+use crate::{
+    ast::*,
+    parser::Token,
+    utils::{is_symbol_character, DedupIterator},
+};
 use ahash::AHashMap;
 use std::{borrow::Cow, fmt, io};
 
@@ -244,7 +248,7 @@ impl<'a> AlethePrinter<'a> {
     }
 
     fn write_lia_smt_instance(&mut self, clause: &[Rc<Term>]) -> io::Result<()> {
-        for term in clause {
+        for term in clause.iter().dedup() {
             write!(self.inner, "(assert (not ")?;
             term.print_with_sharing(self)?;
             writeln!(self.inner, "))")?;
