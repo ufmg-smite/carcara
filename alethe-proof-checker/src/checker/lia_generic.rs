@@ -51,6 +51,15 @@ pub fn lia_generic(
         .wait_with_output()
         .map_err(LiaGenericError::FailedWaitForCvc5)?;
 
+    if !output.status.success() {
+        let code = output.status.code();
+        return if code == Some(134) {
+            Err(LiaGenericError::Cvc5Timeout)
+        } else {
+            Err(LiaGenericError::Cvc5NonZeroExitCode(code))
+        };
+    }
+
     let mut proof = output.stdout.as_slice();
     let mut first_line = String::new();
 
@@ -60,15 +69,6 @@ pub fn lia_generic(
 
     if first_line.trim_end() != "unsat" {
         return Err(LiaGenericError::Cvc5OutputNotUnsat);
-    }
-
-    if !output.status.success() {
-        let code = output.status.code();
-        return if code == Some(134) {
-            Err(LiaGenericError::Cvc5Timeout)
-        } else {
-            Err(LiaGenericError::Cvc5NonZeroExitCode(code))
-        };
     }
 
     let (prelude, proof, mut pool) = parser::parse_instance(problem.as_bytes(), proof, false)
