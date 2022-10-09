@@ -77,14 +77,15 @@ pub fn check<T: io::BufRead>(
     apply_function_defs: bool,
     skip_unknown_rules: bool,
 ) -> Result<bool, Error> {
-    let (_, proof, mut pool) = parser::parse_instance(problem, proof, apply_function_defs)?;
+    let (prelude, proof, mut pool) = parser::parse_instance(problem, proof, apply_function_defs)?;
 
     let config = checker::Config {
         skip_unknown_rules,
         is_running_test: false,
         statistics: None,
+        check_lia_generic_using_cvc5: true,
     };
-    checker::ProofChecker::new(&mut pool, config).check(&proof)
+    checker::ProofChecker::new(&mut pool, config, prelude).check(&proof)
 }
 
 pub fn check_and_elaborate<T: io::BufRead>(
@@ -93,14 +94,15 @@ pub fn check_and_elaborate<T: io::BufRead>(
     apply_function_defs: bool,
     skip_unknown_rules: bool,
 ) -> Result<Vec<ProofCommand>, Error> {
-    let (_, proof, mut pool) = parser::parse_instance(problem, proof, apply_function_defs)?;
+    let (prelude, proof, mut pool) = parser::parse_instance(problem, proof, apply_function_defs)?;
 
     let config = checker::Config {
         skip_unknown_rules,
         is_running_test: false,
         statistics: None,
+        check_lia_generic_using_cvc5: true,
     };
-    checker::ProofChecker::new(&mut pool, config)
+    checker::ProofChecker::new(&mut pool, config, prelude)
         .check_and_elaborate(proof)
         .map(|p| p.commands)
 }

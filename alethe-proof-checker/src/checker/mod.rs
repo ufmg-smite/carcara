@@ -1,6 +1,7 @@
 mod context;
 mod elaboration;
 pub mod error;
+mod lia_generic;
 mod rules;
 
 use crate::{ast::*, benchmarking::CollectResults, AletheResult, Error};
@@ -45,11 +46,13 @@ pub struct Config<'c> {
     pub skip_unknown_rules: bool,
     pub is_running_test: bool,
     pub statistics: Option<CheckerStatistics<'c>>,
+    pub check_lia_generic_using_cvc5: bool,
 }
 
 pub struct ProofChecker<'c> {
     pool: &'c mut TermPool,
     config: Config<'c>,
+    prelude: ProblemPrelude,
     context: ContextStack,
     elaborator: Option<Elaborator>,
     reached_empty_clause: bool,
@@ -57,10 +60,11 @@ pub struct ProofChecker<'c> {
 }
 
 impl<'c> ProofChecker<'c> {
-    pub fn new(pool: &'c mut TermPool, config: Config<'c>) -> Self {
+    pub fn new(pool: &'c mut TermPool, config: Config<'c>, prelude: ProblemPrelude) -> Self {
         ProofChecker {
             pool,
             config,
+            prelude,
             context: ContextStack::new(),
             elaborator: None,
             reached_empty_clause: false,
@@ -248,58 +252,70 @@ impl<'c> ProofChecker<'c> {
         iter: &'a ProofIter<'a>,
     ) -> RuleResult {
         let time = Instant::now();
-
-        let rule = match Self::get_rule(&step.rule) {
-            Some(r) => r,
-            None if self.config.skip_unknown_rules => {
-                self.is_holey = true;
-                if let Some(elaborator) = &mut self.elaborator {
-                    elaborator.unchanged(&step.clause);
-                }
-                return Ok(());
-            }
-            None => return Err(CheckerError::UnknownRule),
-        };
-
-        if step.rule == "hole" || step.rule == "trust" {
-            self.is_holey = true;
-        }
-
-        let premises: Vec<_> = step
-            .premises
-            .iter()
-            .map(|&p| {
-                let command = iter.get_premise(p);
-                Premise::new(p, command)
-            })
-            .collect();
-        let discharge: Vec<_> = step
-            .discharge
-            .iter()
-            .map(|&i| iter.get_premise(i))
-            .collect();
         let mut deep_eq_time = Duration::ZERO;
 
-        let rule_args = RuleArgs {
-            conclusion: &step.clause,
-            premises: &premises,
-            args: &step.args,
-            pool: self.pool,
-            context: &mut self.context,
-            previous_command,
-            discharge: &discharge,
-            deep_eq_time: &mut deep_eq_time,
-        };
-
-        if let Some(elaborator) = &mut self.elaborator {
-            if let Some(elaboration_rule) = Self::get_elaboration_rule(&step.rule) {
-                elaboration_rule(rule_args, step.id.clone(), elaborator)?;
+        if step.rule == "lia_generic" {
+            if self.config.check_lia_generic_using_cvc5 {
+                lia_generic::lia_generic(&step.clause, &self.prelude)?;
             } else {
-                rule(rule_args)?;
+                log::warn!("encountered \"lia_generic\" rule, ignoring");
+                self.is_holey = true;
+            }
+            if let Some(elaborator) = &mut self.elaborator {
                 elaborator.unchanged(&step.clause);
             }
         } else {
-            rule(rule_args)?;
+            let rule = match Self::get_rule(&step.rule) {
+                Some(r) => r,
+                None if self.config.skip_unknown_rules => {
+                    self.is_holey = true;
+                    if let Some(elaborator) = &mut self.elaborator {
+                        elaborator.unchanged(&step.clause);
+                    }
+                    return Ok(());
+                }
+                None => return Err(CheckerError::UnknownRule),
+            };
+
+            if step.rule == "hole" || step.rule == "trust" {
+                self.is_holey = true;
+            }
+
+            let premises: Vec<_> = step
+                .premises
+                .iter()
+                .map(|&p| {
+                    let command = iter.get_premise(p);
+                    Premise::new(p, command)
+                })
+                .collect();
+            let discharge: Vec<_> = step
+                .discharge
+                .iter()
+                .map(|&i| iter.get_premise(i))
+                .collect();
+
+            let rule_args = RuleArgs {
+                conclusion: &step.clause,
+                premises: &premises,
+                args: &step.args,
+                pool: self.pool,
+                context: &mut self.context,
+                previous_command,
+                discharge: &discharge,
+                deep_eq_time: &mut deep_eq_time,
+            };
+
+            if let Some(elaborator) = &mut self.elaborator {
+                if let Some(elaboration_rule) = Self::get_elaboration_rule(&step.rule) {
+                    elaboration_rule(rule_args, step.id.clone(), elaborator)?;
+                } else {
+                    rule(rule_args)?;
+                    elaborator.unchanged(&step.clause);
+                }
+            } else {
+                rule(rule_args)?;
+            }
         }
 
         if let Some(s) = &mut self.config.statistics {
@@ -343,7 +359,6 @@ impl<'c> ProofChecker<'c> {
             "distinct_elim" => clausification::distinct_elim,
             "la_rw_eq" => linear_arithmetic::la_rw_eq,
             "la_generic" => linear_arithmetic::la_generic,
-            "lia_generic" => linear_arithmetic::lia_generic,
             "la_disequality" => linear_arithmetic::la_disequality,
             "la_totality" => linear_arithmetic::la_totality,
             "la_tautology" => linear_arithmetic::la_tautology,

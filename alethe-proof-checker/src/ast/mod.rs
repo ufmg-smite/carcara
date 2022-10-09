@@ -31,7 +31,7 @@ use rug::Integer;
 use rug::Rational;
 use std::hash::Hash;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ProblemPrelude {
     pub(crate) sort_declarations: Vec<(String, usize)>,
     pub(crate) function_declarations: Vec<(String, Rc<Term>)>,

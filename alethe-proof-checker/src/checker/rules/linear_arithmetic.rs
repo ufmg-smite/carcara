@@ -340,19 +340,6 @@ pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
     Ok(())
 }
 
-pub fn lia_generic(_: RuleArgs) -> RuleResult {
-    #![allow(clippy::unnecessary_wraps)]
-
-    // The `lia_generic` rule is very similar to the `la_generic` rule, but the additional
-    // arguments aren't given. In order to properly check this rule, the checker would need to
-    // infer these arguments, which would be very complicated and slow. Therefore, for now, we just
-    // ignore the rule and give a warning. Eventually, we plan to use cvc5 to help check this rule.
-    // This would be done by constructing a problem in a format that cvc5 can solve, calling cvc5
-    // with it, and parsing and checking the result proof.
-    log::warn!("encountered \"lia_generic\" rule, ignoring");
-    Ok(())
-}
-
 pub fn la_disequality(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
 
