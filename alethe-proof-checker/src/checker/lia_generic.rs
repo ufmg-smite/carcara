@@ -1,5 +1,5 @@
 use super::*;
-use crate::parser;
+use crate::{checker::error::LiaGenericError, parser};
 use std::{
     io::{BufRead, Write},
     process::{Command, Stdio},
@@ -22,8 +22,10 @@ fn get_problem_string(conclusion: &[Rc<Term>], prelude: &ProblemPrelude) -> Stri
     problem
 }
 
-// TODO: Add proper error handling
-pub fn lia_generic(conclusion: &[Rc<Term>], prelude: &ProblemPrelude) -> RuleResult {
+pub fn lia_generic(
+    conclusion: &[Rc<Term>],
+    prelude: &ProblemPrelude,
+) -> Result<(), LiaGenericError> {
     let problem = get_problem_string(conclusion, prelude);
 
     let mut cvc5 = Command::new("cvc5")
@@ -37,29 +39,40 @@ pub fn lia_generic(conclusion: &[Rc<Term>], prelude: &ProblemPrelude) -> RuleRes
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .expect("failed to spawn cvc5");
+        .map_err(LiaGenericError::FailedSpawnCvc5)?;
 
     cvc5.stdin
         .take()
         .expect("failed to open cvc5 stdin")
         .write_all(problem.as_bytes())
-        .expect("failed to write to cvc5 stdin");
+        .map_err(LiaGenericError::FailedWriteToCvc5Stdin)?;
 
     let output = cvc5
         .wait_with_output()
-        .map_err(|_| CheckerError::Unspecified)?;
+        .map_err(LiaGenericError::FailedWaitForCvc5)?;
 
     let mut proof = output.stdout.as_slice();
     let mut first_line = String::new();
 
     proof
         .read_line(&mut first_line)
-        .expect("failed to read cvc5 output");
+        .map_err(|_| LiaGenericError::Cvc5GaveInvalidOutput)?;
 
-    assert!(&first_line[..5] == "unsat", "cvc5 output not unsat");
+    if first_line.trim_end() != "unsat" {
+        return Err(LiaGenericError::Cvc5OutputNotUnsat);
+    }
+
+    if !output.status.success() {
+        let code = output.status.code();
+        return if code == Some(134) {
+            Err(LiaGenericError::Cvc5Timeout)
+        } else {
+            Err(LiaGenericError::Cvc5NonZeroExitCode(code))
+        };
+    }
 
     let (prelude, proof, mut pool) = parser::parse_instance(problem.as_bytes(), proof, false)
-        .expect("parsing inner proof failed");
+        .map_err(|e| LiaGenericError::InnerProofError(Box::new(e)))?;
 
     let config = Config {
         skip_unknown_rules: false,
@@ -69,7 +82,7 @@ pub fn lia_generic(conclusion: &[Rc<Term>], prelude: &ProblemPrelude) -> RuleRes
     };
     ProofChecker::new(&mut pool, config, prelude)
         .check(&proof)
-        .expect("checking inner proof failed");
+        .map_err(|e| LiaGenericError::InnerProofError(Box::new(e)))?;
 
     Ok(())
 }
