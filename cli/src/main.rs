@@ -45,6 +45,10 @@ struct Cli {
     /// Sets the maximum logging level.
     #[clap(arg_enum, global = true, long = "log", default_value_t = LogLevel::Warn)]
     log_level: LogLevel,
+
+    /// Disables output coloring.
+    #[clap(global = true, long)]
+    no_color: bool,
 }
 
 #[derive(Subcommand)]
@@ -170,7 +174,8 @@ impl From<LogLevel> for log::LevelFilter {
 
 fn main() {
     let cli = Cli::parse();
-    logger::init(cli.log_level.into());
+    let colors_enabled = !cli.no_color && atty::is(atty::Stream::Stderr);
+    logger::init(cli.log_level.into(), colors_enabled);
 
     let result = match cli.command {
         Command::Parse(options) => parse_command(options),

@@ -1,18 +1,25 @@
-use ansi_term::{ANSIString, Color};
+use ansi_term::{ANSIString, Color, Style};
 use log::{Level, LevelFilter, Log, Metadata, Record};
 
-pub struct Logger;
+pub struct Logger {
+    colors_enabled: bool,
+}
 
 impl Logger {
-    fn prefix(level: Level) -> ANSIString<'static> {
-        let color = match level {
-            Level::Error => Color::Red,
-            Level::Warn => Color::Yellow,
-            Level::Info => Color::Cyan,
-            Level::Debug => Color::Purple,
-            Level::Trace => Color::Green,
+    fn prefix(&self, level: Level) -> ANSIString<'static> {
+        let style = if self.colors_enabled {
+            let color = match level {
+                Level::Error => Color::Red,
+                Level::Warn => Color::Yellow,
+                Level::Info => Color::Cyan,
+                Level::Debug => Color::Purple,
+                Level::Trace => Color::Green,
+            };
+            color.bold()
+        } else {
+            Style::new()
         };
-        color.bold().paint(format!("[{}]", level))
+        style.paint(format!("[{}]", level))
     }
 }
 
@@ -22,13 +29,13 @@ impl Log for Logger {
     }
 
     fn log(&self, record: &Record) {
-        eprintln!("{} {}", Self::prefix(record.level()), record.args());
+        eprintln!("{} {}", self.prefix(record.level()), record.args());
     }
 
     fn flush(&self) {}
 }
 
-pub fn init(max_level: LevelFilter) {
-    log::set_boxed_logger(Box::new(Logger {})).expect("couldn't set up logger");
+pub fn init(max_level: LevelFilter, colors_enabled: bool) {
+    log::set_boxed_logger(Box::new(Logger { colors_enabled })).expect("couldn't set up logger");
     log::set_max_level(max_level);
 }
