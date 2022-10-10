@@ -9,6 +9,7 @@ fn get_problem_string(conclusion: &[Rc<Term>], prelude: &ProblemPrelude) -> Stri
     use std::fmt::Write;
 
     let mut problem = String::new();
+    write!(&mut problem, "(set-option :produce-proofs true)").unwrap();
     write!(&mut problem, "{}", prelude).unwrap();
 
     let mut bytes = Vec::new();
@@ -31,7 +32,7 @@ pub fn lia_generic(
     let mut cvc5 = Command::new("cvc5")
         .args([
             "--tlimit=10000",
-            "--produce-proofs",
+            "--lang=smt2",
             "--proof-format-mode=alethe",
             "--proof-granularity=theory-rewrite",
         ])
