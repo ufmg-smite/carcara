@@ -80,6 +80,11 @@ struct InputOptions {
     /// to be equal to its body.
     #[clap(long)]
     dont_apply_function_defs: bool,
+
+    /// Enables `Int`/`Real` subtyping in the parser. This allows terms of sort `Int` to be passed
+    /// to arithmetic operators that are expecting a term of sort `Real`.
+    #[clap(long)]
+    allow_int_real_subtyping: bool,
 }
 
 #[derive(Args)]
@@ -200,7 +205,7 @@ fn main() {
     }
 }
 
-fn get_instance(options: InputOptions) -> CliResult<(Box<dyn BufRead>, Box<dyn BufRead>)> {
+fn get_instance(options: &InputOptions) -> CliResult<(Box<dyn BufRead>, Box<dyn BufRead>)> {
     fn reader_from_path<P: AsRef<Path>>(path: P) -> CliResult<Box<dyn BufRead>> {
         Ok(Box::new(io::BufReader::new(File::open(path)?)))
     }
@@ -218,22 +223,26 @@ fn get_instance(options: InputOptions) -> CliResult<(Box<dyn BufRead>, Box<dyn B
 }
 
 fn parse_command(options: ParseOptions) -> CliResult<()> {
-    let apply_function_defs = !options.input.dont_apply_function_defs;
-    let (problem, proof) = get_instance(options.input)?;
-    let (proof, _) = parser::parse_instance(problem, proof, apply_function_defs)
-        .map_err(alethe_proof_checker::Error::from)?;
+    let (problem, proof) = get_instance(&options.input)?;
+    let (proof, _) = parser::parse_instance(
+        problem,
+        proof,
+        !options.input.dont_apply_function_defs,
+        options.input.allow_int_real_subtyping,
+    )
+    .map_err(alethe_proof_checker::Error::from)?;
     print_proof(&proof.commands, options.printing.use_sharing)?;
     Ok(())
 }
 
 fn check_command(options: CheckOptions) -> CliResult<bool> {
-    let apply_function_defs = !options.input.dont_apply_function_defs;
-    let (problem, proof) = get_instance(options.input)?;
+    let (problem, proof) = get_instance(&options.input)?;
 
     check(
         problem,
         proof,
-        apply_function_defs,
+        !options.input.dont_apply_function_defs,
+        options.input.allow_int_real_subtyping,
         options.strict,
         options.skip_unknown_rules,
     )
@@ -241,13 +250,13 @@ fn check_command(options: CheckOptions) -> CliResult<bool> {
 }
 
 fn elaborate_command(options: ElaborateOptions) -> CliResult<()> {
-    let apply_function_defs = !options.checking.input.dont_apply_function_defs;
-    let (problem, proof) = get_instance(options.checking.input)?;
+    let (problem, proof) = get_instance(&options.checking.input)?;
 
     let elaborated = check_and_elaborate(
         problem,
         proof,
-        apply_function_defs,
+        !options.checking.input.dont_apply_function_defs,
+        options.checking.input.allow_int_real_subtyping,
         options.checking.strict,
         options.checking.skip_unknown_rules,
     )?;

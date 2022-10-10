@@ -33,6 +33,7 @@ fn run_job<T: CollectResults + Default>(
         BufReader::new(File::open(job.problem_file)?),
         BufReader::new(File::open(job.proof_file)?),
         true,
+        false,
     )?;
     let parsing = parsing.elapsed();
 

@@ -310,7 +310,7 @@ mod tests {
     use crate::parser::*;
 
     fn run_test(definitions: &str, original: &str, x: &str, t: &str, result: &str) {
-        let mut parser = Parser::new(definitions.as_bytes(), true).unwrap();
+        let mut parser = Parser::new(definitions.as_bytes(), true, false).unwrap();
         parser.parse_problem().unwrap();
 
         let [original, x, t, result] = [original, x, t, result].map(|s| {

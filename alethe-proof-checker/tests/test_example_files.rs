@@ -29,6 +29,7 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> AletheResult<()> {
         io::BufReader::new(fs::File::open(problem_path)?),
         io::BufReader::new(fs::File::open(proof_path)?),
         true,
+        false,
     )?;
 
     // First, we check the proof normally

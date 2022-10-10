@@ -12,7 +12,7 @@ pub struct TestParser<'a> {
 
 impl<'a> TestParser<'a> {
     pub fn new(definitions: &'a str) -> Self {
-        let mut inner = Parser::new(definitions.as_bytes(), true).expect(ERROR_MESSAGE);
+        let mut inner = Parser::new(definitions.as_bytes(), true, false).expect(ERROR_MESSAGE);
         inner.parse_problem().expect(ERROR_MESSAGE);
         Self { inner }
     }
@@ -44,7 +44,7 @@ pub fn parse_term(input: &str) -> Term {
 /// Tries to parse a term from a `&str`, expecting it to fail. Returns the error encountered, or
 /// panics if no error is encountered.
 pub fn parse_term_err(input: &str) -> Error {
-    Parser::new(input.as_bytes(), true)
+    Parser::new(input.as_bytes(), true, false)
         .and_then(|mut p| p.parse_term())
         .expect_err("expected error")
 }
@@ -78,7 +78,7 @@ fn test_hash_consing() {
         )
         (* 2 2)
     )";
-    let mut parser = Parser::new(input.as_bytes(), true).unwrap();
+    let mut parser = Parser::new(input.as_bytes(), true, false).unwrap();
     parser.parse_term().unwrap();
 
     // We expect this input to result in 7 unique terms after parsing:

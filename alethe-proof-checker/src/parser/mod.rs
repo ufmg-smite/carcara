@@ -24,8 +24,9 @@ pub fn parse_instance<T: BufRead>(
     problem: T,
     proof: T,
     apply_function_defs: bool,
+    allow_int_real_subtyping: bool,
 ) -> AletheResult<(Proof, TermPool)> {
-    let mut parser = Parser::new(problem, apply_function_defs)?;
+    let mut parser = Parser::new(problem, apply_function_defs, allow_int_real_subtyping)?;
     let premises = parser.parse_problem()?;
     parser.reset(proof)?;
     let commands = parser.parse_proof()?;
@@ -76,7 +77,11 @@ pub struct Parser<R> {
 impl<R: BufRead> Parser<R> {
     /// Constructs a new `Parser` from a type that implements `BufRead`. This operation can fail if
     /// there is an IO or lexer error on the first token.
-    pub fn new(input: R, apply_function_defs: bool) -> AletheResult<Self> {
+    pub fn new(
+        input: R,
+        apply_function_defs: bool,
+        allow_int_real_subtyping: bool,
+    ) -> AletheResult<Self> {
         let mut state = ParserState::default();
         let bool_sort = state.term_pool.add_term(Term::Sort(Sort::Bool));
         for iden in ["true", "false"] {
@@ -94,7 +99,7 @@ impl<R: BufRead> Parser<R> {
             apply_function_defs,
             premises: None,
             has_seen_trust_rule: false,
-            allow_int_real_subtyping: false,
+            allow_int_real_subtyping,
         })
     }
 

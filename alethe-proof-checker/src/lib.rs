@@ -75,10 +75,16 @@ pub fn check<T: io::BufRead>(
     problem: T,
     proof: T,
     apply_function_defs: bool,
+    allow_int_real_subtyping: bool,
     strict: bool,
     skip_unknown_rules: bool,
 ) -> Result<bool, Error> {
-    let (proof, mut pool) = parser::parse_instance(problem, proof, apply_function_defs)?;
+    let (proof, mut pool) = parser::parse_instance(
+        problem,
+        proof,
+        apply_function_defs,
+        allow_int_real_subtyping,
+    )?;
 
     let config = checker::Config {
         strict,
@@ -93,10 +99,16 @@ pub fn check_and_elaborate<T: io::BufRead>(
     problem: T,
     proof: T,
     apply_function_defs: bool,
+    allow_int_real_subtyping: bool,
     strict: bool,
     skip_unknown_rules: bool,
 ) -> Result<Vec<ProofCommand>, Error> {
-    let (proof, mut pool) = parser::parse_instance(problem, proof, apply_function_defs)?;
+    let (proof, mut pool) = parser::parse_instance(
+        problem,
+        proof,
+        apply_function_defs,
+        allow_int_real_subtyping,
+    )?;
 
     let config = checker::Config {
         strict,
