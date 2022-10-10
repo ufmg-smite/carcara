@@ -254,6 +254,7 @@ fn bench_command(options: BenchmarkOptions) -> CliResult<()> {
     let instances = get_instances_from_paths(options.files.iter().map(|s| s.as_str()))?;
     if instances.is_empty() {
         log::warn!("no files passed");
+        return Ok(());
     }
 
     println!(
