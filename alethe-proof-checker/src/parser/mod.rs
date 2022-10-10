@@ -70,6 +70,7 @@ pub struct Parser<R> {
     apply_function_defs: bool,
     premises: Option<AHashSet<Rc<Term>>>,
     has_seen_trust_rule: bool,
+    allow_int_real_subtyping: bool,
 }
 
 impl<R: BufRead> Parser<R> {
@@ -93,6 +94,7 @@ impl<R: BufRead> Parser<R> {
             apply_function_defs,
             premises: None,
             has_seen_trust_rule: false,
+            allow_int_real_subtyping: false,
         })
     }
 
@@ -212,19 +214,44 @@ impl<R: BufRead> Parser<R> {
                 SortError::assert_eq(&Sort::Bool, sorts[0])?;
                 SortError::assert_eq(sorts[1], sorts[2])?;
             }
-            Operator::Add | Operator::Mult | Operator::IntDiv | Operator::RealDiv => {
-                assert_num_args(&args, 2..)?;
-
-                // All the arguments must have the same sort, and it must be either Int or Real
-                SortError::assert_one_of(&[Sort::Int, Sort::Real], sorts[0])?;
-                SortError::assert_all_eq(&sorts)?;
-            }
-            Operator::Sub => {
+            Operator::Add | Operator::Sub | Operator::Mult => {
                 // The `-` operator, in particular, can be called with only one argument, in which
                 // case it means negation instead of subtraction
-                assert_num_args(&args, 1..)?;
-                SortError::assert_one_of(&[Sort::Int, Sort::Real], sorts[0])?;
+                if op == Operator::Sub {
+                    assert_num_args(&args, 1..)?;
+                } else {
+                    assert_num_args(&args, 2..)?;
+                }
+
+                // All the arguments must be either Int or Real. Also, if we are not allowing
+                // Int/Real subtyping, all arguments must have the same sort
+                if self.allow_int_real_subtyping {
+                    for s in sorts {
+                        SortError::assert_one_of(&[Sort::Int, Sort::Real], s)?;
+                    }
+                } else {
+                    SortError::assert_one_of(&[Sort::Int, Sort::Real], sorts[0])?;
+                    SortError::assert_all_eq(&sorts)?;
+                }
+            }
+            Operator::IntDiv => {
+                assert_num_args(&args, 2..)?;
+                SortError::assert_eq(&Sort::Int, sorts[0])?;
                 SortError::assert_all_eq(&sorts)?;
+            }
+            Operator::RealDiv => {
+                assert_num_args(&args, 2..)?;
+
+                // Normally, the `/` operator may only receive Real arguments, but if we are
+                // allowing Int/Real subtyping, it may also receive Ints
+                if self.allow_int_real_subtyping {
+                    for s in sorts {
+                        SortError::assert_one_of(&[Sort::Int, Sort::Real], s)?;
+                    }
+                } else {
+                    SortError::assert_eq(&Sort::Real, sorts[0])?;
+                    SortError::assert_all_eq(&sorts)?;
+                }
             }
             Operator::Mod => {
                 assert_num_args(&args, 2)?;

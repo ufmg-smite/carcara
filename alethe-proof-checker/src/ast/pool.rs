@@ -120,13 +120,15 @@ impl TermPool {
                 | Operator::GreaterEq
                 | Operator::IsInt => Sort::Bool,
                 Operator::Ite => self.compute_sort(&args[1]).clone(),
-                Operator::Add
-                | Operator::Sub
-                | Operator::Mult
-                | Operator::IntDiv
-                | Operator::RealDiv => self.compute_sort(&args[0]).clone(),
-                Operator::ToReal => Sort::Real,
-                Operator::Mod | Operator::Abs | Operator::ToInt => Sort::Int,
+                Operator::Add | Operator::Sub | Operator::Mult => {
+                    if args.iter().any(|a| *self.compute_sort(a) == Sort::Real) {
+                        Sort::Real
+                    } else {
+                        Sort::Int
+                    }
+                }
+                Operator::RealDiv | Operator::ToReal => Sort::Real,
+                Operator::IntDiv | Operator::Mod | Operator::Abs | Operator::ToInt => Sort::Int,
                 Operator::Select => match self.compute_sort(&args[0]) {
                     Sort::Array(_, y) => y.as_sort().unwrap().clone(),
                     _ => unreachable!(),
