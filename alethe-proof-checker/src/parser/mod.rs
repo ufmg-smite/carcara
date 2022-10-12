@@ -25,13 +25,14 @@ pub fn parse_instance<T: BufRead>(
     proof: T,
     apply_function_defs: bool,
 ) -> AletheResult<(ProblemPrelude, Proof, TermPool)> {
-    let mut parser = Parser::new(problem, apply_function_defs)?;
+    let mut pool = TermPool::new();
+    let mut parser = Parser::new(&mut pool, problem, apply_function_defs)?;
     let (prelude, premises) = parser.parse_problem()?;
     parser.reset(proof)?;
     let commands = parser.parse_proof()?;
 
     let proof = Proof { premises, commands };
-    Ok((prelude, proof, parser.term_pool()))
+    Ok((prelude, proof, pool))
 }
 
 /// Represents a "raw" `anchor` command. This is only used while parsing, and does not appear in
@@ -55,13 +56,13 @@ enum AnchorArg {
 struct ParserState {
     symbol_table: SymbolTable<HashCache<Identifier>, Rc<Term>>,
     function_defs: AHashMap<String, FunctionDef>,
-    term_pool: TermPool,
     sort_declarations: AHashMap<String, usize>,
     step_ids: SymbolTable<HashCache<String>, usize>,
 }
 
 /// A parser for the Alethe proof format.
-pub struct Parser<R> {
+pub struct Parser<'a, R> {
+    pool: &'a mut TermPool,
     lexer: Lexer<R>,
     current_token: Token,
     current_position: Position,
@@ -72,12 +73,12 @@ pub struct Parser<R> {
     has_seen_trust_rule: bool,
 }
 
-impl<R: BufRead> Parser<R> {
+impl<'a, R: BufRead> Parser<'a, R> {
     /// Constructs a new `Parser` from a type that implements `BufRead`. This operation can fail if
     /// there is an IO or lexer error on the first token.
-    pub fn new(input: R, apply_function_defs: bool) -> AletheResult<Self> {
+    pub fn new(pool: &'a mut TermPool, input: R, apply_function_defs: bool) -> AletheResult<Self> {
         let mut state = ParserState::default();
-        let bool_sort = state.term_pool.add_term(Term::Sort(Sort::Bool));
+        let bool_sort = pool.add_term(Term::Sort(Sort::Bool));
         for iden in ["true", "false"] {
             let iden = HashCache::new(Identifier::Simple(iden.to_owned()));
             state.symbol_table.insert(iden, bool_sort.clone());
@@ -85,6 +86,7 @@ impl<R: BufRead> Parser<R> {
         let mut lexer = Lexer::new(input)?;
         let (current_token, current_position) = lexer.next_token()?;
         Ok(Parser {
+            pool,
             lexer,
             current_token,
             current_position,
@@ -107,12 +109,6 @@ impl<R: BufRead> Parser<R> {
         Ok(())
     }
 
-    /// Takes the term pool used in parsing. This permanently moves the parser, so it cannot be
-    /// used after calling this method.
-    pub fn term_pool(self) -> TermPool {
-        self.state.term_pool
-    }
-
     /// Returns `true` if the parser is currently parsing a SMT-LIB problem, and `false` otherwise.
     fn is_parsing_problem(&self) -> bool {
         self.problem.is_some()
@@ -128,19 +124,19 @@ impl<R: BufRead> Parser<R> {
         Ok((old_token, old_position))
     }
 
-    /// Shortcut for `self.state.term_pool.add_term`.
+    /// Shortcut for `self.pool.add_term`.
     fn add_term(&mut self, term: Term) -> Rc<Term> {
-        self.state.term_pool.add_term(term)
+        self.pool.add_term(term)
     }
 
-    /// Shortcut for `self.state.term_pool.add_all`.
+    /// Shortcut for `self.pool.add_all`.
     fn add_all(&mut self, terms: Vec<Term>) -> Vec<Rc<Term>> {
-        self.state.term_pool.add_all(terms)
+        self.pool.add_all(terms)
     }
 
-    /// Shortcut for `self.state.term_pool.sort`.
+    /// Shortcut for `self.pool.sort`.
     fn sort(&self, term: &Rc<Term>) -> &Sort {
-        self.state.term_pool.sort(term)
+        self.pool.sort(term)
     }
 
     /// Helper method to insert a `SortedVar` into the parser symbol table.
@@ -1083,26 +1079,20 @@ impl<R: BufRead> Parser<R> {
 
                 // Build a hash map of all the parameter names and the values they will
                 // take
-                let substitution = {
-                    // We have to take a reference to the term pool here, so the closure in
-                    // the `map` call later on doesn't have to capture all of `self`, and
-                    // can just capture the term pool. We need this to please the borrow
-                    // checker
-                    let pool = &mut self.state.term_pool;
-                    func.params
-                        .iter()
-                        .zip(args)
-                        .map(|((name, sort), arg)| {
-                            (pool.add_term(terminal!(var name; sort.clone())), arg)
-                        })
-                        .collect()
-                };
+                let substitution = func
+                    .params
+                    .iter()
+                    .zip(args)
+                    .map(|((name, sort), arg)| {
+                        (self.pool.add_term(terminal!(var name; sort.clone())), arg)
+                    })
+                    .collect();
 
                 // Since we already checked the sorts of the arguments, creating this substitution
                 // can never fail
-                let result = Substitution::new(&mut self.state.term_pool, substitution)
+                let result = Substitution::new(self.pool, substitution)
                     .unwrap()
-                    .apply(&mut self.state.term_pool, &func.body);
+                    .apply(self.pool, &func.body);
 
                 Ok(result)
             }
