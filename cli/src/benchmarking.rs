@@ -23,6 +23,7 @@ fn run_job<T: CollectResults + Default>(
     job: JobDescriptor,
     strict: bool,
     elaborate: bool,
+    allow_int_real_subtyping: bool,
 ) -> Result<(), alethe_proof_checker::Error> {
     let proof_file_name = job.proof_file.to_str().unwrap();
 
@@ -33,7 +34,7 @@ fn run_job<T: CollectResults + Default>(
         BufReader::new(File::open(job.problem_file)?),
         BufReader::new(File::open(job.proof_file)?),
         true,
-        false,
+        allow_int_real_subtyping,
     )?;
     let parsing = parsing.elapsed();
 
@@ -91,11 +92,19 @@ fn worker_thread<T: CollectResults + Default>(
     jobs_queue: &ArrayQueue<JobDescriptor>,
     strict: bool,
     elaborate: bool,
+    allow_int_real_subtyping: bool,
 ) -> T {
     let mut results = T::default();
 
     while let Some(job) = jobs_queue.pop() {
-        if run_job(&mut results, job, strict, elaborate).is_err() {
+        let result = run_job(
+            &mut results,
+            job,
+            strict,
+            elaborate,
+            allow_int_real_subtyping,
+        );
+        if result.is_err() {
             log::error!("encountered error in file '{}'", job.proof_file.display());
         }
     }
@@ -109,6 +118,7 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
     num_threads: usize,
     strict: bool,
     elaborate: bool,
+    allow_int_real_subtyping: bool,
 ) -> T {
     const STACK_SIZE: usize = 128 * 1024 * 1024;
 
@@ -134,7 +144,9 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
             .map(|_| {
                 s.builder()
                     .stack_size(STACK_SIZE)
-                    .spawn(move |_| worker_thread::<T>(jobs_queue, strict, elaborate))
+                    .spawn(move |_| {
+                        worker_thread::<T>(jobs_queue, strict, elaborate, allow_int_real_subtyping)
+                    })
                     .unwrap()
             })
             .collect();
@@ -154,10 +166,17 @@ pub fn run_csv_benchmark(
     num_threads: usize,
     strict: bool,
     elaborate: bool,
+    allow_int_real_subtyping: bool,
     runs_dest: &mut dyn io::Write,
     by_rule_dest: &mut dyn io::Write,
 ) -> io::Result<()> {
-    let result: CsvBenchmarkResults =
-        run_benchmark(instances, num_runs, num_threads, strict, elaborate);
+    let result: CsvBenchmarkResults = run_benchmark(
+        instances,
+        num_runs,
+        num_threads,
+        strict,
+        elaborate,
+        allow_int_real_subtyping,
+    );
     result.write_csv(runs_dest, by_rule_dest)
 }
