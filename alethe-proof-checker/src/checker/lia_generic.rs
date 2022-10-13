@@ -1,5 +1,6 @@
 use super::*;
 use crate::{checker::error::LiaGenericError, parser};
+use ahash::AHashMap;
 use std::{
     io::{BufRead, Write},
     process::{Command, Stdio},
@@ -146,6 +147,47 @@ fn update_premises(
     }
 }
 
+fn insert_missing_assumes(
+    pool: &mut TermPool,
+    elaborator: &mut Elaborator,
+    conclusion: &[Rc<Term>],
+    proof: &[ProofCommand],
+    root_id: &str,
+) -> (Vec<Rc<Term>>, usize) {
+    let mut count_map: AHashMap<&Rc<Term>, usize> = AHashMap::new();
+    for c in conclusion {
+        *count_map.entry(c).or_default() += 1;
+    }
+
+    let proof_premises: Vec<_> = proof
+        .iter()
+        .filter_map(|c| {
+            if let ProofCommand::Assume { term, .. } = c {
+                Some(term.remove_negation().unwrap().clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+    for p in &proof_premises {
+        *count_map.get_mut(p).unwrap() -= 1;
+    }
+
+    let mut all = Vec::new();
+    for (t, mut count) in count_map {
+        while count > 0 {
+            let id = elaborator.get_new_id(root_id);
+            all.push(t.clone());
+            let term = build_term!(pool, (not {t.clone()}));
+            elaborator.add_new_command(ProofCommand::Assume { id, term }, true);
+            count -= 1;
+        }
+    }
+    let num_added = all.len();
+    all.extend(proof_premises);
+    (all, num_added)
+}
+
 fn insert_cvc5_proof(
     pool: &mut TermPool,
     elaborator: &mut Elaborator,
@@ -156,37 +198,22 @@ fn insert_cvc5_proof(
     let subproof_id = elaborator.get_new_id(root_id);
     elaborator.open_accumulator_subproof();
 
-    let proof_premises: AHashSet<_> = commands
-        .iter()
-        .filter_map(|c| {
-            if let ProofCommand::Assume { term, .. } = c {
-                Some(term.remove_negation().unwrap().clone())
-            } else {
-                None
-            }
-        })
-        .collect();
+    let (all_premises, num_added) = insert_missing_assumes(
+        pool,
+        elaborator,
+        conclusion,
+        &commands,
+        // This is a bit ugly, but we have to add the ".added" to avoid colliding with the first few
+        // steps in the cvc5 proof
+        &format!("{}.added", root_id),
+    );
 
-    let mut num_added = 0;
-    for t in conclusion {
-        if !proof_premises.contains(t) {
-            let id = elaborator.get_new_id(root_id);
-            elaborator.add_new_command(ProofCommand::Assume { id, term: t.clone() }, true);
-            num_added += 1;
-        }
-    }
-
-    let (mut clause, discharge): (Vec<_>, Vec<_>) = commands
+    let (mut clause, discharge): (Vec<_>, Vec<_>) = all_premises
         .iter()
         .enumerate()
-        .filter_map(|(i, c)| {
-            if let ProofCommand::Assume { term, .. } = c {
-                let term = build_term!(pool, (not {term.clone()}));
-                let id = (1usize, i);
-                Some((term, id))
-            } else {
-                None
-            }
+        .map(|(i, t)| {
+            let term = build_term!(pool, (not (not {t.clone()})));
+            (term, (1usize, i))
         })
         .unzip();
     clause.push(pool.bool_false());
@@ -242,39 +269,16 @@ fn insert_cvc5_proof(
         discharge: Vec::new(),
     });
 
-    let clause = {
-        clause.pop(); // Remove `false` term
-        clause
-            .into_iter()
-            .map(|t| {
-                t.remove_negation()
-                    .unwrap()
-                    .remove_negation()
-                    .unwrap()
-                    .clone()
-            })
-            .collect()
-    };
     let mut premises = vec![subproof];
     premises.extend(not_not_steps);
     premises.push(false_step);
 
     let id = elaborator.get_new_id(root_id);
-    let resolution_step = elaborator.add_new_step(ProofStep {
-        id,
-        clause,
-        rule: "resolution".to_owned(),
-        premises,
-        args: Vec::new(),
-        discharge: Vec::new(),
-    });
-
-    let id = elaborator.get_new_id(root_id);
     elaborator.push_elaborated_step(ProofStep {
         id,
         clause: conclusion.to_vec(),
-        rule: "hole".to_owned(), // TODO: Implement this properly
-        premises: vec![resolution_step],
+        rule: "resolution".to_owned(),
+        premises,
         args: Vec::new(),
         discharge: Vec::new(),
     });
