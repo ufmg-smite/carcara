@@ -92,7 +92,7 @@ impl Elaborator {
         self.stack[depth].new_indices[i]
     }
 
-    fn add_new_command(&mut self, command: ProofCommand, must_keep: bool) -> (usize, usize) {
+    pub fn add_new_command(&mut self, command: ProofCommand, must_keep: bool) -> (usize, usize) {
         if !must_keep {
             if let Some((d, &i)) = self.seen_clauses.get_with_depth(command.clause()) {
                 return (d, i);

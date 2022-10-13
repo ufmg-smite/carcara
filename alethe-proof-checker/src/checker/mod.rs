@@ -256,13 +256,19 @@ impl<'c> ProofChecker<'c> {
 
         if step.rule == "lia_generic" {
             if self.config.check_lia_generic_using_cvc5 {
-                lia_generic::lia_generic(&step.clause, &self.prelude)?;
+                lia_generic::lia_generic(
+                    self.pool,
+                    &step.clause,
+                    &self.prelude,
+                    self.elaborator.as_mut(),
+                    &step.id,
+                )?;
             } else {
                 log::warn!("encountered \"lia_generic\" rule, ignoring");
                 self.is_holey = true;
-            }
-            if let Some(elaborator) = &mut self.elaborator {
-                elaborator.unchanged(&step.clause);
+                if let Some(elaborator) = &mut self.elaborator {
+                    elaborator.unchanged(&step.clause);
+                }
             }
         } else {
             let rule = match Self::get_rule(&step.rule) {
