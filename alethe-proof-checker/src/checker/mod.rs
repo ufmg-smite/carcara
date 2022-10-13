@@ -256,13 +256,14 @@ impl<'c> ProofChecker<'c> {
 
         if step.rule == "lia_generic" {
             if self.config.check_lia_generic_using_cvc5 {
-                lia_generic::lia_generic(
+                let is_hole = lia_generic::lia_generic(
                     self.pool,
                     &step.clause,
                     &self.prelude,
                     self.elaborator.as_mut(),
                     &step.id,
-                )?;
+                );
+                self.is_holey = self.is_holey || is_hole;
             } else {
                 log::warn!("encountered \"lia_generic\" rule, ignoring");
                 self.is_holey = true;

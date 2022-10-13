@@ -29,9 +29,29 @@ pub fn lia_generic(
     prelude: &ProblemPrelude,
     elaborator: Option<&mut Elaborator>,
     root_id: &str,
-) -> Result<(), LiaGenericError> {
+) -> bool {
     let problem = get_problem_string(conclusion, prelude);
+    let commands = match get_cvc5_proof(pool, problem) {
+        Ok(c) => c,
+        Err(e) => {
+            log::warn!("failed to check `lia_generic` step using cvc5: {}", e);
+            if let Some(elaborator) = elaborator {
+                elaborator.unchanged(conclusion);
+            }
+            return true;
+        }
+    };
 
+    if let Some(elaborator) = elaborator {
+        insert_cvc5_proof(pool, elaborator, commands, conclusion, root_id);
+    }
+    false
+}
+
+fn get_cvc5_proof(
+    pool: &mut TermPool,
+    problem: String,
+) -> Result<Vec<ProofCommand>, LiaGenericError> {
     let mut cvc5 = Command::new("cvc5")
         .args([
             "--tlimit=10000",
@@ -75,14 +95,8 @@ pub fn lia_generic(
         return Err(LiaGenericError::Cvc5OutputNotUnsat);
     }
 
-    let commands = parse_and_check_cvc5_proof(pool, problem.as_bytes(), proof)
-        .map_err(|e| LiaGenericError::InnerProofError(Box::new(e)))?;
-
-    if let Some(elaborator) = elaborator {
-        insert_cvc5_proof(pool, elaborator, commands, conclusion, root_id);
-    }
-
-    Ok(())
+    parse_and_check_cvc5_proof(pool, problem.as_bytes(), proof)
+        .map_err(|e| LiaGenericError::InnerProofError(Box::new(e)))
 }
 
 fn parse_and_check_cvc5_proof(
