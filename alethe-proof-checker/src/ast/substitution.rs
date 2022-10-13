@@ -310,7 +310,8 @@ mod tests {
     use crate::parser::*;
 
     fn run_test(definitions: &str, original: &str, x: &str, t: &str, result: &str) {
-        let mut parser = Parser::new(definitions.as_bytes(), true, false).unwrap();
+        let mut pool = TermPool::new();
+        let mut parser = Parser::new(&mut pool, definitions.as_bytes(), true, false).unwrap();
         parser.parse_problem().unwrap();
 
         let [original, x, t, result] = [original, x, t, result].map(|s| {
@@ -321,7 +322,6 @@ mod tests {
         let mut map = AHashMap::new();
         map.insert(x, t);
 
-        let mut pool = parser.term_pool();
         let got = Substitution::new(&mut pool, map)
             .unwrap()
             .apply(&mut pool, &original);

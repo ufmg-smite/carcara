@@ -6,52 +6,46 @@ use super::*;
 
 const ERROR_MESSAGE: &str = "parser error during test";
 
-pub struct TestParser<'a> {
-    inner: Parser<&'a [u8]>,
+pub fn parse_terms_with_pool<const N: usize>(
+    pool: &mut TermPool,
+    definitions: &str,
+    terms: [&str; N],
+) -> [Rc<Term>; N] {
+    let mut parser = Parser::new(pool, definitions.as_bytes(), true, false).expect(ERROR_MESSAGE);
+    parser.parse_problem().expect(ERROR_MESSAGE);
+
+    terms.map(|s| {
+        parser.reset(s.as_bytes()).expect(ERROR_MESSAGE);
+        parser.parse_term().expect(ERROR_MESSAGE)
+    })
 }
 
-impl<'a> TestParser<'a> {
-    pub fn new(definitions: &'a str) -> Self {
-        let mut inner = Parser::new(definitions.as_bytes(), true, false).expect(ERROR_MESSAGE);
-        inner.parse_problem().expect(ERROR_MESSAGE);
-        Self { inner }
-    }
-
-    fn reset(&mut self, input: &'a str) {
-        self.inner.reset(input.as_bytes()).expect(ERROR_MESSAGE);
-    }
-
-    pub fn parse_term(&mut self, input: &'a str) -> Rc<Term> {
-        self.reset(input);
-        self.inner.parse_term().expect(ERROR_MESSAGE)
-    }
-
-    pub fn parse_proof(&mut self, input: &'a str) -> Vec<ProofCommand> {
-        self.reset(input);
-        self.inner.parse_proof().expect(ERROR_MESSAGE)
-    }
-
-    pub fn term_pool(self) -> TermPool {
-        self.inner.term_pool()
-    }
+pub fn parse_terms<const N: usize>(definitions: &str, terms: [&str; N]) -> [Rc<Term>; N] {
+    let mut pool = TermPool::new();
+    parse_terms_with_pool(&mut pool, definitions, terms)
 }
 
 /// Parses a term from a `&str`. Panics if any error is encountered.
 pub fn parse_term(input: &str) -> Term {
-    TestParser::new("").parse_term(input).as_ref().clone()
+    parse_terms("", [input])[0].as_ref().clone()
 }
 
 /// Tries to parse a term from a `&str`, expecting it to fail. Returns the error encountered, or
 /// panics if no error is encountered.
 pub fn parse_term_err(input: &str) -> Error {
-    Parser::new(input.as_bytes(), true, false)
+    let mut pool = TermPool::new();
+    Parser::new(&mut pool, input.as_bytes(), true, false)
         .and_then(|mut p| p.parse_term())
         .expect_err("expected error")
 }
 
 /// Parses a proof from a `&str`. Panics if any error is encountered.
 pub fn parse_proof(input: &str) -> Proof {
-    let commands = TestParser::new("").parse_proof(input);
+    let mut pool = TermPool::new();
+    let commands = Parser::new(&mut pool, input.as_bytes(), true, false)
+        .expect(ERROR_MESSAGE)
+        .parse_proof()
+        .expect(ERROR_MESSAGE);
     Proof { premises: AHashSet::new(), commands }
 }
 
@@ -71,6 +65,7 @@ fn run_parser_tests(cases: &[(&str, Term)]) {
 fn test_hash_consing() {
     use ahash::AHashSet;
 
+    let mut pool = TermPool::new();
     let input = "(-
         (-
             (+ 1 2)
@@ -78,7 +73,7 @@ fn test_hash_consing() {
         )
         (* 2 2)
     )";
-    let mut parser = Parser::new(input.as_bytes(), true, false).unwrap();
+    let mut parser = Parser::new(&mut pool, input.as_bytes(), true, false).unwrap();
     parser.parse_term().unwrap();
 
     // We expect this input to result in 7 unique terms after parsing:
@@ -106,9 +101,9 @@ fn test_hash_consing() {
     .into_iter()
     .collect::<AHashSet<&str>>();
 
-    assert_eq!(parser.state.term_pool.terms.len(), expected.len());
+    assert_eq!(pool.terms.len(), expected.len());
 
-    for got in parser.state.term_pool.terms.keys() {
+    for got in pool.terms.keys() {
         let formatted: &str = &format!("{}", got);
         assert!(expected.contains(formatted), "{}", formatted);
     }
@@ -521,54 +516,59 @@ fn test_annotated_terms() {
 
 #[test]
 fn test_declare_fun() {
-    TestParser::new("(declare-fun f (Bool Int Real) Real)").parse_term("(f false 42 3.14159)");
+    parse_terms(
+        "(declare-fun f (Bool Int Real) Real)",
+        ["(f false 42 3.14159)"],
+    );
 
-    TestParser::new(
+    parse_terms(
         "(declare-fun y () Real)
         (declare-fun f (Real) Int)
         (declare-fun g (Int Int) Bool)",
-    )
-    .parse_term("(g (f y) 0)");
+        ["(g (f y) 0)"],
+    );
 
-    let got = TestParser::new("(declare-fun x () Real)").parse_term("x");
+    let [got] = parse_terms("(declare-fun x () Real)", ["x"]);
     assert_deep_eq!(&terminal!(var "x"; Rc::new(Term::Sort(Sort::Real))), &got);
 }
 
 #[test]
 fn test_declare_sort() {
-    TestParser::new(
+    parse_terms(
         "(declare-sort T 0)
         (declare-sort U 0)
         (declare-sort Y 0)
         (declare-fun t () T)
         (declare-fun u () U)
         (declare-fun f (T U) Y)",
-    )
-    .parse_term("(f t u)");
+        ["(f t u)"],
+    );
 
-    let got = TestParser::new(
+    let [got] = parse_terms(
         "(declare-sort T 0)
         (declare-fun x () T)",
-    )
-    .parse_term("x");
+        ["x"],
+    );
     let expected_sort = Term::Sort(Sort::Atom("T".to_owned(), Vec::new()));
     assert_deep_eq!(&terminal!(var "x"; Rc::new(expected_sort)), &got);
 }
 
 #[test]
 fn test_define_fun() {
-    let got =
-        TestParser::new("(define-fun add ((a Int) (b Int)) Int (+ a b))").parse_term("(add 2 3)");
+    let [got] = parse_terms(
+        "(define-fun add ((a Int) (b Int)) Int (+ a b))",
+        ["(add 2 3)"],
+    );
     assert_deep_eq!(&parse_term("(+ 2 3)"), &got);
 
-    let got = TestParser::new("(define-fun x () Int 2)").parse_term("(+ x 3)");
+    let [got] = parse_terms("(define-fun x () Int 2)", ["(+ x 3)"]);
     assert_deep_eq!(&parse_term("(+ 2 3)"), &got);
 
-    let got = TestParser::new(
+    let [got] = parse_terms(
         "(define-fun f ((x Int)) Int (+ x 1))
          (define-fun g ((a Int) (b Int)) Int (* (f a) (f b)))",
-    )
-    .parse_term("(g 2 3)");
+        ["(g 2 3)"],
+    );
     let expected = parse_term("(* (+ 2 1) (+ 3 1))");
     assert_deep_eq!(&expected, &got);
 }

@@ -29,7 +29,7 @@ fn run_job<T: CollectResults + Default>(
     let total = Instant::now();
 
     let parsing = Instant::now();
-    let (proof, mut pool) = parse_instance(
+    let (prelude, proof, mut pool) = parse_instance(
         BufReader::new(File::open(job.problem_file)?),
         BufReader::new(File::open(job.proof_file)?),
         true,
@@ -54,8 +54,9 @@ fn run_job<T: CollectResults + Default>(
             assume_core_time: &mut assume_core,
             results,
         }),
+        check_lia_generic_using_cvc5: true,
     };
-    let mut checker = checker::ProofChecker::new(&mut pool, config);
+    let mut checker = checker::ProofChecker::new(&mut pool, config, prelude);
 
     let checking = Instant::now();
 

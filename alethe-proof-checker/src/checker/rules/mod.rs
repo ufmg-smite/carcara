@@ -167,7 +167,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
 
     for (i, (proof, expected)) in cases.iter().enumerate() {
         // This parses the definitions again for every case, which is not ideal
-        let (parsed, mut pool) =
+        let (prelude, parsed, mut pool) =
             parse_instance(Cursor::new(definitions), Cursor::new(proof), true, false)
                 .unwrap_or_else(|e| panic!("parser error during test \"{}\": {}", test_name, e));
         let mut checker = ProofChecker::new(
@@ -177,7 +177,9 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
                 skip_unknown_rules: false,
                 is_running_test: true,
                 statistics: None,
+                check_lia_generic_using_cvc5: true,
             },
+            prelude,
         );
         let got = checker.check(&parsed).is_ok();
         assert_eq!(

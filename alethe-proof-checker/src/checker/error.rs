@@ -4,7 +4,7 @@ use crate::{
     utils::{Range, TypeName},
 };
 use rug::Rational;
-use std::fmt;
+use std::{fmt, io};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -30,6 +30,9 @@ pub enum CheckerError {
 
     #[error(transparent)]
     LinearArithmetic(#[from] LinearArithmeticError),
+
+    #[error(transparent)]
+    LiaGeneric(#[from] LiaGenericError),
 
     #[error(transparent)]
     Subproof(#[from] SubproofError),
@@ -238,6 +241,36 @@ pub enum LinearArithmeticError {
 
     #[error("expected term '{0}' to be less than or equal to term '{1}'")]
     ExpectedLessEq(Rc<Term>, Rc<Term>),
+}
+
+#[derive(Debug, Error)]
+pub enum LiaGenericError {
+    #[error("failed to spawn cvc5 process")]
+    FailedSpawnCvc5(io::Error),
+
+    #[error("failed to write to cvc5 stdin")]
+    FailedWriteToCvc5Stdin(io::Error),
+
+    #[error("error while waiting for cvc5 to exit")]
+    FailedWaitForCvc5(io::Error),
+
+    #[error("cvc5 gave invalid output")]
+    Cvc5GaveInvalidOutput,
+
+    #[error("cvc5 output not unsat")]
+    Cvc5OutputNotUnsat,
+
+    #[error("cvc5 timed out when solving problem")]
+    Cvc5Timeout,
+
+    #[error(
+        "cvc5 returned non-zero exit code: {}",
+        if let Some(i) = .0 { format!("{}", i) } else { "none".to_owned() }
+    )]
+    Cvc5NonZeroExitCode(Option<i32>),
+
+    #[error("error in inner proof: {0}")]
+    InnerProofError(Box<crate::Error>),
 }
 
 /// Errors relevant to all rules that end subproofs (not just the `subproof` rule).

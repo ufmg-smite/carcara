@@ -1,7 +1,6 @@
 use crate::{parser::ParserError, utils::is_symbol_character, AletheResult, Error};
 use rug::{ops::Pow, Integer, Rational};
 use std::{
-    fmt,
     io::{self, BufRead},
     str::FromStr,
 };
@@ -39,22 +38,6 @@ pub enum Token {
 
     /// A signal token to indicate the end of the input.
     Eof,
-}
-
-impl fmt::Display for Token {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Token::OpenParen => write!(f, "("),
-            Token::CloseParen => write!(f, ")"),
-            Token::Symbol(s) => write!(f, "{}", s),
-            Token::Keyword(k) => write!(f, ":{}", k),
-            Token::Numeral(n) => write!(f, "{}", n),
-            Token::Decimal(r) => write!(f, "{}", r),
-            Token::String(s) => write!(f, "\"{}\"", s),
-            Token::ReservedWord(r) => write!(f, "{}", r),
-            Token::Eof => write!(f, "EOF"),
-        }
-    }
 }
 
 /// A reserved word in the SMT-LIB and Alethe lexicon.

@@ -1,4 +1,7 @@
-use crate::parser::tests::{parse_term, TestParser};
+use crate::{
+    ast::TermPool,
+    parser::tests::{parse_term, parse_terms, parse_terms_with_pool},
+};
 use ahash::AHashSet;
 
 #[test]
@@ -25,7 +28,7 @@ fn test_subterms() {
         for c in cases {
             let expected = c.iter().copied();
 
-            let root = TestParser::new(definitions).parse_term(c[0]);
+            let [root] = parse_terms(definitions, [c[0]]);
             let subterms = root.subterms();
             let as_strings: Vec<_> = subterms.map(|t| format!("{}", t)).collect();
             let got = as_strings.iter().map(String::as_str);
@@ -92,9 +95,8 @@ fn test_subterms() {
 fn test_free_vars() {
     fn run_tests(definitions: &str, cases: &[(&str, &[&str])]) {
         for &(term, expected) in cases {
-            let mut parser = TestParser::new(definitions);
-            let root = parser.parse_term(term);
-            let mut pool = parser.term_pool();
+            let mut pool = TermPool::new();
+            let [root] = parse_terms_with_pool(&mut pool, definitions, [term]);
             let expected: AHashSet<_> = expected.iter().copied().collect();
             let got: AHashSet<_> = pool
                 .free_vars(&root)
@@ -134,8 +136,7 @@ fn test_deep_eq() {
 
     fn run_tests(definitions: &str, cases: &[(&str, &str)], test_type: TestType) {
         for (a, b) in cases {
-            let mut parser = TestParser::new(definitions);
-            let (a, b) = (parser.parse_term(a), parser.parse_term(b));
+            let [a, b] = parse_terms(definitions, [a, b]);
             match test_type {
                 TestType::Normal => assert_deep_eq!(&a, &b),
                 TestType::ModReordering => assert_deep_eq_modulo_reordering!(&a, &b),

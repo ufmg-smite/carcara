@@ -79,7 +79,7 @@ pub fn check<T: io::BufRead>(
     strict: bool,
     skip_unknown_rules: bool,
 ) -> Result<bool, Error> {
-    let (proof, mut pool) = parser::parse_instance(
+    let (prelude, proof, mut pool) = parser::parse_instance(
         problem,
         proof,
         apply_function_defs,
@@ -91,8 +91,9 @@ pub fn check<T: io::BufRead>(
         skip_unknown_rules,
         is_running_test: false,
         statistics: None,
+        check_lia_generic_using_cvc5: true,
     };
-    checker::ProofChecker::new(&mut pool, config).check(&proof)
+    checker::ProofChecker::new(&mut pool, config, prelude).check(&proof)
 }
 
 pub fn check_and_elaborate<T: io::BufRead>(
@@ -103,7 +104,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
     strict: bool,
     skip_unknown_rules: bool,
 ) -> Result<Vec<ProofCommand>, Error> {
-    let (proof, mut pool) = parser::parse_instance(
+    let (prelude, proof, mut pool) = parser::parse_instance(
         problem,
         proof,
         apply_function_defs,
@@ -115,8 +116,18 @@ pub fn check_and_elaborate<T: io::BufRead>(
         skip_unknown_rules,
         is_running_test: false,
         statistics: None,
+        check_lia_generic_using_cvc5: true,
     };
-    checker::ProofChecker::new(&mut pool, config)
+    checker::ProofChecker::new(&mut pool, config, prelude)
         .check_and_elaborate(proof)
         .map(|p| p.commands)
+}
+
+pub fn generate_lia_smt_instances<T: io::BufRead>(
+    problem: T,
+    proof: T,
+    apply_function_defs: bool,
+) -> Result<Vec<(String, String)>, Error> {
+    let (prelude, proof, _) = parser::parse_instance(problem, proof, apply_function_defs, false)?;
+    checker::generate_lia_smt_instances(prelude, &proof)
 }

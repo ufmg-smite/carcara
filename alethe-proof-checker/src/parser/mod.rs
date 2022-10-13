@@ -25,14 +25,20 @@ pub fn parse_instance<T: BufRead>(
     proof: T,
     apply_function_defs: bool,
     allow_int_real_subtyping: bool,
-) -> AletheResult<(Proof, TermPool)> {
-    let mut parser = Parser::new(problem, apply_function_defs, allow_int_real_subtyping)?;
-    let premises = parser.parse_problem()?;
+) -> AletheResult<(ProblemPrelude, Proof, TermPool)> {
+    let mut pool = TermPool::new();
+    let mut parser = Parser::new(
+        &mut pool,
+        problem,
+        apply_function_defs,
+        allow_int_real_subtyping,
+    )?;
+    let (prelude, premises) = parser.parse_problem()?;
     parser.reset(proof)?;
     let commands = parser.parse_proof()?;
 
     let proof = Proof { premises, commands };
-    Ok((proof, parser.term_pool()))
+    Ok((prelude, proof, pool))
 }
 
 /// Represents a "raw" `anchor` command. This is only used while parsing, and does not appear in
@@ -56,34 +62,35 @@ enum AnchorArg {
 struct ParserState {
     symbol_table: SymbolTable<HashCache<Identifier>, Rc<Term>>,
     function_defs: AHashMap<String, FunctionDef>,
-    term_pool: TermPool,
     sort_declarations: AHashMap<String, usize>,
     step_ids: SymbolTable<HashCache<String>, usize>,
 }
 
 /// A parser for the Alethe proof format.
-pub struct Parser<R> {
+pub struct Parser<'a, R> {
+    pool: &'a mut TermPool,
     lexer: Lexer<R>,
     current_token: Token,
     current_position: Position,
     state: ParserState,
     interpret_integers_as_reals: bool,
     apply_function_defs: bool,
-    premises: Option<AHashSet<Rc<Term>>>,
+    problem: Option<(ProblemPrelude, AHashSet<Rc<Term>>)>,
     has_seen_trust_rule: bool,
     allow_int_real_subtyping: bool,
 }
 
-impl<R: BufRead> Parser<R> {
+impl<'a, R: BufRead> Parser<'a, R> {
     /// Constructs a new `Parser` from a type that implements `BufRead`. This operation can fail if
     /// there is an IO or lexer error on the first token.
     pub fn new(
+        pool: &'a mut TermPool,
         input: R,
         apply_function_defs: bool,
         allow_int_real_subtyping: bool,
     ) -> AletheResult<Self> {
         let mut state = ParserState::default();
-        let bool_sort = state.term_pool.add_term(Term::Sort(Sort::Bool));
+        let bool_sort = pool.add_term(Term::Sort(Sort::Bool));
         for iden in ["true", "false"] {
             let iden = HashCache::new(Identifier::Simple(iden.to_owned()));
             state.symbol_table.insert(iden, bool_sort.clone());
@@ -91,13 +98,14 @@ impl<R: BufRead> Parser<R> {
         let mut lexer = Lexer::new(input)?;
         let (current_token, current_position) = lexer.next_token()?;
         Ok(Parser {
+            pool,
             lexer,
             current_token,
             current_position,
             state,
             interpret_integers_as_reals: false,
             apply_function_defs,
-            premises: None,
+            problem: None,
             has_seen_trust_rule: false,
             allow_int_real_subtyping,
         })
@@ -114,15 +122,9 @@ impl<R: BufRead> Parser<R> {
         Ok(())
     }
 
-    /// Takes the term pool used in parsing. This permanently moves the parser, so it cannot be
-    /// used after calling this method.
-    pub fn term_pool(self) -> TermPool {
-        self.state.term_pool
-    }
-
     /// Returns `true` if the parser is currently parsing a SMT-LIB problem, and `false` otherwise.
     fn is_parsing_problem(&self) -> bool {
-        self.premises.is_some()
+        self.problem.is_some()
     }
 
     /// Advances the parser one token, and returns the previous `current_token`.
@@ -135,19 +137,19 @@ impl<R: BufRead> Parser<R> {
         Ok((old_token, old_position))
     }
 
-    /// Shortcut for `self.state.term_pool.add_term`.
+    /// Shortcut for `self.pool.add_term`.
     fn add_term(&mut self, term: Term) -> Rc<Term> {
-        self.state.term_pool.add_term(term)
+        self.pool.add_term(term)
     }
 
-    /// Shortcut for `self.state.term_pool.add_all`.
+    /// Shortcut for `self.pool.add_all`.
     fn add_all(&mut self, terms: Vec<Term>) -> Vec<Rc<Term>> {
-        self.state.term_pool.add_all(terms)
+        self.pool.add_all(terms)
     }
 
-    /// Shortcut for `self.state.term_pool.sort`.
+    /// Shortcut for `self.pool.sort`.
     fn sort(&self, term: &Rc<Term>) -> &Sort {
-        self.state.term_pool.sort(term)
+        self.pool.sort(term)
     }
 
     /// Helper method to insert a `SortedVar` into the parser symbol table.
@@ -155,6 +157,16 @@ impl<R: BufRead> Parser<R> {
         self.state
             .symbol_table
             .insert(HashCache::new(Identifier::Simple(symbol)), sort);
+    }
+
+    /// Shortuct for `self.problem.as_mut().unwrap().0`
+    fn prelude(&mut self) -> &mut ProblemPrelude {
+        &mut self.problem.as_mut().unwrap().0
+    }
+
+    /// Shortuct for `self.problem.as_mut().unwrap().1`
+    fn premises(&mut self) -> &mut AHashSet<Rc<Term>> {
+        &mut self.problem.as_mut().unwrap().1
     }
 
     /// Adds a new function definition. If we are parsing the problem and
@@ -173,7 +185,7 @@ impl<R: BufRead> Parser<R> {
             let var_term = self.add_term(var.into());
             let assertion_term =
                 self.add_term(Term::Op(Operator::Equals, vec![var_term, lambda_term]));
-            self.premises.as_mut().unwrap().insert(assertion_term);
+            self.premises().insert(assertion_term);
         } else {
             self.state.function_defs.insert(name, func_def);
         }
@@ -406,11 +418,13 @@ impl<R: BufRead> Parser<R> {
         }
     }
 
-    /// Consumes tokens until the matching closing parenthesis is reached.
-    fn read_until_close_parens(&mut self) -> AletheResult<()> {
+    /// Reads tokens until the matching closing parenthesis is reached.
+    fn read_until_close_parens(&mut self) -> AletheResult<Vec<Token>> {
+        let mut result = Vec::new();
         let mut parens_depth = 1;
         while parens_depth > 0 {
-            parens_depth += match self.next_token()? {
+            let token = self.next_token()?;
+            parens_depth += match token {
                 (Token::OpenParen, _) => 1,
                 (Token::CloseParen, _) => -1,
                 (Token::Eof, pos) => {
@@ -418,7 +432,14 @@ impl<R: BufRead> Parser<R> {
                 }
                 _ => 0,
             };
+            result.push(token.0);
         }
+        Ok(result)
+    }
+
+    /// Consumes and drops tokens until the matching closing parenthesis is reached.
+    fn ignore_until_close_parens(&mut self) -> AletheResult<()> {
+        self.read_until_close_parens()?;
         Ok(())
     }
 
@@ -446,7 +467,7 @@ impl<R: BufRead> Parser<R> {
                 // And if the value is an s-expression we read tokens until it's closed
                 Token::OpenParen => {
                     self.next_token()?;
-                    self.read_until_close_parens()?;
+                    self.ignore_until_close_parens()?;
                 }
             }
             if self.current_token == Token::CloseParen {
@@ -468,15 +489,16 @@ impl<R: BufRead> Parser<R> {
     ///
     /// All other commands are ignored. This method returns a hash set containing the premises
     /// introduced in `assert` commands.
-    pub fn parse_problem(&mut self) -> AletheResult<AHashSet<Rc<Term>>> {
-        self.premises = Some(AHashSet::new());
+    pub fn parse_problem(&mut self) -> AletheResult<(ProblemPrelude, AHashSet<Rc<Term>>)> {
+        self.problem = Some((ProblemPrelude::default(), AHashSet::new()));
 
         while self.current_token != Token::Eof {
             self.expect_token(Token::OpenParen)?;
             match self.next_token()?.0 {
                 Token::ReservedWord(Reserved::DeclareFun) => {
                     let (name, sort) = self.parse_declare_fun()?;
-                    self.insert_sorted_var((name, sort));
+                    self.insert_sorted_var((name.clone(), sort.clone()));
+                    self.prelude().function_declarations.push((name, sort));
                     continue;
                 }
                 Token::ReservedWord(Reserved::DeclareConst) => {
@@ -484,11 +506,15 @@ impl<R: BufRead> Parser<R> {
                     let sort = self.parse_sort()?;
                     let sort = self.add_term(sort);
                     self.expect_token(Token::CloseParen)?;
-                    self.insert_sorted_var((name, sort));
+                    self.insert_sorted_var((name.clone(), sort.clone()));
+                    self.prelude().function_declarations.push((name, sort));
                     continue;
                 }
                 Token::ReservedWord(Reserved::DeclareSort) => {
                     let (name, arity) = self.parse_declare_sort()?;
+
+                    self.prelude().sort_declarations.push((name.clone(), arity));
+
                     // User declared sorts are represented with the `Atom` sort kind, and an
                     // argument which is a string terminal representing the sort name.
                     self.state.sort_declarations.insert(name, arity);
@@ -502,11 +528,12 @@ impl<R: BufRead> Parser<R> {
                 Token::ReservedWord(Reserved::Assert) => {
                     let term = self.parse_term()?;
                     self.expect_token(Token::CloseParen)?;
-                    self.premises.as_mut().unwrap().insert(term);
+                    self.premises().insert(term);
                 }
                 Token::ReservedWord(Reserved::SetLogic) => {
                     let logic = self.expect_symbol()?;
                     self.expect_token(Token::CloseParen)?;
+                    self.prelude().logic = Some(logic.clone());
 
                     // When the problem's logic contains real numbers but not integers, integer
                     // literals should be parsed as reals. For instance, `1` should be interpreted
@@ -516,11 +543,11 @@ impl<R: BufRead> Parser<R> {
                 _ => {
                     // If the command is not one of the commands we care about, we just ignore it.
                     // We do that by reading tokens until the command parenthesis is closed
-                    self.read_until_close_parens()?;
+                    self.ignore_until_close_parens()?;
                 }
             }
         }
-        Ok(self.premises.take().unwrap())
+        Ok(self.problem.take().unwrap())
     }
 
     /// Parses a proof in the Alethe format. All function, constant and sort declarations needed
@@ -672,7 +699,7 @@ impl<R: BufRead> Parser<R> {
             // If the rule is `hole` or `trust`, we want to allow any invalid arguments,
             // so we read the rest of the `:args` attribute without trying to parse anything
             if rule == "hole" || rule == "trust" {
-                self.read_until_close_parens()?;
+                self.ignore_until_close_parens()?;
                 Vec::new()
             } else {
                 self.parse_sequence(Self::parse_proof_arg, true)?
@@ -1090,26 +1117,20 @@ impl<R: BufRead> Parser<R> {
 
                 // Build a hash map of all the parameter names and the values they will
                 // take
-                let substitution = {
-                    // We have to take a reference to the term pool here, so the closure in
-                    // the `map` call later on doesn't have to capture all of `self`, and
-                    // can just capture the term pool. We need this to please the borrow
-                    // checker
-                    let pool = &mut self.state.term_pool;
-                    func.params
-                        .iter()
-                        .zip(args)
-                        .map(|((name, sort), arg)| {
-                            (pool.add_term(terminal!(var name; sort.clone())), arg)
-                        })
-                        .collect()
-                };
+                let substitution = func
+                    .params
+                    .iter()
+                    .zip(args)
+                    .map(|((name, sort), arg)| {
+                        (self.pool.add_term(terminal!(var name; sort.clone())), arg)
+                    })
+                    .collect();
 
                 // Since we already checked the sorts of the arguments, creating this substitution
                 // can never fail
-                let result = Substitution::new(&mut self.state.term_pool, substitution)
+                let result = Substitution::new(self.pool, substitution)
                     .unwrap()
-                    .apply(&mut self.state.term_pool, &func.body);
+                    .apply(self.pool, &func.body);
 
                 Ok(result)
             }

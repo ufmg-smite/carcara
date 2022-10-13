@@ -1,4 +1,8 @@
-use crate::{ast::*, utils::is_symbol_character};
+use crate::{
+    ast::*,
+    parser::Token,
+    utils::{is_symbol_character, DedupIterator},
+};
 use ahash::AHashMap;
 use std::{borrow::Cow, fmt, io};
 
@@ -7,8 +11,18 @@ pub fn print_proof(commands: &[ProofCommand], use_sharing: bool) -> io::Result<(
     let mut printer = AlethePrinter {
         inner: &mut stdout,
         term_indices: use_sharing.then(AHashMap::new),
+        term_sharing_variable_prefix: "@p_",
     };
     printer.write_proof(commands)
+}
+
+pub fn write_lia_smt_instance(dest: &mut dyn io::Write, clause: &[Rc<Term>]) -> io::Result<()> {
+    let mut printer = AlethePrinter {
+        inner: dest,
+        term_indices: Some(AHashMap::new()),
+        term_sharing_variable_prefix: "p_",
+    };
+    printer.write_lia_smt_instance(clause)
 }
 
 trait PrintProof {
@@ -40,13 +54,13 @@ impl PrintWithSharing for Rc<Term> {
             // detect this case by checking if the number of references to it's `Rc` is exaclty 1.
             if !self.is_terminal() && !self.is_sort() && Rc::strong_count(self) > 1 {
                 return if let Some(i) = indices.get(self) {
-                    write!(p.inner, "@p_{}", i)
+                    write!(p.inner, "{}{}", p.term_sharing_variable_prefix, i)
                 } else {
                     let i = indices.len();
                     indices.insert(self.clone(), i);
                     write!(p.inner, "(! ")?;
                     p.write_raw_term(self)?;
-                    write!(p.inner, " :named @p_{})", i)
+                    write!(p.inner, " :named {}{})", p.term_sharing_variable_prefix, i)
                 };
             }
         }
@@ -81,6 +95,7 @@ impl PrintWithSharing for Operator {
 struct AlethePrinter<'a> {
     inner: &'a mut dyn io::Write,
     term_indices: Option<AHashMap<Rc<Term>, usize>>,
+    term_sharing_variable_prefix: &'static str,
 }
 
 impl<'a> PrintProof for AlethePrinter<'a> {
@@ -231,6 +246,15 @@ impl<'a> AlethePrinter<'a> {
             }
         }
     }
+
+    fn write_lia_smt_instance(&mut self, clause: &[Rc<Term>]) -> io::Result<()> {
+        for term in clause.iter().dedup() {
+            write!(self.inner, "(assert (not ")?;
+            term.print_with_sharing(self)?;
+            writeln!(self.inner, "))")?;
+        }
+        Ok(())
+    }
 }
 
 fn write_s_expr<H, T>(f: &mut fmt::Formatter, head: H, tail: &[T]) -> fmt::Result
@@ -380,5 +404,42 @@ impl fmt::Display for Sort {
             Sort::String => write!(f, "String"),
             Sort::Array(x, y) => write_s_expr(f, "Array", &[x, y]),
         }
+    }
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Token::OpenParen => write!(f, "("),
+            Token::CloseParen => write!(f, ")"),
+            Token::Symbol(s) => write!(f, "{}", quote_symbol(s)),
+            Token::Keyword(k) => write!(f, ":{}", k),
+            Token::Numeral(n) => write!(f, "{}", n),
+            Token::Decimal(r) => write!(f, "{}", r),
+            Token::String(s) => write!(f, "\"{}\"", escape_string(s)),
+            Token::ReservedWord(r) => write!(f, "{}", r),
+            Token::Eof => write!(f, "EOF"),
+        }
+    }
+}
+
+impl fmt::Display for ProblemPrelude {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "(set-logic {})", self.logic.as_deref().unwrap_or("ALL"))?;
+
+        for (name, arity) in &self.sort_declarations {
+            writeln!(f, "(declare-sort {} {})", name, arity)?;
+        }
+
+        for (name, sort) in &self.function_declarations {
+            write!(f, "(declare-fun {} ", name)?;
+            if let Sort::Function(sorts) = sort.as_sort().unwrap() {
+                write_s_expr(f, &sorts[0], &sorts[1..sorts.len() - 1])?;
+                writeln!(f, " {})", sorts.last().unwrap())?;
+            } else {
+                writeln!(f, "() {})", sort)?;
+            }
+        }
+        Ok(())
     }
 }
