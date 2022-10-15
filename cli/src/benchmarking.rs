@@ -1,4 +1,4 @@
-use alethe_proof_checker::{
+use carcara::{
     benchmarking::{CollectResults, CsvBenchmarkResults, RunMeasurement},
     checker,
     parser::parse_instance,
@@ -24,7 +24,7 @@ fn run_job<T: CollectResults + Default>(
     strict: bool,
     elaborate: bool,
     allow_int_real_subtyping: bool,
-) -> Result<(), alethe_proof_checker::Error> {
+) -> Result<(), carcara::Error> {
     let proof_file_name = job.proof_file.to_str().unwrap();
 
     let total = Instant::now();

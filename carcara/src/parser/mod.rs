@@ -10,7 +10,7 @@ pub use lexer::{Lexer, Position, Reserved, Token};
 use crate::{
     ast::*,
     utils::{HashCache, SymbolTable},
-    AletheResult, Error,
+    CarcaraResult, Error,
 };
 use ahash::{AHashMap, AHashSet};
 use error::assert_num_args;
@@ -25,7 +25,7 @@ pub fn parse_instance<T: BufRead>(
     proof: T,
     apply_function_defs: bool,
     allow_int_real_subtyping: bool,
-) -> AletheResult<(ProblemPrelude, Proof, TermPool)> {
+) -> CarcaraResult<(ProblemPrelude, Proof, TermPool)> {
     let mut pool = TermPool::new();
     let mut parser = Parser::new(
         &mut pool,
@@ -88,7 +88,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         input: R,
         apply_function_defs: bool,
         allow_int_real_subtyping: bool,
-    ) -> AletheResult<Self> {
+    ) -> CarcaraResult<Self> {
         let mut state = ParserState::default();
         let bool_sort = pool.add_term(Term::Sort(Sort::Bool));
         for iden in ["true", "false"] {
@@ -113,7 +113,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Resets the parser position and sets its input to `input`. This keeps the parser state,
     /// including all function, constant and sort declarations.
-    pub fn reset(&mut self, input: R) -> AletheResult<()> {
+    pub fn reset(&mut self, input: R) -> CarcaraResult<()> {
         let mut lexer = Lexer::new(input)?;
         let (current_token, current_position) = lexer.next_token()?;
         self.lexer = lexer;
@@ -128,7 +128,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     /// Advances the parser one token, and returns the previous `current_token`.
-    fn next_token(&mut self) -> AletheResult<(Token, Position)> {
+    fn next_token(&mut self) -> CarcaraResult<(Token, Position)> {
         use std::mem::replace;
 
         let (new_token, new_position) = self.lexer.next_token()?;
@@ -361,7 +361,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     /// Consumes the current token if it equals `expected`. Returns an error otherwise.
-    fn expect_token(&mut self, expected: Token) -> AletheResult<()> {
+    fn expect_token(&mut self, expected: Token) -> CarcaraResult<()> {
         let (got, pos) = self.next_token()?;
         if got == expected {
             Ok(())
@@ -372,7 +372,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Consumes the current token if it is a symbol, and returns the inner `String`. Returns an
     /// error otherwise.
-    fn expect_symbol(&mut self) -> AletheResult<String> {
+    fn expect_symbol(&mut self) -> CarcaraResult<String> {
         match self.next_token()? {
             (Token::Symbol(s), _) => Ok(s),
             (other, pos) => Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),
@@ -381,7 +381,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Consumes the current token if it is a keyword, and returns the inner `String`. Returns an
     /// error otherwise.
-    fn expect_keyword(&mut self) -> AletheResult<String> {
+    fn expect_keyword(&mut self) -> CarcaraResult<String> {
         match self.next_token()? {
             (Token::Keyword(s), _) => Ok(s),
             (other, pos) => Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),
@@ -390,7 +390,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Consumes the current token if it is a numeral, and returns the inner `Integer`. Returns an
     /// error otherwise.
-    fn expect_numeral(&mut self) -> AletheResult<Integer> {
+    fn expect_numeral(&mut self) -> CarcaraResult<Integer> {
         match self.next_token()? {
             (Token::Numeral(n), _) => Ok(n),
             (other, pos) => Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),
@@ -399,9 +399,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Calls `parse_func` repeatedly until a closing parenthesis is reached. If `non_empty` is
     /// true, empty sequences will result in an error. This method consumes the ending `)` token.
-    fn parse_sequence<T, F>(&mut self, mut parse_func: F, non_empty: bool) -> AletheResult<Vec<T>>
+    fn parse_sequence<T, F>(&mut self, mut parse_func: F, non_empty: bool) -> CarcaraResult<Vec<T>>
     where
-        F: FnMut(&mut Self) -> AletheResult<T>,
+        F: FnMut(&mut Self) -> CarcaraResult<T>,
     {
         let mut result = Vec::new();
         while self.current_token != Token::CloseParen {
@@ -419,7 +419,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     /// Reads tokens until the matching closing parenthesis is reached.
-    fn read_until_close_parens(&mut self) -> AletheResult<Vec<Token>> {
+    fn read_until_close_parens(&mut self) -> CarcaraResult<Vec<Token>> {
         let mut result = Vec::new();
         let mut parens_depth = 1;
         while parens_depth > 0 {
@@ -438,13 +438,13 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     /// Consumes and drops tokens until the matching closing parenthesis is reached.
-    fn ignore_until_close_parens(&mut self) -> AletheResult<()> {
+    fn ignore_until_close_parens(&mut self) -> CarcaraResult<()> {
         self.read_until_close_parens()?;
         Ok(())
     }
 
     /// Consumes and ignores attributes and their values until a closing parenthesis is reached.
-    fn ignore_remaining_attributes(&mut self) -> AletheResult<()> {
+    fn ignore_remaining_attributes(&mut self) -> CarcaraResult<()> {
         while let Token::Keyword(_) = self.current_token {
             self.next_token()?;
             match self.current_token {
@@ -489,7 +489,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     ///
     /// All other commands are ignored. This method returns a hash set containing the premises
     /// introduced in `assert` commands.
-    pub fn parse_problem(&mut self) -> AletheResult<(ProblemPrelude, AHashSet<Rc<Term>>)> {
+    pub fn parse_problem(&mut self) -> CarcaraResult<(ProblemPrelude, AHashSet<Rc<Term>>)> {
         self.problem = Some((ProblemPrelude::default(), AHashSet::new()));
 
         while self.current_token != Token::Eof {
@@ -552,7 +552,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Parses a proof in the Alethe format. All function, constant and sort declarations needed
     /// should already be in the parser state.
-    pub fn parse_proof(&mut self) -> AletheResult<Vec<ProofCommand>> {
+    pub fn parse_proof(&mut self) -> CarcaraResult<Vec<ProofCommand>> {
         // To avoid stack overflows in proofs with many nested subproofs, we parse the subproofs
         // iteratively, instead of recursively
         let mut commands_stack = vec![Vec::new()];
@@ -656,7 +656,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Parses an `assume` proof command. This method assumes that the `(` and `assume` tokens were
     /// already consumed.
-    fn parse_assume_command(&mut self) -> AletheResult<(String, Rc<Term>)> {
+    fn parse_assume_command(&mut self) -> CarcaraResult<(String, Rc<Term>)> {
         let id = self.expect_symbol()?;
         let term = self.parse_term_expecting_sort(&Sort::Bool)?;
         self.expect_token(Token::CloseParen)?;
@@ -665,7 +665,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Parses a `step` proof command. This method assumes that the `(` and `step` tokens were
     /// already consumed.
-    fn parse_step_command(&mut self) -> AletheResult<ProofStep> {
+    fn parse_step_command(&mut self) -> CarcaraResult<ProofStep> {
         let id = self.expect_symbol()?;
         let clause = self.parse_clause()?;
         self.expect_token(Token::Keyword("rule".into()))?;
@@ -733,7 +733,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Parses a premise for a `step` command. This already converts it into the depth and command
     /// index used to reference commands in the AST.
-    fn parse_step_premise(&mut self) -> AletheResult<(usize, usize)> {
+    fn parse_step_premise(&mut self) -> CarcaraResult<(usize, usize)> {
         let position = self.current_position;
         let id = HashCache::new(self.expect_symbol()?);
         self.state
@@ -747,7 +747,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// the current subproof are passed by their "relative" id. That is, the command `t5.t4.h2` is
     /// passed as simply `h2`. This behaviour is not present in other SMT solvers, like cvc5. To
     /// work around that, this function tries to find the command considering both possibilities.
-    fn parse_discharge_premise(&mut self, root_id: &str) -> AletheResult<(usize, usize)> {
+    fn parse_discharge_premise(&mut self, root_id: &str) -> CarcaraResult<(usize, usize)> {
         let position = self.current_position;
         let id = self.expect_symbol()?;
         let absolute_id = format!("{}.{}", root_id, &id);
@@ -764,7 +764,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// Parses an `anchor` proof command. This method assumes that the `(` and `anchor` tokens were
     /// already consumed. In order to parse the subproof arguments, this method pushes a new scope
     /// into the symbol table which must be removed after parsing the subproof.
-    fn parse_anchor_command(&mut self) -> AletheResult<AnchorCommand> {
+    fn parse_anchor_command(&mut self) -> CarcaraResult<AnchorCommand> {
         self.expect_token(Token::Keyword("step".into()))?;
         let end_step_id = self.expect_symbol()?;
 
@@ -796,7 +796,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Parses an argument for an `anchor` proof command. This can be either a variable binding of
     /// the form `(<symbol> <sort>)` or an assignment, of the form `(:= <symbol> <term>)`.
-    fn parse_anchor_argument(&mut self) -> AletheResult<AnchorArg> {
+    fn parse_anchor_argument(&mut self) -> CarcaraResult<AnchorArg> {
         self.expect_token(Token::OpenParen)?;
         Ok(if self.current_token == Token::Keyword("=".into()) {
             self.next_token()?;
@@ -819,7 +819,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Parses a `declare-fun` proof command. Returns the function name and a term representing its
     /// sort. This method assumes that the `(` and `declare-fun` tokens were already consumed.
-    fn parse_declare_fun(&mut self) -> AletheResult<(String, Rc<Term>)> {
+    fn parse_declare_fun(&mut self) -> CarcaraResult<(String, Rc<Term>)> {
         let name = self.expect_symbol()?;
         let sort = {
             self.expect_token(Token::OpenParen)?;
@@ -838,7 +838,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Parses a declare-sort proof command. Returns the sort name and its arity. This method
     /// assumes that the `(` and `declare-sort` tokens were already consumed.
-    fn parse_declare_sort(&mut self) -> AletheResult<(String, usize)> {
+    fn parse_declare_sort(&mut self) -> CarcaraResult<(String, usize)> {
         let name = self.expect_symbol()?;
         let arity_pos = self.current_position;
         let arity = self.expect_numeral()?;
@@ -852,7 +852,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Parses a `define-fun` proof command. Returns the function name and its definition. This
     /// method assumes that the `(` and `define-fun` tokens were already consumed.
-    fn parse_define_fun(&mut self) -> AletheResult<(String, FunctionDef)> {
+    fn parse_define_fun(&mut self) -> CarcaraResult<(String, FunctionDef)> {
         let name = self.expect_symbol()?;
         self.expect_token(Token::OpenParen)?;
         let params = self.parse_sequence(Self::parse_sorted_var, false)?;
@@ -873,14 +873,14 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     /// Parses a clause of the form `(cl <term>*)`.
-    fn parse_clause(&mut self) -> AletheResult<Vec<Rc<Term>>> {
+    fn parse_clause(&mut self) -> CarcaraResult<Vec<Rc<Term>>> {
         self.expect_token(Token::OpenParen)?;
         self.expect_token(Token::ReservedWord(Reserved::Cl))?;
         self.parse_sequence(|p| p.parse_term_expecting_sort(&Sort::Bool), false)
     }
 
     /// Parses an argument for a `step` command.
-    fn parse_proof_arg(&mut self) -> AletheResult<ProofArg> {
+    fn parse_proof_arg(&mut self) -> CarcaraResult<ProofArg> {
         if self.current_token == Token::OpenParen {
             self.next_token()?; // Consume `(` token
 
@@ -907,7 +907,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     /// Parses a sorted variable of the form `(<symbol> <sort>)`.
-    fn parse_sorted_var(&mut self) -> AletheResult<SortedVar> {
+    fn parse_sorted_var(&mut self) -> CarcaraResult<SortedVar> {
         self.expect_token(Token::OpenParen)?;
         let symbol = self.expect_symbol()?;
         let sort = self.parse_sort()?;
@@ -916,7 +916,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     /// Parses a term.
-    pub fn parse_term(&mut self) -> AletheResult<Rc<Term>> {
+    pub fn parse_term(&mut self) -> CarcaraResult<Rc<Term>> {
         let term = match self.next_token()? {
             (Token::Numeral(n), _) if self.interpret_integers_as_reals => {
                 terminal!(real n.into())
@@ -947,7 +947,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     /// Parses a term and checks that its sort matches the expected sort. If not, returns an error.
-    fn parse_term_expecting_sort(&mut self, expected_sort: &Sort) -> AletheResult<Rc<Term>> {
+    fn parse_term_expecting_sort(&mut self, expected_sort: &Sort) -> CarcaraResult<Rc<Term>> {
         let pos = self.current_position;
         let term = self.parse_term()?;
         SortError::assert_eq(expected_sort, self.sort(&term))
@@ -957,7 +957,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Parses a quantifier term. This method assumes that the `(` and quantifier tokens were
     /// already consumed.
-    fn parse_quantifier(&mut self, quantifier: Quantifier) -> AletheResult<Rc<Term>> {
+    fn parse_quantifier(&mut self, quantifier: Quantifier) -> CarcaraResult<Rc<Term>> {
         self.expect_token(Token::OpenParen)?;
         self.state.symbol_table.push_scope();
         let bindings = self.parse_sequence(
@@ -976,7 +976,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Parses a `choice` term. This method assumes that the `(` and `choice` tokens were already
     /// consumed.
-    fn parse_choice_term(&mut self) -> AletheResult<Rc<Term>> {
+    fn parse_choice_term(&mut self) -> CarcaraResult<Rc<Term>> {
         self.expect_token(Token::OpenParen)?;
         let var = self.parse_sorted_var()?;
         self.insert_sorted_var(var.clone());
@@ -988,7 +988,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Parses a `lambda` term. This method assumes that the `(` and `let` tokens were already
     /// consumed.
-    fn parse_lambda_term(&mut self) -> AletheResult<Rc<Term>> {
+    fn parse_lambda_term(&mut self) -> CarcaraResult<Rc<Term>> {
         self.expect_token(Token::OpenParen)?;
         self.state.symbol_table.push_scope();
         let bindings = self.parse_sequence(
@@ -1007,7 +1007,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Parses a `let` term. This method assumes that the `(` and `let` tokens were already
     /// consumed.
-    fn parse_let_term(&mut self) -> AletheResult<Rc<Term>> {
+    fn parse_let_term(&mut self) -> CarcaraResult<Rc<Term>> {
         self.expect_token(Token::OpenParen)?;
         self.state.symbol_table.push_scope();
         let bindings = self.parse_sequence(
@@ -1032,7 +1032,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// attributes are `:named` and `:pattern`, though the latter is ignored. If any other
     /// attribute is present, an error will be returned. This method assumes that the `(` and `!`
     /// tokens were already consumed.
-    fn parse_annotated_term(&mut self) -> AletheResult<Rc<Term>> {
+    fn parse_annotated_term(&mut self) -> CarcaraResult<Rc<Term>> {
         let inner = self.parse_term()?;
         self.parse_sequence(
             |p| {
@@ -1069,7 +1069,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Parses any term that starts with `(`, that is, any term that is not a constant or a
     /// variable. This method assumes that the `(` token was already consumed.
-    fn parse_application(&mut self) -> AletheResult<Rc<Term>> {
+    fn parse_application(&mut self) -> CarcaraResult<Rc<Term>> {
         let head_pos = self.current_position;
         match &self.current_token {
             &Token::ReservedWord(reserved) => {
@@ -1144,7 +1144,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     /// Parses a sort.
-    fn parse_sort(&mut self) -> AletheResult<Term> {
+    fn parse_sort(&mut self) -> CarcaraResult<Term> {
         let pos = self.current_position;
         let (name, args) = match self.next_token()?.0 {
             Token::Symbol(s) => (s, Vec::new()),

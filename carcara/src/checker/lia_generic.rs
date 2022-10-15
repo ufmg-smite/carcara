@@ -59,6 +59,7 @@ fn get_cvc5_proof(
             "--lang=smt2",
             "--proof-format-mode=alethe",
             "--proof-granularity=theory-rewrite",
+            "--proof-alethe-res-pivots",
         ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -104,7 +105,7 @@ fn parse_and_check_cvc5_proof(
     pool: &mut TermPool,
     problem: &[u8],
     proof: &[u8],
-) -> AletheResult<Vec<ProofCommand>> {
+) -> CarcaraResult<Vec<ProofCommand>> {
     let mut parser = parser::Parser::new(pool, problem, true, true)?;
     let (prelude, premises) = parser.parse_problem()?;
     parser.reset(proof)?;

@@ -4,7 +4,7 @@ pub mod error;
 mod lia_generic;
 mod rules;
 
-use crate::{ast::*, benchmarking::CollectResults, AletheResult, Error};
+use crate::{ast::*, benchmarking::CollectResults, CarcaraResult, Error};
 use ahash::AHashSet;
 use context::*;
 use elaboration::Elaborator;
@@ -73,7 +73,7 @@ impl<'c> ProofChecker<'c> {
         }
     }
 
-    pub fn check(&mut self, proof: &Proof) -> AletheResult<bool> {
+    pub fn check(&mut self, proof: &Proof) -> CarcaraResult<bool> {
         // Similarly to the parser, to avoid stack overflows in proofs with many nested subproofs,
         // we check the subproofs iteratively, instead of recursively
         let mut iter = proof.iter();
@@ -155,7 +155,7 @@ impl<'c> ProofChecker<'c> {
         }
     }
 
-    pub fn check_and_elaborate(&mut self, mut proof: Proof) -> AletheResult<Proof> {
+    pub fn check_and_elaborate(&mut self, mut proof: Proof) -> CarcaraResult<Proof> {
         self.elaborator = Some(Elaborator::new());
         let result = self.check(&proof);
 
@@ -178,7 +178,7 @@ impl<'c> ProofChecker<'c> {
         term: &Rc<Term>,
         premises: &AHashSet<Rc<Term>>,
         iter: &ProofIter,
-    ) -> AletheResult<()> {
+    ) -> CarcaraResult<()> {
         let time = Instant::now();
 
         // Some subproofs contain `assume` commands inside them. These don't refer
@@ -256,7 +256,9 @@ impl<'c> ProofChecker<'c> {
         let mut deep_eq_time = Duration::ZERO;
 
         if step.rule == "lia_generic" {
-            if self.config.check_lia_generic_using_cvc5 {
+            if self.config.check_lia_generic_using_cvc5
+                && self.prelude.logic.as_deref() == Some("QF_UFLIA")
+            {
                 let is_hole = lia_generic::lia_generic(
                     self.pool,
                     &step.clause,
@@ -465,7 +467,7 @@ impl<'c> ProofChecker<'c> {
 pub fn generate_lia_smt_instances(
     prelude: ProblemPrelude,
     proof: &Proof,
-) -> AletheResult<Vec<(String, String)>> {
+) -> CarcaraResult<Vec<(String, String)>> {
     use std::fmt::Write;
 
     let mut iter = proof.iter();

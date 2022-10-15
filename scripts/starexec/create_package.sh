@@ -8,6 +8,6 @@ RUSTFLAGS="-C target-cpu=sandybridge" cross build \
     --profile release-lto \
     || exit 1
 
-rm -f ./bin/alethe-proof-checker
-cp ../../target/x86_64-unknown-linux-gnu/release-lto/alethe-proof-checker ./bin/
-tar czf alethe-proof-checker.tar.gz bin starexec_description.txt
+rm -f ./bin/carcara
+cp ../../target/x86_64-unknown-linux-gnu/release-lto/carcara ./bin/
+tar czf carcara.tar.gz bin starexec_description.txt

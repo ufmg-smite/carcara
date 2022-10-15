@@ -14,32 +14,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "alethe-proof-checker"
-version = "0.1.0"
-dependencies = [
- "ahash",
- "log",
- "rand",
- "rug",
- "thiserror",
-]
-
-[[package]]
-name = "alethe-proof-checker-cli"
-version = "0.1.0"
-dependencies = [
- "ahash",
- "alethe-proof-checker",
- "ansi_term",
- "atty",
- "clap",
- "const_format",
- "crossbeam",
- "git-version",
- "log",
-]
-
-[[package]]
 name = "ansi_term"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -76,6 +50,32 @@ name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
+
+[[package]]
+name = "carcara"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "log",
+ "rand",
+ "rug",
+ "thiserror",
+]
+
+[[package]]
+name = "carcara-cli"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "ansi_term",
+ "atty",
+ "carcara",
+ "clap",
+ "const_format",
+ "crossbeam",
+ "git-version",
+ "log",
+]
 
 [[package]]
 name = "cfg-if"

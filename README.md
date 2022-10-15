@@ -1,6 +1,6 @@
-# Alethe Proof Checker
+# Carcará
 
-The Alethe Proof Checker is a checker for SMT proofs in the Alethe format.
+Carcará is a proof checker and elaborator for SMT proofs in the Alethe format.
 
 ### Building and running
 

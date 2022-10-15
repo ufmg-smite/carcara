@@ -7,7 +7,7 @@ if [[ $result = "sat" ]]; then
 elif [[ $result = "unsat" ]]; then
     # Remove every line until the line that is only '(', and also remove the
     # last line. This removes the parentheses that were added around the proof
-    sed '0,/^($/d; $d' $2 | ./alethe-proof-checker --log error check - $1 > /dev/null
+    sed '0,/^($/d; $d' $2 | ./carcara --log error check - $1 > /dev/null
     if [ $? -eq 0 ]; then
         echo "valid"
     else

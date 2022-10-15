@@ -48,7 +48,7 @@ use parser::Position;
 use std::io;
 use thiserror::Error;
 
-pub type AletheResult<T> = Result<T, Error>;
+pub type CarcaraResult<T> = Result<T, Error>;
 
 #[derive(Debug, Error)]
 pub enum Error {

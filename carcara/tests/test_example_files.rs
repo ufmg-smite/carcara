@@ -1,4 +1,4 @@
-use alethe_proof_checker::*;
+use carcara::*;
 use std::{ffi::OsStr, fs, io, path::Path};
 
 fn get_truncated_message(e: &Error) -> String {
@@ -15,7 +15,7 @@ fn get_truncated_message(e: &Error) -> String {
     error_message
 }
 
-fn run_test(problem_path: &Path, proof_path: &Path) -> AletheResult<()> {
+fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
     fn test_config<'a>() -> checker::Config<'a> {
         checker::Config {
             strict: false,

@@ -3,7 +3,7 @@ mod error;
 mod logger;
 mod path_args;
 
-use alethe_proof_checker::{
+use carcara::{
     ast::print_proof,
     benchmarking::{Metrics, OnlineBenchmarkResults},
     check, check_and_elaborate, generate_lia_smt_instances, parser,
@@ -34,7 +34,7 @@ const VERSION_STRING: &str = formatcp!(
 
 #[derive(Parser)]
 #[clap(
-    name = "alethe-proof-checker",
+    name = "carcara",
     version = VERSION_STRING,
     setting = AppSettings::DeriveDisplayOrder
 )]
@@ -238,7 +238,7 @@ fn parse_command(options: ParseOptions) -> CliResult<()> {
         !options.input.dont_apply_function_defs,
         options.input.allow_int_real_subtyping,
     )
-    .map_err(alethe_proof_checker::Error::from)?;
+    .map_err(carcara::Error::from)?;
     print_proof(&proof.commands, options.printing.use_sharing)?;
     Ok(())
 }

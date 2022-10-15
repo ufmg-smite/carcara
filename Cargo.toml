@@ -1,5 +1,5 @@
 [workspace]
-members = ["alethe-proof-checker", "cli"]
+members = ["carcara", "cli"]
 
 [profile.release]
 debug = 1

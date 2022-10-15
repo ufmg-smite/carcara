@@ -1,4 +1,4 @@
-use crate::{parser::ParserError, utils::is_symbol_character, AletheResult, Error};
+use crate::{parser::ParserError, utils::is_symbol_character, CarcaraResult, Error};
 use rug::{ops::Pow, Integer, Rational};
 use std::{
     io::{self, BufRead},
@@ -233,7 +233,7 @@ impl<R: BufRead> Lexer<R> {
     }
 
     /// Reads a token from the input source.
-    pub fn next_token(&mut self) -> AletheResult<(Token, Position)> {
+    pub fn next_token(&mut self) -> CarcaraResult<(Token, Position)> {
         self.consume_whitespace()?;
         let start_position = self.position;
         let token = match self.current_char {
@@ -261,7 +261,7 @@ impl<R: BufRead> Lexer<R> {
     }
 
     /// Reads a simple symbol from the input source.
-    fn read_simple_symbol(&mut self) -> AletheResult<Token> {
+    fn read_simple_symbol(&mut self) -> CarcaraResult<Token> {
         let symbol = self.read_chars_while(is_symbol_character)?;
         if let Ok(reserved) = Reserved::from_str(&symbol) {
             Ok(Token::ReservedWord(reserved))
@@ -271,7 +271,7 @@ impl<R: BufRead> Lexer<R> {
     }
 
     /// Reads a quoted symbol from the input source.
-    fn read_quoted_symbol(&mut self) -> AletheResult<Token> {
+    fn read_quoted_symbol(&mut self) -> CarcaraResult<Token> {
         self.next_char()?; // Consume `|`
         let symbol = self.read_chars_while(|c| c != '|' && c != '\\')?;
         match self.current_char {
@@ -289,7 +289,7 @@ impl<R: BufRead> Lexer<R> {
     }
 
     /// Reads a keyword from the input source.
-    fn read_keyword(&mut self) -> AletheResult<Token> {
+    fn read_keyword(&mut self) -> CarcaraResult<Token> {
         self.next_char()?; // Consume `:`
         let symbol = self.read_chars_while(is_symbol_character)?;
         Ok(Token::Keyword(symbol))
@@ -297,7 +297,7 @@ impl<R: BufRead> Lexer<R> {
 
     /// Reads a binary or hexadecimal literal, e.g. `#b0110` or `#x01Ab`. Returns an error if any
     /// character other than `b` or `x` is encountered after the `#`.
-    fn read_number_with_base(&mut self) -> AletheResult<Token> {
+    fn read_number_with_base(&mut self) -> CarcaraResult<Token> {
         self.next_char()?; // Consume `#`
         let base = match self.next_char()? {
             Some('b') => 2,
@@ -315,7 +315,7 @@ impl<R: BufRead> Lexer<R> {
     }
 
     /// Reads an integer or decimal numerical literal.
-    fn read_number(&mut self) -> AletheResult<Token> {
+    fn read_number(&mut self) -> CarcaraResult<Token> {
         let int_part = self.read_chars_while(|c| c.is_ascii_digit())?;
 
         if int_part.len() > 1 && int_part.starts_with('0') {
@@ -338,7 +338,7 @@ impl<R: BufRead> Lexer<R> {
     }
 
     /// Reads a string literal from the input source.
-    fn read_string(&mut self) -> AletheResult<Token> {
+    fn read_string(&mut self) -> CarcaraResult<Token> {
         self.next_char()?; // Consume `"`
         let mut result = String::new();
         loop {
@@ -362,7 +362,7 @@ impl<R: BufRead> Lexer<R> {
 mod tests {
     use super::*;
 
-    fn lex_one(input: &str) -> AletheResult<Token> {
+    fn lex_one(input: &str) -> CarcaraResult<Token> {
         let mut lex = Lexer::new(std::io::Cursor::new(input))?;
         lex.next_token().map(|(tk, _)| tk)
     }
