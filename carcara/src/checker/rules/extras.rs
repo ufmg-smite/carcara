@@ -4,6 +4,7 @@ use super::{
     assert_clause_len, assert_eq, assert_num_premises, get_premise_term, CheckerError,
     EqualityError, RuleArgs, RuleResult,
 };
+use crate::{ast::*, checker::rules::assert_operation_len};
 use ahash::AHashSet;
 
 pub fn reordering(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
@@ -107,6 +108,79 @@ pub fn bind_let(
 
     assert_eq(left, phi)?;
     assert_eq(right, phi_prime)
+}
+
+pub fn la_mult_pos(args: RuleArgs) -> RuleResult {
+    la_mult_generic(args.conclusion, true)
+}
+
+pub fn la_mult_neg(args: RuleArgs) -> RuleResult {
+    la_mult_generic(args.conclusion, false)
+}
+
+fn la_mult_generic(conclusion: &[Rc<Term>], is_pos: bool) -> RuleResult {
+    use rug::Rational;
+
+    fn match_comparison_term(
+        op: Operator,
+        term: &Rc<Term>,
+    ) -> Result<(&Rc<Term>, &Rc<Term>), CheckerError> {
+        match op {
+            Operator::Equals => match_term_err!((= a b) = term),
+            Operator::LessThan => match_term_err!((< a b) = term),
+            Operator::GreaterThan => match_term_err!((> a b) = term),
+            Operator::LessEq => match_term_err!((<= a b) = term),
+            Operator::GreaterEq => match_term_err!((>= a b) = term),
+            _ => unreachable!(),
+        }
+    }
+
+    assert_clause_len(conclusion, 1)?;
+    let ((m_comparison, original), scaled) =
+        match_term_err!((=> (and m_comparison original) scaled) = &conclusion[0])?;
+    let (m, zero) = if is_pos {
+        match_term_err!((> m zero) = m_comparison)
+    } else {
+        match_term_err!((< m zero) = m_comparison)
+    }?;
+    let m = m.as_fraction_err()?;
+    rassert!(
+        zero.as_number_err()? == 0,
+        CheckerError::ExpectedNumber(Rational::new(), zero.clone())
+    );
+
+    let (op, args) = original.unwrap_op_err()?;
+    assert_operation_len(op, args, 2)?;
+    let (l, r) = (&args[0], &args[1]);
+
+    let op = if is_pos {
+        op
+    } else {
+        match op {
+            Operator::Equals => Operator::Equals,
+            Operator::LessThan => Operator::GreaterThan,
+            Operator::GreaterThan => Operator::LessThan,
+            Operator::LessEq => Operator::GreaterEq,
+            Operator::GreaterEq => Operator::LessEq,
+            _ => unreachable!(),
+        }
+    };
+
+    let (ml, mr) = match_comparison_term(op, scaled)?;
+    let ((m_1, l_1), (m_2, r_2)) = (
+        match_term_err!((* m l) = ml)?,
+        match_term_err!((* m r) = mr)?,
+    );
+    rassert!(
+        m_1.as_fraction_err()? == m,
+        CheckerError::ExpectedNumber(m.clone(), m_1.clone())
+    );
+    rassert!(
+        m_2.as_fraction_err()? == m,
+        CheckerError::ExpectedNumber(m, m_2.clone())
+    );
+    assert_eq(l, l_1)?;
+    assert_eq(r, r_2)
 }
 
 #[cfg(test)]
@@ -249,6 +323,46 @@ mod tests {
                 (step t1.t2 (cl (= x y)) :rule hole)
                 (step t1 (cl (= (let ((a (= 0 1))) x) (let ((a (= 1 0))) y)))
                     :rule bind_let :premises (t1.t1))": true,
+            }
+        }
+    }
+
+    #[test]
+    fn la_mult_pos() {
+        test_cases! {
+            definitions = "
+                (declare-fun a () Int)
+                (declare-fun b () Int)
+                (declare-fun x () Real)
+                (declare-fun y () Real)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (=> (and (> 2 0) (> a b)) (> (* 2 a) (* 2 b))))
+                    :rule la_mult_pos)": true,
+                "(step t1 (cl (=>
+                    (and (> (/ 10.0 13.0) 0.0) (= x y))
+                    (= (* (/ 10.0 13.0) x) (* (/ 10.0 13.0) y)))
+                ) :rule la_mult_pos)": true,
+            }
+        }
+    }
+
+    #[test]
+    fn la_mult_neg() {
+        test_cases! {
+            definitions = "
+                (declare-fun a () Int)
+                (declare-fun b () Int)
+                (declare-fun x () Real)
+                (declare-fun y () Real)
+            ",
+            "Simple working examples" {
+                "(step t1 (cl (=> (and (< (- 2) 0) (>= a b)) (<= (* (- 2) a) (* (- 2) b))))
+                    :rule la_mult_neg)": true,
+                "(step t1 (cl (=>
+                    (and (< (/ (- 1.0) 13.0) 0.0) (= x y))
+                    (= (* (/ (- 1.0) 13.0) x) (* (/ (- 1.0) 13.0) y)))
+                ) :rule la_mult_neg)": true,
             }
         }
     }

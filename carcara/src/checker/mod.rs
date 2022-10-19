@@ -438,6 +438,8 @@ impl<'c> ProofChecker<'c> {
             "eq_symmetric" => extras::eq_symmetric,
             "or_intro" => extras::or_intro,
             "bind_let" => extras::bind_let,
+            "la_mult_pos" => extras::la_mult_pos,
+            "la_mult_neg" => extras::la_mult_neg,
 
             // Special rules that always check as valid, and are used to indicate holes in the
             // proof.

@@ -439,6 +439,15 @@ impl Term {
         }
     }
 
+    /// Tries to unwrap an operation term, returning the `Operator` and the arguments. Returns
+    /// `None` if the term is not an operation term.
+    pub fn unwrap_op(&self) -> Option<(Operator, &[Rc<Term>])> {
+        match self {
+            Term::Op(op, args) => Some((*op, args.as_slice())),
+            _ => None,
+        }
+    }
+
     /// Tries to unwrap a quantifier term, returning the `Quantifier`, the bindings and the inner
     /// term. Returns `None` if the term is not a quantifier term.
     pub fn unwrap_quant(&self) -> Option<(Quantifier, &BindingList, &Rc<Term>)> {
@@ -530,6 +539,13 @@ impl Rc<Term> {
     pub fn as_fraction_err(&self) -> Result<Rational, CheckerError> {
         self.as_fraction()
             .ok_or_else(|| CheckerError::ExpectedAnyNumber(self.clone()))
+    }
+
+    /// Tries to unwrap an operation term, returning the `Operator` and the arguments. Returns a
+    /// `CheckerError` if the term is not an operation term.
+    pub fn unwrap_op_err(&self) -> Result<(Operator, &[Rc<Term>]), CheckerError> {
+        self.unwrap_op()
+            .ok_or_else(|| CheckerError::ExpectedOperationTerm(self.clone()))
     }
 
     /// Tries to unwrap a quantifier term, returning the `Quantifier`, the bindings and the inner
