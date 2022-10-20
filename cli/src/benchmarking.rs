@@ -24,6 +24,7 @@ fn run_job<T: CollectResults + Default>(
     strict: bool,
     elaborate: bool,
     allow_int_real_subtyping: bool,
+    lia_via_cvc5: bool,
 ) -> Result<(), carcara::Error> {
     let proof_file_name = job.proof_file.to_str().unwrap();
 
@@ -55,7 +56,7 @@ fn run_job<T: CollectResults + Default>(
             assume_core_time: &mut assume_core,
             results,
         }),
-        check_lia_generic_using_cvc5: true,
+        check_lia_generic_using_cvc5: lia_via_cvc5,
     };
     let mut checker = checker::ProofChecker::new(&mut pool, config, prelude);
 
@@ -93,6 +94,7 @@ fn worker_thread<T: CollectResults + Default>(
     strict: bool,
     elaborate: bool,
     allow_int_real_subtyping: bool,
+    lia_via_cvc5: bool,
 ) -> T {
     let mut results = T::default();
 
@@ -103,6 +105,7 @@ fn worker_thread<T: CollectResults + Default>(
             strict,
             elaborate,
             allow_int_real_subtyping,
+            lia_via_cvc5,
         );
         if result.is_err() {
             log::error!("encountered error in file '{}'", job.proof_file.display());
@@ -119,6 +122,7 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
     strict: bool,
     elaborate: bool,
     allow_int_real_subtyping: bool,
+    lia_via_cvc5: bool,
 ) -> T {
     const STACK_SIZE: usize = 128 * 1024 * 1024;
 
@@ -145,7 +149,13 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
                 s.builder()
                     .stack_size(STACK_SIZE)
                     .spawn(move |_| {
-                        worker_thread::<T>(jobs_queue, strict, elaborate, allow_int_real_subtyping)
+                        worker_thread::<T>(
+                            jobs_queue,
+                            strict,
+                            elaborate,
+                            allow_int_real_subtyping,
+                            lia_via_cvc5,
+                        )
                     })
                     .unwrap()
             })
@@ -167,6 +177,7 @@ pub fn run_csv_benchmark(
     strict: bool,
     elaborate: bool,
     allow_int_real_subtyping: bool,
+    lia_via_cvc5: bool,
     runs_dest: &mut dyn io::Write,
     by_rule_dest: &mut dyn io::Write,
 ) -> io::Result<()> {
@@ -177,6 +188,7 @@ pub fn run_csv_benchmark(
         strict,
         elaborate,
         allow_int_real_subtyping,
+        lia_via_cvc5,
     );
     result.write_csv(runs_dest, by_rule_dest)
 }

@@ -151,6 +151,10 @@ struct BenchmarkOptions {
     #[clap(long)]
     allow_int_real_subtyping: bool,
 
+    /// Enables checking of `lia_generic` using cvc5.
+    #[clap(long)]
+    lia_via_cvc5: bool,
+
     /// Show benchmark results sorted by total time taken, instead of by average time taken.
     #[clap(short = 't', long)]
     sort_by_total: bool,
@@ -293,6 +297,7 @@ fn bench_command(options: BenchmarkOptions) -> CliResult<()> {
             options.strict,
             options.elaborate,
             options.allow_int_real_subtyping,
+            options.lia_via_cvc5,
             &mut File::create("runs.csv")?,
             &mut File::create("by-rule.csv")?,
         )?;
@@ -306,6 +311,7 @@ fn bench_command(options: BenchmarkOptions) -> CliResult<()> {
         options.strict,
         options.elaborate,
         options.allow_int_real_subtyping,
+        options.lia_via_cvc5,
     );
     if results.is_empty() {
         println!("no benchmark data collected");
