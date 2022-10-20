@@ -123,12 +123,7 @@ fn parse_and_check_cvc5_proof(
     Ok(proof.commands)
 }
 
-fn update_premises(
-    commands: &mut [ProofCommand],
-    depth_delta: usize,
-    index_delta: usize,
-    root_id: &str,
-) {
+fn update_premises(commands: &mut [ProofCommand], delta: usize, root_id: &str) {
     for c in commands {
         match c {
             ProofCommand::Assume { id, .. } => {
@@ -136,13 +131,15 @@ fn update_premises(
             }
             ProofCommand::Step(s) => {
                 s.id = format!("{}.{}", root_id, s.id);
-                for p in &mut s.premises {
-                    p.0 += depth_delta;
-                    p.1 += index_delta;
+                for p in s.premises.iter_mut().chain(s.discharge.iter_mut()) {
+                    if p.0 == 0 {
+                        p.1 += delta;
+                    }
+                    p.0 += 1;
                 }
             }
             ProofCommand::Subproof(s) => {
-                update_premises(&mut s.commands, depth_delta, 0, root_id);
+                update_premises(&mut s.commands, delta, root_id);
             }
         }
     }
@@ -219,7 +216,7 @@ fn insert_cvc5_proof(
         .unzip();
     clause.push(pool.bool_false());
 
-    update_premises(&mut commands, 1, num_added, &subproof_id);
+    update_premises(&mut commands, num_added, &subproof_id);
     for c in commands {
         elaborator.add_new_command(c, true);
     }
