@@ -256,9 +256,7 @@ impl<'c> ProofChecker<'c> {
         let mut deep_eq_time = Duration::ZERO;
 
         if step.rule == "lia_generic" {
-            if self.config.check_lia_generic_using_cvc5
-                && self.prelude.logic.as_deref() == Some("QF_UFLIA")
-            {
+            if self.config.check_lia_generic_using_cvc5 {
                 let is_hole = lia_generic::lia_generic(
                     self.pool,
                     &step.clause,
