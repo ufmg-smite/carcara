@@ -333,7 +333,13 @@ impl fmt::Display for Terminal {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Terminal::Integer(i) => write!(f, "{}", i),
-            Terminal::Real(r) => write!(f, "{:?}", r.to_f64()),
+            Terminal::Real(r) => {
+                if r.is_integer() {
+                    write!(f, "{:?}.0", r.numer())
+                } else {
+                    write!(f, "{:?}", r.to_f64())
+                }
+            }
             Terminal::String(s) => write!(f, "\"{}\"", escape_string(s)),
             Terminal::Var(iden, _) => write!(f, "{}", iden),
         }
