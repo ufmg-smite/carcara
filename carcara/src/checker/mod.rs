@@ -223,18 +223,24 @@ impl<'c> ProofChecker<'c> {
             }
         }
 
-        if let Some(s) = &mut self.config.statistics {
-            let time = time.elapsed();
-            *s.assume_time += time;
-            *s.assume_core_time += core_time;
-            *s.deep_eq_time += deep_eq_time;
-            s.results
-                .add_assume_measurement(s.file_name, id, false, time);
-        }
-
         if let Some(p) = found {
             if let Some(elaborator) = &mut self.elaborator {
+                let elaboration_time = Instant::now();
+
                 elaborator.elaborate_assume(self.pool, p, term.clone(), id);
+
+                if let Some(s) = &mut self.config.statistics {
+                    *s.elaboration_time += elaboration_time.elapsed();
+                }
+            }
+
+            if let Some(s) = &mut self.config.statistics {
+                let time = time.elapsed();
+                *s.assume_time += time;
+                *s.assume_core_time += core_time;
+                *s.deep_eq_time += deep_eq_time;
+                s.results
+                    .add_assume_measurement(s.file_name, id, false, time);
             }
             Ok(())
         } else {
@@ -255,6 +261,7 @@ impl<'c> ProofChecker<'c> {
         let time = Instant::now();
         let mut deep_eq_time = Duration::ZERO;
 
+        let mut elaborated = false;
         if step.rule == "lia_generic" {
             if self.config.check_lia_generic_using_cvc5 {
                 let is_hole = lia_generic::lia_generic(
@@ -265,6 +272,7 @@ impl<'c> ProofChecker<'c> {
                     &step.id,
                 );
                 self.is_holey = self.is_holey || is_hole;
+                elaborated = self.elaborator.is_some();
             } else {
                 log::warn!("encountered \"lia_generic\" rule, ignoring");
                 self.is_holey = true;
@@ -317,6 +325,7 @@ impl<'c> ProofChecker<'c> {
             if let Some(elaborator) = &mut self.elaborator {
                 if let Some(elaboration_rule) = Self::get_elaboration_rule(&step.rule) {
                     elaboration_rule(rule_args, step.id.clone(), elaborator)?;
+                    elaborated = true;
                 } else {
                     rule(rule_args)?;
                     elaborator.unchanged(&step.clause);
@@ -327,9 +336,13 @@ impl<'c> ProofChecker<'c> {
         }
 
         if let Some(s) = &mut self.config.statistics {
+            let time = time.elapsed();
             s.results
-                .add_step_measurement(s.file_name, &step.id, &step.rule, time.elapsed());
+                .add_step_measurement(s.file_name, &step.id, &step.rule, time);
             *s.deep_eq_time += deep_eq_time;
+            if elaborated {
+                *s.elaboration_time += time;
+            }
         }
         Ok(())
     }
