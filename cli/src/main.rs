@@ -187,7 +187,7 @@ struct BenchCommandOptions {
     elaborate: bool,
 
     /// Number of times to run the benchmark for each file.
-    #[clap(short, long, default_value_t = 10)]
+    #[clap(short, long, default_value_t = 1)]
     num_runs: usize,
 
     /// Number of threads to use when running the benchmark.
