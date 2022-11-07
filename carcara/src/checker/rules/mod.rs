@@ -177,7 +177,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
                 skip_unknown_rules: false,
                 is_running_test: true,
                 statistics: None,
-                check_lia_generic_using_cvc5: true,
+                check_lia_using_cvc5: true,
             },
             prelude,
         );

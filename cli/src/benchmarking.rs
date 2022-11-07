@@ -2,6 +2,7 @@ use carcara::{
     benchmarking::{CollectResults, CsvBenchmarkResults, RunMeasurement},
     checker,
     parser::parse_instance,
+    CarcaraOptions,
 };
 use crossbeam::queue::ArrayQueue;
 use std::{
@@ -21,10 +22,14 @@ struct JobDescriptor<'a> {
 fn run_job<T: CollectResults + Default>(
     results: &mut T,
     job: JobDescriptor,
-    strict: bool,
+    &CarcaraOptions {
+        apply_function_defs,
+        allow_int_real_subtyping,
+        check_lia_using_cvc5,
+        strict,
+        skip_unknown_rules,
+    }: &CarcaraOptions,
     elaborate: bool,
-    allow_int_real_subtyping: bool,
-    lia_via_cvc5: bool,
 ) -> Result<(), carcara::Error> {
     let proof_file_name = job.proof_file.to_str().unwrap();
 
@@ -34,7 +39,7 @@ fn run_job<T: CollectResults + Default>(
     let (prelude, proof, mut pool) = parse_instance(
         BufReader::new(File::open(job.problem_file)?),
         BufReader::new(File::open(job.proof_file)?),
-        true,
+        apply_function_defs,
         allow_int_real_subtyping,
     )?;
     let parsing = parsing.elapsed();
@@ -46,7 +51,7 @@ fn run_job<T: CollectResults + Default>(
 
     let config = checker::Config {
         strict,
-        skip_unknown_rules: false,
+        skip_unknown_rules,
         is_running_test: false,
         statistics: Some(checker::CheckerStatistics {
             file_name: proof_file_name,
@@ -56,7 +61,7 @@ fn run_job<T: CollectResults + Default>(
             assume_core_time: &mut assume_core,
             results,
         }),
-        check_lia_generic_using_cvc5: lia_via_cvc5,
+        check_lia_using_cvc5,
     };
     let mut checker = checker::ProofChecker::new(&mut pool, config, prelude);
 
@@ -91,22 +96,13 @@ fn run_job<T: CollectResults + Default>(
 
 fn worker_thread<T: CollectResults + Default>(
     jobs_queue: &ArrayQueue<JobDescriptor>,
-    strict: bool,
+    options: &CarcaraOptions,
     elaborate: bool,
-    allow_int_real_subtyping: bool,
-    lia_via_cvc5: bool,
 ) -> T {
     let mut results = T::default();
 
     while let Some(job) = jobs_queue.pop() {
-        let result = run_job(
-            &mut results,
-            job,
-            strict,
-            elaborate,
-            allow_int_real_subtyping,
-            lia_via_cvc5,
-        );
+        let result = run_job(&mut results, job, options, elaborate);
         if result.is_err() {
             log::error!("encountered error in file '{}'", job.proof_file.display());
         }
@@ -119,10 +115,8 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
     instances: &[(PathBuf, PathBuf)],
     num_runs: usize,
     num_threads: usize,
-    strict: bool,
+    options: &CarcaraOptions,
     elaborate: bool,
-    allow_int_real_subtyping: bool,
-    lia_via_cvc5: bool,
 ) -> T {
     const STACK_SIZE: usize = 128 * 1024 * 1024;
 
@@ -148,15 +142,7 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
             .map(|_| {
                 s.builder()
                     .stack_size(STACK_SIZE)
-                    .spawn(move |_| {
-                        worker_thread::<T>(
-                            jobs_queue,
-                            strict,
-                            elaborate,
-                            allow_int_real_subtyping,
-                            lia_via_cvc5,
-                        )
-                    })
+                    .spawn(move |_| worker_thread::<T>(jobs_queue, options, elaborate))
                     .unwrap()
             })
             .collect();
@@ -174,21 +160,12 @@ pub fn run_csv_benchmark(
     instances: &[(PathBuf, PathBuf)],
     num_runs: usize,
     num_threads: usize,
-    strict: bool,
+    options: &CarcaraOptions,
     elaborate: bool,
-    allow_int_real_subtyping: bool,
-    lia_via_cvc5: bool,
     runs_dest: &mut dyn io::Write,
     by_rule_dest: &mut dyn io::Write,
 ) -> io::Result<()> {
-    let result: CsvBenchmarkResults = run_benchmark(
-        instances,
-        num_runs,
-        num_threads,
-        strict,
-        elaborate,
-        allow_int_real_subtyping,
-        lia_via_cvc5,
-    );
+    let result: CsvBenchmarkResults =
+        run_benchmark(instances, num_runs, num_threads, options, elaborate);
     result.write_csv(runs_dest, by_rule_dest)
 }

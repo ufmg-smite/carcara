@@ -47,7 +47,7 @@ pub struct Config<'c> {
     pub skip_unknown_rules: bool,
     pub is_running_test: bool,
     pub statistics: Option<CheckerStatistics<'c>>,
-    pub check_lia_generic_using_cvc5: bool,
+    pub check_lia_using_cvc5: bool,
 }
 
 pub struct ProofChecker<'c> {
@@ -263,7 +263,7 @@ impl<'c> ProofChecker<'c> {
 
         let mut elaborated = false;
         if step.rule == "lia_generic" {
-            if self.config.check_lia_generic_using_cvc5 {
+            if self.config.check_lia_using_cvc5 {
                 let is_hole = lia_generic::lia_generic(
                     self.pool,
                     &step.clause,
@@ -480,6 +480,7 @@ impl<'c> ProofChecker<'c> {
 pub fn generate_lia_smt_instances(
     prelude: ProblemPrelude,
     proof: &Proof,
+    use_sharing: bool,
 ) -> CarcaraResult<Vec<(String, String)>> {
     use std::fmt::Write;
 
@@ -499,7 +500,7 @@ pub fn generate_lia_smt_instances(
                 write!(&mut problem, "{}", prelude).unwrap();
 
                 let mut bytes = Vec::new();
-                printer::write_lia_smt_instance(&mut bytes, &step.clause).unwrap();
+                printer::write_lia_smt_instance(&mut bytes, &step.clause, use_sharing).unwrap();
                 write!(&mut problem, "{}", String::from_utf8(bytes).unwrap()).unwrap();
 
                 writeln!(&mut problem, "(check-sat)").unwrap();

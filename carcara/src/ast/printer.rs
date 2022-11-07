@@ -16,10 +16,14 @@ pub fn print_proof(commands: &[ProofCommand], use_sharing: bool) -> io::Result<(
     printer.write_proof(commands)
 }
 
-pub fn write_lia_smt_instance(dest: &mut dyn io::Write, clause: &[Rc<Term>]) -> io::Result<()> {
+pub fn write_lia_smt_instance(
+    dest: &mut dyn io::Write,
+    clause: &[Rc<Term>],
+    use_sharing: bool,
+) -> io::Result<()> {
     let mut printer = AlethePrinter {
         inner: dest,
-        term_indices: Some(AHashMap::new()),
+        term_indices: use_sharing.then(AHashMap::new),
         term_sharing_variable_prefix: "p_",
     };
     printer.write_lia_smt_instance(clause)

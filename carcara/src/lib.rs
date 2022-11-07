@@ -50,6 +50,32 @@ use thiserror::Error;
 
 pub type CarcaraResult<T> = Result<T, Error>;
 
+pub struct CarcaraOptions {
+    pub apply_function_defs: bool,
+    pub allow_int_real_subtyping: bool,
+    pub check_lia_using_cvc5: bool,
+    pub strict: bool,
+    pub skip_unknown_rules: bool,
+}
+
+impl Default for CarcaraOptions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl CarcaraOptions {
+    fn new() -> Self {
+        Self {
+            apply_function_defs: true,
+            allow_int_real_subtyping: false,
+            check_lia_using_cvc5: false,
+            strict: false,
+            skip_unknown_rules: false,
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("IO error: {0}")]
@@ -74,10 +100,13 @@ pub enum Error {
 pub fn check<T: io::BufRead>(
     problem: T,
     proof: T,
-    apply_function_defs: bool,
-    allow_int_real_subtyping: bool,
-    strict: bool,
-    skip_unknown_rules: bool,
+    CarcaraOptions {
+        apply_function_defs,
+        allow_int_real_subtyping,
+        check_lia_using_cvc5,
+        strict,
+        skip_unknown_rules,
+    }: CarcaraOptions,
 ) -> Result<bool, Error> {
     let (prelude, proof, mut pool) = parser::parse_instance(
         problem,
@@ -91,7 +120,7 @@ pub fn check<T: io::BufRead>(
         skip_unknown_rules,
         is_running_test: false,
         statistics: None,
-        check_lia_generic_using_cvc5: true,
+        check_lia_using_cvc5,
     };
     checker::ProofChecker::new(&mut pool, config, prelude).check(&proof)
 }
@@ -99,10 +128,13 @@ pub fn check<T: io::BufRead>(
 pub fn check_and_elaborate<T: io::BufRead>(
     problem: T,
     proof: T,
-    apply_function_defs: bool,
-    allow_int_real_subtyping: bool,
-    strict: bool,
-    skip_unknown_rules: bool,
+    CarcaraOptions {
+        apply_function_defs,
+        allow_int_real_subtyping,
+        check_lia_using_cvc5,
+        strict,
+        skip_unknown_rules,
+    }: CarcaraOptions,
 ) -> Result<Vec<ProofCommand>, Error> {
     let (prelude, proof, mut pool) = parser::parse_instance(
         problem,
@@ -116,7 +148,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
         skip_unknown_rules,
         is_running_test: false,
         statistics: None,
-        check_lia_generic_using_cvc5: true,
+        check_lia_using_cvc5,
     };
     checker::ProofChecker::new(&mut pool, config, prelude)
         .check_and_elaborate(proof)
@@ -127,7 +159,14 @@ pub fn generate_lia_smt_instances<T: io::BufRead>(
     problem: T,
     proof: T,
     apply_function_defs: bool,
+    use_sharing: bool,
+    allow_int_real_subtyping: bool,
 ) -> Result<Vec<(String, String)>, Error> {
-    let (prelude, proof, _) = parser::parse_instance(problem, proof, apply_function_defs, false)?;
-    checker::generate_lia_smt_instances(prelude, &proof)
+    let (prelude, proof, _) = parser::parse_instance(
+        problem,
+        proof,
+        apply_function_defs,
+        allow_int_real_subtyping,
+    )?;
+    checker::generate_lia_smt_instances(prelude, &proof, use_sharing)
 }

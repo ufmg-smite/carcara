@@ -22,7 +22,7 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
             skip_unknown_rules: true,
             is_running_test: false,
             statistics: None,
-            check_lia_generic_using_cvc5: true,
+            check_lia_using_cvc5: true,
         }
     }
 

@@ -14,7 +14,7 @@ fn get_problem_string(conclusion: &[Rc<Term>], prelude: &ProblemPrelude) -> Stri
     write!(&mut problem, "{}", prelude).unwrap();
 
     let mut bytes = Vec::new();
-    printer::write_lia_smt_instance(&mut bytes, conclusion).unwrap();
+    printer::write_lia_smt_instance(&mut bytes, conclusion, true).unwrap();
     write!(&mut problem, "{}", String::from_utf8(bytes).unwrap()).unwrap();
 
     writeln!(&mut problem, "(check-sat)").unwrap();
@@ -117,7 +117,7 @@ fn parse_and_check_cvc5_proof(
         skip_unknown_rules: false,
         is_running_test: false,
         statistics: None,
-        check_lia_generic_using_cvc5: false,
+        check_lia_using_cvc5: false,
     };
     ProofChecker::new(pool, config, prelude).check(&proof)?;
     Ok(proof.commands)

@@ -6,7 +6,7 @@ mod path_args;
 use carcara::{
     ast::print_proof,
     benchmarking::{Metrics, OnlineBenchmarkResults},
-    check, check_and_elaborate, generate_lia_smt_instances, parser,
+    check, check_and_elaborate, generate_lia_smt_instances, parser, CarcaraOptions,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -54,30 +54,33 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Parses a proof file and prints it back.
-    Parse(ParseOptions),
+    Parse(ParseCommandOptions),
 
     /// Checks a proof file.
-    Check(CheckOptions),
+    Check(CheckCommandOptions),
 
     /// Checks and elaborates a proof file.
-    Elaborate(ElaborateOptions),
+    Elaborate(ElaborateCommandOptions),
 
     /// Checks a series of proof files and records performance statistics.
-    Bench(BenchmarkOptions),
+    Bench(BenchCommandOptions),
 
     /// Generates the equivalent SMT instance for every `lia_generic` step in a proof.
-    GenerateLiaProblems(InputOptions),
+    GenerateLiaProblems(ParseCommandOptions),
 }
 
 #[derive(Args)]
-struct InputOptions {
+struct Input {
     /// The proof file to be checked
     proof_file: String,
 
     /// The original problem file. If this argument is not present, it will be inferred from the
     /// proof file.
     problem_file: Option<String>,
+}
 
+#[derive(Args, Clone, Copy)]
+struct ParsingOptions {
     /// Don't apply function definitions introduced by `define-fun`s and `:named` attributes.
     /// Instead, interpret them as a function declaration and an `assert` that defines the function
     /// to be equal to its body.
@@ -90,27 +93,8 @@ struct InputOptions {
     allow_int_real_subtyping: bool,
 }
 
-#[derive(Args)]
-struct PrintingOptions {
-    /// Use sharing when printing proof terms.
-    #[clap(long = "print-with-sharing")]
-    use_sharing: bool,
-}
-
-#[derive(Args)]
-struct ParseOptions {
-    #[clap(flatten)]
-    input: InputOptions,
-
-    #[clap(flatten)]
-    printing: PrintingOptions,
-}
-
-#[derive(Args)]
-struct CheckOptions {
-    #[clap(flatten)]
-    input: InputOptions,
-
+#[derive(Args, Clone, Copy)]
+struct CheckingOptions {
     /// Enables the strict checking of certain rules.
     #[clap(short, long)]
     strict: bool,
@@ -118,19 +102,90 @@ struct CheckOptions {
     /// Skips rules that are not known by the checker.
     #[clap(long)]
     skip_unknown_rules: bool,
+
+    /// Check `lia_generic` steps by calling into cvc5.
+    #[clap(long)]
+    lia_via_cvc5: bool,
 }
 
 #[derive(Args)]
-struct ElaborateOptions {
+struct PrintingOptions {
+    /// Use sharing when printing proof terms.
+    #[clap(long = "print-with-sharing")]
+    use_sharing: bool,
+}
+
+fn build_carcara_options(
+    ParsingOptions {
+        dont_apply_function_defs,
+        allow_int_real_subtyping,
+    }: ParsingOptions,
+    CheckingOptions {
+        strict,
+        skip_unknown_rules,
+        lia_via_cvc5,
+    }: CheckingOptions,
+) -> CarcaraOptions {
+    CarcaraOptions {
+        apply_function_defs: !dont_apply_function_defs,
+        allow_int_real_subtyping,
+        check_lia_using_cvc5: lia_via_cvc5,
+        strict,
+        skip_unknown_rules,
+    }
+}
+
+#[derive(Args)]
+struct ParseCommandOptions {
     #[clap(flatten)]
-    checking: CheckOptions,
+    input: Input,
+
+    #[clap(flatten)]
+    parsing: ParsingOptions,
 
     #[clap(flatten)]
     printing: PrintingOptions,
 }
 
 #[derive(Args)]
-struct BenchmarkOptions {
+struct CheckCommandOptions {
+    #[clap(flatten)]
+    input: Input,
+
+    #[clap(flatten)]
+    parsing: ParsingOptions,
+
+    #[clap(flatten)]
+    checking: CheckingOptions,
+}
+
+#[derive(Args)]
+struct ElaborateCommandOptions {
+    #[clap(flatten)]
+    input: Input,
+
+    #[clap(flatten)]
+    parsing: ParsingOptions,
+
+    #[clap(flatten)]
+    checking: CheckingOptions,
+
+    #[clap(flatten)]
+    printing: PrintingOptions,
+}
+
+#[derive(Args)]
+struct BenchCommandOptions {
+    #[clap(flatten)]
+    parsing: ParsingOptions,
+
+    #[clap(flatten)]
+    checking: CheckingOptions,
+
+    /// Also elaborate each proof in addition to parsing and checking.
+    #[clap(long)]
+    elaborate: bool,
+
     /// Number of times to run the benchmark for each file.
     #[clap(short, long, default_value_t = 10)]
     num_runs: usize,
@@ -138,22 +193,6 @@ struct BenchmarkOptions {
     /// Number of threads to use when running the benchmark.
     #[clap(short = 'j', long, default_value_t = 1)]
     num_threads: usize,
-
-    /// Use strict checking in benchmarks
-    #[clap(short, long)]
-    strict: bool,
-
-    /// Also elaborate each proof in addition to parsing and checking.
-    #[clap(long)]
-    elaborate: bool,
-
-    /// Enables `Int`/`Real` subtyping in the parser.
-    #[clap(long)]
-    allow_int_real_subtyping: bool,
-
-    /// Enables checking of `lia_generic` using cvc5.
-    #[clap(long)]
-    lia_via_cvc5: bool,
 
     /// Show benchmark results sorted by total time taken, instead of by average time taken.
     #[clap(short = 't', long)]
@@ -217,7 +256,7 @@ fn main() {
     }
 }
 
-fn get_instance(options: &InputOptions) -> CliResult<(Box<dyn BufRead>, Box<dyn BufRead>)> {
+fn get_instance(options: &Input) -> CliResult<(Box<dyn BufRead>, Box<dyn BufRead>)> {
     fn reader_from_path<P: AsRef<Path>>(path: P) -> CliResult<Box<dyn BufRead>> {
         Ok(Box::new(io::BufReader::new(File::open(path)?)))
     }
@@ -234,49 +273,42 @@ fn get_instance(options: &InputOptions) -> CliResult<(Box<dyn BufRead>, Box<dyn 
     }
 }
 
-fn parse_command(options: ParseOptions) -> CliResult<()> {
+fn parse_command(options: ParseCommandOptions) -> CliResult<()> {
     let (problem, proof) = get_instance(&options.input)?;
     let (_, proof, _) = parser::parse_instance(
         problem,
         proof,
-        !options.input.dont_apply_function_defs,
-        options.input.allow_int_real_subtyping,
+        !options.parsing.dont_apply_function_defs,
+        options.parsing.allow_int_real_subtyping,
     )
     .map_err(carcara::Error::from)?;
     print_proof(&proof.commands, options.printing.use_sharing)?;
     Ok(())
 }
 
-fn check_command(options: CheckOptions) -> CliResult<bool> {
+fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
     let (problem, proof) = get_instance(&options.input)?;
-
     check(
         problem,
         proof,
-        !options.input.dont_apply_function_defs,
-        options.input.allow_int_real_subtyping,
-        options.strict,
-        options.skip_unknown_rules,
+        build_carcara_options(options.parsing, options.checking),
     )
     .map_err(Into::into)
 }
 
-fn elaborate_command(options: ElaborateOptions) -> CliResult<()> {
-    let (problem, proof) = get_instance(&options.checking.input)?;
+fn elaborate_command(options: ElaborateCommandOptions) -> CliResult<()> {
+    let (problem, proof) = get_instance(&options.input)?;
 
     let elaborated = check_and_elaborate(
         problem,
         proof,
-        !options.checking.input.dont_apply_function_defs,
-        options.checking.input.allow_int_real_subtyping,
-        options.checking.strict,
-        options.checking.skip_unknown_rules,
+        build_carcara_options(options.parsing, options.checking),
     )?;
     print_proof(&elaborated, options.printing.use_sharing)?;
     Ok(())
 }
 
-fn bench_command(options: BenchmarkOptions) -> CliResult<()> {
+fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
     let instances = get_instances_from_paths(options.files.iter().map(|s| s.as_str()))?;
     if instances.is_empty() {
         log::warn!("no files passed");
@@ -294,10 +326,8 @@ fn bench_command(options: BenchmarkOptions) -> CliResult<()> {
             &instances,
             options.num_runs,
             options.num_threads,
-            options.strict,
+            &build_carcara_options(options.parsing, options.checking),
             options.elaborate,
-            options.allow_int_real_subtyping,
-            options.lia_via_cvc5,
             &mut File::create("runs.csv")?,
             &mut File::create("by-rule.csv")?,
         )?;
@@ -308,10 +338,8 @@ fn bench_command(options: BenchmarkOptions) -> CliResult<()> {
         &instances,
         options.num_runs,
         options.num_threads,
-        options.strict,
+        &build_carcara_options(options.parsing, options.checking),
         options.elaborate,
-        options.allow_int_real_subtyping,
-        options.lia_via_cvc5,
     );
     if results.is_empty() {
         println!("no benchmark data collected");
@@ -435,14 +463,20 @@ fn print_benchmark_results(results: OnlineBenchmarkResults, sort_by_total: bool)
     Ok(())
 }
 
-fn generate_lia_problems_command(options: InputOptions) -> CliResult<()> {
+fn generate_lia_problems_command(options: ParseCommandOptions) -> CliResult<()> {
     use std::io::Write;
 
-    let root_file_name = options.proof_file.clone();
-    let apply_function_defs = !options.dont_apply_function_defs;
-    let (problem, proof) = get_instance(&options)?;
+    let root_file_name = options.input.proof_file.clone();
+    let apply_function_defs = !options.parsing.dont_apply_function_defs;
+    let (problem, proof) = get_instance(&options.input)?;
 
-    let instances = generate_lia_smt_instances(problem, proof, apply_function_defs)?;
+    let instances = generate_lia_smt_instances(
+        problem,
+        proof,
+        apply_function_defs,
+        options.printing.use_sharing,
+        options.parsing.allow_int_real_subtyping,
+    )?;
     for (id, content) in instances {
         let file_name = format!("{}.{}.lia_smt2", root_file_name, id);
         let mut f = File::create(file_name)?;
