@@ -103,7 +103,7 @@ pub fn elaborate_refl(
     let new_left = context.apply(pool, left);
     let new_right = context.apply(pool, right);
 
-    if left == right || new_left == *right || new_left == new_right {
+    if left == right || new_left == *right || *left == new_right || new_left == new_right {
         elaborator.unchanged(conclusion);
         return Ok(());
     }
