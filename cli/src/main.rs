@@ -6,7 +6,7 @@ mod path_args;
 use carcara::{
     ast::print_proof,
     benchmarking::{Metrics, OnlineBenchmarkResults},
-    check, check_and_elaborate, generate_lia_smt_instances, parser,
+    check, check_and_elaborate, generate_lia_smt_instances, parser, compress,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -67,6 +67,9 @@ enum Command {
 
     /// Generates the equivalent SMT instance for every `lia_generic` step in a proof.
     GenerateLiaProblems(InputOptions),
+
+    /// Compresses a proof file.
+    Compress(CheckOptions),
 }
 
 #[derive(Args)]
@@ -210,6 +213,18 @@ fn main() {
         Command::Elaborate(options) => elaborate_command(options),
         Command::Bench(options) => bench_command(options),
         Command::GenerateLiaProblems(options) => generate_lia_problems_command(options),
+        Command::Compress(options) => {
+            match compress_command(options) {
+                Ok(false) => println!("valid"),
+                Ok(true) => println!("holey"),
+                Err(e) => {
+                    log::error!("{}", e);
+                    println!("invalid");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
     };
     if let Err(e) = result {
         log::error!("{}", e);
@@ -450,4 +465,17 @@ fn generate_lia_problems_command(options: InputOptions) -> CliResult<()> {
     }
 
     Ok(())
+}
+
+fn compress_command(options : CheckOptions) -> CliResult<bool> {
+    let (problem, proof) = get_instance(&options.input)?;
+
+    compress(
+        problem,
+        proof,
+        !options.input.dont_apply_function_defs,
+        options.input.allow_int_real_subtyping,
+        options.strict,
+        options.skip_unknown_rules,
+    ).map_err(Into::into)
 }
