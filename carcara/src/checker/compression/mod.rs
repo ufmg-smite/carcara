@@ -60,16 +60,76 @@ fn collect_units(proof : &Proof) -> Vec<usize> {
     return unit_nodes;
 }
 
-fn fix_proof(proof: &Proof, unit_nodes: Vec<usize>){
-    let mut dnm = Vec::new();
-    dnm.resize(proof.commands.len(), 0);
-    for i in unit_nodes{
-        dnm[i] = 1;
+fn find(i: usize, actual: &mut[usize]) -> usize {
+    if actual[i] == i {
+        return i;
+    }
+    actual[i] = find(actual[i], actual);
+    return actual[i];
+}
+
+fn fix_proof(curr: usize, proof: &Proof, unit_nodes: &[usize], dnm: &[bool], actual : &mut[usize]){
+    println!("{:?} has begun", curr);
+
+    if dnm[curr] {
+        println!("  {:?} was deleted", curr);
+        return;
     }
 
+    match &proof.commands[curr] {
+        ProofCommand::Step(step) => {
+            //if the command has premises, process them
+            for i in 0..step.premises.len(){
+                fix_proof(step.premises[i].1, proof, unit_nodes, dnm, actual);
+            }
+
+            //if some parent is a dnm, it must be replaced by other parent
+            let mut dnm_parents = Vec::new();
+            for i in 0..step.premises.len(){
+                let parent = step.premises[i].1;
+                if dnm[parent] {
+                    dnm_parents.push(parent);
+                }
+            }
+
+            // have to replace the current node for its non deleted parent
+            if dnm_parents.len() > 0 {
+                for i in 0..step.premises.len(){
+                    let parent = step.premises[i].1;
+                    if !dnm[parent] {
+                        actual[curr] = find(parent, actual);
+                    }
+                }
+                println!("  actual of {} is {}", curr, find(curr, actual));
+            }
+            else {
+                println!("  {} has finished without changes", curr);
+            }
+        }
+        ProofCommand::Assume {..} => {
+            println!("  {} has finished without changes", curr);
+        }
+        _ => {}
+    }
 }
 
 pub fn compress_proof(proof: &Proof){
     let unit_nodes = collect_units(&proof);
-    fix_proof(proof, unit_nodes)
+    
+    let mut dnm = Vec::new();
+    dnm.resize(proof.commands.len(), false);
+    for i in &unit_nodes{
+        dnm[*i] = true;
+    }
+    let curr = proof.commands.len() - 1;
+    let mut actual = Vec::new();
+    for i in 0..dnm.len(){
+        actual.push(i as usize);
+    }
+
+    fix_proof(curr, proof, &unit_nodes, &dnm, &mut actual);
+
+    for i in 0..actual.len() {
+        println!("{:?} agora é {:?}", i, find(i, &mut actual));
+    }
 }
