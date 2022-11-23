@@ -78,12 +78,21 @@ impl CarcaraOptions {
     }
 }
 
+fn wrap_parser_error_message(e: &ParserError, pos: &Position) -> String {
+    // For unclosed subproof errors, we don't print the position
+    if matches!(e, ParserError::UnclosedSubproof(_)) {
+        format!("parser error: {}", e)
+    } else {
+        format!("parser error: {} (on line {}, column {})", e, pos.0, pos.1)
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
 
-    #[error("parser error: {0} (on line {}, column {})", (.1).0, (.1).1)]
+    #[error("{}", wrap_parser_error_message(.0, .1))]
     Parser(ParserError, Position),
 
     #[error("checking failed on step '{step}' with rule '{rule}': {inner}")]
