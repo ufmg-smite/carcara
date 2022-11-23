@@ -24,6 +24,7 @@ pub fn parse_instance<T: BufRead>(
     problem: T,
     proof: T,
     apply_function_defs: bool,
+    expand_lets: bool,
     allow_int_real_subtyping: bool,
 ) -> CarcaraResult<(ProblemPrelude, Proof, TermPool)> {
     let mut pool = TermPool::new();
@@ -31,6 +32,7 @@ pub fn parse_instance<T: BufRead>(
         &mut pool,
         problem,
         apply_function_defs,
+        expand_lets,
         allow_int_real_subtyping,
     )?;
     let (prelude, premises) = parser.parse_problem()?;
@@ -75,6 +77,7 @@ pub struct Parser<'a, R> {
     state: ParserState,
     interpret_integers_as_reals: bool,
     apply_function_defs: bool,
+    expand_lets: bool,
     problem: Option<(ProblemPrelude, AHashSet<Rc<Term>>)>,
     has_seen_trust_rule: bool,
     allow_int_real_subtyping: bool,
@@ -87,6 +90,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         pool: &'a mut TermPool,
         input: R,
         apply_function_defs: bool,
+        expand_lets: bool,
         allow_int_real_subtyping: bool,
     ) -> CarcaraResult<Self> {
         let mut state = ParserState::default();
@@ -105,6 +109,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
             state,
             interpret_integers_as_reals: false,
             apply_function_defs,
+            expand_lets,
             problem: None,
             has_seen_trust_rule: false,
             allow_int_real_subtyping,
@@ -1025,7 +1030,25 @@ impl<'a, R: BufRead> Parser<'a, R> {
         let inner = self.parse_term()?;
         self.expect_token(Token::CloseParen)?;
         self.state.symbol_table.pop_scope();
-        Ok(self.add_term(Term::Let(BindingList(bindings), inner)))
+
+        if self.expand_lets {
+            let substitution = bindings
+                .into_iter()
+                .map(|(name, value)| {
+                    let sort = Term::Sort(self.pool.sort(&value).clone());
+                    let var = terminal!(var name; self.pool.add_term(sort));
+                    (self.pool.add_term(var), value)
+                })
+                .collect();
+
+            let result = Substitution::new(self.pool, substitution)
+                .unwrap()
+                .apply(self.pool, &inner);
+
+            Ok(result)
+        } else {
+            Ok(self.add_term(Term::Let(BindingList(bindings), inner)))
+        }
     }
 
     /// Parses an annotated term, of the form `(! <term> <attribute>+)`. The two supported

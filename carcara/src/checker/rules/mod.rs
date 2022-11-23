@@ -167,9 +167,14 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
 
     for (i, (proof, expected)) in cases.iter().enumerate() {
         // This parses the definitions again for every case, which is not ideal
-        let (prelude, parsed, mut pool) =
-            parse_instance(Cursor::new(definitions), Cursor::new(proof), true, false)
-                .unwrap_or_else(|e| panic!("parser error during test \"{}\": {}", test_name, e));
+        let (prelude, parsed, mut pool) = parse_instance(
+            Cursor::new(definitions),
+            Cursor::new(proof),
+            true,
+            false,
+            false,
+        )
+        .unwrap_or_else(|e| panic!("parser error during test \"{}\": {}", test_name, e));
         let mut checker = ProofChecker::new(
             &mut pool,
             Config {

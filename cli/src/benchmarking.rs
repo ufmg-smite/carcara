@@ -24,6 +24,7 @@ fn run_job<T: CollectResults + Default>(
     job: JobDescriptor,
     &CarcaraOptions {
         apply_function_defs,
+        expand_lets,
         allow_int_real_subtyping,
         check_lia_using_cvc5,
         strict,
@@ -40,6 +41,7 @@ fn run_job<T: CollectResults + Default>(
         BufReader::new(File::open(job.problem_file)?),
         BufReader::new(File::open(job.proof_file)?),
         apply_function_defs,
+        expand_lets,
         allow_int_real_subtyping,
     )?;
     let parsing = parsing.elapsed();

@@ -11,7 +11,8 @@ pub fn parse_terms_with_pool<const N: usize>(
     definitions: &str,
     terms: [&str; N],
 ) -> [Rc<Term>; N] {
-    let mut parser = Parser::new(pool, definitions.as_bytes(), true, false).expect(ERROR_MESSAGE);
+    let mut parser =
+        Parser::new(pool, definitions.as_bytes(), true, false, false).expect(ERROR_MESSAGE);
     parser.parse_problem().expect(ERROR_MESSAGE);
 
     terms.map(|s| {
@@ -34,7 +35,7 @@ pub fn parse_term(input: &str) -> Term {
 /// panics if no error is encountered.
 pub fn parse_term_err(input: &str) -> Error {
     let mut pool = TermPool::new();
-    Parser::new(&mut pool, input.as_bytes(), true, false)
+    Parser::new(&mut pool, input.as_bytes(), true, false, false)
         .and_then(|mut p| p.parse_term())
         .expect_err("expected error")
 }
@@ -42,7 +43,7 @@ pub fn parse_term_err(input: &str) -> Error {
 /// Parses a proof from a `&str`. Panics if any error is encountered.
 pub fn parse_proof(input: &str) -> Proof {
     let mut pool = TermPool::new();
-    let commands = Parser::new(&mut pool, input.as_bytes(), true, false)
+    let commands = Parser::new(&mut pool, input.as_bytes(), true, false, false)
         .expect(ERROR_MESSAGE)
         .parse_proof()
         .expect(ERROR_MESSAGE);
@@ -73,7 +74,7 @@ fn test_hash_consing() {
         )
         (* 2 2)
     )";
-    let mut parser = Parser::new(&mut pool, input.as_bytes(), true, false).unwrap();
+    let mut parser = Parser::new(&mut pool, input.as_bytes(), true, false, false).unwrap();
     parser.parse_term().unwrap();
 
     // We expect this input to result in 7 unique terms after parsing:

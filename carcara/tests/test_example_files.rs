@@ -31,6 +31,7 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
         io::BufReader::new(fs::File::open(proof_path)?),
         true,
         false,
+        false,
     )?;
 
     // First, we check the proof normally

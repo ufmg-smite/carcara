@@ -87,6 +87,10 @@ struct ParsingOptions {
     #[clap(long)]
     dont_apply_function_defs: bool,
 
+    /// Eliminates `let` bindings from terms when parsing.
+    #[clap(long)]
+    expand_let_bindings: bool,
+
     /// Enables `Int`/`Real` subtyping in the parser. This allows terms of sort `Int` to be passed
     /// to arithmetic operators that are expecting a term of sort `Real`.
     #[clap(long)]
@@ -118,6 +122,7 @@ struct PrintingOptions {
 fn build_carcara_options(
     ParsingOptions {
         dont_apply_function_defs,
+        expand_let_bindings,
         allow_int_real_subtyping,
     }: ParsingOptions,
     CheckingOptions {
@@ -128,6 +133,7 @@ fn build_carcara_options(
 ) -> CarcaraOptions {
     CarcaraOptions {
         apply_function_defs: !dont_apply_function_defs,
+        expand_lets: expand_let_bindings,
         allow_int_real_subtyping,
         check_lia_using_cvc5: lia_via_cvc5,
         strict,
@@ -279,6 +285,7 @@ fn parse_command(options: ParseCommandOptions) -> CliResult<()> {
         problem,
         proof,
         !options.parsing.dont_apply_function_defs,
+        options.parsing.expand_let_bindings,
         options.parsing.allow_int_real_subtyping,
     )
     .map_err(carcara::Error::from)?;
@@ -474,8 +481,9 @@ fn generate_lia_problems_command(options: ParseCommandOptions) -> CliResult<()> 
         problem,
         proof,
         apply_function_defs,
-        options.printing.use_sharing,
+        options.parsing.expand_let_bindings,
         options.parsing.allow_int_real_subtyping,
+        options.printing.use_sharing,
     )?;
     for (id, content) in instances {
         let file_name = format!("{}.{}.lia_smt2", root_file_name, id);

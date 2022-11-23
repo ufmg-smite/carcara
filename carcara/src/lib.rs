@@ -52,6 +52,7 @@ pub type CarcaraResult<T> = Result<T, Error>;
 
 pub struct CarcaraOptions {
     pub apply_function_defs: bool,
+    pub expand_lets: bool,
     pub allow_int_real_subtyping: bool,
     pub check_lia_using_cvc5: bool,
     pub strict: bool,
@@ -68,6 +69,7 @@ impl CarcaraOptions {
     fn new() -> Self {
         Self {
             apply_function_defs: true,
+            expand_lets: false,
             allow_int_real_subtyping: false,
             check_lia_using_cvc5: false,
             strict: false,
@@ -102,6 +104,7 @@ pub fn check<T: io::BufRead>(
     proof: T,
     CarcaraOptions {
         apply_function_defs,
+        expand_lets,
         allow_int_real_subtyping,
         check_lia_using_cvc5,
         strict,
@@ -112,6 +115,7 @@ pub fn check<T: io::BufRead>(
         problem,
         proof,
         apply_function_defs,
+        expand_lets,
         allow_int_real_subtyping,
     )?;
 
@@ -130,6 +134,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
     proof: T,
     CarcaraOptions {
         apply_function_defs,
+        expand_lets,
         allow_int_real_subtyping,
         check_lia_using_cvc5,
         strict,
@@ -140,6 +145,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
         problem,
         proof,
         apply_function_defs,
+        expand_lets,
         allow_int_real_subtyping,
     )?;
 
@@ -159,13 +165,15 @@ pub fn generate_lia_smt_instances<T: io::BufRead>(
     problem: T,
     proof: T,
     apply_function_defs: bool,
-    use_sharing: bool,
+    expand_lets: bool,
     allow_int_real_subtyping: bool,
+    use_sharing: bool,
 ) -> Result<Vec<(String, String)>, Error> {
     let (prelude, proof, _) = parser::parse_instance(
         problem,
         proof,
         apply_function_defs,
+        expand_lets,
         allow_int_real_subtyping,
     )?;
     checker::generate_lia_smt_instances(prelude, &proof, use_sharing)
