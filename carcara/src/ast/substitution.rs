@@ -2,7 +2,7 @@ use super::{BindingList, Rc, SortedVar, Term, TermPool};
 use ahash::{AHashMap, AHashSet};
 use thiserror::Error;
 
-#[derive(Debug, PartialEq, Error)]
+#[derive(Debug, PartialEq, Eq, Error)]
 pub enum SubstitutionError {
     #[error("trying to substitute term '{0}' with a term of different sort: '{1}'")]
     DifferentSorts(Rc<Term>, Rc<Term>),

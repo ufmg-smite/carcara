@@ -99,7 +99,7 @@ impl ProofCommand {
 
 /// A `step` command, of the form `(step <symbol> <clause> :rule <symbol> [:premises (<symbol>+)]?
 /// [:args <proof_args>]?)`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProofStep {
     pub id: String,
     pub clause: Vec<Rc<Term>>,
@@ -125,7 +125,7 @@ pub struct Subproof {
 }
 
 /// An argument for a `step` or `anchor` command.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProofArg {
     /// An argument that is just a term.
     Term(Rc<Term>),
