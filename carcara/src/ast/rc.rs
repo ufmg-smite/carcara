@@ -1,6 +1,38 @@
 use std::{fmt, hash::Hash, ops::Deref, rc};
 
-/// An `Rc` where equality and hashing are done by reference, instead of by value
+/// An `Rc` where equality and hashing are done by reference, instead of by value.
+///
+/// This means that two `Rc`s will not be considered equal and won't have the same hash value unless
+/// they point to the same allocation. This has the advantage that equality and hashing can be done
+/// in constant time, even for recursive structures.
+///
+/// # Examples
+///
+/// ```
+/// # use carcara::ast::Rc;
+/// let a = Rc::new(5);
+/// let b = Rc::new(5);
+/// assert_ne!(a, b);
+///
+/// let c = a.clone();
+/// assert_eq!(a, c);
+/// ```
+///
+/// While `a` and `b` have the same contents, they are not considered equal. However, since `c` was
+/// created by cloning `a`, they point to the same allocation, and are thus considered equal. The
+/// same thing happens with their hash values:
+///
+/// ```
+/// # use carcara::ast::Rc;
+/// # use std::collections::HashSet;
+/// # let a = Rc::new(5);
+/// # let b = Rc::new(5);
+/// # let c = a.clone();
+/// let mut set = HashSet::new();
+/// set.insert(a);
+/// assert!(!set.contains(&b));
+/// assert!(set.contains(&c));
+/// ```
 #[derive(Eq)]
 pub struct Rc<T: ?Sized>(rc::Rc<T>);
 
@@ -70,11 +102,13 @@ impl<T: ?Sized + fmt::Display> fmt::Display for Rc<T> {
 }
 
 impl<T> Rc<T> {
+    /// Constructs a new `Rc<T>`.
     pub fn new(value: T) -> Self {
         #[allow(clippy::disallowed_methods)]
         Self(rc::Rc::new(value))
     }
 
+    /// Similar to [`std::rc::Rc::strong_count`].
     pub fn strong_count(this: &Self) -> usize {
         rc::Rc::strong_count(&this.0)
     }
