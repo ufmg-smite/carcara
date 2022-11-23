@@ -46,6 +46,7 @@ pub struct Proof {
 }
 
 impl Proof {
+    /// Returns an iterator over the proof commands. See [`ProofIter`].
     pub fn iter(&self) -> ProofIter {
         ProofIter::new(&self.commands)
     }
