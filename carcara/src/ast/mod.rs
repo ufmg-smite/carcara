@@ -8,7 +8,6 @@ mod pool;
 pub(crate) mod printer;
 mod rc;
 mod substitution;
-mod subterms;
 #[cfg(test)]
 mod tests;
 
@@ -21,7 +20,6 @@ pub use pool::TermPool;
 pub use printer::print_proof;
 pub use rc::Rc;
 pub use substitution::{Substitution, SubstitutionError};
-pub use subterms::Subterms;
 
 pub(crate) use deep_eq::DeepEqualityChecker;
 
@@ -335,15 +333,6 @@ impl Term {
         let mut pool = TermPool::new();
         let added = pool.add_term(self.clone());
         pool.sort(&added).clone()
-    }
-
-    /// Returns an iterator over this term and all its subterms, in topological ordering. For
-    /// example, calling this method on the term `(+ (f a b) 2)` would return an iterator over the
-    /// terms `(+ (f a b) 2)`, `(f a b)`, `f`, `a`, `b` and `2`. This method traverses the term as
-    /// a DAG, and the resulting iterator will not contain any duplicate terms. This ignores sort
-    /// terms.
-    pub fn subterms(&self) -> Subterms {
-        Subterms::new(self)
     }
 
     /// Returns `true` if the term is a terminal.
