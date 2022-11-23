@@ -622,6 +622,15 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 end_step_stack.pop().unwrap();
                 let (assignment_args, variable_args) = subproof_args_stack.pop().unwrap();
 
+                // The subproof must contain at least two commands: the end step and the previous
+                // command it implicitly references
+                if commands.len() < 2 {
+                    return Err(Error::Parser(
+                        ParserError::EmptySubproof(id.unwrap()),
+                        position,
+                    ));
+                }
+
                 // We also need to make sure that the last command is in fact a `step`
                 match commands.last() {
                     Some(ProofCommand::Step(_)) => (),
