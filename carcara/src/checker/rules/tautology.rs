@@ -341,9 +341,9 @@ pub fn connective_def(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         assert_eq(b, phi_2)?;
         assert_eq(c, phi_1)?;
         assert_eq(d, phi_3)
-    } else if let Some((first_bindings, first_inner)) = match_term!((exists ...) = first) {
-        let (second_bindings, second_inner) = match_term_err!((not (forall ...)) = second)?;
-        assert_eq(first_inner, second_inner.remove_negation_err()?)?;
+    } else if let Some((first_bindings, first_inner)) = match_term!((exists ... f) = first) {
+        let (second_bindings, second_inner) = match_term_err!((not (forall ... (not s))) = second)?;
+        assert_eq(first_inner, second_inner)?;
         assert_eq(first_bindings, second_bindings)
     } else {
         Err(CheckerError::TermIsNotConnective(first.clone()))

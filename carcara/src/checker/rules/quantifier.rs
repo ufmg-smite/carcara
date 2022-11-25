@@ -17,7 +17,7 @@ pub fn forall_inst(
     assert_clause_len(conclusion, 1)?;
 
     let ((bindings, original), substituted) =
-        match_term_err!((or (not (forall ...)) result) = &conclusion[0])?;
+        match_term_err!((or (not (forall ... original)) result) = &conclusion[0])?;
 
     assert_num_args(args, bindings.len())?;
 
