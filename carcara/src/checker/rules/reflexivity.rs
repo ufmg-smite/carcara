@@ -222,14 +222,18 @@ mod tests {
             ",
             "Simple working examples" {
                 "(anchor :step t1 :args ((y Real) (:= x y)))
-                (step t1 (cl (= x y)) :rule refl)": true,
+                (step t1.t1 (cl (= x y)) :rule refl)
+                (step t1 (cl) :rule hole)": true,
 
-                "(anchor :step t1) (step t1 (cl (= z z)) :rule refl)": true,
+                "(anchor :step t1)
+                (step t1.t1 (cl (= z z)) :rule refl)
+                (step t1 (cl) :rule hole)": true,
 
             }
             "Multiple substitutions in sequence" {
                 "(anchor :step t1 :args ((z Real) (:= y z) (:= x y)))
-                (step t1 (cl (= x z)) :rule refl)": true,
+                (step t1.t1 (cl (= x z)) :rule refl)
+                (step t1 (cl) :rule hole)": true,
             }
             "Nested subproofs" {
                 // Since an inner subproof cannot end an outer subproof, we need to have a dummy
@@ -237,17 +241,20 @@ mod tests {
 
                 "(anchor :step t1 :args ((z Real) (:= x z)))
                 (anchor :step t1.t1 :args ((z Real) (:= y z)))
-                (step t1.t1 (cl (= x y)) :rule refl)
+                (step t1.t1.t1 (cl (= x y)) :rule refl)
+                (step t1.t1 (cl) :rule hole)
                 (step t1 (cl) :rule hole)": true,
 
                 "(anchor :step t1 :args ((y Real) (:= x y)))
                 (anchor :step t1.t1 :args ((z Real) (:= y z)))
-                (step t1.t1 (cl (= x z)) :rule refl)
+                (step t1.t1.t1 (cl (= x z)) :rule refl)
+                (step t1.t1 (cl) :rule hole)
                 (step t1 (cl) :rule hole)": true,
             }
             "Terms aren't equal after applying context substitution" {
                 "(anchor :step t1 :args ((y Real) (:= x y)))
-                (step t1 (cl (= x z)) :rule refl)": false,
+                (step t1.t1 (cl (= x z)) :rule refl)
+                (step t1 (cl) :rule hole)": false,
             }
         }
     }
