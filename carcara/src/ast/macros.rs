@@ -1,8 +1,70 @@
-/// A macro to help deconstruct operation terms. Since a term holds references to other terms in
-/// `Vec`s and `Rc`s, pattern matching a complex term can be difficult and verbose. This macro
-/// helps with that. The return type of this macro is an `Option` of a tree-like tuple. The
-/// structure of the tree will depend on the pattern passed, and the leaf nodes will be
-/// `&Rc<Term>`s.
+/// A macro to help pattern match terms.
+///
+/// Since a term holds references to its subterms in `Vec`s and `Rc`s, pattern matching a complex
+/// term can be difficult and verbose. This macro helps with that. Given a term and a pattern with
+/// which to match it, this macro will deconstruct the term and (if it matches the pattern) return
+/// the subterms specified by the pattern.
+///
+/// The syntax to use this macro is `match_term!(<pattern> = <value>)`, where `<value>` is an
+/// expression of type `Term` or `Rc<Term>`, and `<pattern>` is an s-expression that specifies the
+/// pattern with which to match the given term. Free variables in the pattern will match any term,
+/// and this term will be returned by the macro.
+///
+/// The return type of this macro is `Option<T>` where the exact structure of `T` will reflect the
+/// pattern given. For example, `match_term!((and (= a b) c) = term)` will return an
+/// `Option<((&Rc<Term>, &Rc<Term>), &Rc<Term>)>`. If the term does not match the pattern, the macro
+/// returns `None`.
+///
+/// # Examples
+///
+/// Removing two leading negations from a term:
+/// ```
+/// # use carcara::{ast::*, build_term, match_term};
+/// # let mut pool = TermPool::new();
+/// # let t = build_term!(pool, (not (not {pool.bool_false()})));
+/// let p = match_term!((not (not p)) = t).unwrap();
+/// ```
+///
+/// Deconstructing complex nested terms:
+/// ```
+/// # use carcara::{ast::*, match_term, parser::*};
+/// # pub fn parse_term(input: &str) -> Rc<Term> {
+/// #     let mut pool = TermPool::new();
+/// #     let mut parser = Parser::new(&mut pool, input.as_bytes(), true, false, false).unwrap();
+/// #     parser.parse_term().unwrap()
+/// # }
+/// # let t = parse_term("(and (=> false false) (> (+ 0 0) 0))");
+/// let ((p, q), ((a, b), c)) = match_term!((and (=> p q) (> (+ a b) c)) = t).unwrap();
+/// ```
+///
+/// Pattern matching against boolean constants:
+/// ```
+/// # use carcara::{ast::*, build_term, match_term};
+/// # let mut pool = TermPool::new();
+/// # let t = build_term!(pool, (or {pool.bool_false()} {pool.bool_false()}));
+/// let (p, ()) = match_term!((or p false) = t).unwrap();
+/// ```
+///
+/// Pattern matching quantifier terms:
+/// ```
+/// # use carcara::{ast::*, match_term, parser::*};
+/// # pub fn parse_term(input: &str) -> Rc<Term> {
+/// #     let mut pool = TermPool::new();
+/// #     let mut parser = Parser::new(&mut pool, input.as_bytes(), true, false, false).unwrap();
+/// #     parser.parse_term().unwrap()
+/// # }
+/// # let t = parse_term("(forall ((x Int) (y Int)) (> x y))");
+/// let (bindings, (x, y)) = match_term!((forall ... (> x y)) = t).unwrap();
+/// ```
+///
+/// Pattern matching against a variable number of arguments:
+/// ```
+/// # use carcara::{ast::*, build_term, match_term};
+/// # let mut pool = TermPool::new();
+/// # let t = build_term!(pool, (and {pool.bool_false()} {pool.bool_false()}));
+/// let args: &[Rc<Term>] = match_term!((and ...) = t).unwrap();
+/// ```
+#[macro_export]
 macro_rules! match_term {
     (true = $var:expr $(, $flag:ident)?) => {
         if $var.is_bool_true() { Some(()) } else { None }
@@ -80,8 +142,10 @@ macro_rules! match_term {
     (@GET_VARIANT >=)       => { $crate::ast::Operator::GreaterEq };
 }
 
-/// A variant of `match_term` that returns a `Result<_, CheckerError>` instead of an `Option`. The
-/// error returned is always `CheckerError::TermOfWrongForm`.
+/// A variant of `match_term` that returns a `Result<_, CheckerError>` instead of an `Option`.
+///
+/// The error returned by this macro is always `CheckerError::TermOfWrongForm`.
+#[macro_export]
 macro_rules! match_term_err {
     ($pat:tt = $var:expr) => {{
         let var = $var;
@@ -99,6 +163,21 @@ macro_rules! match_term_err {
 }
 
 /// A macro to help build new terms.
+///
+/// This macro takes two arguments: the `TermPool` with which to build the term, and an s-expression
+/// representing the term to be built. Subterms in that s-expression that are surrounded by `{}` are
+/// evaluated as expressions, and they should have type `Rc<Term>`.
+///
+/// # Examples
+///
+/// Building the term `(and true (not false))`:
+/// ```
+/// # use carcara::{ast::*, build_term, match_term};
+/// let mut pool = TermPool::new();
+/// let t = build_term!(pool, (and {pool.bool_true()} (not {pool.bool_false()})));
+/// assert!(match_term!((and true (not false)) = t).is_some());
+/// ```
+#[macro_export]
 macro_rules! build_term {
     ($pool:expr, {$terminal:expr}) => { $terminal };
     ($pool:expr, ($op:tt $($args:tt)+)) => {{
