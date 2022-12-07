@@ -1,6 +1,7 @@
 use crate::{ast::*};
 use std::collections::HashMap;
 use std::collections::VecDeque;
+use crate::checker::rules::resolution::binary_resolution;
 
 fn visit(idx: usize, visited: &mut HashMap<usize, i32>, unit_nodes: &mut Vec<usize>) -> (){
     if !visited.contains_key(&idx) {
@@ -69,10 +70,7 @@ fn find(i: usize, actual: &mut[usize]) -> usize {
 }
 
 fn fix_proof(curr: usize, proof: &Proof, unit_nodes: &[usize], dnm: &[bool], actual : &mut[usize]){
-    println!("{:?} has begun", curr);
-
     if dnm[curr] {
-        println!("  {:?} was deleted", curr);
         return;
     }
 
@@ -100,20 +98,49 @@ fn fix_proof(curr: usize, proof: &Proof, unit_nodes: &[usize], dnm: &[bool], act
                         actual[curr] = find(parent, actual);
                     }
                 }
-                println!("  actual of {} is {}", curr, find(curr, actual));
             }
-            else {
-                println!("  {} has finished without changes", curr);
-            }
-        }
-        ProofCommand::Assume {..} => {
-            println!("  {} has finished without changes", curr);
         }
         _ => {}
     }
 }
 
-pub fn compress_proof(proof: &Proof){
+fn fix_proof_2(proof: &Proof, _actual : &mut[usize], pool : &mut TermPool){
+    // fn binary_resolution<'a, C: ClauseCollection<'a>>(
+    //     pool: &mut TermPool,
+    //     current: &mut C,
+    //     next: &'a [Rc<Term>],
+    //     pivot: ResolutionTerm<'a>,
+    //     is_pivot_in_current: bool,
+    // )
+
+    let mut current = Vec::new();
+
+    match &proof.commands[4] {
+        ProofCommand::Step(step_q) => {
+            
+            for i in 0..step_q.clause.len(){
+                current.push(step_q.clause[i].remove_all_negations());
+            }
+
+            match &proof.commands[6] {
+                ProofCommand::Step(step_s) => {
+                    let mut next = step_s.clause[2].remove_all_negations();
+                    next.0 = 0 as u32;
+                    println!("Antes eh {:?} \t {:?} \t {:?}", current, &step_s.clause, next);
+                    binary_resolution(pool, &mut current, &step_s.clause, next, true);
+                    println!("Depois eh {:?} \t {:?} \t {:?}", current, &step_s.clause, next);
+                }
+                _ => {}
+            }
+        }
+        ProofCommand::Assume {id: _, term: _} => {
+            println!("É um Assume");
+        }
+        _ => {}
+    }
+}
+
+pub fn compress_proof(proof: &Proof, pool : &mut TermPool){
     let unit_nodes = collect_units(&proof);
     
     let mut dnm = Vec::new();
@@ -132,4 +159,6 @@ pub fn compress_proof(proof: &Proof){
     for i in 0..actual.len() {
         println!("{:?} agora é {:?}", i, find(i, &mut actual));
     }
+
+    fix_proof_2(proof, &mut actual, pool);
 }

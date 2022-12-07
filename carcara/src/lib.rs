@@ -155,7 +155,7 @@ pub fn compress<T: io::BufRead>(
         check_lia_generic_using_cvc5: true,
     };
 
-    checker::compression::compress_proof(&proof);
+    checker::compression::compress_proof(&proof, &mut pool);
 
     checker::ProofChecker::new(&mut pool, config, prelude).check(&proof)
 }
