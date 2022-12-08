@@ -190,6 +190,7 @@ macro_rules! build_term {
 }
 
 /// Helper macro to construct `Terminal` terms.
+#[deprecated]
 macro_rules! terminal {
     (int $e:expr) => {
         $crate::ast::Term::Terminal($crate::ast::Terminal::Integer($e.into()))
