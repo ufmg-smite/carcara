@@ -189,49 +189,6 @@ macro_rules! build_term {
     }};
 }
 
-/// Helper macro to construct `Terminal` terms.
-#[deprecated]
-macro_rules! terminal {
-    (int $e:expr) => {
-        $crate::ast::Term::Terminal($crate::ast::Terminal::Integer($e.into()))
-    };
-    (real $num:literal / $denom:literal) => {{
-        let num: rug::Integer = $num.into();
-        let denom: rug::Integer = $denom.into();
-        $crate::ast::Term::Terminal($crate::ast::Terminal::Real((num, denom).into()))
-    }};
-    (real $e:expr) => {
-        $crate::ast::Term::Terminal($crate::ast::Terminal::Real($e))
-    };
-    (string $e:expr) => {
-        $crate::ast::Term::Terminal($crate::ast::Terminal::String($e.into()))
-    };
-    (var $e:expr ; $sort:ident) => {
-        $crate::ast::Term::Terminal($crate::ast::Terminal::Var(
-            $crate::ast::Identifier::Simple($e.into()),
-            $crate::ast::Term::$sort.clone().into()
-        ))
-    };
-    (var $e:expr ; $sort:expr) => {
-        $crate::ast::Term::Terminal($crate::ast::Terminal::Var(
-            $crate::ast::Identifier::Simple($e.into()),
-            $sort
-        ))
-    };
-    (bool true) => {
-        terminal!(
-            var "true";
-            $crate::ast::Rc::new($crate::ast::Term::Sort($crate::ast::Sort::Bool))
-        )
-    };
-    (bool false) => {
-        terminal!(
-            var "false";
-            $crate::ast::Rc::new($crate::ast::Term::Sort($crate::ast::Sort::Bool))
-        )
-    };
-}
-
 /// Implements `FromStr` and `Debug` for an enum, given a string representation for each variant.
 macro_rules! impl_str_conversion_traits {
     ($enum_name:ident { $($variant:ident: $str:literal),* $(,)? }) => {
