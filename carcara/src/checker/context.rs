@@ -54,7 +54,7 @@ impl ContextStack {
         // resulting hash map will then contain `(:= y z)` and `(:= x (f z))`
         for (var, value) in assignment_args.iter() {
             let sort = Term::Sort(pool.sort(value).clone());
-            let var_term = terminal!(var var; pool.add_term(sort));
+            let var_term = Term::var(var, pool.add_term(sort));
             let var_term = pool.add_term(var_term);
             substitution.insert(pool, var_term.clone(), value.clone())?;
             let new_value = substitution_until_fixed_point.apply(pool, value);

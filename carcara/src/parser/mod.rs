@@ -932,12 +932,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// Parses a term.
     pub fn parse_term(&mut self) -> CarcaraResult<Rc<Term>> {
         let term = match self.next_token()? {
-            (Token::Numeral(n), _) if self.interpret_integers_as_reals => {
-                terminal!(real n.into())
-            }
-            (Token::Numeral(n), _) => terminal!(int n),
-            (Token::Decimal(r), _) => terminal!(real r),
-            (Token::String(s), _) => terminal!(string s),
+            (Token::Numeral(n), _) if self.interpret_integers_as_reals => Term::real(n),
+            (Token::Numeral(n), _) => Term::integer(n),
+            (Token::Decimal(r), _) => Term::real(r),
+            (Token::String(s), _) => Term::string(s),
             (Token::Symbol(s), pos) => {
                 // Check to see if there is a nullary function defined with this name
                 return Ok(if let Some(func_def) = self.state.function_defs.get(&s) {
@@ -1045,7 +1043,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 .into_iter()
                 .map(|(name, value)| {
                     let sort = Term::Sort(self.pool.sort(&value).clone());
-                    let var = terminal!(var name; self.pool.add_term(sort));
+                    let var = Term::var(name, self.pool.add_term(sort));
                     (self.pool.add_term(var), value)
                 })
                 .collect();
@@ -1154,7 +1152,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     .iter()
                     .zip(args)
                     .map(|((name, sort), arg)| {
-                        (self.pool.add_term(terminal!(var name; sort.clone())), arg)
+                        (self.pool.add_term(Term::var(name, sort.clone())), arg)
                     })
                     .collect();
 

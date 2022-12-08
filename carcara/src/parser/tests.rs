@@ -112,9 +112,9 @@ fn test_hash_consing() {
 
 #[test]
 fn test_constant_terms() {
-    assert_eq!(terminal!(int 42), parse_term("42"));
-    assert_eq!(terminal!(real 3 / 2), parse_term("1.5"));
-    assert_eq!(terminal!(string "foo"), parse_term("\"foo\""));
+    assert_eq!(Term::integer(42), parse_term("42"));
+    assert_eq!(Term::real((3, 2)), parse_term("1.5"));
+    assert_eq!(Term::string("foo"), parse_term("\"foo\""));
 }
 
 #[test]
@@ -124,7 +124,7 @@ fn test_arithmetic_ops() {
             "(+ 2 3)",
             Term::Op(
                 Operator::Add,
-                vec![Rc::new(terminal!(int 2)), Rc::new(terminal!(int 3))],
+                vec![Rc::new(Term::integer(2)), Rc::new(Term::integer(3))],
             ),
         ),
         (
@@ -132,16 +132,16 @@ fn test_arithmetic_ops() {
             Term::Op(
                 Operator::Mult,
                 vec![
-                    Rc::new(terminal!(int 2)),
-                    Rc::new(terminal!(int 3)),
-                    Rc::new(terminal!(int 5)),
-                    Rc::new(terminal!(int 7)),
+                    Rc::new(Term::integer(2)),
+                    Rc::new(Term::integer(3)),
+                    Rc::new(Term::integer(5)),
+                    Rc::new(Term::integer(7)),
                 ],
             ),
         ),
         (
             "(- 5)",
-            Term::Op(Operator::Sub, vec![Rc::new(terminal!(int 5))]),
+            Term::Op(Operator::Sub, vec![Rc::new(Term::integer(5))]),
         ),
         (
             "(- (+ 1 1) 2)",
@@ -150,9 +150,9 @@ fn test_arithmetic_ops() {
                 vec![
                     Rc::new(Term::Op(
                         Operator::Add,
-                        vec![Rc::new(terminal!(int 1)), Rc::new(terminal!(int 1))],
+                        vec![Rc::new(Term::integer(1)), Rc::new(Term::integer(1))],
                     )),
-                    Rc::new(terminal!(int 2)),
+                    Rc::new(Term::integer(2)),
                 ],
             ),
         ),
@@ -166,44 +166,34 @@ fn test_arithmetic_ops() {
 
 #[test]
 fn test_logic_ops() {
+    let bool_sort = Rc::new(Term::Sort(Sort::Bool));
+    let bool_false = Rc::new(Term::var("false", bool_sort.clone()));
+    let bool_true = Rc::new(Term::var("true", bool_sort));
     run_parser_tests(&[
         (
             "(and true false)",
-            Term::Op(
-                Operator::And,
-                vec![
-                    Rc::new(terminal!(bool true)),
-                    Rc::new(terminal!(bool false)),
-                ],
-            ),
+            Term::Op(Operator::And, vec![bool_true.clone(), bool_false.clone()]),
         ),
         (
             "(or true true false)",
             Term::Op(
                 Operator::Or,
-                vec![
-                    Rc::new(terminal!(bool true)),
-                    Rc::new(terminal!(bool true)),
-                    Rc::new(terminal!(bool false)),
-                ],
+                vec![bool_true.clone(), bool_true.clone(), bool_false.clone()],
             ),
         ),
         (
             "(and true)",
-            Term::Op(Operator::And, vec![Rc::new(terminal!(bool true))]),
+            Term::Op(Operator::And, vec![bool_true.clone()]),
         ),
         (
             "(or true (and false false))",
             Term::Op(
                 Operator::Or,
                 vec![
-                    Rc::new(terminal!(bool true)),
+                    bool_true.clone(),
                     Rc::new(Term::Op(
                         Operator::And,
-                        vec![
-                            Rc::new(terminal!(bool false)),
-                            Rc::new(terminal!(bool false)),
-                        ],
+                        vec![bool_false.clone(), bool_false.clone()],
                     )),
                 ],
             ),
@@ -212,29 +202,25 @@ fn test_logic_ops() {
             "(xor true false false)",
             Term::Op(
                 Operator::Xor,
-                vec![
-                    Rc::new(terminal!(bool true)),
-                    Rc::new(terminal!(bool false)),
-                    Rc::new(terminal!(bool false)),
-                ],
+                vec![bool_true.clone(), bool_false.clone(), bool_false.clone()],
             ),
         ),
         (
             "(= 2 3)",
             Term::Op(
                 Operator::Equals,
-                vec![Rc::new(terminal!(int 2)), Rc::new(terminal!(int 3))],
+                vec![Rc::new(Term::integer(2)), Rc::new(Term::integer(3))],
             ),
         ),
         (
             "(not false)",
-            Term::Op(Operator::Not, vec![Rc::new(terminal!(bool false))]),
+            Term::Op(Operator::Not, vec![bool_false.clone()]),
         ),
         (
             "(distinct 4 2)",
             Term::Op(
                 Operator::Distinct,
-                vec![Rc::new(terminal!(int 4)), Rc::new(terminal!(int 2))],
+                vec![Rc::new(Term::integer(4)), Rc::new(Term::integer(2))],
             ),
         ),
         (
@@ -244,10 +230,10 @@ fn test_logic_ops() {
                 vec![
                     Rc::new(Term::Op(
                         Operator::Equals,
-                        vec![Rc::new(terminal!(int 0)), Rc::new(terminal!(int 1))],
+                        vec![Rc::new(Term::integer(0)), Rc::new(Term::integer(1))],
                     )),
-                    Rc::new(terminal!(bool true)),
-                    Rc::new(terminal!(bool false)),
+                    bool_true,
+                    bool_false,
                 ],
             ),
         ),
@@ -281,15 +267,16 @@ fn test_logic_ops() {
 
 #[test]
 fn test_ite() {
+    let bool_sort = Rc::new(Term::Sort(Sort::Bool));
     run_parser_tests(&[
         (
             "(ite true 2 3)",
             Term::Op(
                 Operator::Ite,
                 vec![
-                    Rc::new(terminal!(bool true)),
-                    Rc::new(terminal!(int 2)),
-                    Rc::new(terminal!(int 3)),
+                    Rc::new(Term::var("true", bool_sort.clone())),
+                    Rc::new(Term::integer(2)),
+                    Rc::new(Term::integer(3)),
                 ],
             ),
         ),
@@ -299,13 +286,13 @@ fn test_ite() {
                 Operator::Ite,
                 vec![
                     Rc::new(parse_term("(not true)")),
-                    Rc::new(terminal!(int 2)),
+                    Rc::new(Term::integer(2)),
                     Rc::new(Term::Op(
                         Operator::Ite,
                         vec![
-                            Rc::new(terminal!(bool false)),
-                            Rc::new(terminal!(int 2)),
-                            Rc::new(terminal!(int 1)),
+                            Rc::new(Term::var("false", bool_sort)),
+                            Rc::new(Term::integer(2)),
+                            Rc::new(Term::integer(1)),
                         ],
                     )),
                 ],
@@ -329,13 +316,15 @@ fn test_ite() {
 
 #[test]
 fn test_quantifiers() {
+    let bool_sort = Rc::new(Term::Sort(Sort::Bool));
+    let real_sort = Rc::new(Term::Sort(Sort::Real));
     run_parser_tests(&[
         (
             "(exists ((p Bool)) p)",
             Term::Quant(
                 Quantifier::Exists,
-                BindingList(vec![("p".into(), Term::Sort(Sort::Bool).into())]),
-                Rc::new(terminal!(var "p"; Rc::new(Term::Sort(Sort::Bool)))),
+                BindingList(vec![("p".into(), bool_sort.clone())]),
+                Rc::new(Term::var("p", bool_sort)),
             ),
         ),
         (
@@ -343,8 +332,8 @@ fn test_quantifiers() {
             Term::Quant(
                 Quantifier::Forall,
                 BindingList(vec![
-                    ("x".into(), Rc::new(Term::Sort(Sort::Real))),
-                    ("y".into(), Rc::new(Term::Sort(Sort::Real))),
+                    ("x".into(), real_sort.clone()),
+                    ("y".into(), real_sort.clone()),
                 ]),
                 Rc::new(Term::Op(
                     Operator::Equals,
@@ -352,11 +341,11 @@ fn test_quantifiers() {
                         Rc::new(Term::Op(
                             Operator::Add,
                             vec![
-                                terminal!(var "x"; Rc::new(Term::Sort(Sort::Real))).into(),
-                                terminal!(var "y"; Rc::new(Term::Sort(Sort::Real))).into(),
+                                Rc::new(Term::var("x", real_sort.clone())),
+                                Rc::new(Term::var("y", real_sort)),
                             ],
                         )),
-                        terminal!(real 0 / 1).into(),
+                        Term::real(0).into(),
                     ],
                 )),
             ),
@@ -374,24 +363,23 @@ fn test_quantifiers() {
 
 #[test]
 fn test_choice_terms() {
+    let bool_sort = Rc::new(Term::Sort(Sort::Bool));
+    let int_sort = Rc::new(Term::Sort(Sort::Int));
     run_parser_tests(&[
         (
             "(choice ((p Bool)) p)",
             Term::Choice(
-                ("p".into(), Rc::new(Term::Sort(Sort::Bool))),
-                Rc::new(terminal!(var "p"; Rc::new(Term::Sort(Sort::Bool)))),
+                ("p".into(), bool_sort.clone()),
+                Rc::new(Term::var("p", bool_sort)),
             ),
         ),
         (
             "(choice ((x Int)) (= x 0))",
             Term::Choice(
-                ("x".into(), Rc::new(Term::Sort(Sort::Int))),
+                ("x".into(), int_sort.clone()),
                 Rc::new(Term::Op(
                     Operator::Equals,
-                    vec![
-                        terminal!(var "x"; Rc::new(Term::Sort(Sort::Int))).into(),
-                        terminal!(int 0).into(),
-                    ],
+                    vec![Rc::new(Term::var("x", int_sort)), Rc::new(Term::integer(0))],
                 )),
             ),
         ),
@@ -408,26 +396,28 @@ fn test_choice_terms() {
 
 #[test]
 fn test_let_terms() {
+    let int_sort = Rc::new(Term::Sort(Sort::Int));
+    let bool_sort = Rc::new(Term::Sort(Sort::Bool));
     run_parser_tests(&[
         (
             "(let ((p false)) p)",
             Term::Let(
-                BindingList(vec![("p".into(), Rc::new(terminal!(bool false)))]),
-                Rc::new(terminal!(var "p"; Rc::new(Term::Sort(Sort::Bool)))),
+                BindingList(vec![("p".into(), Rc::new(Term::var("false", bool_sort)))]),
+                Rc::new(Term::var("p", Rc::new(Term::Sort(Sort::Bool)))),
             ),
         ),
         (
             "(let ((x 1) (y 2)) (+ x y))",
             Term::Let(
                 BindingList(vec![
-                    ("x".into(), terminal!(int 1).into()),
-                    ("y".into(), terminal!(int 2).into()),
+                    ("x".into(), Term::integer(1).into()),
+                    ("y".into(), Term::integer(2).into()),
                 ]),
                 Rc::new(Term::Op(
                     Operator::Add,
                     vec![
-                        terminal!(var "x"; Rc::new(Term::Sort(Sort::Int))).into(),
-                        terminal!(var "y"; Rc::new(Term::Sort(Sort::Int))).into(),
+                        Rc::new(Term::var("x", int_sort.clone())),
+                        Rc::new(Term::var("y", int_sort)),
                     ],
                 )),
             ),
@@ -441,26 +431,27 @@ fn test_let_terms() {
 
 #[test]
 fn test_lambda_terms() {
+    let int_sort = Rc::new(Term::Sort(Sort::Int));
     run_parser_tests(&[
         (
             "(lambda ((x Int)) x)",
             Term::Lambda(
                 BindingList(vec![("x".into(), Rc::new(Term::Sort(Sort::Int)))]),
-                Rc::new(terminal!(var "x"; Rc::new(Term::Sort(Sort::Int)))),
+                Rc::new(Term::var("x", int_sort.clone())),
             ),
         ),
         (
             "(lambda ((x Int) (y Int)) (+ x y))",
             Term::Lambda(
                 BindingList(vec![
-                    ("x".into(), Rc::new(Term::Sort(Sort::Int))),
-                    ("y".into(), Rc::new(Term::Sort(Sort::Int))),
+                    ("x".into(), int_sort.clone()),
+                    ("y".into(), int_sort.clone()),
                 ]),
                 Rc::new(Term::Op(
                     Operator::Add,
                     vec![
-                        terminal!(var "x"; Rc::new(Term::Sort(Sort::Int))).into(),
-                        terminal!(var "y"; Rc::new(Term::Sort(Sort::Int))).into(),
+                        Rc::new(Term::var("x", int_sort.clone())),
+                        Rc::new(Term::var("y", int_sort)),
                     ],
                 )),
             ),
@@ -478,21 +469,22 @@ fn test_lambda_terms() {
 
 #[test]
 fn test_annotated_terms() {
+    let bool_sort = Rc::new(Term::Sort(Sort::Bool));
     run_parser_tests(&[
-        ("(! 0 :named foo)", terminal!(int 0)),
-        ("(! (! 0 :named foo) :named bar)", terminal!(int 0)),
+        ("(! 0 :named foo)", Term::integer(0)),
+        ("(! (! 0 :named foo) :named bar)", Term::integer(0)),
         (
             "(! (! 0 :pattern ((+ 1 0) 3)) :named bar)",
-            terminal!(int 0),
+            Term::integer(0),
         ),
         (
             "(ite (! true :named baz) 2 3)",
             Term::Op(
                 Operator::Ite,
                 vec![
-                    Rc::new(terminal!(bool true)),
-                    Rc::new(terminal!(int 2)),
-                    Rc::new(terminal!(int 3)),
+                    Rc::new(Term::var("true", bool_sort)),
+                    Rc::new(Term::integer(2)),
+                    Rc::new(Term::integer(3)),
                 ],
             ),
         ),
@@ -530,7 +522,7 @@ fn test_declare_fun() {
     );
 
     let [got] = parse_terms("(declare-fun x () Real)", ["x"]);
-    assert_deep_eq!(&terminal!(var "x"; Rc::new(Term::Sort(Sort::Real))), &got);
+    assert_deep_eq!(&Term::var("x", Rc::new(Term::Sort(Sort::Real))), &got);
 }
 
 #[test]
@@ -551,7 +543,7 @@ fn test_declare_sort() {
         ["x"],
     );
     let expected_sort = Term::Sort(Sort::Atom("T".to_owned(), Vec::new()));
-    assert_deep_eq!(&terminal!(var "x"; Rc::new(expected_sort)), &got);
+    assert_deep_eq!(&Term::var("x", Rc::new(expected_sort)), &got);
 }
 
 #[test]
@@ -619,14 +611,10 @@ fn test_step() {
             rule: "rule-name".into(),
             premises: Vec::new(),
             args: {
-                vec![
-                    terminal!(int 1),
-                    terminal!(real 2 / 1),
-                    terminal!(string "three"),
-                ]
-                .into_iter()
-                .map(|term| ProofArg::Term(Rc::new(term)))
-                .collect()
+                vec![Term::integer(1), Term::real(2), Term::string("three")]
+                    .into_iter()
+                    .map(|term| ProofArg::Term(Rc::new(term)))
+                    .collect()
             },
             discharge: Vec::new(),
         })
@@ -641,8 +629,8 @@ fn test_step() {
             premises: Vec::new(),
             args: {
                 vec![
-                    ("a", terminal!(int 12)),
-                    ("b", terminal!(real 314 / 100)),
+                    ("a", Term::integer(12)),
+                    ("b", Term::real((314, 100))),
                     ("c", parse_term("(* 6 7)")),
                 ]
                 .into_iter()
@@ -660,7 +648,7 @@ fn test_step() {
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: vec![(0, 0), (0, 1), (0, 2)],
-            args: vec![ProofArg::Term(Rc::new(terminal!(int 42)))],
+            args: vec![ProofArg::Term(Rc::new(Term::integer(42)))],
             discharge: Vec::new(),
         })
     );

@@ -274,28 +274,32 @@ mod tests {
 
     #[test]
     fn test_match_term() {
+        let bool_sort = Rc::new(Term::Sort(Sort::Bool));
+        let bool_false = Term::var("false", bool_sort.clone());
+        let bool_true = Term::var("true", bool_sort);
+
         let term = parse_term("(= (= (not false) (= true false)) (not true))");
         let ((a, (b, c)), d) = match_term!((= (= (not a) (= b c)) (not d)) = &term).unwrap();
-        assert_deep_eq!(a.as_ref(), &terminal!(bool false));
-        assert_deep_eq!(b.as_ref(), &terminal!(bool true));
-        assert_deep_eq!(c.as_ref(), &terminal!(bool false));
-        assert_deep_eq!(d.as_ref(), &terminal!(bool true));
+        assert_deep_eq!(a.as_ref(), &bool_false);
+        assert_deep_eq!(b.as_ref(), &bool_true);
+        assert_deep_eq!(c.as_ref(), &bool_false);
+        assert_deep_eq!(d.as_ref(), &bool_true);
 
         let term = parse_term("(ite (not true) (- 2 2) (* 1 5))");
         let (a, b, c) = match_term!((ite (not a) b c) = &term).unwrap();
-        assert_deep_eq!(a.as_ref(), &terminal!(bool true));
+        assert_deep_eq!(a.as_ref(), &bool_true);
         assert_deep_eq!(
             b.as_ref(),
             &Term::Op(
                 Operator::Sub,
-                vec![Rc::new(terminal!(int 2)), Rc::new(terminal!(int 2)),],
+                vec![Rc::new(Term::integer(2)), Rc::new(Term::integer(2))],
             ),
         );
         assert_deep_eq!(
             c.as_ref(),
             &Term::Op(
                 Operator::Mult,
-                vec![Rc::new(terminal!(int 1)), Rc::new(terminal!(int 5)),],
+                vec![Rc::new(Term::integer(1)), Rc::new(Term::integer(5))],
             ),
         );
 
@@ -303,19 +307,19 @@ mod tests {
         let term = parse_term("(not (and true false true))");
         match match_term!((not (and ...)) = &term) {
             Some([a, b, c]) => {
-                assert_deep_eq!(&terminal!(bool true), a);
-                assert_deep_eq!(&terminal!(bool false), b);
-                assert_deep_eq!(&terminal!(bool true), c);
+                assert_deep_eq!(&bool_true, a);
+                assert_deep_eq!(&bool_false, b);
+                assert_deep_eq!(&bool_true, c);
             }
             _ => panic!(),
         }
         let term = parse_term("(and (or false true) (= 2 2))");
         match match_term!((and (or ...) (= ...)) = &term) {
             Some(([a, b], [c, d])) => {
-                assert_deep_eq!(&terminal!(bool false), a);
-                assert_deep_eq!(&terminal!(bool true), b);
-                assert_deep_eq!(&terminal!(int 2), c);
-                assert_deep_eq!(&terminal!(int 2), d);
+                assert_deep_eq!(&bool_false, a);
+                assert_deep_eq!(&bool_true, b);
+                assert_deep_eq!(&Term::integer(2), c);
+                assert_deep_eq!(&Term::integer(2), d);
             }
             _ => panic!(),
         }
@@ -330,19 +334,21 @@ mod tests {
             (declare-fun q () Bool)
         ";
         let mut pool = TermPool::new();
+        let bool_sort = pool.add_term(Term::Sort(Sort::Bool));
+        let int_sort = pool.add_term(Term::Sort(Sort::Int));
 
         let (one, two, three) = (
-            pool.add_term(terminal!(int 1)),
-            pool.add_term(terminal!(int 2)),
-            pool.add_term(terminal!(int 3)),
+            pool.add_term(Term::integer(1)),
+            pool.add_term(Term::integer(2)),
+            pool.add_term(Term::integer(3)),
         );
         let (a, b) = (
-            pool.add_term(terminal!(var "a"; Rc::new(Term::Sort(Sort::Int)))),
-            pool.add_term(terminal!(var "b"; Rc::new(Term::Sort(Sort::Int)))),
+            pool.add_term(Term::var("a", int_sort.clone())),
+            pool.add_term(Term::var("b", int_sort)),
         );
         let (p, q) = (
-            pool.add_term(terminal!(var "p"; Rc::new(Term::Sort(Sort::Bool)))),
-            pool.add_term(terminal!(var "q"; Rc::new(Term::Sort(Sort::Bool)))),
+            pool.add_term(Term::var("p", bool_sort.clone())),
+            pool.add_term(Term::var("q", bool_sort)),
         );
         let (r#true, r#false) = (pool.bool_true(), pool.bool_false());
 
