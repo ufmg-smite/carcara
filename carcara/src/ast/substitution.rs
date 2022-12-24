@@ -216,8 +216,8 @@ impl Substitution {
         // Note: this method assumes that `binding_list` is a "sort" binding list. "Value" lists add
         // some complications that are currently not supported. For example, the variable in the
         // domain of the substitution might be used in the value of a binding in the binding list,
-        // and the behaviour of the susbstitution may change if this use is before or after the
-        // varibale is bound in the list.
+        // and the behavior of the substitution may change if this use is before or after the
+        // variable is bound in the list.
 
         if self.map.len() != 1 {
             return false;

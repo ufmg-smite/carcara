@@ -217,15 +217,17 @@ fn strengthen(op: Operator, disequality: &mut LinearComb, a: &Rational) -> Opera
 
         // In some cases, when the disequality is over integers, we can make the strengthening
         // rules even stronger. Consider for instance the following example:
+        // ```
         //     (step t1 (cl
         //         (not (<= (- 1) n))
         //         (not (<= (- 1) (+ n m)))
         //         (<= (- 2) (* 2 n))
         //         (not (<= m 1))
         //     ) :rule la_generic :args (1 1 1 1))
+        // ```
         // After the third disequality is negated and flipped, it becomes:
         //     -2 * n > 2
-        // If nothing fancy is done, this would strenghten to:
+        // If nothing fancy is done, this would strengthen to:
         //     -2 * n >= 3
         // However, in this case, we can divide the disequality by 2 before strengthening, and then
         // multiply it by 2 to get back. This would result in:

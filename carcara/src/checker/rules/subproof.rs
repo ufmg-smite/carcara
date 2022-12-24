@@ -290,7 +290,7 @@ pub fn onepoint(
 
     let points = extract_points(quant, left);
 
-    // Since a substitution may use a varibale introduced in a previous substitution, we apply the
+    // Since a substitution may use a variable introduced in a previous substitution, we apply the
     // substitution to the points in order to replace these variables by their value. We also
     // create a duplicate of every point in the reverse order, since the order of equalities may be
     // flipped

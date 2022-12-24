@@ -208,7 +208,7 @@ struct BenchCommandOptions {
     #[clap(long = "dump-to-csv")]
     dump_to_csv: bool,
 
-    /// The proof files on which the benchkmark will be run. If a directory is passed, the checker
+    /// The proof files on which the benchmark will be run. If a directory is passed, the checker
     /// will recursively find all '.proof' files in the directory. The problem files will be
     /// inferred from the proof files.
     files: Vec<String>,

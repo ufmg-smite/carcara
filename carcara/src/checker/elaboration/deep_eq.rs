@@ -141,7 +141,7 @@ impl<'a> DeepEqElaborator<'a> {
 
                 self.open_subproof();
 
-                // The values of the binding lists in the `let` terms may not be syntatically
+                // The values of the binding lists in the `let` terms may not be syntactically
                 // identical, in which case we need to prove their equality so the `bind_let` step
                 // is valid.
                 let premises = a_bindings
@@ -195,7 +195,7 @@ impl<'a> DeepEqElaborator<'a> {
         }
     }
 
-    /// Returns `true` if the terms are equal modulo reordering of inequaliites, and modulo
+    /// Returns `true` if the terms are equal modulo reordering of inequalities, and modulo
     /// application of the current context.
     fn deep_eq(&mut self, pool: &mut TermPool, a: &Rc<Term>, b: &Rc<Term>) -> bool {
         match &mut self.context {
@@ -338,7 +338,7 @@ impl<'a> DeepEqElaborator<'a> {
     }
 
     /// Creates the subproof for a `bind` or `bind_let` step, used to derive the equality of
-    /// quantifer or `let` terms. This assumes the accumulator subproof has already been opened.
+    /// quantifier or `let` terms. This assumes the accumulator subproof has already been opened.
     fn create_bind_subproof(&mut self, pool: &mut TermPool, inner_equality: (Rc<Term>, Rc<Term>)) {
         let (a, b) = inner_equality;
 

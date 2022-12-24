@@ -306,7 +306,7 @@ fn bfun_elim_second_step(
     }
 
     // If there were no non-constant boolean arguments we don't need to expand the term into an ite
-    // term. So we just contruct the original application term and return it.
+    // term. So we just construct the original application term and return it.
     pool.add_term(Term::App(func.clone(), args.to_vec()))
 }
 

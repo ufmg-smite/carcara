@@ -120,7 +120,7 @@ impl Elaborator {
     }
 
     pub fn push_elaborated_step(&mut self, step: ProofStep) -> (usize, usize) {
-        // TODO: discard elaborated steps that inroduce already seen conclusions (and can be
+        // TODO: discard elaborated steps that introduce already seen conclusions (and can be
         // deleted)
 
         let clause = step.clause.clone();

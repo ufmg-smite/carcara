@@ -268,12 +268,14 @@ pub fn ite_intro(RuleArgs { conclusion, deep_eq_time, .. }: RuleArgs) -> RuleRes
     // reordering of equalities. One example where this happens is the test file
     // SH_problems_all_filtered/isabelle-mirabelle/HOL-Library/smt_verit/x2020_07_23_15_09_29_511_18566192.smt_in.proof
     // Step `t7` in that proof is:
+    // ```
     //     (step t7 (cl (=
     //         (= (times$ c$ (ite (< (g$ n$) 0.0) (- (g$ n$)) (g$ n$)))
     //            (times$ (ite (< (g$ n$) 0.0) (- (g$ n$)) (g$ n$)) c$))
     //         (= (times$ c$ (ite (< (g$ n$) 0.0) (- (g$ n$)) (g$ n$)))
     //            (times$ (ite (< (g$ n$) 0.0) (- (g$ n$)) (g$ n$)) c$))
     //     )) :rule ite_intro)
+    // ```
     // For cases like this, we first check if `t` equals the right side term modulo reordering of
     // equalities. If not, we unwrap the conjunction and continue checking the rule normally.
     if timed_deep_eq_modulo_reordering(root_term, right_side, deep_eq_time) {
@@ -334,8 +336,6 @@ pub fn connective_def(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         assert_eq(d, phi_1)
     } else if let Some((phi_1, phi_2, phi_3)) = match_term!((ite phi_1 phi_2 phi_3) = first) {
         // ite phi_1 phi_2 phi_3 <-> (phi_1 -> phi_2) ^ (¬phi_1 -> phi_3)
-        // Note: In the proofonomicon, this case is incorrectly documented as:
-        //     ite phi_1 phi_2 phi_3 <-> (phi_1 -> phi_2) ^ (¬phi_1 -> ¬phi_3)
         let ((a, b), (c, d)) = match_term_err!((and (=> a b) (=> (not c) d)) = second)?;
         assert_eq(a, phi_1)?;
         assert_eq(b, phi_2)?;

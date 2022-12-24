@@ -183,7 +183,7 @@ fn negation_normal_form(
 /// which are disjunctions of literals
 type CnfFormula = Vec<Vec<Rc<Term>>>;
 
-/// Applies the distribution rules into a disjunction of formulae in conjunctive normal form. More
+/// Applies the distribution rules into a disjunction of formulas in conjunctive normal form. More
 /// precisely, this takes the disjunction `P v Q v R v ...`, where
 /// ```text
 ///     P = P_1 ^ P_2 ^ P_3 ^ ...
@@ -193,9 +193,9 @@ type CnfFormula = Vec<Vec<Rc<Term>>>;
 /// ```
 /// and returns the conjunction of all `(P_i v Q_j v R_k v ...)`, for every combination of `i`,
 /// `j`, `k`, etc.
-fn distribute(formulae: &[CnfFormula]) -> CnfFormula {
-    match formulae {
-        // This function is never called with an empty slice of formulae, so to avoid unnecessary
+fn distribute(formulas: &[CnfFormula]) -> CnfFormula {
+    match formulas {
+        // This function is never called with an empty slice of formulas, so to avoid unnecessary
         // allocations we use the case with just one formula as the base case for the recursion
         [formula] => formula.clone(),
         [] => unreachable!(),
@@ -308,8 +308,8 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
     // While all bindings in `r_bindings` must also be in `new_bindings`, the same is not true in
     // the opposite direction. That is because some variables from the set may be omitted in the
-    // right-hand side quantifier if they don't appear in phi_prime as free variables.  If there is
-    // a binding in the left side that is a free variable in the selected clause, but doesn't
+    // right-hand side quantifier if they don't appear in `phi_prime` as free variables.  If there
+    // is a binding in the left side that is a free variable in the selected clause, but doesn't
     // appear in the right-hand side bindings, we must return an error
     let found = new_bindings.into_iter().find(|var| {
         !r_bindings.contains(var) && free_vars.contains(&pool.add_term(var.clone().into()))

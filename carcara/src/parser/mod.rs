@@ -164,12 +164,12 @@ impl<'a, R: BufRead> Parser<'a, R> {
             .insert(HashCache::new(Identifier::Simple(symbol)), sort);
     }
 
-    /// Shortuct for `self.problem.as_mut().unwrap().0`
+    /// Shortcut for `self.problem.as_mut().unwrap().0`
     fn prelude(&mut self) -> &mut ProblemPrelude {
         &mut self.problem.as_mut().unwrap().0
     }
 
-    /// Shortuct for `self.problem.as_mut().unwrap().1`
+    /// Shortcut for `self.problem.as_mut().unwrap().1`
     fn premises(&mut self) -> &mut AHashSet<Rc<Term>> {
         &mut self.problem.as_mut().unwrap().1
     }
@@ -759,7 +759,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Parses an argument for the `:discharge` attribute. Due to a bug in veriT, commands local to
     /// the current subproof are passed by their "relative" id. That is, the command `t5.t4.h2` is
-    /// passed as simply `h2`. This behaviour is not present in other SMT solvers, like cvc5. To
+    /// passed as simply `h2`. This behavior is not present in other SMT solvers, like cvc5. To
     /// work around that, this function tries to find the command considering both possibilities.
     fn parse_discharge_premise(&mut self, root_id: &str) -> CarcaraResult<(usize, usize)> {
         let position = self.current_position;

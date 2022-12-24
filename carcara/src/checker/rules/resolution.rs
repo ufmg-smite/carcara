@@ -85,7 +85,7 @@ fn resolution_impl(
     //
     // Without looking at the conclusion, it is unclear if the (not p) term should be removed by the
     // p term, or if the (not (not p)) should be removed by the (not (not (not p))). We can only
-    // determine this by looking at the conlcusion and using it to derive the pivots.
+    // determine this by looking at the conclusion and using it to derive the pivots.
     let conclusion: AHashSet<_> = conclusion
         .iter()
         .map(Rc::remove_all_negations)
@@ -128,7 +128,7 @@ fn resolution_impl(
 
             // If the negation of the encountered term is present in the pivots set, we simply
             // eliminate it. Otherwise, we insert the encountered term in the working clause or the
-            // pivots set, depending on wether it is present in the conclusion clause or not
+            // pivots set, depending on whether it is present in the conclusion clause or not
             let mut try_eliminate = |pivot| match pivots.entry(pivot) {
                 Entry::Occupied(mut e) => {
                     e.insert(true);
@@ -137,7 +137,7 @@ fn resolution_impl(
                 Entry::Vacant(_) => false,
             };
 
-            // Only one pivot may be elminated per clause, so if we already found this clauses'
+            // Only one pivot may be eliminated per clause, so if we already found this clauses'
             // pivot, we don't try to eliminate the term
             let eliminated =
                 !eliminated_clause_pivot && (try_eliminate(below) || try_eliminate(above));
@@ -178,16 +178,15 @@ fn resolution_impl(
         //     (step t2 (cl (= (not e) (not (not f)))) :rule hole)
         //     (step t3 (cl (not (= (not e) (not (not f)))) e f) :rule hole)
         //     (step t4 (cl (not (not f))) :rule resolution :premises (t1 t2 t3))
-        // Usually, we would expect the clause in the t4 step to be (cl f). This behaviour may be a
+        // Usually, we would expect the clause in the t4 step to be (cl f). This behavior may be a
         // bug in veriT, but it is still logically sound and happens often enough that it is useful
-        // to support it here
+        // to support it here.
         if conclusion.len() == 1 {
             let (j, conclusion) = conclusion.into_iter().next().unwrap();
             if conclusion == *pivot && (i % 2) == (j % 2) {
                 return Ok(());
             }
         }
-
         let pivot = unremove_all_negations(pool, (*i as u32, pivot));
         Err(ResolutionError::RemainingPivot(pivot).into())
     } else {

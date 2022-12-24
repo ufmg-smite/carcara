@@ -147,7 +147,7 @@ pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
         (Term::Op(Operator::Equals, f_args), Term::Op(Operator::Equals, g_args))
             if f_args.len() == 2 && g_args.len() == 2 =>
         {
-            // We have to test all four possibilites: neither f nor g are flipped, only f is
+            // We have to test all four possibilities: neither f nor g are flipped, only f is
             // flipped, only g is flipped, or both f and g are flipped
             let f_args_flipped: &[_] = &[f_args[1].clone(), f_args[0].clone()];
             let g_args_flipped: &[_] = &[g_args[1].clone(), g_args[0].clone()];
