@@ -256,21 +256,21 @@ macro_rules! assert_deep_eq_modulo_reordering {
 #[cfg(test)]
 mod tests {
     use crate::ast::*;
-    use crate::parser::tests::{parse_term_with_pool, parse_terms_with_pool};
+    use crate::parser::tests::{parse_term, parse_terms};
 
     #[test]
     fn test_match_term() {
         let mut p = TermPool::new();
         let [one, two, five] = [1, 2, 5].map(|n| p.add(Term::integer(n)));
 
-        let term = parse_term_with_pool(&mut p, "(= (= (not false) (= true false)) (not true))");
+        let term = parse_term(&mut p, "(= (= (not false) (= true false)) (not true))");
         let ((a, (b, c)), d) = match_term!((= (= (not a) (= b c)) (not d)) = &term).unwrap();
         assert_eq!(a, &p.bool_false());
         assert_eq!(b, &p.bool_true());
         assert_eq!(c, &p.bool_false());
         assert_eq!(d, &p.bool_true());
 
-        let term = parse_term_with_pool(&mut p, "(ite (not true) (- 2 2) (* 1 5))");
+        let term = parse_term(&mut p, "(ite (not true) (- 2 2) (* 1 5))");
         let (a, b, c) = match_term!((ite (not a) b c) = &term).unwrap();
         assert_eq!(a, &p.bool_true());
         assert_eq!(
@@ -280,7 +280,7 @@ mod tests {
         assert_eq!(c.as_ref(), &Term::Op(Operator::Mult, vec![one, five]));
 
         // Test the `...` pattern
-        let term = parse_term_with_pool(&mut p, "(not (and true false true))");
+        let term = parse_term(&mut p, "(not (and true false true))");
         match match_term!((not (and ...)) = &term) {
             Some([a, b, c]) => {
                 assert_eq!(&p.bool_true(), a);
@@ -289,7 +289,7 @@ mod tests {
             }
             _ => panic!(),
         }
-        let term = parse_term_with_pool(&mut p, "(and (or false true) (= 2 2))");
+        let term = parse_term(&mut p, "(and (or false true) (= 2 2))");
         match match_term!((and (or ...) (= ...)) = &term) {
             Some(([a, b], [c, d])) => {
                 assert_eq!(&p.bool_false(), a);
@@ -349,7 +349,7 @@ mod tests {
         ];
 
         for (s, got) in &cases {
-            let [expected] = parse_terms_with_pool(&mut pool, definitions, [s]);
+            let [expected] = parse_terms(&mut pool, definitions, [s]);
             assert_eq!(&expected, got);
         }
     }

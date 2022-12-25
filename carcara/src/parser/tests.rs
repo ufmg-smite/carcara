@@ -6,7 +6,7 @@ use super::*;
 
 const ERROR_MESSAGE: &str = "parser error during test";
 
-pub fn parse_terms_with_pool<const N: usize>(
+pub fn parse_terms<const N: usize>(
     pool: &mut TermPool,
     definitions: &str,
     terms: [&str; N],
@@ -21,9 +21,10 @@ pub fn parse_terms_with_pool<const N: usize>(
     })
 }
 
-pub fn parse_term_with_pool(pool: &mut TermPool, input: &str) -> Rc<Term> {
-    let [term] = parse_terms_with_pool(pool, "", [input]);
-    term
+pub fn parse_term(pool: &mut TermPool, input: &str) -> Rc<Term> {
+    Parser::new(pool, input.as_bytes(), true, false, false)
+        .and_then(|mut parser| parser.parse_term())
+        .expect(ERROR_MESSAGE)
 }
 
 /// Tries to parse a term from a `&str`, expecting it to fail. Returns the error encountered, or
@@ -46,7 +47,7 @@ pub fn parse_proof(pool: &mut TermPool, input: &str) -> Proof {
 
 fn run_parser_tests(pool: &mut TermPool, cases: &[(&str, Rc<Term>)]) {
     for (case, expected) in cases {
-        let got = parse_term_with_pool(pool, case);
+        let got = parse_term(pool, case);
         assert_eq!(expected, &got);
     }
 }
@@ -102,12 +103,9 @@ fn test_hash_consing() {
 #[test]
 fn test_constant_terms() {
     let mut p = TermPool::new();
-    assert_eq!(Term::integer(42), *parse_term_with_pool(&mut p, "42"));
-    assert_eq!(Term::real((3, 2)), *parse_term_with_pool(&mut p, "1.5"));
-    assert_eq!(
-        Term::string("foo"),
-        *parse_term_with_pool(&mut p, "\"foo\"")
-    );
+    assert_eq!(Term::integer(42), *parse_term(&mut p, "42"));
+    assert_eq!(Term::real((3, 2)), *parse_term(&mut p, "1.5"));
+    assert_eq!(Term::string("foo"), *parse_term(&mut p, "\"foo\""));
 }
 
 #[test]
@@ -424,12 +422,12 @@ fn test_annotated_terms() {
 fn test_declare_fun() {
     let mut p = TermPool::new();
 
-    parse_terms_with_pool(
+    parse_terms(
         &mut p,
         "(declare-fun f (Bool Int Real) Real)",
         ["(f false 42 3.14159)"],
     );
-    parse_terms_with_pool(
+    parse_terms(
         &mut p,
         "(declare-fun y () Real)
         (declare-fun f (Real) Int)
@@ -437,7 +435,7 @@ fn test_declare_fun() {
         ["(g (f y) 0)"],
     );
 
-    let [got] = parse_terms_with_pool(&mut p, "(declare-fun x () Real)", ["x"]);
+    let [got] = parse_terms(&mut p, "(declare-fun x () Real)", ["x"]);
     let real_sort = p.add(Term::Sort(Sort::Real));
     assert_eq!(p.add(Term::var("x", real_sort)), got);
 }
@@ -446,7 +444,7 @@ fn test_declare_fun() {
 fn test_declare_sort() {
     let mut p = TermPool::new();
 
-    parse_terms_with_pool(
+    parse_terms(
         &mut p,
         "(declare-sort T 0)
         (declare-sort U 0)
@@ -457,7 +455,7 @@ fn test_declare_sort() {
         ["(f t u)"],
     );
 
-    let [got] = parse_terms_with_pool(
+    let [got] = parse_terms(
         &mut p,
         "(declare-sort T 0)
         (declare-fun x () T)",
@@ -470,23 +468,23 @@ fn test_declare_sort() {
 #[test]
 fn test_define_fun() {
     let mut p = TermPool::new();
-    let [got] = parse_terms_with_pool(
+    let [got] = parse_terms(
         &mut p,
         "(define-fun add ((a Int) (b Int)) Int (+ a b))",
         ["(add 2 3)"],
     );
-    assert_eq!(parse_term_with_pool(&mut p, "(+ 2 3)"), got);
+    assert_eq!(parse_term(&mut p, "(+ 2 3)"), got);
 
-    let [got] = parse_terms_with_pool(&mut p, "(define-fun x () Int 2)", ["(+ x 3)"]);
-    assert_eq!(parse_term_with_pool(&mut p, "(+ 2 3)"), got);
+    let [got] = parse_terms(&mut p, "(define-fun x () Int 2)", ["(+ x 3)"]);
+    assert_eq!(parse_term(&mut p, "(+ 2 3)"), got);
 
-    let [got] = parse_terms_with_pool(
+    let [got] = parse_terms(
         &mut p,
         "(define-fun f ((x Int)) Int (+ x 1))
          (define-fun g ((a Int) (b Int)) Int (* (f a) (f b)))",
         ["(g 2 3)"],
     );
-    let expected = parse_term_with_pool(&mut p, "(* (+ 2 1) (+ 3 1))");
+    let expected = parse_term(&mut p, "(* (+ 2 1) (+ 3 1))");
     assert_eq!(expected, got);
 }
 
@@ -508,7 +506,7 @@ fn test_step() {
         &proof.commands[0],
         &ProofCommand::Step(ProofStep {
             id: "t1".into(),
-            clause: vec![parse_term_with_pool(&mut p, "(= (+ 2 3) (- 1 2))")],
+            clause: vec![parse_term(&mut p, "(= (+ 2 3) (- 1 2))")],
             rule: "rule-name".into(),
             premises: Vec::new(),
             args: Vec::new(),
@@ -556,7 +554,7 @@ fn test_step() {
                 vec![
                     ProofArg::Assign("a".into(), p.add(Term::integer(12))),
                     ProofArg::Assign("b".into(), p.add(Term::real((314, 100)))),
-                    ProofArg::Assign("c".into(), parse_term_with_pool(&mut p, "(* 6 7)")),
+                    ProofArg::Assign("c".into(), parse_term(&mut p, "(* 6 7)")),
                 ]
             },
             discharge: Vec::new(),

@@ -503,8 +503,7 @@ mod tests {
         fn run_tests(definitions: &str, cases: &[(&str, &str)]) {
             for &(term, expected) in cases {
                 let mut pool = TermPool::new();
-                let [term, expected] =
-                    parse_terms_with_pool(&mut pool, definitions, [term, expected]);
+                let [term, expected] = parse_terms(&mut pool, definitions, [term, expected]);
                 let got = to_cnf_term(&mut pool, &term);
                 assert_eq!(expected, got);
             }
