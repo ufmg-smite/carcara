@@ -39,7 +39,6 @@ fn test_free_vars() {
 #[test]
 fn test_deep_eq() {
     enum TestType {
-        Normal,
         ModReordering,
         AlphaEquiv,
     }
@@ -49,7 +48,6 @@ fn test_deep_eq() {
         for (a, b) in cases {
             let [a, b] = parse_terms(&mut pool, definitions, [a, b]);
             match test_type {
-                TestType::Normal => assert_deep_eq!(&a, &b),
                 TestType::ModReordering => assert_deep_eq_modulo_reordering!(&a, &b),
                 TestType::AlphaEquiv => {
                     let mut time = std::time::Duration::ZERO;
@@ -67,18 +65,6 @@ fn test_deep_eq() {
             (declare-fun x () Int)
             (declare-fun y () Int)
         ";
-    run_tests(
-        definitions,
-        &[
-            ("a", "a"),
-            ("(+ x y)", "(+ x y)"),
-            (
-                "(ite (and (not p) q) (* x y) (- 0 y))",
-                "(ite (and (not p) q) (* x y) (- 0 y))",
-            ),
-        ],
-        TestType::Normal,
-    );
     run_tests(
         definitions,
         &[
