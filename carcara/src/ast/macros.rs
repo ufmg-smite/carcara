@@ -189,7 +189,36 @@ macro_rules! build_term {
     }};
 }
 
-/// Implements `FromStr` and `Debug` for an enum, given a string representation for each variant.
+/// Implements `FromStr` and `Display` for an enum, given a mapping from each variant to a string
+/// literal.
+///
+/// This macros only supports enums that don't hold any data in any of their variants. The error
+/// type for the implementation of `FromStr` will be `()`.
+///
+/// # Examples
+///
+/// ```
+/// # use carcara::impl_str_conversion_traits;
+/// # use std::str::FromStr;
+/// #[derive(Debug, PartialEq)]
+/// enum Foo {
+///     A,
+///     B,
+///     C,
+/// }
+///
+/// impl_str_conversion_traits!(Foo {
+///     A: "a",
+///     B: "b",
+///     C: "c",
+/// });
+///
+/// fn main() {
+///     assert_eq!(Foo::from_str("a"), Ok(Foo::A));
+///     assert_eq!(format!("{}", Foo::B), "b");
+///     assert_eq!(Foo::from_str("d"), Err(()));
+/// }
+/// ```
 macro_rules! impl_str_conversion_traits {
     ($enum_name:ident { $($variant:ident: $str:literal),* $(,)? }) => {
         impl std::str::FromStr for $enum_name {
