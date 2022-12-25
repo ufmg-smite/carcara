@@ -78,7 +78,7 @@ impl<'a> DeepEqElaborator<'a> {
                             .iter()
                             .map(|x| {
                                 let var = x.0.clone();
-                                let term = pool.add_term(x.clone().into());
+                                let term = pool.add(x.clone().into());
                                 (var, term)
                             })
                             .collect();
@@ -100,7 +100,7 @@ impl<'a> DeepEqElaborator<'a> {
                         let assigment_args: Vec<_> = a_bindings
                             .iter()
                             .zip(b_bindings)
-                            .map(|((a_var, _), b)| (a_var.clone(), pool.add_term(b.clone().into())))
+                            .map(|((a_var, _), b)| (a_var.clone(), pool.add(b.clone().into())))
                             .collect();
 
                         c.push(pool, &assigment_args, &variable_args).unwrap();
@@ -135,7 +135,7 @@ impl<'a> DeepEqElaborator<'a> {
                     .iter()
                     .map(|(name, value)| {
                         let sort = Term::Sort(pool.sort(value).clone());
-                        (name.clone(), pool.add_term(sort))
+                        (name.clone(), pool.add(sort))
                     })
                     .collect();
 

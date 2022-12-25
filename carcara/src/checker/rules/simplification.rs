@@ -254,7 +254,7 @@ fn generic_and_or_simplify(
     } else if result_args.iter().eq(&phis) {
         Ok(())
     } else {
-        let expected = pool.add_term(Term::Op(rule_kind, phis));
+        let expected = pool.add(Term::Op(rule_kind, phis));
         Err(EqualityError::ExpectedToBe { expected, got: result_term.clone() }.into())
     }
 }
@@ -531,10 +531,9 @@ fn generic_sum_prod_simplify_rule(
     // Finally, we verify that the constant and the remaining arguments are what we expect
     rassert!(u_constant == constant_total && u_args.iter().eq(result), {
         let expected = {
-            let mut expected_args =
-                vec![pool.add_term(Term::Terminal(Terminal::Real(constant_total)))];
+            let mut expected_args = vec![pool.add(Term::Terminal(Terminal::Real(constant_total)))];
             expected_args.extend(u_args.iter().cloned());
-            pool.add_term(Term::Op(rule_kind, expected_args))
+            pool.add(Term::Op(rule_kind, expected_args))
         };
         EqualityError::ExpectedToBe { expected, got: u.clone() }
     });
@@ -714,7 +713,7 @@ fn apply_ac_simp(
         Term::Let(binding, inner) => Term::Let(binding.clone(), apply_ac_simp(pool, cache, inner)),
         _ => return term.clone(),
     };
-    let result = pool.add_term(result);
+    let result = pool.add(result);
     cache.insert(term.clone(), result.clone());
     result
 }

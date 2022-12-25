@@ -54,8 +54,8 @@ impl ContextStack {
         // resulting hash map will then contain `(:= y z)` and `(:= x (f z))`
         for (var, value) in assignment_args.iter() {
             let sort = Term::Sort(pool.sort(value).clone());
-            let var_term = Term::var(var, pool.add_term(sort));
-            let var_term = pool.add_term(var_term);
+            let var_term = Term::var(var, pool.add(sort));
+            let var_term = pool.add(var_term);
             substitution.insert(pool, var_term.clone(), value.clone())?;
             let new_value = substitution_until_fixed_point.apply(pool, value);
             substitution_until_fixed_point.insert(pool, var_term, new_value)?;
@@ -65,8 +65,8 @@ impl ContextStack {
             .iter()
             .map(|(var, value)| {
                 let sort = Term::Sort(pool.sort(value).clone());
-                let var_term = (var.clone(), pool.add_term(sort)).into();
-                (pool.add_term(var_term), value.clone())
+                let var_term = (var.clone(), pool.add(sort)).into();
+                (pool.add(var_term), value.clone())
             })
             .collect();
         let bindings = variable_args.iter().cloned().collect();

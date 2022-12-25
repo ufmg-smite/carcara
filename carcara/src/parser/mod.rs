@@ -94,7 +94,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         allow_int_real_subtyping: bool,
     ) -> CarcaraResult<Self> {
         let mut state = ParserState::default();
-        let bool_sort = pool.add_term(Term::Sort(Sort::Bool));
+        let bool_sort = pool.add(Term::Sort(Sort::Bool));
         for iden in ["true", "false"] {
             let iden = HashCache::new(Identifier::Simple(iden.to_owned()));
             state.symbol_table.insert(iden, bool_sort.clone());
@@ -144,7 +144,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Shortcut for `self.pool.add_term`.
     fn add_term(&mut self, term: Term) -> Rc<Term> {
-        self.pool.add_term(term)
+        self.pool.add(term)
     }
 
     /// Shortcut for `self.pool.add_all`.
@@ -1043,8 +1043,8 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 .into_iter()
                 .map(|(name, value)| {
                     let sort = Term::Sort(self.pool.sort(&value).clone());
-                    let var = Term::var(name, self.pool.add_term(sort));
-                    (self.pool.add_term(var), value)
+                    let var = Term::var(name, self.pool.add(sort));
+                    (self.pool.add(var), value)
                 })
                 .collect();
 
@@ -1151,9 +1151,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     .params
                     .iter()
                     .zip(args)
-                    .map(|((name, sort), arg)| {
-                        (self.pool.add_term(Term::var(name, sort.clone())), arg)
-                    })
+                    .map(|((name, sort), arg)| (self.pool.add(Term::var(name, sort.clone())), arg))
                     .collect();
 
                 // Since we already checked the sorts of the arguments, creating this substitution

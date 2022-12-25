@@ -185,7 +185,7 @@ macro_rules! build_term {
             match_term!(@GET_VARIANT $op),
             vec![ $(build_term!($pool, $args)),+ ],
         );
-        $pool.add_term(term)
+        $pool.add(term)
     }};
 }
 
@@ -320,21 +320,21 @@ mod tests {
             (declare-fun q () Bool)
         ";
         let mut pool = TermPool::new();
-        let bool_sort = pool.add_term(Term::Sort(Sort::Bool));
-        let int_sort = pool.add_term(Term::Sort(Sort::Int));
+        let bool_sort = pool.add(Term::Sort(Sort::Bool));
+        let int_sort = pool.add(Term::Sort(Sort::Int));
 
         let (one, two, three) = (
-            pool.add_term(Term::integer(1)),
-            pool.add_term(Term::integer(2)),
-            pool.add_term(Term::integer(3)),
+            pool.add(Term::integer(1)),
+            pool.add(Term::integer(2)),
+            pool.add(Term::integer(3)),
         );
         let (a, b) = (
-            pool.add_term(Term::var("a", int_sort.clone())),
-            pool.add_term(Term::var("b", int_sort)),
+            pool.add(Term::var("a", int_sort.clone())),
+            pool.add(Term::var("b", int_sort)),
         );
         let (p, q) = (
-            pool.add_term(Term::var("p", bool_sort.clone())),
-            pool.add_term(Term::var("q", bool_sort)),
+            pool.add(Term::var("p", bool_sort.clone())),
+            pool.add(Term::var("q", bool_sort)),
         );
         let (r#true, r#false) = (pool.bool_true(), pool.bool_false());
 

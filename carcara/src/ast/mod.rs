@@ -351,7 +351,7 @@ impl Term {
     /// use `TermPool::sort`.
     pub fn raw_sort(&self) -> Sort {
         let mut pool = TermPool::new();
-        let added = pool.add_term(self.clone());
+        let added = pool.add(self.clone());
         pool.sort(&added).clone()
     }
 

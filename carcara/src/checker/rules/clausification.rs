@@ -226,7 +226,7 @@ pub fn nary_elim(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
             Case::LeftAssoc => vec![nested, head.clone()],
             Case::Chainable => unreachable!(),
         };
-        pool.add_term(Term::Op(op, new_args))
+        pool.add(Term::Op(op, new_args))
     }
 
     assert_clause_len(conclusion, 1)?;
@@ -249,9 +249,9 @@ pub fn nary_elim(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         Case::Chainable => {
             let and_args: Vec<_> = args
                 .windows(2)
-                .map(|args| pool.add_term(Term::Op(*op, args.to_vec())))
+                .map(|args| pool.add(Term::Op(*op, args.to_vec())))
                 .collect();
-            pool.add_term(Term::Op(Operator::And, and_args))
+            pool.add(Term::Op(Operator::And, and_args))
         }
         assoc_case => expand_assoc(pool, *op, args, assoc_case),
     };
@@ -266,7 +266,7 @@ fn bfun_elim_first_step(
     acc: &mut Vec<Rc<Term>>,
 ) -> Result<(), SubstitutionError> {
     let var = match bindigns {
-        [.., var] if var.1.as_sort() == Some(&Sort::Bool) => pool.add_term(var.clone().into()),
+        [.., var] if var.1.as_sort() == Some(&Sort::Bool) => pool.add(var.clone().into()),
         [rest @ .., _] => return bfun_elim_first_step(pool, rest, term, acc),
         [] => {
             acc.push(term.clone());
@@ -301,13 +301,13 @@ fn bfun_elim_second_step(
                 let inner_term = bfun_elim_second_step(pool, func, &new_args, i + 1);
                 ite_args.push(inner_term);
             }
-            return pool.add_term(Term::Op(Operator::Ite, ite_args));
+            return pool.add(Term::Op(Operator::Ite, ite_args));
         }
     }
 
     // If there were no non-constant boolean arguments we don't need to expand the term into an ite
     // term. So we just construct the original application term and return it.
-    pool.add_term(Term::App(func.clone(), args.to_vec()))
+    pool.add(Term::App(func.clone(), args.to_vec()))
 }
 
 /// Applies the simplification steps for the `bfun_elim` rule.
@@ -333,7 +333,7 @@ fn apply_bfun_elim(
                 .iter()
                 .map(|a| apply_bfun_elim(pool, a, cache))
                 .collect::<Result<_, _>>()?;
-            pool.add_term(Term::Op(*op, args))
+            pool.add(Term::Op(*op, args))
         }
         Term::Quant(q, bindings, inner) => {
             let op = match q {
@@ -346,7 +346,7 @@ fn apply_bfun_elim(
             let op_term = if args.len() == 1 {
                 args.pop().unwrap()
             } else {
-                pool.add_term(Term::Op(op, args))
+                pool.add(Term::Op(op, args))
             };
             let op_term = apply_bfun_elim(pool, &op_term, cache)?;
 
@@ -358,20 +358,20 @@ fn apply_bfun_elim(
             if new_bindings.is_empty() {
                 op_term
             } else {
-                pool.add_term(Term::Quant(*q, BindingList(new_bindings), op_term))
+                pool.add(Term::Quant(*q, BindingList(new_bindings), op_term))
             }
         }
         Term::Choice(var, inner) => {
             let inner = apply_bfun_elim(pool, inner, cache)?;
-            pool.add_term(Term::Choice(var.clone(), inner))
+            pool.add(Term::Choice(var.clone(), inner))
         }
         Term::Let(bindings, inner) => {
             let inner = apply_bfun_elim(pool, inner, cache)?;
-            pool.add_term(Term::Let(bindings.clone(), inner))
+            pool.add(Term::Let(bindings.clone(), inner))
         }
         Term::Lambda(bindings, inner) => {
             let inner = apply_bfun_elim(pool, inner, cache)?;
-            pool.add_term(Term::Lambda(bindings.clone(), inner))
+            pool.add(Term::Lambda(bindings.clone(), inner))
         }
         _ => term.clone(),
     };
