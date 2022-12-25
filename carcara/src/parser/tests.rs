@@ -26,7 +26,13 @@ pub fn parse_terms<const N: usize>(definitions: &str, terms: [&str; N]) -> [Rc<T
     parse_terms_with_pool(&mut pool, definitions, terms)
 }
 
+pub fn parse_term_with_pool(pool: &mut TermPool, input: &str) -> Rc<Term> {
+    let [term] = parse_terms_with_pool(pool, "", [input]);
+    term
+}
+
 /// Parses a term from a `&str`. Panics if any error is encountered.
+#[deprecated = "use `parse_term_with_pool` instead"]
 pub fn parse_term(input: &str) -> Term {
     parse_terms("", [input])[0].as_ref().clone()
 }
