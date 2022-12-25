@@ -1,6 +1,6 @@
 use super::{
-    assert_clause_len, assert_eq, assert_is_expected, assert_is_expected_modulo_reordering,
-    assert_num_args, CheckerError, RuleArgs, RuleResult,
+    assert_clause_len, assert_deep_eq_is_expected, assert_eq, assert_is_expected, assert_num_args,
+    CheckerError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::QuantifierError, utils::DedupIterator};
 use ahash::{AHashMap, AHashSet};
@@ -49,7 +49,7 @@ pub fn forall_inst(
     // Equalities may be reordered in the final term, so we need to use deep equality modulo
     // reordering
     let expected = substitution.apply(pool, original);
-    assert_is_expected_modulo_reordering(substituted, expected, deep_eq_time)
+    assert_deep_eq_is_expected(substituted, expected, deep_eq_time)
 }
 
 pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {

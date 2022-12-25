@@ -47,10 +47,12 @@ fn test_deep_eq() {
         let mut pool = TermPool::new();
         for (a, b) in cases {
             let [a, b] = parse_terms(&mut pool, definitions, [a, b]);
+            let mut time = std::time::Duration::ZERO;
             match test_type {
-                TestType::ModReordering => assert_deep_eq_modulo_reordering!(&a, &b),
+                TestType::ModReordering => {
+                    assert!(super::deep_eq::deep_eq(&a, &b, &mut time));
+                }
                 TestType::AlphaEquiv => {
-                    let mut time = std::time::Duration::ZERO;
                     assert!(super::deep_eq::are_alpha_equivalent(&a, &b, &mut time));
                 }
             }

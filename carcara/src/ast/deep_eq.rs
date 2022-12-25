@@ -1,12 +1,8 @@
 //! This module implements less strict definitions of equality for terms. In particular, it
-//! contains three definitions of equality that differ from `PartialEq`:
+//! contains two definitions of equality that differ from `PartialEq`:
 //!
-//! - `eq` implements a "deep" equality, meaning that it compares `ast::Rc`s by value,
-//! instead of by reference.
-//!
-//! - `eq_modulo_reordering` is also a "deep" equality, but it considers `=` terms that are
-//! reflections of each other as equal, meaning the terms `(= a b)` and `(= b a)` are considered
-//! equal by this method.
+//! - `deep_eq` considers `=` terms that are reflections of each other as equal, meaning the terms
+//! `(= a b)` and `(= b a)` are considered equal by this method.
 //!
 //! - `are_alpha_equivalent` compares terms by alpha-equivalence, meaning it implements equality of
 //! terms modulo renaming of bound variables.
@@ -22,15 +18,11 @@ pub trait DeepEq {
     fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool;
 }
 
-pub fn timed_deep_eq_modulo_reordering<T: DeepEq>(a: &T, b: &T, time: &mut Duration) -> bool {
+pub fn deep_eq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> bool {
     let start = Instant::now();
-    let result = deep_eq_modulo_reordering(a, b);
+    let result = DeepEq::eq(&mut DeepEqualityChecker::new(true, false), a, b);
     *time += start.elapsed();
     result
-}
-
-pub fn deep_eq_modulo_reordering<T: DeepEq>(a: &T, b: &T) -> bool {
-    DeepEq::eq(&mut DeepEqualityChecker::new(true, false), a, b)
 }
 
 pub fn tracing_deep_eq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> (bool, usize) {
