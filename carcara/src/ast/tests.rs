@@ -1,7 +1,4 @@
-use crate::{
-    ast::TermPool,
-    parser::tests::{parse_terms, parse_terms_with_pool},
-};
+use crate::{ast::TermPool, parser::tests::parse_terms_with_pool};
 use ahash::AHashSet;
 
 #[test]
@@ -48,8 +45,9 @@ fn test_deep_eq() {
     }
 
     fn run_tests(definitions: &str, cases: &[(&str, &str)], test_type: TestType) {
+        let mut pool = TermPool::new();
         for (a, b) in cases {
-            let [a, b] = parse_terms(definitions, [a, b]);
+            let [a, b] = parse_terms_with_pool(&mut pool, definitions, [a, b]);
             match test_type {
                 TestType::Normal => assert_deep_eq!(&a, &b),
                 TestType::ModReordering => assert_deep_eq_modulo_reordering!(&a, &b),

@@ -256,56 +256,46 @@ macro_rules! assert_deep_eq_modulo_reordering {
 #[cfg(test)]
 mod tests {
     use crate::ast::*;
-    use crate::parser::tests::{parse_term, parse_terms};
+    use crate::parser::tests::{parse_term_with_pool, parse_terms_with_pool};
 
     #[test]
     fn test_match_term() {
-        let bool_sort = Rc::new(Term::Sort(Sort::Bool));
-        let bool_false = Term::var("false", bool_sort.clone());
-        let bool_true = Term::var("true", bool_sort);
+        let mut p = TermPool::new();
+        let [one, two, five] = [1, 2, 5].map(|n| p.add(Term::integer(n)));
 
-        let term = parse_term("(= (= (not false) (= true false)) (not true))");
+        let term = parse_term_with_pool(&mut p, "(= (= (not false) (= true false)) (not true))");
         let ((a, (b, c)), d) = match_term!((= (= (not a) (= b c)) (not d)) = &term).unwrap();
-        assert_deep_eq!(a.as_ref(), &bool_false);
-        assert_deep_eq!(b.as_ref(), &bool_true);
-        assert_deep_eq!(c.as_ref(), &bool_false);
-        assert_deep_eq!(d.as_ref(), &bool_true);
+        assert_eq!(a, &p.bool_false());
+        assert_eq!(b, &p.bool_true());
+        assert_eq!(c, &p.bool_false());
+        assert_eq!(d, &p.bool_true());
 
-        let term = parse_term("(ite (not true) (- 2 2) (* 1 5))");
+        let term = parse_term_with_pool(&mut p, "(ite (not true) (- 2 2) (* 1 5))");
         let (a, b, c) = match_term!((ite (not a) b c) = &term).unwrap();
-        assert_deep_eq!(a.as_ref(), &bool_true);
-        assert_deep_eq!(
-            b.as_ref(),
-            &Term::Op(
-                Operator::Sub,
-                vec![Rc::new(Term::integer(2)), Rc::new(Term::integer(2))],
-            ),
+        assert_eq!(a, &p.bool_true());
+        assert_eq!(
+            b,
+            &p.add(Term::Op(Operator::Sub, vec![two.clone(), two.clone()])),
         );
-        assert_deep_eq!(
-            c.as_ref(),
-            &Term::Op(
-                Operator::Mult,
-                vec![Rc::new(Term::integer(1)), Rc::new(Term::integer(5))],
-            ),
-        );
+        assert_eq!(c.as_ref(), &Term::Op(Operator::Mult, vec![one, five]));
 
         // Test the `...` pattern
-        let term = parse_term("(not (and true false true))");
+        let term = parse_term_with_pool(&mut p, "(not (and true false true))");
         match match_term!((not (and ...)) = &term) {
             Some([a, b, c]) => {
-                assert_deep_eq!(&bool_true, a);
-                assert_deep_eq!(&bool_false, b);
-                assert_deep_eq!(&bool_true, c);
+                assert_eq!(&p.bool_true(), a);
+                assert_eq!(&p.bool_false(), b);
+                assert_eq!(&p.bool_true(), c);
             }
             _ => panic!(),
         }
-        let term = parse_term("(and (or false true) (= 2 2))");
+        let term = parse_term_with_pool(&mut p, "(and (or false true) (= 2 2))");
         match match_term!((and (or ...) (= ...)) = &term) {
             Some(([a, b], [c, d])) => {
-                assert_deep_eq!(&bool_false, a);
-                assert_deep_eq!(&bool_true, b);
-                assert_deep_eq!(&Term::integer(2), c);
-                assert_deep_eq!(&Term::integer(2), d);
+                assert_eq!(&p.bool_false(), a);
+                assert_eq!(&p.bool_true(), b);
+                assert_eq!(&two, c);
+                assert_eq!(&two, d);
             }
             _ => panic!(),
         }
@@ -323,20 +313,9 @@ mod tests {
         let bool_sort = pool.add(Term::Sort(Sort::Bool));
         let int_sort = pool.add(Term::Sort(Sort::Int));
 
-        let (one, two, three) = (
-            pool.add(Term::integer(1)),
-            pool.add(Term::integer(2)),
-            pool.add(Term::integer(3)),
-        );
-        let (a, b) = (
-            pool.add(Term::var("a", int_sort.clone())),
-            pool.add(Term::var("b", int_sort)),
-        );
-        let (p, q) = (
-            pool.add(Term::var("p", bool_sort.clone())),
-            pool.add(Term::var("q", bool_sort)),
-        );
-        let (r#true, r#false) = (pool.bool_true(), pool.bool_false());
+        let [one, two, three] = [1, 2, 3].map(|n| pool.add(Term::integer(n)));
+        let [a, b] = ["a", "b"].map(|s| pool.add(Term::var(s, int_sort.clone())));
+        let [p, q] = ["p", "q"].map(|s| pool.add(Term::var(s, bool_sort.clone())));
 
         let cases = [
             ("(= a b)", build_term!(pool, (= {a} {b}))),
@@ -344,21 +323,21 @@ mod tests {
                 "(= 1 2)",
                 build_term!(pool, (= {one.clone()} {two.clone()})),
             ),
-            ("(not true)", build_term!(pool, (not {r#true.clone()}))),
+            ("(not true)", build_term!(pool, (not {pool.bool_true()}))),
             (
                 "(or p false)",
-                build_term!(pool, (or {p.clone()} {r#false.clone()})),
+                build_term!(pool, (or {p.clone()} {pool.bool_false()})),
             ),
             (
                 "(and (=> p q) (ite p false (= 1 3)))",
                 build_term!(pool, (and
                     (=> {p.clone()} {q.clone()})
-                    (ite {p.clone()} {r#false} (= {one.clone()} {three.clone()}))
+                    (ite {p.clone()} {pool.bool_false()} (= {one.clone()} {three.clone()}))
                 )),
             ),
             (
                 "(distinct p q true)",
-                build_term!(pool, (distinct {p} {q} {r#true})),
+                build_term!(pool, (distinct {p} {q} {pool.bool_true()})),
             ),
             (
                 "(or (not (= 2 3)) (= 1 1))",
@@ -370,8 +349,8 @@ mod tests {
         ];
 
         for (s, got) in &cases {
-            let [expected] = parse_terms(definitions, [s]);
-            assert_deep_eq!(&expected, got);
+            let [expected] = parse_terms_with_pool(&mut pool, definitions, [s]);
+            assert_eq!(&expected, got);
         }
     }
 }
