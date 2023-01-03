@@ -119,7 +119,7 @@ fn parse_and_check_cvc5_proof(
         statistics: None,
         check_lia_using_cvc5: false,
     };
-    ProofChecker::new(pool, config, prelude).check(&proof)?;
+    ProofChecker::new(pool, config, prelude, 1).check(&proof)?;
     Ok(proof.commands)
 }
 

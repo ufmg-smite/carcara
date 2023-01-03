@@ -18,6 +18,7 @@ use std::{
     io::{self, BufRead},
     path::Path,
 };
+extern crate num_cpus;
 
 const GIT_COMMIT_HASH: &str = git_version!(fallback = "unknown");
 const GIT_BRANCH_NAME: &str = git_version!(args = ["--all"]);
@@ -110,6 +111,12 @@ struct CheckingOptions {
     /// Check `lia_generic` steps by calling into cvc5.
     #[clap(long)]
     lia_via_cvc5: bool,
+
+    /// Defines the number of cores for proof checking.
+    #[clap(short = 'u', long, required = false, default_value = "1", validator = |s: &str| -> Result<(), String> {
+        if s == "0" { Err(String::from("The number of cores can't be 0.")) } else { Ok(()) }
+    })]
+    num_cores: usize,
 }
 
 #[derive(Args)]
@@ -129,6 +136,7 @@ fn build_carcara_options(
         strict,
         skip_unknown_rules,
         lia_via_cvc5,
+        num_cores,
     }: CheckingOptions,
 ) -> CarcaraOptions {
     CarcaraOptions {
@@ -138,6 +146,7 @@ fn build_carcara_options(
         check_lia_using_cvc5: lia_via_cvc5,
         strict,
         skip_unknown_rules,
+        num_cores: std::cmp::min(num_cores as u32, num_cpus::get() as u32) as usize,
     }
 }
 

@@ -58,10 +58,16 @@ pub struct ProofChecker<'c> {
     elaborator: Option<Elaborator>,
     reached_empty_clause: bool,
     is_holey: bool,
+    num_cores: usize,
 }
 
 impl<'c> ProofChecker<'c> {
-    pub fn new(pool: &'c mut TermPool, config: Config<'c>, prelude: ProblemPrelude) -> Self {
+    pub fn new(
+        pool: &'c mut TermPool,
+        config: Config<'c>,
+        prelude: ProblemPrelude,
+        num_cores: usize,
+    ) -> Self {
         ProofChecker {
             pool,
             config,
@@ -70,6 +76,18 @@ impl<'c> ProofChecker<'c> {
             elaborator: None,
             reached_empty_clause: false,
             is_holey: false,
+            num_cores: num_cores,
+        }
+    }
+
+    pub fn parallel_check(&mut self, proof: &Proof) -> CarcaraResult<bool> {
+        let mut threads: Vec<_> = vec![];
+
+
+        if self.config.is_running_test || self.reached_empty_clause {
+            Ok(self.is_holey)
+        } else {
+            Err(Error::DoesNotReachEmptyClause)
         }
     }
 

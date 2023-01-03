@@ -29,6 +29,7 @@ fn run_job<T: CollectResults + Default>(
         check_lia_using_cvc5,
         strict,
         skip_unknown_rules,
+        num_cores: _,
     }: &CarcaraOptions,
     elaborate: bool,
 ) -> Result<(), carcara::Error> {
@@ -65,7 +66,7 @@ fn run_job<T: CollectResults + Default>(
         }),
         check_lia_using_cvc5,
     };
-    let mut checker = checker::ProofChecker::new(&mut pool, config, prelude);
+    let mut checker = checker::ProofChecker::new(&mut pool, config, prelude, 1);
 
     let checking = Instant::now();
 

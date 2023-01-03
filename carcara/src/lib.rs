@@ -57,6 +57,7 @@ pub struct CarcaraOptions {
     pub check_lia_using_cvc5: bool,
     pub strict: bool,
     pub skip_unknown_rules: bool,
+    pub num_cores: usize,
 }
 
 impl Default for CarcaraOptions {
@@ -74,6 +75,7 @@ impl CarcaraOptions {
             check_lia_using_cvc5: false,
             strict: false,
             skip_unknown_rules: false,
+            num_cores: 1,
         }
     }
 }
@@ -118,6 +120,7 @@ pub fn check<T: io::BufRead>(
         check_lia_using_cvc5,
         strict,
         skip_unknown_rules,
+        num_cores,
     }: CarcaraOptions,
 ) -> Result<bool, Error> {
     let (prelude, proof, mut pool) = parser::parse_instance(
@@ -135,7 +138,11 @@ pub fn check<T: io::BufRead>(
         statistics: None,
         check_lia_using_cvc5,
     };
-    checker::ProofChecker::new(&mut pool, config, prelude).check(&proof)
+    if num_cores != 1 {
+        checker::ProofChecker::new(&mut pool, config, prelude, num_cores).parallel_check(&proof)
+    } else {
+        checker::ProofChecker::new(&mut pool, config, prelude, num_cores).check(&proof)
+    }
 }
 
 pub fn check_and_elaborate<T: io::BufRead>(
@@ -148,6 +155,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
         check_lia_using_cvc5,
         strict,
         skip_unknown_rules,
+        num_cores: _,
     }: CarcaraOptions,
 ) -> Result<Vec<ProofCommand>, Error> {
     let (prelude, proof, mut pool) = parser::parse_instance(
@@ -165,7 +173,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
         statistics: None,
         check_lia_using_cvc5,
     };
-    checker::ProofChecker::new(&mut pool, config, prelude)
+    checker::ProofChecker::new(&mut pool, config, prelude, 1)
         .check_and_elaborate(proof)
         .map(|p| p.commands)
 }

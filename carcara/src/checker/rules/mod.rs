@@ -185,6 +185,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
                 check_lia_using_cvc5: true,
             },
             prelude,
+            1,
         );
         let got = checker.check(&parsed).is_ok();
         assert_eq!(
