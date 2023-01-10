@@ -163,10 +163,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
         checker::{Config, ProofChecker},
         parser::parse_instance,
     };
-    use std::{
-        io::Cursor,
-        sync::{Arc, Mutex},
-    };
+    use std::io::Cursor;
 
     for (i, (proof, expected)) in cases.iter().enumerate() {
         // This parses the definitions again for every case, which is not ideal
@@ -184,7 +181,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
                 strict: false,
                 skip_unknown_rules: false,
                 is_running_test: true,
-                statistics: Arc::new(Mutex::new(None)),
+                statistics: None,
                 check_lia_using_cvc5: true,
             },
             prelude,

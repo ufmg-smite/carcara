@@ -49,7 +49,7 @@ pub struct Config<'c> {
     pub strict: bool,
     pub skip_unknown_rules: bool,
     pub is_running_test: bool,
-    pub statistics: Arc<Mutex<Option<CheckerStatistics<'c>>>>,
+    pub statistics: Option<CheckerStatistics<'c>>,
     pub check_lia_using_cvc5: bool,
 }
 
@@ -90,7 +90,7 @@ impl<'c> ProofChecker<'c> {
                 strict: config.strict,
                 skip_unknown_rules: config.skip_unknown_rules,
                 is_running_test: config.is_running_test,
-                statistics: Arc::clone(&config.statistics),
+                statistics: None,
                 check_lia_using_cvc5: config.check_lia_using_cvc5,
             },
             prelude: self.prelude.clone(),
@@ -180,9 +180,7 @@ impl<'c> ProofChecker<'c> {
                                         }
 
                                         // let mut a = ;
-                                        if let Some(stats) =
-                                            &mut *local_self.config.statistics.lock().unwrap()
-                                        {
+                                        if let Some(stats) = &mut local_self.config.statistics {
                                             let rule_name = match s.commands.last() {
                                                 Some(ProofCommand::Step(step)) => {
                                                     format!("anchor({})", &step.rule)
@@ -292,7 +290,7 @@ impl<'c> ProofChecker<'c> {
                         elaborator.open_subproof(s.commands.len());
                     }
 
-                    if let Some(stats) = &mut *self.config.statistics.lock().unwrap() {
+                    if let Some(stats) = &mut self.config.statistics {
                         let rule_name = match s.commands.last() {
                             Some(ProofCommand::Step(step)) => format!("anchor({})", &step.rule),
                             _ => "anchor".to_owned(),
@@ -328,7 +326,7 @@ impl<'c> ProofChecker<'c> {
 
         let elaboration_time = Instant::now();
         proof.commands = elaborator.end(proof.commands);
-        if let Some(stats) = &mut *self.config.statistics.lock().unwrap() {
+        if let Some(stats) = &mut self.config.statistics {
             *stats.elaboration_time += elaboration_time.elapsed();
         }
         Ok(proof)
@@ -356,7 +354,7 @@ impl<'c> ProofChecker<'c> {
         }
 
         if premises.contains(term) {
-            if let Some(s) = &mut *self.config.statistics.lock().unwrap() {
+            if let Some(s) = &mut self.config.statistics {
                 let time = time.elapsed();
                 *s.assume_time += time;
                 s.results
@@ -375,7 +373,7 @@ impl<'c> ProofChecker<'c> {
             let mut this_deep_eq_time = Duration::ZERO;
             let (result, depth) = tracing_deep_eq(term, p, &mut this_deep_eq_time);
             deep_eq_time += this_deep_eq_time;
-            if let Some(s) = &mut *self.config.statistics.lock().unwrap() {
+            if let Some(s) = &mut self.config.statistics {
                 s.results.add_deep_eq_depth(depth);
             }
             if result {
@@ -391,12 +389,12 @@ impl<'c> ProofChecker<'c> {
 
                 elaborator.elaborate_assume(&mut self.pool.lock().unwrap(), p, term.clone(), id);
 
-                if let Some(s) = &mut *self.config.statistics.lock().unwrap() {
+                if let Some(s) = &mut self.config.statistics {
                     *s.elaboration_time += elaboration_time.elapsed();
                 }
             }
 
-            if let Some(s) = &mut *self.config.statistics.lock().unwrap() {
+            if let Some(s) = &mut self.config.statistics {
                 let time = time.elapsed();
                 *s.assume_time += time;
                 *s.assume_core_time += core_time;
@@ -497,7 +495,7 @@ impl<'c> ProofChecker<'c> {
             }
         }
 
-        if let Some(s) = &mut *self.config.statistics.lock().unwrap() {
+        if let Some(s) = &mut self.config.statistics {
             let time = time.elapsed();
             s.results
                 .add_step_measurement(s.file_name, &step.id, &step.rule, time);

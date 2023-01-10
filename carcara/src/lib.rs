@@ -46,8 +46,6 @@ use checker::error::CheckerError;
 use parser::ParserError;
 use parser::Position;
 use std::io;
-use std::sync::Arc;
-use std::sync::Mutex;
 use thiserror::Error;
 
 pub type CarcaraResult<T> = Result<T, Error>;
@@ -137,7 +135,7 @@ pub fn check<T: io::BufRead>(
         strict,
         skip_unknown_rules,
         is_running_test: false,
-        statistics: Arc::new(Mutex::new(None)),
+        statistics: None,
         check_lia_using_cvc5,
     };
     if num_cores != 1 {
@@ -172,7 +170,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
         strict,
         skip_unknown_rules,
         is_running_test: false,
-        statistics: Arc::new(Mutex::new(None)),
+        statistics: None,
         check_lia_using_cvc5,
     };
     checker::ProofChecker::new(&mut pool, config, prelude, 1)
