@@ -1,12 +1,8 @@
 //! This module implements less strict definitions of equality for terms. In particular, it
-//! contains three definitions of equality that differ from `PartialEq`:
+//! contains two definitions of equality that differ from `PartialEq`:
 //!
-//! - `eq` implements a "deep" equality, meaning that it compares `ast::Rc`s by value,
-//! instead of by reference.
-//!
-//! - `eq_modulo_reordering` is also a "deep" equality, but it considers `=` terms that are
-//! reflections of each other as equal, meaning the terms `(= a b)` and `(= b a)` are considered
-//! equal by this method.
+//! - `deep_eq` considers `=` terms that are reflections of each other as equal, meaning the terms
+//! `(= a b)` and `(= b a)` are considered equal by this method.
 //!
 //! - `are_alpha_equivalent` compares terms by alpha-equivalence, meaning it implements equality of
 //! terms modulo renaming of bound variables.
@@ -22,26 +18,11 @@ pub trait DeepEq {
     fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool;
 }
 
-pub fn timed_deep_eq<T: DeepEq>(a: &T, b: &T, time: &mut Duration) -> bool {
+pub fn deep_eq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> bool {
     let start = Instant::now();
-    let result = deep_eq(a, b);
+    let result = DeepEq::eq(&mut DeepEqualityChecker::new(true, false), a, b);
     *time += start.elapsed();
     result
-}
-
-pub fn timed_deep_eq_modulo_reordering<T: DeepEq>(a: &T, b: &T, time: &mut Duration) -> bool {
-    let start = Instant::now();
-    let result = deep_eq_modulo_reordering(a, b);
-    *time += start.elapsed();
-    result
-}
-
-pub fn deep_eq<T: DeepEq>(a: &T, b: &T) -> bool {
-    DeepEq::eq(&mut DeepEqualityChecker::new(false, false), a, b)
-}
-
-pub fn deep_eq_modulo_reordering<T: DeepEq>(a: &T, b: &T) -> bool {
-    DeepEq::eq(&mut DeepEqualityChecker::new(true, false), a, b)
 }
 
 pub fn tracing_deep_eq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> (bool, usize) {
@@ -70,6 +51,7 @@ pub fn are_alpha_equivalent(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> 
 pub struct DeepEqualityChecker {
     // In order to check alpha-equivalence, we can't use a simple global cache. For instance, let's
     // say we are comparing the following terms for alpha equivalence:
+    // ```
     //     a := (and
     //         (forall ((x Int) (y Int)) (< x y))
     //         (forall ((x Int) (y Int)) (< x y))
@@ -78,13 +60,14 @@ pub struct DeepEqualityChecker {
     //         (forall ((x Int) (y Int)) (< x y))
     //         (forall ((y Int) (x Int)) (< x y))
     //     )
+    // ```
     // When comparing the first argument of each term, `(forall ((x Int) (y Int)) (< x y))`,
     // `(< x y)` will become `(< $0 $1)` for both `a` and `b`, using De Bruijn indices. We will see
     // that they are equal, and add the entry `((< x y), (< x y))` to the cache. However, when we
     // are comparing the second argument of each term, `(< x y)` will again be `(< $0 $1)` in `a`,
     // but it will be `(< $1 $0)` in `b`. If we just rely on the cache, we will incorrectly
     // determine that `a` and `b` are alpha-equivalent.  To account for that, we use a more
-    // complicated caching system, based on a `SymbolTable`. We push a new scope everytime we enter
+    // complicated caching system, based on a `SymbolTable`. We push a new scope every time we enter
     // a binder term, and pop it as we exit. This unfortunately means that equalities derived
     // inside a binder term can't be reused outside of it, degrading performance. If we are not
     // checking for alpha-equivalence, we never push an additional scope to this `SymbolTable`,
@@ -156,7 +139,7 @@ impl DeepEqualityChecker {
 impl DeepEq for Rc<Term> {
     fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool {
         // If the two `Rc`s are directly equal, and we are not checking for alpha-equivalence, we
-        // can retrun `true`.
+        // can return `true`.
         // Note that if we are checking for alpha-equivalence, identical terms may be considered
         // different, if the bound variables in them have different meanings. For example, in the
         // terms `(forall ((x Int) (y Int)) (< x y))` and `(forall ((y Int) (x Int)) (< x y))`,
@@ -347,9 +330,9 @@ struct AlphaEquivalenceChecker {
     //
     // Normally, the index selected for a given appearance of a variable is the number of bound
     // variables introduced between that variable and its appearance. That is, the term
-    //     (forall ((x Int)) (and (exists ((y Int)) (> x y)) (> x 5)))
+    //     `(forall ((x Int)) (and (exists ((y Int)) (> x y)) (> x 5)))`
     // would be represented using De Bruijn indices like this:
-    //     (forall ((x Int)) (and (exists ((y Int)) (> $1 $0)) (> $0 5)))
+    //     `(forall ((x Int)) (and (exists ((y Int)) (> $1 $0)) (> $0 5)))`
     // This has a few annoying properties, like the fact that the same bound variable can receive
     // different indices in different appearances (in the example, `x` appears as both `$0` and
     // `$1`). To simplify the implementation, we revert the order of the indices, such that each
@@ -357,7 +340,7 @@ struct AlphaEquivalenceChecker {
     // appearances of the first bound variable are assigned `$0`, all appearances of the variable
     // that is bound second are assigned `$1`, etc. The given term would then be represented like
     // this:
-    //     (forall ((x Int)) (and (exists ((y Int)) (> $0 $1)) (> $0 5)))
+    //     `(forall ((x Int)) (and (exists ((y Int)) (> $0 $1)) (> $0 5)))`
     indices: (SymbolTable<String, usize>, SymbolTable<String, usize>),
     counter: Vec<usize>, // Holds the count of how many variables were bound before each depth
 }

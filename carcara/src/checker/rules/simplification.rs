@@ -10,11 +10,14 @@ use rug::Rational;
 macro_rules! simplify {
     // This is a recursive macro that expands to a series of nested `match` expressions. For
     // example:
+    // ```
     //      simplify!(term {
     //          (or a b): (bind_a, bind_b) => foo,
     //          (not c): (bind_c) if pred(bind_c) => bar,
     //      })
-    // becomes:
+    // ```
+    // becomes
+    // ```
     //      match match_term!((or a b) = term) {
     //          Some((bind_a, bind_b)) => foo,
     //          _ => match match_term!((not c) = term) {
@@ -22,6 +25,7 @@ macro_rules! simplify {
     //              _ => None,
     //          }
     //      }
+    // ```
     ($term:ident {}) => { None };
     ($term:ident {
         $pat:tt: $idens:tt $(if $guard:expr)? => $res:expr,
@@ -63,7 +67,7 @@ fn generic_simplify_rule(
 
     let (left, right) = match_term_err!((= phi psi) = &conclusion[0])?;
 
-    // Since equalities can be implicitly flipped, we have to check both possiblities. We store the
+    // Since equalities can be implicitly flipped, we have to check both possibilities. We store the
     // result of the first simplification to use in the error if both of them fail.
     let result = simplify_until_fixed_point(left, right)?;
     let got = result == *right || simplify_until_fixed_point(right, left)? == *left;
@@ -171,7 +175,7 @@ fn generic_and_or_simplify(
     };
 
     // The "short-circuit term" is the term that can short-circuit the conjunction or disjunction.
-    // This is `true` for conjunctions and `false` disjunctions
+    // This is `true` for conjunctions and `false` for disjunctions
     let short_circuit_term = !skip_term;
 
     let (phis, result_term) = match_term_err!((= phi psi) = &conclusion[0])?;
@@ -187,7 +191,7 @@ fn generic_and_or_simplify(
     };
 
     // Sometimes, the `and_simplify` and `or_simplify` rules are used on a nested application of
-    // the rule operator, where the outer operation only has one argument, e.g. `(and (and p q r)`.
+    // the rule operator, where the outer operation only has one argument, e.g. `(and (and p q r))`.
     // If we encounter this, we remove the outer application
     if phis.len() == 1 {
         match phis[0].as_ref() {
@@ -250,7 +254,7 @@ fn generic_and_or_simplify(
     } else if result_args.iter().eq(&phis) {
         Ok(())
     } else {
-        let expected = pool.add_term(Term::Op(rule_kind, phis));
+        let expected = pool.add(Term::Op(rule_kind, phis));
         Err(EqualityError::ExpectedToBe { expected, got: result_term.clone() }.into())
     }
 }
@@ -511,9 +515,11 @@ fn generic_sum_prod_simplify_rule(
 
     // This covers a tricky edge case that happens when the only non-constant term in `ts` is also a
     // valid application of the rule operator. For example:
+    // ```
     //     (step t1 (cl
     //         (= (* 1 (* 2 x)) (* 2 x))
     //     ) :rule prod_simplify)
+    // ```
     // In this step, the term `(* 2 x)` on the right-hand side should be interpreted as an atom,
     // but since it is a valid `u` term, it is unwrapped such that `u_constant` is 2 and `u_args`
     // is `x`. To handle this, we first check if the expected result is just one term, and try to
@@ -525,10 +531,9 @@ fn generic_sum_prod_simplify_rule(
     // Finally, we verify that the constant and the remaining arguments are what we expect
     rassert!(u_constant == constant_total && u_args.iter().eq(result), {
         let expected = {
-            let mut expected_args =
-                vec![pool.add_term(Term::Terminal(Terminal::Real(constant_total)))];
+            let mut expected_args = vec![pool.add(Term::Terminal(Terminal::Real(constant_total)))];
             expected_args.extend(u_args.iter().cloned());
-            pool.add_term(Term::Op(rule_kind, expected_args))
+            pool.add(Term::Op(rule_kind, expected_args))
         };
         EqualityError::ExpectedToBe { expected, got: u.clone() }
     });
@@ -708,7 +713,7 @@ fn apply_ac_simp(
         Term::Let(binding, inner) => Term::Let(binding.clone(), apply_ac_simp(pool, cache, inner)),
         _ => return term.clone(),
     };
-    let result = pool.add_term(result);
+    let result = pool.add(result);
     cache.insert(term.clone(), result.clone());
     result
 }

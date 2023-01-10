@@ -11,17 +11,14 @@ mod substitution;
 #[cfg(test)]
 mod tests;
 
-pub use deep_eq::{
-    are_alpha_equivalent, deep_eq, deep_eq_modulo_reordering, timed_deep_eq,
-    timed_deep_eq_modulo_reordering, tracing_deep_eq, DeepEq,
-};
+pub use deep_eq::{are_alpha_equivalent, deep_eq, tracing_deep_eq};
 pub use iter::ProofIter;
 pub use pool::TermPool;
 pub use printer::print_proof;
 pub use rc::Rc;
 pub use substitution::{Substitution, SubstitutionError};
 
-pub(crate) use deep_eq::DeepEqualityChecker;
+pub(crate) use deep_eq::{DeepEq, DeepEqualityChecker};
 
 use crate::checker::error::CheckerError;
 use ahash::AHashSet;
@@ -351,7 +348,7 @@ impl Term {
     /// use `TermPool::sort`.
     pub fn raw_sort(&self) -> Sort {
         let mut pool = TermPool::new();
-        let added = pool.add_term(self.clone());
+        let added = pool.add(self.clone());
         pool.sort(&added).clone()
     }
 

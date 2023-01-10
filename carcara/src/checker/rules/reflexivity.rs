@@ -81,7 +81,7 @@ fn elaborate_equality(
     id: &str,
     deep_eq_time: &mut std::time::Duration,
 ) -> (usize, usize) {
-    let is_alpha_equivalence = !timed_deep_eq_modulo_reordering(left, right, deep_eq_time);
+    let is_alpha_equivalence = !deep_eq(left, right, deep_eq_time);
     elaborator.elaborate_deep_eq(pool, id, left.clone(), right.clone(), is_alpha_equivalence)
 }
 

@@ -70,7 +70,7 @@ pub fn bind(
 
     let [l_bindings, r_bindings] = [l_bindings, r_bindings].map(|b| {
         b.iter()
-            .map(|var| pool.add_term(var.clone().into()))
+            .map(|var| pool.add(var.clone().into()))
             .collect::<AHashSet<_>>()
     });
 
@@ -103,7 +103,7 @@ pub fn bind(
             // Sometimes, the context bindings also appear as bindings in the quantifiers, so we
             // include them in the `xs` and `ys`
             context.bindings.iter().map(|var| {
-                let term = pool.add_term(var.clone().into());
+                let term = pool.add(var.clone().into());
                 (term.clone(), term)
             }),
         )
@@ -167,8 +167,8 @@ pub fn r#let(
     let mut pairs: Vec<_> = let_bindings
         .iter()
         .map(|(x, t)| {
-            let sort = pool.add_term(Term::Sort(pool.sort(t).clone()));
-            let x_term = pool.add_term((x.clone(), sort).into());
+            let sort = pool.add(Term::Sort(pool.sort(t).clone()));
+            let x_term = pool.add((x.clone(), sort).into());
             let s = substitution
                 .get(&x_term)
                 .ok_or_else(|| SubproofError::BindingIsNotInContext(x.clone()))?;
@@ -276,11 +276,11 @@ pub fn onepoint(
 
     let l_bindings_set: AHashSet<_> = l_bindings
         .iter()
-        .map(|var| pool.add_term(var.clone().into()))
+        .map(|var| pool.add(var.clone().into()))
         .collect();
     let r_bindings_set: AHashSet<_> = r_bindings
         .iter()
-        .map(|var| pool.add_term(var.clone().into()))
+        .map(|var| pool.add(var.clone().into()))
         .collect();
     let substitution_vars: AHashSet<_> = last_context
         .mappings
@@ -290,7 +290,7 @@ pub fn onepoint(
 
     let points = extract_points(quant, left);
 
-    // Since a substitution may use a varibale introduced in a previous substitution, we apply the
+    // Since a substitution may use a variable introduced in a previous substitution, we apply the
     // substitution to the points in order to replace these variables by their value. We also
     // create a duplicate of every point in the reverse order, since the order of equalities may be
     // flipped
@@ -314,7 +314,7 @@ pub fn onepoint(
         let expected: Vec<_> = l_bindings
             .iter()
             .filter(|&v| {
-                let t = pool.add_term(v.clone().into());
+                let t = pool.add(v.clone().into());
                 !last_context.mappings.iter().any(|(k, _)| *k == t)
             })
             .cloned()
@@ -357,7 +357,7 @@ fn generic_skolemization_rule(
     let substitution: AHashMap<Rc<Term>, Rc<Term>> =
         context.last().unwrap().mappings.iter().cloned().collect();
     for (i, x) in bindings.iter().enumerate() {
-        let x_term = pool.add_term(Term::from(x.clone()));
+        let x_term = pool.add(Term::from(x.clone()));
         let t = substitution
             .get(&x_term)
             .ok_or_else(|| SubproofError::BindingIsNotInContext(x.0.clone()))?;
@@ -370,7 +370,7 @@ fn generic_skolemization_rule(
             // If this is the last binding, all bindings were skolemized, so we don't need to wrap
             // the term in a quantifier
             if i < bindings.len() - 1 {
-                inner = pool.add_term(Term::Quant(
+                inner = pool.add(Term::Quant(
                     rule_type,
                     BindingList(bindings.0[i + 1..].to_vec()),
                     inner,
@@ -381,7 +381,7 @@ fn generic_skolemization_rule(
             if rule_type == Quantifier::Forall {
                 inner = build_term!(pool, (not { inner }));
             }
-            pool.add_term(Term::Choice(x.clone(), inner))
+            pool.add(Term::Choice(x.clone(), inner))
         };
         if !are_alpha_equivalent(t, &expected, deep_eq_time) {
             return Err(EqualityError::ExpectedEqual(t.clone(), expected).into());

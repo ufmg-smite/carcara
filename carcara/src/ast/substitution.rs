@@ -174,11 +174,11 @@ impl Substitution {
             Term::App(func, args) => {
                 let new_args = apply_to_sequence!(args);
                 let new_func = self.apply(pool, func);
-                pool.add_term(Term::App(new_func, new_args))
+                pool.add(Term::App(new_func, new_args))
             }
             Term::Op(op, args) => {
                 let new_args = apply_to_sequence!(args);
-                pool.add_term(Term::Op(*op, new_args))
+                pool.add(Term::Op(*op, new_args))
             }
             Term::Quant(q, b, t) => {
                 self.apply_to_binder(pool, term, b.as_ref(), t, false, |b, t| {
@@ -216,8 +216,8 @@ impl Substitution {
         // Note: this method assumes that `binding_list` is a "sort" binding list. "Value" lists add
         // some complications that are currently not supported. For example, the variable in the
         // domain of the substitution might be used in the value of a binding in the binding list,
-        // and the behaviour of the susbstitution may change if this use is before or after the
-        // varibale is bound in the list.
+        // and the behavior of the substitution may change if this use is before or after the
+        // variable is bound in the list.
 
         if self.map.len() != 1 {
             return false;
@@ -225,7 +225,7 @@ impl Substitution {
         let x = self.map.iter().next().unwrap().0.as_var().unwrap();
 
         let mut should_be_renamed = binding_list.iter().filter(|&var| {
-            let t = pool.add_term(var.clone().into());
+            let t = pool.add(var.clone().into());
             self.should_be_renamed.as_ref().unwrap().contains(&t)
         });
 
@@ -274,7 +274,7 @@ impl Substitution {
             let renamed = renaming.apply(pool, inner);
             self.apply(pool, &renamed)
         };
-        pool.add_term(build_function(new_bindings, new_term))
+        pool.add(build_function(new_bindings, new_term))
     }
 
     /// Creates a new substitution that renames all variables in the binding list that may be
@@ -297,7 +297,7 @@ impl Substitution {
                 // If the binding list is a "sort" binding list, then `value` will be the variable's
                 // sort. Otherwise, we need to get the sort of `value`
                 let sort = if is_value_list {
-                    pool.add_term(Term::Sort(pool.sort(value).clone()))
+                    pool.add(Term::Sort(pool.sort(value).clone()))
                 } else {
                     value.clone()
                 };
@@ -308,7 +308,7 @@ impl Substitution {
                 // We keep adding `@`s to the variable name as long as it is necessary
                 loop {
                     if !new_vars.contains(&new_var) {
-                        let new_term = pool.add_term((new_var.clone(), sort.clone()).into());
+                        let new_term = pool.add((new_var.clone(), sort.clone()).into());
                         if !self.should_be_renamed.as_ref().unwrap().contains(&new_term) {
                             break;
                         }
@@ -320,8 +320,8 @@ impl Substitution {
                 if changed {
                     // If the variable was renamed, we have to add this renaming to the resulting
                     // substitution
-                    let old = pool.add_term((var.clone(), sort.clone()).into());
-                    let new = pool.add_term((new_var.clone(), sort).into());
+                    let old = pool.add((var.clone(), sort.clone()).into());
+                    let new = pool.add((new_var.clone(), sort).into());
 
                     // We can safely unwrap here because `old` and `new` are guaranteed to have the
                     // same sort

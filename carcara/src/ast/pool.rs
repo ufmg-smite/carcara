@@ -73,7 +73,7 @@ impl TermPool {
 
     /// Takes a term and returns an `Rc` referencing it. If the term was not originally in the
     /// terms hash map, it is added to it. This also adds the term's sort to the sort cache.
-    pub fn add_term(&mut self, term: Term) -> Rc<Term> {
+    pub fn add(&mut self, term: Term) -> Rc<Term> {
         let term = Self::add_term_to_map(&mut self.terms, term);
         self.compute_sort(&term);
         term
@@ -81,7 +81,7 @@ impl TermPool {
 
     /// Takes a vector of terms and calls `add_term` on each.
     pub fn add_all(&mut self, terms: Vec<Term>) -> Vec<Rc<Term>> {
-        terms.into_iter().map(|t| self.add_term(t)).collect()
+        terms.into_iter().map(|t| self.add(t)).collect()
     }
 
     /// Returns the sort of this term. For operations and application terms, this method assumes
@@ -149,7 +149,7 @@ impl TermPool {
                 let mut result: Vec<_> =
                     bindings.iter().map(|(_name, sort)| sort.clone()).collect();
                 let return_sort = Term::Sort(self.compute_sort(body).clone());
-                result.push(self.add_term(return_sort));
+                result.push(self.add(return_sort));
                 Sort::Function(result)
             }
         };
@@ -194,7 +194,7 @@ impl TermPool {
             Term::Quant(_, bindings, inner) | Term::Lambda(bindings, inner) => {
                 let mut vars = self.free_vars(inner).clone();
                 for bound_var in bindings {
-                    let term = self.add_term(bound_var.clone().into());
+                    let term = self.add(bound_var.clone().into());
                     vars.remove(&term);
                 }
                 vars
@@ -203,15 +203,15 @@ impl TermPool {
                 let mut vars = self.free_vars(inner).clone();
                 for (var, value) in bindings {
                     let sort = Term::Sort(self.sort(value).clone());
-                    let sort = self.add_term(sort);
-                    let term = self.add_term((var.clone(), sort).into());
+                    let sort = self.add(sort);
+                    let term = self.add((var.clone(), sort).into());
                     vars.remove(&term);
                 }
                 vars
             }
             Term::Choice(bound_var, inner) => {
                 let mut vars = self.free_vars(inner).clone();
-                let term = self.add_term(bound_var.clone().into());
+                let term = self.add(bound_var.clone().into());
                 vars.remove(&term);
                 vars
             }

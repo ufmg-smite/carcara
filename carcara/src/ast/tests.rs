@@ -1,7 +1,4 @@
-use crate::{
-    ast::TermPool,
-    parser::tests::{parse_terms, parse_terms_with_pool},
-};
+use crate::{ast::TermPool, parser::tests::parse_terms};
 use ahash::AHashSet;
 
 #[test]
@@ -9,7 +6,7 @@ fn test_free_vars() {
     fn run_tests(definitions: &str, cases: &[(&str, &[&str])]) {
         for &(term, expected) in cases {
             let mut pool = TermPool::new();
-            let [root] = parse_terms_with_pool(&mut pool, definitions, [term]);
+            let [root] = parse_terms(&mut pool, definitions, [term]);
             let expected: AHashSet<_> = expected.iter().copied().collect();
             let got: AHashSet<_> = pool
                 .free_vars(&root)
@@ -42,19 +39,20 @@ fn test_free_vars() {
 #[test]
 fn test_deep_eq() {
     enum TestType {
-        Normal,
         ModReordering,
         AlphaEquiv,
     }
 
     fn run_tests(definitions: &str, cases: &[(&str, &str)], test_type: TestType) {
+        let mut pool = TermPool::new();
         for (a, b) in cases {
-            let [a, b] = parse_terms(definitions, [a, b]);
+            let [a, b] = parse_terms(&mut pool, definitions, [a, b]);
+            let mut time = std::time::Duration::ZERO;
             match test_type {
-                TestType::Normal => assert_deep_eq!(&a, &b),
-                TestType::ModReordering => assert_deep_eq_modulo_reordering!(&a, &b),
+                TestType::ModReordering => {
+                    assert!(super::deep_eq::deep_eq(&a, &b, &mut time));
+                }
                 TestType::AlphaEquiv => {
-                    let mut time = std::time::Duration::ZERO;
                     assert!(super::deep_eq::are_alpha_equivalent(&a, &b, &mut time));
                 }
             }
@@ -69,18 +67,6 @@ fn test_deep_eq() {
             (declare-fun x () Int)
             (declare-fun y () Int)
         ";
-    run_tests(
-        definitions,
-        &[
-            ("a", "a"),
-            ("(+ x y)", "(+ x y)"),
-            (
-                "(ite (and (not p) q) (* x y) (- 0 y))",
-                "(ite (and (not p) q) (* x y) (- 0 y))",
-            ),
-        ],
-        TestType::Normal,
-    );
     run_tests(
         definitions,
         &[

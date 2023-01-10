@@ -1,6 +1,6 @@
 use super::{
-    assert_clause_len, assert_eq, assert_is_expected, assert_is_expected_modulo_reordering,
-    assert_num_args, CheckerError, RuleArgs, RuleResult,
+    assert_clause_len, assert_deep_eq_is_expected, assert_eq, assert_is_expected, assert_num_args,
+    CheckerError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::QuantifierError, utils::DedupIterator};
 use ahash::{AHashMap, AHashSet};
@@ -28,14 +28,14 @@ pub fn forall_inst(
         .iter()
         .map(|arg| {
             let (arg_name, arg_value) = arg.as_assign()?;
-            let arg_sort = pool.add_term(Term::Sort(pool.sort(arg_value).clone()));
+            let arg_sort = pool.add(Term::Sort(pool.sort(arg_value).clone()));
             rassert!(
                 bindings.remove(&(arg_name.clone(), arg_sort.clone())),
                 QuantifierError::NoBindingMatchesArg(arg_name.clone())
             );
 
             let ident_term = (arg_name.clone(), arg_sort).into();
-            Ok((pool.add_term(ident_term), arg_value.clone()))
+            Ok((pool.add(ident_term), arg_value.clone()))
         })
         .collect::<Result<_, CheckerError>>()?;
     let mut substitution = Substitution::new(pool, substitution)?;
@@ -49,7 +49,7 @@ pub fn forall_inst(
     // Equalities may be reordered in the final term, so we need to use deep equality modulo
     // reordering
     let expected = substitution.apply(pool, original);
-    assert_is_expected_modulo_reordering(substituted, expected, deep_eq_time)
+    assert_deep_eq_is_expected(substituted, expected, deep_eq_time)
 }
 
 pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
@@ -101,7 +101,7 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
     let expected: Vec<_> = bindings_1
         .iter()
         .filter(|&var| {
-            let var = pool.add_term(var.clone().into());
+            let var = pool.add(var.clone().into());
             free_vars.contains(&var)
         })
         .cloned()
@@ -134,7 +134,7 @@ fn negation_normal_form(
             .iter()
             .map(|a| negation_normal_form(pool, a, polarity, cache))
             .collect();
-        pool.add_term(Term::Op(op, args))
+        pool.add(Term::Op(op, args))
     } else if let Some((p, q)) = match_term!((=> p q) = term) {
         let a = negation_normal_form(pool, p, !polarity, cache);
         let b = negation_normal_form(pool, q, polarity, cache);
@@ -156,7 +156,7 @@ fn negation_normal_form(
     } else if let Some((quant, bindings, inner)) = term.unwrap_quant() {
         let quant = if polarity { quant } else { !quant };
         let inner = negation_normal_form(pool, inner, polarity, cache);
-        pool.add_term(Term::Quant(quant, bindings.clone(), inner))
+        pool.add(Term::Quant(quant, bindings.clone(), inner))
     } else {
         match match_term!((= p q) = term) {
             Some((left, right)) if *pool.sort(left) == Sort::Bool => {
@@ -183,7 +183,7 @@ fn negation_normal_form(
 /// which are disjunctions of literals
 type CnfFormula = Vec<Vec<Rc<Term>>>;
 
-/// Applies the distribution rules into a disjunction of formulae in conjunctive normal form. More
+/// Applies the distribution rules into a disjunction of formulas in conjunctive normal form. More
 /// precisely, this takes the disjunction `P v Q v R v ...`, where
 /// ```text
 ///     P = P_1 ^ P_2 ^ P_3 ^ ...
@@ -193,9 +193,9 @@ type CnfFormula = Vec<Vec<Rc<Term>>>;
 /// ```
 /// and returns the conjunction of all `(P_i v Q_j v R_k v ...)`, for every combination of `i`,
 /// `j`, `k`, etc.
-fn distribute(formulae: &[CnfFormula]) -> CnfFormula {
-    match formulae {
-        // This function is never called with an empty slice of formulae, so to avoid unnecessary
+fn distribute(formulas: &[CnfFormula]) -> CnfFormula {
+    match formulas {
+        // This function is never called with an empty slice of formulas, so to avoid unnecessary
         // allocations we use the case with just one formula as the base case for the recursion
         [formula] => formula.clone(),
         [] => unreachable!(),
@@ -230,7 +230,7 @@ where
         // other than a conjunction, disjunction, or a universal quantifier is considered a literal
         Term::Op(op @ (Operator::And | Operator::Or), args) => {
             let args = args.iter().map(|a| prenex_forall(pool, acc, a)).collect();
-            pool.add_term(Term::Op(*op, args))
+            pool.add(Term::Op(*op, args))
         }
         Term::Quant(Quantifier::Forall, bindings, inner) => {
             acc.extend(bindings.iter().cloned());
@@ -285,7 +285,7 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
             .map(|c| match c.as_slice() {
                 [] => unreachable!(),
                 [term] => term.clone(),
-                _ => pool.add_term(Term::Op(Operator::Or, c)),
+                _ => pool.add(Term::Op(Operator::Or, c)),
             })
             .collect()
     };
@@ -308,12 +308,12 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
     // While all bindings in `r_bindings` must also be in `new_bindings`, the same is not true in
     // the opposite direction. That is because some variables from the set may be omitted in the
-    // right-hand side quantifier if they don't appear in phi_prime as free variables.  If there is
-    // a binding in the left side that is a free variable in the selected clause, but doesn't
+    // right-hand side quantifier if they don't appear in `phi_prime` as free variables.  If there
+    // is a binding in the left side that is a free variable in the selected clause, but doesn't
     // appear in the right-hand side bindings, we must return an error
-    let found = new_bindings.into_iter().find(|var| {
-        !r_bindings.contains(var) && free_vars.contains(&pool.add_term(var.clone().into()))
-    });
+    let found = new_bindings
+        .into_iter()
+        .find(|var| !r_bindings.contains(var) && free_vars.contains(&pool.add(var.clone().into())));
     if let Some((var, _)) = found {
         return Err(QuantifierError::CnfBindingIsMissing(var).into());
     }
@@ -479,20 +479,20 @@ mod tests {
                 .map(|c| match c.as_slice() {
                     [] => unreachable!(),
                     [term] => term.clone(),
-                    _ => pool.add_term(Term::Op(Operator::Or, c)),
+                    _ => pool.add(Term::Op(Operator::Or, c)),
                 })
                 .collect();
 
             let conjunctions = if clauses.len() == 1 {
                 clauses.pop().unwrap()
             } else {
-                pool.add_term(Term::Op(Operator::And, clauses))
+                pool.add(Term::Op(Operator::And, clauses))
             };
 
             if bindings.is_empty() {
                 conjunctions
             } else {
-                pool.add_term(Term::Quant(
+                pool.add(Term::Quant(
                     Quantifier::Forall,
                     BindingList(bindings),
                     conjunctions,
@@ -503,8 +503,7 @@ mod tests {
         fn run_tests(definitions: &str, cases: &[(&str, &str)]) {
             for &(term, expected) in cases {
                 let mut pool = TermPool::new();
-                let [term, expected] =
-                    parse_terms_with_pool(&mut pool, definitions, [term, expected]);
+                let [term, expected] = parse_terms(&mut pool, definitions, [term, expected]);
                 let got = to_cnf_term(&mut pool, &term);
                 assert_eq!(expected, got);
             }

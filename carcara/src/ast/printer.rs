@@ -55,7 +55,7 @@ impl PrintWithSharing for Rc<Term> {
             // we can't use the `(! ... :named ...)` syntax to give them a name.
             //
             // - If a term is only used once in the proof, there is no reason to give it a name. We
-            // detect this case by checking if the number of references to it's `Rc` is exaclty 1.
+            // detect this case by checking if the number of references to it's `Rc` is exactly 1.
             if !self.is_terminal() && !self.is_sort() && Rc::strong_count(self) > 1 {
                 return if let Some(i) = indices.get(self) {
                     write!(p.inner, "{}{}", p.term_sharing_variable_prefix, i)
