@@ -116,7 +116,7 @@ fn parse_and_check_cvc5_proof(
         strict: false,
         skip_unknown_rules: false,
         is_running_test: false,
-        statistics: None,
+        statistics: Arc::new(Mutex::new(None)),
         check_lia_using_cvc5: false,
     };
     ProofChecker::new(pool, config, prelude, 1).check(&proof)?;

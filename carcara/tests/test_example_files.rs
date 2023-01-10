@@ -1,5 +1,10 @@
 use carcara::*;
-use std::{ffi::OsStr, fs, io, path::Path};
+use std::{
+    ffi::OsStr,
+    fs, io,
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
 fn get_truncated_message(e: &Error) -> String {
     const ERROR_MESSAGE_LIMIT: usize = 350;
@@ -21,7 +26,7 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
             strict: false,
             skip_unknown_rules: true,
             is_running_test: false,
-            statistics: None,
+            statistics: Arc::new(Mutex::new(None)),
             check_lia_using_cvc5: true,
         }
     }

@@ -1,4 +1,4 @@
-use std::{fmt, hash::Hash, ops::Deref, rc};
+use std::{fmt, hash::Hash, ops::Deref, sync};
 
 /// An `Rc` where equality and hashing are done by reference, instead of by value.
 ///
@@ -34,7 +34,7 @@ use std::{fmt, hash::Hash, ops::Deref, rc};
 /// assert!(set.contains(&c));
 /// ```
 #[derive(Eq)]
-pub struct Rc<T: ?Sized>(rc::Rc<T>);
+pub struct Rc<T: ?Sized>(sync::Arc<T>);
 
 // If we simply `#[derive(Clone)]`, it would require that the type parameter `T` also implements
 // `Clone`, even though it is of course not needed. For more info, see:
@@ -47,13 +47,13 @@ impl<T: ?Sized> Clone for Rc<T> {
 
 impl<T: ?Sized> PartialEq for Rc<T> {
     fn eq(&self, other: &Self) -> bool {
-        rc::Rc::ptr_eq(&self.0, &other.0)
+        sync::Arc::ptr_eq(&self.0, &other.0)
     }
 }
 
 impl<T: ?Sized> Hash for Rc<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        rc::Rc::as_ptr(&self.0).hash(state);
+        sync::Arc::as_ptr(&self.0).hash(state);
     }
 }
 
@@ -76,7 +76,7 @@ impl<T: ?Sized> AsRef<T> for Rc<T> {
 // Implements `From<U>` for every `U` that can be converted into an `rc::Rc<T>`
 impl<T: ?Sized, U> From<U> for Rc<T>
 where
-    rc::Rc<T>: From<U>,
+    sync::Arc<T>: From<U>,
 {
     fn from(inner: U) -> Self {
         Self(inner.into())
@@ -105,11 +105,11 @@ impl<T> Rc<T> {
     /// Constructs a new `Rc<T>`.
     pub fn new(value: T) -> Self {
         #[allow(clippy::disallowed_methods)]
-        Self(rc::Rc::new(value))
+        Self(sync::Arc::new(value))
     }
 
     /// Similar to [`std::rc::Rc::strong_count`].
     pub fn strong_count(this: &Self) -> usize {
-        rc::Rc::strong_count(&this.0)
+        sync::Arc::strong_count(&this.0)
     }
 }

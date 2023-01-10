@@ -9,6 +9,7 @@ use std::{
     fs::File,
     io::{self, BufReader},
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -56,14 +57,14 @@ fn run_job<T: CollectResults + Default>(
         strict,
         skip_unknown_rules,
         is_running_test: false,
-        statistics: Some(checker::CheckerStatistics {
+        statistics: Arc::new(Mutex::new(Some(checker::CheckerStatistics {
             file_name: proof_file_name,
             elaboration_time: &mut elaboration,
             deep_eq_time: &mut deep_eq,
             assume_time: &mut assume,
             assume_core_time: &mut assume_core,
             results,
-        }),
+        }))),
         check_lia_using_cvc5,
     };
     let mut checker = checker::ProofChecker::new(&mut pool, config, prelude, 1);
