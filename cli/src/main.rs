@@ -81,11 +81,12 @@ struct Input {
 
 #[derive(Args, Clone, Copy)]
 struct ParsingOptions {
-    /// Don't apply function definitions introduced by `define-fun`s and `:named` attributes.
-    /// Instead, interpret them as a function declaration and an `assert` that defines the function
-    /// to be equal to its body.
+    /// Expand function definitions introduced by `define-fun`s in the SMT problem. If this flag is
+    /// not present, they are instead interpreted as a function declaration and an `assert` that
+    /// defines the function name to be equal to its body. Function definitions in the proof itself
+    /// are always expanded.
     #[clap(long)]
-    dont_apply_function_defs: bool,
+    apply_function_defs: bool,
 
     /// Eliminates `let` bindings from terms when parsing.
     #[clap(long)]
@@ -121,7 +122,7 @@ struct PrintingOptions {
 
 fn build_carcara_options(
     ParsingOptions {
-        dont_apply_function_defs,
+        apply_function_defs,
         expand_let_bindings,
         allow_int_real_subtyping,
     }: ParsingOptions,
@@ -132,7 +133,7 @@ fn build_carcara_options(
     }: CheckingOptions,
 ) -> CarcaraOptions {
     CarcaraOptions {
-        apply_function_defs: !dont_apply_function_defs,
+        apply_function_defs,
         expand_lets: expand_let_bindings,
         allow_int_real_subtyping,
         check_lia_using_cvc5: lia_via_cvc5,
@@ -284,7 +285,7 @@ fn parse_command(options: ParseCommandOptions) -> CliResult<()> {
     let (_, proof, _) = parser::parse_instance(
         problem,
         proof,
-        !options.parsing.dont_apply_function_defs,
+        options.parsing.apply_function_defs,
         options.parsing.expand_let_bindings,
         options.parsing.allow_int_real_subtyping,
     )
@@ -474,13 +475,12 @@ fn generate_lia_problems_command(options: ParseCommandOptions) -> CliResult<()> 
     use std::io::Write;
 
     let root_file_name = options.input.proof_file.clone();
-    let apply_function_defs = !options.parsing.dont_apply_function_defs;
     let (problem, proof) = get_instance(&options.input)?;
 
     let instances = generate_lia_smt_instances(
         problem,
         proof,
-        apply_function_defs,
+        options.parsing.apply_function_defs,
         options.parsing.expand_let_bindings,
         options.parsing.allow_int_real_subtyping,
         options.printing.use_sharing,
