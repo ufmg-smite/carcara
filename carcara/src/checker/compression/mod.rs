@@ -28,9 +28,12 @@ fn collect_units(proof : &Proof) -> Vec<usize> {
         match &proof.commands[curr] {
             ProofCommand::Step(step) => {
                 //if the command has premises, add them to the queue
+                print!("Os pais de {} são ", curr);
                 for i in 0..step.premises.len(){
+                    print!("{} ", step.premises[i].1);
                     queue.push_front(step.premises[i].1);
                 }
+                println!("");
 
                 //if it is a unit clause, then visit it
                 if step.clause.len() == 1{
@@ -105,18 +108,12 @@ fn fix_proof(curr: usize, proof: &Proof, unit_nodes: &[usize], dnm: &[bool], act
 }
 
 fn fix_proof_2(proof: &Proof, _actual : &mut[usize], pool : &mut TermPool){
-    // fn binary_resolution<'a, C: ClauseCollection<'a>>(
-    //     pool: &mut TermPool,
-    //     current: &mut C,
-    //     next: &'a [Rc<Term>],
-    //     pivot: ResolutionTerm<'a>,
-    //     is_pivot_in_current: bool,
-    // )
 
     let mut current = Vec::new();
 
     match &proof.commands[4] {
         ProofCommand::Step(step_q) => {
+            println!("o step 4 é {:?}", step_q);
             
             for i in 0..step_q.clause.len(){
                 current.push(step_q.clause[i].remove_all_negations());
@@ -124,7 +121,8 @@ fn fix_proof_2(proof: &Proof, _actual : &mut[usize], pool : &mut TermPool){
 
             match &proof.commands[6] {
                 ProofCommand::Step(step_s) => {
-                    let mut next = step_s.clause[2].remove_all_negations();
+                    println!("o step 6 é {:?}", step_s);
+                    let mut next = step_s.clause[1].remove_all_negations();
                     next.0 = 0 as u32;
                     println!("Antes eh {:?} \t {:?} \t {:?}", current, &step_s.clause, next);
                     binary_resolution(pool, &mut current, &step_s.clause, next, true);
@@ -139,6 +137,8 @@ fn fix_proof_2(proof: &Proof, _actual : &mut[usize], pool : &mut TermPool){
         _ => {}
     }
 }
+
+
 
 pub fn compress_proof(proof: &Proof, pool : &mut TermPool){
     let unit_nodes = collect_units(&proof);
