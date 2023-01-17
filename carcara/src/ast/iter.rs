@@ -36,7 +36,7 @@ pub struct ProofIter<'a> {
 }
 
 impl<'a> ProofIter<'a> {
-    pub(super) fn new(commands: &'a [ProofCommand]) -> Self {
+    pub fn new(commands: &'a [ProofCommand]) -> Self {
         Self { stack: vec![(0, commands)] }
     }
 
@@ -71,6 +71,18 @@ impl<'a> ProofIter<'a> {
     /// This method may panic if the premise index does not refer to a valid command.
     pub fn get_premise(&self, (depth, index): (usize, usize)) -> &ProofCommand {
         &self.stack[depth].1[index]
+    }
+
+    pub fn get_premise_or_main(
+        &self,
+        (depth, index): (usize, usize),
+        proof: &'a [ProofCommand],
+    ) -> &ProofCommand {
+        if depth == 0 {
+            &proof[index]
+        } else {
+            &self.stack[depth].1[index]
+        }
     }
 }
 

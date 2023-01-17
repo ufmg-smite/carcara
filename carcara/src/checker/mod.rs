@@ -3,6 +3,7 @@ mod elaboration;
 pub mod error;
 mod lia_generic;
 mod rules;
+mod scheduler;
 
 use crate::{ast::*, benchmarking::CollectResults, CarcaraResult, Error};
 use ahash::AHashSet;
@@ -15,6 +16,8 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
+
+use scheduler::Scheduler;
 
 pub struct CheckerStatistics<'s> {
     pub file_name: &'s str,
@@ -83,7 +86,7 @@ impl<'c> ProofChecker<'c> {
         }
     }
 
-    pub fn _copy(&self, config: &Config<'c>) -> Self {
+    pub fn copy_self(&self, config: &Config<'c>) -> Self {
         ProofChecker {
             pool: Arc::clone(&self.pool),
             config: Config {
@@ -103,21 +106,21 @@ impl<'c> ProofChecker<'c> {
     }
 
     pub fn parallel_check<'s, 'p>(&'s mut self, proof: &'p Proof) -> CarcaraResult<bool> {
-        let mutex_self = Arc::new(Mutex::new(self));
-        let proof_ref = Arc::new(proof);
+        let scheduler = Scheduler::new(self.num_cores, proof);
+        let self_ref = Arc::new(self);
 
         crossbeam::scope(|s| {
-            let num_cores = mutex_self.lock().unwrap().num_cores;
-
-            let threads: Vec<_> = (0..num_cores)
-                .map(|_| {
-                    let proof = Arc::clone(&proof_ref);
-                    let tmp_self = mutex_self.lock().unwrap();
-                    let mut local_self = tmp_self._copy(&tmp_self.config);
+            let threads: Vec<_> = scheduler
+                .loads
+                .into_iter()
+                .enumerate()
+                .map(|(i, load_vec)| {
+                    let mut local_self = self_ref.copy_self(&self_ref.config);
 
                     s.builder()
-                        .spawn(move |_| -> CarcaraResult<bool> {
-                            let mut iter = proof.iter();
+                        .name(format!("worker-{i}"))
+                        .spawn(move |_| -> CarcaraResult<(bool, bool)> {
+                            let mut iter = load_vec.iter();
 
                             while let Some(command) = iter.next() {
                                 match command {
@@ -135,9 +138,9 @@ impl<'c> ProofChecker<'c> {
                                         } else {
                                             None
                                         };
-                                        // let mut local_self = shared_self.lock().unwrap();
+
                                         local_self
-                                            .check_step(step, previous_command, &iter)
+                                            .check_step(step, previous_command, &iter, proof)
                                             .map_err(|e| Error::Checker {
                                                 inner: e,
                                                 rule: step.rule.clone(),
@@ -149,9 +152,6 @@ impl<'c> ProofChecker<'c> {
                                         // in a subproof is always a `step` command
                                         if is_end_of_subproof {
                                             local_self.context.pop();
-                                            if let Some(elaborator) = &mut local_self.elaborator {
-                                                elaborator.close_subproof();
-                                            }
                                         }
 
                                         if step.clause.is_empty() {
@@ -175,11 +175,6 @@ impl<'c> ProofChecker<'c> {
                                                 step: step_id.to_owned(),
                                             })?;
 
-                                        if let Some(elaborator) = &mut local_self.elaborator {
-                                            elaborator.open_subproof(s.commands.len());
-                                        }
-
-                                        // let mut a = ;
                                         if let Some(stats) = &mut local_self.config.statistics {
                                             let rule_name = match s.commands.last() {
                                                 Some(ProofCommand::Step(step)) => {
@@ -206,11 +201,12 @@ impl<'c> ProofChecker<'c> {
                                 }
                             }
 
+                            // Returns Ok(reached empty clause, isHoley)
                             if local_self.config.is_running_test || local_self.reached_empty_clause
                             {
-                                Ok(local_self.is_holey)
+                                Ok((true, local_self.is_holey))
                             } else {
-                                Err(Error::DoesNotReachEmptyClause)
+                                Ok((false, local_self.is_holey))
                             }
                         })
                         .unwrap()
@@ -218,12 +214,20 @@ impl<'c> ProofChecker<'c> {
                 .collect();
 
             // Unify the results of all threads and generate the final result based on them
-            let mut it = threads.into_iter().map(|t| t.join().unwrap());
+            let (mut reached, mut holey) = (false, false);
+            threads
+                .into_iter()
+                .map(|t| t.join().unwrap())
+                .for_each(|opt| {
+                    if let Ok((_reached, _holey)) = opt {
+                        (reached, holey) = (reached | _reached, holey | _holey);
+                    }
+                });
 
-            if it.any(|opt| if let Err(_) = opt { true } else { false }) {
-                Err(Error::DoesNotReachEmptyClause)
+            if reached {
+                Ok(holey)
             } else {
-                Ok(it.any(|opt| if let Ok(true) = opt { true } else { false }))
+                Err(Error::DoesNotReachEmptyClause)
             }
         })
         .unwrap()
@@ -249,7 +253,7 @@ impl<'c> ProofChecker<'c> {
                     } else {
                         None
                     };
-                    self.check_step(step, previous_command, &iter)
+                    self.check_step(step, previous_command, &iter, proof)
                         .map_err(|e| Error::Checker {
                             inner: e,
                             rule: step.rule.clone(),
@@ -417,6 +421,7 @@ impl<'c> ProofChecker<'c> {
         step: &'a ProofStep,
         previous_command: Option<Premise<'a>>,
         iter: &'a ProofIter<'a>,
+        proof: &Proof,
     ) -> RuleResult {
         let time = Instant::now();
         let mut deep_eq_time = Duration::ZERO;
@@ -461,14 +466,14 @@ impl<'c> ProofChecker<'c> {
                 .premises
                 .iter()
                 .map(|&p| {
-                    let command = iter.get_premise(p);
+                    let command = iter.get_premise_or_main(p, &proof.commands);
                     Premise::new(p, command)
                 })
                 .collect();
             let discharge: Vec<_> = step
                 .discharge
                 .iter()
-                .map(|&i| iter.get_premise(i))
+                .map(|&i| iter.get_premise_or_main(i, &proof.commands))
                 .collect();
 
             let rule_args = RuleArgs {
