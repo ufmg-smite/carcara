@@ -127,11 +127,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
         Ok(())
     }
 
-    /// Returns `true` if the parser is currently parsing a SMT-LIB problem, and `false` otherwise.
-    fn is_parsing_problem(&self) -> bool {
-        self.problem.is_some()
-    }
-
     /// Advances the parser one token, and returns the previous `current_token`.
     fn next_token(&mut self) -> CarcaraResult<(Token, Position)> {
         use std::mem::replace;
@@ -172,28 +167,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// Shortcut for `self.problem.as_mut().unwrap().1`
     fn premises(&mut self) -> &mut AHashSet<Rc<Term>> {
         &mut self.problem.as_mut().unwrap().1
-    }
-
-    /// Adds a new function definition. If we are parsing the problem and
-    /// `self.apply_function_defs` is `false`, this instead adds the function name to the symbol
-    /// table and adds a new premise that defines the function.
-    fn add_function_def(&mut self, name: String, func_def: FunctionDef) {
-        if self.is_parsing_problem() && !self.apply_function_defs {
-            let lambda_term = if func_def.params.is_empty() {
-                func_def.body
-            } else {
-                self.add_term(Term::Lambda(BindingList(func_def.params), func_def.body))
-            };
-            let sort = self.add_term(Term::Sort(self.sort(&lambda_term).clone()));
-            let var = (name, sort);
-            self.insert_sorted_var(var.clone());
-            let var_term = self.add_term(var.into());
-            let assertion_term =
-                self.add_term(Term::Op(Operator::Equals, vec![var_term, lambda_term]));
-            self.premises().insert(assertion_term);
-        } else {
-            self.state.function_defs.insert(name, func_def);
-        }
     }
 
     /// Constructs and sort checks a variable term.
@@ -527,7 +500,25 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 }
                 Token::ReservedWord(Reserved::DefineFun) => {
                     let (name, func_def) = self.parse_define_fun()?;
-                    self.add_function_def(name, func_def);
+
+                    if self.apply_function_defs {
+                        self.state.function_defs.insert(name, func_def);
+                    } else {
+                        // If `self.apply_function_defs` is false, we instead add the function name
+                        // to the symbol table, and add a new premise that defines the function
+                        let lambda_term = if func_def.params.is_empty() {
+                            func_def.body
+                        } else {
+                            self.add_term(Term::Lambda(BindingList(func_def.params), func_def.body))
+                        };
+                        let sort = self.add_term(Term::Sort(self.sort(&lambda_term).clone()));
+                        let var = (name, sort);
+                        self.insert_sorted_var(var.clone());
+                        let var_term = self.add_term(var.into());
+                        let assertion_term =
+                            self.add_term(Term::Op(Operator::Equals, vec![var_term, lambda_term]));
+                        self.premises().insert(assertion_term);
+                    }
                     continue;
                 }
                 Token::ReservedWord(Reserved::Assert) => {
@@ -584,7 +575,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 }
                 Token::ReservedWord(Reserved::DefineFun) => {
                     let (name, func_def) = self.parse_define_fun()?;
-                    self.add_function_def(name, func_def);
+                    self.state.function_defs.insert(name, func_def);
                     continue;
                 }
                 Token::ReservedWord(Reserved::Anchor) => {
@@ -1077,7 +1068,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                             params: Vec::new(),
                             body: inner.clone(),
                         };
-                        p.add_function_def(name, func_def);
+                        p.state.function_defs.insert(name, func_def);
                         Ok(())
                     }
                     "pattern" => {
