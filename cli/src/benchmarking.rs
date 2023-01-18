@@ -66,7 +66,7 @@ fn run_job<T: CollectResults + Default>(
         }),
         check_lia_using_cvc5,
     };
-    let mut checker = checker::ProofChecker::new(&mut pool, config, prelude, 1);
+    let mut checker = checker::ProofChecker::new(&mut pool, config, prelude);
 
     let checking = Instant::now();
 

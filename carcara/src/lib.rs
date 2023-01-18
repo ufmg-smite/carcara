@@ -139,9 +139,9 @@ pub fn check<T: io::BufRead>(
         check_lia_using_cvc5,
     };
     if num_cores != 1 {
-        checker::ProofChecker::new(&mut pool, config, prelude, num_cores).parallel_check(&proof)
+        checker::ParallelProofChecker::new(&mut pool, config, prelude, num_cores).check(&proof)
     } else {
-        checker::ProofChecker::new(&mut pool, config, prelude, num_cores).check(&proof)
+        checker::ProofChecker::new(&mut pool, config, prelude).check(&proof)
     }
 }
 
@@ -173,7 +173,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
         statistics: None,
         check_lia_using_cvc5,
     };
-    checker::ProofChecker::new(&mut pool, config, prelude, 1)
+    checker::ProofChecker::new(&mut pool, config, prelude)
         .check_and_elaborate(proof)
         .map(|p| p.commands)
 }
