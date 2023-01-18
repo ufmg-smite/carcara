@@ -56,10 +56,19 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
         return resolution_with_args(rule_args);
     }
     let RuleArgs { conclusion, premises, pool, .. } = rule_args;
-    resolution_impl(conclusion, premises, pool)
+
+    greedy_resolution(conclusion, premises, pool).or_else(|greedy_error| {
+        if rup_resolution(conclusion, premises) {
+            Ok(())
+        } else {
+            // If RUP resolution also fails, we return the error originally returned by the greedy
+            // algorithm
+            Err(greedy_error)
+        }
+    })
 }
 
-fn resolution_impl(
+fn greedy_resolution(
     conclusion: &[Rc<Term>],
     premises: &[Premise],
     pool: &mut TermPool,
@@ -207,6 +216,47 @@ fn resolution_impl(
     }
 }
 
+fn rup_resolution(conclusion: &[Rc<Term>], premises: &[Premise]) -> bool {
+    let mut clauses: Vec<AHashSet<(bool, &Rc<Term>)>> = premises
+        .iter()
+        .map(|p| {
+            p.clause
+                .iter()
+                .map(Rc::remove_all_negations_with_polarity)
+                .collect()
+        })
+        .collect();
+    clauses.extend(conclusion.iter().map(|t| {
+        let (p, t) = t.remove_all_negations_with_polarity();
+        let mut clause = AHashSet::new();
+        clause.insert((!p, t));
+        clause
+    }));
+
+    loop {
+        if clauses.is_empty() {
+            return false;
+        }
+        let smallest = clauses.iter().min_by_key(|c| c.len()).unwrap();
+        match smallest.len() {
+            0 => return true,
+            1 => {
+                let literal = *smallest.iter().next().unwrap();
+                let negated_literal = (!literal.0, literal.1);
+
+                // Remove all clauses that contain the literal
+                clauses.retain(|c| !c.contains(&literal));
+
+                // Remove the negated literal from all clauses that contain it
+                for c in &mut clauses {
+                    c.remove(&negated_literal);
+                }
+            }
+            _ => return false,
+        }
+    }
+}
+
 pub fn th_resolution(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> RuleResult {
     // In the way that it's currently implemented in veriT, `th_resolution` steps may be given
     // premises in the reversed order. This would cause some of these steps to be considered invalid
@@ -216,12 +266,12 @@ pub fn th_resolution(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> R
     // TODO: Ideally, we should also check _all_ permutations of the premise list, to detect any
     // case that may be valid.
 
-    if resolution_impl(conclusion, premises, pool).is_ok() {
+    if greedy_resolution(conclusion, premises, pool).is_ok() {
         return Ok(());
     }
 
     let reversed: Vec<_> = premises.iter().copied().rev().collect();
-    resolution_impl(conclusion, &reversed, pool)
+    greedy_resolution(conclusion, &reversed, pool)
 }
 
 fn resolution_with_args(
@@ -402,11 +452,6 @@ mod tests {
                 "(assume h1 (not p))
                 (step t2 (cl p q r) :rule hole)
                 (step t3 (cl q) :rule resolution :premises (h1 t2))": false,
-            }
-            "Extra term in final clause" {
-                "(assume h1 (not p))
-                (step t2 (cl p q r) :rule hole)
-                (step t3 (cl p q r) :rule resolution :premises (h1 t2))": false,
             }
             "Term appears in final clause with wrong polarity" {
                 "(assume h1 (not p))
