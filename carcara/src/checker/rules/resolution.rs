@@ -160,31 +160,34 @@ fn resolution_impl(
     let mut remaining_pivots = pivots.iter().filter(|&(_, eliminated)| !eliminated);
 
     if let Some(((i, pivot), _)) = remaining_pivots.next() {
-        // There is a special case in the resolution rules that is valid, but leaves a pivot
-        // remaining: when the result of the resolution is just the boolean constant `false`, it
-        // may be implicitly eliminated. For example:
-        //     (step t1 (cl p q false) :rule hole)
-        //     (step t2 (cl (not p)) :rule hole)
-        //     (step t3 (cl (not q)) :rule hole)
-        //     (step t4 (cl) :rule resolution :premises (t1 t2 t3))
-        if conclusion.is_empty() && *i == 0 && pivot.is_bool_false() {
-            return Ok(());
-        }
-
-        // There is another, similar, special case: when the result of the resolution is just one
-        // term, it may appear in the conclusion clause with an even number of leading negations
-        // added to it. The following is an example of this, adapted from a generated proof:
-        //     (step t1 (cl (not e)) :rule hole)
-        //     (step t2 (cl (= (not e) (not (not f)))) :rule hole)
-        //     (step t3 (cl (not (= (not e) (not (not f)))) e f) :rule hole)
-        //     (step t4 (cl (not (not f))) :rule resolution :premises (t1 t2 t3))
-        // Usually, we would expect the clause in the t4 step to be (cl f). This behavior may be a
-        // bug in veriT, but it is still logically sound and happens often enough that it is useful
-        // to support it here.
-        if conclusion.len() == 1 {
-            let (j, conclusion) = conclusion.into_iter().next().unwrap();
-            if conclusion == *pivot && (i % 2) == (j % 2) {
+        if remaining_pivots.next().is_none() {
+            // There is a special case in the resolution rules that is valid, but leaves a pivot
+            // remaining: when the result of the resolution is just the boolean constant `false`, it
+            // may be implicitly eliminated. For example:
+            //     (step t1 (cl p q false) :rule hole)
+            //     (step t2 (cl (not p)) :rule hole)
+            //     (step t3 (cl (not q)) :rule hole)
+            //     (step t4 (cl) :rule resolution :premises (t1 t2 t3))
+            if conclusion.is_empty() && *i == 0 && pivot.is_bool_false() {
                 return Ok(());
+            }
+
+            // There is another, similar, special case: when the result of the resolution is just
+            // one term, it may appear in the conclusion clause with an even number of leading
+            // negations added to it. The following is an example of this, adapted from a generated
+            // proof:
+            //     (step t1 (cl (not e)) :rule hole)
+            //     (step t2 (cl (= (not e) (not (not f)))) :rule hole)
+            //     (step t3 (cl (not (= (not e) (not (not f)))) e f) :rule hole)
+            //     (step t4 (cl (not (not f))) :rule resolution :premises (t1 t2 t3))
+            // Usually, we would expect the clause in the t4 step to be (cl f). This behavior may
+            // be a bug in veriT, but it is still logically sound and happens often enough that it
+            // is useful to support it here.
+            if conclusion.len() == 1 {
+                let (j, conclusion) = conclusion.into_iter().next().unwrap();
+                if conclusion == *pivot && (i % 2) == (j % 2) {
+                    return Ok(());
+                }
             }
         }
         let pivot = unremove_all_negations(pool, (*i as u32, pivot));
