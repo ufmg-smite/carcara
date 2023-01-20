@@ -43,6 +43,12 @@ pub fn parse_instance<T: BufRead>(
     Ok((prelude, proof, pool))
 }
 
+/// A function definition, from a `define-fun` command.
+struct FunctionDef {
+    params: Vec<SortedVar>,
+    body: Rc<Term>,
+}
+
 /// Represents a "raw" `anchor` command. This is only used while parsing, and does not appear in
 /// the final AST.
 struct AnchorCommand {

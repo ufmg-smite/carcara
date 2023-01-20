@@ -1,6 +1,15 @@
 use super::{Identifier, Rc, Sort, Term, Terminal};
 use ahash::{AHashMap, AHashSet};
 
+/// A structure to store and manage all allocated terms.
+///
+/// You can add a `Term` to the pool using [`TermPool::add`], which will return an `Rc<Term>`. This
+/// struct ensures that, if two equal terms are added to a pool, they will be in the same
+/// allocation. This invariant allows terms to be safely compared and hashed by reference, instead
+/// of by value (see [`Rc`]).
+///
+/// This struct also provides other utility methods, like computing the sort of a term (see
+/// [`TermPool::sort`]) or its free variables (see [`TermPool::free_vars`]).
 pub struct TermPool {
     pub(crate) terms: AHashMap<Term, Rc<Term>>,
     free_vars_cache: AHashMap<Rc<Term>, AHashSet<Rc<Term>>>,
@@ -16,6 +25,8 @@ impl Default for TermPool {
 }
 
 impl TermPool {
+    /// Constructs a new `TermPool`. This new pool will already contain the boolean constants `true`
+    /// and `false`, as well as the `Bool` sort.
     pub fn new() -> Self {
         let mut terms = AHashMap::new();
         let mut sorts_cache = AHashMap::new();
@@ -44,14 +55,17 @@ impl TermPool {
         }
     }
 
+    /// Return the term corresponding to the boolean constant `true`.
     pub fn bool_true(&self) -> Rc<Term> {
         self.bool_true.clone()
     }
 
+    /// Return the term corresponding to the boolean constant `false`.
     pub fn bool_false(&self) -> Rc<Term> {
         self.bool_false.clone()
     }
 
+    /// Return the term corresponding to the boolean constant determined by `value`.
     pub fn bool_constant(&self, value: bool) -> Rc<Term> {
         match value {
             true => self.bool_true(),
@@ -71,22 +85,26 @@ impl TermPool {
         }
     }
 
-    /// Takes a term and returns an `Rc` referencing it. If the term was not originally in the
-    /// terms hash map, it is added to it. This also adds the term's sort to the sort cache.
+    /// Takes a term and returns a possibly newly allocated `Rc` that references it.
+    ///
+    /// If the term was not originally in the term pool, it is added to it. Otherwise, this method
+    /// just returns an `Rc` pointing to the existing allocation. This method also computes the
+    /// term's sort, and adds it to the sort cache.
     pub fn add(&mut self, term: Term) -> Rc<Term> {
         let term = Self::add_term_to_map(&mut self.terms, term);
         self.compute_sort(&term);
         term
     }
 
-    /// Takes a vector of terms and calls `add_term` on each.
+    /// Takes a vector of terms and calls [`TermPool::add`] on each.
     pub fn add_all(&mut self, terms: Vec<Term>) -> Vec<Rc<Term>> {
         terms.into_iter().map(|t| self.add(t)).collect()
     }
 
-    /// Returns the sort of this term. For operations and application terms, this method assumes
-    /// that the arguments' sorts have already been checked, and are correct. If `term` is itself a
-    /// sort, this simply returns that sort.
+    /// Returns the sort of the given term.
+    ///
+    /// This method assumes that the sorts of any subterms have already been checked, and are
+    /// correct. If `term` is itself a sort, this simply returns that sort.
     pub fn sort(&self, term: &Rc<Term>) -> &Sort {
         &self.sorts_cache[term]
     }
@@ -157,7 +175,10 @@ impl TermPool {
         &self.sorts_cache[term]
     }
 
-    /// Returns an `AHashSet` containing all the free variables in this term.
+    /// Returns an `AHashSet` containing all the free variables in the given term.
+    ///
+    /// This method uses a cache, so there is no additional cost to computing the free variables of
+    /// a term multiple times.
     pub fn free_vars<'t>(&mut self, term: &'t Rc<Term>) -> &AHashSet<Rc<Term>> {
         // Here, I would like to do
         // ```
