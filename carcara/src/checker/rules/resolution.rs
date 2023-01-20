@@ -263,15 +263,19 @@ pub fn th_resolution(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> R
     // by the checker because of the restriction that each clause can only eliminate one pivot. To
     // account for that, we first check the step with the given premise order, and then with the
     // premise list reversed.
-    // TODO: Ideally, we should also check _all_ permutations of the premise list, to detect any
-    // case that may be valid.
 
     if greedy_resolution(conclusion, premises, pool).is_ok() {
         return Ok(());
     }
 
     let reversed: Vec<_> = premises.iter().copied().rev().collect();
-    greedy_resolution(conclusion, &reversed, pool)
+    greedy_resolution(conclusion, &reversed, pool).or_else(|greedy_error| {
+        if rup_resolution(conclusion, premises) {
+            Ok(())
+        } else {
+            Err(greedy_error)
+        }
+    })
 }
 
 fn resolution_with_args(
