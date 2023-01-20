@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::ast::{Proof, ProofCommand, ProofIter};
 use std::{cmp::Ordering, collections::BinaryHeap};
 
@@ -50,7 +51,6 @@ impl Schedule {
     }
 }
 
-#[allow(unused_assignments)]
 pub struct Scheduler {
     pub loads: Vec<Schedule>,
 }

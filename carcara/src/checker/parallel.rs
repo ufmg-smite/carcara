@@ -1,5 +1,9 @@
+#![allow(unused_imports)]
+#![allow(dead_code)]
+
 use super::error::CheckerError;
 use super::rules::{Premise, Rule, RuleArgs, RuleResult};
+use super::scheduler::*;
 use super::{context::*, lia_generic, CheckerStatistics, Config};
 use crate::{ast::*, CarcaraResult, Error};
 use ahash::AHashSet;
@@ -7,8 +11,6 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-
-use super::scheduler::*;
 
 unsafe impl Sync for CheckerStatistics<'_> {}
 unsafe impl Send for CheckerStatistics<'_> {}
@@ -51,6 +53,7 @@ impl<'c> ParallelProofChecker<'c> {
                 statistics: None,
                 check_lia_using_cvc5: config.check_lia_using_cvc5,
             },
+            /* TODO: Fix this clone */
             prelude: self.prelude.clone(),
             context: ContextStack::new(),
             reached_empty_clause: false,
@@ -59,6 +62,7 @@ impl<'c> ParallelProofChecker<'c> {
         }
     }
 
+    #[cfg(feature = "thread_safety")]
     pub fn check<'s, 'p>(&'s mut self, proof: &'p Proof) -> CarcaraResult<bool> {
         let scheduler = Scheduler::new(self.num_cores, proof);
         let self_ref = Arc::new(self);
@@ -453,5 +457,11 @@ impl<'c> ParallelProofChecker<'c> {
 
             _ => return None,
         })
+    }
+
+    // Never reached piece of code
+    #[cfg(not(feature = "thread_safety"))]
+    pub fn check<'s, 'p>(&'s mut self, _: &'p Proof) -> CarcaraResult<bool> {
+        Ok(false)
     }
 }
