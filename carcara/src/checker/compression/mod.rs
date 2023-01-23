@@ -1,7 +1,11 @@
 use crate::{ast::*};
-use std::collections::HashMap;
+use std::collections::{HashMap, hash_map::Entry};
+use ahash::{AHashMap, AHashSet};
 use std::collections::VecDeque;
-use crate::checker::rules::resolution::binary_resolution;
+use crate::checker::rules::resolution::{binary_resolution};
+use crate::checker::rules::Premise;
+use super::RuleResult;
+
 
 fn visit(idx: usize, visited: &mut HashMap<usize, i32>, unit_nodes: &mut Vec<usize>) -> (){
     if !visited.contains_key(&idx) {
@@ -12,6 +16,7 @@ fn visit(idx: usize, visited: &mut HashMap<usize, i32>, unit_nodes: &mut Vec<usi
         *visited.get_mut(&idx).unwrap() = 1;
     }
 }
+
 
 fn collect_units(proof : &Proof) -> Vec<usize> {
     let mut curr = proof.commands.len() - 1;
@@ -64,6 +69,7 @@ fn collect_units(proof : &Proof) -> Vec<usize> {
     return unit_nodes;
 }
 
+
 fn find(i: usize, actual: &mut[usize]) -> usize {
     if actual[i] == i {
         return i;
@@ -71,6 +77,7 @@ fn find(i: usize, actual: &mut[usize]) -> usize {
     actual[i] = find(actual[i], actual);
     return actual[i];
 }
+
 
 fn fix_proof(curr: usize, proof: &Proof, unit_nodes: &[usize], dnm: &[bool], actual : &mut[usize]){
     if dnm[curr] {
@@ -107,6 +114,7 @@ fn fix_proof(curr: usize, proof: &Proof, unit_nodes: &[usize], dnm: &[bool], act
     }
 }
 
+
 fn fix_proof_2(proof: &Proof, _actual : &mut[usize], pool : &mut TermPool){
 
     let mut current = Vec::new();
@@ -139,6 +147,106 @@ fn fix_proof_2(proof: &Proof, _actual : &mut[usize], pool : &mut TermPool){
 }
 
 
+fn get_pivots<'a>(
+    conclusion: &'a [Rc<Term>],
+    premises: &'a [Premise],
+    pool: &'a mut TermPool,
+// ) -> AHashMap<(i32, &'a ast::rc::Rc<ast::Term>), bool> {
+) -> AHashMap<(i32, &'a Rc<Term>), bool> {
+    // In some cases, this rule is used with a single premise `(not true)` to justify an empty
+    // conclusion clause
+    if conclusion.is_empty() && premises.len() == 1 {
+        println!("Caiu no primeiro if");
+        if let [t] = premises[0].clause {
+            if match_term!((not true) = t).is_some() {
+                return AHashMap::new();
+            }
+        }
+    }
+
+    // When checking this rule, we must look at what the conclusion clause looks like in order to
+    // determine the pivots. The reason for that is because there is no other way to know which
+    // terms should be removed in a given binary resolution step. Consider the following example,
+    // adapted from an actual generated proof:
+    //
+    //     (step t1 (cl (not q) (not (not p)) (not p)) :rule irrelevant)
+    //     (step t2 (cl (not (not (not p))) p) :rule irrelevant)
+    //     (step t3 (cl (not q) p (not p)) :rule resolution :premises (t1 t2))
+    //
+    // Without looking at the conclusion, it is unclear if the (not p) term should be removed by the
+    // p term, or if the (not (not p)) should be removed by the (not (not (not p))). We can only
+    // determine this by looking at the conlcusion and using it to derive the pivots.
+    let conclusion: AHashSet<_> = conclusion
+        .iter()
+        .map(Rc::remove_all_negations)
+        .map(|(n, t)| (n as i32, t))
+        .collect();
+
+    // The working clause contains the terms from the conclusion clause that we already encountered
+    let mut working_clause = AHashSet::new();
+
+    // The pivots are the encountered terms that are not present in the conclusion clause, and so
+    // should be removed. After being used to eliminate a term, a pivot can still be used to
+    // eliminate other terms. Because of that, we represent the pivots as a hash map to a boolean,
+    // which represents if the pivot was already eliminated or not. At the end, this boolean should
+    // be true for all pivots
+    let mut pivots = AHashMap::new();
+
+    for premise in premises {
+        // Only one pivot may be eliminated per clause. This restriction is required so logically
+        // unsound proofs like this one are not considered valid:
+        //
+        //     (step t1 (cl (= false true) (not false) (not true)) :rule equiv_neg1)
+        //     (step t2 (cl (= false true) false true) :rule equiv_neg2)
+        //     (step t3 (cl (= false true)) :rule resolution :premises (t1 t2))
+        let mut eliminated_clause_pivot = false;
+        for term in premise.clause {
+            let (n, inner) = term.remove_all_negations();
+            let n = n as i32;
+
+            // There are two possible negations of a term, with one leading negation added, or with
+            // one leading negation removed (if the term had any in the first place)
+            let below = (n - 1, inner);
+            let above = (n + 1, inner);
+
+            // First, if the encountered term should be in the conclusion, but is not yet in the
+            // working clause, we insert it and don't try to remove it with a pivot
+            if conclusion.contains(&(n, inner)) && !working_clause.contains(&(n, inner)) {
+                working_clause.insert((n, inner));
+                continue;
+            }
+
+            // If the negation of the encountered term is present in the pivots set, we simply
+            // eliminate it. Otherwise, we insert the encountered term in the working clause or the
+            // pivots set, depending on wether it is present in the conclusion clause or not
+            let mut try_eliminate = |pivot| match pivots.entry(pivot) {
+                Entry::Occupied(mut e) => {
+                    e.insert(true);
+                    true
+                }
+                Entry::Vacant(_) => false,
+            };
+
+            // Only one pivot may be elminated per clause, so if we already found this clauses'
+            // pivot, we don't try to eliminate the term
+            let eliminated =
+                !eliminated_clause_pivot && (try_eliminate(below) || try_eliminate(above));
+
+            if eliminated {
+                eliminated_clause_pivot = true;
+            } else if conclusion.contains(&(n, inner)) {
+                working_clause.insert((n, inner));
+            } else {
+                // If the term is not in the conclusion clause, it must be a pivot. If it was
+                // not already in the pivots set, we insert `false`, to indicate that it was
+                // not yet eliminated
+                pivots.entry((n, inner)).or_insert(false);
+            }
+        }
+    }
+    pivots
+}
+
 
 pub fn compress_proof(proof: &Proof, pool : &mut TermPool){
     let unit_nodes = collect_units(&proof);
@@ -161,4 +269,18 @@ pub fn compress_proof(proof: &Proof, pool : &mut TermPool){
     }
 
     fix_proof_2(proof, &mut actual, pool);
+    
+    // Como encontrar o pivo que foi usado numa aplicação de resolution
+    // let pr = [Premise::new((0, 11), &proof.commands[11]), Premise::new((0, 9), &proof.commands[9])];
+    // let tam = proof.commands.len();
+    // match &proof.commands[tam-1] {
+    //     ProofCommand::Step(step_s) => {
+    //         println!("{:?}", get_pivots(&step_s.clause, &pr, pool));
+    //     }
+    //     _ => {}
+    // }
+
+    
 }
+
+
