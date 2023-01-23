@@ -18,53 +18,44 @@ unsafe impl Send for CheckerStatistics<'_> {}
 pub struct ParallelProofChecker<'c> {
     pool: Arc<Mutex<&'c mut TermPool>>,
     config: Config<'c>,
-    prelude: ProblemPrelude,
+    prelude: Rc<ProblemPrelude>,
     context: ContextStack,
     reached_empty_clause: bool,
     is_holey: bool,
-    num_cores: usize,
 }
 
 impl<'c> ParallelProofChecker<'c> {
-    pub fn new(
-        pool: &'c mut TermPool,
-        config: Config<'c>,
-        prelude: ProblemPrelude,
-        num_cores: usize,
-    ) -> Self {
+    pub fn new(pool: &'c mut TermPool, config: Config<'c>, prelude: ProblemPrelude) -> Self {
         ParallelProofChecker {
             pool: Arc::new(Mutex::new(pool)),
             config,
-            prelude,
+            prelude: Rc::new(prelude),
             context: ContextStack::new(),
             reached_empty_clause: false,
             is_holey: false,
-            num_cores: num_cores,
         }
     }
 
-    pub fn copy_self(&self, config: &Config<'c>) -> Self {
+    pub fn copy_self(&self) -> Self {
         ParallelProofChecker {
             pool: Arc::clone(&self.pool),
             config: Config {
-                strict: config.strict,
-                skip_unknown_rules: config.skip_unknown_rules,
-                is_running_test: config.is_running_test,
+                strict: self.config.strict,
+                skip_unknown_rules: self.config.skip_unknown_rules,
+                is_running_test: self.config.is_running_test,
                 statistics: None,
-                check_lia_using_cvc5: config.check_lia_using_cvc5,
+                check_lia_using_cvc5: self.config.check_lia_using_cvc5,
             },
-            /* TODO: Fix this clone */
-            prelude: self.prelude.clone(),
+            prelude: Rc::clone(&self.prelude),
             context: ContextStack::new(),
             reached_empty_clause: false,
             is_holey: false,
-            num_cores: self.num_cores,
         }
     }
 
-    #[cfg(feature = "thread_safety")]
-    pub fn check<'s, 'p>(&'s mut self, proof: &'p Proof) -> CarcaraResult<bool> {
-        let scheduler = Scheduler::new(self.num_cores, proof);
+    #[cfg(feature = "thread-safety")]
+    pub fn check<'s, 'p>(&'s mut self, proof: &'p Proof, num_cores: usize) -> CarcaraResult<bool> {
+        let scheduler = Scheduler::new(num_cores, proof);
         let self_ref = Arc::new(self);
 
         crossbeam::scope(|s| {
@@ -73,7 +64,7 @@ impl<'c> ParallelProofChecker<'c> {
                 .into_iter()
                 .enumerate()
                 .map(|(i, load_vec)| {
-                    let mut local_self = self_ref.copy_self(&self_ref.config);
+                    let mut local_self = self_ref.copy_self();
 
                     s.builder()
                         .name(format!("worker-{i}"))
@@ -117,7 +108,6 @@ impl<'c> ParallelProofChecker<'c> {
                                         }
                                     }
                                     ProofCommand::Subproof(s) => {
-                                        let time = Instant::now();
                                         let step_id = command.id();
 
                                         let context = &mut local_self.context;
@@ -132,21 +122,6 @@ impl<'c> ParallelProofChecker<'c> {
                                                 rule: "anchor".into(),
                                                 step: step_id.to_owned(),
                                             })?;
-
-                                        if let Some(stats) = &mut local_self.config.statistics {
-                                            let rule_name = match s.commands.last() {
-                                                Some(ProofCommand::Step(step)) => {
-                                                    format!("anchor({})", &step.rule)
-                                                }
-                                                _ => "anchor".to_owned(),
-                                            };
-                                            stats.results.add_step_measurement(
-                                                stats.file_name,
-                                                step_id,
-                                                &rule_name,
-                                                time.elapsed(),
-                                            );
-                                        }
                                     }
                                     ProofCommand::Assume { id, term } => {
                                         local_self.check_assume(
@@ -175,19 +150,17 @@ impl<'c> ParallelProofChecker<'c> {
             let (mut reached, mut holey) = (false, false);
             let mut err: Result<(bool, bool), Error> = Ok((false, false));
 
-            threads
-                .into_iter()
-                .map(|t| t.join().unwrap())
-                .for_each(|opt| match opt {
+            for opt in threads.into_iter().map(|t| t.join().unwrap()) {
+                match opt {
                     Ok((_reached, _holey)) => {
                         (reached, holey) = (reached | _reached, holey | _holey);
                     }
                     Err(_) => {
                         err = opt;
-                        return;
+                        break;
                     }
-                });
-
+                }
+            }
             // If an error happend
             if let Err(x) = err {
                 return Err(x);
@@ -209,8 +182,6 @@ impl<'c> ParallelProofChecker<'c> {
         premises: &AHashSet<Rc<Term>>,
         iter: &ProofIter,
     ) -> CarcaraResult<()> {
-        let time = Instant::now();
-
         // Some subproofs contain `assume` commands inside them. These don't refer
         // to the original problem premises, so we ignore the `assume` command if
         // it is inside a subproof. Since the unit tests for the rules don't define the
@@ -221,41 +192,22 @@ impl<'c> ParallelProofChecker<'c> {
         }
 
         if premises.contains(term) {
-            if let Some(s) = &mut self.config.statistics {
-                let time = time.elapsed();
-                *s.assume_time += time;
-                s.results
-                    .add_assume_measurement(s.file_name, id, true, time);
-            }
             return Ok(());
         }
 
         let mut found = None;
         let mut deep_eq_time = Duration::ZERO;
-        let mut core_time = Duration::ZERO;
         for p in premises {
             let mut this_deep_eq_time = Duration::ZERO;
-            let (result, depth) = tracing_deep_eq(term, p, &mut this_deep_eq_time);
+            let (result, _) = tracing_deep_eq(term, p, &mut this_deep_eq_time);
             deep_eq_time += this_deep_eq_time;
-            if let Some(s) = &mut self.config.statistics {
-                s.results.add_deep_eq_depth(depth);
-            }
             if result {
-                core_time = this_deep_eq_time;
                 found = Some(p.clone());
                 break;
             }
         }
 
         if let Some(_) = found {
-            if let Some(s) = &mut self.config.statistics {
-                let time = time.elapsed();
-                *s.assume_time += time;
-                *s.assume_core_time += core_time;
-                *s.deep_eq_time += deep_eq_time;
-                s.results
-                    .add_assume_measurement(s.file_name, id, false, time);
-            }
             Ok(())
         } else {
             Err(Error::Checker {
@@ -273,7 +225,6 @@ impl<'c> ParallelProofChecker<'c> {
         iter: &'a ProofIter<'a>,
         proof: &Proof,
     ) -> RuleResult {
-        let time = Instant::now();
         let mut deep_eq_time = Duration::ZERO;
 
         if step.rule == "lia_generic" {
@@ -332,12 +283,6 @@ impl<'c> ParallelProofChecker<'c> {
             rule(rule_args)?;
         }
 
-        if let Some(s) = &mut self.config.statistics {
-            let time = time.elapsed();
-            s.results
-                .add_step_measurement(s.file_name, &step.id, &step.rule, time);
-            *s.deep_eq_time += deep_eq_time;
-        }
         Ok(())
     }
 
@@ -460,7 +405,7 @@ impl<'c> ParallelProofChecker<'c> {
     }
 
     // Never reached piece of code
-    #[cfg(not(feature = "thread_safety"))]
+    #[cfg(not(feature = "thread-safety"))]
     pub fn check<'s, 'p>(&'s mut self, _: &'p Proof) -> CarcaraResult<bool> {
         Ok(false)
     }

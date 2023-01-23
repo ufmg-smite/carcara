@@ -14,7 +14,7 @@ count=0
 
 for FILE in *.smt_in; do
     RESULT1=$(cargo run -- check --skip-unknown-rules "$FILE.proof" "$FILE" 2>/dev/null);
-    RESULT2=$(cargo run --features thread_safety -- check --skip-unknown-rules -u 3 "$FILE.proof" "$FILE" 2>/dev/null);
+    RESULT2=$(cargo run --features thread-safety -- check --skip-unknown-rules -u 3 "$FILE.proof" "$FILE" 2>/dev/null);
     
     DIF="EQUAL"
     if [ $RESULT1 != $RESULT2 ] 

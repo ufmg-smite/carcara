@@ -15,7 +15,7 @@ crossbeam = "0.8"
 
 [features]
 large-test-set = []
-thread_safety = []
+thread-safety = []
 
 [dev-dependencies]
 rand = "0.8.4"

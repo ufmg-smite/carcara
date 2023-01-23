@@ -1,8 +1,8 @@
-// Ensures that the custom Arc struct is only used when the thread_safety build
+// Ensures that the custom Arc struct is only used when the thread-safety build
 //  flag is activated. This ensures that the Carcará sequential execution will
 //  not suffer a performance downgrade due to the Arc slowness.
 
-#[cfg(feature = "thread_safety")]
+#[cfg(feature = "thread-safety")]
 /// An `Rc` where equality and hashing are done by reference, instead of by value.
 ///
 /// This means that two `Rc`s will not be considered equal and won't have the same hash value unless
@@ -38,7 +38,7 @@
 /// ```
 pub type Rc<T> = MyArc::Rc<T>;
 
-#[cfg(not(feature = "thread_safety"))]
+#[cfg(not(feature = "thread-safety"))]
 /// An `Rc` where equality and hashing are done by reference, instead of by value.
 ///
 /// This means that two `Rc`s will not be considered equal and won't have the same hash value unless
