@@ -257,27 +257,6 @@ fn rup_resolution(conclusion: &[Rc<Term>], premises: &[Premise]) -> bool {
     }
 }
 
-pub fn th_resolution(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> RuleResult {
-    // In the way that it's currently implemented in veriT, `th_resolution` steps may be given
-    // premises in the reversed order. This would cause some of these steps to be considered invalid
-    // by the checker because of the restriction that each clause can only eliminate one pivot. To
-    // account for that, we first check the step with the given premise order, and then with the
-    // premise list reversed.
-
-    if greedy_resolution(conclusion, premises, pool).is_ok() {
-        return Ok(());
-    }
-
-    let reversed: Vec<_> = premises.iter().copied().rev().collect();
-    greedy_resolution(conclusion, &reversed, pool).or_else(|greedy_error| {
-        if rup_resolution(conclusion, premises) {
-            Ok(())
-        } else {
-            Err(greedy_error)
-        }
-    })
-}
-
 fn resolution_with_args(
     RuleArgs {
         conclusion, premises, args, pool, ..
