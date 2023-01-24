@@ -7,6 +7,7 @@ use crate::checker::rules::Premise;
 use super::RuleResult;
 
 
+// Set the node as visited and if it was visited for the second time, push it onto the the unit_nodes
 fn visit(idx: usize, visited: &mut HashMap<usize, i32>, unit_nodes: &mut Vec<usize>) -> (){
     if !visited.contains_key(&idx) {
         visited.insert(idx, 0);
@@ -17,7 +18,7 @@ fn visit(idx: usize, visited: &mut HashMap<usize, i32>, unit_nodes: &mut Vec<usi
     }
 }
 
-
+// Perform a DFS through the prrof and get all unit nodes
 fn collect_units(proof : &Proof) -> Vec<usize> {
     let mut curr = proof.commands.len() - 1;
     let mut queue = VecDeque::new();
@@ -25,34 +26,31 @@ fn collect_units(proof : &Proof) -> Vec<usize> {
     let mut unit_nodes = Vec::new();
     queue.push_back(curr);
 
-    //bottom up dfs to go through the proof
+    // Bottom up dfs to go through the proof
     while queue.len() > 0 {
         curr = queue[0];
         queue.pop_front();
 
         match &proof.commands[curr] {
             ProofCommand::Step(step) => {
-                //if the command has premises, add them to the queue
-                print!("Os pais de {} são ", curr);
+                // If the command has premises, add them to the queue
                 for i in 0..step.premises.len(){
-                    print!("{} ", step.premises[i].1);
                     queue.push_front(step.premises[i].1);
                 }
-                println!("");
 
-                //if it is a unit clause, then visit it
+                // If it is a unit clause, then visit it
                 if step.clause.len() == 1{
                     visit(curr, &mut visited, &mut unit_nodes);
                 }
             }
             ProofCommand::Assume {id: _, term} => {
                 match &**term {
-                    //if it is a terminal, then it is a unit clause
+                    // If it is a terminal, it is a unit clause
                     Term::Terminal(_) => {
                         visit(curr, &mut visited, &mut unit_nodes);
                     }
                     Term::Op(_operator, terms) => {
-                        //only visit it if it is a unit clause
+                        // Only visit it if it is a unit clause
                         if terms.len() == 1{
                             visit(curr, &mut visited, &mut unit_nodes);
                         }
@@ -64,12 +62,10 @@ fn collect_units(proof : &Proof) -> Vec<usize> {
         }
     }
 
-    println!("unit_nodes: {:?}", unit_nodes);
-    println!("visited: {:?}", visited);
     return unit_nodes;
 }
 
-
+// Get the node that replaced i (the answer can be i itself) using path compression
 fn find(i: usize, actual: &mut[usize]) -> usize {
     if actual[i] == i {
         return i;
@@ -78,7 +74,7 @@ fn find(i: usize, actual: &mut[usize]) -> usize {
     return actual[i];
 }
 
-
+// Find out which nodes were replaced and by who
 fn fix_proof(curr: usize, proof: &Proof, unit_nodes: &[usize], dnm: &[bool], actual : &mut[usize]){
     if dnm[curr] {
         return;
@@ -147,11 +143,11 @@ fn fix_proof_2(proof: &Proof, _actual : &mut[usize], pool : &mut TermPool){
 }
 
 
+// Given the premises and conclusion of a resolution rule, find out which were the pivots used
 fn get_pivots<'a>(
     conclusion: &'a [Rc<Term>],
     premises: &'a [Premise],
     pool: &'a mut TermPool,
-// ) -> AHashMap<(i32, &'a ast::rc::Rc<ast::Term>), bool> {
 ) -> AHashMap<(i32, &'a Rc<Term>), bool> {
     // In some cases, this rule is used with a single premise `(not true)` to justify an empty
     // conclusion clause
@@ -247,7 +243,7 @@ fn get_pivots<'a>(
     pivots
 }
 
-
+// Compress the proof using the Lower Units algorithm
 pub fn compress_proof(proof: &Proof, pool : &mut TermPool){
     let unit_nodes = collect_units(&proof);
     
