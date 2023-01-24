@@ -280,7 +280,25 @@ pub fn compress_proof(proof: &Proof, pool : &mut TermPool){
     //     _ => {}
     // }
 
-    
+    // Como criar uma nova prova
+    // As premissas eu posso colocar assim
+    // println!("{:?}", proof.premises);
+    // let mut new_premises = AHashSet::new();
+    // for i in &proof.premises{
+    //     println!("{:?}", i);
+    //     new_premises.insert(Rc::clone(i));
+    // }
+
+    // Os comandos podem ser assim
+    // let mut new_commands = Vec::new();
+    // let mut command = ProofCommand::Step(ProofStep{ id       : String::from("t10"),
+    //                                                 clause   : Vec::from(proof.commands[10].clause()),
+    //                                                 rule     : String::from("resolution"),
+    //                                                 premises : vec![(0, 5), (0, 9)],
+    //                                                 args     : vec![],
+    //                                                 discharge: vec![]});
+    // new_commands.push(command);
+
+    // E a prova fica assim
+    // let new_proof = Proof{premises : new_premises, commands : new_commands};
 }
-
-
