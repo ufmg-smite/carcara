@@ -243,6 +243,43 @@ fn get_pivots<'a>(
     pivots
 }
 
+
+fn add_node(curr: usize, old_proof : &Proof, actual : &[usize], new_commands :  &mut Vec<ProofCommand>) -> usize{
+    match &old_proof.commands[curr] {
+        ProofCommand::Step(step) => {
+            println!("Currently in {:?}", step);
+
+            //if the command has premises, process them
+            let mut new_premises = Vec::new();
+            for i in 0..step.premises.len(){
+                new_premises.push((0 as usize, add_node(actual[step.premises[i].1], old_proof, actual, new_commands) - 1));
+            }
+            
+            //agora tem que fazer as cláusulas
+
+            let mut new_id = (new_commands.len() + 1).to_string();
+            let mut command = ProofCommand::Step(ProofStep{ id       : String::from("t") + &new_id,
+                                                            clause   : Vec::from(old_proof.commands[10].clause()),
+                                                            rule     : step.rule.clone(),
+                                                            premises : new_premises,
+                                                            args     : vec![],
+                                                            discharge: vec![]});
+            new_commands.push(command);
+
+        }
+        ProofCommand::Assume {id, term} => {
+            println!("It is not a step, it is {:?} and {:?}", id, term);
+            let mut new_id = (new_commands.len() + 1).to_string();
+            let mut command = ProofCommand::Assume{id : String::from("h") + &new_id, term : Rc::clone(term)};
+            new_commands.push(command);
+        }
+        _ => {}
+    }
+    // new_commands.push(old_proof.commands[curr]); não funciona porque tem o copy
+    // e de todo jeito não é bom funcionar porque eu tenho que alterar as premissas
+    return new_commands.len();
+}
+
 // Compress the proof using the Lower Units algorithm
 pub fn compress_proof(proof: &Proof, pool : &mut TermPool){
     let unit_nodes = collect_units(&proof);
@@ -264,8 +301,16 @@ pub fn compress_proof(proof: &Proof, pool : &mut TermPool){
         println!("{:?} agora é {:?}", i, find(i, &mut actual));
     }
 
-    fix_proof_2(proof, &mut actual, pool);
+    //fix_proof_2(proof, &mut actual, pool);
+    let mut new_proof_commands = Vec::new();
+    add_node(proof.commands.len() - 1, proof, &actual, &mut new_proof_commands);
+
+    println!("New proof commands are:");
+    for i in new_proof_commands{
+        println!("{:?}", i);
+    }
     
+
     // Como encontrar o pivo que foi usado numa aplicação de resolution
     // let pr = [Premise::new((0, 11), &proof.commands[11]), Premise::new((0, 9), &proof.commands[9])];
     // let tam = proof.commands.len();
