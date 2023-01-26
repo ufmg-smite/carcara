@@ -154,11 +154,16 @@ where
 pub struct CsvBenchmarkResults {
     runs: AHashMap<RunId, RunMeasurement>,
     step_time_by_rule: AHashMap<String, OfflineMetrics<StepId>>,
+    num_errors: usize,
 }
 
 impl CsvBenchmarkResults {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn num_errors(&self) -> usize {
+        self.num_errors
     }
 
     pub fn write_csv(
@@ -241,6 +246,7 @@ pub trait CollectResults {
     fn add_assume_measurement(&mut self, file: &str, id: &str, is_easy: bool, time: Duration);
     fn add_deep_eq_depth(&mut self, depth: usize);
     fn add_run_measurement(&mut self, id: &RunId, measurement: RunMeasurement);
+    fn register_error(&mut self, error: &crate::Error);
 
     fn combine(a: Self, b: Self) -> Self
     where
@@ -333,6 +339,8 @@ where
             num_easy_assumes: a.num_easy_assumes + b.num_easy_assumes,
         }
     }
+
+    fn register_error(&mut self, _: &crate::Error) {}
 }
 
 impl CollectResults for CsvBenchmarkResults {
@@ -363,6 +371,11 @@ impl CollectResults for CsvBenchmarkResults {
         // in benchmarks anyway
         a.runs.extend(b.runs);
         a.step_time_by_rule = combine_map(a.step_time_by_rule, b.step_time_by_rule);
+        a.num_errors += b.num_errors;
         a
+    }
+
+    fn register_error(&mut self, _: &crate::Error) {
+        self.num_errors += 1;
     }
 }
