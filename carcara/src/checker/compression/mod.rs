@@ -111,51 +111,21 @@ fn fix_proof(curr: usize, proof: &Proof, unit_nodes: &[usize], dnm: &[bool], act
 }
 
 
-fn fix_proof_2(proof: &Proof, _actual : &mut[usize], pool : &mut TermPool){
-
-    let mut current = Vec::new();
-
-    match &proof.commands[4] {
-        ProofCommand::Step(step_q) => {
-            println!("o step 4 é {:?}", step_q);
-            
-            for i in 0..step_q.clause.len(){
-                current.push(step_q.clause[i].remove_all_negations());
-            }
-
-            match &proof.commands[6] {
-                ProofCommand::Step(step_s) => {
-                    println!("o step 6 é {:?}", step_s);
-                    let mut next = step_s.clause[1].remove_all_negations();
-                    next.0 = 0 as u32;
-                    println!("Antes eh {:?} \t {:?} \t {:?}", current, &step_s.clause, next);
-                    binary_resolution(pool, &mut current, &step_s.clause, next, true);
-                    println!("Depois eh {:?} \t {:?} \t {:?}", current, &step_s.clause, next);
-                }
-                _ => {}
-            }
-        }
-        ProofCommand::Assume {id: _, term: _} => {
-            println!("É um Assume");
-        }
-        _ => {}
-    }
-}
-
-
 // Given the premises and conclusion of a resolution rule, find out which were the pivots used
 fn get_pivots<'a>(
     conclusion: &'a [Rc<Term>],
     premises: &'a [Premise],
     pool: &'a mut TermPool,
-) -> AHashMap<(i32, &'a Rc<Term>), bool> {
+//) -> AHashMap<(i32, &'a Rc<Term>), bool> {
+) -> Option<(i32, &'a Rc<Term>)> {
     // In some cases, this rule is used with a single premise `(not true)` to justify an empty
     // conclusion clause
     if conclusion.is_empty() && premises.len() == 1 {
         println!("Caiu no primeiro if");
         if let [t] = premises[0].clause {
             if match_term!((not true) = t).is_some() {
-                return AHashMap::new();
+                //return AHashMap::new();
+                return None;
             }
         }
     }
@@ -240,9 +210,49 @@ fn get_pivots<'a>(
             }
         }
     }
-    pivots
+
+    for i in pivots{
+        return Some(i.0);
+    }
+    return None
 }
 
+//proof: &Proof, _actual : &mut[usize], pool : &mut TermPool
+fn binary_resolution_from_old(
+    pool : &mut TermPool,
+    new_premises : Vec<(usize, usize)>,
+    new_commands : Vec<ProofCommand>,
+    pivot :(i32, Rc<Term>), 
+){
+    let left_parent = new_premises[0].1;
+    let right_parent = new_premises[1].1;
+
+    let mut current = Vec::new();
+    match &new_commands[left_parent] {
+        ProofCommand::Step(step_l) => {
+            println!("o step_l é {:?}", step_l);
+
+            for i in 0..step_l.clause.len(){
+                current.push(step_l.clause[i].remove_all_negations());
+            }
+
+            match &new_commands[right_parent] {
+                ProofCommand::Step(step_r) => {
+                    println!("o step_r é {:?}", step_r);
+                    //let pivot = ;
+                    //println!("Antes eh {:?} \t {:?} \t {:?}", current, &step_s.clause, next);
+                    //binary_resolution(pool, &mut current, &step_s.clause, pivot, true);
+                    //println!("Depois eh {:?} \t {:?} \t {:?}", current, &step_s.clause, next);
+                }
+                _ => {}
+            }
+        }
+        ProofCommand::Assume {id: _, term: _} => {
+            println!("É um Assume");
+        }
+        _ => {}
+    }
+}
 
 fn add_node(curr: usize, old_proof : &Proof, actual : &[usize], new_commands :  &mut Vec<ProofCommand>) -> usize{
     match &old_proof.commands[curr] {
@@ -256,10 +266,18 @@ fn add_node(curr: usize, old_proof : &Proof, actual : &[usize], new_commands :  
             }
             
             //agora tem que fazer as cláusulas
+            let mut new_clause;
+            if step.rule == "resolution"{
+                println!("Passo de resolution");
+                new_clause = Vec::from(old_proof.commands[10].clause());
+            }
+            else{
+                new_clause = Vec::from(old_proof.commands[curr].clause());
+            }
 
             let mut new_id = (new_commands.len() + 1).to_string();
             let mut command = ProofCommand::Step(ProofStep{ id       : String::from("t") + &new_id,
-                                                            clause   : Vec::from(old_proof.commands[10].clause()),
+                                                            clause   : new_clause,
                                                             rule     : step.rule.clone(),
                                                             premises : new_premises,
                                                             args     : vec![],
@@ -278,6 +296,47 @@ fn add_node(curr: usize, old_proof : &Proof, actual : &[usize], new_commands :  
     // new_commands.push(old_proof.commands[curr]); não funciona porque tem o copy
     // e de todo jeito não é bom funcionar porque eu tenho que alterar as premissas
     return new_commands.len();
+}
+
+// pub fn binary_resolution<'a, C: ClauseCollection<'a>>(
+//     pool: &mut TermPool,
+//     current: &mut C,
+//     next: &'a [Rc<Term>],
+//     pivot: ResolutionTerm<'a>,
+//     is_pivot_in_current: bool,
+// )
+
+
+fn dummy_resolution(proof: &Proof, _actual : &mut[usize], pool : &mut TermPool){
+
+    let mut current = Vec::new();
+
+    match &proof.commands[4] {
+        ProofCommand::Step(step_q) => {
+            println!("o step 4 é {:?}", step_q);
+            
+            for i in 0..step_q.clause.len(){
+                current.push(step_q.clause[i].remove_all_negations());
+            }
+
+            match &proof.commands[6] {
+                ProofCommand::Step(step_s) => {
+                    println!("o step 6 é {:?}", step_s);
+                    let mut next = step_s.clause[1].remove_all_negations();
+                    println!("next: {:?}", next);
+                    next.0 = 0 as u32;
+                    println!("Antes eh {:?} \t {:?} \t {:?}", current, &step_s.clause, next);
+                    binary_resolution(pool, &mut current, &step_s.clause, next, true);
+                    println!("Depois eh {:?} \t {:?} \t {:?}", current, &step_s.clause, next);
+                }
+                _ => {}
+            }
+        }
+        ProofCommand::Assume {id: _, term: _} => {
+            println!("É um Assume");
+        }
+        _ => {}
+    }
 }
 
 // Compress the proof using the Lower Units algorithm
@@ -301,25 +360,25 @@ pub fn compress_proof(proof: &Proof, pool : &mut TermPool){
         println!("{:?} agora é {:?}", i, find(i, &mut actual));
     }
 
-    //fix_proof_2(proof, &mut actual, pool);
+    //dummy_resolution(proof, &mut actual, pool);
     let mut new_proof_commands = Vec::new();
     add_node(proof.commands.len() - 1, proof, &actual, &mut new_proof_commands);
 
-    println!("New proof commands are:");
+    println!("\n\nNew proof commands are:");
     for i in new_proof_commands{
         println!("{:?}", i);
     }
     
 
-    // Como encontrar o pivo que foi usado numa aplicação de resolution
-    // let pr = [Premise::new((0, 11), &proof.commands[11]), Premise::new((0, 9), &proof.commands[9])];
-    // let tam = proof.commands.len();
-    // match &proof.commands[tam-1] {
-    //     ProofCommand::Step(step_s) => {
-    //         println!("{:?}", get_pivots(&step_s.clause, &pr, pool));
-    //     }
-    //     _ => {}
-    // }
+    //Como encontrar o pivo que foi usado numa aplicação de resolution
+    let pr = [Premise::new((0, 11), &proof.commands[11]), Premise::new((0, 9), &proof.commands[9])];
+    let tam = proof.commands.len();
+    match &proof.commands[tam-1] {
+        ProofCommand::Step(step_s) => {
+            println!("to no compress proof {:?}", get_pivots(&step_s.clause, &pr, pool));
+        }
+        _ => {}
+    }
 
     // Como criar uma nova prova
     // As premissas eu posso colocar assim
