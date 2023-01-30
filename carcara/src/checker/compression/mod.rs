@@ -2,7 +2,7 @@ use crate::{ast::*};
 use std::collections::{HashMap, hash_map::Entry};
 use ahash::{AHashMap, AHashSet};
 use std::collections::VecDeque;
-use crate::checker::rules::resolution::{binary_resolution};
+use crate::checker::rules::resolution::{binary_resolution, unremove_all_negations};
 use crate::checker::rules::Premise;
 use super::RuleResult;
 
@@ -185,7 +185,8 @@ fn binary_resolution_from_old(
     right_parent : usize,
     new_commands : Vec<ProofCommand>,
     curr_step : &ProofStep,
-){
+) -> Vec<Rc<Term>>{
+//){
     let mut current = Vec::new();
     match &new_commands[left_parent] {
         ProofCommand::Step(step_l) => {
@@ -202,13 +203,27 @@ fn binary_resolution_from_old(
                     let premises = [Premise::new((0 as usize, left_parent), &new_commands[left_parent]),
                                     Premise::new((0 as usize, right_parent),&new_commands[right_parent])];
 
-                    let (pool, pivot) = get_pivots(&curr_step.clause, &premises, pool);
+                    let (pool, mut pivot) = get_pivots(&curr_step.clause, &premises, pool);
+                    pivot.0 = 0;
                     println!("I got {:?} as pivot", pivot);
+
+                    let mut is_pivot_in_current = true;
+                    for i in 0..current.len(){
+                        if pivot.1 == current[i].1 && current[i].0 % 2 == 1{
+                            is_pivot_in_current = false;
+                        }
+                    }
                     
                     println!("Parameters were {:?} {:?} {:?}", current, step_r.clause, pivot);
-                    binary_resolution(pool, &mut current, &step_r.clause, pivot, true);
+                    binary_resolution(pool, &mut current, &step_r.clause, pivot, is_pivot_in_current);
                     println!("Parameters  are {:?} {:?} {:?}", current, step_r.clause, pivot);
-
+                    let mut new_clause = Vec::new();
+                    for i in 0..(current.len() / 2){
+                        new_clause.push(unremove_all_negations(pool, current[i]));
+                    }
+                    println!("New clause {:?}", new_clause);
+                    return new_clause;
+                    
                 }
                 _ => {}
             }
@@ -218,6 +233,7 @@ fn binary_resolution_from_old(
         }
         _ => {}
     }
+    panic!("Was not able to compute the resolution");
 }
 
 fn add_node(curr: usize,
@@ -240,12 +256,13 @@ fn add_node(curr: usize,
             let mut new_clause;
             if step.rule == "resolution"{
                 println!("Passo de resolution");
-                binary_resolution_from_old(pool, new_premises[0].1, new_premises[1].1, new_commands.to_vec(), step);
-                new_clause = Vec::from(old_proof.commands[10].clause());
+                new_clause = binary_resolution_from_old(pool, new_premises[0].1, new_premises[1].1, new_commands.to_vec(), step);
+                //new_clause = Vec::from(old_proof.commands[10].clause());
             }
             else{
                 new_clause = Vec::from(old_proof.commands[curr].clause());
             }
+            println!("{:?}", new_clause);
 
             let mut new_id = (new_commands.len() + 1).to_string();
             let mut command = ProofCommand::Step(ProofStep{ id       : String::from("t") + &new_id,
@@ -332,16 +349,9 @@ pub fn compress_proof(proof: &Proof, pool : &mut TermPool){
         println!("{:?}", i);
     }
     
+    // Agora eu tenho que adicionar cada um dos unit_nodes e
+    // depois fazer a binary resolution deles com o último nó da prova
 
-    //Como encontrar o pivo que foi usado numa aplicação de resolution
-    // let pr = [Premise::new((0, 11), &proof.commands[11]), Premise::new((0, 9), &proof.commands[9])];
-    // let tam = proof.commands.len();
-    // match &proof.commands[tam-1] {
-    //     ProofCommand::Step(step_s) => {
-    //         println!("to no compress proof {:?}", get_pivots(&step_s.clause, &pr, pool));
-    //     }
-    //     _ => {}
-    // }
 
     // Como criar uma nova prova
     // As premissas eu posso colocar assim

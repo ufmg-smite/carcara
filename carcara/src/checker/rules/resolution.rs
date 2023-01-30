@@ -41,7 +41,7 @@ impl<'a> ClauseCollection<'a> for AHashSet<ResolutionTerm<'a>> {
 }
 
 /// Undoes the transformation done by `Rc<Term>::remove_all_negations`.
-fn unremove_all_negations(pool: &mut TermPool, (n, term): ResolutionTerm) -> Rc<Term> {
+pub fn unremove_all_negations(pool: &mut TermPool, (n, term): ResolutionTerm) -> Rc<Term> {
     let mut term = term.clone();
     for _ in 0..n {
         term = build_term!(pool, (not { term }));
