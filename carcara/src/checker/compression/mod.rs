@@ -116,75 +116,38 @@ fn get_pivots<'a>(
     conclusion: &'a [Rc<Term>],
     premises: &'a [Premise],
     pool: &'a mut TermPool,
-//) -> AHashMap<(i32, &'a Rc<Term>), bool> {
-) -> Option<(i32, &'a Rc<Term>)> {
-    // In some cases, this rule is used with a single premise `(not true)` to justify an empty
-    // conclusion clause
+) -> (&'a mut TermPool, (u32, &'a Rc<Term>)) {
     if conclusion.is_empty() && premises.len() == 1 {
         println!("Caiu no primeiro if");
         if let [t] = premises[0].clause {
             if match_term!((not true) = t).is_some() {
-                //return AHashMap::new();
-                return None;
+                panic!("Cannot determine the pivots");
             }
         }
     }
 
-    // When checking this rule, we must look at what the conclusion clause looks like in order to
-    // determine the pivots. The reason for that is because there is no other way to know which
-    // terms should be removed in a given binary resolution step. Consider the following example,
-    // adapted from an actual generated proof:
-    //
-    //     (step t1 (cl (not q) (not (not p)) (not p)) :rule irrelevant)
-    //     (step t2 (cl (not (not (not p))) p) :rule irrelevant)
-    //     (step t3 (cl (not q) p (not p)) :rule resolution :premises (t1 t2))
-    //
-    // Without looking at the conclusion, it is unclear if the (not p) term should be removed by the
-    // p term, or if the (not (not p)) should be removed by the (not (not (not p))). We can only
-    // determine this by looking at the conlcusion and using it to derive the pivots.
     let conclusion: AHashSet<_> = conclusion
         .iter()
         .map(Rc::remove_all_negations)
         .map(|(n, t)| (n as i32, t))
         .collect();
-
-    // The working clause contains the terms from the conclusion clause that we already encountered
     let mut working_clause = AHashSet::new();
-
-    // The pivots are the encountered terms that are not present in the conclusion clause, and so
-    // should be removed. After being used to eliminate a term, a pivot can still be used to
-    // eliminate other terms. Because of that, we represent the pivots as a hash map to a boolean,
-    // which represents if the pivot was already eliminated or not. At the end, this boolean should
-    // be true for all pivots
     let mut pivots = AHashMap::new();
 
     for premise in premises {
-        // Only one pivot may be eliminated per clause. This restriction is required so logically
-        // unsound proofs like this one are not considered valid:
-        //
-        //     (step t1 (cl (= false true) (not false) (not true)) :rule equiv_neg1)
-        //     (step t2 (cl (= false true) false true) :rule equiv_neg2)
-        //     (step t3 (cl (= false true)) :rule resolution :premises (t1 t2))
         let mut eliminated_clause_pivot = false;
         for term in premise.clause {
             let (n, inner) = term.remove_all_negations();
             let n = n as i32;
 
-            // There are two possible negations of a term, with one leading negation added, or with
-            // one leading negation removed (if the term had any in the first place)
             let below = (n - 1, inner);
             let above = (n + 1, inner);
 
-            // First, if the encountered term should be in the conclusion, but is not yet in the
-            // working clause, we insert it and don't try to remove it with a pivot
             if conclusion.contains(&(n, inner)) && !working_clause.contains(&(n, inner)) {
                 working_clause.insert((n, inner));
                 continue;
             }
 
-            // If the negation of the encountered term is present in the pivots set, we simply
-            // eliminate it. Otherwise, we insert the encountered term in the working clause or the
-            // pivots set, depending on wether it is present in the conclusion clause or not
             let mut try_eliminate = |pivot| match pivots.entry(pivot) {
                 Entry::Occupied(mut e) => {
                     e.insert(true);
@@ -193,8 +156,6 @@ fn get_pivots<'a>(
                 Entry::Vacant(_) => false,
             };
 
-            // Only one pivot may be elminated per clause, so if we already found this clauses'
-            // pivot, we don't try to eliminate the term
             let eliminated =
                 !eliminated_clause_pivot && (try_eliminate(below) || try_eliminate(above));
 
@@ -203,30 +164,28 @@ fn get_pivots<'a>(
             } else if conclusion.contains(&(n, inner)) {
                 working_clause.insert((n, inner));
             } else {
-                // If the term is not in the conclusion clause, it must be a pivot. If it was
-                // not already in the pivots set, we insert `false`, to indicate that it was
-                // not yet eliminated
                 pivots.entry((n, inner)).or_insert(false);
             }
         }
     }
 
+    println!("Pivots are {:?}", pivots);
+
     for i in pivots{
-        return Some(i.0);
+        if i.1{
+            return (pool, (i.0.0 as u32, i.0.1));
+        }
     }
-    return None
+    panic!("Cannot determine the pivots");
 }
 
-//proof: &Proof, _actual : &mut[usize], pool : &mut TermPool
 fn binary_resolution_from_old(
     pool : &mut TermPool,
-    new_premises : Vec<(usize, usize)>,
+    left_parent : usize,
+    right_parent : usize,
     new_commands : Vec<ProofCommand>,
-    pivot :(i32, Rc<Term>), 
+    curr_step : &ProofStep,
 ){
-    let left_parent = new_premises[0].1;
-    let right_parent = new_premises[1].1;
-
     let mut current = Vec::new();
     match &new_commands[left_parent] {
         ProofCommand::Step(step_l) => {
@@ -239,10 +198,17 @@ fn binary_resolution_from_old(
             match &new_commands[right_parent] {
                 ProofCommand::Step(step_r) => {
                     println!("o step_r é {:?}", step_r);
-                    //let pivot = ;
-                    //println!("Antes eh {:?} \t {:?} \t {:?}", current, &step_s.clause, next);
-                    //binary_resolution(pool, &mut current, &step_s.clause, pivot, true);
-                    //println!("Depois eh {:?} \t {:?} \t {:?}", current, &step_s.clause, next);
+
+                    let premises = [Premise::new((0 as usize, left_parent), &new_commands[left_parent]),
+                                    Premise::new((0 as usize, right_parent),&new_commands[right_parent])];
+
+                    let (pool, pivot) = get_pivots(&curr_step.clause, &premises, pool);
+                    println!("I got {:?} as pivot", pivot);
+                    
+                    println!("Parameters were {:?} {:?} {:?}", current, step_r.clause, pivot);
+                    binary_resolution(pool, &mut current, &step_r.clause, pivot, true);
+                    println!("Parameters  are {:?} {:?} {:?}", current, step_r.clause, pivot);
+
                 }
                 _ => {}
             }
@@ -254,7 +220,12 @@ fn binary_resolution_from_old(
     }
 }
 
-fn add_node(curr: usize, old_proof : &Proof, actual : &[usize], new_commands :  &mut Vec<ProofCommand>) -> usize{
+fn add_node(curr: usize,
+            old_proof : &Proof,
+            actual : &[usize],
+            new_commands :  &mut Vec<ProofCommand>,
+            pool : &mut TermPool
+) -> usize{
     match &old_proof.commands[curr] {
         ProofCommand::Step(step) => {
             println!("Currently in {:?}", step);
@@ -262,13 +233,14 @@ fn add_node(curr: usize, old_proof : &Proof, actual : &[usize], new_commands :  
             //if the command has premises, process them
             let mut new_premises = Vec::new();
             for i in 0..step.premises.len(){
-                new_premises.push((0 as usize, add_node(actual[step.premises[i].1], old_proof, actual, new_commands) - 1));
+                new_premises.push((0 as usize, add_node(actual[step.premises[i].1], old_proof, actual, new_commands, pool) - 1));
             }
             
             //agora tem que fazer as cláusulas
             let mut new_clause;
             if step.rule == "resolution"{
                 println!("Passo de resolution");
+                binary_resolution_from_old(pool, new_premises[0].1, new_premises[1].1, new_commands.to_vec(), step);
                 new_clause = Vec::from(old_proof.commands[10].clause());
             }
             else{
@@ -293,18 +265,9 @@ fn add_node(curr: usize, old_proof : &Proof, actual : &[usize], new_commands :  
         }
         _ => {}
     }
-    // new_commands.push(old_proof.commands[curr]); não funciona porque tem o copy
-    // e de todo jeito não é bom funcionar porque eu tenho que alterar as premissas
     return new_commands.len();
 }
 
-// pub fn binary_resolution<'a, C: ClauseCollection<'a>>(
-//     pool: &mut TermPool,
-//     current: &mut C,
-//     next: &'a [Rc<Term>],
-//     pivot: ResolutionTerm<'a>,
-//     is_pivot_in_current: bool,
-// )
 
 
 fn dummy_resolution(proof: &Proof, _actual : &mut[usize], pool : &mut TermPool){
@@ -362,7 +325,7 @@ pub fn compress_proof(proof: &Proof, pool : &mut TermPool){
 
     //dummy_resolution(proof, &mut actual, pool);
     let mut new_proof_commands = Vec::new();
-    add_node(proof.commands.len() - 1, proof, &actual, &mut new_proof_commands);
+    add_node(proof.commands.len() - 1, proof, &actual, &mut new_proof_commands, pool);
 
     println!("\n\nNew proof commands are:");
     for i in new_proof_commands{
@@ -371,14 +334,14 @@ pub fn compress_proof(proof: &Proof, pool : &mut TermPool){
     
 
     //Como encontrar o pivo que foi usado numa aplicação de resolution
-    let pr = [Premise::new((0, 11), &proof.commands[11]), Premise::new((0, 9), &proof.commands[9])];
-    let tam = proof.commands.len();
-    match &proof.commands[tam-1] {
-        ProofCommand::Step(step_s) => {
-            println!("to no compress proof {:?}", get_pivots(&step_s.clause, &pr, pool));
-        }
-        _ => {}
-    }
+    // let pr = [Premise::new((0, 11), &proof.commands[11]), Premise::new((0, 9), &proof.commands[9])];
+    // let tam = proof.commands.len();
+    // match &proof.commands[tam-1] {
+    //     ProofCommand::Step(step_s) => {
+    //         println!("to no compress proof {:?}", get_pivots(&step_s.clause, &pr, pool));
+    //     }
+    //     _ => {}
+    // }
 
     // Como criar uma nova prova
     // As premissas eu posso colocar assim
