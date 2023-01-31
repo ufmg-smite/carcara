@@ -240,8 +240,10 @@ fn add_node(curr: usize,
             old_proof : &Proof,
             actual : &[usize],
             new_commands :  &mut Vec<ProofCommand>,
-            pool : &mut TermPool
+            pool : &mut TermPool,
+//            added: &mut Vec<Option<usize>>
 ) -> usize{
+    println!("Estou tentando adicionar o {:?}", old_proof.commands[curr]);
     match &old_proof.commands[curr] {
         ProofCommand::Step(step) => {
             println!("Currently in {:?}", step);
@@ -286,11 +288,8 @@ fn add_node(curr: usize,
 }
 
 
-
 fn dummy_resolution(proof: &Proof, _actual : &mut[usize], pool : &mut TermPool){
-
     let mut current = Vec::new();
-
     match &proof.commands[4] {
         ProofCommand::Step(step_q) => {
             println!("o step 4 é {:?}", step_q);
@@ -336,21 +335,23 @@ pub fn compress_proof(proof: &Proof, pool : &mut TermPool){
 
     fix_proof(curr, proof, &unit_nodes, &dnm, &mut actual);
 
-    for i in 0..actual.len() {
-        println!("{:?} agora é {:?}", i, find(i, &mut actual));
-    }
-
     //dummy_resolution(proof, &mut actual, pool);
     let mut new_proof_commands = Vec::new();
+    //let mut added: Vec<Option<usize>> = vec![None; proof.commands.len()];
+    //println!("Added: {:?}", added);
     add_node(proof.commands.len() - 1, proof, &actual, &mut new_proof_commands, pool);
+    
+    // Agora eu tenho que adicionar cada um dos unit_nodes e
+    // depois fazer a binary resolution deles com o último nó da prova
+    for i in unit_nodes{
+        //println!("Vai adicionar o {:?}", proof.commands[i]);
+        add_node(i, proof, &actual, &mut new_proof_commands, pool);
+    }
 
     println!("\n\nNew proof commands are:");
     for i in new_proof_commands{
         println!("{:?}", i);
     }
-    
-    // Agora eu tenho que adicionar cada um dos unit_nodes e
-    // depois fazer a binary resolution deles com o último nó da prova
 
 
     // Como criar uma nova prova
