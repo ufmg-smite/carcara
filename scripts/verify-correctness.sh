@@ -13,17 +13,20 @@ cd $FULL_DIR
 count=0
 
 for FILE in *.smt_in; do
-    RESULT1=$(cargo run -- check --skip-unknown-rules "$FILE.proof" "$FILE" 2>/dev/null);
+    RESULT1=$(cargo run -- check --skip-unknown-rules -u 1 "$FILE.proof" "$FILE" 2>/dev/null);
     RESULT2=$(cargo run --features thread-safety -- check --skip-unknown-rules -u 3 "$FILE.proof" "$FILE" 2>/dev/null);
-    
-    DIF="EQUAL"
-    if [ $RESULT1 != $RESULT2 ] 
-    then
-        DIF="DIF"
-        count = count + 1
-    fi
 
-    echo "$FILE: $RESULT1 is $DIF";
+    RESULT1=$(echo $RESULT1 | tr '\a' ' ' | awk '{print $NF}')
+    RESULT2=$(echo $RESULT2 | tr '\a' ' ' | awk '{print $NF}')
+
+    DIF="EQUAL"
+    if [ "$RESULT1" != "$RESULT2" ]; then
+        DIF="DIF"
+        ((count = count + 1))
+        echo $''$FILE$': '$RESULT1$' is \e[1;31m'$DIF$'\e[0m from '$RESULT2$'';
+    else
+        echo $''$FILE$': '$RESULT1$' is \e[1;32m'$DIF$'\e[0m from '$RESULT2$'';
+    fi
 done
 
 echo;

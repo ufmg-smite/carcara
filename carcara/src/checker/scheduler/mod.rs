@@ -1,149 +1,166 @@
-#![allow(dead_code)]
-use crate::ast::{Proof, ProofCommand, ProofIter};
-use std::{cmp::Ordering, collections::BinaryHeap};
+pub(crate) mod iter;
 
-// Represents the remaining load for an specific worker. Implements Ord for heap.
-// 0: Remaing load | 1: worker index at the vector of remaining loads
-#[derive(Eq)]
-struct RemainLoad(usize, usize);
+pub mod Schedule {
+    #![allow(non_snake_case)]
+    use super::iter::ScheduleIter;
+    use crate::ast::ProofCommand;
 
-impl Ord for RemainLoad {
-    fn cmp(&self, other: &Self) -> Ordering {
-        if self.0 > other.0 {
-            return Ordering::Greater;
-        } else if self.0 < other.0 {
-            return Ordering::Less;
-        }
-        return Ordering::Equal;
-    }
-}
-
-impl PartialOrd for RemainLoad {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl PartialEq for RemainLoad {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-
-//
-#[derive(Clone)]
-pub struct Schedule {
-    vec: Vec<ProofCommand>,
-}
-
-impl Schedule {
-    pub fn new() -> Self {
-        Schedule { vec: Vec::new() }
+    /// Struct responsible for storing a thread work schedule. Each schedule
+    /// will store the original proof steps in the following format: (depth, subproof index)
+    #[derive(Clone)]
+    pub struct Schedule<'a> {
+        proof_cmds: &'a [ProofCommand],
+        steps: Vec<(usize, usize)>,
     }
 
-    pub fn push(&mut self, cmd: ProofCommand) {
-        self.vec.push(cmd);
-    }
-
-    /// Returns an iterator over the proof commands. See [`ProofIter`].
-    pub fn iter(&self) -> ProofIter {
-        ProofIter::new(&self.vec)
-    }
-}
-
-pub struct Scheduler {
-    pub loads: Vec<Schedule>,
-}
-
-impl Scheduler {
-    pub fn new(num_workers: usize, proof: &Proof) -> Self {
-        let cmds = &proof.commands;
-        let mut loads = vec![Schedule::new(); num_workers];
-
-        let (mut num_assumes, mut num_steps, mut num_subproofs, mut total) = (0, 0, 0, 0);
-        let mut subproofs_ids = vec![];
-
-        // Pre process the proof and slice subproofs from the other types of proof cmds
-        let mut i = 0;
-        for cmd in cmds {
-            match cmd {
-                ProofCommand::Assume { .. } => {
-                    total += 1;
-                    num_assumes += 1;
-                }
-                ProofCommand::Step(_) => {
-                    total += 1;
-                    num_steps += 1;
-                }
-                ProofCommand::Subproof(s) => {
-                    num_subproofs += 1;
-                    subproofs_ids.push(i);
-                    total += s.commands.len();
-                }
-            }
-            i += 1;
-        }
-
-        // Defines the total number of steps for each worker
-        let mut steps_per_schedule = vec![total / num_workers; num_workers];
-        {
-            // for _ in 0.. {
-            //     steps_per_schedule.push();
-            // }
-            let remain_to_dist = total - (total / num_workers) * num_workers;
-            for i in 0..remain_to_dist {
-                steps_per_schedule[i] += 1;
+    impl<'a> Schedule<'a> {
+        pub fn new(proof_cmds: &'a [ProofCommand]) -> Self {
+            Schedule {
+                proof_cmds: proof_cmds,
+                steps: vec![],
             }
         }
 
-        let mut heap = BinaryHeap::new();
-        for i in 0..num_workers {
-            heap.push(RemainLoad { 0: steps_per_schedule[i], 1: i });
+        /// Inserts a new step into the end of the schedule steps
+        pub fn push(&mut self, cmd: (usize, usize)) {
+            self.steps.push(cmd);
         }
 
-        // Assign the subproofs for each worker
-        i = 0;
-        for id in subproofs_ids {
-            let mut biggest = heap.pop().unwrap();
-            loads[i].push(cmds[id].clone());
+        /// Returns the last schedule step
+        pub fn last(&mut self) -> Option<&(usize, usize)> {
+            self.steps.last()
+        }
 
-            if let ProofCommand::Subproof(s) = &cmds[id] {
-                steps_per_schedule[biggest.1] -= s.commands.len();
-                biggest.0 -= s.commands.len();
+        /// Returns an iterator over the proof commands. See [`ProofIter`].
+        pub fn iter(&self) -> ScheduleIter {
+            ScheduleIter::new(self.proof_cmds, &self.steps)
+        }
+    }
+}
 
-                heap.push(biggest);
+pub mod Scheduler {
+    #![allow(non_snake_case)]
+    use super::Schedule::Schedule;
+    use crate::ast::{Proof, ProofCommand};
+    use std::{cmp::Ordering, collections::hash_set::HashSet};
+
+    // Represents the remaining load for an specific worker. Implements Ord for heap.
+    // 0: Remaing load | 1: worker index at the vector of remaining loads
+    #[derive(Eq)]
+    struct RemainLoad(usize, usize);
+
+    impl Ord for RemainLoad {
+        fn cmp(&self, other: &Self) -> Ordering {
+            if self.0 > other.0 {
+                return Ordering::Greater;
+            } else if self.0 < other.0 {
+                return Ordering::Less;
             }
-
-            i = (i + 1) % num_workers;
+            return Ordering::Equal;
         }
+    }
 
-        // Assign the other proof cmds
-        for cmd in cmds {
-            match cmd {
-                ProofCommand::Assume { .. } => {
-                    let mut biggest = heap.pop().unwrap();
-                    loads[biggest.1].push(cmd.clone());
+    impl PartialOrd for RemainLoad {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
 
-                    /* TODO: change from weight 1 to an custom weight based in the rule */
-                    steps_per_schedule[biggest.1] -= 1;
-                    biggest.0 -= 1;
+    impl PartialEq for RemainLoad {
+        fn eq(&self, other: &Self) -> bool {
+            self.0 == other.0
+        }
+    }
 
-                    heap.push(biggest);
-                }
-                ProofCommand::Step(_) => {
-                    let mut biggest = heap.pop().unwrap();
-                    loads[biggest.1].push(cmd.clone());
+    /// Represents a level in the proof stacks. It holds the subproof itself,
+    /// its prerequisite step (anchor) and which schedules used any step of
+    /// this layer
+    struct StackLevel<'a> {
+        id: usize,
+        cmds: &'a [ProofCommand],
+        pre_req: Option<(usize, usize)>,
+        used_by: HashSet<usize>,
+    }
 
-                    /* TODO: change from weight 1 to an custom weight based in the rule */
-                    steps_per_schedule[biggest.1] -= 1;
-                    biggest.0 -= 1;
-
-                    heap.push(biggest);
-                }
-                _ => {}
+    impl<'a> StackLevel<'a> {
+        pub fn new(id: usize, cmds: &'a [ProofCommand], pre_req: Option<(usize, usize)>) -> Self {
+            Self {
+                id,
+                cmds,
+                pre_req,
+                used_by: HashSet::new(),
             }
         }
+    }
 
-        Scheduler { loads }
+    pub struct Scheduler<'a> {
+        pub loads: Vec<Schedule<'a>>,
+    }
+
+    impl<'a> Scheduler<'a> {
+        /// Creates a thread scheduler for this proof using a specific number of
+        /// workers. This scheduler is responsible for balancing the load of this
+        /// proof aiming the minimum amount of sync overhead
+        pub fn new(num_workers: usize, proof: &'a Proof) -> Self {
+            let cmds = &proof.commands;
+            let mut loads = vec![Schedule::new(cmds); num_workers];
+            let mut stack = vec![StackLevel::new(0, cmds, None)];
+            let mut load_index = 0;
+
+            loop {
+                // Pop the finished subproofs
+                while stack.len() != 0 && {
+                    let top = stack.last().unwrap();
+                    top.id == top.cmds.len()
+                } {
+                    // Creates a closing step for each schedule that used this subproof
+                    for schedule_id in &stack.last().unwrap().used_by {
+                        loads[*schedule_id].push((stack.len() - 1, usize::MAX));
+                    }
+                    stack.pop();
+                }
+                if stack.len() == 0 {
+                    break;
+                }
+
+                let depth = stack.len() - 1;
+                let (mut i, initial_layer) = (1, {
+                    let tmp = loads[load_index].last().unwrap_or_else(|| &(0, 0));
+                    if tmp.1 == usize::MAX {
+                        tmp.0 - 1
+                    } else {
+                        tmp.0
+                    }
+                });
+                // If this step needs the context of the subproof oppening step
+                // but it was not assigned to this schedule yet
+                while initial_layer + i <= depth {
+                    let subproof_oppening = stack[initial_layer + i].pre_req.unwrap();
+                    let last_inserted =
+                        *loads[load_index].last().unwrap_or_else(|| &(usize::MAX, 0));
+
+                    if last_inserted != subproof_oppening {
+                        loads[load_index].push(subproof_oppening);
+                        stack[subproof_oppening.0].used_by.insert(load_index);
+                    }
+                    i += 1;
+                }
+
+                let top = stack.last_mut().unwrap();
+                // Assign a step to some Schedule
+                loads[load_index].push((depth, top.id));
+                top.used_by.insert(load_index);
+
+                // Go to next step
+                let last_id = top.id;
+                top.id += 1;
+                if let ProofCommand::Subproof(s) = &top.cmds[last_id] {
+                    stack.push(StackLevel::new(0, &s.commands, Some((depth, last_id))));
+                }
+
+                load_index = (load_index + 1) % num_workers;
+            }
+            Scheduler { loads }
+        }
     }
 }

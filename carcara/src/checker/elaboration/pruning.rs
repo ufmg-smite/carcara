@@ -79,6 +79,7 @@ pub fn prune_proof(proof: &[ProofCommand]) -> ProofDiff {
                     stack.push(frame);
                     to_visit.push(new_queue);
                 }
+                ProofCommand::Closing => {}
             }
         }
         to_visit.pop();

@@ -139,6 +139,7 @@ impl<'a> PrintProof for AlethePrinter<'a> {
                     }
                     write!(self.inner, ")")?;
                 }
+                ProofCommand::Closing => {}
             }
             writeln!(self.inner)?;
         }

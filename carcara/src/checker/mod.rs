@@ -149,6 +149,7 @@ impl<'c> ProofChecker<'c> {
                 ProofCommand::Assume { id, term } => {
                     self.check_assume(id, term, &proof.premises, &iter)?;
                 }
+                ProofCommand::Closing => {}
             }
         }
         if self.config.is_running_test || self.reached_empty_clause {

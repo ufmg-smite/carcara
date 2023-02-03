@@ -58,6 +58,9 @@ pub enum ProofCommand {
 
     /// A subproof.
     Subproof(Subproof),
+
+    /// A closing subproof step
+    Closing,
 }
 
 impl ProofCommand {
@@ -66,6 +69,7 @@ impl ProofCommand {
             ProofCommand::Assume { id, .. } => id,
             ProofCommand::Step(s) => &s.id,
             ProofCommand::Subproof(s) => s.commands.last().unwrap().id(),
+            ProofCommand::Closing => "",
         }
     }
 
@@ -74,6 +78,7 @@ impl ProofCommand {
             ProofCommand::Assume { id: _, term } => std::slice::from_ref(term),
             ProofCommand::Step(ProofStep { clause, .. }) => clause,
             ProofCommand::Subproof(s) => s.commands.last().unwrap().clause(),
+            ProofCommand::Closing => &[],
         }
     }
 

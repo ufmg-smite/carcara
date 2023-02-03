@@ -3,7 +3,7 @@
 
 use super::error::CheckerError;
 use super::rules::{Premise, Rule, RuleArgs, RuleResult};
-use super::scheduler::*;
+use super::scheduler::{iter::ScheduleIter, Scheduler::Scheduler};
 use super::{context::*, lia_generic, CheckerStatistics, Config};
 use crate::{ast::*, CarcaraResult, Error};
 use ahash::AHashSet;
@@ -63,22 +63,20 @@ impl<'c> ParallelProofChecker<'c> {
                 .loads
                 .into_iter()
                 .enumerate()
-                .map(|(i, load_vec)| {
+                .map(|(i, schedule)| {
                     let mut local_self = self_ref.copy_self();
 
                     s.builder()
                         .name(format!("worker-{i}"))
                         .spawn(move |_| -> CarcaraResult<(bool, bool)> {
-                            let mut iter = load_vec.iter();
+                            let mut iter = schedule.iter();
 
                             while let Some(command) = iter.next() {
                                 match command {
                                     ProofCommand::Step(step) => {
-                                        let is_end_of_subproof = iter.is_end_step();
-
                                         // If this step ends a subproof, it might need to implicitly reference the
                                         // previous command in the subproof
-                                        let previous_command = if is_end_of_subproof {
+                                        let previous_command = if iter.is_end_step() {
                                             let subproof = iter.current_subproof().unwrap();
                                             let index = subproof.len() - 2;
                                             subproof.get(index).map(|command| {
@@ -89,19 +87,12 @@ impl<'c> ParallelProofChecker<'c> {
                                         };
 
                                         local_self
-                                            .check_step(step, previous_command, &iter, proof)
+                                            .check_step(step, previous_command, &iter)
                                             .map_err(|e| Error::Checker {
                                                 inner: e,
                                                 rule: step.rule.clone(),
                                                 step: step.id.clone(),
                                             })?;
-
-                                        // If this is the last command of a subproof, we have to pop the subproof
-                                        // commands off of the stack. The parser already ensures that the last command
-                                        // in a subproof is always a `step` command
-                                        if is_end_of_subproof {
-                                            local_self.context.pop();
-                                        }
 
                                         if step.clause.is_empty() {
                                             local_self.reached_empty_clause = true;
@@ -130,6 +121,12 @@ impl<'c> ParallelProofChecker<'c> {
                                             &proof.premises,
                                             &iter,
                                         )?;
+                                    }
+                                    ProofCommand::Closing => {
+                                        // If this is the last command of a subproof, we have to pop the subproof
+                                        // commands off of the stack. The parser already ensures that the last command
+                                        // in a subproof is always a `step` command
+                                        local_self.context.pop();
                                     }
                                 }
                             }
@@ -180,7 +177,7 @@ impl<'c> ParallelProofChecker<'c> {
         id: &str,
         term: &Rc<Term>,
         premises: &AHashSet<Rc<Term>>,
-        iter: &ProofIter,
+        iter: &ScheduleIter,
     ) -> CarcaraResult<()> {
         // Some subproofs contain `assume` commands inside them. These don't refer
         // to the original problem premises, so we ignore the `assume` command if
@@ -222,8 +219,7 @@ impl<'c> ParallelProofChecker<'c> {
         &mut self,
         step: &'a ProofStep,
         previous_command: Option<Premise<'a>>,
-        iter: &'a ProofIter<'a>,
-        proof: &Proof,
+        iter: &'a ScheduleIter<'a>,
     ) -> RuleResult {
         let mut deep_eq_time = Duration::ZERO;
 
@@ -259,14 +255,14 @@ impl<'c> ParallelProofChecker<'c> {
                 .premises
                 .iter()
                 .map(|&p| {
-                    let command = iter.get_premise_or_main(p, &proof.commands);
+                    let command = iter.get_premise(p);
                     Premise::new(p, command)
                 })
                 .collect();
             let discharge: Vec<_> = step
                 .discharge
                 .iter()
-                .map(|&i| iter.get_premise_or_main(i, &proof.commands))
+                .map(|&i| iter.get_premise(i))
                 .collect();
 
             let rule_args = RuleArgs {

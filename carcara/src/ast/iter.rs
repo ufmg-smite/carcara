@@ -72,18 +72,6 @@ impl<'a> ProofIter<'a> {
     pub fn get_premise(&self, (depth, index): (usize, usize)) -> &ProofCommand {
         &self.stack[depth].1[index]
     }
-
-    pub fn get_premise_or_main(
-        &self,
-        (depth, index): (usize, usize),
-        proof: &'a [ProofCommand],
-    ) -> &ProofCommand {
-        if depth == 0 {
-            &proof[index]
-        } else {
-            &self.stack[depth].1[index]
-        }
-    }
 }
 
 impl<'a> Iterator for ProofIter<'a> {
