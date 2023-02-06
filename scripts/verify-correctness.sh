@@ -8,26 +8,41 @@ DIR=$1
 
 aaa=$(pwd);
 FULL_DIR="$aaa/$DIR";
-echo $FULL_DIR;
 cd $FULL_DIR
-count=0
+global_count=0
 
-for FILE in *.smt_in; do
-    RESULT1=$(cargo run -- check --skip-unknown-rules -u 1 "$FILE.proof" "$FILE" 2>/dev/null);
-    RESULT2=$(cargo run --features thread-safety -- check --skip-unknown-rules -u 3 "$FILE.proof" "$FILE" 2>/dev/null);
+for dir in $(find $FULL_DIR -maxdepth 6 -type d); do
+    echo $'\e[1;34m'$dir$':\e[0m'
 
-    RESULT1=$(echo $RESULT1 | tr '\a' ' ' | awk '{print $NF}')
-    RESULT2=$(echo $RESULT2 | tr '\a' ' ' | awk '{print $NF}')
+    count=0
+    for FILE in $dir/*.smt_in; do
+        RESULT1=$(cargo run -- check --skip-unknown-rules -u 1 "$FILE.proof" "$FILE" 2>/dev/null &)
+        RESULT2=$(cargo run --features thread-safety -- check --skip-unknown-rules -u 3 "$FILE.proof" "$FILE" 2>/dev/null &)
 
-    DIF="EQUAL"
-    if [ "$RESULT1" != "$RESULT2" ]; then
-        DIF="DIF"
-        ((count = count + 1))
-        echo $''$FILE$': '$RESULT1$' is \e[1;31m'$DIF$'\e[0m from '$RESULT2$'';
-    else
-        echo $''$FILE$': '$RESULT1$' is \e[1;32m'$DIF$'\e[0m from '$RESULT2$'';
-    fi
+        RESULT1=$(echo $RESULT1 | tr '\a' ' ' | awk '{print $NF}')
+        RESULT2=$(echo $RESULT2 | tr '\a' ' ' | awk '{print $NF}')
+
+        if [ "$RESULT1" == "" ] || [ "$RESULT2" == "" ]; then
+            echo;
+            echo $'\e[1;31mPanicked at '$(basename $FILE)$'\e[0m';
+            echo;
+            exit 0;
+        fi
+
+        DIF="EQUAL"
+        if [ "$RESULT1" != "$RESULT2" ]; then
+            DIF="DIF"
+            ((count = count + 1))
+            ((global_count = global_count + 1))
+            echo $''$(basename $FILE)$': '$RESULT1$' is \e[1;31m'$DIF$'\e[0m from '$RESULT2$'';
+        else
+            echo $''$(basename $FILE)$': '$RESULT1$' is \e[1;32m'$DIF$'\e[0m from '$RESULT2$'';
+        fi
+    done
+    
+    echo $'Different count: \e[1;33m'$count$'\e[0m';
+    echo;
 done
 
 echo;
-echo "Different count: $count";
+echo $'Global count: \e[1;33m'$global_count$'\e[0m';

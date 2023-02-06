@@ -26,6 +26,11 @@ pub mod Schedule {
             self.steps.push(cmd);
         }
 
+        /// Removes the last step from the end of the steps vector
+        pub fn pop(&mut self) {
+            self.steps.pop();
+        }
+
         /// Returns the last schedule step
         pub fn last(&mut self) -> Option<&(usize, usize)> {
             self.steps.last()
@@ -113,9 +118,18 @@ pub mod Scheduler {
                     let top = stack.last().unwrap();
                     top.id == top.cmds.len()
                 } {
-                    // Creates a closing step for each schedule that used this subproof
                     for schedule_id in &stack.last().unwrap().used_by {
-                        loads[*schedule_id].push((stack.len() - 1, usize::MAX));
+                        let last = loads[*schedule_id].last().unwrap();
+                        // If it's an useless context insertion
+                        if last.0 <= stack.len() - 1
+                            && matches!(stack[last.0].cmds[last.1], ProofCommand::Subproof(_))
+                        {
+                            loads[*schedule_id].pop();
+                        }
+                        // Creates a closing step for each schedule that used this subproof
+                        else {
+                            loads[*schedule_id].push((stack.len() - 1, usize::MAX));
+                        }
                     }
                     stack.pop();
                 }
@@ -156,6 +170,7 @@ pub mod Scheduler {
                 top.id += 1;
                 if let ProofCommand::Subproof(s) = &top.cmds[last_id] {
                     stack.push(StackLevel::new(0, &s.commands, Some((depth, last_id))));
+                    stack.last_mut().unwrap().used_by.insert(load_index);
                 }
 
                 load_index = (load_index + 1) % num_workers;
