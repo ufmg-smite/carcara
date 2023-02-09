@@ -12,6 +12,8 @@ log = "0.4.14"
 rug = { version = "1.16.0", features = ["integer", "rational"] }
 thiserror = "1.0.30"
 crossbeam = "0.8"
+num-bigint = "0.4.3"
+num-traits = "0.2"
 
 [features]
 large-test-set = []

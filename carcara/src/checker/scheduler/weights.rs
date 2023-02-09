@@ -1,0 +1,116 @@
+use crate::ast::ProofCommand;
+
+pub fn get_step_weight(step: &ProofCommand) -> usize {
+    match step {
+        ProofCommand::Assume { .. } => 294553,
+        ProofCommand::Subproof(_) => 0,
+        ProofCommand::Step(s) => {
+            match &s.rule as &str {
+                "assume" => 294553,
+                "true" => 0, //-1
+                "false" => 317,
+                "not_not" => 581,
+                "and_pos" => 468,
+                "and_neg" => 618,
+                "or_pos" => 646,
+                "or_neg" => 1774,
+                "xor_pos1" => 791,
+                "xor_pos2" => 395,
+                "xor_neg1" => 0, //-1
+                "xor_neg2" => 0, //-1
+                "implies_pos" => 422,
+                "implies_neg1" => 247,
+                "implies_neg2" => 319,
+                "equiv_pos1" => 789,
+                "equiv_pos2" => 539,
+                "equiv_neg1" => 460,
+                "equiv_neg2" => 503,
+                "ite_pos1" => 812,
+                "ite_pos2" => 422,
+                "ite_neg1" => 607,
+                "ite_neg2" => 578,
+                "eq_reflexive" => 459,
+                "eq_transitive" => 860,
+                "eq_congruent" => 761,
+                "eq_congruent_pred" => 676,
+                "distinct_elim" => 16830,
+                "la_rw_eq" => 1079,
+                "la_generic" => 146566,
+                "la_disequality" => 909,
+                "la_totality" => 0, //-1
+                "la_tautology" => 5180,
+                "forall_inst" => 9244,
+                "qnt_join" => 2404,
+                "qnt_rm_unused" => 15126,
+                "resolution" => 13170,
+                "th_resolution" => 2964,
+                "refl" => 12685,
+                "trans" => 630,
+                "cong" => 1145,
+                "ho_cong" => 0, //-1
+                "and" => 1525,
+                "tautology" => 0, //-1
+                "not_or" => 505,
+                "or" => 433,
+                "not_and" => 955,
+                "xor1" => 0,     //-1
+                "xor2" => 0,     //-1
+                "not_xor1" => 0, //-1
+                "not_xor2" => 0, //-1
+                "implies" => 798,
+                "not_implies1" => 407,
+                "not_implies2" => 481,
+                "equiv1" => 849,
+                "equiv2" => 831,
+                "not_equiv1" => 473,
+                "not_equiv2" => 479,
+                "ite1" => 526,
+                "ite2" => 527,
+                "not_ite1" => 722,
+                "not_ite2" => 476,
+                "ite_intro" => 49115,
+                "contraction" => 2812,
+                "connective_def" => 785,
+                "ite_simplify" => 1813,
+                "eq_simplify" => 932,
+                "and_simplify" => 2371,
+                "or_simplify" => 1172,
+                "not_simplify" => 838,
+                "implies_simplify" => 1229,
+                "equiv_simplify" => 1286,
+                "bool_simplify" => 1547,
+                "qnt_simplify" => 552,
+                "div_simplify" => 2320,
+                "prod_simplify" => 2534,
+                "unary_minus_simplify" => 0, //-1
+                "minus_simplify" => 1413,
+                "sum_simplify" => 2428,
+                "comp_simplify" => 1821,
+                "nary_elim" => 0, //-1
+                "ac_simp" => 256758,
+                "bfun_elim" => 16099,
+                "bind" => 9240,
+                "qnt_cnf" => 17274,
+                "subproof" => 335,
+                "let" => 10794,
+                "onepoint" => 14586,
+                "sko_ex" => 14006,
+                "sko_forall" => 95443,
+                "reordering" => 1452,
+                "symm" => 682,
+                "not_symm" => 0, //-1
+                "eq_symmetric" => 673,
+                "or_intro" => 508,
+                "bind_let" => 2324,
+                "la_mult_pos" => 1446,
+                "la_mult_neg" => 1447,
+                "hole" => 185, //Debug only
+                "trust" => 0,  //Debug only
+                "strict_resolution" => 1276,
+
+                _ => 0,
+            }
+        }
+        ProofCommand::Closing => 0,
+    }
+}

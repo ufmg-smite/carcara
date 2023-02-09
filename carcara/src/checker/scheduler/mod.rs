@@ -1,4 +1,5 @@
 pub(crate) mod iter;
+pub(crate) mod weights;
 
 pub mod Schedule {
     #![allow(non_snake_case)]
@@ -45,33 +46,41 @@ pub mod Schedule {
 
 pub mod Scheduler {
     #![allow(non_snake_case)]
+    use super::weights::get_step_weight;
     use super::Schedule::Schedule;
     use crate::ast::{Proof, ProofCommand};
-    use std::{cmp::Ordering, collections::hash_set::HashSet};
 
-    // Represents the remaining load for an specific worker. Implements Ord for heap.
-    // 0: Remaing load | 1: worker index at the vector of remaining loads
+    use num_bigint::BigUint;
+    use num_traits::Zero;
+    use std::{
+        cmp::Ordering,
+        collections::{hash_set::HashSet, BinaryHeap},
+    };
+
+    /// Represents the current load assigned for an specific schedule.
+    /// - `0`: Current load
+    /// - `1`: Schedule index
     #[derive(Eq)]
-    struct RemainLoad(usize, usize);
+    struct AssignedLoad(BigUint, usize);
 
-    impl Ord for RemainLoad {
+    impl Ord for AssignedLoad {
         fn cmp(&self, other: &Self) -> Ordering {
             if self.0 > other.0 {
-                return Ordering::Greater;
-            } else if self.0 < other.0 {
                 return Ordering::Less;
+            } else if self.0 < other.0 {
+                return Ordering::Greater;
             }
             return Ordering::Equal;
         }
     }
 
-    impl PartialOrd for RemainLoad {
+    impl PartialOrd for AssignedLoad {
         fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
             Some(self.cmp(other))
         }
     }
 
-    impl PartialEq for RemainLoad {
+    impl PartialEq for AssignedLoad {
         fn eq(&self, other: &Self) -> bool {
             self.0 == other.0
         }
@@ -110,7 +119,10 @@ pub mod Scheduler {
             let cmds = &proof.commands;
             let mut loads = vec![Schedule::new(cmds); num_workers];
             let mut stack = vec![StackLevel::new(0, cmds, None)];
-            let mut load_index = 0;
+            let mut pq = BinaryHeap::<AssignedLoad>::new();
+            for i in 0..num_workers {
+                pq.push(AssignedLoad { 0: Zero::zero(), 1: i });
+            }
 
             loop {
                 // Pop the finished subproofs
@@ -135,6 +147,13 @@ pub mod Scheduler {
                 }
                 if stack.len() == 0 {
                     break;
+                }
+                //
+                let AssignedLoad { 0: mut load, 1: load_index } = pq.pop().unwrap();
+                {
+                    let top = stack.last().unwrap();
+                    load += get_step_weight(&top.cmds[top.id]);
+                    pq.push(AssignedLoad { 0: load, 1: load_index });
                 }
 
                 let depth = stack.len() - 1;
@@ -172,8 +191,6 @@ pub mod Scheduler {
                     stack.push(StackLevel::new(0, &s.commands, Some((depth, last_id))));
                     stack.last_mut().unwrap().used_by.insert(load_index);
                 }
-
-                load_index = (load_index + 1) % num_workers;
             }
             Scheduler { loads }
         }
