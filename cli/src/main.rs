@@ -147,7 +147,7 @@ fn build_carcara_options(
         check_lia_using_cvc5: lia_via_cvc5,
         strict,
         skip_unknown_rules,
-        num_cores: std::cmp::min(num_cores as u32, num_cpus::get() as u32) as usize,
+        num_cores: num_cores,
     }
 }
 

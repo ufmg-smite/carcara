@@ -50,8 +50,6 @@ pub mod Scheduler {
     use super::Schedule::Schedule;
     use crate::ast::{Proof, ProofCommand};
 
-    use num_bigint::BigUint;
-    use num_traits::Zero;
     use std::{
         cmp::Ordering,
         collections::{hash_set::HashSet, BinaryHeap},
@@ -61,7 +59,7 @@ pub mod Scheduler {
     /// - `0`: Current load
     /// - `1`: Schedule index
     #[derive(Eq)]
-    struct AssignedLoad(BigUint, usize);
+    struct AssignedLoad(u64, usize);
 
     impl Ord for AssignedLoad {
         fn cmp(&self, other: &Self) -> Ordering {
@@ -121,7 +119,7 @@ pub mod Scheduler {
             let mut stack = vec![StackLevel::new(0, cmds, None)];
             let mut pq = BinaryHeap::<AssignedLoad>::new();
             for i in 0..num_workers {
-                pq.push(AssignedLoad { 0: Zero::zero(), 1: i });
+                pq.push(AssignedLoad { 0: 0, 1: i });
             }
 
             loop {
@@ -152,7 +150,9 @@ pub mod Scheduler {
                 let AssignedLoad { 0: mut load, 1: load_index } = pq.pop().unwrap();
                 {
                     let top = stack.last().unwrap();
-                    load += get_step_weight(&top.cmds[top.id]);
+                    let step_weight = get_step_weight(&top.cmds[top.id]);
+                    assert!(u64::MAX - step_weight >= load, "Weight balancing overflow!");
+                    load += step_weight;
                     pq.push(AssignedLoad { 0: load, 1: load_index });
                 }
 
