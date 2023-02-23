@@ -11,6 +11,7 @@ use ahash::AHashSet;
 use context::*;
 use elaboration::Elaborator;
 use error::CheckerError;
+#[cfg(feature = "thread-safety")]
 pub use parallel::ParallelProofChecker;
 use rules::{ElaborationRule, Premise, Rule, RuleArgs, RuleResult};
 use std::{
@@ -390,8 +391,7 @@ impl<'c> ProofChecker<'c> {
             "forall_inst" => quantifier::forall_inst,
             "qnt_join" => quantifier::qnt_join,
             "qnt_rm_unused" => quantifier::qnt_rm_unused,
-            "resolution" => resolution::resolution,
-            "th_resolution" => resolution::th_resolution,
+            "resolution" | "th_resolution" => resolution::resolution,
             "refl" if strict => reflexivity::strict_refl,
             "refl" => reflexivity::refl,
             "trans" => transitivity::trans,

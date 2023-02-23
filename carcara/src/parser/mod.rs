@@ -43,6 +43,12 @@ pub fn parse_instance<T: BufRead>(
     Ok((prelude, proof, pool))
 }
 
+/// A function definition, from a `define-fun` command.
+struct FunctionDef {
+    params: Vec<SortedVar>,
+    body: Rc<Term>,
+}
+
 /// Represents a "raw" `anchor` command. This is only used while parsing, and does not appear in
 /// the final AST.
 struct AnchorCommand {
@@ -137,21 +143,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
         Ok((old_token, old_position))
     }
 
-    /// Shortcut for `self.pool.add_term`.
-    fn add_term(&mut self, term: Term) -> Rc<Term> {
-        self.pool.add(term)
-    }
-
-    /// Shortcut for `self.pool.add_all`.
-    fn add_all(&mut self, terms: Vec<Term>) -> Vec<Rc<Term>> {
-        self.pool.add_all(terms)
-    }
-
-    /// Shortcut for `self.pool.sort`.
-    fn sort(&self, term: &Rc<Term>) -> &Sort {
-        self.pool.sort(term)
-    }
-
     /// Helper method to insert a `SortedVar` into the parser symbol table.
     fn insert_sorted_var(&mut self, (symbol, sort): SortedVar) {
         self.state
@@ -176,12 +167,14 @@ impl<'a, R: BufRead> Parser<'a, R> {
             Some(s) => s.clone(),
             None => return Err(ParserError::UndefinedIden(cached.unwrap())),
         };
-        Ok(self.add_term(Term::Terminal(Terminal::Var(cached.unwrap(), sort))))
+        Ok(self
+            .pool
+            .add(Term::Terminal(Terminal::Var(cached.unwrap(), sort))))
     }
 
     /// Constructs and sort checks an operation term.
     fn make_op(&mut self, op: Operator, args: Vec<Rc<Term>>) -> Result<Rc<Term>, ParserError> {
-        let sorts: Vec<_> = args.iter().map(|t| self.sort(t)).collect();
+        let sorts: Vec<_> = args.iter().map(|t| self.pool.sort(t)).collect();
         match op {
             Operator::Not => {
                 assert_num_args(&args, 1)?;
@@ -284,8 +277,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         // changed later
                         let got = got.clone();
                         let x = sorts[1].clone();
-                        let x = self.add_term(Term::Sort(x));
-                        let y = self.add_term(Term::Sort(Sort::Atom("Y".to_owned(), Vec::new())));
+                        let x = self.pool.add(Term::Sort(x));
+                        let y = self
+                            .pool
+                            .add(Term::Sort(Sort::Atom("Y".to_owned(), Vec::new())));
                         return Err(SortError {
                             expected: vec![Sort::Array(x, y)],
                             got,
@@ -305,7 +300,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         let got = got.clone();
                         let [x, y] = [sorts[0], sorts[1]].map(|s| Term::Sort(s.clone()));
                         return Err(SortError {
-                            expected: vec![Sort::Array(self.add_term(x), self.add_term(y))],
+                            expected: vec![Sort::Array(self.pool.add(x), self.pool.add(y))],
                             got,
                         }
                         .into());
@@ -313,7 +308,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 }
             }
         }
-        Ok(self.add_term(Term::Op(op, args)))
+        Ok(self.pool.add(Term::Op(op, args)))
     }
 
     /// Constructs and sort checks an application term.
@@ -323,7 +318,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         args: Vec<Rc<Term>>,
     ) -> Result<Rc<Term>, ParserError> {
         let sorts = {
-            let function_sort = self.sort(&function);
+            let function_sort = self.pool.sort(&function);
             if let Sort::Function(sorts) = function_sort {
                 sorts
             } else {
@@ -333,9 +328,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
         };
         assert_num_args(&args, sorts.len() - 1)?;
         for i in 0..args.len() {
-            SortError::assert_eq(sorts[i].as_sort().unwrap(), self.sort(&args[i]))?;
+            SortError::assert_eq(sorts[i].as_sort().unwrap(), self.pool.sort(&args[i]))?;
         }
-        Ok(self.add_term(Term::App(function, args)))
+        Ok(self.pool.add(Term::App(function, args)))
     }
 
     /// Consumes the current token if it equals `expected`. Returns an error otherwise.
@@ -482,7 +477,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 Token::ReservedWord(Reserved::DeclareConst) => {
                     let name = self.expect_symbol()?;
                     let sort = self.parse_sort()?;
-                    let sort = self.add_term(sort);
+                    let sort = self.pool.add(sort);
                     self.expect_token(Token::CloseParen)?;
                     self.insert_sorted_var((name.clone(), sort.clone()));
                     self.prelude().function_declarations.push((name, sort));
@@ -509,14 +504,18 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         let lambda_term = if func_def.params.is_empty() {
                             func_def.body
                         } else {
-                            self.add_term(Term::Lambda(BindingList(func_def.params), func_def.body))
+                            self.pool
+                                .add(Term::Lambda(BindingList(func_def.params), func_def.body))
                         };
-                        let sort = self.add_term(Term::Sort(self.sort(&lambda_term).clone()));
+                        let sort = self
+                            .pool
+                            .add(Term::Sort(self.pool.sort(&lambda_term).clone()));
                         let var = (name, sort);
                         self.insert_sorted_var(var.clone());
-                        let var_term = self.add_term(var.into());
-                        let assertion_term =
-                            self.add_term(Term::Op(Operator::Equals, vec![var_term, lambda_term]));
+                        let var_term = self.pool.add(var.into());
+                        let assertion_term = self
+                            .pool
+                            .add(Term::Op(Operator::Equals, vec![var_term, lambda_term]));
                         self.premises().insert(assertion_term);
                     }
                     continue;
@@ -807,15 +806,15 @@ impl<'a, R: BufRead> Parser<'a, R> {
             self.next_token()?;
             let var = self.expect_symbol()?;
             let value = self.parse_term()?;
-            let sort = Term::Sort(self.sort(&value).clone());
-            let sort = self.add_term(sort);
+            let sort = Term::Sort(self.pool.sort(&value).clone());
+            let sort = self.pool.add(sort);
             self.insert_sorted_var((var.clone(), sort));
             self.expect_token(Token::CloseParen)?;
             AnchorArg::Assign(var, value)
         } else {
             let symbol = self.expect_symbol()?;
             let sort = self.parse_sort()?;
-            let var = (symbol, self.add_term(sort));
+            let var = (symbol, self.pool.add(sort));
             self.insert_sorted_var(var.clone());
             self.expect_token(Token::CloseParen)?;
             AnchorArg::Variable(var)
@@ -830,11 +829,11 @@ impl<'a, R: BufRead> Parser<'a, R> {
             self.expect_token(Token::OpenParen)?;
             let mut sorts = self.parse_sequence(Self::parse_sort, false)?;
             sorts.push(self.parse_sort()?);
-            let sorts = self.add_all(sorts);
+            let sorts = self.pool.add_all(sorts);
             if sorts.len() == 1 {
                 sorts.into_iter().next().unwrap()
             } else {
-                self.add_term(Term::Sort(Sort::Function(sorts)))
+                self.pool.add(Term::Sort(Sort::Function(sorts)))
             }
         };
         self.expect_token(Token::CloseParen)?;
@@ -917,7 +916,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         let symbol = self.expect_symbol()?;
         let sort = self.parse_sort()?;
         self.expect_token(Token::CloseParen)?;
-        Ok((symbol, self.add_term(sort)))
+        Ok((symbol, self.pool.add(sort)))
     }
 
     /// Parses a term.
@@ -946,14 +945,14 @@ impl<'a, R: BufRead> Parser<'a, R> {
             (Token::OpenParen, _) => return self.parse_application(),
             (other, pos) => return Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),
         };
-        Ok(self.add_term(term))
+        Ok(self.pool.add(term))
     }
 
     /// Parses a term and checks that its sort matches the expected sort. If not, returns an error.
     fn parse_term_expecting_sort(&mut self, expected_sort: &Sort) -> CarcaraResult<Rc<Term>> {
         let pos = self.current_position;
         let term = self.parse_term()?;
-        SortError::assert_eq(expected_sort, self.sort(&term))
+        SortError::assert_eq(expected_sort, self.pool.sort(&term))
             .map_err(|e| Error::Parser(e.into(), pos))?;
         Ok(term)
     }
@@ -974,7 +973,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
         let term = self.parse_term_expecting_sort(&Sort::Bool)?;
         self.state.symbol_table.pop_scope();
         self.expect_token(Token::CloseParen)?;
-        Ok(self.add_term(Term::Quant(quantifier, BindingList(bindings), term)))
+        Ok(self
+            .pool
+            .add(Term::Quant(quantifier, BindingList(bindings), term)))
     }
 
     /// Parses a `choice` term. This method assumes that the `(` and `choice` tokens were already
@@ -986,7 +987,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         self.expect_token(Token::CloseParen)?;
         let inner = self.parse_term()?;
         self.expect_token(Token::CloseParen)?;
-        Ok(self.add_term(Term::Choice(var, inner)))
+        Ok(self.pool.add(Term::Choice(var, inner)))
     }
 
     /// Parses a `lambda` term. This method assumes that the `(` and `let` tokens were already
@@ -1005,7 +1006,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         let body = self.parse_term()?;
         self.state.symbol_table.pop_scope();
         self.expect_token(Token::CloseParen)?;
-        Ok(self.add_term(Term::Lambda(BindingList(bindings), body)))
+        Ok(self.pool.add(Term::Lambda(BindingList(bindings), body)))
     }
 
     /// Parses a `let` term. This method assumes that the `(` and `let` tokens were already
@@ -1018,7 +1019,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 p.expect_token(Token::OpenParen)?;
                 let name = p.expect_symbol()?;
                 let value = p.parse_term()?;
-                let sort = p.add_term(Term::Sort(p.sort(&value).clone()));
+                let sort = p.pool.add(Term::Sort(p.pool.sort(&value).clone()));
                 p.insert_sorted_var((name.clone(), sort));
                 p.expect_token(Token::CloseParen)?;
                 Ok((name, value))
@@ -1045,7 +1046,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
             Ok(result)
         } else {
-            Ok(self.add_term(Term::Let(BindingList(bindings), inner)))
+            Ok(self.pool.add(Term::Let(BindingList(bindings), inner)))
         }
     }
 
@@ -1132,7 +1133,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 assert_num_args(&args, func.params.len())
                     .map_err(|err| Error::Parser(err, head_pos))?;
                 for (arg, param) in args.iter().zip(func.params.iter()) {
-                    SortError::assert_eq(param.1.as_sort().unwrap(), self.sort(arg))
+                    SortError::assert_eq(param.1.as_sort().unwrap(), self.pool.sort(arg))
                         .map_err(|err| Error::Parser(err.into(), head_pos))?;
                 }
 
@@ -1170,7 +1171,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
             Token::OpenParen => {
                 let name = self.expect_symbol()?;
                 let args = self.parse_sequence(Parser::parse_sort, true)?;
-                (name, self.add_all(args))
+                (name, self.pool.add_all(args))
             }
             other => return Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),
         };

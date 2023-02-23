@@ -12,9 +12,12 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(feature = "thread-safety")]
 unsafe impl Sync for CheckerStatistics<'_> {}
+#[cfg(feature = "thread-safety")]
 unsafe impl Send for CheckerStatistics<'_> {}
 
+#[cfg(feature = "thread-safety")]
 pub struct ParallelProofChecker<'c> {
     pool: Arc<Mutex<&'c mut TermPool>>,
     config: Config<'c>,
@@ -24,6 +27,7 @@ pub struct ParallelProofChecker<'c> {
     is_holey: bool,
 }
 
+#[cfg(feature = "thread-safety")]
 impl<'c> ParallelProofChecker<'c> {
     pub fn new(pool: &'c mut TermPool, config: Config<'c>, prelude: ProblemPrelude) -> Self {
         ParallelProofChecker {
@@ -53,7 +57,6 @@ impl<'c> ParallelProofChecker<'c> {
         }
     }
 
-    #[cfg(feature = "thread-safety")]
     pub fn check<'s, 'p>(&'s mut self, proof: &'p Proof, num_cores: usize) -> CarcaraResult<bool> {
         let scheduler = Scheduler::new(num_cores, proof);
         let self_ref = Arc::new(self);
@@ -321,8 +324,7 @@ impl<'c> ParallelProofChecker<'c> {
             "forall_inst" => quantifier::forall_inst,
             "qnt_join" => quantifier::qnt_join,
             "qnt_rm_unused" => quantifier::qnt_rm_unused,
-            "resolution" => resolution::resolution,
-            "th_resolution" => resolution::th_resolution,
+            "resolution" | "th_resolution" => resolution::resolution,
             "refl" if strict => reflexivity::strict_refl,
             "refl" => reflexivity::refl,
             "trans" => transitivity::trans,
@@ -398,11 +400,5 @@ impl<'c> ParallelProofChecker<'c> {
 
             _ => return None,
         })
-    }
-
-    // Never reached piece of code
-    #[cfg(not(feature = "thread-safety"))]
-    pub fn check<'s, 'p>(&'s mut self, _: &'p Proof) -> CarcaraResult<bool> {
-        Ok(false)
     }
 }
