@@ -390,22 +390,23 @@ fn binary_resolution_with_unit(
     right_parent : usize,
     new_commands : Vec<ProofCommand>,
 ) -> Vec<Rc<Term>>{
-    //let mut current = Vec::new();
+    let mut current_vec = Vec::new();
     let mut current = AHashSet::new();
     match &new_commands[left_parent] {
         ProofCommand::Step(step_l) => {
             //println!("O step_l é {:?}", step_l.clause);
             for i in 0..step_l.clause.len(){
                 current.insert(step_l.clause[i].remove_all_negations());
+                current_vec.push(step_l.clause[i].remove_all_negations());
             }
         }
         ProofCommand::Assume {id: _, term: term_l} => {
             println!("O step_l é um assume com {:?}", term_l);
             current.insert(term_l.remove_all_negations());
+            current_vec.push(term_l.remove_all_negations());
         }
         _ => {}
     }
-
 
     match &new_commands[right_parent] {
         ProofCommand::Step(step_r) => {
@@ -424,10 +425,21 @@ fn binary_resolution_with_unit(
         ProofCommand::Assume {id: _, term: term_r} => {
             //println!("\n\n\n\n Trying to get pivot {:?} \n\n\n\n", term_r.remove_all_negations());
             let new_clause = [Rc::clone(term_r)];
+            let mut pivot = term_r.remove_all_negations();
+            pivot.0 = 0;
+
+            let mut is_pivot_in_current = true;
+            for i in 0..current_vec.len(){
+                if pivot.1 == current_vec[i].1 && current_vec[i].0 > 0{
+                    is_pivot_in_current = false;
+                }
+            }
+
             println!("Left term: {:?}", current);
             println!("Right term: {:?}", &new_clause[..]);
-            println!("Pivot: {:?}", term_r.remove_all_negations());
-            binary_resolution(pool, &mut current, &new_clause[..], term_r.remove_all_negations(), false);
+            println!("Pivot: {:?}", pivot);
+
+            binary_resolution(pool, &mut current, &new_clause[..], pivot, is_pivot_in_current);
             println!("Resolution conclusion: {:?}", current);
             let mut new_clause = Vec::new();
             // for i in 0..(current.len()){
