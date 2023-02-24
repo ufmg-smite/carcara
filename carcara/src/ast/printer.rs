@@ -6,6 +6,11 @@ use crate::{
 use ahash::AHashMap;
 use std::{borrow::Cow, fmt, io};
 
+/// Prints a proof to the standard output.
+///
+/// If `use_sharing` is `true`, terms that are used multiple times will make use of sharing. The
+/// first time a novel term appears, it receives a unique name using the `:named` attribute. After
+/// that, any occurrence of that term will simply use this name, instead of printing the whole term.
 pub fn print_proof(commands: &[ProofCommand], use_sharing: bool) -> io::Result<()> {
     let mut stdout = io::stdout();
     let mut printer = AlethePrinter {
@@ -16,6 +21,8 @@ pub fn print_proof(commands: &[ProofCommand], use_sharing: bool) -> io::Result<(
     printer.write_proof(commands)
 }
 
+/// Given the conclusion clause of a `lia_generic` step, this method will write to `dest` the
+/// corresponding SMT problem instance.
 pub fn write_lia_smt_instance(
     dest: &mut dyn io::Write,
     clause: &[Rc<Term>],
@@ -362,11 +369,11 @@ impl fmt::Display for Identifier {
     }
 }
 
-impl fmt::Display for Index {
+impl fmt::Display for IdentifierIndex {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Index::Numeral(n) => write!(f, "{}", n),
-            Index::Symbol(s) => write!(f, "{}", quote_symbol(s)),
+            IdentifierIndex::Numeral(n) => write!(f, "{}", n),
+            IdentifierIndex::Symbol(s) => write!(f, "{}", quote_symbol(s)),
         }
     }
 }

@@ -106,8 +106,9 @@ fn worker_thread<T: CollectResults + Default>(
 
     while let Some(job) = jobs_queue.pop() {
         let result = run_job(&mut results, job, options, elaborate);
-        if result.is_err() {
+        if let Err(e) = &result {
             log::error!("encountered error in file '{}'", job.proof_file.display());
+            results.register_error(e);
         }
     }
 
@@ -170,5 +171,9 @@ pub fn run_csv_benchmark(
 ) -> io::Result<()> {
     let result: CsvBenchmarkResults =
         run_benchmark(instances, num_runs, num_threads, options, elaborate);
+    println!(
+        "{} errors encountered during benchmark",
+        result.num_errors()
+    );
     result.write_csv(runs_dest, by_rule_dest)
 }

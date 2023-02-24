@@ -56,10 +56,19 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
         return resolution_with_args(rule_args);
     }
     let RuleArgs { conclusion, premises, pool, .. } = rule_args;
-    resolution_impl(conclusion, premises, pool)
+
+    greedy_resolution(conclusion, premises, pool).or_else(|greedy_error| {
+        if rup_resolution(conclusion, premises) {
+            Ok(())
+        } else {
+            // If RUP resolution also fails, we return the error originally returned by the greedy
+            // algorithm
+            Err(greedy_error)
+        }
+    })
 }
 
-fn resolution_impl(
+fn greedy_resolution(
     conclusion: &[Rc<Term>],
     premises: &[Premise],
     pool: &mut TermPool,
@@ -160,31 +169,34 @@ fn resolution_impl(
     let mut remaining_pivots = pivots.iter().filter(|&(_, eliminated)| !eliminated);
 
     if let Some(((i, pivot), _)) = remaining_pivots.next() {
-        // There is a special case in the resolution rules that is valid, but leaves a pivot
-        // remaining: when the result of the resolution is just the boolean constant `false`, it
-        // may be implicitly eliminated. For example:
-        //     (step t1 (cl p q false) :rule hole)
-        //     (step t2 (cl (not p)) :rule hole)
-        //     (step t3 (cl (not q)) :rule hole)
-        //     (step t4 (cl) :rule resolution :premises (t1 t2 t3))
-        if conclusion.is_empty() && *i == 0 && pivot.is_bool_false() {
-            return Ok(());
-        }
-
-        // There is another, similar, special case: when the result of the resolution is just one
-        // term, it may appear in the conclusion clause with an even number of leading negations
-        // added to it. The following is an example of this, adapted from a generated proof:
-        //     (step t1 (cl (not e)) :rule hole)
-        //     (step t2 (cl (= (not e) (not (not f)))) :rule hole)
-        //     (step t3 (cl (not (= (not e) (not (not f)))) e f) :rule hole)
-        //     (step t4 (cl (not (not f))) :rule resolution :premises (t1 t2 t3))
-        // Usually, we would expect the clause in the t4 step to be (cl f). This behavior may be a
-        // bug in veriT, but it is still logically sound and happens often enough that it is useful
-        // to support it here.
-        if conclusion.len() == 1 {
-            let (j, conclusion) = conclusion.into_iter().next().unwrap();
-            if conclusion == *pivot && (i % 2) == (j % 2) {
+        if remaining_pivots.next().is_none() {
+            // There is a special case in the resolution rules that is valid, but leaves a pivot
+            // remaining: when the result of the resolution is just the boolean constant `false`, it
+            // may be implicitly eliminated. For example:
+            //     (step t1 (cl p q false) :rule hole)
+            //     (step t2 (cl (not p)) :rule hole)
+            //     (step t3 (cl (not q)) :rule hole)
+            //     (step t4 (cl) :rule resolution :premises (t1 t2 t3))
+            if conclusion.is_empty() && *i == 0 && pivot.is_bool_false() {
                 return Ok(());
+            }
+
+            // There is another, similar, special case: when the result of the resolution is just
+            // one term, it may appear in the conclusion clause with an even number of leading
+            // negations added to it. The following is an example of this, adapted from a generated
+            // proof:
+            //     (step t1 (cl (not e)) :rule hole)
+            //     (step t2 (cl (= (not e) (not (not f)))) :rule hole)
+            //     (step t3 (cl (not (= (not e) (not (not f)))) e f) :rule hole)
+            //     (step t4 (cl (not (not f))) :rule resolution :premises (t1 t2 t3))
+            // Usually, we would expect the clause in the t4 step to be (cl f). This behavior may
+            // be a bug in veriT, but it is still logically sound and happens often enough that it
+            // is useful to support it here.
+            if conclusion.len() == 1 {
+                let (j, conclusion) = conclusion.into_iter().next().unwrap();
+                if conclusion == *pivot && (i % 2) == (j % 2) {
+                    return Ok(());
+                }
             }
         }
         let pivot = unremove_all_negations(pool, (*i as u32, pivot));
@@ -204,21 +216,45 @@ fn resolution_impl(
     }
 }
 
-pub fn th_resolution(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> RuleResult {
-    // In the way that it's currently implemented in veriT, `th_resolution` steps may be given
-    // premises in the reversed order. This would cause some of these steps to be considered invalid
-    // by the checker because of the restriction that each clause can only eliminate one pivot. To
-    // account for that, we first check the step with the given premise order, and then with the
-    // premise list reversed.
-    // TODO: Ideally, we should also check _all_ permutations of the premise list, to detect any
-    // case that may be valid.
+fn rup_resolution(conclusion: &[Rc<Term>], premises: &[Premise]) -> bool {
+    let mut clauses: Vec<AHashSet<(bool, &Rc<Term>)>> = premises
+        .iter()
+        .map(|p| {
+            p.clause
+                .iter()
+                .map(Rc::remove_all_negations_with_polarity)
+                .collect()
+        })
+        .collect();
+    clauses.extend(conclusion.iter().map(|t| {
+        let (p, t) = t.remove_all_negations_with_polarity();
+        let mut clause = AHashSet::new();
+        clause.insert((!p, t));
+        clause
+    }));
 
-    if resolution_impl(conclusion, premises, pool).is_ok() {
-        return Ok(());
+    loop {
+        if clauses.is_empty() {
+            return false;
+        }
+        let smallest = clauses.iter().min_by_key(|c| c.len()).unwrap();
+        match smallest.len() {
+            0 => return true,
+            1 => {
+                let literal = *smallest.iter().next().unwrap();
+                let negated_literal = (!literal.0, literal.1);
+
+                // Remove all clauses that contain the literal
+                clauses.retain(|c| !c.contains(&literal));
+
+                // Remove the negated literal from all clauses that contain it
+                for c in &mut clauses {
+                    c.remove(&negated_literal);
+                }
+            }
+            _ => return false,
+        }
     }
-
-    let reversed: Vec<_> = premises.iter().copied().rev().collect();
-    resolution_impl(conclusion, &reversed, pool)
 }
 
 fn resolution_with_args(
@@ -399,11 +435,6 @@ mod tests {
                 "(assume h1 (not p))
                 (step t2 (cl p q r) :rule hole)
                 (step t3 (cl q) :rule resolution :premises (h1 t2))": false,
-            }
-            "Extra term in final clause" {
-                "(assume h1 (not p))
-                (step t2 (cl p q r) :rule hole)
-                (step t3 (cl p q r) :rule resolution :premises (h1 t2))": false,
             }
             "Term appears in final clause with wrong polarity" {
                 "(assume h1 (not p))

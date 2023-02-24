@@ -20,8 +20,14 @@ use std::{
 };
 extern crate num_cpus;
 
+// `git describe --all` will try to find any ref (including tags) that describes the current commit.
+// This will include tags like `carcara-0.1.0`, that we create for github releases. To account for
+// that, we pass the arguments `--exclude 'carcara-*'`, ignoring these tags.
+const GIT_BRANCH_NAME: &str = git_version!(
+    args = ["--all", "--exclude", "carcara-*"],
+    fallback = "heads/none",
+);
 const GIT_COMMIT_HASH: &str = git_version!(fallback = "unknown");
-const GIT_BRANCH_NAME: &str = git_version!(args = ["--all"]);
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const VERSION_STRING: &str = formatcp!(
