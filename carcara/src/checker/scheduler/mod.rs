@@ -1,6 +1,7 @@
 pub(crate) mod iter;
 pub(crate) mod weights;
 
+#[cfg(feature = "thread-safety")]
 pub mod Schedule {
     #![allow(non_snake_case)]
     use super::iter::ScheduleIter;
@@ -44,6 +45,7 @@ pub mod Schedule {
     }
 }
 
+#[cfg(feature = "thread-safety")]
 pub mod Scheduler {
     #![allow(non_snake_case)]
     use super::weights::get_step_weight;

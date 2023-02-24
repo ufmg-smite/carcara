@@ -139,11 +139,17 @@ pub fn check<T: io::BufRead>(
         check_lia_using_cvc5,
     };
 
-    if num_cores != 1 && cfg!(feature = "thread-safety") {
-        checker::ParallelProofChecker::new(&mut pool, config, prelude).check(&proof, num_cores)
-    } else {
+    let res = {
+        #[cfg(feature = "thread-safety")]
+        {
+            checker::ParallelProofChecker::new(config, prelude).check(&proof, num_cores, &pool)
+        }
+        #[cfg(not(feature = "thread-safety"))]
+        {
         checker::ProofChecker::new(&mut pool, config, prelude).check(&proof)
     }
+    };
+    res
 }
 
 pub fn check_and_elaborate<T: io::BufRead>(

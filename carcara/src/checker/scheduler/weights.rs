@@ -1,5 +1,7 @@
+#[cfg(feature = "thread-safety")]
 use crate::ast::ProofCommand;
 
+#[cfg(feature = "thread-safety")]
 pub fn get_step_weight(step: &ProofCommand) -> u64 {
     match step {
         ProofCommand::Assume { .. } => 230,

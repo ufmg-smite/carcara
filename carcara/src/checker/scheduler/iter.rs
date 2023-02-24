@@ -1,11 +1,14 @@
+#[cfg(feature = "thread-safety")]
 use crate::ast::ProofCommand;
 
+#[cfg(feature = "thread-safety")]
 pub struct ScheduleIter<'a> {
     proof_stack: Vec<&'a [ProofCommand]>,
     steps: &'a Vec<(usize, usize)>,
     step_id: usize,
 }
 
+#[cfg(feature = "thread-safety")]
 impl<'a> ScheduleIter<'a> {
     pub fn new(proof_commands: &'a [ProofCommand], steps: &'a Vec<(usize, usize)>) -> Self {
         Self {
@@ -48,6 +51,7 @@ impl<'a> ScheduleIter<'a> {
     }
 }
 
+#[cfg(feature = "thread-safety")]
 impl<'a> Iterator for ScheduleIter<'a> {
     type Item = &'a ProofCommand;
 

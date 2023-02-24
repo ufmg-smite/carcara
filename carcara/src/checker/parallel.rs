@@ -3,6 +3,7 @@
 
 use super::error::CheckerError;
 use super::rules::{Premise, Rule, RuleArgs, RuleResult};
+#[cfg(feature = "thread-safety")]
 use super::scheduler::{iter::ScheduleIter, Scheduler::Scheduler};
 use super::{context::*, lia_generic, CheckerStatistics, Config};
 use crate::{ast::*, CarcaraResult, Error};
@@ -16,7 +17,6 @@ unsafe impl Sync for CheckerStatistics<'_> {}
 unsafe impl Send for CheckerStatistics<'_> {}
 
 pub struct ParallelProofChecker<'c> {
-    pool: Arc<Mutex<&'c mut TermPool>>,
     config: Config<'c>,
     prelude: Rc<ProblemPrelude>,
     context: ContextStack,
@@ -24,10 +24,10 @@ pub struct ParallelProofChecker<'c> {
     is_holey: bool,
 }
 
+#[cfg(feature = "thread-safety")]
 impl<'c> ParallelProofChecker<'c> {
-    pub fn new(pool: &'c mut TermPool, config: Config<'c>, prelude: ProblemPrelude) -> Self {
+    pub fn new(config: Config<'c>, prelude: ProblemPrelude) -> Self {
         ParallelProofChecker {
-            pool: Arc::new(Mutex::new(pool)),
             config,
             prelude: Rc::new(prelude),
             context: ContextStack::new(),
@@ -36,9 +36,9 @@ impl<'c> ParallelProofChecker<'c> {
         }
     }
 
-    pub fn copy_self(&self) -> Self {
+    /// Copies the proof checker and instantiate parallel fields
+    pub fn parallelize_self(&self) -> Self {
         ParallelProofChecker {
-            pool: Arc::clone(&self.pool),
             config: Config {
                 strict: self.config.strict,
                 skip_unknown_rules: self.config.skip_unknown_rules,
@@ -53,10 +53,15 @@ impl<'c> ParallelProofChecker<'c> {
         }
     }
 
-    #[cfg(feature = "thread-safety")]
-    pub fn check<'s, 'p>(&'s mut self, proof: &'p Proof, num_cores: usize) -> CarcaraResult<bool> {
+    pub fn check<'s, 'p>(
+        &'s mut self,
+        proof: &'p Proof,
+        num_cores: usize,
+        pool: &TermPool,
+    ) -> CarcaraResult<bool> {
         let scheduler = Scheduler::new(num_cores, proof);
         let self_ref = Arc::new(self);
+        let dyn_pool = Arc::new(pool.dyn_pool.clone());
 
         crossbeam::scope(|s| {
             let threads: Vec<_> = scheduler
@@ -64,7 +69,8 @@ impl<'c> ParallelProofChecker<'c> {
                 .into_iter()
                 .enumerate()
                 .map(|(i, schedule)| {
-                    let mut local_self = self_ref.copy_self();
+                    let mut local_self = self_ref.parallelize_self();
+                    let mut merged_pool = TermPool::from_previous(&dyn_pool);
 
                     s.builder()
                         .name(format!("worker-{i}"))
@@ -87,7 +93,12 @@ impl<'c> ParallelProofChecker<'c> {
                                         };
 
                                         local_self
-                                            .check_step(step, previous_command, &iter)
+                                            .check_step(
+                                                step,
+                                                previous_command,
+                                                &iter,
+                                                &mut merged_pool,
+                                            )
                                             .map_err(|e| Error::Checker {
                                                 inner: e,
                                                 rule: step.rule.clone(),
@@ -104,7 +115,7 @@ impl<'c> ParallelProofChecker<'c> {
                                         let context = &mut local_self.context;
                                         context
                                             .push(
-                                                &mut local_self.pool.lock().unwrap(),
+                                                &mut merged_pool,
                                                 &s.assignment_args,
                                                 &s.variable_args,
                                             )
@@ -220,18 +231,14 @@ impl<'c> ParallelProofChecker<'c> {
         step: &'a ProofStep,
         previous_command: Option<Premise<'a>>,
         iter: &'a ScheduleIter<'a>,
+        pool: &mut TermPool,
     ) -> RuleResult {
         let mut deep_eq_time = Duration::ZERO;
 
         if step.rule == "lia_generic" {
             if self.config.check_lia_using_cvc5 {
-                let is_hole = lia_generic::lia_generic(
-                    &mut self.pool.lock().unwrap(),
-                    &step.clause,
-                    &self.prelude,
-                    None,
-                    &step.id,
-                );
+                let is_hole =
+                    lia_generic::lia_generic(pool, &step.clause, &self.prelude, None, &step.id);
                 self.is_holey = self.is_holey || is_hole;
             } else {
                 log::warn!("encountered \"lia_generic\" rule, ignoring");
@@ -269,7 +276,7 @@ impl<'c> ParallelProofChecker<'c> {
                 conclusion: &step.clause,
                 premises: &premises,
                 args: &step.args,
-                pool: &mut self.pool.lock().unwrap(),
+                pool,
                 context: &mut self.context,
                 previous_command,
                 discharge: &discharge,
@@ -398,11 +405,5 @@ impl<'c> ParallelProofChecker<'c> {
 
             _ => return None,
         })
-    }
-
-    // Never reached piece of code
-    #[cfg(not(feature = "thread-safety"))]
-    pub fn check<'s, 'p>(&'s mut self, _: &'p Proof) -> CarcaraResult<bool> {
-        Ok(false)
     }
 }
