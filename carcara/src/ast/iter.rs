@@ -36,7 +36,7 @@ pub struct ProofIter<'a> {
 }
 
 impl<'a> ProofIter<'a> {
-    pub fn new(commands: &'a [ProofCommand]) -> Self {
+    pub(super) fn new(commands: &'a [ProofCommand]) -> Self {
         Self { stack: vec![(0, commands)] }
     }
 

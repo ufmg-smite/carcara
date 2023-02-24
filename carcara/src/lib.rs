@@ -146,8 +146,8 @@ pub fn check<T: io::BufRead>(
         }
         #[cfg(not(feature = "thread-safety"))]
         {
-        checker::ProofChecker::new(&mut pool, config, prelude).check(&proof)
-    }
+            checker::ProofChecker::new(&mut pool, config, prelude).check(&proof)
+        }
     };
     res
 }
