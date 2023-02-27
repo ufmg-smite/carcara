@@ -340,25 +340,6 @@ mod MultiThreadPool {
             const_pool: &'c Option<Arc<TermPool>>,
             term: Term,
         ) -> Rc<Term> {
-            // use std::collections::hash_map::Entry;
-
-            // if let (Some(_), Some(entry)) = (
-            //     const_pool.as_ref(),
-            //     const_pool.as_ref().unwrap().terms.get(&term),
-            // ) {
-            //     entry.clone()
-            // } else {
-            //     match dyn_pool.terms.entry(term) {
-            //         Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
-            //         Entry::Vacant(vacant_entry) => {
-            //             let term = vacant_entry.key().clone();
-            //             let t = vacant_entry.insert(Rc::new(term)).clone();
-            //             dyn_pool.compute_sort(&t);
-            //             t
-            //         }
-            //     }
-            // }
-
             use std::collections::hash_map::Entry;
 
             // If there is a constant pool and has the term
@@ -410,101 +391,96 @@ mod MultiThreadPool {
         }
 
         pub fn free_vars<'s, 't: 's>(&'s mut self, term: &'t Rc<Term>) -> &AHashSet<Rc<Term>> {
-            MergedPool::internal(&mut self.dyn_pool, &self.const_pool, term)
-        }
-
-        fn internal<'d: 't, 'c: 'd, 't>(
-            dyn_pool: &'d mut TermPool,
-            const_pool: &'c Option<Arc<TermPool>>,
-            term: &'t Rc<Term>,
-        ) -> &'t AHashSet<Rc<Term>> {
-            // Here, I would like to do
-            // ```
-            // if let Some(vars) = self.free_vars_cache.get(term) {
-            //     return vars;
-            // }
-            // ```
-            // However, because of a limitation in the borrow checker, the compiler thinks that
-            // this immutable borrow of `cache` has to live until the end of the function, even
-            // though the code immediately returns. This would stop me from mutating `cache` in the
-            // rest of the function. Because of that, I have to check if the hash map contains
-            // `term` as a key, and then get the value associated with it, meaning I have to access
-            // the hash map twice, which is a bit slower. This is an example of problem case #3
-            // from the non-lexical lifetimes RFC:
-            // https://github.com/rust-lang/rfcs/blob/master/text/2094-nll.md
-            if dyn_pool.free_vars_cache.contains_key(term) {
-                return dyn_pool.free_vars_cache.get(term).unwrap();
-            }
-            // TODO: const_pool.and_then(|| {})
-            if let Some(pool) = const_pool {
-                if pool.free_vars_cache.contains_key(term) {
-                    return pool.free_vars_cache.get(term).unwrap();
+            fn internal<'d: 't, 'c: 'd, 't>(
+                dyn_pool: &'d mut TermPool,
+                const_pool: &'c Option<Arc<TermPool>>,
+                term: &'t Rc<Term>,
+            ) -> &'t AHashSet<Rc<Term>> {
+                // Here, I would like to do
+                // ```
+                // if let Some(vars) = self.free_vars_cache.get(term) {
+                //     return vars;
+                // }
+                // ```
+                // However, because of a limitation in the borrow checker, the compiler thinks that
+                // this immutable borrow of `cache` has to live until the end of the function, even
+                // though the code immediately returns. This would stop me from mutating `cache` in the
+                // rest of the function. Because of that, I have to check if the hash map contains
+                // `term` as a key, and then get the value associated with it, meaning I have to access
+                // the hash map twice, which is a bit slower. This is an example of problem case #3
+                // from the non-lexical lifetimes RFC:
+                // https://github.com/rust-lang/rfcs/blob/master/text/2094-nll.md
+                if dyn_pool.free_vars_cache.contains_key(term) {
+                    return dyn_pool.free_vars_cache.get(term).unwrap();
                 }
-            }
-            let set = match term.as_ref() {
-                Term::App(f, args) => {
-                    let mut set = MergedPool::internal(dyn_pool, const_pool, f).clone();
-                    for a in args {
-                        set.extend(
-                            MergedPool::internal(dyn_pool, const_pool, a)
-                                .iter()
-                                .cloned(),
-                        );
+                // TODO: const_pool.and_then(|| {})
+                if let Some(pool) = const_pool {
+                    if pool.free_vars_cache.contains_key(term) {
+                        return pool.free_vars_cache.get(term).unwrap();
                     }
-                    set
                 }
-                Term::Op(_, args) => {
-                    let mut set = AHashSet::new();
-                    for a in args {
-                        set.extend(
-                            MergedPool::internal(dyn_pool, const_pool, a)
-                                .iter()
-                                .cloned(),
-                        );
+                let set = match term.as_ref() {
+                    Term::App(f, args) => {
+                        let mut set = internal(dyn_pool, const_pool, f).clone();
+                        for a in args {
+                            set.extend(internal(dyn_pool, const_pool, a).iter().cloned());
+                        }
+                        set
                     }
-                    set
-                }
-                Term::Quant(_, bindings, inner) | Term::Lambda(bindings, inner) => {
-                    let mut vars = MergedPool::internal(dyn_pool, const_pool, inner).clone();
-                    for bound_var in bindings {
+                    Term::Op(_, args) => {
+                        let mut set = AHashSet::new();
+                        for a in args {
+                            set.extend(internal(dyn_pool, const_pool, a).iter().cloned());
+                        }
+                        set
+                    }
+                    Term::Quant(_, bindings, inner) | Term::Lambda(bindings, inner) => {
+                        let mut vars = internal(dyn_pool, const_pool, inner).clone();
+                        for bound_var in bindings {
+                            let term = MergedPool::add_by_ref(
+                                dyn_pool,
+                                const_pool,
+                                bound_var.clone().into(),
+                            );
+                            vars.remove(&term);
+                        }
+                        vars
+                    }
+                    Term::Let(bindings, inner) => {
+                        let mut vars = internal(dyn_pool, const_pool, inner).clone();
+                        for (var, value) in bindings {
+                            let sort = Term::Sort(
+                                MergedPool::sort_by_ref(dyn_pool, const_pool, value).clone(),
+                            );
+                            let sort = MergedPool::add_by_ref(dyn_pool, const_pool, sort);
+                            let term = MergedPool::add_by_ref(
+                                dyn_pool,
+                                const_pool,
+                                (var.clone(), sort).into(),
+                            );
+                            vars.remove(&term);
+                        }
+                        vars
+                    }
+                    Term::Choice(bound_var, inner) => {
+                        let mut vars = internal(dyn_pool, const_pool, inner).clone();
                         let term =
                             MergedPool::add_by_ref(dyn_pool, const_pool, bound_var.clone().into());
                         vars.remove(&term);
+                        vars
                     }
-                    vars
-                }
-                Term::Let(bindings, inner) => {
-                    let mut vars = MergedPool::internal(dyn_pool, const_pool, inner).clone();
-                    for (var, value) in bindings {
-                        let sort = Term::Sort(
-                            MergedPool::sort_by_ref(dyn_pool, const_pool, value).clone(),
-                        );
-                        let sort = MergedPool::add_by_ref(dyn_pool, const_pool, sort);
-                        let term = MergedPool::add_by_ref(
-                            dyn_pool,
-                            const_pool,
-                            (var.clone(), sort).into(),
-                        );
-                        vars.remove(&term);
+                    Term::Terminal(Terminal::Var(Identifier::Simple(_), _)) => {
+                        let mut set = AHashSet::with_capacity(1);
+                        set.insert(term.clone());
+                        set
                     }
-                    vars
-                }
-                Term::Choice(bound_var, inner) => {
-                    let mut vars = MergedPool::internal(dyn_pool, const_pool, inner).clone();
-                    let term =
-                        MergedPool::add_by_ref(dyn_pool, const_pool, bound_var.clone().into());
-                    vars.remove(&term);
-                    vars
-                }
-                Term::Terminal(Terminal::Var(Identifier::Simple(_), _)) => {
-                    let mut set = AHashSet::with_capacity(1);
-                    set.insert(term.clone());
-                    set
-                }
-                Term::Terminal(_) | Term::Sort(_) => AHashSet::new(),
-            };
-            dyn_pool.free_vars_cache.insert(term.clone(), set);
-            dyn_pool.free_vars_cache.get(term).unwrap()
+                    Term::Terminal(_) | Term::Sort(_) => AHashSet::new(),
+                };
+                dyn_pool.free_vars_cache.insert(term.clone(), set);
+                dyn_pool.free_vars_cache.get(term).unwrap()
+            }
+
+            internal(&mut self.dyn_pool, &self.const_pool, term)
         }
     }
 }
