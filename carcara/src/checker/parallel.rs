@@ -8,10 +8,8 @@ use super::scheduler::{iter::ScheduleIter, Scheduler::Scheduler};
 use super::{context::*, lia_generic, CheckerStatistics, Config};
 use crate::{ast::*, CarcaraResult, Error};
 use ahash::AHashSet;
-use std::{
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
+use triomphe::Arc;
 
 unsafe impl Sync for CheckerStatistics<'_> {}
 unsafe impl Send for CheckerStatistics<'_> {}
@@ -57,11 +55,10 @@ impl<'c> ParallelProofChecker<'c> {
         &'s mut self,
         proof: &'p Proof,
         num_cores: usize,
-        pool: &TermPool,
+        pool: &Arc<SingleThreadPool::TermPool>,
     ) -> CarcaraResult<bool> {
         let scheduler = Scheduler::new(num_cores, proof);
         let self_ref = Arc::new(self);
-        let dyn_pool = Arc::new(pool.dyn_pool.clone());
 
         crossbeam::scope(|s| {
             let threads: Vec<_> = scheduler
@@ -70,7 +67,7 @@ impl<'c> ParallelProofChecker<'c> {
                 .enumerate()
                 .map(|(i, schedule)| {
                     let mut local_self = self_ref.parallelize_self();
-                    let mut merged_pool = TermPool::from_previous(&dyn_pool);
+                    let mut merged_pool = TermPool::from_previous(pool);
 
                     s.builder()
                         .name(format!("worker-{i}"))

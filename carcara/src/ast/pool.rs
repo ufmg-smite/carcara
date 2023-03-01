@@ -4,9 +4,26 @@ pub type TermPool = SingleThreadPool::TermPool;
 #[cfg(feature = "thread-safety")]
 pub type TermPool = MultiThreadPool::MergedPool;
 
+use super::{Rc, Sort, Term};
+use ahash::AHashSet;
+
+pub trait Pool {
+    fn new() -> Self;
+    fn bool_true(&self) -> Rc<Term>;
+    fn bool_false(&self) -> Rc<Term>;
+    fn bool_constant(&self, value: bool) -> Rc<Term>;
+    fn add(&mut self, term: Term) -> Rc<Term>;
+    fn add_all(&mut self, terms: Vec<Term>) -> Vec<Rc<Term>>;
+    fn sort(&self, term: &Rc<Term>) -> &Sort;
+    fn free_vars<'s, 't: 's>(&'s mut self, term: &'t Rc<Term>) -> &AHashSet<Rc<Term>>;
+}
+
 #[allow(non_snake_case, dead_code)]
-mod SingleThreadPool {
-    use super::super::{Identifier, Rc, Sort, Term, Terminal};
+pub mod SingleThreadPool {
+    use super::{
+        super::{Identifier, Rc, Sort, Term, Terminal},
+        Pool,
+    };
     use ahash::{AHashMap, AHashSet};
 
     /// A structure to store and manage all allocated terms.
@@ -34,54 +51,6 @@ mod SingleThreadPool {
     }
 
     impl TermPool {
-        /// Constructs a new `TermPool`. This new pool will already contain the boolean constants `true`
-        /// and `false`, as well as the `Bool` sort.
-        pub fn new() -> Self {
-            let mut terms = AHashMap::new();
-            let mut sorts_cache = AHashMap::new();
-            let bool_sort = Self::add_term_to_map(&mut terms, Term::Sort(Sort::Bool));
-
-            let [bool_true, bool_false] = ["true", "false"].map(|b| {
-                Self::add_term_to_map(
-                    &mut terms,
-                    Term::Terminal(Terminal::Var(
-                        Identifier::Simple(b.into()),
-                        bool_sort.clone(),
-                    )),
-                )
-            });
-
-            sorts_cache.insert(bool_false.clone(), Sort::Bool);
-            sorts_cache.insert(bool_true.clone(), Sort::Bool);
-            sorts_cache.insert(bool_sort, Sort::Bool);
-
-            Self {
-                terms,
-                free_vars_cache: AHashMap::new(),
-                sorts_cache,
-                bool_true,
-                bool_false,
-            }
-        }
-
-        /// Return the term corresponding to the boolean constant `true`.
-        pub fn bool_true(&self) -> Rc<Term> {
-            self.bool_true.clone()
-        }
-
-        /// Return the term corresponding to the boolean constant `false`.
-        pub fn bool_false(&self) -> Rc<Term> {
-            self.bool_false.clone()
-        }
-
-        /// Return the term corresponding to the boolean constant determined by `value`.
-        pub fn bool_constant(&self, value: bool) -> Rc<Term> {
-            match value {
-                true => self.bool_true(),
-                false => self.bool_false(),
-            }
-        }
-
         fn add_term_to_map(terms_map: &mut AHashMap<Term, Rc<Term>>, term: Term) -> Rc<Term> {
             use std::collections::hash_map::Entry;
 
@@ -92,30 +61,6 @@ mod SingleThreadPool {
                     vacant_entry.insert(Rc::new(term)).clone()
                 }
             }
-        }
-
-        /// Takes a term and returns a possibly newly allocated `Rc` that references it.
-        ///
-        /// If the term was not originally in the term pool, it is added to it. Otherwise, this method
-        /// just returns an `Rc` pointing to the existing allocation. This method also computes the
-        /// term's sort, and adds it to the sort cache.
-        pub fn add(&mut self, term: Term) -> Rc<Term> {
-            let term = Self::add_term_to_map(&mut self.terms, term);
-            self.compute_sort(&term);
-            term
-        }
-
-        /// Takes a vector of terms and calls [`TermPool::add`] on each.
-        pub fn add_all(&mut self, terms: Vec<Term>) -> Vec<Rc<Term>> {
-            terms.into_iter().map(|t| self.add(t)).collect()
-        }
-
-        /// Returns the sort of the given term.
-        ///
-        /// This method assumes that the sorts of any subterms have already been checked, and are
-        /// correct. If `term` is itself a sort, this simply returns that sort.
-        pub fn sort(&self, term: &Rc<Term>) -> &Sort {
-            &self.sorts_cache[term]
         }
 
         /// Computes the sort of a term and adds it to the sort cache.
@@ -183,12 +128,86 @@ mod SingleThreadPool {
             self.sorts_cache.insert(term.clone(), result);
             &self.sorts_cache[term]
         }
+    }
+
+    impl Pool for TermPool {
+        /// Constructs a new `TermPool`. This new pool will already contain the boolean constants `true`
+        /// and `false`, as well as the `Bool` sort.
+        fn new() -> Self {
+            let mut terms = AHashMap::new();
+            let mut sorts_cache = AHashMap::new();
+            let bool_sort = Self::add_term_to_map(&mut terms, Term::Sort(Sort::Bool));
+
+            let [bool_true, bool_false] = ["true", "false"].map(|b| {
+                Self::add_term_to_map(
+                    &mut terms,
+                    Term::Terminal(Terminal::Var(
+                        Identifier::Simple(b.into()),
+                        bool_sort.clone(),
+                    )),
+                )
+            });
+
+            sorts_cache.insert(bool_false.clone(), Sort::Bool);
+            sorts_cache.insert(bool_true.clone(), Sort::Bool);
+            sorts_cache.insert(bool_sort, Sort::Bool);
+
+            Self {
+                terms,
+                free_vars_cache: AHashMap::new(),
+                sorts_cache,
+                bool_true,
+                bool_false,
+            }
+        }
+
+        /// Return the term corresponding to the boolean constant `true`.
+        fn bool_true(&self) -> Rc<Term> {
+            self.bool_true.clone()
+        }
+
+        /// Return the term corresponding to the boolean constant `false`.
+        fn bool_false(&self) -> Rc<Term> {
+            self.bool_false.clone()
+        }
+
+        /// Return the term corresponding to the boolean constant determined by `value`.
+        fn bool_constant(&self, value: bool) -> Rc<Term> {
+            match value {
+                true => self.bool_true(),
+                false => self.bool_false(),
+            }
+        }
+
+        /// Takes a term and returns a possibly newly allocated `Rc` that references it.
+        ///
+        /// If the term was not originally in the term pool, it is added to it. Otherwise, this method
+        /// just returns an `Rc` pointing to the existing allocation. This method also computes the
+        /// term's sort, and adds it to the sort cache.
+        fn add(&mut self, term: Term) -> Rc<Term> {
+            let term = Self::add_term_to_map(&mut self.terms, term);
+            self.compute_sort(&term);
+            term
+        }
+
+        /// Takes a vector of terms and calls [`TermPool::add`] on each.
+        fn add_all(&mut self, terms: Vec<Term>) -> Vec<Rc<Term>> {
+            terms.into_iter().map(|t| self.add(t)).collect()
+        }
+
+        /// Returns the sort of the given term.
+        ///
+        /// This method assumes that the sorts of any subterms have already been checked, and are
+        /// correct. If `term` is itself a sort, this simply returns that sort.
+        fn sort(&self, term: &Rc<Term>) -> &Sort {
+            &self.sorts_cache[term]
+        }
 
         /// Returns an `AHashSet` containing all the free variables in the given term.
         ///
         /// This method uses a cache, so there is no additional cost to computing the free variables of
         /// a term multiple times.
-        pub fn free_vars<'t>(&mut self, term: &'t Rc<Term>) -> &AHashSet<Rc<Term>> {
+        fn free_vars<'s, 't: 's>(&'s mut self, term: &'t Rc<Term>) -> &AHashSet<Rc<Term>> {
             // Here, I would like to do
             // ```
             // if let Some(vars) = self.free_vars_cache.get(term) {
@@ -260,11 +279,11 @@ mod SingleThreadPool {
 
 #[allow(non_snake_case, dead_code)]
 mod MultiThreadPool {
-    use std::sync::Arc;
-
     use super::super::{Identifier, Rc, Sort, Term, Terminal};
+    use super::Pool;
     use super::SingleThreadPool::TermPool;
     use ahash::AHashSet;
+    use triomphe::Arc;
 
     pub struct MergedPool {
         pub(crate) dyn_pool: TermPool,
@@ -278,59 +297,12 @@ mod MultiThreadPool {
     }
 
     impl MergedPool {
-        pub fn new() -> Self {
-            Self {
-                dyn_pool: TermPool::new(),
-                const_pool: None,
-            }
-        }
-
         /// Instantiates a new Merged Pool from a previous term pool
         /// TODO: Make sure this is receiving the right pool type based on the future decision in the parallel impl
         pub fn from_previous(pool: &Arc<TermPool>) -> Self {
             Self {
                 dyn_pool: TermPool::new(),
                 const_pool: Some(Arc::clone(&pool)),
-            }
-        }
-
-        pub fn bool_true(&self) -> Rc<Term> {
-            self.const_pool.as_ref().unwrap().bool_true.clone()
-        }
-
-        pub fn bool_false(&self) -> Rc<Term> {
-            self.const_pool.as_ref().unwrap().bool_false.clone()
-        }
-
-        pub fn bool_constant(&self, value: bool) -> Rc<Term> {
-            match value {
-                true => self.bool_true(),
-                false => self.bool_false(),
-            }
-        }
-
-        /// Takes a term and returns an `Rc` referencing it. If the term was not originally in the
-        /// terms hash map, it is added to it. This also adds the term's sort to the sort cache.
-        pub fn add(&mut self, term: Term) -> Rc<Term> {
-            use std::collections::hash_map::Entry;
-
-            // If there is a constant pool and has the term
-            if let Some(entry) = self
-                .const_pool
-                .as_ref()
-                .and_then(|c_pool| c_pool.terms.get(&term))
-            {
-                entry.clone()
-            } else {
-                match self.dyn_pool.terms.entry(term) {
-                    Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
-                    Entry::Vacant(vacant_entry) => {
-                        let term = vacant_entry.key().clone();
-                        let t = vacant_entry.insert(Rc::new(term)).clone();
-                        self.dyn_pool.compute_sort(&t);
-                        t
-                    }
-                }
             }
         }
 
@@ -361,22 +333,6 @@ mod MultiThreadPool {
             }
         }
 
-        /// Takes a vector of terms and calls `add_term` on each.
-        pub fn add_all(&mut self, terms: Vec<Term>) -> Vec<Rc<Term>> {
-            terms.into_iter().map(|t| self.add(t)).collect()
-        }
-
-        /// Returns the sort of this term. For operations and application terms, this method assumes
-        /// that the arguments' sorts have already been checked, and are correct. If `term` is itself a
-        /// sort, this simply returns that sort.
-        pub fn sort(&self, term: &Rc<Term>) -> &Sort {
-            if let Some(sort) = self.dyn_pool.sorts_cache.get(term) {
-                sort
-            } else {
-                &self.const_pool.as_ref().unwrap().sorts_cache[term]
-            }
-        }
-
         /// Returns the sort of this term exactly as the sort function. Receive the pools references directly.
         fn sort_by_ref<'d: 't, 'c: 'd, 't>(
             dyn_pool: &'d mut TermPool,
@@ -389,8 +345,73 @@ mod MultiThreadPool {
                 &const_pool.as_ref().unwrap().sorts_cache[term]
             }
         }
+    }
 
-        pub fn free_vars<'s, 't: 's>(&'s mut self, term: &'t Rc<Term>) -> &AHashSet<Rc<Term>> {
+    impl Pool for MergedPool {
+        fn new() -> Self {
+            Self {
+                dyn_pool: TermPool::new(),
+                const_pool: None::<Arc<TermPool>>,
+            }
+        }
+
+        fn bool_true(&self) -> Rc<Term> {
+            self.const_pool.as_ref().unwrap().bool_true.clone()
+        }
+
+        fn bool_false(&self) -> Rc<Term> {
+            self.const_pool.as_ref().unwrap().bool_false.clone()
+        }
+
+        fn bool_constant(&self, value: bool) -> Rc<Term> {
+            match value {
+                true => self.bool_true(),
+                false => self.bool_false(),
+            }
+        }
+
+        /// Takes a term and returns an `Rc` referencing it. If the term was not originally in the
+        /// terms hash map, it is added to it. This also adds the term's sort to the sort cache.
+        fn add(&mut self, term: Term) -> Rc<Term> {
+            use std::collections::hash_map::Entry;
+
+            // If there is a constant pool and has the term
+            if let Some(entry) = self
+                .const_pool
+                .as_ref()
+                .and_then(|c_pool| c_pool.terms.get(&term))
+            {
+                entry.clone()
+            } else {
+                match self.dyn_pool.terms.entry(term) {
+                    Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
+                    Entry::Vacant(vacant_entry) => {
+                        let term = vacant_entry.key().clone();
+                        let t = vacant_entry.insert(Rc::new(term)).clone();
+                        self.dyn_pool.compute_sort(&t);
+                        t
+                    }
+                }
+            }
+        }
+
+        /// Takes a vector of terms and calls `add_term` on each.
+        fn add_all(&mut self, terms: Vec<Term>) -> Vec<Rc<Term>> {
+            terms.into_iter().map(|t| self.add(t)).collect()
+        }
+
+        /// Returns the sort of this term. For operations and application terms, this method assumes
+        /// that the arguments' sorts have already been checked, and are correct. If `term` is itself a
+        /// sort, this simply returns that sort.
+        fn sort(&self, term: &Rc<Term>) -> &Sort {
+            if let Some(sort) = self.dyn_pool.sorts_cache.get(term) {
+                sort
+            } else {
+                &self.const_pool.as_ref().unwrap().sorts_cache[term]
+            }
+        }
+
+        fn free_vars<'s, 't: 's>(&'s mut self, term: &'t Rc<Term>) -> &AHashSet<Rc<Term>> {
             fn internal<'d: 't, 'c: 'd, 't>(
                 dyn_pool: &'d mut TermPool,
                 const_pool: &'c Option<Arc<TermPool>>,

@@ -110,6 +110,7 @@ pub enum Error {
     DoesNotReachEmptyClause,
 }
 
+#[allow(unused_mut)]
 pub fn check<T: io::BufRead>(
     problem: T,
     proof: T,
@@ -123,6 +124,16 @@ pub fn check<T: io::BufRead>(
         num_cores,
     }: CarcaraOptions,
 ) -> Result<bool, Error> {
+    #[cfg(feature = "thread-safety")]
+    let (prelude, proof, pool) = parser::parse_instance_multithread(
+        problem,
+        proof,
+        apply_function_defs,
+        expand_lets,
+        allow_int_real_subtyping,
+    )?;
+
+    #[cfg(not(feature = "thread-safety"))]
     let (prelude, proof, mut pool) = parser::parse_instance(
         problem,
         proof,

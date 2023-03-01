@@ -1,11 +1,15 @@
-use crate::{ast::TermPool, parser::tests::parse_terms};
+use crate::{
+    ast::{Pool, TermPool},
+    parser::tests::parse_terms,
+};
 use ahash::AHashSet;
 
 #[test]
 fn test_free_vars() {
     fn run_tests(definitions: &str, cases: &[(&str, &[&str])]) {
         for &(term, expected) in cases {
-            let mut pool = TermPool::new();
+            // TODO: Verify why the new was needed to be implemented
+            let mut pool = Pool::new();
             let [root] = parse_terms(&mut pool, definitions, [term]);
             let expected: AHashSet<_> = expected.iter().copied().collect();
             let got: AHashSet<_> = pool
