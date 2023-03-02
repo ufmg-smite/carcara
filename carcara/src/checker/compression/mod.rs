@@ -4,6 +4,7 @@ use ahash::{AHashMap, AHashSet};
 use std::collections::VecDeque;
 use crate::checker::rules::resolution::{binary_resolution, unremove_all_negations};
 use crate::checker::rules::Premise;
+use crate::ast::printer::print_proof;
 //use super::RuleResult;
 
 
@@ -511,10 +512,13 @@ pub fn compress_proof(proof: &Proof, pool : &mut TermPool){
         new_proof_commands.push(command);
     }
 
-    println!("\n\nNew proof commands are:");
-    for i in new_proof_commands{
-        println!("{:?}", i);
-    }
+    // println!("\n\nNew proof commands are:");
+    // for i in new_proof_commands{
+    //     println!("{:?}", i);
+    // }
+    println!("\n\n");
+
+    print_proof(new_proof_commands, false);
 
 
     // Como criar uma nova prova
