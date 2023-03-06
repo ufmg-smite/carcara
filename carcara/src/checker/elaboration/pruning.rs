@@ -33,9 +33,8 @@ pub fn prune_proof(proof: &[ProofCommand]) -> ProofDiff {
     loop {
         'inner: loop {
             let frame = stack.last_mut().unwrap();
-            let current = match to_visit.last_mut().unwrap().pop_front() {
-                Some(i) => i,
-                None => break 'inner,
+            let Some(current) = to_visit.last_mut().unwrap().pop_front() else {
+                break 'inner;
             };
             if frame.visited[current] {
                 continue;

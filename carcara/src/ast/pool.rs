@@ -179,7 +179,7 @@ impl TermPool {
     ///
     /// This method uses a cache, so there is no additional cost to computing the free variables of
     /// a term multiple times.
-    pub fn free_vars<'t>(&mut self, term: &'t Rc<Term>) -> &AHashSet<Rc<Term>> {
+    pub fn free_vars(&mut self, term: &Rc<Term>) -> &AHashSet<Rc<Term>> {
         // Here, I would like to do
         // ```
         // if let Some(vars) = self.free_vars_cache.get(term) {
