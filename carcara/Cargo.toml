@@ -3,17 +3,17 @@ name = "carcara"
 version = "0.1.0"
 authors = ["Bruno Andreotti <bandreotti@protonmail.com>"]
 edition = "2021"
-rust-version = "1.61"
+rust-version = "1.67"
 license = "Apache-2.0"
 
 [dependencies]
-ahash = "0.7.4"
-log = "0.4.14"
-rug = { version = "1.16.0", features = ["integer", "rational"] }
-thiserror = "1.0.30"
+ahash = "0.8.3"
+log = "0.4.17"
+rug = { version = "1.19.1", features = ["integer", "rational"] }
+thiserror = "1.0.39"
 
 [features]
 large-test-set = []
 
 [dev-dependencies]
-rand = "0.8.4"
+rand = "0.8.5"
