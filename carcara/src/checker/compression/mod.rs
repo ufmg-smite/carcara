@@ -412,45 +412,36 @@ fn binary_resolution_with_unit(
     match &new_commands[right_parent] {
         ProofCommand::Step(step_r) => {
             println!("Vou tentar resolution com {:?} e {:?}", current, step_r.clause);
-            binary_resolution(pool, &mut current, &step_r.clause, step_r.clause[0].remove_all_negations(), false);
-            let mut new_clause = Vec::new();
-            // for i in 0..(current.len()){
-            //     new_clause.push(unremove_all_negations(pool, current[i]));
-            // }
-            //let mut new_clause = current.into_iter().collect();
-            for i in current{
-                new_clause.push(unremove_all_negations(pool, i));
-            }
-            return new_clause;
-        }
-        ProofCommand::Assume {id: _, term: term_r} => {
-            //println!("\n\n\n\n Trying to get pivot {:?} \n\n\n\n", term_r.remove_all_negations());
-            let new_clause = [Rc::clone(term_r)];
-            let mut pivot = term_r.remove_all_negations();
+            let mut pivot = step_r.clause[0].remove_all_negations();
             pivot.0 = 0;
-
             let mut is_pivot_in_current = true;
             for i in 0..current_vec.len(){
                 if pivot.1 == current_vec[i].1 && current_vec[i].0 > 0{
                     is_pivot_in_current = false;
                 }
             }
-
-            println!("Left term: {:?}", current);
-            println!("Right term: {:?}", &new_clause[..]);
-            println!("Pivot: {:?}", pivot);
-
-            binary_resolution(pool, &mut current, &new_clause[..], pivot, is_pivot_in_current);
-            println!("Resolution conclusion: {:?}", current);
+            binary_resolution(pool, &mut current, &step_r.clause, pivot, is_pivot_in_current);
             let mut new_clause = Vec::new();
-            // for i in 0..(current.len()){
-            //     new_clause.push(unremove_all_negations(pool, current[i]));
-            // }
             for i in current{
                 new_clause.push(unremove_all_negations(pool, i));
-                //println!("Sera que da? {:?}", i);
             }
-            //let mut new_clause = current.into_iter().collect();
+            return new_clause;
+        }
+        ProofCommand::Assume {id: _, term: term_r} => {
+            let new_clause = [Rc::clone(term_r)];
+            let mut pivot = term_r.remove_all_negations();
+            pivot.0 = 0;
+            let mut is_pivot_in_current = true;
+            for i in 0..current_vec.len(){
+                if pivot.1 == current_vec[i].1 && current_vec[i].0 > 0{
+                    is_pivot_in_current = false;
+                }
+            }
+            binary_resolution(pool, &mut current, &new_clause[..], pivot, is_pivot_in_current);
+            let mut new_clause = Vec::new();
+            for i in current{
+                new_clause.push(unremove_all_negations(pool, i));
+            }
             return new_clause;
         }
         _ => {println!("Não matchou nada");}
