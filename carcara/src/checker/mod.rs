@@ -13,6 +13,8 @@ use elaboration::Elaborator;
 use error::CheckerError;
 pub use parallel::ParallelProofChecker;
 use rules::{ElaborationRule, Premise, Rule, RuleArgs, RuleResult};
+#[cfg(feature = "thread-safety")]
+pub use scheduler::Scheduler;
 use std::{
     fmt,
     time::{Duration, Instant},

@@ -8,6 +8,7 @@ use super::scheduler::{iter::ScheduleIter, Scheduler::Scheduler};
 use super::{context::*, lia_generic, CheckerStatistics, Config};
 use crate::{ast::*, CarcaraResult, Error};
 use ahash::AHashSet;
+use std::sync::RwLock;
 use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -26,11 +27,11 @@ pub struct ParallelProofChecker<'c> {
 
 #[cfg(feature = "thread-safety")]
 impl<'c> ParallelProofChecker<'c> {
-    pub fn new(config: Config<'c>, prelude: ProblemPrelude) -> Self {
+    pub fn new(config: Config<'c>, prelude: ProblemPrelude, context_usage: &Vec<usize>) -> Self {
         ParallelProofChecker {
             config,
             prelude: Rc::new(prelude),
-            context: ContextStack::new(),
+            context: ContextStack::from_usage(context_usage),
             reached_empty_clause: false,
             is_holey: false,
         }
@@ -47,7 +48,7 @@ impl<'c> ParallelProofChecker<'c> {
                 check_lia_using_cvc5: self.config.check_lia_using_cvc5,
             },
             prelude: Rc::clone(&self.prelude),
-            context: ContextStack::new(),
+            context: ContextStack::from_previous(&self.context),
             reached_empty_clause: false,
             is_holey: false,
         }
@@ -56,11 +57,9 @@ impl<'c> ParallelProofChecker<'c> {
     pub fn check<'s, 'p>(
         &'s mut self,
         proof: &'p Proof,
-        num_cores: usize,
         pool: &TermPool,
+        scheduler: Scheduler,
     ) -> CarcaraResult<bool> {
-        let scheduler = Scheduler::new(num_cores, proof);
-        let self_ref = Arc::new(self);
         let dyn_pool = Arc::new(pool.dyn_pool.clone());
 
         crossbeam::scope(|s| {
@@ -69,7 +68,7 @@ impl<'c> ParallelProofChecker<'c> {
                 .into_iter()
                 .enumerate()
                 .map(|(i, schedule)| {
-                    let mut local_self = self_ref.parallelize_self();
+                    let mut local_self = self.parallelize_self();
                     let mut merged_pool = TermPool::from_previous(&dyn_pool);
 
                     s.builder()
@@ -114,10 +113,11 @@ impl<'c> ParallelProofChecker<'c> {
 
                                         let context = &mut local_self.context;
                                         context
-                                            .push(
+                                            .push_from_id(
                                                 &mut merged_pool,
                                                 &s.assignment_args,
                                                 &s.variable_args,
+                                                s.context_id,
                                             )
                                             .map_err(|e| Error::Checker {
                                                 inner: e.into(),

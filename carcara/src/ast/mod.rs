@@ -148,6 +148,8 @@ pub struct Subproof {
     pub commands: Vec<ProofCommand>,
     pub assignment_args: Vec<(String, Rc<Term>)>,
     pub variable_args: Vec<SortedVar>,
+    /// Subproof id used for context hashing purpose
+    pub context_id: usize,
 }
 
 /// An argument for a `step` command.

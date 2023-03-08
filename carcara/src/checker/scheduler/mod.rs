@@ -115,11 +115,12 @@ pub mod Scheduler {
         /// Creates a thread scheduler for this proof using a specific number of
         /// workers. This scheduler is responsible for balancing the load of this
         /// proof aiming the minimum amount of sync overhead
-        pub fn new(num_workers: usize, proof: &'a Proof) -> Self {
+        pub fn new(num_workers: usize, proof: &'a Proof) -> (Self, Vec<usize>) {
             let cmds = &proof.commands;
             let mut loads = vec![Schedule::new(cmds); num_workers];
             let mut stack = vec![StackLevel::new(0, cmds, None)];
             let mut pq = BinaryHeap::<AssignedLoad>::new();
+            let mut context_usage = vec![];
             for i in 0..num_workers {
                 pq.push(AssignedLoad { 0: 0, 1: i });
             }
@@ -136,6 +137,13 @@ pub mod Scheduler {
                         if last.0 <= stack.len() - 1
                             && matches!(stack[last.0].cmds[last.1], ProofCommand::Subproof(_))
                         {
+                            // Make sure this context usage count is reduced
+                            let subproof_id = match &stack[last.0].cmds[last.1] {
+                                ProofCommand::Subproof(s) => s.context_id,
+                                _ => unreachable!(),
+                            };
+                            context_usage[subproof_id] -= 1;
+
                             loads[*schedule_id].pop();
                         }
                         // Creates a closing step for each schedule that used this subproof
@@ -177,6 +185,14 @@ pub mod Scheduler {
                     if last_inserted != subproof_oppening {
                         loads[load_index].push(subproof_oppening);
                         stack[subproof_oppening.0].used_by.insert(load_index);
+
+                        // Now this subproof is used by another schedule
+                        let subproof_id =
+                            match &stack[subproof_oppening.0].cmds[subproof_oppening.1] {
+                                ProofCommand::Subproof(s) => s.context_id,
+                                _ => unreachable!(),
+                            };
+                        context_usage[subproof_id] += 1;
                     }
                     i += 1;
                 }
@@ -192,9 +208,11 @@ pub mod Scheduler {
                 if let ProofCommand::Subproof(s) = &top.cmds[last_id] {
                     stack.push(StackLevel::new(0, &s.commands, Some((depth, last_id))));
                     stack.last_mut().unwrap().used_by.insert(load_index);
+                    // First schedule using this subproof
+                    context_usage.push(1);
                 }
             }
-            Scheduler { loads }
+            (Scheduler { loads }, context_usage)
         }
     }
 }

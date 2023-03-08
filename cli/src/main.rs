@@ -261,7 +261,7 @@ fn main() {
                 Command::Elaborate(_) => "elaborate",
                 Command::Bench(_) => "bench",
                 Command::GenerateLiaProblems(_) => "generate lia problems",
-                _ => "",
+                _ => unreachable!(),
             }
         );
         std::process::exit(1);

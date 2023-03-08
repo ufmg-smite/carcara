@@ -553,6 +553,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         let mut commands_stack = vec![Vec::new()];
         let mut end_step_stack = Vec::new();
         let mut subproof_args_stack = Vec::new();
+        let mut subproof_id = 0;
 
         let mut finished_assumes = false;
 
@@ -639,7 +640,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         commands,
                         assignment_args,
                         variable_args,
+                        context_id: subproof_id,
                     }));
+                subproof_id += 1;
             }
             self.state
                 .step_ids

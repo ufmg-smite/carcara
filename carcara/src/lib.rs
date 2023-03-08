@@ -142,7 +142,11 @@ pub fn check<T: io::BufRead>(
     let res = {
         #[cfg(feature = "thread-safety")]
         {
-            checker::ParallelProofChecker::new(config, prelude).check(&proof, num_cores, &pool)
+            use crate::checker::Scheduler::Scheduler;
+
+            let (scheduler, schedule_context_usage) = Scheduler::new(num_cores, &proof);
+            checker::ParallelProofChecker::new(config, prelude, &schedule_context_usage)
+                .check(&proof, &pool, scheduler)
         }
         #[cfg(not(feature = "thread-safety"))]
         {
