@@ -4,11 +4,12 @@ use carcara::{
     parser::parse_instance,
     CarcaraOptions,
 };
-use crossbeam::queue::ArrayQueue;
+use crossbeam_queue::ArrayQueue;
 use std::{
     fs::File,
     io::{self, BufReader},
     path::{Path, PathBuf},
+    thread,
     time::{Duration, Instant},
 };
 
@@ -135,7 +136,7 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
         }
     }
 
-    crossbeam::scope(|s| {
+    thread::scope(|s| {
         let jobs_queue = &jobs_queue; // So we don't try to move the queue into the thread closure
 
         // We of course need to `collect` here to ensure we spawn all threads before starting to
@@ -143,9 +144,9 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
         #[allow(clippy::needless_collect)]
         let workers: Vec<_> = (0..num_threads)
             .map(|_| {
-                s.builder()
+                thread::Builder::new()
                     .stack_size(STACK_SIZE)
-                    .spawn(move |_| worker_thread::<T>(jobs_queue, options, elaborate))
+                    .spawn_scoped(s, move || worker_thread(jobs_queue, options, elaborate))
                     .unwrap()
             })
             .collect();
@@ -156,7 +157,6 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
             .reduce(T::combine)
             .unwrap()
     })
-    .unwrap()
 }
 
 pub fn run_csv_benchmark(
