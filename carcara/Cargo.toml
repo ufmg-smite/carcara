@@ -12,8 +12,6 @@ log = "0.4.17"
 rug = { version = "1.19.1", features = ["integer", "rational"] }
 thiserror = "1.0.39"
 
-[features]
-large-test-set = []
-
 [dev-dependencies]
+test-generator = { path = "../test-generator" }
 rand = "0.8.5"
