@@ -74,8 +74,12 @@ fn test_file(proof_path: &str) {
     }
 }
 
-// TODO: Add generated tests for full benchmark set (they should be `#[ignore]`)
 #[test_generator::from_dir("benchmarks/small")]
-fn generated(proof_path: &str) {
+fn small(proof_path: &str) {
+    test_file(proof_path)
+}
+
+#[test_generator::from_dir("benchmarks/full", ignore)]
+fn full(proof_path: &str) {
     test_file(proof_path)
 }
