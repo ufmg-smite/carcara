@@ -128,23 +128,19 @@ where
     Ok(())
 }
 
-fn assert_eq_modulo_reordering<T>(a: &T, b: &T, time: &mut Duration) -> Result<(), CheckerError>
-where
-    T: Eq + Clone + TypeName + DeepEq,
-    EqualityError<T>: Into<CheckerError>,
-{
-    if !timed_deep_eq_modulo_reordering(a, b, time) {
+fn assert_deep_eq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> Result<(), CheckerError> {
+    if !deep_eq(a, b, time) {
         return Err(EqualityError::ExpectedEqual(a.clone(), b.clone()).into());
     }
     Ok(())
 }
 
-fn assert_is_expected_modulo_reordering<T>(got: &T, expected: T, time: &mut Duration) -> RuleResult
-where
-    T: Eq + Clone + TypeName + DeepEq,
-    EqualityError<T>: Into<CheckerError>,
-{
-    if !timed_deep_eq_modulo_reordering(got, &expected, time) {
+fn assert_deep_eq_is_expected(
+    got: &Rc<Term>,
+    expected: Rc<Term>,
+    time: &mut Duration,
+) -> RuleResult {
+    if !deep_eq(got, &expected, time) {
         return Err(EqualityError::ExpectedToBe { expected, got: got.clone() }.into());
     }
     Ok(())
@@ -167,9 +163,14 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
 
     for (i, (proof, expected)) in cases.iter().enumerate() {
         // This parses the definitions again for every case, which is not ideal
-        let (prelude, parsed, mut pool) =
-            parse_instance(Cursor::new(definitions), Cursor::new(proof), true, false)
-                .unwrap_or_else(|e| panic!("parser error during test \"{}\": {}", test_name, e));
+        let (prelude, parsed, mut pool) = parse_instance(
+            Cursor::new(definitions),
+            Cursor::new(proof),
+            true,
+            false,
+            false,
+        )
+        .unwrap_or_else(|e| panic!("parser error during test \"{}\": {}", test_name, e));
         let mut checker = ProofChecker::new(
             &mut pool,
             Config {
@@ -177,7 +178,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
                 skip_unknown_rules: false,
                 is_running_test: true,
                 statistics: None,
-                check_lia_generic_using_cvc5: true,
+                check_lia_using_cvc5: true,
             },
             prelude,
         );

@@ -1,102 +1,12 @@
-use crate::{
-    ast::TermPool,
-    parser::tests::{parse_term, parse_terms, parse_terms_with_pool},
-};
+use crate::{ast::TermPool, parser::tests::parse_terms};
 use ahash::AHashSet;
-
-#[test]
-fn test_subterms_no_duplicates() {
-    fn run_tests(cases: &[&str]) {
-        for s in cases {
-            let term = parse_term(s);
-            let mut seen = AHashSet::new();
-            assert!(term.subterms().all(|t| seen.insert(t)));
-        }
-    }
-    run_tests(&[
-        "(= 1 1)",
-        "(ite false false false)",
-        "(- (ite (not true) 2 3) (ite (not true) 2 3))",
-        "(= (= 1 2) (not (= 1 2)))",
-        "(+ (* 1 2) (- 2 (* 1 2)))",
-    ]);
-}
-
-#[test]
-fn test_subterms() {
-    fn run_tests(definitions: &str, cases: &[&[&str]]) {
-        for c in cases {
-            let expected = c.iter().copied();
-
-            let [root] = parse_terms(definitions, [c[0]]);
-            let subterms = root.subterms();
-            let as_strings: Vec<_> = subterms.map(|t| format!("{}", t)).collect();
-            let got = as_strings.iter().map(String::as_str);
-
-            assert!(expected.eq(got));
-        }
-    }
-    run_tests(
-        "(declare-fun f (Int Int) Int)
-        (declare-fun a () Int)
-        (declare-fun b () Int)
-        (declare-fun c () Int)",
-        &[
-            &["(= 0 1)", "0", "1"],
-            &["(f a b)", "f", "a", "b"],
-            &[
-                "(f (f a b) (f b c))",
-                "f",
-                "(f a b)",
-                "a",
-                "b",
-                "(f b c)",
-                "c",
-            ],
-            &[
-                "(= (= 1 2) (not (= 1 2)))",
-                "(= 1 2)",
-                "1",
-                "2",
-                "(not (= 1 2))",
-            ],
-            &[
-                "(ite (not false) (+ 2 (f 0 1)) (- (f a b) (f 0 1)))",
-                "(not false)",
-                "false",
-                "(+ 2 (f 0 1))",
-                "2",
-                "(f 0 1)",
-                "f",
-                "0",
-                "1",
-                "(- (f a b) (f 0 1))",
-                "(f a b)",
-                "a",
-                "b",
-            ],
-            &["(exists ((x Int)) false)", "false"],
-            &["(forall ((p Bool)) (= 0 1))", "(= 0 1)", "0", "1"],
-            &["(choice ((y Real)) (= 0 1))", "(= 0 1)", "0", "1"],
-            &[
-                "(let ((p false) (q (= 0 1))) true)",
-                "false",
-                "(= 0 1)",
-                "0",
-                "1",
-                "true",
-            ],
-            &["(lambda ((x Int) (y Int)) (+ 1 2))", "(+ 1 2)", "1", "2"],
-        ],
-    );
-}
 
 #[test]
 fn test_free_vars() {
     fn run_tests(definitions: &str, cases: &[(&str, &[&str])]) {
         for &(term, expected) in cases {
             let mut pool = TermPool::new();
-            let [root] = parse_terms_with_pool(&mut pool, definitions, [term]);
+            let [root] = parse_terms(&mut pool, definitions, [term]);
             let expected: AHashSet<_> = expected.iter().copied().collect();
             let got: AHashSet<_> = pool
                 .free_vars(&root)
@@ -129,19 +39,20 @@ fn test_free_vars() {
 #[test]
 fn test_deep_eq() {
     enum TestType {
-        Normal,
         ModReordering,
         AlphaEquiv,
     }
 
     fn run_tests(definitions: &str, cases: &[(&str, &str)], test_type: TestType) {
+        let mut pool = TermPool::new();
         for (a, b) in cases {
-            let [a, b] = parse_terms(definitions, [a, b]);
+            let [a, b] = parse_terms(&mut pool, definitions, [a, b]);
+            let mut time = std::time::Duration::ZERO;
             match test_type {
-                TestType::Normal => assert_deep_eq!(&a, &b),
-                TestType::ModReordering => assert_deep_eq_modulo_reordering!(&a, &b),
+                TestType::ModReordering => {
+                    assert!(super::deep_eq::deep_eq(&a, &b, &mut time));
+                }
                 TestType::AlphaEquiv => {
-                    let mut time = std::time::Duration::ZERO;
                     assert!(super::deep_eq::are_alpha_equivalent(&a, &b, &mut time));
                 }
             }
@@ -156,18 +67,6 @@ fn test_deep_eq() {
             (declare-fun x () Int)
             (declare-fun y () Int)
         ";
-    run_tests(
-        definitions,
-        &[
-            ("a", "a"),
-            ("(+ x y)", "(+ x y)"),
-            (
-                "(ite (and (not p) q) (* x y) (- 0 y))",
-                "(ite (and (not p) q) (* x y) (- 0 y))",
-            ),
-        ],
-        TestType::Normal,
-    );
     run_tests(
         definitions,
         &[

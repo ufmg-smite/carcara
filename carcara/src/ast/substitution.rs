@@ -2,14 +2,36 @@ use super::{BindingList, Rc, SortedVar, Term, TermPool};
 use ahash::{AHashMap, AHashSet};
 use thiserror::Error;
 
-#[derive(Debug, PartialEq, Error)]
+/// The error type for errors when constructing or applying substitutions.
+#[derive(Debug, PartialEq, Eq, Error)]
 pub enum SubstitutionError {
-    #[error("trying to substitute term '{0}' with a term of different sort: '{1}'")]
+    /// A term in the left-hand side of the substitution was not a variable.
+    #[error("term in the left-hand side of substitution is not a variable: '{0}'")]
+    NotAVariable(Rc<Term>),
+
+    /// One of the mappings in the substitution was mapping a term to a term of a different sort.
+    #[error("trying to substitute term '{0}' with a term of a different sort: '{1}'")]
     DifferentSorts(Rc<Term>, Rc<Term>),
 }
 
 type SubstitutionResult<T> = Result<T, SubstitutionError>;
 
+/// Represents a capture-avoiding substitution over terms.
+///
+/// A substitution is a mapping from variables to terms, that, when applied to a term, will replace
+/// all instances of these variables to the terms that they map to. For example, applying the
+/// substitution `{x -> (+ y 3)}` to the term `(and (> x 0) (= x z))` would result in the term
+/// `(and (> (+ y 3) 0) (= (+ y 3) z))`.
+///
+/// Note that naively applying a substitution to a term that contains binders may result in what's
+/// called a capture: when a variable that was supposed to be free is captured as the result of
+/// applying the substitution to the binder term. Consider applying the substitution `{x -> y}` to
+/// the term `(forall ((y Int)) (= x y))`. Doing so naively would result in the term
+/// `(forall ((y Int)) (= y y))`, which has a different meaning than the original term, because the
+/// `x` variable was captured by the binder when it was renamed. To prevent this, these
+/// substitutions are also capture-avoiding. This is done by renaming the binder variable when
+/// necessary before applying the substitution. In the earlier example, the resulting term would
+/// actually be `(forall ((y@ Int)) (= y y@))`.
 pub struct Substitution {
     pub(crate) map: AHashMap<Rc<Term>, Rc<Term>>,
     // Variables that should be renamed to preserve capture-avoidance if they are bound by a binder
@@ -19,6 +41,7 @@ pub struct Substitution {
 }
 
 impl Substitution {
+    /// Constructs an empty substitution.
     pub fn empty() -> Self {
         Self {
             map: AHashMap::new(),
@@ -27,14 +50,22 @@ impl Substitution {
         }
     }
 
+    /// Constructs a singleton substitution mapping `x` to `t`. This returns an error if the sorts
+    /// of the given terms are not the same, or if `x` is not a variable term.
     pub fn single(pool: &mut TermPool, x: Rc<Term>, t: Rc<Term>) -> SubstitutionResult<Self> {
         let mut this = Self::empty();
         this.insert(pool, x, t)?;
         Ok(this)
     }
 
+    /// Constructs a new substitution from an arbitrary mapping of terms to other terms. This
+    /// returns an error if any term in the left-hand side is not a variable, or if any term is
+    /// mapped to a term of a different sort.
     pub fn new(pool: &mut TermPool, map: AHashMap<Rc<Term>, Rc<Term>>) -> SubstitutionResult<Self> {
         for (k, v) in map.iter() {
+            if !k.is_var() {
+                return Err(SubstitutionError::NotAVariable(k.clone()));
+            }
             if pool.sort(k) != pool.sort(v) {
                 return Err(SubstitutionError::DifferentSorts(k.clone(), v.clone()));
             }
@@ -47,20 +78,22 @@ impl Substitution {
         })
     }
 
+    /// Returns `true` if the substitution is empty.
     pub fn is_empty(&self) -> bool {
         self.map.is_empty()
     }
 
-    /// Extends the substitution by adding a new mapping from `x` to `t`. `x` must be a variable
-    /// term.
+    /// Extends the substitution by adding a new mapping from `x` to `t`. This returns an error if
+    /// the sorts of the given terms are not the same, or if `x` is not a variable term.
     pub(crate) fn insert(
         &mut self,
         pool: &mut TermPool,
         x: Rc<Term>,
         t: Rc<Term>,
     ) -> SubstitutionResult<()> {
-        assert!(x.is_var());
-
+        if !x.is_var() {
+            return Err(SubstitutionError::NotAVariable(x));
+        }
         if pool.sort(&x) != pool.sort(&t) {
             return Err(SubstitutionError::DifferentSorts(x, t));
         }
@@ -83,6 +116,8 @@ impl Substitution {
         Ok(())
     }
 
+    /// Computes which binder variables will need to be renamed, and stores the result in
+    /// `self.should_be_renamed`.
     fn compute_should_be_renamed(&mut self, pool: &mut TermPool) {
         if self.should_be_renamed.is_some() {
             return;
@@ -117,6 +152,7 @@ impl Substitution {
         self.should_be_renamed = Some(should_be_renamed);
     }
 
+    /// Applies the substitution to `term`, and returns the result as a new term.
     pub fn apply(&mut self, pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
         macro_rules! apply_to_sequence {
             ($sequence:expr) => {
@@ -138,11 +174,11 @@ impl Substitution {
             Term::App(func, args) => {
                 let new_args = apply_to_sequence!(args);
                 let new_func = self.apply(pool, func);
-                pool.add_term(Term::App(new_func, new_args))
+                pool.add(Term::App(new_func, new_args))
             }
             Term::Op(op, args) => {
                 let new_args = apply_to_sequence!(args);
-                pool.add_term(Term::Op(*op, new_args))
+                pool.add(Term::Op(*op, new_args))
             }
             Term::Quant(q, b, t) => {
                 self.apply_to_binder(pool, term, b.as_ref(), t, false, |b, t| {
@@ -180,8 +216,8 @@ impl Substitution {
         // Note: this method assumes that `binding_list` is a "sort" binding list. "Value" lists add
         // some complications that are currently not supported. For example, the variable in the
         // domain of the substitution might be used in the value of a binding in the binding list,
-        // and the behaviour of the susbstitution may change if this use is before or after the
-        // varibale is bound in the list.
+        // and the behavior of the substitution may change if this use is before or after the
+        // variable is bound in the list.
 
         if self.map.len() != 1 {
             return false;
@@ -189,7 +225,7 @@ impl Substitution {
         let x = self.map.iter().next().unwrap().0.as_var().unwrap();
 
         let mut should_be_renamed = binding_list.iter().filter(|&var| {
-            let t = pool.add_term(var.clone().into());
+            let t = pool.add(var.clone().into());
             self.should_be_renamed.as_ref().unwrap().contains(&t)
         });
 
@@ -200,6 +236,9 @@ impl Substitution {
             && should_be_renamed.next().is_none()
     }
 
+    /// Applies the substitution to a binder term, renaming any bound variables as needed. This
+    /// method uses the function `build_function` to construct the resulting binder term. If the
+    /// binder is a `let` or `lambda` term, `is_value_list` should be true.
     fn apply_to_binder<F: Fn(BindingList, Rc<Term>) -> Term>(
         &mut self,
         pool: &mut TermPool,
@@ -235,7 +274,7 @@ impl Substitution {
             let renamed = renaming.apply(pool, inner);
             self.apply(pool, &renamed)
         };
-        pool.add_term(build_function(new_bindings, new_term))
+        pool.add(build_function(new_bindings, new_term))
     }
 
     /// Creates a new substitution that renames all variables in the binding list that may be
@@ -258,7 +297,7 @@ impl Substitution {
                 // If the binding list is a "sort" binding list, then `value` will be the variable's
                 // sort. Otherwise, we need to get the sort of `value`
                 let sort = if is_value_list {
-                    pool.add_term(Term::Sort(pool.sort(value).clone()))
+                    pool.add(Term::Sort(pool.sort(value).clone()))
                 } else {
                     value.clone()
                 };
@@ -269,7 +308,7 @@ impl Substitution {
                 // We keep adding `@`s to the variable name as long as it is necessary
                 loop {
                     if !new_vars.contains(&new_var) {
-                        let new_term = pool.add_term((new_var.clone(), sort.clone()).into());
+                        let new_term = pool.add((new_var.clone(), sort.clone()).into());
                         if !self.should_be_renamed.as_ref().unwrap().contains(&new_term) {
                             break;
                         }
@@ -281,8 +320,8 @@ impl Substitution {
                 if changed {
                     // If the variable was renamed, we have to add this renaming to the resulting
                     // substitution
-                    let old = pool.add_term((var.clone(), sort.clone()).into());
-                    let new = pool.add_term((new_var.clone(), sort).into());
+                    let old = pool.add((var.clone(), sort.clone()).into());
+                    let new = pool.add((new_var.clone(), sort).into());
 
                     // We can safely unwrap here because `old` and `new` are guaranteed to have the
                     // same sort
@@ -311,7 +350,8 @@ mod tests {
 
     fn run_test(definitions: &str, original: &str, x: &str, t: &str, result: &str) {
         let mut pool = TermPool::new();
-        let mut parser = Parser::new(&mut pool, definitions.as_bytes(), true, false).unwrap();
+        let mut parser =
+            Parser::new(&mut pool, definitions.as_bytes(), true, false, false).unwrap();
         parser.parse_problem().unwrap();
 
         let [original, x, t, result] = [original, x, t, result].map(|s| {

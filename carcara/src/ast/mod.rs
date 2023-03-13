@@ -1,4 +1,6 @@
-//! The abstract syntax tree (AST) for the Alethe Proof Format.
+//! The abstract syntax tree (AST) for the Alethe proof format.
+//!
+//! This module also contains various utilities for manipulating Alethe proofs and terms.
 
 #[macro_use]
 mod macros;
@@ -8,22 +10,17 @@ mod pool;
 pub(crate) mod printer;
 mod rc;
 mod substitution;
-mod subterms;
 #[cfg(test)]
 mod tests;
 
-pub use deep_eq::{
-    are_alpha_equivalent, deep_eq, deep_eq_modulo_reordering, timed_deep_eq,
-    timed_deep_eq_modulo_reordering, tracing_deep_eq, DeepEq,
-};
+pub use deep_eq::{are_alpha_equivalent, deep_eq, tracing_deep_eq};
 pub use iter::ProofIter;
 pub use pool::TermPool;
 pub use printer::print_proof;
 pub use rc::Rc;
 pub use substitution::{Substitution, SubstitutionError};
-pub use subterms::Subterms;
 
-pub(crate) use deep_eq::DeepEqualityChecker;
+pub(crate) use deep_eq::{DeepEq, DeepEqualityChecker};
 
 use crate::checker::error::CheckerError;
 use ahash::AHashSet;
@@ -31,6 +28,9 @@ use rug::Integer;
 use rug::Rational;
 use std::hash::Hash;
 
+/// The prelude of an SMT-LIB problem instance.
+///
+/// This stores the sort declarations, function declarations and the problem's logic string.
 #[derive(Debug, Clone, Default)]
 pub struct ProblemPrelude {
     pub(crate) sort_declarations: Vec<(String, usize)>,
@@ -38,7 +38,7 @@ pub struct ProblemPrelude {
     pub(crate) logic: Option<String>,
 }
 
-/// A proof in the Alethe Proof Format.
+/// A proof in the Alethe format.
 #[derive(Debug, Clone)]
 pub struct Proof {
     pub premises: AHashSet<Rc<Term>>,
@@ -46,6 +46,7 @@ pub struct Proof {
 }
 
 impl Proof {
+    /// Returns an iterator over the proof commands. See [`ProofIter`].
     pub fn iter(&self) -> ProofIter {
         ProofIter::new(&self.commands)
     }
@@ -65,6 +66,9 @@ pub enum ProofCommand {
 }
 
 impl ProofCommand {
+    /// Returns the unique identifier of this command.
+    ///
+    /// For subproofs, this is the identifier of the last step in the subproof.
     pub fn id(&self) -> &str {
         match self {
             ProofCommand::Assume { id, .. } => id,
@@ -73,6 +77,11 @@ impl ProofCommand {
         }
     }
 
+    /// Returns the clause of this command.
+    ///
+    /// For `assume` commands, this is a unit clause containing the assumed term; for steps, it's
+    /// the conclusion clause; and for subproofs, it's the conclusion clause of the last step in the
+    /// subproof.
     pub fn clause(&self) -> &[Rc<Term>] {
         match self {
             ProofCommand::Assume { id: _, term } => std::slice::from_ref(term),
@@ -97,26 +106,38 @@ impl ProofCommand {
     }
 }
 
-/// A `step` command, of the form `(step <symbol> <clause> :rule <symbol> [:premises (<symbol>+)]?
-/// [:args <proof_args>]?)`.
-#[derive(Debug, Clone, PartialEq)]
+/// A `step` command.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProofStep {
+    /// The step identifier.
     pub id: String,
+
+    /// The conclusion clause.
     pub clause: Vec<Rc<Term>>,
+
+    /// The rule used by the step.
     pub rule: String,
 
-    /// Premises are indexed with two indices: The first indicates the depth of the subproof (where
-    /// 0 is the root proof) and the second is the index of the command in that subproof.
+    /// The premises of the step, given via the `:premises` attribute.
+    ///
+    /// Each premise references a command, indexed using two indices: The first indicates the depth
+    /// of the subproof where the command is located, in the stack of currently open subproofs. The
+    /// second is the index of the command in that subproof.
     pub premises: Vec<(usize, usize)>,
 
+    /// The step arguments, given via the `:args` attribute.
     pub args: Vec<ProofArg>,
 
-    /// Commands passed to the `:discharge` attribute are indexed similarly to premises
+    /// The local premises that this step discharges, given via the `:discharge` attribute, and
+    /// indexed similarly to premises.
     pub discharge: Vec<(usize, usize)>,
 }
 
-/// A subproof. Subproofs are started by `anchor` commands, of the form `(anchor :step <symbol>
-/// [:args <proof_args>]?)`, which specifies which step ends the subproof.
+/// A subproof.
+///
+/// Subproofs are started by `anchor` commands, and contain a series of steps, possibly including
+/// nested subproofs. A subproof must end in a `step`, which is indicated in the anchor via the
+/// `:step` attribute.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Subproof {
     pub commands: Vec<ProofCommand>,
@@ -124,8 +145,8 @@ pub struct Subproof {
     pub variable_args: Vec<SortedVar>,
 }
 
-/// An argument for a `step` or `anchor` command.
-#[derive(Debug, Clone, PartialEq)]
+/// An argument for a `step` command.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProofArg {
     /// An argument that is just a term.
     Term(Rc<Term>),
@@ -154,44 +175,82 @@ impl ProofArg {
     }
 }
 
-/// A function definition. Functions are defined using the `function-def` command, of the form
-/// `(define-fun <symbol> (<sorted_var>*) <sort> <term>)`. These definitions are substituted in
-/// during parsing, so these commands don't appear in the final AST.
-pub struct FunctionDef {
-    pub params: Vec<SortedVar>,
-    pub body: Rc<Term>,
-}
-
+/// The operator of an operation term.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Operator {
     // Logic
+    /// The `not` operator.
     Not,
+
+    /// The `=>` operator.
     Implies,
+
+    /// The `and` operator.
     And,
+
+    /// The `or` operator.
     Or,
+
+    /// The `xor` operator.
     Xor,
+
+    /// The `=` operator.
     Equals,
+
+    /// The `distinct` operator.
     Distinct,
+
+    /// The `ite` operator.
     Ite,
 
     // Arithmetic
+    /// The `+` operator.
     Add,
+
+    /// The `-` operator.
     Sub,
+
+    /// The `*` operator.
     Mult,
+
+    /// The `div` operator.
     IntDiv,
+
+    /// The `/` operator.
     RealDiv,
+
+    /// The `mod` operator.
     Mod,
+
+    /// The `abs` operator.
     Abs,
+
+    /// The `<` operator.
     LessThan,
+
+    /// The `>` operator.
     GreaterThan,
+
+    /// The `<=` operator.
     LessEq,
+
+    /// The `>=` operator.
     GreaterEq,
+
+    /// The `to_real` operator.
     ToReal,
+
+    /// The `to_int` operator.
     ToInt,
+
+    /// The `is_int` operator.
     IsInt,
 
     // Arrays
+    /// The `select` operator.
     Select,
+
+    /// The `store` operator.
     Store,
 }
 
@@ -224,22 +283,49 @@ impl_str_conversion_traits!(Operator {
     Store: "store",
 });
 
+/// A variable and an associated sort.
 pub type SortedVar = (String, Rc<Term>);
 
+/// The sort of a term.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Sort {
+    /// A function sort.
+    ///
+    /// The last term indicates the return sort of the function. The remaining terms are the sorts
+    /// of the parameters of the function.
     Function(Vec<Rc<Term>>),
+
+    /// A user-declared sort, from a `declare-sort` command.
+    ///
+    /// The associated string is the sort name, and the associated terms are the sort arguments for
+    /// this sort.
     Atom(String, Vec<Rc<Term>>),
+
+    /// The `Bool` primitive sort.
     Bool,
+
+    /// The `Int` primitive sort.
     Int,
+
+    /// The `Real` primitive sort.
     Real,
+
+    /// The `String` primitive sort.
     String,
+
+    /// An `Array` sort.
+    ///
+    /// The two associated terms are the sort arguments for this sort.
     Array(Rc<Term>, Rc<Term>),
 }
 
+/// A quantifier, either `forall` or `exists`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Quantifier {
+    /// The `forall` quantifier.
     Forall,
+
+    /// The `exists` quantifier.
     Exists,
 }
 
@@ -254,6 +340,11 @@ impl std::ops::Not for Quantifier {
     }
 }
 
+/// A list of bindings, where each binding is a variable associated with a term.
+///
+/// Depending on the context, it can be a "sort" binding list (like the ones present in quantifier
+/// terms) where the associated term of each variable is its sort; or a "value" binding list (like
+/// the ones present in `let` terms) where the associated term of each variable is its bound value.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BindingList(pub Vec<SortedVar>);
 
@@ -293,6 +384,7 @@ impl BindingList {
     }
 }
 
+/// A term.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Term {
     /// A terminal. This can be a constant or a variable.
@@ -328,21 +420,32 @@ impl From<SortedVar> for Term {
 }
 
 impl Term {
+    /// Constructs a new integer term.
+    pub fn integer(value: impl Into<Integer>) -> Self {
+        Term::Terminal(Terminal::Integer(value.into()))
+    }
+
+    /// Constructs a new real term.
+    pub fn real(value: impl Into<Rational>) -> Self {
+        Term::Terminal(Terminal::Real(value.into()))
+    }
+
+    /// Constructs a new string term.
+    pub fn string(value: impl Into<String>) -> Self {
+        Term::Terminal(Terminal::String(value.into()))
+    }
+
+    /// Constructs a new variable term.
+    pub fn var(name: impl Into<String>, sort: Rc<Term>) -> Self {
+        Term::Terminal(Terminal::Var(Identifier::Simple(name.into()), sort))
+    }
+
     /// Returns the sort of this term. This does not make use of a cache -- if possible, prefer to
     /// use `TermPool::sort`.
     pub fn raw_sort(&self) -> Sort {
         let mut pool = TermPool::new();
-        let added = pool.add_term(self.clone());
+        let added = pool.add(self.clone());
         pool.sort(&added).clone()
-    }
-
-    /// Returns an iterator over this term and all its subterms, in topological ordering. For
-    /// example, calling this method on the term `(+ (f a b) 2)` would return an iterator over the
-    /// terms `(+ (f a b) 2)`, `(f a b)`, `f`, `a`, `b` and `2`. This method traverses the term as
-    /// a DAG, and the resulting iterator will not contain any duplicate terms. This ignores sort
-    /// terms.
-    pub fn subterms(&self) -> Subterms {
-        Subterms::new(self)
     }
 
     /// Returns `true` if the term is a terminal.
@@ -563,22 +666,35 @@ impl Rc<Term> {
     }
 }
 
+/// A terminal term.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Terminal {
+    /// An integer constant term.
     Integer(Integer),
+
+    /// A real constant term.
     Real(Rational),
+
+    /// A string literal term.
     String(String),
+
+    /// A variable, consisting of an identifier and a sort.
     Var(Identifier, Rc<Term>),
 }
 
+/// An identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Identifier {
+    /// A simple identifier, consisting of a symbol.
     Simple(String),
-    Indexed(String, Vec<Index>),
+
+    /// An indexed identifier, consisting of a symbol and one or more indices.
+    Indexed(String, Vec<IdentifierIndex>),
 }
 
+/// An index for an indexed identifier. This can be either a numeral or a symbol.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Index {
+pub enum IdentifierIndex {
     Numeral(u64),
     Symbol(String),
 }

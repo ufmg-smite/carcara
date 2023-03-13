@@ -96,7 +96,7 @@ pub fn eq_transitive(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     let chain_conclusion = match_term_err!((= t u) = conclusion.last().unwrap())?;
 
     // The first `conclusion.len()` - 1 terms in the conclusion clause must be a sequence of
-    // inequalites, and they will be the premises of the transitive chain
+    // inequalities, and they will be the premises of the transitive chain
     let mut premises: Vec<_> = conclusion[..conclusion.len() - 1]
         .iter()
         .map(|term| match_term_err!((not (= t u)) = term))
@@ -118,7 +118,7 @@ pub fn elaborate_eq_transitive(
     let conclusion_equality = match_term_err!((= t u) = conclusion.last().unwrap())?;
 
     // The first `conclusion.len()` - 1 terms in the conclusion clause must be a sequence of
-    // inequalites, and they will be the premises of the transitive chain
+    // inequalities, and they will be the premises of the transitive chain
     let mut premise_equalities: Vec<_> = conclusion[..n - 1]
         .iter()
         .map(|term| match_term_err!((not (= t u)) = term))

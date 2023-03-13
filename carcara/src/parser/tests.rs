@@ -6,12 +6,13 @@ use super::*;
 
 const ERROR_MESSAGE: &str = "parser error during test";
 
-pub fn parse_terms_with_pool<const N: usize>(
+pub fn parse_terms<const N: usize>(
     pool: &mut TermPool,
     definitions: &str,
     terms: [&str; N],
 ) -> [Rc<Term>; N] {
-    let mut parser = Parser::new(pool, definitions.as_bytes(), true, false).expect(ERROR_MESSAGE);
+    let mut parser =
+        Parser::new(pool, definitions.as_bytes(), true, false, false).expect(ERROR_MESSAGE);
     parser.parse_problem().expect(ERROR_MESSAGE);
 
     terms.map(|s| {
@@ -20,44 +21,34 @@ pub fn parse_terms_with_pool<const N: usize>(
     })
 }
 
-pub fn parse_terms<const N: usize>(definitions: &str, terms: [&str; N]) -> [Rc<Term>; N] {
-    let mut pool = TermPool::new();
-    parse_terms_with_pool(&mut pool, definitions, terms)
-}
-
-/// Parses a term from a `&str`. Panics if any error is encountered.
-pub fn parse_term(input: &str) -> Term {
-    parse_terms("", [input])[0].as_ref().clone()
+pub fn parse_term(pool: &mut TermPool, input: &str) -> Rc<Term> {
+    Parser::new(pool, input.as_bytes(), true, false, false)
+        .and_then(|mut parser| parser.parse_term())
+        .expect(ERROR_MESSAGE)
 }
 
 /// Tries to parse a term from a `&str`, expecting it to fail. Returns the error encountered, or
 /// panics if no error is encountered.
 pub fn parse_term_err(input: &str) -> Error {
     let mut pool = TermPool::new();
-    Parser::new(&mut pool, input.as_bytes(), true, false)
+    Parser::new(&mut pool, input.as_bytes(), true, false, false)
         .and_then(|mut p| p.parse_term())
         .expect_err("expected error")
 }
 
 /// Parses a proof from a `&str`. Panics if any error is encountered.
-pub fn parse_proof(input: &str) -> Proof {
-    let mut pool = TermPool::new();
-    let commands = Parser::new(&mut pool, input.as_bytes(), true, false)
+pub fn parse_proof(pool: &mut TermPool, input: &str) -> Proof {
+    let commands = Parser::new(pool, input.as_bytes(), true, false, false)
         .expect(ERROR_MESSAGE)
         .parse_proof()
         .expect(ERROR_MESSAGE);
     Proof { premises: AHashSet::new(), commands }
 }
 
-fn run_parser_tests(cases: &[(&str, Term)]) {
+fn run_parser_tests(pool: &mut TermPool, cases: &[(&str, Rc<Term>)]) {
     for (case, expected) in cases {
-        let got = parse_term(case);
-        assert!(
-            deep_eq(expected, &got),
-            "test case failed: {} != {}",
-            expected,
-            got
-        );
+        let got = parse_term(pool, case);
+        assert_eq!(expected, &got);
     }
 }
 
@@ -73,7 +64,7 @@ fn test_hash_consing() {
         )
         (* 2 2)
     )";
-    let mut parser = Parser::new(&mut pool, input.as_bytes(), true, false).unwrap();
+    let mut parser = Parser::new(&mut pool, input.as_bytes(), true, false, false).unwrap();
     parser.parse_term().unwrap();
 
     // We expect this input to result in 7 unique terms after parsing:
@@ -111,51 +102,35 @@ fn test_hash_consing() {
 
 #[test]
 fn test_constant_terms() {
-    assert_eq!(terminal!(int 42), parse_term("42"));
-    assert_eq!(terminal!(real 3 / 2), parse_term("1.5"));
-    assert_eq!(terminal!(string "foo"), parse_term("\"foo\""));
+    let mut p = TermPool::new();
+    assert_eq!(Term::integer(42), *parse_term(&mut p, "42"));
+    assert_eq!(Term::real((3, 2)), *parse_term(&mut p, "1.5"));
+    assert_eq!(Term::string("foo"), *parse_term(&mut p, "\"foo\""));
 }
 
 #[test]
 fn test_arithmetic_ops() {
-    run_parser_tests(&[
+    let mut p = TermPool::new();
+    let [one, two, three, five, seven] = [1, 2, 3, 5, 7].map(|n| p.add(Term::integer(n)));
+    let cases = [
         (
             "(+ 2 3)",
-            Term::Op(
-                Operator::Add,
-                vec![Rc::new(terminal!(int 2)), Rc::new(terminal!(int 3))],
-            ),
+            p.add(Term::Op(Operator::Add, vec![two.clone(), three.clone()])),
         ),
         (
             "(* 2 3 5 7)",
-            Term::Op(
+            p.add(Term::Op(
                 Operator::Mult,
-                vec![
-                    Rc::new(terminal!(int 2)),
-                    Rc::new(terminal!(int 3)),
-                    Rc::new(terminal!(int 5)),
-                    Rc::new(terminal!(int 7)),
-                ],
-            ),
+                vec![two.clone(), three, five.clone(), seven],
+            )),
         ),
-        (
-            "(- 5)",
-            Term::Op(Operator::Sub, vec![Rc::new(terminal!(int 5))]),
-        ),
-        (
-            "(- (+ 1 1) 2)",
-            Term::Op(
-                Operator::Sub,
-                vec![
-                    Rc::new(Term::Op(
-                        Operator::Add,
-                        vec![Rc::new(terminal!(int 1)), Rc::new(terminal!(int 1))],
-                    )),
-                    Rc::new(terminal!(int 2)),
-                ],
-            ),
-        ),
-    ]);
+        ("(- 5)", p.add(Term::Op(Operator::Sub, vec![five]))),
+        ("(- (+ 1 1) 2)", {
+            let one_plus_one = p.add(Term::Op(Operator::Add, vec![one.clone(), one]));
+            p.add(Term::Op(Operator::Sub, vec![one_plus_one, two]))
+        }),
+    ];
+    run_parser_tests(&mut p, &cases);
 
     assert!(matches!(
         parse_term_err("(+ (- 1 2) (* 3.0 4.2))"),
@@ -165,92 +140,59 @@ fn test_arithmetic_ops() {
 
 #[test]
 fn test_logic_ops() {
-    run_parser_tests(&[
+    let mut p = TermPool::new();
+    let [zero, one, two, three, four] = [0, 1, 2, 3, 4].map(|n| p.add(Term::integer(n)));
+    let cases = [
         (
             "(and true false)",
-            Term::Op(
-                Operator::And,
-                vec![
-                    Rc::new(terminal!(bool true)),
-                    Rc::new(terminal!(bool false)),
-                ],
-            ),
+            p.add(Term::Op(Operator::And, vec![p.bool_true(), p.bool_false()])),
         ),
         (
             "(or true true false)",
-            Term::Op(
+            p.add(Term::Op(
                 Operator::Or,
-                vec![
-                    Rc::new(terminal!(bool true)),
-                    Rc::new(terminal!(bool true)),
-                    Rc::new(terminal!(bool false)),
-                ],
-            ),
+                vec![p.bool_true(), p.bool_true(), p.bool_false()],
+            )),
         ),
         (
             "(and true)",
-            Term::Op(Operator::And, vec![Rc::new(terminal!(bool true))]),
+            p.add(Term::Op(Operator::And, vec![p.bool_true()])),
         ),
-        (
-            "(or true (and false false))",
-            Term::Op(
-                Operator::Or,
-                vec![
-                    Rc::new(terminal!(bool true)),
-                    Rc::new(Term::Op(
-                        Operator::And,
-                        vec![
-                            Rc::new(terminal!(bool false)),
-                            Rc::new(terminal!(bool false)),
-                        ],
-                    )),
-                ],
-            ),
-        ),
+        ("(or true (and false false))", {
+            let false_and_false = p.add(Term::Op(
+                Operator::And,
+                vec![p.bool_false(), p.bool_false()],
+            ));
+            p.add(Term::Op(Operator::Or, vec![p.bool_true(), false_and_false]))
+        }),
         (
             "(xor true false false)",
-            Term::Op(
+            p.add(Term::Op(
                 Operator::Xor,
-                vec![
-                    Rc::new(terminal!(bool true)),
-                    Rc::new(terminal!(bool false)),
-                    Rc::new(terminal!(bool false)),
-                ],
-            ),
+                vec![p.bool_true(), p.bool_false(), p.bool_false()],
+            )),
         ),
         (
             "(= 2 3)",
-            Term::Op(
-                Operator::Equals,
-                vec![Rc::new(terminal!(int 2)), Rc::new(terminal!(int 3))],
-            ),
+            p.add(Term::Op(Operator::Equals, vec![two.clone(), three])),
         ),
         (
             "(not false)",
-            Term::Op(Operator::Not, vec![Rc::new(terminal!(bool false))]),
+            p.add(Term::Op(Operator::Not, vec![p.bool_false()])),
         ),
         (
             "(distinct 4 2)",
-            Term::Op(
-                Operator::Distinct,
-                vec![Rc::new(terminal!(int 4)), Rc::new(terminal!(int 2))],
-            ),
+            p.add(Term::Op(Operator::Distinct, vec![four, two])),
         ),
-        (
-            "(=> (= 0 1) true false)",
-            Term::Op(
+        ("(=> (= 0 1) true false)", {
+            let zero_equals_one = p.add(Term::Op(Operator::Equals, vec![zero, one]));
+            p.add(Term::Op(
                 Operator::Implies,
-                vec![
-                    Rc::new(Term::Op(
-                        Operator::Equals,
-                        vec![Rc::new(terminal!(int 0)), Rc::new(terminal!(int 1))],
-                    )),
-                    Rc::new(terminal!(bool true)),
-                    Rc::new(terminal!(bool false)),
-                ],
-            ),
-        ),
-    ]);
+                vec![zero_equals_one, p.bool_true(), p.bool_false()],
+            ))
+        }),
+    ];
+    run_parser_tests(&mut p, &cases);
 
     assert!(matches!(
         parse_term_err("(or true 1.2)"),
@@ -280,37 +222,26 @@ fn test_logic_ops() {
 
 #[test]
 fn test_ite() {
-    run_parser_tests(&[
+    let mut p = TermPool::new();
+    let [one, two, three] = [1, 2, 3].map(|n| p.add(Term::integer(n)));
+    let cases = [
         (
             "(ite true 2 3)",
-            Term::Op(
+            p.add(Term::Op(
                 Operator::Ite,
-                vec![
-                    Rc::new(terminal!(bool true)),
-                    Rc::new(terminal!(int 2)),
-                    Rc::new(terminal!(int 3)),
-                ],
-            ),
+                vec![p.bool_true(), two.clone(), three],
+            )),
         ),
-        (
-            "(ite (not true) 2 (ite false 2 1))",
-            Term::Op(
+        ("(ite (not true) 2 (ite false 2 1))", {
+            let not_true = p.add(Term::Op(Operator::Not, vec![p.bool_true()]));
+            let ite = p.add(Term::Op(
                 Operator::Ite,
-                vec![
-                    Rc::new(parse_term("(not true)")),
-                    Rc::new(terminal!(int 2)),
-                    Rc::new(Term::Op(
-                        Operator::Ite,
-                        vec![
-                            Rc::new(terminal!(bool false)),
-                            Rc::new(terminal!(int 2)),
-                            Rc::new(terminal!(int 1)),
-                        ],
-                    )),
-                ],
-            ),
-        ),
-    ]);
+                vec![p.bool_false(), two.clone(), one],
+            ));
+            p.add(Term::Op(Operator::Ite, vec![not_true, two, ite]))
+        }),
+    ];
+    run_parser_tests(&mut p, &cases);
 
     assert!(matches!(
         parse_term_err("(ite true 0)"),
@@ -328,39 +259,34 @@ fn test_ite() {
 
 #[test]
 fn test_quantifiers() {
-    run_parser_tests(&[
-        (
-            "(exists ((p Bool)) p)",
-            Term::Quant(
+    let mut p = TermPool::new();
+    let bool_sort = p.add(Term::Sort(Sort::Bool));
+    let real_sort = p.add(Term::Sort(Sort::Real));
+    let cases = [
+        ("(exists ((p Bool)) p)", {
+            let inner = p.add(Term::var("p", bool_sort.clone()));
+            p.add(Term::Quant(
                 Quantifier::Exists,
-                BindingList(vec![("p".into(), Term::Sort(Sort::Bool).into())]),
-                Rc::new(terminal!(var "p"; Rc::new(Term::Sort(Sort::Bool)))),
-            ),
-        ),
-        (
-            "(forall ((x Real) (y Real)) (= (+ x y) 0.0))",
-            Term::Quant(
+                BindingList(vec![("p".into(), bool_sort)]),
+                inner,
+            ))
+        }),
+        ("(forall ((x Real) (y Real)) (= (+ x y) 0.0))", {
+            let [x, y] = ["x", "y"].map(|s| p.add(Term::var(s, real_sort.clone())));
+            let x_plus_y = p.add(Term::Op(Operator::Add, vec![x, y]));
+            let zero = p.add(Term::real(0));
+            let inner = p.add(Term::Op(Operator::Equals, vec![x_plus_y, zero]));
+            p.add(Term::Quant(
                 Quantifier::Forall,
                 BindingList(vec![
-                    ("x".into(), Rc::new(Term::Sort(Sort::Real))),
-                    ("y".into(), Rc::new(Term::Sort(Sort::Real))),
+                    ("x".into(), real_sort.clone()),
+                    ("y".into(), real_sort),
                 ]),
-                Rc::new(Term::Op(
-                    Operator::Equals,
-                    vec![
-                        Rc::new(Term::Op(
-                            Operator::Add,
-                            vec![
-                                terminal!(var "x"; Rc::new(Term::Sort(Sort::Real))).into(),
-                                terminal!(var "y"; Rc::new(Term::Sort(Sort::Real))).into(),
-                            ],
-                        )),
-                        terminal!(real 0 / 1).into(),
-                    ],
-                )),
-            ),
-        ),
-    ]);
+                inner,
+            ))
+        }),
+    ];
+    run_parser_tests(&mut p, &cases);
     assert!(matches!(
         parse_term_err("(exists () true)"),
         Error::Parser(ParserError::EmptySequence, _),
@@ -373,28 +299,22 @@ fn test_quantifiers() {
 
 #[test]
 fn test_choice_terms() {
-    run_parser_tests(&[
-        (
-            "(choice ((p Bool)) p)",
-            Term::Choice(
-                ("p".into(), Rc::new(Term::Sort(Sort::Bool))),
-                Rc::new(terminal!(var "p"; Rc::new(Term::Sort(Sort::Bool)))),
-            ),
-        ),
-        (
-            "(choice ((x Int)) (= x 0))",
-            Term::Choice(
-                ("x".into(), Rc::new(Term::Sort(Sort::Int))),
-                Rc::new(Term::Op(
-                    Operator::Equals,
-                    vec![
-                        terminal!(var "x"; Rc::new(Term::Sort(Sort::Int))).into(),
-                        terminal!(int 0).into(),
-                    ],
-                )),
-            ),
-        ),
-    ]);
+    let mut p = TermPool::new();
+    let bool_sort = p.add(Term::Sort(Sort::Bool));
+    let int_sort = p.add(Term::Sort(Sort::Int));
+    let cases = [
+        ("(choice ((p Bool)) p)", {
+            let inner = p.add(Term::var("p", bool_sort.clone()));
+            p.add(Term::Choice(("p".into(), bool_sort), inner))
+        }),
+        ("(choice ((x Int)) (= x 0))", {
+            let x = p.add(Term::var("x", int_sort.clone()));
+            let zero = p.add(Term::integer(0));
+            let inner = p.add(Term::Op(Operator::Equals, vec![x, zero]));
+            p.add(Term::Choice(("x".into(), int_sort), inner))
+        }),
+    ];
+    run_parser_tests(&mut p, &cases);
     assert!(matches!(
         parse_term_err("(choice () false)"),
         Error::Parser(ParserError::UnexpectedToken(_), _),
@@ -407,31 +327,28 @@ fn test_choice_terms() {
 
 #[test]
 fn test_let_terms() {
-    run_parser_tests(&[
-        (
-            "(let ((p false)) p)",
-            Term::Let(
-                BindingList(vec![("p".into(), Rc::new(terminal!(bool false)))]),
-                Rc::new(terminal!(var "p"; Rc::new(Term::Sort(Sort::Bool)))),
-            ),
-        ),
-        (
-            "(let ((x 1) (y 2)) (+ x y))",
-            Term::Let(
-                BindingList(vec![
-                    ("x".into(), terminal!(int 1).into()),
-                    ("y".into(), terminal!(int 2).into()),
-                ]),
-                Rc::new(Term::Op(
-                    Operator::Add,
-                    vec![
-                        terminal!(var "x"; Rc::new(Term::Sort(Sort::Int))).into(),
-                        terminal!(var "y"; Rc::new(Term::Sort(Sort::Int))).into(),
-                    ],
-                )),
-            ),
-        ),
-    ]);
+    let mut p = TermPool::new();
+    let int_sort = p.add(Term::Sort(Sort::Int));
+    let bool_sort = p.add(Term::Sort(Sort::Bool));
+    let cases = [
+        ("(let ((p false)) p)", {
+            let inner = p.add(Term::var("p", bool_sort));
+            p.add(Term::Let(
+                BindingList(vec![("p".into(), p.bool_false())]),
+                inner,
+            ))
+        }),
+        ("(let ((x 1) (y 2)) (+ x y))", {
+            let [one, two] = [1, 2].map(|n| p.add(Term::integer(n)));
+            let [x, y] = ["x", "y"].map(|s| p.add(Term::var(s, int_sort.clone())));
+            let inner = p.add(Term::Op(Operator::Add, vec![x, y]));
+            p.add(Term::Let(
+                BindingList(vec![("x".into(), one), ("y".into(), two)]),
+                inner,
+            ))
+        }),
+    ];
+    run_parser_tests(&mut p, &cases);
     assert!(matches!(
         parse_term_err("(let () 0)"),
         Error::Parser(ParserError::EmptySequence, _),
@@ -440,31 +357,26 @@ fn test_let_terms() {
 
 #[test]
 fn test_lambda_terms() {
-    run_parser_tests(&[
-        (
-            "(lambda ((x Int)) x)",
-            Term::Lambda(
-                BindingList(vec![("x".into(), Rc::new(Term::Sort(Sort::Int)))]),
-                Rc::new(terminal!(var "x"; Rc::new(Term::Sort(Sort::Int)))),
-            ),
-        ),
-        (
-            "(lambda ((x Int) (y Int)) (+ x y))",
-            Term::Lambda(
-                BindingList(vec![
-                    ("x".into(), Rc::new(Term::Sort(Sort::Int))),
-                    ("y".into(), Rc::new(Term::Sort(Sort::Int))),
-                ]),
-                Rc::new(Term::Op(
-                    Operator::Add,
-                    vec![
-                        terminal!(var "x"; Rc::new(Term::Sort(Sort::Int))).into(),
-                        terminal!(var "y"; Rc::new(Term::Sort(Sort::Int))).into(),
-                    ],
-                )),
-            ),
-        ),
-    ]);
+    let mut p = TermPool::new();
+    let int_sort = p.add(Term::Sort(Sort::Int));
+    let cases = [
+        ("(lambda ((x Int)) x)", {
+            let x = p.add(Term::var("x", int_sort.clone()));
+            p.add(Term::Lambda(
+                BindingList(vec![("x".into(), int_sort.clone())]),
+                x,
+            ))
+        }),
+        ("(lambda ((x Int) (y Int)) (+ x y))", {
+            let [x, y] = ["x", "y"].map(|s| p.add(Term::var(s, int_sort.clone())));
+            let inner = p.add(Term::Op(Operator::Add, vec![x, y]));
+            p.add(Term::Lambda(
+                BindingList(vec![("x".into(), int_sort.clone()), ("y".into(), int_sort)]),
+                inner,
+            ))
+        }),
+    ];
+    run_parser_tests(&mut p, &cases);
     assert!(matches!(
         parse_term_err("(lambda () false)"),
         Error::Parser(ParserError::EmptySequence, _),
@@ -477,25 +389,17 @@ fn test_lambda_terms() {
 
 #[test]
 fn test_annotated_terms() {
-    run_parser_tests(&[
-        ("(! 0 :named foo)", terminal!(int 0)),
-        ("(! (! 0 :named foo) :named bar)", terminal!(int 0)),
-        (
-            "(! (! 0 :pattern ((+ 1 0) 3)) :named bar)",
-            terminal!(int 0),
-        ),
-        (
-            "(ite (! true :named baz) 2 3)",
-            Term::Op(
-                Operator::Ite,
-                vec![
-                    Rc::new(terminal!(bool true)),
-                    Rc::new(terminal!(int 2)),
-                    Rc::new(terminal!(int 3)),
-                ],
-            ),
-        ),
-    ]);
+    let mut p = TermPool::new();
+    let [zero, two, three] = [0, 2, 3].map(|n| p.add(Term::integer(n)));
+    let cases = [
+        ("(! 0 :named foo)", zero.clone()),
+        ("(! (! 0 :named foo) :named bar)", zero.clone()),
+        ("(! (! 0 :pattern ((+ 1 0) 3)) :named bar)", zero),
+        ("(ite (! true :named baz) 2 3)", {
+            p.add(Term::Op(Operator::Ite, vec![p.bool_true(), two, three]))
+        }),
+    ];
+    run_parser_tests(&mut p, &cases);
     assert!(matches!(
         parse_term_err("(! true)"),
         Error::Parser(ParserError::EmptySequence, _),
@@ -516,25 +420,32 @@ fn test_annotated_terms() {
 
 #[test]
 fn test_declare_fun() {
+    let mut p = TermPool::new();
+
     parse_terms(
+        &mut p,
         "(declare-fun f (Bool Int Real) Real)",
         ["(f false 42 3.14159)"],
     );
-
     parse_terms(
+        &mut p,
         "(declare-fun y () Real)
         (declare-fun f (Real) Int)
         (declare-fun g (Int Int) Bool)",
         ["(g (f y) 0)"],
     );
 
-    let [got] = parse_terms("(declare-fun x () Real)", ["x"]);
-    assert_deep_eq!(&terminal!(var "x"; Rc::new(Term::Sort(Sort::Real))), &got);
+    let [got] = parse_terms(&mut p, "(declare-fun x () Real)", ["x"]);
+    let real_sort = p.add(Term::Sort(Sort::Real));
+    assert_eq!(p.add(Term::var("x", real_sort)), got);
 }
 
 #[test]
 fn test_declare_sort() {
+    let mut p = TermPool::new();
+
     parse_terms(
+        &mut p,
         "(declare-sort T 0)
         (declare-sort U 0)
         (declare-sort Y 0)
@@ -545,36 +456,41 @@ fn test_declare_sort() {
     );
 
     let [got] = parse_terms(
+        &mut p,
         "(declare-sort T 0)
         (declare-fun x () T)",
         ["x"],
     );
-    let expected_sort = Term::Sort(Sort::Atom("T".to_owned(), Vec::new()));
-    assert_deep_eq!(&terminal!(var "x"; Rc::new(expected_sort)), &got);
+    let expected_sort = p.add(Term::Sort(Sort::Atom("T".to_owned(), Vec::new())));
+    assert_eq!(p.add(Term::var("x", expected_sort)), got);
 }
 
 #[test]
 fn test_define_fun() {
+    let mut p = TermPool::new();
     let [got] = parse_terms(
+        &mut p,
         "(define-fun add ((a Int) (b Int)) Int (+ a b))",
         ["(add 2 3)"],
     );
-    assert_deep_eq!(&parse_term("(+ 2 3)"), &got);
+    assert_eq!(parse_term(&mut p, "(+ 2 3)"), got);
 
-    let [got] = parse_terms("(define-fun x () Int 2)", ["(+ x 3)"]);
-    assert_deep_eq!(&parse_term("(+ 2 3)"), &got);
+    let [got] = parse_terms(&mut p, "(define-fun x () Int 2)", ["(+ x 3)"]);
+    assert_eq!(parse_term(&mut p, "(+ 2 3)"), got);
 
     let [got] = parse_terms(
+        &mut p,
         "(define-fun f ((x Int)) Int (+ x 1))
          (define-fun g ((a Int) (b Int)) Int (* (f a) (f b)))",
         ["(g 2 3)"],
     );
-    let expected = parse_term("(* (+ 2 1) (+ 3 1))");
-    assert_deep_eq!(&expected, &got);
+    let expected = parse_term(&mut p, "(* (+ 2 1) (+ 3 1))");
+    assert_eq!(expected, got);
 }
 
 #[test]
 fn test_step() {
+    let mut p = TermPool::new();
     let input = "
         (step t1 (cl (= (+ 2 3) (- 1 2))) :rule rule-name)
         (step t2 (cl) :rule rule-name :premises (t1))
@@ -583,14 +499,14 @@ fn test_step() {
         (step t5 (cl) :rule rule-name :premises (t1 t2 t3) :args (42)
             :ignore_this :and_this (blah blah 0 1))
     ";
-    let proof = parse_proof(input);
+    let proof = parse_proof(&mut p, input);
     assert_eq!(proof.commands.len(), 5);
 
-    assert_deep_eq!(
+    assert_eq!(
         &proof.commands[0],
         &ProofCommand::Step(ProofStep {
             id: "t1".into(),
-            clause: vec![Rc::new(parse_term("(= (+ 2 3) (- 1 2))"))],
+            clause: vec![parse_term(&mut p, "(= (+ 2 3) (- 1 2))")],
             rule: "rule-name".into(),
             premises: Vec::new(),
             args: Vec::new(),
@@ -598,7 +514,7 @@ fn test_step() {
         })
     );
 
-    assert_deep_eq!(
+    assert_eq!(
         &proof.commands[1],
         &ProofCommand::Step(ProofStep {
             id: "t2".into(),
@@ -610,7 +526,7 @@ fn test_step() {
         })
     );
 
-    assert_deep_eq!(
+    assert_eq!(
         &proof.commands[2],
         &ProofCommand::Step(ProofStep {
             id: "t3".into(),
@@ -618,20 +534,16 @@ fn test_step() {
             rule: "rule-name".into(),
             premises: Vec::new(),
             args: {
-                vec![
-                    terminal!(int 1),
-                    terminal!(real 2 / 1),
-                    terminal!(string "three"),
-                ]
-                .into_iter()
-                .map(|term| ProofArg::Term(Rc::new(term)))
-                .collect()
+                vec![Term::integer(1), Term::real(2), Term::string("three")]
+                    .into_iter()
+                    .map(|term| ProofArg::Term(p.add(term)))
+                    .collect()
             },
             discharge: Vec::new(),
         })
     );
 
-    assert_deep_eq!(
+    assert_eq!(
         &proof.commands[3],
         &ProofCommand::Step(ProofStep {
             id: "t4".into(),
@@ -640,26 +552,23 @@ fn test_step() {
             premises: Vec::new(),
             args: {
                 vec![
-                    ("a", terminal!(int 12)),
-                    ("b", terminal!(real 314 / 100)),
-                    ("c", parse_term("(* 6 7)")),
+                    ProofArg::Assign("a".into(), p.add(Term::integer(12))),
+                    ProofArg::Assign("b".into(), p.add(Term::real((314, 100)))),
+                    ProofArg::Assign("c".into(), parse_term(&mut p, "(* 6 7)")),
                 ]
-                .into_iter()
-                .map(|(name, term)| ProofArg::Assign(name.into(), Rc::new(term)))
-                .collect()
             },
             discharge: Vec::new(),
         })
     );
 
-    assert_deep_eq!(
+    assert_eq!(
         &proof.commands[4],
         &ProofCommand::Step(ProofStep {
             id: "t5".into(),
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: vec![(0, 0), (0, 1), (0, 2)],
-            args: vec![ProofArg::Term(Rc::new(terminal!(int 42)))],
+            args: vec![ProofArg::Term(p.add(Term::integer(42)))],
             discharge: Vec::new(),
         })
     );
@@ -667,6 +576,7 @@ fn test_step() {
 
 #[test]
 fn test_premises_in_subproofs() {
+    let mut p = TermPool::new();
     let input = "
         (assume h1 true)
         (assume h2 true)
@@ -675,14 +585,14 @@ fn test_premises_in_subproofs() {
         (step t3.t2 (cl) :rule rule-name :premises (t3.t1 h1 h2))
         (step t3 (cl) :rule rule-name :premises (h1 t3.t1 h2 t3.t2))
     ";
-    let proof = parse_proof(input);
+    let proof = parse_proof(&mut p, input);
     assert_eq!(proof.commands.len(), 3);
     let subproof = match &proof.commands[2] {
         ProofCommand::Subproof(s) => &s.commands,
         _ => panic!(),
     };
     assert_eq!(subproof.len(), 3);
-    assert_deep_eq!(
+    assert_eq!(
         &subproof[0],
         &ProofCommand::Step(ProofStep {
             id: "t3.t1".into(),
@@ -693,7 +603,7 @@ fn test_premises_in_subproofs() {
             discharge: Vec::new(),
         })
     );
-    assert_deep_eq!(
+    assert_eq!(
         &subproof[1],
         &ProofCommand::Step(ProofStep {
             id: "t3.t2".into(),
@@ -704,7 +614,7 @@ fn test_premises_in_subproofs() {
             discharge: Vec::new(),
         })
     );
-    assert_deep_eq!(
+    assert_eq!(
         &subproof[2],
         &ProofCommand::Step(ProofStep {
             id: "t3".into(),

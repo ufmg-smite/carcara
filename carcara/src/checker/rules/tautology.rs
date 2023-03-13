@@ -1,6 +1,6 @@
 use super::{
-    assert_clause_len, assert_eq, assert_eq_modulo_reordering, assert_num_premises,
-    get_premise_term, CheckerError, RuleArgs, RuleResult,
+    assert_clause_len, assert_deep_eq, assert_eq, assert_num_premises, get_premise_term,
+    CheckerError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::rules::assert_operation_len};
 
@@ -268,21 +268,23 @@ pub fn ite_intro(RuleArgs { conclusion, deep_eq_time, .. }: RuleArgs) -> RuleRes
     // reordering of equalities. One example where this happens is the test file
     // SH_problems_all_filtered/isabelle-mirabelle/HOL-Library/smt_verit/x2020_07_23_15_09_29_511_18566192.smt_in.proof
     // Step `t7` in that proof is:
+    // ```
     //     (step t7 (cl (=
     //         (= (times$ c$ (ite (< (g$ n$) 0.0) (- (g$ n$)) (g$ n$)))
     //            (times$ (ite (< (g$ n$) 0.0) (- (g$ n$)) (g$ n$)) c$))
     //         (= (times$ c$ (ite (< (g$ n$) 0.0) (- (g$ n$)) (g$ n$)))
     //            (times$ (ite (< (g$ n$) 0.0) (- (g$ n$)) (g$ n$)) c$))
     //     )) :rule ite_intro)
+    // ```
     // For cases like this, we first check if `t` equals the right side term modulo reordering of
     // equalities. If not, we unwrap the conjunction and continue checking the rule normally.
-    if timed_deep_eq_modulo_reordering(root_term, right_side, deep_eq_time) {
+    if deep_eq(root_term, right_side, deep_eq_time) {
         return Ok(());
     }
     let us = match_term_err!((and ...) = right_side)?;
 
     // `us` must be a conjunction where the first term is the root term
-    assert_eq_modulo_reordering(&us[0], root_term, deep_eq_time)?;
+    assert_deep_eq(&us[0], root_term, deep_eq_time)?;
 
     // The remaining terms in `us` should be of the correct form
     for u_i in &us[1..] {
@@ -290,11 +292,11 @@ pub fn ite_intro(RuleArgs { conclusion, deep_eq_time, .. }: RuleArgs) -> RuleRes
 
         let mut is_valid = |r_1, s_1, r_2, s_2| {
             // s_1 == s_2 == (ite cond r_1 r_2)
-            if timed_deep_eq_modulo_reordering(s_1, s_2, deep_eq_time) {
+            if deep_eq(s_1, s_2, deep_eq_time) {
                 if let Some((a, b, c)) = match_term!((ite a b c) = s_1) {
-                    return timed_deep_eq_modulo_reordering(a, cond, deep_eq_time)
-                        && timed_deep_eq_modulo_reordering(b, r_1, deep_eq_time)
-                        && timed_deep_eq_modulo_reordering(c, r_2, deep_eq_time);
+                    return deep_eq(a, cond, deep_eq_time)
+                        && deep_eq(b, r_1, deep_eq_time)
+                        && deep_eq(c, r_2, deep_eq_time);
                 }
             }
             false
@@ -334,16 +336,14 @@ pub fn connective_def(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         assert_eq(d, phi_1)
     } else if let Some((phi_1, phi_2, phi_3)) = match_term!((ite phi_1 phi_2 phi_3) = first) {
         // ite phi_1 phi_2 phi_3 <-> (phi_1 -> phi_2) ^ (¬phi_1 -> phi_3)
-        // Note: In the proofonomicon, this case is incorrectly documented as:
-        //     ite phi_1 phi_2 phi_3 <-> (phi_1 -> phi_2) ^ (¬phi_1 -> ¬phi_3)
         let ((a, b), (c, d)) = match_term_err!((and (=> a b) (=> (not c) d)) = second)?;
         assert_eq(a, phi_1)?;
         assert_eq(b, phi_2)?;
         assert_eq(c, phi_1)?;
         assert_eq(d, phi_3)
-    } else if let Some((first_bindings, first_inner)) = match_term!((exists ...) = first) {
-        let (second_bindings, second_inner) = match_term_err!((not (forall ...)) = second)?;
-        assert_eq(first_inner, second_inner.remove_negation_err()?)?;
+    } else if let Some((first_bindings, first_inner)) = match_term!((exists ... f) = first) {
+        let (second_bindings, second_inner) = match_term_err!((not (forall ... (not s))) = second)?;
+        assert_eq(first_inner, second_inner)?;
         assert_eq(first_bindings, second_bindings)
     } else {
         Err(CheckerError::TermIsNotConnective(first.clone()))

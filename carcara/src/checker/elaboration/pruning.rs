@@ -14,14 +14,12 @@ struct Frame<'a> {
 }
 
 pub fn prune_proof(proof: &[ProofCommand]) -> ProofDiff {
-    if proof.is_empty() {
-        return ProofDiff::default(); // TODO: Add proper error handling
-    }
+    assert!(!proof.is_empty(), "cannot prune an empty proof");
 
     let end_step = proof
         .iter()
         .position(|c| c.clause().is_empty())
-        .expect("proof does not reach empty clause"); // TODO: Add proper error handling
+        .expect("proof does not reach empty clause");
 
     let root = Frame {
         commands: proof,

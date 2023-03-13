@@ -6,6 +6,11 @@ use crate::{
 use ahash::AHashMap;
 use std::{borrow::Cow, fmt, io};
 
+/// Prints a proof to the standard output.
+///
+/// If `use_sharing` is `true`, terms that are used multiple times will make use of sharing. The
+/// first time a novel term appears, it receives a unique name using the `:named` attribute. After
+/// that, any occurrence of that term will simply use this name, instead of printing the whole term.
 pub fn print_proof(commands: &[ProofCommand], use_sharing: bool) -> io::Result<()> {
     let mut stdout = io::stdout();
     let mut printer = AlethePrinter {
@@ -16,10 +21,16 @@ pub fn print_proof(commands: &[ProofCommand], use_sharing: bool) -> io::Result<(
     printer.write_proof(commands)
 }
 
-pub fn write_lia_smt_instance(dest: &mut dyn io::Write, clause: &[Rc<Term>]) -> io::Result<()> {
+/// Given the conclusion clause of a `lia_generic` step, this method will write to `dest` the
+/// corresponding SMT problem instance.
+pub fn write_lia_smt_instance(
+    dest: &mut dyn io::Write,
+    clause: &[Rc<Term>],
+    use_sharing: bool,
+) -> io::Result<()> {
     let mut printer = AlethePrinter {
         inner: dest,
-        term_indices: Some(AHashMap::new()),
+        term_indices: use_sharing.then(AHashMap::new),
         term_sharing_variable_prefix: "p_",
     };
     printer.write_lia_smt_instance(clause)
@@ -51,7 +62,7 @@ impl PrintWithSharing for Rc<Term> {
             // we can't use the `(! ... :named ...)` syntax to give them a name.
             //
             // - If a term is only used once in the proof, there is no reason to give it a name. We
-            // detect this case by checking if the number of references to it's `Rc` is exaclty 1.
+            // detect this case by checking if the number of references to it's `Rc` is exactly 1.
             if !self.is_terminal() && !self.is_sort() && Rc::strong_count(self) > 1 {
                 return if let Some(i) = indices.get(self) {
                     write!(p.inner, "{}{}", p.term_sharing_variable_prefix, i)
@@ -357,11 +368,11 @@ impl fmt::Display for Identifier {
     }
 }
 
-impl fmt::Display for Index {
+impl fmt::Display for IdentifierIndex {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Index::Numeral(n) => write!(f, "{}", n),
-            Index::Symbol(s) => write!(f, "{}", quote_symbol(s)),
+            IdentifierIndex::Numeral(n) => write!(f, "{}", n),
+            IdentifierIndex::Symbol(s) => write!(f, "{}", quote_symbol(s)),
         }
     }
 }

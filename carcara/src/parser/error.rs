@@ -76,6 +76,10 @@ pub enum ParserError {
     #[error("{0} is not a valid sort arity")]
     InvalidSortArity(Integer),
 
+    /// The parser encountered an empty subproof
+    #[error("subproof '{0}' is empty")]
+    EmptySubproof(String),
+
     /// The last command in a subproof is not a `step` command.
     #[error("last command in subproof '{0}' is not a step")]
     LastSubproofStepIsNotStep(String),
