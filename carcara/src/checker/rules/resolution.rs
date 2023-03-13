@@ -9,7 +9,7 @@ use std::{collections::hash_map::Entry, iter::FromIterator};
 type ResolutionTerm<'a> = (u32, &'a Rc<Term>);
 
 /// A collection that can be used as a clause during resolution.
-trait ClauseCollection<'a>: FromIterator<ResolutionTerm<'a>> {
+pub trait ClauseCollection<'a>: FromIterator<ResolutionTerm<'a>> {
     fn insert_term(&mut self, item: ResolutionTerm<'a>);
 
     fn remove_term(&mut self, item: &ResolutionTerm<'a>) -> bool;
@@ -41,7 +41,7 @@ impl<'a> ClauseCollection<'a> for AHashSet<ResolutionTerm<'a>> {
 }
 
 /// Undoes the transformation done by `Rc<Term>::remove_all_negations`.
-fn unremove_all_negations(pool: &mut TermPool, (n, term): ResolutionTerm) -> Rc<Term> {
+pub fn unremove_all_negations(pool: &mut TermPool, (n, term): ResolutionTerm) -> Rc<Term> {
     let mut term = term.clone();
     for _ in 0..n {
         term = build_term!(pool, (not { term }));
@@ -344,7 +344,7 @@ fn apply_generic_resolution<'a, C: ClauseCollection<'a>>(
     Ok(current)
 }
 
-fn binary_resolution<'a, C: ClauseCollection<'a>>(
+pub fn binary_resolution<'a, C: ClauseCollection<'a>>(
     pool: &mut TermPool,
     current: &mut C,
     next: &'a [Rc<Term>],

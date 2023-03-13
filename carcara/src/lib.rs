@@ -187,3 +187,31 @@ pub fn generate_lia_smt_instances<T: io::BufRead>(
     )?;
     checker::generate_lia_smt_instances(prelude, &proof, use_sharing)
 }
+
+pub fn compress<T: io::BufRead>(
+    problem: T,
+    proof: T,
+    apply_function_defs: bool,
+    allow_int_real_subtyping: bool,
+    strict: bool,
+    skip_unknown_rules: bool,
+) -> Result<bool, Error> {
+    let (prelude, proof, mut pool) = parser::parse_instance(
+        problem,
+        proof,
+        apply_function_defs,
+        allow_int_real_subtyping,
+    )?;
+
+    let config = checker::Config {
+        strict,
+        skip_unknown_rules,
+        is_running_test: false,
+        statistics: None,
+        check_lia_generic_using_cvc5: true,
+    };
+
+    checker::compression::compress_proof(&proof, &mut pool);
+
+    checker::ProofChecker::new(&mut pool, config, prelude).check(&proof)
+}

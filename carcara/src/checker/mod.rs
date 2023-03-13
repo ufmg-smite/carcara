@@ -1,6 +1,7 @@
 mod context;
 mod elaboration;
 pub mod error;
+pub mod compression;
 mod lia_generic;
 mod rules;
 
