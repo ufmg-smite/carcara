@@ -300,6 +300,7 @@ pub fn onepoint(
         .collect();
 
     drop(last_context);
+    #[cfg(feature = "thread-safety")]
     drop(rw_lock);
 
     let points = extract_points(quant, left);

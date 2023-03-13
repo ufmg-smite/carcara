@@ -285,8 +285,8 @@ pub mod MultiThreadContextStack {
                     bindings,
                     cumulative_substitution: None,
                 });
-                self.stack.push(context_id);
             }
+            self.stack.push(context_id);
             Ok(())
         }
 

@@ -111,8 +111,8 @@ impl<'c> ParallelProofChecker<'c> {
                                     ProofCommand::Subproof(s) => {
                                         let step_id = command.id();
 
-                                        let context = &mut local_self.context;
-                                        context
+                                        local_self
+                                            .context
                                             .push_from_id(
                                                 &mut merged_pool,
                                                 &s.assignment_args,
