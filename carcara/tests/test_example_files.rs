@@ -4,20 +4,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-fn get_truncated_message(e: &Error) -> String {
-    const ERROR_MESSAGE_LIMIT: usize = 350;
-    const TRUNCATION_MESSAGE: &str = "... (long message truncated)";
-    const TRUNCATION_LEN: usize = TRUNCATION_MESSAGE.as_bytes().len();
-
-    let mut error_message = format!("{}", e);
-
-    if error_message.len() > ERROR_MESSAGE_LIMIT + TRUNCATION_LEN {
-        error_message.truncate(ERROR_MESSAGE_LIMIT);
-        error_message.push_str(TRUNCATION_MESSAGE);
-    }
-    error_message
-}
-
 fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
     fn test_config<'a>() -> checker::Config<'a> {
         checker::Config {
@@ -66,10 +52,18 @@ fn test_file(proof_path: &str) {
         path
     };
     if let Err(e) = run_test(&problem_path, &proof_path) {
+        // Error messages are sometimes pretty big, so printing them fully can be very bad for
+        // performance
+        let short_message = match e {
+            Error::Io(_) => "IO error".to_owned(),
+            Error::Parser(_, (line, column)) => format!("parser error at {}:{}", line, column),
+            Error::Checker { rule, step, .. } => format!("checker error at '{}' ({})", step, rule),
+            Error::DoesNotReachEmptyClause => format!("{}", e), // This one is already pretty short
+        };
         panic!(
             "\"{}\" returned error: {}",
             &proof_path.to_str().unwrap(),
-            get_truncated_message(&e),
+            short_message
         )
     }
 }
