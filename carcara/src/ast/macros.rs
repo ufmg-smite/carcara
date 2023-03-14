@@ -197,9 +197,11 @@ macro_rules! build_term {
 ///
 /// # Examples
 ///
-/// ```
-/// # use carcara::impl_str_conversion_traits;
-/// # use std::str::FromStr;
+// Since this macro is not exported, and since doctests are run as if they were a different crate,
+// it's impossible to test this macro. To avoid test errors, we interpret this block as text. This
+// is not a perfect solution, since we lose syntax highlighting.
+// See https://github.com/rust-lang/rust/issues/63193
+/// ```test
 /// #[derive(Debug, PartialEq)]
 /// enum Foo {
 ///     A,
