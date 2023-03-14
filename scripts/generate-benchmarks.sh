@@ -14,6 +14,8 @@ OPTIONS:
     -h, --help      Show this mesage.
     --full          Download and solve all benchmarks from the SMT-LIB
                     repositories. This may take a very long time.
+    --clean         After running, remove all .smt2 files for which a proof
+                    could not be generated.
     -t <timeout>    The time limit to solve each problem. (default: 10s)
     -j <jobs>       Maximum number of jobs to use. (default: number of CPUs)
 EOF
@@ -22,6 +24,7 @@ EOF
 benchmark_dir="benchmarks/small"
 timeout="10s"
 num_jobs="$(nproc)"
+clean_flag=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -30,20 +33,21 @@ while [ $# -gt 0 ]; do
             exit 0
             ;;
         --full) benchmark_dir="benchmarks" ;;
-        -t)
-            if [ "$#" -lt 2 ]; then
-                echo "missing argument value"
-                exit 1
-            fi
-            timeout="$2"
-            shift
-            ;;
+        --clean) clean_flag="true" ;;
         -j)
             if [ "$#" -lt 2 ]; then
                 echo "missing argument value"
                 exit 1
             fi
             num_jobs="$2"
+            shift
+            ;;
+        -t)
+            if [ "$#" -lt 2 ]; then
+                echo "missing argument value"
+                exit 1
+            fi
+            timeout="$2"
             shift
             ;;
         *)
@@ -80,4 +84,14 @@ fi
 
 echo "generating proofs..."
 find $benchmark_dir -name '*.smt2' | xargs -P $num_jobs -n 1 bash -c 'scripts/solve.sh $0'
+
+if [ -n "clean_flag" ]; then
+    echo "cleaning up..."
+    for f in $(find $benchmark_dir -name '*.smt2'); do
+        if [ ! -f $f.proof ]; then
+            rm -f $f
+        fi
+    done
+fi
+
 echo "done :)"
