@@ -253,6 +253,19 @@ fn main() {
     let cli = Cli::parse();
     let colors_enabled = !cli.no_color && atty::is(atty::Stream::Stderr);
     logger::init(cli.log_level.into(), colors_enabled);
+    if !matches!(cli.command, Command::Check(_)) && cfg!(feature = "thread-safety") {
+        log::error!(
+            "No avaiable implementation for {} command in thread safety mode. Please disable thread safety mode.",
+            match cli.command {
+                Command::Parse(_) => "parse",
+                Command::Elaborate(_) => "elaborate",
+                Command::Bench(_) => "bench",
+                Command::GenerateLiaProblems(_) => "generate lia problems",
+                _ => "",
+            }
+        );
+        std::process::exit(1);
+    }
 
     let result = match cli.command {
         Command::Parse(options) => parse_command(options),
