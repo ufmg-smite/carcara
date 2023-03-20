@@ -30,8 +30,7 @@ fn collect_units(proof : &Proof) -> Vec<usize> {
     while queue.len() > 0 {
         curr = queue[0];
         queue.pop_front();
-        //println!("O command é {:?}", &proof.commands[curr]);
-
+        
         match &proof.commands[curr] {
             ProofCommand::Step(step) => {
                 // If the command has premises, add them to the queue
@@ -307,7 +306,6 @@ fn binary_resolution_with_unit(
             }
         }
         ProofCommand::Assume {id: _, term: term_l} => {
-            println!("O step_l é um assume com {:?}", term_l);
             current.insert(term_l.remove_all_negations());
             current_vec.push(term_l.remove_all_negations());
         }
@@ -316,7 +314,6 @@ fn binary_resolution_with_unit(
 
     match &new_commands[right_parent] {
         ProofCommand::Step(step_r) => {
-            println!("Vou tentar resolution com {:?} e {:?}", current, step_r.clause);
             let mut pivot = step_r.clause[0].remove_all_negations();
             pivot.0 = 0;
             let mut is_pivot_in_current = true;

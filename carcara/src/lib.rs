@@ -191,15 +191,20 @@ pub fn generate_lia_smt_instances<T: io::BufRead>(
 pub fn compress<T: io::BufRead>(
     problem: T,
     proof: T,
-    apply_function_defs: bool,
-    allow_int_real_subtyping: bool,
-    strict: bool,
-    skip_unknown_rules: bool,
+    CarcaraOptions {
+        apply_function_defs,
+        expand_lets,
+        allow_int_real_subtyping,
+        check_lia_using_cvc5,
+        strict,
+        skip_unknown_rules,
+    }: CarcaraOptions,
 ) -> Result<bool, Error> {
     let (prelude, proof, mut pool) = parser::parse_instance(
         problem,
         proof,
         apply_function_defs,
+        false,
         allow_int_real_subtyping,
     )?;
 
@@ -208,7 +213,7 @@ pub fn compress<T: io::BufRead>(
         skip_unknown_rules,
         is_running_test: false,
         statistics: None,
-        check_lia_generic_using_cvc5: true,
+        check_lia_using_cvc5: true,
     };
 
     checker::compression::compress_proof(&proof, &mut pool);

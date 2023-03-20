@@ -16,7 +16,7 @@ use path_args::{get_instances_from_paths, infer_problem_path};
 use std::{
     fs::File,
     io::{self, BufRead},
-    path::Path,
+    path::Path, option,
 };
 
 // `git describe --all` will try to find any ref (including tags) that describes the current commit.
@@ -75,7 +75,7 @@ enum Command {
     GenerateLiaProblems(ParseCommandOptions),
 
     /// Compresses a proof file.
-    Compress(CheckOptions),
+    Compress(CheckCommandOptions),
 }
 
 #[derive(Args)]
@@ -515,15 +515,12 @@ fn generate_lia_problems_command(options: ParseCommandOptions) -> CliResult<()> 
     Ok(())
 }
 
-fn compress_command(options : CheckOptions) -> CliResult<bool> {
+fn compress_command(options : CheckCommandOptions) -> CliResult<bool> {
     let (problem, proof) = get_instance(&options.input)?;
 
     compress(
         problem,
         proof,
-        !options.input.dont_apply_function_defs,
-        options.input.allow_int_real_subtyping,
-        options.strict,
-        options.skip_unknown_rules,
+        build_carcara_options(options.parsing, options.checking),
     ).map_err(Into::into)
 }
