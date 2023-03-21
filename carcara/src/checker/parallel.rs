@@ -8,13 +8,14 @@ use super::scheduler::{iter::ScheduleIter, Scheduler::Scheduler};
 use super::{context::*, lia_generic, CheckerStatistics, Config};
 use crate::{ast::*, CarcaraResult, Error};
 use ahash::AHashSet;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
-use triomphe::Arc;
 
 unsafe impl Sync for CheckerStatistics<'_> {}
 unsafe impl Send for CheckerStatistics<'_> {}
 
 pub struct ParallelProofChecker<'c> {
+    pool: Arc<SingleThreadPool::TermPool>,
     config: Config<'c>,
     prelude: Rc<ProblemPrelude>,
     context: ContextStack,
@@ -24,8 +25,13 @@ pub struct ParallelProofChecker<'c> {
 
 #[cfg(feature = "thread-safety")]
 impl<'c> ParallelProofChecker<'c> {
-    pub fn new(config: Config<'c>, prelude: ProblemPrelude) -> Self {
+    pub fn new(
+        config: Config<'c>,
+        prelude: ProblemPrelude,
+        pool: Arc<SingleThreadPool::TermPool>,
+    ) -> Self {
         ParallelProofChecker {
+            pool,
             config,
             prelude: Rc::new(prelude),
             context: ContextStack::new(),
@@ -37,6 +43,7 @@ impl<'c> ParallelProofChecker<'c> {
     /// Copies the proof checker and instantiate parallel fields
     pub fn parallelize_self(&self) -> Self {
         ParallelProofChecker {
+            pool: self.pool.clone(),
             config: Config {
                 strict: self.config.strict,
                 skip_unknown_rules: self.config.skip_unknown_rules,
@@ -51,12 +58,7 @@ impl<'c> ParallelProofChecker<'c> {
         }
     }
 
-    pub fn check<'s, 'p>(
-        &'s mut self,
-        proof: &'p Proof,
-        num_cores: usize,
-        pool: &Arc<SingleThreadPool::TermPool>,
-    ) -> CarcaraResult<bool> {
+    pub fn check<'s, 'p>(&'s mut self, proof: &'p Proof, num_cores: usize) -> CarcaraResult<bool> {
         let scheduler = Scheduler::new(num_cores, proof);
         let self_ref = Arc::new(self);
 
@@ -67,7 +69,7 @@ impl<'c> ParallelProofChecker<'c> {
                 .enumerate()
                 .map(|(i, schedule)| {
                     let mut local_self = self_ref.parallelize_self();
-                    let mut merged_pool = TermPool::from_previous(pool);
+                    let mut merged_pool = TermPool::from_previous(&local_self.pool);
 
                     s.builder()
                         .name(format!("worker-{i}"))
@@ -109,8 +111,8 @@ impl<'c> ParallelProofChecker<'c> {
                                     ProofCommand::Subproof(s) => {
                                         let step_id = command.id();
 
-                                        let context = &mut local_self.context;
-                                        context
+                                        local_self
+                                            .context
                                             .push(
                                                 &mut merged_pool,
                                                 &s.assignment_args,

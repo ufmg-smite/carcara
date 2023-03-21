@@ -18,7 +18,6 @@ use std::{
     io::{self, BufRead},
     path::Path,
 };
-extern crate num_cpus;
 
 // `git describe --all` will try to find any ref (including tags) that describes the current commit.
 // This will include tags like `carcara-0.1.0`, that we create for github releases. To account for

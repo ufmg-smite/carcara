@@ -28,8 +28,8 @@ use rug::Integer;
 use rug::Rational;
 use std::hash::Hash;
 
-pub use pool::Pool;
 pub use pool::SingleThreadPool;
+pub use pool::TPool;
 
 /// The prelude of an SMT-LIB problem instance.
 ///

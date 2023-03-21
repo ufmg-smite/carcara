@@ -15,7 +15,7 @@ use crate::{
 use ahash::{AHashMap, AHashSet};
 use error::assert_num_args;
 use rug::Integer;
-use std::{borrow::BorrowMut, io::BufRead, str::FromStr};
+use std::{io::BufRead, str::FromStr, sync::Arc};
 
 /// Parses an SMT problem instance (in the SMT-LIB format) and its associated proof (in the Alethe
 /// format). Returns the parsed proof, as well as the `TermPool` used in parsing. Can take any type
@@ -52,16 +52,12 @@ pub fn parse_instance_multithread<T: BufRead>(
     apply_function_defs: bool,
     expand_lets: bool,
     allow_int_real_subtyping: bool,
-) -> CarcaraResult<(
-    ProblemPrelude,
-    Proof,
-    triomphe::Arc<SingleThreadPool::TermPool>,
-)> {
-    use triomphe::UniqueArc;
+) -> CarcaraResult<(ProblemPrelude, Proof, Arc<SingleThreadPool::TermPool>)> {
+    let mut pool = Arc::new(SingleThreadPool::TermPool::new());
+    let mut_pool = Arc::get_mut(&mut pool).unwrap();
 
-    let mut pool = UniqueArc::new(SingleThreadPool::TermPool::new());
     let mut parser = Parser::new(
-        (**pool.borrow_mut()).borrow_mut(),
+        mut_pool,
         problem,
         apply_function_defs,
         expand_lets,
@@ -72,7 +68,7 @@ pub fn parse_instance_multithread<T: BufRead>(
     let commands = parser.parse_proof()?;
 
     let proof = Proof { premises, commands };
-    Ok((prelude, proof, pool.shareable()))
+    Ok((prelude, proof, pool))
 }
 
 /// A function definition, from a `define-fun` command.
@@ -121,7 +117,7 @@ pub struct Parser<'a, R, P> {
     allow_int_real_subtyping: bool,
 }
 
-impl<'a, R: BufRead, P: Pool> Parser<'a, R, P> {
+impl<'a, R: BufRead, P: TPool> Parser<'a, R, P> {
     /// Constructs a new `Parser` from a type that implements `BufRead`. This operation can fail if
     /// there is an IO or lexer error on the first token.
     pub fn new(

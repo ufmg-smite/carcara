@@ -153,7 +153,7 @@ pub fn check<T: io::BufRead>(
     let res = {
         #[cfg(feature = "thread-safety")]
         {
-            checker::ParallelProofChecker::new(config, prelude).check(&proof, num_cores, &pool)
+            checker::ParallelProofChecker::new(config, prelude, pool).check(&proof, num_cores)
         }
         #[cfg(not(feature = "thread-safety"))]
         {

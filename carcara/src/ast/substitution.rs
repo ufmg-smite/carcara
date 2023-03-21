@@ -1,4 +1,4 @@
-use super::{BindingList, Pool, Rc, SortedVar, Term, TermPool};
+use super::{BindingList, Rc, SortedVar, TPool, Term, TermPool};
 use ahash::{AHashMap, AHashSet};
 use thiserror::Error;
 
@@ -61,7 +61,7 @@ impl Substitution {
     /// Constructs a new substitution from an arbitrary mapping of terms to other terms. This
     /// returns an error if any term in the left-hand side is not a variable, or if any term is
     /// mapped to a term of a different sort.
-    pub fn new<P: Pool>(
+    pub fn new<P: TPool>(
         pool: &mut P,
         map: AHashMap<Rc<Term>, Rc<Term>>,
     ) -> SubstitutionResult<Self> {
@@ -88,7 +88,7 @@ impl Substitution {
 
     /// Extends the substitution by adding a new mapping from `x` to `t`. This returns an error if
     /// the sorts of the given terms are not the same, or if `x` is not a variable term.
-    pub(crate) fn insert<P: Pool>(
+    pub(crate) fn insert<P: TPool>(
         &mut self,
         pool: &mut P,
         x: Rc<Term>,
@@ -121,7 +121,7 @@ impl Substitution {
 
     /// Computes which binder variables will need to be renamed, and stores the result in
     /// `self.should_be_renamed`.
-    fn compute_should_be_renamed<P: Pool>(&mut self, pool: &mut P) {
+    fn compute_should_be_renamed<P: TPool>(&mut self, pool: &mut P) {
         if self.should_be_renamed.is_some() {
             return;
         }
@@ -156,7 +156,7 @@ impl Substitution {
     }
 
     /// Applies the substitution to `term`, and returns the result as a new term.
-    pub fn apply<P: Pool>(&mut self, pool: &mut P, term: &Rc<Term>) -> Rc<Term> {
+    pub fn apply<P: TPool>(&mut self, pool: &mut P, term: &Rc<Term>) -> Rc<Term> {
         macro_rules! apply_to_sequence {
             ($sequence:expr) => {
                 $sequence
@@ -211,7 +211,7 @@ impl Substitution {
         result
     }
 
-    fn can_skip_instead_of_renaming<P: Pool>(
+    fn can_skip_instead_of_renaming<P: TPool>(
         &self,
         pool: &mut P,
         binding_list: &[SortedVar],
@@ -242,7 +242,7 @@ impl Substitution {
     /// Applies the substitution to a binder term, renaming any bound variables as needed. This
     /// method uses the function `build_function` to construct the resulting binder term. If the
     /// binder is a `let` or `lambda` term, `is_value_list` should be true.
-    fn apply_to_binder<F: Fn(BindingList, Rc<Term>) -> Term, P: Pool>(
+    fn apply_to_binder<F: Fn(BindingList, Rc<Term>) -> Term, P: TPool>(
         &mut self,
         pool: &mut P,
         original_term: &Rc<Term>,
@@ -286,7 +286,7 @@ impl Substitution {
     /// returns a clone of the binding list and an empty substitution. The name chosen when renaming
     /// a variable is the old name with '@' appended. If the binding list is a "value" list, like in
     /// a `let` or `lambda` term, `is_value_list` should be true.
-    fn rename_binding_list<P: Pool>(
+    fn rename_binding_list<P: TPool>(
         &mut self,
         pool: &mut P,
         binding_list: &[SortedVar],

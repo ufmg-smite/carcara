@@ -7,8 +7,7 @@ pub type TermPool = MultiThreadPool::MergedPool;
 use super::{Rc, Sort, Term};
 use ahash::AHashSet;
 
-pub trait Pool {
-    fn new() -> Self;
+pub trait TPool {
     fn bool_true(&self) -> Rc<Term>;
     fn bool_false(&self) -> Rc<Term>;
     fn bool_constant(&self, value: bool) -> Rc<Term>;
@@ -22,7 +21,7 @@ pub trait Pool {
 pub mod SingleThreadPool {
     use super::{
         super::{Identifier, Rc, Sort, Term, Terminal},
-        Pool,
+        TPool,
     };
     use ahash::{AHashMap, AHashSet};
 
@@ -51,6 +50,36 @@ pub mod SingleThreadPool {
     }
 
     impl TermPool {
+        /// Constructs a new `TermPool`. This new pool will already contain the boolean constants `true`
+        /// and `false`, as well as the `Bool` sort.
+        pub fn new() -> Self {
+            let mut terms = AHashMap::new();
+            let mut sorts_cache = AHashMap::new();
+            let bool_sort = Self::add_term_to_map(&mut terms, Term::Sort(Sort::Bool));
+
+            let [bool_true, bool_false] = ["true", "false"].map(|b| {
+                Self::add_term_to_map(
+                    &mut terms,
+                    Term::Terminal(Terminal::Var(
+                        Identifier::Simple(b.into()),
+                        bool_sort.clone(),
+                    )),
+                )
+            });
+
+            sorts_cache.insert(bool_false.clone(), Sort::Bool);
+            sorts_cache.insert(bool_true.clone(), Sort::Bool);
+            sorts_cache.insert(bool_sort, Sort::Bool);
+
+            Self {
+                terms,
+                free_vars_cache: AHashMap::new(),
+                sorts_cache,
+                bool_true,
+                bool_false,
+            }
+        }
+
         fn add_term_to_map(terms_map: &mut AHashMap<Term, Rc<Term>>, term: Term) -> Rc<Term> {
             use std::collections::hash_map::Entry;
 
@@ -130,37 +159,7 @@ pub mod SingleThreadPool {
         }
     }
 
-    impl Pool for TermPool {
-        /// Constructs a new `TermPool`. This new pool will already contain the boolean constants `true`
-        /// and `false`, as well as the `Bool` sort.
-        fn new() -> Self {
-            let mut terms = AHashMap::new();
-            let mut sorts_cache = AHashMap::new();
-            let bool_sort = Self::add_term_to_map(&mut terms, Term::Sort(Sort::Bool));
-
-            let [bool_true, bool_false] = ["true", "false"].map(|b| {
-                Self::add_term_to_map(
-                    &mut terms,
-                    Term::Terminal(Terminal::Var(
-                        Identifier::Simple(b.into()),
-                        bool_sort.clone(),
-                    )),
-                )
-            });
-
-            sorts_cache.insert(bool_false.clone(), Sort::Bool);
-            sorts_cache.insert(bool_true.clone(), Sort::Bool);
-            sorts_cache.insert(bool_sort, Sort::Bool);
-
-            Self {
-                terms,
-                free_vars_cache: AHashMap::new(),
-                sorts_cache,
-                bool_true,
-                bool_false,
-            }
-        }
-
+    impl TPool for TermPool {
         /// Return the term corresponding to the boolean constant `true`.
         fn bool_true(&self) -> Rc<Term> {
             self.bool_true.clone()
@@ -280,10 +279,10 @@ pub mod SingleThreadPool {
 #[allow(non_snake_case, dead_code)]
 mod MultiThreadPool {
     use super::super::{Identifier, Rc, Sort, Term, Terminal};
-    use super::Pool;
-    use super::SingleThreadPool::TermPool;
+    use super::SingleThreadPool::{self, TermPool};
+    use super::TPool;
     use ahash::AHashSet;
-    use triomphe::Arc;
+    use std::sync::Arc;
 
     pub struct MergedPool {
         pub(crate) dyn_pool: TermPool,
@@ -297,9 +296,16 @@ mod MultiThreadPool {
     }
 
     impl MergedPool {
+        pub fn new() -> Self {
+            Self {
+                dyn_pool: SingleThreadPool::TermPool::new(),
+                const_pool: None::<Arc<TermPool>>,
+            }
+        }
+
         /// Instantiates a new Merged Pool from a previous term pool
         /// TODO: Make sure this is receiving the right pool type based on the future decision in the parallel impl
-        pub fn from_previous(pool: &Arc<TermPool>) -> Self {
+        pub fn from_previous(pool: &Arc<SingleThreadPool::TermPool>) -> Self {
             Self {
                 dyn_pool: TermPool::new(),
                 const_pool: Some(Arc::clone(&pool)),
@@ -347,14 +353,7 @@ mod MultiThreadPool {
         }
     }
 
-    impl Pool for MergedPool {
-        fn new() -> Self {
-            Self {
-                dyn_pool: TermPool::new(),
-                const_pool: None::<Arc<TermPool>>,
-            }
-        }
-
+    impl TPool for MergedPool {
         fn bool_true(&self) -> Rc<Term> {
             self.const_pool.as_ref().unwrap().bool_true.clone()
         }
