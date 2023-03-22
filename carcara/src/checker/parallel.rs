@@ -77,7 +77,6 @@ impl<'c> ParallelProofChecker<'c> {
                     let mut merged_pool = TermPool::from_previous(&local_self.pool);
 
                     s.builder()
-                        .stack_size(4 * 1024 * 1024)
                         .name(format!("worker-{i}"))
                         .spawn(move |_| -> CarcaraResult<(bool, bool)> {
                             let mut iter = schedule.iter();
