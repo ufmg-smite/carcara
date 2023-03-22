@@ -1,4 +1,7 @@
-use crate::{ast::TermPool, parser::tests::parse_terms};
+use crate::{
+    ast::{TPool, TermPool},
+    parser::tests::parse_terms,
+};
 use ahash::AHashSet;
 
 #[test]

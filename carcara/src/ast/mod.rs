@@ -28,6 +28,9 @@ use rug::Integer;
 use rug::Rational;
 use std::hash::Hash;
 
+pub use pool::SingleThreadPool;
+pub use pool::TPool;
+
 /// The prelude of an SMT-LIB problem instance.
 ///
 /// This stores the sort declarations, function declarations and the problem's logic string.

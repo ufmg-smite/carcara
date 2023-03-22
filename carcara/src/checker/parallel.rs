@@ -18,6 +18,7 @@ unsafe impl Sync for CheckerStatistics<'_> {}
 unsafe impl Send for CheckerStatistics<'_> {}
 
 pub struct ParallelProofChecker<'c> {
+    pool: Arc<SingleThreadPool::TermPool>,
     config: Config<'c>,
     prelude: Rc<ProblemPrelude>,
     context: ContextStack,
@@ -27,8 +28,14 @@ pub struct ParallelProofChecker<'c> {
 
 #[cfg(feature = "thread-safety")]
 impl<'c> ParallelProofChecker<'c> {
-    pub fn new(config: Config<'c>, prelude: ProblemPrelude, context_usage: &Vec<usize>) -> Self {
+    pub fn new(
+        config: Config<'c>,
+        prelude: ProblemPrelude,
+        pool: Arc<SingleThreadPool::TermPool>,
+        context_usage: &Vec<usize>,
+    ) -> Self {
         ParallelProofChecker {
+            pool,
             config,
             prelude: Rc::new(prelude),
             context: ContextStack::from_usage(context_usage),
@@ -40,6 +47,7 @@ impl<'c> ParallelProofChecker<'c> {
     /// Copies the proof checker and instantiate parallel fields
     pub fn parallelize_self(&self) -> Self {
         ParallelProofChecker {
+            pool: self.pool.clone(),
             config: Config {
                 strict: self.config.strict,
                 skip_unknown_rules: self.config.skip_unknown_rules,
@@ -57,11 +65,8 @@ impl<'c> ParallelProofChecker<'c> {
     pub fn check<'s, 'p>(
         &'s mut self,
         proof: &'p Proof,
-        pool: &TermPool,
         scheduler: Scheduler,
     ) -> CarcaraResult<bool> {
-        let dyn_pool = Arc::new(pool.dyn_pool.clone());
-
         crossbeam::scope(|s| {
             let threads: Vec<_> = scheduler
                 .loads
@@ -69,7 +74,7 @@ impl<'c> ParallelProofChecker<'c> {
                 .enumerate()
                 .map(|(i, schedule)| {
                     let mut local_self = self.parallelize_self();
-                    let mut merged_pool = TermPool::from_previous(&dyn_pool);
+                    let mut merged_pool = TermPool::from_previous(&local_self.pool);
 
                     s.builder()
                         .stack_size(4 * 1024 * 1024)

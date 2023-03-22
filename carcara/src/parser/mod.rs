@@ -15,7 +15,7 @@ use crate::{
 use ahash::{AHashMap, AHashSet};
 use error::assert_num_args;
 use rug::Integer;
-use std::{io::BufRead, str::FromStr};
+use std::{io::BufRead, str::FromStr, sync::Arc};
 
 /// Parses an SMT problem instance (in the SMT-LIB format) and its associated proof (in the Alethe
 /// format). Returns the parsed proof, as well as the `TermPool` used in parsing. Can take any type
@@ -30,6 +30,34 @@ pub fn parse_instance<T: BufRead>(
     let mut pool = TermPool::new();
     let mut parser = Parser::new(
         &mut pool,
+        problem,
+        apply_function_defs,
+        expand_lets,
+        allow_int_real_subtyping,
+    )?;
+    let (prelude, premises) = parser.parse_problem()?;
+    parser.reset(proof)?;
+    let commands = parser.parse_proof()?;
+
+    let proof = Proof { premises, commands };
+    Ok((prelude, proof, pool))
+}
+
+/// Parses an SMT problem instance (in the SMT-LIB format) and its associated proof (in the Alethe
+/// format). Returns the parsed proof, as well as the `TermPool` used in parsing. Can take any type
+/// that implements `BufRead`.
+pub fn parse_instance_multithread<T: BufRead>(
+    problem: T,
+    proof: T,
+    apply_function_defs: bool,
+    expand_lets: bool,
+    allow_int_real_subtyping: bool,
+) -> CarcaraResult<(ProblemPrelude, Proof, Arc<SingleThreadPool::TermPool>)> {
+    let mut pool = Arc::new(SingleThreadPool::TermPool::new());
+    let mut_pool = Arc::get_mut(&mut pool).unwrap();
+
+    let mut parser = Parser::new(
+        mut_pool,
         problem,
         apply_function_defs,
         expand_lets,
@@ -75,8 +103,8 @@ struct ParserState {
 }
 
 /// A parser for the Alethe proof format.
-pub struct Parser<'a, R> {
-    pool: &'a mut TermPool,
+pub struct Parser<'a, R, P> {
+    pool: &'a mut P,
     lexer: Lexer<R>,
     current_token: Token,
     current_position: Position,
@@ -89,11 +117,11 @@ pub struct Parser<'a, R> {
     allow_int_real_subtyping: bool,
 }
 
-impl<'a, R: BufRead> Parser<'a, R> {
+impl<'a, R: BufRead, P: TPool> Parser<'a, R, P> {
     /// Constructs a new `Parser` from a type that implements `BufRead`. This operation can fail if
     /// there is an IO or lexer error on the first token.
     pub fn new(
-        pool: &'a mut TermPool,
+        pool: &'a mut P,
         input: R,
         apply_function_defs: bool,
         expand_lets: bool,

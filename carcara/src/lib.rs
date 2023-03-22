@@ -123,6 +123,16 @@ pub fn check<T: io::BufRead>(
         num_cores,
     }: CarcaraOptions,
 ) -> Result<bool, Error> {
+    #[cfg(feature = "thread-safety")]
+    let (prelude, proof, pool) = parser::parse_instance_multithread(
+        problem,
+        proof,
+        apply_function_defs,
+        expand_lets,
+        allow_int_real_subtyping,
+    )?;
+
+    #[cfg(not(feature = "thread-safety"))]
     let (prelude, proof, mut pool) = parser::parse_instance(
         problem,
         proof,
@@ -145,8 +155,8 @@ pub fn check<T: io::BufRead>(
             use crate::checker::Scheduler::Scheduler;
 
             let (scheduler, schedule_context_usage) = Scheduler::new(num_cores, &proof);
-            checker::ParallelProofChecker::new(config, prelude, &schedule_context_usage)
-                .check(&proof, &pool, scheduler)
+            checker::ParallelProofChecker::new(config, prelude, pool, &schedule_context_usage)
+                .check(&proof, scheduler)
         }
         #[cfg(not(feature = "thread-safety"))]
         {
