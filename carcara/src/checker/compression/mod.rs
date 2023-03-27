@@ -355,6 +355,12 @@ fn binary_resolution_with_unit(
 // Compress the proof using the Lower Units algorithm
 pub fn compress_proof(proof: &Proof, pool : &mut TermPool){
     let unit_nodes = collect_units(&proof);
+    println!("Unit nodes are: {:?}", unit_nodes);
+
+    if unit_nodes.len() == 0{
+        print_proof(&proof.commands, false);
+        return;
+    }
     
     let mut dnm = Vec::new();
     dnm.resize(proof.commands.len(), false);
@@ -366,6 +372,7 @@ pub fn compress_proof(proof: &Proof, pool : &mut TermPool){
     for i in 0..dnm.len(){
         actual.push(i as usize);
     }
+    println!("Actual is {:?}", actual);
 
     fix_proof(curr, proof, &unit_nodes, &dnm, &mut actual);
 
