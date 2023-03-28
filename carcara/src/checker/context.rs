@@ -148,7 +148,7 @@ pub mod SingleThreadContextStack {
     }
 }
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, dead_code)]
 pub mod MultiThreadContextStack {
     use crossbeam::atomic::AtomicCell;
     use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};

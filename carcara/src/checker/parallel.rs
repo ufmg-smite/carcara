@@ -65,11 +65,10 @@ impl<'c> ParallelProofChecker<'c> {
     pub fn check<'s, 'p>(
         &'s mut self,
         proof: &'p Proof,
-        scheduler: Scheduler,
+        scheduler: &'s Scheduler,
     ) -> CarcaraResult<bool> {
         crossbeam::scope(|s| {
-            let threads: Vec<_> = scheduler
-                .loads
+            let threads: Vec<_> = (&scheduler.loads)
                 .into_iter()
                 .enumerate()
                 .map(|(i, schedule)| {

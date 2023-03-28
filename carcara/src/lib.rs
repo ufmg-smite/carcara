@@ -110,6 +110,7 @@ pub enum Error {
     DoesNotReachEmptyClause,
 }
 
+#[allow(unused_variables)]
 pub fn check<T: io::BufRead>(
     problem: T,
     proof: T,
@@ -156,7 +157,7 @@ pub fn check<T: io::BufRead>(
 
             let (scheduler, schedule_context_usage) = Scheduler::new(num_cores, &proof);
             checker::ParallelProofChecker::new(config, prelude, pool, &schedule_context_usage)
-                .check(&proof, scheduler)
+                .check(&proof, &scheduler)
         }
         #[cfg(not(feature = "thread-safety"))]
         {

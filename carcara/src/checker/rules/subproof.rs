@@ -315,6 +315,7 @@ pub fn onepoint(
         .map(|(x, t)| (x, context.apply(pool, &t)))
         .collect();
 
+    #[allow(unused_mut)]
     let mut last_context = context.last_mut().unwrap();
     #[cfg(feature = "thread-safety")]
     let last_context = last_context.get_mut();
