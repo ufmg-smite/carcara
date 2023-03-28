@@ -150,6 +150,7 @@ pub mod SingleThreadContextStack {
 
 #[allow(non_snake_case)]
 pub mod MultiThreadContextStack {
+    use crossbeam::atomic::AtomicCell;
     use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
     use super::Context;
@@ -159,13 +160,13 @@ pub mod MultiThreadContextStack {
 
     enum InternalContextElement {
         Global(usize),
-        Local(Arc<RwLock<Option<Context>>>),
+        Local(AtomicCell<Option<Context>>),
     }
 
     pub enum ContextWrapper<'c> {
         Global(RwLockReadGuard<'c, Option<Context>>),
         GlobalMut(RwLockWriteGuard<'c, Option<Context>>),
-        Local(RwLockWriteGuard<'c, Option<Context>>),
+        Local(Option<&'c mut Context>),
     }
 
     impl<'c> ContextWrapper<'c> {
@@ -243,9 +244,9 @@ pub mod MultiThreadContextStack {
                     InternalContextElement::Global(id) => {
                         ContextWrapper::Global(self.context_vec[*id].1.read().unwrap())
                     }
-                    InternalContextElement::Local(ctx) => {
-                        ContextWrapper::Local(ctx.write().unwrap())
-                    }
+                    InternalContextElement::Local(ctx) => unsafe {
+                        ContextWrapper::Local(ctx.as_ptr().as_mut().unwrap().as_mut())
+                    },
                 })
             })
         }
@@ -256,9 +257,9 @@ pub mod MultiThreadContextStack {
                     InternalContextElement::Global(id) => {
                         ContextWrapper::GlobalMut(self.context_vec[*id].1.write().unwrap())
                     }
-                    InternalContextElement::Local(ctx) => {
-                        ContextWrapper::Local(ctx.write().unwrap())
-                    }
+                    InternalContextElement::Local(ctx) => unsafe {
+                        ContextWrapper::Local(ctx.as_ptr().as_mut().unwrap().as_mut())
+                    },
                 })
             })
         }
@@ -376,11 +377,11 @@ pub mod MultiThreadContextStack {
                     let bindings = variable_args.iter().cloned().collect();
 
                     // Builds the local context
-                    let local_ctx = Arc::new(RwLock::new(Some(Context {
+                    let local_ctx = AtomicCell::new(Some(Context {
                         mappings,
                         bindings,
                         cumulative_substitution: None,
-                    })));
+                    }));
                     self.stack.push(InternalContextElement::Local(local_ctx));
                     // Make sure to decrement this context remaining threads (since
                     // this thread will no more use the shared context)
@@ -419,10 +420,14 @@ pub mod MultiThreadContextStack {
             for i in self.num_cumulative_calculated..std::cmp::max(up_to + 1, self.len()) {
                 // Waits until the OS allows to write at this context
                 let mut curr_context = match &self.stack[i] {
-                    InternalContextElement::Global(id) => self.context_vec[*id].1.write().unwrap(),
-                    InternalContextElement::Local(ctx) => ctx.write().unwrap(),
+                    InternalContextElement::Global(id) => {
+                        ContextWrapper::GlobalMut(self.context_vec[*id].1.write().unwrap())
+                    }
+                    InternalContextElement::Local(ctx) => unsafe {
+                        ContextWrapper::Local(ctx.as_ptr().as_mut().unwrap().as_mut())
+                    },
                 };
-                let curr_context = curr_context.as_mut().unwrap();
+                let curr_context = curr_context.get_mut();
 
                 let simultaneous =
                     super::build_simultaneous_substitution(pool, &curr_context.mappings).map;
@@ -440,12 +445,14 @@ pub mod MultiThreadContextStack {
                     if let Some(previous_context) = self.stack.get(i - 1).and_then(|ctx_el| {
                         Some(match ctx_el {
                             InternalContextElement::Global(id) => {
-                                self.context_vec[*id].1.read().unwrap()
+                                ContextWrapper::Global(self.context_vec[*id].1.read().unwrap())
                             }
-                            InternalContextElement::Local(ctx) => ctx.read().unwrap(),
+                            InternalContextElement::Local(ctx) => unsafe {
+                                ContextWrapper::Local(ctx.as_ptr().as_mut().unwrap().as_mut())
+                            },
                         })
                     }) {
-                        let previous_context = previous_context.as_ref().unwrap();
+                        let previous_context = previous_context.get_ref();
                         let previous_substitution =
                             previous_context.cumulative_substitution.as_ref().unwrap();
 
@@ -464,17 +471,17 @@ pub mod MultiThreadContextStack {
             }
         }
 
-        fn get_substitution(
-            &mut self,
-            pool: &mut TermPool,
-            index: usize,
-        ) -> RwLockWriteGuard<Option<Context>> {
+        fn get_substitution(&mut self, pool: &mut TermPool, index: usize) -> ContextWrapper {
             assert!(index < self.len());
             self.catch_up_cumulative(pool, index);
 
             let writable_ctx = match &self.stack[index] {
-                InternalContextElement::Global(id) => self.context_vec[*id].1.write().unwrap(),
-                InternalContextElement::Local(ctx) => ctx.write().unwrap(),
+                InternalContextElement::Global(id) => {
+                    ContextWrapper::GlobalMut(self.context_vec[*id].1.write().unwrap())
+                }
+                InternalContextElement::Local(ctx) => unsafe {
+                    ContextWrapper::Local(ctx.as_ptr().as_mut().unwrap().as_mut())
+                },
             };
             writable_ctx
         }
@@ -484,8 +491,7 @@ pub mod MultiThreadContextStack {
                 term.clone()
             } else {
                 self.get_substitution(pool, self.len() - 2)
-                    .as_mut()
-                    .unwrap()
+                    .get_mut()
                     .cumulative_substitution
                     .as_mut()
                     .unwrap()
@@ -498,8 +504,7 @@ pub mod MultiThreadContextStack {
                 term.clone()
             } else {
                 self.get_substitution(pool, self.len() - 1)
-                    .as_mut()
-                    .unwrap()
+                    .get_mut()
                     .cumulative_substitution
                     .as_mut()
                     .unwrap()
