@@ -92,7 +92,7 @@ pub fn bind(
     // in it
     let context = context.last().unwrap();
     #[cfg(feature = "thread-safety")]
-    let context = context.as_ref().unwrap();
+    let context = context.get_ref();
 
     // The quantifier binders must be the xs and ys of the context substitution
     let (xs, ys): (AHashSet<_>, AHashSet<_>) = context
@@ -146,7 +146,7 @@ pub fn r#let(
     // in it
     let last = context.last().unwrap();
     #[cfg(feature = "thread-safety")]
-    let last = last.as_ref().unwrap();
+    let last = last.get_ref();
 
     let substitution: AHashMap<Rc<Term>, Rc<Term>> = last.mappings.iter().cloned().collect();
 
@@ -274,9 +274,9 @@ pub fn onepoint(
     #[cfg(not(feature = "thread-safety"))]
     let last_context = context.last_mut().unwrap();
     #[cfg(feature = "thread-safety")]
-    let mut rw_lock = context.last_mut().unwrap();
+    let mut ctx_wrapper = context.last_mut().unwrap();
     #[cfg(feature = "thread-safety")]
-    let last_context = rw_lock.as_mut().unwrap();
+    let last_context = ctx_wrapper.get_mut();
 
     if let Some((var, _)) = r_bindings
         .iter()
@@ -301,7 +301,7 @@ pub fn onepoint(
 
     drop(last_context);
     #[cfg(feature = "thread-safety")]
-    drop(rw_lock);
+    drop(ctx_wrapper);
 
     let points = extract_points(quant, left);
 
@@ -317,7 +317,7 @@ pub fn onepoint(
 
     let mut last_context = context.last_mut().unwrap();
     #[cfg(feature = "thread-safety")]
-    let last_context = last_context.as_mut().unwrap();
+    let last_context = last_context.get_mut();
 
     // For each substitution (:= x t) in the context, the equality (= x t) must appear in phi
     if let Some((k, v)) = last_context
@@ -374,7 +374,7 @@ fn generic_skolemization_rule(
 
     let last = context.last().unwrap();
     #[cfg(feature = "thread-safety")]
-    let last = last.as_ref().unwrap();
+    let last = last.get_ref();
 
     let substitution: AHashMap<Rc<Term>, Rc<Term>> = last.mappings.iter().cloned().collect();
     for (i, x) in bindings.iter().enumerate() {
