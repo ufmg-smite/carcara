@@ -31,4 +31,5 @@ There are still some problems with the code that must be solved.
 1. Some functions, like `add_node` and `find` are recursive. This may be a problem because the program can run out of memory (`find` is probably ok because it is short and it probably will not be called many time recursively).
 1. The program still does not support subproofs. In function like `binary_resolution_from_old`, the new commands are added in the subproof with index 0, the proof itself. This has to be changed.
 1. Results are not properly parsed. Functions like `binary_resolution_with_unit` call the function `binary_resolution`, that can return an error. But this is not properly parsed. Besides that, functions like `get_pivots` may panic and this may not be the best way to deal with problems.
-1. The program was not properly tested. There are no unit tests and it was only tested with the example from the paper. It is urgent to make more tests. And the code was not reviewed by anyone. 
+1. Running some checks on the test_examples showed that there may be problems with the `get_pivots` function. Also it cannot handle resolutions made from more than two parents. 
+1. The program was not properly tested. 
