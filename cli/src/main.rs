@@ -16,7 +16,7 @@ use path_args::{get_instances_from_paths, infer_problem_path};
 use std::{
     fs::File,
     io::{self, BufRead},
-    path::Path, option,
+    path::Path,
 };
 
 // `git describe --all` will try to find any ref (including tags) that describes the current commit.

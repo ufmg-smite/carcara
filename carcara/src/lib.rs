@@ -193,9 +193,9 @@ pub fn compress<T: io::BufRead>(
     proof: T,
     CarcaraOptions {
         apply_function_defs,
-        expand_lets,
+        expand_lets : _,
         allow_int_real_subtyping,
-        check_lia_using_cvc5,
+        check_lia_using_cvc5 : _,
         strict,
         skip_unknown_rules,
     }: CarcaraOptions,

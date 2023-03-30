@@ -1,3 +1,6 @@
+#![allow(unused_must_use)]
+#![allow(unused_variables)]
+
 use crate::{ast::*};
 use std::collections::{HashMap, hash_map::Entry};
 use ahash::{AHashMap, AHashSet};
@@ -258,7 +261,7 @@ fn add_node<'a>(curr: usize,
             }
             
             let new_clause;
-            if step.rule == "resolution"{
+            if step.rule == "resolution" || step.rule == "th_resolution"{
                 new_clause = binary_resolution_from_old(pool, new_premises[0].1, new_premises[1].1, new_commands.to_vec(), step);
             }
             else{
@@ -355,7 +358,6 @@ fn binary_resolution_with_unit(
 // Compress the proof using the Lower Units algorithm
 pub fn compress_proof(proof: &Proof, pool : &mut TermPool){
     let unit_nodes = collect_units(&proof);
-    println!("Unit nodes are: {:?}", unit_nodes);
 
     if unit_nodes.len() == 0{
         print_proof(&proof.commands, false);
@@ -372,7 +374,6 @@ pub fn compress_proof(proof: &Proof, pool : &mut TermPool){
     for i in 0..dnm.len(){
         actual.push(i as usize);
     }
-    println!("Actual is {:?}", actual);
 
     fix_proof(curr, proof, &unit_nodes, &dnm, &mut actual);
 
@@ -385,11 +386,10 @@ pub fn compress_proof(proof: &Proof, pool : &mut TermPool){
     for i in unit_nodes{
         let previous_last_node = new_proof_commands.len() - 1;
         let (_, new_proof_commands) = add_node(i, proof, &actual, &mut new_proof_commands, pool, &mut added);
-        
+
         //Aqui eu tenho que fazer o binary resolution com o atual último nó da prova
         let current_last_node = new_proof_commands.len() - 1;
         let new_premises = [(0 as usize, previous_last_node), (0 as usize, current_last_node)];
-
         let new_clause = binary_resolution_with_unit(pool, previous_last_node, current_last_node, new_proof_commands.to_vec());
 
         let new_id = (new_proof_commands.len() + 1).to_string();
