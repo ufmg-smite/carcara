@@ -26,9 +26,9 @@ pub struct ParallelProofChecker<'c> {
 #[cfg(feature = "thread-safety")]
 impl<'c> ParallelProofChecker<'c> {
     pub fn new(
+        pool: Arc<SingleThreadPool::TermPool>,
         config: Config<'c>,
         prelude: &'c ProblemPrelude,
-        pool: Arc<SingleThreadPool::TermPool>,
     ) -> Self {
         ParallelProofChecker {
             pool,
