@@ -156,7 +156,7 @@ pub fn check<T: io::BufRead>(
             use crate::checker::Scheduler::Scheduler;
 
             let (scheduler, schedule_context_usage) = Scheduler::new(num_cores, &proof);
-            checker::ParallelProofChecker::new(config, prelude, pool, &schedule_context_usage)
+            checker::ParallelProofChecker::new(pool, config, &prelude, &schedule_context_usage)
                 .check(&proof, &scheduler)
         }
         #[cfg(not(feature = "thread-safety"))]
