@@ -304,7 +304,6 @@ mod MultiThreadPool {
         }
 
         /// Instantiates a new Merged Pool from a previous term pool
-        /// TODO: Make sure this is receiving the right pool type based on the future decision in the parallel impl
         pub fn from_previous(pool: &Arc<SingleThreadPool::TermPool>) -> Self {
             Self {
                 dyn_pool: TermPool::new(),
@@ -433,10 +432,9 @@ mod MultiThreadPool {
                 if dyn_pool.free_vars_cache.contains_key(term) {
                     return dyn_pool.free_vars_cache.get(term).unwrap();
                 }
-                // TODO: const_pool.and_then(|| {})
                 if let Some(pool) = const_pool {
-                    if pool.free_vars_cache.contains_key(term) {
-                        return pool.free_vars_cache.get(term).unwrap();
+                    if let Some(set) = pool.free_vars_cache.get(term) {
+                        return set;
                     }
                 }
                 let set = match term.as_ref() {

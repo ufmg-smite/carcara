@@ -17,7 +17,7 @@ unsafe impl Send for CheckerStatistics<'_> {}
 pub struct ParallelProofChecker<'c> {
     pool: Arc<SingleThreadPool::TermPool>,
     config: Config<'c>,
-    prelude: Rc<ProblemPrelude>,
+    prelude: &'c ProblemPrelude,
     context: ContextStack,
     reached_empty_clause: bool,
     is_holey: bool,
@@ -27,13 +27,13 @@ pub struct ParallelProofChecker<'c> {
 impl<'c> ParallelProofChecker<'c> {
     pub fn new(
         config: Config<'c>,
-        prelude: ProblemPrelude,
+        prelude: &'c ProblemPrelude,
         pool: Arc<SingleThreadPool::TermPool>,
     ) -> Self {
         ParallelProofChecker {
             pool,
             config,
-            prelude: Rc::new(prelude),
+            prelude,
             context: ContextStack::new(),
             reached_empty_clause: false,
             is_holey: false,
@@ -51,7 +51,7 @@ impl<'c> ParallelProofChecker<'c> {
                 statistics: None,
                 check_lia_using_cvc5: self.config.check_lia_using_cvc5,
             },
-            prelude: Rc::clone(&self.prelude),
+            prelude: self.prelude,
             context: ContextStack::new(),
             reached_empty_clause: false,
             is_holey: false,
