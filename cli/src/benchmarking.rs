@@ -70,14 +70,11 @@ fn run_job<T: CollectResults + Default>(
 
     let checking = Instant::now();
 
-    // If any errors are encountered when checking a proof, we return from this function and do not
-    // record the `RunMeasurement`. However, the data for each individual step is recorded as they
-    // are checked, so any steps that were run before the error will be recorded.
-    let is_holey = if elaborate {
-        checker.check_and_elaborate(proof)?;
-        false // TODO: correctly record holes when elaborating
+    let checking_result = if elaborate {
+        // TODO: correctly record holes when elaborating
+        checker.check_and_elaborate(proof).map(|_| false)
     } else {
-        checker.check(&proof)?
+        checker.check(&proof)
     };
     let checking = checking.elapsed();
 
@@ -95,7 +92,7 @@ fn run_job<T: CollectResults + Default>(
             assume_core,
         },
     );
-    Ok(is_holey)
+    checking_result
 }
 
 fn worker_thread<T: CollectResults + Default>(
