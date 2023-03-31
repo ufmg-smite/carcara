@@ -32,7 +32,7 @@ fn run_job<T: CollectResults + Default>(
         skip_unknown_rules,
     }: &CarcaraOptions,
     elaborate: bool,
-) -> Result<(), carcara::Error> {
+) -> Result<bool, carcara::Error> {
     let proof_file_name = job.proof_file.to_str().unwrap();
 
     let total = Instant::now();
@@ -73,11 +73,12 @@ fn run_job<T: CollectResults + Default>(
     // If any errors are encountered when checking a proof, we return from this function and do not
     // record the `RunMeasurement`. However, the data for each individual step is recorded as they
     // are checked, so any steps that were run before the error will be recorded.
-    if elaborate {
+    let is_holey = if elaborate {
         checker.check_and_elaborate(proof)?;
+        false // TODO: correctly record holes when elaborating
     } else {
-        checker.check(&proof)?;
-    }
+        checker.check(&proof)?
+    };
     let checking = checking.elapsed();
 
     let total = total.elapsed();
@@ -94,7 +95,7 @@ fn run_job<T: CollectResults + Default>(
             assume_core,
         },
     );
-    Ok(())
+    Ok(is_holey)
 }
 
 fn worker_thread<T: CollectResults + Default>(
@@ -105,10 +106,13 @@ fn worker_thread<T: CollectResults + Default>(
     let mut results = T::default();
 
     while let Some(job) = jobs_queue.pop() {
-        let result = run_job(&mut results, job, options, elaborate);
-        if let Err(e) = &result {
-            log::error!("encountered error in file '{}'", job.proof_file.display());
-            results.register_error(e);
+        match run_job(&mut results, job, options, elaborate) {
+            Ok(true) => results.register_holey(),
+            Err(e) => {
+                log::error!("encountered error in file '{}'", job.proof_file.display());
+                results.register_error(&e);
+            }
+            _ => (),
         }
     }
 
@@ -174,5 +178,12 @@ pub fn run_csv_benchmark(
         "{} errors encountered during benchmark",
         result.num_errors()
     );
+    if result.num_errors() > 0 {
+        println!("invalid");
+    } else if result.is_holey() {
+        println!("holey");
+    } else {
+        println!("valid");
+    }
     result.write_csv(runs_dest, by_rule_dest)
 }

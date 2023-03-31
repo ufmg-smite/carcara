@@ -329,7 +329,7 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         return Ok(());
     }
 
-    println!(
+    log::info!(
         "running benchmark on {} files, doing {} runs each",
         instances.len(),
         options.num_runs
@@ -360,6 +360,13 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         return Ok(());
     }
 
+    if results.had_error {
+        println!("invalid");
+    } else if results.is_holey {
+        println!("holey");
+    } else {
+        println!("valid");
+    }
     print_benchmark_results(results, options.sort_by_total)
 }
 
@@ -382,7 +389,7 @@ fn print_benchmark_results(results: OnlineBenchmarkResults, sort_by_total: bool)
     println!("parsing:             {}", parsing);
     println!("checking:            {}", checking);
     if !elaborating.is_empty() {
-        println!("elaborating:      {}", elaborating);
+        println!("elaborating:         {}", elaborating);
     }
     println!(
         "on assume:           {} ({:.02}% of checking time)",
