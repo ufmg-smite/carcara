@@ -284,6 +284,15 @@ mod MultiThreadPool {
     use ahash::AHashSet;
     use std::sync::Arc;
 
+    /// A structure to store and manage all allocated terms.
+    ///
+    /// You can add a `Term` to the pool using [`TermPool::add`], which will return an `Rc<Term>`. This
+    /// struct ensures that, if two equal terms are added to a pool, they will be in the same
+    /// allocation. This invariant allows terms to be safely compared and hashed by reference, instead
+    /// of by value (see [`Rc`]).
+    ///
+    /// This struct also provides other utility methods, like computing the sort of a term (see
+    /// [`TermPool::sort`]) or its free variables (see [`TermPool::free_vars`]).
     pub struct MergedPool {
         pub(crate) dyn_pool: TermPool,
         pub(crate) const_pool: Option<Arc<TermPool>>,

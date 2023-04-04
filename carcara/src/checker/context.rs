@@ -156,20 +156,46 @@ pub mod MultiThreadContextStack {
     use super::Context;
     use crate::ast::*;
 
+    /// A triple that will represent a single `Context` and allows a `Context` to be shared between threads.
+    ///
+    /// `0`: Number of threads that will use this context.
+    ///
+    /// `1`: Droppable slot for the context
+    ///
+    /// `2`: Usize indicating whether the context building status (0: No thread
+    ///  tried to build this context, 1: A thread is building this context,
+    ///  2: Context has been built).
     type GlobalContextInfo = (RwLock<usize>, RwLock<Option<Context>>, Mutex<u8>);
 
+    /// Enum used to implement, to some extent, a polymorphism between global
+    /// shared context and locally stored context.
     enum InternalContextElement {
+        /// Wrapper for global context. Stores the index of this context in the
+        /// global context vector.
         Global(usize),
+        /// Wrapper for locally stored context. Stores a mutable and sendable
+        /// cell wrapping a context. This context is wrapped in an option, but
+        /// only for standardisation (always wrapped in `Some`).
         Local(AtomicCell<Option<Context>>),
     }
 
+    /// Enum used to implement a polymorphism between contexts references. Since
+    ///  one type of context is wrapped by a `RwLock` and another is locally
+    /// stored, it is needed different approachs to get these refs.
     pub enum ContextWrapper<'c> {
+        /// A wrapper for an immutable reference for a global context.
         Global(RwLockReadGuard<'c, Option<Context>>),
+        /// A wrapper for an mutable reference for a global context.
         GlobalMut(RwLockWriteGuard<'c, Option<Context>>),
+        /// A wrapper for a mutable reference for a local context. Since only
+        /// the thread owner of this `InternalContextElement` have access to
+        /// this context, it can be always borrowed as mutable.
         Local(Option<&'c mut Context>),
     }
 
     impl<'c> ContextWrapper<'c> {
+        /// Returns a immutable reference to the context being wrapped by this
+        /// `ContextWrapper`
         pub fn get_ref(&self) -> &Context {
             match self {
                 ContextWrapper::Global(lock) => lock.as_ref().unwrap(),
@@ -179,6 +205,8 @@ pub mod MultiThreadContextStack {
         }
 
         #[allow(unreachable_code)]
+        /// Returns a mutable reference to the context being wrapped by this
+        /// `ContextWrapper`
         pub fn get_mut(&mut self) -> &mut Context {
             match self {
                 ContextWrapper::GlobalMut(lock) => lock.as_mut().unwrap(),
@@ -189,13 +217,21 @@ pub mod MultiThreadContextStack {
     }
 
     #[derive(Default)]
+    /// Struct that implements a semi-shared context stack. That way, this stack
+    /// will try to use an already existing global `Context` (built by another
+    /// thread). If no thread built it globally, then the current thread will
+    /// build a local copy of this `Context`.
     pub struct ContextStack {
+        /// The context vector that is shared globally between all the threads.
+        /// Then contexts storage is index based.
+        ///
         /// 0: Number of threads that will use this context.
-        /// 1: Slot for the context
-        /// 2: Usize indicating whether the context building status (0: None thread
+        /// 1: Droppable slot for the context
+        /// 2: Usize indicating whether the context building status (0: No thread
         ///  tried to build this context, 1: A thread is building this context,
         ///  2: Context has been built).
         context_vec: Arc<Vec<GlobalContextInfo>>,
+        /// The stack of contexts itself.
         stack: Vec<InternalContextElement>,
         num_cumulative_calculated: usize,
     }

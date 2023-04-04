@@ -2,6 +2,13 @@
 use crate::ast::ProofCommand;
 
 #[cfg(feature = "thread-safety")]
+/// Function that returns a weight associated to a specific rule. These weights
+/// are directly correlated to carcara (Single Thread) median performance while
+/// solving those ones.
+///
+/// Even though subproofs should have a weight (since it has an high cost to be
+/// computed), it's for better of scheduler architeture that subproof have a null
+/// weight.
 pub fn get_step_weight(step: &ProofCommand) -> u64 {
     match step {
         ProofCommand::Assume { .. } => 230,

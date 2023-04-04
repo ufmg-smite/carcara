@@ -107,15 +107,17 @@ pub mod Scheduler {
         }
     }
 
+    /// Struct that stores the schedule for each thread.
     pub struct Scheduler<'a> {
         pub loads: Vec<Schedule<'a>>,
     }
 
     impl<'a> Scheduler<'a> {
         /// Creates a thread scheduler for this proof using a specific number of
-        /// workers. This scheduler is responsible for balancing the load of this
-        /// proof aiming the minimum amount of sync overhead
+        /// workers. This scheduler is responsible for balancing the load (the
+        /// proof) aiming the minimum amount of async overhead
         pub fn new(num_workers: usize, proof: &'a Proof) -> (Self, Vec<usize>) {
+            // Initializes the control and result variables
             let cmds = &proof.commands;
             let mut loads = vec![Schedule::new(cmds); num_workers];
             let mut stack = vec![StackLevel::new(0, cmds, None)];
