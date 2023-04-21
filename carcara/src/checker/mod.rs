@@ -293,7 +293,7 @@ impl<'c> ProofChecker<'c> {
                 None => return Err(CheckerError::UnknownRule),
             };
 
-            if step.rule == "hole" || step.rule == "trust" {
+            if step.rule == "hole" {
                 self.is_holey = true;
             }
 
@@ -453,7 +453,7 @@ impl<'c> ProofChecker<'c> {
 
             // Special rules that always check as valid, and are used to indicate holes in the
             // proof.
-            "hole" | "trust" => |_| Ok(()),
+            "hole" => |_| Ok(()),
 
             // The Alethe specification does not yet describe how this more strict version of the
             // resolution rule will be called. Until that is decided and added to the specification,

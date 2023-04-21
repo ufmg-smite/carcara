@@ -85,7 +85,6 @@ pub struct Parser<'a, R> {
     apply_function_defs: bool,
     expand_lets: bool,
     problem: Option<(ProblemPrelude, AHashSet<Rc<Term>>)>,
-    has_seen_trust_rule: bool,
     allow_int_real_subtyping: bool,
 }
 
@@ -117,7 +116,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
             apply_function_defs,
             expand_lets,
             problem: None,
-            has_seen_trust_rule: false,
             allow_int_real_subtyping,
         })
     }
@@ -679,15 +677,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
             (other, pos) => return Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),
         };
 
-        if rule == "trust" && !self.has_seen_trust_rule {
-            // We do this to avoid printing more than one warning message if there are multiple
-            // `trust` steps
-            self.has_seen_trust_rule = true;
-            log::warn!(
-                "`trust` rule is deprecated and will be removed in the future. Use `hole` instead"
-            );
-        }
-
         let premises = if self.current_token == Token::Keyword("premises".into()) {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
@@ -700,9 +689,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
 
-            // If the rule is `hole` or `trust`, we want to allow any invalid arguments,
-            // so we read the rest of the `:args` attribute without trying to parse anything
-            if rule == "hole" || rule == "trust" {
+            // If the rule is `hole`, we want to allow any invalid arguments, so we read the rest of
+            // the `:args` attribute without trying to parse anything
+            if rule == "hole" {
                 self.ignore_until_close_parens()?;
                 Vec::new()
             } else {
