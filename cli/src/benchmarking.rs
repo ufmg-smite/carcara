@@ -71,8 +71,7 @@ fn run_job<T: CollectResults + Default>(
     let checking = Instant::now();
 
     let checking_result = if elaborate {
-        // TODO: correctly record holes when elaborating
-        checker.check_and_elaborate(proof).map(|_| false)
+        checker.check_and_elaborate(proof).map(|(is_holey, _)| is_holey)
     } else {
         checker.check(&proof)
     };

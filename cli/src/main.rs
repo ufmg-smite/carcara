@@ -313,12 +313,12 @@ fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
 fn elaborate_command(options: ElaborateCommandOptions) -> CliResult<()> {
     let (problem, proof) = get_instance(&options.input)?;
 
-    let elaborated = check_and_elaborate(
+    let (_, elaborated) = check_and_elaborate(
         problem,
         proof,
         build_carcara_options(options.parsing, options.checking),
     )?;
-    print_proof(&elaborated, options.printing.use_sharing)?;
+    print_proof(&elaborated.commands, options.printing.use_sharing)?;
     Ok(())
 }
 

@@ -155,7 +155,7 @@ impl<'c> ProofChecker<'c> {
         }
     }
 
-    pub fn check_and_elaborate(&mut self, mut proof: Proof) -> CarcaraResult<Proof> {
+    pub fn check_and_elaborate(&mut self, mut proof: Proof) -> CarcaraResult<(bool, Proof)> {
         self.elaborator = Some(Elaborator::new());
         let result = self.check(&proof);
 
@@ -169,7 +169,7 @@ impl<'c> ProofChecker<'c> {
         if let Some(stats) = &mut self.config.statistics {
             *stats.elaboration_time += elaboration_time.elapsed();
         }
-        Ok(proof)
+        Ok((self.is_holey, proof))
     }
 
     fn check_assume(

@@ -41,7 +41,6 @@ pub mod checker;
 pub mod parser;
 mod utils;
 
-use ast::ProofCommand;
 use checker::error::CheckerError;
 use parser::ParserError;
 use parser::Position;
@@ -149,7 +148,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
         strict,
         skip_unknown_rules,
     }: CarcaraOptions,
-) -> Result<Vec<ProofCommand>, Error> {
+) -> Result<(bool, ast::Proof), Error> {
     let (prelude, proof, mut pool) = parser::parse_instance(
         problem,
         proof,
@@ -167,7 +166,6 @@ pub fn check_and_elaborate<T: io::BufRead>(
     };
     checker::ProofChecker::new(&mut pool, config, prelude)
         .check_and_elaborate(proof)
-        .map(|p| p.commands)
 }
 
 pub fn generate_lia_smt_instances<T: io::BufRead>(
