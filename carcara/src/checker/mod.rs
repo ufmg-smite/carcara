@@ -16,23 +16,24 @@ use rules::{ElaborationRule, Premise, Rule, RuleArgs, RuleResult};
 #[cfg(feature = "thread-safety")]
 pub use scheduler::Scheduler;
 use std::{
+    cell::RefCell,
     fmt,
     time::{Duration, Instant},
 };
 
-pub struct CheckerStatistics<'s> {
+pub struct CheckerStatistics<'s, CR> {
     pub file_name: &'s str,
-    pub elaboration_time: &'s mut Duration,
-    pub deep_eq_time: &'s mut Duration,
-    pub assume_time: &'s mut Duration,
+    pub elaboration_time: Duration,
+    pub deep_eq_time: Duration,
+    pub assume_time: Duration,
 
     // This is the time to compare the `assume` term with the `assert` that matches it. That is,
     // this excludes the time spent searching for the correct `assert` premise.
-    pub assume_core_time: &'s mut Duration,
-    pub results: &'s mut dyn CollectResults,
+    pub assume_core_time: Duration,
+    pub results: std::rc::Rc<RefCell<CR>>,
 }
 
-impl fmt::Debug for CheckerStatistics<'_> {
+impl<CR: CollectResults + Send> fmt::Debug for CheckerStatistics<'_, CR> {
     // Since `self.results` does not implement `Debug`, we can't just `#[derive(Debug)]` and instead
     // have to implement it manually, removing that field.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -47,17 +48,16 @@ impl fmt::Debug for CheckerStatistics<'_> {
 }
 
 #[derive(Debug, Default)]
-pub struct Config<'c> {
+pub struct Config {
     pub strict: bool,
     pub skip_unknown_rules: bool,
     pub is_running_test: bool,
-    pub statistics: Option<CheckerStatistics<'c>>,
     pub check_lia_using_cvc5: bool,
 }
 
 pub struct ProofChecker<'c> {
     pool: &'c mut TermPool,
-    config: Config<'c>,
+    config: Config,
     prelude: ProblemPrelude,
     context: ContextStack,
     elaborator: Option<Elaborator>,
@@ -66,7 +66,7 @@ pub struct ProofChecker<'c> {
 }
 
 impl<'c> ProofChecker<'c> {
-    pub fn new(pool: &'c mut TermPool, config: Config<'c>, prelude: ProblemPrelude) -> Self {
+    pub fn new(pool: &'c mut TermPool, config: Config, prelude: ProblemPrelude) -> Self {
         ProofChecker {
             pool,
             config,
@@ -78,7 +78,11 @@ impl<'c> ProofChecker<'c> {
         }
     }
 
-    pub fn check(&mut self, proof: &Proof) -> CarcaraResult<bool> {
+    pub fn check<CR: CollectResults + Send>(
+        &mut self,
+        proof: &Proof,
+        statistics: &mut Option<CheckerStatistics<CR>>,
+    ) -> CarcaraResult<bool> {
         // Similarly to the parser, to avoid stack overflows in proofs with many nested subproofs,
         // we check the subproofs iteratively, instead of recursively
         let mut iter = proof.iter();
@@ -98,7 +102,7 @@ impl<'c> ProofChecker<'c> {
                     } else {
                         None
                     };
-                    self.check_step(step, previous_command, &iter)
+                    self.check_step(step, previous_command, &iter, statistics)
                         .map_err(|e| Error::Checker {
                             inner: e,
                             rule: step.rule.clone(),
@@ -135,12 +139,13 @@ impl<'c> ProofChecker<'c> {
                         elaborator.open_subproof(s.commands.len());
                     }
 
-                    if let Some(stats) = &mut self.config.statistics {
+                    if let Some(stats) = statistics {
                         let rule_name = match s.commands.last() {
                             Some(ProofCommand::Step(step)) => format!("anchor({})", &step.rule),
                             _ => "anchor".to_owned(),
                         };
-                        stats.results.add_step_measurement(
+
+                        stats.results.as_ref().borrow_mut().add_step_measurement(
                             stats.file_name,
                             step_id,
                             &rule_name,
@@ -149,7 +154,7 @@ impl<'c> ProofChecker<'c> {
                     }
                 }
                 ProofCommand::Assume { id, term } => {
-                    self.check_assume(id, term, &proof.premises, &iter)?;
+                    self.check_assume(id, term, &proof.premises, &iter, statistics)?;
                 }
                 ProofCommand::Closing => {}
             }
@@ -161,9 +166,13 @@ impl<'c> ProofChecker<'c> {
         }
     }
 
-    pub fn check_and_elaborate(&mut self, mut proof: Proof) -> CarcaraResult<Proof> {
+    pub fn check_and_elaborate<CR: CollectResults + Send>(
+        &mut self,
+        mut proof: Proof,
+        statistics: &mut Option<CheckerStatistics<CR>>,
+    ) -> CarcaraResult<Proof> {
         self.elaborator = Some(Elaborator::new());
-        let result = self.check(&proof);
+        let result = self.check(&proof, statistics);
 
         // We reset `self.elaborator` before returning any errors encountered while checking so we
         // don't leave the checker in an invalid state
@@ -172,18 +181,19 @@ impl<'c> ProofChecker<'c> {
 
         let elaboration_time = Instant::now();
         proof.commands = elaborator.end(proof.commands);
-        if let Some(stats) = &mut self.config.statistics {
-            *stats.elaboration_time += elaboration_time.elapsed();
+        if let Some(stats) = statistics {
+            stats.elaboration_time += elaboration_time.elapsed();
         }
         Ok(proof)
     }
 
-    fn check_assume(
+    fn check_assume<CR: CollectResults + Send>(
         &mut self,
         id: &str,
         term: &Rc<Term>,
         premises: &AHashSet<Rc<Term>>,
         iter: &ProofIter,
+        statistics: &mut Option<CheckerStatistics<CR>>,
     ) -> CarcaraResult<()> {
         let time = Instant::now();
 
@@ -200,10 +210,12 @@ impl<'c> ProofChecker<'c> {
         }
 
         if premises.contains(term) {
-            if let Some(s) = &mut self.config.statistics {
+            if let Some(s) = statistics {
                 let time = time.elapsed();
-                *s.assume_time += time;
+                s.assume_time += time;
                 s.results
+                    .as_ref()
+                    .borrow_mut()
                     .add_assume_measurement(s.file_name, id, true, time);
             }
             if let Some(elaborator) = &mut self.elaborator {
@@ -219,8 +231,8 @@ impl<'c> ProofChecker<'c> {
             let mut this_deep_eq_time = Duration::ZERO;
             let (result, depth) = tracing_deep_eq(term, p, &mut this_deep_eq_time);
             deep_eq_time += this_deep_eq_time;
-            if let Some(s) = &mut self.config.statistics {
-                s.results.add_deep_eq_depth(depth);
+            if let Some(s) = statistics {
+                s.results.as_ref().borrow_mut().add_deep_eq_depth(depth);
             }
             if result {
                 core_time = this_deep_eq_time;
@@ -235,18 +247,22 @@ impl<'c> ProofChecker<'c> {
 
                 elaborator.elaborate_assume(self.pool, p, term.clone(), id);
 
-                if let Some(s) = &mut self.config.statistics {
-                    *s.elaboration_time += elaboration_time.elapsed();
+                if let Some(s) = statistics {
+                    s.elaboration_time += elaboration_time.elapsed();
                 }
             }
 
-            if let Some(s) = &mut self.config.statistics {
+            if let Some(s) = statistics {
                 let time = time.elapsed();
-                *s.assume_time += time;
-                *s.assume_core_time += core_time;
-                *s.deep_eq_time += deep_eq_time;
-                s.results
-                    .add_assume_measurement(s.file_name, id, false, time);
+                s.assume_time += time;
+                s.assume_core_time += core_time;
+                s.deep_eq_time += deep_eq_time;
+                s.results.as_ref().borrow_mut().add_assume_measurement(
+                    s.file_name,
+                    id,
+                    false,
+                    time,
+                );
             }
             Ok(())
         } else {
@@ -258,11 +274,12 @@ impl<'c> ProofChecker<'c> {
         }
     }
 
-    fn check_step<'a>(
+    fn check_step<'a, CR: CollectResults + Send>(
         &mut self,
         step: &'a ProofStep,
         previous_command: Option<Premise<'a>>,
         iter: &'a ProofIter<'a>,
+        statistics: &mut Option<CheckerStatistics<CR>>,
     ) -> RuleResult {
         let time = Instant::now();
         let mut deep_eq_time = Duration::ZERO;
@@ -341,13 +358,17 @@ impl<'c> ProofChecker<'c> {
             }
         }
 
-        if let Some(s) = &mut self.config.statistics {
+        if let Some(s) = statistics {
             let time = time.elapsed();
-            s.results
-                .add_step_measurement(s.file_name, &step.id, &step.rule, time);
-            *s.deep_eq_time += deep_eq_time;
+            s.results.as_ref().borrow_mut().add_step_measurement(
+                s.file_name,
+                &step.id,
+                &step.rule,
+                time,
+            );
+            s.deep_eq_time += deep_eq_time;
             if elaborated {
-                *s.elaboration_time += time;
+                s.elaboration_time += time;
             }
         }
         Ok(())

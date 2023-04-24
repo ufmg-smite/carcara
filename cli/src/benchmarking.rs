@@ -6,6 +6,7 @@ use carcara::{
 };
 use crossbeam::queue::ArrayQueue;
 use std::{
+    cell::RefCell,
     fs::File,
     io::{self, BufReader},
     path::{Path, PathBuf},
@@ -19,8 +20,8 @@ struct JobDescriptor<'a> {
     run_index: usize,
 }
 
-fn run_job<T: CollectResults + Default>(
-    results: &mut T,
+fn run_job<CR: CollectResults + Default + Send>(
+    results: std::rc::Rc<RefCell<CR>>,
     job: JobDescriptor,
     &CarcaraOptions {
         apply_function_defs,
@@ -29,7 +30,8 @@ fn run_job<T: CollectResults + Default>(
         check_lia_using_cvc5,
         strict,
         skip_unknown_rules,
-        num_cores: _,
+        num_threads: _,
+        stats: _,
     }: &CarcaraOptions,
     elaborate: bool,
 ) -> Result<(), carcara::Error> {
@@ -47,25 +49,21 @@ fn run_job<T: CollectResults + Default>(
     )?;
     let parsing = parsing.elapsed();
 
-    let mut elaboration = Duration::ZERO;
-    let mut deep_eq = Duration::ZERO;
-    let mut assume = Duration::ZERO;
-    let mut assume_core = Duration::ZERO;
-
     let config = checker::Config {
         strict,
         skip_unknown_rules,
         is_running_test: false,
-        statistics: Some(checker::CheckerStatistics {
-            file_name: proof_file_name,
-            elaboration_time: &mut elaboration,
-            deep_eq_time: &mut deep_eq,
-            assume_time: &mut assume,
-            assume_core_time: &mut assume_core,
-            results,
-        }),
         check_lia_using_cvc5,
     };
+
+    let mut checker_stats = Some(checker::CheckerStatistics {
+        file_name: proof_file_name,
+        elaboration_time: Duration::ZERO,
+        deep_eq_time: Duration::ZERO,
+        assume_time: Duration::ZERO,
+        assume_core_time: Duration::ZERO,
+        results: std::rc::Rc::clone(&results),
+    });
     let mut checker = checker::ProofChecker::new(&mut pool, config, prelude);
 
     let checking = Instant::now();
@@ -74,54 +72,58 @@ fn run_job<T: CollectResults + Default>(
     // record the `RunMeasurement`. However, the data for each individual step is recorded as they
     // are checked, so any steps that were run before the error will be recorded.
     if elaborate {
-        checker.check_and_elaborate(proof)?;
+        checker.check_and_elaborate(proof, &mut checker_stats)?;
     } else {
-        checker.check(&proof)?;
+        checker.check(&proof, &mut checker_stats)?;
     }
     let checking = checking.elapsed();
 
     let total = total.elapsed();
 
-    results.add_run_measurement(
+    let unwrapped_stats = checker_stats.as_mut().unwrap();
+
+    results.as_ref().borrow_mut().add_run_measurement(
         &(proof_file_name.to_string(), job.run_index),
         RunMeasurement {
             parsing,
             checking,
-            elaboration,
+            elaboration: unwrapped_stats.elaboration_time,
             total,
-            deep_eq,
-            assume,
-            assume_core,
+            deep_eq: unwrapped_stats.deep_eq_time,
+            assume: unwrapped_stats.assume_time,
+            assume_core: unwrapped_stats.assume_core_time,
         },
     );
     Ok(())
 }
 
-fn worker_thread<T: CollectResults + Default>(
+fn worker_thread<CR: CollectResults + Default + Send>(
     jobs_queue: &ArrayQueue<JobDescriptor>,
     options: &CarcaraOptions,
     elaborate: bool,
-) -> T {
-    let mut results = T::default();
+) -> CR {
+    let results = std::rc::Rc::new(RefCell::new(CR::default()));
 
     while let Some(job) = jobs_queue.pop() {
-        let result = run_job(&mut results, job, options, elaborate);
+        let result = run_job(results.clone(), job, options, elaborate);
         if let Err(e) = &result {
             log::error!("encountered error in file '{}'", job.proof_file.display());
-            results.register_error(e);
+            results.as_ref().borrow_mut().register_error(e);
         }
     }
 
-    results
+    let mut res = CR::default();
+    res.copy_from(&*results.as_ref().borrow_mut());
+    res
 }
 
-pub fn run_benchmark<T: CollectResults + Default + Send>(
+pub fn run_benchmark<CR: CollectResults + Default + Send>(
     instances: &[(PathBuf, PathBuf)],
     num_runs: usize,
     num_threads: usize,
     options: &CarcaraOptions,
     elaborate: bool,
-) -> T {
+) -> CR {
     const STACK_SIZE: usize = 128 * 1024 * 1024;
 
     let jobs_queue = ArrayQueue::new(instances.len() * num_runs);
@@ -146,7 +148,7 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
             .map(|_| {
                 s.builder()
                     .stack_size(STACK_SIZE)
-                    .spawn(move |_| worker_thread::<T>(jobs_queue, options, elaborate))
+                    .spawn(move |_| worker_thread::<CR>(jobs_queue, options, elaborate))
                     .unwrap()
             })
             .collect();
@@ -154,7 +156,7 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
         workers
             .into_iter()
             .map(|w| w.join().unwrap())
-            .reduce(T::combine)
+            .reduce(CR::combine)
             .unwrap()
     })
     .unwrap()

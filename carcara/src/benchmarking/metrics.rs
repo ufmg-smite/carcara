@@ -142,7 +142,7 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OnlineMetrics<K, T: MetricsUnit = Duration> {
     total: T,
     count: usize,
@@ -293,6 +293,7 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OnlineMetrics<K, T> {
     }
 }
 
+#[derive(Clone)]
 pub struct OfflineMetrics<K, T = Duration> {
     data: Vec<(K, T)>,
 }

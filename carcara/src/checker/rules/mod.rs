@@ -156,7 +156,8 @@ fn assert_is_bool_constant(got: &Rc<Term>, expected: bool) -> RuleResult {
 #[cfg(test)]
 fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
     use crate::{
-        checker::{Config, ProofChecker},
+        benchmarking::OnlineBenchmarkResults,
+        checker::{CheckerStatistics, Config, ProofChecker},
         parser::parse_instance,
     };
     use std::io::Cursor;
@@ -177,12 +178,16 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
                 strict: false,
                 skip_unknown_rules: false,
                 is_running_test: true,
-                statistics: None,
                 check_lia_using_cvc5: true,
             },
             prelude,
         );
-        let got = checker.check(&parsed).is_ok();
+        let got = checker
+            .check(
+                &parsed,
+                &mut None::<CheckerStatistics<OnlineBenchmarkResults>>,
+            )
+            .is_ok();
         assert_eq!(
             *expected, got,
             "test case \"{}\" index {} failed",

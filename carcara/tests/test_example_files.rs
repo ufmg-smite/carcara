@@ -1,4 +1,4 @@
-use carcara::*;
+use carcara::{benchmarking::OnlineBenchmarkResults, checker::CheckerStatistics, *};
 use std::{ffi::OsStr, fs, io, path::Path};
 
 fn get_truncated_message(e: &Error) -> String {
@@ -16,12 +16,11 @@ fn get_truncated_message(e: &Error) -> String {
 }
 
 fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
-    fn test_config<'a>() -> checker::Config<'a> {
+    fn test_config() -> checker::Config {
         checker::Config {
             strict: false,
             skip_unknown_rules: true,
             is_running_test: false,
-            statistics: None,
             check_lia_using_cvc5: true,
         }
     }
@@ -35,19 +34,31 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
     )?;
 
     // First, we check the proof normally
-    checker::ProofChecker::new(&mut pool, test_config(), prelude.clone()).check(&proof)?;
+    checker::ProofChecker::new(&mut pool, test_config(), prelude.clone()).check(
+        &proof,
+        &mut None::<CheckerStatistics<OnlineBenchmarkResults>>,
+    )?;
 
     // Then, we check it while elaborating the proof
     let mut checker = checker::ProofChecker::new(&mut pool, test_config(), prelude.clone());
-    let elaborated = checker.check_and_elaborate(proof)?;
+    let elaborated = checker.check_and_elaborate(
+        proof,
+        &mut None::<CheckerStatistics<OnlineBenchmarkResults>>,
+    )?;
 
     // After that, we check the elaborated proof normally, to make sure it is valid
-    checker::ProofChecker::new(&mut pool, test_config(), prelude.clone()).check(&elaborated)?;
+    checker::ProofChecker::new(&mut pool, test_config(), prelude.clone()).check(
+        &elaborated,
+        &mut None::<CheckerStatistics<OnlineBenchmarkResults>>,
+    )?;
 
     // Finally, we elaborate the already elaborated proof, to make sure the elaboration step is
     // idempotent
     let mut checker = checker::ProofChecker::new(&mut pool, test_config(), prelude);
-    let elaborated_twice = checker.check_and_elaborate(elaborated.clone())?;
+    let elaborated_twice = checker.check_and_elaborate(
+        elaborated.clone(),
+        &mut None::<CheckerStatistics<OnlineBenchmarkResults>>,
+    )?;
     assert_eq!(elaborated.commands, elaborated_twice.commands);
 
     Ok(())

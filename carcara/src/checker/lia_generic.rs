@@ -1,5 +1,5 @@
 use super::*;
-use crate::{checker::error::LiaGenericError, parser};
+use crate::{benchmarking::OnlineBenchmarkResults, checker::error::LiaGenericError, parser};
 use ahash::AHashMap;
 use std::{
     io::{BufRead, Write},
@@ -116,10 +116,12 @@ fn parse_and_check_cvc5_proof(
         strict: false,
         skip_unknown_rules: false,
         is_running_test: false,
-        statistics: None,
         check_lia_using_cvc5: false,
     };
-    ProofChecker::new(pool, config, prelude).check(&proof)?;
+    ProofChecker::new(pool, config, prelude).check(
+        &proof,
+        &mut None::<CheckerStatistics<OnlineBenchmarkResults>>,
+    )?;
     Ok(proof.commands)
 }
 

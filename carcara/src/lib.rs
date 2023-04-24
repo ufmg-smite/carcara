@@ -42,11 +42,16 @@ pub mod parser;
 mod utils;
 
 use ast::ProofCommand;
-use checker::error::CheckerError;
+use benchmarking::OnlineBenchmarkResults;
+use checker::{error::CheckerError, CheckerStatistics};
 use parser::ParserError;
 use parser::Position;
+use std::cell::RefCell;
 use std::io;
+use std::time::{Duration, Instant};
 use thiserror::Error;
+
+use crate::benchmarking::{CollectResults, RunMeasurement};
 
 pub type CarcaraResult<T> = Result<T, Error>;
 
@@ -57,7 +62,8 @@ pub struct CarcaraOptions {
     pub check_lia_using_cvc5: bool,
     pub strict: bool,
     pub skip_unknown_rules: bool,
-    pub num_cores: usize,
+    pub num_threads: usize,
+    pub stats: bool,
 }
 
 impl Default for CarcaraOptions {
@@ -75,7 +81,8 @@ impl CarcaraOptions {
             check_lia_using_cvc5: false,
             strict: false,
             skip_unknown_rules: false,
-            num_cores: 1,
+            num_threads: 1,
+            stats: false,
         }
     }
 }
@@ -121,9 +128,14 @@ pub fn check<T: io::BufRead>(
         check_lia_using_cvc5,
         strict,
         skip_unknown_rules,
-        num_cores,
+        num_threads,
+        stats,
     }: CarcaraOptions,
 ) -> Result<bool, Error> {
+    let mut run_measures: RunMeasurement = RunMeasurement::default();
+
+    // Parsing
+    let total = Instant::now();
     #[cfg(feature = "thread-safety")]
     let (prelude, proof, pool) = parser::parse_instance_multithread(
         problem,
@@ -141,29 +153,62 @@ pub fn check<T: io::BufRead>(
         expand_lets,
         allow_int_real_subtyping,
     )?;
+    run_measures.parsing = total.elapsed();
 
     let config = checker::Config {
         strict,
         skip_unknown_rules,
         is_running_test: false,
-        statistics: None,
         check_lia_using_cvc5,
     };
 
+    let checker_stats = &mut stats.then(|| CheckerStatistics {
+        file_name: "this",
+        elaboration_time: Duration::ZERO,
+        deep_eq_time: Duration::ZERO,
+        assume_time: Duration::ZERO,
+        assume_core_time: Duration::ZERO,
+        results: std::rc::Rc::new(RefCell::new(OnlineBenchmarkResults::new())),
+    });
+
+    // Checking
+    let checking = Instant::now();
     let res = {
         #[cfg(feature = "thread-safety")]
         {
             use crate::checker::Scheduler::Scheduler;
 
-            let (scheduler, schedule_context_usage) = Scheduler::new(num_cores, &proof);
+            let (scheduler, schedule_context_usage) = Scheduler::new(num_threads, &proof);
             checker::ParallelProofChecker::new(pool, config, &prelude, &schedule_context_usage)
-                .check(&proof, &scheduler)
+                .check(&proof, &scheduler, checker_stats)
         }
         #[cfg(not(feature = "thread-safety"))]
         {
-            checker::ProofChecker::new(&mut pool, config, prelude).check(&proof)
+            checker::ProofChecker::new(&mut pool, config, prelude).check(&proof, checker_stats)
         }
     };
+    run_measures.checking = checking.elapsed();
+    run_measures.total = total.elapsed();
+
+    // If the statistics were collected
+    if let Some(c_stats) = checker_stats {
+        let mut c_stats_results = c_stats.results.as_ref().borrow_mut();
+        c_stats_results.add_run_measurement(
+            &("this".to_string(), 0),
+            RunMeasurement {
+                parsing: run_measures.parsing,
+                checking: run_measures.checking,
+                elaboration: c_stats.elaboration_time,
+                total: run_measures.total,
+                deep_eq: c_stats.deep_eq_time,
+                assume: c_stats.assume_time,
+                assume_core: c_stats.assume_core_time,
+            },
+        );
+        // Print the statistics
+        c_stats_results.print(false);
+    }
+
     res
 }
 
@@ -177,7 +222,8 @@ pub fn check_and_elaborate<T: io::BufRead>(
         check_lia_using_cvc5,
         strict,
         skip_unknown_rules,
-        num_cores: _,
+        num_threads: _,
+        stats: _,
     }: CarcaraOptions,
 ) -> Result<Vec<ProofCommand>, Error> {
     let (prelude, proof, mut pool) = parser::parse_instance(
@@ -192,11 +238,14 @@ pub fn check_and_elaborate<T: io::BufRead>(
         strict,
         skip_unknown_rules,
         is_running_test: false,
-        statistics: None,
         check_lia_using_cvc5,
     };
+
     checker::ProofChecker::new(&mut pool, config, prelude)
-        .check_and_elaborate(proof)
+        .check_and_elaborate(
+            proof,
+            &mut None::<CheckerStatistics<OnlineBenchmarkResults>>,
+        )
         .map(|p| p.commands)
 }
 

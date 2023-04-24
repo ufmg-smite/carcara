@@ -44,7 +44,7 @@ impl fmt::Display for StepId {
 
 type RunId = (String, usize);
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RunMeasurement {
     pub parsing: Duration,
     pub checking: Duration,
@@ -148,6 +148,120 @@ where
     pub fn step_time_by_rule(&self) -> &AHashMap<String, ByStep> {
         &self.step_time_by_rule
     }
+
+    /// Prints the benchmark results
+    pub fn print(&self, sort_by_total: bool) {
+        let [parsing, checking, elaborating, accounted_for, total] = [
+            self.parsing(),
+            self.checking(),
+            self.elaborating(),
+            self.total_accounted_for(),
+            self.total(),
+        ]
+        .map(|m| {
+            if sort_by_total {
+                format!("{:#}", m)
+            } else {
+                format!("{}", m)
+            }
+        });
+
+        println!("parsing:             {}", parsing);
+        println!("checking:            {}", checking);
+        if !elaborating.is_empty() {
+            println!("elaborating:      {}", elaborating);
+        }
+        println!(
+            "on assume:           {} ({:.02}% of checking time)",
+            self.assume_time,
+            100.0 * self.assume_time.mean().as_secs_f64() / self.checking().mean().as_secs_f64(),
+        );
+        println!("on assume (core):    {}", self.assume_core_time);
+        println!("assume ratio:        {}", self.assume_time_ratio);
+        println!(
+            "on deep equality:    {} ({:.02}% of checking time)",
+            self.deep_eq_time,
+            100.0 * self.deep_eq_time.mean().as_secs_f64() / self.checking().mean().as_secs_f64(),
+        );
+        println!("deep equality ratio: {}", self.deep_eq_time_ratio);
+        println!("total accounted for: {}", accounted_for);
+        println!("total:               {}", total);
+
+        let data_by_rule = self.step_time_by_rule();
+        let mut data_by_rule: Vec<_> = data_by_rule.iter().collect();
+        data_by_rule.sort_by_key(|(_, m)| if sort_by_total { m.total() } else { m.mean() });
+
+        println!("by rule:");
+        for (rule, data) in data_by_rule {
+            print!("    {: <18}", rule);
+            if sort_by_total {
+                println!("{:#}", data)
+            } else {
+                println!("{}", data)
+            }
+        }
+
+        println!("worst cases:");
+        let worst_step = self.step_time().max();
+        println!("    step:            {} ({:?})", worst_step.0, worst_step.1);
+
+        let worst_file_parsing = self.parsing().max();
+        println!(
+            "    file (parsing):  {} ({:?})",
+            worst_file_parsing.0 .0, worst_file_parsing.1
+        );
+
+        let worst_file_checking = self.checking().max();
+        println!(
+            "    file (checking): {} ({:?})",
+            worst_file_checking.0 .0, worst_file_checking.1
+        );
+
+        let worst_file_assume = self.assume_time_ratio.max();
+        println!(
+            "    file (assume):   {} ({:.04}%)",
+            worst_file_assume.0 .0,
+            worst_file_assume.1 * 100.0
+        );
+
+        let worst_file_deep_eq = self.deep_eq_time_ratio.max();
+        println!(
+            "    file (deep_eq):  {} ({:.04}%)",
+            worst_file_deep_eq.0 .0,
+            worst_file_deep_eq.1 * 100.0
+        );
+
+        let worst_file_total = self.total().max();
+        println!(
+            "    file overall:    {} ({:?})",
+            worst_file_total.0 .0, worst_file_total.1
+        );
+
+        let num_hard_assumes = self.num_assumes - self.num_easy_assumes;
+        let percent_easy = (self.num_easy_assumes as f64) * 100.0 / (self.num_assumes as f64);
+        let percent_hard = (num_hard_assumes as f64) * 100.0 / (self.num_assumes as f64);
+        println!("          number of assumes: {}", self.num_assumes);
+        println!(
+            "                     (easy): {} ({:.02}%)",
+            self.num_easy_assumes, percent_easy
+        );
+        println!(
+            "                     (hard): {} ({:.02}%)",
+            num_hard_assumes, percent_hard
+        );
+
+        let depths = &self.deep_eq_depths;
+        if !depths.is_empty() {
+            println!("    max deep equality depth: {}", depths.max().1);
+            println!("  total deep equality depth: {}", depths.total());
+            println!("  number of deep equalities: {}", depths.count());
+            println!("                 mean depth: {:.4}", depths.mean());
+            println!(
+                "standard deviation of depth: {:.4}",
+                depths.standard_deviation()
+            );
+        }
+    }
 }
 
 #[derive(Default)]
@@ -242,6 +356,7 @@ impl CsvBenchmarkResults {
 }
 
 pub trait CollectResults {
+    fn new() -> Self;
     fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration);
     fn add_assume_measurement(&mut self, file: &str, id: &str, is_easy: bool, time: Duration);
     fn add_deep_eq_depth(&mut self, depth: usize);
@@ -251,16 +366,24 @@ pub trait CollectResults {
     fn combine(a: Self, b: Self) -> Self
     where
         Self: Sized;
+
+    fn copy_from(&mut self, other: &Self)
+    where
+        Self: Sized;
 }
 
 impl<ByRun, ByStep, ByRunF64, ByDeepEq> CollectResults
     for BenchmarkResults<ByRun, ByStep, ByRunF64, ByDeepEq>
 where
-    ByRun: Metrics<RunId, Duration> + Default,
-    ByStep: Metrics<StepId, Duration> + Default,
-    ByRunF64: Metrics<RunId, f64> + Default,
-    ByDeepEq: Metrics<(), usize> + Default,
+    ByRun: Metrics<RunId, Duration> + Default + Clone,
+    ByStep: Metrics<StepId, Duration> + Default + Clone,
+    ByRunF64: Metrics<RunId, f64> + Default + Clone,
+    ByDeepEq: Metrics<(), usize> + Default + Clone,
 {
+    fn new() -> Self {
+        Default::default()
+    }
+
     fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration) {
         let file = file.to_owned();
         let rule = rule.to_owned();
@@ -340,10 +463,38 @@ where
         }
     }
 
+    fn copy_from(&mut self, other: &Self)
+    where
+        Self: Sized,
+    {
+        self.parsing = other.parsing.clone();
+        self.checking = other.checking.clone();
+        self.elaborating = other.elaborating.clone();
+        self.total_accounted_for = other.total_accounted_for.clone();
+        self.total = other.total.clone();
+        self.step_time = other.step_time.clone();
+        self.step_time_by_file = other.step_time_by_file.clone();
+        self.step_time_by_rule = other.step_time_by_rule.clone();
+
+        self.deep_eq_time = other.deep_eq_time.clone();
+        self.deep_eq_time_ratio = other.deep_eq_time_ratio.clone();
+        self.assume_time = other.assume_time.clone();
+        self.assume_time_ratio = other.assume_time_ratio.clone();
+        self.assume_core_time = other.assume_core_time.clone();
+
+        self.deep_eq_depths = other.deep_eq_depths.clone();
+        self.num_assumes = other.num_assumes.clone();
+        self.num_easy_assumes = other.num_easy_assumes.clone();
+    }
+
     fn register_error(&mut self, _: &crate::Error) {}
 }
 
 impl CollectResults for CsvBenchmarkResults {
+    fn new() -> Self {
+        Default::default()
+    }
+
     fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration) {
         let id = StepId {
             file: file.into(),
@@ -377,5 +528,14 @@ impl CollectResults for CsvBenchmarkResults {
 
     fn register_error(&mut self, _: &crate::Error) {
         self.num_errors += 1;
+    }
+
+    fn copy_from(&mut self, other: &Self)
+    where
+        Self: Sized,
+    {
+        self.runs = other.runs.clone();
+        self.step_time_by_rule = other.step_time_by_rule.clone();
+        self.num_errors = other.num_errors;
     }
 }
