@@ -49,6 +49,7 @@ use thiserror::Error;
 
 pub type CarcaraResult<T> = Result<T, Error>;
 
+#[derive(Default)]
 pub struct CarcaraOptions {
     pub apply_function_defs: bool,
     pub expand_lets: bool,
@@ -58,22 +59,9 @@ pub struct CarcaraOptions {
     pub skip_unknown_rules: bool,
 }
 
-impl Default for CarcaraOptions {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl CarcaraOptions {
-    fn new() -> Self {
-        Self {
-            apply_function_defs: true,
-            expand_lets: false,
-            allow_int_real_subtyping: false,
-            check_lia_using_cvc5: false,
-            strict: false,
-            skip_unknown_rules: false,
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 
