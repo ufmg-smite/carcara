@@ -95,32 +95,21 @@ pub enum Error {
     DoesNotReachEmptyClause,
 }
 
-pub fn check<T: io::BufRead>(
-    problem: T,
-    proof: T,
-    CarcaraOptions {
-        apply_function_defs,
-        expand_lets,
-        allow_int_real_subtyping,
-        lia_via_cvc5,
-        strict,
-        skip_unknown_rules,
-    }: CarcaraOptions,
-) -> Result<bool, Error> {
+pub fn check<T: io::BufRead>(problem: T, proof: T, options: CarcaraOptions) -> Result<bool, Error> {
     let (prelude, proof, mut pool) = parser::parse_instance(
         problem,
         proof,
-        apply_function_defs,
-        expand_lets,
-        allow_int_real_subtyping,
+        options.apply_function_defs,
+        options.expand_lets,
+        options.allow_int_real_subtyping,
     )?;
 
     let config = checker::Config {
-        strict,
-        skip_unknown_rules,
+        strict: options.strict,
+        skip_unknown_rules: options.skip_unknown_rules,
         is_running_test: false,
         statistics: None,
-        lia_via_cvc5,
+        lia_via_cvc5: options.lia_via_cvc5,
     };
     checker::ProofChecker::new(&mut pool, config, prelude).check(&proof)
 }
@@ -128,32 +117,24 @@ pub fn check<T: io::BufRead>(
 pub fn check_and_elaborate<T: io::BufRead>(
     problem: T,
     proof: T,
-    CarcaraOptions {
-        apply_function_defs,
-        expand_lets,
-        allow_int_real_subtyping,
-        lia_via_cvc5,
-        strict,
-        skip_unknown_rules,
-    }: CarcaraOptions,
+    options: CarcaraOptions,
 ) -> Result<(bool, ast::Proof), Error> {
     let (prelude, proof, mut pool) = parser::parse_instance(
         problem,
         proof,
-        apply_function_defs,
-        expand_lets,
-        allow_int_real_subtyping,
+        options.apply_function_defs,
+        options.expand_lets,
+        options.allow_int_real_subtyping,
     )?;
 
     let config = checker::Config {
-        strict,
-        skip_unknown_rules,
+        strict: options.strict,
+        skip_unknown_rules: options.skip_unknown_rules,
         is_running_test: false,
         statistics: None,
-        lia_via_cvc5,
+        lia_via_cvc5: options.lia_via_cvc5,
     };
-    checker::ProofChecker::new(&mut pool, config, prelude)
-        .check_and_elaborate(proof)
+    checker::ProofChecker::new(&mut pool, config, prelude).check_and_elaborate(proof)
 }
 
 pub fn generate_lia_smt_instances<T: io::BufRead>(
