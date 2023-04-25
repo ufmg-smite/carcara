@@ -190,8 +190,8 @@ pub fn check<T: io::BufRead>(
     run_measures.checking = checking.elapsed();
     run_measures.total = total.elapsed();
 
-    // If the statistics were collected
-    if let Some(c_stats) = checker_stats {
+    // If the statistics were collected and no error happend
+    if let (Some(c_stats), Ok(_)) = (checker_stats, &res) {
         let mut c_stats_results = c_stats.results.as_ref().borrow_mut();
         c_stats_results.add_run_measurement(
             &("this".to_string(), 0),
