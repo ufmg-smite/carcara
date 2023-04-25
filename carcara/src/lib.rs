@@ -49,8 +49,7 @@ use thiserror::Error;
 
 pub type CarcaraResult<T> = Result<T, Error>;
 
-/// The options that control how Carcara parses, checks and elaborates a proof. All options are
-/// `false` by default.
+/// The options that control how Carcara parses, checks and elaborates a proof.
 #[derive(Default)]
 pub struct CarcaraOptions {
     /// If `true`, Carcara will automatically expand function definitions introduced by `define-fun`
