@@ -47,7 +47,7 @@ pub struct Config<'c> {
     pub skip_unknown_rules: bool,
     pub is_running_test: bool,
     pub statistics: Option<CheckerStatistics<'c>>,
-    pub check_lia_using_cvc5: bool,
+    pub lia_via_cvc5: bool,
 }
 
 pub struct ProofChecker<'c> {
@@ -263,7 +263,7 @@ impl<'c> ProofChecker<'c> {
 
         let mut elaborated = false;
         if step.rule == "lia_generic" {
-            if self.config.check_lia_using_cvc5 {
+            if self.config.lia_via_cvc5 {
                 let is_hole = lia_generic::lia_generic(
                     self.pool,
                     &step.clause,

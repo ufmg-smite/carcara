@@ -11,7 +11,7 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
             skip_unknown_rules: true,
             is_running_test: false,
             statistics: None,
-            check_lia_using_cvc5: false,
+            lia_via_cvc5: false,
         }
     }
 

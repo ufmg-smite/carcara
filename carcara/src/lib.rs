@@ -54,7 +54,7 @@ pub struct CarcaraOptions {
     pub apply_function_defs: bool,
     pub expand_lets: bool,
     pub allow_int_real_subtyping: bool,
-    pub check_lia_using_cvc5: bool,
+    pub lia_via_cvc5: bool,
     pub strict: bool,
     pub skip_unknown_rules: bool,
 }
@@ -102,7 +102,7 @@ pub fn check<T: io::BufRead>(
         apply_function_defs,
         expand_lets,
         allow_int_real_subtyping,
-        check_lia_using_cvc5,
+        lia_via_cvc5,
         strict,
         skip_unknown_rules,
     }: CarcaraOptions,
@@ -120,7 +120,7 @@ pub fn check<T: io::BufRead>(
         skip_unknown_rules,
         is_running_test: false,
         statistics: None,
-        check_lia_using_cvc5,
+        lia_via_cvc5,
     };
     checker::ProofChecker::new(&mut pool, config, prelude).check(&proof)
 }
@@ -132,7 +132,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
         apply_function_defs,
         expand_lets,
         allow_int_real_subtyping,
-        check_lia_using_cvc5,
+        lia_via_cvc5,
         strict,
         skip_unknown_rules,
     }: CarcaraOptions,
@@ -150,7 +150,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
         skip_unknown_rules,
         is_running_test: false,
         statistics: None,
-        check_lia_using_cvc5,
+        lia_via_cvc5,
     };
     checker::ProofChecker::new(&mut pool, config, prelude)
         .check_and_elaborate(proof)

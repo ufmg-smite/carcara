@@ -142,7 +142,7 @@ fn build_carcara_options(
         apply_function_defs,
         expand_lets: expand_let_bindings,
         allow_int_real_subtyping,
-        check_lia_using_cvc5: lia_via_cvc5,
+        lia_via_cvc5,
         strict,
         skip_unknown_rules,
     }
