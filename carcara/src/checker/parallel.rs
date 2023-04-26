@@ -73,6 +73,8 @@ impl<'c> ParallelProofChecker<'c> {
                 .into_iter()
                 .enumerate()
                 .map(|(i, schedule)| {
+                    // Creates a local statistics collector, allowing the collection
+                    // of this threads statistics and then the merge
                     let mut local_stats = statistics.as_ref().and(Some(CheckerStatistics {
                         file_name: "this",
                         elaboration_time: Duration::ZERO,
@@ -178,7 +180,7 @@ impl<'c> ParallelProofChecker<'c> {
                                     }
                                 }
 
-                                // Returns Ok(reached empty clause, isHoley)
+                                // Returns Ok(reached empty clause, isHoley, current thread statistics)
                                 if local_self.config.is_running_test
                                     || local_self.reached_empty_clause
                                 {
