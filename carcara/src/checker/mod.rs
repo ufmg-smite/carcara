@@ -469,6 +469,7 @@ impl<'c> ProofChecker<'c> {
 
         Some(match rule_name {
             "eq_transitive" => transitivity::elaborate_eq_transitive,
+            "resolution" | "th_resolution" => resolution::elaborate_resolution,
             "refl" => reflexivity::elaborate_refl,
             "trans" => transitivity::elaborate_trans,
             _ => return None,
