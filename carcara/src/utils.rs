@@ -13,6 +13,11 @@ pub fn is_symbol_character(ch: char) -> bool {
         ch if ch.is_ascii_alphanumeric() => true,
         '+' | '-' | '/' | '*' | '=' | '%' | '?' | '!' | '.' | '$' | '_' | '~' | '&' | '^' | '<'
         | '>' | '@' => true,
+
+        // While `'` is not a valid symbol character according to the SMT-LIB and Alethe specs, it
+        // is used by Carcara to differentiate variables renamed by capture-avoidance in
+        // substitutions. To accomodate for that, we consider it a valid character when parsing.
+        '\'' => true,
         _ => false,
     }
 }
