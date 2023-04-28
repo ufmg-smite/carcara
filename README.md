@@ -8,6 +8,9 @@ To build Carcara, you will need Rust and Cargo 1.67 or newer. Build the project 
 When running on large proofs, we recommend compiling with optimizations enabled: `cargo build
 --release`.
 
+To build and install Carcara, run `cargo install --profile release-lto --path cli`. This will build
+the project with all optimizations enabled, and install the CLI binary in `$HOME/.cargo/bin`.
+
 ## Using Carcara
 ### Checking a proof file
 
