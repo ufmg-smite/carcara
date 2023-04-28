@@ -18,8 +18,10 @@ use rug::Integer;
 use std::{io::BufRead, str::FromStr};
 
 /// Parses an SMT problem instance (in the SMT-LIB format) and its associated proof (in the Alethe
-/// format). Returns the parsed proof, as well as the `TermPool` used in parsing. Can take any type
-/// that implements `BufRead`.
+/// format).
+///
+/// This returns the parsed proof, as well as the `TermPool` used in parsing. Can take any type that
+/// implements `BufRead`.
 pub fn parse_instance<T: BufRead>(
     problem: T,
     proof: T,
@@ -64,8 +66,10 @@ enum AnchorArg {
     Variable(SortedVar),
 }
 
-/// The state of the parser. This holds all the function, constant or sort declarations and
-/// definitions, as well as the term pool used by the parser.
+/// The state of the parser.
+///
+/// This holds all the function, constant or sort declarations and definitions, as well as the term
+/// pool used by the parser.
 #[derive(Default)]
 struct ParserState {
     symbol_table: SymbolTable<HashCache<Identifier>, Rc<Term>>,
@@ -89,8 +93,9 @@ pub struct Parser<'a, R> {
 }
 
 impl<'a, R: BufRead> Parser<'a, R> {
-    /// Constructs a new `Parser` from a type that implements `BufRead`. This operation can fail if
-    /// there is an IO or lexer error on the first token.
+    /// Constructs a new `Parser` from a type that implements `BufRead`.
+    ///
+    /// This operation can fail if there is an IO or lexer error on the first token.
     pub fn new(
         pool: &'a mut TermPool,
         input: R,
@@ -141,7 +146,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         Ok((old_token, old_position))
     }
 
-    /// Helper method to insert a `SortedVar` into the parser symbol table.
+    /// Inserts a `SortedVar` into the parser symbol table.
     fn insert_sorted_var(&mut self, (symbol, sort): SortedVar) {
         self.state
             .symbol_table
@@ -368,8 +373,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
         }
     }
 
-    /// Calls `parse_func` repeatedly until a closing parenthesis is reached. If `non_empty` is
-    /// true, empty sequences will result in an error. This method consumes the ending `)` token.
+    /// Calls `parse_func` repeatedly until a closing parenthesis is reached.
+    ///
+    /// If `non_empty` is true, empty sequences will result in an error. This method consumes the
+    /// ending `)` token.
     fn parse_sequence<T, F>(&mut self, mut parse_func: F, non_empty: bool) -> CarcaraResult<Vec<T>>
     where
         F: FnMut(&mut Self) -> CarcaraResult<T>,
@@ -448,8 +455,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
         Ok(())
     }
 
-    /// Reads an SMT-LIB script and parses the assertions, declarations and definitions. The
-    /// following commands are parsed:
+    /// Reads an SMT-LIB script and parses the assertions, declarations and definitions.
+    ///
+    /// The following commands are parsed:
     ///
     /// - `assert`
     /// - `declare-const`
@@ -736,10 +744,12 @@ impl<'a, R: BufRead> Parser<'a, R> {
             .ok_or_else(|| Error::Parser(ParserError::UndefinedStepIndex(id.unwrap()), position))
     }
 
-    /// Parses an argument for the `:discharge` attribute. Due to a bug in veriT, commands local to
-    /// the current subproof are passed by their "relative" id. That is, the command `t5.t4.h2` is
-    /// passed as simply `h2`. This behavior is not present in other SMT solvers, like cvc5. To
-    /// work around that, this function tries to find the command considering both possibilities.
+    /// Parses an argument for the `:discharge` attribute.
+    ///
+    /// Due to a bug in veriT, commands local to the current subproof are passed by their "relative"
+    /// id. That is, the command `t5.t4.h2` is passed as simply `h2`. This behavior is not present
+    /// in other SMT solvers, like cvc5. To work around that, this function tries to find the
+    /// command considering both possibilities.
     fn parse_discharge_premise(&mut self, root_id: &str) -> CarcaraResult<(usize, usize)> {
         let position = self.current_position;
         let id = self.expect_symbol()?;
@@ -755,8 +765,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     /// Parses an `anchor` proof command. This method assumes that the `(` and `anchor` tokens were
-    /// already consumed. In order to parse the subproof arguments, this method pushes a new scope
-    /// into the symbol table which must be removed after parsing the subproof.
+    /// already consumed.
+    ///
+    /// In order to parse the subproof arguments, this method pushes a new scope into the symbol
+    /// table which must be removed after parsing the subproof.
     fn parse_anchor_command(&mut self) -> CarcaraResult<AnchorCommand> {
         self.expect_token(Token::Keyword("step".into()))?;
         let end_step_id = self.expect_symbol()?;
@@ -1039,10 +1051,11 @@ impl<'a, R: BufRead> Parser<'a, R> {
         }
     }
 
-    /// Parses an annotated term, of the form `(! <term> <attribute>+)`. The two supported
-    /// attributes are `:named` and `:pattern`, though the latter is ignored. If any other
-    /// attribute is present, an error will be returned. This method assumes that the `(` and `!`
-    /// tokens were already consumed.
+    /// Parses an annotated term, of the form `(! <term> <attribute>+)`. This method assumes that
+    /// the `(` and `!` tokens were already consumed.
+    ///
+    /// The two supported attributes are `:named` and `:pattern`, though the latter is ignored. If
+    /// any other attribute is present, an error will be returned.
     fn parse_annotated_term(&mut self) -> CarcaraResult<Rc<Term>> {
         let inner = self.parse_term()?;
         self.parse_sequence(

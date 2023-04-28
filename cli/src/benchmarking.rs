@@ -27,7 +27,7 @@ fn run_job<T: CollectResults + Default>(
         apply_function_defs,
         expand_lets,
         allow_int_real_subtyping,
-        check_lia_using_cvc5,
+        lia_via_cvc5,
         strict,
         skip_unknown_rules,
     }: &CarcaraOptions,
@@ -64,7 +64,7 @@ fn run_job<T: CollectResults + Default>(
             assume_core_time: &mut assume_core,
             results,
         }),
-        check_lia_using_cvc5,
+        lia_via_cvc5,
     };
     let mut checker = checker::ProofChecker::new(&mut pool, config, prelude);
 

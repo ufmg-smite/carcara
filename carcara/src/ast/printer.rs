@@ -1,3 +1,5 @@
+//! A pretty printer for Alethe proofs.
+
 use crate::{
     ast::*,
     parser::Token,

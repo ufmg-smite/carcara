@@ -49,31 +49,48 @@ use thiserror::Error;
 
 pub type CarcaraResult<T> = Result<T, Error>;
 
+/// The options that control how Carcara parses, checks and elaborates a proof.
+#[derive(Default)]
 pub struct CarcaraOptions {
+    /// If `true`, Carcara will automatically expand function definitions introduced by `define-fun`
+    /// commands in the SMT problem. If `false`, those `define-fun`s are instead interpreted as a
+    /// function declaration and an `assert` command that defines the function as equal to its body
+    /// (or to a lambda term, if it contains arguments). Note that function definitions in the proof
+    /// are always expanded.
     pub apply_function_defs: bool,
+
+    /// If `true`, Carcara will eliminate `let` bindings from terms during parsing. This is done by
+    /// replacing any occurence of a variable bound in the `let` binding with its corresponding
+    /// value.
     pub expand_lets: bool,
+
+    /// If `true`, this relaxes the type checking rules in Carcara to allow `Int`-`Real` subtyping.
+    /// That is, terms of sort `Int` will be allowed in arithmetic operations where a `Real` term
+    /// was expected. Note that this only applies to predefined operators --- passing an `Int` term
+    /// to a function that expects a `Real` will still be an error.
     pub allow_int_real_subtyping: bool,
-    pub check_lia_using_cvc5: bool,
+
+    /// Enable checking/elaboration of `lia_generic` steps using cvc5. When checking a proof, this
+    /// will call cvc5 to solve the linear integer arithmetic problem, check the proof, and discard
+    /// it. When elaborating, the proof will instead be inserted in the place of the `lia_generic`
+    /// step.
+    pub lia_via_cvc5: bool,
+
+    /// Enables "strict" checking of some rules. Currently, only the "refl" rule is affected by this
+    /// option --- when it is enabled, implicit reordering of equalities are not allowed in "refl"
+    /// steps. The invariant we aim for is that, if you are checking a proof that was elaborated by
+    /// Carcara, you can safely enable this option (and possibly get a performance benefit).
     pub strict: bool,
+
+    /// If `true`, Carcara will skip any rules that it does not recognize, and will consider them as
+    /// holes. Normally, using an unknown rule is considered an error.
     pub skip_unknown_rules: bool,
 }
 
-impl Default for CarcaraOptions {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl CarcaraOptions {
-    fn new() -> Self {
-        Self {
-            apply_function_defs: true,
-            expand_lets: false,
-            allow_int_real_subtyping: false,
-            check_lia_using_cvc5: false,
-            strict: false,
-            skip_unknown_rules: false,
-        }
+    /// Constructs a new `CarcaraOptions` with all options set to `false`.
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 
@@ -107,32 +124,21 @@ pub enum Error {
     DoesNotReachEmptyClause,
 }
 
-pub fn check<T: io::BufRead>(
-    problem: T,
-    proof: T,
-    CarcaraOptions {
-        apply_function_defs,
-        expand_lets,
-        allow_int_real_subtyping,
-        check_lia_using_cvc5,
-        strict,
-        skip_unknown_rules,
-    }: CarcaraOptions,
-) -> Result<bool, Error> {
+pub fn check<T: io::BufRead>(problem: T, proof: T, options: CarcaraOptions) -> Result<bool, Error> {
     let (prelude, proof, mut pool) = parser::parse_instance(
         problem,
         proof,
-        apply_function_defs,
-        expand_lets,
-        allow_int_real_subtyping,
+        options.apply_function_defs,
+        options.expand_lets,
+        options.allow_int_real_subtyping,
     )?;
 
     let config = checker::Config {
-        strict,
-        skip_unknown_rules,
+        strict: options.strict,
+        skip_unknown_rules: options.skip_unknown_rules,
         is_running_test: false,
         statistics: None,
-        check_lia_using_cvc5,
+        lia_via_cvc5: options.lia_via_cvc5,
     };
     checker::ProofChecker::new(&mut pool, config, prelude).check(&proof)
 }
@@ -140,29 +146,22 @@ pub fn check<T: io::BufRead>(
 pub fn check_and_elaborate<T: io::BufRead>(
     problem: T,
     proof: T,
-    CarcaraOptions {
-        apply_function_defs,
-        expand_lets,
-        allow_int_real_subtyping,
-        check_lia_using_cvc5,
-        strict,
-        skip_unknown_rules,
-    }: CarcaraOptions,
+    options: CarcaraOptions,
 ) -> Result<(bool, ast::Proof), Error> {
     let (prelude, proof, mut pool) = parser::parse_instance(
         problem,
         proof,
-        apply_function_defs,
-        expand_lets,
-        allow_int_real_subtyping,
+        options.apply_function_defs,
+        options.expand_lets,
+        options.allow_int_real_subtyping,
     )?;
 
     let config = checker::Config {
-        strict,
-        skip_unknown_rules,
+        strict: options.strict,
+        skip_unknown_rules: options.skip_unknown_rules,
         is_running_test: false,
         statistics: None,
-        check_lia_using_cvc5,
+        lia_via_cvc5: options.lia_via_cvc5,
     };
     checker::ProofChecker::new(&mut pool, config, prelude).check_and_elaborate(proof)
 }

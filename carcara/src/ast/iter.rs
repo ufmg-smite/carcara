@@ -1,3 +1,6 @@
+//! This module implements `ProofIter`, an iterator that recursively iterates over the proof
+//! commands in a proof.
+
 use super::*;
 
 /// An iterator over the proof commands in a proof.
@@ -36,6 +39,7 @@ pub struct ProofIter<'a> {
 }
 
 impl<'a> ProofIter<'a> {
+    /// Constructs a new `ProofIter`, given a slice of proof commands.
     pub(super) fn new(commands: &'a [ProofCommand]) -> Self {
         Self { stack: vec![(0, commands)] }
     }

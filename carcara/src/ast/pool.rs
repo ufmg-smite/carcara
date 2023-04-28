@@ -1,3 +1,5 @@
+//! This module implements `TermPool`, a structure that stores terms and implements hash consing.
+
 use super::{Identifier, Rc, Sort, Term, Terminal};
 use ahash::{AHashMap, AHashSet};
 
@@ -11,6 +13,7 @@ use ahash::{AHashMap, AHashSet};
 /// This struct also provides other utility methods, like computing the sort of a term (see
 /// [`TermPool::sort`]) or its free variables (see [`TermPool::free_vars`]).
 pub struct TermPool {
+    /// A map of the terms in the pool.
     pub(crate) terms: AHashMap<Term, Rc<Term>>,
     free_vars_cache: AHashMap<Rc<Term>, AHashSet<Rc<Term>>>,
     sorts_cache: AHashMap<Rc<Term>, Sort>,
@@ -55,17 +58,17 @@ impl TermPool {
         }
     }
 
-    /// Return the term corresponding to the boolean constant `true`.
+    /// Returns the term corresponding to the boolean constant `true`.
     pub fn bool_true(&self) -> Rc<Term> {
         self.bool_true.clone()
     }
 
-    /// Return the term corresponding to the boolean constant `false`.
+    /// Returns the term corresponding to the boolean constant `false`.
     pub fn bool_false(&self) -> Rc<Term> {
         self.bool_false.clone()
     }
 
-    /// Return the term corresponding to the boolean constant determined by `value`.
+    /// Returns the term corresponding to the boolean constant determined by `value`.
     pub fn bool_constant(&self, value: bool) -> Rc<Term> {
         match value {
             true => self.bool_true(),
