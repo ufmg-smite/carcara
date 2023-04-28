@@ -1,3 +1,5 @@
+//! The types for parser errors.
+
 use crate::{
     ast::{Identifier, Sort},
     parser::Token,
@@ -109,7 +111,10 @@ where
 /// An error in sort checking.
 #[derive(Debug, Error)]
 pub struct SortError {
+    /// The possible sorts that were expected.
     pub expected: Vec<Sort>,
+
+    /// The sort we got.
     pub got: Sort,
 }
 
