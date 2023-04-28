@@ -1,3 +1,5 @@
+//! Some useful helper macros.
+
 /// A macro to help pattern match terms.
 ///
 /// Since a term holds references to its subterms in `Vec`s and `Rc`s, pattern matching a complex
@@ -201,7 +203,7 @@ macro_rules! build_term {
 // it's impossible to test this macro. To avoid test errors, we interpret this block as text. This
 // is not a perfect solution, since we lose syntax highlighting.
 // See https://github.com/rust-lang/rust/issues/63193
-/// ```test
+/// ```text
 /// #[derive(Debug, PartialEq)]
 /// enum Foo {
 ///     A,

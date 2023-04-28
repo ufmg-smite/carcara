@@ -14,10 +14,18 @@ use super::{
 use crate::utils::SymbolTable;
 use std::time::{Duration, Instant};
 
+/// A trait that represents objects that can be compared for equality modulo reordering of
+/// equalities or alpha equivalence.
 pub trait DeepEq {
     fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool;
 }
 
+/// Computes whether the two given terms are equal, modulo reordering of equalities.
+///
+/// That is, for this function, `=` terms that are reflections of each other are considered as
+/// equal, meaning terms like `(and p (= a b))` and `(and p (= b a))` are considered equal.
+///
+/// This function records how long it takes to run, and adds that duration to the `time` argument.
 pub fn deep_eq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> bool {
     let start = Instant::now();
     let result = DeepEq::eq(&mut DeepEqualityChecker::new(true, false), a, b);
@@ -25,6 +33,10 @@ pub fn deep_eq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> bool {
     result
 }
 
+/// Similar to `deep_eq`, but also records the maximum depth the deep equality checker reached when
+/// comparing the terms.
+///
+/// This function records how long it takes to run, and adds that duration to the `time` argument.
 pub fn tracing_deep_eq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> (bool, usize) {
     let start = Instant::now();
 
@@ -35,6 +47,14 @@ pub fn tracing_deep_eq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> (bool
     (result, checker.max_depth)
 }
 
+/// Similar to `deep_eq`, but instead compares terms for alpha equivalence.
+///
+/// This means that two terms which are the same, except for the renaming of a bound variable, are
+/// considered equivalent. This functions still considers equality modulo reordering of equalities.
+/// For example, this function will consider the terms `(forall ((x Int)) (= x 0))` and `(forall ((y
+/// Int)) (= 0 y))` as equivalent.
+///
+/// This function records how long it takes to run, and adds that duration to the `time` argument.
 pub fn are_alpha_equivalent(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> bool {
     let start = Instant::now();
 
@@ -48,6 +68,7 @@ pub fn are_alpha_equivalent(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> 
     result
 }
 
+/// A configurable checker for equality modulo reordering of equalities and alpha equivalence.
 pub struct DeepEqualityChecker {
     // In order to check alpha-equivalence, we can't use a simple global cache. For instance, let's
     // say we are comparing the following terms for alpha equivalence:
@@ -81,6 +102,11 @@ pub struct DeepEqualityChecker {
 }
 
 impl DeepEqualityChecker {
+    /// Constructs a new `DeepEqualityChecker`.
+    ///
+    /// If `is_mod_reordering` is `true`, the checker will compare terms modulo reordering of
+    /// equalities. If `is_alpha_equivalence` is `true`, the checker will compare terms for alpha
+    /// equivalence.
     pub fn new(is_mod_reordering: bool, is_alpha_equivalence: bool) -> Self {
         Self {
             is_mod_reordering,

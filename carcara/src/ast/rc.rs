@@ -1,3 +1,5 @@
+//! This module implements a variant of `Rc` where equality and hashing are done by reference.
+
 use std::{fmt, hash::Hash, ops::Deref, rc};
 
 /// An `Rc` where equality and hashing are done by reference, instead of by value.
@@ -84,6 +86,7 @@ where
 }
 
 impl<T, const N: usize> Rc<[T; N]> {
+    /// Converts an `Rc` of an array into an `Rc` of a slice.
     pub fn to_rc_of_slice(self) -> Rc<[T]> {
         Rc(self.0 as _)
     }

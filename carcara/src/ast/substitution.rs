@@ -1,3 +1,5 @@
+//! Algorithms for creating and applying capture-avoiding substitutions over terms.
+
 use super::{BindingList, Rc, SortedVar, Term, TermPool};
 use ahash::{AHashMap, AHashSet};
 use thiserror::Error;
@@ -33,9 +35,11 @@ type SubstitutionResult<T> = Result<T, SubstitutionError>;
 /// necessary before applying the substitution. In the earlier example, the resulting term would
 /// actually be `(forall ((y@ Int)) (= y y@))`.
 pub struct Substitution {
+    /// The substitution's mappings.
     pub(crate) map: AHashMap<Rc<Term>, Rc<Term>>,
-    // Variables that should be renamed to preserve capture-avoidance if they are bound by a binder
-    // term
+
+    /// The variables that should be renamed to preserve capture-avoidance, if they are bound by a
+    /// binder term.
     should_be_renamed: Option<AHashSet<Rc<Term>>>,
     cache: AHashMap<Rc<Term>, Rc<Term>>,
 }

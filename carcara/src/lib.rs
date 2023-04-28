@@ -66,7 +66,7 @@ pub struct CarcaraOptions {
 
     /// If `true`, this relaxes the type checking rules in Carcara to allow `Int`-`Real` subtyping.
     /// That is, terms of sort `Int` will be allowed in arithmetic operations where a `Real` term
-    /// was expected. Note that this only applies to predefined operators -- passing an `Int` term
+    /// was expected. Note that this only applies to predefined operators --- passing an `Int` term
     /// to a function that expects a `Real` will still be an error.
     pub allow_int_real_subtyping: bool,
 
@@ -77,7 +77,7 @@ pub struct CarcaraOptions {
     pub lia_via_cvc5: bool,
 
     /// Enables "strict" checking of some rules. Currently, only the "refl" rule is affected by this
-    /// option -- when it is enabled, implicit reordering of equalities are not allowed in "refl"
+    /// option --- when it is enabled, implicit reordering of equalities are not allowed in "refl"
     /// steps. The invariant we aim for is that, if you are checking a proof that was elaborated by
     /// Carcara, you can safely enable this option (and possibly get a performance benefit).
     pub strict: bool,
