@@ -164,24 +164,5 @@ pub fn check_and_elaborate<T: io::BufRead>(
         statistics: None,
         check_lia_using_cvc5,
     };
-    checker::ProofChecker::new(&mut pool, config, prelude)
-        .check_and_elaborate(proof)
-}
-
-pub fn generate_lia_smt_instances<T: io::BufRead>(
-    problem: T,
-    proof: T,
-    apply_function_defs: bool,
-    expand_lets: bool,
-    allow_int_real_subtyping: bool,
-    use_sharing: bool,
-) -> Result<Vec<(String, String)>, Error> {
-    let (prelude, proof, _) = parser::parse_instance(
-        problem,
-        proof,
-        apply_function_defs,
-        expand_lets,
-        allow_int_real_subtyping,
-    )?;
-    checker::generate_lia_smt_instances(prelude, &proof, use_sharing)
+    checker::ProofChecker::new(&mut pool, config, prelude).check_and_elaborate(proof)
 }

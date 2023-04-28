@@ -6,7 +6,7 @@ mod path_args;
 use carcara::{
     ast::print_proof,
     benchmarking::{Metrics, OnlineBenchmarkResults},
-    check, check_and_elaborate, generate_lia_smt_instances, parser, CarcaraOptions,
+    check, check_and_elaborate, parser, CarcaraOptions,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -70,9 +70,6 @@ enum Command {
 
     /// Checks a series of proof files and records performance statistics.
     Bench(BenchCommandOptions),
-
-    /// Generates the equivalent SMT instance for every `lia_generic` step in a proof.
-    GenerateLiaProblems(ParseCommandOptions),
 }
 
 #[derive(Args)]
@@ -261,7 +258,6 @@ fn main() {
         }
         Command::Elaborate(options) => elaborate_command(options),
         Command::Bench(options) => bench_command(options),
-        Command::GenerateLiaProblems(options) => generate_lia_problems_command(options),
     };
     if let Err(e) = result {
         log::error!("{}", e);
@@ -481,28 +477,5 @@ fn print_benchmark_results(results: OnlineBenchmarkResults, sort_by_total: bool)
             depths.standard_deviation()
         );
     }
-    Ok(())
-}
-
-fn generate_lia_problems_command(options: ParseCommandOptions) -> CliResult<()> {
-    use std::io::Write;
-
-    let root_file_name = options.input.proof_file.clone();
-    let (problem, proof) = get_instance(&options.input)?;
-
-    let instances = generate_lia_smt_instances(
-        problem,
-        proof,
-        options.parsing.apply_function_defs,
-        options.parsing.expand_let_bindings,
-        options.parsing.allow_int_real_subtyping,
-        options.printing.use_sharing,
-    )?;
-    for (id, content) in instances {
-        let file_name = format!("{}.{}.lia_smt2", root_file_name, id);
-        let mut f = File::create(file_name)?;
-        write!(f, "{}", content)?;
-    }
-
     Ok(())
 }

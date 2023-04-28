@@ -475,39 +475,3 @@ impl<'c> ProofChecker<'c> {
         })
     }
 }
-
-pub fn generate_lia_smt_instances(
-    prelude: ProblemPrelude,
-    proof: &Proof,
-    use_sharing: bool,
-) -> CarcaraResult<Vec<(String, String)>> {
-    use std::fmt::Write;
-
-    let mut iter = proof.iter();
-    let mut result = Vec::new();
-    while let Some(command) = iter.next() {
-        if let ProofCommand::Step(step) = command {
-            if step.rule == "lia_generic" {
-                if iter.depth() > 0 {
-                    log::error!(
-                        "generating SMT instance for step inside subproof is not supported"
-                    );
-                    continue;
-                }
-
-                let mut problem = String::new();
-                write!(&mut problem, "{}", prelude).unwrap();
-
-                let mut bytes = Vec::new();
-                printer::write_lia_smt_instance(&mut bytes, &step.clause, use_sharing).unwrap();
-                write!(&mut problem, "{}", String::from_utf8(bytes).unwrap()).unwrap();
-
-                writeln!(&mut problem, "(check-sat)").unwrap();
-                writeln!(&mut problem, "(exit)").unwrap();
-
-                result.push((step.id.clone(), problem));
-            }
-        }
-    }
-    Ok(result)
-}
