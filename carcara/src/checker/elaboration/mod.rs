@@ -264,7 +264,7 @@ impl Elaborator {
         let equality_step = self.elaborate_deep_eq(pool, id, premise.clone(), term.clone(), false);
         let equiv1_step = {
             let new_id = self.get_new_id(id);
-            let clause = vec![build_term!(pool, (not { premise })), term.clone()];
+            let clause = vec![build_term!(pool, (not {premise.clone()})), term.clone()];
             self.add_new_step(ProofStep {
                 id: new_id,
                 clause,
@@ -281,7 +281,7 @@ impl Elaborator {
             clause: vec![term],
             rule: "resolution".to_owned(),
             premises: vec![new_assume, equiv1_step],
-            args: Vec::new(), // TODO: Add args
+            args: vec![ProofArg::Term(premise), ProofArg::Term(pool.bool_true())],
             discharge: Vec::new(),
         })
     }
