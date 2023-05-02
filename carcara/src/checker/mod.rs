@@ -144,7 +144,13 @@ impl<'c> ProofChecker<'c> {
                     }
                 }
                 ProofCommand::Assume { id, term } => {
-                    self.check_assume(id, term, &proof.premises, &iter)?;
+                    if !self.check_assume(id, term, &proof.premises, &iter) {
+                        return Err(Error::Checker {
+                            inner: CheckerError::Assume(term.clone()),
+                            rule: "assume".into(),
+                            step: id.clone(),
+                        });
+                    }
                 }
             }
         }
@@ -178,7 +184,7 @@ impl<'c> ProofChecker<'c> {
         term: &Rc<Term>,
         premises: &AHashSet<Rc<Term>>,
         iter: &ProofIter,
-    ) -> CarcaraResult<()> {
+    ) -> bool {
         let time = Instant::now();
 
         // Some subproofs contain `assume` commands inside them. These don't refer
@@ -190,7 +196,7 @@ impl<'c> ProofChecker<'c> {
             if let Some(elaborator) = &mut self.elaborator {
                 elaborator.assume(term);
             }
-            return Ok(());
+            return true;
         }
 
         if premises.contains(term) {
@@ -203,12 +209,17 @@ impl<'c> ProofChecker<'c> {
             if let Some(elaborator) = &mut self.elaborator {
                 elaborator.assume(term);
             }
-            return Ok(());
+            return true;
+        }
+
+        if self.config.strict {
+            return false;
         }
 
         let mut found = None;
         let mut deep_eq_time = Duration::ZERO;
         let mut core_time = Duration::ZERO;
+
         for p in premises {
             let mut this_deep_eq_time = Duration::ZERO;
             let (result, depth) = tracing_deep_eq(term, p, &mut this_deep_eq_time);
@@ -223,33 +234,28 @@ impl<'c> ProofChecker<'c> {
             }
         }
 
-        if let Some(p) = found {
-            if let Some(elaborator) = &mut self.elaborator {
-                let elaboration_time = Instant::now();
+        let Some(p) = found else { return false };
 
-                elaborator.elaborate_assume(self.pool, p, term.clone(), id);
+        if let Some(elaborator) = &mut self.elaborator {
+            let elaboration_time = Instant::now();
 
-                if let Some(s) = &mut self.config.statistics {
-                    *s.elaboration_time += elaboration_time.elapsed();
-                }
-            }
+            elaborator.elaborate_assume(self.pool, p, term.clone(), id);
 
             if let Some(s) = &mut self.config.statistics {
-                let time = time.elapsed();
-                *s.assume_time += time;
-                *s.assume_core_time += core_time;
-                *s.deep_eq_time += deep_eq_time;
-                s.results
-                    .add_assume_measurement(s.file_name, id, false, time);
+                *s.elaboration_time += elaboration_time.elapsed();
             }
-            Ok(())
-        } else {
-            Err(Error::Checker {
-                inner: CheckerError::Assume(term.clone()),
-                rule: "assume".into(),
-                step: id.to_owned(),
-            })
         }
+
+        if let Some(s) = &mut self.config.statistics {
+            let time = time.elapsed();
+            *s.assume_time += time;
+            *s.assume_core_time += core_time;
+            *s.deep_eq_time += deep_eq_time;
+            s.results
+                .add_assume_measurement(s.file_name, id, false, time);
+        }
+
+        true
     }
 
     fn check_step<'a>(
