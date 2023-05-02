@@ -30,7 +30,10 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
     // idempotent
     let mut checker = checker::ProofChecker::new(&mut pool, Config::new().strict(true), prelude);
     let (_, elaborated_twice) = checker.check_and_elaborate(elaborated.clone())?;
-    assert_eq!(elaborated.commands, elaborated_twice.commands);
+    assert!(
+        elaborated.commands == elaborated_twice.commands,
+        "elaboration was not idempotent!"
+    );
 
     Ok(())
 }
