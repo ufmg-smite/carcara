@@ -386,6 +386,7 @@ impl<'c> ProofChecker<'c> {
             "forall_inst" => quantifier::forall_inst,
             "qnt_join" => quantifier::qnt_join,
             "qnt_rm_unused" => quantifier::qnt_rm_unused,
+            "resolution" | "th_resolution" if strict => resolution::resolution_with_args,
             "resolution" | "th_resolution" => resolution::resolution,
             "refl" if strict => reflexivity::strict_refl,
             "refl" => reflexivity::refl,

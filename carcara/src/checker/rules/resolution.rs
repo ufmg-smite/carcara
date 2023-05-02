@@ -287,7 +287,7 @@ fn rup_resolution(conclusion: &[Rc<Term>], premises: &[Premise]) -> bool {
     }
 }
 
-fn resolution_with_args(
+pub fn resolution_with_args(
     RuleArgs {
         conclusion, premises, args, pool, ..
     }: RuleArgs,
