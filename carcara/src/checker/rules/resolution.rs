@@ -443,7 +443,7 @@ pub fn elaborate_resolution(
         }
     }
 
-    let mut premises = premises.to_vec();
+    let mut premises: Vec<_> = premises.iter().dedup().copied().collect();
     let ResolutionTrace { not_not_added, pivot_trace } =
         greedy_resolution(conclusion, &premises, pool, true).or_else(|_| {
             premises.reverse();

@@ -30,7 +30,7 @@ pub struct RuleArgs<'a> {
     pub(super) deep_eq_time: &'a mut Duration,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct Premise<'a> {
     pub id: &'a str,
     pub clause: &'a [Rc<Term>],
