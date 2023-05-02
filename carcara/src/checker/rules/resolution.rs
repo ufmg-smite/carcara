@@ -61,6 +61,16 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
     }
     let RuleArgs { conclusion, premises, pool, .. } = rule_args;
 
+    // In some cases, this rule is used with a single premise `(not true)` to justify an empty
+    // conclusion clause
+    if conclusion.is_empty() && premises.len() == 1 {
+        if let [t] = premises[0].clause {
+            if match_term!((not true) = t).is_some() {
+                return Ok(());
+            }
+        }
+    }
+
     greedy_resolution(conclusion, premises, pool, false)
         .map(|_| ())
         .or_else(|greedy_error| {
@@ -88,16 +98,6 @@ fn greedy_resolution(
     // If we are elaborating, we record which pivot was found for each binary resolution step, so we
     // can add them all as arguments later
     let mut pivot_trace = Vec::new();
-
-    // In some cases, this rule is used with a single premise `(not true)` to justify an empty
-    // conclusion clause
-    if conclusion.is_empty() && premises.len() == 1 {
-        if let [t] = premises[0].clause {
-            if match_term!((not true) = t).is_some() {
-                return Ok(ResolutionTrace { not_not_added: false, pivot_trace });
-            }
-        }
-    }
 
     // When checking this rule, we must look at what the conclusion clause looks like in order to
     // determine the pivots. The reason for that is because there is no other way to know which
@@ -413,6 +413,36 @@ pub fn elaborate_resolution(
     command_id: String,
     elaborator: &mut Elaborator,
 ) -> RuleResult {
+    // In the cases where the rule is used to get an empty clause from `(not true)`, we add a `true`
+    // step to get an actual resolution step
+    if conclusion.is_empty() && premises.len() == 1 {
+        if let [t] = premises[0].clause {
+            if match_term!((not true) = t).is_some() {
+                let id = elaborator.get_new_id(&command_id);
+                let true_step = elaborator.add_new_step(ProofStep {
+                    id,
+                    clause: vec![pool.bool_true()],
+                    rule: "true".to_owned(),
+                    premises: Vec::new(),
+                    args: Vec::new(),
+                    discharge: Vec::new(),
+                });
+                let premises = vec![elaborator.map_index(premises[0].index), true_step];
+                elaborator.push_elaborated_step(ProofStep {
+                    id: command_id,
+                    clause: Vec::new(),
+                    rule: "resolution".to_owned(),
+                    premises,
+                    args: [true, false]
+                        .map(|a| ProofArg::Term(pool.bool_constant(a)))
+                        .to_vec(),
+                    discharge: Vec::new(),
+                });
+                return Ok(());
+            }
+        }
+    }
+
     let mut premises = premises.to_vec();
     let ResolutionTrace { not_not_added, pivot_trace } =
         greedy_resolution(conclusion, &premises, pool, true).or_else(|_| {
