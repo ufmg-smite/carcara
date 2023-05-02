@@ -16,7 +16,7 @@ ulimit -s 134217728
 
 cd $cur_dir
 for i in $(seq 1 $3); do
-    RESULT1=$(cargo run --quiet --release -- check --stats --skip-unknown-rules "$PROOF_FOLDER/$FILE_NAME.proof" "$FILE" 2>/dev/null)
+    RESULT1=$(cargo run --quiet --profile release-with-debug -- check --stats --skip-unknown-rules "$PROOF_FOLDER/$FILE_NAME.proof" "$FILE" 2>/dev/null)
     echo "$RESULT1"
 done
 
@@ -24,6 +24,6 @@ echo "";
 
 cd $cur_dir
 for i in $(seq 1 $3); do
-    RESULT2=$(cargo run --quiet  --release --features thread-safety -- check  --stats  --skip-unknown-rules -u 3 "$PROOF_FOLDER/$FILE_NAME.proof" "$FILE" 2>/dev/null)
+    RESULT2=$(cargo run --quiet   --profile release-with-debug --features thread-safety -- check  --stats  --skip-unknown-rules -u 3 "$PROOF_FOLDER/$FILE_NAME.proof" "$FILE" 2>/dev/null)
     echo "$RESULT2"
 done

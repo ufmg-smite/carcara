@@ -5,6 +5,10 @@ members = ["carcara", "cli"]
 debug = 1
 incremental = true
 
+[profile.release-with-debug]
+inherits = "release"
+debug = true
+
 [profile.release-lto]
 inherits = "release"
 debug = 0
