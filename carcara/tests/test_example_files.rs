@@ -5,15 +5,7 @@ use std::{
 };
 
 fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
-    fn test_config<'a>() -> checker::Config<'a> {
-        checker::Config {
-            strict: false,
-            skip_unknown_rules: true,
-            is_running_test: false,
-            statistics: None,
-            lia_via_cvc5: false,
-        }
-    }
+    use checker::Config;
 
     let (prelude, proof, mut pool) = parser::parse_instance(
         io::BufReader::new(fs::File::open(problem_path)?),
@@ -24,18 +16,19 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
     )?;
 
     // First, we check the proof normally
-    checker::ProofChecker::new(&mut pool, test_config(), prelude.clone()).check(&proof)?;
+    checker::ProofChecker::new(&mut pool, Config::new(), prelude.clone()).check(&proof)?;
 
     // Then, we check it while elaborating the proof
-    let mut checker = checker::ProofChecker::new(&mut pool, test_config(), prelude.clone());
+    let mut checker = checker::ProofChecker::new(&mut pool, Config::new(), prelude.clone());
     let (_, elaborated) = checker.check_and_elaborate(proof)?;
 
     // After that, we check the elaborated proof normally, to make sure it is valid
-    checker::ProofChecker::new(&mut pool, test_config(), prelude.clone()).check(&elaborated)?;
+    checker::ProofChecker::new(&mut pool, Config::new().strict(true), prelude.clone())
+        .check(&elaborated)?;
 
     // Finally, we elaborate the already elaborated proof, to make sure the elaboration step is
     // idempotent
-    let mut checker = checker::ProofChecker::new(&mut pool, test_config(), prelude);
+    let mut checker = checker::ProofChecker::new(&mut pool, Config::new().strict(true), prelude);
     let (_, elaborated_twice) = checker.check_and_elaborate(elaborated.clone())?;
     assert_eq!(elaborated.commands, elaborated_twice.commands);
 

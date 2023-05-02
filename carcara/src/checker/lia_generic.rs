@@ -112,14 +112,7 @@ fn parse_and_check_cvc5_proof(
     let commands = parser.parse_proof()?;
     let proof = Proof { premises, commands };
 
-    let config = Config {
-        strict: false,
-        skip_unknown_rules: false,
-        is_running_test: false,
-        statistics: None,
-        lia_via_cvc5: false,
-    };
-    ProofChecker::new(pool, config, prelude).check(&proof)?;
+    ProofChecker::new(pool, Config::new(), prelude).check(&proof)?;
     Ok(proof.commands)
 }
 

@@ -138,13 +138,10 @@ pub fn check<T: io::BufRead>(problem: T, proof: T, options: CarcaraOptions) -> R
         options.allow_int_real_subtyping,
     )?;
 
-    let config = checker::Config {
-        strict: options.strict,
-        skip_unknown_rules: options.skip_unknown_rules,
-        is_running_test: false,
-        statistics: None,
-        lia_via_cvc5: options.lia_via_cvc5,
-    };
+    let config = checker::Config::new()
+        .strict(options.strict)
+        .skip_unknown_rules(options.skip_unknown_rules)
+        .lia_via_cvc5(options.lia_via_cvc5);
     checker::ProofChecker::new(&mut pool, config, prelude).check(&proof)
 }
 
@@ -161,12 +158,9 @@ pub fn check_and_elaborate<T: io::BufRead>(
         options.allow_int_real_subtyping,
     )?;
 
-    let config = checker::Config {
-        strict: options.strict,
-        skip_unknown_rules: options.skip_unknown_rules,
-        is_running_test: false,
-        statistics: None,
-        lia_via_cvc5: options.lia_via_cvc5,
-    };
+    let config = checker::Config::new()
+        .strict(options.strict)
+        .skip_unknown_rules(options.skip_unknown_rules)
+        .lia_via_cvc5(options.lia_via_cvc5);
     checker::ProofChecker::new(&mut pool, config, prelude).check_and_elaborate(proof)
 }

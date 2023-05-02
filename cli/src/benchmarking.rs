@@ -23,14 +23,7 @@ struct JobDescriptor<'a> {
 fn run_job<T: CollectResults + Default>(
     results: &mut T,
     job: JobDescriptor,
-    &CarcaraOptions {
-        apply_function_defs,
-        expand_lets,
-        allow_int_real_subtyping,
-        lia_via_cvc5,
-        strict,
-        skip_unknown_rules,
-    }: &CarcaraOptions,
+    options: &CarcaraOptions,
     elaborate: bool,
 ) -> Result<bool, carcara::Error> {
     let proof_file_name = job.proof_file.to_str().unwrap();
@@ -41,9 +34,9 @@ fn run_job<T: CollectResults + Default>(
     let (prelude, proof, mut pool) = parse_instance(
         BufReader::new(File::open(job.problem_file)?),
         BufReader::new(File::open(job.proof_file)?),
-        apply_function_defs,
-        expand_lets,
-        allow_int_real_subtyping,
+        options.apply_function_defs,
+        options.expand_lets,
+        options.allow_int_real_subtyping,
     )?;
     let parsing = parsing.elapsed();
 
@@ -52,26 +45,26 @@ fn run_job<T: CollectResults + Default>(
     let mut assume = Duration::ZERO;
     let mut assume_core = Duration::ZERO;
 
-    let config = checker::Config {
-        strict,
-        skip_unknown_rules,
-        is_running_test: false,
-        statistics: Some(checker::CheckerStatistics {
+    let config = checker::Config::new()
+        .strict(options.strict)
+        .skip_unknown_rules(options.skip_unknown_rules)
+        .lia_via_cvc5(options.lia_via_cvc5)
+        .statistics(checker::CheckerStatistics {
             file_name: proof_file_name,
             elaboration_time: &mut elaboration,
             deep_eq_time: &mut deep_eq,
             assume_time: &mut assume,
             assume_core_time: &mut assume_core,
             results,
-        }),
-        lia_via_cvc5,
-    };
+        });
     let mut checker = checker::ProofChecker::new(&mut pool, config, prelude);
 
     let checking = Instant::now();
 
     let checking_result = if elaborate {
-        checker.check_and_elaborate(proof).map(|(is_holey, _)| is_holey)
+        checker
+            .check_and_elaborate(proof)
+            .map(|(is_holey, _)| is_holey)
     } else {
         checker.check(&proof)
     };

@@ -43,11 +43,37 @@ impl fmt::Debug for CheckerStatistics<'_> {
 
 #[derive(Debug, Default)]
 pub struct Config<'c> {
-    pub strict: bool,
-    pub skip_unknown_rules: bool,
-    pub is_running_test: bool,
-    pub statistics: Option<CheckerStatistics<'c>>,
-    pub lia_via_cvc5: bool,
+    strict: bool,
+    skip_unknown_rules: bool,
+    is_running_test: bool,
+    statistics: Option<CheckerStatistics<'c>>,
+    lia_via_cvc5: bool,
+}
+
+impl<'c> Config<'c> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn strict(mut self, value: bool) -> Self {
+        self.strict = value;
+        self
+    }
+
+    pub fn skip_unknown_rules(mut self, value: bool) -> Self {
+        self.skip_unknown_rules = value;
+        self
+    }
+
+    pub fn lia_via_cvc5(mut self, value: bool) -> Self {
+        self.lia_via_cvc5 = value;
+        self
+    }
+
+    pub fn statistics(mut self, value: CheckerStatistics<'c>) -> Self {
+        self.statistics = Some(value);
+        self
+    }
 }
 
 pub struct ProofChecker<'c> {
