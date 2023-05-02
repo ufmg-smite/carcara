@@ -28,9 +28,8 @@ carcara check example.smt2.proof
 By default, Carcara will return a checking error when encountering a rule it does not recognize. If
 instead you want to ignore such rules, pass the `--ignore-unknown-rules` flag.
 
-The `--strict` flag will enable "strict checking" of some rules. Currently, this only affects the
-`refl` rule -- if the flag is present, Carcara will not allow the implicit reordering of equalities
-when checking `refl` steps.
+The `--strict` flag will enable a "strict checking" mode. See the [strict
+checking](#strict-checking) section for more details.
 
 See `carcara help check` for more options.
 
@@ -76,3 +75,28 @@ using the `-n`/`--num-runs` option. By default, all benchmarks are run on a sing
 enable multiple threads using the `-j`/`--num-threads` option.
 
 See `carcara help bench` for more options.
+
+
+## "Strict" checking
+
+Strict checking mode can be enabled by using the `--strict` flag when checking. Currently, this only
+affects a few rules.
+
+For the `assume` and `refl` rules, if strict checking is enabled, the implicit reordering of
+equalities is not allowed in those steps.
+
+For the `resolution` and `th_resolution` rules, if strict checking is enabled, the steps must
+provide the resolution pivots as arguments. The expected format is that, for each binary resolution
+step, two arguments must be provided: the pivot used, and a boolean argument indicating whether the
+pivot is in the left-hand (`true`) or right-hand (`false`) clause. For example:
+```
+(step t1 (cl p q) :rule hole)
+(step t2 (cl (not q) (not r)) :rule hole)
+(step t3 (cl (not s) r) :rule hole)
+(step t4 (cl (not (not s))) :rule hole)
+(step t5 (cl p) :rule resolution :premises (t1 t2 t3 t4)
+     :args (q true r false (not s) true))
+```
+
+The intended invariant of strict checking is that any proof that has been elaborated by Carcara can
+be checked strictly. Strict checking may also improve perfomance.

@@ -76,10 +76,15 @@ pub struct CarcaraOptions {
     /// step.
     pub lia_via_cvc5: bool,
 
-    /// Enables "strict" checking of some rules. Currently, only the "refl" rule is affected by this
-    /// option --- when it is enabled, implicit reordering of equalities are not allowed in "refl"
-    /// steps. The invariant we aim for is that, if you are checking a proof that was elaborated by
-    /// Carcara, you can safely enable this option (and possibly get a performance benefit).
+    /// Enables "strict" checking of some rules.
+    ///
+    /// Currently, if enabled, the following rules are affected:
+    /// - `assume` and `refl`: implicit reordering of equalities is not allowed
+    /// - `resolution` and `th_resolution`: the pivots must be provided as arguments
+    ///
+    /// In general, the invariant we aim for is that, if you are checking a proof that was
+    /// elaborated by Carcara, you can safely enable this option (and possibly get a performance
+    /// benefit).
     pub strict: bool,
 
     /// If `true`, Carcara will skip any rules that it does not recognize, and will consider them as
