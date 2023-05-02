@@ -26,7 +26,7 @@ carcara check example.smt2.proof
 ```
 
 By default, Carcara will return a checking error when encountering a rule it does not recognize. If
-instead you want to ignore such rules, pass the `--ignore-unknown-rules` flag.
+instead you want to ignore such rules, pass the `--skip-unknown-rules` flag.
 
 The `--strict` flag will enable a "strict checking" mode. See the [strict
 checking](#strict-checking) section for more details.
