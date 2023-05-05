@@ -3,7 +3,7 @@ mod deep_eq;
 mod diff;
 mod pruning;
 
-use crate::{ast::*, utils::SymbolTable};
+use crate::{ast::*, utils::HashMapStack};
 use accumulator::Accumulator;
 use deep_eq::DeepEqElaborator;
 use diff::{apply_diff, CommandDiff, ProofDiff};
@@ -33,7 +33,7 @@ impl Frame {
 #[derive(Debug)]
 pub struct Elaborator {
     stack: Vec<Frame>,
-    seen_clauses: SymbolTable<Vec<Rc<Term>>, usize>,
+    seen_clauses: HashMapStack<Vec<Rc<Term>>, usize>,
     accumulator: Accumulator,
 }
 
@@ -48,7 +48,7 @@ impl Elaborator {
         Self {
             stack: vec![Frame::default()],
             accumulator: Accumulator::new(),
-            seen_clauses: SymbolTable::new(),
+            seen_clauses: HashMapStack::new(),
         }
     }
 

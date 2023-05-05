@@ -9,7 +9,7 @@ pub use lexer::{Lexer, Position, Reserved, Token};
 
 use crate::{
     ast::*,
-    utils::{HashCache, SymbolTable},
+    utils::{HashCache, HashMapStack},
     CarcaraResult, Error,
 };
 use ahash::{AHashMap, AHashSet};
@@ -72,10 +72,10 @@ enum AnchorArg {
 /// pool used by the parser.
 #[derive(Default)]
 struct ParserState {
-    symbol_table: SymbolTable<HashCache<Identifier>, Rc<Term>>,
+    symbol_table: HashMapStack<HashCache<Identifier>, Rc<Term>>,
     function_defs: AHashMap<String, FunctionDef>,
     sort_declarations: AHashMap<String, usize>,
-    step_ids: SymbolTable<HashCache<String>, usize>,
+    step_ids: HashMapStack<HashCache<String>, usize>,
 }
 
 /// A parser for the Alethe proof format.

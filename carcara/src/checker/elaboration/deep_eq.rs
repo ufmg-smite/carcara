@@ -2,13 +2,13 @@ use super::*;
 use crate::{
     ast::*,
     checker::context::ContextStack,
-    utils::{DedupIterator, SymbolTable},
+    utils::{DedupIterator, HashMapStack},
 };
 
 pub struct DeepEqElaborator<'a> {
     inner: &'a mut Elaborator,
     root_id: &'a str,
-    cache: SymbolTable<(Rc<Term>, Rc<Term>), (usize, usize)>,
+    cache: HashMapStack<(Rc<Term>, Rc<Term>), (usize, usize)>,
     checker: DeepEqualityChecker,
     context: Option<ContextStack>,
 }
@@ -18,7 +18,7 @@ impl<'a> DeepEqElaborator<'a> {
         Self {
             inner,
             root_id,
-            cache: SymbolTable::new(),
+            cache: HashMapStack::new(),
             checker: DeepEqualityChecker::new(true, is_alpha_equivalence),
             context: is_alpha_equivalence.then(ContextStack::new),
         }

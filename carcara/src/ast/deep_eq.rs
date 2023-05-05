@@ -11,7 +11,7 @@ use super::{
     BindingList, Identifier, Operator, ProofArg, ProofCommand, ProofStep, Rc, Sort, Subproof, Term,
     Terminal,
 };
-use crate::utils::SymbolTable;
+use crate::utils::HashMapStack;
 use std::time::{Duration, Instant};
 
 /// A trait that represents objects that can be compared for equality modulo reordering of
@@ -88,12 +88,12 @@ pub struct DeepEqualityChecker {
     // are comparing the second argument of each term, `(< x y)` will again be `(< $0 $1)` in `a`,
     // but it will be `(< $1 $0)` in `b`. If we just rely on the cache, we will incorrectly
     // determine that `a` and `b` are alpha-equivalent.  To account for that, we use a more
-    // complicated caching system, based on a `SymbolTable`. We push a new scope every time we enter
-    // a binder term, and pop it as we exit. This unfortunately means that equalities derived
+    // complicated caching system, based on a `HashMapStack`. We push a new scope every time we
+    // enter a binder term, and pop it as we exit. This unfortunately means that equalities derived
     // inside a binder term can't be reused outside of it, degrading performance. If we are not
-    // checking for alpha-equivalence, we never push an additional scope to this `SymbolTable`,
-    // meaning it functions as a simple hash set.
-    cache: SymbolTable<(Rc<Term>, Rc<Term>), ()>,
+    // checking for alpha-equivalence, we never push an additional scope to this `HashMapStack`,
+    // meaning it functions as a simple hash map.
+    cache: HashMapStack<(Rc<Term>, Rc<Term>), ()>,
     is_mod_reordering: bool,
     alpha_equiv_checker: Option<AlphaEquivalenceChecker>,
 
@@ -110,7 +110,7 @@ impl DeepEqualityChecker {
     pub fn new(is_mod_reordering: bool, is_alpha_equivalence: bool) -> Self {
         Self {
             is_mod_reordering,
-            cache: SymbolTable::new(),
+            cache: HashMapStack::new(),
             alpha_equiv_checker: if is_alpha_equivalence {
                 Some(AlphaEquivalenceChecker::new())
             } else {
@@ -367,14 +367,14 @@ struct AlphaEquivalenceChecker {
     // that is bound second are assigned `$1`, etc. The given term would then be represented like
     // this:
     //     `(forall ((x Int)) (and (exists ((y Int)) (> $0 $1)) (> $0 5)))`
-    indices: (SymbolTable<String, usize>, SymbolTable<String, usize>),
+    indices: (HashMapStack<String, usize>, HashMapStack<String, usize>),
     counter: Vec<usize>, // Holds the count of how many variables were bound before each depth
 }
 
 impl AlphaEquivalenceChecker {
     fn new() -> Self {
         Self {
-            indices: (SymbolTable::new(), SymbolTable::new()),
+            indices: (HashMapStack::new(), HashMapStack::new()),
             counter: vec![0],
         }
     }
@@ -390,7 +390,7 @@ impl AlphaEquivalenceChecker {
         self.indices.0.pop_scope();
         self.indices.1.pop_scope();
 
-        // If we successfully popped the scopes from the symbol tables, that means that there was
+        // If we successfully popped the scopes from the indices stacks, that means that there was
         // at least one scope, so we can safely pop from the counter stack as well
         self.counter.pop();
     }
