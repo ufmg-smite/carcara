@@ -1,4 +1,3 @@
-mod context;
 mod elaboration;
 pub mod error;
 mod lia_generic;
@@ -6,7 +5,6 @@ mod rules;
 
 use crate::{ast::*, benchmarking::CollectResults, CarcaraResult, Error};
 use ahash::AHashSet;
-use context::*;
 use elaboration::Elaborator;
 use error::CheckerError;
 use rules::{ElaborationRule, Premise, Rule, RuleArgs, RuleResult};

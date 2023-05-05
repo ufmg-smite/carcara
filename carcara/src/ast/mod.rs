@@ -4,6 +4,7 @@
 
 #[macro_use]
 mod macros;
+mod context;
 mod iter;
 mod polyeq;
 mod pool;
@@ -13,6 +14,7 @@ mod substitution;
 #[cfg(test)]
 mod tests;
 
+pub use context::{Context, ContextStack};
 pub use iter::ProofIter;
 pub use polyeq::{alpha_equiv, polyeq, tracing_polyeq};
 pub use pool::TermPool;

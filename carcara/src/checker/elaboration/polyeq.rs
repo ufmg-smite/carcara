@@ -1,7 +1,6 @@
 use super::*;
 use crate::{
     ast::*,
-    checker::context::ContextStack,
     utils::{DedupIterator, HashMapStack},
 };
 
