@@ -395,11 +395,11 @@ fn print_benchmark_results(results: OnlineBenchmarkResults, sort_by_total: bool)
     println!("on assume (core):    {}", results.assume_core_time);
     println!("assume ratio:        {}", results.assume_time_ratio);
     println!(
-        "on deep equality:    {} ({:.02}% of checking time)",
-        results.deep_eq_time,
-        100.0 * results.deep_eq_time.mean().as_secs_f64() / results.checking().mean().as_secs_f64(),
+        "on polyeq:           {} ({:.02}% of checking time)",
+        results.polyeq_time,
+        100.0 * results.polyeq_time.mean().as_secs_f64() / results.checking().mean().as_secs_f64(),
     );
-    println!("deep equality ratio: {}", results.deep_eq_time_ratio);
+    println!("polyeq ratio:        {}", results.polyeq_time_ratio);
     println!("total accounted for: {}", accounted_for);
     println!("total:               {}", total);
 
@@ -440,11 +440,11 @@ fn print_benchmark_results(results: OnlineBenchmarkResults, sort_by_total: bool)
         worst_file_assume.1 * 100.0
     );
 
-    let worst_file_deep_eq = results.deep_eq_time_ratio.max();
+    let worst_file_polyeq = results.polyeq_time_ratio.max();
     println!(
-        "    file (deep_eq):  {} ({:.04}%)",
-        worst_file_deep_eq.0 .0,
-        worst_file_deep_eq.1 * 100.0
+        "    file (polyeq):   {} ({:.04}%)",
+        worst_file_polyeq.0 .0,
+        worst_file_polyeq.1 * 100.0
     );
 
     let worst_file_total = results.total().max();
@@ -466,11 +466,11 @@ fn print_benchmark_results(results: OnlineBenchmarkResults, sort_by_total: bool)
         num_hard_assumes, percent_hard
     );
 
-    let depths = results.deep_eq_depths;
+    let depths = results.polyeq_depths;
     if !depths.is_empty() {
-        println!("    max deep equality depth: {}", depths.max().1);
-        println!("  total deep equality depth: {}", depths.total());
-        println!("  number of deep equalities: {}", depths.count());
+        println!("           max polyeq depth: {}", depths.max().1);
+        println!("         total polyeq depth: {}", depths.total());
+        println!("    number of polyeq checks: {}", depths.count());
         println!("                 mean depth: {:.4}", depths.mean());
         println!(
             "standard deviation of depth: {:.4}",

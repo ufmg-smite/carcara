@@ -41,7 +41,7 @@ fn run_job<T: CollectResults + Default>(
     let parsing = parsing.elapsed();
 
     let mut elaboration = Duration::ZERO;
-    let mut deep_eq = Duration::ZERO;
+    let mut polyeq = Duration::ZERO;
     let mut assume = Duration::ZERO;
     let mut assume_core = Duration::ZERO;
 
@@ -52,7 +52,7 @@ fn run_job<T: CollectResults + Default>(
         .statistics(checker::CheckerStatistics {
             file_name: proof_file_name,
             elaboration_time: &mut elaboration,
-            deep_eq_time: &mut deep_eq,
+            polyeq_time: &mut polyeq,
             assume_time: &mut assume,
             assume_core_time: &mut assume_core,
             results,
@@ -79,7 +79,7 @@ fn run_job<T: CollectResults + Default>(
             checking,
             elaboration,
             total,
-            deep_eq,
+            polyeq,
             assume,
             assume_core,
         },

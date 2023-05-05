@@ -330,7 +330,7 @@ fn generic_skolemization_rule(
         pool,
         context,
         previous_command,
-        deep_eq_time,
+        polyeq_time,
         ..
     }: RuleArgs,
 ) -> RuleResult {
@@ -382,7 +382,7 @@ fn generic_skolemization_rule(
             }
             pool.add(Term::Choice(x.clone(), inner))
         };
-        if !are_alpha_equivalent(t, &expected, deep_eq_time) {
+        if !alpha_equiv(t, &expected, polyeq_time) {
             return Err(EqualityError::ExpectedEqual(t.clone(), expected).into());
         }
 

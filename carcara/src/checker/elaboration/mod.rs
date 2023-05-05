@@ -1,12 +1,12 @@
 mod accumulator;
-mod deep_eq;
 mod diff;
+mod polyeq;
 mod pruning;
 
 use crate::{ast::*, utils::HashMapStack};
 use accumulator::Accumulator;
-use deep_eq::DeepEqElaborator;
 use diff::{apply_diff, CommandDiff, ProofDiff};
+use polyeq::PolyeqElaborator;
 use pruning::prune_proof;
 
 #[derive(Debug, Default)]
@@ -236,7 +236,7 @@ impl Elaborator {
         self.add_new_step(step)
     }
 
-    pub fn elaborate_deep_eq(
+    pub fn elaborate_polyeq(
         &mut self,
         pool: &mut TermPool,
         root_id: &str,
@@ -244,7 +244,7 @@ impl Elaborator {
         b: Rc<Term>,
         is_alpha_equivalence: bool,
     ) -> (usize, usize) {
-        DeepEqElaborator::new(self, root_id, is_alpha_equivalence).elaborate(pool, a, b)
+        PolyeqElaborator::new(self, root_id, is_alpha_equivalence).elaborate(pool, a, b)
     }
 
     pub fn elaborate_assume(
@@ -261,7 +261,7 @@ impl Elaborator {
             },
             false,
         );
-        let equality_step = self.elaborate_deep_eq(pool, id, premise.clone(), term.clone(), false);
+        let equality_step = self.elaborate_polyeq(pool, id, premise.clone(), term.clone(), false);
         let equiv1_step = {
             let new_id = self.get_new_id(id);
             let clause = vec![build_term!(pool, (not {premise.clone()})), term.clone()];

@@ -18,7 +18,7 @@ use std::{
 pub struct CheckerStatistics<'s> {
     pub file_name: &'s str,
     pub elaboration_time: &'s mut Duration,
-    pub deep_eq_time: &'s mut Duration,
+    pub polyeq_time: &'s mut Duration,
     pub assume_time: &'s mut Duration,
 
     // This is the time to compare the `assume` term with the `assert` that matches it. That is,
@@ -34,7 +34,7 @@ impl fmt::Debug for CheckerStatistics<'_> {
         f.debug_struct("CheckerStatistics")
             .field("file_name", &self.file_name)
             .field("elaboration_time", &self.elaboration_time)
-            .field("deep_eq_time", &self.deep_eq_time)
+            .field("polyeq_time", &self.polyeq_time)
             .field("assume_time", &self.assume_time)
             .field("assume_core_time", &self.assume_core_time)
             .finish()
@@ -243,18 +243,18 @@ impl<'c> ProofChecker<'c> {
         }
 
         let mut found = None;
-        let mut deep_eq_time = Duration::ZERO;
+        let mut polyeq_time = Duration::ZERO;
         let mut core_time = Duration::ZERO;
 
         for p in premises {
-            let mut this_deep_eq_time = Duration::ZERO;
-            let (result, depth) = tracing_deep_eq(term, p, &mut this_deep_eq_time);
-            deep_eq_time += this_deep_eq_time;
+            let mut this_polyeq_time = Duration::ZERO;
+            let (result, depth) = tracing_polyeq(term, p, &mut this_polyeq_time);
+            polyeq_time += this_polyeq_time;
             if let Some(s) = &mut self.config.statistics {
-                s.results.add_deep_eq_depth(depth);
+                s.results.add_polyeq_depth(depth);
             }
             if result {
-                core_time = this_deep_eq_time;
+                core_time = this_polyeq_time;
                 found = Some(p.clone());
                 break;
             }
@@ -276,7 +276,7 @@ impl<'c> ProofChecker<'c> {
             let time = time.elapsed();
             *s.assume_time += time;
             *s.assume_core_time += core_time;
-            *s.deep_eq_time += deep_eq_time;
+            *s.polyeq_time += polyeq_time;
             s.results
                 .add_assume_measurement(s.file_name, id, false, time);
         }
@@ -291,7 +291,7 @@ impl<'c> ProofChecker<'c> {
         iter: &'a ProofIter<'a>,
     ) -> RuleResult {
         let time = Instant::now();
-        let mut deep_eq_time = Duration::ZERO;
+        let mut polyeq_time = Duration::ZERO;
 
         let mut elaborated = false;
         if step.rule == "lia_generic" {
@@ -351,7 +351,7 @@ impl<'c> ProofChecker<'c> {
                 context: &mut self.context,
                 previous_command,
                 discharge: &discharge,
-                deep_eq_time: &mut deep_eq_time,
+                polyeq_time: &mut polyeq_time,
             };
 
             if let Some(elaborator) = &mut self.elaborator {
@@ -371,7 +371,7 @@ impl<'c> ProofChecker<'c> {
             let time = time.elapsed();
             s.results
                 .add_step_measurement(s.file_name, &step.id, &step.rule, time);
-            *s.deep_eq_time += deep_eq_time;
+            *s.polyeq_time += polyeq_time;
             if elaborated {
                 *s.elaboration_time += time;
             }

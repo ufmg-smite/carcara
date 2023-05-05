@@ -1,11 +1,11 @@
 //! This module implements less strict definitions of equality for terms. In particular, it
 //! contains two definitions of equality that differ from `PartialEq`:
 //!
-//! - `deep_eq` considers `=` terms that are reflections of each other as equal, meaning the terms
+//! - `polyeq` considers `=` terms that are reflections of each other as equal, meaning the terms
 //! `(= a b)` and `(= b a)` are considered equal by this method.
 //!
-//! - `are_alpha_equivalent` compares terms by alpha-equivalence, meaning it implements equality of
-//! terms modulo renaming of bound variables.
+//! - `alpha_equiv` compares terms by alpha-equivalence, meaning it implements equality of terms
+//! modulo renaming of bound variables.
 
 use super::{
     BindingList, Identifier, Operator, ProofArg, ProofCommand, ProofStep, Rc, Sort, Subproof, Term,
@@ -16,8 +16,8 @@ use std::time::{Duration, Instant};
 
 /// A trait that represents objects that can be compared for equality modulo reordering of
 /// equalities or alpha equivalence.
-pub trait DeepEq {
-    fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool;
+pub trait Polyeq {
+    fn eq(comp: &mut PolyeqComparator, a: &Self, b: &Self) -> bool;
 }
 
 /// Computes whether the two given terms are equal, modulo reordering of equalities.
@@ -26,28 +26,28 @@ pub trait DeepEq {
 /// equal, meaning terms like `(and p (= a b))` and `(and p (= b a))` are considered equal.
 ///
 /// This function records how long it takes to run, and adds that duration to the `time` argument.
-pub fn deep_eq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> bool {
+pub fn polyeq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> bool {
     let start = Instant::now();
-    let result = DeepEq::eq(&mut DeepEqualityChecker::new(true, false), a, b);
+    let result = Polyeq::eq(&mut PolyeqComparator::new(true, false), a, b);
     *time += start.elapsed();
     result
 }
 
-/// Similar to `deep_eq`, but also records the maximum depth the deep equality checker reached when
+/// Similar to `polyeq`, but also records the maximum depth the polyequal comparator reached when
 /// comparing the terms.
 ///
 /// This function records how long it takes to run, and adds that duration to the `time` argument.
-pub fn tracing_deep_eq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> (bool, usize) {
+pub fn tracing_polyeq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> (bool, usize) {
     let start = Instant::now();
 
-    let mut checker = DeepEqualityChecker::new(true, false);
-    let result = DeepEq::eq(&mut checker, a, b);
+    let mut comp = PolyeqComparator::new(true, false);
+    let result = Polyeq::eq(&mut comp, a, b);
 
     *time += start.elapsed();
-    (result, checker.max_depth)
+    (result, comp.max_depth)
 }
 
-/// Similar to `deep_eq`, but instead compares terms for alpha equivalence.
+/// Similar to `polyeq`, but instead compares terms for alpha equivalence.
 ///
 /// This means that two terms which are the same, except for the renaming of a bound variable, are
 /// considered equivalent. This functions still considers equality modulo reordering of equalities.
@@ -55,21 +55,21 @@ pub fn tracing_deep_eq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> (bool
 /// Int)) (= 0 y))` as equivalent.
 ///
 /// This function records how long it takes to run, and adds that duration to the `time` argument.
-pub fn are_alpha_equivalent(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> bool {
+pub fn alpha_equiv(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> bool {
     let start = Instant::now();
 
     // When we are checking for alpha-equivalence, we can't always assume that if `a` and `b` are
-    // identical, they are alpha-equivalent, so that optimization is not used in `DeepEq::eq`.
+    // identical, they are alpha-equivalent, so that optimization is not used in `Polyeq::eq`.
     // However, here at the "root" level this assumption is valid, so we check if the terms are
     // directly equal before doing anything else
-    let result = a == b || DeepEq::eq(&mut DeepEqualityChecker::new(true, true), a, b);
+    let result = a == b || Polyeq::eq(&mut PolyeqComparator::new(true, true), a, b);
 
     *time += start.elapsed();
     result
 }
 
-/// A configurable checker for equality modulo reordering of equalities and alpha equivalence.
-pub struct DeepEqualityChecker {
+/// A configurable comparator for polyequality and alpha equivalence.
+pub struct PolyeqComparator {
     // In order to check alpha-equivalence, we can't use a simple global cache. For instance, let's
     // say we are comparing the following terms for alpha equivalence:
     // ```
@@ -95,24 +95,24 @@ pub struct DeepEqualityChecker {
     // meaning it functions as a simple hash map.
     cache: HashMapStack<(Rc<Term>, Rc<Term>), ()>,
     is_mod_reordering: bool,
-    alpha_equiv_checker: Option<AlphaEquivalenceChecker>,
+    de_bruijn_map: Option<DeBruijnMap>,
 
     current_depth: usize,
     max_depth: usize,
 }
 
-impl DeepEqualityChecker {
-    /// Constructs a new `DeepEqualityChecker`.
+impl PolyeqComparator {
+    /// Constructs a new `PolyeqComparator`.
     ///
-    /// If `is_mod_reordering` is `true`, the checker will compare terms modulo reordering of
-    /// equalities. If `is_alpha_equivalence` is `true`, the checker will compare terms for alpha
+    /// If `is_mod_reordering` is `true`, the comparator will compare terms modulo reordering of
+    /// equalities. If `is_alpha_equivalence` is `true`, the comparator will compare terms for alpha
     /// equivalence.
     pub fn new(is_mod_reordering: bool, is_alpha_equivalence: bool) -> Self {
         Self {
             is_mod_reordering,
             cache: HashMapStack::new(),
-            alpha_equiv_checker: if is_alpha_equivalence {
-                Some(AlphaEquivalenceChecker::new())
+            de_bruijn_map: if is_alpha_equivalence {
+                Some(DeBruijnMap::new())
             } else {
                 None
             },
@@ -121,109 +121,108 @@ impl DeepEqualityChecker {
         }
     }
 
-    fn check_binder(
+    fn compare_binder(
         &mut self,
         a_binds: &BindingList,
         b_binds: &BindingList,
         a_inner: &Rc<Term>,
         b_inner: &Rc<Term>,
     ) -> bool {
-        if let Some(alpha_checker) = self.alpha_equiv_checker.as_mut() {
-            // First, we push new scopes into the alpha-equivalence checker and the cache stack
-            alpha_checker.push();
+        if let Some(de_bruijn_map) = self.de_bruijn_map.as_mut() {
+            // First, we push new scopes into the De Bruijn map and the cache stack
+            de_bruijn_map.push();
             self.cache.push_scope();
 
             // Then, we check that the binding lists and the inner terms are equivalent
             for (a_var, b_var) in a_binds.iter().zip(b_binds.iter()) {
-                if !DeepEq::eq(self, &a_var.1, &b_var.1) {
-                    // We must remember to pop the frames from the alpha equivalence checker and
-                    // cache stack here, so as not to leave them in a corrupted state
-                    self.alpha_equiv_checker.as_mut().unwrap().pop();
+                if !Polyeq::eq(self, &a_var.1, &b_var.1) {
+                    // We must remember to pop the frames from the De Bruijn map and cache stack
+                    // here, so as not to leave them in a corrupted state
+                    self.de_bruijn_map.as_mut().unwrap().pop();
                     self.cache.pop_scope();
                     return false;
                 }
-                // We also insert each variable in the binding lists into the alpha-equivalence
-                // checker
-                self.alpha_equiv_checker
+                // We also insert each variable in the binding lists into the De Bruijn map
+                self.de_bruijn_map
                     .as_mut()
                     .unwrap()
                     .insert(a_var.0.clone(), b_var.0.clone());
             }
-            let result = DeepEq::eq(self, a_inner, b_inner);
+            let result = Polyeq::eq(self, a_inner, b_inner);
 
             // Finally, we pop the scopes we pushed
-            self.alpha_equiv_checker.as_mut().unwrap().pop();
+            self.de_bruijn_map.as_mut().unwrap().pop();
             self.cache.pop_scope();
 
             result
         } else {
-            DeepEq::eq(self, a_binds, b_binds) && DeepEq::eq(self, a_inner, b_inner)
+            Polyeq::eq(self, a_binds, b_binds) && Polyeq::eq(self, a_inner, b_inner)
         }
     }
 }
 
-impl DeepEq for Rc<Term> {
-    fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool {
+impl Polyeq for Rc<Term> {
+    fn eq(comp: &mut PolyeqComparator, a: &Self, b: &Self) -> bool {
         // If the two `Rc`s are directly equal, and we are not checking for alpha-equivalence, we
         // can return `true`.
         // Note that if we are checking for alpha-equivalence, identical terms may be considered
         // different, if the bound variables in them have different meanings. For example, in the
         // terms `(forall ((x Int) (y Int)) (< x y))` and `(forall ((y Int) (x Int)) (< x y))`,
         // even though both instances of `(< x y)` are identical, they are not alpha-equivalent.
-        if checker.alpha_equiv_checker.is_none() && a == b {
+        if comp.de_bruijn_map.is_none() && a == b {
             return true;
         }
 
         // We first check the cache to see if these terms were already determined to be equal
-        if checker.cache.get(&(a.clone(), b.clone())).is_some() {
+        if comp.cache.get(&(a.clone(), b.clone())).is_some() {
             return true;
         }
 
-        checker.current_depth += 1;
-        checker.max_depth = std::cmp::max(checker.max_depth, checker.current_depth);
-        let result = DeepEq::eq(checker, a.as_ref(), b.as_ref());
+        comp.current_depth += 1;
+        comp.max_depth = std::cmp::max(comp.max_depth, comp.current_depth);
+        let result = Polyeq::eq(comp, a.as_ref(), b.as_ref());
         if result {
-            checker.cache.insert((a.clone(), b.clone()), ());
+            comp.cache.insert((a.clone(), b.clone()), ());
         }
-        checker.current_depth -= 1;
+        comp.current_depth -= 1;
         result
     }
 }
 
-impl DeepEq for Term {
-    fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool {
+impl Polyeq for Term {
+    fn eq(comp: &mut PolyeqComparator, a: &Self, b: &Self) -> bool {
         match (a, b) {
             (Term::App(f_a, args_a), Term::App(f_b, args_b)) => {
-                DeepEq::eq(checker, f_a, f_b) && DeepEq::eq(checker, args_a, args_b)
+                Polyeq::eq(comp, f_a, f_b) && Polyeq::eq(comp, args_a, args_b)
             }
             (Term::Op(op_a, args_a), Term::Op(op_b, args_b)) => {
-                if checker.is_mod_reordering {
+                if comp.is_mod_reordering {
                     if let (Operator::Equals, [a_1, a_2], Operator::Equals, [b_1, b_2]) =
                         (op_a, args_a.as_slice(), op_b, args_b.as_slice())
                     {
                         // If the term is an equality of two terms, we also check if they would be
                         // equal if one of them was flipped
-                        return DeepEq::eq(checker, &(a_1, a_2), &(b_1, b_2))
-                            || DeepEq::eq(checker, &(a_1, a_2), &(b_2, b_1));
+                        return Polyeq::eq(comp, &(a_1, a_2), &(b_1, b_2))
+                            || Polyeq::eq(comp, &(a_1, a_2), &(b_2, b_1));
                     }
                 }
                 // General case
-                op_a == op_b && DeepEq::eq(checker, args_a, args_b)
+                op_a == op_b && Polyeq::eq(comp, args_a, args_b)
             }
-            (Term::Sort(a), Term::Sort(b)) => DeepEq::eq(checker, a, b),
+            (Term::Sort(a), Term::Sort(b)) => Polyeq::eq(comp, a, b),
             (Term::Terminal(a), Term::Terminal(b)) => match (a, b) {
                 // If we are checking for alpha-equivalence, and we encounter two variables, we
-                // check that they are equivalent using the alpha-equivalence checker
+                // check that they are equivalent using the De Bruijn map
                 (
                     Terminal::Var(Identifier::Simple(a_var), a_sort),
                     Terminal::Var(Identifier::Simple(b_var), b_sort),
-                ) if checker.alpha_equiv_checker.is_some() => {
-                    let alpha = checker.alpha_equiv_checker.as_mut().unwrap();
-                    alpha.check(a_var, b_var) && DeepEq::eq(checker, a_sort, b_sort)
+                ) if comp.de_bruijn_map.is_some() => {
+                    let alpha = comp.de_bruijn_map.as_mut().unwrap();
+                    alpha.compare(a_var, b_var) && Polyeq::eq(comp, a_sort, b_sort)
                 }
 
                 (Terminal::Var(iden_a, sort_a), Terminal::Var(iden_b, sort_b)) => {
-                    iden_a == iden_b && DeepEq::eq(checker, sort_a, sort_b)
+                    iden_a == iden_b && Polyeq::eq(comp, sort_a, sort_b)
                 }
                 (a, b) => a == b,
             },
@@ -231,124 +230,121 @@ impl DeepEq for Term {
             (Term::Quant(_, a_binds, a), Term::Quant(_, b_binds, b))
             | (Term::Let(a_binds, a), Term::Let(b_binds, b))
             | (Term::Lambda(a_binds, a), Term::Lambda(b_binds, b)) => {
-                checker.check_binder(a_binds, b_binds, a, b)
+                comp.compare_binder(a_binds, b_binds, a, b)
             }
             (Term::Choice(a_var, a), Term::Choice(b_var, b)) => {
                 let a_binds = BindingList(vec![a_var.clone()]);
                 let b_binds = BindingList(vec![b_var.clone()]);
-                checker.check_binder(&a_binds, &b_binds, a, b)
+                comp.compare_binder(&a_binds, &b_binds, a, b)
             }
             _ => false,
         }
     }
 }
 
-impl DeepEq for BindingList {
-    fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool {
-        DeepEq::eq(checker, &a.0, &b.0)
+impl Polyeq for BindingList {
+    fn eq(comp: &mut PolyeqComparator, a: &Self, b: &Self) -> bool {
+        Polyeq::eq(comp, &a.0, &b.0)
     }
 }
 
-impl DeepEq for Sort {
-    fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool {
+impl Polyeq for Sort {
+    fn eq(comp: &mut PolyeqComparator, a: &Self, b: &Self) -> bool {
         match (a, b) {
             (Sort::Function(sorts_a), Sort::Function(sorts_b)) => {
-                DeepEq::eq(checker, sorts_a, sorts_b)
+                Polyeq::eq(comp, sorts_a, sorts_b)
             }
             (Sort::Atom(a, sorts_a), Sort::Atom(b, sorts_b)) => {
-                a == b && DeepEq::eq(checker, sorts_a, sorts_b)
+                a == b && Polyeq::eq(comp, sorts_a, sorts_b)
             }
             (Sort::Bool, Sort::Bool)
             | (Sort::Int, Sort::Int)
             | (Sort::Real, Sort::Real)
             | (Sort::String, Sort::String) => true,
             (Sort::Array(x_a, y_a), Sort::Array(x_b, y_b)) => {
-                DeepEq::eq(checker, x_a, x_b) && DeepEq::eq(checker, y_a, y_b)
+                Polyeq::eq(comp, x_a, x_b) && Polyeq::eq(comp, y_a, y_b)
             }
             _ => false,
         }
     }
 }
 
-impl<T: DeepEq> DeepEq for &T {
-    fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool {
-        DeepEq::eq(checker, *a, *b)
+impl<T: Polyeq> Polyeq for &T {
+    fn eq(comp: &mut PolyeqComparator, a: &Self, b: &Self) -> bool {
+        Polyeq::eq(comp, *a, *b)
     }
 }
 
-impl<T: DeepEq> DeepEq for [T] {
-    fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool {
-        a.len() == b.len()
-            && a.iter()
-                .zip(b.iter())
-                .all(|(a, b)| DeepEq::eq(checker, a, b))
+impl<T: Polyeq> Polyeq for [T] {
+    fn eq(comp: &mut PolyeqComparator, a: &Self, b: &Self) -> bool {
+        a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| Polyeq::eq(comp, a, b))
     }
 }
 
-impl<T: DeepEq> DeepEq for Vec<T> {
-    fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool {
-        DeepEq::eq(checker, a.as_slice(), b.as_slice())
+impl<T: Polyeq> Polyeq for Vec<T> {
+    fn eq(comp: &mut PolyeqComparator, a: &Self, b: &Self) -> bool {
+        Polyeq::eq(comp, a.as_slice(), b.as_slice())
     }
 }
 
-impl<T: DeepEq, U: DeepEq> DeepEq for (T, U) {
-    fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool {
-        DeepEq::eq(checker, &a.0, &b.0) && DeepEq::eq(checker, &a.1, &b.1)
+impl<T: Polyeq, U: Polyeq> Polyeq for (T, U) {
+    fn eq(comp: &mut PolyeqComparator, a: &Self, b: &Self) -> bool {
+        Polyeq::eq(comp, &a.0, &b.0) && Polyeq::eq(comp, &a.1, &b.1)
     }
 }
 
-impl DeepEq for String {
-    fn eq(_: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool {
+impl Polyeq for String {
+    fn eq(_: &mut PolyeqComparator, a: &Self, b: &Self) -> bool {
         a == b
     }
 }
 
-impl DeepEq for ProofArg {
-    fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool {
+impl Polyeq for ProofArg {
+    fn eq(comp: &mut PolyeqComparator, a: &Self, b: &Self) -> bool {
         match (a, b) {
-            (ProofArg::Term(a), ProofArg::Term(b)) => DeepEq::eq(checker, a, b),
+            (ProofArg::Term(a), ProofArg::Term(b)) => Polyeq::eq(comp, a, b),
             (ProofArg::Assign(sa, ta), ProofArg::Assign(sb, tb)) => {
-                sa == sb && DeepEq::eq(checker, ta, tb)
+                sa == sb && Polyeq::eq(comp, ta, tb)
             }
             _ => false,
         }
     }
 }
 
-impl DeepEq for ProofCommand {
-    fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool {
+impl Polyeq for ProofCommand {
+    fn eq(comp: &mut PolyeqComparator, a: &Self, b: &Self) -> bool {
         match (a, b) {
             (
                 ProofCommand::Assume { id: a_id, term: a_term },
                 ProofCommand::Assume { id: b_id, term: b_term },
-            ) => a_id == b_id && DeepEq::eq(checker, a_term, b_term),
-            (ProofCommand::Step(a), ProofCommand::Step(b)) => DeepEq::eq(checker, a, b),
-            (ProofCommand::Subproof(a), ProofCommand::Subproof(b)) => DeepEq::eq(checker, a, b),
+            ) => a_id == b_id && Polyeq::eq(comp, a_term, b_term),
+            (ProofCommand::Step(a), ProofCommand::Step(b)) => Polyeq::eq(comp, a, b),
+            (ProofCommand::Subproof(a), ProofCommand::Subproof(b)) => Polyeq::eq(comp, a, b),
             _ => false,
         }
     }
 }
 
-impl DeepEq for ProofStep {
-    fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool {
+impl Polyeq for ProofStep {
+    fn eq(comp: &mut PolyeqComparator, a: &Self, b: &Self) -> bool {
         a.id == b.id
-            && DeepEq::eq(checker, &a.clause, &b.clause)
+            && Polyeq::eq(comp, &a.clause, &b.clause)
             && a.rule == b.rule
             && a.premises == b.premises
-            && DeepEq::eq(checker, &a.args, &b.args)
+            && Polyeq::eq(comp, &a.args, &b.args)
             && a.discharge == b.discharge
     }
 }
 
-impl DeepEq for Subproof {
-    fn eq(checker: &mut DeepEqualityChecker, a: &Self, b: &Self) -> bool {
-        DeepEq::eq(checker, &a.commands, &b.commands)
-            && DeepEq::eq(checker, &a.assignment_args, &b.assignment_args)
-            && DeepEq::eq(checker, &a.variable_args, &b.variable_args)
+impl Polyeq for Subproof {
+    fn eq(comp: &mut PolyeqComparator, a: &Self, b: &Self) -> bool {
+        Polyeq::eq(comp, &a.commands, &b.commands)
+            && Polyeq::eq(comp, &a.assignment_args, &b.assignment_args)
+            && Polyeq::eq(comp, &a.variable_args, &b.variable_args)
     }
 }
 
-struct AlphaEquivalenceChecker {
+struct DeBruijnMap {
     // To check for alpha-equivalence, we make use of De Bruijn indices. The idea is to map each
     // bound variable to an integer depending on the order in which they were bound. As we compare
     // the two terms, if we encounter two bound variables, we need only to check if the associated
@@ -368,10 +364,12 @@ struct AlphaEquivalenceChecker {
     // this:
     //     `(forall ((x Int)) (and (exists ((y Int)) (> $0 $1)) (> $0 5)))`
     indices: (HashMapStack<String, usize>, HashMapStack<String, usize>),
-    counter: Vec<usize>, // Holds the count of how many variables were bound before each depth
+
+    // Holds the count of how many variables were bound before each depth
+    counter: Vec<usize>,
 }
 
-impl AlphaEquivalenceChecker {
+impl DeBruijnMap {
     fn new() -> Self {
         Self {
             indices: (HashMapStack::new(), HashMapStack::new()),
@@ -402,7 +400,7 @@ impl AlphaEquivalenceChecker {
         *current += 1;
     }
 
-    fn check(&self, a: &str, b: &str) -> bool {
+    fn compare(&self, a: &str, b: &str) -> bool {
         match (self.indices.0.get(a), self.indices.1.get(b)) {
             // If both a and b are free variables, they need to have the same name
             (None, None) => a == b,

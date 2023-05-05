@@ -50,7 +50,7 @@ pub struct RunMeasurement {
     pub checking: Duration,
     pub elaboration: Duration,
     pub total: Duration,
-    pub deep_eq: Duration,
+    pub polyeq: Duration,
     pub assume: Duration,
     pub assume_core: Duration,
 }
@@ -58,7 +58,7 @@ pub struct RunMeasurement {
 // Higher kinded types would be very useful here. Ideally, I would like `BenchmarkResults` to be
 // generic on any kind that implements `Metrics`, like `OnlineMetrics` or `OfflineMetrics`.
 #[derive(Debug, Default)]
-pub struct BenchmarkResults<ByRun, ByStep, ByRunF64, ByDeepEq> {
+pub struct BenchmarkResults<ByRun, ByStep, ByRunF64, ByPolyeq> {
     pub parsing: ByRun,
     pub checking: ByRun,
     pub elaborating: ByRun,
@@ -68,13 +68,13 @@ pub struct BenchmarkResults<ByRun, ByStep, ByRunF64, ByDeepEq> {
     pub step_time_by_file: AHashMap<String, ByStep>,
     pub step_time_by_rule: AHashMap<String, ByStep>,
 
-    pub deep_eq_time: ByRun,
-    pub deep_eq_time_ratio: ByRunF64,
+    pub polyeq_time: ByRun,
+    pub polyeq_time_ratio: ByRunF64,
     pub assume_time: ByRun,
     pub assume_time_ratio: ByRunF64,
     pub assume_core_time: ByRun,
 
-    pub deep_eq_depths: ByDeepEq,
+    pub polyeq_depths: ByPolyeq,
     pub num_assumes: usize,
     pub num_easy_assumes: usize,
 
@@ -96,12 +96,12 @@ pub type OfflineBenchmarkResults = BenchmarkResults<
     OfflineMetrics<(), usize>,
 >;
 
-impl<ByRun, ByStep, ByRunF64, ByDeepEq> BenchmarkResults<ByRun, ByStep, ByRunF64, ByDeepEq>
+impl<ByRun, ByStep, ByRunF64, ByPolyeq> BenchmarkResults<ByRun, ByStep, ByRunF64, ByPolyeq>
 where
     ByRun: Metrics<RunId, Duration> + Default,
     ByStep: Metrics<StepId, Duration> + Default,
     ByRunF64: Metrics<RunId, f64> + Default,
-    ByDeepEq: Metrics<(), usize> + Default,
+    ByPolyeq: Metrics<(), usize> + Default,
 {
     pub fn new() -> Self {
         Default::default()
@@ -190,12 +190,12 @@ impl CsvBenchmarkResults {
         writeln!(
             dest,
             "proof_file,run_id,parsing,checking,elaboration,total_accounted_for,\
-            total,deep_eq,deep_eq_ratio,assume,assume_ratio"
+            total,polyeq,polyeq_ratio,assume,assume_ratio"
         )?;
 
         for (id, m) in data {
             let total_accounted_for = m.parsing + m.checking;
-            let deep_eq_ratio = m.deep_eq.as_secs_f64() / m.checking.as_secs_f64();
+            let polyeq_ratio = m.polyeq.as_secs_f64() / m.checking.as_secs_f64();
             let assume_ratio = m.assume.as_secs_f64() / m.checking.as_secs_f64();
             writeln!(
                 dest,
@@ -207,8 +207,8 @@ impl CsvBenchmarkResults {
                 m.elaboration.as_nanos(),
                 total_accounted_for.as_nanos(),
                 m.total.as_nanos(),
-                m.deep_eq.as_nanos(),
-                deep_eq_ratio,
+                m.polyeq.as_nanos(),
+                polyeq_ratio,
                 m.assume.as_nanos(),
                 assume_ratio,
             )?;
@@ -252,7 +252,7 @@ impl CsvBenchmarkResults {
 pub trait CollectResults {
     fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration);
     fn add_assume_measurement(&mut self, file: &str, id: &str, is_easy: bool, time: Duration);
-    fn add_deep_eq_depth(&mut self, depth: usize);
+    fn add_polyeq_depth(&mut self, depth: usize);
     fn add_run_measurement(&mut self, id: &RunId, measurement: RunMeasurement);
     fn register_holey(&mut self);
     fn register_error(&mut self, error: &crate::Error);
@@ -262,13 +262,13 @@ pub trait CollectResults {
         Self: Sized;
 }
 
-impl<ByRun, ByStep, ByRunF64, ByDeepEq> CollectResults
-    for BenchmarkResults<ByRun, ByStep, ByRunF64, ByDeepEq>
+impl<ByRun, ByStep, ByRunF64, ByPolyeq> CollectResults
+    for BenchmarkResults<ByRun, ByStep, ByRunF64, ByPolyeq>
 where
     ByRun: Metrics<RunId, Duration> + Default,
     ByStep: Metrics<StepId, Duration> + Default,
     ByRunF64: Metrics<RunId, f64> + Default,
-    ByDeepEq: Metrics<(), usize> + Default,
+    ByPolyeq: Metrics<(), usize> + Default,
 {
     fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration) {
         let file = file.to_owned();
@@ -295,8 +295,8 @@ where
         self.add_step_measurement(file, id, "assume", time);
     }
 
-    fn add_deep_eq_depth(&mut self, depth: usize) {
-        self.deep_eq_depths.add_sample(&(), depth);
+    fn add_polyeq_depth(&mut self, depth: usize) {
+        self.polyeq_depths.add_sample(&(), depth);
     }
 
     fn add_run_measurement(&mut self, id: &RunId, measurement: RunMeasurement) {
@@ -305,7 +305,7 @@ where
             checking,
             elaboration,
             total,
-            deep_eq,
+            polyeq,
             assume,
             assume_core,
         } = measurement;
@@ -316,13 +316,13 @@ where
         self.total_accounted_for.add_sample(id, parsing + checking);
         self.total.add_sample(id, total);
 
-        self.deep_eq_time.add_sample(id, deep_eq);
+        self.polyeq_time.add_sample(id, polyeq);
         self.assume_time.add_sample(id, assume);
         self.assume_core_time.add_sample(id, assume_core);
 
-        let deep_eq_ratio = deep_eq.as_secs_f64() / checking.as_secs_f64();
+        let polyeq_ratio = polyeq.as_secs_f64() / checking.as_secs_f64();
         let assume_ratio = assume.as_secs_f64() / checking.as_secs_f64();
-        self.deep_eq_time_ratio.add_sample(id, deep_eq_ratio);
+        self.polyeq_time_ratio.add_sample(id, polyeq_ratio);
         self.assume_time_ratio.add_sample(id, assume_ratio);
     }
 
@@ -337,13 +337,13 @@ where
             step_time_by_file: combine_map(a.step_time_by_file, b.step_time_by_file),
             step_time_by_rule: combine_map(a.step_time_by_rule, b.step_time_by_rule),
 
-            deep_eq_time: a.deep_eq_time.combine(b.deep_eq_time),
-            deep_eq_time_ratio: a.deep_eq_time_ratio.combine(b.deep_eq_time_ratio),
+            polyeq_time: a.polyeq_time.combine(b.polyeq_time),
+            polyeq_time_ratio: a.polyeq_time_ratio.combine(b.polyeq_time_ratio),
             assume_time: a.assume_time.combine(b.assume_time),
             assume_time_ratio: a.assume_time_ratio.combine(b.assume_time_ratio),
             assume_core_time: a.assume_core_time.combine(b.assume_core_time),
 
-            deep_eq_depths: a.deep_eq_depths.combine(b.deep_eq_depths),
+            polyeq_depths: a.polyeq_depths.combine(b.polyeq_depths),
             num_assumes: a.num_assumes + b.num_assumes,
             num_easy_assumes: a.num_easy_assumes + b.num_easy_assumes,
             is_holey: a.is_holey || b.is_holey,
@@ -377,7 +377,7 @@ impl CollectResults for CsvBenchmarkResults {
         self.add_step_measurement(file, id, "assume", time);
     }
 
-    fn add_deep_eq_depth(&mut self, _: usize) {}
+    fn add_polyeq_depth(&mut self, _: usize) {}
 
     fn add_run_measurement(&mut self, id: &RunId, measurement: RunMeasurement) {
         self.runs.insert(id.clone(), measurement);

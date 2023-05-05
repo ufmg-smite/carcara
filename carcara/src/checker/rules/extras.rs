@@ -317,7 +317,7 @@ mod tests {
                 (step t1.t1 (cl (= x y)) :rule hole)
                 (step t1 (cl (= (let ((a 0)) x) (let ((b 0)) y))) :rule bind_let)": false,
             }
-            "Deep equality in variable values" {
+            "Polyequality in variable values" {
                 "(anchor :step t1 :args ((x Int) (y Int)))
                 (step t1.t1 (cl (= (= 0 1) (= 1 0))) :rule hole)
                 (step t1.t2 (cl (= x y)) :rule hole)

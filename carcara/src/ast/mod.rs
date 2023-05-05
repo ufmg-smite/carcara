@@ -4,8 +4,8 @@
 
 #[macro_use]
 mod macros;
-mod deep_eq;
 mod iter;
+mod polyeq;
 mod pool;
 pub(crate) mod printer;
 mod rc;
@@ -13,14 +13,14 @@ mod substitution;
 #[cfg(test)]
 mod tests;
 
-pub use deep_eq::{are_alpha_equivalent, deep_eq, tracing_deep_eq};
 pub use iter::ProofIter;
+pub use polyeq::{alpha_equiv, polyeq, tracing_polyeq};
 pub use pool::TermPool;
 pub use printer::print_proof;
 pub use rc::Rc;
 pub use substitution::{Substitution, SubstitutionError};
 
-pub(crate) use deep_eq::{DeepEq, DeepEqualityChecker};
+pub(crate) use polyeq::{Polyeq, PolyeqComparator};
 
 use crate::checker::error::CheckerError;
 use ahash::AHashSet;

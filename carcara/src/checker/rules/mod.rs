@@ -27,7 +27,7 @@ pub struct RuleArgs<'a> {
     pub(super) previous_command: Option<Premise<'a>>,
     pub(super) discharge: &'a [&'a ProofCommand],
 
-    pub(super) deep_eq_time: &'a mut Duration,
+    pub(super) polyeq_time: &'a mut Duration,
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -128,19 +128,15 @@ where
     Ok(())
 }
 
-fn assert_deep_eq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> Result<(), CheckerError> {
-    if !deep_eq(a, b, time) {
+fn assert_polyeq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> Result<(), CheckerError> {
+    if !polyeq(a, b, time) {
         return Err(EqualityError::ExpectedEqual(a.clone(), b.clone()).into());
     }
     Ok(())
 }
 
-fn assert_deep_eq_is_expected(
-    got: &Rc<Term>,
-    expected: Rc<Term>,
-    time: &mut Duration,
-) -> RuleResult {
-    if !deep_eq(got, &expected, time) {
+fn assert_polyeq_expected(got: &Rc<Term>, expected: Rc<Term>, time: &mut Duration) -> RuleResult {
+    if !polyeq(got, &expected, time) {
         return Err(EqualityError::ExpectedToBe { expected, got: got.clone() }.into());
     }
     Ok(())
