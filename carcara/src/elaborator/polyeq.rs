@@ -82,7 +82,7 @@ impl<'a> PolyeqElaborator<'a> {
                             })
                             .collect();
 
-                        (a_bindings.as_slice().to_vec(), assignment_args)
+                        (a_bindings.to_vec(), assignment_args)
                     }
                     Some(c) => {
                         assert!(a_bindings

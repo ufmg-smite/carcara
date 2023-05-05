@@ -372,7 +372,7 @@ impl AsRef<[SortedVar]> for BindingList {
 }
 
 impl Deref for BindingList {
-    type Target = [SortedVar];
+    type Target = Vec<SortedVar>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -391,11 +391,6 @@ impl<'a> IntoIterator for &'a BindingList {
 
 impl BindingList {
     pub const EMPTY: &'static Self = &BindingList(Vec::new());
-
-    /// Extract a slice of the binding list's contents.
-    pub fn as_slice(&self) -> &[SortedVar] {
-        self.0.as_slice()
-    }
 }
 
 /// A term.
