@@ -52,9 +52,9 @@ pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
 
-    let (q_1, bindings_1, left) = left.unwrap_quant_err()?;
-    let (q_2, bindings_2, left) = left.unwrap_quant_err()?;
-    let (q_3, bindings_3, right) = right.unwrap_quant_err()?;
+    let (q_1, bindings_1, left) = left.as_quant_err()?;
+    let (q_2, bindings_2, left) = left.as_quant_err()?;
+    let (q_3, bindings_3, right) = right.as_quant_err()?;
 
     assert_eq(&q_1, &q_2)?;
     assert_eq(&q_2, &q_3)?;
@@ -76,9 +76,9 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
     assert_clause_len(conclusion, 1)?;
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
-    let (q_1, bindings_1, phi_1) = left.unwrap_quant_err()?;
+    let (q_1, bindings_1, phi_1) = left.as_quant_err()?;
 
-    let (bindings_2, phi_2) = match right.unwrap_quant() {
+    let (bindings_2, phi_2) = match right.as_quant() {
         Some((q_2, b, t)) => {
             assert_eq(&q_1, &q_2)?;
             (b, t)
@@ -148,7 +148,7 @@ fn negation_normal_form(
             true => build_term!(pool, (and (or {a} {b}) (or {c} {d}))),
             false => build_term!(pool, (or (and {a} {b}) (and {c} {d}))),
         }
-    } else if let Some((quant, bindings, inner)) = term.unwrap_quant() {
+    } else if let Some((quant, bindings, inner)) = term.as_quant() {
         let quant = if polarity { quant } else { !quant };
         let inner = negation_normal_form(pool, inner, polarity, cache);
         pool.add(Term::Quant(quant, bindings.clone(), inner))
@@ -260,8 +260,8 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
     let (l_bindings, phi, r_bindings, phi_prime) = {
         let (l, r) = match_term_err!((or (not l) r) = &conclusion[0])?;
-        let (l_q, l_b, phi) = l.unwrap_quant_err()?;
-        let (r_q, r_b, phi_prime) = r.unwrap_quant_err()?;
+        let (l_q, l_b, phi) = l.as_quant_err()?;
+        let (r_q, r_b, phi_prime) = r.as_quant_err()?;
 
         // We expect both quantifiers to be `forall`
         assert_is_expected(&l_q, Quantifier::Forall)?;

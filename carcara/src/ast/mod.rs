@@ -559,7 +559,7 @@ impl Term {
 
     /// Tries to unwrap an operation term, returning the `Operator` and the arguments. Returns
     /// `None` if the term is not an operation term.
-    pub fn unwrap_op(&self) -> Option<(Operator, &[Rc<Term>])> {
+    pub fn as_op(&self) -> Option<(Operator, &[Rc<Term>])> {
         match self {
             Term::Op(op, args) => Some((*op, args.as_slice())),
             _ => None,
@@ -568,7 +568,7 @@ impl Term {
 
     /// Tries to unwrap a quantifier term, returning the `Quantifier`, the bindings and the inner
     /// term. Returns `None` if the term is not a quantifier term.
-    pub fn unwrap_quant(&self) -> Option<(Quantifier, &BindingList, &Rc<Term>)> {
+    pub fn as_quant(&self) -> Option<(Quantifier, &BindingList, &Rc<Term>)> {
         match self {
             Term::Quant(q, b, t) => Some((*q, b, t)),
             _ => None,
@@ -577,7 +577,7 @@ impl Term {
 
     /// Tries to unwrap a `let` term, returning the bindings and the inner term. Returns `None` if
     /// the term is not a `let` term.
-    pub fn unwrap_let(&self) -> Option<(&BindingList, &Rc<Term>)> {
+    pub fn as_let(&self) -> Option<(&BindingList, &Rc<Term>)> {
         match self {
             Term::Let(b, t) => Some((b, t)),
             _ => None,
@@ -662,22 +662,22 @@ impl Rc<Term> {
 
     /// Tries to unwrap an operation term, returning the `Operator` and the arguments. Returns a
     /// `CheckerError` if the term is not an operation term.
-    pub fn unwrap_op_err(&self) -> Result<(Operator, &[Rc<Term>]), CheckerError> {
-        self.unwrap_op()
+    pub fn as_op_err(&self) -> Result<(Operator, &[Rc<Term>]), CheckerError> {
+        self.as_op()
             .ok_or_else(|| CheckerError::ExpectedOperationTerm(self.clone()))
     }
 
     /// Tries to unwrap a quantifier term, returning the `Quantifier`, the bindings and the inner
     /// term. Returns a `CheckerError` if the term is not a quantifier term.
-    pub fn unwrap_quant_err(&self) -> Result<(Quantifier, &BindingList, &Rc<Term>), CheckerError> {
-        self.unwrap_quant()
+    pub fn as_quant_err(&self) -> Result<(Quantifier, &BindingList, &Rc<Term>), CheckerError> {
+        self.as_quant()
             .ok_or_else(|| CheckerError::ExpectedQuantifierTerm(self.clone()))
     }
 
     /// Tries to unwrap a `let` term, returning the bindings and the inner
     /// term. Returns a `CheckerError` if the term is not a `let` term.
-    pub fn unwrap_let_err(&self) -> Result<(&BindingList, &Rc<Term>), CheckerError> {
-        self.unwrap_let()
+    pub fn as_let_err(&self) -> Result<(&BindingList, &Rc<Term>), CheckerError> {
+        self.as_let()
             .ok_or_else(|| CheckerError::ExpectedLetTerm(self.clone()))
     }
 }

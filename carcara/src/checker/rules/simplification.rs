@@ -407,7 +407,7 @@ pub fn bool_simplify(args: RuleArgs) -> RuleResult {
 pub fn qnt_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
-    let (_, _, inner) = left.unwrap_quant_err()?;
+    let (_, _, inner) = left.as_quant_err()?;
     rassert!(
         inner.is_bool_false() || inner.is_bool_true(),
         CheckerError::ExpectedAnyBoolConstant(inner.clone())
