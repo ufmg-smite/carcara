@@ -439,22 +439,22 @@ impl From<SortedVar> for Term {
 
 impl Term {
     /// Constructs a new integer term.
-    pub fn integer(value: impl Into<Integer>) -> Self {
+    pub fn new_int(value: impl Into<Integer>) -> Self {
         Term::Const(Constant::Integer(value.into()))
     }
 
     /// Constructs a new real term.
-    pub fn real(value: impl Into<Rational>) -> Self {
+    pub fn new_real(value: impl Into<Rational>) -> Self {
         Term::Const(Constant::Real(value.into()))
     }
 
     /// Constructs a new string term.
-    pub fn string(value: impl Into<String>) -> Self {
+    pub fn new_string(value: impl Into<String>) -> Self {
         Term::Const(Constant::String(value.into()))
     }
 
     /// Constructs a new variable term.
-    pub fn var(name: impl Into<String>, sort: Rc<Term>) -> Self {
+    pub fn new_var(name: impl Into<String>, sort: Rc<Term>) -> Self {
         Term::Var(Ident::Simple(name.into()), sort)
     }
 

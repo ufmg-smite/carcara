@@ -36,7 +36,7 @@ impl TermPool {
         let bool_sort = Self::add_term_to_map(&mut terms, Term::Sort(Sort::Bool));
 
         let [bool_true, bool_false] = ["true", "false"]
-            .map(|b| Self::add_term_to_map(&mut terms, Term::var(b, bool_sort.clone())));
+            .map(|b| Self::add_term_to_map(&mut terms, Term::new_var(b, bool_sort.clone())));
 
         sorts_cache.insert(bool_false.clone(), Sort::Bool);
         sorts_cache.insert(bool_true.clone(), Sort::Bool);

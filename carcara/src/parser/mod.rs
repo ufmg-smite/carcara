@@ -921,10 +921,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// Parses a term.
     pub fn parse_term(&mut self) -> CarcaraResult<Rc<Term>> {
         let term = match self.next_token()? {
-            (Token::Numeral(n), _) if self.interpret_integers_as_reals => Term::real(n),
-            (Token::Numeral(n), _) => Term::integer(n),
-            (Token::Decimal(r), _) => Term::real(r),
-            (Token::String(s), _) => Term::string(s),
+            (Token::Numeral(n), _) if self.interpret_integers_as_reals => Term::new_real(n),
+            (Token::Numeral(n), _) => Term::new_int(n),
+            (Token::Decimal(r), _) => Term::new_real(r),
+            (Token::String(s), _) => Term::new_string(s),
             (Token::Symbol(s), pos) => {
                 // Check to see if there is a nullary function defined with this name
                 return Ok(if let Some(func_def) = self.state.function_defs.get(&s) {
@@ -1034,7 +1034,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 .into_iter()
                 .map(|(name, value)| {
                     let sort = Term::Sort(self.pool.sort(&value).clone());
-                    let var = Term::var(name, self.pool.add(sort));
+                    let var = Term::new_var(name, self.pool.add(sort));
                     (self.pool.add(var), value)
                 })
                 .collect();
@@ -1143,7 +1143,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     .params
                     .iter()
                     .zip(args)
-                    .map(|((name, sort), arg)| (self.pool.add(Term::var(name, sort.clone())), arg))
+                    .map(|((n, s), arg)| (self.pool.add(Term::new_var(n, s.clone())), arg))
                     .collect();
 
                 // Since we already checked the sorts of the arguments, creating this substitution
