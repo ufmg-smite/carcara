@@ -709,7 +709,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
             Vec::new()
         };
 
-        // For some rules (notable the `subproof` rule), there is also a `:discharge` attribute that
+        // For some rules (notably the `subproof` rule), there is also a `:discharge` attribute that
         // takes a series of command ids, in addition to the regular premises
         let discharge = if self.current_token == Token::Keyword("discharge".into()) {
             self.next_token()?;
