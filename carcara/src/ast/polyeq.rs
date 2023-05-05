@@ -8,8 +8,7 @@
 //! modulo renaming of bound variables.
 
 use super::{
-    BindingList, Identifier, Operator, ProofArg, ProofCommand, ProofStep, Rc, Sort, Subproof, Term,
-    Terminal,
+    BindingList, Ident, Operator, ProofArg, ProofCommand, ProofStep, Rc, Sort, Subproof, Term,
 };
 use crate::utils::HashMapStack;
 use std::time::{Duration, Instant};
@@ -192,6 +191,18 @@ impl Polyeq for Rc<Term> {
 impl Polyeq for Term {
     fn eq(comp: &mut PolyeqComparator, a: &Self, b: &Self) -> bool {
         match (a, b) {
+            (Term::Const(a), Term::Const(b)) => a == b,
+            (Term::Var(Ident::Simple(a), a_sort), Term::Var(Ident::Simple(b), b_sort))
+                if comp.de_bruijn_map.is_some() =>
+            {
+                // If we are checking for alpha-equivalence, and we encounter two variables, we
+                // check that they are equivalent using the De Bruijn map
+                let db = comp.de_bruijn_map.as_mut().unwrap();
+                db.compare(a, b) && Polyeq::eq(comp, a_sort, b_sort)
+            }
+            (Term::Var(a, a_sort), Term::Var(b, b_sort)) => {
+                a == b && Polyeq::eq(comp, a_sort, b_sort)
+            }
             (Term::App(f_a, args_a), Term::App(f_b, args_b)) => {
                 Polyeq::eq(comp, f_a, f_b) && Polyeq::eq(comp, args_a, args_b)
             }
@@ -210,22 +221,6 @@ impl Polyeq for Term {
                 op_a == op_b && Polyeq::eq(comp, args_a, args_b)
             }
             (Term::Sort(a), Term::Sort(b)) => Polyeq::eq(comp, a, b),
-            (Term::Terminal(a), Term::Terminal(b)) => match (a, b) {
-                // If we are checking for alpha-equivalence, and we encounter two variables, we
-                // check that they are equivalent using the De Bruijn map
-                (
-                    Terminal::Var(Identifier::Simple(a_var), a_sort),
-                    Terminal::Var(Identifier::Simple(b_var), b_sort),
-                ) if comp.de_bruijn_map.is_some() => {
-                    let alpha = comp.de_bruijn_map.as_mut().unwrap();
-                    alpha.compare(a_var, b_var) && Polyeq::eq(comp, a_sort, b_sort)
-                }
-
-                (Terminal::Var(iden_a, sort_a), Terminal::Var(iden_b, sort_b)) => {
-                    iden_a == iden_b && Polyeq::eq(comp, sort_a, sort_b)
-                }
-                (a, b) => a == b,
-            },
             (Term::Quant(q_a, _, _), Term::Quant(q_b, _, _)) if q_a != q_b => false,
             (Term::Quant(_, a_binds, a), Term::Quant(_, b_binds, b))
             | (Term::Let(a_binds, a), Term::Let(b_binds, b))

@@ -72,7 +72,7 @@ enum AnchorArg {
 /// pool used by the parser.
 #[derive(Default)]
 struct ParserState {
-    symbol_table: HashMapStack<HashCache<Identifier>, Rc<Term>>,
+    symbol_table: HashMapStack<HashCache<Ident>, Rc<Term>>,
     function_defs: AHashMap<String, FunctionDef>,
     sort_declarations: AHashMap<String, usize>,
     step_ids: HashMapStack<HashCache<String>, usize>,
@@ -106,7 +106,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         let mut state = ParserState::default();
         let bool_sort = pool.add(Term::Sort(Sort::Bool));
         for iden in ["true", "false"] {
-            let iden = HashCache::new(Identifier::Simple(iden.to_owned()));
+            let iden = HashCache::new(Ident::Simple(iden.to_owned()));
             state.symbol_table.insert(iden, bool_sort.clone());
         }
         let mut lexer = Lexer::new(input)?;
@@ -150,7 +150,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     fn insert_sorted_var(&mut self, (symbol, sort): SortedVar) {
         self.state
             .symbol_table
-            .insert(HashCache::new(Identifier::Simple(symbol)), sort);
+            .insert(HashCache::new(Ident::Simple(symbol)), sort);
     }
 
     /// Shortcut for `self.problem.as_mut().unwrap().0`
@@ -164,15 +164,13 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     /// Constructs and sort checks a variable term.
-    fn make_var(&mut self, iden: Identifier) -> Result<Rc<Term>, ParserError> {
+    fn make_var(&mut self, iden: Ident) -> Result<Rc<Term>, ParserError> {
         let cached = HashCache::new(iden);
         let sort = match self.state.symbol_table.get(&cached) {
             Some(s) => s.clone(),
             None => return Err(ParserError::UndefinedIden(cached.unwrap())),
         };
-        Ok(self
-            .pool
-            .add(Term::Terminal(Terminal::Var(cached.unwrap(), sort))))
+        Ok(self.pool.add(Term::Var(cached.unwrap(), sort)))
     }
 
     /// Constructs and sort checks an operation term.
@@ -939,7 +937,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         ));
                     }
                 } else {
-                    self.make_var(Identifier::Simple(s))
+                    self.make_var(Ident::Simple(s))
                         .map_err(|err| Error::Parser(err, pos))?
                 });
             }

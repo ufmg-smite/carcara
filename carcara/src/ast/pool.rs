@@ -1,6 +1,6 @@
 //! This module implements `TermPool`, a structure that stores terms and implements hash consing.
 
-use super::{Identifier, Rc, Sort, Term, Terminal};
+use super::{Constant, Rc, Sort, Term};
 use ahash::{AHashMap, AHashSet};
 
 /// A structure to store and manage all allocated terms.
@@ -35,15 +35,8 @@ impl TermPool {
         let mut sorts_cache = AHashMap::new();
         let bool_sort = Self::add_term_to_map(&mut terms, Term::Sort(Sort::Bool));
 
-        let [bool_true, bool_false] = ["true", "false"].map(|b| {
-            Self::add_term_to_map(
-                &mut terms,
-                Term::Terminal(Terminal::Var(
-                    Identifier::Simple(b.into()),
-                    bool_sort.clone(),
-                )),
-            )
-        });
+        let [bool_true, bool_false] = ["true", "false"]
+            .map(|b| Self::add_term_to_map(&mut terms, Term::var(b, bool_sort.clone())));
 
         sorts_cache.insert(bool_false.clone(), Sort::Bool);
         sorts_cache.insert(bool_true.clone(), Sort::Bool);
@@ -121,12 +114,12 @@ impl TermPool {
         }
 
         let result = match term.as_ref() {
-            Term::Terminal(t) => match t {
-                Terminal::Integer(_) => Sort::Int,
-                Terminal::Real(_) => Sort::Real,
-                Terminal::String(_) => Sort::String,
-                Terminal::Var(_, sort) => sort.as_sort().unwrap().clone(),
+            Term::Const(c) => match c {
+                Constant::Integer(_) => Sort::Int,
+                Constant::Real(_) => Sort::Real,
+                Constant::String(_) => Sort::String,
             },
+            Term::Var(_, sort) => sort.as_sort().unwrap().clone(),
             Term::Op(op, args) => match op {
                 Operator::Not
                 | Operator::Implies
@@ -239,12 +232,12 @@ impl TermPool {
                 vars.remove(&term);
                 vars
             }
-            Term::Terminal(Terminal::Var(Identifier::Simple(_), _)) => {
+            Term::Var(..) => {
                 let mut set = AHashSet::with_capacity(1);
                 set.insert(term.clone());
                 set
             }
-            Term::Terminal(_) | Term::Sort(_) => AHashSet::new(),
+            Term::Const(_) | Term::Sort(_) => AHashSet::new(),
         };
         self.free_vars_cache.insert(term.clone(), set);
         self.free_vars_cache.get(term).unwrap()

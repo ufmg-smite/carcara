@@ -531,7 +531,7 @@ fn generic_sum_prod_simplify_rule(
     // Finally, we verify that the constant and the remaining arguments are what we expect
     rassert!(u_constant == constant_total && u_args.iter().eq(result), {
         let expected = {
-            let mut expected_args = vec![pool.add(Term::Terminal(Terminal::Real(constant_total)))];
+            let mut expected_args = vec![pool.add(Term::real(constant_total))];
             expected_args.extend(u_args.iter().cloned());
             pool.add(Term::Op(rule_kind, expected_args))
         };

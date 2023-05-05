@@ -201,7 +201,7 @@ impl Substitution {
             Term::Lambda(b, t) => {
                 self.apply_to_binder(pool, term, b.as_ref(), t, true, Term::Lambda)
             }
-            Term::Terminal(_) | Term::Sort(_) => term.clone(),
+            Term::Const(_) | Term::Var(..) | Term::Sort(_) => term.clone(),
         };
 
         // Since frequently a term will have more than one identical subterms, we insert the

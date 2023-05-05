@@ -403,8 +403,11 @@ impl BindingList {
 /// Many additional methods are implemented in [`Rc<Term>`].
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Term {
-    /// A terminal. This can be a constant or a variable.
-    Terminal(Terminal),
+    /// A constant term.
+    Const(Constant),
+
+    /// A variable, consisting of an identifier and a sort.
+    Var(Ident, Rc<Term>),
 
     /// An application of a function to one or more terms.
     App(Rc<Term>, Vec<Rc<Term>>),
@@ -430,29 +433,29 @@ pub enum Term {
 
 impl From<SortedVar> for Term {
     fn from(var: SortedVar) -> Self {
-        Term::Terminal(Terminal::Var(Identifier::Simple(var.0), var.1))
+        Term::Var(Ident::Simple(var.0), var.1)
     }
 }
 
 impl Term {
     /// Constructs a new integer term.
     pub fn integer(value: impl Into<Integer>) -> Self {
-        Term::Terminal(Terminal::Integer(value.into()))
+        Term::Const(Constant::Integer(value.into()))
     }
 
     /// Constructs a new real term.
     pub fn real(value: impl Into<Rational>) -> Self {
-        Term::Terminal(Terminal::Real(value.into()))
+        Term::Const(Constant::Real(value.into()))
     }
 
     /// Constructs a new string term.
     pub fn string(value: impl Into<String>) -> Self {
-        Term::Terminal(Terminal::String(value.into()))
+        Term::Const(Constant::String(value.into()))
     }
 
     /// Constructs a new variable term.
     pub fn var(name: impl Into<String>, sort: Rc<Term>) -> Self {
-        Term::Terminal(Terminal::Var(Identifier::Simple(name.into()), sort))
+        Term::Var(Ident::Simple(name.into()), sort)
     }
 
     /// Returns the sort of this term. This does not make use of a cache --- if possible, prefer to
@@ -463,17 +466,14 @@ impl Term {
         pool.sort(&added).clone()
     }
 
-    /// Returns `true` if the term is a terminal.
+    /// Returns `true` if the term is a terminal, that is, if it is a constant or a variable.
     pub fn is_terminal(&self) -> bool {
-        matches!(self, Term::Terminal(_))
+        matches!(self, Term::Const(_) | Term::Var(..))
     }
 
     /// Returns `true` if the term is an integer or real constant.
     pub fn is_number(&self) -> bool {
-        matches!(
-            self,
-            Term::Terminal(Terminal::Real(_) | Terminal::Integer(_))
-        )
+        matches!(self, Term::Const(Constant::Real(_) | Constant::Integer(_)))
     }
 
     /// Returns `true` if the term is an integer or real constant, or one such constant negated
@@ -489,8 +489,8 @@ impl Term {
     /// constant.
     pub fn as_number(&self) -> Option<Rational> {
         match self {
-            Term::Terminal(Terminal::Real(r)) => Some(r.clone()),
-            Term::Terminal(Terminal::Integer(i)) => Some(i.clone().into()),
+            Term::Const(Constant::Real(r)) => Some(r.clone()),
+            Term::Const(Constant::Integer(i)) => Some(i.clone().into()),
             _ => None,
         }
     }
@@ -529,17 +529,14 @@ impl Term {
 
     /// Returns `true` if the term is a variable.
     pub fn is_var(&self) -> bool {
-        matches!(
-            self,
-            Term::Terminal(Terminal::Var(Identifier::Simple(_), _))
-        )
+        matches!(self, Term::Var(Ident::Simple(_), _))
     }
 
     /// Tries to extract the variable name from a term. Returns `Some` if the term is a variable
     /// with a simple identifier.
     pub fn as_var(&self) -> Option<&str> {
         match self {
-            Term::Terminal(Terminal::Var(Identifier::Simple(var), _)) => Some(var.as_str()),
+            Term::Var(Ident::Simple(var), _) => Some(var.as_str()),
             _ => None,
         }
     }
@@ -586,7 +583,7 @@ impl Term {
 
     /// Returns `true` if the term is the boolean constant `true`.
     pub fn is_bool_true(&self) -> bool {
-        if let Term::Terminal(Terminal::Var(Identifier::Simple(name), sort)) = self {
+        if let Term::Var(Ident::Simple(name), sort) = self {
             sort.as_sort() == Some(&Sort::Bool) && name == "true"
         } else {
             false
@@ -595,7 +592,7 @@ impl Term {
 
     /// Returns `true` if the term is the boolean constant `false`.
     pub fn is_bool_false(&self) -> bool {
-        if let Term::Terminal(Terminal::Var(Identifier::Simple(name), sort)) = self {
+        if let Term::Var(Ident::Simple(name), sort) = self {
             sort.as_sort() == Some(&Sort::Bool) && name == "false"
         } else {
             false
@@ -682,9 +679,9 @@ impl Rc<Term> {
     }
 }
 
-/// A terminal term.
+/// A constant term.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Terminal {
+pub enum Constant {
     /// An integer constant term.
     Integer(Integer),
 
@@ -693,24 +690,21 @@ pub enum Terminal {
 
     /// A string literal term.
     String(String),
-
-    /// A variable, consisting of an identifier and a sort.
-    Var(Identifier, Rc<Term>),
 }
 
 /// An identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Identifier {
+pub enum Ident {
     /// A simple identifier, consisting of a symbol.
     Simple(String),
 
     /// An indexed identifier, consisting of a symbol and one or more indices.
-    Indexed(String, Vec<IdentifierIndex>),
+    Indexed(String, Vec<IdentIndex>),
 }
 
 /// An index for an indexed identifier. This can be either a numeral or a symbol.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum IdentifierIndex {
+pub enum IdentIndex {
     Numeral(u64),
     Symbol(String),
 }
