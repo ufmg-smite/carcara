@@ -203,8 +203,8 @@ where
 
         println!("worst cases:");
         if !self.step_time().is_empty() {
-        let worst_step = self.step_time().max();
-        println!("    step:            {} ({:?})", worst_step.0, worst_step.1);
+            let worst_step = self.step_time().max();
+            println!("    step:            {} ({:?})", worst_step.0, worst_step.1);
         }
 
         let worst_file_parsing = self.parsing().max();
