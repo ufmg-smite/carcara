@@ -62,7 +62,6 @@ pub struct CarcaraOptions {
     pub check_lia_using_cvc5: bool,
     pub strict: bool,
     pub skip_unknown_rules: bool,
-    pub num_threads: usize,
     pub stats: bool,
 }
 
@@ -81,7 +80,6 @@ impl CarcaraOptions {
             check_lia_using_cvc5: false,
             strict: false,
             skip_unknown_rules: false,
-            num_threads: 1,
             stats: false,
         }
     }
@@ -128,9 +126,9 @@ pub fn check<T: io::BufRead>(
         check_lia_using_cvc5,
         strict,
         skip_unknown_rules,
-        num_threads,
         stats,
     }: CarcaraOptions,
+    num_threads: usize,
 ) -> Result<bool, Error> {
     let mut run_measures: RunMeasurement = RunMeasurement::default();
 
@@ -222,10 +220,12 @@ pub fn check_and_elaborate<T: io::BufRead>(
         check_lia_using_cvc5,
         strict,
         skip_unknown_rules,
-        num_threads: _,
-        stats: _,
+        stats,
     }: CarcaraOptions,
 ) -> Result<Vec<ProofCommand>, Error> {
+    let mut run_measures: RunMeasurement = RunMeasurement::default();
+
+    let total = Instant::now();
     let (prelude, proof, mut pool) = parser::parse_instance(
         problem,
         proof,
@@ -233,6 +233,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
         expand_lets,
         allow_int_real_subtyping,
     )?;
+    run_measures.parsing = total.elapsed();
 
     let config = checker::Config {
         strict,
@@ -241,12 +242,42 @@ pub fn check_and_elaborate<T: io::BufRead>(
         check_lia_using_cvc5,
     };
 
-    checker::ProofChecker::new(&mut pool, config, prelude)
-        .check_and_elaborate(
-            proof,
-            &mut None::<CheckerStatistics<OnlineBenchmarkResults>>,
-        )
-        .map(|p| p.commands)
+    let checker_stats = &mut stats.then(|| CheckerStatistics {
+        file_name: "this",
+        elaboration_time: Duration::ZERO,
+        deep_eq_time: Duration::ZERO,
+        assume_time: Duration::ZERO,
+        assume_core_time: Duration::ZERO,
+        results: std::rc::Rc::new(RefCell::new(OnlineBenchmarkResults::new())),
+    });
+
+    let checking = Instant::now();
+    let res = checker::ProofChecker::new(&mut pool, config, prelude)
+        .check_and_elaborate(proof, checker_stats)
+        .map(|p| p.commands);
+    run_measures.checking = checking.elapsed();
+    run_measures.total = total.elapsed();
+
+    // If the statistics were collected and no error happend
+    if let Some(c_stats) = checker_stats {
+        let mut c_stats_results = c_stats.results.as_ref().borrow_mut();
+        c_stats_results.add_run_measurement(
+            &("this".to_string(), 0),
+            RunMeasurement {
+                parsing: run_measures.parsing,
+                checking: run_measures.checking,
+                elaboration: c_stats.elaboration_time,
+                total: run_measures.total,
+                deep_eq: c_stats.deep_eq_time,
+                assume: c_stats.assume_time,
+                assume_core: c_stats.assume_core_time,
+            },
+        );
+        // Print the statistics
+        c_stats_results.print(false);
+    }
+
+    res
 }
 
 pub fn generate_lia_smt_instances<T: io::BufRead>(

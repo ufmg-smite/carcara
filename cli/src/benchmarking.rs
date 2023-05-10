@@ -30,7 +30,6 @@ fn run_job<CR: CollectResults + Default + Send>(
         check_lia_using_cvc5,
         strict,
         skip_unknown_rules,
-        num_threads: _,
         stats: _,
     }: &CarcaraOptions,
     elaborate: bool,
