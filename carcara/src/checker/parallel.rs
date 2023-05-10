@@ -207,15 +207,15 @@ impl<'c> ParallelProofChecker<'c> {
                             let merged = statistics.as_mut().unwrap();
 
                             // Since combine needs a value instead of reference,
-                            // it's needed to copy both of the results since the
-                            // copy trait can't be implemented directly.
-                            let (mut merged_copy, mut l_stats_copy) = (CR::new(), CR::new());
+                            // it's needed to copy both of the results because
+                            // the copy trait can't be implemented directly.
+                            let (mut merged_copy, mut local_stats_copy) = (CR::new(), CR::new());
                             merged_copy.copy_from(&*merged.results.as_ref().borrow_mut());
-                            l_stats_copy.copy_from(&*l_stats.results.as_ref().borrow_mut());
+                            local_stats_copy.copy_from(&*l_stats.results.as_ref().borrow_mut());
 
                             //
                             *merged.results.as_ref().borrow_mut() =
-                                CR::combine(merged_copy, l_stats_copy);
+                                CR::combine(merged_copy, local_stats_copy);
 
                             // Make sure
                             merged.elaboration_time += l_stats.elaboration_time;
