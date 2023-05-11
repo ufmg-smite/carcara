@@ -9,9 +9,9 @@ use super::{context::*, lia_generic, CheckerStatistics, Config};
 use crate::benchmarking::CollectResults;
 use crate::{ast::*, CarcaraResult, Error};
 use ahash::AHashSet;
-use std::cell::RefCell;
 use std::{
-    sync::Arc,
+    cell::RefCell,
+    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 
@@ -68,6 +68,10 @@ impl<'c> ParallelProofChecker<'c> {
         scheduler: &'s Scheduler,
         statistics: &mut Option<CheckerStatistics<CR>>,
     ) -> CarcaraResult<bool> {
+        // Used to estimulate threads to abort prematurely (only happens when a
+        // thread already found out an invalid step)
+        let premature_abort = Arc::new(RwLock::new(false));
+        //
         crossbeam::scope(|s| {
             let threads: Vec<_> = (&scheduler.loads)
                 .into_iter()
@@ -85,6 +89,7 @@ impl<'c> ParallelProofChecker<'c> {
                     }));
                     let mut local_self = self.parallelize_self();
                     let mut merged_pool = TermPool::from_previous(&local_self.pool);
+                    let should_abort = premature_abort.clone();
 
                     s.builder()
                         .name(format!("worker-{i}"))
@@ -115,10 +120,14 @@ impl<'c> ParallelProofChecker<'c> {
                                                     &mut merged_pool,
                                                     &mut local_stats,
                                                 )
-                                                .map_err(|e| Error::Checker {
-                                                    inner: e,
-                                                    rule: step.rule.clone(),
-                                                    step: step.id.clone(),
+                                                .map_err(|e| {
+                                                    // Signals to other threads to stop the proof checking
+                                                    *should_abort.write().unwrap() = true;
+                                                    Error::Checker {
+                                                        inner: e,
+                                                        rule: step.rule.clone(),
+                                                        step: step.id.clone(),
+                                                    }
                                                 })?;
 
                                             if step.clause.is_empty() {
@@ -137,10 +146,14 @@ impl<'c> ParallelProofChecker<'c> {
                                                     &s.variable_args,
                                                     s.context_id,
                                                 )
-                                                .map_err(|e| Error::Checker {
-                                                    inner: e.into(),
-                                                    rule: "anchor".into(),
-                                                    step: step_id.to_owned(),
+                                                .map_err(|e| {
+                                                    // Signals to other threads to stop the proof checking
+                                                    *should_abort.write().unwrap() = true;
+                                                    Error::Checker {
+                                                        inner: e.into(),
+                                                        rule: "anchor".into(),
+                                                        step: step_id.to_owned(),
+                                                    }
                                                 })?;
 
                                             if let Some(stats) = &mut local_stats {
@@ -163,13 +176,19 @@ impl<'c> ParallelProofChecker<'c> {
                                             }
                                         }
                                         ProofCommand::Assume { id, term } => {
-                                            local_self.check_assume(
-                                                id,
-                                                term,
-                                                &proof.premises,
-                                                &iter,
-                                                &mut local_stats,
-                                            )?;
+                                            local_self
+                                                .check_assume(
+                                                    id,
+                                                    term,
+                                                    &proof.premises,
+                                                    &iter,
+                                                    &mut local_stats,
+                                                )
+                                                .map_err(|e| {
+                                                    // Signals to other threads to stop the proof checking
+                                                    *should_abort.write().unwrap() = true;
+                                                    e
+                                                })?;
                                         }
                                         ProofCommand::Closing => {
                                             // If this is the last command of a subproof, we have to pop the subproof
@@ -177,6 +196,13 @@ impl<'c> ParallelProofChecker<'c> {
                                             // in a subproof is always a `step` command
                                             local_self.context.pop();
                                         }
+                                    }
+                                    // If the thread got untill here and no error
+                                    // happend, then carcará will assume this thread
+                                    // got no error (even though an invalid step
+                                    // could be found in the next steps).
+                                    if *should_abort.read().unwrap() {
+                                        break;
                                     }
                                 }
 
@@ -196,7 +222,7 @@ impl<'c> ParallelProofChecker<'c> {
 
             // Unify the results of all threads and generate the final result based on them
             let (mut reached, mut holey) = (false, false);
-            let mut err: Result<(bool, bool), Error> = Ok((false, false));
+            let mut err: Result<_, Error> = Ok(());
 
             // Wait until the threads finish and merge the results and statistics
             for opt in threads.into_iter().map(|t| t.join().unwrap()) {
@@ -228,7 +254,6 @@ impl<'c> ParallelProofChecker<'c> {
                     }
                     Err(e) => {
                         err = Err(e);
-                        break;
                     }
                 }
             }
