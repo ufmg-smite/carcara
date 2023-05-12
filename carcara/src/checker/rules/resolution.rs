@@ -1,6 +1,6 @@
 use super::{
-    assert_clause_len, assert_eq, assert_is_bool_constant, assert_is_expected, assert_num_args,
-    assert_num_premises, CheckerError, Premise, RuleArgs, RuleResult,
+    assert_clause_len, assert_eq, assert_is_bool_constant, assert_num_args, assert_num_premises,
+    CheckerError, Premise, RuleArgs, RuleResult,
 };
 use crate::{
     ast::*,
@@ -563,13 +563,14 @@ pub fn tautology(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult 
 pub fn contraction(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_num_premises(premises, 1)?;
 
-    let expected: Vec<_> = premises[0].clause.iter().dedup().collect();
-    assert_clause_len(conclusion, expected.len())?;
+    let premise: AHashSet<_> = premises[0].clause.iter().collect();
+    let conclusion: AHashSet<_> = conclusion.iter().dedup().collect();
 
-    for (t, u) in conclusion.iter().zip(expected) {
-        assert_is_expected(t, u.clone())?;
+    if premise == conclusion {
+        Ok(())
+    } else {
+        Err(CheckerError::Unspecified) // TODO: add proper error type
     }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -831,13 +832,16 @@ mod tests {
                 "(assume h1 q)
                 (step t2 (cl q) :rule contraction :premises (h1))": true,
             }
-            "Encountered wrong term" {
-                "(step t1 (cl p p q) :rule hole)
-                (step t2 (cl p r) :rule contraction :premises (t1))": false,
+            "Not all terms removed" {
+                "(step t1 (cl p p q q) :rule hole)
+                (step t2 (cl p p q) :rule contraction :premises (t1))": true,
+
+                "(step t1 (cl q p p q q) :rule hole)
+                (step t2 (cl q p q) :rule contraction :premises (t1))": true,
             }
             "Terms are not in correct order" {
                 "(step t1 (cl p q q r) :rule hole)
-                (step t2 (cl p r q) :rule contraction :premises (t1))": false,
+                (step t2 (cl p r q) :rule contraction :premises (t1))": true,
             }
             "Conclusion is missing terms" {
                 "(step t1 (cl p q q r) :rule hole)
