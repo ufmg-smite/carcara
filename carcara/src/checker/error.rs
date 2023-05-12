@@ -63,10 +63,10 @@ pub enum CheckerError {
     BrokenTransitivityChain(Rc<Term>, Rc<Term>),
 
     #[error("term '{0}' is missing in conclusion clause")]
-    ReorderingMissingTerm(Rc<Term>),
+    ContractionMissingTerm(Rc<Term>),
 
     #[error("term '{0}' was not expected in conclusion clause")]
-    ReorderingExtraTerm(Rc<Term>),
+    ContractionExtraTerm(Rc<Term>),
 
     #[error("term '{0}' is not a valid n-ary operation")]
     NotValidNaryTerm(Rc<Term>),

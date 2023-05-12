@@ -16,9 +16,9 @@ pub fn reordering(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult
     let premise_set: AHashSet<_> = premise.iter().collect();
     let conclusion_set: AHashSet<_> = conclusion.iter().collect();
     if let Some(&t) = premise_set.difference(&conclusion_set).next() {
-        Err(CheckerError::ReorderingMissingTerm(t.clone()))
+        Err(CheckerError::ContractionMissingTerm(t.clone()))
     } else if let Some(&t) = conclusion_set.difference(&premise_set).next() {
-        Err(CheckerError::ReorderingExtraTerm(t.clone()))
+        Err(CheckerError::ContractionExtraTerm(t.clone()))
     } else {
         Ok(())
     }

@@ -563,13 +563,14 @@ pub fn tautology(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult 
 pub fn contraction(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_num_premises(premises, 1)?;
 
-    let premise: AHashSet<_> = premises[0].clause.iter().collect();
-    let conclusion: AHashSet<_> = conclusion.iter().dedup().collect();
-
-    if premise == conclusion {
-        Ok(())
+    let premise_set: AHashSet<_> = premises[0].clause.iter().collect();
+    let conclusion_set: AHashSet<_> = conclusion.iter().collect();
+    if let Some(&t) = premise_set.difference(&conclusion_set).next() {
+        Err(CheckerError::ContractionMissingTerm(t.clone()))
+    } else if let Some(&t) = conclusion_set.difference(&premise_set).next() {
+        Err(CheckerError::ContractionExtraTerm(t.clone()))
     } else {
-        Err(CheckerError::Unspecified) // TODO: add proper error type
+        Ok(())
     }
 }
 
