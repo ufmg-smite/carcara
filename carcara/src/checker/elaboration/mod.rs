@@ -306,6 +306,7 @@ impl Elaborator {
 
         let last_command_index = inner.current_index() - 1;
         let diff = if inner.diff.last() == Some(&(last_command_index, CommandDiff::Delete)) {
+            frame.current_offset -= 1;
             CommandDiff::Delete
         } else {
             // Even if the subproof diff is empty, we still need to update the indices of the
