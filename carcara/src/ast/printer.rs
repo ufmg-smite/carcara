@@ -171,8 +171,8 @@ impl<'a> AlethePrinter<'a> {
         write!(self.inner, ")")
     }
 
-    fn write_raw_term(&mut self, term: &Rc<Term>) -> io::Result<()> {
-        match term.as_ref() {
+    fn write_raw_term(&mut self, term: &Term) -> io::Result<()> {
+        match term {
             Term::Terminal(t) => write!(self.inner, "{}", t),
             Term::App(func, args) => self.write_s_expr(func, args),
             Term::Op(op, args) => self.write_s_expr(op, args),
@@ -315,24 +315,15 @@ fn escape_string(string: &str) -> Cow<str> {
 
 impl fmt::Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Term::Terminal(t) => write!(f, "{}", t),
-            Term::App(func, args) => write_s_expr(f, func, args),
-            Term::Op(op, args) => write_s_expr(f, op, args),
-            Term::Sort(sort) => write!(f, "{}", sort),
-            Term::Quant(quantifier, bindings, term) => {
-                write!(f, "({} {} {})", quantifier, bindings, term)
-            }
-            Term::Choice((symbol, sort), term) => {
-                write!(f, "(choice (({} {})) {})", symbol, sort, term)
-            }
-            Term::Let(bindings, term) => {
-                write!(f, "(let {} {})", bindings, term)
-            }
-            Term::Lambda(bindings, term) => {
-                write!(f, "(lambda {} {})", bindings, term)
-            }
-        }
+        let mut buf = Vec::new();
+        let mut printer = AlethePrinter {
+            inner: &mut buf,
+            term_indices: Some(AHashMap::new()),
+            term_sharing_variable_prefix: "@p_",
+        };
+        printer.write_raw_term(self).unwrap();
+        let result = std::str::from_utf8(&buf).unwrap();
+        write!(f, "{}", result)
     }
 }
 
