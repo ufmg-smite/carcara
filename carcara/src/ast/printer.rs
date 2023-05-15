@@ -321,7 +321,7 @@ impl fmt::Display for Term {
             term_indices: Some(AHashMap::new()),
             term_sharing_variable_prefix: "@p_",
         };
-        printer.write_raw_term(&self).unwrap();
+        printer.write_raw_term(self).unwrap();
         let result = std::str::from_utf8(&buf).unwrap();
         write!(f, "{}", result)
     }
