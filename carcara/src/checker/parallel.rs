@@ -49,12 +49,7 @@ impl<'c> ParallelProofChecker<'c> {
     pub fn parallelize_self(&self) -> Self {
         ParallelProofChecker {
             pool: self.pool.clone(),
-            config: Config {
-                strict: self.config.strict,
-                skip_unknown_rules: self.config.skip_unknown_rules,
-                is_running_test: self.config.is_running_test,
-                check_lia_using_cvc5: self.config.check_lia_using_cvc5,
-            },
+            config: self.config.clone(),
             prelude: self.prelude,
             context: ContextStack::from_previous(&self.context),
             reached_empty_clause: false,
@@ -79,14 +74,16 @@ impl<'c> ParallelProofChecker<'c> {
                 .map(|(i, schedule)| {
                     // Creates a local statistics collector, allowing the collection
                     // of this threads statistics and then the merge
-                    let mut local_stats = statistics.as_ref().and(Some(CheckerStatistics {
-                        file_name: "this",
-                        elaboration_time: Duration::ZERO,
-                        deep_eq_time: Duration::ZERO,
-                        assume_time: Duration::ZERO,
-                        assume_core_time: Duration::ZERO,
-                        results: std::rc::Rc::new(RefCell::new(CR::new())),
-                    }));
+                    let mut local_stats = statistics.as_ref().and_then(|s| {
+                        Some(CheckerStatistics {
+                            file_name: s.file_name,
+                            elaboration_time: Duration::ZERO,
+                            deep_eq_time: Duration::ZERO,
+                            assume_time: Duration::ZERO,
+                            assume_core_time: Duration::ZERO,
+                            results: std::rc::Rc::new(RefCell::new(CR::new())),
+                        })
+                    });
                     let mut local_self = self.parallelize_self();
                     let mut merged_pool = TermPool::from_previous(&local_self.pool);
                     let should_abort = premature_abort.clone();
@@ -168,7 +165,7 @@ impl<'c> ParallelProofChecker<'c> {
                                                     .as_ref()
                                                     .borrow_mut()
                                                     .add_step_measurement(
-                                                        "this",
+                                                        stats.file_name,
                                                         step_id,
                                                         &rule_name,
                                                         time.elapsed(),
@@ -176,19 +173,21 @@ impl<'c> ParallelProofChecker<'c> {
                                             }
                                         }
                                         ProofCommand::Assume { id, term } => {
-                                            local_self
-                                                .check_assume(
-                                                    id,
-                                                    term,
-                                                    &proof.premises,
-                                                    &iter,
-                                                    &mut local_stats,
-                                                )
-                                                .map_err(|e| {
-                                                    // Signals to other threads to stop the proof checking
-                                                    *should_abort.write().unwrap() = true;
-                                                    e
-                                                })?;
+                                            if !local_self.check_assume(
+                                                id,
+                                                term,
+                                                &proof.premises,
+                                                &iter,
+                                                &mut local_stats,
+                                            ) {
+                                                // Signals to other threads to stop the proof checking
+                                                *should_abort.write().unwrap() = true;
+                                                return Err(Error::Checker {
+                                                    inner: CheckerError::Assume(term.clone()),
+                                                    rule: "assume".into(),
+                                                    step: id.clone(),
+                                                });
+                                            }
                                         }
                                         ProofCommand::Closing => {
                                             // If this is the last command of a subproof, we have to pop the subproof
@@ -279,7 +278,7 @@ impl<'c> ParallelProofChecker<'c> {
         premises: &AHashSet<Rc<Term>>,
         iter: &ScheduleIter,
         statistics: &mut Option<CheckerStatistics<CR>>,
-    ) -> CarcaraResult<()> {
+    ) -> bool {
         let time = Instant::now();
 
         // Some subproofs contain `assume` commands inside them. These don't refer
@@ -288,7 +287,7 @@ impl<'c> ParallelProofChecker<'c> {
         // original problem, but sometimes use `assume` commands, we also skip the
         // command if we are in a testing context.
         if self.config.is_running_test || iter.is_in_subproof() {
-            return Ok(());
+            return true;
         }
 
         if premises.contains(term) {
@@ -298,14 +297,19 @@ impl<'c> ParallelProofChecker<'c> {
                 s.results
                     .as_ref()
                     .borrow_mut()
-                    .add_assume_measurement("this", id, true, time);
+                    .add_assume_measurement(s.file_name, id, true, time);
             }
-            return Ok(());
+            return true;
+        }
+
+        if self.config.strict {
+            return false;
         }
 
         let mut found = None;
         let mut deep_eq_time = Duration::ZERO;
         let mut core_time = Duration::ZERO;
+
         for p in premises {
             let mut this_deep_eq_time = Duration::ZERO;
             let (result, depth) = tracing_deep_eq(term, p, &mut this_deep_eq_time);
@@ -320,25 +324,20 @@ impl<'c> ParallelProofChecker<'c> {
             }
         }
 
-        if let Some(_) = found {
-            if let Some(s) = statistics {
-                let time = time.elapsed();
-                s.assume_time += time;
-                s.assume_core_time += core_time;
-                s.deep_eq_time += deep_eq_time;
-                s.results
-                    .as_ref()
-                    .borrow_mut()
-                    .add_assume_measurement("this", id, false, time);
-            }
-            Ok(())
-        } else {
-            Err(Error::Checker {
-                inner: CheckerError::Assume(term.clone()),
-                rule: "assume".into(),
-                step: id.to_owned(),
-            })
+        let Some(_) = found else { return false };
+
+        if let Some(s) = statistics {
+            let time = time.elapsed();
+            s.assume_time += time;
+            s.assume_core_time += core_time;
+            s.deep_eq_time += deep_eq_time;
+            s.results
+                .as_ref()
+                .borrow_mut()
+                .add_assume_measurement(s.file_name, id, false, time);
         }
+
+        true
     }
 
     fn check_step<'a, CR: CollectResults + Send>(
@@ -353,7 +352,7 @@ impl<'c> ParallelProofChecker<'c> {
         let mut deep_eq_time = Duration::ZERO;
 
         if step.rule == "lia_generic" {
-            if self.config.check_lia_using_cvc5 {
+            if self.config.lia_via_cvc5 {
                 let is_hole =
                     lia_generic::lia_generic(pool, &step.clause, &self.prelude, None, &step.id);
                 self.is_holey = self.is_holey || is_hole;
@@ -371,7 +370,7 @@ impl<'c> ParallelProofChecker<'c> {
                 None => return Err(CheckerError::UnknownRule),
             };
 
-            if step.rule == "hole" || step.rule == "trust" {
+            if step.rule == "hole" {
                 self.is_holey = true;
             }
 
@@ -405,10 +404,12 @@ impl<'c> ParallelProofChecker<'c> {
 
         if let Some(s) = statistics {
             let time = time.elapsed();
-            s.results
-                .as_ref()
-                .borrow_mut()
-                .add_step_measurement("this", &step.id, &step.rule, time);
+            s.results.as_ref().borrow_mut().add_step_measurement(
+                s.file_name,
+                &step.id,
+                &step.rule,
+                time,
+            );
             s.deep_eq_time += deep_eq_time;
         }
         Ok(())
@@ -453,6 +454,7 @@ impl<'c> ParallelProofChecker<'c> {
             "forall_inst" => quantifier::forall_inst,
             "qnt_join" => quantifier::qnt_join,
             "qnt_rm_unused" => quantifier::qnt_rm_unused,
+            "resolution" | "th_resolution" if strict => resolution::resolution_with_args,
             "resolution" | "th_resolution" => resolution::resolution,
             "refl" if strict => reflexivity::strict_refl,
             "refl" => reflexivity::refl,
@@ -520,7 +522,7 @@ impl<'c> ParallelProofChecker<'c> {
 
             // Special rules that always check as valid, and are used to indicate holes in the
             // proof.
-            "hole" | "trust" => |_| Ok(()),
+            "hole" => |_| Ok(()),
 
             // The Alethe specification does not yet describe how this more strict version of the
             // resolution rule will be called. Until that is decided and added to the specification,

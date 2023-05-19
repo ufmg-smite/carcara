@@ -26,7 +26,7 @@ use crate::checker::error::CheckerError;
 use ahash::AHashSet;
 use rug::Integer;
 use rug::Rational;
-use std::hash::Hash;
+use std::{hash::Hash, ops::Deref};
 
 pub use pool::SingleThreadPool;
 pub use pool::TPool;
@@ -36,15 +36,25 @@ pub use pool::TPool;
 /// This stores the sort declarations, function declarations and the problem's logic string.
 #[derive(Debug, Clone, Default)]
 pub struct ProblemPrelude {
+    /// The sort declarations, each represented by its name and arity.
     pub(crate) sort_declarations: Vec<(String, usize)>,
+
+    /// The function declarations, each represented by its name and body.
     pub(crate) function_declarations: Vec<(String, Rc<Term>)>,
+
+    /// The problem's logic string, if it exists.
     pub(crate) logic: Option<String>,
 }
 
 /// A proof in the Alethe format.
 #[derive(Debug, Clone)]
 pub struct Proof {
+    /// The proof's premises.
+    ///
+    /// Those are the terms introduced in the original problem's `assert` commands.
     pub premises: AHashSet<Rc<Term>>,
+
+    /// The proof commands.
     pub commands: Vec<ProofCommand>,
 }
 
@@ -58,7 +68,7 @@ impl Proof {
 /// A proof command.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProofCommand {
-    /// An `assume` command, of the form `(assume <symbol> <term>)`.
+    /// An `assume` command.
     Assume { id: String, term: Rc<Term> },
 
     /// A `step` command.
@@ -67,14 +77,14 @@ pub enum ProofCommand {
     /// A subproof.
     Subproof(Subproof),
 
-    /// A closing subproof step
+    /// A subproof closing step
     Closing,
 }
 
 impl ProofCommand {
-    /// Returns the unique identifier of this command.
+    /// Returns the unique id of this command.
     ///
-    /// For subproofs, this is the identifier of the last step in the subproof.
+    /// For subproofs, this is the id of the last step in the subproof.
     pub fn id(&self) -> &str {
         match self {
             ProofCommand::Assume { id, .. } => id,
@@ -117,7 +127,7 @@ impl ProofCommand {
 /// A `step` command.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProofStep {
-    /// The step identifier.
+    /// The step id.
     pub id: String,
 
     /// The conclusion clause.
@@ -148,8 +158,13 @@ pub struct ProofStep {
 /// `:step` attribute.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Subproof {
+    /// The proof commands inside the subproof.
     pub commands: Vec<ProofCommand>,
+
+    /// The "assignment" style arguments of the subproof, of the form `(:= <symbol> <term>)`.
     pub assignment_args: Vec<(String, Rc<Term>)>,
+
+    /// The "variable" style arguments of the subproof, of the form `(<symbol> <sort>)`.
     pub variable_args: Vec<SortedVar>,
     /// Subproof id used for context hashing purpose
     pub context_id: usize,
@@ -364,6 +379,14 @@ impl AsRef<[SortedVar]> for BindingList {
     }
 }
 
+impl Deref for BindingList {
+    type Target = [SortedVar];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl<'a> IntoIterator for &'a BindingList {
     type Item = &'a SortedVar;
 
@@ -377,24 +400,15 @@ impl<'a> IntoIterator for &'a BindingList {
 impl BindingList {
     pub const EMPTY: &'static Self = &BindingList(Vec::new());
 
-    pub fn iter(&self) -> std::slice::Iter<SortedVar> {
-        self.0.iter()
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
+    /// Extract a slice of the binding list's contents.
     pub fn as_slice(&self) -> &[SortedVar] {
         self.0.as_slice()
     }
 }
 
 /// A term.
+///
+/// Many additional methods are implemented in [`Rc<Term>`].
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Term {
     /// A terminal. This can be a constant or a variable.
@@ -420,7 +434,6 @@ pub enum Term {
 
     /// A `lambda` term.
     Lambda(BindingList, Rc<Term>),
-    // TODO: `match` binder terms
 }
 
 impl From<SortedVar> for Term {
@@ -450,7 +463,7 @@ impl Term {
         Term::Terminal(Terminal::Var(Identifier::Simple(name.into()), sort))
     }
 
-    /// Returns the sort of this term. This does not make use of a cache -- if possible, prefer to
+    /// Returns the sort of this term. This does not make use of a cache --- if possible, prefer to
     /// use `TermPool::sort`.
     pub fn raw_sort(&self) -> Sort {
         let mut pool = TermPool::new();
@@ -618,6 +631,7 @@ impl Rc<Term> {
     pub fn remove_negation_err(&self) -> Result<&Self, CheckerError> {
         match_term_err!((not t) = self)
     }
+
     /// Removes all leading negations from the term, and returns how many there were.
     pub fn remove_all_negations(&self) -> (u32, &Self) {
         let mut term = self;

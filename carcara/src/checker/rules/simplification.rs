@@ -51,7 +51,7 @@ fn generic_simplify_rule(
             let mut seen = AHashSet::new();
             loop {
                 if !seen.insert(current.clone()) {
-                    return Err(CheckerError::CycleInSimplification(current.clone()));
+                    return Err(CheckerError::CycleInSimplification(current));
                 }
                 match simplify_function(&current, pool) {
                     Some(next) => {

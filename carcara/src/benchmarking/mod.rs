@@ -77,6 +77,9 @@ pub struct BenchmarkResults<ByRun, ByStep, ByRunF64, ByDeepEq> {
     pub deep_eq_depths: ByDeepEq,
     pub num_assumes: usize,
     pub num_easy_assumes: usize,
+
+    pub is_holey: bool,
+    pub had_error: bool,
 }
 
 pub type OnlineBenchmarkResults = BenchmarkResults<
@@ -270,12 +273,17 @@ where
 pub struct CsvBenchmarkResults {
     runs: AHashMap<RunId, RunMeasurement>,
     step_time_by_rule: AHashMap<String, OfflineMetrics<StepId>>,
+    is_holey: bool,
     num_errors: usize,
 }
 
 impl CsvBenchmarkResults {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn is_holey(&self) -> bool {
+        self.is_holey
     }
 
     pub fn num_errors(&self) -> usize {
@@ -363,6 +371,7 @@ pub trait CollectResults {
     fn add_assume_measurement(&mut self, file: &str, id: &str, is_easy: bool, time: Duration);
     fn add_deep_eq_depth(&mut self, depth: usize);
     fn add_run_measurement(&mut self, id: &RunId, measurement: RunMeasurement);
+    fn register_holey(&mut self);
     fn register_error(&mut self, error: &crate::Error);
 
     fn combine(a: Self, b: Self) -> Self
@@ -462,7 +471,17 @@ where
             deep_eq_depths: a.deep_eq_depths.combine(b.deep_eq_depths),
             num_assumes: a.num_assumes + b.num_assumes,
             num_easy_assumes: a.num_easy_assumes + b.num_easy_assumes,
+            is_holey: a.is_holey || b.is_holey,
+            had_error: a.had_error || b.had_error,
         }
+    }
+
+    fn register_holey(&mut self) {
+        self.is_holey = true;
+    }
+
+    fn register_error(&mut self, _: &crate::Error) {
+        self.had_error = true;
     }
 
     fn copy_from(&mut self, other: &Self)
@@ -488,8 +507,6 @@ where
         self.num_assumes = other.num_assumes.clone();
         self.num_easy_assumes = other.num_easy_assumes.clone();
     }
-
-    fn register_error(&mut self, _: &crate::Error) {}
 }
 
 impl CollectResults for CsvBenchmarkResults {
@@ -519,6 +536,14 @@ impl CollectResults for CsvBenchmarkResults {
         self.runs.insert(id.clone(), measurement);
     }
 
+    fn register_holey(&mut self) {
+        self.is_holey = true;
+    }
+
+    fn register_error(&mut self, _: &crate::Error) {
+        self.num_errors += 1;
+    }
+
     fn combine(mut a: Self, b: Self) -> Self {
         // This assumes that the same run never appears in both `a` and `b`. This should be the case
         // in benchmarks anyway
@@ -526,10 +551,6 @@ impl CollectResults for CsvBenchmarkResults {
         a.step_time_by_rule = combine_map(a.step_time_by_rule, b.step_time_by_rule);
         a.num_errors += b.num_errors;
         a
-    }
-
-    fn register_error(&mut self, _: &crate::Error) {
-        self.num_errors += 1;
     }
 
     fn copy_from(&mut self, other: &Self)

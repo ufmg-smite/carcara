@@ -4,12 +4,13 @@ use carcara::{
     parser::parse_instance,
     CarcaraOptions,
 };
-use crossbeam::queue::ArrayQueue;
+use crossbeam_queue::ArrayQueue;
 use std::{
     cell::RefCell,
     fs::File,
     io::{self, BufReader},
     path::{Path, PathBuf},
+    thread,
     time::{Duration, Instant},
 };
 
@@ -23,17 +24,9 @@ struct JobDescriptor<'a> {
 fn run_job<CR: CollectResults + Default + Send>(
     results: std::rc::Rc<RefCell<CR>>,
     job: JobDescriptor,
-    &CarcaraOptions {
-        apply_function_defs,
-        expand_lets,
-        allow_int_real_subtyping,
-        check_lia_using_cvc5,
-        strict,
-        skip_unknown_rules,
-        stats: _,
-    }: &CarcaraOptions,
+    options: &CarcaraOptions,
     elaborate: bool,
-) -> Result<(), carcara::Error> {
+) -> Result<bool, carcara::Error> {
     let proof_file_name = job.proof_file.to_str().unwrap();
 
     let total = Instant::now();
@@ -42,18 +35,16 @@ fn run_job<CR: CollectResults + Default + Send>(
     let (prelude, proof, mut pool) = parse_instance(
         BufReader::new(File::open(job.problem_file)?),
         BufReader::new(File::open(job.proof_file)?),
-        apply_function_defs,
-        expand_lets,
-        allow_int_real_subtyping,
+        options.apply_function_defs,
+        options.expand_lets,
+        options.allow_int_real_subtyping,
     )?;
     let parsing = parsing.elapsed();
 
-    let config = checker::Config {
-        strict,
-        skip_unknown_rules,
-        is_running_test: false,
-        check_lia_using_cvc5,
-    };
+    let config = checker::Config::new()
+        .strict(options.strict)
+        .skip_unknown_rules(options.skip_unknown_rules)
+        .lia_via_cvc5(options.lia_via_cvc5);
 
     let mut checker_stats = Some(checker::CheckerStatistics {
         file_name: proof_file_name,
@@ -67,14 +58,13 @@ fn run_job<CR: CollectResults + Default + Send>(
 
     let checking = Instant::now();
 
-    // If any errors are encountered when checking a proof, we return from this function and do not
-    // record the `RunMeasurement`. However, the data for each individual step is recorded as they
-    // are checked, so any steps that were run before the error will be recorded.
-    if elaborate {
-        checker.check_and_elaborate(proof, &mut checker_stats)?;
+    let checking_result = if elaborate {
+        checker
+            .check_and_elaborate(proof, &mut checker_stats)
+            .map(|(is_holey, _)| is_holey)
     } else {
-        checker.check(&proof, &mut checker_stats)?;
-    }
+        checker.check(&proof, &mut checker_stats)
+    };
     let checking = checking.elapsed();
 
     let total = total.elapsed();
@@ -93,7 +83,7 @@ fn run_job<CR: CollectResults + Default + Send>(
             assume_core: unwrapped_stats.assume_core_time,
         },
     );
-    Ok(())
+    checking_result
 }
 
 fn worker_thread<CR: CollectResults + Default + Send>(
@@ -104,10 +94,13 @@ fn worker_thread<CR: CollectResults + Default + Send>(
     let results = std::rc::Rc::new(RefCell::new(CR::default()));
 
     while let Some(job) = jobs_queue.pop() {
-        let result = run_job(results.clone(), job, options, elaborate);
-        if let Err(e) = &result {
-            log::error!("encountered error in file '{}'", job.proof_file.display());
-            results.as_ref().borrow_mut().register_error(e);
+        match run_job(results.clone(), job, options, elaborate) {
+            Ok(true) => results.as_ref().borrow_mut().register_holey(),
+            Err(e) => {
+                log::error!("encountered error in file '{}'", job.proof_file.display());
+                results.as_ref().borrow_mut().register_error(&e);
+            }
+            _ => (),
         }
     }
 
@@ -137,7 +130,7 @@ pub fn run_benchmark<CR: CollectResults + Default + Send>(
         }
     }
 
-    crossbeam::scope(|s| {
+    thread::scope(|s| {
         let jobs_queue = &jobs_queue; // So we don't try to move the queue into the thread closure
 
         // We of course need to `collect` here to ensure we spawn all threads before starting to
@@ -145,9 +138,11 @@ pub fn run_benchmark<CR: CollectResults + Default + Send>(
         #[allow(clippy::needless_collect)]
         let workers: Vec<_> = (0..num_threads)
             .map(|_| {
-                s.builder()
+                thread::Builder::new()
                     .stack_size(STACK_SIZE)
-                    .spawn(move |_| worker_thread::<CR>(jobs_queue, options, elaborate))
+                    .spawn_scoped(s, move || {
+                        worker_thread::<CR>(jobs_queue, options, elaborate)
+                    })
                     .unwrap()
             })
             .collect();
@@ -158,7 +153,6 @@ pub fn run_benchmark<CR: CollectResults + Default + Send>(
             .reduce(CR::combine)
             .unwrap()
     })
-    .unwrap()
 }
 
 pub fn run_csv_benchmark(
@@ -176,5 +170,12 @@ pub fn run_csv_benchmark(
         "{} errors encountered during benchmark",
         result.num_errors()
     );
+    if result.num_errors() > 0 {
+        println!("invalid");
+    } else if result.is_holey() {
+        println!("holey");
+    } else {
+        println!("valid");
+    }
     result.write_csv(runs_dest, by_rule_dest)
 }

@@ -25,7 +25,7 @@ for dir in $(find $DIR -maxdepth 6 -type d); do
         cd $CARCARA
         RESULT1=$(cargo run --quiet --release -- check --skip-unknown-rules "$FILE.proof" "$FILE" &)
         cd $cur_dir
-        RESULT2=$(cargo run --quiet --release --features thread-safety -- check --skip-unknown-rules -u 3 "$FILE.proof" "$FILE" &)
+        RESULT2=$(cargo run --quiet --profile release --features thread-safety -- check --skip-unknown-rules -u 3 "$FILE.proof" "$FILE" &)
         echo "$(echo $RESULT1 | tr '\a' ' ') $(echo $RESULT2 | tr '\a' ' ')"
         RESULT1=$(echo $RESULT1 | tr '\a' ' ' | awk '{print $NF}')
         RESULT2=$(echo $RESULT2 | tr '\a' ' ' | awk '{print $NF}')

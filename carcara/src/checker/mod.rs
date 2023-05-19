@@ -47,12 +47,33 @@ impl<CR: CollectResults + Send> fmt::Debug for CheckerStatistics<'_, CR> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Config {
-    pub strict: bool,
-    pub skip_unknown_rules: bool,
-    pub is_running_test: bool,
-    pub check_lia_using_cvc5: bool,
+    strict: bool,
+    skip_unknown_rules: bool,
+    is_running_test: bool,
+    lia_via_cvc5: bool,
+}
+
+impl Config {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn strict(mut self, value: bool) -> Self {
+        self.strict = value;
+        self
+    }
+
+    pub fn skip_unknown_rules(mut self, value: bool) -> Self {
+        self.skip_unknown_rules = value;
+        self
+    }
+
+    pub fn lia_via_cvc5(mut self, value: bool) -> Self {
+        self.lia_via_cvc5 = value;
+        self
+    }
 }
 
 pub struct ProofChecker<'c> {
@@ -154,7 +175,13 @@ impl<'c> ProofChecker<'c> {
                     }
                 }
                 ProofCommand::Assume { id, term } => {
-                    self.check_assume(id, term, &proof.premises, &iter, statistics)?;
+                    if !self.check_assume(id, term, &proof.premises, &iter, statistics) {
+                        return Err(Error::Checker {
+                            inner: CheckerError::Assume(term.clone()),
+                            rule: "assume".into(),
+                            step: id.clone(),
+                        });
+                    }
                 }
                 ProofCommand::Closing => {}
             }
@@ -170,7 +197,7 @@ impl<'c> ProofChecker<'c> {
         &mut self,
         mut proof: Proof,
         statistics: &mut Option<CheckerStatistics<CR>>,
-    ) -> CarcaraResult<Proof> {
+    ) -> CarcaraResult<(bool, Proof)> {
         self.elaborator = Some(Elaborator::new());
         let result = self.check(&proof, statistics);
 
@@ -184,7 +211,7 @@ impl<'c> ProofChecker<'c> {
         if let Some(stats) = statistics {
             stats.elaboration_time += elaboration_time.elapsed();
         }
-        Ok(proof)
+        Ok((self.is_holey, proof))
     }
 
     fn check_assume<CR: CollectResults + Send>(
@@ -194,7 +221,7 @@ impl<'c> ProofChecker<'c> {
         premises: &AHashSet<Rc<Term>>,
         iter: &ProofIter,
         statistics: &mut Option<CheckerStatistics<CR>>,
-    ) -> CarcaraResult<()> {
+    ) -> bool {
         let time = Instant::now();
 
         // Some subproofs contain `assume` commands inside them. These don't refer
@@ -206,7 +233,7 @@ impl<'c> ProofChecker<'c> {
             if let Some(elaborator) = &mut self.elaborator {
                 elaborator.assume(term);
             }
-            return Ok(());
+            return true;
         }
 
         if premises.contains(term) {
@@ -221,12 +248,17 @@ impl<'c> ProofChecker<'c> {
             if let Some(elaborator) = &mut self.elaborator {
                 elaborator.assume(term);
             }
-            return Ok(());
+            return true;
+        }
+
+        if self.config.strict {
+            return false;
         }
 
         let mut found = None;
         let mut deep_eq_time = Duration::ZERO;
         let mut core_time = Duration::ZERO;
+
         for p in premises {
             let mut this_deep_eq_time = Duration::ZERO;
             let (result, depth) = tracing_deep_eq(term, p, &mut this_deep_eq_time);
@@ -241,37 +273,30 @@ impl<'c> ProofChecker<'c> {
             }
         }
 
-        if let Some(p) = found {
-            if let Some(elaborator) = &mut self.elaborator {
-                let elaboration_time = Instant::now();
+        let Some(p) = found else { return false };
 
-                elaborator.elaborate_assume(self.pool, p, term.clone(), id);
+        if let Some(elaborator) = &mut self.elaborator {
+            let elaboration_time = Instant::now();
 
-                if let Some(s) = statistics {
-                    s.elaboration_time += elaboration_time.elapsed();
-                }
-            }
+            elaborator.elaborate_assume(self.pool, p, term.clone(), id);
 
             if let Some(s) = statistics {
-                let time = time.elapsed();
-                s.assume_time += time;
-                s.assume_core_time += core_time;
-                s.deep_eq_time += deep_eq_time;
-                s.results.as_ref().borrow_mut().add_assume_measurement(
-                    s.file_name,
-                    id,
-                    false,
-                    time,
-                );
+                s.elaboration_time += elaboration_time.elapsed();
             }
-            Ok(())
-        } else {
-            Err(Error::Checker {
-                inner: CheckerError::Assume(term.clone()),
-                rule: "assume".into(),
-                step: id.to_owned(),
-            })
         }
+
+        if let Some(s) = statistics {
+            let time = time.elapsed();
+            s.assume_time += time;
+            s.assume_core_time += core_time;
+            s.deep_eq_time += deep_eq_time;
+            s.results
+                .as_ref()
+                .borrow_mut()
+                .add_assume_measurement(s.file_name, id, false, time);
+        }
+
+        true
     }
 
     fn check_step<'a, CR: CollectResults + Send>(
@@ -286,7 +311,7 @@ impl<'c> ProofChecker<'c> {
 
         let mut elaborated = false;
         if step.rule == "lia_generic" {
-            if self.config.check_lia_using_cvc5 {
+            if self.config.lia_via_cvc5 {
                 let is_hole = lia_generic::lia_generic(
                     self.pool,
                     &step.clause,
@@ -316,7 +341,7 @@ impl<'c> ProofChecker<'c> {
                 None => return Err(CheckerError::UnknownRule),
             };
 
-            if step.rule == "hole" || step.rule == "trust" {
+            if step.rule == "hole" {
                 self.is_holey = true;
             }
 
@@ -413,6 +438,7 @@ impl<'c> ProofChecker<'c> {
             "forall_inst" => quantifier::forall_inst,
             "qnt_join" => quantifier::qnt_join,
             "qnt_rm_unused" => quantifier::qnt_rm_unused,
+            "resolution" | "th_resolution" if strict => resolution::resolution_with_args,
             "resolution" | "th_resolution" => resolution::resolution,
             "refl" if strict => reflexivity::strict_refl,
             "refl" => reflexivity::refl,
@@ -480,7 +506,7 @@ impl<'c> ProofChecker<'c> {
 
             // Special rules that always check as valid, and are used to indicate holes in the
             // proof.
-            "hole" | "trust" => |_| Ok(()),
+            "hole" => |_| Ok(()),
 
             // The Alethe specification does not yet describe how this more strict version of the
             // resolution rule will be called. Until that is decided and added to the specification,
@@ -496,45 +522,10 @@ impl<'c> ProofChecker<'c> {
 
         Some(match rule_name {
             "eq_transitive" => transitivity::elaborate_eq_transitive,
+            "resolution" | "th_resolution" => resolution::elaborate_resolution,
             "refl" => reflexivity::elaborate_refl,
             "trans" => transitivity::elaborate_trans,
             _ => return None,
         })
     }
-}
-
-pub fn generate_lia_smt_instances(
-    prelude: ProblemPrelude,
-    proof: &Proof,
-    use_sharing: bool,
-) -> CarcaraResult<Vec<(String, String)>> {
-    use std::fmt::Write;
-
-    let mut iter = proof.iter();
-    let mut result = Vec::new();
-    while let Some(command) = iter.next() {
-        if let ProofCommand::Step(step) = command {
-            if step.rule == "lia_generic" {
-                if iter.depth() > 0 {
-                    log::error!(
-                        "generating SMT instance for step inside subproof is not supported"
-                    );
-                    continue;
-                }
-
-                let mut problem = String::new();
-                write!(&mut problem, "{}", prelude).unwrap();
-
-                let mut bytes = Vec::new();
-                printer::write_lia_smt_instance(&mut bytes, &step.clause, use_sharing).unwrap();
-                write!(&mut problem, "{}", String::from_utf8(bytes).unwrap()).unwrap();
-
-                writeln!(&mut problem, "(check-sat)").unwrap();
-                writeln!(&mut problem, "(exit)").unwrap();
-
-                result.push((step.id.clone(), problem));
-            }
-        }
-    }
-    Ok(result)
 }

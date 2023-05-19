@@ -30,7 +30,7 @@ pub struct RuleArgs<'a> {
     pub(super) deep_eq_time: &'a mut Duration,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct Premise<'a> {
     pub id: &'a str,
     pub clause: &'a [Rc<Term>],
@@ -178,7 +178,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
                 strict: false,
                 skip_unknown_rules: false,
                 is_running_test: true,
-                check_lia_using_cvc5: true,
+                lia_via_cvc5: false,
             },
             prelude,
         );

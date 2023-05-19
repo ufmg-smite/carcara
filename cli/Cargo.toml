@@ -1,8 +1,8 @@
 [package]
 name = "carcara-cli"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
-rust-version = "1.61"
+rust-version = "1.67"
 license = "Apache-2.0"
 
 [[bin]]
@@ -11,12 +11,12 @@ path = "src/main.rs"
 
 [dependencies]
 carcara = { path = "../carcara" }
-ahash = "0.7.4"
-clap = { version = "3.1.6", features = ["derive"] }
-const_format = "0.2.22"
-crossbeam = "0.8"
-log = { version = "0.4.14", features = ["std"] }
-ansi_term = "0.11"
+ahash = "0.8.3"
+clap = { version = "3.2.23", features = ["derive"] }
+const_format = "0.2.30"
+crossbeam-queue = "0.3.8"
+log = { version = "0.4.17", features = ["std"] }
+ansi_term = "0.12"
 git-version = "0.3.5"
 atty = "0.2.14"
 

@@ -1,3 +1,5 @@
+//! This module implements a variant of `Rc` where equality and hashing are done by reference.
+
 // Ensures that the custom Arc struct is only used when the thread-safety build
 //  flag is activated. This ensures that the Carcará sequential execution will
 //  not suffer a performance downgrade due to the Arc slowness.
@@ -129,6 +131,7 @@ mod MyArc {
     }
 
     impl<T, const N: usize> Rc<[T; N]> {
+        /// Converts an `Rc` of an array into an `Rc` of a slice.
         pub fn to_rc_of_slice(self) -> Rc<[T]> {
             Rc(self.0 as _)
         }
@@ -215,6 +218,7 @@ mod MyRc {
     }
 
     impl<T, const N: usize> Rc<[T; N]> {
+        /// Converts an `Rc` of an array into an `Rc` of a slice.
         pub fn to_rc_of_slice(self) -> Rc<[T]> {
             Rc(self.0 as _)
         }

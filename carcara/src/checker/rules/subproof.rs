@@ -151,9 +151,8 @@ pub fn r#let(
     let substitution: AHashMap<Rc<Term>, Rc<Term>> = last.mappings.iter().cloned().collect();
 
     let (let_term, u_prime) = match_term_err!((= l u) = &conclusion[0])?;
-    let (let_bindings, u) = match let_term.as_ref() {
-        Term::Let(b, t) => (b, t),
-        _ => return Err(CheckerError::TermOfWrongForm("(let ...)", let_term.clone())),
+    let Term::Let(let_bindings, u) = let_term.as_ref() else {
+        return Err(CheckerError::TermOfWrongForm("(let ...)", let_term.clone()));
     };
 
     // The u and u' in the conclusion must match the u and u' in the previous command in the

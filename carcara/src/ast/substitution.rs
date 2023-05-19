@@ -1,3 +1,5 @@
+//! Algorithms for creating and applying capture-avoiding substitutions over terms.
+
 use super::{BindingList, Rc, SortedVar, TPool, Term, TermPool};
 use ahash::{AHashMap, AHashSet};
 use thiserror::Error;
@@ -31,11 +33,13 @@ type SubstitutionResult<T> = Result<T, SubstitutionError>;
 /// `x` variable was captured by the binder when it was renamed. To prevent this, these
 /// substitutions are also capture-avoiding. This is done by renaming the binder variable when
 /// necessary before applying the substitution. In the earlier example, the resulting term would
-/// actually be `(forall ((y@ Int)) (= y y@))`.
+/// actually be `(forall ((y' Int)) (= y y'))`.
 pub struct Substitution {
+    /// The substitution's mappings.
     pub(crate) map: AHashMap<Rc<Term>, Rc<Term>>,
-    // Variables that should be renamed to preserve capture-avoidance if they are bound by a binder
-    // term
+
+    /// The variables that should be renamed to preserve capture-avoidance, if they are bound by a
+    /// binder term.
     should_be_renamed: Option<AHashSet<Rc<Term>>>,
     cache: AHashMap<Rc<Term>, Rc<Term>>,
 }
@@ -284,7 +288,7 @@ impl Substitution {
     /// captured by this substitution to a new, arbitrary name. Returns that substitution, and the
     /// new binding list, with the bindings renamed. If no variable needs to be renamed, this just
     /// returns a clone of the binding list and an empty substitution. The name chosen when renaming
-    /// a variable is the old name with '@' appended. If the binding list is a "value" list, like in
+    /// a variable is the old name with `'` appended. If the binding list is a "value" list, like in
     /// a `let` or `lambda` term, `is_value_list` should be true.
     fn rename_binding_list<P: TPool>(
         &mut self,
@@ -308,7 +312,7 @@ impl Substitution {
                 let mut changed = false;
                 let mut new_var = var.clone();
 
-                // We keep adding `@`s to the variable name as long as it is necessary
+                // We keep adding `'`s to the variable name as long as it is necessary
                 loop {
                     if !new_vars.contains(&new_var) {
                         let new_term = pool.add((new_var.clone(), sort.clone()).into());
@@ -316,7 +320,7 @@ impl Substitution {
                             break;
                         }
                     }
-                    new_var.push('@');
+                    new_var.push('\'');
                     changed = true;
                 }
 
@@ -398,29 +402,29 @@ mod tests {
             "(forall ((p Bool)) (and p q))" [q -> r] => "(forall ((p Bool)) (and p r))",
 
             // Simple renaming
-            "(forall ((y Int)) (> y 0))" [x -> y] => "(forall ((y@ Int)) (> y@ 0))",
+            "(forall ((y Int)) (> y 0))" [x -> y] => "(forall ((y' Int)) (> y' 0))",
 
             // Renaming may be skipped
             "(forall ((x Int)) (> x 0))" [x -> y] => "(forall ((x Int)) (> x 0))",
 
             // Capture-avoidance
-            "(forall ((y Int)) (> y x))" [x -> y] => "(forall ((y@ Int)) (> y@ y))",
+            "(forall ((y Int)) (> y x))" [x -> y] => "(forall ((y' Int)) (> y' y))",
             "(forall ((x Int) (y Int)) (= x y))" [x -> y] =>
-                "(forall ((x@ Int) (y@ Int)) (= x@ y@))",
+                "(forall ((x' Int) (y' Int)) (= x' y'))",
             "(forall ((x Int) (y Int)) (= x y))" [x -> x] => "(forall ((x Int) (y Int)) (= x y))",
-            "(forall ((y Int)) (> y x))" [x -> (+ y 0)] => "(forall ((y@ Int)) (> y@ (+ y 0)))",
+            "(forall ((y Int)) (> y x))" [x -> (+ y 0)] => "(forall ((y' Int)) (> y' (+ y 0)))",
 
-            "(forall ((y Int) (y@ Int)) (= y y@))" [x -> y] =>
-                "(forall ((y@ Int) (y@@ Int)) (= y@ y@@))",
-            "(forall ((y Int) (y@ Int) (y@@ Int)) (= y y@ y@@))" [x -> y] =>
-                "(forall ((y@ Int) (y@@ Int) (y@@@ Int)) (= y@ y@@ y@@@))",
+            "(forall ((y Int) (y' Int)) (= y y'))" [x -> y] =>
+                "(forall ((y' Int) (y'' Int)) (= y' y''))",
+            "(forall ((y Int) (y' Int) (y'' Int)) (= y y' y''))" [x -> y] =>
+                "(forall ((y' Int) (y'' Int) (y''' Int)) (= y' y'' y'''))",
 
             // The capture-avoidance may disambiguate repeated bindings
-            "(forall ((y Int) (y@ Int) (y@ Int)) (= y y@ y@))" [x -> y] =>
-                "(forall ((y@ Int) (y@@ Int) (y@@@ Int)) (= y@ y@@@ y@@@))",
+            "(forall ((y Int) (y' Int) (y' Int)) (= y y' y'))" [x -> y] =>
+                "(forall ((y' Int) (y'' Int) (y''' Int)) (= y' y''' y'''))",
 
-            // In theory, since x does not appear in this term, renaming y to y@ is unnecessary
-            "(forall ((y Int)) (> y 0))" [x -> y] => "(forall ((y@ Int)) (> y@ 0))",
+            // In theory, since x does not appear in this term, renaming y to y' is unnecessary
+            "(forall ((y Int)) (> y 0))" [x -> y] => "(forall ((y' Int)) (> y' 0))",
 
             // TODO: Add tests for `choice`, `let`, and `lambda` terms
         }

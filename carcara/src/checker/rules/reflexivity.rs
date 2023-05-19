@@ -100,10 +100,19 @@ pub fn elaborate_refl(
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
 
-    let new_left = context.apply(pool, left);
-    let new_right = context.apply(pool, right);
+    if left == right {
+        elaborator.unchanged(conclusion);
+        return Ok(());
+    }
 
-    if left == right || new_left == *right || *left == new_right || new_left == new_right {
+    // We don't compute the new left and right terms until they are needed
+    let new_left = context.apply(pool, left);
+    if new_left == *right {
+        elaborator.unchanged(conclusion);
+        return Ok(());
+    }
+    let new_right = context.apply(pool, right);
+    if *left == new_right || new_left == new_right {
         elaborator.unchanged(conclusion);
         return Ok(());
     }
