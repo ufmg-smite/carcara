@@ -3,11 +3,12 @@ mod diff;
 mod polyeq;
 mod pruning;
 
+pub use diff::{apply_diff, CommandDiff, ProofDiff};
+pub use pruning::{prune_proof, slice_proof};
+
 use crate::{ast::*, utils::HashMapStack};
 use accumulator::Accumulator;
-use diff::{apply_diff, CommandDiff, ProofDiff};
 use polyeq::PolyeqElaborator;
-use pruning::prune_proof;
 
 #[derive(Debug, Default)]
 struct Frame {

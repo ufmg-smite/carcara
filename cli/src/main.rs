@@ -70,6 +70,9 @@ enum Command {
 
     /// Checks a series of proof files and records performance statistics.
     Bench(BenchCommandOptions),
+
+    /// Given a step, takes a slice of a proof consisting of all its transitive premises.
+    Slice(SliceCommandOption),
 }
 
 #[derive(Args)]
@@ -218,6 +221,24 @@ struct BenchCommandOptions {
     files: Vec<String>,
 }
 
+#[derive(Args)]
+struct SliceCommandOption {
+    #[clap(flatten)]
+    input: Input,
+
+    #[clap(flatten)]
+    parsing: ParsingOptions,
+
+    #[clap(flatten)]
+    printing: PrintingOptions,
+
+    #[clap(long)]
+    from: String,
+
+    #[clap(long, short = 'd')]
+    max_distance: Option<usize>,
+}
+
 #[derive(ArgEnum, Clone)]
 enum LogLevel {
     Off,
@@ -258,6 +279,7 @@ fn main() {
         }
         Command::Elaborate(options) => elaborate_command(options),
         Command::Bench(options) => bench_command(options),
+        Command::Slice(options) => slice_command(options),
     };
     if let Err(e) = result {
         log::error!("{}", e);
@@ -477,5 +499,29 @@ fn print_benchmark_results(results: OnlineBenchmarkResults, sort_by_total: bool)
             depths.standard_deviation()
         );
     }
+    Ok(())
+}
+
+fn slice_command(options: SliceCommandOption) -> CliResult<()> {
+    let (problem, proof) = get_instance(&options.input)?;
+    let (_, proof, _) = parser::parse_instance(
+        problem,
+        proof,
+        options.parsing.apply_function_defs,
+        options.parsing.expand_let_bindings,
+        options.parsing.allow_int_real_subtyping,
+    )
+    .map_err(carcara::Error::from)?;
+
+    let source_index = proof
+        .commands
+        .iter()
+        .position(|c| c.id() == options.from)
+        .ok_or_else(|| CliError::InvalidSliceId(options.from.to_owned()))?;
+
+    let diff =
+        carcara::elaborator::slice_proof(&proof.commands, source_index, options.max_distance);
+    let slice = carcara::elaborator::apply_diff(diff, proof.commands);
+    print_proof(&slice, options.printing.use_sharing)?;
     Ok(())
 }
