@@ -394,10 +394,14 @@ fn test_annotated_terms() {
     let cases = [
         ("(! 0 :named foo)", zero.clone()),
         ("(! (! 0 :named foo) :named bar)", zero.clone()),
-        ("(! (! 0 :pattern ((+ 1 0) 3)) :named bar)", zero),
+        ("(! 0 :named foo :named bar)", zero.clone()),
+        ("(! (! 0 :pattern ((+ 1 0) 3)) :named bar)", zero.clone()),
         ("(ite (! true :named baz) 2 3)", {
             p.add(Term::Op(Operator::Ite, vec![p.bool_true(), two, three]))
         }),
+        ("(! 0 :unknown foo)", zero.clone()),
+        ("(! 0 :unknown (list of tokens) :named foo)", zero.clone()),
+        ("(! 0 :no :arguments)", zero),
     ];
     run_parser_tests(&mut p, &cases);
     assert!(matches!(
@@ -407,10 +411,6 @@ fn test_annotated_terms() {
     assert!(matches!(
         parse_term_err("(! true not_a_keyword)"),
         Error::Parser(ParserError::UnexpectedToken(_), _),
-    ));
-    assert!(matches!(
-        parse_term_err("(! true :unknown)"),
-        Error::Parser(ParserError::UnknownAttribute(_), _),
     ));
     assert!(matches!(
         parse_term_err("(! true :named 1 2 3)"),

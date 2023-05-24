@@ -1060,7 +1060,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
         let inner = self.parse_term()?;
         self.parse_sequence(
             |p| {
-                let attribute_pos = p.current_position;
                 let attribute = p.expect_keyword()?;
                 match attribute.as_str() {
                     "named" => {
@@ -1074,16 +1073,24 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         p.state.function_defs.insert(name, func_def);
                         Ok(())
                     }
-                    "pattern" => {
-                        // We just ignore the values of `:pattern` attributes
-                        p.expect_token(Token::OpenParen)?;
-                        p.parse_sequence(Parser::parse_term, true)?;
-                        Ok(())
-                    }
-                    _ => Err(Error::Parser(
-                        ParserError::UnknownAttribute(attribute),
-                        attribute_pos,
-                    )),
+
+                    // We allow unknown attributes, and just ignore them
+                    _ => match p.current_token {
+                        // If the argument is a list, we consume it until the `)` token
+                        Token::OpenParen => {
+                            p.next_token()?;
+                            p.ignore_until_close_parens()
+                        }
+
+                        // If the attribute has no argument, we don't do anything
+                        Token::Keyword(_) | Token::CloseParen | Token::Eof => Ok(()),
+
+                        // If the argument is a single token, we consume it
+                        _ => {
+                            p.next_token()?;
+                            Ok(())
+                        }
+                    },
                 }
             },
             true,
