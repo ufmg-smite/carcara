@@ -1,3 +1,5 @@
+//! A lexer for the SMT-LIB and Alethe formats.
+
 use crate::{parser::ParserError, utils::is_symbol_character, CarcaraResult, Error};
 use rug::{ops::Pow, Integer, Rational};
 use std::{
@@ -5,7 +7,7 @@ use std::{
     str::FromStr,
 };
 
-/// A token in the SMT-LIB and Alethe languages.
+/// A token in the SMT-LIB and Alethe formats.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Token {
     /// The `(` token.
@@ -126,7 +128,7 @@ impl_str_conversion_traits!(Reserved {
 /// Represents a position (line and column numbers) in the source input.
 pub type Position = (usize, usize);
 
-/// A lexer for the Alethe proof format.
+/// A lexer for the SMT-LIB and Alethe formats.
 pub struct Lexer<R> {
     input: R,
     current_line: Option<std::vec::IntoIter<char>>,
@@ -135,8 +137,9 @@ pub struct Lexer<R> {
 }
 
 impl<R: BufRead> Lexer<R> {
-    /// Constructs a new `Lexer` from a type that implements `BufRead`. This operation can fail if
-    /// there is an IO error on the first token.
+    /// Constructs a new `Lexer` from a type that implements `BufRead`.
+    ///
+    /// This operation can fail if there is an IO error on the first token.
     pub fn new(mut input: R) -> io::Result<Self> {
         let mut buf = String::new();
         let read = input.read_line(&mut buf)?;
@@ -194,6 +197,7 @@ impl<R: BufRead> Lexer<R> {
     }
 
     /// Reads characters while the given predicate returns `true`, and stores them in a `String`.
+    ///
     /// At the end, all characters in the returned string will satisfy the predicate, and
     /// `self.current_char` will be the first character that didn't satisfy the predicate.
     fn read_chars_while<P: Fn(char) -> bool>(&mut self, predicate: P) -> io::Result<String> {
@@ -208,9 +212,10 @@ impl<R: BufRead> Lexer<R> {
         Ok(result)
     }
 
-    /// Reads and drops characters until a non-whitespace character is encountered. Similar to
-    /// calling `self.read_chars_while(char::is_whitespace)`, but this method doesn't allocate a
-    /// string to store the result.
+    /// Reads and drops characters until a non-whitespace character is encountered.
+    ///
+    /// This is similar to calling `self.read_chars_while(char::is_whitespace)`, but this method
+    /// doesn't allocate a string to store the result.
     fn drop_while_whitespace(&mut self) -> io::Result<()> {
         while let Some(c) = self.current_char {
             if !c.is_whitespace() {
@@ -295,8 +300,9 @@ impl<R: BufRead> Lexer<R> {
         Ok(Token::Keyword(symbol))
     }
 
-    /// Reads a binary or hexadecimal literal, e.g. `#b0110` or `#x01Ab`. Returns an error if any
-    /// character other than `b` or `x` is encountered after the `#`.
+    /// Reads a binary or hexadecimal literal, e.g. `#b0110` or `#x01Ab`.
+    ///
+    /// Returns an error if any character other than `b` or `x` is encountered after the `#`.
     fn read_number_with_base(&mut self) -> CarcaraResult<Token> {
         self.next_char()?; // Consume `#`
         let base = match self.next_char()? {

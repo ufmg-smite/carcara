@@ -64,8 +64,8 @@ pub fn bind(
 
     // While the documentation indicates this rule is only called with `forall` quantifiers, in
     // some of the tests examples it is also called with the `exists` quantifier
-    let (l_quant, l_bindings, left) = left.unwrap_quant_err()?;
-    let (r_quant, r_bindings, right) = right.unwrap_quant_err()?;
+    let (l_quant, l_bindings, left) = left.as_quant_err()?;
+    let (r_quant, r_bindings, right) = right.as_quant_err()?;
     assert_eq(&l_quant, &r_quant)?;
 
     let [l_bindings, r_bindings] = [l_bindings, r_bindings].map(|b| {
@@ -151,9 +151,8 @@ pub fn r#let(
     let substitution: AHashMap<Rc<Term>, Rc<Term>> = last.mappings.iter().cloned().collect();
 
     let (let_term, u_prime) = match_term_err!((= l u) = &conclusion[0])?;
-    let (let_bindings, u) = match let_term.as_ref() {
-        Term::Let(b, t) => (b, t),
-        _ => return Err(CheckerError::TermOfWrongForm("(let ...)", let_term.clone())),
+    let Term::Let(let_bindings, u) = let_term.as_ref() else {
+        return Err(CheckerError::TermOfWrongForm("(let ...)", let_term.clone()));
     };
 
     // The u and u' in the conclusion must match the u and u' in the previous command in the
@@ -205,7 +204,7 @@ fn extract_points(quant: Quantifier, term: &Rc<Term>) -> AHashSet<(Rc<Term>, Rc<
         if let Some(inner) = term.remove_negation() {
             return find_points(acc, !polarity, inner);
         }
-        if let Some((_, _, inner)) = term.unwrap_quant() {
+        if let Some((_, _, inner)) = term.as_quant() {
             return find_points(acc, polarity, inner);
         }
         match polarity {
@@ -250,8 +249,8 @@ pub fn onepoint(
     assert_clause_len(conclusion, 1)?;
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
-    let (quant, l_bindings, left) = left.unwrap_quant_err()?;
-    let (r_bindings, right) = match right.unwrap_quant() {
+    let (quant, l_bindings, left) = left.as_quant_err()?;
+    let (r_bindings, right) = match right.as_quant() {
         Some((q, b, t)) => {
             assert_eq(&q, &quant)?;
             (b, t)
@@ -350,7 +349,7 @@ fn generic_skolemization_rule(
         pool,
         context,
         previous_command,
-        deep_eq_time,
+        polyeq_time,
         ..
     }: RuleArgs,
 ) -> RuleResult {
@@ -360,7 +359,7 @@ fn generic_skolemization_rule(
 
     let (left, psi) = match_term_err!((= l r) = &conclusion[0])?;
 
-    let (quant, bindings, phi) = left.unwrap_quant_err()?;
+    let (quant, bindings, phi) = left.as_quant_err()?;
     assert_is_expected(&quant, rule_type)?;
 
     let previous_term = get_premise_term(&previous_command)?;
@@ -405,7 +404,7 @@ fn generic_skolemization_rule(
             }
             pool.add(Term::Choice(x.clone(), inner))
         };
-        if !are_alpha_equivalent(t, &expected, deep_eq_time) {
+        if !alpha_equiv(t, &expected, polyeq_time) {
             return Err(EqualityError::ExpectedEqual(t.clone(), expected).into());
         }
 

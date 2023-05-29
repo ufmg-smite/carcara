@@ -12,7 +12,7 @@ pub fn refl(
         conclusion,
         pool,
         context,
-        deep_eq_time,
+        polyeq_time,
         ..
     }: RuleArgs,
 ) -> RuleResult {
@@ -23,7 +23,7 @@ pub fn refl(
     // If the two terms are directly identical, we don't need to do any more work. We make sure to
     // do this check before we try to get the context substitution, because `refl` can be used
     // outside of any subproof
-    if are_alpha_equivalent(left, right, deep_eq_time) {
+    if alpha_equiv(left, right, polyeq_time) {
         return Ok(());
     }
 
@@ -36,10 +36,10 @@ pub fn refl(
     // don't compute the new left and right terms until they are needed, to avoid doing unnecessary
     // work
     let new_left = context.apply(pool, left);
-    let result = are_alpha_equivalent(&new_left, right, deep_eq_time) || {
+    let result = alpha_equiv(&new_left, right, polyeq_time) || {
         let new_right = context.apply(pool, right);
-        are_alpha_equivalent(left, &new_right, deep_eq_time)
-            || are_alpha_equivalent(&new_left, &new_right, deep_eq_time)
+        alpha_equiv(left, &new_right, polyeq_time)
+            || alpha_equiv(&new_left, &new_right, polyeq_time)
     };
     rassert!(
         result,
@@ -79,10 +79,10 @@ fn elaborate_equality(
     left: &Rc<Term>,
     right: &Rc<Term>,
     id: &str,
-    deep_eq_time: &mut std::time::Duration,
+    polyeq_time: &mut std::time::Duration,
 ) -> (usize, usize) {
-    let is_alpha_equivalence = !deep_eq(left, right, deep_eq_time);
-    elaborator.elaborate_deep_eq(pool, id, left.clone(), right.clone(), is_alpha_equivalence)
+    let is_alpha_equivalence = !polyeq(left, right, polyeq_time);
+    elaborator.elaborate_polyeq(pool, id, left.clone(), right.clone(), is_alpha_equivalence)
 }
 
 pub fn elaborate_refl(
@@ -90,7 +90,7 @@ pub fn elaborate_refl(
         conclusion,
         pool,
         context,
-        deep_eq_time,
+        polyeq_time,
         ..
     }: RuleArgs,
     command_id: String,
@@ -100,10 +100,19 @@ pub fn elaborate_refl(
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
 
-    let new_left = context.apply(pool, left);
-    let new_right = context.apply(pool, right);
+    if left == right {
+        elaborator.unchanged(conclusion);
+        return Ok(());
+    }
 
-    if left == right || new_left == *right || *left == new_right || new_left == new_right {
+    // We don't compute the new left and right terms until they are needed
+    let new_left = context.apply(pool, left);
+    if new_left == *right {
+        elaborator.unchanged(conclusion);
+        return Ok(());
+    }
+    let new_right = context.apply(pool, right);
+    if *left == new_right || new_left == new_right {
         elaborator.unchanged(conclusion);
         return Ok(());
     }
@@ -113,12 +122,12 @@ pub fn elaborate_refl(
     // directly. In the second case, we need to first apply the context to the left term, using a
     // `refl` step, and then prove the equivalence of the new left term with the right term. In the
     // third case, we also need to apply the context to the right term, using another `refl` step.
-    if are_alpha_equivalent(left, right, deep_eq_time) {
+    if alpha_equiv(left, right, polyeq_time) {
         let equality_step =
-            elaborate_equality(elaborator, pool, left, right, &command_id, deep_eq_time);
+            elaborate_equality(elaborator, pool, left, right, &command_id, polyeq_time);
         let id = elaborator.get_new_id(&command_id);
 
-        // TODO: Elaborating the deep equality will add new commands to the accumulator, but
+        // TODO: Elaborating the polyequality will add new commands to the accumulator, but
         // currently we can't push them as the elaborated step directly, so we need to add this
         // dummy `reordering` step.
         elaborator.push_elaborated_step(ProofStep {
@@ -133,15 +142,9 @@ pub fn elaborate_refl(
         let id = elaborator.get_new_id(&command_id);
         let first_step = elaborator.add_refl_step(pool, left.clone(), new_left.clone(), id);
 
-        if are_alpha_equivalent(&new_left, right, deep_eq_time) {
-            let second_step = elaborate_equality(
-                elaborator,
-                pool,
-                &new_left,
-                right,
-                &command_id,
-                deep_eq_time,
-            );
+        if alpha_equiv(&new_left, right, polyeq_time) {
+            let second_step =
+                elaborate_equality(elaborator, pool, &new_left, right, &command_id, polyeq_time);
             let id = elaborator.get_new_id(&command_id);
             elaborator.push_elaborated_step(ProofStep {
                 id,
@@ -151,15 +154,9 @@ pub fn elaborate_refl(
                 args: Vec::new(),
                 discharge: Vec::new(),
             });
-        } else if are_alpha_equivalent(&new_left, &new_right, deep_eq_time) {
-            let second_step = elaborate_equality(
-                elaborator,
-                pool,
-                &new_left,
-                right,
-                &command_id,
-                deep_eq_time,
-            );
+        } else if alpha_equiv(&new_left, &new_right, polyeq_time) {
+            let second_step =
+                elaborate_equality(elaborator, pool, &new_left, right, &command_id, polyeq_time);
             let id = elaborator.get_new_id(&command_id);
             let third_step = elaborator.add_refl_step(pool, new_right.clone(), right.clone(), id);
 

@@ -1,3 +1,5 @@
+//! A pretty printer for Alethe proofs.
+
 use crate::{
     ast::*,
     parser::Token,
@@ -55,7 +57,7 @@ impl PrintWithSharing for Rc<Term> {
         if let Some(indices) = &mut p.term_indices {
             // There are three cases where we don't use sharing when printing a term:
             //
-            // - Terminal terms (e.g., integers, reals, variables, etc.) could in theory be shared,
+            // - Terminal terms (i.e., constants or variables) could in theory be shared,
             // but, since they are very small, it's not worth it to give them a name.
             //
             // - Sorts are represented as terms, but they are not actually terms in the grammar, so
@@ -172,7 +174,8 @@ impl<'a> AlethePrinter<'a> {
 
     fn write_raw_term(&mut self, term: &Rc<Term>) -> io::Result<()> {
         match term.as_ref() {
-            Term::Terminal(t) => write!(self.inner, "{}", t),
+            Term::Const(c) => write!(self.inner, "{}", c),
+            Term::Var(iden, _) => write!(self.inner, "{}", iden),
             Term::App(func, args) => self.write_s_expr(func, args),
             Term::Op(op, args) => self.write_s_expr(op, args),
             Term::Sort(sort) => write!(self.inner, "{}", sort),
@@ -315,7 +318,8 @@ fn escape_string(string: &str) -> Cow<str> {
 impl fmt::Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Term::Terminal(t) => write!(f, "{}", t),
+            Term::Const(c) => write!(f, "{}", c),
+            Term::Var(iden, _) => write!(f, "{}", iden),
             Term::App(func, args) => write_s_expr(f, func, args),
             Term::Op(op, args) => write_s_expr(f, op, args),
             Term::Sort(sort) => write!(f, "{}", sort),
@@ -341,39 +345,38 @@ impl fmt::Debug for Term {
     }
 }
 
-impl fmt::Display for Terminal {
+impl fmt::Display for Constant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Terminal::Integer(i) => write!(f, "{}", i),
-            Terminal::Real(r) => {
+            Constant::Integer(i) => write!(f, "{}", i),
+            Constant::Real(r) => {
                 if r.is_integer() {
                     write!(f, "{:?}.0", r.numer())
                 } else {
                     write!(f, "{:?}", r.to_f64())
                 }
             }
-            Terminal::String(s) => write!(f, "\"{}\"", escape_string(s)),
-            Terminal::Var(iden, _) => write!(f, "{}", iden),
+            Constant::String(s) => write!(f, "\"{}\"", escape_string(s)),
         }
     }
 }
 
-impl fmt::Display for Identifier {
+impl fmt::Display for Ident {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Identifier::Simple(s) => write!(f, "{}", quote_symbol(s)),
-            Identifier::Indexed(s, indices) => {
+            Ident::Simple(s) => write!(f, "{}", quote_symbol(s)),
+            Ident::Indexed(s, indices) => {
                 write_s_expr(f, format!("_ {}", quote_symbol(s)), indices)
             }
         }
     }
 }
 
-impl fmt::Display for IdentifierIndex {
+impl fmt::Display for IdentIndex {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            IdentifierIndex::Numeral(n) => write!(f, "{}", n),
-            IdentifierIndex::Symbol(s) => write!(f, "{}", quote_symbol(s)),
+            IdentIndex::Numeral(n) => write!(f, "{}", n),
+            IdentIndex::Symbol(s) => write!(f, "{}", quote_symbol(s)),
         }
     }
 }

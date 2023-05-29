@@ -66,7 +66,7 @@ pub mod SingleThreadContextStack {
             // resulting hash map will then contain `(:= y z)` and `(:= x (f z))`
             for (var, value) in assignment_args.iter() {
                 let sort = Term::Sort(pool.sort(value).clone());
-                let var_term = Term::var(var, pool.add(sort));
+                let var_term = Term::new_var(var, pool.add(sort));
                 let var_term = pool.add(var_term);
                 substitution.insert(pool, var_term.clone(), value.clone())?;
                 let new_value = substitution_until_fixed_point.apply(pool, value);
@@ -150,8 +150,10 @@ pub mod SingleThreadContextStack {
 
 #[allow(non_snake_case, dead_code)]
 pub mod MultiThreadContextStack {
-    use crossbeam::atomic::AtomicCell;
-    use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
+    use std::{
+        cell::Cell,
+        sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard},
+    };
 
     use super::Context;
     use crate::ast::*;
@@ -176,7 +178,7 @@ pub mod MultiThreadContextStack {
         /// Wrapper for locally stored context. Stores a mutable and sendable
         /// cell wrapping a context. This context is wrapped in an option, but
         /// only for standardisation (always wrapped in `Some`).
-        Local(AtomicCell<Option<Context>>),
+        Local(Cell<Option<Context>>),
     }
 
     /// Enum used to implement a polymorphism between contexts references. Since
@@ -325,7 +327,7 @@ pub mod MultiThreadContextStack {
                 // It's the first thread trying to build this context. It will
                 // build this context in the context vec (accessible for all threads)
                 0 => {
-                    // Block the RwLock before unlocking the mutex since there is a chance where the
+                    // Block the RwLock before unlocking the mutex since there is a chance which the
                     // other threads (after the mutex being released) try to access the context being
                     // built here and it haven't finished yet
                     let mut context = self.context_vec[context_id].1.write().unwrap();
@@ -349,7 +351,7 @@ pub mod MultiThreadContextStack {
                     // resulting hash map will then contain `(:= y z)` and `(:= x (f z))`
                     for (var, value) in assignment_args.iter() {
                         let sort = Term::Sort(pool.sort(value).clone());
-                        let var_term = Term::var(var, pool.add(sort));
+                        let var_term = Term::new_var(var, pool.add(sort));
                         let var_term = pool.add(var_term);
                         substitution.insert(pool, var_term.clone(), value.clone())?;
                         let new_value = substitution_until_fixed_point.apply(pool, value);
@@ -395,7 +397,7 @@ pub mod MultiThreadContextStack {
                     // resulting hash map will then contain `(:= y z)` and `(:= x (f z))`
                     for (var, value) in assignment_args.iter() {
                         let sort = Term::Sort(pool.sort(value).clone());
-                        let var_term = Term::var(var, pool.add(sort));
+                        let var_term = Term::new_var(var, pool.add(sort));
                         let var_term = pool.add(var_term);
                         substitution.insert(pool, var_term.clone(), value.clone())?;
                         let new_value = substitution_until_fixed_point.apply(pool, value);
@@ -413,7 +415,7 @@ pub mod MultiThreadContextStack {
                     let bindings = variable_args.iter().cloned().collect();
 
                     // Builds the local context
-                    let local_ctx = AtomicCell::new(Some(Context {
+                    let local_ctx = Cell::new(Some(Context {
                         mappings,
                         bindings,
                         cumulative_substitution: None,

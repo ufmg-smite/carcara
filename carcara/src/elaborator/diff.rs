@@ -30,19 +30,16 @@ pub fn apply_diff(root: ProofDiff, proof: Vec<ProofCommand>) -> Vec<ProofCommand
 
     loop {
         let f = stack.last_mut().unwrap();
-        let (i, mut command) = match f.commands.next() {
-            Some(c) => c,
-            None => {
-                let result = stack.pop().unwrap().result;
-                if let Some(outer_frame) = stack.last_mut() {
-                    outer_frame
-                        .result
-                        .commands
-                        .push(ProofCommand::Subproof(result));
-                    continue;
-                } else {
-                    return result.commands;
-                }
+        let Some((i, mut command)) = f.commands.next() else {
+            let result = stack.pop().unwrap().result;
+            if let Some(outer_frame) = stack.last_mut() {
+                outer_frame
+                    .result
+                    .commands
+                    .push(ProofCommand::Subproof(result));
+                continue;
+            } else {
+                return result.commands;
             }
         };
 
@@ -60,10 +57,7 @@ pub fn apply_diff(root: ProofDiff, proof: Vec<ProofCommand>) -> Vec<ProofCommand
                         };
                         stack.push(new_frame);
                     }
-                    (
-                        ProofCommand::Step(_) | ProofCommand::Assume { .. },
-                        CommandDiff::Step(mut elaboration),
-                    ) => {
+                    (_, CommandDiff::Step(mut elaboration)) => {
                         f.result.commands.append(&mut elaboration);
                     }
                     (_, CommandDiff::Delete) => (),

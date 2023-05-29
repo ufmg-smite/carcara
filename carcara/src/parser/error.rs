@@ -1,5 +1,7 @@
+//! The types for parser errors.
+
 use crate::{
-    ast::{Identifier, Sort},
+    ast::{Ident, Sort},
     parser::Token,
     utils::Range,
 };
@@ -53,7 +55,7 @@ pub enum ParserError {
 
     /// The parser encountered an identifier that was not defined.
     #[error("identifier '{0}' is not defined")]
-    UndefinedIden(Identifier),
+    UndefinedIden(Ident),
 
     /// The parser encountered a sort that was not defined.
     #[error("sort '{0}' is not defined")]
@@ -109,7 +111,10 @@ where
 /// An error in sort checking.
 #[derive(Debug, Error)]
 pub struct SortError {
+    /// The possible sorts that were expected.
     pub expected: Vec<Sort>,
+
+    /// The sort we got.
     pub got: Sort,
 }
 

@@ -2,7 +2,11 @@ use super::{
     assert_clause_len, assert_eq, assert_is_bool_constant, assert_is_expected, assert_num_args,
     assert_num_premises, CheckerError, Premise, RuleArgs, RuleResult,
 };
-use crate::{ast::*, checker::error::ResolutionError, utils::DedupIterator};
+use crate::{
+    ast::*,
+    checker::{error::ResolutionError, Elaborator},
+    utils::DedupIterator,
+};
 use ahash::{AHashMap, AHashSet};
 use std::{collections::hash_map::Entry, iter::FromIterator};
 
@@ -57,22 +61,6 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
     }
     let RuleArgs { conclusion, premises, pool, .. } = rule_args;
 
-    greedy_resolution(conclusion, premises, pool).or_else(|greedy_error| {
-        if rup_resolution(conclusion, premises) {
-            Ok(())
-        } else {
-            // If RUP resolution also fails, we return the error originally returned by the greedy
-            // algorithm
-            Err(greedy_error)
-        }
-    })
-}
-
-fn greedy_resolution(
-    conclusion: &[Rc<Term>],
-    premises: &[Premise],
-    pool: &mut TermPool,
-) -> RuleResult {
     // In some cases, this rule is used with a single premise `(not true)` to justify an empty
     // conclusion clause
     if conclusion.is_empty() && premises.len() == 1 {
@@ -82,6 +70,34 @@ fn greedy_resolution(
             }
         }
     }
+
+    greedy_resolution(conclusion, premises, pool, false)
+        .map(|_| ())
+        .or_else(|greedy_error| {
+            if rup_resolution(conclusion, premises) {
+                Ok(())
+            } else {
+                // If RUP resolution also fails, we return the error originally returned by the greedy
+                // algorithm
+                Err(greedy_error)
+            }
+        })
+}
+
+struct ResolutionTrace {
+    not_not_added: bool,
+    pivot_trace: Vec<(Rc<Term>, bool)>,
+}
+
+fn greedy_resolution(
+    conclusion: &[Rc<Term>],
+    premises: &[Premise],
+    pool: &mut TermPool,
+    tracing: bool,
+) -> Result<ResolutionTrace, CheckerError> {
+    // If we are elaborating, we record which pivot was found for each binary resolution step, so we
+    // can add them all as arguments later
+    let mut pivot_trace = Vec::new();
 
     // When checking this rule, we must look at what the conclusion clause looks like in order to
     // determine the pivots. The reason for that is because there is no other way to know which
@@ -147,9 +163,23 @@ fn greedy_resolution(
             };
 
             // Only one pivot may be eliminated per clause, so if we already found this clauses'
-            // pivot, we don't try to eliminate the term
-            let eliminated =
-                !eliminated_clause_pivot && (try_eliminate(below) || try_eliminate(above));
+            // pivot, we don't try to eliminate the term. If we are elaborating, we add the pivot
+            // found to the pivot trace.
+            let eliminated = if eliminated_clause_pivot {
+                false
+            } else if try_eliminate(below) {
+                if tracing {
+                    pivot_trace.push((unremove_all_negations(pool, (n as u32 - 1, inner)), true));
+                }
+                true
+            } else if try_eliminate(above) {
+                if tracing {
+                    pivot_trace.push((term.clone(), false));
+                }
+                true
+            } else {
+                false
+            };
 
             if eliminated {
                 eliminated_clause_pivot = true;
@@ -178,7 +208,7 @@ fn greedy_resolution(
             //     (step t3 (cl (not q)) :rule hole)
             //     (step t4 (cl) :rule resolution :premises (t1 t2 t3))
             if conclusion.is_empty() && *i == 0 && pivot.is_bool_false() {
-                return Ok(());
+                return Ok(ResolutionTrace { not_not_added: false, pivot_trace });
             }
 
             // There is another, similar, special case: when the result of the resolution is just
@@ -195,7 +225,7 @@ fn greedy_resolution(
             if conclusion.len() == 1 {
                 let (j, conclusion) = conclusion.into_iter().next().unwrap();
                 if conclusion == *pivot && (i % 2) == (j % 2) {
-                    return Ok(());
+                    return Ok(ResolutionTrace { not_not_added: true, pivot_trace });
                 }
             }
         }
@@ -212,7 +242,7 @@ fn greedy_resolution(
                 return Err(ResolutionError::ExtraTermInConclusion(t).into());
             }
         }
-        Ok(())
+        Ok(ResolutionTrace { not_not_added: false, pivot_trace })
     }
 }
 
@@ -257,7 +287,7 @@ fn rup_resolution(conclusion: &[Rc<Term>], premises: &[Premise]) -> bool {
     }
 }
 
-fn resolution_with_args(
+pub fn resolution_with_args(
     RuleArgs {
         conclusion, premises, args, pool, ..
     }: RuleArgs,
@@ -374,6 +404,141 @@ fn binary_resolution<'a, C: ClauseCollection<'a>>(
     if !found {
         let p = unremove_all_negations(pool, pivot_in_next);
         return Err(ResolutionError::PivotNotFound(p));
+    }
+    Ok(())
+}
+
+pub fn elaborate_resolution(
+    RuleArgs { conclusion, premises, pool, .. }: RuleArgs,
+    command_id: String,
+    elaborator: &mut Elaborator,
+) -> RuleResult {
+    // In the cases where the rule is used to get an empty clause from `(not true)`, we add a `true`
+    // step to get an actual resolution step
+    if conclusion.is_empty() && premises.len() == 1 {
+        if let [t] = premises[0].clause {
+            if match_term!((not true) = t).is_some() {
+                let id = elaborator.get_new_id(&command_id);
+                let true_step = elaborator.add_new_step(ProofStep {
+                    id,
+                    clause: vec![pool.bool_true()],
+                    rule: "true".to_owned(),
+                    premises: Vec::new(),
+                    args: Vec::new(),
+                    discharge: Vec::new(),
+                });
+                let premises = vec![elaborator.map_index(premises[0].index), true_step];
+                elaborator.push_elaborated_step(ProofStep {
+                    id: command_id,
+                    clause: Vec::new(),
+                    rule: "resolution".to_owned(),
+                    premises,
+                    args: [true, false]
+                        .map(|a| ProofArg::Term(pool.bool_constant(a)))
+                        .to_vec(),
+                    discharge: Vec::new(),
+                });
+                return Ok(());
+            }
+        }
+    }
+
+    let mut premises: Vec<_> = premises.iter().dedup().copied().collect();
+    let ResolutionTrace { not_not_added, pivot_trace } =
+        greedy_resolution(conclusion, &premises, pool, true).or_else(|_| {
+            premises.reverse();
+            greedy_resolution(conclusion, &premises, pool, true)
+        })?;
+
+    let pivots = pivot_trace
+        .into_iter()
+        .flat_map(|(pivot, polarity)| [pivot, pool.bool_constant(polarity)])
+        .map(ProofArg::Term)
+        .collect();
+
+    let premises: Vec<_> = premises
+        .iter()
+        .map(|p| elaborator.map_index(p.index))
+        .collect();
+
+    let mut resolution_step = ProofStep {
+        id: command_id.clone(),
+        clause: conclusion.to_vec(),
+        rule: "resolution".to_owned(),
+        premises,
+        args: pivots,
+        discharge: Vec::new(),
+    };
+
+    if not_not_added {
+        // In this case, where the solver added a double negation implicitly to the concluded term,
+        // we remove it from the resolution conclusion, and then add a series of steps to
+        // reconstruct it again. More precisely, if the conclusion of the resolution step should
+        // have been `c`, but was instead `(not (not c))`, we will have:
+        //
+        // ```
+        // (step t1 (cl (not (not c))) :rule resolution :premises ...)
+        // ```
+        //
+        // which will become:
+        //
+        // ```
+        // (step t1 (cl c) :rule resolution :premises ...)
+        // (step t1.t2 (cl (not (not (not (not c)))) (not c)) :rule not_not)
+        // (step t1.t3 (cl (not (not (not (not (not c))))) (not (not c))) :rule not_not)
+        // (step t1.t4 (cl (not (not c))) :rule resolution :premises (t1 t1.t2 t1.t3)
+        //     :args (c true (not (not (not (not c)))) true))
+        // ```
+
+        assert!(resolution_step.clause.len() == 1);
+        let original_conclusion = resolution_step.clause;
+        let double_not_c = original_conclusion[0].clone();
+        let single_not_c = double_not_c.remove_negation().unwrap().clone();
+        let c = single_not_c.remove_negation().unwrap().clone();
+        let quadruple_not_c = build_term!(pool, (not (not {double_not_c.clone()})));
+        let quintuple_not_c = build_term!(pool, (not {quadruple_not_c.clone()}));
+
+        // First, we change the conclusion of the resolution step
+        resolution_step.clause = vec![c.clone()];
+        let resolution_step = elaborator.add_new_step(resolution_step);
+
+        // Then we add the two `not_not` steps
+        let id = elaborator.get_new_id(&command_id);
+        let first_not_not_step = elaborator.add_new_step(ProofStep {
+            id,
+            clause: vec![quadruple_not_c.clone(), single_not_c],
+            rule: "not_not".to_owned(),
+            premises: Vec::new(),
+            args: Vec::new(),
+            discharge: Vec::new(),
+        });
+        let id = elaborator.get_new_id(&command_id);
+        let second_not_not_step = elaborator.add_new_step(ProofStep {
+            id,
+            clause: vec![quintuple_not_c, double_not_c.clone()],
+            rule: "not_not".to_owned(),
+            premises: Vec::new(),
+            args: Vec::new(),
+            discharge: Vec::new(),
+        });
+
+        // Finally, we add a new resolution step, refering to the preivous three, and concluding the
+        // original resolution step's conclusion
+        let args = [c, pool.bool_true(), quadruple_not_c, pool.bool_true()]
+            .into_iter()
+            .map(ProofArg::Term)
+            .collect();
+        let id = elaborator.get_new_id(&command_id);
+        elaborator.push_elaborated_step(ProofStep {
+            id,
+            clause: vec![double_not_c],
+            rule: "resolution".to_owned(),
+            premises: vec![resolution_step, first_not_not_step, second_not_not_step],
+            args,
+            discharge: Vec::new(),
+        });
+    } else {
+        elaborator.push_elaborated_step(resolution_step);
     }
     Ok(())
 }

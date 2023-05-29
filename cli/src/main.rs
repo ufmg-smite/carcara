@@ -4,8 +4,8 @@ mod logger;
 mod path_args;
 
 use carcara::{
-    ast::print_proof, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate,
-    generate_lia_smt_instances, parser, CarcaraOptions,
+    ast::print_proof, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate, parser,
+    CarcaraOptions,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -70,8 +70,8 @@ enum Command {
     /// Checks a series of proof files and records performance statistics.
     Bench(BenchCommandOptions),
 
-    /// Generates the equivalent SMT instance for every `lia_generic` step in a proof.
-    GenerateLiaProblems(ParseCommandOptions),
+    /// Given a step, takes a slice of a proof consisting of all its transitive premises.
+    Slice(SliceCommandOption),
 }
 
 #[derive(Args)]
@@ -149,7 +149,7 @@ fn build_carcara_options(
         apply_function_defs,
         expand_lets: expand_let_bindings,
         allow_int_real_subtyping,
-        check_lia_using_cvc5: lia_via_cvc5,
+        lia_via_cvc5,
         strict,
         skip_unknown_rules,
         stats,
@@ -251,6 +251,24 @@ struct BenchCommandOptions {
     files: Vec<String>,
 }
 
+#[derive(Args)]
+struct SliceCommandOption {
+    #[clap(flatten)]
+    input: Input,
+
+    #[clap(flatten)]
+    parsing: ParsingOptions,
+
+    #[clap(flatten)]
+    printing: PrintingOptions,
+
+    #[clap(long)]
+    from: String,
+
+    #[clap(long, short = 'd')]
+    max_distance: Option<usize>,
+}
+
 #[derive(ArgEnum, Clone)]
 enum LogLevel {
     Off,
@@ -281,7 +299,6 @@ fn main() {
                 Command::Parse(_) => "parse",
                 Command::Elaborate(_) => "elaborate",
                 Command::Bench(_) => "bench",
-                Command::GenerateLiaProblems(_) => "generate lia problems",
                 _ => unreachable!(),
             }
         );
@@ -304,7 +321,7 @@ fn main() {
         }
         Command::Elaborate(options) => elaborate_command(options),
         Command::Bench(options) => bench_command(options),
-        Command::GenerateLiaProblems(options) => generate_lia_problems_command(options),
+        Command::Slice(options) => slice_command(options),
     };
     if let Err(e) = result {
         log::error!("{}", e);
@@ -357,12 +374,12 @@ fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
 fn elaborate_command(options: ElaborateCommandOptions) -> CliResult<()> {
     let (problem, proof) = get_instance(&options.input)?;
 
-    let elaborated = check_and_elaborate(
+    let (_, elaborated) = check_and_elaborate(
         problem,
         proof,
         build_carcara_options(options.parsing, options.checking, options.stats),
     )?;
-    print_proof(&elaborated, options.printing.use_sharing)?;
+    print_proof(&elaborated.commands, options.printing.use_sharing)?;
     Ok(())
 }
 
@@ -373,7 +390,7 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         return Ok(());
     }
 
-    println!(
+    log::info!(
         "running benchmark on {} files, doing {} runs each",
         instances.len(),
         options.num_runs
@@ -405,6 +422,13 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         return Ok(());
     }
 
+    if results.had_error {
+        println!("invalid");
+    } else if results.is_holey {
+        println!("holey");
+    } else {
+        println!("valid");
+    }
     print_benchmark_results(results, options.sort_by_total)
 }
 
@@ -413,25 +437,26 @@ fn print_benchmark_results(results: OnlineBenchmarkResults, sort_by_total: bool)
     Ok(())
 }
 
-fn generate_lia_problems_command(options: ParseCommandOptions) -> CliResult<()> {
-    use std::io::Write;
-
-    let root_file_name = options.input.proof_file.clone();
+fn slice_command(options: SliceCommandOption) -> CliResult<()> {
     let (problem, proof) = get_instance(&options.input)?;
-
-    let instances = generate_lia_smt_instances(
+    let (_, proof, _) = parser::parse_instance(
         problem,
         proof,
         options.parsing.apply_function_defs,
         options.parsing.expand_let_bindings,
         options.parsing.allow_int_real_subtyping,
-        options.printing.use_sharing,
-    )?;
-    for (id, content) in instances {
-        let file_name = format!("{}.{}.lia_smt2", root_file_name, id);
-        let mut f = File::create(file_name)?;
-        write!(f, "{}", content)?;
-    }
+    )
+    .map_err(carcara::Error::from)?;
 
+    let source_index = proof
+        .commands
+        .iter()
+        .position(|c| c.id() == options.from)
+        .ok_or_else(|| CliError::InvalidSliceId(options.from.to_owned()))?;
+
+    let diff =
+        carcara::elaborator::slice_proof(&proof.commands, source_index, options.max_distance);
+    let slice = carcara::elaborator::apply_diff(diff, proof.commands);
+    print_proof(&slice, options.printing.use_sharing)?;
     Ok(())
 }

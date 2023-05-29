@@ -1,13 +1,14 @@
 mod accumulator;
-mod deep_eq;
 mod diff;
+mod polyeq;
 mod pruning;
 
-use crate::{ast::*, utils::SymbolTable};
+pub use diff::{apply_diff, CommandDiff, ProofDiff};
+pub use pruning::{prune_proof, slice_proof};
+
+use crate::{ast::*, utils::HashMapStack};
 use accumulator::Accumulator;
-use deep_eq::DeepEqElaborator;
-use diff::{apply_diff, CommandDiff, ProofDiff};
-use pruning::prune_proof;
+use polyeq::PolyeqElaborator;
 
 #[derive(Debug, Default)]
 struct Frame {
@@ -33,7 +34,7 @@ impl Frame {
 #[derive(Debug)]
 pub struct Elaborator {
     stack: Vec<Frame>,
-    seen_clauses: SymbolTable<Vec<Rc<Term>>, usize>,
+    seen_clauses: HashMapStack<Vec<Rc<Term>>, usize>,
     accumulator: Accumulator,
 }
 
@@ -48,7 +49,7 @@ impl Elaborator {
         Self {
             stack: vec![Frame::default()],
             accumulator: Accumulator::new(),
-            seen_clauses: SymbolTable::new(),
+            seen_clauses: HashMapStack::new(),
         }
     }
 
@@ -236,7 +237,7 @@ impl Elaborator {
         self.add_new_step(step)
     }
 
-    pub fn elaborate_deep_eq(
+    pub fn elaborate_polyeq(
         &mut self,
         pool: &mut TermPool,
         root_id: &str,
@@ -244,7 +245,7 @@ impl Elaborator {
         b: Rc<Term>,
         is_alpha_equivalence: bool,
     ) -> (usize, usize) {
-        DeepEqElaborator::new(self, root_id, is_alpha_equivalence).elaborate(pool, a, b)
+        PolyeqElaborator::new(self, root_id, is_alpha_equivalence).elaborate(pool, a, b)
     }
 
     pub fn elaborate_assume(
@@ -261,10 +262,10 @@ impl Elaborator {
             },
             false,
         );
-        let equality_step = self.elaborate_deep_eq(pool, id, premise.clone(), term.clone(), false);
+        let equality_step = self.elaborate_polyeq(pool, id, premise.clone(), term.clone(), false);
         let equiv1_step = {
             let new_id = self.get_new_id(id);
-            let clause = vec![build_term!(pool, (not { premise })), term.clone()];
+            let clause = vec![build_term!(pool, (not {premise.clone()})), term.clone()];
             self.add_new_step(ProofStep {
                 id: new_id,
                 clause,
@@ -281,7 +282,7 @@ impl Elaborator {
             clause: vec![term],
             rule: "resolution".to_owned(),
             premises: vec![new_assume, equiv1_step],
-            args: Vec::new(), // TODO: Add args
+            args: vec![ProofArg::Term(premise), ProofArg::Term(pool.bool_true())],
             discharge: Vec::new(),
         })
     }

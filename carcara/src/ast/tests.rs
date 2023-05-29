@@ -40,9 +40,9 @@ fn test_free_vars() {
 }
 
 #[test]
-fn test_deep_eq() {
+fn test_polyeq() {
     enum TestType {
-        ModReordering,
+        Polyeq,
         AlphaEquiv,
     }
 
@@ -52,11 +52,11 @@ fn test_deep_eq() {
             let [a, b] = parse_terms(&mut pool, definitions, [a, b]);
             let mut time = std::time::Duration::ZERO;
             match test_type {
-                TestType::ModReordering => {
-                    assert!(super::deep_eq::deep_eq(&a, &b, &mut time));
+                TestType::Polyeq => {
+                    assert!(super::polyeq::polyeq(&a, &b, &mut time));
                 }
                 TestType::AlphaEquiv => {
-                    assert!(super::deep_eq::are_alpha_equivalent(&a, &b, &mut time));
+                    assert!(super::polyeq::alpha_equiv(&a, &b, &mut time));
                 }
             }
         }
@@ -80,7 +80,7 @@ fn test_deep_eq() {
                 "(ite (= b a) (= (+ x y) x) (and p (not (= y x))))",
             ),
         ],
-        TestType::ModReordering,
+        TestType::Polyeq,
     );
     run_tests(
         definitions,
