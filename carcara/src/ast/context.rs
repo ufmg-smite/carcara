@@ -150,10 +150,7 @@ pub mod SingleThreadContextStack {
 
 #[allow(non_snake_case, dead_code)]
 pub mod MultiThreadContextStack {
-    use std::{
-        cell::Cell,
-        sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard},
-    };
+    use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
     use super::Context;
     use crate::ast::*;
@@ -163,11 +160,7 @@ pub mod MultiThreadContextStack {
     /// `0`: Number of threads that will use this context.
     ///
     /// `1`: Droppable slot for the context
-    ///
-    /// `2`: Usize indicating whether the context building status (0: No thread
-    ///  tried to build this context, 1: A thread is building this context,
-    ///  2: Context has been built).
-    type GlobalContextInfo = (RwLock<usize>, RwLock<Option<Context>>, Mutex<u8>);
+    type GlobalContextInfo = (RwLock<usize>, RwLock<Option<Context>>);
 
     /// Enum used to implement, to some extent, a polymorphism between global
     /// shared context and locally stored context.
@@ -175,10 +168,6 @@ pub mod MultiThreadContextStack {
         /// Wrapper for global context. Stores the index of this context in the
         /// global context vector.
         Global(usize),
-        /// Wrapper for locally stored context. Stores a mutable and sendable
-        /// cell wrapping a context. This context is wrapped in an option, but
-        /// only for standardisation (always wrapped in `Some`).
-        Local(Cell<Option<Context>>),
     }
 
     /// Enum used to implement a polymorphism between contexts references. Since
@@ -189,10 +178,6 @@ pub mod MultiThreadContextStack {
         Global(RwLockReadGuard<'c, Option<Context>>),
         /// A wrapper for an mutable reference for a global context.
         GlobalMut(RwLockWriteGuard<'c, Option<Context>>),
-        /// A wrapper for a mutable reference for a local context. Since only
-        /// the thread owner of this `InternalContextElement` have access to
-        /// this context, it can be always borrowed as mutable.
-        Local(Option<&'c mut Context>),
     }
 
     impl<'c> ContextWrapper<'c> {
@@ -202,7 +187,6 @@ pub mod MultiThreadContextStack {
             match self {
                 ContextWrapper::Global(lock) => lock.as_ref().unwrap(),
                 ContextWrapper::GlobalMut(lock) => lock.as_ref().unwrap(),
-                ContextWrapper::Local(lock) => lock.as_ref().unwrap(),
             }
         }
 
@@ -212,7 +196,6 @@ pub mod MultiThreadContextStack {
         pub fn get_mut(&mut self) -> &mut Context {
             match self {
                 ContextWrapper::GlobalMut(lock) => lock.as_mut().unwrap(),
-                ContextWrapper::Local(lock) => lock.as_mut().unwrap(),
                 _ => !unreachable!(),
             }
         }
@@ -229,9 +212,6 @@ pub mod MultiThreadContextStack {
         ///
         /// 0: Number of threads that will use this context.
         /// 1: Droppable slot for the context
-        /// 2: Usize indicating whether the context building status (0: No thread
-        ///  tried to build this context, 1: A thread is building this context,
-        ///  2: Context has been built).
         context_vec: Arc<Vec<GlobalContextInfo>>,
         /// The stack of contexts itself.
         stack: Vec<InternalContextElement>,
@@ -249,7 +229,7 @@ pub mod MultiThreadContextStack {
             let ctx_ref = Arc::get_mut(&mut context_vec).unwrap();
 
             for &usage in context_usage {
-                ctx_ref.push((RwLock::new(usage), RwLock::new(None), Mutex::new(0)));
+                ctx_ref.push((RwLock::new(usage), RwLock::new(None)));
             }
 
             Self {
@@ -282,9 +262,6 @@ pub mod MultiThreadContextStack {
                     InternalContextElement::Global(id) => {
                         ContextWrapper::Global(self.context_vec[*id].1.read().unwrap())
                     }
-                    InternalContextElement::Local(ctx) => unsafe {
-                        ContextWrapper::Local(ctx.as_ptr().as_mut().unwrap().as_mut())
-                    },
                 })
             })
         }
@@ -295,9 +272,6 @@ pub mod MultiThreadContextStack {
                     InternalContextElement::Global(id) => {
                         ContextWrapper::GlobalMut(self.context_vec[*id].1.write().unwrap())
                     }
-                    InternalContextElement::Local(ctx) => unsafe {
-                        ContextWrapper::Local(ctx.as_ptr().as_mut().unwrap().as_mut())
-                    },
                 })
             })
         }
@@ -322,115 +296,61 @@ pub mod MultiThreadContextStack {
             variable_args: &[SortedVar],
             context_id: usize,
         ) -> Result<(), SubstitutionError> {
-            let mut ctx_building_status = self.context_vec[context_id].2.lock().unwrap();
-            match *ctx_building_status {
-                // It's the first thread trying to build this context. It will
-                // build this context in the context vec (accessible for all threads)
-                0 => {
-                    // Block the RwLock before unlocking the mutex since there is a chance which the
-                    // other threads (after the mutex being released) try to access the context being
-                    // built here and it haven't finished yet
-                    let mut context = self.context_vec[context_id].1.write().unwrap();
-                    // Make sure the mutex guard is dropped after indicating that the context is build/being built
-                    // That way other threads can right away skip this function and when the momment to use
-                    // the context being built here is finished the RwLock you allow then to read the content
-                    *ctx_building_status = 1;
-                    drop(ctx_building_status);
+            let mut ctx_building_status = self.context_vec[context_id].1.try_write();
+            match &mut ctx_building_status {
+                // The write guard was yield to this thread
+                Ok(ctx_write_guard) => {
+                    match ctx_write_guard.as_mut() {
+                        Some(_) => {
+                            drop(ctx_write_guard);
+                        }
+                        // It's the first thread trying to build this context. It will
+                        // build this context in the context vec (accessible for all threads)
+                        None => {
+                            // Since some rules (like `refl`) need to apply substitutions until a fixed point, we
+                            // precompute these substitutions into a separate hash map. This assumes that the assignment
+                            // arguments are in the correct order.
+                            let mut substitution = Substitution::empty();
+                            let mut substitution_until_fixed_point = Substitution::empty();
 
-                    // Since some rules (like `refl`) need to apply substitutions until a fixed point, we
-                    // precompute these substitutions into a separate hash map. This assumes that the assignment
-                    // arguments are in the correct order.
-                    let mut substitution = Substitution::empty();
-                    let mut substitution_until_fixed_point = Substitution::empty();
+                            // We build the `substitution_until_fixed_point` hash map from the bottom up, by using the
+                            // substitutions already introduced to transform the result of a new substitution before
+                            // inserting it into the hash map. So for instance, if the substitutions are `(:= y z)` and
+                            // `(:= x (f y))`, we insert the first substitution, and then, when introducing the second,
+                            // we use the current state of the hash map to transform `(f y)` into `(f z)`. The
+                            // resulting hash map will then contain `(:= y z)` and `(:= x (f z))`
+                            for (var, value) in assignment_args.iter() {
+                                let sort = Term::Sort(pool.sort(value).clone());
+                                let var_term = Term::new_var(var, pool.add(sort));
+                                let var_term = pool.add(var_term);
+                                substitution.insert(pool, var_term.clone(), value.clone())?;
+                                let new_value = substitution_until_fixed_point.apply(pool, value);
+                                substitution_until_fixed_point.insert(pool, var_term, new_value)?;
+                            }
 
-                    // We build the `substitution_until_fixed_point` hash map from the bottom up, by using the
-                    // substitutions already introduced to transform the result of a new substitution before
-                    // inserting it into the hash map. So for instance, if the substitutions are `(:= y z)` and
-                    // `(:= x (f y))`, we insert the first substitution, and then, when introducing the second,
-                    // we use the current state of the hash map to transform `(f y)` into `(f z)`. The
-                    // resulting hash map will then contain `(:= y z)` and `(:= x (f z))`
-                    for (var, value) in assignment_args.iter() {
-                        let sort = Term::Sort(pool.sort(value).clone());
-                        let var_term = Term::new_var(var, pool.add(sort));
-                        let var_term = pool.add(var_term);
-                        substitution.insert(pool, var_term.clone(), value.clone())?;
-                        let new_value = substitution_until_fixed_point.apply(pool, value);
-                        substitution_until_fixed_point.insert(pool, var_term, new_value)?;
+                            let mappings = assignment_args
+                                .iter()
+                                .map(|(var, value)| {
+                                    let sort = Term::Sort(pool.sort(value).clone());
+                                    let var_term = (var.clone(), pool.add(sort)).into();
+                                    (pool.add(var_term), value.clone())
+                                })
+                                .collect();
+                            let bindings = variable_args.iter().cloned().collect();
+
+                            **ctx_write_guard = Some(Context {
+                                mappings,
+                                bindings,
+                                cumulative_substitution: None,
+                            });
+                        }
                     }
-
-                    let mappings = assignment_args
-                        .iter()
-                        .map(|(var, value)| {
-                            let sort = Term::Sort(pool.sort(value).clone());
-                            let var_term = (var.clone(), pool.add(sort)).into();
-                            (pool.add(var_term), value.clone())
-                        })
-                        .collect();
-                    let bindings = variable_args.iter().cloned().collect();
-
-                    *context = Some(Context {
-                        mappings,
-                        bindings,
-                        cumulative_substitution: None,
-                    });
-                    // Update the flag to show to other threads that this context has been built.
-                    *self.context_vec[context_id].2.lock().unwrap() = 2;
-                    self.stack.push(InternalContextElement::Global(context_id));
                 }
-                // There is a thread building this context but haven't finished yet.
-                // Then, this thread will build this context locally
-                1 => {
-                    // Drop the mutex since this thread will not change the build status
-                    drop(ctx_building_status);
-
-                    // Since some rules (like `refl`) need to apply substitutions until a fixed point, we
-                    // precompute these substitutions into a separate hash map. This assumes that the assignment
-                    // arguments are in the correct order.
-                    let mut substitution = Substitution::empty();
-                    let mut substitution_until_fixed_point = Substitution::empty();
-
-                    // We build the `substitution_until_fixed_point` hash map from the bottom up, by using the
-                    // substitutions already introduced to transform the result of a new substitution before
-                    // inserting it into the hash map. So for instance, if the substitutions are `(:= y z)` and
-                    // `(:= x (f y))`, we insert the first substitution, and then, when introducing the second,
-                    // we use the current state of the hash map to transform `(f y)` into `(f z)`. The
-                    // resulting hash map will then contain `(:= y z)` and `(:= x (f z))`
-                    for (var, value) in assignment_args.iter() {
-                        let sort = Term::Sort(pool.sort(value).clone());
-                        let var_term = Term::new_var(var, pool.add(sort));
-                        let var_term = pool.add(var_term);
-                        substitution.insert(pool, var_term.clone(), value.clone())?;
-                        let new_value = substitution_until_fixed_point.apply(pool, value);
-                        substitution_until_fixed_point.insert(pool, var_term, new_value)?;
-                    }
-
-                    let mappings = assignment_args
-                        .iter()
-                        .map(|(var, value)| {
-                            let sort = Term::Sort(pool.sort(value).clone());
-                            let var_term = (var.clone(), pool.add(sort)).into();
-                            (pool.add(var_term), value.clone())
-                        })
-                        .collect();
-                    let bindings = variable_args.iter().cloned().collect();
-
-                    // Builds the local context
-                    let local_ctx = Cell::new(Some(Context {
-                        mappings,
-                        bindings,
-                        cumulative_substitution: None,
-                    }));
-                    self.stack.push(InternalContextElement::Local(local_ctx));
-                    // Make sure to decrement this context remaining threads (since
-                    // this thread will no more use the shared context)
-                    *self.context_vec[context_id].0.write().unwrap() -= 1;
-                }
-                // This context have been built in the shared context vec, then
-                // is usable for all the next threads that needs this context
-                _ => {
-                    self.stack.push(InternalContextElement::Global(context_id));
-                }
+                // A thread is currently building the context
+                Err(_) => {}
             }
+
+            self.stack.push(InternalContextElement::Global(context_id));
             Ok(())
         }
 
@@ -461,9 +381,6 @@ pub mod MultiThreadContextStack {
                     InternalContextElement::Global(id) => {
                         ContextWrapper::GlobalMut(self.context_vec[*id].1.write().unwrap())
                     }
-                    InternalContextElement::Local(ctx) => unsafe {
-                        ContextWrapper::Local(ctx.as_ptr().as_mut().unwrap().as_mut())
-                    },
                 };
                 let curr_context = curr_context.get_mut();
 
@@ -485,9 +402,6 @@ pub mod MultiThreadContextStack {
                             InternalContextElement::Global(id) => {
                                 ContextWrapper::Global(self.context_vec[*id].1.read().unwrap())
                             }
-                            InternalContextElement::Local(ctx) => unsafe {
-                                ContextWrapper::Local(ctx.as_ptr().as_mut().unwrap().as_mut())
-                            },
                         })
                     }) {
                         let previous_context = previous_context.get_ref();
@@ -517,9 +431,6 @@ pub mod MultiThreadContextStack {
                 InternalContextElement::Global(id) => {
                     ContextWrapper::GlobalMut(self.context_vec[*id].1.write().unwrap())
                 }
-                InternalContextElement::Local(ctx) => unsafe {
-                    ContextWrapper::Local(ctx.as_ptr().as_mut().unwrap().as_mut())
-                },
             };
             writable_ctx
         }
