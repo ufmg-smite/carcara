@@ -11,11 +11,8 @@ fn test_free_vars() {
             let mut pool = TermPool::new();
             let [root] = parse_terms(&mut pool, definitions, [term]);
             let expected: AHashSet<_> = expected.iter().copied().collect();
-            let got: AHashSet<_> = pool
-                .free_vars(&root)
-                .iter()
-                .map(|t| t.as_var().unwrap())
-                .collect();
+            let set = pool.free_vars(&root);
+            let got: AHashSet<_> = set.iter().map(|t| t.as_var().unwrap()).collect();
 
             assert_eq!(expected, got);
         }

@@ -95,26 +95,15 @@ fn test_hash_consing() {
     {
         let d = &mut pool.dyn_pool;
         let c = &pool.const_pool;
-        assert_eq!(
-            d.terms.len() + {
-                if let Some(pool) = c {
-                    pool.terms.len() - 3
-                } else {
-                    0
-                }
-            },
-            expected.len()
-        );
+        assert_eq!(d.terms.len() + c.terms.len() - 3, expected.len());
 
         for got in d.terms.keys() {
             let formatted: &str = &format!("{}", got);
             assert!(expected.contains(formatted), "{}", formatted);
         }
-        if let Some(pool) = c.as_ref() {
-            for got in pool.terms.keys() {
-                let formatted: &str = &format!("{}", got);
-                assert!(expected.contains(formatted), "{}", formatted);
-            }
+        for got in c.terms.keys() {
+            let formatted: &str = &format!("{}", got);
+            assert!(expected.contains(formatted), "{}", formatted);
         }
     }
     #[cfg(not(feature = "thread-safety"))]

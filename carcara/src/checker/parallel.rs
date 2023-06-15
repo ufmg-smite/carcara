@@ -67,6 +67,7 @@ impl<'c> ParallelProofChecker<'c> {
         // Used to estimulate threads to abort prematurely (only happens when a
         // thread already found out an invalid step)
         let premature_abort = Arc::new(RwLock::new(false));
+        let context_pool = Arc::new(RwLock::new(SingleThreadPool::TermPool::new()));
         //
         thread::scope(|s| {
             let threads: Vec<_> = (&scheduler.loads)
@@ -86,7 +87,7 @@ impl<'c> ParallelProofChecker<'c> {
                         })
                     });
                     let mut local_self = self.parallelize_self();
-                    let mut merged_pool = TermPool::from_previous(&local_self.pool);
+                    let mut merged_pool = TermPool::from_previous(&local_self.pool, &context_pool);
                     let should_abort = premature_abort.clone();
 
                     thread::Builder::new()

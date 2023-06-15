@@ -65,7 +65,7 @@ pub mod SingleThreadContextStack {
             // we use the current state of the hash map to transform `(f y)` into `(f z)`. The
             // resulting hash map will then contain `(:= y z)` and `(:= x (f z))`
             for (var, value) in assignment_args.iter() {
-                let sort = Term::Sort(pool.sort(value).clone());
+                let sort = pool.sort(value).as_ref().clone();
                 let var_term = Term::new_var(var, pool.add(sort));
                 let var_term = pool.add(var_term);
                 substitution.insert(pool, var_term.clone(), value.clone())?;
@@ -76,7 +76,7 @@ pub mod SingleThreadContextStack {
             let mappings = assignment_args
                 .iter()
                 .map(|(var, value)| {
-                    let sort = Term::Sort(pool.sort(value).clone());
+                    let sort = pool.sort(value).as_ref().clone();
                     let var_term = (var.clone(), pool.add(sort)).into();
                     (pool.add(var_term), value.clone())
                 })
@@ -320,7 +320,7 @@ pub mod MultiThreadContextStack {
                             // we use the current state of the hash map to transform `(f y)` into `(f z)`. The
                             // resulting hash map will then contain `(:= y z)` and `(:= x (f z))`
                             for (var, value) in assignment_args.iter() {
-                                let sort = Term::Sort(pool.sort(value).clone());
+                                let sort = pool.sort(value).as_ref().clone();
                                 let var_term = Term::new_var(var, pool.add(sort));
                                 let var_term = pool.add(var_term);
                                 substitution.insert(pool, var_term.clone(), value.clone())?;
@@ -331,7 +331,7 @@ pub mod MultiThreadContextStack {
                             let mappings = assignment_args
                                 .iter()
                                 .map(|(var, value)| {
-                                    let sort = Term::Sort(pool.sort(value).clone());
+                                    let sort = pool.sort(value).as_ref().clone();
                                     let var_term = (var.clone(), pool.add(sort)).into();
                                     (pool.add(var_term), value.clone())
                                 })

@@ -1,6 +1,6 @@
 //! This module implements `TermPool`, a structure that stores terms and implements hash consing.
 
-use super::{Rc, Sort, Term};
+use super::{Rc, Term};
 use ahash::AHashSet;
 
 #[cfg(not(feature = "thread-safety"))]
@@ -28,17 +28,18 @@ pub trait TPool {
     ///
     /// This method assumes that the sorts of any subterms have already been checked, and are
     /// correct. If `term` is itself a sort, this simply returns that sort.
-    fn sort(&self, term: &Rc<Term>) -> &Sort;
+    fn sort(&self, term: &Rc<Term>) -> Rc<Term>;
     /// Returns an `AHashSet` containing all the free variables in the given term.
     ///
     /// This method uses a cache, so there is no additional cost to computing the free variables of
     /// a term multiple times.
-    fn free_vars<'s, 't: 's>(&'s mut self, term: &'t Rc<Term>) -> &AHashSet<Rc<Term>>;
+    fn free_vars<'s, 't: 's>(&'s mut self, term: &'t Rc<Term>) -> AHashSet<Rc<Term>>;
 }
 
 #[allow(non_snake_case, dead_code)]
 pub mod SingleThreadPool {
     use crate::ast::Constant;
+    use std::ops::Deref;
 
     use super::{
         super::{Rc, Sort, Term},
@@ -60,7 +61,7 @@ pub mod SingleThreadPool {
         /// A map of the terms in the pool.
         pub(crate) terms: AHashMap<Term, Rc<Term>>,
         pub(super) free_vars_cache: AHashMap<Rc<Term>, AHashSet<Rc<Term>>>,
-        pub(super) sorts_cache: AHashMap<Rc<Term>, Sort>,
+        pub(super) sorts_cache: AHashMap<Rc<Term>, Rc<Term>>,
         pub(super) bool_true: Rc<Term>,
         pub(super) bool_false: Rc<Term>,
     }
@@ -82,9 +83,9 @@ pub mod SingleThreadPool {
             let [bool_true, bool_false] = ["true", "false"]
                 .map(|b| Self::add_term_to_map(&mut terms, Term::new_var(b, bool_sort.clone())));
 
-            sorts_cache.insert(bool_false.clone(), Sort::Bool);
-            sorts_cache.insert(bool_true.clone(), Sort::Bool);
-            sorts_cache.insert(bool_sort, Sort::Bool);
+            sorts_cache.insert(bool_false.clone(), bool_sort.clone());
+            sorts_cache.insert(bool_true.clone(), bool_sort.clone());
+            sorts_cache.insert(bool_sort.clone(), bool_sort.clone());
 
             Self {
                 terms,
@@ -108,14 +109,14 @@ pub mod SingleThreadPool {
         }
 
         /// Computes the sort of a term and adds it to the sort cache.
-        pub(super) fn compute_sort<'a, 'b: 'a>(&'a mut self, term: &'b Rc<Term>) -> &'a Sort {
+        pub(super) fn compute_sort<'a, 'b: 'a>(&'a mut self, term: &'b Rc<Term>) -> Rc<Term> {
             use super::super::Operator;
 
             if self.sorts_cache.contains_key(term) {
-                return &self.sorts_cache[term];
+                return self.sorts_cache[term].clone();
             }
 
-            let result = match term.as_ref() {
+            let result: Sort = match term.as_ref() {
                 Term::Const(c) => match c {
                     Constant::Integer(_) => Sort::Int,
                     Constant::Real(_) => Sort::Real,
@@ -135,9 +136,12 @@ pub mod SingleThreadPool {
                     | Operator::LessEq
                     | Operator::GreaterEq
                     | Operator::IsInt => Sort::Bool,
-                    Operator::Ite => self.compute_sort(&args[1]).clone(),
+                    Operator::Ite => self.compute_sort(&args[1]).as_sort().unwrap().clone(),
                     Operator::Add | Operator::Sub | Operator::Mult => {
-                        if args.iter().any(|a| *self.compute_sort(a) == Sort::Real) {
+                        if args
+                            .iter()
+                            .any(|a| self.compute_sort(a).as_sort().unwrap() == &Sort::Real)
+                        {
                             Sort::Real
                         } else {
                             Sort::Int
@@ -145,14 +149,14 @@ pub mod SingleThreadPool {
                     }
                     Operator::RealDiv | Operator::ToReal => Sort::Real,
                     Operator::IntDiv | Operator::Mod | Operator::Abs | Operator::ToInt => Sort::Int,
-                    Operator::Select => match self.compute_sort(&args[0]) {
+                    Operator::Select => match self.compute_sort(&args[0]).as_sort().unwrap() {
                         Sort::Array(_, y) => y.as_sort().unwrap().clone(),
                         _ => unreachable!(),
                     },
-                    Operator::Store => self.compute_sort(&args[0]).clone(),
+                    Operator::Store => self.compute_sort(&args[0]).as_sort().unwrap().clone(),
                 },
                 Term::App(f, _) => {
-                    match self.compute_sort(f) {
+                    match self.compute_sort(f).as_sort().unwrap() {
                         Sort::Function(sorts) => sorts.last().unwrap().as_sort().unwrap().clone(),
                         _ => unreachable!(), // We assume that the function is correctly sorted
                     }
@@ -160,17 +164,18 @@ pub mod SingleThreadPool {
                 Term::Sort(sort) => sort.clone(),
                 Term::Quant(_, _, _) => Sort::Bool,
                 Term::Choice((_, sort), _) => sort.as_sort().unwrap().clone(),
-                Term::Let(_, inner) => self.compute_sort(inner).clone(),
+                Term::Let(_, inner) => self.compute_sort(inner).as_sort().unwrap().clone(),
                 Term::Lambda(bindings, body) => {
                     let mut result: Vec<_> =
                         bindings.iter().map(|(_name, sort)| sort.clone()).collect();
-                    let return_sort = Term::Sort(self.compute_sort(body).clone());
+                    let return_sort = self.compute_sort(body).as_ref().clone();
                     result.push(self.add(return_sort));
                     Sort::Function(result)
                 }
             };
-            self.sorts_cache.insert(term.clone(), result);
-            &self.sorts_cache[term]
+            let sorted_term = Self::add_term_to_map(&mut self.terms, Term::Sort(result));
+            self.sorts_cache.insert(term.clone(), sorted_term);
+            self.sorts_cache[term].clone()
         }
     }
 
@@ -200,11 +205,11 @@ pub mod SingleThreadPool {
             terms.into_iter().map(|t| self.add(t)).collect()
         }
 
-        fn sort(&self, term: &Rc<Term>) -> &Sort {
-            &self.sorts_cache[term]
+        fn sort(&self, term: &Rc<Term>) -> Rc<Term> {
+            self.sorts_cache[term].clone()
         }
 
-        fn free_vars<'s, 't: 's>(&'s mut self, term: &'t Rc<Term>) -> &AHashSet<Rc<Term>> {
+        fn free_vars<'s, 't: 's>(&'s mut self, term: &'t Rc<Term>) -> AHashSet<Rc<Term>> {
             // Here, I would like to do
             // ```
             // if let Some(vars) = self.free_vars_cache.get(term) {
@@ -220,7 +225,7 @@ pub mod SingleThreadPool {
             // from the non-lexical lifetimes RFC:
             // https://github.com/rust-lang/rfcs/blob/master/text/2094-nll.md
             if self.free_vars_cache.contains_key(term) {
-                return self.free_vars_cache.get(term).unwrap();
+                return self.free_vars_cache.get(term).unwrap().clone();
             }
             let set = match term.as_ref() {
                 Term::App(f, args) => {
@@ -248,7 +253,7 @@ pub mod SingleThreadPool {
                 Term::Let(bindings, inner) => {
                     let mut vars = self.free_vars(inner).clone();
                     for (var, value) in bindings {
-                        let sort = Term::Sort(self.sort(value).clone());
+                        let sort = self.sort(value).as_ref().clone();
                         let sort = self.add(sort);
                         let term = self.add((var.clone(), sort).into());
                         vars.remove(&term);
@@ -269,18 +274,18 @@ pub mod SingleThreadPool {
                 Term::Const(_) | Term::Sort(_) => AHashSet::new(),
             };
             self.free_vars_cache.insert(term.clone(), set);
-            self.free_vars_cache.get(term).unwrap()
+            self.free_vars_cache.get(term).unwrap().clone()
         }
     }
 }
 
 #[allow(non_snake_case, dead_code)]
 mod MultiThreadPool {
-    use super::super::{Rc, Sort, Term};
+    use super::super::{Rc, Term};
     use super::SingleThreadPool::{self, TermPool};
     use super::TPool;
     use ahash::AHashSet;
-    use std::sync::Arc;
+    use std::sync::{Arc, RwLock};
 
     /// A structure to store and manage all allocated terms.
     ///
@@ -295,7 +300,8 @@ mod MultiThreadPool {
         /// Term pool that stores only dynamic terms (generated after the proof parsing)
         pub(crate) dyn_pool: TermPool,
         /// Term pool that stores a constant amount of terms (all the terms generated by the parser)
-        pub(crate) const_pool: Option<Arc<TermPool>>,
+        pub(crate) const_pool: Arc<TermPool>,
+        pub(crate) ctx_pool: Arc<RwLock<TermPool>>,
     }
 
     impl Default for MergedPool {
@@ -308,31 +314,33 @@ mod MultiThreadPool {
         pub fn new() -> Self {
             Self {
                 dyn_pool: SingleThreadPool::TermPool::new(),
-                const_pool: None::<Arc<TermPool>>,
+                const_pool: Arc::new(SingleThreadPool::TermPool::new()),
+                ctx_pool: Arc::new(RwLock::new(SingleThreadPool::TermPool::new())),
             }
         }
 
         /// Instantiates a new Merged Pool from a previous term pool
-        pub fn from_previous(pool: &Arc<SingleThreadPool::TermPool>) -> Self {
+        pub fn from_previous(
+            pool: &Arc<SingleThreadPool::TermPool>,
+            ctx_pool: &Arc<RwLock<SingleThreadPool::TermPool>>,
+        ) -> Self {
             Self {
                 dyn_pool: TermPool::new(),
-                const_pool: Some(Arc::clone(&pool)),
+                const_pool: Arc::clone(pool),
+                ctx_pool: Arc::clone(ctx_pool),
             }
         }
 
         /// Takes a term and returns an `Rc` referencing it. Receive the pools references directly.
         fn add_by_ref<'d, 'c: 'd>(
             dyn_pool: &'d mut TermPool,
-            const_pool: &'c Option<Arc<TermPool>>,
+            const_pool: &'c Arc<TermPool>,
             term: Term,
         ) -> Rc<Term> {
             use std::collections::hash_map::Entry;
 
             // If there is a constant pool and has the term
-            if let Some(entry) = const_pool
-                .as_ref()
-                .and_then(|c_pool| c_pool.terms.get(&term))
-            {
+            if let Some(entry) = const_pool.terms.get(&term) {
                 entry.clone()
             } else {
                 match dyn_pool.terms.entry(term) {
@@ -350,24 +358,24 @@ mod MultiThreadPool {
         /// Returns the sort of this term exactly as the sort function. Receive the pools references directly.
         fn sort_by_ref<'d: 't, 'c: 'd, 't>(
             dyn_pool: &'d mut TermPool,
-            const_pool: &'c Option<Arc<TermPool>>,
+            const_pool: &'c Arc<TermPool>,
             term: &'t Rc<Term>,
-        ) -> &'t Sort {
-            if let Some(sort) = dyn_pool.sorts_cache.get(term) {
-                sort
+        ) -> Rc<Term> {
+            if let Some(sort) = const_pool.sorts_cache.get(term) {
+                sort.clone()
             } else {
-                &const_pool.as_ref().unwrap().sorts_cache[term]
+                dyn_pool.sorts_cache[term].clone()
             }
         }
     }
 
     impl TPool for MergedPool {
         fn bool_true(&self) -> Rc<Term> {
-            self.const_pool.as_ref().unwrap().bool_true.clone()
+            self.const_pool.bool_true.clone()
         }
 
         fn bool_false(&self) -> Rc<Term> {
-            self.const_pool.as_ref().unwrap().bool_false.clone()
+            self.const_pool.bool_false.clone()
         }
 
         fn bool_constant(&self, value: bool) -> Rc<Term> {
@@ -381,13 +389,10 @@ mod MultiThreadPool {
             use std::collections::hash_map::Entry;
 
             // If there is a constant pool and has the term
-            if let Some(entry) = self
-                .const_pool
-                .as_ref()
-                .and_then(|c_pool| c_pool.terms.get(&term))
-            {
+            if let Some(entry) = self.const_pool.terms.get(&term) {
                 entry.clone()
-            } else {
+            }
+            else {
                 match self.dyn_pool.terms.entry(term) {
                     Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
                     Entry::Vacant(vacant_entry) => {
@@ -404,18 +409,18 @@ mod MultiThreadPool {
             terms.into_iter().map(|t| self.add(t)).collect()
         }
 
-        fn sort(&self, term: &Rc<Term>) -> &Sort {
-            if let Some(sort) = self.dyn_pool.sorts_cache.get(term) {
-                sort
+        fn sort(&self, term: &Rc<Term>) -> Rc<Term> {
+            if let Some(sort) = self.const_pool.sorts_cache.get(term) {
+                sort.clone()
             } else {
-                &self.const_pool.as_ref().unwrap().sorts_cache[term]
+                self.dyn_pool.sorts_cache[term].clone()
             }
         }
 
-        fn free_vars<'s, 't: 's>(&'s mut self, term: &'t Rc<Term>) -> &AHashSet<Rc<Term>> {
+        fn free_vars<'s, 't: 's>(&'s mut self, term: &'t Rc<Term>) -> AHashSet<Rc<Term>> {
             fn internal<'d: 't, 'c: 'd, 't>(
                 dyn_pool: &'d mut TermPool,
-                const_pool: &'c Option<Arc<TermPool>>,
+                const_pool: &'c Arc<TermPool>,
                 term: &'t Rc<Term>,
             ) -> &'t AHashSet<Rc<Term>> {
                 // Here, I would like to do
@@ -432,13 +437,11 @@ mod MultiThreadPool {
                 // the hash map twice, which is a bit slower. This is an example of problem case #3
                 // from the non-lexical lifetimes RFC:
                 // https://github.com/rust-lang/rfcs/blob/master/text/2094-nll.md
+                if let Some(set) = const_pool.free_vars_cache.get(term) {
+                    return set;
+                }
                 if dyn_pool.free_vars_cache.contains_key(term) {
                     return dyn_pool.free_vars_cache.get(term).unwrap();
-                }
-                if let Some(pool) = const_pool {
-                    if let Some(set) = pool.free_vars_cache.get(term) {
-                        return set;
-                    }
                 }
                 let set = match term.as_ref() {
                     Term::App(f, args) => {
@@ -470,9 +473,9 @@ mod MultiThreadPool {
                     Term::Let(bindings, inner) => {
                         let mut vars = internal(dyn_pool, const_pool, inner).clone();
                         for (var, value) in bindings {
-                            let sort = Term::Sort(
-                                MergedPool::sort_by_ref(dyn_pool, const_pool, value).clone(),
-                            );
+                            let sort = MergedPool::sort_by_ref(dyn_pool, const_pool, value)
+                                .as_ref()
+                                .clone();
                             let sort = MergedPool::add_by_ref(dyn_pool, const_pool, sort);
                             let term = MergedPool::add_by_ref(
                                 dyn_pool,
@@ -501,7 +504,7 @@ mod MultiThreadPool {
                 dyn_pool.free_vars_cache.get(term).unwrap()
             }
 
-            internal(&mut self.dyn_pool, &self.const_pool, term)
+            internal(&mut self.dyn_pool, &self.const_pool, term).clone()
         }
     }
 }

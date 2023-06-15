@@ -24,7 +24,7 @@ pub fn forall_inst(
         .iter()
         .map(|arg| {
             let (arg_name, arg_value) = arg.as_assign()?;
-            let arg_sort = pool.add(Term::Sort(pool.sort(arg_value).clone()));
+            let arg_sort = pool.sort(arg_value).clone();
             rassert!(
                 bindings.remove(&(arg_name.clone(), arg_sort.clone())),
                 QuantifierError::NoBindingMatchesArg(arg_name.clone())
@@ -154,7 +154,7 @@ fn negation_normal_form(
         pool.add(Term::Quant(quant, bindings.clone(), inner))
     } else {
         match match_term!((= p q) = term) {
-            Some((left, right)) if *pool.sort(left) == Sort::Bool => {
+            Some((left, right)) if pool.sort(left).as_sort().unwrap() == &Sort::Bool => {
                 let a = negation_normal_form(pool, left, !polarity, cache);
                 let b = negation_normal_form(pool, right, polarity, cache);
                 let c = negation_normal_form(pool, right, !polarity, cache);
