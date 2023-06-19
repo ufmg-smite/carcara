@@ -68,6 +68,7 @@ impl<'c> ParallelProofChecker<'c> {
         // thread already found out an invalid step)
         let premature_abort = Arc::new(RwLock::new(false));
         let context_pool = Arc::new(RwLock::new(SingleThreadPool::TermPool::new()));
+        const STACK_SIZE: usize = 128 * 1024 * 1024;
         //
         thread::scope(|s| {
             let threads: Vec<_> = (&scheduler.loads)
@@ -92,6 +93,7 @@ impl<'c> ParallelProofChecker<'c> {
 
                     thread::Builder::new()
                         .name(format!("worker-{i}"))
+                        .stack_size(STACK_SIZE)
                         .spawn_scoped(
                         s,
                         move || -> CarcaraResult<(bool, bool, Option<CheckerStatistics<CR>>)> {
@@ -111,7 +113,7 @@ impl<'c> ParallelProofChecker<'c> {
                                         } else {
                                             None
                                         };
-
+                                        
                                         local_self
                                             .check_step(
                                                 step,

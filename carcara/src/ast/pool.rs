@@ -39,7 +39,6 @@ pub trait TPool {
 #[allow(non_snake_case, dead_code)]
 pub mod SingleThreadPool {
     use crate::ast::Constant;
-    use std::ops::Deref;
 
     use super::{
         super::{Rc, Sort, Term},
