@@ -95,7 +95,7 @@ fn test_hash_consing() {
     assert_eq!(pool.terms.len(), expected.len());
 
     for got in pool.terms.keys() {
-        let formatted: &str = &format!("{}", got);
+        let formatted: &str = &format!("{:#}", got);
         assert!(expected.contains(formatted), "{}", formatted);
     }
 }

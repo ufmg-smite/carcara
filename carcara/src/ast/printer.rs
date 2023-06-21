@@ -315,10 +315,12 @@ fn escape_string(string: &str) -> Cow<str> {
 
 impl fmt::Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // If the alternate flag (`#`) is passed, we disable printing with sharing
+        let use_sharing = !f.alternate();
         let mut buf = Vec::new();
         let mut printer = AlethePrinter {
             inner: &mut buf,
-            term_indices: Some(AHashMap::new()),
+            term_indices: use_sharing.then(AHashMap::new),
             term_sharing_variable_prefix: "@p_",
         };
         printer.write_raw_term(self).unwrap();
