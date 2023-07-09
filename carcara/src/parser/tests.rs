@@ -93,11 +93,19 @@ fn test_hash_consing() {
     .collect::<AHashSet<&str>>();
     #[cfg(feature = "thread-safety")]
     {
-        let d = &mut pool.dyn_pool;
-        let c = &pool.const_pool;
-        assert_eq!(d.terms.len() + c.terms.len() - 3, expected.len());
+        let l = &mut pool.storage;
+        let g = &pool.ctx_pool.global_pool;
+        let c = &pool.ctx_pool.storage.read().unwrap();
+        assert_eq!(
+            l.terms.len() + g.terms.len() + c.terms.len() - 6,
+            expected.len()
+        );
 
-        for got in d.terms.keys() {
+        for got in l.terms.keys() {
+            let formatted: &str = &format!("{}", got);
+            assert!(expected.contains(formatted), "{}", formatted);
+        }
+        for got in g.terms.keys() {
             let formatted: &str = &format!("{}", got);
             assert!(expected.contains(formatted), "{}", formatted);
         }

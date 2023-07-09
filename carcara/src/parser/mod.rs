@@ -54,8 +54,8 @@ pub fn parse_instance_multithread<T: BufRead>(
     apply_function_defs: bool,
     expand_lets: bool,
     allow_int_real_subtyping: bool,
-) -> CarcaraResult<(ProblemPrelude, Proof, Arc<SingleThreadPool::TermPool>)> {
-    let mut pool = Arc::new(SingleThreadPool::TermPool::new());
+) -> CarcaraResult<(ProblemPrelude, Proof, Arc<PrimitivePool::TermPool>)> {
+    let mut pool = Arc::new(PrimitivePool::TermPool::new());
     let mut_pool = Arc::get_mut(&mut pool).unwrap();
 
     let mut parser = Parser::new(

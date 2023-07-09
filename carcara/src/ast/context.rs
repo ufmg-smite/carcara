@@ -152,6 +152,8 @@ pub mod SingleThreadContextStack {
 pub mod MultiThreadContextStack {
     use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
+    use pool::AdvancedPools::ContextPool;
+
     use super::Context;
     use crate::ast::*;
 
@@ -291,7 +293,7 @@ pub mod MultiThreadContextStack {
 
         pub fn push_from_id(
             &mut self,
-            pool: &mut TermPool,
+            pool: &mut ContextPool,
             assignment_args: &[(String, Rc<Term>)],
             variable_args: &[SortedVar],
             context_id: usize,
