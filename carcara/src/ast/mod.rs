@@ -30,8 +30,8 @@ use rug::Integer;
 use rug::Rational;
 use std::{hash::Hash, ops::Deref};
 
-pub use pool::SingleThreadPool;
 pub use pool::TPool;
+pub use pool::{AdvancedPools, PrimitivePool};
 
 /// The prelude of an SMT-LIB problem instance.
 ///
@@ -466,7 +466,7 @@ impl Term {
     /// Returns the sort of this term. This does not make use of a cache --- if possible, prefer to
     /// use `TermPool::sort`.
     pub fn raw_sort(&self) -> Sort {
-        let mut pool = SingleThreadPool::TermPool::new();
+        let mut pool = PrimitivePool::TermPool::new();
         let added = pool.add(self.clone());
         pool.sort(&added).as_sort().unwrap().clone()
     }

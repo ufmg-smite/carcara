@@ -6,6 +6,7 @@ use super::rules::{Premise, Rule, RuleArgs, RuleResult};
 #[cfg(feature = "thread-safety")]
 use super::scheduler::{iter::ScheduleIter, Scheduler::Scheduler};
 use super::{lia_generic, CheckerStatistics, Config};
+use crate::ast::AdvancedPools::LocalPool;
 use crate::benchmarking::CollectResults;
 use crate::{ast::*, CarcaraResult, Error};
 use ahash::AHashSet;
@@ -20,7 +21,7 @@ unsafe impl<CR: CollectResults + Send> Sync for CheckerStatistics<'_, CR> {}
 unsafe impl<CR: CollectResults + Send> Send for CheckerStatistics<'_, CR> {}
 
 pub struct ParallelProofChecker<'c> {
-    pool: Arc<SingleThreadPool::TermPool>,
+    pool: Arc<PrimitivePool::TermPool>,
     config: Config,
     prelude: &'c ProblemPrelude,
     context: ContextStack,
@@ -31,7 +32,7 @@ pub struct ParallelProofChecker<'c> {
 #[cfg(feature = "thread-safety")]
 impl<'c> ParallelProofChecker<'c> {
     pub fn new(
-        pool: Arc<SingleThreadPool::TermPool>,
+        pool: Arc<PrimitivePool::TermPool>,
         config: Config,
         prelude: &'c ProblemPrelude,
         context_usage: &Vec<usize>,
@@ -67,7 +68,7 @@ impl<'c> ParallelProofChecker<'c> {
         // Used to estimulate threads to abort prematurely (only happens when a
         // thread already found out an invalid step)
         let premature_abort = Arc::new(RwLock::new(false));
-        let context_pool = Arc::new(RwLock::new(SingleThreadPool::TermPool::new()));
+        let context_pool = AdvancedPools::ContextPool::from_global(&self.pool);
         const STACK_SIZE: usize = 128 * 1024 * 1024;
         //
         thread::scope(|s| {
@@ -88,7 +89,7 @@ impl<'c> ParallelProofChecker<'c> {
                         })
                     });
                     let mut local_self = self.parallelize_self();
-                    let mut merged_pool = TermPool::from_previous(&local_self.pool, &context_pool);
+                    let mut local_pool = LocalPool::from_previous(&context_pool);
                     let should_abort = premature_abort.clone();
 
                     thread::Builder::new()
@@ -119,7 +120,7 @@ impl<'c> ParallelProofChecker<'c> {
                                                 step,
                                                 previous_command,
                                                 &iter,
-                                                &mut merged_pool,
+                                                &mut local_pool,
                                                 &mut local_stats,
                                             )
                                             .map_err(|e| {
@@ -143,7 +144,7 @@ impl<'c> ParallelProofChecker<'c> {
                                         local_self
                                             .context
                                             .push_from_id(
-                                                &mut merged_pool,
+                                                &mut local_pool.ctx_pool,
                                                 &s.assignment_args,
                                                 &s.variable_args,
                                                 s.context_id,
