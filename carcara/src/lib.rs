@@ -38,6 +38,7 @@
 pub mod ast;
 pub mod benchmarking;
 pub mod checker;
+pub mod elaborator;
 pub mod parser;
 mod utils;
 
@@ -175,7 +176,7 @@ pub fn check<T: io::BufRead>(
     let checker_stats = &mut options.stats.then(|| CheckerStatistics {
         file_name: "this",
         elaboration_time: Duration::ZERO,
-        deep_eq_time: Duration::ZERO,
+        polyeq_time: Duration::ZERO,
         assume_time: Duration::ZERO,
         assume_core_time: Duration::ZERO,
         results: std::rc::Rc::new(RefCell::new(OnlineBenchmarkResults::new())),
@@ -210,7 +211,7 @@ pub fn check<T: io::BufRead>(
                 checking: run_measures.checking,
                 elaboration: c_stats.elaboration_time,
                 total: run_measures.total,
-                deep_eq: c_stats.deep_eq_time,
+                polyeq: c_stats.polyeq_time,
                 assume: c_stats.assume_time,
                 assume_core: c_stats.assume_core_time,
             },
@@ -247,7 +248,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
     let checker_stats = &mut options.stats.then(|| CheckerStatistics {
         file_name: "this",
         elaboration_time: Duration::ZERO,
-        deep_eq_time: Duration::ZERO,
+        polyeq_time: Duration::ZERO,
         assume_time: Duration::ZERO,
         assume_core_time: Duration::ZERO,
         results: std::rc::Rc::new(RefCell::new(OnlineBenchmarkResults::new())),
@@ -269,7 +270,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
                 checking: run_measures.checking,
                 elaboration: c_stats.elaboration_time,
                 total: run_measures.total,
-                deep_eq: c_stats.deep_eq_time,
+                polyeq: c_stats.polyeq_time,
                 assume: c_stats.assume_time,
                 assume_core: c_stats.assume_core_time,
             },

@@ -1,7 +1,6 @@
 use super::{
-    assert_clause_len, assert_deep_eq_is_expected, assert_eq, assert_is_expected,
-    assert_num_premises, assert_operation_len, get_premise_term, CheckerError, EqualityError,
-    RuleArgs, RuleResult,
+    assert_clause_len, assert_eq, assert_is_expected, assert_num_premises, assert_operation_len,
+    assert_polyeq_expected, get_premise_term, CheckerError, EqualityError, RuleArgs, RuleResult,
 };
 use crate::ast::*;
 use ahash::AHashMap;
@@ -23,7 +22,7 @@ pub fn distinct_elim(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
         }
         // If there are more than two boolean arguments to the distinct operator, the
         // second term must be `false`
-        args if *pool.sort(&args[0]) == Sort::Bool => {
+        args if pool.sort(&args[0]).as_sort().unwrap() == &Sort::Bool => {
             if second_term.is_bool_false() {
                 Ok(())
             } else {
@@ -290,7 +289,9 @@ fn bfun_elim_second_step(
     processed: usize,
 ) -> Rc<Term> {
     for i in processed..args.len() {
-        if *pool.sort(&args[i]) == Sort::Bool && !args[i].is_bool_false() && !args[i].is_bool_true()
+        if pool.sort(&args[i]).as_sort().unwrap() == &Sort::Bool
+            && !args[i].is_bool_false()
+            && !args[i].is_bool_true()
         {
             let mut ite_args = Vec::with_capacity(3);
             ite_args.push(args[i].clone());
@@ -385,7 +386,7 @@ pub fn bfun_elim(
         conclusion,
         premises,
         pool,
-        deep_eq_time,
+        polyeq_time,
         ..
     }: RuleArgs,
 ) -> RuleResult {
@@ -395,7 +396,7 @@ pub fn bfun_elim(
     let psi = get_premise_term(&premises[0])?;
 
     let expected = apply_bfun_elim(pool, psi, &mut AHashMap::new())?;
-    assert_deep_eq_is_expected(&conclusion[0], expected, deep_eq_time)
+    assert_polyeq_expected(&conclusion[0], expected, polyeq_time)
 }
 
 #[cfg(test)]

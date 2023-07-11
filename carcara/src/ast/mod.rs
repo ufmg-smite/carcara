@@ -4,8 +4,9 @@
 
 #[macro_use]
 mod macros;
-mod deep_eq;
+mod context;
 mod iter;
+mod polyeq;
 mod pool;
 pub(crate) mod printer;
 mod rc;
@@ -13,14 +14,15 @@ mod substitution;
 #[cfg(test)]
 mod tests;
 
-pub use deep_eq::{are_alpha_equivalent, deep_eq, tracing_deep_eq};
+pub use context::{Context, ContextStack};
 pub use iter::ProofIter;
+pub use polyeq::{alpha_equiv, polyeq, tracing_polyeq};
 pub use pool::TermPool;
 pub use printer::print_proof;
 pub use rc::Rc;
 pub use substitution::{Substitution, SubstitutionError};
 
-pub(crate) use deep_eq::{DeepEq, DeepEqualityChecker};
+pub(crate) use polyeq::{Polyeq, PolyeqComparator};
 
 use crate::checker::error::CheckerError;
 use ahash::AHashSet;
@@ -28,8 +30,8 @@ use rug::Integer;
 use rug::Rational;
 use std::{hash::Hash, ops::Deref};
 
-pub use pool::SingleThreadPool;
 pub use pool::TPool;
+pub use pool::{AdvancedPools, PrimitivePool};
 
 /// The prelude of an SMT-LIB problem instance.
 ///
@@ -380,7 +382,7 @@ impl AsRef<[SortedVar]> for BindingList {
 }
 
 impl Deref for BindingList {
-    type Target = [SortedVar];
+    type Target = Vec<SortedVar>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -399,11 +401,6 @@ impl<'a> IntoIterator for &'a BindingList {
 
 impl BindingList {
     pub const EMPTY: &'static Self = &BindingList(Vec::new());
-
-    /// Extract a slice of the binding list's contents.
-    pub fn as_slice(&self) -> &[SortedVar] {
-        self.0.as_slice()
-    }
 }
 
 /// A term.
@@ -411,8 +408,11 @@ impl BindingList {
 /// Many additional methods are implemented in [`Rc<Term>`].
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Term {
-    /// A terminal. This can be a constant or a variable.
-    Terminal(Terminal),
+    /// A constant term.
+    Const(Constant),
+
+    /// A variable, consisting of an identifier and a sort.
+    Var(Ident, Rc<Term>),
 
     /// An application of a function to one or more terms.
     App(Rc<Term>, Vec<Rc<Term>>),
@@ -438,50 +438,47 @@ pub enum Term {
 
 impl From<SortedVar> for Term {
     fn from(var: SortedVar) -> Self {
-        Term::Terminal(Terminal::Var(Identifier::Simple(var.0), var.1))
+        Term::Var(Ident::Simple(var.0), var.1)
     }
 }
 
 impl Term {
     /// Constructs a new integer term.
-    pub fn integer(value: impl Into<Integer>) -> Self {
-        Term::Terminal(Terminal::Integer(value.into()))
+    pub fn new_int(value: impl Into<Integer>) -> Self {
+        Term::Const(Constant::Integer(value.into()))
     }
 
     /// Constructs a new real term.
-    pub fn real(value: impl Into<Rational>) -> Self {
-        Term::Terminal(Terminal::Real(value.into()))
+    pub fn new_real(value: impl Into<Rational>) -> Self {
+        Term::Const(Constant::Real(value.into()))
     }
 
     /// Constructs a new string term.
-    pub fn string(value: impl Into<String>) -> Self {
-        Term::Terminal(Terminal::String(value.into()))
+    pub fn new_string(value: impl Into<String>) -> Self {
+        Term::Const(Constant::String(value.into()))
     }
 
     /// Constructs a new variable term.
-    pub fn var(name: impl Into<String>, sort: Rc<Term>) -> Self {
-        Term::Terminal(Terminal::Var(Identifier::Simple(name.into()), sort))
+    pub fn new_var(name: impl Into<String>, sort: Rc<Term>) -> Self {
+        Term::Var(Ident::Simple(name.into()), sort)
     }
 
     /// Returns the sort of this term. This does not make use of a cache --- if possible, prefer to
     /// use `TermPool::sort`.
     pub fn raw_sort(&self) -> Sort {
-        let mut pool = TermPool::new();
+        let mut pool = PrimitivePool::TermPool::new();
         let added = pool.add(self.clone());
-        pool.sort(&added).clone()
+        pool.sort(&added).as_sort().unwrap().clone()
     }
 
-    /// Returns `true` if the term is a terminal.
+    /// Returns `true` if the term is a terminal, that is, if it is a constant or a variable.
     pub fn is_terminal(&self) -> bool {
-        matches!(self, Term::Terminal(_))
+        matches!(self, Term::Const(_) | Term::Var(..))
     }
 
     /// Returns `true` if the term is an integer or real constant.
     pub fn is_number(&self) -> bool {
-        matches!(
-            self,
-            Term::Terminal(Terminal::Real(_) | Terminal::Integer(_))
-        )
+        matches!(self, Term::Const(Constant::Real(_) | Constant::Integer(_)))
     }
 
     /// Returns `true` if the term is an integer or real constant, or one such constant negated
@@ -497,8 +494,8 @@ impl Term {
     /// constant.
     pub fn as_number(&self) -> Option<Rational> {
         match self {
-            Term::Terminal(Terminal::Real(r)) => Some(r.clone()),
-            Term::Terminal(Terminal::Integer(i)) => Some(i.clone().into()),
+            Term::Const(Constant::Real(r)) => Some(r.clone()),
+            Term::Const(Constant::Integer(i)) => Some(i.clone().into()),
             _ => None,
         }
     }
@@ -537,17 +534,14 @@ impl Term {
 
     /// Returns `true` if the term is a variable.
     pub fn is_var(&self) -> bool {
-        matches!(
-            self,
-            Term::Terminal(Terminal::Var(Identifier::Simple(_), _))
-        )
+        matches!(self, Term::Var(Ident::Simple(_), _))
     }
 
     /// Tries to extract the variable name from a term. Returns `Some` if the term is a variable
     /// with a simple identifier.
     pub fn as_var(&self) -> Option<&str> {
         match self {
-            Term::Terminal(Terminal::Var(Identifier::Simple(var), _)) => Some(var.as_str()),
+            Term::Var(Ident::Simple(var), _) => Some(var.as_str()),
             _ => None,
         }
     }
@@ -567,7 +561,7 @@ impl Term {
 
     /// Tries to unwrap an operation term, returning the `Operator` and the arguments. Returns
     /// `None` if the term is not an operation term.
-    pub fn unwrap_op(&self) -> Option<(Operator, &[Rc<Term>])> {
+    pub fn as_op(&self) -> Option<(Operator, &[Rc<Term>])> {
         match self {
             Term::Op(op, args) => Some((*op, args.as_slice())),
             _ => None,
@@ -576,7 +570,7 @@ impl Term {
 
     /// Tries to unwrap a quantifier term, returning the `Quantifier`, the bindings and the inner
     /// term. Returns `None` if the term is not a quantifier term.
-    pub fn unwrap_quant(&self) -> Option<(Quantifier, &BindingList, &Rc<Term>)> {
+    pub fn as_quant(&self) -> Option<(Quantifier, &BindingList, &Rc<Term>)> {
         match self {
             Term::Quant(q, b, t) => Some((*q, b, t)),
             _ => None,
@@ -585,7 +579,7 @@ impl Term {
 
     /// Tries to unwrap a `let` term, returning the bindings and the inner term. Returns `None` if
     /// the term is not a `let` term.
-    pub fn unwrap_let(&self) -> Option<(&BindingList, &Rc<Term>)> {
+    pub fn as_let(&self) -> Option<(&BindingList, &Rc<Term>)> {
         match self {
             Term::Let(b, t) => Some((b, t)),
             _ => None,
@@ -594,7 +588,7 @@ impl Term {
 
     /// Returns `true` if the term is the boolean constant `true`.
     pub fn is_bool_true(&self) -> bool {
-        if let Term::Terminal(Terminal::Var(Identifier::Simple(name), sort)) = self {
+        if let Term::Var(Ident::Simple(name), sort) = self {
             sort.as_sort() == Some(&Sort::Bool) && name == "true"
         } else {
             false
@@ -603,7 +597,7 @@ impl Term {
 
     /// Returns `true` if the term is the boolean constant `false`.
     pub fn is_bool_false(&self) -> bool {
-        if let Term::Terminal(Terminal::Var(Identifier::Simple(name), sort)) = self {
+        if let Term::Var(Ident::Simple(name), sort) = self {
             sort.as_sort() == Some(&Sort::Bool) && name == "false"
         } else {
             false
@@ -670,29 +664,29 @@ impl Rc<Term> {
 
     /// Tries to unwrap an operation term, returning the `Operator` and the arguments. Returns a
     /// `CheckerError` if the term is not an operation term.
-    pub fn unwrap_op_err(&self) -> Result<(Operator, &[Rc<Term>]), CheckerError> {
-        self.unwrap_op()
+    pub fn as_op_err(&self) -> Result<(Operator, &[Rc<Term>]), CheckerError> {
+        self.as_op()
             .ok_or_else(|| CheckerError::ExpectedOperationTerm(self.clone()))
     }
 
     /// Tries to unwrap a quantifier term, returning the `Quantifier`, the bindings and the inner
     /// term. Returns a `CheckerError` if the term is not a quantifier term.
-    pub fn unwrap_quant_err(&self) -> Result<(Quantifier, &BindingList, &Rc<Term>), CheckerError> {
-        self.unwrap_quant()
+    pub fn as_quant_err(&self) -> Result<(Quantifier, &BindingList, &Rc<Term>), CheckerError> {
+        self.as_quant()
             .ok_or_else(|| CheckerError::ExpectedQuantifierTerm(self.clone()))
     }
 
     /// Tries to unwrap a `let` term, returning the bindings and the inner
     /// term. Returns a `CheckerError` if the term is not a `let` term.
-    pub fn unwrap_let_err(&self) -> Result<(&BindingList, &Rc<Term>), CheckerError> {
-        self.unwrap_let()
+    pub fn as_let_err(&self) -> Result<(&BindingList, &Rc<Term>), CheckerError> {
+        self.as_let()
             .ok_or_else(|| CheckerError::ExpectedLetTerm(self.clone()))
     }
 }
 
-/// A terminal term.
+/// A constant term.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Terminal {
+pub enum Constant {
     /// An integer constant term.
     Integer(Integer),
 
@@ -701,24 +695,21 @@ pub enum Terminal {
 
     /// A string literal term.
     String(String),
-
-    /// A variable, consisting of an identifier and a sort.
-    Var(Identifier, Rc<Term>),
 }
 
 /// An identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Identifier {
+pub enum Ident {
     /// A simple identifier, consisting of a symbol.
     Simple(String),
 
     /// An indexed identifier, consisting of a symbol and one or more indices.
-    Indexed(String, Vec<IdentifierIndex>),
+    Indexed(String, Vec<IdentIndex>),
 }
 
 /// An index for an indexed identifier. This can be either a numeral or a symbol.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum IdentifierIndex {
+pub enum IdentIndex {
     Numeral(u64),
     Symbol(String),
 }

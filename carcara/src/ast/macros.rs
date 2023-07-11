@@ -255,7 +255,7 @@ mod tests {
     #[test]
     fn test_match_term() {
         let mut p = TermPool::new();
-        let [one, two, five] = [1, 2, 5].map(|n| p.add(Term::integer(n)));
+        let [one, two, five] = [1, 2, 5].map(|n| p.add(Term::new_int(n)));
 
         let term = parse_term(&mut p, "(= (= (not false) (= true false)) (not true))");
         let ((a, (b, c)), d) = match_term!((= (= (not a) (= b c)) (not d)) = &term).unwrap();
@@ -307,9 +307,9 @@ mod tests {
         let bool_sort = pool.add(Term::Sort(Sort::Bool));
         let int_sort = pool.add(Term::Sort(Sort::Int));
 
-        let [one, two, three] = [1, 2, 3].map(|n| pool.add(Term::integer(n)));
-        let [a, b] = ["a", "b"].map(|s| pool.add(Term::var(s, int_sort.clone())));
-        let [p, q] = ["p", "q"].map(|s| pool.add(Term::var(s, bool_sort.clone())));
+        let [one, two, three] = [1, 2, 3].map(|n| pool.add(Term::new_int(n)));
+        let [a, b] = ["a", "b"].map(|s| pool.add(Term::new_var(s, int_sort.clone())));
+        let [p, q] = ["p", "q"].map(|s| pool.add(Term::new_var(s, bool_sort.clone())));
 
         let cases = [
             ("(= a b)", build_term!(pool, (= {a} {b}))),

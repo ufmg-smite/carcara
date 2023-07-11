@@ -1,5 +1,5 @@
 use super::{
-    assert_clause_len, assert_deep_eq_is_expected, assert_eq, assert_is_expected, assert_num_args,
+    assert_clause_len, assert_eq, assert_is_expected, assert_num_args, assert_polyeq_expected,
     CheckerError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::QuantifierError, utils::DedupIterator};
@@ -7,11 +7,7 @@ use ahash::{AHashMap, AHashSet};
 
 pub fn forall_inst(
     RuleArgs {
-        conclusion,
-        args,
-        pool,
-        deep_eq_time,
-        ..
+        conclusion, args, pool, polyeq_time, ..
     }: RuleArgs,
 ) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
@@ -28,7 +24,7 @@ pub fn forall_inst(
         .iter()
         .map(|arg| {
             let (arg_name, arg_value) = arg.as_assign()?;
-            let arg_sort = pool.add(Term::Sort(pool.sort(arg_value).clone()));
+            let arg_sort = pool.sort(arg_value).clone();
             rassert!(
                 bindings.remove(&(arg_name.clone(), arg_sort.clone())),
                 QuantifierError::NoBindingMatchesArg(arg_name.clone())
@@ -46,10 +42,9 @@ pub fn forall_inst(
         QuantifierError::NoArgGivenForBinding(bindings.iter().next().unwrap().0.clone())
     );
 
-    // Equalities may be reordered in the final term, so we need to use deep equality modulo
-    // reordering
+    // Equalities may be reordered in the final term, so we need to compare for polyequality here
     let expected = substitution.apply(pool, original);
-    assert_deep_eq_is_expected(substituted, expected, deep_eq_time)
+    assert_polyeq_expected(substituted, expected, polyeq_time)
 }
 
 pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
@@ -57,9 +52,9 @@ pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
 
-    let (q_1, bindings_1, left) = left.unwrap_quant_err()?;
-    let (q_2, bindings_2, left) = left.unwrap_quant_err()?;
-    let (q_3, bindings_3, right) = right.unwrap_quant_err()?;
+    let (q_1, bindings_1, left) = left.as_quant_err()?;
+    let (q_2, bindings_2, left) = left.as_quant_err()?;
+    let (q_3, bindings_3, right) = right.as_quant_err()?;
 
     assert_eq(&q_1, &q_2)?;
     assert_eq(&q_2, &q_3)?;
@@ -81,9 +76,9 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
     assert_clause_len(conclusion, 1)?;
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
-    let (q_1, bindings_1, phi_1) = left.unwrap_quant_err()?;
+    let (q_1, bindings_1, phi_1) = left.as_quant_err()?;
 
-    let (bindings_2, phi_2) = match right.unwrap_quant() {
+    let (bindings_2, phi_2) = match right.as_quant() {
         Some((q_2, b, t)) => {
             assert_eq(&q_1, &q_2)?;
             (b, t)
@@ -153,13 +148,13 @@ fn negation_normal_form(
             true => build_term!(pool, (and (or {a} {b}) (or {c} {d}))),
             false => build_term!(pool, (or (and {a} {b}) (and {c} {d}))),
         }
-    } else if let Some((quant, bindings, inner)) = term.unwrap_quant() {
+    } else if let Some((quant, bindings, inner)) = term.as_quant() {
         let quant = if polarity { quant } else { !quant };
         let inner = negation_normal_form(pool, inner, polarity, cache);
         pool.add(Term::Quant(quant, bindings.clone(), inner))
     } else {
         match match_term!((= p q) = term) {
-            Some((left, right)) if *pool.sort(left) == Sort::Bool => {
+            Some((left, right)) if pool.sort(left).as_sort().unwrap() == &Sort::Bool => {
                 let a = negation_normal_form(pool, left, !polarity, cache);
                 let b = negation_normal_form(pool, right, polarity, cache);
                 let c = negation_normal_form(pool, right, !polarity, cache);
@@ -265,8 +260,8 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
     let (l_bindings, phi, r_bindings, phi_prime) = {
         let (l, r) = match_term_err!((or (not l) r) = &conclusion[0])?;
-        let (l_q, l_b, phi) = l.unwrap_quant_err()?;
-        let (r_q, r_b, phi_prime) = r.unwrap_quant_err()?;
+        let (l_q, l_b, phi) = l.as_quant_err()?;
+        let (r_q, r_b, phi_prime) = r.as_quant_err()?;
 
         // We expect both quantifiers to be `forall`
         assert_is_expected(&l_q, Quantifier::Forall)?;

@@ -1,25 +1,24 @@
 use super::*;
 use crate::{
     ast::*,
-    checker::context::ContextStack,
-    utils::{DedupIterator, SymbolTable},
+    utils::{DedupIterator, HashMapStack},
 };
 
-pub struct DeepEqElaborator<'a> {
+pub struct PolyeqElaborator<'a> {
     inner: &'a mut Elaborator,
     root_id: &'a str,
-    cache: SymbolTable<(Rc<Term>, Rc<Term>), (usize, usize)>,
-    checker: DeepEqualityChecker,
+    cache: HashMapStack<(Rc<Term>, Rc<Term>), (usize, usize)>,
+    checker: PolyeqComparator,
     context: Option<ContextStack>,
 }
 
-impl<'a> DeepEqElaborator<'a> {
+impl<'a> PolyeqElaborator<'a> {
     pub fn new(inner: &'a mut Elaborator, root_id: &'a str, is_alpha_equivalence: bool) -> Self {
         Self {
             inner,
             root_id,
-            cache: SymbolTable::new(),
-            checker: DeepEqualityChecker::new(true, is_alpha_equivalence),
+            cache: HashMapStack::new(),
+            checker: PolyeqComparator::new(true, is_alpha_equivalence),
             context: is_alpha_equivalence.then(ContextStack::new),
         }
     }
@@ -48,7 +47,7 @@ impl<'a> DeepEqElaborator<'a> {
 
         if let Some((a_left, a_right)) = match_term!((= x y) = a) {
             if let Some((b_left, b_right)) = match_term!((= x y) = b) {
-                if self.deep_eq(pool, a_left, b_right) && self.deep_eq(pool, a_right, b_left) {
+                if self.polyeq(pool, a_left, b_right) && self.polyeq(pool, a_right, b_left) {
                     let [a_left, a_right, b_left, b_right] =
                         [a_left, a_right, b_left, b_right].map(Clone::clone);
                     return self.flip_equality(pool, (a, a_left, a_right), (b, b_left, b_right));
@@ -83,7 +82,7 @@ impl<'a> DeepEqElaborator<'a> {
                             })
                             .collect();
 
-                        (a_bindings.as_slice().to_vec(), assignment_args)
+                        (a_bindings.to_vec(), assignment_args)
                     }
                     Some(c) => {
                         assert!(a_bindings
@@ -134,7 +133,7 @@ impl<'a> DeepEqElaborator<'a> {
                 let variable_args: Vec<_> = a_bindings
                     .iter()
                     .map(|(name, value)| {
-                        let sort = Term::Sort(pool.sort(value).clone());
+                        let sort = pool.sort(value).as_ref().clone();
                         (name.clone(), pool.add(sort))
                     })
                     .collect();
@@ -173,14 +172,14 @@ impl<'a> DeepEqElaborator<'a> {
             }
 
             // Since `choice` and `lambda` terms are not in the SMT-LIB standard, they cannot appear
-            // in the premises of a proof, so we would never need to elaborate deep equalities that
+            // in the premises of a proof, so we would never need to elaborate polyequalities that
             // use these terms.
             (Term::Choice(_, _), Term::Choice(_, _)) => {
-                log::error!("Trying to elaborate deep equality between `choice` terms");
+                log::error!("Trying to elaborate polyequality between `choice` terms");
                 panic!()
             }
             (Term::Lambda(_, _), Term::Lambda(_, _)) => {
-                log::error!("Trying to elaborate deep equality between `lambda` terms");
+                log::error!("Trying to elaborate polyequality between `lambda` terms");
                 panic!()
             }
             _ => panic!("terms not equal!"),
@@ -197,10 +196,10 @@ impl<'a> DeepEqElaborator<'a> {
 
     /// Returns `true` if the terms are equal modulo reordering of inequalities, and modulo
     /// application of the current context.
-    fn deep_eq(&mut self, pool: &mut TermPool, a: &Rc<Term>, b: &Rc<Term>) -> bool {
+    fn polyeq(&mut self, pool: &mut TermPool, a: &Rc<Term>, b: &Rc<Term>) -> bool {
         match &mut self.context {
-            Some(c) => DeepEq::eq(&mut self.checker, &c.apply(pool, a), b),
-            None => DeepEq::eq(&mut self.checker, a, b),
+            Some(c) => Polyeq::eq(&mut self.checker, &c.apply(pool, a), b),
+            None => Polyeq::eq(&mut self.checker, a, b),
         }
     }
 
@@ -253,12 +252,13 @@ impl<'a> DeepEqElaborator<'a> {
         // reordering of equalities, or if they are equal modulo the application of the current
         // context (in the case of alpha equivalence).
         //
-        // In this case, we need to elaborate the deep equality between x and x' (or y and y'), and
-        // from that, prove that `(= (= x y) (= y' x))`. We do that by first proving that `(= x x')`
-        // (1) and `(= y y')` (2). Then, we introduce a `cong` step that uses (1) and (2) to show
-        // that `(= (= x y) (= x' y'))` (3). After that, we add an `equiv_simplify` step that
-        // derives `(= (= x' y') (= y' x'))` (4). Finally, we introduce a `trans` step with premises
-        // (3) and (4) that proves `(= (= x y) (= y' x'))`. The general format looks like this:
+        // In this case, we need to elaborate the polyequality between x and x' (or y and y'), and
+        // from that, prove that `(= (= x y) (= y' x'))`. We do that by first proving that
+        // `(= x x')` (1) and `(= y y')` (2). Then, we introduce a `cong` step that uses (1) and (2)
+        // to show that `(= (= x y) (= x' y'))` (3). After that, we add an `equiv_simplify` step
+        // that derives `(= (= x' y') (= y' x'))` (4). Finally, we introduce a `trans` step with
+        // premises (3) and (4) that proves `(= (= x y) (= y' x'))`. The general format looks like
+        // this:
         //
         //     ...
         //     (step t1 (cl (= x x')) ...)

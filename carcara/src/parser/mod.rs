@@ -9,7 +9,7 @@ pub use lexer::{Lexer, Position, Reserved, Token};
 
 use crate::{
     ast::*,
-    utils::{HashCache, SymbolTable},
+    utils::{HashCache, HashMapStack},
     CarcaraResult, Error,
 };
 use ahash::{AHashMap, AHashSet};
@@ -54,8 +54,8 @@ pub fn parse_instance_multithread<T: BufRead>(
     apply_function_defs: bool,
     expand_lets: bool,
     allow_int_real_subtyping: bool,
-) -> CarcaraResult<(ProblemPrelude, Proof, Arc<SingleThreadPool::TermPool>)> {
-    let mut pool = Arc::new(SingleThreadPool::TermPool::new());
+) -> CarcaraResult<(ProblemPrelude, Proof, Arc<PrimitivePool::TermPool>)> {
+    let mut pool = Arc::new(PrimitivePool::TermPool::new());
     let mut_pool = Arc::get_mut(&mut pool).unwrap();
 
     let mut parser = Parser::new(
@@ -100,10 +100,10 @@ enum AnchorArg {
 /// pool used by the parser.
 #[derive(Default)]
 struct ParserState {
-    symbol_table: SymbolTable<HashCache<Identifier>, Rc<Term>>,
+    symbol_table: HashMapStack<HashCache<Ident>, Rc<Term>>,
     function_defs: AHashMap<String, FunctionDef>,
     sort_declarations: AHashMap<String, usize>,
-    step_ids: SymbolTable<HashCache<String>, usize>,
+    step_ids: HashMapStack<HashCache<String>, usize>,
 }
 
 /// A parser for the Alethe proof format.
@@ -134,7 +134,7 @@ impl<'a, R: BufRead, P: TPool> Parser<'a, R, P> {
         let mut state = ParserState::default();
         let bool_sort = pool.add(Term::Sort(Sort::Bool));
         for iden in ["true", "false"] {
-            let iden = HashCache::new(Identifier::Simple(iden.to_owned()));
+            let iden = HashCache::new(Ident::Simple(iden.to_owned()));
             state.symbol_table.insert(iden, bool_sort.clone());
         }
         let mut lexer = Lexer::new(input)?;
@@ -178,7 +178,7 @@ impl<'a, R: BufRead, P: TPool> Parser<'a, R, P> {
     fn insert_sorted_var(&mut self, (symbol, sort): SortedVar) {
         self.state
             .symbol_table
-            .insert(HashCache::new(Identifier::Simple(symbol)), sort);
+            .insert(HashCache::new(Ident::Simple(symbol)), sort);
     }
 
     /// Shortcut for `self.problem.as_mut().unwrap().0`
@@ -192,20 +192,19 @@ impl<'a, R: BufRead, P: TPool> Parser<'a, R, P> {
     }
 
     /// Constructs and sort checks a variable term.
-    fn make_var(&mut self, iden: Identifier) -> Result<Rc<Term>, ParserError> {
+    fn make_var(&mut self, iden: Ident) -> Result<Rc<Term>, ParserError> {
         let cached = HashCache::new(iden);
         let sort = match self.state.symbol_table.get(&cached) {
             Some(s) => s.clone(),
             None => return Err(ParserError::UndefinedIden(cached.unwrap())),
         };
-        Ok(self
-            .pool
-            .add(Term::Terminal(Terminal::Var(cached.unwrap(), sort))))
+        Ok(self.pool.add(Term::Var(cached.unwrap(), sort)))
     }
 
     /// Constructs and sort checks an operation term.
     fn make_op(&mut self, op: Operator, args: Vec<Rc<Term>>) -> Result<Rc<Term>, ParserError> {
-        let sorts: Vec<_> = args.iter().map(|t| self.pool.sort(t)).collect();
+        let terms: Vec<_> = args.iter().map(|t| self.pool.sort(t)).collect();
+        let sorts: Vec<_> = terms.iter().map(|op| op.as_sort().unwrap()).collect();
         match op {
             Operator::Not => {
                 assert_num_args(&args, 1)?;
@@ -348,8 +347,9 @@ impl<'a, R: BufRead, P: TPool> Parser<'a, R, P> {
         function: Rc<Term>,
         args: Vec<Rc<Term>>,
     ) -> Result<Rc<Term>, ParserError> {
+        let sort = self.pool.sort(&function);
         let sorts = {
-            let function_sort = self.pool.sort(&function);
+            let function_sort = sort.as_sort().unwrap();
             if let Sort::Function(sorts) = function_sort {
                 sorts
             } else {
@@ -359,7 +359,10 @@ impl<'a, R: BufRead, P: TPool> Parser<'a, R, P> {
         };
         assert_num_args(&args, sorts.len() - 1)?;
         for i in 0..args.len() {
-            SortError::assert_eq(sorts[i].as_sort().unwrap(), self.pool.sort(&args[i]))?;
+            SortError::assert_eq(
+                sorts[i].as_sort().unwrap(),
+                self.pool.sort(&args[i]).as_sort().unwrap(),
+            )?;
         }
         Ok(self.pool.add(Term::App(function, args)))
     }
@@ -541,9 +544,7 @@ impl<'a, R: BufRead, P: TPool> Parser<'a, R, P> {
                             self.pool
                                 .add(Term::Lambda(BindingList(func_def.params), func_def.body))
                         };
-                        let sort = self
-                            .pool
-                            .add(Term::Sort(self.pool.sort(&lambda_term).clone()));
+                        let sort = self.pool.add(self.pool.sort(&lambda_term).as_ref().clone());
                         let var = (name, sort);
                         self.insert_sorted_var(var.clone());
                         let var_term = self.pool.add(var.into());
@@ -743,7 +744,7 @@ impl<'a, R: BufRead, P: TPool> Parser<'a, R, P> {
             Vec::new()
         };
 
-        // For some rules (notable the `subproof` rule), there is also a `:discharge` attribute that
+        // For some rules (notably the `subproof` rule), there is also a `:discharge` attribute that
         // takes a series of command ids, in addition to the regular premises
         let discharge = if self.current_token == Token::Keyword("discharge".into()) {
             self.next_token()?;
@@ -841,7 +842,7 @@ impl<'a, R: BufRead, P: TPool> Parser<'a, R, P> {
             self.next_token()?;
             let var = self.expect_symbol()?;
             let value = self.parse_term()?;
-            let sort = Term::Sort(self.pool.sort(&value).clone());
+            let sort = self.pool.sort(&value).as_ref().clone();
             let sort = self.pool.add(sort);
             self.insert_sorted_var((var.clone(), sort));
             self.expect_token(Token::CloseParen)?;
@@ -957,10 +958,10 @@ impl<'a, R: BufRead, P: TPool> Parser<'a, R, P> {
     /// Parses a term.
     pub fn parse_term(&mut self) -> CarcaraResult<Rc<Term>> {
         let term = match self.next_token()? {
-            (Token::Numeral(n), _) if self.interpret_integers_as_reals => Term::real(n),
-            (Token::Numeral(n), _) => Term::integer(n),
-            (Token::Decimal(r), _) => Term::real(r),
-            (Token::String(s), _) => Term::string(s),
+            (Token::Numeral(n), _) if self.interpret_integers_as_reals => Term::new_real(n),
+            (Token::Numeral(n), _) => Term::new_int(n),
+            (Token::Decimal(r), _) => Term::new_real(r),
+            (Token::String(s), _) => Term::new_string(s),
             (Token::Symbol(s), pos) => {
                 // Check to see if there is a nullary function defined with this name
                 return Ok(if let Some(func_def) = self.state.function_defs.get(&s) {
@@ -973,7 +974,7 @@ impl<'a, R: BufRead, P: TPool> Parser<'a, R, P> {
                         ));
                     }
                 } else {
-                    self.make_var(Identifier::Simple(s))
+                    self.make_var(Ident::Simple(s))
                         .map_err(|err| Error::Parser(err, pos))?
                 });
             }
@@ -987,7 +988,7 @@ impl<'a, R: BufRead, P: TPool> Parser<'a, R, P> {
     fn parse_term_expecting_sort(&mut self, expected_sort: &Sort) -> CarcaraResult<Rc<Term>> {
         let pos = self.current_position;
         let term = self.parse_term()?;
-        SortError::assert_eq(expected_sort, self.pool.sort(&term))
+        SortError::assert_eq(expected_sort, self.pool.sort(&term).as_sort().unwrap())
             .map_err(|e| Error::Parser(e.into(), pos))?;
         Ok(term)
     }
@@ -1054,7 +1055,7 @@ impl<'a, R: BufRead, P: TPool> Parser<'a, R, P> {
                 p.expect_token(Token::OpenParen)?;
                 let name = p.expect_symbol()?;
                 let value = p.parse_term()?;
-                let sort = p.pool.add(Term::Sort(p.pool.sort(&value).clone()));
+                let sort = p.pool.add(p.pool.sort(&value).as_ref().clone());
                 p.insert_sorted_var((name.clone(), sort));
                 p.expect_token(Token::CloseParen)?;
                 Ok((name, value))
@@ -1069,8 +1070,8 @@ impl<'a, R: BufRead, P: TPool> Parser<'a, R, P> {
             let substitution = bindings
                 .into_iter()
                 .map(|(name, value)| {
-                    let sort = Term::Sort(self.pool.sort(&value).clone());
-                    let var = Term::var(name, self.pool.add(sort));
+                    let sort = self.pool.sort(&value).as_ref().clone();
+                    let var = Term::new_var(name, self.pool.add(sort));
                     (self.pool.add(var), value)
                 })
                 .collect();
@@ -1169,8 +1170,11 @@ impl<'a, R: BufRead, P: TPool> Parser<'a, R, P> {
                 assert_num_args(&args, func.params.len())
                     .map_err(|err| Error::Parser(err, head_pos))?;
                 for (arg, param) in args.iter().zip(func.params.iter()) {
-                    SortError::assert_eq(param.1.as_sort().unwrap(), self.pool.sort(arg))
-                        .map_err(|err| Error::Parser(err.into(), head_pos))?;
+                    SortError::assert_eq(
+                        param.1.as_sort().unwrap(),
+                        self.pool.sort(arg).as_sort().unwrap(),
+                    )
+                    .map_err(|err| Error::Parser(err.into(), head_pos))?;
                 }
 
                 // Build a hash map of all the parameter names and the values they will
@@ -1179,7 +1183,7 @@ impl<'a, R: BufRead, P: TPool> Parser<'a, R, P> {
                     .params
                     .iter()
                     .zip(args)
-                    .map(|((name, sort), arg)| (self.pool.add(Term::var(name, sort.clone())), arg))
+                    .map(|((n, s), arg)| (self.pool.add(Term::new_var(n, s.clone())), arg))
                     .collect();
 
                 // Since we already checked the sorts of the arguments, creating this substitution

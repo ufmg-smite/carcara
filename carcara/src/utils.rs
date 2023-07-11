@@ -101,11 +101,11 @@ impl<T> AsRef<T> for HashCache<T> {
 }
 
 #[derive(Debug)]
-pub struct SymbolTable<K, V> {
+pub struct HashMapStack<K, V> {
     scopes: Vec<AHashMap<K, V>>,
 }
 
-impl<K, V> SymbolTable<K, V> {
+impl<K, V> HashMapStack<K, V> {
     pub fn new() -> Self {
         Self { scopes: vec![AHashMap::new()] }
     }
@@ -117,10 +117,7 @@ impl<K, V> SymbolTable<K, V> {
     pub fn pop_scope(&mut self) {
         match self.scopes.len() {
             0 => unreachable!(),
-            1 => {
-                log::error!("cannot pop last scope in symbol table");
-                panic!();
-            }
+            1 => panic!("trying to pop last scope in `HashMapStack`"),
             _ => {
                 self.scopes.pop().unwrap();
             }
@@ -128,7 +125,7 @@ impl<K, V> SymbolTable<K, V> {
     }
 }
 
-impl<K: Eq + Hash, V> SymbolTable<K, V> {
+impl<K: Eq + Hash, V> HashMapStack<K, V> {
     pub fn get<Q>(&self, key: &Q) -> Option<&V>
     where
         K: Borrow<Q>,
@@ -161,7 +158,7 @@ impl<K: Eq + Hash, V> SymbolTable<K, V> {
     }
 }
 
-impl<K, V> Default for SymbolTable<K, V> {
+impl<K, V> Default for HashMapStack<K, V> {
     fn default() -> Self {
         Self::new()
     }

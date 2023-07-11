@@ -10,78 +10,93 @@ struct Frame<'a> {
 
     /// The index of the subproof that this frame represents, in the outer subproof
     index_of_subproof: usize,
-    visited: Vec<bool>,
+
+    /// For each command, the distance between it and the source.
+    distance_to_source: Vec<usize>,
+
+    /// The queue of commands to visit, represented as a tuple of (command index, distance to
+    /// source)
+    queue: VecDeque<(usize, usize)>,
 }
 
 pub fn prune_proof(proof: &[ProofCommand]) -> ProofDiff {
-    assert!(!proof.is_empty(), "cannot prune an empty proof");
-
     let end_step = proof
         .iter()
         .position(|c| c.clause().is_empty())
         .expect("proof does not reach empty clause");
 
-    let root = Frame {
+    slice_proof(proof, end_step, None)
+}
+
+pub fn slice_proof(
+    proof: &[ProofCommand],
+    source: usize,
+    max_distance: Option<usize>,
+) -> ProofDiff {
+    assert!(proof.len() > source, "invalid slice index");
+
+    let mut stack = vec![Frame {
         commands: proof,
         subproof_diffs: vec![None; proof.len()],
-        visited: vec![false; proof.len()],
+        distance_to_source: vec![usize::MAX; proof.len()],
         index_of_subproof: 0, // For the root proof, this value is irrelevant
-    };
-    let mut stack = vec![root];
-    let mut to_visit = vec![VecDeque::from([end_step])];
+        queue: VecDeque::from([(source, 0usize)]),
+    }];
 
     loop {
         'inner: loop {
             let frame = stack.last_mut().unwrap();
-            let Some(current) = to_visit.last_mut().unwrap().pop_front() else {
+            let Some((current, current_dist)) = frame.queue.pop_front() else {
                 break 'inner;
             };
-            if frame.visited[current] {
+            if frame.distance_to_source[current] < usize::MAX {
+                continue;
+            }
+            frame.distance_to_source[current] =
+                std::cmp::min(frame.distance_to_source[current], current_dist);
+
+            if max_distance.map_or(false, |max| current_dist > max) {
                 continue;
             }
 
-            frame.visited[current] = true;
             match &frame.commands[current] {
                 ProofCommand::Assume { .. } => (),
                 ProofCommand::Step(s) => {
-                    for &(depth, i) in &s.premises {
-                        to_visit[depth].push_back(i);
+                    for &(_, i) in &s.premises {
+                        frame.queue.push_back((i, current_dist + 1));
                     }
                 }
                 ProofCommand::Subproof(s) => {
                     let n = s.commands.len();
-                    let mut visited = vec![false; n];
                     let mut new_queue = VecDeque::new();
-                    new_queue.push_back(n - 1);
+                    new_queue.push_back((n - 1, current_dist));
 
-                    // Since the second to last command in a subproof may be implicitly referenced
-                    // by the last command, we have to add it to the `to_visit` queue if it exists
-                    if n >= 2 {
-                        new_queue.push_back(n - 2);
-                    }
-
-                    // Since `assume` commands in the subproof cannot be removed we need to always
-                    // visit them. As they don't have any premises, we can just mark them as visited
-                    // now
+                    // Since `assume` commands in a subproof are implicitly referenced by the last
+                    // step in the subproof, we must add them to the queue now
                     for (i, command) in s.commands.iter().enumerate() {
                         if command.is_assume() {
-                            visited[i] = true;
+                            new_queue.push_back((i, current_dist + 1));
                         }
+                    }
+
+                    // The second to last command in a subproof is also implicitly referenced by the
+                    // last step, so we also add it to the queue
+                    if n >= 2 {
+                        new_queue.push_back((n - 2, current_dist + 1));
                     }
 
                     let frame = Frame {
                         commands: &s.commands,
                         subproof_diffs: vec![None; n],
-                        visited,
+                        distance_to_source: vec![usize::MAX; n],
                         index_of_subproof: current,
+                        queue: new_queue,
                     };
                     stack.push(frame);
-                    to_visit.push(new_queue);
                 }
                 ProofCommand::Closing => {}
             }
         }
-        to_visit.pop();
         let mut frame = stack.pop().unwrap();
 
         let mut result_diff = Vec::new();
@@ -91,9 +106,19 @@ pub fn prune_proof(proof: &[ProofCommand]) -> ProofDiff {
         for i in 0..frame.commands.len() {
             new_indices.push((depth, i - num_pruned));
 
-            if !frame.visited[i] {
+            if frame.distance_to_source[i] == usize::MAX {
                 result_diff.push((i, CommandDiff::Delete));
                 num_pruned += 1;
+            } else if max_distance.map_or(false, |max| frame.distance_to_source[i] == max + 1) {
+                let new_command = ProofCommand::Step(ProofStep {
+                    id: frame.commands[i].id().to_owned(),
+                    clause: frame.commands[i].clause().to_vec(),
+                    rule: "hole".to_owned(),
+                    premises: Vec::new(),
+                    args: Vec::new(),
+                    discharge: Vec::new(),
+                });
+                result_diff.push((i, CommandDiff::Step(vec![new_command])));
             } else if let Some(diff) = frame.subproof_diffs[i].take() {
                 result_diff.push((i, CommandDiff::Subproof(diff)));
             }

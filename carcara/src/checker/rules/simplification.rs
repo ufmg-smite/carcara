@@ -349,10 +349,10 @@ pub fn equiv_simplify(args: RuleArgs) -> RuleResult {
             (= phi_1 false): (phi_1, _) => build_term!(pool, (not {phi_1.clone()})),
 
             // This is a special case for the `equiv_simplify` rule that was added to make
-            // elaboration of deep equalities less verbose. This transformation can very easily lead
-            // to cycles, so it must always be the last transformation rule. Unfortunately, this
-            // means that failed simplifications in the `equiv_simplify` rule will frequently reach
-            // this transformation and reach a cycle, in which case the error message may be a bit
+            // elaboration of polyequality less verbose. This transformation can very easily lead to
+            // cycles, so it must always be the last transformation rule. Unfortunately, this means
+            // that failed simplifications in the `equiv_simplify` rule will frequently reach this
+            // transformation and reach a cycle, in which case the error message may be a bit
             // confusing.
             //
             // phi_1 = phi_2 => phi_2 = phi_1
@@ -407,7 +407,7 @@ pub fn bool_simplify(args: RuleArgs) -> RuleResult {
 pub fn qnt_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
-    let (_, _, inner) = left.unwrap_quant_err()?;
+    let (_, _, inner) = left.as_quant_err()?;
     rassert!(
         inner.is_bool_false() || inner.is_bool_true(),
         CheckerError::ExpectedAnyBoolConstant(inner.clone())
@@ -531,7 +531,7 @@ fn generic_sum_prod_simplify_rule(
     // Finally, we verify that the constant and the remaining arguments are what we expect
     rassert!(u_constant == constant_total && u_args.iter().eq(result), {
         let expected = {
-            let mut expected_args = vec![pool.add(Term::Terminal(Terminal::Real(constant_total)))];
+            let mut expected_args = vec![pool.add(Term::new_real(constant_total))];
             expected_args.extend(u_args.iter().cloned());
             pool.add(Term::Op(rule_kind, expected_args))
         };

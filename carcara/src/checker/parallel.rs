@@ -5,7 +5,8 @@ use super::error::CheckerError;
 use super::rules::{Premise, Rule, RuleArgs, RuleResult};
 #[cfg(feature = "thread-safety")]
 use super::scheduler::{iter::ScheduleIter, Scheduler::Scheduler};
-use super::{context::*, lia_generic, CheckerStatistics, Config};
+use super::{lia_generic, CheckerStatistics, Config};
+use crate::ast::AdvancedPools::LocalPool;
 use crate::benchmarking::CollectResults;
 use crate::{ast::*, CarcaraResult, Error};
 use ahash::AHashSet;
@@ -20,7 +21,7 @@ unsafe impl<CR: CollectResults + Send> Sync for CheckerStatistics<'_, CR> {}
 unsafe impl<CR: CollectResults + Send> Send for CheckerStatistics<'_, CR> {}
 
 pub struct ParallelProofChecker<'c> {
-    pool: Arc<SingleThreadPool::TermPool>,
+    pool: Arc<PrimitivePool::TermPool>,
     config: Config,
     prelude: &'c ProblemPrelude,
     context: ContextStack,
@@ -31,7 +32,7 @@ pub struct ParallelProofChecker<'c> {
 #[cfg(feature = "thread-safety")]
 impl<'c> ParallelProofChecker<'c> {
     pub fn new(
-        pool: Arc<SingleThreadPool::TermPool>,
+        pool: Arc<PrimitivePool::TermPool>,
         config: Config,
         prelude: &'c ProblemPrelude,
         context_usage: &Vec<usize>,
@@ -67,6 +68,8 @@ impl<'c> ParallelProofChecker<'c> {
         // Used to estimulate threads to abort prematurely (only happens when a
         // thread already found out an invalid step)
         let premature_abort = Arc::new(RwLock::new(false));
+        let context_pool = AdvancedPools::ContextPool::from_global(&self.pool);
+        const STACK_SIZE: usize = 128 * 1024 * 1024;
         //
         thread::scope(|s| {
             let threads: Vec<_> = (&scheduler.loads)
@@ -79,18 +82,19 @@ impl<'c> ParallelProofChecker<'c> {
                         Some(CheckerStatistics {
                             file_name: s.file_name,
                             elaboration_time: Duration::ZERO,
-                            deep_eq_time: Duration::ZERO,
+                            polyeq_time: Duration::ZERO,
                             assume_time: Duration::ZERO,
                             assume_core_time: Duration::ZERO,
                             results: std::rc::Rc::new(RefCell::new(CR::new())),
                         })
                     });
                     let mut local_self = self.parallelize_self();
-                    let mut merged_pool = TermPool::from_previous(&local_self.pool);
+                    let mut local_pool = LocalPool::from_previous(&context_pool);
                     let should_abort = premature_abort.clone();
 
                     thread::Builder::new()
                         .name(format!("worker-{i}"))
+                        .stack_size(STACK_SIZE)
                         .spawn_scoped(
                         s,
                         move || -> CarcaraResult<(bool, bool, Option<CheckerStatistics<CR>>)> {
@@ -110,13 +114,13 @@ impl<'c> ParallelProofChecker<'c> {
                                         } else {
                                             None
                                         };
-
+                                        
                                         local_self
                                             .check_step(
                                                 step,
                                                 previous_command,
                                                 &iter,
-                                                &mut merged_pool,
+                                                &mut local_pool,
                                                 &mut local_stats,
                                             )
                                             .map_err(|e| {
@@ -140,7 +144,7 @@ impl<'c> ParallelProofChecker<'c> {
                                         local_self
                                             .context
                                             .push_from_id(
-                                                &mut merged_pool,
+                                                &mut local_pool.ctx_pool,
                                                 &s.assignment_args,
                                                 &s.variable_args,
                                                 s.context_id,
@@ -249,7 +253,7 @@ impl<'c> ParallelProofChecker<'c> {
 
                                 // Make sure
                                 merged.elaboration_time += l_stats.elaboration_time;
-                                merged.deep_eq_time += l_stats.deep_eq_time;
+                                merged.polyeq_time += l_stats.polyeq_time;
                                 merged.assume_time += l_stats.assume_time;
                                 merged.assume_core_time += l_stats.assume_core_time;
                             }
@@ -311,18 +315,18 @@ impl<'c> ParallelProofChecker<'c> {
         }
 
         let mut found = None;
-        let mut deep_eq_time = Duration::ZERO;
+        let mut polyeq_time = Duration::ZERO;
         let mut core_time = Duration::ZERO;
 
         for p in premises {
-            let mut this_deep_eq_time = Duration::ZERO;
-            let (result, depth) = tracing_deep_eq(term, p, &mut this_deep_eq_time);
-            deep_eq_time += this_deep_eq_time;
+            let mut this_polyeq_time = Duration::ZERO;
+            let (result, depth) = tracing_polyeq(term, p, &mut this_polyeq_time);
+            polyeq_time += this_polyeq_time;
             if let Some(s) = statistics {
-                s.results.as_ref().borrow_mut().add_deep_eq_depth(depth);
+                s.results.as_ref().borrow_mut().add_polyeq_depth(depth);
             }
             if result {
-                core_time = this_deep_eq_time;
+                core_time = this_polyeq_time;
                 found = Some(p.clone());
                 break;
             }
@@ -334,7 +338,7 @@ impl<'c> ParallelProofChecker<'c> {
             let time = time.elapsed();
             s.assume_time += time;
             s.assume_core_time += core_time;
-            s.deep_eq_time += deep_eq_time;
+            s.polyeq_time += polyeq_time;
             s.results
                 .as_ref()
                 .borrow_mut()
@@ -353,7 +357,7 @@ impl<'c> ParallelProofChecker<'c> {
         statistics: &mut Option<CheckerStatistics<CR>>,
     ) -> RuleResult {
         let time = Instant::now();
-        let mut deep_eq_time = Duration::ZERO;
+        let mut polyeq_time = Duration::ZERO;
 
         if step.rule == "lia_generic" {
             if self.config.lia_via_cvc5 {
@@ -400,7 +404,7 @@ impl<'c> ParallelProofChecker<'c> {
                 context: &mut self.context,
                 previous_command,
                 discharge: &discharge,
-                deep_eq_time: &mut deep_eq_time,
+                polyeq_time: &mut polyeq_time,
             };
 
             rule(rule_args)?;
@@ -414,7 +418,7 @@ impl<'c> ParallelProofChecker<'c> {
                 &step.rule,
                 time,
             );
-            s.deep_eq_time += deep_eq_time;
+            s.polyeq_time += polyeq_time;
         }
         Ok(())
     }

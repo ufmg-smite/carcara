@@ -1,6 +1,6 @@
 use carcara::{
     benchmarking::{CollectResults, CsvBenchmarkResults, RunMeasurement},
-    checker,
+    checker::{self, Config},
     parser::parse_instance,
     CarcaraOptions,
 };
@@ -41,7 +41,7 @@ fn run_job<CR: CollectResults + Default + Send>(
     )?;
     let parsing = parsing.elapsed();
 
-    let config = checker::Config::new()
+    let config = Config::new()
         .strict(options.strict)
         .skip_unknown_rules(options.skip_unknown_rules)
         .lia_via_cvc5(options.lia_via_cvc5);
@@ -49,7 +49,7 @@ fn run_job<CR: CollectResults + Default + Send>(
     let mut checker_stats = Some(checker::CheckerStatistics {
         file_name: proof_file_name,
         elaboration_time: Duration::ZERO,
-        deep_eq_time: Duration::ZERO,
+        polyeq_time: Duration::ZERO,
         assume_time: Duration::ZERO,
         assume_core_time: Duration::ZERO,
         results: std::rc::Rc::clone(&results),
@@ -78,7 +78,7 @@ fn run_job<CR: CollectResults + Default + Send>(
             checking,
             elaboration: unwrapped_stats.elaboration_time,
             total,
-            deep_eq: unwrapped_stats.deep_eq_time,
+            polyeq: unwrapped_stats.polyeq_time,
             assume: unwrapped_stats.assume_time,
             assume_core: unwrapped_stats.assume_core_time,
         },

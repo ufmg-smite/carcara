@@ -204,7 +204,7 @@ impl Substitution {
             Term::Lambda(b, t) => {
                 self.apply_to_binder(pool, term, b.as_ref(), t, true, Term::Lambda)
             }
-            Term::Terminal(_) | Term::Sort(_) => term.clone(),
+            Term::Const(_) | Term::Var(..) | Term::Sort(_) => term.clone(),
         };
 
         // Since frequently a term will have more than one identical subterms, we insert the
@@ -304,7 +304,7 @@ impl Substitution {
                 // If the binding list is a "sort" binding list, then `value` will be the variable's
                 // sort. Otherwise, we need to get the sort of `value`
                 let sort = if is_value_list {
-                    pool.add(Term::Sort(pool.sort(value).clone()))
+                    pool.add(pool.sort(value).as_ref().clone())
                 } else {
                     value.clone()
                 };
