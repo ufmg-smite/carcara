@@ -85,6 +85,13 @@ struct Input {
     problem_file: Option<String>,
 }
 
+#[derive(Args)]
+struct StatsOptions {
+    /// Enables the gathering of performance statistics
+    #[clap(long)]
+    stats: bool,
+}
+
 #[derive(Args, Clone, Copy)]
 struct ParsingOptions {
     /// Expand function definitions introduced by `define-fun`s in the SMT problem. If this flag is
@@ -137,6 +144,7 @@ fn build_carcara_options(
         skip_unknown_rules,
         lia_via_cvc5,
     }: CheckingOptions,
+    StatsOptions { stats }: StatsOptions,
 ) -> CarcaraOptions {
     CarcaraOptions {
         apply_function_defs,
@@ -145,6 +153,7 @@ fn build_carcara_options(
         lia_via_cvc5,
         strict,
         skip_unknown_rules,
+        stats,
     }
 }
 
@@ -170,6 +179,23 @@ struct CheckCommandOptions {
 
     #[clap(flatten)]
     checking: CheckingOptions,
+
+    /// Defines the number of cores for proof checking.
+    #[clap(short = 'u', long, required = false, default_value = "1", validator = |s: &str| -> Result<(), String> {
+        if let Ok(n) = s.to_string().parse() as Result<u32, _> {
+            if n < 1 {
+                Err(format!("The threads number can't be {n}."))
+            } else {
+                Ok(())
+            }
+        } else {
+            Err(String::from("Not a number."))
+        }
+    })]
+    num_threads: usize,
+
+    #[clap(flatten)]
+    stats: StatsOptions,
 }
 
 #[derive(Args)]
@@ -185,6 +211,9 @@ struct ElaborateCommandOptions {
 
     #[clap(flatten)]
     printing: PrintingOptions,
+
+    #[clap(flatten)]
+    stats: StatsOptions,
 }
 
 #[derive(Args)]
@@ -323,7 +352,8 @@ fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
     check(
         problem,
         proof,
-        build_carcara_options(options.parsing, options.checking),
+        build_carcara_options(options.parsing, options.checking, options.stats),
+        options.num_threads,
     )
     .map_err(Into::into)
 }
@@ -334,7 +364,7 @@ fn elaborate_command(options: ElaborateCommandOptions) -> CliResult<()> {
     let (_, elaborated) = check_and_elaborate(
         problem,
         proof,
-        build_carcara_options(options.parsing, options.checking),
+        build_carcara_options(options.parsing, options.checking, options.stats),
     )?;
     print_proof(&elaborated.commands, options.printing.use_sharing)?;
     Ok(())
@@ -353,12 +383,17 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         options.num_runs
     );
 
+    let carc_options = build_carcara_options(
+        options.parsing,
+        options.checking,
+        StatsOptions { stats: false },
+    );
     if options.dump_to_csv {
         benchmarking::run_csv_benchmark(
             &instances,
             options.num_runs,
             options.num_threads,
-            &build_carcara_options(options.parsing, options.checking),
+            &carc_options,
             options.elaborate,
             &mut File::create("runs.csv")?,
             &mut File::create("by-rule.csv")?,
@@ -370,7 +405,7 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         &instances,
         options.num_runs,
         options.num_threads,
-        &build_carcara_options(options.parsing, options.checking),
+        &carc_options,
         options.elaborate,
     );
     if results.is_empty() {

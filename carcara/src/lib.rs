@@ -91,6 +91,10 @@ pub struct CarcaraOptions {
     /// If `true`, Carcara will skip any rules that it does not recognize, and will consider them as
     /// holes. Normally, using an unknown rule is considered an error.
     pub skip_unknown_rules: bool,
+
+    /// If `true`, Carcará will log the check and elaboration statistics of any
+    /// `check` or `check_and_elaborate` run. If `false` no statistics are logged.
+    pub stats: bool,
 }
 
 impl CarcaraOptions {
@@ -130,7 +134,12 @@ pub enum Error {
     DoesNotReachEmptyClause,
 }
 
-pub fn check<T: io::BufRead>(problem: T, proof: T, options: CarcaraOptions) -> Result<bool, Error> {
+pub fn check<T: io::BufRead>(
+    problem: T,
+    proof: T,
+    options: CarcaraOptions,
+    num_threads: usize,
+) -> Result<bool, Error> {
     let (prelude, proof, mut pool) = parser::parse_instance(
         problem,
         proof,
