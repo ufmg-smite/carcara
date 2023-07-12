@@ -1,0 +1,36 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: install toolchain
+      run: rustup default 1.67
+    - name: add components
+      run: rustup component add clippy && rustup component add rustfmt
+  build:
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+    - uses: actions/checkout@v3
+    - name: lint
+      run: cargo clippy --all-targets --all-features --tests --no-deps -- -D warnings
+    - name: build
+      run: cargo build
+  test:
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+    - uses: actions/checkout@v3
+    - name: test
+      run: cargo test --release
+  format:
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+    - uses: actions/checkout@v3
+    - name: check formatting
+      run: cargo fmt --check
