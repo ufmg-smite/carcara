@@ -1,11 +1,13 @@
 pub mod error;
 mod lia_generic;
 mod rules;
+mod scheduler;
 
 use crate::{ast::*, benchmarking::CollectResults, elaborator::Elaborator, CarcaraResult, Error};
 use ahash::AHashSet;
 use error::CheckerError;
 use rules::{ElaborationRule, Premise, Rule, RuleArgs, RuleResult};
+pub use scheduler::Scheduler;
 use std::{
     fmt,
     time::{Duration, Instant},
@@ -174,6 +176,7 @@ impl<'c> ProofChecker<'c> {
                         });
                     }
                 }
+                ProofCommand::Closing => {}
             }
         }
         if self.config.is_running_test || self.reached_empty_clause {

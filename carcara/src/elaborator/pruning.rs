@@ -94,6 +94,7 @@ pub fn slice_proof(
                     };
                     stack.push(frame);
                 }
+                ProofCommand::Closing => {}
             }
         }
         let mut frame = stack.pop().unwrap();

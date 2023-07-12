@@ -134,6 +134,7 @@ fn update_premises(commands: &mut [ProofCommand], delta: usize, root_id: &str) {
             ProofCommand::Subproof(s) => {
                 update_premises(&mut s.commands, delta, root_id);
             }
+            ProofCommand::Closing => {}
         }
     }
 }

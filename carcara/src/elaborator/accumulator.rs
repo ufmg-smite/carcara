@@ -66,6 +66,7 @@ impl Accumulator {
             commands,
             assignment_args,
             variable_args,
+            context_id: 0,
         })
     }
 

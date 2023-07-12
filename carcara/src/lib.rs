@@ -140,6 +140,8 @@ pub fn check<T: io::BufRead>(
     options: CarcaraOptions,
     num_threads: usize,
 ) -> Result<bool, Error> {
+    use crate::checker::Scheduler;
+
     let (prelude, proof, mut pool) = parser::parse_instance(
         problem,
         proof,
@@ -152,6 +154,7 @@ pub fn check<T: io::BufRead>(
         .strict(options.strict)
         .skip_unknown_rules(options.skip_unknown_rules)
         .lia_via_cvc5(options.lia_via_cvc5);
+    let (scheduler, schedule_context_usage) = Scheduler::new(num_threads, &proof);
     checker::ProofChecker::new(&mut pool, config, prelude).check(&proof)
 }
 
