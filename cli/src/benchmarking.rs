@@ -48,16 +48,8 @@ fn run_job<T: CollectResults + Default>(
     let config = checker::Config::new()
         .strict(options.strict)
         .skip_unknown_rules(options.skip_unknown_rules)
-        .lia_via_cvc5(options.lia_via_cvc5)
-        .statistics(checker::CheckerStatistics {
-            file_name: proof_file_name,
-            elaboration_time: &mut elaboration,
-            polyeq_time: &mut polyeq,
-            assume_time: &mut assume,
-            assume_core_time: &mut assume_core,
-            results,
-        });
-    let mut checker = checker::ProofChecker::new(&mut pool, config, prelude);
+        .lia_via_cvc5(options.lia_via_cvc5);
+    let mut checker = checker::ProofChecker::new(&mut pool, config, &prelude);
 
     let checking = Instant::now();
 

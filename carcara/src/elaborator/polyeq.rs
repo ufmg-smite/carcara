@@ -133,7 +133,7 @@ impl<'a> PolyeqElaborator<'a> {
                 let variable_args: Vec<_> = a_bindings
                     .iter()
                     .map(|(name, value)| {
-                        let sort = Term::Sort(pool.sort(value).clone());
+                        let sort = pool.sort(value).as_ref().clone();
                         (name.clone(), pool.add(sort))
                     })
                     .collect();

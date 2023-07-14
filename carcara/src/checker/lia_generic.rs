@@ -112,7 +112,7 @@ fn parse_and_check_cvc5_proof(
     let commands = parser.parse_proof()?;
     let proof = Proof { premises, commands };
 
-    ProofChecker::new(pool, Config::new(), prelude).check(&proof)?;
+    ProofChecker::new(pool, Config::new(), &prelude).check(&proof)?;
     Ok(proof.commands)
 }
 

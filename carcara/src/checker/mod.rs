@@ -1,11 +1,13 @@
 pub mod error;
 mod lia_generic;
+mod parallel;
 mod rules;
 mod scheduler;
 
 use crate::{ast::*, benchmarking::CollectResults, elaborator::Elaborator, CarcaraResult, Error};
 use ahash::AHashSet;
 use error::CheckerError;
+pub use parallel::ParallelProofChecker;
 use rules::{ElaborationRule, Premise, Rule, RuleArgs, RuleResult};
 pub use scheduler::Scheduler;
 use std::{
@@ -39,16 +41,16 @@ impl fmt::Debug for CheckerStatistics<'_> {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct Config<'c> {
+#[derive(Debug, Default, Clone)]
+pub struct Config {
     strict: bool,
     skip_unknown_rules: bool,
     is_running_test: bool,
-    statistics: Option<CheckerStatistics<'c>>,
+    statistics: Option<()>,
     lia_via_cvc5: bool,
 }
 
-impl<'c> Config<'c> {
+impl Config {
     pub fn new() -> Self {
         Self::default()
     }
@@ -68,7 +70,7 @@ impl<'c> Config<'c> {
         self
     }
 
-    pub fn statistics(mut self, value: CheckerStatistics<'c>) -> Self {
+    pub fn statistics(mut self, value: ()) -> Self {
         self.statistics = Some(value);
         self
     }
@@ -76,8 +78,8 @@ impl<'c> Config<'c> {
 
 pub struct ProofChecker<'c> {
     pool: &'c mut TermPool,
-    config: Config<'c>,
-    prelude: ProblemPrelude,
+    config: Config,
+    prelude: &'c ProblemPrelude,
     context: ContextStack,
     elaborator: Option<Elaborator>,
     reached_empty_clause: bool,
@@ -85,7 +87,7 @@ pub struct ProofChecker<'c> {
 }
 
 impl<'c> ProofChecker<'c> {
-    pub fn new(pool: &'c mut TermPool, config: Config<'c>, prelude: ProblemPrelude) -> Self {
+    pub fn new(pool: &'c mut TermPool, config: Config, prelude: &'c ProblemPrelude) -> Self {
         ProofChecker {
             pool,
             config,
@@ -153,19 +155,6 @@ impl<'c> ProofChecker<'c> {
                     if let Some(elaborator) = &mut self.elaborator {
                         elaborator.open_subproof(s.commands.len());
                     }
-
-                    if let Some(stats) = &mut self.config.statistics {
-                        let rule_name = match s.commands.last() {
-                            Some(ProofCommand::Step(step)) => format!("anchor({})", &step.rule),
-                            _ => "anchor".to_owned(),
-                        };
-                        stats.results.add_step_measurement(
-                            stats.file_name,
-                            step_id,
-                            &rule_name,
-                            time.elapsed(),
-                        );
-                    }
                 }
                 ProofCommand::Assume { id, term } => {
                     if !self.check_assume(id, term, &proof.premises, &iter) {
@@ -197,9 +186,6 @@ impl<'c> ProofChecker<'c> {
 
         let elaboration_time = Instant::now();
         proof.commands = elaborator.end(proof.commands);
-        if let Some(stats) = &mut self.config.statistics {
-            *stats.elaboration_time += elaboration_time.elapsed();
-        }
         Ok((self.is_holey, proof))
     }
 
@@ -225,12 +211,6 @@ impl<'c> ProofChecker<'c> {
         }
 
         if premises.contains(term) {
-            if let Some(s) = &mut self.config.statistics {
-                let time = time.elapsed();
-                *s.assume_time += time;
-                s.results
-                    .add_assume_measurement(s.file_name, id, true, time);
-            }
             if let Some(elaborator) = &mut self.elaborator {
                 elaborator.assume(term);
             }
@@ -249,9 +229,6 @@ impl<'c> ProofChecker<'c> {
             let mut this_polyeq_time = Duration::ZERO;
             let (result, depth) = tracing_polyeq(term, p, &mut this_polyeq_time);
             polyeq_time += this_polyeq_time;
-            if let Some(s) = &mut self.config.statistics {
-                s.results.add_polyeq_depth(depth);
-            }
             if result {
                 core_time = this_polyeq_time;
                 found = Some(p.clone());
@@ -265,19 +242,6 @@ impl<'c> ProofChecker<'c> {
             let elaboration_time = Instant::now();
 
             elaborator.elaborate_assume(self.pool, p, term.clone(), id);
-
-            if let Some(s) = &mut self.config.statistics {
-                *s.elaboration_time += elaboration_time.elapsed();
-            }
-        }
-
-        if let Some(s) = &mut self.config.statistics {
-            let time = time.elapsed();
-            *s.assume_time += time;
-            *s.assume_core_time += core_time;
-            *s.polyeq_time += polyeq_time;
-            s.results
-                .add_assume_measurement(s.file_name, id, false, time);
         }
 
         true
@@ -366,15 +330,6 @@ impl<'c> ProofChecker<'c> {
             }
         }
 
-        if let Some(s) = &mut self.config.statistics {
-            let time = time.elapsed();
-            s.results
-                .add_step_measurement(s.file_name, &step.id, &step.rule, time);
-            *s.polyeq_time += polyeq_time;
-            if elaborated {
-                *s.elaboration_time += time;
-            }
-        }
         Ok(())
     }
 

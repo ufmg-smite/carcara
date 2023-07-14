@@ -176,7 +176,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
                 statistics: None,
                 lia_via_cvc5: false,
             },
-            prelude,
+            &prelude,
         );
         let got = checker.check(&parsed).is_ok();
         assert_eq!(

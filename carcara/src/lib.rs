@@ -142,7 +142,7 @@ pub fn check<T: io::BufRead>(
 ) -> Result<bool, Error> {
     use crate::checker::Scheduler;
 
-    let (prelude, proof, mut pool) = parser::parse_instance(
+    let (prelude, proof, pool) = parser::parse_instance_multithread(
         problem,
         proof,
         options.apply_function_defs,
@@ -155,7 +155,7 @@ pub fn check<T: io::BufRead>(
         .skip_unknown_rules(options.skip_unknown_rules)
         .lia_via_cvc5(options.lia_via_cvc5);
     let (scheduler, schedule_context_usage) = Scheduler::new(num_threads, &proof);
-    checker::ProofChecker::new(&mut pool, config, prelude).check(&proof)
+    checker::ParallelProofChecker::new(pool, config, &prelude).check(&proof, &scheduler)
 }
 
 pub fn check_and_elaborate<T: io::BufRead>(
@@ -175,5 +175,5 @@ pub fn check_and_elaborate<T: io::BufRead>(
         .strict(options.strict)
         .skip_unknown_rules(options.skip_unknown_rules)
         .lia_via_cvc5(options.lia_via_cvc5);
-    checker::ProofChecker::new(&mut pool, config, prelude).check_and_elaborate(proof)
+    checker::ProofChecker::new(&mut pool, config, &prelude).check_and_elaborate(proof)
 }
