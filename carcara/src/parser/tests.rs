@@ -2,6 +2,8 @@
 //! useful in tests, and are intended to be used in other modules.
 #![cfg(test)]
 
+use crate::rare::Parameter;
+
 use super::*;
 
 const ERROR_MESSAGE: &str = "parser error during test";
@@ -50,6 +52,12 @@ fn run_parser_tests(pool: &mut TermPool, cases: &[(&str, Rc<Term>)]) {
         let got = parse_term(pool, case);
         assert_eq!(expected, &got);
     }
+}
+
+fn parse_rare_rules(pool: &mut TermPool, input: &str) -> rare::RewritingRules {
+    Parser::new(pool, input.as_bytes(), true, false, false)
+        .and_then(|mut p| p.parse_rare_rules())
+        .expect(ERROR_MESSAGE)
 }
 
 #[test]
@@ -624,5 +632,187 @@ fn test_premises_in_subproofs() {
             args: Vec::new(),
             discharge: Vec::new(),
         })
+    );
+}
+
+#[test]
+fn test_parse_define_rule() {
+    let mut p = TermPool::new();
+    let input = "
+        (define-rule bool-impl-false1 ((t Bool)) (=> t false) (not t))
+        (define-rule bool-or-true ((xs Bool :list) (ys Bool :list)) (or xs true ys) true)
+        (define-rule ite-true-cond ((x ?) (y ?)) (ite true x y) x)
+    ";
+
+    let rules = parse_rare_rules(&mut p, input);
+
+    assert_eq!(rules.0.len(), 3);
+
+    assert_eq!(
+        &rules.0[0],
+        &rare::RewriteRule {
+            id: "bool-impl-false1".into(),
+            is_rec: false,
+            params: vec![Parameter {
+                id: "t".into(),
+                sort: p.add(Term::Sort(Sort::Bool)),
+                attrs: vec![]
+            }],
+            cond: None,
+            match_expr: parse_terms(&mut p, "(declare-const t Bool)", ["(=> t false)"])[0].clone(),
+            target_expr: parse_terms(&mut p, "(declare-const t Bool)", ["(not t)"])[0].clone(),
+        },
+    );
+
+    assert_eq!(
+        &rules.0[1],
+        &rare::RewriteRule {
+            id: "bool-or-true".into(),
+            is_rec: false,
+            params: vec![
+                Parameter {
+                    id: "xs".into(),
+                    sort: p.add(Term::Sort(Sort::Bool)),
+                    attrs: vec![Attribute::List]
+                },
+                Parameter {
+                    id: "ys".into(),
+                    sort: p.add(Term::Sort(Sort::Bool)),
+                    attrs: vec![Attribute::List]
+                }
+            ],
+            cond: None,
+            match_expr: parse_terms(
+                &mut p,
+                "(declare-const xs Bool)(declare-const ys Bool)",
+                ["(or xs true ys)"]
+            )[0]
+            .clone(),
+            target_expr: parse_term(&mut p, "true"),
+        },
+    );
+
+    assert_eq!(
+        &rules.0[2],
+        &rare::RewriteRule {
+            id: "ite-true-cond".into(),
+            is_rec: false,
+            params: vec![
+                Parameter {
+                    id: "x".into(),
+                    sort: p.add(Term::Sort(Sort::Any)),
+                    attrs: vec![]
+                },
+                Parameter {
+                    id: "y".into(),
+                    sort: p.add(Term::Sort(Sort::Any)),
+                    attrs: vec![]
+                }
+            ],
+            cond: None,
+            match_expr: parse_terms(
+                &mut p,
+                "(declare-const x ?)(declare-const y ?)",
+                ["(ite true x y)"]
+            )[0]
+            .clone(),
+            target_expr: parse_terms(&mut p, "(declare-const x ?)", ["x"])[0].clone(),
+        },
+    );
+}
+
+#[test]
+fn test_parse_define_cond_rule() {
+    let mut p = TermPool::new();
+    let input = "
+        (define-cond-rule ite-neg-branch ((c Bool) (x Bool) (y Bool)) (= (not y) x) (ite c x y) (= c x))
+    ";
+    let rules = parse_rare_rules(&mut p, input);
+
+    assert_eq!(
+        &rules.0[0],
+        &rare::RewriteRule {
+            id: "ite-neg-branch".into(),
+            is_rec: false,
+            params: vec![
+                Parameter {
+                    id: "c".into(),
+                    sort: p.add(Term::Sort(Sort::Bool)),
+                    attrs: vec![],
+                },
+                Parameter {
+                    id: "x".into(),
+                    sort: p.add(Term::Sort(Sort::Bool)),
+                    attrs: vec![],
+                },
+                Parameter {
+                    id: "y".into(),
+                    sort: p.add(Term::Sort(Sort::Bool)),
+                    attrs: vec![],
+                },
+            ],
+            cond: Some(
+                parse_terms(
+                    &mut p,
+                    "(declare-const x Bool)(declare-const y Bool)",
+                    ["(= (not y) x)"]
+                )[0]
+                .clone()
+            ),
+            match_expr: parse_terms(
+                &mut p,
+                "(declare-const c Bool)(declare-const x Bool)(declare-const y Bool)",
+                ["(ite c x y)"]
+            )[0]
+            .clone(),
+            target_expr: parse_terms(
+                &mut p,
+                "(declare-const c Bool)(declare-const x Bool)",
+                ["(= c x)"]
+            )[0]
+            .clone(),
+        },
+    );
+}
+
+#[test]
+fn test_parse_define_rec_rule() {
+    let mut p = TermPool::new();
+    let input = "
+        (define-rule* bool-and-true ((xs Bool :list) (ys Bool :list)) (and xs true ys) (and xs ys))
+    ";
+    let rules = parse_rare_rules(&mut p, input);
+
+    assert_eq!(
+        &rules.0[0],
+        &rare::RewriteRule {
+            id: "bool-and-true".into(),
+            is_rec: true,
+            params: vec![
+                Parameter {
+                    id: "xs".into(),
+                    sort: p.add(Term::Sort(Sort::Bool)),
+                    attrs: vec![Attribute::List],
+                },
+                Parameter {
+                    id: "ys".into(),
+                    sort: p.add(Term::Sort(Sort::Bool)),
+                    attrs: vec![Attribute::List],
+                },
+            ],
+            cond: None,
+            match_expr: parse_terms(
+                &mut p,
+                "(declare-const xs Bool)(declare-const ys Bool)",
+                ["(and xs true ys)"]
+            )[0]
+            .clone(),
+            target_expr: parse_terms(
+                &mut p,
+                "(declare-const xs Bool)(declare-const ys Bool)",
+                ["(and xs ys)"]
+            )[0]
+            .clone(),
+        },
     );
 }

@@ -39,6 +39,7 @@ pub mod ast;
 pub mod benchmarking;
 pub mod checker;
 pub mod parser;
+pub mod rare;
 mod utils;
 
 use checker::error::CheckerError;

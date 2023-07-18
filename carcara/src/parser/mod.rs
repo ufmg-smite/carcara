@@ -9,6 +9,7 @@ pub use lexer::{Lexer, Position, Reserved, Token};
 
 use crate::{
     ast::*,
+    rare::{self, Attribute},
     utils::{HashCache, SymbolTable},
     CarcaraResult, Error,
 };
@@ -166,6 +167,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// Constructs and sort checks a variable term.
     fn make_var(&mut self, iden: Identifier) -> Result<Rc<Term>, ParserError> {
         let cached = HashCache::new(iden);
+
         let sort = match self.state.symbol_table.get(&cached) {
             Some(s) => s.clone(),
             None => return Err(ParserError::UndefinedIden(cached.unwrap())),
@@ -1195,6 +1197,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     pos,
                 )),
             },
+            "?" => Ok(Sort::Any),
             _ => match self.state.sort_declarations.get(&name) {
                 Some(arity) if *arity == args.len() => Ok(Sort::Atom(name, args)),
                 Some(arity) => Err(Error::Parser(
@@ -1205,5 +1208,90 @@ impl<'a, R: BufRead> Parser<'a, R> {
             },
         }?;
         Ok(Term::Sort(sort))
+    }
+
+    fn parse_rare_rules(&mut self) -> CarcaraResult<rare::RewritingRules> {
+        let mut rules = Vec::new();
+
+        while self.current_token != Token::Eof {
+            self.expect_token(Token::OpenParen)?;
+            match self.next_token()?.0 {
+                Token::ReservedWord(Reserved::DefineRule) => {
+                    rules.push(self.parse_define_rule(false)?);
+                }
+                Token::ReservedWord(Reserved::DefineCondRule) => {
+                    rules.push(self.parse_define_rule(true)?);
+                }
+                Token::ReservedWord(Reserved::DefineRecRule) => {
+                    let mut rule = self.parse_define_rule(false)?;
+                    rule.is_rec = true;
+                    rules.push(rule);
+                }
+                t => {
+                    return Err(Error::Parser(
+                        ParserError::UnexpectedToken(t),
+                        self.current_position,
+                    ));
+                }
+            }
+        }
+
+        Ok(rare::RewritingRules(rules))
+    }
+
+    fn parse_define_rule(&mut self, conditional: bool) -> CarcaraResult<rare::RewriteRule> {
+        let id = self.expect_symbol()?;
+        self.expect_token(Token::OpenParen)?;
+        let params = self.parse_sequence(Self::parse_parameter, false)?;
+
+        let cond = if conditional {
+            Some(self.parse_term()?)
+        } else {
+            None
+        };
+
+        let match_expr = self.parse_term()?;
+        let target_expr = self.parse_term()?;
+
+        self.expect_token(Token::CloseParen)?;
+
+        Ok(rare::RewriteRule {
+            id,
+            is_rec: false,
+            params,
+            cond,
+            match_expr,
+            target_expr,
+        })
+    }
+
+    fn parse_parameter(&mut self) -> CarcaraResult<rare::Parameter> {
+        self.expect_token(Token::OpenParen)?;
+
+        let id = self.expect_symbol()?;
+
+        // parse sort and add the id to the parser context
+        let sort = self.parse_sort()?;
+        let added: Rc<Term> = self.pool.add(sort.clone());
+        self.insert_sorted_var((id.clone(), added.clone()));
+
+        // Parse the attributes list e.g. :list
+        let attrs_as_tokens = self.read_until_close_parens()?;
+
+        let attrs = attrs_as_tokens
+            .into_iter()
+            .fold(Ok(vec![]), |mut acc, t| match t {
+                Token::Keyword(k) => {
+                    acc.as_mut().unwrap().push(Attribute::from(k));
+                    acc
+                }
+                Token::CloseParen => acc,
+                k => Err(ParserError::UnknownAttribute(format!("{}", k))),
+            })
+            .map_err(|e| Error::Parser(e.into(), self.current_position))?;
+
+        let param = rare::Parameter { id, sort: added, attrs };
+
+        Ok(param)
     }
 }

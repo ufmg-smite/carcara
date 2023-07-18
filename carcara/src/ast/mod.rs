@@ -332,6 +332,9 @@ pub enum Sort {
     ///
     /// The two associated terms are the sort arguments for this sort.
     Array(Rc<Term>, Rc<Term>),
+
+    /// RARE gradual type
+    Any,
 }
 
 /// A quantifier, either `forall` or `exists`.

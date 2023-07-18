@@ -413,6 +413,7 @@ impl fmt::Display for Sort {
             Sort::Real => write!(f, "Real"),
             Sort::String => write!(f, "String"),
             Sort::Array(x, y) => write_s_expr(f, "Array", &[x, y]),
+            Sort::Any => write!(f, "?"),
         }
     }
 }
