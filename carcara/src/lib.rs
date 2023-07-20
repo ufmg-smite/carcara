@@ -42,10 +42,11 @@ pub mod elaborator;
 pub mod parser;
 mod utils;
 
-use checker::error::CheckerError;
-use parser::ParserError;
-use parser::Position;
+use crate::benchmarking::{CollectResults, OnlineBenchmarkResults, RunMeasurement};
+use checker::{error::CheckerError, CheckerStatistics};
+use parser::{ParserError, Position};
 use std::io;
+use std::time::{Duration, Instant};
 use thiserror::Error;
 
 pub type CarcaraResult<T> = Result<T, Error>;
@@ -141,7 +142,10 @@ pub fn check<T: io::BufRead>(
     num_threads: usize,
 ) -> Result<bool, Error> {
     use crate::checker::Scheduler;
+    let mut run_measures: RunMeasurement = RunMeasurement::default();
 
+    // Parsing
+    let total = Instant::now();
     let (prelude, proof, pool) = parser::parse_instance_multithread(
         problem,
         proof,
@@ -149,13 +153,50 @@ pub fn check<T: io::BufRead>(
         options.expand_lets,
         options.allow_int_real_subtyping,
     )?;
+    run_measures.parsing = total.elapsed();
 
     let config = checker::Config::new()
         .strict(options.strict)
         .skip_unknown_rules(options.skip_unknown_rules)
         .lia_via_cvc5(options.lia_via_cvc5);
-    let (scheduler, schedule_context_usage) = Scheduler::new(num_threads, &proof);
-    checker::ParallelProofChecker::new(pool, config, &prelude).check(&proof, &scheduler)
+
+    // Checking
+    let checking = Instant::now();
+    let mut checker = checker::ParallelProofChecker::new(pool, config, &prelude);
+    let (scheduler, _) = Scheduler::new(num_threads, &proof);
+    if options.stats {
+        let mut checker_stats = CheckerStatistics {
+            file_name: "this",
+            elaboration_time: Duration::ZERO,
+            polyeq_time: Duration::ZERO,
+            assume_time: Duration::ZERO,
+            assume_core_time: Duration::ZERO,
+            results: OnlineBenchmarkResults::new(),
+        };
+        let res = checker.check_with_stats(&proof, &scheduler, &mut checker_stats);
+
+        run_measures.checking = checking.elapsed();
+        run_measures.total = total.elapsed();
+
+        checker_stats.results.add_run_measurement(
+            &("this".to_string(), 0),
+            RunMeasurement {
+                parsing: run_measures.parsing,
+                checking: run_measures.checking,
+                elaboration: checker_stats.elaboration_time,
+                total: run_measures.total,
+                polyeq: checker_stats.polyeq_time,
+                assume: checker_stats.assume_time,
+                assume_core: checker_stats.assume_core_time,
+            },
+        );
+        // Print the statistics
+        checker_stats.results.print(false);
+
+        res
+    } else {
+        checker.check(&proof, &scheduler)
+    }
 }
 
 pub fn check_and_elaborate<T: io::BufRead>(
@@ -163,6 +204,10 @@ pub fn check_and_elaborate<T: io::BufRead>(
     proof: T,
     options: CarcaraOptions,
 ) -> Result<(bool, ast::Proof), Error> {
+    let mut run_measures: RunMeasurement = RunMeasurement::default();
+
+    // Parsing
+    let total = Instant::now();
     let (prelude, proof, mut pool) = parser::parse_instance(
         problem,
         proof,
@@ -170,10 +215,47 @@ pub fn check_and_elaborate<T: io::BufRead>(
         options.expand_lets,
         options.allow_int_real_subtyping,
     )?;
+    run_measures.parsing = total.elapsed();
 
     let config = checker::Config::new()
         .strict(options.strict)
         .skip_unknown_rules(options.skip_unknown_rules)
         .lia_via_cvc5(options.lia_via_cvc5);
-    checker::ProofChecker::new(&mut pool, config, &prelude).check_and_elaborate(proof)
+
+    // Checking
+    let checking = Instant::now();
+    let mut checker = checker::ProofChecker::new(&mut pool, config, &prelude);
+    if options.stats {
+        let mut checker_stats = CheckerStatistics {
+            file_name: "this",
+            elaboration_time: Duration::ZERO,
+            polyeq_time: Duration::ZERO,
+            assume_time: Duration::ZERO,
+            assume_core_time: Duration::ZERO,
+            results: OnlineBenchmarkResults::new(),
+        };
+
+        let res = checker.check_and_elaborate_with_stats(proof, &mut checker_stats);
+        run_measures.checking = checking.elapsed();
+        run_measures.total = total.elapsed();
+
+        checker_stats.results.add_run_measurement(
+            &("this".to_string(), 0),
+            RunMeasurement {
+                parsing: run_measures.parsing,
+                checking: run_measures.checking,
+                elaboration: checker_stats.elaboration_time,
+                total: run_measures.total,
+                polyeq: checker_stats.polyeq_time,
+                assume: checker_stats.assume_time,
+                assume_core: checker_stats.assume_core_time,
+            },
+        );
+        // Print the statistics
+        checker_stats.results.print(false);
+
+        res
+    } else {
+        checker.check_and_elaborate(proof)
+    }
 }

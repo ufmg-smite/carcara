@@ -173,7 +173,6 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
                 strict: false,
                 skip_unknown_rules: false,
                 is_running_test: true,
-                statistics: None,
                 lia_via_cvc5: false,
             },
             &prelude,

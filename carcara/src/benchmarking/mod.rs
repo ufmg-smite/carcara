@@ -55,26 +55,24 @@ pub struct RunMeasurement {
     pub assume_core: Duration,
 }
 
-// Higher kinded types would be very useful here. Ideally, I would like `BenchmarkResults` to be
-// generic on any kind that implements `Metrics`, like `OnlineMetrics` or `OfflineMetrics`.
-#[derive(Debug, Default)]
-pub struct BenchmarkResults<ByRun, ByStep, ByRunF64, ByPolyeq> {
-    pub parsing: ByRun,
-    pub checking: ByRun,
-    pub elaborating: ByRun,
-    pub total_accounted_for: ByRun,
-    pub total: ByRun,
-    pub step_time: ByStep,
-    pub step_time_by_file: AHashMap<String, ByStep>,
-    pub step_time_by_rule: AHashMap<String, ByStep>,
+#[derive(Debug, Default, Clone)]
+pub struct OnlineBenchmarkResults {
+    pub parsing: OnlineMetrics<RunId>,
+    pub checking: OnlineMetrics<RunId>,
+    pub elaborating: OnlineMetrics<RunId>,
+    pub total_accounted_for: OnlineMetrics<RunId>,
+    pub total: OnlineMetrics<RunId>,
+    pub step_time: OnlineMetrics<StepId>,
+    pub step_time_by_file: AHashMap<String, OnlineMetrics<StepId>>,
+    pub step_time_by_rule: AHashMap<String, OnlineMetrics<StepId>>,
 
-    pub polyeq_time: ByRun,
-    pub polyeq_time_ratio: ByRunF64,
-    pub assume_time: ByRun,
-    pub assume_time_ratio: ByRunF64,
-    pub assume_core_time: ByRun,
+    pub polyeq_time: OnlineMetrics<RunId>,
+    pub polyeq_time_ratio: OnlineMetrics<RunId, f64>,
+    pub assume_time: OnlineMetrics<RunId>,
+    pub assume_time_ratio: OnlineMetrics<RunId, f64>,
+    pub assume_core_time: OnlineMetrics<RunId>,
 
-    pub polyeq_depths: ByPolyeq,
+    pub polyeq_depths: OnlineMetrics<(), usize>,
     pub num_assumes: usize,
     pub num_easy_assumes: usize,
 
@@ -82,27 +80,7 @@ pub struct BenchmarkResults<ByRun, ByStep, ByRunF64, ByPolyeq> {
     pub had_error: bool,
 }
 
-pub type OnlineBenchmarkResults = BenchmarkResults<
-    OnlineMetrics<RunId>,
-    OnlineMetrics<StepId>,
-    OnlineMetrics<RunId, f64>,
-    OnlineMetrics<(), usize>,
->;
-
-pub type OfflineBenchmarkResults = BenchmarkResults<
-    OfflineMetrics<RunId>,
-    OfflineMetrics<StepId>,
-    OfflineMetrics<RunId, f64>,
-    OfflineMetrics<(), usize>,
->;
-
-impl<ByRun, ByStep, ByRunF64, ByPolyeq> BenchmarkResults<ByRun, ByStep, ByRunF64, ByPolyeq>
-where
-    ByRun: Metrics<RunId, Duration> + Default,
-    ByStep: Metrics<StepId, Duration> + Default,
-    ByRunF64: Metrics<RunId, f64> + Default,
-    ByPolyeq: Metrics<(), usize> + Default,
-{
+impl OnlineBenchmarkResults {
     pub fn new() -> Self {
         Default::default()
     }
@@ -113,43 +91,159 @@ where
     }
 
     /// The time per run to completely parse the proof.
-    pub fn parsing(&self) -> &ByRun {
+    pub fn parsing(&self) -> &OnlineMetrics<RunId> {
         &self.parsing
     }
 
     /// The time per run to check all the steps in the proof.
-    pub fn checking(&self) -> &ByRun {
+    pub fn checking(&self) -> &OnlineMetrics<RunId> {
         &self.checking
     }
 
     /// The time per run to elaborate the proof.
-    pub fn elaborating(&self) -> &ByRun {
+    pub fn elaborating(&self) -> &OnlineMetrics<RunId> {
         &self.elaborating
     }
 
     /// The combined time per run to parse, check, and elaborate all the steps in the proof.
-    pub fn total_accounted_for(&self) -> &ByRun {
+    pub fn total_accounted_for(&self) -> &OnlineMetrics<RunId> {
         &self.total_accounted_for
     }
 
     /// The total time spent per run. Should be pretty similar to `total_accounted_for`.
-    pub fn total(&self) -> &ByRun {
+    pub fn total(&self) -> &OnlineMetrics<RunId> {
         &self.total
     }
 
     /// The time spent checking each step.
-    pub fn step_time(&self) -> &ByStep {
+    pub fn step_time(&self) -> &OnlineMetrics<StepId> {
         &self.step_time
     }
 
     /// For each file, the time spent checking each step in the file.
-    pub fn step_time_by_file(&self) -> &AHashMap<String, ByStep> {
+    pub fn step_time_by_file(&self) -> &AHashMap<String, OnlineMetrics<StepId>> {
         &self.step_time_by_file
     }
 
     /// For each rule, the time spent checking each step that uses that rule.
-    pub fn step_time_by_rule(&self) -> &AHashMap<String, ByStep> {
+    pub fn step_time_by_rule(&self) -> &AHashMap<String, OnlineMetrics<StepId>> {
         &self.step_time_by_rule
+    }
+
+    /// Prints the benchmark results
+    pub fn print(&self, sort_by_total: bool) {
+        let [parsing, checking, elaborating, accounted_for, total] = [
+            self.parsing(),
+            self.checking(),
+            self.elaborating(),
+            self.total_accounted_for(),
+            self.total(),
+        ]
+        .map(|m| {
+            if sort_by_total {
+                format!("{:#}", m)
+            } else {
+                format!("{}", m)
+            }
+        });
+
+        println!("parsing:             {}", parsing);
+        println!("checking:            {}", checking);
+        if !elaborating.is_empty() {
+            println!("elaborating:         {}", elaborating);
+        }
+        println!(
+            "on assume:           {} ({:.02}% of checking time)",
+            self.assume_time,
+            100.0 * self.assume_time.mean().as_secs_f64() / self.checking().mean().as_secs_f64(),
+        );
+        println!("on assume (core):    {}", self.assume_core_time);
+        println!("assume ratio:        {}", self.assume_time_ratio);
+        println!(
+            "on polyeq:           {} ({:.02}% of checking time)",
+            self.polyeq_time,
+            100.0 * self.polyeq_time.mean().as_secs_f64() / self.checking().mean().as_secs_f64(),
+        );
+        println!("polyeq ratio:        {}", self.polyeq_time_ratio);
+        println!("total accounted for: {}", accounted_for);
+        println!("total:               {}", total);
+
+        let data_by_rule = self.step_time_by_rule();
+        let mut data_by_rule: Vec<_> = data_by_rule.iter().collect();
+        data_by_rule.sort_by_key(|(_, m)| if sort_by_total { m.total() } else { m.mean() });
+
+        println!("by rule:");
+        for (rule, data) in data_by_rule {
+            print!("    {: <18}", rule);
+            if sort_by_total {
+                println!("{:#}", data)
+            } else {
+                println!("{}", data)
+            }
+        }
+
+        println!("worst cases:");
+        if !self.step_time().is_empty() {
+            let worst_step = self.step_time().max();
+            println!("    step:            {} ({:?})", worst_step.0, worst_step.1);
+        }
+
+        let worst_file_parsing = self.parsing().max();
+        println!(
+            "    file (parsing):  {} ({:?})",
+            worst_file_parsing.0 .0, worst_file_parsing.1
+        );
+
+        let worst_file_checking = self.checking().max();
+        println!(
+            "    file (checking): {} ({:?})",
+            worst_file_checking.0 .0, worst_file_checking.1
+        );
+
+        let worst_file_assume = self.assume_time_ratio.max();
+        println!(
+            "    file (assume):   {} ({:.04}%)",
+            worst_file_assume.0 .0,
+            worst_file_assume.1 * 100.0
+        );
+
+        let worst_file_polyeq = self.polyeq_time_ratio.max();
+        println!(
+            "    file (polyeq):   {} ({:.04}%)",
+            worst_file_polyeq.0 .0,
+            worst_file_polyeq.1 * 100.0
+        );
+
+        let worst_file_total = self.total().max();
+        println!(
+            "    file overall:    {} ({:?})",
+            worst_file_total.0 .0, worst_file_total.1
+        );
+
+        let num_hard_assumes = self.num_assumes - self.num_easy_assumes;
+        let percent_easy = (self.num_easy_assumes as f64) * 100.0 / (self.num_assumes as f64);
+        let percent_hard = (num_hard_assumes as f64) * 100.0 / (self.num_assumes as f64);
+        println!("          number of assumes: {}", self.num_assumes);
+        println!(
+            "                     (easy): {} ({:.02}%)",
+            self.num_easy_assumes, percent_easy
+        );
+        println!(
+            "                     (hard): {} ({:.02}%)",
+            num_hard_assumes, percent_hard
+        );
+
+        let depths = &self.polyeq_depths;
+        if !depths.is_empty() {
+            println!("           max polyeq depth: {}", depths.max().1);
+            println!("         total polyeq depth: {}", depths.total());
+            println!("    number of polyeq checks: {}", depths.count());
+            println!("                 mean depth: {:.4}", depths.mean());
+            println!(
+                "standard deviation of depth: {:.4}",
+                depths.standard_deviation()
+            );
+        }
     }
 }
 
@@ -250,6 +344,7 @@ impl CsvBenchmarkResults {
 }
 
 pub trait CollectResults {
+    fn new() -> Self;
     fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration);
     fn add_assume_measurement(&mut self, file: &str, id: &str, is_easy: bool, time: Duration);
     fn add_polyeq_depth(&mut self, depth: usize);
@@ -262,14 +357,11 @@ pub trait CollectResults {
         Self: Sized;
 }
 
-impl<ByRun, ByStep, ByRunF64, ByPolyeq> CollectResults
-    for BenchmarkResults<ByRun, ByStep, ByRunF64, ByPolyeq>
-where
-    ByRun: Metrics<RunId, Duration> + Default,
-    ByStep: Metrics<StepId, Duration> + Default,
-    ByRunF64: Metrics<RunId, f64> + Default,
-    ByPolyeq: Metrics<(), usize> + Default,
-{
+impl CollectResults for OnlineBenchmarkResults {
+    fn new() -> Self {
+        Default::default()
+    }
+
     fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration) {
         let file = file.to_owned();
         let rule = rule.to_owned();
@@ -361,6 +453,10 @@ where
 }
 
 impl CollectResults for CsvBenchmarkResults {
+    fn new() -> Self {
+        Default::default()
+    }
+
     fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration) {
         let id = StepId {
             file: file.into(),

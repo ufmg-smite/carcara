@@ -39,7 +39,6 @@ pub trait TPool {
     fn free_vars<'s, 't: 's>(&'s mut self, term: &'t Rc<Term>) -> AHashSet<Rc<Term>>;
 }
 
-#[allow(non_snake_case)]
 pub mod PrimitivePool {
     use crate::ast::Constant;
 
@@ -269,12 +268,11 @@ pub mod PrimitivePool {
     }
 }
 
-#[allow(non_snake_case)]
 pub mod AdvancedPools {
     use super::super::{Rc, Term};
     use super::{PrimitivePool, TPool};
     use ahash::AHashSet;
-    use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+    use std::sync::{Arc, RwLock};
 
     pub struct ContextPool {
         pub(crate) global_pool: Arc<PrimitivePool::TermPool>,
@@ -311,7 +309,7 @@ pub mod AdvancedPools {
 
         /// Takes a term and returns an `Rc` referencing it. Receive the pools references directly.
         fn add_by_ref<'d, 'c: 'd>(
-            ctx_pool: &mut RwLockWriteGuard<PrimitivePool::TermPool>,
+            ctx_pool: &mut PrimitivePool::TermPool,
             global_pool: &'d Arc<PrimitivePool::TermPool>,
             term: Term,
         ) -> Rc<Term> {
@@ -335,7 +333,7 @@ pub mod AdvancedPools {
 
         /// Returns the sort of this term exactly as the sort function. Receive the pools references directly.
         fn sort_by_ref<'d: 't, 'c: 'd, 't>(
-            ctx_pool: &RwLockWriteGuard<PrimitivePool::TermPool>,
+            ctx_pool: &PrimitivePool::TermPool,
             global_pool: &'d Arc<PrimitivePool::TermPool>,
             term: &'t Rc<Term>,
         ) -> Rc<Term> {
@@ -390,7 +388,7 @@ pub mod AdvancedPools {
 
         fn free_vars<'s, 't: 's>(&'s mut self, term: &'t Rc<Term>) -> AHashSet<Rc<Term>> {
             fn internal<'d: 't, 'c: 'd, 't>(
-                ctx_pool: &'d mut RwLockWriteGuard<'_, PrimitivePool::TermPool>,
+                ctx_pool: &'d mut PrimitivePool::TermPool,
                 global_pool: &'c Arc<PrimitivePool::TermPool>,
                 term: &'t Rc<Term>,
             ) -> &'t AHashSet<Rc<Term>> {
@@ -516,7 +514,7 @@ pub mod AdvancedPools {
         /// Takes a term and returns an `Rc` referencing it. Receive the pools references directly.
         fn add_by_ref<'d, 'c: 'd>(
             local_pool: &'d mut PrimitivePool::TermPool,
-            ctx_pool: &RwLockReadGuard<PrimitivePool::TermPool>,
+            ctx_pool: &PrimitivePool::TermPool,
             global_pool: &'d Arc<PrimitivePool::TermPool>,
             term: Term,
         ) -> Rc<Term> {
@@ -545,7 +543,7 @@ pub mod AdvancedPools {
         /// Returns the sort of this term exactly as the sort function. Receive the pools references directly.
         fn sort_by_ref<'d: 't, 'c: 'd, 't>(
             local_pool: &'d mut PrimitivePool::TermPool,
-            ctx_pool: &RwLockReadGuard<PrimitivePool::TermPool>,
+            ctx_pool: &PrimitivePool::TermPool,
             global_pool: &'d Arc<PrimitivePool::TermPool>,
             term: &'t Rc<Term>,
         ) -> Rc<Term> {
@@ -608,7 +606,7 @@ pub mod AdvancedPools {
         fn free_vars<'s, 't: 's>(&'s mut self, term: &'t Rc<Term>) -> AHashSet<Rc<Term>> {
             fn internal<'d: 't, 'c: 'd, 't>(
                 local_pool: &'d mut PrimitivePool::TermPool,
-                ctx_pool: &'t RwLockReadGuard<'t, PrimitivePool::TermPool>,
+                ctx_pool: &'t PrimitivePool::TermPool,
                 global_pool: &'d Arc<PrimitivePool::TermPool>,
                 term: &'t Rc<Term>,
             ) -> &'t AHashSet<Rc<Term>> {

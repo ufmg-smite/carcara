@@ -1,20 +1,20 @@
 use super::error::CheckerError;
-use super::rules::{Premise, Rule, RuleArgs, RuleResult};
+use super::rules::{Premise, RuleArgs, RuleResult};
 use super::scheduler::{iter::ScheduleIter, Scheduler};
-use super::{lia_generic, CheckerStatistics, Config};
+use super::{lia_generic, Config};
+use crate::benchmarking::{CollectResults, OnlineBenchmarkResults};
+use crate::checker::CheckerStatistics;
 use crate::{
     ast::{AdvancedPools::LocalPool, *},
     CarcaraResult, Error,
 };
 use ahash::AHashSet;
 use std::{
+    ops::ControlFlow,
     sync::{Arc, RwLock},
     thread,
     time::{Duration, Instant},
 };
-
-unsafe impl Sync for CheckerStatistics<'_> {}
-unsafe impl Send for CheckerStatistics<'_> {}
 
 pub struct ParallelProofChecker<'c> {
     pool: Arc<PrimitivePool::TermPool>,
@@ -41,9 +41,8 @@ impl<'c> ParallelProofChecker<'c> {
         }
     }
 
-    /// Copies the proof checker and instantiate parallel fields
-    /// TODO: Change function name
-    pub fn parallelize_self(&self) -> Self {
+    /// Copies the proof checker and instantiate parallel fields to be shared between threads
+    pub fn share(&self) -> Self {
         ParallelProofChecker {
             pool: self.pool.clone(),
             config: self.config.clone(),
@@ -71,17 +70,15 @@ impl<'c> ParallelProofChecker<'c> {
                 .into_iter()
                 .enumerate()
                 .map(|(i, schedule)| {
-                    // Creates a local statistics collector, allowing the collection
-                    // of this threads statistics and then the merge
-                    let mut local_stats = None;
-                    let mut local_self = self.parallelize_self();
+                    // Shares the self between threads
+                    let mut local_self = self.share();
                     let mut local_pool = LocalPool::from_previous(&context_pool);
                     let should_abort = premature_abort.clone();
 
                     thread::Builder::new()
                         .name(format!("worker-{i}"))
                         .stack_size(STACK_SIZE)
-                        .spawn_scoped(s, move || -> CarcaraResult<(bool, bool, Option<()>)> {
+                        .spawn_scoped(s, move || -> CarcaraResult<(bool, bool)> {
                             let mut iter = schedule.iter(&proof.commands[..]);
 
                             while let Some(command) = iter.next() {
@@ -105,7 +102,9 @@ impl<'c> ParallelProofChecker<'c> {
                                                 previous_command,
                                                 &iter,
                                                 &mut local_pool,
-                                                &mut local_stats,
+                                                None::<
+                                                    &mut CheckerStatistics<OnlineBenchmarkResults>,
+                                                >,
                                             )
                                             .map_err(|e| {
                                                 // Signalize to other threads to stop the proof checking
@@ -122,7 +121,6 @@ impl<'c> ParallelProofChecker<'c> {
                                         }
                                     }
                                     ProofCommand::Subproof(s) => {
-                                        let time = Instant::now();
                                         let step_id = command.id();
 
                                         local_self
@@ -148,7 +146,7 @@ impl<'c> ParallelProofChecker<'c> {
                                             term,
                                             &proof.premises,
                                             &iter,
-                                            &mut local_stats,
+                                            None::<&mut CheckerStatistics<OnlineBenchmarkResults>>,
                                         ) {
                                             // Signalize to other threads to stop the proof checking
                                             *should_abort.write().unwrap() = true;
@@ -175,9 +173,9 @@ impl<'c> ParallelProofChecker<'c> {
                             // Returns Ok(reached empty clause, isHoley, current thread statistics)
                             if local_self.config.is_running_test || local_self.reached_empty_clause
                             {
-                                Ok((true, local_self.is_holey, Some(())))
+                                Ok((true, local_self.is_holey))
                             } else {
-                                Ok((false, local_self.is_holey, Some(())))
+                                Ok((false, local_self.is_holey))
                             }
                         })
                         .unwrap()
@@ -192,9 +190,212 @@ impl<'c> ParallelProofChecker<'c> {
             threads
                 .into_iter()
                 .map(|t| t.join().unwrap())
+                .try_for_each(|opt| {
+                    match opt {
+                        Ok((_reached, _holey)) => {
+                            // Mask the result booleans
+                            (reached, holey) = (reached | _reached, holey | _holey);
+                            ControlFlow::Continue(())
+                        }
+                        Err(e) => {
+                            err = Err(e);
+                            ControlFlow::Break(())
+                        }
+                    }
+                });
+
+            // If an error happend
+            if let Err(x) = err {
+                return Err(x);
+            }
+
+            if reached {
+                Ok(holey)
+            } else {
+                Err(Error::DoesNotReachEmptyClause)
+            }
+        })
+    }
+
+    pub fn check_with_stats<'s, 'p, 'a, CR: CollectResults + Send + Default>(
+        &'s mut self,
+        proof: &'p Proof,
+        scheduler: &'s Scheduler,
+        stats: &'s mut CheckerStatistics<'a, CR>,
+    ) -> CarcaraResult<bool> {
+        // Used to estimulate threads to abort prematurely (only happens when a
+        // thread already found out an invalid step)
+        let premature_abort = Arc::new(RwLock::new(false));
+        let context_pool = AdvancedPools::ContextPool::from_global(&self.pool);
+        // TODO: Add stack size flag
+        const STACK_SIZE: usize = 128 * 1024 * 1024;
+        //
+        thread::scope(|s| {
+            let threads: Vec<_> = (&scheduler.loads)
+                .into_iter()
+                .enumerate()
+                .map(|(i, schedule)| {
+                    let mut local_stats = CheckerStatistics {
+                        file_name: "",
+                        elaboration_time: Duration::ZERO,
+                        polyeq_time: Duration::ZERO,
+                        assume_time: Duration::ZERO,
+                        assume_core_time: Duration::ZERO,
+                        results: CR::new(),
+                    };
+                    // Shares the proof checker between threads
+                    let mut local_self = self.share();
+                    let mut local_pool = LocalPool::from_previous(&context_pool);
+                    let should_abort = premature_abort.clone();
+
+                    thread::Builder::new()
+                        .name(format!("worker-{i}"))
+                        .stack_size(STACK_SIZE)
+                        .spawn_scoped(
+                            s,
+                            move || -> CarcaraResult<(bool, bool, CheckerStatistics<CR>)> {
+                                let mut iter = schedule.iter(&proof.commands[..]);
+
+                                while let Some(command) = iter.next() {
+                                    match command {
+                                        ProofCommand::Step(step) => {
+                                            // If this step ends a subproof, it might need to implicitly reference the
+                                            // previous command in the subproof
+                                            let previous_command = if iter.is_end_step() {
+                                                let subproof = iter.current_subproof().unwrap();
+                                                let index = subproof.len() - 2;
+                                                subproof.get(index).map(|command| {
+                                                    Premise::new((iter.depth(), index), command)
+                                                })
+                                            } else {
+                                                None
+                                            };
+
+                                            local_self
+                                                .check_step(
+                                                    step,
+                                                    previous_command,
+                                                    &iter,
+                                                    &mut local_pool,
+                                                    Some(&mut local_stats),
+                                                )
+                                                .map_err(|e| {
+                                                    // Signalize to other threads to stop the proof checking
+                                                    *should_abort.write().unwrap() = true;
+                                                    Error::Checker {
+                                                        inner: e,
+                                                        rule: step.rule.clone(),
+                                                        step: step.id.clone(),
+                                                    }
+                                                })?;
+
+                                            if step.clause.is_empty() {
+                                                local_self.reached_empty_clause = true;
+                                            }
+                                        }
+                                        ProofCommand::Subproof(s) => {
+                                            let time = Instant::now();
+                                            let step_id = command.id();
+
+                                            local_self
+                                                .context
+                                                .push(
+                                                    &mut local_pool,
+                                                    &s.assignment_args,
+                                                    &s.variable_args,
+                                                )
+                                                .map_err(|e| {
+                                                    // Signalize to other threads to stop the proof checking
+                                                    *should_abort.write().unwrap() = true;
+                                                    Error::Checker {
+                                                        inner: e.into(),
+                                                        rule: "anchor".into(),
+                                                        step: step_id.to_owned(),
+                                                    }
+                                                })?;
+
+                                            // Collects statistics
+                                            let rule_name = match s.commands.last() {
+                                                Some(ProofCommand::Step(step)) => {
+                                                    format!("anchor({})", &step.rule)
+                                                }
+                                                _ => "anchor".to_owned(),
+                                            };
+
+                                            local_stats.results.add_step_measurement(
+                                                local_stats.file_name,
+                                                step_id,
+                                                &rule_name,
+                                                time.elapsed(),
+                                            );
+                                        }
+                                        ProofCommand::Assume { id, term } => {
+                                            if !local_self.check_assume(
+                                                id,
+                                                term,
+                                                &proof.premises,
+                                                &iter,
+                                                Some(&mut local_stats),
+                                            ) {
+                                                // Signalize to other threads to stop the proof checking
+                                                *should_abort.write().unwrap() = true;
+                                                return Err(Error::Checker {
+                                                    inner: CheckerError::Assume(term.clone()),
+                                                    rule: "assume".into(),
+                                                    step: id.clone(),
+                                                });
+                                            }
+                                        }
+                                        ProofCommand::Closing => {
+                                            // If this is the last command of a subproof, we have to pop off the subproof
+                                            // commands of the stack. The parser already ensures that the last command
+                                            // in a subproof is always a `step` command
+                                            local_self.context.pop();
+                                        }
+                                    }
+                                    // Verify if any of the other threads found an error and abort in case of positive
+                                    if *should_abort.read().unwrap() {
+                                        break;
+                                    }
+                                }
+
+                                // Returns Ok(reached empty clause, isHoley, current thread statistics)
+                                if local_self.config.is_running_test
+                                    || local_self.reached_empty_clause
+                                {
+                                    Ok((true, local_self.is_holey, local_stats))
+                                } else {
+                                    Ok((false, local_self.is_holey, local_stats))
+                                }
+                            },
+                        )
+                        .unwrap()
+                })
+                .collect();
+
+            // Unify the results of all threads and generate the final result based on them
+            let (mut reached, mut holey) = (false, false);
+            let mut err: Result<_, Error> = Ok(());
+
+            // Wait until the threads finish and merge the results and statistics
+            threads
+                .into_iter()
+                .map(|t| t.join().unwrap())
                 .for_each(|opt| {
                     match opt {
-                        Ok((_reached, _holey, local_stats)) => {
+                        Ok((_reached, _holey, mut local_stats)) => {
+                            // Combine the statistics
+                            // Takes the external and local benchmark results to local variables and combine them
+                            let main = std::mem::take(&mut stats.results);
+                            let to_merge = std::mem::take(&mut local_stats.results);
+                            stats.results = CR::combine(main, to_merge);
+
+                            // Make sure other times are updated
+                            stats.elaboration_time += local_stats.elaboration_time;
+                            stats.polyeq_time += local_stats.polyeq_time;
+                            stats.assume_time += local_stats.assume_time;
+                            stats.assume_core_time += local_stats.assume_core_time;
+
                             // Mask the result booleans
                             (reached, holey) = (reached | _reached, holey | _holey);
                         }
@@ -221,14 +422,13 @@ impl<'c> ParallelProofChecker<'c> {
         })
     }
 
-    // TODO: Remove statistics as an argument since we are going to pass it through config in the local_self
-    fn check_assume(
+    fn check_assume<'a, CR: CollectResults + Send + Default>(
         &mut self,
         id: &str,
         term: &Rc<Term>,
         premises: &AHashSet<Rc<Term>>,
         iter: &ScheduleIter,
-        statistics: &mut Option<CheckerStatistics>,
+        mut stats: Option<&'a mut CheckerStatistics<CR>>,
     ) -> bool {
         let time = Instant::now();
 
@@ -242,6 +442,12 @@ impl<'c> ParallelProofChecker<'c> {
         }
 
         if premises.contains(term) {
+            if let Some(s) = stats {
+                let time = time.elapsed();
+                s.assume_time += time;
+                s.results
+                    .add_assume_measurement(s.file_name, id, true, time);
+            }
             return true;
         }
 
@@ -257,6 +463,9 @@ impl<'c> ParallelProofChecker<'c> {
             let mut this_polyeq_time = Duration::ZERO;
             let (result, depth) = tracing_polyeq(term, p, &mut this_polyeq_time);
             polyeq_time += this_polyeq_time;
+            if let Some(s) = &mut stats {
+                s.results.add_polyeq_depth(depth);
+            }
             if result {
                 core_time = this_polyeq_time;
                 found = Some(p.clone());
@@ -264,19 +473,29 @@ impl<'c> ParallelProofChecker<'c> {
             }
         }
 
-        let Some(_) = found else { return false };
+        if found.is_none() {
+            return false;
+        }
+
+        if let Some(s) = stats {
+            let time = time.elapsed();
+            s.assume_time += time;
+            s.assume_core_time += core_time;
+            s.polyeq_time += polyeq_time;
+            s.results
+                .add_assume_measurement(s.file_name, id, false, time);
+        }
 
         true
     }
 
-    // TODO: Ditto
-    fn check_step<'a>(
+    fn check_step<'a, CR: CollectResults + Send + Default>(
         &mut self,
         step: &'a ProofStep,
         previous_command: Option<Premise<'a>>,
         iter: &'a ScheduleIter<'a>,
         pool: &mut TermPool,
-        statistics: &mut Option<CheckerStatistics>,
+        stats: Option<&'a mut CheckerStatistics<CR>>,
     ) -> RuleResult {
         let time = Instant::now();
         let mut polyeq_time = Duration::ZERO;
@@ -291,7 +510,7 @@ impl<'c> ParallelProofChecker<'c> {
                 self.is_holey = true;
             }
         } else {
-            let rule = match Self::get_rule(&step.rule, self.config.strict) {
+            let rule = match super::ProofChecker::get_rule(&step.rule, self.config.strict) {
                 Some(r) => r,
                 None if self.config.skip_unknown_rules => {
                     self.is_holey = true;
@@ -332,124 +551,12 @@ impl<'c> ParallelProofChecker<'c> {
             rule(rule_args)?;
         }
 
+        if let Some(s) = stats {
+            let time = time.elapsed();
+            s.results
+                .add_step_measurement(s.file_name, &step.id, &step.rule, time);
+            s.polyeq_time += polyeq_time;
+        }
         Ok(())
-    }
-
-    pub fn get_rule(rule_name: &str, strict: bool) -> Option<Rule> {
-        use super::rules::*;
-
-        Some(match rule_name {
-            "true" => tautology::r#true,
-            "false" => tautology::r#false,
-            "not_not" => tautology::not_not,
-            "and_pos" => tautology::and_pos,
-            "and_neg" => tautology::and_neg,
-            "or_pos" => tautology::or_pos,
-            "or_neg" => tautology::or_neg,
-            "xor_pos1" => tautology::xor_pos1,
-            "xor_pos2" => tautology::xor_pos2,
-            "xor_neg1" => tautology::xor_neg1,
-            "xor_neg2" => tautology::xor_neg2,
-            "implies_pos" => tautology::implies_pos,
-            "implies_neg1" => tautology::implies_neg1,
-            "implies_neg2" => tautology::implies_neg2,
-            "equiv_pos1" => tautology::equiv_pos1,
-            "equiv_pos2" => tautology::equiv_pos2,
-            "equiv_neg1" => tautology::equiv_neg1,
-            "equiv_neg2" => tautology::equiv_neg2,
-            "ite_pos1" => tautology::ite_pos1,
-            "ite_pos2" => tautology::ite_pos2,
-            "ite_neg1" => tautology::ite_neg1,
-            "ite_neg2" => tautology::ite_neg2,
-            "eq_reflexive" => reflexivity::eq_reflexive,
-            "eq_transitive" => transitivity::eq_transitive,
-            "eq_congruent" => congruence::eq_congruent,
-            "eq_congruent_pred" => congruence::eq_congruent_pred,
-            "distinct_elim" => clausification::distinct_elim,
-            "la_rw_eq" => linear_arithmetic::la_rw_eq,
-            "la_generic" => linear_arithmetic::la_generic,
-            "la_disequality" => linear_arithmetic::la_disequality,
-            "la_totality" => linear_arithmetic::la_totality,
-            "la_tautology" => linear_arithmetic::la_tautology,
-            "forall_inst" => quantifier::forall_inst,
-            "qnt_join" => quantifier::qnt_join,
-            "qnt_rm_unused" => quantifier::qnt_rm_unused,
-            "resolution" | "th_resolution" if strict => resolution::resolution_with_args,
-            "resolution" | "th_resolution" => resolution::resolution,
-            "refl" if strict => reflexivity::strict_refl,
-            "refl" => reflexivity::refl,
-            "trans" => transitivity::trans,
-            "cong" => congruence::cong,
-            "ho_cong" => congruence::ho_cong,
-            "and" => clausification::and,
-            "tautology" => resolution::tautology,
-            "not_or" => clausification::not_or,
-            "or" => clausification::or,
-            "not_and" => clausification::not_and,
-            "xor1" => clausification::xor1,
-            "xor2" => clausification::xor2,
-            "not_xor1" => clausification::not_xor1,
-            "not_xor2" => clausification::not_xor2,
-            "implies" => clausification::implies,
-            "not_implies1" => clausification::not_implies1,
-            "not_implies2" => clausification::not_implies2,
-            "equiv1" => tautology::equiv1,
-            "equiv2" => tautology::equiv2,
-            "not_equiv1" => tautology::not_equiv1,
-            "not_equiv2" => tautology::not_equiv2,
-            "ite1" => tautology::ite1,
-            "ite2" => tautology::ite2,
-            "not_ite1" => tautology::not_ite1,
-            "not_ite2" => tautology::not_ite2,
-            "ite_intro" => tautology::ite_intro,
-            "contraction" => resolution::contraction,
-            "connective_def" => tautology::connective_def,
-            "ite_simplify" => simplification::ite_simplify,
-            "eq_simplify" => simplification::eq_simplify,
-            "and_simplify" => simplification::and_simplify,
-            "or_simplify" => simplification::or_simplify,
-            "not_simplify" => simplification::not_simplify,
-            "implies_simplify" => simplification::implies_simplify,
-            "equiv_simplify" => simplification::equiv_simplify,
-            "bool_simplify" => simplification::bool_simplify,
-            "qnt_simplify" => simplification::qnt_simplify,
-            "div_simplify" => simplification::div_simplify,
-            "prod_simplify" => simplification::prod_simplify,
-            // Despite being separate rules in the specification, proofs generated by veriT don't
-            // differentiate between `unary_minus_simplify` and `minus_simplify`. To account for
-            // that, `simplification::minus_simplify` implements both rules in the same function.
-            "unary_minus_simplify" | "minus_simplify" => simplification::minus_simplify,
-            "sum_simplify" => simplification::sum_simplify,
-            "comp_simplify" => simplification::comp_simplify,
-            "nary_elim" => clausification::nary_elim,
-            "ac_simp" => simplification::ac_simp,
-            "bfun_elim" => clausification::bfun_elim,
-            "bind" => subproof::bind,
-            "qnt_cnf" => quantifier::qnt_cnf,
-            "subproof" => subproof::subproof,
-            "let" => subproof::r#let,
-            "onepoint" => subproof::onepoint,
-            "sko_ex" => subproof::sko_ex,
-            "sko_forall" => subproof::sko_forall,
-            "reordering" => extras::reordering,
-            "symm" => extras::symm,
-            "not_symm" => extras::not_symm,
-            "eq_symmetric" => extras::eq_symmetric,
-            "or_intro" => extras::or_intro,
-            "bind_let" => extras::bind_let,
-            "la_mult_pos" => extras::la_mult_pos,
-            "la_mult_neg" => extras::la_mult_neg,
-
-            // Special rules that always check as valid, and are used to indicate holes in the
-            // proof.
-            "hole" => |_| Ok(()),
-
-            // The Alethe specification does not yet describe how this more strict version of the
-            // resolution rule will be called. Until that is decided and added to the specification,
-            // we define a new specialized rule that calls it
-            "strict_resolution" => resolution::strict_resolution,
-
-            _ => return None,
-        })
     }
 }
