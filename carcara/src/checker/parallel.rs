@@ -5,7 +5,7 @@ use super::{lia_generic, Config};
 use crate::benchmarking::{CollectResults, OnlineBenchmarkResults};
 use crate::checker::CheckerStatistics;
 use crate::{
-    ast::{AdvancedPools::LocalPool, *},
+    ast::{pool::advanced::*, *},
     CarcaraResult, Error,
 };
 use ahash::AHashSet;
@@ -61,7 +61,7 @@ impl<'c> ParallelProofChecker<'c> {
         // Used to estimulate threads to abort prematurely (only happens when a
         // thread already found out an invalid step)
         let premature_abort = Arc::new(RwLock::new(false));
-        let context_pool = AdvancedPools::ContextPool::from_global(&self.pool);
+        let context_pool = ContextPool::from_global(&self.pool);
         // TODO: Add stack size flag
         const STACK_SIZE: usize = 128 * 1024 * 1024;
         //
@@ -226,7 +226,7 @@ impl<'c> ParallelProofChecker<'c> {
         // Used to estimulate threads to abort prematurely (only happens when a
         // thread already found out an invalid step)
         let premature_abort = Arc::new(RwLock::new(false));
-        let context_pool = AdvancedPools::ContextPool::from_global(&self.pool);
+        let context_pool = ContextPool::from_global(&self.pool);
         // TODO: Add stack size flag
         const STACK_SIZE: usize = 128 * 1024 * 1024;
         //
