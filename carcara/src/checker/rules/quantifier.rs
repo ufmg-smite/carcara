@@ -107,7 +107,7 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
 
 /// Converts a term into negation normal form, expanding all connectives.
 fn negation_normal_form(
-    pool: &mut dyn TPool,
+    pool: &mut dyn TermPool,
     term: &Rc<Term>,
     polarity: bool,
     cache: &mut AHashMap<(Rc<Term>, bool), Rc<Term>>,
@@ -216,7 +216,7 @@ fn distribute(formulas: &[CnfFormula]) -> CnfFormula {
 
 /// Prenex all universal quantifiers in a term. This doesn't prenex existential quantifiers. This
 /// assumes the term is in negation normal form.
-fn prenex_forall<C>(pool: &mut dyn TPool, acc: &mut C, term: &Rc<Term>) -> Rc<Term>
+fn prenex_forall<C>(pool: &mut dyn TermPool, acc: &mut C, term: &Rc<Term>) -> Rc<Term>
 where
     C: Extend<SortedVar>,
 {
@@ -464,7 +464,7 @@ mod tests {
         use super::*;
         use crate::parser::tests::*;
 
-        fn to_cnf_term(pool: &mut dyn TPool, term: &Rc<Term>) -> Rc<Term> {
+        fn to_cnf_term(pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term> {
             let nnf = negation_normal_form(pool, term, true, &mut AHashMap::new());
             let mut bindings = Vec::new();
             let prenexed = prenex_forall(pool, &mut bindings, &nnf);

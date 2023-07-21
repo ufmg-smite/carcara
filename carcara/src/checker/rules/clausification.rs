@@ -206,7 +206,12 @@ pub fn nary_elim(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
     /// A function to expand terms that fall in the right or left associative cases. For example,
     /// the term `(=> p q r s)` will be expanded into the term `(=> p (=> q (=> r s)))`.
-    fn expand_assoc(pool: &mut dyn TPool, op: Operator, args: &[Rc<Term>], case: Case) -> Rc<Term> {
+    fn expand_assoc(
+        pool: &mut dyn TermPool,
+        op: Operator,
+        args: &[Rc<Term>],
+        case: Case,
+    ) -> Rc<Term> {
         let (head, tail) = match args {
             [] => unreachable!(),
             [t] => return t.clone(),
@@ -259,7 +264,7 @@ pub fn nary_elim(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
 /// The first simplification step for `bfun_elim`, that expands quantifiers over boolean variables.
 fn bfun_elim_first_step(
-    pool: &mut dyn TPool,
+    pool: &mut dyn TermPool,
     bindigns: &[SortedVar],
     term: &Rc<Term>,
     acc: &mut Vec<Rc<Term>>,
@@ -283,7 +288,7 @@ fn bfun_elim_first_step(
 /// The second simplification step for `bfun_elim`, that expands function applications over
 /// non-constant boolean arguments into `ite` terms.
 fn bfun_elim_second_step(
-    pool: &mut dyn TPool,
+    pool: &mut dyn TermPool,
     func: &Rc<Term>,
     args: &[Rc<Term>],
     processed: usize,
@@ -313,7 +318,7 @@ fn bfun_elim_second_step(
 
 /// Applies the simplification steps for the `bfun_elim` rule.
 fn apply_bfun_elim(
-    pool: &mut dyn TPool,
+    pool: &mut dyn TermPool,
     term: &Rc<Term>,
     cache: &mut AHashMap<Rc<Term>, Rc<Term>>,
 ) -> Result<Rc<Term>, SubstitutionError> {

@@ -45,7 +45,7 @@ impl<'a> ClauseCollection<'a> for AHashSet<ResolutionTerm<'a>> {
 }
 
 /// Undoes the transformation done by `Rc<Term>::remove_all_negations`.
-fn unremove_all_negations(pool: &mut dyn TPool, (n, term): ResolutionTerm) -> Rc<Term> {
+fn unremove_all_negations(pool: &mut dyn TermPool, (n, term): ResolutionTerm) -> Rc<Term> {
     let mut term = term.clone();
     for _ in 0..n {
         term = build_term!(pool, (not { term }));
@@ -92,7 +92,7 @@ struct ResolutionTrace {
 fn greedy_resolution(
     conclusion: &[Rc<Term>],
     premises: &[Premise],
-    pool: &mut dyn TPool,
+    pool: &mut dyn TermPool,
     tracing: bool,
 ) -> Result<ResolutionTrace, CheckerError> {
     // If we are elaborating, we record which pivot was found for each binary resolution step, so we
@@ -339,7 +339,7 @@ pub fn strict_resolution(
 fn apply_generic_resolution<'a, C: ClauseCollection<'a>>(
     premises: &'a [Premise],
     args: &'a [ProofArg],
-    pool: &mut dyn TPool,
+    pool: &mut dyn TermPool,
 ) -> Result<C, CheckerError> {
     assert_num_premises(premises, 1..)?;
     let num_steps = premises.len() - 1;
@@ -375,7 +375,7 @@ fn apply_generic_resolution<'a, C: ClauseCollection<'a>>(
 }
 
 fn binary_resolution<'a, C: ClauseCollection<'a>>(
-    pool: &mut dyn TPool,
+    pool: &mut dyn TermPool,
     current: &mut C,
     next: &'a [Rc<Term>],
     pivot: ResolutionTerm<'a>,

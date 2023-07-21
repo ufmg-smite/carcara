@@ -75,7 +75,7 @@ pub fn strict_refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> Rule
 
 fn elaborate_equality(
     elaborator: &mut Elaborator,
-    pool: &mut dyn TPool,
+    pool: &mut dyn TermPool,
     left: &Rc<Term>,
     right: &Rc<Term>,
     id: &str,

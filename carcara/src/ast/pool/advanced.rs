@@ -1,5 +1,5 @@
 use super::super::{Rc, Term};
-use super::{PrimitivePool, TPool};
+use super::{PrimitivePool, TermPool};
 use ahash::AHashSet;
 use std::sync::{Arc, RwLock};
 
@@ -76,7 +76,7 @@ impl ContextPool {
     }
 }
 
-impl TPool for ContextPool {
+impl TermPool for ContextPool {
     fn bool_true(&self) -> Rc<Term> {
         self.global_pool.bool_true.clone()
     }
@@ -285,7 +285,7 @@ impl LocalPool {
     }
 }
 
-impl TPool for LocalPool {
+impl TermPool for LocalPool {
     fn bool_true(&self) -> Rc<Term> {
         self.ctx_pool.global_pool.bool_true.clone()
     }

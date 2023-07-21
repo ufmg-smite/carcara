@@ -7,7 +7,7 @@ use crate::ast::pool::advanced::LocalPool;
 
 const ERROR_MESSAGE: &str = "parser error during test";
 
-pub fn parse_terms<const N: usize, P: TPool>(
+pub fn parse_terms<const N: usize, P: TermPool>(
     pool: &mut P,
     definitions: &str,
     terms: [&str; N],
@@ -22,7 +22,7 @@ pub fn parse_terms<const N: usize, P: TPool>(
     })
 }
 
-pub fn parse_term<P: TPool>(pool: &mut P, input: &str) -> Rc<Term> {
+pub fn parse_term<P: TermPool>(pool: &mut P, input: &str) -> Rc<Term> {
     Parser::new(pool, input.as_bytes(), true, false, false)
         .and_then(|mut parser| parser.parse_term())
         .expect(ERROR_MESSAGE)
@@ -38,7 +38,7 @@ pub fn parse_term_err(input: &str) -> Error {
 }
 
 /// Parses a proof from a `&str`. Panics if any error is encountered.
-pub fn parse_proof<P: TPool>(pool: &mut P, input: &str) -> Proof {
+pub fn parse_proof<P: TermPool>(pool: &mut P, input: &str) -> Proof {
     let commands = Parser::new(pool, input.as_bytes(), true, false, false)
         .expect(ERROR_MESSAGE)
         .parse_proof()
@@ -46,7 +46,7 @@ pub fn parse_proof<P: TPool>(pool: &mut P, input: &str) -> Proof {
     Proof { premises: AHashSet::new(), commands }
 }
 
-fn run_parser_tests<P: TPool>(pool: &mut P, cases: &[(&str, Rc<Term>)]) {
+fn run_parser_tests<P: TermPool>(pool: &mut P, cases: &[(&str, Rc<Term>)]) {
     for (case, expected) in cases {
         let got = parse_term(pool, case);
         assert_eq!(expected, &got);

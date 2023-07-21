@@ -22,7 +22,7 @@ use std::{io::BufRead, str::FromStr};
 ///
 /// This returns the parsed proof, as well as the `TermPool` used in parsing. Can take any type that
 /// implements `BufRead`.
-pub fn parse_instance<T: BufRead, P: TPool + Default>(
+pub fn parse_instance<T: BufRead, P: TermPool + Default>(
     problem: T,
     proof: T,
     apply_function_defs: bool,
@@ -92,7 +92,7 @@ pub struct Parser<'a, R, P> {
     allow_int_real_subtyping: bool,
 }
 
-impl<'a, R: BufRead, P: TPool> Parser<'a, R, P> {
+impl<'a, R: BufRead, P: TermPool> Parser<'a, R, P> {
     /// Constructs a new `Parser` from a type that implements `BufRead`.
     ///
     /// This operation can fail if there is an IO or lexer error on the first token.

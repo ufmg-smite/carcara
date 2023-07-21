@@ -150,9 +150,8 @@ fn update_premises(commands: &mut [ProofCommand], delta: usize, root_id: &str) {
     }
 }
 
-// TODO: Remove generics from here and all other functions
-fn insert_missing_assumes<P: TPool>(
-    pool: &mut P,
+fn insert_missing_assumes(
+    pool: &mut PrimitivePool,
     elaborator: &mut Elaborator,
     conclusion: &[Rc<Term>],
     proof: &[ProofCommand],
@@ -192,8 +191,8 @@ fn insert_missing_assumes<P: TPool>(
     (all, num_added)
 }
 
-fn insert_cvc5_proof<P: TPool>(
-    pool: &mut P,
+fn insert_cvc5_proof(
+    pool: &mut PrimitivePool,
     elaborator: &mut Elaborator,
     mut commands: Vec<ProofCommand>,
     conclusion: &[Rc<Term>],

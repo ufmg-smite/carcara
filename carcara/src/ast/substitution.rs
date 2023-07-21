@@ -1,6 +1,6 @@
 //! Algorithms for creating and applying capture-avoiding substitutions over terms.
 
-use super::{BindingList, Rc, SortedVar, TPool, Term};
+use super::{BindingList, Rc, SortedVar, Term, TermPool};
 use ahash::{AHashMap, AHashSet};
 use thiserror::Error;
 
@@ -56,7 +56,7 @@ impl Substitution {
 
     /// Constructs a singleton substitution mapping `x` to `t`. This returns an error if the sorts
     /// of the given terms are not the same, or if `x` is not a variable term.
-    pub fn single(pool: &mut dyn TPool, x: Rc<Term>, t: Rc<Term>) -> SubstitutionResult<Self> {
+    pub fn single(pool: &mut dyn TermPool, x: Rc<Term>, t: Rc<Term>) -> SubstitutionResult<Self> {
         let mut this = Self::empty();
         this.insert(pool, x, t)?;
         Ok(this)
@@ -66,7 +66,7 @@ impl Substitution {
     /// returns an error if any term in the left-hand side is not a variable, or if any term is
     /// mapped to a term of a different sort.
     pub fn new(
-        pool: &mut dyn TPool,
+        pool: &mut dyn TermPool,
         map: AHashMap<Rc<Term>, Rc<Term>>,
     ) -> SubstitutionResult<Self> {
         for (k, v) in map.iter() {
@@ -94,7 +94,7 @@ impl Substitution {
     /// the sorts of the given terms are not the same, or if `x` is not a variable term.
     pub(crate) fn insert(
         &mut self,
-        pool: &mut dyn TPool,
+        pool: &mut dyn TermPool,
         x: Rc<Term>,
         t: Rc<Term>,
     ) -> SubstitutionResult<()> {
@@ -125,7 +125,7 @@ impl Substitution {
 
     /// Computes which binder variables will need to be renamed, and stores the result in
     /// `self.should_be_renamed`.
-    fn compute_should_be_renamed(&mut self, pool: &mut dyn TPool) {
+    fn compute_should_be_renamed(&mut self, pool: &mut dyn TermPool) {
         if self.should_be_renamed.is_some() {
             return;
         }
@@ -160,7 +160,7 @@ impl Substitution {
     }
 
     /// Applies the substitution to `term`, and returns the result as a new term.
-    pub fn apply(&mut self, pool: &mut dyn TPool, term: &Rc<Term>) -> Rc<Term> {
+    pub fn apply(&mut self, pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term> {
         macro_rules! apply_to_sequence {
             ($sequence:expr) => {
                 $sequence
@@ -217,7 +217,7 @@ impl Substitution {
 
     fn can_skip_instead_of_renaming(
         &self,
-        pool: &mut dyn TPool,
+        pool: &mut dyn TermPool,
         binding_list: &[SortedVar],
     ) -> bool {
         // Note: this method assumes that `binding_list` is a "sort" binding list. "Value" lists add
@@ -248,7 +248,7 @@ impl Substitution {
     /// binder is a `let` or `lambda` term, `is_value_list` should be true.
     fn apply_to_binder<F: Fn(BindingList, Rc<Term>) -> Term>(
         &mut self,
-        pool: &mut dyn TPool,
+        pool: &mut dyn TermPool,
         original_term: &Rc<Term>,
         binding_list: &[SortedVar],
         inner: &Rc<Term>,
@@ -292,7 +292,7 @@ impl Substitution {
     /// a `let` or `lambda` term, `is_value_list` should be true.
     fn rename_binding_list(
         &mut self,
-        pool: &mut dyn TPool,
+        pool: &mut dyn TermPool,
         binding_list: &[SortedVar],
         is_value_list: bool,
     ) -> (BindingList, Self) {

@@ -17,7 +17,7 @@ mod tests;
 pub use context::{Context, ContextStack};
 pub use iter::ProofIter;
 pub use polyeq::{alpha_equiv, polyeq, tracing_polyeq};
-pub use pool::{PrimitivePool, TPool};
+pub use pool::{PrimitivePool, TermPool};
 pub use printer::print_proof;
 pub use rc::Rc;
 pub use substitution::{Substitution, SubstitutionError};

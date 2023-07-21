@@ -1,5 +1,5 @@
 use crate::{
-    ast::{pool::advanced::LocalPool, TPool},
+    ast::{pool::advanced::LocalPool, TermPool},
     parser::tests::parse_terms,
 };
 use ahash::AHashSet;

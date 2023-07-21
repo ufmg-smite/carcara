@@ -6,7 +6,7 @@ use super::{Rc, Sort, Term};
 use crate::ast::Constant;
 use ahash::{AHashMap, AHashSet};
 
-pub trait TPool {
+pub trait TermPool {
     /// Returns the term corresponding to the boolean constant `true`.
     fn bool_true(&self) -> Rc<Term>;
     /// Returns the term corresponding to the boolean constant `false`.
@@ -171,7 +171,7 @@ impl PrimitivePool {
     }
 }
 
-impl TPool for PrimitivePool {
+impl TermPool for PrimitivePool {
     fn bool_true(&self) -> Rc<Term> {
         self.bool_true.clone()
     }

@@ -204,7 +204,7 @@ pub fn elaborate_eq_transitive(
 }
 
 fn flip_eq_transitive_premises(
-    pool: &mut dyn TPool,
+    pool: &mut dyn TermPool,
     elaborator: &mut Elaborator,
     new_eq_transitive_step: (usize, usize),
     new_clause: &[Rc<Term>],
