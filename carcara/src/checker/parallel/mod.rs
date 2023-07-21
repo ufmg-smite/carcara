@@ -1,6 +1,7 @@
+pub mod scheduler;
+
 use super::error::CheckerError;
 use super::rules::{Premise, RuleArgs, RuleResult};
-use super::scheduler::{iter::ScheduleIter, Scheduler};
 use super::{lia_generic, Config};
 use crate::benchmarking::{CollectResults, OnlineBenchmarkResults};
 use crate::checker::CheckerStatistics;
@@ -9,6 +10,7 @@ use crate::{
     CarcaraResult, Error,
 };
 use ahash::AHashSet;
+pub use scheduler::{iter::ScheduleIter, Scheduler};
 use std::{
     ops::ControlFlow,
     sync::{Arc, RwLock},

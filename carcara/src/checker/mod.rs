@@ -2,7 +2,6 @@ pub mod error;
 mod lia_generic;
 mod parallel;
 mod rules;
-mod scheduler;
 
 use crate::{
     ast::*,
@@ -12,9 +11,8 @@ use crate::{
 };
 use ahash::AHashSet;
 use error::CheckerError;
-pub use parallel::ParallelProofChecker;
+pub use parallel::{scheduler::Scheduler, ParallelProofChecker};
 use rules::{ElaborationRule, Premise, Rule, RuleArgs, RuleResult};
-pub use scheduler::Scheduler;
 use std::{
     fmt,
     time::{Duration, Instant},

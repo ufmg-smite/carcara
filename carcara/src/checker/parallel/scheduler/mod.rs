@@ -1,15 +1,13 @@
 pub(crate) mod iter;
 pub(crate) mod weights;
 
-use crate::{
-    ast::{Proof, ProofCommand},
-    checker::scheduler::weights::get_step_weight,
-};
+use crate::ast::{Proof, ProofCommand};
 use iter::ScheduleIter;
 use std::{
     cmp::Ordering,
     collections::{BinaryHeap, HashSet},
 };
+use weights::get_step_weight;
 
 /// Struct responsible for storing a thread work schedule.
 ///
