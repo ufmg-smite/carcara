@@ -112,7 +112,7 @@ impl Substitution {
 
         if let Some(should_be_renamed) = &mut self.should_be_renamed {
             if x != t {
-                should_be_renamed.extend(pool.free_vars(&t).iter().cloned());
+                should_be_renamed.extend(pool.free_vars(&t).into_iter());
                 if x.is_var() {
                     should_be_renamed.insert(x.clone());
                 }
@@ -151,7 +151,7 @@ impl Substitution {
             if x == t {
                 continue; // We ignore reflexive substitutions
             }
-            should_be_renamed.extend(pool.free_vars(t).iter().cloned());
+            should_be_renamed.extend(pool.free_vars(t).into_iter());
             if x.is_var() {
                 should_be_renamed.insert(x.clone());
             }

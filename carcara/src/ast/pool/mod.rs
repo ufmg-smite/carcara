@@ -210,21 +210,21 @@ impl TPool for PrimitivePool {
         }
         let set = match term.as_ref() {
             Term::App(f, args) => {
-                let mut set = self.free_vars(f).clone();
+                let mut set = self.free_vars(f);
                 for a in args {
-                    set.extend(self.free_vars(a).iter().cloned());
+                    set.extend(self.free_vars(a).into_iter());
                 }
                 set
             }
             Term::Op(_, args) => {
                 let mut set = AHashSet::new();
                 for a in args {
-                    set.extend(self.free_vars(a).iter().cloned());
+                    set.extend(self.free_vars(a).into_iter());
                 }
                 set
             }
             Term::Quant(_, bindings, inner) | Term::Lambda(bindings, inner) => {
-                let mut vars = self.free_vars(inner).clone();
+                let mut vars = self.free_vars(inner);
                 for bound_var in bindings {
                     let term = self.add(bound_var.clone().into());
                     vars.remove(&term);
@@ -232,7 +232,7 @@ impl TPool for PrimitivePool {
                 vars
             }
             Term::Let(bindings, inner) => {
-                let mut vars = self.free_vars(inner).clone();
+                let mut vars = self.free_vars(inner);
                 for (var, value) in bindings {
                     let sort = self.sort(value).as_ref().clone();
                     let sort = self.add(sort);
@@ -242,7 +242,7 @@ impl TPool for PrimitivePool {
                 vars
             }
             Term::Choice(bound_var, inner) => {
-                let mut vars = self.free_vars(inner).clone();
+                let mut vars = self.free_vars(inner);
                 let term = self.add(bound_var.clone().into());
                 vars.remove(&term);
                 vars

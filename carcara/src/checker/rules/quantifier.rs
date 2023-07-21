@@ -91,8 +91,7 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
     assert_eq(phi_1, phi_2)?;
 
     // Cloning here may be unnecessary
-    // TODO: Remove the clone from similar situations
-    let free_vars = pool.free_vars(phi_1).clone();
+    let free_vars = pool.free_vars(phi_1);
 
     let expected: Vec<_> = bindings_1
         .iter()
@@ -300,7 +299,7 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         .ok_or_else(|| QuantifierError::ClauseDoesntAppearInCnf(phi_prime.clone()))?;
 
     // Cloning here may be unnecessary
-    let free_vars = pool.free_vars(selected_clause).clone();
+    let free_vars = pool.free_vars(selected_clause);
 
     // While all bindings in `r_bindings` must also be in `new_bindings`, the same is not true in
     // the opposite direction. That is because some variables from the set may be omitted in the
