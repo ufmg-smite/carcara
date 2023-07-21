@@ -40,7 +40,7 @@ impl Schedule {
         self.steps.last()
     }
 
-    /// Returns an iterator over the proof commands. See [`ProofIter`].
+    /// Returns an iterator over the proof commands. See [`ScheduleIter`].
     pub fn iter<'a>(&'a self, proof: &'a [ProofCommand]) -> ScheduleIter {
         ScheduleIter::new(proof, &self.steps)
     }

@@ -49,6 +49,7 @@ pub struct RunMeasurement {
     pub parsing: Duration,
     pub checking: Duration,
     pub elaboration: Duration,
+    pub scheduling: Duration,
     pub total: Duration,
     pub polyeq: Duration,
     pub assume: Duration,
@@ -60,6 +61,7 @@ pub struct OnlineBenchmarkResults {
     pub parsing: OnlineMetrics<RunId>,
     pub checking: OnlineMetrics<RunId>,
     pub elaborating: OnlineMetrics<RunId>,
+    pub scheduling: OnlineMetrics<RunId>,
     pub total_accounted_for: OnlineMetrics<RunId>,
     pub total: OnlineMetrics<RunId>,
     pub step_time: OnlineMetrics<StepId>,
@@ -105,6 +107,11 @@ impl OnlineBenchmarkResults {
         &self.elaborating
     }
 
+    /// The time per run to schedule the threads tasks.
+    pub fn scheduling(&self) -> &OnlineMetrics<RunId> {
+        &self.scheduling
+    }
+
     /// The combined time per run to parse, check, and elaborate all the steps in the proof.
     pub fn total_accounted_for(&self) -> &OnlineMetrics<RunId> {
         &self.total_accounted_for
@@ -132,10 +139,11 @@ impl OnlineBenchmarkResults {
 
     /// Prints the benchmark results
     pub fn print(&self, sort_by_total: bool) {
-        let [parsing, checking, elaborating, accounted_for, total] = [
+        let [parsing, checking, elaborating, scheduling, accounted_for, total] = [
             self.parsing(),
             self.checking(),
             self.elaborating(),
+            self.scheduling(),
             self.total_accounted_for(),
             self.total(),
         ]
@@ -152,6 +160,7 @@ impl OnlineBenchmarkResults {
         if !elaborating.is_empty() {
             println!("elaborating:         {}", elaborating);
         }
+        println!("scheduling:          {}", scheduling);
         println!(
             "on assume:           {} ({:.02}% of checking time)",
             self.assume_time,
@@ -396,6 +405,7 @@ impl CollectResults for OnlineBenchmarkResults {
             parsing,
             checking,
             elaboration,
+            scheduling,
             total,
             polyeq,
             assume,
@@ -405,6 +415,7 @@ impl CollectResults for OnlineBenchmarkResults {
         self.parsing.add_sample(id, parsing);
         self.checking.add_sample(id, checking);
         self.elaborating.add_sample(id, elaboration);
+        self.scheduling.add_sample(id, scheduling);
         self.total_accounted_for.add_sample(id, parsing + checking);
         self.total.add_sample(id, total);
 
@@ -423,6 +434,7 @@ impl CollectResults for OnlineBenchmarkResults {
             parsing: a.parsing.combine(b.parsing),
             checking: a.checking.combine(b.checking),
             elaborating: a.elaborating.combine(b.elaborating),
+            scheduling: a.scheduling.combine(b.scheduling),
             total_accounted_for: a.total_accounted_for.combine(b.total_accounted_for),
             total: a.total.combine(b.total),
             step_time: a.step_time.combine(b.step_time),

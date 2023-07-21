@@ -163,8 +163,10 @@ pub fn check<T: io::BufRead>(
 
     // Checking
     let checking = Instant::now();
-    let mut checker = checker::ParallelProofChecker::new(Arc::new(pool), config, &prelude);
     let (scheduler, _) = Scheduler::new(num_threads, &proof);
+    run_measures.scheduling = checking.elapsed();
+    let mut checker = checker::ParallelProofChecker::new(Arc::new(pool), config, &prelude);
+
     if options.stats {
         let mut checker_stats = CheckerStatistics {
             file_name: "this",
@@ -185,6 +187,7 @@ pub fn check<T: io::BufRead>(
                 parsing: run_measures.parsing,
                 checking: run_measures.checking,
                 elaboration: checker_stats.elaboration_time,
+                scheduling: run_measures.scheduling,
                 total: run_measures.total,
                 polyeq: checker_stats.polyeq_time,
                 assume: checker_stats.assume_time,
@@ -246,6 +249,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
                 parsing: run_measures.parsing,
                 checking: run_measures.checking,
                 elaboration: checker_stats.elaboration_time,
+                scheduling: run_measures.scheduling,
                 total: run_measures.total,
                 polyeq: checker_stats.polyeq_time,
                 assume: checker_stats.assume_time,
