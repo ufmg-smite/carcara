@@ -404,7 +404,7 @@ impl<'c> ProofChecker<'c> {
         let mut elaborated = false;
         if step.rule == "lia_generic" {
             if self.config.lia_via_cvc5 {
-                let is_hole = lia_generic::lia_generic(
+                let is_hole = lia_generic::lia_generic_single_thread(
                     self.pool,
                     &step.clause,
                     &self.prelude,

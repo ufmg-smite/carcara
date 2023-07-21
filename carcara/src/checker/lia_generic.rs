@@ -24,17 +24,15 @@ fn get_problem_string(conclusion: &[Rc<Term>], prelude: &ProblemPrelude) -> Stri
     problem
 }
 
-pub fn lia_generic<P: TPool>(
-    pool: &mut P,
+pub fn lia_generic_single_thread(
+    pool: &mut PrimitivePool,
     conclusion: &[Rc<Term>],
     prelude: &ProblemPrelude,
     elaborator: Option<&mut Elaborator>,
     root_id: &str,
 ) -> bool {
-    // TODO: Transform it into 2 different functions
-    let mut pp = PrimitivePool::new();
     let problem = get_problem_string(conclusion, prelude);
-    let commands = match get_cvc5_proof(&mut pp, problem) {
+    let commands = match get_cvc5_proof(pool, problem) {
         Ok(c) => c,
         Err(e) => {
             log::warn!("failed to check `lia_generic` step using cvc5: {}", e);
@@ -49,6 +47,17 @@ pub fn lia_generic<P: TPool>(
         insert_cvc5_proof(pool, elaborator, commands, conclusion, root_id);
     }
     false
+}
+
+pub fn lia_generic_multi_thread(conclusion: &[Rc<Term>], prelude: &ProblemPrelude) -> bool {
+    let mut pool = PrimitivePool::new();
+    let problem = get_problem_string(conclusion, prelude);
+    if let Err(e) = get_cvc5_proof(&mut pool, problem) {
+        log::warn!("failed to check `lia_generic` step using cvc5: {}", e);
+        true
+    } else {
+        false
+    }
 }
 
 fn get_cvc5_proof(

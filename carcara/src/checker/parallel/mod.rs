@@ -500,8 +500,7 @@ impl<'c> ParallelProofChecker<'c> {
 
         if step.rule == "lia_generic" {
             if self.config.lia_via_cvc5 {
-                let is_hole =
-                    lia_generic::lia_generic(pool, &step.clause, &self.prelude, None, &step.id);
+                let is_hole = lia_generic::lia_generic_multi_thread(&step.clause, &self.prelude);
                 self.is_holey = self.is_holey || is_hole;
             } else {
                 log::warn!("encountered \"lia_generic\" rule, ignoring");
