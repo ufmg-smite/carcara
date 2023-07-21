@@ -39,7 +39,7 @@ impl ContextPool {
     /// Takes a term and returns an `Rc` referencing it. Receive the pools references directly.
     fn add_by_ref<'d, 'c: 'd>(
         ctx_pool: &mut PrimitivePool,
-        global_pool: &'d Arc<PrimitivePool>,
+        global_pool: &'d PrimitivePool,
         term: Term,
     ) -> Rc<Term> {
         use std::collections::hash_map::Entry;
@@ -63,7 +63,7 @@ impl ContextPool {
     /// Returns the sort of this term exactly as the sort function. Receive the pools references directly.
     fn sort_by_ref<'d: 't, 'c: 'd, 't>(
         ctx_pool: &PrimitivePool,
-        global_pool: &'d Arc<PrimitivePool>,
+        global_pool: &'d PrimitivePool,
         term: &'t Rc<Term>,
     ) -> Rc<Term> {
         if let Some(sort) = global_pool.sorts_cache.get(term) {
@@ -118,7 +118,7 @@ impl TPool for ContextPool {
     fn free_vars<'s, 't: 's>(&'s mut self, term: &'t Rc<Term>) -> AHashSet<Rc<Term>> {
         fn internal<'d: 't, 'c: 'd, 't>(
             ctx_pool: &'d mut PrimitivePool,
-            global_pool: &'c Arc<PrimitivePool>,
+            global_pool: &'c PrimitivePool,
             term: &'t Rc<Term>,
         ) -> &'t AHashSet<Rc<Term>> {
             // Here, I would like to do
@@ -241,7 +241,7 @@ impl LocalPool {
     fn add_by_ref<'d, 'c: 'd>(
         local_pool: &'d mut PrimitivePool,
         ctx_pool: &PrimitivePool,
-        global_pool: &'d Arc<PrimitivePool>,
+        global_pool: &'d PrimitivePool,
         term: Term,
     ) -> Rc<Term> {
         use std::collections::hash_map::Entry;
@@ -270,7 +270,7 @@ impl LocalPool {
     fn sort_by_ref<'d: 't, 'c: 'd, 't>(
         local_pool: &'d mut PrimitivePool,
         ctx_pool: &PrimitivePool,
-        global_pool: &'d Arc<PrimitivePool>,
+        global_pool: &'d PrimitivePool,
         term: &'t Rc<Term>,
     ) -> Rc<Term> {
         if let Some(sort) = global_pool.sorts_cache.get(term) {
@@ -333,7 +333,7 @@ impl TPool for LocalPool {
         fn internal<'d: 't, 'c: 'd, 't>(
             local_pool: &'d mut PrimitivePool,
             ctx_pool: &'t PrimitivePool,
-            global_pool: &'d Arc<PrimitivePool>,
+            global_pool: &'d PrimitivePool,
             term: &'t Rc<Term>,
         ) -> &'t AHashSet<Rc<Term>> {
             // Here, I would like to do
