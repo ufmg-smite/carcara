@@ -1,12 +1,11 @@
-
 use super::super::{Rc, Term};
 use super::{PrimitivePool, TPool};
 use ahash::AHashSet;
 use std::sync::{Arc, RwLock};
 
 pub struct ContextPool {
-    pub(crate) global_pool: Arc<PrimitivePool::TermPool>,
-    pub(crate) storage: Arc<RwLock<PrimitivePool::TermPool>>,
+    pub(crate) global_pool: Arc<PrimitivePool>,
+    pub(crate) storage: Arc<RwLock<PrimitivePool>>,
 }
 
 impl Default for ContextPool {
@@ -18,15 +17,15 @@ impl Default for ContextPool {
 impl ContextPool {
     pub fn new() -> Self {
         Self {
-            global_pool: Arc::new(PrimitivePool::TermPool::new()),
-            storage: Arc::new(RwLock::new(PrimitivePool::TermPool::new())),
+            global_pool: Arc::new(PrimitivePool::new()),
+            storage: Arc::new(RwLock::new(PrimitivePool::new())),
         }
     }
 
-    pub fn from_global(global_pool: &Arc<PrimitivePool::TermPool>) -> Self {
+    pub fn from_global(global_pool: &Arc<PrimitivePool>) -> Self {
         Self {
             global_pool: global_pool.clone(),
-            storage: Arc::new(RwLock::new(PrimitivePool::TermPool::new())),
+            storage: Arc::new(RwLock::new(PrimitivePool::new())),
         }
     }
 
@@ -39,8 +38,8 @@ impl ContextPool {
 
     /// Takes a term and returns an `Rc` referencing it. Receive the pools references directly.
     fn add_by_ref<'d, 'c: 'd>(
-        ctx_pool: &mut PrimitivePool::TermPool,
-        global_pool: &'d Arc<PrimitivePool::TermPool>,
+        ctx_pool: &mut PrimitivePool,
+        global_pool: &'d Arc<PrimitivePool>,
         term: Term,
     ) -> Rc<Term> {
         use std::collections::hash_map::Entry;
@@ -63,8 +62,8 @@ impl ContextPool {
 
     /// Returns the sort of this term exactly as the sort function. Receive the pools references directly.
     fn sort_by_ref<'d: 't, 'c: 'd, 't>(
-        ctx_pool: &PrimitivePool::TermPool,
-        global_pool: &'d Arc<PrimitivePool::TermPool>,
+        ctx_pool: &PrimitivePool,
+        global_pool: &'d Arc<PrimitivePool>,
         term: &'t Rc<Term>,
     ) -> Rc<Term> {
         if let Some(sort) = global_pool.sorts_cache.get(term) {
@@ -118,8 +117,8 @@ impl TPool for ContextPool {
 
     fn free_vars<'s, 't: 's>(&'s mut self, term: &'t Rc<Term>) -> AHashSet<Rc<Term>> {
         fn internal<'d: 't, 'c: 'd, 't>(
-            ctx_pool: &'d mut PrimitivePool::TermPool,
-            global_pool: &'c Arc<PrimitivePool::TermPool>,
+            ctx_pool: &'d mut PrimitivePool,
+            global_pool: &'c Arc<PrimitivePool>,
             term: &'t Rc<Term>,
         ) -> &'t AHashSet<Rc<Term>> {
             // Here, I would like to do
@@ -212,7 +211,7 @@ impl TPool for ContextPool {
 
 pub struct LocalPool {
     pub(crate) ctx_pool: ContextPool,
-    pub(crate) storage: PrimitivePool::TermPool,
+    pub(crate) storage: PrimitivePool,
 }
 
 impl Default for LocalPool {
@@ -225,7 +224,7 @@ impl LocalPool {
     pub fn new() -> Self {
         Self {
             ctx_pool: ContextPool::new(),
-            storage: PrimitivePool::TermPool::new(),
+            storage: PrimitivePool::new(),
         }
     }
 
@@ -234,15 +233,15 @@ impl LocalPool {
     pub fn from_previous(ctx_pool: &ContextPool) -> Self {
         Self {
             ctx_pool: ContextPool::from_previous(ctx_pool),
-            storage: PrimitivePool::TermPool::new(),
+            storage: PrimitivePool::new(),
         }
     }
 
     /// Takes a term and returns an `Rc` referencing it. Receive the pools references directly.
     fn add_by_ref<'d, 'c: 'd>(
-        local_pool: &'d mut PrimitivePool::TermPool,
-        ctx_pool: &PrimitivePool::TermPool,
-        global_pool: &'d Arc<PrimitivePool::TermPool>,
+        local_pool: &'d mut PrimitivePool,
+        ctx_pool: &PrimitivePool,
+        global_pool: &'d Arc<PrimitivePool>,
         term: Term,
     ) -> Rc<Term> {
         use std::collections::hash_map::Entry;
@@ -269,9 +268,9 @@ impl LocalPool {
 
     /// Returns the sort of this term exactly as the sort function. Receive the pools references directly.
     fn sort_by_ref<'d: 't, 'c: 'd, 't>(
-        local_pool: &'d mut PrimitivePool::TermPool,
-        ctx_pool: &PrimitivePool::TermPool,
-        global_pool: &'d Arc<PrimitivePool::TermPool>,
+        local_pool: &'d mut PrimitivePool,
+        ctx_pool: &PrimitivePool,
+        global_pool: &'d Arc<PrimitivePool>,
         term: &'t Rc<Term>,
     ) -> Rc<Term> {
         if let Some(sort) = global_pool.sorts_cache.get(term) {
@@ -332,9 +331,9 @@ impl TPool for LocalPool {
 
     fn free_vars<'s, 't: 's>(&'s mut self, term: &'t Rc<Term>) -> AHashSet<Rc<Term>> {
         fn internal<'d: 't, 'c: 'd, 't>(
-            local_pool: &'d mut PrimitivePool::TermPool,
-            ctx_pool: &'t PrimitivePool::TermPool,
-            global_pool: &'d Arc<PrimitivePool::TermPool>,
+            local_pool: &'d mut PrimitivePool,
+            ctx_pool: &'t PrimitivePool,
+            global_pool: &'d Arc<PrimitivePool>,
             term: &'t Rc<Term>,
         ) -> &'t AHashSet<Rc<Term>> {
             // Here, I would like to do

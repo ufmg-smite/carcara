@@ -249,12 +249,12 @@ macro_rules! impl_str_conversion_traits {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::*;
+    use crate::ast::{pool::advanced::LocalPool, *};
     use crate::parser::tests::{parse_term, parse_terms};
 
     #[test]
     fn test_match_term() {
-        let mut p = TermPool::new();
+        let mut p = LocalPool::new();
         let [one, two, five] = [1, 2, 5].map(|n| p.add(Term::new_int(n)));
 
         let term = parse_term(&mut p, "(= (= (not false) (= true false)) (not true))");
@@ -303,7 +303,7 @@ mod tests {
             (declare-fun p () Bool)
             (declare-fun q () Bool)
         ";
-        let mut pool = TermPool::new();
+        let mut pool = LocalPool::new();
         let bool_sort = pool.add(Term::Sort(Sort::Bool));
         let int_sort = pool.add(Term::Sort(Sort::Int));
 

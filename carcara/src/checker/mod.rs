@@ -77,7 +77,7 @@ impl Config {
 }
 
 pub struct ProofChecker<'c> {
-    pool: &'c mut TermPool,
+    pool: &'c mut PrimitivePool,
     config: Config,
     prelude: &'c ProblemPrelude,
     context: ContextStack,
@@ -87,7 +87,7 @@ pub struct ProofChecker<'c> {
 }
 
 impl<'c> ProofChecker<'c> {
-    pub fn new(pool: &'c mut TermPool, config: Config, prelude: &'c ProblemPrelude) -> Self {
+    pub fn new(pool: &'c mut PrimitivePool, config: Config, prelude: &'c ProblemPrelude) -> Self {
         ProofChecker {
             pool,
             config,

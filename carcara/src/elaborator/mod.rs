@@ -200,7 +200,7 @@ impl Elaborator {
     /// index must already be mapped to the new index space.
     pub fn add_symm_step(
         &mut self,
-        pool: &mut TermPool,
+        pool: &mut dyn TPool,
         original_premise: (usize, usize),
         original_equality: (Rc<Term>, Rc<Term>),
         id: String,
@@ -221,7 +221,7 @@ impl Elaborator {
     /// Adds a `refl` step that asserts that the two given terms are equal.
     pub fn add_refl_step(
         &mut self,
-        pool: &mut TermPool,
+        pool: &mut dyn TPool,
         a: Rc<Term>,
         b: Rc<Term>,
         id: String,
@@ -239,7 +239,7 @@ impl Elaborator {
 
     pub fn elaborate_polyeq(
         &mut self,
-        pool: &mut TermPool,
+        pool: &mut dyn TPool,
         root_id: &str,
         a: Rc<Term>,
         b: Rc<Term>,
@@ -250,7 +250,7 @@ impl Elaborator {
 
     pub fn elaborate_assume(
         &mut self,
-        pool: &mut TermPool,
+        pool: &mut dyn TPool,
         premise: Rc<Term>,
         term: Rc<Term>,
         id: &str,

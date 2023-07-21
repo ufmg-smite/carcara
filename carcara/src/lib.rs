@@ -142,11 +142,12 @@ pub fn check<T: io::BufRead>(
     num_threads: usize,
 ) -> Result<bool, Error> {
     use crate::checker::Scheduler;
+    use std::sync::Arc;
     let mut run_measures: RunMeasurement = RunMeasurement::default();
 
     // Parsing
     let total = Instant::now();
-    let (prelude, proof, pool) = parser::parse_instance_multithread(
+    let (prelude, proof, pool) = parser::parse_instance(
         problem,
         proof,
         options.apply_function_defs,
@@ -162,7 +163,7 @@ pub fn check<T: io::BufRead>(
 
     // Checking
     let checking = Instant::now();
-    let mut checker = checker::ParallelProofChecker::new(pool, config, &prelude);
+    let mut checker = checker::ParallelProofChecker::new(Arc::new(pool), config, &prelude);
     let (scheduler, _) = Scheduler::new(num_threads, &proof);
     if options.stats {
         let mut checker_stats = CheckerStatistics {

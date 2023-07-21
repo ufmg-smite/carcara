@@ -1,6 +1,6 @@
 //! Algorithms for creating and applying capture-avoiding substitutions over terms.
 
-use super::{BindingList, Rc, SortedVar, TPool, Term, TermPool};
+use super::{BindingList, Rc, SortedVar, TPool, Term};
 use ahash::{AHashMap, AHashSet};
 use thiserror::Error;
 
@@ -56,7 +56,7 @@ impl Substitution {
 
     /// Constructs a singleton substitution mapping `x` to `t`. This returns an error if the sorts
     /// of the given terms are not the same, or if `x` is not a variable term.
-    pub fn single(pool: &mut TermPool, x: Rc<Term>, t: Rc<Term>) -> SubstitutionResult<Self> {
+    pub fn single(pool: &mut dyn TPool, x: Rc<Term>, t: Rc<Term>) -> SubstitutionResult<Self> {
         let mut this = Self::empty();
         this.insert(pool, x, t)?;
         Ok(this)
@@ -65,8 +65,8 @@ impl Substitution {
     /// Constructs a new substitution from an arbitrary mapping of terms to other terms. This
     /// returns an error if any term in the left-hand side is not a variable, or if any term is
     /// mapped to a term of a different sort.
-    pub fn new<P: TPool>(
-        pool: &mut P,
+    pub fn new(
+        pool: &mut dyn TPool,
         map: AHashMap<Rc<Term>, Rc<Term>>,
     ) -> SubstitutionResult<Self> {
         for (k, v) in map.iter() {
@@ -92,9 +92,9 @@ impl Substitution {
 
     /// Extends the substitution by adding a new mapping from `x` to `t`. This returns an error if
     /// the sorts of the given terms are not the same, or if `x` is not a variable term.
-    pub(crate) fn insert<P: TPool>(
+    pub(crate) fn insert(
         &mut self,
-        pool: &mut P,
+        pool: &mut dyn TPool,
         x: Rc<Term>,
         t: Rc<Term>,
     ) -> SubstitutionResult<()> {
@@ -125,7 +125,7 @@ impl Substitution {
 
     /// Computes which binder variables will need to be renamed, and stores the result in
     /// `self.should_be_renamed`.
-    fn compute_should_be_renamed<P: TPool>(&mut self, pool: &mut P) {
+    fn compute_should_be_renamed(&mut self, pool: &mut dyn TPool) {
         if self.should_be_renamed.is_some() {
             return;
         }
@@ -160,7 +160,7 @@ impl Substitution {
     }
 
     /// Applies the substitution to `term`, and returns the result as a new term.
-    pub fn apply<P: TPool>(&mut self, pool: &mut P, term: &Rc<Term>) -> Rc<Term> {
+    pub fn apply(&mut self, pool: &mut dyn TPool, term: &Rc<Term>) -> Rc<Term> {
         macro_rules! apply_to_sequence {
             ($sequence:expr) => {
                 $sequence
@@ -215,9 +215,9 @@ impl Substitution {
         result
     }
 
-    fn can_skip_instead_of_renaming<P: TPool>(
+    fn can_skip_instead_of_renaming(
         &self,
-        pool: &mut P,
+        pool: &mut dyn TPool,
         binding_list: &[SortedVar],
     ) -> bool {
         // Note: this method assumes that `binding_list` is a "sort" binding list. "Value" lists add
@@ -246,9 +246,9 @@ impl Substitution {
     /// Applies the substitution to a binder term, renaming any bound variables as needed. This
     /// method uses the function `build_function` to construct the resulting binder term. If the
     /// binder is a `let` or `lambda` term, `is_value_list` should be true.
-    fn apply_to_binder<F: Fn(BindingList, Rc<Term>) -> Term, P: TPool>(
+    fn apply_to_binder<F: Fn(BindingList, Rc<Term>) -> Term>(
         &mut self,
-        pool: &mut P,
+        pool: &mut dyn TPool,
         original_term: &Rc<Term>,
         binding_list: &[SortedVar],
         inner: &Rc<Term>,
@@ -290,9 +290,9 @@ impl Substitution {
     /// returns a clone of the binding list and an empty substitution. The name chosen when renaming
     /// a variable is the old name with `'` appended. If the binding list is a "value" list, like in
     /// a `let` or `lambda` term, `is_value_list` should be true.
-    fn rename_binding_list<P: TPool>(
+    fn rename_binding_list(
         &mut self,
-        pool: &mut P,
+        pool: &mut dyn TPool,
         binding_list: &[SortedVar],
         is_value_list: bool,
     ) -> (BindingList, Self) {
@@ -353,10 +353,10 @@ impl Substitution {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::*;
+    use crate::{ast::pool::advanced::LocalPool, parser::*};
 
     fn run_test(definitions: &str, original: &str, x: &str, t: &str, result: &str) {
-        let mut pool = TermPool::new();
+        let mut pool = LocalPool::new();
         let mut parser =
             Parser::new(&mut pool, definitions.as_bytes(), true, false, false).unwrap();
         parser.parse_problem().unwrap();

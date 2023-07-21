@@ -15,56 +15,23 @@ use crate::{
 use ahash::{AHashMap, AHashSet};
 use error::assert_num_args;
 use rug::Integer;
-use std::{io::BufRead, str::FromStr, sync::Arc};
+use std::{io::BufRead, str::FromStr};
 
 /// Parses an SMT problem instance (in the SMT-LIB format) and its associated proof (in the Alethe
 /// format).
 ///
 /// This returns the parsed proof, as well as the `TermPool` used in parsing. Can take any type that
 /// implements `BufRead`.
-pub fn parse_instance<T: BufRead>(
+pub fn parse_instance<T: BufRead, P: TPool + Default>(
     problem: T,
     proof: T,
     apply_function_defs: bool,
     expand_lets: bool,
     allow_int_real_subtyping: bool,
-) -> CarcaraResult<(ProblemPrelude, Proof, TermPool)> {
-    let mut pool = TermPool::new();
+) -> CarcaraResult<(ProblemPrelude, Proof, P)> {
+    let mut pool = P::default();
     let mut parser = Parser::new(
         &mut pool,
-        problem,
-        apply_function_defs,
-        expand_lets,
-        allow_int_real_subtyping,
-    )?;
-    let (prelude, premises) = parser.parse_problem()?;
-    parser.reset(proof)?;
-    let commands = parser.parse_proof()?;
-
-    let proof = Proof { premises, commands };
-    Ok((prelude, proof, pool))
-}
-
-/// Parses an SMT problem instance (in the SMT-LIB format) and its associated proof (in the Alethe
-/// format).
-///
-/// This returns the parsed proof, as well as the `TermPool` used in parsing. Can take any type
-/// that implements `BufRead`.
-///
-/// Returns an atomic reference counter of an primitive pool.
-/// TODO: Unify the two parsing methods?
-pub fn parse_instance_multithread<T: BufRead>(
-    problem: T,
-    proof: T,
-    apply_function_defs: bool,
-    expand_lets: bool,
-    allow_int_real_subtyping: bool,
-) -> CarcaraResult<(ProblemPrelude, Proof, Arc<PrimitivePool::TermPool>)> {
-    let mut pool = Arc::new(PrimitivePool::TermPool::new());
-    let mut_pool = Arc::get_mut(&mut pool).unwrap();
-
-    let mut parser = Parser::new(
-        mut_pool,
         problem,
         apply_function_defs,
         expand_lets,

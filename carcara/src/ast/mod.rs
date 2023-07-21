@@ -17,7 +17,7 @@ mod tests;
 pub use context::{Context, ContextStack};
 pub use iter::ProofIter;
 pub use polyeq::{alpha_equiv, polyeq, tracing_polyeq};
-pub use pool::{PrimitivePool, TPool, TermPool};
+pub use pool::{PrimitivePool, TPool};
 pub use printer::print_proof;
 pub use rc::Rc;
 pub use substitution::{Substitution, SubstitutionError};
@@ -464,7 +464,7 @@ impl Term {
     /// Returns the sort of this term. This does not make use of a cache --- if possible, prefer to
     /// use `TermPool::sort`.
     pub fn raw_sort(&self) -> Sort {
-        let mut pool = PrimitivePool::TermPool::new();
+        let mut pool = PrimitivePool::new();
         let added = pool.add(self.clone());
         pool.sort(&added).as_sort().unwrap().clone()
     }

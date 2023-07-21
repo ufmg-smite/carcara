@@ -17,7 +17,7 @@ use std::{
 };
 
 pub struct ParallelProofChecker<'c> {
-    pool: Arc<PrimitivePool::TermPool>,
+    pool: Arc<PrimitivePool>,
     config: Config,
     prelude: &'c ProblemPrelude,
     context: ContextStack,
@@ -26,11 +26,7 @@ pub struct ParallelProofChecker<'c> {
 }
 
 impl<'c> ParallelProofChecker<'c> {
-    pub fn new(
-        pool: Arc<PrimitivePool::TermPool>,
-        config: Config,
-        prelude: &'c ProblemPrelude,
-    ) -> Self {
+    pub fn new(pool: Arc<PrimitivePool>, config: Config, prelude: &'c ProblemPrelude) -> Self {
         ParallelProofChecker {
             pool,
             config,
@@ -494,7 +490,7 @@ impl<'c> ParallelProofChecker<'c> {
         step: &'a ProofStep,
         previous_command: Option<Premise<'a>>,
         iter: &'a ScheduleIter<'a>,
-        pool: &mut TermPool,
+        pool: &mut LocalPool,
         stats: Option<&'a mut CheckerStatistics<CR>>,
     ) -> RuleResult {
         let time = Instant::now();

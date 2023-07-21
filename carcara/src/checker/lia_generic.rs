@@ -24,15 +24,17 @@ fn get_problem_string(conclusion: &[Rc<Term>], prelude: &ProblemPrelude) -> Stri
     problem
 }
 
-pub fn lia_generic(
-    pool: &mut TermPool,
+pub fn lia_generic<P: TPool>(
+    pool: &mut P,
     conclusion: &[Rc<Term>],
     prelude: &ProblemPrelude,
     elaborator: Option<&mut Elaborator>,
     root_id: &str,
 ) -> bool {
+    // TODO: Transform it into 2 different functions
+    let mut pp = PrimitivePool::new();
     let problem = get_problem_string(conclusion, prelude);
-    let commands = match get_cvc5_proof(pool, problem) {
+    let commands = match get_cvc5_proof(&mut pp, problem) {
         Ok(c) => c,
         Err(e) => {
             log::warn!("failed to check `lia_generic` step using cvc5: {}", e);
@@ -50,7 +52,7 @@ pub fn lia_generic(
 }
 
 fn get_cvc5_proof(
-    pool: &mut TermPool,
+    pool: &mut PrimitivePool,
     problem: String,
 ) -> Result<Vec<ProofCommand>, LiaGenericError> {
     let mut cvc5 = Command::new("cvc5")
@@ -102,7 +104,7 @@ fn get_cvc5_proof(
 }
 
 fn parse_and_check_cvc5_proof(
-    pool: &mut TermPool,
+    pool: &mut PrimitivePool,
     problem: &[u8],
     proof: &[u8],
 ) -> CarcaraResult<Vec<ProofCommand>> {
@@ -139,8 +141,9 @@ fn update_premises(commands: &mut [ProofCommand], delta: usize, root_id: &str) {
     }
 }
 
-fn insert_missing_assumes(
-    pool: &mut TermPool,
+// TODO: Remove generics from here and all other functions
+fn insert_missing_assumes<P: TPool>(
+    pool: &mut P,
     elaborator: &mut Elaborator,
     conclusion: &[Rc<Term>],
     proof: &[ProofCommand],
@@ -180,8 +183,8 @@ fn insert_missing_assumes(
     (all, num_added)
 }
 
-fn insert_cvc5_proof(
-    pool: &mut TermPool,
+fn insert_cvc5_proof<P: TPool>(
+    pool: &mut P,
     elaborator: &mut Elaborator,
     mut commands: Vec<ProofCommand>,
     conclusion: &[Rc<Term>],

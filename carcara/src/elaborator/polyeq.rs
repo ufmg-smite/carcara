@@ -25,7 +25,7 @@ impl<'a> PolyeqElaborator<'a> {
 
     /// Takes two terms that are equal modulo reordering of equalities, and returns a premise that
     /// proves their equality.
-    pub fn elaborate(&mut self, pool: &mut TermPool, a: Rc<Term>, b: Rc<Term>) -> (usize, usize) {
+    pub fn elaborate(&mut self, pool: &mut dyn TPool, a: Rc<Term>, b: Rc<Term>) -> (usize, usize) {
         // TODO: Make this method return an error instead of panicking if the terms aren't equal
 
         let key = (a, b);
@@ -39,7 +39,7 @@ impl<'a> PolyeqElaborator<'a> {
         result
     }
 
-    fn elaborate_impl(&mut self, pool: &mut TermPool, a: Rc<Term>, b: Rc<Term>) -> (usize, usize) {
+    fn elaborate_impl(&mut self, pool: &mut dyn TPool, a: Rc<Term>, b: Rc<Term>) -> (usize, usize) {
         if self.directly_eq(pool, &a, &b) {
             let id = self.inner.get_new_id(self.root_id);
             return self.inner.add_refl_step(pool, a, b, id);
@@ -187,7 +187,7 @@ impl<'a> PolyeqElaborator<'a> {
     }
 
     /// Returns `true` if the terms are directly equal, modulo application of the current context.
-    fn directly_eq(&mut self, pool: &mut TermPool, a: &Rc<Term>, b: &Rc<Term>) -> bool {
+    fn directly_eq(&mut self, pool: &mut dyn TPool, a: &Rc<Term>, b: &Rc<Term>) -> bool {
         match &mut self.context {
             Some(c) => c.apply(pool, a) == *b,
             None => a == b,
@@ -196,7 +196,7 @@ impl<'a> PolyeqElaborator<'a> {
 
     /// Returns `true` if the terms are equal modulo reordering of inequalities, and modulo
     /// application of the current context.
-    fn polyeq(&mut self, pool: &mut TermPool, a: &Rc<Term>, b: &Rc<Term>) -> bool {
+    fn polyeq(&mut self, pool: &mut dyn TPool, a: &Rc<Term>, b: &Rc<Term>) -> bool {
         match &mut self.context {
             Some(c) => Polyeq::eq(&mut self.checker, &c.apply(pool, a), b),
             None => Polyeq::eq(&mut self.checker, a, b),
@@ -205,7 +205,7 @@ impl<'a> PolyeqElaborator<'a> {
 
     fn build_cong(
         &mut self,
-        pool: &mut TermPool,
+        pool: &mut dyn TPool,
         (a, b): (&Rc<Term>, &Rc<Term>),
         (a_args, b_args): (&[Rc<Term>], &[Rc<Term>]),
     ) -> (usize, usize) {
@@ -235,7 +235,7 @@ impl<'a> PolyeqElaborator<'a> {
 
     fn flip_equality(
         &mut self,
-        pool: &mut TermPool,
+        pool: &mut dyn TPool,
         (a, a_left, a_right): (Rc<Term>, Rc<Term>, Rc<Term>),
         (b, b_left, b_right): (Rc<Term>, Rc<Term>, Rc<Term>),
     ) -> (usize, usize) {
@@ -339,7 +339,7 @@ impl<'a> PolyeqElaborator<'a> {
 
     /// Creates the subproof for a `bind` or `bind_let` step, used to derive the equality of
     /// quantifier or `let` terms. This assumes the accumulator subproof has already been opened.
-    fn create_bind_subproof(&mut self, pool: &mut TermPool, inner_equality: (Rc<Term>, Rc<Term>)) {
+    fn create_bind_subproof(&mut self, pool: &mut dyn TPool, inner_equality: (Rc<Term>, Rc<Term>)) {
         let (a, b) = inner_equality;
 
         let inner_eq = self.elaborate(pool, a.clone(), b.clone());

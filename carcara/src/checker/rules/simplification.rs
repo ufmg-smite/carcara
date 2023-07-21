@@ -40,8 +40,8 @@ macro_rules! simplify {
 
 fn generic_simplify_rule(
     conclusion: &[Rc<Term>],
-    pool: &mut TermPool,
-    simplify_function: fn(&Term, &mut TermPool) -> Option<Rc<Term>>,
+    pool: &mut dyn TPool,
+    simplify_function: fn(&Term, &mut dyn TPool) -> Option<Rc<Term>>,
 ) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
 
@@ -160,7 +160,7 @@ pub fn eq_simplify(args: RuleArgs) -> RuleResult {
 /// Used for both the `and_simplify` and `or_simplify` rules, depending on `rule_kind`. `rule_kind`
 /// has to be either `Operator::And` or `Operator::Or`.
 fn generic_and_or_simplify(
-    pool: &mut TermPool,
+    pool: &mut dyn TPool,
     conclusion: &[Rc<Term>],
     rule_kind: Operator,
 ) -> RuleResult {
@@ -445,7 +445,7 @@ pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 /// Used for both the `sum_simplify` and `prod_simplify` rules, depending on `rule_kind`.
 /// `rule_kind` has to be either `Operator::Add` or `Operator::Mult`.
 fn generic_sum_prod_simplify_rule(
-    pool: &mut TermPool,
+    pool: &mut dyn TPool,
     ts: &Rc<Term>,
     u: &Rc<Term>,
     rule_kind: Operator,
@@ -667,7 +667,7 @@ pub fn comp_simplify(args: RuleArgs) -> RuleResult {
 }
 
 fn apply_ac_simp(
-    pool: &mut TermPool,
+    pool: &mut dyn TPool,
     cache: &mut AHashMap<Rc<Term>, Rc<Term>>,
     term: &Rc<Term>,
 ) -> Rc<Term> {

@@ -18,7 +18,7 @@ pub struct RuleArgs<'a> {
     pub(super) conclusion: &'a [Rc<Term>],
     pub(super) premises: &'a [Premise<'a>],
     pub(super) args: &'a [ProofArg],
-    pub(super) pool: &'a mut TermPool,
+    pub(super) pool: &'a mut dyn TPool,
     pub(super) context: &'a mut ContextStack,
 
     // For rules that end a subproof, we need to pass the previous command in the subproof that it
