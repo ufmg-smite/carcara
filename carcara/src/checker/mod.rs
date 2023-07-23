@@ -216,6 +216,7 @@ impl<'c> ProofChecker<'c> {
                     // If this is the last command of a subproof, we have to pop the subproof
                     // commands off of the stack. The parser already ensures that the last command
                     // in a subproof is always a `step` command
+                    // TODO: Use depth diff to pop context off
                     if is_end_of_subproof {
                         self.context.pop();
                         if let Some(elaborator) = &mut self.elaborator {

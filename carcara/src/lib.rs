@@ -140,6 +140,7 @@ pub fn check<T: io::BufRead>(
     proof: T,
     options: CarcaraOptions,
     num_threads: usize,
+    stack_size: usize,
 ) -> Result<bool, Error> {
     use crate::checker::Scheduler;
     use std::sync::Arc;
@@ -165,7 +166,8 @@ pub fn check<T: io::BufRead>(
     let checking = Instant::now();
     let (scheduler, _) = Scheduler::new(num_threads, &proof);
     run_measures.scheduling = checking.elapsed();
-    let mut checker = checker::ParallelProofChecker::new(Arc::new(pool), config, &prelude);
+    let mut checker =
+        checker::ParallelProofChecker::new(Arc::new(pool), config, &prelude, stack_size);
 
     if options.stats {
         let mut checker_stats = CheckerStatistics {

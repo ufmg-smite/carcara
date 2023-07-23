@@ -25,10 +25,16 @@ pub struct ParallelProofChecker<'c> {
     context: ContextStack,
     reached_empty_clause: bool,
     is_holey: bool,
+    stack_size: usize,
 }
 
 impl<'c> ParallelProofChecker<'c> {
-    pub fn new(pool: Arc<PrimitivePool>, config: Config, prelude: &'c ProblemPrelude) -> Self {
+    pub fn new(
+        pool: Arc<PrimitivePool>,
+        config: Config,
+        prelude: &'c ProblemPrelude,
+        stack_size: usize,
+    ) -> Self {
         ParallelProofChecker {
             pool,
             config,
@@ -36,6 +42,7 @@ impl<'c> ParallelProofChecker<'c> {
             context: ContextStack::new(),
             reached_empty_clause: false,
             is_holey: false,
+            stack_size,
         }
     }
 
@@ -48,6 +55,7 @@ impl<'c> ParallelProofChecker<'c> {
             context: ContextStack::new(),
             reached_empty_clause: false,
             is_holey: false,
+            stack_size: self.stack_size,
         }
     }
 
@@ -60,8 +68,6 @@ impl<'c> ParallelProofChecker<'c> {
         // thread already found out an invalid step)
         let premature_abort = Arc::new(RwLock::new(false));
         let context_pool = ContextPool::from_global(&self.pool);
-        // TODO: Add stack size flag
-        const STACK_SIZE: usize = 128 * 1024 * 1024;
         //
         thread::scope(|s| {
             let threads: Vec<_> = (&scheduler.loads)
@@ -75,7 +81,7 @@ impl<'c> ParallelProofChecker<'c> {
 
                     thread::Builder::new()
                         .name(format!("worker-{i}"))
-                        .stack_size(STACK_SIZE)
+                        .stack_size(self.stack_size)
                         .spawn_scoped(s, move || -> CarcaraResult<(bool, bool)> {
                             let mut iter = schedule.iter(&proof.commands[..]);
                             let mut last_depth = 0;
@@ -233,8 +239,6 @@ impl<'c> ParallelProofChecker<'c> {
         // thread already found out an invalid step)
         let premature_abort = Arc::new(RwLock::new(false));
         let context_pool = ContextPool::from_global(&self.pool);
-        // TODO: Add stack size flag
-        const STACK_SIZE: usize = 128 * 1024 * 1024;
         //
         thread::scope(|s| {
             let threads: Vec<_> = (&scheduler.loads)
@@ -256,7 +260,7 @@ impl<'c> ParallelProofChecker<'c> {
 
                     thread::Builder::new()
                         .name(format!("worker-{i}"))
-                        .stack_size(STACK_SIZE)
+                        .stack_size(self.stack_size)
                         .spawn_scoped(
                             s,
                             move || -> CarcaraResult<(bool, bool, CheckerStatistics<CR>)> {

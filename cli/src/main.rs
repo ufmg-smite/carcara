@@ -91,6 +91,13 @@ struct StatsOptions {
     stats: bool,
 }
 
+#[derive(Args)]
+struct StackOptions {
+    /// Defines the thread stack size for each check worker (does not include the main thread stack size, which should be set manually).
+    #[clap(long, default_value = "0")]
+    stack_size: usize,
+}
+
 #[derive(Args, Clone, Copy)]
 struct ParsingOptions {
     /// Expand function definitions introduced by `define-fun`s in the SMT problem. If this flag is
@@ -195,6 +202,9 @@ struct CheckCommandOptions {
 
     #[clap(flatten)]
     stats: StatsOptions,
+
+    #[clap(flatten)]
+    stack: StackOptions,
 }
 
 #[derive(Args)]
@@ -354,6 +364,7 @@ fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
         proof,
         build_carcara_options(options.parsing, options.checking, options.stats),
         options.num_threads,
+        options.stack.stack_size,
     )
     .map_err(Into::into)
 }
