@@ -126,6 +126,5 @@ pub fn get_step_weight(step: &ProofCommand) -> u64 {
                 _ => 0,
             }
         }
-        ProofCommand::Closing => 0,
     }
 }

@@ -55,15 +55,17 @@ impl<'a> Iterator for ScheduleIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         // If it isn't the end of the steps
         if self.step_id < self.steps.len() {
+            // If current step is an closing subproof step
+            while let (_, usize::MAX) = self.steps[self.step_id] {
+                self.proof_stack.pop();
+                self.step_id += 1;
+                // If reached the last closing step of the whole proof
+                if self.step_id == self.steps.len() {
+                    return None;
+                }
+            }
             let cur_step = self.steps[self.step_id];
             self.step_id += 1;
-            // If current step is an closing subproof
-            if let (_, usize::MAX) = cur_step {
-                return Some(&ProofCommand::Closing);
-            }
-            while cur_step.0 != self.proof_stack.len() - 1 {
-                self.proof_stack.pop();
-            }
 
             let top = self.proof_stack.last().unwrap();
             let command = &top[cur_step.1];

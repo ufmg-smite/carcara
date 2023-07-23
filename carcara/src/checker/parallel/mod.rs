@@ -78,8 +78,22 @@ impl<'c> ParallelProofChecker<'c> {
                         .stack_size(STACK_SIZE)
                         .spawn_scoped(s, move || -> CarcaraResult<(bool, bool)> {
                             let mut iter = schedule.iter(&proof.commands[..]);
+                            let mut last_depth = 0;
 
                             while let Some(command) = iter.next() {
+                                // If there is any depth difference between the current and last step
+                                while (last_depth - iter.depth() as i64 > 0)
+                                    || (last_depth - iter.depth() as i64 == 0
+                                        && matches!(command, ProofCommand::Subproof(_)))
+                                {
+                                    // If this is the last command of a subproof, we have to pop off the subproof
+                                    // commands of the stack. The parser already ensures that the last command
+                                    // in a subproof is always a `step` command
+                                    local_self.context.pop();
+                                    last_depth -= 1;
+                                }
+                                last_depth = iter.depth() as i64;
+
                                 match command {
                                     ProofCommand::Step(step) => {
                                         // If this step ends a subproof, it might need to implicitly reference the
@@ -154,12 +168,6 @@ impl<'c> ParallelProofChecker<'c> {
                                                 step: id.clone(),
                                             });
                                         }
-                                    }
-                                    ProofCommand::Closing => {
-                                        // If this is the last command of a subproof, we have to pop off the subproof
-                                        // commands of the stack. The parser already ensures that the last command
-                                        // in a subproof is always a `step` command
-                                        local_self.context.pop();
                                     }
                                 }
                                 // Verify if any of the other threads found an error and abort in case of positive
@@ -253,8 +261,22 @@ impl<'c> ParallelProofChecker<'c> {
                             s,
                             move || -> CarcaraResult<(bool, bool, CheckerStatistics<CR>)> {
                                 let mut iter = schedule.iter(&proof.commands[..]);
+                                let mut last_depth = 0;
 
                                 while let Some(command) = iter.next() {
+                                    // If there is any depth difference between the current and last step
+                                    while (last_depth - iter.depth() as i64 > 0)
+                                        || (last_depth - iter.depth() as i64 == 0
+                                            && matches!(command, ProofCommand::Subproof(_)))
+                                    {
+                                        // If this is the last command of a subproof, we have to pop off the subproof
+                                        // commands of the stack. The parser already ensures that the last command
+                                        // in a subproof is always a `step` command
+                                        local_self.context.pop();
+                                        last_depth -= 1;
+                                    }
+                                    last_depth = iter.depth() as i64;
+
                                     match command {
                                         ProofCommand::Step(step) => {
                                             // If this step ends a subproof, it might need to implicitly reference the
@@ -343,12 +365,6 @@ impl<'c> ParallelProofChecker<'c> {
                                                     step: id.clone(),
                                                 });
                                             }
-                                        }
-                                        ProofCommand::Closing => {
-                                            // If this is the last command of a subproof, we have to pop off the subproof
-                                            // commands of the stack. The parser already ensures that the last command
-                                            // in a subproof is always a `step` command
-                                            local_self.context.pop();
                                         }
                                     }
                                     // Verify if any of the other threads found an error and abort in case of positive

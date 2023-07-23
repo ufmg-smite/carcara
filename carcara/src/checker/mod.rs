@@ -173,7 +173,6 @@ impl<'c> ProofChecker<'c> {
                         });
                     }
                 }
-                ProofCommand::Closing => {}
             }
         }
         if self.config.is_running_test || self.reached_empty_clause {
@@ -264,7 +263,6 @@ impl<'c> ProofChecker<'c> {
                         });
                     }
                 }
-                ProofCommand::Closing => {}
             }
         }
         if self.config.is_running_test || self.reached_empty_clause {
