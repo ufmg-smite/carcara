@@ -66,7 +66,8 @@ impl<'c> ParallelProofChecker<'c> {
         let context_pool = ContextPool::from_global(&self.pool);
         //
         thread::scope(|s| {
-            let threads: Vec<_> = (&scheduler.loads)
+            let threads: Vec<_> = scheduler
+                .loads
                 .iter()
                 .enumerate()
                 .map(|(i, schedule)| {
@@ -235,7 +236,8 @@ impl<'c> ParallelProofChecker<'c> {
         let context_pool = ContextPool::from_global(&self.pool);
         //
         thread::scope(|s| {
-            let threads: Vec<_> = (&scheduler.loads)
+            let threads: Vec<_> = scheduler
+                .loads
                 .iter()
                 .enumerate()
                 .map(|(i, schedule)| {
