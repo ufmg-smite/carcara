@@ -1,5 +1,5 @@
-pub(crate) mod iter;
-pub(crate) mod weights;
+pub mod iter;
+pub mod weights;
 
 use crate::ast::{Proof, ProofCommand};
 use iter::ScheduleIter;
@@ -56,12 +56,7 @@ struct AssignedLoad(u64, usize);
 
 impl Ord for AssignedLoad {
     fn cmp(&self, other: &Self) -> Ordering {
-        if self.0 > other.0 {
-            return Ordering::Less;
-        } else if self.0 < other.0 {
-            return Ordering::Greater;
-        }
-        return Ordering::Equal;
+        other.0.cmp(&self.0)
     }
 }
 
@@ -103,6 +98,12 @@ pub struct Scheduler {
     pub loads: Vec<Schedule>,
 }
 
+impl Default for Schedule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Scheduler {
     /// Creates a thread scheduler for this proof using a specific number of
     /// workers. This scheduler is responsible for balancing the load (the
@@ -116,19 +117,19 @@ impl Scheduler {
         let mut pq = BinaryHeap::<AssignedLoad>::new();
         let mut context_usage = vec![];
         for i in 0..num_workers {
-            pq.push(AssignedLoad { 0: 0, 1: i });
+            pq.push(AssignedLoad(0, i));
         }
 
         loop {
             // Pop the finished subproofs
-            while stack.len() != 0 && {
+            while !stack.is_empty() && {
                 let top = stack.last().unwrap();
                 top.id == top.cmds.len()
             } {
                 for schedule_id in &stack.last().unwrap().used_by {
                     let last = loads[*schedule_id].last().unwrap();
                     // If it's an useless context insertion
-                    if last.0 <= stack.len() - 1
+                    if last.0 < stack.len()
                         && matches!(stack[last.0].cmds[last.1], ProofCommand::Subproof(_))
                     {
                         // Make sure this context usage count is reduced
@@ -147,7 +148,7 @@ impl Scheduler {
                 }
                 stack.pop();
             }
-            if stack.len() == 0 {
+            if stack.is_empty() {
                 break;
             }
             //
@@ -157,12 +158,12 @@ impl Scheduler {
                 let step_weight = get_step_weight(&top.cmds[top.id]);
                 assert!(u64::MAX - step_weight >= load, "Weight balancing overflow!");
                 load += step_weight;
-                pq.push(AssignedLoad { 0: load, 1: load_index });
+                pq.push(AssignedLoad(load, load_index));
             }
 
             let depth = stack.len() - 1;
             let (mut i, initial_layer) = (1, {
-                let tmp = loads[load_index].last().unwrap_or_else(|| &(0, 0));
+                let tmp = loads[load_index].last().unwrap_or(&(0, 0));
                 if tmp.1 == usize::MAX {
                     tmp.0 - 1
                 } else {
@@ -173,7 +174,7 @@ impl Scheduler {
             // but it was not assigned to this schedule yet
             while initial_layer + i <= depth {
                 let subproof_oppening = stack[initial_layer + i].pre_req.unwrap();
-                let last_inserted = *loads[load_index].last().unwrap_or_else(|| &(usize::MAX, 0));
+                let last_inserted = *loads[load_index].last().unwrap_or(&(usize::MAX, 0));
 
                 if last_inserted != subproof_oppening {
                     loads[load_index].push(subproof_oppening);

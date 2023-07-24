@@ -182,10 +182,10 @@ impl<'c> ProofChecker<'c> {
         }
     }
 
-    pub fn check_with_stats<'s, 'p, 'a, CR: CollectResults + Send + Default>(
+    pub fn check_with_stats<'s, CR: CollectResults + Send + Default>(
         &'s mut self,
-        proof: &'p Proof,
-        stats: &'s mut CheckerStatistics<'a, CR>,
+        proof: &Proof,
+        stats: &'s mut CheckerStatistics<CR>,
     ) -> CarcaraResult<bool> {
         // Similarly to the parser, to avoid stack overflows in proofs with many nested subproofs,
         // we check the subproofs iteratively, instead of recursively
@@ -287,10 +287,10 @@ impl<'c> ProofChecker<'c> {
         Ok((self.is_holey, proof))
     }
 
-    pub fn check_and_elaborate_with_stats<'s, 'a, CR: CollectResults + Send + Default>(
+    pub fn check_and_elaborate_with_stats<'s, CR: CollectResults + Send + Default>(
         &'s mut self,
         mut proof: Proof,
-        stats: &'s mut CheckerStatistics<'a, CR>,
+        stats: &'s mut CheckerStatistics<CR>,
     ) -> CarcaraResult<(bool, Proof)> {
         self.elaborator = Some(Elaborator::new());
         let result = self.check_with_stats(&proof, stats);
@@ -307,13 +307,13 @@ impl<'c> ProofChecker<'c> {
         Ok((self.is_holey, proof))
     }
 
-    fn check_assume<'a, CR: CollectResults + Send + Default>(
+    fn check_assume<CR: CollectResults + Send + Default>(
         &mut self,
         id: &str,
         term: &Rc<Term>,
         premises: &AHashSet<Rc<Term>>,
         iter: &ProofIter,
-        mut stats: Option<&'a mut CheckerStatistics<CR>>,
+        mut stats: Option<&mut CheckerStatistics<CR>>,
     ) -> bool {
         let time = Instant::now();
 
@@ -406,7 +406,7 @@ impl<'c> ProofChecker<'c> {
                 let is_hole = lia_generic::lia_generic_single_thread(
                     self.pool,
                     &step.clause,
-                    &self.prelude,
+                    self.prelude,
                     self.elaborator.as_mut(),
                     &step.id,
                 );

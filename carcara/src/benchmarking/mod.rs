@@ -185,9 +185,9 @@ impl OnlineBenchmarkResults {
         for (rule, data) in data_by_rule {
             print!("    {: <18}", rule);
             if sort_by_total {
-                println!("{:#}", data)
+                println!("{:#}", data);
             } else {
-                println!("{}", data)
+                println!("{}", data);
             }
         }
 

@@ -184,7 +184,7 @@ pub fn check<T: io::BufRead>(
         run_measures.total = total.elapsed();
 
         checker_stats.results.add_run_measurement(
-            &("this".to_string(), 0),
+            &("this".to_owned(), 0),
             RunMeasurement {
                 parsing: run_measures.parsing,
                 checking: run_measures.checking,
@@ -246,7 +246,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
         run_measures.total = total.elapsed();
 
         checker_stats.results.add_run_measurement(
-            &("this".to_string(), 0),
+            &("this".to_owned(), 0),
             RunMeasurement {
                 parsing: run_measures.parsing,
                 checking: run_measures.checking,

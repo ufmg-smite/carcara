@@ -59,11 +59,7 @@ impl<'c> ParallelProofChecker<'c> {
         }
     }
 
-    pub fn check<'s, 'p>(
-        &'s mut self,
-        proof: &'p Proof,
-        scheduler: &'s Scheduler,
-    ) -> CarcaraResult<bool> {
+    pub fn check<'s>(&'s mut self, proof: &Proof, scheduler: &'s Scheduler) -> CarcaraResult<bool> {
         // Used to estimulate threads to abort prematurely (only happens when a
         // thread already found out an invalid step)
         let premature_abort = Arc::new(RwLock::new(false));
@@ -71,7 +67,7 @@ impl<'c> ParallelProofChecker<'c> {
         //
         thread::scope(|s| {
             let threads: Vec<_> = (&scheduler.loads)
-                .into_iter()
+                .iter()
                 .enumerate()
                 .map(|(i, schedule)| {
                     // Shares the self between threads
@@ -217,9 +213,7 @@ impl<'c> ParallelProofChecker<'c> {
                 });
 
             // If an error happend
-            if let Err(x) = err {
-                return Err(x);
-            }
+            err?;
 
             if reached {
                 Ok(holey)
@@ -229,11 +223,11 @@ impl<'c> ParallelProofChecker<'c> {
         })
     }
 
-    pub fn check_with_stats<'s, 'p, 'a, CR: CollectResults + Send + Default>(
+    pub fn check_with_stats<'s, CR: CollectResults + Send + Default>(
         &'s mut self,
-        proof: &'p Proof,
+        proof: &Proof,
         scheduler: &'s Scheduler,
-        stats: &'s mut CheckerStatistics<'a, CR>,
+        stats: &'s mut CheckerStatistics<CR>,
     ) -> CarcaraResult<bool> {
         // Used to estimulate threads to abort prematurely (only happens when a
         // thread already found out an invalid step)
@@ -242,7 +236,7 @@ impl<'c> ParallelProofChecker<'c> {
         //
         thread::scope(|s| {
             let threads: Vec<_> = (&scheduler.loads)
-                .into_iter()
+                .iter()
                 .enumerate()
                 .map(|(i, schedule)| {
                     let mut local_stats = CheckerStatistics {
@@ -428,9 +422,7 @@ impl<'c> ParallelProofChecker<'c> {
                 });
 
             // If an error happend
-            if let Err(x) = err {
-                return Err(x);
-            }
+            err?;
 
             if reached {
                 Ok(holey)
@@ -440,13 +432,13 @@ impl<'c> ParallelProofChecker<'c> {
         })
     }
 
-    fn check_assume<'a, CR: CollectResults + Send + Default>(
+    fn check_assume<CR: CollectResults + Send + Default>(
         &mut self,
         id: &str,
         term: &Rc<Term>,
         premises: &AHashSet<Rc<Term>>,
         iter: &ScheduleIter,
-        mut stats: Option<&'a mut CheckerStatistics<CR>>,
+        mut stats: Option<&mut CheckerStatistics<CR>>,
     ) -> bool {
         let time = Instant::now();
 
@@ -520,7 +512,7 @@ impl<'c> ParallelProofChecker<'c> {
 
         if step.rule == "lia_generic" {
             if self.config.lia_via_cvc5 {
-                let is_hole = lia_generic::lia_generic_multi_thread(&step.clause, &self.prelude);
+                let is_hole = lia_generic::lia_generic_multi_thread(&step.clause, self.prelude);
                 self.is_holey = self.is_holey || is_hole;
             } else {
                 log::warn!("encountered \"lia_generic\" rule, ignoring");

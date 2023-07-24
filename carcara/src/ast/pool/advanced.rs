@@ -277,7 +277,7 @@ impl LocalPool {
             sort.clone()
         }
         // A sort inserted by context
-        else if let Some(entry) = ctx_pool.terms.get(&term) {
+        else if let Some(entry) = ctx_pool.terms.get(term) {
             entry.clone()
         } else {
             local_pool.sorts_cache[term].clone()
@@ -322,7 +322,7 @@ impl TermPool for LocalPool {
             sort.clone()
         }
         // A sort inserted by context
-        else if let Some(entry) = self.ctx_pool.storage.read().unwrap().terms.get(&term) {
+        else if let Some(entry) = self.ctx_pool.storage.read().unwrap().terms.get(term) {
             entry.clone()
         } else {
             self.storage.sorts_cache[term].clone()

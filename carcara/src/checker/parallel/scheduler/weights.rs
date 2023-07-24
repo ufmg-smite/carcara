@@ -8,9 +8,9 @@ use crate::ast::ProofCommand;
 /// computed), it's for better of scheduler architecture that subproofs have a
 /// null weight.
 ///
-/// If you're interested in these weight values, take a look at Carcara's paper
-/// published at TACAS in April 2023
-/// (https://hanielbarbosa.com/papers/tacas2023.pdf) and its benchmark data.
+/// If you're interested in these weight values, take a look at [Carcara's
+/// paper](https://hanielbarbosa.com/papers/tacas2023.pdf)
+/// published at TACAS in April 2023 and its benchmark data.
 ///
 /// The rules with null weight are rules that we had no info about the median
 /// performance, since the solver used in the paper dataset does not generate
