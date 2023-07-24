@@ -83,6 +83,7 @@ fn test_hash_consing() {
         "true",
         "false",
         "1",
+        "Int",
         "2",
         "(+ 1 2)",
         "(* (+ 1 2) (+ 1 2))",
