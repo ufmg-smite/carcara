@@ -516,7 +516,7 @@ impl<'a, R: BufRead, P: TermPool> Parser<'a, R, P> {
                             self.pool
                                 .add(Term::Lambda(BindingList(func_def.params), func_def.body))
                         };
-                        let sort = self.pool.add(self.pool.sort(&lambda_term).as_ref().clone());
+                        let sort = self.pool.sort(&lambda_term);
                         let var = (name, sort);
                         self.insert_sorted_var(var.clone());
                         let var_term = self.pool.add(var.into());
@@ -814,8 +814,7 @@ impl<'a, R: BufRead, P: TermPool> Parser<'a, R, P> {
             self.next_token()?;
             let var = self.expect_symbol()?;
             let value = self.parse_term()?;
-            let sort = self.pool.sort(&value).as_ref().clone();
-            let sort = self.pool.add(sort);
+            let sort = self.pool.sort(&value);
             self.insert_sorted_var((var.clone(), sort));
             self.expect_token(Token::CloseParen)?;
             AnchorArg::Assign(var, value)
@@ -1027,7 +1026,7 @@ impl<'a, R: BufRead, P: TermPool> Parser<'a, R, P> {
                 p.expect_token(Token::OpenParen)?;
                 let name = p.expect_symbol()?;
                 let value = p.parse_term()?;
-                let sort = p.pool.add(p.pool.sort(&value).as_ref().clone());
+                let sort = p.pool.sort(&value);
                 p.insert_sorted_var((name.clone(), sort));
                 p.expect_token(Token::CloseParen)?;
                 Ok((name, value))
@@ -1042,8 +1041,7 @@ impl<'a, R: BufRead, P: TermPool> Parser<'a, R, P> {
             let substitution = bindings
                 .into_iter()
                 .map(|(name, value)| {
-                    let sort = self.pool.sort(&value).as_ref().clone();
-                    let var = Term::new_var(name, self.pool.add(sort));
+                    let var = Term::new_var(name, self.pool.sort(&value));
                     (self.pool.add(var), value)
                 })
                 .collect();

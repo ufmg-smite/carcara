@@ -24,7 +24,7 @@ pub fn forall_inst(
         .iter()
         .map(|arg| {
             let (arg_name, arg_value) = arg.as_assign()?;
-            let arg_sort = pool.sort(arg_value).clone();
+            let arg_sort = pool.sort(arg_value);
             rassert!(
                 bindings.remove(&(arg_name.clone(), arg_sort.clone())),
                 QuantifierError::NoBindingMatchesArg(arg_name.clone())

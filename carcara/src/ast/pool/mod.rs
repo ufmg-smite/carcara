@@ -191,22 +191,8 @@ impl TermPool for PrimitivePool {
     }
 
     fn free_vars<'s, 't: 's>(&'s mut self, term: &'t Rc<Term>) -> AHashSet<Rc<Term>> {
-        // Here, I would like to do
-        // ```
-        // if let Some(vars) = self.free_vars_cache.get(term) {
-        //     return vars;
-        // }
-        // ```
-        // However, because of a limitation in the borrow checker, the compiler thinks that
-        // this immutable borrow of `cache` has to live until the end of the function, even
-        // though the code immediately returns. This would stop me from mutating `cache` in the
-        // rest of the function. Because of that, I have to check if the hash map contains
-        // `term` as a key, and then get the value associated with it, meaning I have to access
-        // the hash map twice, which is a bit slower. This is an example of problem case #3
-        // from the non-lexical lifetimes RFC:
-        // https://github.com/rust-lang/rfcs/blob/master/text/2094-nll.md
-        if self.free_vars_cache.contains_key(term) {
-            return self.free_vars_cache.get(term).unwrap().clone();
+        if let Some(vars) = self.free_vars_cache.get(term) {
+            return vars.clone();
         }
         let set = match term.as_ref() {
             Term::App(f, args) => {
@@ -234,8 +220,7 @@ impl TermPool for PrimitivePool {
             Term::Let(bindings, inner) => {
                 let mut vars = self.free_vars(inner);
                 for (var, value) in bindings {
-                    let sort = self.sort(value).as_ref().clone();
-                    let sort = self.add(sort);
+                    let sort = self.sort(value);
                     let term = self.add((var.clone(), sort).into());
                     vars.remove(&term);
                 }

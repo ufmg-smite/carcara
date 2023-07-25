@@ -166,7 +166,7 @@ pub fn r#let(
     let mut pairs: Vec<_> = let_bindings
         .iter()
         .map(|(x, t)| {
-            let sort = pool.add(pool.sort(t).as_ref().clone());
+            let sort = pool.sort(t);
             let x_term = pool.add((x.clone(), sort).into());
             let s = substitution
                 .get(&x_term)

@@ -142,10 +142,7 @@ impl<'a> PolyeqElaborator<'a> {
 
                 let variable_args: Vec<_> = a_bindings
                     .iter()
-                    .map(|(name, value)| {
-                        let sort = pool.sort(value).as_ref().clone();
-                        (name.clone(), pool.add(sort))
-                    })
+                    .map(|(name, value)| (name.clone(), pool.sort(value)))
                     .collect();
 
                 self.open_subproof();
