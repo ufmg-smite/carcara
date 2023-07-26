@@ -37,7 +37,7 @@ pub trait TermPool {
     ///
     /// This method uses a cache, so there is no additional cost to computing the free variables of
     /// a term multiple times.
-    fn free_vars<'s, 't: 's>(&'s mut self, term: &'t Rc<Term>) -> AHashSet<Rc<Term>>;
+    fn free_vars(&mut self, term: &Rc<Term>) -> AHashSet<Rc<Term>>;
 }
 
 /// A structure to store and manage all allocated terms.
@@ -169,6 +169,108 @@ impl PrimitivePool {
         self.sorts_cache.insert(term.clone(), sorted_term);
         self.sorts_cache[term].clone()
     }
+
+    fn add_with_priorities<const N: usize>(
+        &mut self,
+        term: Term,
+        prior_pools: [&PrimitivePool; N],
+    ) -> Rc<Term> {
+        use std::collections::hash_map::Entry;
+
+        for p in prior_pools {
+            // If this prior pool has the term
+            if let Some(entry) = p.terms.get(&term) {
+                return entry.clone();
+            }
+        }
+
+        match self.terms.entry(term) {
+            Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
+            Entry::Vacant(vacant_entry) => {
+                let term = vacant_entry.key().clone();
+                let term = vacant_entry.insert(Rc::new(term)).clone();
+                self.compute_sort(&term);
+                term
+            }
+        }
+    }
+
+    fn sort_with_priorities<const N: usize>(
+        &mut self,
+        term: &Rc<Term>,
+        prior_pools: [&PrimitivePool; N],
+    ) -> Rc<Term> {
+        for p in prior_pools {
+            if let Some(sort) = p.sorts_cache.get(term) {
+                return sort.clone();
+            }
+        }
+        self.sorts_cache[term].clone()
+    }
+
+    pub fn free_vars_with_priorities<const N: usize>(
+        &mut self,
+        term: &Rc<Term>,
+        prior_pools: [&PrimitivePool; N],
+    ) -> AHashSet<Rc<Term>> {
+        for p in prior_pools {
+            if let Some(set) = p.free_vars_cache.get(term) {
+                return set.clone();
+            }
+        }
+
+        if let Some(set) = self.free_vars_cache.get(term) {
+            return set.clone();
+        }
+
+        let set = match term.as_ref() {
+            Term::App(f, args) => {
+                let mut set = self.free_vars_with_priorities(f, prior_pools);
+                for a in args {
+                    set.extend(self.free_vars_with_priorities(a, prior_pools).into_iter());
+                }
+                set
+            }
+            Term::Op(_, args) => {
+                let mut set = AHashSet::new();
+                for a in args {
+                    set.extend(self.free_vars_with_priorities(a, prior_pools).into_iter());
+                }
+                set
+            }
+            Term::Quant(_, bindings, inner) | Term::Lambda(bindings, inner) => {
+                let mut vars = self.free_vars_with_priorities(inner, prior_pools);
+                for bound_var in bindings {
+                    let term = self.add_with_priorities(bound_var.clone().into(), prior_pools);
+                    vars.remove(&term);
+                }
+                vars
+            }
+            Term::Let(bindings, inner) => {
+                let mut vars = self.free_vars_with_priorities(inner, prior_pools);
+                for (var, value) in bindings {
+                    let sort = self.sort_with_priorities(value, prior_pools);
+                    let term = self.add_with_priorities((var.clone(), sort).into(), prior_pools);
+                    vars.remove(&term);
+                }
+                vars
+            }
+            Term::Choice(bound_var, inner) => {
+                let mut vars = self.free_vars_with_priorities(inner, prior_pools);
+                let term = self.add_with_priorities(bound_var.clone().into(), prior_pools);
+                vars.remove(&term);
+                vars
+            }
+            Term::Var(..) => {
+                let mut set = AHashSet::with_capacity(1);
+                set.insert(term.clone());
+                set
+            }
+            Term::Const(_) | Term::Sort(_) => AHashSet::new(),
+        };
+        self.free_vars_cache.insert(term.clone(), set);
+        self.free_vars_cache.get(term).unwrap().clone()
+    }
 }
 
 impl TermPool for PrimitivePool {
@@ -190,56 +292,7 @@ impl TermPool for PrimitivePool {
         self.sorts_cache[term].clone()
     }
 
-    fn free_vars<'s, 't: 's>(&'s mut self, term: &'t Rc<Term>) -> AHashSet<Rc<Term>> {
-        if let Some(vars) = self.free_vars_cache.get(term) {
-            return vars.clone();
-        }
-        let set = match term.as_ref() {
-            Term::App(f, args) => {
-                let mut set = self.free_vars(f);
-                for a in args {
-                    set.extend(self.free_vars(a).into_iter());
-                }
-                set
-            }
-            Term::Op(_, args) => {
-                let mut set = AHashSet::new();
-                for a in args {
-                    set.extend(self.free_vars(a).into_iter());
-                }
-                set
-            }
-            Term::Quant(_, bindings, inner) | Term::Lambda(bindings, inner) => {
-                let mut vars = self.free_vars(inner);
-                for bound_var in bindings {
-                    let term = self.add(bound_var.clone().into());
-                    vars.remove(&term);
-                }
-                vars
-            }
-            Term::Let(bindings, inner) => {
-                let mut vars = self.free_vars(inner);
-                for (var, value) in bindings {
-                    let sort = self.sort(value);
-                    let term = self.add((var.clone(), sort).into());
-                    vars.remove(&term);
-                }
-                vars
-            }
-            Term::Choice(bound_var, inner) => {
-                let mut vars = self.free_vars(inner);
-                let term = self.add(bound_var.clone().into());
-                vars.remove(&term);
-                vars
-            }
-            Term::Var(..) => {
-                let mut set = AHashSet::with_capacity(1);
-                set.insert(term.clone());
-                set
-            }
-            Term::Const(_) | Term::Sort(_) => AHashSet::new(),
-        };
-        self.free_vars_cache.insert(term.clone(), set);
-        self.free_vars_cache.get(term).unwrap().clone()
+    fn free_vars(&mut self, term: &Rc<Term>) -> AHashSet<Rc<Term>> {
+        self.free_vars_with_priorities(term, [])
     }
 }
