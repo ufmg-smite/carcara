@@ -77,7 +77,7 @@ impl PrimitivePool {
 
         sorts_cache.insert(bool_false.clone(), bool_sort.clone());
         sorts_cache.insert(bool_true.clone(), bool_sort.clone());
-        sorts_cache.insert(bool_sort.clone(), bool_sort.clone());
+        sorts_cache.insert(bool_sort.clone(), bool_sort);
 
         Self {
             terms,
