@@ -10,7 +10,7 @@ use crate::{
     CarcaraResult, Error,
 };
 use ahash::AHashSet;
-pub use scheduler::{iter::ScheduleIter, Scheduler};
+pub use scheduler::{ScheduleIter, Scheduler};
 use std::{
     ops::ControlFlow,
     sync::{Arc, RwLock},
