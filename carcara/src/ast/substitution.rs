@@ -353,10 +353,10 @@ impl Substitution {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ast::pool::advanced::LocalPool, parser::*};
+    use crate::{ast::PrimitivePool, parser::*};
 
     fn run_test(definitions: &str, original: &str, x: &str, t: &str, result: &str) {
-        let mut pool = LocalPool::new();
+        let mut pool = PrimitivePool::new();
         let mut parser =
             Parser::new(&mut pool, definitions.as_bytes(), true, false, false).unwrap();
         parser.parse_problem().unwrap();

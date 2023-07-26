@@ -22,14 +22,14 @@ use std::{io::BufRead, str::FromStr};
 ///
 /// This returns the parsed proof, as well as the `TermPool` used in parsing. Can take any type that
 /// implements `BufRead`.
-pub fn parse_instance<T: BufRead, P: TermPool + Default>(
+pub fn parse_instance<T: BufRead>(
     problem: T,
     proof: T,
     apply_function_defs: bool,
     expand_lets: bool,
     allow_int_real_subtyping: bool,
-) -> CarcaraResult<(ProblemPrelude, Proof, P)> {
-    let mut pool = P::default();
+) -> CarcaraResult<(ProblemPrelude, Proof, PrimitivePool)> {
+    let mut pool = PrimitivePool::new();
     let mut parser = Parser::new(
         &mut pool,
         problem,
@@ -79,8 +79,8 @@ struct ParserState {
 }
 
 /// A parser for the Alethe proof format.
-pub struct Parser<'a, R, P> {
-    pool: &'a mut P,
+pub struct Parser<'a, R> {
+    pool: &'a mut PrimitivePool,
     lexer: Lexer<R>,
     current_token: Token,
     current_position: Position,
@@ -92,12 +92,12 @@ pub struct Parser<'a, R, P> {
     allow_int_real_subtyping: bool,
 }
 
-impl<'a, R: BufRead, P: TermPool> Parser<'a, R, P> {
+impl<'a, R: BufRead> Parser<'a, R> {
     /// Constructs a new `Parser` from a type that implements `BufRead`.
     ///
     /// This operation can fail if there is an IO or lexer error on the first token.
     pub fn new(
-        pool: &'a mut P,
+        pool: &'a mut PrimitivePool,
         input: R,
         apply_function_defs: bool,
         expand_lets: bool,
@@ -175,34 +175,38 @@ impl<'a, R: BufRead, P: TermPool> Parser<'a, R, P> {
 
     /// Constructs and sort checks an operation term.
     fn make_op(&mut self, op: Operator, args: Vec<Rc<Term>>) -> Result<Rc<Term>, ParserError> {
-        let terms: Vec<_> = args.iter().map(|t| self.pool.sort(t)).collect();
-        let sorts: Vec<_> = terms.iter().map(|op| op.as_sort().unwrap()).collect();
+        let sorts: Vec<_> = args.iter().map(|t| self.pool.sort(t)).collect();
         match op {
             Operator::Not => {
                 assert_num_args(&args, 1)?;
-                SortError::assert_eq(&Sort::Bool, sorts[0])?;
+                SortError::assert_eq(&Sort::Bool, sorts[0].as_sort().unwrap())?;
             }
             Operator::Implies => {
                 assert_num_args(&args, 2..)?;
                 for s in sorts {
-                    SortError::assert_eq(&Sort::Bool, s)?;
+                    SortError::assert_eq(&Sort::Bool, s.as_sort().unwrap())?;
                 }
             }
             Operator::Or | Operator::And | Operator::Xor => {
                 // These operators can be called with only one argument
                 assert_num_args(&args, 1..)?;
                 for s in sorts {
-                    SortError::assert_eq(&Sort::Bool, s)?;
+                    SortError::assert_eq(&Sort::Bool, s.as_sort().unwrap())?;
                 }
             }
             Operator::Equals | Operator::Distinct => {
                 assert_num_args(&args, 2..)?;
-                SortError::assert_all_eq(&sorts)?;
+                SortError::assert_all_eq(
+                    &sorts
+                        .iter()
+                        .map(|op| op.as_sort().unwrap())
+                        .collect::<Vec<&Sort>>(),
+                )?;
             }
             Operator::Ite => {
                 assert_num_args(&args, 3)?;
-                SortError::assert_eq(&Sort::Bool, sorts[0])?;
-                SortError::assert_eq(sorts[1], sorts[2])?;
+                SortError::assert_eq(&Sort::Bool, sorts[0].as_sort().unwrap())?;
+                SortError::assert_eq(sorts[1].as_sort().unwrap(), sorts[2].as_sort().unwrap())?;
             }
             Operator::Add | Operator::Sub | Operator::Mult => {
                 // The `-` operator, in particular, can be called with only one argument, in which
@@ -217,17 +221,30 @@ impl<'a, R: BufRead, P: TermPool> Parser<'a, R, P> {
                 // Int/Real subtyping, all arguments must have the same sort
                 if self.allow_int_real_subtyping {
                     for s in sorts {
-                        SortError::assert_one_of(&[Sort::Int, Sort::Real], s)?;
+                        SortError::assert_one_of(&[Sort::Int, Sort::Real], s.as_sort().unwrap())?;
                     }
                 } else {
-                    SortError::assert_one_of(&[Sort::Int, Sort::Real], sorts[0])?;
-                    SortError::assert_all_eq(&sorts)?;
+                    SortError::assert_one_of(
+                        &[Sort::Int, Sort::Real],
+                        sorts[0].as_sort().unwrap(),
+                    )?;
+                    SortError::assert_all_eq(
+                        &sorts
+                            .iter()
+                            .map(|op| op.as_sort().unwrap())
+                            .collect::<Vec<&Sort>>(),
+                    )?;
                 }
             }
             Operator::IntDiv => {
                 assert_num_args(&args, 2..)?;
-                SortError::assert_eq(&Sort::Int, sorts[0])?;
-                SortError::assert_all_eq(&sorts)?;
+                SortError::assert_eq(&Sort::Int, sorts[0].as_sort().unwrap())?;
+                SortError::assert_all_eq(
+                    &sorts
+                        .iter()
+                        .map(|op| op.as_sort().unwrap())
+                        .collect::<Vec<&Sort>>(),
+                )?;
             }
             Operator::RealDiv => {
                 assert_num_args(&args, 2..)?;
@@ -236,41 +253,46 @@ impl<'a, R: BufRead, P: TermPool> Parser<'a, R, P> {
                 // allowing Int/Real subtyping, it may also receive Ints
                 if self.allow_int_real_subtyping {
                     for s in sorts {
-                        SortError::assert_one_of(&[Sort::Int, Sort::Real], s)?;
+                        SortError::assert_one_of(&[Sort::Int, Sort::Real], s.as_sort().unwrap())?;
                     }
                 } else {
-                    SortError::assert_eq(&Sort::Real, sorts[0])?;
-                    SortError::assert_all_eq(&sorts)?;
+                    SortError::assert_eq(&Sort::Real, sorts[0].as_sort().unwrap())?;
+                    SortError::assert_all_eq(
+                        &sorts
+                            .iter()
+                            .map(|op| op.as_sort().unwrap())
+                            .collect::<Vec<&Sort>>(),
+                    )?;
                 }
             }
             Operator::Mod => {
                 assert_num_args(&args, 2)?;
-                SortError::assert_eq(&Sort::Int, sorts[0])?;
-                SortError::assert_eq(&Sort::Int, sorts[1])?;
+                SortError::assert_eq(&Sort::Int, sorts[0].as_sort().unwrap())?;
+                SortError::assert_eq(&Sort::Int, sorts[1].as_sort().unwrap())?;
             }
             Operator::Abs => {
                 assert_num_args(&args, 1)?;
-                SortError::assert_eq(&Sort::Int, sorts[0])?;
+                SortError::assert_eq(&Sort::Int, sorts[0].as_sort().unwrap())?;
             }
             Operator::LessThan | Operator::GreaterThan | Operator::LessEq | Operator::GreaterEq => {
                 assert_num_args(&args, 2..)?;
                 // All the arguments must be either Int or Real sorted, but they don't need to all
                 // have the same sort
                 for s in sorts {
-                    SortError::assert_one_of(&[Sort::Int, Sort::Real], s)?;
+                    SortError::assert_one_of(&[Sort::Int, Sort::Real], s.as_sort().unwrap())?;
                 }
             }
             Operator::ToReal => {
                 assert_num_args(&args, 1)?;
-                SortError::assert_eq(&Sort::Int, sorts[0])?;
+                SortError::assert_eq(&Sort::Int, sorts[0].as_sort().unwrap())?;
             }
             Operator::ToInt | Operator::IsInt => {
                 assert_num_args(&args, 1)?;
-                SortError::assert_eq(&Sort::Real, sorts[0])?;
+                SortError::assert_eq(&Sort::Real, sorts[0].as_sort().unwrap())?;
             }
             Operator::Select => {
                 assert_num_args(&args, 2)?;
-                match sorts[0] {
+                match sorts[0].as_sort().unwrap() {
                     Sort::Array(_, _) => (),
                     got => {
                         // Instead of creating some special case for sort errors with parametric
@@ -278,7 +300,7 @@ impl<'a, R: BufRead, P: TermPool> Parser<'a, R, P> {
                         // infer the `X` sort from the second operator argument. This may be
                         // changed later
                         let got = got.clone();
-                        let x = sorts[1].clone();
+                        let x = sorts[1].as_sort().unwrap().clone();
                         let x = self.pool.add(Term::Sort(x));
                         let y = self
                             .pool
@@ -293,14 +315,15 @@ impl<'a, R: BufRead, P: TermPool> Parser<'a, R, P> {
             }
             Operator::Store => {
                 assert_num_args(&args, 3)?;
-                match sorts[0] {
+                match sorts[0].as_sort().unwrap() {
                     Sort::Array(x, y) => {
-                        SortError::assert_eq(x.as_sort().unwrap(), sorts[1])?;
-                        SortError::assert_eq(y.as_sort().unwrap(), sorts[2])?;
+                        SortError::assert_eq(x.as_sort().unwrap(), sorts[1].as_sort().unwrap())?;
+                        SortError::assert_eq(y.as_sort().unwrap(), sorts[2].as_sort().unwrap())?;
                     }
                     got => {
                         let got = got.clone();
-                        let [x, y] = [sorts[0], sorts[1]].map(|s| Term::Sort(s.clone()));
+                        let [x, y] = [&sorts[0], &sorts[1]]
+                            .map(|s| Term::Sort(s.as_sort().unwrap().clone()));
                         return Err(SortError {
                             expected: vec![Sort::Array(self.pool.add(x), self.pool.add(y))],
                             got,

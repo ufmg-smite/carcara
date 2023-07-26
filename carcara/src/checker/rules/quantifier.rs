@@ -497,7 +497,7 @@ mod tests {
 
         fn run_tests(definitions: &str, cases: &[(&str, &str)]) {
             for &(term, expected) in cases {
-                let mut pool = crate::ast::pool::advanced::LocalPool::new();
+                let mut pool = crate::ast::pool::PrimitivePool::new();
                 let [term, expected] = parse_terms(&mut pool, definitions, [term, expected]);
                 let got = to_cnf_term(&mut pool, &term);
                 assert_eq!(expected, got);
