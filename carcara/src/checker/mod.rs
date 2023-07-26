@@ -277,8 +277,8 @@ impl<'c> ProofChecker<'c> {
         self.elaborator = Some(Elaborator::new());
         let result = self.check(&proof);
 
-        // We reset `self.elaborator` before returning any errors encountered while checking so we
-        // don't leave the checker in an invalid state
+        // We reset `self.elaborator` before returning any errors encountered while checking so
+        // we don't leave the checker in an invalid state
         let mut elaborator = self.elaborator.take().unwrap();
         result?;
 
