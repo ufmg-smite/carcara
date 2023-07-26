@@ -135,7 +135,66 @@ pub enum Error {
     DoesNotReachEmptyClause,
 }
 
-pub fn check<T: io::BufRead>(
+pub fn check<T: io::BufRead>(problem: T, proof: T, options: CarcaraOptions) -> Result<bool, Error> {
+    let mut run_measures: RunMeasurement = RunMeasurement::default();
+
+    // Parsing
+    let total = Instant::now();
+    let (prelude, proof, mut pool) = parser::parse_instance(
+        problem,
+        proof,
+        options.apply_function_defs,
+        options.expand_lets,
+        options.allow_int_real_subtyping,
+    )?;
+    run_measures.parsing = total.elapsed();
+
+    let config = checker::Config::new()
+        .strict(options.strict)
+        .skip_unknown_rules(options.skip_unknown_rules)
+        .lia_via_cvc5(options.lia_via_cvc5);
+
+    // Checking
+    let checking = Instant::now();
+    let mut checker = checker::ProofChecker::new(&mut pool, config, &prelude);
+
+    if options.stats {
+        let mut checker_stats = CheckerStatistics {
+            file_name: "this",
+            elaboration_time: Duration::ZERO,
+            polyeq_time: Duration::ZERO,
+            assume_time: Duration::ZERO,
+            assume_core_time: Duration::ZERO,
+            results: OnlineBenchmarkResults::new(),
+        };
+        let res = checker.check_with_stats(&proof, &mut checker_stats);
+
+        run_measures.checking = checking.elapsed();
+        run_measures.total = total.elapsed();
+
+        checker_stats.results.add_run_measurement(
+            &("this".to_owned(), 0),
+            RunMeasurement {
+                parsing: run_measures.parsing,
+                checking: run_measures.checking,
+                elaboration: checker_stats.elaboration_time,
+                scheduling: run_measures.scheduling,
+                total: run_measures.total,
+                polyeq: checker_stats.polyeq_time,
+                assume: checker_stats.assume_time,
+                assume_core: checker_stats.assume_core_time,
+            },
+        );
+        // Print the statistics
+        checker_stats.results.print(false);
+
+        res
+    } else {
+        checker.check(&proof)
+    }
+}
+
+pub fn check_parallel<T: io::BufRead>(
     problem: T,
     proof: T,
     options: CarcaraOptions,

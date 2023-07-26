@@ -4,8 +4,8 @@ mod logger;
 mod path_args;
 
 use carcara::{
-    ast::print_proof, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate, parser,
-    CarcaraOptions,
+    ast::print_proof, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate,
+    check_parallel, parser, CarcaraOptions,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -359,13 +359,18 @@ fn parse_command(options: ParseCommandOptions) -> CliResult<()> {
 
 fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
     let (problem, proof) = get_instance(&options.input)?;
-    check(
-        problem,
-        proof,
-        build_carcara_options(options.parsing, options.checking, options.stats),
-        options.num_threads,
-        options.stack.stack_size,
-    )
+    let carc_options = build_carcara_options(options.parsing, options.checking, options.stats);
+    if options.num_threads == 1 {
+        check(problem, proof, carc_options)
+    } else {
+        check_parallel(
+            problem,
+            proof,
+            carc_options,
+            options.num_threads,
+            options.stack.stack_size,
+        )
+    }
     .map_err(Into::into)
 }
 
