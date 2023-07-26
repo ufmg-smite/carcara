@@ -53,29 +53,29 @@ impl<'a> Iterator for ScheduleIter<'a> {
     type Item = &'a ProofCommand;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // If it isn't the end of the steps
-        if self.step_id < self.steps.len() {
-            // If current step is an closing subproof step
-            while let (_, usize::MAX) = self.steps[self.step_id] {
-                self.proof_stack.pop();
-                self.step_id += 1;
-                // If reached the last closing step of the whole proof
-                if self.step_id == self.steps.len() {
-                    return None;
-                }
-            }
-            let cur_step = self.steps[self.step_id];
-            self.step_id += 1;
-
-            let top = self.proof_stack.last().unwrap();
-            let command = &top[cur_step.1];
-            // Opens a new subproof
-            if let ProofCommand::Subproof(subproof) = command {
-                self.proof_stack.push(&subproof.commands);
-            }
-            Some(command)
-        } else {
-            None
+        // If it is the end of the steps
+        if self.step_id >= self.steps.len() {
+            return None;
         }
+
+        // If current step is an closing subproof step
+        while let (_, usize::MAX) = self.steps[self.step_id] {
+            self.proof_stack.pop();
+            self.step_id += 1;
+            // If reached the last closing step of the whole proof
+            if self.step_id == self.steps.len() {
+                return None;
+            }
+        }
+        let cur_step = self.steps[self.step_id];
+        self.step_id += 1;
+
+        let top = self.proof_stack.last().unwrap();
+        let command = &top[cur_step.1];
+        // Opens a new subproof
+        if let ProofCommand::Subproof(subproof) = command {
+            self.proof_stack.push(&subproof.commands);
+        }
+        Some(command)
     }
 }

@@ -15,14 +15,14 @@ use weights::get_step_weight;
 /// (depth, subproof index). The first element is the subproof nesting `depth`
 /// (in the subproof stack) and `subproof index` is the index where this step is
 /// located in the subproof vector.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Schedule {
     steps: Vec<(usize, usize)>,
 }
 
 impl Schedule {
     pub fn new() -> Self {
-        Schedule { steps: vec![] }
+        Self::default()
     }
 
     /// Inserts a new step into the end of the schedule steps vector
@@ -98,17 +98,16 @@ pub struct Scheduler {
     pub loads: Vec<Schedule>,
 }
 
-impl Default for Schedule {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Scheduler {
     /// Creates a thread scheduler for this proof using a specific number of
     /// workers. This scheduler is responsible for balancing the load (the
-    /// proof steps have different costs to be checked) aiming the minimum
-    /// amount of async overhead
+    /// proof steps have different costs to be checked) aiming for minimum
+    /// amount of async overhead.
+    ///
+    /// Returns a scheduler itself and context usage info (a vector holding
+    /// how many threads are going to use each of the contexts. This vector maps
+    /// the contexts based in the subproof hashing value (i.e. `subproof_id`)
+    /// created in the parser).
     pub fn new(num_workers: usize, proof: &Proof) -> (Self, Vec<usize>) {
         // Initializes the control and result variables
         let cmds = &proof.commands;
@@ -152,24 +151,26 @@ impl Scheduler {
                 break;
             }
             //
-            let AssignedLoad { 0: mut load, 1: load_index } = pq.pop().unwrap();
+            let AssignedLoad(mut load, load_index) = pq.pop().unwrap();
             {
                 let top = stack.last().unwrap();
                 let step_weight = get_step_weight(&top.cmds[top.id]);
-                assert!(u64::MAX - step_weight >= load, "Weight balancing overflow!");
-                load += step_weight;
+                load = load
+                    .checked_add(step_weight)
+                    .expect("Weight balancing overflow!");
                 pq.push(AssignedLoad(load, load_index));
             }
 
             let depth = stack.len() - 1;
-            let (mut i, initial_layer) = (1, {
+            let mut i = 1;
+            let initial_layer = {
                 let tmp = loads[load_index].last().unwrap_or(&(0, 0));
                 if tmp.1 == usize::MAX {
                     tmp.0 - 1
                 } else {
                     tmp.0
                 }
-            });
+            };
             // If this step needs the context of the subproof oppening step
             // but it was not assigned to this schedule yet
             while initial_layer + i <= depth {
