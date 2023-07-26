@@ -157,7 +157,6 @@ pub fn check<T: io::BufRead>(problem: T, proof: T, options: CarcaraOptions) -> R
     // Checking
     let checking = Instant::now();
     let mut checker = checker::ProofChecker::new(&mut pool, config, &prelude);
-
     if options.stats {
         let mut checker_stats = CheckerStatistics {
             file_name: "this",
