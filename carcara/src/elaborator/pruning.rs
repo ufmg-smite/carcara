@@ -62,8 +62,8 @@ pub fn slice_proof(
             match &frame.commands[current] {
                 ProofCommand::Assume { .. } => (),
                 ProofCommand::Step(s) => {
-                    for &(_, i) in &s.premises {
-                        frame.queue.push_back((i, current_dist + 1));
+                    for &(depth, i) in &s.premises {
+                        stack[depth].queue.push_back((i, current_dist + 1));
                     }
                 }
                 ProofCommand::Subproof(s) => {
