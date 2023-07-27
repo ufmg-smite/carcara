@@ -296,11 +296,20 @@ impl<'a> PolyeqElaborator<'a> {
             (&[a_left, a_right], &[b_right, b_left]),
         );
 
+        // It might be the case that `x'` is syntactically equal to `y'`, which would mean that we
+        // are adding an `equiv_simplify` step to prove a reflexivity step. This is not valid
+        // according to the `equiv_simplify` specification, so we must change the rule to `refl` in
+        // this case.
+        let rule = if b == flipped_b {
+            "refl".to_owned()
+        } else {
+            "equiv_simplify".to_owned()
+        };
         let id = self.inner.get_new_id(self.root_id);
         let equiv_step = self.inner.add_new_step(ProofStep {
             id,
             clause: vec![build_term!(pool, (= {flipped_b} {b.clone()}))],
-            rule: "equiv_simplify".to_owned(),
+            rule,
             premises: Vec::new(),
             args: Vec::new(),
             discharge: Vec::new(),
