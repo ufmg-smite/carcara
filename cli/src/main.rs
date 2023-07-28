@@ -343,9 +343,8 @@ fn get_instance(options: &Input) -> CliResult<(Box<dyn BufRead>, Box<dyn BufRead
 }
 
 fn parse_command(options: ParseCommandOptions) -> CliResult<()> {
-    use carcara::ast::{PrimitivePool, ProblemPrelude, Proof};
     let (problem, proof) = get_instance(&options.input)?;
-    let (_, proof, _): (ProblemPrelude, Proof, PrimitivePool) = parser::parse_instance(
+    let (_, proof, _) = parser::parse_instance(
         problem,
         proof,
         options.parsing.apply_function_defs,
@@ -436,18 +435,13 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
     } else {
         println!("valid");
     }
-    print_benchmark_results(results, options.sort_by_total)
-}
-
-fn print_benchmark_results(results: OnlineBenchmarkResults, sort_by_total: bool) -> CliResult<()> {
-    results.print(sort_by_total);
+    results.print(options.sort_by_total);
     Ok(())
 }
 
 fn slice_command(options: SliceCommandOption) -> CliResult<()> {
-    use carcara::ast::{PrimitivePool, ProblemPrelude, Proof};
     let (problem, proof) = get_instance(&options.input)?;
-    let (_, proof, _): (ProblemPrelude, Proof, PrimitivePool) = parser::parse_instance(
+    let (_, proof, _) = parser::parse_instance(
         problem,
         proof,
         options.parsing.apply_function_defs,

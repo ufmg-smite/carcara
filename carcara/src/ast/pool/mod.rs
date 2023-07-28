@@ -101,11 +101,11 @@ impl PrimitivePool {
     }
 
     /// Computes the sort of a term and adds it to the sort cache.
-    pub(super) fn compute_sort<'a, 'b: 'a>(&'a mut self, term: &'b Rc<Term>) -> Rc<Term> {
+    fn compute_sort(&mut self, term: &Rc<Term>) -> Rc<Term> {
         use super::Operator;
 
-        if self.sorts_cache.contains_key(term) {
-            return self.sorts_cache[term].clone();
+        if let Some(sort) = self.sorts_cache.get(term) {
+            return sort.clone();
         }
 
         let result: Sort = match term.as_ref() {
@@ -160,8 +160,7 @@ impl PrimitivePool {
             Term::Lambda(bindings, body) => {
                 let mut result: Vec<_> =
                     bindings.iter().map(|(_name, sort)| sort.clone()).collect();
-                let return_sort = self.compute_sort(body).as_ref().clone();
-                result.push(self.add(return_sort));
+                result.push(self.compute_sort(body));
                 Sort::Function(result)
             }
         };
@@ -208,6 +207,7 @@ impl PrimitivePool {
         self.sorts_cache[term].clone()
     }
 
+    // TODO: Try to workaround the lifetime specifiers and return a ref
     pub fn free_vars_with_priorities<const N: usize>(
         &mut self,
         term: &Rc<Term>,

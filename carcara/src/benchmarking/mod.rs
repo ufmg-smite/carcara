@@ -353,7 +353,6 @@ impl CsvBenchmarkResults {
 }
 
 pub trait CollectResults {
-    fn new() -> Self;
     fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration);
     fn add_assume_measurement(&mut self, file: &str, id: &str, is_easy: bool, time: Duration);
     fn add_polyeq_depth(&mut self, depth: usize);
@@ -367,10 +366,6 @@ pub trait CollectResults {
 }
 
 impl CollectResults for OnlineBenchmarkResults {
-    fn new() -> Self {
-        Default::default()
-    }
-
     fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration) {
         let file = file.to_owned();
         let rule = rule.to_owned();
@@ -465,10 +460,6 @@ impl CollectResults for OnlineBenchmarkResults {
 }
 
 impl CollectResults for CsvBenchmarkResults {
-    fn new() -> Self {
-        Default::default()
-    }
-
     fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration) {
         let id = StepId {
             file: file.into(),

@@ -10,10 +10,10 @@ use crate::{
     CarcaraResult, Error,
 };
 use ahash::AHashSet;
-pub use scheduler::{ScheduleIter, Scheduler};
+pub use scheduler::{Schedule, ScheduleIter, Scheduler};
 use std::{
     ops::ControlFlow,
-    sync::{Arc, RwLock},
+    sync::{atomic::AtomicBool, Arc},
     thread,
     time::{Duration, Instant},
 };
@@ -59,10 +59,10 @@ impl<'c> ParallelProofChecker<'c> {
         }
     }
 
-    pub fn check<'s>(&'s mut self, proof: &Proof, scheduler: &'s Scheduler) -> CarcaraResult<bool> {
+    pub fn check(&mut self, proof: &Proof, scheduler: &Scheduler) -> CarcaraResult<bool> {
         // Used to estimulate threads to abort prematurely (only happens when a
         // thread already found out an invalid step)
-        let premature_abort = Arc::new(RwLock::new(false));
+        let premature_abort = Arc::new(AtomicBool::new(false));
         let context_pool = ContextPool::from_global(&self.pool);
         //
         thread::scope(|s| {
@@ -73,119 +73,20 @@ impl<'c> ParallelProofChecker<'c> {
                 .map(|(i, schedule)| {
                     // Shares the self between threads
                     let mut local_self = self.share();
-                    let mut local_pool = LocalPool::from_previous(&context_pool);
+                    let local_pool = LocalPool::from_previous(&context_pool);
                     let should_abort = premature_abort.clone();
 
                     thread::Builder::new()
                         .name(format!("worker-{i}"))
                         .stack_size(self.stack_size)
                         .spawn_scoped(s, move || -> CarcaraResult<(bool, bool)> {
-                            let mut iter = schedule.iter(&proof.commands[..]);
-                            let mut last_depth = 0;
-
-                            while let Some(command) = iter.next() {
-                                // If there is any depth difference between the current and last step
-                                while (last_depth - iter.depth() as i64 > 0)
-                                    || (last_depth - iter.depth() as i64 == 0
-                                        && matches!(command, ProofCommand::Subproof(_)))
-                                {
-                                    // If this is the last command of a subproof, we have to pop off the subproof
-                                    // commands of the stack. The parser already ensures that the last command
-                                    // in a subproof is always a `step` command
-                                    local_self.context.pop();
-                                    last_depth -= 1;
-                                }
-                                last_depth = iter.depth() as i64;
-
-                                match command {
-                                    ProofCommand::Step(step) => {
-                                        // If this step ends a subproof, it might need to implicitly reference the
-                                        // previous command in the subproof
-                                        let previous_command = if iter.is_end_step() {
-                                            let subproof = iter.current_subproof().unwrap();
-                                            let index = subproof.len() - 2;
-                                            subproof.get(index).map(|command| {
-                                                Premise::new((iter.depth(), index), command)
-                                            })
-                                        } else {
-                                            None
-                                        };
-
-                                        local_self
-                                            .check_step(
-                                                step,
-                                                previous_command,
-                                                &iter,
-                                                &mut local_pool,
-                                                None::<
-                                                    &mut CheckerStatistics<OnlineBenchmarkResults>,
-                                                >,
-                                            )
-                                            .map_err(|e| {
-                                                // Signalize to other threads to stop the proof checking
-                                                *should_abort.write().unwrap() = true;
-                                                Error::Checker {
-                                                    inner: e,
-                                                    rule: step.rule.clone(),
-                                                    step: step.id.clone(),
-                                                }
-                                            })?;
-
-                                        if step.clause.is_empty() {
-                                            local_self.reached_empty_clause = true;
-                                        }
-                                    }
-                                    ProofCommand::Subproof(s) => {
-                                        let step_id = command.id();
-
-                                        local_self
-                                            .context
-                                            .push(
-                                                &mut local_pool,
-                                                &s.assignment_args,
-                                                &s.variable_args,
-                                            )
-                                            .map_err(|e| {
-                                                // Signalize to other threads to stop the proof checking
-                                                *should_abort.write().unwrap() = true;
-                                                Error::Checker {
-                                                    inner: e.into(),
-                                                    rule: "anchor".into(),
-                                                    step: step_id.to_owned(),
-                                                }
-                                            })?;
-                                    }
-                                    ProofCommand::Assume { id, term } => {
-                                        if !local_self.check_assume(
-                                            id,
-                                            term,
-                                            &proof.premises,
-                                            &iter,
-                                            None::<&mut CheckerStatistics<OnlineBenchmarkResults>>,
-                                        ) {
-                                            // Signalize to other threads to stop the proof checking
-                                            *should_abort.write().unwrap() = true;
-                                            return Err(Error::Checker {
-                                                inner: CheckerError::Assume(term.clone()),
-                                                rule: "assume".into(),
-                                                step: id.clone(),
-                                            });
-                                        }
-                                    }
-                                }
-                                // Verify if any of the other threads found an error and abort in case of positive
-                                if *should_abort.read().unwrap() {
-                                    break;
-                                }
-                            }
-
-                            // Returns Ok(reached empty clause, isHoley, current thread statistics)
-                            if local_self.config.is_running_test || local_self.reached_empty_clause
-                            {
-                                Ok((true, local_self.is_holey))
-                            } else {
-                                Ok((false, local_self.is_holey))
-                            }
+                            local_self.worker_thread_check(
+                                proof,
+                                schedule,
+                                local_pool,
+                                should_abort,
+                                None::<&mut CheckerStatistics<OnlineBenchmarkResults>>,
+                            )
                         })
                         .unwrap()
                 })
@@ -224,15 +125,15 @@ impl<'c> ParallelProofChecker<'c> {
         })
     }
 
-    pub fn check_with_stats<'s, CR: CollectResults + Send + Default>(
-        &'s mut self,
+    pub fn check_with_stats<CR: CollectResults + Send + Default>(
+        &mut self,
         proof: &Proof,
-        scheduler: &'s Scheduler,
-        stats: &'s mut CheckerStatistics<CR>,
+        scheduler: &Scheduler,
+        stats: &mut CheckerStatistics<CR>,
     ) -> CarcaraResult<bool> {
         // Used to estimulate threads to abort prematurely (only happens when a
         // thread already found out an invalid step)
-        let premature_abort = Arc::new(RwLock::new(false));
+        let premature_abort = Arc::new(AtomicBool::new(false));
         let context_pool = ContextPool::from_global(&self.pool);
         //
         thread::scope(|s| {
@@ -247,11 +148,11 @@ impl<'c> ParallelProofChecker<'c> {
                         polyeq_time: Duration::ZERO,
                         assume_time: Duration::ZERO,
                         assume_core_time: Duration::ZERO,
-                        results: CR::new(),
+                        results: CR::default(),
                     };
                     // Shares the proof checker between threads
                     let mut local_self = self.share();
-                    let mut local_pool = LocalPool::from_previous(&context_pool);
+                    let local_pool = LocalPool::from_previous(&context_pool);
                     let should_abort = premature_abort.clone();
 
                     thread::Builder::new()
@@ -260,127 +161,14 @@ impl<'c> ParallelProofChecker<'c> {
                         .spawn_scoped(
                             s,
                             move || -> CarcaraResult<(bool, bool, CheckerStatistics<CR>)> {
-                                let mut iter = schedule.iter(&proof.commands[..]);
-                                let mut last_depth = 0;
-
-                                while let Some(command) = iter.next() {
-                                    // If there is any depth difference between the current and last step
-                                    while (last_depth - iter.depth() as i64 > 0)
-                                        || (last_depth - iter.depth() as i64 == 0
-                                            && matches!(command, ProofCommand::Subproof(_)))
-                                    {
-                                        // If this is the last command of a subproof, we have to pop off the subproof
-                                        // commands of the stack. The parser already ensures that the last command
-                                        // in a subproof is always a `step` command
-                                        local_self.context.pop();
-                                        last_depth -= 1;
-                                    }
-                                    last_depth = iter.depth() as i64;
-
-                                    match command {
-                                        ProofCommand::Step(step) => {
-                                            // If this step ends a subproof, it might need to implicitly reference the
-                                            // previous command in the subproof
-                                            let previous_command = if iter.is_end_step() {
-                                                let subproof = iter.current_subproof().unwrap();
-                                                let index = subproof.len() - 2;
-                                                subproof.get(index).map(|command| {
-                                                    Premise::new((iter.depth(), index), command)
-                                                })
-                                            } else {
-                                                None
-                                            };
-
-                                            local_self
-                                                .check_step(
-                                                    step,
-                                                    previous_command,
-                                                    &iter,
-                                                    &mut local_pool,
-                                                    Some(&mut local_stats),
-                                                )
-                                                .map_err(|e| {
-                                                    // Signalize to other threads to stop the proof checking
-                                                    *should_abort.write().unwrap() = true;
-                                                    Error::Checker {
-                                                        inner: e,
-                                                        rule: step.rule.clone(),
-                                                        step: step.id.clone(),
-                                                    }
-                                                })?;
-
-                                            if step.clause.is_empty() {
-                                                local_self.reached_empty_clause = true;
-                                            }
-                                        }
-                                        ProofCommand::Subproof(s) => {
-                                            let time = Instant::now();
-                                            let step_id = command.id();
-
-                                            local_self
-                                                .context
-                                                .push(
-                                                    &mut local_pool,
-                                                    &s.assignment_args,
-                                                    &s.variable_args,
-                                                )
-                                                .map_err(|e| {
-                                                    // Signalize to other threads to stop the proof checking
-                                                    *should_abort.write().unwrap() = true;
-                                                    Error::Checker {
-                                                        inner: e.into(),
-                                                        rule: "anchor".into(),
-                                                        step: step_id.to_owned(),
-                                                    }
-                                                })?;
-
-                                            // Collects statistics
-                                            let rule_name = match s.commands.last() {
-                                                Some(ProofCommand::Step(step)) => {
-                                                    format!("anchor({})", &step.rule)
-                                                }
-                                                _ => "anchor".to_owned(),
-                                            };
-
-                                            local_stats.results.add_step_measurement(
-                                                local_stats.file_name,
-                                                step_id,
-                                                &rule_name,
-                                                time.elapsed(),
-                                            );
-                                        }
-                                        ProofCommand::Assume { id, term } => {
-                                            if !local_self.check_assume(
-                                                id,
-                                                term,
-                                                &proof.premises,
-                                                &iter,
-                                                Some(&mut local_stats),
-                                            ) {
-                                                // Signalize to other threads to stop the proof checking
-                                                *should_abort.write().unwrap() = true;
-                                                return Err(Error::Checker {
-                                                    inner: CheckerError::Assume(term.clone()),
-                                                    rule: "assume".into(),
-                                                    step: id.clone(),
-                                                });
-                                            }
-                                        }
-                                    }
-                                    // Verify if any of the other threads found an error and abort in case of positive
-                                    if *should_abort.read().unwrap() {
-                                        break;
-                                    }
-                                }
-
-                                // Returns Ok(reached empty clause, isHoley, current thread statistics)
-                                if local_self.config.is_running_test
-                                    || local_self.reached_empty_clause
-                                {
-                                    Ok((true, local_self.is_holey, local_stats))
-                                } else {
-                                    Ok((false, local_self.is_holey, local_stats))
-                                }
+                                let res = local_self.worker_thread_check(
+                                    proof,
+                                    schedule,
+                                    local_pool,
+                                    should_abort,
+                                    Some(&mut local_stats),
+                                );
+                                res.and_then(|r| Ok((r.0, r.1, local_stats)))
                             },
                         )
                         .unwrap()
@@ -434,13 +222,127 @@ impl<'c> ParallelProofChecker<'c> {
         })
     }
 
-    fn check_assume<CR: CollectResults + Send + Default>(
+    fn worker_thread_check<CR: CollectResults + Send + Default>(
+        &mut self,
+        proof: &Proof,
+        schedule: &Schedule,
+        mut pool: LocalPool,
+        should_abort: Arc<AtomicBool>,
+        mut stats: Option<&mut CheckerStatistics<CR>>,
+    ) -> CarcaraResult<(bool, bool)> {
+        use std::sync::atomic::Ordering;
+
+        let mut iter = schedule.iter(&proof.commands[..]);
+        let mut last_depth = 0;
+
+        while let Some(command) = iter.next() {
+            // If there is any depth difference between the current and last step
+            while (last_depth - iter.depth() as i64 > 0)
+                || (last_depth - iter.depth() as i64 == 0
+                    && matches!(command, ProofCommand::Subproof(_)))
+            {
+                // If this is the last command of a subproof, we have to pop off the subproof
+                // commands of the stack. The parser already ensures that the last command
+                // in a subproof is always a `step` command
+                self.context.pop();
+                last_depth -= 1;
+            }
+            last_depth = iter.depth() as i64;
+
+            match command {
+                ProofCommand::Step(step) => {
+                    // If this step ends a subproof, it might need to implicitly reference the
+                    // previous command in the subproof
+                    let previous_command = if iter.is_end_step() {
+                        let subproof = iter.current_subproof().unwrap();
+                        let index = subproof.len() - 2;
+                        subproof
+                            .get(index)
+                            .map(|command| Premise::new((iter.depth(), index), command))
+                    } else {
+                        None
+                    };
+
+                    self.check_step(step, previous_command, &iter, &mut pool, &mut stats)
+                        .map_err(|e| {
+                            // Signalize to other threads to stop the proof checking
+                            should_abort.store(true, Ordering::Release);
+                            Error::Checker {
+                                inner: e,
+                                rule: step.rule.clone(),
+                                step: step.id.clone(),
+                            }
+                        })?;
+
+                    if step.clause.is_empty() {
+                        self.reached_empty_clause = true;
+                    }
+                }
+                ProofCommand::Subproof(s) => {
+                    let time = Instant::now();
+                    let step_id = command.id();
+
+                    self.context
+                        .push(&mut pool, &s.assignment_args, &s.variable_args)
+                        .map_err(|e| {
+                            // Signalize to other threads to stop the proof checking
+                            should_abort.store(true, Ordering::Release);
+                            Error::Checker {
+                                inner: e.into(),
+                                rule: "anchor".into(),
+                                step: step_id.to_owned(),
+                            }
+                        })?;
+
+                    if let Some(stats) = &mut stats {
+                        // Collects statistics
+                        let rule_name = match s.commands.last() {
+                            Some(ProofCommand::Step(step)) => {
+                                format!("anchor({})", &step.rule)
+                            }
+                            _ => "anchor".to_owned(),
+                        };
+                        stats.results.add_step_measurement(
+                            stats.file_name,
+                            step_id,
+                            &rule_name,
+                            time.elapsed(),
+                        );
+                    }
+                }
+                ProofCommand::Assume { id, term } => {
+                    if !self.check_assume(id, term, &proof.premises, &iter, &mut stats) {
+                        // Signalize to other threads to stop the proof checking
+                        should_abort.store(true, Ordering::Release);
+                        return Err(Error::Checker {
+                            inner: CheckerError::Assume(term.clone()),
+                            rule: "assume".into(),
+                            step: id.clone(),
+                        });
+                    }
+                }
+            }
+            // Verify if any of the other threads found an error and abort in case of positive
+            if should_abort.load(Ordering::Acquire) {
+                break;
+            }
+        }
+
+        // Returns Ok(reached empty clause, isHoley, current thread statistics)
+        if self.config.is_running_test || self.reached_empty_clause {
+            Ok((true, self.is_holey))
+        } else {
+            Ok((false, self.is_holey))
+        }
+    }
+
+    fn check_assume<'a, 'i, CR: CollectResults + Send + Default>(
         &mut self,
         id: &str,
         term: &Rc<Term>,
         premises: &AHashSet<Rc<Term>>,
-        iter: &ScheduleIter,
-        mut stats: Option<&mut CheckerStatistics<CR>>,
+        iter: &'i ScheduleIter<'i>,
+        mut stats: &mut Option<&'a mut CheckerStatistics<CR>>,
     ) -> bool {
         let time = Instant::now();
 
@@ -501,13 +403,13 @@ impl<'c> ParallelProofChecker<'c> {
         true
     }
 
-    fn check_step<'a, CR: CollectResults + Send + Default>(
+    fn check_step<'a, 'i, CR: CollectResults + Send + Default>(
         &mut self,
-        step: &'a ProofStep,
-        previous_command: Option<Premise<'a>>,
-        iter: &'a ScheduleIter<'a>,
+        step: &ProofStep,
+        previous_command: Option<Premise>,
+        iter: &'i ScheduleIter<'i>,
         pool: &mut LocalPool,
-        stats: Option<&'a mut CheckerStatistics<CR>>,
+        stats: &mut Option<&'a mut CheckerStatistics<CR>>,
     ) -> RuleResult {
         let time = Instant::now();
         let mut polyeq_time = Duration::ZERO;
