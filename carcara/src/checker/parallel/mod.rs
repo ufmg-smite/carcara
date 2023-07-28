@@ -102,9 +102,9 @@ impl<'c> ParallelProofChecker<'c> {
                 .map(|t| t.join().unwrap())
                 .try_for_each(|opt| {
                     match opt {
-                        Ok((_reached, _holey)) => {
+                        Ok((local_reached, local_holey)) => {
                             // Mask the result booleans
-                            (reached, holey) = (reached | _reached, holey | _holey);
+                            (reached, holey) = (reached | local_reached, holey | local_holey);
                             ControlFlow::Continue(())
                         }
                         Err(e) => {
@@ -161,14 +161,15 @@ impl<'c> ParallelProofChecker<'c> {
                         .spawn_scoped(
                             s,
                             move || -> CarcaraResult<(bool, bool, CheckerStatistics<CR>)> {
-                                let res = local_self.worker_thread_check(
-                                    proof,
-                                    schedule,
-                                    local_pool,
-                                    should_abort,
-                                    Some(&mut local_stats),
-                                );
-                                res.and_then(|r| Ok((r.0, r.1, local_stats)))
+                                local_self
+                                    .worker_thread_check(
+                                        proof,
+                                        schedule,
+                                        local_pool,
+                                        should_abort,
+                                        Some(&mut local_stats),
+                                    )
+                                    .map(|r| (r.0, r.1, local_stats))
                             },
                         )
                         .unwrap()
@@ -185,7 +186,7 @@ impl<'c> ParallelProofChecker<'c> {
                 .map(|t| t.join().unwrap())
                 .for_each(|opt| {
                     match opt {
-                        Ok((_reached, _holey, mut local_stats)) => {
+                        Ok((local_reached, local_holey, mut local_stats)) => {
                             // Combine the statistics
                             // Takes the external and local benchmark results to local variables and combine them
                             let main = std::mem::take(&mut stats.results);
@@ -199,7 +200,7 @@ impl<'c> ParallelProofChecker<'c> {
                             stats.assume_core_time += local_stats.assume_core_time;
 
                             // Mask the result booleans
-                            (reached, holey) = (reached | _reached, holey | _holey);
+                            (reached, holey) = (reached | local_reached, holey | local_holey);
                         }
                         Err(e) => {
                             // Since we want the statistics of the whole run
@@ -336,13 +337,13 @@ impl<'c> ParallelProofChecker<'c> {
         }
     }
 
-    fn check_assume<'a, 'i, CR: CollectResults + Send + Default>(
+    fn check_assume<'i, CR: CollectResults + Send + Default>(
         &mut self,
         id: &str,
         term: &Rc<Term>,
         premises: &AHashSet<Rc<Term>>,
         iter: &'i ScheduleIter<'i>,
-        mut stats: &mut Option<&'a mut CheckerStatistics<CR>>,
+        mut stats: &mut Option<&mut CheckerStatistics<CR>>,
     ) -> bool {
         let time = Instant::now();
 

@@ -98,94 +98,24 @@ impl<'c> ProofChecker<'c> {
     }
 
     pub fn check(&mut self, proof: &Proof) -> CarcaraResult<bool> {
-        // Similarly to the parser, to avoid stack overflows in proofs with many nested subproofs,
-        // we check the subproofs iteratively, instead of recursively
-        let mut iter = proof.iter();
-        while let Some(command) = iter.next() {
-            match command {
-                ProofCommand::Step(step) => {
-                    let is_end_of_subproof = iter.is_end_step();
-
-                    // If this step ends a subproof, it might need to implicitly reference the
-                    // previous command in the subproof
-                    let previous_command = if is_end_of_subproof {
-                        let subproof = iter.current_subproof().unwrap();
-                        let index = subproof.len() - 2;
-                        subproof
-                            .get(index)
-                            .map(|command| Premise::new((iter.depth(), index), command))
-                    } else {
-                        None
-                    };
-                    self.check_step(
-                        step,
-                        previous_command,
-                        &iter,
-                        None::<&mut CheckerStatistics<OnlineBenchmarkResults>>,
-                    )
-                    .map_err(|e| Error::Checker {
-                        inner: e,
-                        rule: step.rule.clone(),
-                        step: step.id.clone(),
-                    })?;
-
-                    // If this is the last command of a subproof, we have to pop the subproof
-                    // commands off of the stack. The parser already ensures that the last command
-                    // in a subproof is always a `step` command
-                    if is_end_of_subproof {
-                        self.context.pop();
-                        if let Some(elaborator) = &mut self.elaborator {
-                            elaborator.close_subproof();
-                        }
-                    }
-
-                    if step.clause.is_empty() {
-                        self.reached_empty_clause = true;
-                    }
-                }
-                ProofCommand::Subproof(s) => {
-                    let step_id = command.id();
-
-                    self.context
-                        .push(self.pool, &s.assignment_args, &s.variable_args)
-                        .map_err(|e| Error::Checker {
-                            inner: e.into(),
-                            rule: "anchor".into(),
-                            step: step_id.to_owned(),
-                        })?;
-
-                    if let Some(elaborator) = &mut self.elaborator {
-                        elaborator.open_subproof(s.commands.len());
-                    }
-                }
-                ProofCommand::Assume { id, term } => {
-                    if !self.check_assume(
-                        id,
-                        term,
-                        &proof.premises,
-                        &iter,
-                        None::<&mut CheckerStatistics<OnlineBenchmarkResults>>,
-                    ) {
-                        return Err(Error::Checker {
-                            inner: CheckerError::Assume(term.clone()),
-                            rule: "assume".into(),
-                            step: id.clone(),
-                        });
-                    }
-                }
-            }
-        }
-        if self.config.is_running_test || self.reached_empty_clause {
-            Ok(self.is_holey)
-        } else {
-            Err(Error::DoesNotReachEmptyClause)
-        }
+        self.check_impl(
+            proof,
+            None::<&mut CheckerStatistics<OnlineBenchmarkResults>>,
+        )
     }
 
     pub fn check_with_stats<'s, CR: CollectResults + Send + Default>(
         &'s mut self,
         proof: &Proof,
         stats: &'s mut CheckerStatistics<CR>,
+    ) -> CarcaraResult<bool> {
+        self.check_impl(proof, Some(stats))
+    }
+
+    fn check_impl<CR: CollectResults + Send + Default>(
+        &mut self,
+        proof: &Proof,
+        mut stats: Option<&mut CheckerStatistics<CR>>,
     ) -> CarcaraResult<bool> {
         // Similarly to the parser, to avoid stack overflows in proofs with many nested subproofs,
         // we check the subproofs iteratively, instead of recursively
@@ -206,7 +136,7 @@ impl<'c> ProofChecker<'c> {
                     } else {
                         None
                     };
-                    self.check_step(step, previous_command, &iter, Some(stats))
+                    self.check_step(step, previous_command, &iter, &mut stats)
                         .map_err(|e| Error::Checker {
                             inner: e,
                             rule: step.rule.clone(),
@@ -244,19 +174,21 @@ impl<'c> ProofChecker<'c> {
                         elaborator.open_subproof(s.commands.len());
                     }
 
-                    let rule_name = match s.commands.last() {
-                        Some(ProofCommand::Step(step)) => format!("anchor({})", &step.rule),
-                        _ => "anchor".to_owned(),
-                    };
-                    stats.results.add_step_measurement(
-                        stats.file_name,
-                        step_id,
-                        &rule_name,
-                        time.elapsed(),
-                    );
+                    if let Some(stats) = &mut stats {
+                        let rule_name = match s.commands.last() {
+                            Some(ProofCommand::Step(step)) => format!("anchor({})", &step.rule),
+                            _ => "anchor".to_owned(),
+                        };
+                        stats.results.add_step_measurement(
+                            stats.file_name,
+                            step_id,
+                            &rule_name,
+                            time.elapsed(),
+                        );
+                    }
                 }
                 ProofCommand::Assume { id, term } => {
-                    if !self.check_assume(id, term, &proof.premises, &iter, Some(stats)) {
+                    if !self.check_assume(id, term, &proof.premises, &iter, &mut stats) {
                         return Err(Error::Checker {
                             inner: CheckerError::Assume(term.clone()),
                             rule: "assume".into(),
@@ -307,13 +239,13 @@ impl<'c> ProofChecker<'c> {
         Ok((self.is_holey, proof))
     }
 
-    fn check_assume<CR: CollectResults + Send + Default>(
+    fn check_assume<'i, CR: CollectResults + Send + Default>(
         &mut self,
         id: &str,
         term: &Rc<Term>,
         premises: &AHashSet<Rc<Term>>,
-        iter: &ProofIter,
-        mut stats: Option<&mut CheckerStatistics<CR>>,
+        iter: &'i ProofIter<'i>,
+        mut stats: &mut Option<&mut CheckerStatistics<CR>>,
     ) -> bool {
         let time = Instant::now();
 
@@ -390,12 +322,12 @@ impl<'c> ProofChecker<'c> {
         true
     }
 
-    fn check_step<'a, CR: CollectResults + Send + Default>(
+    fn check_step<'a, 'i, CR: CollectResults + Send + Default>(
         &mut self,
-        step: &'a ProofStep,
-        previous_command: Option<Premise<'a>>,
-        iter: &'a ProofIter<'a>,
-        stats: Option<&'a mut CheckerStatistics<CR>>,
+        step: &ProofStep,
+        previous_command: Option<Premise>,
+        iter: &'i ProofIter<'i>,
+        stats: &mut Option<&'a mut CheckerStatistics<CR>>,
     ) -> RuleResult {
         let time = Instant::now();
         let mut polyeq_time = Duration::ZERO;
