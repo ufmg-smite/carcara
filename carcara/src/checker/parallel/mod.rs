@@ -404,13 +404,13 @@ impl<'c> ParallelProofChecker<'c> {
         true
     }
 
-    fn check_step<'a, 'i, CR: CollectResults + Send + Default>(
+    fn check_step<'i, CR: CollectResults + Send + Default>(
         &mut self,
         step: &ProofStep,
         previous_command: Option<Premise>,
         iter: &'i ScheduleIter<'i>,
         pool: &mut LocalPool,
-        stats: &mut Option<&'a mut CheckerStatistics<CR>>,
+        stats: &mut Option<&mut CheckerStatistics<CR>>,
     ) -> RuleResult {
         let time = Instant::now();
         let mut polyeq_time = Duration::ZERO;
