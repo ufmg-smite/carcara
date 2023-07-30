@@ -235,7 +235,7 @@ impl<'a> ScheduleIter<'a> {
     }
 
     /// Returns a slice to the commands of the inner-most open subproof.
-    pub fn current_subproof<'s: 'a>(&'s self) -> Option<&[ProofCommand]> {
+    pub fn current_subproof(&self) -> Option<&[ProofCommand]> {
         self.is_in_subproof()
             .then(|| *self.proof_stack.last().unwrap())
     }

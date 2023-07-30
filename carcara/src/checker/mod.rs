@@ -104,10 +104,10 @@ impl<'c> ProofChecker<'c> {
         )
     }
 
-    pub fn check_with_stats<'s, CR: CollectResults + Send + Default>(
-        &'s mut self,
+    pub fn check_with_stats<CR: CollectResults + Send + Default>(
+        &mut self,
         proof: &Proof,
-        stats: &'s mut CheckerStatistics<CR>,
+        stats: &mut CheckerStatistics<CR>,
     ) -> CarcaraResult<bool> {
         self.check_impl(proof, Some(stats))
     }

@@ -329,7 +329,7 @@ impl<'c> ParallelProofChecker<'c> {
             }
         }
 
-        // Returns Ok(reached empty clause, isHoley, current thread statistics)
+        // Returns Ok(reached empty clause, isHoley)
         if self.config.is_running_test || self.reached_empty_clause {
             Ok((true, self.is_holey))
         } else {
@@ -337,12 +337,12 @@ impl<'c> ParallelProofChecker<'c> {
         }
     }
 
-    fn check_assume<'i, CR: CollectResults + Send + Default>(
+    fn check_assume<CR: CollectResults + Send + Default>(
         &mut self,
         id: &str,
         term: &Rc<Term>,
         premises: &AHashSet<Rc<Term>>,
-        iter: &'i ScheduleIter<'i>,
+        iter: &ScheduleIter,
         mut stats: &mut Option<&mut CheckerStatistics<CR>>,
     ) -> bool {
         let time = Instant::now();
@@ -404,11 +404,11 @@ impl<'c> ParallelProofChecker<'c> {
         true
     }
 
-    fn check_step<'i, CR: CollectResults + Send + Default>(
+    fn check_step<CR: CollectResults + Send + Default>(
         &mut self,
         step: &ProofStep,
         previous_command: Option<Premise>,
-        iter: &'i ScheduleIter<'i>,
+        iter: &ScheduleIter,
         pool: &mut LocalPool,
         stats: &mut Option<&mut CheckerStatistics<CR>>,
     ) -> RuleResult {
