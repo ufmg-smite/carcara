@@ -36,7 +36,7 @@ impl ContextStack {
 
     pub fn push(
         &mut self,
-        pool: &mut TermPool,
+        pool: &mut dyn TermPool,
         assignment_args: &[(String, Rc<Term>)],
         variable_args: &[SortedVar],
     ) -> Result<(), SubstitutionError> {
@@ -53,8 +53,7 @@ impl ContextStack {
         // we use the current state of the hash map to transform `(f y)` into `(f z)`. The
         // resulting hash map will then contain `(:= y z)` and `(:= x (f z))`
         for (var, value) in assignment_args.iter() {
-            let sort = Term::Sort(pool.sort(value).clone());
-            let var_term = Term::new_var(var, pool.add(sort));
+            let var_term = Term::new_var(var, pool.sort(value));
             let var_term = pool.add(var_term);
             substitution.insert(pool, var_term.clone(), value.clone())?;
             let new_value = substitution_until_fixed_point.apply(pool, value);
@@ -64,8 +63,7 @@ impl ContextStack {
         let mappings = assignment_args
             .iter()
             .map(|(var, value)| {
-                let sort = Term::Sort(pool.sort(value).clone());
-                let var_term = (var.clone(), pool.add(sort)).into();
+                let var_term = (var.clone(), pool.sort(value)).into();
                 (pool.add(var_term), value.clone())
             })
             .collect();
@@ -84,7 +82,7 @@ impl ContextStack {
             std::cmp::min(self.num_cumulative_calculated, self.stack.len());
     }
 
-    fn catch_up_cumulative(&mut self, pool: &mut TermPool, up_to: usize) {
+    fn catch_up_cumulative(&mut self, pool: &mut dyn TermPool, up_to: usize) {
         for i in self.num_cumulative_calculated..std::cmp::max(up_to + 1, self.len()) {
             let simultaneous = build_simultaneous_substitution(pool, &self.stack[i].mappings).map;
             let mut cumulative_substitution = simultaneous.clone();
@@ -109,13 +107,13 @@ impl ContextStack {
         }
     }
 
-    fn get_substitution(&mut self, pool: &mut TermPool, index: usize) -> &mut Substitution {
+    fn get_substitution(&mut self, pool: &mut dyn TermPool, index: usize) -> &mut Substitution {
         assert!(index < self.len());
         self.catch_up_cumulative(pool, index);
         self.stack[index].cumulative_substitution.as_mut().unwrap()
     }
 
-    pub fn apply_previous(&mut self, pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
+    pub fn apply_previous(&mut self, pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term> {
         if self.len() < 2 {
             term.clone()
         } else {
@@ -124,7 +122,7 @@ impl ContextStack {
         }
     }
 
-    pub fn apply(&mut self, pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
+    pub fn apply(&mut self, pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term> {
         if self.is_empty() {
             term.clone()
         } else {
@@ -135,7 +133,7 @@ impl ContextStack {
 }
 
 fn build_simultaneous_substitution(
-    pool: &mut TermPool,
+    pool: &mut dyn TermPool,
     mappings: &[(Rc<Term>, Rc<Term>)],
 ) -> Substitution {
     let mut result = Substitution::empty();

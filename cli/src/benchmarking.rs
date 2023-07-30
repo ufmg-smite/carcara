@@ -20,13 +20,21 @@ struct JobDescriptor<'a> {
     run_index: usize,
 }
 
-fn run_job<T: CollectResults + Default>(
+fn run_job<T: CollectResults + Default + Send>(
     results: &mut T,
     job: JobDescriptor,
     options: &CarcaraOptions,
     elaborate: bool,
 ) -> Result<bool, carcara::Error> {
     let proof_file_name = job.proof_file.to_str().unwrap();
+    let mut checker_stats = checker::CheckerStatistics {
+        file_name: proof_file_name,
+        elaboration_time: Duration::ZERO,
+        polyeq_time: Duration::ZERO,
+        assume_time: Duration::ZERO,
+        assume_core_time: Duration::ZERO,
+        results: std::mem::take(results),
+    };
 
     let total = Instant::now();
 
@@ -40,54 +48,43 @@ fn run_job<T: CollectResults + Default>(
     )?;
     let parsing = parsing.elapsed();
 
-    let mut elaboration = Duration::ZERO;
-    let mut polyeq = Duration::ZERO;
-    let mut assume = Duration::ZERO;
-    let mut assume_core = Duration::ZERO;
-
     let config = checker::Config::new()
         .strict(options.strict)
         .skip_unknown_rules(options.skip_unknown_rules)
-        .lia_via_cvc5(options.lia_via_cvc5)
-        .statistics(checker::CheckerStatistics {
-            file_name: proof_file_name,
-            elaboration_time: &mut elaboration,
-            polyeq_time: &mut polyeq,
-            assume_time: &mut assume,
-            assume_core_time: &mut assume_core,
-            results,
-        });
-    let mut checker = checker::ProofChecker::new(&mut pool, config, prelude);
+        .lia_via_cvc5(options.lia_via_cvc5);
+    let mut checker = checker::ProofChecker::new(&mut pool, config, &prelude);
 
     let checking = Instant::now();
 
     let checking_result = if elaborate {
         checker
-            .check_and_elaborate(proof)
+            .check_and_elaborate_with_stats(proof, &mut checker_stats)
             .map(|(is_holey, _)| is_holey)
     } else {
-        checker.check(&proof)
+        checker.check_with_stats(&proof, &mut checker_stats)
     };
     let checking = checking.elapsed();
 
     let total = total.elapsed();
 
-    results.add_run_measurement(
+    checker_stats.results.add_run_measurement(
         &(proof_file_name.to_string(), job.run_index),
         RunMeasurement {
             parsing,
             checking,
-            elaboration,
+            elaboration: checker_stats.elaboration_time,
+            scheduling: Duration::ZERO,
             total,
-            polyeq,
-            assume,
-            assume_core,
+            polyeq: checker_stats.polyeq_time,
+            assume: checker_stats.assume_time,
+            assume_core: checker_stats.assume_core_time,
         },
     );
+    *results = checker_stats.results;
     checking_result
 }
 
-fn worker_thread<T: CollectResults + Default>(
+fn worker_thread<T: CollectResults + Default + Send>(
     jobs_queue: &ArrayQueue<JobDescriptor>,
     options: &CarcaraOptions,
     elaborate: bool,

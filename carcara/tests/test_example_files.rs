@@ -16,19 +16,19 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
     )?;
 
     // First, we check the proof normally
-    checker::ProofChecker::new(&mut pool, Config::new(), prelude.clone()).check(&proof)?;
+    checker::ProofChecker::new(&mut pool, Config::new(), &prelude).check(&proof)?;
 
     // Then, we check it while elaborating the proof
-    let mut checker = checker::ProofChecker::new(&mut pool, Config::new(), prelude.clone());
+    let mut checker = checker::ProofChecker::new(&mut pool, Config::new(), &prelude);
     let (_, elaborated) = checker.check_and_elaborate(proof)?;
 
     // After that, we check the elaborated proof normally, to make sure it is valid
-    checker::ProofChecker::new(&mut pool, Config::new().strict(true), prelude.clone())
+    checker::ProofChecker::new(&mut pool, Config::new().strict(true), &prelude)
         .check(&elaborated)?;
 
     // Finally, we elaborate the already elaborated proof, to make sure the elaboration step is
     // idempotent
-    let mut checker = checker::ProofChecker::new(&mut pool, Config::new().strict(true), prelude);
+    let mut checker = checker::ProofChecker::new(&mut pool, Config::new().strict(true), &prelude);
     let (_, elaborated_twice) = checker.check_and_elaborate(elaborated.clone())?;
     assert!(
         elaborated.commands == elaborated_twice.commands,

@@ -4,9 +4,8 @@ mod logger;
 mod path_args;
 
 use carcara::{
-    ast::print_proof,
-    benchmarking::{Metrics, OnlineBenchmarkResults},
-    check, check_and_elaborate, parser, CarcaraOptions,
+    ast::print_proof, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate,
+    check_parallel, parser, CarcaraOptions,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -85,6 +84,20 @@ struct Input {
     problem_file: Option<String>,
 }
 
+#[derive(Args)]
+struct StatsOptions {
+    /// Enables the gathering of performance statistics
+    #[clap(long)]
+    stats: bool,
+}
+
+#[derive(Args)]
+struct StackOptions {
+    /// Defines the thread stack size for each check worker (does not include the main thread stack size, which should be set manually).
+    #[clap(long, default_value = "0")]
+    stack_size: usize,
+}
+
 #[derive(Args, Clone, Copy)]
 struct ParsingOptions {
     /// Expand function definitions introduced by `define-fun`s in the SMT problem. If this flag is
@@ -137,6 +150,7 @@ fn build_carcara_options(
         skip_unknown_rules,
         lia_via_cvc5,
     }: CheckingOptions,
+    StatsOptions { stats }: StatsOptions,
 ) -> CarcaraOptions {
     CarcaraOptions {
         apply_function_defs,
@@ -145,6 +159,7 @@ fn build_carcara_options(
         lia_via_cvc5,
         strict,
         skip_unknown_rules,
+        stats,
     }
 }
 
@@ -170,6 +185,26 @@ struct CheckCommandOptions {
 
     #[clap(flatten)]
     checking: CheckingOptions,
+
+    /// Defines the number of cores for proof checking.
+    #[clap(short = 'u', long, required = false, default_value = "1", validator = |s: &str| -> Result<(), String> {
+        if let Ok(n) = s.to_string().parse() as Result<u32, _> {
+            if n < 1 {
+                Err(format!("The threads number can't be {n}."))
+            } else {
+                Ok(())
+            }
+        } else {
+            Err(String::from("Not a number."))
+        }
+    })]
+    num_threads: usize,
+
+    #[clap(flatten)]
+    stats: StatsOptions,
+
+    #[clap(flatten)]
+    stack: StackOptions,
 }
 
 #[derive(Args)]
@@ -185,6 +220,9 @@ struct ElaborateCommandOptions {
 
     #[clap(flatten)]
     printing: PrintingOptions,
+
+    #[clap(flatten)]
+    stats: StatsOptions,
 }
 
 #[derive(Args)]
@@ -320,11 +358,18 @@ fn parse_command(options: ParseCommandOptions) -> CliResult<()> {
 
 fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
     let (problem, proof) = get_instance(&options.input)?;
-    check(
-        problem,
-        proof,
-        build_carcara_options(options.parsing, options.checking),
-    )
+    let carc_options = build_carcara_options(options.parsing, options.checking, options.stats);
+    if options.num_threads == 1 {
+        check(problem, proof, carc_options)
+    } else {
+        check_parallel(
+            problem,
+            proof,
+            carc_options,
+            options.num_threads,
+            options.stack.stack_size,
+        )
+    }
     .map_err(Into::into)
 }
 
@@ -334,7 +379,7 @@ fn elaborate_command(options: ElaborateCommandOptions) -> CliResult<()> {
     let (_, elaborated) = check_and_elaborate(
         problem,
         proof,
-        build_carcara_options(options.parsing, options.checking),
+        build_carcara_options(options.parsing, options.checking, options.stats),
     )?;
     print_proof(&elaborated.commands, options.printing.use_sharing)?;
     Ok(())
@@ -353,12 +398,17 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         options.num_runs
     );
 
+    let carc_options = build_carcara_options(
+        options.parsing,
+        options.checking,
+        StatsOptions { stats: false },
+    );
     if options.dump_to_csv {
         benchmarking::run_csv_benchmark(
             &instances,
             options.num_runs,
             options.num_threads,
-            &build_carcara_options(options.parsing, options.checking),
+            &carc_options,
             options.elaborate,
             &mut File::create("runs.csv")?,
             &mut File::create("by-rule.csv")?,
@@ -370,7 +420,7 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         &instances,
         options.num_runs,
         options.num_threads,
-        &build_carcara_options(options.parsing, options.checking),
+        &carc_options,
         options.elaborate,
     );
     if results.is_empty() {
@@ -385,120 +435,7 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
     } else {
         println!("valid");
     }
-    print_benchmark_results(results, options.sort_by_total)
-}
-
-fn print_benchmark_results(results: OnlineBenchmarkResults, sort_by_total: bool) -> CliResult<()> {
-    let [parsing, checking, elaborating, accounted_for, total] = [
-        results.parsing(),
-        results.checking(),
-        results.elaborating(),
-        results.total_accounted_for(),
-        results.total(),
-    ]
-    .map(|m| {
-        if sort_by_total {
-            format!("{:#}", m)
-        } else {
-            format!("{}", m)
-        }
-    });
-
-    println!("parsing:             {}", parsing);
-    println!("checking:            {}", checking);
-    if !elaborating.is_empty() {
-        println!("elaborating:         {}", elaborating);
-    }
-    println!(
-        "on assume:           {} ({:.02}% of checking time)",
-        results.assume_time,
-        100.0 * results.assume_time.mean().as_secs_f64() / results.checking().mean().as_secs_f64(),
-    );
-    println!("on assume (core):    {}", results.assume_core_time);
-    println!("assume ratio:        {}", results.assume_time_ratio);
-    println!(
-        "on polyeq:           {} ({:.02}% of checking time)",
-        results.polyeq_time,
-        100.0 * results.polyeq_time.mean().as_secs_f64() / results.checking().mean().as_secs_f64(),
-    );
-    println!("polyeq ratio:        {}", results.polyeq_time_ratio);
-    println!("total accounted for: {}", accounted_for);
-    println!("total:               {}", total);
-
-    let data_by_rule = results.step_time_by_rule();
-    let mut data_by_rule: Vec<_> = data_by_rule.iter().collect();
-    data_by_rule.sort_by_key(|(_, m)| if sort_by_total { m.total() } else { m.mean() });
-
-    println!("by rule:");
-    for (rule, data) in data_by_rule {
-        print!("    {: <18}", rule);
-        if sort_by_total {
-            println!("{:#}", data)
-        } else {
-            println!("{}", data)
-        }
-    }
-
-    println!("worst cases:");
-    let worst_step = results.step_time().max();
-    println!("    step:            {} ({:?})", worst_step.0, worst_step.1);
-
-    let worst_file_parsing = results.parsing().max();
-    println!(
-        "    file (parsing):  {} ({:?})",
-        worst_file_parsing.0 .0, worst_file_parsing.1
-    );
-
-    let worst_file_checking = results.checking().max();
-    println!(
-        "    file (checking): {} ({:?})",
-        worst_file_checking.0 .0, worst_file_checking.1
-    );
-
-    let worst_file_assume = results.assume_time_ratio.max();
-    println!(
-        "    file (assume):   {} ({:.04}%)",
-        worst_file_assume.0 .0,
-        worst_file_assume.1 * 100.0
-    );
-
-    let worst_file_polyeq = results.polyeq_time_ratio.max();
-    println!(
-        "    file (polyeq):   {} ({:.04}%)",
-        worst_file_polyeq.0 .0,
-        worst_file_polyeq.1 * 100.0
-    );
-
-    let worst_file_total = results.total().max();
-    println!(
-        "    file overall:    {} ({:?})",
-        worst_file_total.0 .0, worst_file_total.1
-    );
-
-    let num_hard_assumes = results.num_assumes - results.num_easy_assumes;
-    let percent_easy = (results.num_easy_assumes as f64) * 100.0 / (results.num_assumes as f64);
-    let percent_hard = (num_hard_assumes as f64) * 100.0 / (results.num_assumes as f64);
-    println!("          number of assumes: {}", results.num_assumes);
-    println!(
-        "                     (easy): {} ({:.02}%)",
-        results.num_easy_assumes, percent_easy
-    );
-    println!(
-        "                     (hard): {} ({:.02}%)",
-        num_hard_assumes, percent_hard
-    );
-
-    let depths = results.polyeq_depths;
-    if !depths.is_empty() {
-        println!("           max polyeq depth: {}", depths.max().1);
-        println!("         total polyeq depth: {}", depths.total());
-        println!("    number of polyeq checks: {}", depths.count());
-        println!("                 mean depth: {:.4}", depths.mean());
-        println!(
-            "standard deviation of depth: {:.4}",
-            depths.standard_deviation()
-        );
-    }
+    results.print(options.sort_by_total);
     Ok(())
 }
 

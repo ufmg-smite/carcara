@@ -22,7 +22,7 @@
 /// Removing two leading negations from a term:
 /// ```
 /// # use carcara::{ast::*, build_term, match_term};
-/// # let mut pool = TermPool::new();
+/// # let mut pool = PrimitivePool::new();
 /// # let t = build_term!(pool, (not (not {pool.bool_false()})));
 /// let p = match_term!((not (not p)) = t).unwrap();
 /// ```
@@ -31,7 +31,7 @@
 /// ```
 /// # use carcara::{ast::*, match_term, parser::*};
 /// # pub fn parse_term(input: &str) -> Rc<Term> {
-/// #     let mut pool = TermPool::new();
+/// #     let mut pool = PrimitivePool::new();
 /// #     let mut parser = Parser::new(&mut pool, input.as_bytes(), true, false, false).unwrap();
 /// #     parser.parse_term().unwrap()
 /// # }
@@ -42,7 +42,7 @@
 /// Pattern matching against boolean constants:
 /// ```
 /// # use carcara::{ast::*, build_term, match_term};
-/// # let mut pool = TermPool::new();
+/// # let mut pool = PrimitivePool::new();
 /// # let t = build_term!(pool, (or {pool.bool_false()} {pool.bool_false()}));
 /// let (p, ()) = match_term!((or p false) = t).unwrap();
 /// ```
@@ -51,7 +51,7 @@
 /// ```
 /// # use carcara::{ast::*, match_term, parser::*};
 /// # pub fn parse_term(input: &str) -> Rc<Term> {
-/// #     let mut pool = TermPool::new();
+/// #     let mut pool = PrimitivePool::new();
 /// #     let mut parser = Parser::new(&mut pool, input.as_bytes(), true, false, false).unwrap();
 /// #     parser.parse_term().unwrap()
 /// # }
@@ -62,7 +62,7 @@
 /// Pattern matching against a variable number of arguments:
 /// ```
 /// # use carcara::{ast::*, build_term, match_term};
-/// # let mut pool = TermPool::new();
+/// # let mut pool = PrimitivePool::new();
 /// # let t = build_term!(pool, (and {pool.bool_false()} {pool.bool_false()}));
 /// let args: &[Rc<Term>] = match_term!((and ...) = t).unwrap();
 /// ```
@@ -175,7 +175,7 @@ macro_rules! match_term_err {
 /// Building the term `(and true (not false))`:
 /// ```
 /// # use carcara::{ast::*, build_term, match_term};
-/// let mut pool = TermPool::new();
+/// let mut pool = PrimitivePool::new();
 /// let t = build_term!(pool, (and {pool.bool_true()} (not {pool.bool_false()})));
 /// assert!(match_term!((and true (not false)) = t).is_some());
 /// ```
@@ -249,12 +249,12 @@ macro_rules! impl_str_conversion_traits {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::*;
+    use crate::ast::{pool::PrimitivePool, *};
     use crate::parser::tests::{parse_term, parse_terms};
 
     #[test]
     fn test_match_term() {
-        let mut p = TermPool::new();
+        let mut p = PrimitivePool::new();
         let [one, two, five] = [1, 2, 5].map(|n| p.add(Term::new_int(n)));
 
         let term = parse_term(&mut p, "(= (= (not false) (= true false)) (not true))");
@@ -303,7 +303,7 @@ mod tests {
             (declare-fun p () Bool)
             (declare-fun q () Bool)
         ";
-        let mut pool = TermPool::new();
+        let mut pool = PrimitivePool::new();
         let bool_sort = pool.add(Term::Sort(Sort::Bool));
         let int_sort = pool.add(Term::Sort(Sort::Int));
 
