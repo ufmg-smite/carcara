@@ -112,8 +112,8 @@ impl<'a> PolyeqElaborator<'a> {
                             .map(|((a_var, _), b)| (a_var.clone(), pool.add(b.clone().into())))
                             .collect();
 
-                        // TODO: Add new context pool when using it here and fix s.context_id bellow
-                        c.push(pool, &assigment_args, &variable_args, 99999999)
+                        let new_context_id = c.force_new_context();
+                        c.push(pool, &assigment_args, &variable_args, new_context_id)
                             .unwrap();
                         (variable_args, assigment_args)
                     }

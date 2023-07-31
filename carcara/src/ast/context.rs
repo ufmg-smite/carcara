@@ -81,7 +81,18 @@ impl ContextStack {
             .and_then(|id| Some(self.context_vec[*id].1.write().unwrap()))
     }
 
-    // TODO: Add pre push function for single thread tasks
+    /// A function used to force the creation of a new context at the end of the
+    /// `context_vec`. This function should be called before a
+    /// `ContextStack::push` in a single thread operation. Since a single
+    /// thread doesn't require a schedule balancing, then there is no info about
+    /// how many contexts there are in the proof (and it's not needed since we
+    /// can always add a new context at the end of the vector just like an usual
+    /// stack)
+    pub fn force_new_context(&mut self) -> usize {
+        let ctx_vec = Arc::get_mut(&mut self.context_vec).unwrap();
+        ctx_vec.push((AtomicUsize::new(1), RwLock::new(None)));
+        ctx_vec.len() - 1
+    }
 
     pub fn push(
         &mut self,
