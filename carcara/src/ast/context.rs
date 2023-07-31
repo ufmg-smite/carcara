@@ -72,13 +72,13 @@ impl ContextStack {
     pub fn last(&self) -> Option<RwLockReadGuard<Option<Context>>> {
         self.stack
             .last()
-            .and_then(|id| Some(self.context_vec[*id].1.read().unwrap()))
+            .map(|id| self.context_vec[*id].1.read().unwrap())
     }
 
     pub fn last_mut(&mut self) -> Option<RwLockWriteGuard<Option<Context>>> {
         self.stack
             .last_mut()
-            .and_then(|id| Some(self.context_vec[*id].1.write().unwrap()))
+            .map(|id| self.context_vec[*id].1.write().unwrap())
     }
 
     /// A function used to force the creation of a new context at the end of the
@@ -101,57 +101,46 @@ impl ContextStack {
         variable_args: &[SortedVar],
         context_id: usize,
     ) -> Result<(), SubstitutionError> {
-        let ctx_building_status = self.context_vec[context_id].1.try_write();
-        match ctx_building_status {
-            // The write guard was yielded to this thread
-            Ok(mut ctx_write_guard) => {
-                match ctx_write_guard.as_mut() {
-                    // Since the context already exists, just use it
-                    Some(_) => {
-                        drop(ctx_write_guard);
-                    }
-                    // It's the first thread trying to build this context. It will
-                    // build this context at the context vec (accessible for all threads)
-                    None => {
-                        // Since some rules (like `refl`) need to apply substitutions until a fixed point, we
-                        // precompute these substitutions into a separate hash map. This assumes that the assignment
-                        // arguments are in the correct order.
-                        let mut substitution = Substitution::empty();
-                        let mut substitution_until_fixed_point = Substitution::empty();
+        // The write guard was yielded to this thread
+        if let Ok(mut ctx_write_guard) = self.context_vec[context_id].1.try_write() {
+            // It's the first thread trying to build this context. It will
+            // build this context at the context vec (accessible for all threads)
+            if ctx_write_guard.is_none() {
+                // Since some rules (like `refl`) need to apply substitutions until a fixed point, we
+                // precompute these substitutions into a separate hash map. This assumes that the assignment
+                // arguments are in the correct order.
+                let mut substitution = Substitution::empty();
+                let mut substitution_until_fixed_point = Substitution::empty();
 
-                        // We build the `substitution_until_fixed_point` hash map from the bottom up, by using the
-                        // substitutions already introduced to transform the result of a new substitution before
-                        // inserting it into the hash map. So for instance, if the substitutions are `(:= y z)` and
-                        // `(:= x (f y))`, we insert the first substitution, and then, when introducing the second,
-                        // we use the current state of the hash map to transform `(f y)` into `(f z)`. The
-                        // resulting hash map will then contain `(:= y z)` and `(:= x (f z))`
-                        for (var, value) in assignment_args.iter() {
-                            let var_term = Term::new_var(var, pool.sort(value));
-                            let var_term = pool.add(var_term);
-                            substitution.insert(pool, var_term.clone(), value.clone())?;
-                            let new_value = substitution_until_fixed_point.apply(pool, value);
-                            substitution_until_fixed_point.insert(pool, var_term, new_value)?;
-                        }
-
-                        let mappings = assignment_args
-                            .iter()
-                            .map(|(var, value)| {
-                                let var_term = (var.clone(), pool.sort(value)).into();
-                                (pool.add(var_term), value.clone())
-                            })
-                            .collect();
-                        let bindings = variable_args.iter().cloned().collect();
-                        // Finally creates the new context under this RwLock
-                        *ctx_write_guard = Some(Context {
-                            mappings,
-                            bindings,
-                            cumulative_substitution: None,
-                        });
-                    }
+                // We build the `substitution_until_fixed_point` hash map from the bottom up, by using the
+                // substitutions already introduced to transform the result of a new substitution before
+                // inserting it into the hash map. So for instance, if the substitutions are `(:= y z)` and
+                // `(:= x (f y))`, we insert the first substitution, and then, when introducing the second,
+                // we use the current state of the hash map to transform `(f y)` into `(f z)`. The
+                // resulting hash map will then contain `(:= y z)` and `(:= x (f z))`
+                for (var, value) in assignment_args.iter() {
+                    let var_term = Term::new_var(var, pool.sort(value));
+                    let var_term = pool.add(var_term);
+                    substitution.insert(pool, var_term.clone(), value.clone())?;
+                    let new_value = substitution_until_fixed_point.apply(pool, value);
+                    substitution_until_fixed_point.insert(pool, var_term, new_value)?;
                 }
+
+                let mappings = assignment_args
+                    .iter()
+                    .map(|(var, value)| {
+                        let var_term = (var.clone(), pool.sort(value)).into();
+                        (pool.add(var_term), value.clone())
+                    })
+                    .collect();
+                let bindings = variable_args.iter().cloned().collect();
+                // Finally creates the new context under this RwLock
+                *ctx_write_guard = Some(Context {
+                    mappings,
+                    bindings,
+                    cumulative_substitution: None,
+                });
             }
-            // A thread is currently building the context
-            Err(_) => {}
         }
         // Adds this context in the stack
         // Notice that even though the context is not ready for use, the write
@@ -208,7 +197,7 @@ impl ContextStack {
                 if let Some(previous_context) = self
                     .stack
                     .get(i - 1)
-                    .and_then(|id| Some(self.context_vec[*id].1.read().unwrap()))
+                    .map(|id| self.context_vec[*id].1.read().unwrap())
                 {
                     let previous_context = previous_context.as_ref().unwrap();
                     let previous_substitution =
