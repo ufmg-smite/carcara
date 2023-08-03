@@ -33,13 +33,14 @@ impl<'c> ParallelProofChecker<'c> {
         pool: Arc<PrimitivePool>,
         config: Config,
         prelude: &'c ProblemPrelude,
+        context_usage: &Vec<usize>,
         stack_size: usize,
     ) -> Self {
         ParallelProofChecker {
             pool,
             config,
             prelude,
-            context: ContextStack::new(),
+            context: ContextStack::from_usage(context_usage),
             reached_empty_clause: false,
             is_holey: false,
             stack_size,
@@ -52,7 +53,7 @@ impl<'c> ParallelProofChecker<'c> {
             pool: self.pool.clone(),
             config: self.config.clone(),
             prelude: self.prelude,
-            context: ContextStack::new(),
+            context: ContextStack::from_previous(&self.context),
             reached_empty_clause: false,
             is_holey: false,
             stack_size: self.stack_size,
@@ -284,7 +285,12 @@ impl<'c> ParallelProofChecker<'c> {
                     let step_id = command.id();
 
                     self.context
-                        .push(&mut pool, &s.assignment_args, &s.variable_args)
+                        .push(
+                            &mut pool.ctx_pool,
+                            &s.assignment_args,
+                            &s.variable_args,
+                            s.context_id,
+                        )
                         .map_err(|e| {
                             // Signalize to other threads to stop the proof checking
                             should_abort.store(true, Ordering::Release);

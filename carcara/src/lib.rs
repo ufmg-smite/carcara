@@ -222,10 +222,15 @@ pub fn check_parallel<T: io::BufRead>(
 
     // Checking
     let checking = Instant::now();
-    let (scheduler, _) = Scheduler::new(num_threads, &proof);
+    let (scheduler, schedule_context_usage) = Scheduler::new(num_threads, &proof);
     run_measures.scheduling = checking.elapsed();
-    let mut checker =
-        checker::ParallelProofChecker::new(Arc::new(pool), config, &prelude, stack_size);
+    let mut checker = checker::ParallelProofChecker::new(
+        Arc::new(pool),
+        config,
+        &prelude,
+        &schedule_context_usage,
+        stack_size,
+    );
 
     if options.stats {
         let mut checker_stats = CheckerStatistics {

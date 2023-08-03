@@ -162,8 +162,14 @@ impl<'c> ProofChecker<'c> {
                     let time = Instant::now();
                     let step_id = command.id();
 
+                    let new_context_id = self.context.force_new_context();
                     self.context
-                        .push(self.pool, &s.assignment_args, &s.variable_args)
+                        .push(
+                            self.pool,
+                            &s.assignment_args,
+                            &s.variable_args,
+                            new_context_id,
+                        )
                         .map_err(|e| Error::Checker {
                             inner: e.into(),
                             rule: "anchor".into(),

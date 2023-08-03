@@ -91,6 +91,7 @@ pub fn bind(
     // Since we are closing a subproof, we only care about the substitutions that were introduced
     // in it
     let context = context.last().unwrap();
+    let context = context.as_ref().unwrap();
 
     // The quantifier binders must be the xs and ys of the context substitution
     let (xs, ys): (AHashSet<_>, AHashSet<_>) = context
@@ -142,8 +143,15 @@ pub fn r#let(
 
     // Since we are closing a subproof, we only care about the substitutions that were introduced
     // in it
-    let substitution: AHashMap<Rc<Term>, Rc<Term>> =
-        context.last().unwrap().mappings.iter().cloned().collect();
+    let substitution: AHashMap<Rc<Term>, Rc<Term>> = context
+        .last()
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .mappings
+        .iter()
+        .cloned()
+        .collect();
 
     let (let_term, u_prime) = match_term_err!((= l u) = &conclusion[0])?;
     let Term::Let(let_bindings, u) = let_term.as_ref() else {
@@ -265,11 +273,13 @@ pub fn onepoint(
         }
     );
 
-    let last_context = context.last_mut().unwrap();
-    if let Some((var, _)) = r_bindings
-        .iter()
-        .find(|b| !last_context.bindings.contains(b))
-    {
+    let last_context = context.last().unwrap();
+    if let Some((var, _)) = {
+        let last_context = last_context.as_ref().unwrap();
+        r_bindings
+            .iter()
+            .find(|b| !last_context.bindings.contains(b))
+    } {
         return Err(SubproofError::BindingIsNotInContext(var.clone()).into());
     }
 
@@ -282,10 +292,13 @@ pub fn onepoint(
         .map(|var| pool.add(var.clone().into()))
         .collect();
     let substitution_vars: AHashSet<_> = last_context
+        .as_ref()
+        .unwrap()
         .mappings
         .iter()
         .map(|(k, _)| k.clone())
         .collect();
+    drop(last_context);
 
     let points = extract_points(quant, left);
 
@@ -299,7 +312,8 @@ pub fn onepoint(
         .map(|(x, t)| (x, context.apply(pool, &t)))
         .collect();
 
-    let last_context = context.last_mut().unwrap();
+    let last_context = context.last().unwrap();
+    let last_context = last_context.as_ref().unwrap();
     // For each substitution (:= x t) in the context, the equality (= x t) must appear in phi
     if let Some((k, v)) = last_context
         .mappings
@@ -353,8 +367,15 @@ fn generic_skolemization_rule(
         current_phi = context.apply_previous(pool, &current_phi);
     }
 
-    let substitution: AHashMap<Rc<Term>, Rc<Term>> =
-        context.last().unwrap().mappings.iter().cloned().collect();
+    let substitution: AHashMap<Rc<Term>, Rc<Term>> = context
+        .last()
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .mappings
+        .iter()
+        .cloned()
+        .collect();
     for (i, x) in bindings.iter().enumerate() {
         let x_term = pool.add(Term::from(x.clone()));
         let t = substitution
