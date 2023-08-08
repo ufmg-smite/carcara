@@ -7,7 +7,7 @@ mod macros;
 mod context;
 mod iter;
 mod polyeq;
-mod pool;
+pub mod pool;
 pub(crate) mod printer;
 mod rc;
 mod substitution;
@@ -17,7 +17,7 @@ mod tests;
 pub use context::{Context, ContextStack};
 pub use iter::ProofIter;
 pub use polyeq::{alpha_equiv, polyeq, tracing_polyeq};
-pub use pool::TermPool;
+pub use pool::{PrimitivePool, TermPool};
 pub use printer::print_proof;
 pub use rc::Rc;
 pub use substitution::{Substitution, SubstitutionError};
@@ -160,6 +160,9 @@ pub struct Subproof {
 
     /// The "variable" style arguments of the subproof, of the form `(<symbol> <sort>)`.
     pub variable_args: Vec<SortedVar>,
+
+    /// Subproof id used for context hashing purpose
+    pub context_id: usize,
 }
 
 /// An argument for a `step` command.
@@ -456,9 +459,9 @@ impl Term {
     /// Returns the sort of this term. This does not make use of a cache --- if possible, prefer to
     /// use `TermPool::sort`.
     pub fn raw_sort(&self) -> Sort {
-        let mut pool = TermPool::new();
+        let mut pool = PrimitivePool::new();
         let added = pool.add(self.clone());
-        pool.sort(&added).clone()
+        pool.sort(&added).as_sort().unwrap().clone()
     }
 
     /// Returns `true` if the term is a terminal, that is, if it is a constant or a variable.

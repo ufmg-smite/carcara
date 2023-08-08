@@ -24,8 +24,8 @@ fn get_problem_string(conclusion: &[Rc<Term>], prelude: &ProblemPrelude) -> Stri
     problem
 }
 
-pub fn lia_generic(
-    pool: &mut TermPool,
+pub fn lia_generic_single_thread(
+    pool: &mut PrimitivePool,
     conclusion: &[Rc<Term>],
     prelude: &ProblemPrelude,
     elaborator: Option<&mut Elaborator>,
@@ -49,8 +49,19 @@ pub fn lia_generic(
     false
 }
 
+pub fn lia_generic_multi_thread(conclusion: &[Rc<Term>], prelude: &ProblemPrelude) -> bool {
+    let mut pool = PrimitivePool::new();
+    let problem = get_problem_string(conclusion, prelude);
+    if let Err(e) = get_cvc5_proof(&mut pool, problem) {
+        log::warn!("failed to check `lia_generic` step using cvc5: {}", e);
+        true
+    } else {
+        false
+    }
+}
+
 fn get_cvc5_proof(
-    pool: &mut TermPool,
+    pool: &mut PrimitivePool,
     problem: String,
 ) -> Result<Vec<ProofCommand>, LiaGenericError> {
     let mut cvc5 = Command::new("cvc5")
@@ -102,7 +113,7 @@ fn get_cvc5_proof(
 }
 
 fn parse_and_check_cvc5_proof(
-    pool: &mut TermPool,
+    pool: &mut PrimitivePool,
     problem: &[u8],
     proof: &[u8],
 ) -> CarcaraResult<Vec<ProofCommand>> {
@@ -112,7 +123,7 @@ fn parse_and_check_cvc5_proof(
     let commands = parser.parse_proof()?;
     let proof = Proof { premises, commands };
 
-    ProofChecker::new(pool, Config::new(), prelude).check(&proof)?;
+    ProofChecker::new(pool, Config::new(), &prelude).check(&proof)?;
     Ok(proof.commands)
 }
 
@@ -139,7 +150,7 @@ fn update_premises(commands: &mut [ProofCommand], delta: usize, root_id: &str) {
 }
 
 fn insert_missing_assumes(
-    pool: &mut TermPool,
+    pool: &mut PrimitivePool,
     elaborator: &mut Elaborator,
     conclusion: &[Rc<Term>],
     proof: &[ProofCommand],
@@ -180,7 +191,7 @@ fn insert_missing_assumes(
 }
 
 fn insert_cvc5_proof(
-    pool: &mut TermPool,
+    pool: &mut PrimitivePool,
     elaborator: &mut Elaborator,
     mut commands: Vec<ProofCommand>,
     conclusion: &[Rc<Term>],

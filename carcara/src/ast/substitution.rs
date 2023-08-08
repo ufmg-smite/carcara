@@ -56,7 +56,7 @@ impl Substitution {
 
     /// Constructs a singleton substitution mapping `x` to `t`. This returns an error if the sorts
     /// of the given terms are not the same, or if `x` is not a variable term.
-    pub fn single(pool: &mut TermPool, x: Rc<Term>, t: Rc<Term>) -> SubstitutionResult<Self> {
+    pub fn single(pool: &mut dyn TermPool, x: Rc<Term>, t: Rc<Term>) -> SubstitutionResult<Self> {
         let mut this = Self::empty();
         this.insert(pool, x, t)?;
         Ok(this)
@@ -65,7 +65,10 @@ impl Substitution {
     /// Constructs a new substitution from an arbitrary mapping of terms to other terms. This
     /// returns an error if any term in the left-hand side is not a variable, or if any term is
     /// mapped to a term of a different sort.
-    pub fn new(pool: &mut TermPool, map: AHashMap<Rc<Term>, Rc<Term>>) -> SubstitutionResult<Self> {
+    pub fn new(
+        pool: &mut dyn TermPool,
+        map: AHashMap<Rc<Term>, Rc<Term>>,
+    ) -> SubstitutionResult<Self> {
         for (k, v) in map.iter() {
             if !k.is_var() {
                 return Err(SubstitutionError::NotAVariable(k.clone()));
@@ -91,7 +94,7 @@ impl Substitution {
     /// the sorts of the given terms are not the same, or if `x` is not a variable term.
     pub(crate) fn insert(
         &mut self,
-        pool: &mut TermPool,
+        pool: &mut dyn TermPool,
         x: Rc<Term>,
         t: Rc<Term>,
     ) -> SubstitutionResult<()> {
@@ -109,7 +112,7 @@ impl Substitution {
 
         if let Some(should_be_renamed) = &mut self.should_be_renamed {
             if x != t {
-                should_be_renamed.extend(pool.free_vars(&t).iter().cloned());
+                should_be_renamed.extend(pool.free_vars(&t).into_iter());
                 if x.is_var() {
                     should_be_renamed.insert(x.clone());
                 }
@@ -122,7 +125,7 @@ impl Substitution {
 
     /// Computes which binder variables will need to be renamed, and stores the result in
     /// `self.should_be_renamed`.
-    fn compute_should_be_renamed(&mut self, pool: &mut TermPool) {
+    fn compute_should_be_renamed(&mut self, pool: &mut dyn TermPool) {
         if self.should_be_renamed.is_some() {
             return;
         }
@@ -148,7 +151,7 @@ impl Substitution {
             if x == t {
                 continue; // We ignore reflexive substitutions
             }
-            should_be_renamed.extend(pool.free_vars(t).iter().cloned());
+            should_be_renamed.extend(pool.free_vars(t).into_iter());
             if x.is_var() {
                 should_be_renamed.insert(x.clone());
             }
@@ -157,7 +160,7 @@ impl Substitution {
     }
 
     /// Applies the substitution to `term`, and returns the result as a new term.
-    pub fn apply(&mut self, pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
+    pub fn apply(&mut self, pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term> {
         macro_rules! apply_to_sequence {
             ($sequence:expr) => {
                 $sequence
@@ -214,7 +217,7 @@ impl Substitution {
 
     fn can_skip_instead_of_renaming(
         &self,
-        pool: &mut TermPool,
+        pool: &mut dyn TermPool,
         binding_list: &[SortedVar],
     ) -> bool {
         // Note: this method assumes that `binding_list` is a "sort" binding list. "Value" lists add
@@ -245,7 +248,7 @@ impl Substitution {
     /// binder is a `let` or `lambda` term, `is_value_list` should be true.
     fn apply_to_binder<F: Fn(BindingList, Rc<Term>) -> Term>(
         &mut self,
-        pool: &mut TermPool,
+        pool: &mut dyn TermPool,
         original_term: &Rc<Term>,
         binding_list: &[SortedVar],
         inner: &Rc<Term>,
@@ -289,7 +292,7 @@ impl Substitution {
     /// a `let` or `lambda` term, `is_value_list` should be true.
     fn rename_binding_list(
         &mut self,
-        pool: &mut TermPool,
+        pool: &mut dyn TermPool,
         binding_list: &[SortedVar],
         is_value_list: bool,
     ) -> (BindingList, Self) {
@@ -301,7 +304,7 @@ impl Substitution {
                 // If the binding list is a "sort" binding list, then `value` will be the variable's
                 // sort. Otherwise, we need to get the sort of `value`
                 let sort = if is_value_list {
-                    pool.add(Term::Sort(pool.sort(value).clone()))
+                    pool.sort(value)
                 } else {
                     value.clone()
                 };
@@ -350,10 +353,10 @@ impl Substitution {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::*;
+    use crate::{ast::PrimitivePool, parser::*};
 
     fn run_test(definitions: &str, original: &str, x: &str, t: &str, result: &str) {
-        let mut pool = TermPool::new();
+        let mut pool = PrimitivePool::new();
         let mut parser =
             Parser::new(&mut pool, definitions.as_bytes(), true, false, false).unwrap();
         parser.parse_problem().unwrap();

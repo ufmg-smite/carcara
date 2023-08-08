@@ -1,18 +1,18 @@
-use crate::{ast::TermPool, parser::tests::parse_terms};
+use crate::{
+    ast::{pool::PrimitivePool, TermPool},
+    parser::tests::parse_terms,
+};
 use ahash::AHashSet;
 
 #[test]
 fn test_free_vars() {
     fn run_tests(definitions: &str, cases: &[(&str, &[&str])]) {
         for &(term, expected) in cases {
-            let mut pool = TermPool::new();
+            let mut pool = PrimitivePool::new();
             let [root] = parse_terms(&mut pool, definitions, [term]);
             let expected: AHashSet<_> = expected.iter().copied().collect();
-            let got: AHashSet<_> = pool
-                .free_vars(&root)
-                .iter()
-                .map(|t| t.as_var().unwrap())
-                .collect();
+            let set = pool.free_vars(&root);
+            let got: AHashSet<_> = set.iter().map(|t| t.as_var().unwrap()).collect();
 
             assert_eq!(expected, got);
         }
@@ -44,7 +44,7 @@ fn test_polyeq() {
     }
 
     fn run_tests(definitions: &str, cases: &[(&str, &str)], test_type: TestType) {
-        let mut pool = TermPool::new();
+        let mut pool = PrimitivePool::new();
         for (a, b) in cases {
             let [a, b] = parse_terms(&mut pool, definitions, [a, b]);
             let mut time = std::time::Duration::ZERO;

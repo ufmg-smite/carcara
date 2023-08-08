@@ -18,7 +18,7 @@ pub struct RuleArgs<'a> {
     pub(super) conclusion: &'a [Rc<Term>],
     pub(super) premises: &'a [Premise<'a>],
     pub(super) args: &'a [ProofArg],
-    pub(super) pool: &'a mut TermPool,
+    pub(super) pool: &'a mut dyn TermPool,
     pub(super) context: &'a mut ContextStack,
 
     // For rules that end a subproof, we need to pass the previous command in the subproof that it
@@ -173,10 +173,9 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
                 strict: false,
                 skip_unknown_rules: false,
                 is_running_test: true,
-                statistics: None,
                 lia_via_cvc5: false,
             },
-            prelude,
+            &prelude,
         );
         let got = checker.check(&parsed).is_ok();
         assert_eq!(
