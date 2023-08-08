@@ -248,29 +248,29 @@ pub enum LinearArithmeticError {
 
 #[derive(Debug, Error)]
 pub enum LiaGenericError {
-    #[error("failed to spawn cvc5 process")]
-    FailedSpawnCvc5(io::Error),
+    #[error("failed to spawn solver process")]
+    FailedSpawnSolver(io::Error),
 
-    #[error("failed to write to cvc5 stdin")]
-    FailedWriteToCvc5Stdin(io::Error),
+    #[error("failed to write to solver stdin")]
+    FailedWriteToSolverStdin(io::Error),
 
-    #[error("error while waiting for cvc5 to exit")]
-    FailedWaitForCvc5(io::Error),
+    #[error("error while waiting for solver to exit")]
+    FailedWaitForSolver(io::Error),
 
-    #[error("cvc5 gave invalid output")]
-    Cvc5GaveInvalidOutput,
+    #[error("solver gave invalid output")]
+    SolverGaveInvalidOutput,
 
-    #[error("cvc5 output not unsat")]
-    Cvc5OutputNotUnsat,
+    #[error("solver output not unsat")]
+    OutputNotUnsat,
 
-    #[error("cvc5 timed out when solving problem")]
-    Cvc5Timeout,
+    #[error("solver timed out when solving problem")]
+    SolverTimeout,
 
     #[error(
-        "cvc5 returned non-zero exit code: {}",
+        "solver returned non-zero exit code: {}",
         if let Some(i) = .0 { format!("{}", i) } else { "none".to_owned() }
     )]
-    Cvc5NonZeroExitCode(Option<i32>),
+    NonZeroExitCode(Option<i32>),
 
     #[error("error in inner proof: {0}")]
     InnerProofError(Box<crate::Error>),

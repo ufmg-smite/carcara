@@ -72,11 +72,12 @@ pub struct CarcaraOptions {
     /// to a function that expects a `Real` will still be an error.
     pub allow_int_real_subtyping: bool,
 
-    /// Enable checking/elaboration of `lia_generic` steps using cvc5. When checking a proof, this
-    /// will call cvc5 to solve the linear integer arithmetic problem, check the proof, and discard
-    /// it. When elaborating, the proof will instead be inserted in the place of the `lia_generic`
-    /// step.
-    pub lia_via_cvc5: bool,
+    /// Enable checking/elaboration of `lia_generic` steps using the given solver. When checking a
+    /// proof, this will call the solver to solve the linear integer arithmetic problem, check the
+    /// proof, and discard it. When elaborating, the proof will instead be inserted in the place of
+    /// the `lia_generic` step. The solver should be a binary that can read SMT-LIB from stdin and
+    /// output an Alethe proof from stdout.
+    pub lia_solver: Option<Box<str>>,
 
     /// Enables "strict" checking of some rules.
     ///
@@ -152,7 +153,7 @@ pub fn check<T: io::BufRead>(problem: T, proof: T, options: CarcaraOptions) -> R
     let config = checker::Config::new()
         .strict(options.strict)
         .skip_unknown_rules(options.skip_unknown_rules)
-        .lia_via_cvc5(options.lia_via_cvc5);
+        .lia_solver(options.lia_solver);
 
     // Checking
     let checking = Instant::now();
@@ -218,7 +219,7 @@ pub fn check_parallel<T: io::BufRead>(
     let config = checker::Config::new()
         .strict(options.strict)
         .skip_unknown_rules(options.skip_unknown_rules)
-        .lia_via_cvc5(options.lia_via_cvc5);
+        .lia_solver(options.lia_solver);
 
     // Checking
     let checking = Instant::now();
@@ -289,7 +290,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
     let config = checker::Config::new()
         .strict(options.strict)
         .skip_unknown_rules(options.skip_unknown_rules)
-        .lia_via_cvc5(options.lia_via_cvc5);
+        .lia_solver(options.lia_solver);
 
     // Checking
     let checking = Instant::now();

@@ -117,7 +117,7 @@ struct ParsingOptions {
     allow_int_real_subtyping: bool,
 }
 
-#[derive(Args, Clone, Copy)]
+#[derive(Args, Clone)]
 struct CheckingOptions {
     /// Enables the strict checking of certain rules.
     #[clap(short, long)]
@@ -127,8 +127,12 @@ struct CheckingOptions {
     #[clap(long)]
     skip_unknown_rules: bool,
 
-    /// Check `lia_generic` steps by calling into cvc5.
+    /// Check `lia_generic` steps using the provided solver.
     #[clap(long)]
+    lia_solver: Option<String>,
+
+    /// Check `lia_generic` steps by calling into cvc5 (deprecated).
+    #[clap(long, conflicts_with("lia-solver"))]
     lia_via_cvc5: bool,
 }
 
@@ -148,15 +152,21 @@ fn build_carcara_options(
     CheckingOptions {
         strict,
         skip_unknown_rules,
+        lia_solver,
         lia_via_cvc5,
     }: CheckingOptions,
     StatsOptions { stats }: StatsOptions,
 ) -> CarcaraOptions {
+    // If no solver is provided by the `--lia-solver` option, *and* the `--lia-via-cvc5` option was
+    // passed, we default to cvc5 as a solver
+    let lia_solver = lia_solver
+        .map(Into::into)
+        .or_else(|| lia_via_cvc5.then(|| "cvc5".into()));
     CarcaraOptions {
         apply_function_defs,
         expand_lets: expand_let_bindings,
         allow_int_real_subtyping,
-        lia_via_cvc5,
+        lia_solver,
         strict,
         skip_unknown_rules,
         stats,
@@ -300,6 +310,15 @@ fn main() {
     let cli = Cli::parse();
     let colors_enabled = !cli.no_color && atty::is(atty::Stream::Stderr);
     logger::init(cli.log_level.into(), colors_enabled);
+
+    if let Command::Check(CheckCommandOptions { checking, .. })
+    | Command::Elaborate(ElaborateCommandOptions { checking, .. })
+    | Command::Bench(BenchCommandOptions { checking, .. }) = &cli.command
+    {
+        if checking.lia_via_cvc5 {
+            log::warn!("`--lia-via-cvc5` option is deprecated, please use `--lia-solver cvc5`")
+        }
+    }
 
     let result = match cli.command {
         Command::Parse(options) => parse_command(options),

@@ -50,7 +50,7 @@ pub struct Config {
     strict: bool,
     skip_unknown_rules: bool,
     is_running_test: bool,
-    lia_via_cvc5: bool,
+    lia_solver: Option<Box<str>>,
 }
 
 impl Config {
@@ -68,8 +68,8 @@ impl Config {
         self
     }
 
-    pub fn lia_via_cvc5(mut self, value: bool) -> Self {
-        self.lia_via_cvc5 = value;
+    pub fn lia_solver(mut self, value: impl Into<Option<Box<str>>>) -> Self {
+        self.lia_solver = value.into();
         self
     }
 }
@@ -340,13 +340,14 @@ impl<'c> ProofChecker<'c> {
 
         let mut elaborated = false;
         if step.rule == "lia_generic" {
-            if self.config.lia_via_cvc5 {
+            if let Some(solver) = &self.config.lia_solver {
                 let is_hole = lia_generic::lia_generic_single_thread(
                     self.pool,
                     &step.clause,
                     self.prelude,
                     self.elaborator.as_mut(),
                     &step.id,
+                    solver,
                 );
                 self.is_holey = self.is_holey || is_hole;
                 elaborated = self.elaborator.is_some();
