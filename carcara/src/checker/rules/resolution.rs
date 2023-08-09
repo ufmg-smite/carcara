@@ -70,6 +70,8 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
             }
         }
     }
+    // Aside from this special case, all resolution steps must be between at least two clauses
+    assert_num_premises(premises, 2..)?;
 
     greedy_resolution(conclusion, premises, pool, false)
         .map(|_| ())
@@ -341,7 +343,7 @@ fn apply_generic_resolution<'a, C: ClauseCollection<'a>>(
     args: &'a [ProofArg],
     pool: &mut TermPool,
 ) -> Result<C, CheckerError> {
-    assert_num_premises(premises, 1..)?;
+    assert_num_premises(premises, 2..)?;
     let num_steps = premises.len() - 1;
     assert_num_args(args, num_steps * 2)?;
 
@@ -701,6 +703,12 @@ mod tests {
                 (step t3 (cl q) :rule hole)
                 (step t4 (cl r) :rule hole)
                 (step t5 (cl) :rule th_resolution :premises (t1 t2 t3 t4))": true,
+            }
+            "Number of premises must be at least two" {
+                "(step t1 (cl) :rule resolution)": false,
+
+                "(assume h1 true)
+                (step t2 (cl true) :rule resolution :premises (h1))": false,
             }
         }
     }
