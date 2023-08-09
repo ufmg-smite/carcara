@@ -1,5 +1,5 @@
 use super::*;
-use crate::{checker::error::LiaGenericError, parser};
+use crate::{checker::error::LiaGenericError, parser, LiaGenericOptions};
 use ahash::AHashMap;
 use std::{
     io::{BufRead, Write},
@@ -30,10 +30,10 @@ pub fn lia_generic_single_thread(
     prelude: &ProblemPrelude,
     elaborator: Option<&mut Elaborator>,
     root_id: &str,
-    solver: &str,
+    options: &LiaGenericOptions,
 ) -> bool {
     let problem = get_problem_string(conclusion, prelude);
-    let commands = match get_solver_proof(pool, problem, solver) {
+    let commands = match get_solver_proof(pool, problem, options) {
         Ok(c) => c,
         Err(e) => {
             log::warn!("failed to check `lia_generic` step: {}", e);
@@ -53,11 +53,11 @@ pub fn lia_generic_single_thread(
 pub fn lia_generic_multi_thread(
     conclusion: &[Rc<Term>],
     prelude: &ProblemPrelude,
-    solver: &str,
+    options: &LiaGenericOptions,
 ) -> bool {
     let mut pool = PrimitivePool::new();
     let problem = get_problem_string(conclusion, prelude);
-    if let Err(e) = get_solver_proof(&mut pool, problem, solver) {
+    if let Err(e) = get_solver_proof(&mut pool, problem, options) {
         log::warn!("failed to check `lia_generic` step using: {}", e);
         true
     } else {
@@ -68,16 +68,10 @@ pub fn lia_generic_multi_thread(
 fn get_solver_proof(
     pool: &mut PrimitivePool,
     problem: String,
-    solver: &str,
+    options: &LiaGenericOptions,
 ) -> Result<Vec<ProofCommand>, LiaGenericError> {
-    let mut process = Command::new(solver)
-        .args([
-            "--tlimit=10000",
-            "--lang=smt2",
-            "--proof-format-mode=alethe",
-            "--proof-granularity=theory-rewrite",
-            "--proof-alethe-res-pivots",
-        ])
+    let mut process = Command::new(options.solver.as_ref())
+        .args(options.arguments.iter().map(AsRef::as_ref))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

@@ -51,7 +51,7 @@ fn run_job<T: CollectResults + Default + Send>(
     let config = checker::Config::new()
         .strict(options.strict)
         .skip_unknown_rules(options.skip_unknown_rules)
-        .lia_solver(options.lia_solver.clone());
+        .lia_options(options.lia_options.clone());
     let mut checker = checker::ProofChecker::new(&mut pool, config, &prelude);
 
     let checking = Instant::now();

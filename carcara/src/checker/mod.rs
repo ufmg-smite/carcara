@@ -7,7 +7,7 @@ use crate::{
     ast::*,
     benchmarking::{CollectResults, OnlineBenchmarkResults},
     elaborator::Elaborator,
-    CarcaraResult, Error,
+    CarcaraResult, Error, LiaGenericOptions,
 };
 use ahash::AHashSet;
 use error::CheckerError;
@@ -50,7 +50,7 @@ pub struct Config {
     strict: bool,
     skip_unknown_rules: bool,
     is_running_test: bool,
-    lia_solver: Option<Box<str>>,
+    lia_options: Option<LiaGenericOptions>,
 }
 
 impl Config {
@@ -68,8 +68,8 @@ impl Config {
         self
     }
 
-    pub fn lia_solver(mut self, value: impl Into<Option<Box<str>>>) -> Self {
-        self.lia_solver = value.into();
+    pub fn lia_options(mut self, value: impl Into<Option<LiaGenericOptions>>) -> Self {
+        self.lia_options = value.into();
         self
     }
 }
@@ -340,14 +340,14 @@ impl<'c> ProofChecker<'c> {
 
         let mut elaborated = false;
         if step.rule == "lia_generic" {
-            if let Some(solver) = &self.config.lia_solver {
+            if let Some(options) = &self.config.lia_options {
                 let is_hole = lia_generic::lia_generic_single_thread(
                     self.pool,
                     &step.clause,
                     self.prelude,
                     self.elaborator.as_mut(),
                     &step.id,
-                    solver,
+                    options,
                 );
                 self.is_holey = self.is_holey || is_hole;
                 elaborated = self.elaborator.is_some();

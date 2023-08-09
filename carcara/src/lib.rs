@@ -72,12 +72,11 @@ pub struct CarcaraOptions {
     /// to a function that expects a `Real` will still be an error.
     pub allow_int_real_subtyping: bool,
 
-    /// Enable checking/elaboration of `lia_generic` steps using the given solver. When checking a
-    /// proof, this will call the solver to solve the linear integer arithmetic problem, check the
-    /// proof, and discard it. When elaborating, the proof will instead be inserted in the place of
-    /// the `lia_generic` step. The solver should be a binary that can read SMT-LIB from stdin and
-    /// output an Alethe proof from stdout.
-    pub lia_solver: Option<Box<str>>,
+    /// If `Some`, enables the checking/elaboration of `lia_generic` steps using an external solver.
+    /// When checking a proof, this means calling the solver to solve the linear integer arithmetic
+    /// problem, checking the proof, and discarding it. When elaborating, the proof will instead be
+    /// inserted in the place of the `lia_generic` step. See [`LiaGenericOptions`] for more details.
+    pub lia_options: Option<LiaGenericOptions>,
 
     /// Enables "strict" checking of some rules.
     ///
@@ -97,6 +96,18 @@ pub struct CarcaraOptions {
     /// If `true`, Carcará will log the check and elaboration statistics of any
     /// `check` or `check_and_elaborate` run. If `false` no statistics are logged.
     pub stats: bool,
+}
+
+/// The options that control how `lia_generic` steps are checked/elaborated using an external
+/// solver.
+#[derive(Debug, Clone)]
+pub struct LiaGenericOptions {
+    /// The external solver path. The solver should be a binary that can read SMT-LIB from stdin and
+    /// output an Alethe proof to stdout.
+    pub solver: Box<str>,
+
+    /// The arguments to pass to the solver.
+    pub arguments: Vec<Box<str>>,
 }
 
 impl CarcaraOptions {
@@ -153,7 +164,7 @@ pub fn check<T: io::BufRead>(problem: T, proof: T, options: CarcaraOptions) -> R
     let config = checker::Config::new()
         .strict(options.strict)
         .skip_unknown_rules(options.skip_unknown_rules)
-        .lia_solver(options.lia_solver);
+        .lia_options(options.lia_options);
 
     // Checking
     let checking = Instant::now();
@@ -219,7 +230,7 @@ pub fn check_parallel<T: io::BufRead>(
     let config = checker::Config::new()
         .strict(options.strict)
         .skip_unknown_rules(options.skip_unknown_rules)
-        .lia_solver(options.lia_solver);
+        .lia_options(options.lia_options);
 
     // Checking
     let checking = Instant::now();
@@ -290,7 +301,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
     let config = checker::Config::new()
         .strict(options.strict)
         .skip_unknown_rules(options.skip_unknown_rules)
-        .lia_solver(options.lia_solver);
+        .lia_options(options.lia_options);
 
     // Checking
     let checking = Instant::now();

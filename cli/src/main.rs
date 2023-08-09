@@ -5,7 +5,7 @@ mod path_args;
 
 use carcara::{
     ast::print_proof, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate,
-    check_parallel, parser, CarcaraOptions,
+    check_parallel, parser, CarcaraOptions, LiaGenericOptions,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -131,6 +131,16 @@ struct CheckingOptions {
     #[clap(long)]
     lia_solver: Option<String>,
 
+    /// The arguments to pass to the `lia_generic` solver. This should be a single string where
+    /// multiple arguments are separated by spaces.
+    #[clap(
+        long,
+        requires = "lia-solver",
+        allow_hyphen_values = true,
+        default_value = "--tlimit=10000 --lang=smt2 --proof-format-mode=alethe --proof-granularity=theory-rewrite --proof-alethe-res-pivots"
+    )]
+    lia_solver_args: String,
+
     /// Check `lia_generic` steps by calling into cvc5 (deprecated).
     #[clap(long, conflicts_with("lia-solver"))]
     lia_via_cvc5: bool,
@@ -154,19 +164,22 @@ fn build_carcara_options(
         skip_unknown_rules,
         lia_solver,
         lia_via_cvc5,
+        lia_solver_args,
     }: CheckingOptions,
     StatsOptions { stats }: StatsOptions,
 ) -> CarcaraOptions {
     // If no solver is provided by the `--lia-solver` option, *and* the `--lia-via-cvc5` option was
     // passed, we default to cvc5 as a solver
-    let lia_solver = lia_solver
-        .map(Into::into)
-        .or_else(|| lia_via_cvc5.then(|| "cvc5".into()));
+    let solver = lia_solver.or_else(|| lia_via_cvc5.then(|| "cvc5".into()));
+    let lia_options = solver.map(|solver| LiaGenericOptions {
+        solver: solver.into(),
+        arguments: lia_solver_args.split_whitespace().map(Into::into).collect(),
+    });
     CarcaraOptions {
         apply_function_defs,
         expand_lets: expand_let_bindings,
         allow_int_real_subtyping,
-        lia_solver,
+        lia_options,
         strict,
         skip_unknown_rules,
         stats,

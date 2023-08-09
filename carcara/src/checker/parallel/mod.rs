@@ -422,9 +422,9 @@ impl<'c> ParallelProofChecker<'c> {
         let mut polyeq_time = Duration::ZERO;
 
         if step.rule == "lia_generic" {
-            if let Some(solver) = &self.config.lia_solver {
+            if let Some(options) = &self.config.lia_options {
                 let is_hole =
-                    lia_generic::lia_generic_multi_thread(&step.clause, self.prelude, solver);
+                    lia_generic::lia_generic_multi_thread(&step.clause, self.prelude, options);
                 self.is_holey = self.is_holey || is_hole;
             } else {
                 log::warn!("encountered \"lia_generic\" rule, ignoring");
