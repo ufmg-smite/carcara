@@ -49,7 +49,6 @@ impl<CR: CollectResults + Send + Default> fmt::Debug for CheckerStatistics<'_, C
 pub struct Config {
     strict: bool,
     skip_unknown_rules: bool,
-    is_running_test: bool,
     lia_options: Option<LiaGenericOptions>,
 }
 
@@ -204,7 +203,7 @@ impl<'c> ProofChecker<'c> {
                 }
             }
         }
-        if self.config.is_running_test || self.reached_empty_clause {
+        if self.reached_empty_clause {
             Ok(self.is_holey)
         } else {
             Err(Error::DoesNotReachEmptyClause)
@@ -255,12 +254,10 @@ impl<'c> ProofChecker<'c> {
     ) -> bool {
         let time = Instant::now();
 
-        // Some subproofs contain `assume` commands inside them. These don't refer
-        // to the original problem premises, so we ignore the `assume` command if
-        // it is inside a subproof. Since the unit tests for the rules don't define the
-        // original problem, but sometimes use `assume` commands, we also skip the
-        // command if we are in a testing context.
-        if self.config.is_running_test || iter.is_in_subproof() {
+        // Some subproofs contain `assume` commands inside them. These don't refer to the original
+        // problem premises, but are instead local assumptions that are discharged by the subproof's
+        // final step, so we ignore the `assume` command if it is inside a subproof.
+        if iter.is_in_subproof() {
             if let Some(elaborator) = &mut self.elaborator {
                 elaborator.assume(term);
             }

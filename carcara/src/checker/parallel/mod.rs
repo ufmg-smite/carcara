@@ -336,7 +336,7 @@ impl<'c> ParallelProofChecker<'c> {
         }
 
         // Returns Ok(reached empty clause, isHoley)
-        if self.config.is_running_test || self.reached_empty_clause {
+        if self.reached_empty_clause {
             Ok((true, self.is_holey))
         } else {
             Ok((false, self.is_holey))
@@ -353,12 +353,9 @@ impl<'c> ParallelProofChecker<'c> {
     ) -> bool {
         let time = Instant::now();
 
-        // Some subproofs contain `assume` commands inside them. These don't refer
-        // to the original problem premises, so we ignore the `assume` command if
-        // it is inside a subproof. Since the unit tests for the rules don't define the
-        // original problem, but sometimes use `assume` commands, we also skip the
-        // command if we are in a testing context.
-        if self.config.is_running_test || iter.is_in_subproof() {
+        // Similarly to the single-threaded checker, we ignore `assume` commands that are inside
+        // subproofs
+        if iter.is_in_subproof() {
             return true;
         }
 

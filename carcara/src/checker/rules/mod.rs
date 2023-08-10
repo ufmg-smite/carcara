@@ -159,7 +159,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
 
     for (i, (proof, expected)) in cases.iter().enumerate() {
         // This parses the definitions again for every case, which is not ideal
-        let (prelude, parsed, mut pool) = parse_instance(
+        let (prelude, mut proof, mut pool) = parse_instance(
             Cursor::new(definitions),
             Cursor::new(proof),
             true,
@@ -167,17 +167,32 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
             false,
         )
         .unwrap_or_else(|e| panic!("parser error during test \"{}\": {}", test_name, e));
-        let mut checker = ProofChecker::new(
-            &mut pool,
-            Config {
-                strict: false,
-                skip_unknown_rules: false,
-                is_running_test: true,
-                lia_options: None,
-            },
-            &prelude,
-        );
-        let got = checker.check(&parsed).is_ok();
+
+        // Since rule tests often use `assume` commands to introduce premises, we search the proof
+        // for all `assume`d terms and retroactively add them as the problem premises, to avoid
+        // checker errors on the `assume`s
+        proof.premises = proof
+            .commands
+            .iter()
+            .filter_map(|c| match c {
+                ProofCommand::Assume { term, .. } => Some(term.clone()),
+                _ => None,
+            })
+            .collect();
+
+        // All proofs must eventually reach the empty clause, so to avoid having to add a dummy
+        // `(step end (cl) :rule hole)` to every rule test, we add this dummy step here
+        proof.commands.push(ProofCommand::Step(ProofStep {
+            id: "end".into(),
+            clause: Vec::new(),
+            rule: "hole".into(),
+            premises: Vec::new(),
+            args: Vec::new(),
+            discharge: Vec::new(),
+        }));
+
+        let mut checker = ProofChecker::new(&mut pool, Config::new(), &prelude);
+        let got = checker.check(&proof).is_ok();
         assert_eq!(
             *expected, got,
             "test case \"{}\" index {} failed",
