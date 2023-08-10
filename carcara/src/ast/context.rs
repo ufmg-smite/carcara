@@ -217,8 +217,7 @@ impl ContextStack {
             // Waits until the OS allows to mutate at this context
             // TODO: Does it really needs to require a write guard here instead of up there
             let mut context_guard = self.context_vec[self.stack[i]].1.write().unwrap();
-            let mut curr_context = context_guard.as_mut().unwrap();
-            curr_context.cumulative_substitution =
+            context_guard.as_mut().unwrap().cumulative_substitution =
                 Some(Substitution::new(pool, cumulative_substitution).unwrap());
             self.num_cumulative_calculated = i + 1;
         }
