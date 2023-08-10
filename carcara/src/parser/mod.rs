@@ -699,6 +699,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     fn parse_assume_command(&mut self) -> CarcaraResult<(String, Rc<Term>)> {
         let id = self.expect_symbol()?;
         let term = self.parse_term_expecting_sort(&Sort::Bool)?;
+        self.ignore_remaining_attributes()?;
         self.expect_token(Token::CloseParen)?;
         Ok((id, term))
     }

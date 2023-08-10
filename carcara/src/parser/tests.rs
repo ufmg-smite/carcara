@@ -491,6 +491,33 @@ fn test_define_fun() {
 }
 
 #[test]
+fn test_assume() {
+    let mut p = PrimitivePool::new();
+    let input = "
+        (assume h1 true)
+        (assume h2 (or true false) :ignore \"extra\" :attributes)
+    ";
+    let proof = parse_proof(&mut p, input);
+    assert_eq!(proof.commands.len(), 2);
+
+    assert_eq!(
+        &proof.commands[0],
+        &ProofCommand::Assume {
+            id: "h1".into(),
+            term: p.bool_true(),
+        }
+    );
+
+    assert_eq!(
+        &proof.commands[1],
+        &ProofCommand::Assume {
+            id: "h2".into(),
+            term: parse_term(&mut p, "(or true false)"),
+        }
+    );
+}
+
+#[test]
 fn test_step() {
     let mut p = PrimitivePool::new();
     let input = "
