@@ -47,23 +47,14 @@ impl TermPool for ContextPool {
     }
 
     fn add(&mut self, term: Term) -> Rc<Term> {
-        use std::collections::hash_map::Entry;
-
         // If the global pool has the term
         if let Some(entry) = self.global_pool.terms.get(&term) {
-            entry.clone()
-        } else {
-            let mut ctx_guard = self.storage.write().unwrap();
-            match ctx_guard.terms.entry(term) {
-                Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
-                Entry::Vacant(vacant_entry) => {
-                    let term = vacant_entry.key().clone();
-                    let t = vacant_entry.insert(Rc::new(term)).clone();
-                    ctx_guard.compute_sort(&t);
-                    t
-                }
-            }
+            return entry.clone();
         }
+        let mut ctx_guard = self.storage.write().unwrap();
+        let term = ctx_guard.terms.add(term);
+        ctx_guard.compute_sort(&term);
+        term
     }
 
     fn sort(&self, term: &Rc<Term>) -> Rc<Term> {
@@ -125,8 +116,6 @@ impl TermPool for LocalPool {
     }
 
     fn add(&mut self, term: Term) -> Rc<Term> {
-        use std::collections::hash_map::Entry;
-
         // If there is a constant pool and has the term
         if let Some(entry) = self.ctx_pool.global_pool.terms.get(&term) {
             entry.clone()
@@ -135,15 +124,7 @@ impl TermPool for LocalPool {
         else if let Some(entry) = self.ctx_pool.storage.read().unwrap().terms.get(&term) {
             entry.clone()
         } else {
-            match self.storage.terms.entry(term) {
-                Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
-                Entry::Vacant(vacant_entry) => {
-                    let term = vacant_entry.key().clone();
-                    let t = vacant_entry.insert(Rc::new(term)).clone();
-                    self.storage.compute_sort(&t);
-                    t
-                }
-            }
+            self.storage.add(term)
         }
     }
 

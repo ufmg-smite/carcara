@@ -1,10 +1,12 @@
 //! This module implements `TermPool`, a structure that stores terms and implements hash consing.
 
 pub mod advanced;
+mod storage;
 
 use super::{Rc, Sort, Term};
 use crate::ast::Constant;
 use ahash::{AHashMap, AHashSet};
+use storage::Storage;
 
 pub trait TermPool {
     /// Returns the term corresponding to the boolean constant `true`.
@@ -51,7 +53,7 @@ pub trait TermPool {
 /// [`PrimitivePool::sort`]) or its free variables (see [`PrimitivePool::free_vars`]).
 pub struct PrimitivePool {
     /// A map of the terms in the pool.
-    pub(crate) terms: AHashMap<Term, Rc<Term>>,
+    pub(crate) terms: Storage,
     pub(crate) free_vars_cache: AHashMap<Rc<Term>, AHashSet<Rc<Term>>>,
     pub(crate) sorts_cache: AHashMap<Rc<Term>, Rc<Term>>,
     pub(crate) bool_true: Rc<Term>,
@@ -68,12 +70,12 @@ impl PrimitivePool {
     /// Constructs a new `TermPool`. This new pool will already contain the boolean constants `true`
     /// and `false`, as well as the `Bool` sort.
     pub fn new() -> Self {
-        let mut terms = AHashMap::new();
+        let mut terms = Storage::new();
         let mut sorts_cache = AHashMap::new();
-        let bool_sort = Self::add_term_to_map(&mut terms, Term::Sort(Sort::Bool));
+        let bool_sort = terms.add(Term::Sort(Sort::Bool));
 
-        let [bool_true, bool_false] = ["true", "false"]
-            .map(|b| Self::add_term_to_map(&mut terms, Term::new_var(b, bool_sort.clone())));
+        let [bool_true, bool_false] =
+            ["true", "false"].map(|b| terms.add(Term::new_var(b, bool_sort.clone())));
 
         sorts_cache.insert(bool_false.clone(), bool_sort.clone());
         sorts_cache.insert(bool_true.clone(), bool_sort.clone());
@@ -85,18 +87,6 @@ impl PrimitivePool {
             sorts_cache,
             bool_true,
             bool_false,
-        }
-    }
-
-    fn add_term_to_map(terms_map: &mut AHashMap<Term, Rc<Term>>, term: Term) -> Rc<Term> {
-        use std::collections::hash_map::Entry;
-
-        match terms_map.entry(term) {
-            Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
-            Entry::Vacant(vacant_entry) => {
-                let term = vacant_entry.key().clone();
-                vacant_entry.insert(Rc::new(term)).clone()
-            }
         }
     }
 
@@ -164,8 +154,8 @@ impl PrimitivePool {
                 Sort::Function(result)
             }
         };
-        let sorted_term = Self::add_term_to_map(&mut self.terms, Term::Sort(result));
-        self.sorts_cache.insert(term.clone(), sorted_term);
+        let sort = self.terms.add(Term::Sort(result));
+        self.sorts_cache.insert(term.clone(), sort);
         self.sorts_cache[term].clone()
     }
 
@@ -174,8 +164,6 @@ impl PrimitivePool {
         term: Term,
         prior_pools: [&PrimitivePool; N],
     ) -> Rc<Term> {
-        use std::collections::hash_map::Entry;
-
         for p in prior_pools {
             // If this prior pool has the term
             if let Some(entry) = p.terms.get(&term) {
@@ -183,15 +171,7 @@ impl PrimitivePool {
             }
         }
 
-        match self.terms.entry(term) {
-            Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
-            Entry::Vacant(vacant_entry) => {
-                let term = vacant_entry.key().clone();
-                let term = vacant_entry.insert(Rc::new(term)).clone();
-                self.compute_sort(&term);
-                term
-            }
-        }
+        self.add(term)
     }
 
     fn sort_with_priorities<const N: usize>(
@@ -283,7 +263,7 @@ impl TermPool for PrimitivePool {
     }
 
     fn add(&mut self, term: Term) -> Rc<Term> {
-        let term = Self::add_term_to_map(&mut self.terms, term);
+        let term = self.terms.add(term);
         self.compute_sort(&term);
         term
     }
