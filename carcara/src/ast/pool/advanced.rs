@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 
 pub struct ContextPool {
     pub(crate) global_pool: Arc<PrimitivePool>,
-    pub(crate) storage: Arc<RwLock<PrimitivePool>>,
+    pub(crate) inner: Arc<RwLock<PrimitivePool>>,
 }
 
 impl Default for ContextPool {
@@ -18,21 +18,21 @@ impl ContextPool {
     pub fn new() -> Self {
         Self {
             global_pool: Arc::new(PrimitivePool::new()),
-            storage: Arc::new(RwLock::new(PrimitivePool::new())),
+            inner: Arc::new(RwLock::new(PrimitivePool::new())),
         }
     }
 
     pub fn from_global(global_pool: &Arc<PrimitivePool>) -> Self {
         Self {
             global_pool: global_pool.clone(),
-            storage: Arc::new(RwLock::new(PrimitivePool::new())),
+            inner: Arc::new(RwLock::new(PrimitivePool::new())),
         }
     }
 
     pub fn from_previous(ctx_pool: &Self) -> Self {
         Self {
             global_pool: ctx_pool.global_pool.clone(),
-            storage: ctx_pool.storage.clone(),
+            inner: ctx_pool.inner.clone(),
         }
     }
 }
@@ -48,11 +48,11 @@ impl TermPool for ContextPool {
 
     fn add(&mut self, term: Term) -> Rc<Term> {
         // If the global pool has the term
-        if let Some(entry) = self.global_pool.terms.get(&term) {
+        if let Some(entry) = self.global_pool.storage.get(&term) {
             return entry.clone();
         }
-        let mut ctx_guard = self.storage.write().unwrap();
-        let term = ctx_guard.terms.add(term);
+        let mut ctx_guard = self.inner.write().unwrap();
+        let term = ctx_guard.storage.add(term);
         ctx_guard.compute_sort(&term);
         term
     }
@@ -63,12 +63,12 @@ impl TermPool for ContextPool {
         }
         // A sort inserted by context
         else {
-            self.storage.read().unwrap().sorts_cache[term].clone()
+            self.inner.read().unwrap().sorts_cache[term].clone()
         }
     }
 
     fn free_vars(&mut self, term: &Rc<Term>) -> AHashSet<Rc<Term>> {
-        self.storage
+        self.inner
             .write()
             .unwrap()
             .free_vars_with_priorities(term, [&self.global_pool])
@@ -79,7 +79,7 @@ impl TermPool for ContextPool {
 
 pub struct LocalPool {
     pub(crate) ctx_pool: ContextPool,
-    pub(crate) storage: PrimitivePool,
+    pub(crate) inner: PrimitivePool,
 }
 
 impl Default for LocalPool {
@@ -92,7 +92,7 @@ impl LocalPool {
     pub fn new() -> Self {
         Self {
             ctx_pool: ContextPool::new(),
-            storage: PrimitivePool::new(),
+            inner: PrimitivePool::new(),
         }
     }
 
@@ -101,7 +101,7 @@ impl LocalPool {
     pub fn from_previous(ctx_pool: &ContextPool) -> Self {
         Self {
             ctx_pool: ContextPool::from_previous(ctx_pool),
-            storage: PrimitivePool::new(),
+            inner: PrimitivePool::new(),
         }
     }
 }
@@ -117,14 +117,14 @@ impl TermPool for LocalPool {
 
     fn add(&mut self, term: Term) -> Rc<Term> {
         // If there is a constant pool and has the term
-        if let Some(entry) = self.ctx_pool.global_pool.terms.get(&term) {
+        if let Some(entry) = self.ctx_pool.global_pool.storage.get(&term) {
             entry.clone()
         }
         // If this term was inserted by the context
-        else if let Some(entry) = self.ctx_pool.storage.read().unwrap().terms.get(&term) {
+        else if let Some(entry) = self.ctx_pool.inner.read().unwrap().storage.get(&term) {
             entry.clone()
         } else {
-            self.storage.add(term)
+            self.inner.add(term)
         }
     }
 
@@ -133,19 +133,19 @@ impl TermPool for LocalPool {
             sort.clone()
         }
         // A sort inserted by context
-        else if let Some(entry) = self.ctx_pool.storage.read().unwrap().terms.get(term) {
+        else if let Some(entry) = self.ctx_pool.inner.read().unwrap().storage.get(term) {
             entry.clone()
         } else {
-            self.storage.sorts_cache[term].clone()
+            self.inner.sorts_cache[term].clone()
         }
     }
 
     fn free_vars(&mut self, term: &Rc<Term>) -> AHashSet<Rc<Term>> {
-        self.storage.free_vars_with_priorities(
+        self.inner.free_vars_with_priorities(
             term,
             [
                 &self.ctx_pool.global_pool,
-                &self.ctx_pool.storage.read().unwrap(),
+                &self.ctx_pool.inner.read().unwrap(),
             ],
         )
     }

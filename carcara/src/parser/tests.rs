@@ -94,7 +94,7 @@ fn test_hash_consing() {
     .into_iter()
     .collect::<AHashSet<&str>>();
 
-    let pool_terms = pool.terms.into_vec();
+    let pool_terms = pool.storage.into_vec();
     assert_eq!(pool_terms.len(), expected.len());
     for got in pool_terms {
         let formatted: &str = &format!("{}", got);

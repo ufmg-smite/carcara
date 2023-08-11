@@ -52,8 +52,7 @@ pub trait TermPool {
 /// This struct also provides other utility methods, like computing the sort of a term (see
 /// [`PrimitivePool::sort`]) or its free variables (see [`PrimitivePool::free_vars`]).
 pub struct PrimitivePool {
-    /// A map of the terms in the pool.
-    pub(crate) terms: Storage,
+    pub(crate) storage: Storage,
     pub(crate) free_vars_cache: AHashMap<Rc<Term>, AHashSet<Rc<Term>>>,
     pub(crate) sorts_cache: AHashMap<Rc<Term>, Rc<Term>>,
     pub(crate) bool_true: Rc<Term>,
@@ -70,19 +69,19 @@ impl PrimitivePool {
     /// Constructs a new `TermPool`. This new pool will already contain the boolean constants `true`
     /// and `false`, as well as the `Bool` sort.
     pub fn new() -> Self {
-        let mut terms = Storage::new();
+        let mut storage = Storage::new();
         let mut sorts_cache = AHashMap::new();
-        let bool_sort = terms.add(Term::Sort(Sort::Bool));
+        let bool_sort = storage.add(Term::Sort(Sort::Bool));
 
         let [bool_true, bool_false] =
-            ["true", "false"].map(|b| terms.add(Term::new_var(b, bool_sort.clone())));
+            ["true", "false"].map(|b| storage.add(Term::new_var(b, bool_sort.clone())));
 
         sorts_cache.insert(bool_false.clone(), bool_sort.clone());
         sorts_cache.insert(bool_true.clone(), bool_sort.clone());
         sorts_cache.insert(bool_sort.clone(), bool_sort);
 
         Self {
-            terms,
+            storage,
             free_vars_cache: AHashMap::new(),
             sorts_cache,
             bool_true,
@@ -154,7 +153,7 @@ impl PrimitivePool {
                 Sort::Function(result)
             }
         };
-        let sort = self.terms.add(Term::Sort(result));
+        let sort = self.storage.add(Term::Sort(result));
         self.sorts_cache.insert(term.clone(), sort);
         self.sorts_cache[term].clone()
     }
@@ -166,11 +165,10 @@ impl PrimitivePool {
     ) -> Rc<Term> {
         for p in prior_pools {
             // If this prior pool has the term
-            if let Some(entry) = p.terms.get(&term) {
+            if let Some(entry) = p.storage.get(&term) {
                 return entry.clone();
             }
         }
-
         self.add(term)
     }
 
@@ -263,7 +261,7 @@ impl TermPool for PrimitivePool {
     }
 
     fn add(&mut self, term: Term) -> Rc<Term> {
-        let term = self.terms.add(term);
+        let term = self.storage.add(term);
         self.compute_sort(&term);
         term
     }
