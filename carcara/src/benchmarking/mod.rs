@@ -4,11 +4,12 @@ mod tests;
 
 pub use metrics::*;
 
-use ahash::AHashMap;
-use std::{fmt, io, time::Duration};
+use ahash::{AHashMap, AHashSet};
+use std::{fmt, hash::Hash, io, sync::Arc, time::Duration};
 
-fn combine_map<K, V, M>(mut a: AHashMap<String, M>, b: AHashMap<String, M>) -> AHashMap<String, M>
+fn combine_map<S, K, V, M>(mut a: AHashMap<S, M>, b: AHashMap<S, M>) -> AHashMap<S, M>
 where
+    S: Eq + Hash,
     V: MetricsUnit,
     M: Metrics<K, V> + Default,
 {
@@ -256,10 +257,26 @@ impl OnlineBenchmarkResults {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct InternedStepId {
+    pub(crate) file: Arc<str>,
+    pub(crate) step_id: Arc<str>,
+    pub(crate) rule: Arc<str>,
+}
+
+impl fmt::Display for InternedStepId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}:{} ({})", self.file, self.step_id, self.rule)
+    }
+}
+
+type InternedRunId = (Arc<str>, usize);
+
 #[derive(Default)]
 pub struct CsvBenchmarkResults {
-    runs: AHashMap<RunId, RunMeasurement>,
-    step_time_by_rule: AHashMap<String, OfflineMetrics<StepId>>,
+    strings: AHashSet<Arc<str>>,
+    runs: AHashMap<InternedRunId, RunMeasurement>,
+    step_time_by_rule: AHashMap<Arc<str>, OfflineMetrics<InternedStepId>>,
     is_holey: bool,
     num_errors: usize,
 }
@@ -277,6 +294,17 @@ impl CsvBenchmarkResults {
         self.num_errors
     }
 
+    fn intern(&mut self, s: &str) -> Arc<str> {
+        match self.strings.get(s) {
+            Some(interned) => interned.clone(),
+            None => {
+                let result: Arc<str> = Arc::from(s);
+                self.strings.insert(result.clone());
+                result
+            }
+        }
+    }
+
     pub fn write_csv(
         self,
         runs_dest: &mut dyn io::Write,
@@ -287,7 +315,7 @@ impl CsvBenchmarkResults {
     }
 
     fn write_runs_csv(
-        data: AHashMap<RunId, RunMeasurement>,
+        data: AHashMap<InternedRunId, RunMeasurement>,
         dest: &mut dyn io::Write,
     ) -> io::Result<()> {
         writeln!(
@@ -321,7 +349,7 @@ impl CsvBenchmarkResults {
     }
 
     fn write_by_rule_csv(
-        data: AHashMap<String, OfflineMetrics<StepId>>,
+        data: AHashMap<Arc<str>, OfflineMetrics<InternedStepId>>,
         dest: &mut dyn io::Write,
     ) -> io::Result<()> {
         let mut data: Vec<_> = data.into_iter().collect();
@@ -461,13 +489,14 @@ impl CollectResults for OnlineBenchmarkResults {
 
 impl CollectResults for CsvBenchmarkResults {
     fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration) {
-        let id = StepId {
-            file: file.into(),
-            step_id: step_id.into(),
-            rule: rule.into(),
+        let rule = self.intern(rule);
+        let id = InternedStepId {
+            file: self.intern(file),
+            step_id: self.intern(step_id),
+            rule: rule.clone(),
         };
         self.step_time_by_rule
-            .entry(rule.to_owned())
+            .entry(rule)
             .or_default()
             .add_sample(&id, time);
     }
@@ -478,8 +507,9 @@ impl CollectResults for CsvBenchmarkResults {
 
     fn add_polyeq_depth(&mut self, _: usize) {}
 
-    fn add_run_measurement(&mut self, id: &RunId, measurement: RunMeasurement) {
-        self.runs.insert(id.clone(), measurement);
+    fn add_run_measurement(&mut self, (file, i): &RunId, measurement: RunMeasurement) {
+        let id = (self.intern(file), *i);
+        self.runs.insert(id, measurement);
     }
 
     fn register_holey(&mut self) {
