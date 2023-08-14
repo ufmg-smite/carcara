@@ -17,6 +17,19 @@ use error::assert_num_args;
 use rug::Integer;
 use std::{io::BufRead, str::FromStr};
 
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Config {
+    pub apply_function_defs: bool,
+    pub expand_lets: bool,
+    pub allow_int_real_subtyping: bool,
+}
+
+impl Config {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 /// Parses an SMT problem instance (in the SMT-LIB format) and its associated proof (in the Alethe
 /// format).
 ///
@@ -25,18 +38,10 @@ use std::{io::BufRead, str::FromStr};
 pub fn parse_instance<T: BufRead>(
     problem: T,
     proof: T,
-    apply_function_defs: bool,
-    expand_lets: bool,
-    allow_int_real_subtyping: bool,
+    config: Config,
 ) -> CarcaraResult<(ProblemPrelude, Proof, PrimitivePool)> {
     let mut pool = PrimitivePool::new();
-    let mut parser = Parser::new(
-        &mut pool,
-        problem,
-        apply_function_defs,
-        expand_lets,
-        allow_int_real_subtyping,
-    )?;
+    let mut parser = Parser::new(&mut pool, config, problem)?;
     let (prelude, premises) = parser.parse_problem()?;
     parser.reset(proof)?;
     let commands = parser.parse_proof()?;
@@ -81,28 +86,20 @@ struct ParserState {
 /// A parser for the Alethe proof format.
 pub struct Parser<'a, R> {
     pool: &'a mut PrimitivePool,
+    config: Config,
     lexer: Lexer<R>,
     current_token: Token,
     current_position: Position,
     state: ParserState,
     interpret_integers_as_reals: bool,
-    apply_function_defs: bool,
-    expand_lets: bool,
     problem: Option<(ProblemPrelude, AHashSet<Rc<Term>>)>,
-    allow_int_real_subtyping: bool,
 }
 
 impl<'a, R: BufRead> Parser<'a, R> {
     /// Constructs a new `Parser` from a type that implements `BufRead`.
     ///
     /// This operation can fail if there is an IO or lexer error on the first token.
-    pub fn new(
-        pool: &'a mut PrimitivePool,
-        input: R,
-        apply_function_defs: bool,
-        expand_lets: bool,
-        allow_int_real_subtyping: bool,
-    ) -> CarcaraResult<Self> {
+    pub fn new(pool: &'a mut PrimitivePool, config: Config, input: R) -> CarcaraResult<Self> {
         let mut state = ParserState::default();
         let bool_sort = pool.add(Term::Sort(Sort::Bool));
         for iden in ["true", "false"] {
@@ -113,15 +110,13 @@ impl<'a, R: BufRead> Parser<'a, R> {
         let (current_token, current_position) = lexer.next_token()?;
         Ok(Parser {
             pool,
+            config,
             lexer,
             current_token,
             current_position,
             state,
             interpret_integers_as_reals: false,
-            apply_function_defs,
-            expand_lets,
             problem: None,
-            allow_int_real_subtyping,
         })
     }
 
@@ -219,7 +214,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
                 // All the arguments must be either Int or Real. Also, if we are not allowing
                 // Int/Real subtyping, all arguments must have the same sort
-                if self.allow_int_real_subtyping {
+                if self.config.allow_int_real_subtyping {
                     for s in sorts {
                         SortError::assert_one_of(&[Sort::Int, Sort::Real], s.as_sort().unwrap())?;
                     }
@@ -251,7 +246,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
                 // Normally, the `/` operator may only receive Real arguments, but if we are
                 // allowing Int/Real subtyping, it may also receive Ints
-                if self.allow_int_real_subtyping {
+                if self.config.allow_int_real_subtyping {
                     for s in sorts {
                         SortError::assert_one_of(&[Sort::Int, Sort::Real], s.as_sort().unwrap())?;
                     }
@@ -528,7 +523,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 Token::ReservedWord(Reserved::DefineFun) => {
                     let (name, func_def) = self.parse_define_fun()?;
 
-                    if self.apply_function_defs {
+                    if self.config.apply_function_defs {
                         self.state.function_defs.insert(name, func_def);
                     } else {
                         // If `self.apply_function_defs` is false, we instead add the function name
@@ -1061,7 +1056,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         self.expect_token(Token::CloseParen)?;
         self.state.symbol_table.pop_scope();
 
-        if self.expand_lets {
+        if self.config.expand_lets {
             let substitution = bindings
                 .into_iter()
                 .map(|(name, value)| {

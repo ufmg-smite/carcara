@@ -1,8 +1,6 @@
 use carcara::{
     benchmarking::{CollectResults, CsvBenchmarkResults, RunMeasurement},
-    checker,
-    parser::parse_instance,
-    CarcaraOptions,
+    checker, parser, CarcaraOptions,
 };
 use crossbeam_queue::ArrayQueue;
 use std::{
@@ -39,12 +37,15 @@ fn run_job<T: CollectResults + Default + Send>(
     let total = Instant::now();
 
     let parsing = Instant::now();
-    let (prelude, proof, mut pool) = parse_instance(
+    let config = parser::Config {
+        apply_function_defs: options.apply_function_defs,
+        expand_lets: options.expand_lets,
+        allow_int_real_subtyping: options.allow_int_real_subtyping,
+    };
+    let (prelude, proof, mut pool) = parser::parse_instance(
         BufReader::new(File::open(job.problem_file)?),
         BufReader::new(File::open(job.proof_file)?),
-        options.apply_function_defs,
-        options.expand_lets,
-        options.allow_int_real_subtyping,
+        config,
     )?;
     let parsing = parsing.elapsed();
 

@@ -15,9 +15,7 @@ fn run_parallel_checker_test(
     let (prelude, proof, pool) = parser::parse_instance(
         io::BufReader::new(fs::File::open(problem_path)?),
         io::BufReader::new(fs::File::open(proof_path)?),
-        false,
-        false,
-        false,
+        parser::Config::new(),
     )?;
 
     let (scheduler, schedule_context_usage) = checker::Scheduler::new(num_threads, &proof);
@@ -38,9 +36,7 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
     let (prelude, proof, mut pool) = parser::parse_instance(
         io::BufReader::new(fs::File::open(problem_path)?),
         io::BufReader::new(fs::File::open(proof_path)?),
-        true,
-        false,
-        false,
+        parser::Config::new(),
     )?;
 
     // First, we check the proof normally

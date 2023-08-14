@@ -7,13 +7,19 @@ use crate::ast::pool::PrimitivePool;
 
 const ERROR_MESSAGE: &str = "parser error during test";
 
+const TEST_CONFIG: Config = Config {
+    // Some tests need function definitions to be applied
+    apply_function_defs: true,
+    expand_lets: false,
+    allow_int_real_subtyping: false,
+};
+
 pub fn parse_terms<const N: usize>(
     pool: &mut PrimitivePool,
     definitions: &str,
     terms: [&str; N],
 ) -> [Rc<Term>; N] {
-    let mut parser =
-        Parser::new(pool, definitions.as_bytes(), true, false, false).expect(ERROR_MESSAGE);
+    let mut parser = Parser::new(pool, TEST_CONFIG, definitions.as_bytes()).expect(ERROR_MESSAGE);
     parser.parse_problem().expect(ERROR_MESSAGE);
 
     terms.map(|s| {
@@ -23,7 +29,7 @@ pub fn parse_terms<const N: usize>(
 }
 
 pub fn parse_term(pool: &mut PrimitivePool, input: &str) -> Rc<Term> {
-    Parser::new(pool, input.as_bytes(), true, false, false)
+    Parser::new(pool, TEST_CONFIG, input.as_bytes())
         .and_then(|mut parser| parser.parse_term())
         .expect(ERROR_MESSAGE)
 }
@@ -32,14 +38,14 @@ pub fn parse_term(pool: &mut PrimitivePool, input: &str) -> Rc<Term> {
 /// panics if no error is encountered.
 pub fn parse_term_err(input: &str) -> Error {
     let mut pool = PrimitivePool::new();
-    Parser::new(&mut pool, input.as_bytes(), true, false, false)
+    Parser::new(&mut pool, TEST_CONFIG, input.as_bytes())
         .and_then(|mut p| p.parse_term())
         .expect_err("expected error")
 }
 
 /// Parses a proof from a `&str`. Panics if any error is encountered.
 pub fn parse_proof(pool: &mut PrimitivePool, input: &str) -> Proof {
-    let commands = Parser::new(pool, input.as_bytes(), true, false, false)
+    let commands = Parser::new(pool, TEST_CONFIG, input.as_bytes())
         .expect(ERROR_MESSAGE)
         .parse_proof()
         .expect(ERROR_MESSAGE);
@@ -65,7 +71,7 @@ fn test_hash_consing() {
         )
         (* 2 2)
     )";
-    let mut parser = Parser::new(&mut pool, input.as_bytes(), true, false, false).unwrap();
+    let mut parser = Parser::new(&mut pool, Config::new(), input.as_bytes()).unwrap();
     parser.parse_term().unwrap();
 
     // We expect this input to result in 7 unique terms after parsing:

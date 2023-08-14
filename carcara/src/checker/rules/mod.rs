@@ -151,20 +151,15 @@ fn assert_is_bool_constant(got: &Rc<Term>, expected: bool) -> RuleResult {
 
 #[cfg(test)]
 fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
-    use crate::{
-        checker::{Config, ProofChecker},
-        parser::parse_instance,
-    };
+    use crate::{checker, parser};
     use std::io::Cursor;
 
     for (i, (proof, expected)) in cases.iter().enumerate() {
         // This parses the definitions again for every case, which is not ideal
-        let (prelude, mut proof, mut pool) = parse_instance(
+        let (prelude, mut proof, mut pool) = parser::parse_instance(
             Cursor::new(definitions),
             Cursor::new(proof),
-            true,
-            false,
-            false,
+            parser::Config::new(),
         )
         .unwrap_or_else(|e| panic!("parser error during test \"{}\": {}", test_name, e));
 
@@ -191,7 +186,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
             discharge: Vec::new(),
         }));
 
-        let mut checker = ProofChecker::new(&mut pool, Config::new(), &prelude);
+        let mut checker = checker::ProofChecker::new(&mut pool, checker::Config::new(), &prelude);
         let got = checker.check(&proof).is_ok();
         assert_eq!(
             *expected, got,

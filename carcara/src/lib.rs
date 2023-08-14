@@ -152,13 +152,12 @@ pub fn check<T: io::BufRead>(problem: T, proof: T, options: CarcaraOptions) -> R
 
     // Parsing
     let total = Instant::now();
-    let (prelude, proof, mut pool) = parser::parse_instance(
-        problem,
-        proof,
-        options.apply_function_defs,
-        options.expand_lets,
-        options.allow_int_real_subtyping,
-    )?;
+    let config = parser::Config {
+        apply_function_defs: options.apply_function_defs,
+        expand_lets: options.expand_lets,
+        allow_int_real_subtyping: options.allow_int_real_subtyping,
+    };
+    let (prelude, proof, mut pool) = parser::parse_instance(problem, proof, config)?;
     run_measures.parsing = total.elapsed();
 
     let config = checker::Config::new()
@@ -218,13 +217,12 @@ pub fn check_parallel<T: io::BufRead>(
 
     // Parsing
     let total = Instant::now();
-    let (prelude, proof, pool) = parser::parse_instance(
-        problem,
-        proof,
-        options.apply_function_defs,
-        options.expand_lets,
-        options.allow_int_real_subtyping,
-    )?;
+    let config = parser::Config {
+        apply_function_defs: options.apply_function_defs,
+        expand_lets: options.expand_lets,
+        allow_int_real_subtyping: options.allow_int_real_subtyping,
+    };
+    let (prelude, proof, pool) = parser::parse_instance(problem, proof, config)?;
     run_measures.parsing = total.elapsed();
 
     let config = checker::Config::new()
@@ -289,13 +287,12 @@ pub fn check_and_elaborate<T: io::BufRead>(
 
     // Parsing
     let total = Instant::now();
-    let (prelude, proof, mut pool) = parser::parse_instance(
-        problem,
-        proof,
-        options.apply_function_defs,
-        options.expand_lets,
-        options.allow_int_real_subtyping,
-    )?;
+    let config = parser::Config {
+        apply_function_defs: options.apply_function_defs,
+        expand_lets: options.expand_lets,
+        allow_int_real_subtyping: options.allow_int_real_subtyping,
+    };
+    let (prelude, proof, mut pool) = parser::parse_instance(problem, proof, config)?;
     run_measures.parsing = total.elapsed();
 
     let config = checker::Config::new()

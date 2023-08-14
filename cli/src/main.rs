@@ -379,9 +379,11 @@ fn parse_command(options: ParseCommandOptions) -> CliResult<()> {
     let (_, proof, _) = parser::parse_instance(
         problem,
         proof,
-        options.parsing.apply_function_defs,
-        options.parsing.expand_let_bindings,
-        options.parsing.allow_int_real_subtyping,
+        parser::Config {
+            apply_function_defs: options.parsing.apply_function_defs,
+            expand_lets: options.parsing.expand_let_bindings,
+            allow_int_real_subtyping: options.parsing.allow_int_real_subtyping,
+        },
     )
     .map_err(carcara::Error::from)?;
     print_proof(&proof.commands, options.printing.use_sharing)?;
@@ -473,14 +475,13 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
 
 fn slice_command(options: SliceCommandOption) -> CliResult<()> {
     let (problem, proof) = get_instance(&options.input)?;
-    let (_, proof, _) = parser::parse_instance(
-        problem,
-        proof,
-        options.parsing.apply_function_defs,
-        options.parsing.expand_let_bindings,
-        options.parsing.allow_int_real_subtyping,
-    )
-    .map_err(carcara::Error::from)?;
+    let config = parser::Config {
+        apply_function_defs: options.parsing.apply_function_defs,
+        expand_lets: options.parsing.expand_let_bindings,
+        allow_int_real_subtyping: options.parsing.allow_int_real_subtyping,
+    };
+    let (_, proof, _) =
+        parser::parse_instance(problem, proof, config).map_err(carcara::Error::from)?;
 
     let source_index = proof
         .commands

@@ -357,8 +357,7 @@ mod tests {
 
     fn run_test(definitions: &str, original: &str, x: &str, t: &str, result: &str) {
         let mut pool = PrimitivePool::new();
-        let mut parser =
-            Parser::new(&mut pool, definitions.as_bytes(), true, false, false).unwrap();
+        let mut parser = Parser::new(&mut pool, Config::new(), definitions.as_bytes()).unwrap();
         parser.parse_problem().unwrap();
 
         let [original, x, t, result] = [original, x, t, result].map(|s| {

@@ -32,7 +32,7 @@
 /// # use carcara::{ast::*, match_term, parser::*};
 /// # pub fn parse_term(input: &str) -> Rc<Term> {
 /// #     let mut pool = PrimitivePool::new();
-/// #     let mut parser = Parser::new(&mut pool, input.as_bytes(), true, false, false).unwrap();
+/// #     let mut parser = Parser::new(&mut pool, Config::new(), input.as_bytes()).unwrap();
 /// #     parser.parse_term().unwrap()
 /// # }
 /// # let t = parse_term("(and (=> false false) (> (+ 0 0) 0))");
@@ -52,7 +52,7 @@
 /// # use carcara::{ast::*, match_term, parser::*};
 /// # pub fn parse_term(input: &str) -> Rc<Term> {
 /// #     let mut pool = PrimitivePool::new();
-/// #     let mut parser = Parser::new(&mut pool, input.as_bytes(), true, false, false).unwrap();
+/// #     let mut parser = Parser::new(&mut pool, Config::new(), input.as_bytes()).unwrap();
 /// #     parser.parse_term().unwrap()
 /// # }
 /// # let t = parse_term("(forall ((x Int) (y Int)) (> x y))");
