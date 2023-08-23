@@ -1,7 +1,7 @@
 //! Algorithms for creating and applying capture-avoiding substitutions over terms.
 
 use super::{BindingList, Rc, SortedVar, Term, TermPool};
-use ahash::{AHashMap, AHashSet};
+use indexmap::{IndexMap, IndexSet};
 use thiserror::Error;
 
 /// The error type for errors when constructing or applying substitutions.
@@ -36,21 +36,21 @@ type SubstitutionResult<T> = Result<T, SubstitutionError>;
 /// actually be `(forall ((y' Int)) (= y y'))`.
 pub struct Substitution {
     /// The substitution's mappings.
-    pub(crate) map: AHashMap<Rc<Term>, Rc<Term>>,
+    pub(crate) map: IndexMap<Rc<Term>, Rc<Term>>,
 
     /// The variables that should be renamed to preserve capture-avoidance, if they are bound by a
     /// binder term.
-    should_be_renamed: Option<AHashSet<Rc<Term>>>,
-    cache: AHashMap<Rc<Term>, Rc<Term>>,
+    should_be_renamed: Option<IndexSet<Rc<Term>>>,
+    cache: IndexMap<Rc<Term>, Rc<Term>>,
 }
 
 impl Substitution {
     /// Constructs an empty substitution.
     pub fn empty() -> Self {
         Self {
-            map: AHashMap::new(),
+            map: IndexMap::new(),
             should_be_renamed: None,
-            cache: AHashMap::new(),
+            cache: IndexMap::new(),
         }
     }
 
@@ -67,7 +67,7 @@ impl Substitution {
     /// mapped to a term of a different sort.
     pub fn new(
         pool: &mut dyn TermPool,
-        map: AHashMap<Rc<Term>, Rc<Term>>,
+        map: IndexMap<Rc<Term>, Rc<Term>>,
     ) -> SubstitutionResult<Self> {
         for (k, v) in map.iter() {
             if !k.is_var() {
@@ -81,7 +81,7 @@ impl Substitution {
         Ok(Self {
             map,
             should_be_renamed: None,
-            cache: AHashMap::new(),
+            cache: IndexMap::new(),
         })
     }
 
@@ -146,7 +146,7 @@ impl Substitution {
         //
         // See https://en.wikipedia.org/wiki/Lambda_calculus#Capture-avoiding_substitutions for
         // more details.
-        let mut should_be_renamed = AHashSet::new();
+        let mut should_be_renamed = IndexSet::new();
         for (x, t) in self.map.iter() {
             if x == t {
                 continue; // We ignore reflexive substitutions
@@ -297,7 +297,7 @@ impl Substitution {
         is_value_list: bool,
     ) -> (BindingList, Self) {
         let mut new_substitution = Self::empty();
-        let mut new_vars = AHashSet::new();
+        let mut new_vars = IndexSet::new();
         let new_binding_list = binding_list
             .iter()
             .map(|(var, value)| {
@@ -365,7 +365,7 @@ mod tests {
             parser.parse_term().unwrap()
         });
 
-        let mut map = AHashMap::new();
+        let mut map = IndexMap::new();
         map.insert(x, t);
 
         let got = Substitution::new(&mut pool, map)

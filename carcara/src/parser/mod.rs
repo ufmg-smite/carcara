@@ -12,8 +12,8 @@ use crate::{
     utils::{HashCache, HashMapStack},
     CarcaraResult, Error,
 };
-use ahash::{AHashMap, AHashSet};
 use error::assert_num_args;
+use indexmap::{IndexMap, IndexSet};
 use rug::Integer;
 use std::{io::BufRead, str::FromStr};
 
@@ -78,8 +78,8 @@ enum AnchorArg {
 #[derive(Default)]
 struct ParserState {
     symbol_table: HashMapStack<HashCache<Ident>, Rc<Term>>,
-    function_defs: AHashMap<String, FunctionDef>,
-    sort_declarations: AHashMap<String, usize>,
+    function_defs: IndexMap<String, FunctionDef>,
+    sort_declarations: IndexMap<String, usize>,
     step_ids: HashMapStack<HashCache<String>, usize>,
 }
 
@@ -92,7 +92,7 @@ pub struct Parser<'a, R> {
     current_position: Position,
     state: ParserState,
     interpret_integers_as_reals: bool,
-    problem: Option<(ProblemPrelude, AHashSet<Rc<Term>>)>,
+    problem: Option<(ProblemPrelude, IndexSet<Rc<Term>>)>,
 }
 
 impl<'a, R: BufRead> Parser<'a, R> {
@@ -154,7 +154,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     /// Shortcut for `self.problem.as_mut().unwrap().1`
-    fn premises(&mut self) -> &mut AHashSet<Rc<Term>> {
+    fn premises(&mut self) -> &mut IndexSet<Rc<Term>> {
         &mut self.problem.as_mut().unwrap().1
     }
 
@@ -489,8 +489,8 @@ impl<'a, R: BufRead> Parser<'a, R> {
     ///
     /// All other commands are ignored. This method returns a hash set containing the premises
     /// introduced in `assert` commands.
-    pub fn parse_problem(&mut self) -> CarcaraResult<(ProblemPrelude, AHashSet<Rc<Term>>)> {
-        self.problem = Some((ProblemPrelude::default(), AHashSet::new()));
+    pub fn parse_problem(&mut self) -> CarcaraResult<(ProblemPrelude, IndexSet<Rc<Term>>)> {
+        self.problem = Some((ProblemPrelude::default(), IndexSet::new()));
 
         while self.current_token != Token::Eof {
             self.expect_token(Token::OpenParen)?;

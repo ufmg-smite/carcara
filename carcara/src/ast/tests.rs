@@ -2,7 +2,7 @@ use crate::{
     ast::{pool::PrimitivePool, TermPool},
     parser::tests::parse_terms,
 };
-use ahash::AHashSet;
+use indexmap::IndexSet;
 
 #[test]
 fn test_free_vars() {
@@ -10,9 +10,9 @@ fn test_free_vars() {
         for &(term, expected) in cases {
             let mut pool = PrimitivePool::new();
             let [root] = parse_terms(&mut pool, definitions, [term]);
-            let expected: AHashSet<_> = expected.iter().copied().collect();
+            let expected: IndexSet<_> = expected.iter().copied().collect();
             let set = pool.free_vars(&root);
-            let got: AHashSet<_> = set.iter().map(|t| t.as_var().unwrap()).collect();
+            let got: IndexSet<_> = set.iter().map(|t| t.as_var().unwrap()).collect();
 
             assert_eq!(expected, got);
         }

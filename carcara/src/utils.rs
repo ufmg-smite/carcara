@@ -1,5 +1,5 @@
 use crate::ast::{BindingList, Quantifier, Rc, Term};
-use ahash::{AHashMap, AHashSet, AHasher};
+use indexmap::{IndexMap, IndexSet};
 use std::{
     borrow::Borrow,
     fmt,
@@ -25,7 +25,7 @@ pub fn is_symbol_character(ch: char) -> bool {
 /// An iterator that removes duplicate elements from `iter`. This will yield the elements in
 /// `iter` in order, skipping elements that have already been seen before.
 pub struct Dedup<T, I> {
-    seen: AHashSet<T>,
+    seen: IndexSet<T>,
     iter: I,
 }
 
@@ -59,7 +59,7 @@ impl<T, I: Iterator<Item = T>> DedupIterator<T> for I {
     where
         Self: Sized,
     {
-        Dedup { seen: AHashSet::new(), iter: self }
+        Dedup { seen: IndexSet::new(), iter: self }
     }
 }
 
@@ -84,7 +84,7 @@ impl<T: Hash> Hash for HashCache<T> {
 
 impl<T: Eq + Hash> HashCache<T> {
     pub fn new(value: T) -> Self {
-        let mut hasher = AHasher::default();
+        let mut hasher = std::collections::hash_map::DefaultHasher::default();
         value.hash(&mut hasher);
         Self { hash: hasher.finish(), value }
     }
@@ -102,16 +102,16 @@ impl<T> AsRef<T> for HashCache<T> {
 
 #[derive(Debug)]
 pub struct HashMapStack<K, V> {
-    scopes: Vec<AHashMap<K, V>>,
+    scopes: Vec<IndexMap<K, V>>,
 }
 
 impl<K, V> HashMapStack<K, V> {
     pub fn new() -> Self {
-        Self { scopes: vec![AHashMap::new()] }
+        Self { scopes: vec![IndexMap::new()] }
     }
 
     pub fn push_scope(&mut self) {
-        self.scopes.push(AHashMap::new());
+        self.scopes.push(IndexMap::new());
     }
 
     pub fn pop_scope(&mut self) {

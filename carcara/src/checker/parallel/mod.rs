@@ -9,7 +9,7 @@ use crate::{
     ast::{pool::advanced::*, *},
     CarcaraResult, Error,
 };
-use ahash::AHashSet;
+use indexmap::IndexSet;
 pub use scheduler::{Schedule, ScheduleIter, Scheduler};
 use std::{
     ops::ControlFlow,
@@ -347,7 +347,7 @@ impl<'c> ParallelProofChecker<'c> {
         &mut self,
         id: &str,
         term: &Rc<Term>,
-        premises: &AHashSet<Rc<Term>>,
+        premises: &IndexSet<Rc<Term>>,
         iter: &ScheduleIter,
         mut stats: &mut Option<&mut CheckerStatistics<CR>>,
     ) -> bool {

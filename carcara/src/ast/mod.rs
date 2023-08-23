@@ -25,7 +25,7 @@ pub use substitution::{Substitution, SubstitutionError};
 pub(crate) use polyeq::{Polyeq, PolyeqComparator};
 
 use crate::checker::error::CheckerError;
-use ahash::AHashSet;
+use indexmap::IndexSet;
 use rug::Integer;
 use rug::Rational;
 use std::{hash::Hash, ops::Deref};
@@ -51,7 +51,7 @@ pub struct Proof {
     /// The proof's premises.
     ///
     /// Those are the terms introduced in the original problem's `assert` commands.
-    pub premises: AHashSet<Rc<Term>>,
+    pub premises: IndexSet<Rc<Term>>,
 
     /// The proof commands.
     pub commands: Vec<ProofCommand>,

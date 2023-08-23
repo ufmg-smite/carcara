@@ -3,7 +3,7 @@ use super::{
     assert_polyeq_expected, get_premise_term, CheckerError, EqualityError, RuleArgs, RuleResult,
 };
 use crate::ast::*;
-use ahash::AHashMap;
+use indexmap::IndexMap;
 
 pub fn distinct_elim(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
@@ -320,7 +320,7 @@ fn bfun_elim_second_step(
 fn apply_bfun_elim(
     pool: &mut dyn TermPool,
     term: &Rc<Term>,
-    cache: &mut AHashMap<Rc<Term>, Rc<Term>>,
+    cache: &mut IndexMap<Rc<Term>, Rc<Term>>,
 ) -> Result<Rc<Term>, SubstitutionError> {
     if let Some(v) = cache.get(term) {
         return Ok(v.clone());
@@ -400,7 +400,7 @@ pub fn bfun_elim(
 
     let psi = get_premise_term(&premises[0])?;
 
-    let expected = apply_bfun_elim(pool, psi, &mut AHashMap::new())?;
+    let expected = apply_bfun_elim(pool, psi, &mut IndexMap::new())?;
     assert_polyeq_expected(&conclusion[0], expected, polyeq_time)
 }
 

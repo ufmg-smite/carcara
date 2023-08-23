@@ -5,7 +5,7 @@ use crate::{
     parser::Token,
     utils::{is_symbol_character, DedupIterator},
 };
-use ahash::AHashMap;
+use indexmap::IndexMap;
 use std::{borrow::Cow, fmt, io};
 
 /// Prints a proof to the standard output.
@@ -17,7 +17,7 @@ pub fn print_proof(commands: &[ProofCommand], use_sharing: bool) -> io::Result<(
     let mut stdout = io::stdout();
     let mut printer = AlethePrinter {
         inner: &mut stdout,
-        term_indices: use_sharing.then(AHashMap::new),
+        term_indices: use_sharing.then(IndexMap::new),
         term_sharing_variable_prefix: "@p_",
     };
     printer.write_proof(commands)
@@ -32,7 +32,7 @@ pub fn write_lia_smt_instance(
 ) -> io::Result<()> {
     let mut printer = AlethePrinter {
         inner: dest,
-        term_indices: use_sharing.then(AHashMap::new),
+        term_indices: use_sharing.then(IndexMap::new),
         term_sharing_variable_prefix: "p_",
     };
     printer.write_lia_smt_instance(clause)
@@ -107,7 +107,7 @@ impl PrintWithSharing for Operator {
 
 struct AlethePrinter<'a> {
     inner: &'a mut dyn io::Write,
-    term_indices: Option<AHashMap<Rc<Term>, usize>>,
+    term_indices: Option<IndexMap<Rc<Term>, usize>>,
     term_sharing_variable_prefix: &'static str,
 }
 

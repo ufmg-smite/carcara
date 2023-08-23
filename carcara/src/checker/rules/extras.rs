@@ -5,7 +5,7 @@ use super::{
     EqualityError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::rules::assert_operation_len};
-use ahash::AHashSet;
+use indexmap::IndexSet;
 
 pub fn reordering(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_num_premises(premises, 1)?;
@@ -13,8 +13,8 @@ pub fn reordering(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult
     let premise = premises[0].clause;
     assert_clause_len(conclusion, premise.len())?;
 
-    let premise_set: AHashSet<_> = premise.iter().collect();
-    let conclusion_set: AHashSet<_> = conclusion.iter().collect();
+    let premise_set: IndexSet<_> = premise.iter().collect();
+    let conclusion_set: IndexSet<_> = conclusion.iter().collect();
     if let Some(&t) = premise_set.difference(&conclusion_set).next() {
         Err(CheckerError::ReorderingMissingTerm(t.clone()))
     } else if let Some(&t) = conclusion_set.difference(&premise_set).next() {

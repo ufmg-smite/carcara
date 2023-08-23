@@ -3,7 +3,7 @@ use super::{
     CheckerError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::QuantifierError, utils::DedupIterator};
-use ahash::{AHashMap, AHashSet};
+use indexmap::{IndexMap, IndexSet};
 
 pub fn forall_inst(
     RuleArgs {
@@ -19,8 +19,8 @@ pub fn forall_inst(
 
     // Since the bindings and arguments may not be in the same order, we collect the bindings into
     // a hash set, and remove each binding from it as we find the associated argument
-    let mut bindings: AHashSet<_> = bindings.iter().cloned().collect();
-    let substitution: AHashMap<_, _> = args
+    let mut bindings: IndexSet<_> = bindings.iter().cloned().collect();
+    let substitution: IndexMap<_, _> = args
         .iter()
         .map(|arg| {
             let (arg_name, arg_value) = arg.as_assign()?;
@@ -110,7 +110,7 @@ fn negation_normal_form(
     pool: &mut dyn TermPool,
     term: &Rc<Term>,
     polarity: bool,
-    cache: &mut AHashMap<(Rc<Term>, bool), Rc<Term>>,
+    cache: &mut IndexMap<(Rc<Term>, bool), Rc<Term>>,
 ) -> Rc<Term> {
     if let Some(v) = cache.get(&(term.clone(), polarity)) {
         return v.clone();
@@ -270,10 +270,10 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         (l_b, phi, r_b, phi_prime)
     };
 
-    let r_bindings = r_bindings.iter().cloned().collect::<AHashSet<_>>();
-    let mut new_bindings = l_bindings.iter().cloned().collect::<AHashSet<_>>();
+    let r_bindings = r_bindings.iter().cloned().collect::<IndexSet<_>>();
+    let mut new_bindings = l_bindings.iter().cloned().collect::<IndexSet<_>>();
     let clauses: Vec<_> = {
-        let nnf = negation_normal_form(pool, phi, true, &mut AHashMap::new());
+        let nnf = negation_normal_form(pool, phi, true, &mut IndexMap::new());
         let prenexed = prenex_forall(pool, &mut new_bindings, &nnf);
         let cnf = conjunctive_normal_form(&prenexed);
         cnf.into_iter()
@@ -287,7 +287,7 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
     // `new_bindings` contains all bindings that existed in the original term, plus all bindings
     // added by the prenexing step. All bindings in the right side must be in this set
-    if let Some((var, _)) = r_bindings.iter().find(|b| !new_bindings.contains(b)) {
+    if let Some((var, _)) = r_bindings.iter().find(|&b| !new_bindings.contains(b)) {
         return Err(CheckerError::Quant(
             QuantifierError::CnfNewBindingIntroduced(var.clone()),
         ));
@@ -465,7 +465,7 @@ mod tests {
         use crate::parser::tests::*;
 
         fn to_cnf_term(pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term> {
-            let nnf = negation_normal_form(pool, term, true, &mut AHashMap::new());
+            let nnf = negation_normal_form(pool, term, true, &mut IndexMap::new());
             let mut bindings = Vec::new();
             let prenexed = prenex_forall(pool, &mut bindings, &nnf);
             let cnf = conjunctive_normal_form(&prenexed);

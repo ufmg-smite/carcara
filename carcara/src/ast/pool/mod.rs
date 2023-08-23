@@ -5,7 +5,7 @@ mod storage;
 
 use super::{Rc, Sort, Term};
 use crate::ast::Constant;
-use ahash::{AHashMap, AHashSet};
+use indexmap::{IndexMap, IndexSet};
 use storage::Storage;
 
 pub trait TermPool {
@@ -35,11 +35,11 @@ pub trait TermPool {
     /// This method assumes that the sorts of any subterms have already been checked, and are
     /// correct. If `term` is itself a sort, this simply returns that sort.
     fn sort(&self, term: &Rc<Term>) -> Rc<Term>;
-    /// Returns an `AHashSet` containing all the free variables in the given term.
+    /// Returns an `IndexSet` containing all the free variables in the given term.
     ///
     /// This method uses a cache, so there is no additional cost to computing the free variables of
     /// a term multiple times.
-    fn free_vars(&mut self, term: &Rc<Term>) -> AHashSet<Rc<Term>>;
+    fn free_vars(&mut self, term: &Rc<Term>) -> IndexSet<Rc<Term>>;
 }
 
 /// A structure to store and manage all allocated terms.
@@ -53,8 +53,8 @@ pub trait TermPool {
 /// [`PrimitivePool::sort`]) or its free variables (see [`PrimitivePool::free_vars`]).
 pub struct PrimitivePool {
     pub(crate) storage: Storage,
-    pub(crate) free_vars_cache: AHashMap<Rc<Term>, AHashSet<Rc<Term>>>,
-    pub(crate) sorts_cache: AHashMap<Rc<Term>, Rc<Term>>,
+    pub(crate) free_vars_cache: IndexMap<Rc<Term>, IndexSet<Rc<Term>>>,
+    pub(crate) sorts_cache: IndexMap<Rc<Term>, Rc<Term>>,
     pub(crate) bool_true: Rc<Term>,
     pub(crate) bool_false: Rc<Term>,
 }
@@ -70,7 +70,7 @@ impl PrimitivePool {
     /// and `false`, as well as the `Bool` sort.
     pub fn new() -> Self {
         let mut storage = Storage::new();
-        let mut sorts_cache = AHashMap::new();
+        let mut sorts_cache = IndexMap::new();
         let bool_sort = storage.add(Term::Sort(Sort::Bool));
 
         let [bool_true, bool_false] =
@@ -82,7 +82,7 @@ impl PrimitivePool {
 
         Self {
             storage,
-            free_vars_cache: AHashMap::new(),
+            free_vars_cache: IndexMap::new(),
             sorts_cache,
             bool_true,
             bool_false,
@@ -190,7 +190,7 @@ impl PrimitivePool {
         &mut self,
         term: &Rc<Term>,
         prior_pools: [&PrimitivePool; N],
-    ) -> AHashSet<Rc<Term>> {
+    ) -> IndexSet<Rc<Term>> {
         for p in prior_pools {
             if let Some(set) = p.free_vars_cache.get(term) {
                 return set.clone();
@@ -210,7 +210,7 @@ impl PrimitivePool {
                 set
             }
             Term::Op(_, args) => {
-                let mut set = AHashSet::new();
+                let mut set = IndexSet::new();
                 for a in args {
                     set.extend(self.free_vars_with_priorities(a, prior_pools).into_iter());
                 }
@@ -240,11 +240,11 @@ impl PrimitivePool {
                 vars
             }
             Term::Var(..) => {
-                let mut set = AHashSet::with_capacity(1);
+                let mut set = IndexSet::with_capacity(1);
                 set.insert(term.clone());
                 set
             }
-            Term::Const(_) | Term::Sort(_) => AHashSet::new(),
+            Term::Const(_) | Term::Sort(_) => IndexSet::new(),
         };
         self.free_vars_cache.insert(term.clone(), set);
         self.free_vars_cache.get(term).unwrap().clone()
@@ -270,7 +270,7 @@ impl TermPool for PrimitivePool {
         self.sorts_cache[term].clone()
     }
 
-    fn free_vars(&mut self, term: &Rc<Term>) -> AHashSet<Rc<Term>> {
+    fn free_vars(&mut self, term: &Rc<Term>) -> IndexSet<Rc<Term>> {
         self.free_vars_with_priorities(term, [])
     }
 }

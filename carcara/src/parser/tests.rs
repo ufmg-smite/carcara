@@ -49,7 +49,7 @@ pub fn parse_proof(pool: &mut PrimitivePool, input: &str) -> Proof {
         .expect(ERROR_MESSAGE)
         .parse_proof()
         .expect(ERROR_MESSAGE);
-    Proof { premises: AHashSet::new(), commands }
+    Proof { premises: IndexSet::new(), commands }
 }
 
 fn run_parser_tests(pool: &mut PrimitivePool, cases: &[(&str, Rc<Term>)]) {
@@ -61,7 +61,7 @@ fn run_parser_tests(pool: &mut PrimitivePool, cases: &[(&str, Rc<Term>)]) {
 
 #[test]
 fn test_hash_consing() {
-    use ahash::AHashSet;
+    use indexmap::IndexSet;
 
     let mut pool = PrimitivePool::new();
     let input = "(-
@@ -98,7 +98,7 @@ fn test_hash_consing() {
         "(- (- (+ 1 2) (* (+ 1 2) (+ 1 2))) (* 2 2))",
     ]
     .into_iter()
-    .collect::<AHashSet<&str>>();
+    .collect::<IndexSet<&str>>();
 
     let pool_terms = pool.storage.into_vec();
     assert_eq!(pool_terms.len(), expected.len());

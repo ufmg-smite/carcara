@@ -9,8 +9,8 @@ use crate::{
     elaborator::Elaborator,
     CarcaraResult, Error, LiaGenericOptions,
 };
-use ahash::AHashSet;
 use error::CheckerError;
+use indexmap::IndexSet;
 pub use parallel::{scheduler::Scheduler, ParallelProofChecker};
 use rules::{ElaborationRule, Premise, Rule, RuleArgs, RuleResult};
 use std::{
@@ -248,7 +248,7 @@ impl<'c> ProofChecker<'c> {
         &mut self,
         id: &str,
         term: &Rc<Term>,
-        premises: &AHashSet<Rc<Term>>,
+        premises: &IndexSet<Rc<Term>>,
         iter: &'i ProofIter<'i>,
         mut stats: &mut Option<&mut CheckerStatistics<CR>>,
     ) -> bool {

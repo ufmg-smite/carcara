@@ -1,6 +1,6 @@
 use super::super::{Rc, Term};
 use super::{PrimitivePool, TermPool};
-use ahash::AHashSet;
+use indexmap::IndexSet;
 use std::sync::{Arc, RwLock};
 
 pub struct ContextPool {
@@ -67,7 +67,7 @@ impl TermPool for ContextPool {
         }
     }
 
-    fn free_vars(&mut self, term: &Rc<Term>) -> AHashSet<Rc<Term>> {
+    fn free_vars(&mut self, term: &Rc<Term>) -> IndexSet<Rc<Term>> {
         self.inner
             .write()
             .unwrap()
@@ -140,7 +140,7 @@ impl TermPool for LocalPool {
         }
     }
 
-    fn free_vars(&mut self, term: &Rc<Term>) -> AHashSet<Rc<Term>> {
+    fn free_vars(&mut self, term: &Rc<Term>) -> IndexSet<Rc<Term>> {
         self.inner.free_vars_with_priorities(
             term,
             [

@@ -1,6 +1,6 @@
 use super::*;
 use crate::{checker::error::LiaGenericError, parser, LiaGenericOptions};
-use ahash::AHashMap;
+use indexmap::IndexMap;
 use std::{
     io::{BufRead, Write},
     process::{Command, Stdio},
@@ -157,7 +157,7 @@ fn insert_missing_assumes(
     proof: &[ProofCommand],
     root_id: &str,
 ) -> (Vec<Rc<Term>>, usize) {
-    let mut count_map: AHashMap<&Rc<Term>, usize> = AHashMap::new();
+    let mut count_map: IndexMap<&Rc<Term>, usize> = IndexMap::new();
     for c in conclusion {
         *count_map.entry(c).or_default() += 1;
     }

@@ -4,16 +4,15 @@ mod tests;
 
 pub use metrics::*;
 
-use ahash::{AHashMap, AHashSet};
+use indexmap::{map::Entry, IndexMap, IndexSet};
 use std::{fmt, hash::Hash, io, sync::Arc, time::Duration};
 
-fn combine_map<S, K, V, M>(mut a: AHashMap<S, M>, b: AHashMap<S, M>) -> AHashMap<S, M>
+fn combine_map<S, K, V, M>(mut a: IndexMap<S, M>, b: IndexMap<S, M>) -> IndexMap<S, M>
 where
     S: Eq + Hash,
     V: MetricsUnit,
     M: Metrics<K, V> + Default,
 {
-    use std::collections::hash_map::Entry;
     for (k, v) in b {
         match a.entry(k) {
             Entry::Occupied(mut e) => {
@@ -66,8 +65,8 @@ pub struct OnlineBenchmarkResults {
     pub total_accounted_for: OnlineMetrics<RunId>,
     pub total: OnlineMetrics<RunId>,
     pub step_time: OnlineMetrics<StepId>,
-    pub step_time_by_file: AHashMap<String, OnlineMetrics<StepId>>,
-    pub step_time_by_rule: AHashMap<String, OnlineMetrics<StepId>>,
+    pub step_time_by_file: IndexMap<String, OnlineMetrics<StepId>>,
+    pub step_time_by_rule: IndexMap<String, OnlineMetrics<StepId>>,
 
     pub polyeq_time: OnlineMetrics<RunId>,
     pub polyeq_time_ratio: OnlineMetrics<RunId, f64>,
@@ -129,12 +128,12 @@ impl OnlineBenchmarkResults {
     }
 
     /// For each file, the time spent checking each step in the file.
-    pub fn step_time_by_file(&self) -> &AHashMap<String, OnlineMetrics<StepId>> {
+    pub fn step_time_by_file(&self) -> &IndexMap<String, OnlineMetrics<StepId>> {
         &self.step_time_by_file
     }
 
     /// For each rule, the time spent checking each step that uses that rule.
-    pub fn step_time_by_rule(&self) -> &AHashMap<String, OnlineMetrics<StepId>> {
+    pub fn step_time_by_rule(&self) -> &IndexMap<String, OnlineMetrics<StepId>> {
         &self.step_time_by_rule
     }
 
@@ -274,9 +273,9 @@ type InternedRunId = (Arc<str>, usize);
 
 #[derive(Default)]
 pub struct CsvBenchmarkResults {
-    strings: AHashSet<Arc<str>>,
-    runs: AHashMap<InternedRunId, RunMeasurement>,
-    step_time_by_rule: AHashMap<Arc<str>, OfflineMetrics<InternedStepId>>,
+    strings: IndexSet<Arc<str>>,
+    runs: IndexMap<InternedRunId, RunMeasurement>,
+    step_time_by_rule: IndexMap<Arc<str>, OfflineMetrics<InternedStepId>>,
     is_holey: bool,
     num_errors: usize,
 }
@@ -315,7 +314,7 @@ impl CsvBenchmarkResults {
     }
 
     fn write_runs_csv(
-        data: AHashMap<InternedRunId, RunMeasurement>,
+        data: IndexMap<InternedRunId, RunMeasurement>,
         dest: &mut dyn io::Write,
     ) -> io::Result<()> {
         writeln!(
@@ -349,7 +348,7 @@ impl CsvBenchmarkResults {
     }
 
     fn write_by_rule_csv(
-        data: AHashMap<Arc<str>, OfflineMetrics<InternedStepId>>,
+        data: IndexMap<Arc<str>, OfflineMetrics<InternedStepId>>,
         dest: &mut dyn io::Write,
     ) -> io::Result<()> {
         let mut data: Vec<_> = data.into_iter().collect();

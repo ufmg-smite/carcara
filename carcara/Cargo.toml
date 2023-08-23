@@ -7,7 +7,7 @@ rust-version = "1.67"
 license = "Apache-2.0"
 
 [dependencies]
-ahash = "0.8.3"
+indexmap = "2.0.0"
 log = "0.4.17"
 rug = { version = "1.19.2", features = ["integer", "rational"] }
 thiserror = "1.0.40"

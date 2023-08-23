@@ -3,7 +3,7 @@ use std::sync::{atomic::AtomicUsize, Arc, RwLock, RwLockReadGuard, RwLockWriteGu
 
 pub struct Context {
     pub mappings: Vec<(Rc<Term>, Rc<Term>)>,
-    pub bindings: AHashSet<SortedVar>,
+    pub bindings: IndexSet<SortedVar>,
     pub cumulative_substitution: Option<Substitution>,
 }
 

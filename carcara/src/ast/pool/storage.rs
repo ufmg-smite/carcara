@@ -34,7 +34,7 @@ impl Borrow<Term> for ByValue {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct Storage(AHashSet<ByValue>);
+pub struct Storage(IndexSet<ByValue>);
 
 impl Storage {
     pub fn new() -> Self {

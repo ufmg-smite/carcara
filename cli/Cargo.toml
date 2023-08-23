@@ -11,7 +11,6 @@ path = "src/main.rs"
 
 [dependencies]
 carcara = { path = "../carcara" }
-ahash = "0.8.3"
 clap = { version = "3.2.23", features = ["derive"] }
 const_format = "0.2.30"
 crossbeam-queue = "0.3.8"

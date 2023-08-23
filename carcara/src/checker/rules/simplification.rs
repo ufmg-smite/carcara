@@ -3,7 +3,7 @@ use super::{
     RuleResult,
 };
 use crate::{ast::*, utils::DedupIterator};
-use ahash::{AHashMap, AHashSet};
+use indexmap::{IndexMap, IndexSet};
 use rug::Rational;
 
 /// A macro to define the possible transformations for a "simplify" rule.
@@ -48,7 +48,7 @@ fn generic_simplify_rule(
     let mut simplify_until_fixed_point =
         |term: &Rc<Term>, goal: &Rc<Term>| -> Result<Rc<Term>, CheckerError> {
             let mut current = term.clone();
-            let mut seen = AHashSet::new();
+            let mut seen = IndexSet::new();
             loop {
                 if !seen.insert(current.clone()) {
                     return Err(CheckerError::CycleInSimplification(current));
@@ -213,14 +213,14 @@ fn generic_and_or_simplify(
     // Then, we remove all duplicate terms. We do this in place to avoid another allocation.
     // Similarly to the step that removes the "skip term", we check if we already found the result
     // after this step. This is also necessary in some examples
-    let mut seen = AHashSet::with_capacity(phis.len());
+    let mut seen = IndexSet::with_capacity(phis.len());
     phis.retain(|t| seen.insert(t.clone()));
     if result_args.iter().eq(&phis) {
         return Ok(());
     }
 
     // Finally, we check to see if the result was short-circuited
-    let seen: AHashSet<(bool, &Rc<Term>)> = phis
+    let seen: IndexSet<(bool, &Rc<Term>)> = phis
         .iter()
         .map(Rc::remove_all_negations_with_polarity)
         .collect();
@@ -668,7 +668,7 @@ pub fn comp_simplify(args: RuleArgs) -> RuleResult {
 
 fn apply_ac_simp(
     pool: &mut dyn TermPool,
-    cache: &mut AHashMap<Rc<Term>, Rc<Term>>,
+    cache: &mut IndexMap<Rc<Term>, Rc<Term>>,
     term: &Rc<Term>,
 ) -> Rc<Term> {
     if let Some(t) = cache.get(term) {
@@ -723,7 +723,7 @@ pub fn ac_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     let (original, flattened) = match_term_err!((= psi phis) = &conclusion[0])?;
     assert_eq(
         flattened,
-        &apply_ac_simp(pool, &mut AHashMap::new(), original),
+        &apply_ac_simp(pool, &mut IndexMap::new(), original),
     )
 }
 
