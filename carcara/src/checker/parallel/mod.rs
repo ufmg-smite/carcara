@@ -1,7 +1,7 @@
 pub mod scheduler;
 
 use super::{
-    error::CheckerError,
+    error::{CheckerError, SubproofError},
     lia_generic,
     rules::{Premise, RuleArgs, RuleResult},
     Config, ProofChecker,
@@ -420,6 +420,10 @@ impl<'c> ParallelProofChecker<'c> {
     ) -> RuleResult {
         let time = Instant::now();
         let mut polyeq_time = Duration::ZERO;
+
+        if !step.discharge.is_empty() && step.rule != "subproof" {
+            return Err(CheckerError::Subproof(SubproofError::DischargeInWrongRule));
+        }
 
         if step.rule == "lia_generic" {
             if let Some(options) = &self.config.lia_options {

@@ -9,7 +9,7 @@ use crate::{
     elaborator::Elaborator,
     CarcaraResult, Error, LiaGenericOptions,
 };
-use error::CheckerError;
+use error::{CheckerError, SubproofError};
 use indexmap::IndexSet;
 pub use parallel::{scheduler::Scheduler, ParallelProofChecker};
 use rules::{ElaborationRule, Premise, Rule, RuleArgs, RuleResult};
@@ -334,6 +334,10 @@ impl<'c> ProofChecker<'c> {
         let time = Instant::now();
         let mut polyeq_time = Duration::ZERO;
 
+        if !step.discharge.is_empty() && step.rule != "subproof" {
+            return Err(CheckerError::Subproof(SubproofError::DischargeInWrongRule));
+        }
+
         let mut elaborated = false;
         if step.rule == "lia_generic" {
             if let Some(options) = &self.config.lia_options {
@@ -433,12 +437,17 @@ impl<'c> ProofChecker<'c> {
         discharge: &[(usize, usize)],
     ) -> RuleResult {
         let discharge: IndexSet<_> = discharge.iter().collect();
-        subproof
+        if let Some((_, not_discharged)) = subproof
             .iter()
             .enumerate()
-            .all(|(i, command)| !command.is_assume() || discharge.contains(&(depth, i)))
-            .then_some(())
-            .ok_or_else(|| CheckerError::Unspecified) // TODO: add custom error
+            .find(|&(i, command)| command.is_assume() && !discharge.contains(&(depth, i)))
+        {
+            Err(CheckerError::Subproof(
+                SubproofError::LocalAssumeNotDischarged(not_discharged.id().to_owned()),
+            ))
+        } else {
+            Ok(())
+        }
     }
 
     pub fn get_rule(rule_name: &str, strict: bool) -> Option<Rule> {

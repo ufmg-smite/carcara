@@ -282,6 +282,12 @@ pub enum SubproofError {
     #[error("discharge must be 'assume' command: '{0}'")]
     DischargeMustBeAssume(String),
 
+    #[error("local assumption '{0}' was not discharged")]
+    LocalAssumeNotDischarged(String),
+
+    #[error("only the `subproof` rule may discharge local assumptions")]
+    DischargeInWrongRule,
+
     #[error("binding '{0}' appears as free variable in phi")]
     BindBindingIsFreeVarInPhi(String),
 
