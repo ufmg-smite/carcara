@@ -4,6 +4,7 @@ use crate::error::CliError;
 use std::{ffi::OsStr, fs, path::PathBuf};
 
 const SMT_FILE_EXTENSIONS: [&str; 3] = ["smt", "smt2", "smt_in"];
+const ALETHE_FILE_EXTENSIONS: [&str; 2] = ["alethe", "proof"];
 
 pub fn infer_problem_path(proof_path: impl Into<PathBuf>) -> Result<PathBuf, CliError> {
     fn inner(mut path: PathBuf) -> Option<PathBuf> {
@@ -22,7 +23,11 @@ fn get_instances_from_dir(
 ) -> Result<(), CliError> {
     let file_type = fs::metadata(&path)?.file_type();
     if file_type.is_file() {
-        if path.extension() == Some(OsStr::new("proof")) {
+        let is_proof_file = path
+            .extension()
+            .and_then(OsStr::to_str)
+            .is_some_and(|ext| ALETHE_FILE_EXTENSIONS.contains(&ext));
+        if is_proof_file {
             let problem_file = infer_problem_path(&path)?;
             acc.push((problem_file, path))
         }

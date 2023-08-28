@@ -54,11 +54,11 @@ pub fn from_dir(args: TokenStream, input: TokenStream) -> TokenStream {
     for entry in walkdir::WalkDir::new(&arg) {
         let Ok(entry) = entry else { continue };
 
-        if entry.file_type().is_file() && entry.path().extension() == Some(OsStr::new("proof")) {
+        if entry.file_type().is_file() && entry.path().extension() == Some(OsStr::new("alethe")) {
             let path = entry.path().to_str().unwrap();
             let new_ident = {
                 let path = path.strip_prefix(&arg).unwrap().strip_prefix('/').unwrap();
-                let path = path.strip_suffix(".proof").unwrap();
+                let path = path.strip_suffix(".alethe").unwrap();
                 let path = path.replace(|c: char| !c.is_ascii_alphanumeric() && c != '_', "_");
                 syn::Ident::new(&format!("{}_{}", func_ident, path), func_ident.span())
             };
