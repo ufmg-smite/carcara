@@ -180,7 +180,7 @@ pub fn elaborate_eq_transitive(
 
     if !not_needed.is_empty() {
         let mut clause = latest_clause;
-        clause.extend(not_needed.into_iter());
+        clause.extend(not_needed);
         let or_intro_step = ProofStep {
             id: elaborator.get_new_id(&command_id),
             clause,

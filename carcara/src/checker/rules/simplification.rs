@@ -430,7 +430,7 @@ pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
             CheckerError::ExpectedNumber(Rational::new(), right.clone())
         );
         Ok(())
-    } else if t_2.as_number().map_or(false, |n| n == 1) {
+    } else if t_2.as_number().is_some_and(|n| n == 1) {
         assert_eq(right, t_1)
     } else {
         let expected = t_1.as_signed_number_err()? / t_2.as_signed_number_err()?;
@@ -557,7 +557,7 @@ pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     // the `minus_simplify` and the `unary_minus_simplify` rules
     fn try_unary_minus_simplify(t: &Rc<Term>, u: &Rc<Term>) -> bool {
         // First case of `unary_minus_simplify`
-        if match_term!((-(-t)) = t).map_or(false, |t| t == u) {
+        if match_term!((-(-t)) = t) == Some(u) {
             return true;
         }
 

@@ -330,7 +330,7 @@ impl<'a> fmt::Display for DisplayLinearComb<'a> {
             1 => write_var(f, vars.iter().next().unwrap()),
             _ => {
                 write!(f, "(+")?;
-                for var in vars.iter() {
+                for var in vars {
                     write!(f, " ")?;
                     write_var(f, var)?;
                 }

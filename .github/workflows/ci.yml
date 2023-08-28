@@ -8,7 +8,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: setup
-      run: rustup default 1.67 && rustup component add clippy
+      run: rustup default 1.72 && rustup component add clippy
     - name: lint
       run: cargo clippy --version && cargo clippy --all-targets --all-features --tests --no-deps -- -D warnings
     - name: build
@@ -18,7 +18,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: setup
-      run: rustup default 1.67
+      run: rustup default 1.72
     - name: test
       run: cargo --version && cargo test --release
   format:
@@ -26,6 +26,6 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: setup
-      run: rustup default 1.67 && rustup component add rustfmt
+      run: rustup default 1.72 && rustup component add rustfmt
     - name: check formatting
       run: cargo fmt --version && cargo fmt --check

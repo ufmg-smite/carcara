@@ -118,7 +118,7 @@ impl ContextStack {
                 // `(:= x (f y))`, we insert the first substitution, and then, when introducing the second,
                 // we use the current state of the hash map to transform `(f y)` into `(f z)`. The
                 // resulting hash map will then contain `(:= y z)` and `(:= x (f z))`
-                for (var, value) in assignment_args.iter() {
+                for (var, value) in assignment_args {
                     let var_term = Term::new_var(var, pool.sort(value));
                     let var_term = pool.add(var_term);
                     substitution.insert(pool, var_term.clone(), value.clone())?;
@@ -203,7 +203,7 @@ impl ContextStack {
                     let previous_substitution =
                         previous_context.cumulative_substitution.as_ref().unwrap();
 
-                    for (k, v) in previous_substitution.map.iter() {
+                    for (k, v) in &previous_substitution.map {
                         let value = match simultaneous.get(v) {
                             Some(new_value) => new_value,
                             None => v,

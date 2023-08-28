@@ -183,7 +183,7 @@ impl LinearComb {
         }
 
         let mut result = self.1.numer().clone();
-        for (_, coeff) in self.0.iter() {
+        for (_, coeff) in &self.0 {
             if result == 1 {
                 return Integer::from(1);
             }

@@ -26,6 +26,7 @@
 #![warn(clippy::multiple_crate_versions)]
 #![warn(clippy::redundant_closure_for_method_calls)]
 #![warn(clippy::redundant_pub_crate)]
+#![warn(clippy::redundant_type_annotations)]
 #![warn(clippy::semicolon_if_nothing_returned)]
 #![warn(clippy::str_to_string)]
 #![warn(clippy::string_to_string)]

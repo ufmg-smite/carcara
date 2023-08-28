@@ -14,7 +14,7 @@ use git_version::git_version;
 use path_args::{get_instances_from_paths, infer_problem_path};
 use std::{
     fs::File,
-    io::{self, BufRead},
+    io::{self, BufRead, IsTerminal},
     path::Path,
 };
 
@@ -321,7 +321,7 @@ impl From<LogLevel> for log::LevelFilter {
 
 fn main() {
     let cli = Cli::parse();
-    let colors_enabled = !cli.no_color && atty::is(atty::Stream::Stderr);
+    let colors_enabled = !cli.no_color && std::io::stderr().is_terminal();
     logger::init(cli.log_level.into(), colors_enabled);
 
     if let Command::Check(CheckCommandOptions { checking, .. })

@@ -3,7 +3,7 @@ name = "carcara"
 version = "1.0.0"
 authors = ["Bruno Andreotti <bandreotti@proton.me>", "Vinícius Braga Freire <vinicius.braga.freire@gmail.com>"]
 edition = "2021"
-rust-version = "1.67"
+rust-version = "1.72"
 license = "Apache-2.0"
 
 [dependencies]

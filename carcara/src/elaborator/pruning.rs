@@ -55,7 +55,7 @@ pub fn slice_proof(
             frame.distance_to_source[current] =
                 std::cmp::min(frame.distance_to_source[current], current_dist);
 
-            if max_distance.map_or(false, |max| current_dist > max) {
+            if max_distance.is_some_and(|max| current_dist > max) {
                 continue;
             }
 
@@ -108,7 +108,7 @@ pub fn slice_proof(
             if frame.distance_to_source[i] == usize::MAX {
                 result_diff.push((i, CommandDiff::Delete));
                 num_pruned += 1;
-            } else if max_distance.map_or(false, |max| frame.distance_to_source[i] == max + 1) {
+            } else if max_distance.is_some_and(|max| frame.distance_to_source[i] == max + 1) {
                 let new_command = ProofCommand::Step(ProofStep {
                     id: frame.commands[i].id().to_owned(),
                     clause: frame.commands[i].clause().to_vec(),

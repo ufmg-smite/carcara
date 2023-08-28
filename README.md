@@ -4,7 +4,7 @@ Carcara is a proof checker and elaborator for SMT proofs in the [Alethe format](
 
 ## Building
 
-To build Carcara, you will need Rust and Cargo 1.67 or newer. Build the project with `cargo build`.
+To build Carcara, you will need Rust and Cargo 1.72 or newer. Build the project with `cargo build`.
 When running on large proofs, we recommend compiling with optimizations enabled: `cargo build
 --release`.
 

@@ -69,7 +69,7 @@ impl Substitution {
         pool: &mut dyn TermPool,
         map: IndexMap<Rc<Term>, Rc<Term>>,
     ) -> SubstitutionResult<Self> {
-        for (k, v) in map.iter() {
+        for (k, v) in &map {
             if !k.is_var() {
                 return Err(SubstitutionError::NotAVariable(k.clone()));
             }
@@ -112,7 +112,7 @@ impl Substitution {
 
         if let Some(should_be_renamed) = &mut self.should_be_renamed {
             if x != t {
-                should_be_renamed.extend(pool.free_vars(&t).into_iter());
+                should_be_renamed.extend(pool.free_vars(&t));
                 if x.is_var() {
                     should_be_renamed.insert(x.clone());
                 }
@@ -147,7 +147,7 @@ impl Substitution {
         // See https://en.wikipedia.org/wiki/Lambda_calculus#Capture-avoiding_substitutions for
         // more details.
         let mut should_be_renamed = IndexSet::new();
-        for (x, t) in self.map.iter() {
+        for (x, t) in &self.map {
             if x == t {
                 continue; // We ignore reflexive substitutions
             }
