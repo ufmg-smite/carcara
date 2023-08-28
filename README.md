@@ -17,12 +17,12 @@ the project with all optimizations enabled, and install the CLI binary in `$HOME
 To check a proof file, use the `check` command, passing both the proof file and the original
 SMT-LIB problem file.
 ```
-carcara check example.smt2.proof example.smt2
+carcara check example.smt2.alethe example.smt2
 ```
 
-If the problem file name is exactly the proof file name minus `.proof`, you can omit it:
+If the problem file name is exactly the proof file name minus `.alethe`, you can omit it:
 ```
-carcara check example.smt2.proof
+carcara check example.smt2.alethe
 ```
 
 By default, Carcara will return a checking error when encountering a rule it does not recognize. If
@@ -37,7 +37,7 @@ See `carcara help check` for more options.
 
 You can elaborate a proof file using the `elaborate` command.
 ```
-carcara elaborate example.smt2.proof example.smt2
+carcara elaborate example.smt2.alethe example.smt2
 ```
 This command will check the given proof while elaborating it, and print the elaborated proof to
 standard output. The `--print-with-sharing` flag controls whether the elaborated proof will be
@@ -52,7 +52,7 @@ By default, Carcara ignores steps of the `lia_generic` rule when checking or ela
 instead considering them as holes. However, you can use an external solver to aid Carcara in
 checking these steps, using the `--lia-solver` option. For example, running
 ```
-carcara check example.smt2.proof --lia-solver cvc5
+carcara check example.smt2.alethe --lia-solver cvc5
 ```
 
 will check the proof using cvc5 (more precisely, the cvc5 binary in your `PATH`) to check any
@@ -70,7 +70,7 @@ option should receive a single value, where multiple arguments are separated by 
 if you wanted to instead check `lia_generic` steps using veriT, you might pass the following
 arguments:
 ```
-carcara check example.smt2.proof --lia-solver veriT --lia-solver-args "--proof=- --proof-with-sharing"
+carcara check example.smt2.alethe --lia-solver veriT --lia-solver-args "--proof=- --proof-with-sharing"
 ```
 
 The default arguments for `--lia-solver-args` are as follows (note that they assume you use cvc5 as
@@ -85,13 +85,13 @@ The `bench` command is used to run benchmarks. For example, the following comman
 benchmark on three proof files.
 
 ```
-carcara bench a.smt2.proof b.smt2.proof c.smt2.proof
+carcara bench a.smt2.alethe b.smt2.alethe c.smt2.alethe
 ```
 
 The command takes as arguments any number of proof files or directories. If a directory is passed,
-the benchmark will be run on all `.proof` files in that directory. This command assumes that the
+the benchmark will be run on all `.alethe` files in that directory. This command assumes that the
 problem file associated with each proof is in the same directory as the proof, and that they follow
-the pattern `<filename>.smt2`/`<filename>.smt2.proof`.
+the pattern `<filename>.smt2`/`<filename>.smt2.alethe`.
 
 The benchmark will parse and check each file, and record performance data. If you pass the
 `--elaborate` flag, the proofs will also be elaborated (though the resulting elaborated proof is
