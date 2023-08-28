@@ -145,7 +145,6 @@ impl<'c> ProofChecker<'c> {
                     // If this is the last command of a subproof, we have to pop the subproof
                     // commands off of the stack. The parser already ensures that the last command
                     // in a subproof is always a `step` command
-                    // TODO: Use depth diff to pop context off
                     if is_end_of_subproof {
                         self.context.pop();
                         if let Some(elaborator) = &mut self.elaborator {
@@ -410,6 +409,11 @@ impl<'c> ProofChecker<'c> {
             }
         }
 
+        if iter.is_end_step() {
+            let subproof = iter.current_subproof().unwrap();
+            Self::check_discharge(subproof, iter.depth(), &step.discharge)?;
+        }
+
         if let Some(s) = stats {
             let time = time.elapsed();
 
@@ -421,6 +425,20 @@ impl<'c> ProofChecker<'c> {
             }
         }
         Ok(())
+    }
+
+    fn check_discharge(
+        subproof: &[ProofCommand],
+        depth: usize,
+        discharge: &[(usize, usize)],
+    ) -> RuleResult {
+        let discharge: IndexSet<_> = discharge.iter().collect();
+        subproof
+            .iter()
+            .enumerate()
+            .all(|(i, command)| !command.is_assume() || discharge.contains(&(depth, i)))
+            .then_some(())
+            .ok_or_else(|| CheckerError::Unspecified) // TODO: add custom error
     }
 
     pub fn get_rule(rule_name: &str, strict: bool) -> Option<Rule> {

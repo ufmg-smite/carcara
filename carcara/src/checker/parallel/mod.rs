@@ -1,8 +1,11 @@
 pub mod scheduler;
 
-use super::error::CheckerError;
-use super::rules::{Premise, RuleArgs, RuleResult};
-use super::{lia_generic, Config};
+use super::{
+    error::CheckerError,
+    lia_generic,
+    rules::{Premise, RuleArgs, RuleResult},
+    Config, ProofChecker,
+};
 use crate::benchmarking::{CollectResults, OnlineBenchmarkResults};
 use crate::checker::CheckerStatistics;
 use crate::{
@@ -428,7 +431,7 @@ impl<'c> ParallelProofChecker<'c> {
                 self.is_holey = true;
             }
         } else {
-            let rule = match super::ProofChecker::get_rule(&step.rule, self.config.strict) {
+            let rule = match ProofChecker::get_rule(&step.rule, self.config.strict) {
                 Some(r) => r,
                 None if self.config.skip_unknown_rules => {
                     self.is_holey = true;
@@ -467,6 +470,11 @@ impl<'c> ParallelProofChecker<'c> {
             };
 
             rule(rule_args)?;
+        }
+
+        if iter.is_end_step() {
+            let subproof = iter.current_subproof().unwrap();
+            ProofChecker::check_discharge(subproof, iter.depth(), &step.discharge)?;
         }
 
         if let Some(s) = stats {
