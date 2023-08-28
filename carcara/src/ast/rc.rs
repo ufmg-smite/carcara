@@ -2,11 +2,31 @@
 
 use std::{fmt, hash::Hash, ops::Deref, sync};
 
-/// An `Rc` where equality and hashing are done by reference, instead of by value.
+/// A wrapper for `std::rc::Rc` where equality and hashing are done by reference, instead of by
+/// value.
 ///
 /// This means that two `Rc`s will not be considered equal and won't have the same hash value unless
 /// they point to the same allocation. This has the advantage that equality and hashing can be done
 /// in constant time, even for recursive structures.
+///
+/// The Carcara parser makes use of hash consing, meaning that each term is only allocated once,
+/// even if it appears multiple times in the proof. This means that if we want to compare two terms
+/// for equality, we only need to compare them by reference, since if they are equal they will point
+/// to the same allocation. However, `std::rc::Rc` implements `PartialEq` by comparing the inner
+/// values for equality. If we simply used this implementation, each equality comparison would need
+/// to traverse the terms recursively, which would be prohibitively expensive. Instead, this wrapper
+/// overrides the `PartialEq` implementation to compare the pointers directly, allowing for constant
+/// time equality comparisons.
+///
+/// Similarly, when inserting terms in a hash map or set, we can also just hash the pointers
+/// instead of recursively hashing the inner value (as `std::rc::Rc`'s `Hash` implementation does).
+/// Therefore, this wrapper also overrides the implementation of the `Hash` trait.
+///
+/// Note: when using this struct, it's important to avoid constructing terms with `Rc::new` and
+/// instead prefer to construct them by adding them to a `TermPool`. This is because `Rc::new` will
+/// create a brand new allocation for that term, instead of reusing the existing allocation if that
+/// term was already added to the pool. Two indentical terms created independently with `Rc::new`
+/// will not compare as equal.
 ///
 /// # Examples
 ///
