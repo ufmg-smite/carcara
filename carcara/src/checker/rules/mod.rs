@@ -18,7 +18,7 @@ pub struct RuleArgs<'a> {
     pub(super) conclusion: &'a [Rc<Term>],
     pub(super) premises: &'a [Premise<'a>],
     pub(super) args: &'a [ProofArg],
-    pub(super) pool: &'a mut TermPool,
+    pub(super) pool: &'a mut dyn TermPool,
     pub(super) context: &'a mut ContextStack,
 
     // For rules that end a subproof, we need to pass the previous command in the subproof that it
@@ -27,7 +27,7 @@ pub struct RuleArgs<'a> {
     pub(super) previous_command: Option<Premise<'a>>,
     pub(super) discharge: &'a [&'a ProofCommand],
 
-    pub(super) deep_eq_time: &'a mut Duration,
+    pub(super) polyeq_time: &'a mut Duration,
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -128,19 +128,15 @@ where
     Ok(())
 }
 
-fn assert_deep_eq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> Result<(), CheckerError> {
-    if !deep_eq(a, b, time) {
+fn assert_polyeq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> Result<(), CheckerError> {
+    if !polyeq(a, b, time) {
         return Err(EqualityError::ExpectedEqual(a.clone(), b.clone()).into());
     }
     Ok(())
 }
 
-fn assert_deep_eq_is_expected(
-    got: &Rc<Term>,
-    expected: Rc<Term>,
-    time: &mut Duration,
-) -> RuleResult {
-    if !deep_eq(got, &expected, time) {
+fn assert_polyeq_expected(got: &Rc<Term>, expected: Rc<Term>, time: &mut Duration) -> RuleResult {
+    if !polyeq(got, &expected, time) {
         return Err(EqualityError::ExpectedToBe { expected, got: got.clone() }.into());
     }
     Ok(())
@@ -155,34 +151,43 @@ fn assert_is_bool_constant(got: &Rc<Term>, expected: bool) -> RuleResult {
 
 #[cfg(test)]
 fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
-    use crate::{
-        checker::{Config, ProofChecker},
-        parser::parse_instance,
-    };
+    use crate::{checker, parser};
     use std::io::Cursor;
 
     for (i, (proof, expected)) in cases.iter().enumerate() {
         // This parses the definitions again for every case, which is not ideal
-        let (prelude, parsed, mut pool) = parse_instance(
+        let (prelude, mut proof, mut pool) = parser::parse_instance(
             Cursor::new(definitions),
             Cursor::new(proof),
-            true,
-            false,
-            false,
+            parser::Config::new(),
         )
         .unwrap_or_else(|e| panic!("parser error during test \"{}\": {}", test_name, e));
-        let mut checker = ProofChecker::new(
-            &mut pool,
-            Config {
-                strict: false,
-                skip_unknown_rules: false,
-                is_running_test: true,
-                statistics: None,
-                lia_via_cvc5: false,
-            },
-            prelude,
-        );
-        let got = checker.check(&parsed).is_ok();
+
+        // Since rule tests often use `assume` commands to introduce premises, we search the proof
+        // for all `assume`d terms and retroactively add them as the problem premises, to avoid
+        // checker errors on the `assume`s
+        proof.premises = proof
+            .commands
+            .iter()
+            .filter_map(|c| match c {
+                ProofCommand::Assume { term, .. } => Some(term.clone()),
+                _ => None,
+            })
+            .collect();
+
+        // All proofs must eventually reach the empty clause, so to avoid having to add a dummy
+        // `(step end (cl) :rule hole)` to every rule test, we add this dummy step here
+        proof.commands.push(ProofCommand::Step(ProofStep {
+            id: "end".into(),
+            clause: Vec::new(),
+            rule: "hole".into(),
+            premises: Vec::new(),
+            args: Vec::new(),
+            discharge: Vec::new(),
+        }));
+
+        let mut checker = checker::ProofChecker::new(&mut pool, checker::Config::new(), &prelude);
+        let got = checker.check(&proof).is_ok();
         assert_eq!(
             *expected, got,
             "test case \"{}\" index {} failed",

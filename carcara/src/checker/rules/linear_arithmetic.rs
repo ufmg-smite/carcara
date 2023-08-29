@@ -3,7 +3,7 @@ use crate::{
     ast::*,
     checker::error::{CheckerError, LinearArithmeticError},
 };
-use ahash::AHashMap;
+use indexmap::{map::Entry, IndexMap};
 use rug::{ops::NegAssign, Integer, Rational};
 
 pub fn la_rw_eq(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
@@ -62,11 +62,11 @@ fn negate_disequality(term: &Rc<Term>) -> Result<(Operator, LinearComb, LinearCo
 /// plus a constant term. This is also used to represent a disequality, in which case the left side
 /// is the non-constant terms and their coefficients, and the right side is the constant term.
 #[derive(Debug)]
-pub struct LinearComb(pub(crate) AHashMap<Rc<Term>, Rational>, pub(crate) Rational);
+pub struct LinearComb(pub(crate) IndexMap<Rc<Term>, Rational>, pub(crate) Rational);
 
 impl LinearComb {
     fn new() -> Self {
-        Self(AHashMap::new(), Rational::new())
+        Self(IndexMap::new(), Rational::new())
     }
 
     /// Flattens a term and adds it to the linear combination, multiplying by the coefficient
@@ -125,8 +125,6 @@ impl LinearComb {
     }
 
     fn insert(&mut self, key: Rc<Term>, value: Rational) {
-        use std::collections::hash_map::Entry;
-
         match self.0.entry(key) {
             Entry::Occupied(mut e) => {
                 *e.get_mut() += value;
@@ -185,7 +183,7 @@ impl LinearComb {
         }
 
         let mut result = self.1.numer().clone();
-        for (_, coeff) in self.0.iter() {
+        for (_, coeff) in &self.0 {
             if result == 1 {
                 return Integer::from(1);
             }

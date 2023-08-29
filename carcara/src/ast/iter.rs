@@ -28,7 +28,7 @@ use super::*;
 ///     (step t5 (cl) :rule resolution :premises (t4 h1 h2))
 /// "
 /// .as_bytes();
-/// let (_, proof, _) = parser::parse_instance("".as_bytes(), proof, true, false, false)?;
+/// let (_, proof, _) = parser::parse_instance("".as_bytes(), proof, parser::Config::new())?;
 /// let ids: Vec<_> = proof.iter().map(|c| c.id()).collect();
 /// assert_eq!(ids, ["h1", "h2", "t3", "t3.t1", "t3.t2", "t3", "t4", "t5"]);
 /// # Ok(())

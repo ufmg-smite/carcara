@@ -9,13 +9,26 @@ pub use lexer::{Lexer, Position, Reserved, Token};
 
 use crate::{
     ast::*,
-    utils::{HashCache, SymbolTable},
+    utils::{HashCache, HashMapStack},
     CarcaraResult, Error,
 };
-use ahash::{AHashMap, AHashSet};
 use error::assert_num_args;
+use indexmap::{IndexMap, IndexSet};
 use rug::Integer;
 use std::{io::BufRead, str::FromStr};
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Config {
+    pub apply_function_defs: bool,
+    pub expand_lets: bool,
+    pub allow_int_real_subtyping: bool,
+}
+
+impl Config {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
 
 /// Parses an SMT problem instance (in the SMT-LIB format) and its associated proof (in the Alethe
 /// format).
@@ -25,18 +38,10 @@ use std::{io::BufRead, str::FromStr};
 pub fn parse_instance<T: BufRead>(
     problem: T,
     proof: T,
-    apply_function_defs: bool,
-    expand_lets: bool,
-    allow_int_real_subtyping: bool,
-) -> CarcaraResult<(ProblemPrelude, Proof, TermPool)> {
-    let mut pool = TermPool::new();
-    let mut parser = Parser::new(
-        &mut pool,
-        problem,
-        apply_function_defs,
-        expand_lets,
-        allow_int_real_subtyping,
-    )?;
+    config: Config,
+) -> CarcaraResult<(ProblemPrelude, Proof, PrimitivePool)> {
+    let mut pool = PrimitivePool::new();
+    let mut parser = Parser::new(&mut pool, config, problem)?;
     let (prelude, premises) = parser.parse_problem()?;
     parser.reset(proof)?;
     let commands = parser.parse_proof()?;
@@ -72,56 +77,46 @@ enum AnchorArg {
 /// pool used by the parser.
 #[derive(Default)]
 struct ParserState {
-    symbol_table: SymbolTable<HashCache<Identifier>, Rc<Term>>,
-    function_defs: AHashMap<String, FunctionDef>,
-    sort_declarations: AHashMap<String, usize>,
-    step_ids: SymbolTable<HashCache<String>, usize>,
+    symbol_table: HashMapStack<HashCache<Ident>, Rc<Term>>,
+    function_defs: IndexMap<String, FunctionDef>,
+    sort_declarations: IndexMap<String, usize>,
+    step_ids: HashMapStack<HashCache<String>, usize>,
 }
 
 /// A parser for the Alethe proof format.
 pub struct Parser<'a, R> {
-    pool: &'a mut TermPool,
+    pool: &'a mut PrimitivePool,
+    config: Config,
     lexer: Lexer<R>,
     current_token: Token,
     current_position: Position,
     state: ParserState,
     interpret_integers_as_reals: bool,
-    apply_function_defs: bool,
-    expand_lets: bool,
-    problem: Option<(ProblemPrelude, AHashSet<Rc<Term>>)>,
-    allow_int_real_subtyping: bool,
+    problem: Option<(ProblemPrelude, IndexSet<Rc<Term>>)>,
 }
 
 impl<'a, R: BufRead> Parser<'a, R> {
     /// Constructs a new `Parser` from a type that implements `BufRead`.
     ///
     /// This operation can fail if there is an IO or lexer error on the first token.
-    pub fn new(
-        pool: &'a mut TermPool,
-        input: R,
-        apply_function_defs: bool,
-        expand_lets: bool,
-        allow_int_real_subtyping: bool,
-    ) -> CarcaraResult<Self> {
+    pub fn new(pool: &'a mut PrimitivePool, config: Config, input: R) -> CarcaraResult<Self> {
         let mut state = ParserState::default();
         let bool_sort = pool.add(Term::Sort(Sort::Bool));
         for iden in ["true", "false"] {
-            let iden = HashCache::new(Identifier::Simple(iden.to_owned()));
+            let iden = HashCache::new(Ident::Simple(iden.to_owned()));
             state.symbol_table.insert(iden, bool_sort.clone());
         }
         let mut lexer = Lexer::new(input)?;
         let (current_token, current_position) = lexer.next_token()?;
         Ok(Parser {
             pool,
+            config,
             lexer,
             current_token,
             current_position,
             state,
             interpret_integers_as_reals: false,
-            apply_function_defs,
-            expand_lets,
             problem: None,
-            allow_int_real_subtyping,
         })
     }
 
@@ -150,7 +145,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     fn insert_sorted_var(&mut self, (symbol, sort): SortedVar) {
         self.state
             .symbol_table
-            .insert(HashCache::new(Identifier::Simple(symbol)), sort);
+            .insert(HashCache::new(Ident::Simple(symbol)), sort);
     }
 
     /// Shortcut for `self.problem.as_mut().unwrap().0`
@@ -159,20 +154,18 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     /// Shortcut for `self.problem.as_mut().unwrap().1`
-    fn premises(&mut self) -> &mut AHashSet<Rc<Term>> {
+    fn premises(&mut self) -> &mut IndexSet<Rc<Term>> {
         &mut self.problem.as_mut().unwrap().1
     }
 
     /// Constructs and sort checks a variable term.
-    fn make_var(&mut self, iden: Identifier) -> Result<Rc<Term>, ParserError> {
+    fn make_var(&mut self, iden: Ident) -> Result<Rc<Term>, ParserError> {
         let cached = HashCache::new(iden);
         let sort = match self.state.symbol_table.get(&cached) {
             Some(s) => s.clone(),
             None => return Err(ParserError::UndefinedIden(cached.unwrap())),
         };
-        Ok(self
-            .pool
-            .add(Term::Terminal(Terminal::Var(cached.unwrap(), sort))))
+        Ok(self.pool.add(Term::Var(cached.unwrap(), sort)))
     }
 
     /// Constructs and sort checks an operation term.
@@ -181,29 +174,34 @@ impl<'a, R: BufRead> Parser<'a, R> {
         match op {
             Operator::Not => {
                 assert_num_args(&args, 1)?;
-                SortError::assert_eq(&Sort::Bool, sorts[0])?;
+                SortError::assert_eq(&Sort::Bool, sorts[0].as_sort().unwrap())?;
             }
             Operator::Implies => {
                 assert_num_args(&args, 2..)?;
                 for s in sorts {
-                    SortError::assert_eq(&Sort::Bool, s)?;
+                    SortError::assert_eq(&Sort::Bool, s.as_sort().unwrap())?;
                 }
             }
             Operator::Or | Operator::And | Operator::Xor => {
                 // These operators can be called with only one argument
                 assert_num_args(&args, 1..)?;
                 for s in sorts {
-                    SortError::assert_eq(&Sort::Bool, s)?;
+                    SortError::assert_eq(&Sort::Bool, s.as_sort().unwrap())?;
                 }
             }
             Operator::Equals | Operator::Distinct => {
                 assert_num_args(&args, 2..)?;
-                SortError::assert_all_eq(&sorts)?;
+                SortError::assert_all_eq(
+                    &sorts
+                        .iter()
+                        .map(|op| op.as_sort().unwrap())
+                        .collect::<Vec<&Sort>>(),
+                )?;
             }
             Operator::Ite => {
                 assert_num_args(&args, 3)?;
-                SortError::assert_eq(&Sort::Bool, sorts[0])?;
-                SortError::assert_eq(sorts[1], sorts[2])?;
+                SortError::assert_eq(&Sort::Bool, sorts[0].as_sort().unwrap())?;
+                SortError::assert_eq(sorts[1].as_sort().unwrap(), sorts[2].as_sort().unwrap())?;
             }
             Operator::Add | Operator::Sub | Operator::Mult => {
                 // The `-` operator, in particular, can be called with only one argument, in which
@@ -216,62 +214,80 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
                 // All the arguments must be either Int or Real. Also, if we are not allowing
                 // Int/Real subtyping, all arguments must have the same sort
-                if self.allow_int_real_subtyping {
+                if self.config.allow_int_real_subtyping {
                     for s in sorts {
-                        SortError::assert_one_of(&[Sort::Int, Sort::Real], s)?;
+                        SortError::assert_one_of(&[Sort::Int, Sort::Real], s.as_sort().unwrap())?;
                     }
                 } else {
-                    SortError::assert_one_of(&[Sort::Int, Sort::Real], sorts[0])?;
-                    SortError::assert_all_eq(&sorts)?;
+                    SortError::assert_one_of(
+                        &[Sort::Int, Sort::Real],
+                        sorts[0].as_sort().unwrap(),
+                    )?;
+                    SortError::assert_all_eq(
+                        &sorts
+                            .iter()
+                            .map(|op| op.as_sort().unwrap())
+                            .collect::<Vec<&Sort>>(),
+                    )?;
                 }
             }
             Operator::IntDiv => {
                 assert_num_args(&args, 2..)?;
-                SortError::assert_eq(&Sort::Int, sorts[0])?;
-                SortError::assert_all_eq(&sorts)?;
+                SortError::assert_eq(&Sort::Int, sorts[0].as_sort().unwrap())?;
+                SortError::assert_all_eq(
+                    &sorts
+                        .iter()
+                        .map(|op| op.as_sort().unwrap())
+                        .collect::<Vec<&Sort>>(),
+                )?;
             }
             Operator::RealDiv => {
                 assert_num_args(&args, 2..)?;
 
                 // Normally, the `/` operator may only receive Real arguments, but if we are
                 // allowing Int/Real subtyping, it may also receive Ints
-                if self.allow_int_real_subtyping {
+                if self.config.allow_int_real_subtyping {
                     for s in sorts {
-                        SortError::assert_one_of(&[Sort::Int, Sort::Real], s)?;
+                        SortError::assert_one_of(&[Sort::Int, Sort::Real], s.as_sort().unwrap())?;
                     }
                 } else {
-                    SortError::assert_eq(&Sort::Real, sorts[0])?;
-                    SortError::assert_all_eq(&sorts)?;
+                    SortError::assert_eq(&Sort::Real, sorts[0].as_sort().unwrap())?;
+                    SortError::assert_all_eq(
+                        &sorts
+                            .iter()
+                            .map(|op| op.as_sort().unwrap())
+                            .collect::<Vec<&Sort>>(),
+                    )?;
                 }
             }
             Operator::Mod => {
                 assert_num_args(&args, 2)?;
-                SortError::assert_eq(&Sort::Int, sorts[0])?;
-                SortError::assert_eq(&Sort::Int, sorts[1])?;
+                SortError::assert_eq(&Sort::Int, sorts[0].as_sort().unwrap())?;
+                SortError::assert_eq(&Sort::Int, sorts[1].as_sort().unwrap())?;
             }
             Operator::Abs => {
                 assert_num_args(&args, 1)?;
-                SortError::assert_eq(&Sort::Int, sorts[0])?;
+                SortError::assert_eq(&Sort::Int, sorts[0].as_sort().unwrap())?;
             }
             Operator::LessThan | Operator::GreaterThan | Operator::LessEq | Operator::GreaterEq => {
                 assert_num_args(&args, 2..)?;
                 // All the arguments must be either Int or Real sorted, but they don't need to all
                 // have the same sort
                 for s in sorts {
-                    SortError::assert_one_of(&[Sort::Int, Sort::Real], s)?;
+                    SortError::assert_one_of(&[Sort::Int, Sort::Real], s.as_sort().unwrap())?;
                 }
             }
             Operator::ToReal => {
                 assert_num_args(&args, 1)?;
-                SortError::assert_eq(&Sort::Int, sorts[0])?;
+                SortError::assert_eq(&Sort::Int, sorts[0].as_sort().unwrap())?;
             }
             Operator::ToInt | Operator::IsInt => {
                 assert_num_args(&args, 1)?;
-                SortError::assert_eq(&Sort::Real, sorts[0])?;
+                SortError::assert_eq(&Sort::Real, sorts[0].as_sort().unwrap())?;
             }
             Operator::Select => {
                 assert_num_args(&args, 2)?;
-                match sorts[0] {
+                match sorts[0].as_sort().unwrap() {
                     Sort::Array(_, _) => (),
                     got => {
                         // Instead of creating some special case for sort errors with parametric
@@ -279,7 +295,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         // infer the `X` sort from the second operator argument. This may be
                         // changed later
                         let got = got.clone();
-                        let x = sorts[1].clone();
+                        let x = sorts[1].as_sort().unwrap().clone();
                         let x = self.pool.add(Term::Sort(x));
                         let y = self
                             .pool
@@ -294,14 +310,15 @@ impl<'a, R: BufRead> Parser<'a, R> {
             }
             Operator::Store => {
                 assert_num_args(&args, 3)?;
-                match sorts[0] {
+                match sorts[0].as_sort().unwrap() {
                     Sort::Array(x, y) => {
-                        SortError::assert_eq(x.as_sort().unwrap(), sorts[1])?;
-                        SortError::assert_eq(y.as_sort().unwrap(), sorts[2])?;
+                        SortError::assert_eq(x.as_sort().unwrap(), sorts[1].as_sort().unwrap())?;
+                        SortError::assert_eq(y.as_sort().unwrap(), sorts[2].as_sort().unwrap())?;
                     }
                     got => {
                         let got = got.clone();
-                        let [x, y] = [sorts[0], sorts[1]].map(|s| Term::Sort(s.clone()));
+                        let [x, y] = [&sorts[0], &sorts[1]]
+                            .map(|s| Term::Sort(s.as_sort().unwrap().clone()));
                         return Err(SortError {
                             expected: vec![Sort::Array(self.pool.add(x), self.pool.add(y))],
                             got,
@@ -320,8 +337,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
         function: Rc<Term>,
         args: Vec<Rc<Term>>,
     ) -> Result<Rc<Term>, ParserError> {
+        let sort = self.pool.sort(&function);
         let sorts = {
-            let function_sort = self.pool.sort(&function);
+            let function_sort = sort.as_sort().unwrap();
             if let Sort::Function(sorts) = function_sort {
                 sorts
             } else {
@@ -331,7 +349,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
         };
         assert_num_args(&args, sorts.len() - 1)?;
         for i in 0..args.len() {
-            SortError::assert_eq(sorts[i].as_sort().unwrap(), self.pool.sort(&args[i]))?;
+            SortError::assert_eq(
+                sorts[i].as_sort().unwrap(),
+                self.pool.sort(&args[i]).as_sort().unwrap(),
+            )?;
         }
         Ok(self.pool.add(Term::App(function, args)))
     }
@@ -468,8 +489,8 @@ impl<'a, R: BufRead> Parser<'a, R> {
     ///
     /// All other commands are ignored. This method returns a hash set containing the premises
     /// introduced in `assert` commands.
-    pub fn parse_problem(&mut self) -> CarcaraResult<(ProblemPrelude, AHashSet<Rc<Term>>)> {
-        self.problem = Some((ProblemPrelude::default(), AHashSet::new()));
+    pub fn parse_problem(&mut self) -> CarcaraResult<(ProblemPrelude, IndexSet<Rc<Term>>)> {
+        self.problem = Some((ProblemPrelude::default(), IndexSet::new()));
 
         while self.current_token != Token::Eof {
             self.expect_token(Token::OpenParen)?;
@@ -502,7 +523,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 Token::ReservedWord(Reserved::DefineFun) => {
                     let (name, func_def) = self.parse_define_fun()?;
 
-                    if self.apply_function_defs {
+                    if self.config.apply_function_defs {
                         self.state.function_defs.insert(name, func_def);
                     } else {
                         // If `self.apply_function_defs` is false, we instead add the function name
@@ -513,9 +534,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                             self.pool
                                 .add(Term::Lambda(BindingList(func_def.params), func_def.body))
                         };
-                        let sort = self
-                            .pool
-                            .add(Term::Sort(self.pool.sort(&lambda_term).clone()));
+                        let sort = self.pool.sort(&lambda_term);
                         let var = (name, sort);
                         self.insert_sorted_var(var.clone());
                         let var_term = self.pool.add(var.into());
@@ -559,6 +578,8 @@ impl<'a, R: BufRead> Parser<'a, R> {
         let mut commands_stack = vec![Vec::new()];
         let mut end_step_stack = Vec::new();
         let mut subproof_args_stack = Vec::new();
+        let mut subproof_id_stack = Vec::new();
+        let mut last_subproof_id: i64 = -1;
 
         let mut finished_assumes = false;
 
@@ -596,6 +617,8 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     commands_stack.push(Vec::new());
                     end_step_stack.push(anchor.end_step_id);
                     subproof_args_stack.push((anchor.assignment_args, anchor.variable_args));
+                    last_subproof_id += 1;
+                    subproof_id_stack.push(last_subproof_id as usize);
                     continue;
                 }
                 _ => return Err(Error::Parser(ParserError::UnexpectedToken(token), position)),
@@ -617,6 +640,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 let commands = commands_stack.pop().unwrap();
                 end_step_stack.pop().unwrap();
                 let (assignment_args, variable_args) = subproof_args_stack.pop().unwrap();
+                let subproof_id = subproof_id_stack.pop().unwrap();
 
                 // The subproof must contain at least two commands: the end step and the previous
                 // command it implicitly references
@@ -645,6 +669,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         commands,
                         assignment_args,
                         variable_args,
+                        context_id: subproof_id,
                     }));
             }
             self.state
@@ -669,6 +694,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     fn parse_assume_command(&mut self) -> CarcaraResult<(String, Rc<Term>)> {
         let id = self.expect_symbol()?;
         let term = self.parse_term_expecting_sort(&Sort::Bool)?;
+        self.ignore_remaining_attributes()?;
         self.expect_token(Token::CloseParen)?;
         Ok((id, term))
     }
@@ -709,7 +735,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
             Vec::new()
         };
 
-        // For some rules (notable the `subproof` rule), there is also a `:discharge` attribute that
+        // For some rules (notably the `subproof` rule), there is also a `:discharge` attribute that
         // takes a series of command ids, in addition to the regular premises
         let discharge = if self.current_token == Token::Keyword("discharge".into()) {
             self.next_token()?;
@@ -807,8 +833,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
             self.next_token()?;
             let var = self.expect_symbol()?;
             let value = self.parse_term()?;
-            let sort = Term::Sort(self.pool.sort(&value).clone());
-            let sort = self.pool.add(sort);
+            let sort = self.pool.sort(&value);
             self.insert_sorted_var((var.clone(), sort));
             self.expect_token(Token::CloseParen)?;
             AnchorArg::Assign(var, value)
@@ -923,10 +948,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// Parses a term.
     pub fn parse_term(&mut self) -> CarcaraResult<Rc<Term>> {
         let term = match self.next_token()? {
-            (Token::Numeral(n), _) if self.interpret_integers_as_reals => Term::real(n),
-            (Token::Numeral(n), _) => Term::integer(n),
-            (Token::Decimal(r), _) => Term::real(r),
-            (Token::String(s), _) => Term::string(s),
+            (Token::Numeral(n), _) if self.interpret_integers_as_reals => Term::new_real(n),
+            (Token::Numeral(n), _) => Term::new_int(n),
+            (Token::Decimal(r), _) => Term::new_real(r),
+            (Token::String(s), _) => Term::new_string(s),
             (Token::Symbol(s), pos) => {
                 // Check to see if there is a nullary function defined with this name
                 return Ok(if let Some(func_def) = self.state.function_defs.get(&s) {
@@ -939,7 +964,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         ));
                     }
                 } else {
-                    self.make_var(Identifier::Simple(s))
+                    self.make_var(Ident::Simple(s))
                         .map_err(|err| Error::Parser(err, pos))?
                 });
             }
@@ -953,7 +978,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     fn parse_term_expecting_sort(&mut self, expected_sort: &Sort) -> CarcaraResult<Rc<Term>> {
         let pos = self.current_position;
         let term = self.parse_term()?;
-        SortError::assert_eq(expected_sort, self.pool.sort(&term))
+        SortError::assert_eq(expected_sort, self.pool.sort(&term).as_sort().unwrap())
             .map_err(|e| Error::Parser(e.into(), pos))?;
         Ok(term)
     }
@@ -1020,7 +1045,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 p.expect_token(Token::OpenParen)?;
                 let name = p.expect_symbol()?;
                 let value = p.parse_term()?;
-                let sort = p.pool.add(Term::Sort(p.pool.sort(&value).clone()));
+                let sort = p.pool.sort(&value);
                 p.insert_sorted_var((name.clone(), sort));
                 p.expect_token(Token::CloseParen)?;
                 Ok((name, value))
@@ -1031,12 +1056,11 @@ impl<'a, R: BufRead> Parser<'a, R> {
         self.expect_token(Token::CloseParen)?;
         self.state.symbol_table.pop_scope();
 
-        if self.expand_lets {
+        if self.config.expand_lets {
             let substitution = bindings
                 .into_iter()
                 .map(|(name, value)| {
-                    let sort = Term::Sort(self.pool.sort(&value).clone());
-                    let var = Term::var(name, self.pool.add(sort));
+                    let var = Term::new_var(name, self.pool.sort(&value));
                     (self.pool.add(var), value)
                 })
                 .collect();
@@ -1142,8 +1166,11 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 assert_num_args(&args, func.params.len())
                     .map_err(|err| Error::Parser(err, head_pos))?;
                 for (arg, param) in args.iter().zip(func.params.iter()) {
-                    SortError::assert_eq(param.1.as_sort().unwrap(), self.pool.sort(arg))
-                        .map_err(|err| Error::Parser(err.into(), head_pos))?;
+                    SortError::assert_eq(
+                        param.1.as_sort().unwrap(),
+                        self.pool.sort(arg).as_sort().unwrap(),
+                    )
+                    .map_err(|err| Error::Parser(err.into(), head_pos))?;
                 }
 
                 // Build a hash map of all the parameter names and the values they will
@@ -1152,7 +1179,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     .params
                     .iter()
                     .zip(args)
-                    .map(|((name, sort), arg)| (self.pool.add(Term::var(name, sort.clone())), arg))
+                    .map(|((n, s), arg)| (self.pool.add(Term::new_var(n, s.clone())), arg))
                     .collect();
 
                 // Since we already checked the sorts of the arguments, creating this substitution

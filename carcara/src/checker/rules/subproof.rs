@@ -3,7 +3,7 @@ use super::{
     CheckerError, EqualityError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::SubproofError};
-use ahash::{AHashMap, AHashSet};
+use indexmap::{IndexMap, IndexSet};
 
 pub fn subproof(
     RuleArgs {
@@ -64,14 +64,14 @@ pub fn bind(
 
     // While the documentation indicates this rule is only called with `forall` quantifiers, in
     // some of the tests examples it is also called with the `exists` quantifier
-    let (l_quant, l_bindings, left) = left.unwrap_quant_err()?;
-    let (r_quant, r_bindings, right) = right.unwrap_quant_err()?;
+    let (l_quant, l_bindings, left) = left.as_quant_err()?;
+    let (r_quant, r_bindings, right) = right.as_quant_err()?;
     assert_eq(&l_quant, &r_quant)?;
 
     let [l_bindings, r_bindings] = [l_bindings, r_bindings].map(|b| {
         b.iter()
             .map(|var| pool.add(var.clone().into()))
-            .collect::<AHashSet<_>>()
+            .collect::<IndexSet<_>>()
     });
 
     // The terms in the quantifiers must be phi and phi'
@@ -91,9 +91,10 @@ pub fn bind(
     // Since we are closing a subproof, we only care about the substitutions that were introduced
     // in it
     let context = context.last().unwrap();
+    let context = context.as_ref().unwrap();
 
     // The quantifier binders must be the xs and ys of the context substitution
-    let (xs, ys): (AHashSet<_>, AHashSet<_>) = context
+    let (xs, ys): (IndexSet<_>, IndexSet<_>) = context
         .mappings
         .iter()
         // We skip terms which are not simply variables
@@ -142,8 +143,15 @@ pub fn r#let(
 
     // Since we are closing a subproof, we only care about the substitutions that were introduced
     // in it
-    let substitution: AHashMap<Rc<Term>, Rc<Term>> =
-        context.last().unwrap().mappings.iter().cloned().collect();
+    let substitution: IndexMap<Rc<Term>, Rc<Term>> = context
+        .last()
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .mappings
+        .iter()
+        .cloned()
+        .collect();
 
     let (let_term, u_prime) = match_term_err!((= l u) = &conclusion[0])?;
     let Term::Let(let_bindings, u) = let_term.as_ref() else {
@@ -166,7 +174,7 @@ pub fn r#let(
     let mut pairs: Vec<_> = let_bindings
         .iter()
         .map(|(x, t)| {
-            let sort = pool.add(Term::Sort(pool.sort(t).clone()));
+            let sort = pool.sort(t);
             let x_term = pool.add((x.clone(), sort).into());
             let s = substitution
                 .get(&x_term)
@@ -191,15 +199,15 @@ pub fn r#let(
     Ok(())
 }
 
-fn extract_points(quant: Quantifier, term: &Rc<Term>) -> AHashSet<(Rc<Term>, Rc<Term>)> {
-    fn find_points(acc: &mut AHashSet<(Rc<Term>, Rc<Term>)>, polarity: bool, term: &Rc<Term>) {
+fn extract_points(quant: Quantifier, term: &Rc<Term>) -> IndexSet<(Rc<Term>, Rc<Term>)> {
+    fn find_points(acc: &mut IndexSet<(Rc<Term>, Rc<Term>)>, polarity: bool, term: &Rc<Term>) {
         // This does not make use of a cache, so there may be performance issues
         // TODO: Measure the performance of this function, and see if a cache is needed
 
         if let Some(inner) = term.remove_negation() {
             return find_points(acc, !polarity, inner);
         }
-        if let Some((_, _, inner)) = term.unwrap_quant() {
+        if let Some((_, _, inner)) = term.as_quant() {
             return find_points(acc, polarity, inner);
         }
         match polarity {
@@ -225,7 +233,7 @@ fn extract_points(quant: Quantifier, term: &Rc<Term>) -> AHashSet<(Rc<Term>, Rc<
         }
     }
 
-    let mut result = AHashSet::new();
+    let mut result = IndexSet::new();
     find_points(&mut result, quant == Quantifier::Exists, term);
     result
 }
@@ -244,8 +252,8 @@ pub fn onepoint(
     assert_clause_len(conclusion, 1)?;
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
-    let (quant, l_bindings, left) = left.unwrap_quant_err()?;
-    let (r_bindings, right) = match right.unwrap_quant() {
+    let (quant, l_bindings, left) = left.as_quant_err()?;
+    let (r_bindings, right) = match right.as_quant() {
         Some((q, b, t)) => {
             assert_eq(&q, &quant)?;
             (b, t)
@@ -265,27 +273,32 @@ pub fn onepoint(
         }
     );
 
-    let last_context = context.last_mut().unwrap();
-    if let Some((var, _)) = r_bindings
-        .iter()
-        .find(|b| !last_context.bindings.contains(b))
-    {
+    let last_context = context.last().unwrap();
+    if let Some((var, _)) = {
+        let last_context = last_context.as_ref().unwrap();
+        r_bindings
+            .iter()
+            .find(|&b| !last_context.bindings.contains(b))
+    } {
         return Err(SubproofError::BindingIsNotInContext(var.clone()).into());
     }
 
-    let l_bindings_set: AHashSet<_> = l_bindings
+    let l_bindings_set: IndexSet<_> = l_bindings
         .iter()
         .map(|var| pool.add(var.clone().into()))
         .collect();
-    let r_bindings_set: AHashSet<_> = r_bindings
+    let r_bindings_set: IndexSet<_> = r_bindings
         .iter()
         .map(|var| pool.add(var.clone().into()))
         .collect();
-    let substitution_vars: AHashSet<_> = last_context
+    let substitution_vars: IndexSet<_> = last_context
+        .as_ref()
+        .unwrap()
         .mappings
         .iter()
         .map(|(k, _)| k.clone())
         .collect();
+    drop(last_context);
 
     let points = extract_points(quant, left);
 
@@ -293,13 +306,14 @@ pub fn onepoint(
     // substitution to the points in order to replace these variables by their value. We also
     // create a duplicate of every point in the reverse order, since the order of equalities may be
     // flipped
-    let points: AHashSet<_> = points
+    let points: IndexSet<_> = points
         .into_iter()
         .flat_map(|(x, t)| [(x.clone(), t.clone()), (t, x)])
         .map(|(x, t)| (x, context.apply(pool, &t)))
         .collect();
 
-    let last_context = context.last_mut().unwrap();
+    let last_context = context.last().unwrap();
+    let last_context = last_context.as_ref().unwrap();
     // For each substitution (:= x t) in the context, the equality (= x t) must appear in phi
     if let Some((k, v)) = last_context
         .mappings
@@ -330,7 +344,7 @@ fn generic_skolemization_rule(
         pool,
         context,
         previous_command,
-        deep_eq_time,
+        polyeq_time,
         ..
     }: RuleArgs,
 ) -> RuleResult {
@@ -340,7 +354,7 @@ fn generic_skolemization_rule(
 
     let (left, psi) = match_term_err!((= l r) = &conclusion[0])?;
 
-    let (quant, bindings, phi) = left.unwrap_quant_err()?;
+    let (quant, bindings, phi) = left.as_quant_err()?;
     assert_is_expected(&quant, rule_type)?;
 
     let previous_term = get_premise_term(&previous_command)?;
@@ -353,8 +367,15 @@ fn generic_skolemization_rule(
         current_phi = context.apply_previous(pool, &current_phi);
     }
 
-    let substitution: AHashMap<Rc<Term>, Rc<Term>> =
-        context.last().unwrap().mappings.iter().cloned().collect();
+    let substitution: IndexMap<Rc<Term>, Rc<Term>> = context
+        .last()
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .mappings
+        .iter()
+        .cloned()
+        .collect();
     for (i, x) in bindings.iter().enumerate() {
         let x_term = pool.add(Term::from(x.clone()));
         let t = substitution
@@ -382,7 +403,7 @@ fn generic_skolemization_rule(
             }
             pool.add(Term::Choice(x.clone(), inner))
         };
-        if !are_alpha_equivalent(t, &expected, deep_eq_time) {
+        if !alpha_equiv(t, &expected, polyeq_time) {
             return Err(EqualityError::ExpectedEqual(t.clone(), expected).into());
         }
 

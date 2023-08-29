@@ -1,12 +1,32 @@
 //! This module implements a variant of `Rc` where equality and hashing are done by reference.
 
-use std::{fmt, hash::Hash, ops::Deref, rc};
+use std::{fmt, hash::Hash, ops::Deref, sync};
 
-/// An `Rc` where equality and hashing are done by reference, instead of by value.
+/// A wrapper for `std::rc::Rc` where equality and hashing are done by reference, instead of by
+/// value.
 ///
 /// This means that two `Rc`s will not be considered equal and won't have the same hash value unless
 /// they point to the same allocation. This has the advantage that equality and hashing can be done
 /// in constant time, even for recursive structures.
+///
+/// The Carcara parser makes use of hash consing, meaning that each term is only allocated once,
+/// even if it appears multiple times in the proof. This means that if we want to compare two terms
+/// for equality, we only need to compare them by reference, since if they are equal they will point
+/// to the same allocation. However, `std::rc::Rc` implements `PartialEq` by comparing the inner
+/// values for equality. If we simply used this implementation, each equality comparison would need
+/// to traverse the terms recursively, which would be prohibitively expensive. Instead, this wrapper
+/// overrides the `PartialEq` implementation to compare the pointers directly, allowing for constant
+/// time equality comparisons.
+///
+/// Similarly, when inserting terms in a hash map or set, we can also just hash the pointers
+/// instead of recursively hashing the inner value (as `std::rc::Rc`'s `Hash` implementation does).
+/// Therefore, this wrapper also overrides the implementation of the `Hash` trait.
+///
+/// Note: when using this struct, it's important to avoid constructing terms with `Rc::new` and
+/// instead prefer to construct them by adding them to a `TermPool`. This is because `Rc::new` will
+/// create a brand new allocation for that term, instead of reusing the existing allocation if that
+/// term was already added to the pool. Two indentical terms created independently with `Rc::new`
+/// will not compare as equal.
 ///
 /// # Examples
 ///
@@ -36,7 +56,7 @@ use std::{fmt, hash::Hash, ops::Deref, rc};
 /// assert!(set.contains(&c));
 /// ```
 #[derive(Eq)]
-pub struct Rc<T: ?Sized>(rc::Rc<T>);
+pub struct Rc<T: ?Sized>(sync::Arc<T>);
 
 // If we simply `#[derive(Clone)]`, it would require that the type parameter `T` also implements
 // `Clone`, even though it is of course not needed. For more info, see:
@@ -49,13 +69,13 @@ impl<T: ?Sized> Clone for Rc<T> {
 
 impl<T: ?Sized> PartialEq for Rc<T> {
     fn eq(&self, other: &Self) -> bool {
-        rc::Rc::ptr_eq(&self.0, &other.0)
+        sync::Arc::ptr_eq(&self.0, &other.0)
     }
 }
 
 impl<T: ?Sized> Hash for Rc<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        rc::Rc::as_ptr(&self.0).hash(state);
+        sync::Arc::as_ptr(&self.0).hash(state);
     }
 }
 
@@ -78,7 +98,7 @@ impl<T: ?Sized> AsRef<T> for Rc<T> {
 // Implements `From<U>` for every `U` that can be converted into an `rc::Rc<T>`
 impl<T: ?Sized, U> From<U> for Rc<T>
 where
-    rc::Rc<T>: From<U>,
+    sync::Arc<T>: From<U>,
 {
     fn from(inner: U) -> Self {
         Self(inner.into())
@@ -108,11 +128,11 @@ impl<T> Rc<T> {
     /// Constructs a new `Rc<T>`.
     pub fn new(value: T) -> Self {
         #[allow(clippy::disallowed_methods)]
-        Self(rc::Rc::new(value))
+        Self(sync::Arc::new(value))
     }
 
     /// Similar to [`std::rc::Rc::strong_count`].
     pub fn strong_count(this: &Self) -> usize {
-        rc::Rc::strong_count(&this.0)
+        sync::Arc::strong_count(&this.0)
     }
 }

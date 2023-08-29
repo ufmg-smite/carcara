@@ -88,7 +88,7 @@ find $benchmark_dir -name '*.smt2' | xargs -P $num_jobs -n 1 bash -c 'scripts/so
 if [ -n "clean_flag" ]; then
     echo "cleaning up..."
     for f in $(find $benchmark_dir -name '*.smt2'); do
-        if [ ! -f $f.proof ]; then
+        if [ ! -f $f.alethe ]; then
             rm -f $f
         fi
     done

@@ -1,5 +1,6 @@
 [workspace]
 members = ["carcara", "cli", "test-generator"]
+resolver = "2"
 
 [profile.release]
 debug = 1

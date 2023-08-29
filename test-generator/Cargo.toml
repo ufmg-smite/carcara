@@ -2,7 +2,7 @@
 name = "test-generator"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.67"
+rust-version = "1.72"
 license = "Apache-2.0"
 
 [lib]

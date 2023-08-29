@@ -57,10 +57,7 @@ pub fn apply_diff(root: ProofDiff, proof: Vec<ProofCommand>) -> Vec<ProofCommand
                         };
                         stack.push(new_frame);
                     }
-                    (
-                        ProofCommand::Step(_) | ProofCommand::Assume { .. },
-                        CommandDiff::Step(mut elaboration),
-                    ) => {
+                    (_, CommandDiff::Step(mut elaboration)) => {
                         f.result.commands.append(&mut elaboration);
                     }
                     (_, CommandDiff::Delete) => (),

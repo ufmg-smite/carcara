@@ -4,9 +4,8 @@ mod logger;
 mod path_args;
 
 use carcara::{
-    ast::print_proof,
-    benchmarking::{Metrics, OnlineBenchmarkResults},
-    check, check_and_elaborate, parser, CarcaraOptions,
+    ast::print_proof, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate,
+    check_parallel, parser, CarcaraOptions, LiaGenericOptions,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -15,7 +14,7 @@ use git_version::git_version;
 use path_args::{get_instances_from_paths, infer_problem_path};
 use std::{
     fs::File,
-    io::{self, BufRead},
+    io::{self, BufRead, IsTerminal},
     path::Path,
 };
 
@@ -70,6 +69,9 @@ enum Command {
 
     /// Checks a series of proof files and records performance statistics.
     Bench(BenchCommandOptions),
+
+    /// Given a step, takes a slice of a proof consisting of all its transitive premises.
+    Slice(SliceCommandOption),
 }
 
 #[derive(Args)]
@@ -80,6 +82,20 @@ struct Input {
     /// The original problem file. If this argument is not present, it will be inferred from the
     /// proof file.
     problem_file: Option<String>,
+}
+
+#[derive(Args)]
+struct StatsOptions {
+    /// Enables the gathering of performance statistics
+    #[clap(long)]
+    stats: bool,
+}
+
+#[derive(Args)]
+struct StackOptions {
+    /// Defines the thread stack size for each check worker (does not include the main thread stack size, which should be set manually).
+    #[clap(long, default_value = "0")]
+    stack_size: usize,
 }
 
 #[derive(Args, Clone, Copy)]
@@ -101,18 +117,36 @@ struct ParsingOptions {
     allow_int_real_subtyping: bool,
 }
 
-#[derive(Args, Clone, Copy)]
+#[derive(Args, Clone)]
 struct CheckingOptions {
     /// Enables the strict checking of certain rules.
     #[clap(short, long)]
     strict: bool,
 
-    /// Skips rules that are not known by the checker.
-    #[clap(long)]
+    /// Allow steps with rules that are not known by the checker, and consider them as holes.
+    #[clap(short, long)]
+    ignore_unknown_rules: bool,
+
+    // Note: the `--skip-unknown-rules` flag has been deprecated in favor of `--ignore-unknown-rules`
+    #[clap(long, conflicts_with("ignore-unknown-rules"), hide = true)]
     skip_unknown_rules: bool,
 
-    /// Check `lia_generic` steps by calling into cvc5.
+    /// Check `lia_generic` steps using the provided solver.
     #[clap(long)]
+    lia_solver: Option<String>,
+
+    /// The arguments to pass to the `lia_generic` solver. This should be a single string where
+    /// multiple arguments are separated by spaces.
+    #[clap(
+        long,
+        requires = "lia-solver",
+        allow_hyphen_values = true,
+        default_value = "--tlimit=10000 --lang=smt2 --proof-format-mode=alethe --proof-granularity=theory-rewrite --proof-alethe-res-pivots"
+    )]
+    lia_solver_args: String,
+
+    /// Check `lia_generic` steps by calling into cvc5 (deprecated).
+    #[clap(long, conflicts_with("lia-solver"))]
     lia_via_cvc5: bool,
 }
 
@@ -131,17 +165,29 @@ fn build_carcara_options(
     }: ParsingOptions,
     CheckingOptions {
         strict,
+        ignore_unknown_rules,
         skip_unknown_rules,
+        lia_solver,
         lia_via_cvc5,
+        lia_solver_args,
     }: CheckingOptions,
+    StatsOptions { stats }: StatsOptions,
 ) -> CarcaraOptions {
+    // If no solver is provided by the `--lia-solver` option, *and* the `--lia-via-cvc5` option was
+    // passed, we default to cvc5 as a solver
+    let solver = lia_solver.or_else(|| lia_via_cvc5.then(|| "cvc5".into()));
+    let lia_options = solver.map(|solver| LiaGenericOptions {
+        solver: solver.into(),
+        arguments: lia_solver_args.split_whitespace().map(Into::into).collect(),
+    });
     CarcaraOptions {
         apply_function_defs,
         expand_lets: expand_let_bindings,
         allow_int_real_subtyping,
-        lia_via_cvc5,
+        lia_options,
         strict,
-        skip_unknown_rules,
+        ignore_unknown_rules: ignore_unknown_rules || skip_unknown_rules,
+        stats,
     }
 }
 
@@ -167,6 +213,26 @@ struct CheckCommandOptions {
 
     #[clap(flatten)]
     checking: CheckingOptions,
+
+    /// Defines the number of cores for proof checking.
+    #[clap(short = 'u', long, required = false, default_value = "1", validator = |s: &str| -> Result<(), String> {
+        if let Ok(n) = s.to_string().parse() as Result<u32, _> {
+            if n < 1 {
+                Err(format!("The threads number can't be {n}."))
+            } else {
+                Ok(())
+            }
+        } else {
+            Err(String::from("Not a number."))
+        }
+    })]
+    num_threads: usize,
+
+    #[clap(flatten)]
+    stats: StatsOptions,
+
+    #[clap(flatten)]
+    stack: StackOptions,
 }
 
 #[derive(Args)]
@@ -182,6 +248,9 @@ struct ElaborateCommandOptions {
 
     #[clap(flatten)]
     printing: PrintingOptions,
+
+    #[clap(flatten)]
+    stats: StatsOptions,
 }
 
 #[derive(Args)]
@@ -200,9 +269,9 @@ struct BenchCommandOptions {
     #[clap(short, long, default_value_t = 1)]
     num_runs: usize,
 
-    /// Number of threads to use when running the benchmark.
+    /// Number of jobs to run simultaneously when running the benchmark.
     #[clap(short = 'j', long, default_value_t = 1)]
-    num_threads: usize,
+    num_jobs: usize,
 
     /// Show benchmark results sorted by total time taken, instead of by average time taken.
     #[clap(short = 't', long)]
@@ -213,9 +282,27 @@ struct BenchCommandOptions {
     dump_to_csv: bool,
 
     /// The proof files on which the benchmark will be run. If a directory is passed, the checker
-    /// will recursively find all '.proof' files in the directory. The problem files will be
+    /// will recursively find all proof files in the directory. The problem files will be
     /// inferred from the proof files.
     files: Vec<String>,
+}
+
+#[derive(Args)]
+struct SliceCommandOption {
+    #[clap(flatten)]
+    input: Input,
+
+    #[clap(flatten)]
+    parsing: ParsingOptions,
+
+    #[clap(flatten)]
+    printing: PrintingOptions,
+
+    #[clap(long)]
+    from: String,
+
+    #[clap(long, short = 'd')]
+    max_distance: Option<usize>,
 }
 
 #[derive(ArgEnum, Clone)]
@@ -239,8 +326,25 @@ impl From<LogLevel> for log::LevelFilter {
 
 fn main() {
     let cli = Cli::parse();
-    let colors_enabled = !cli.no_color && atty::is(atty::Stream::Stderr);
+    let colors_enabled = !cli.no_color && std::io::stderr().is_terminal();
     logger::init(cli.log_level.into(), colors_enabled);
+
+    if let Command::Check(CheckCommandOptions { checking, .. })
+    | Command::Elaborate(ElaborateCommandOptions { checking, .. })
+    | Command::Bench(BenchCommandOptions { checking, .. }) = &cli.command
+    {
+        if checking.skip_unknown_rules {
+            log::warn!(
+                "the `--skip-unknown-rules` option is deprecated, please use \
+                `--ignore-unknown-rules` instead"
+            )
+        }
+        if checking.lia_via_cvc5 {
+            log::warn!(
+                "the `--lia-via-cvc5` option is deprecated, please use `--lia-solver cvc5` instead"
+            )
+        }
+    }
 
     let result = match cli.command {
         Command::Parse(options) => parse_command(options),
@@ -258,6 +362,7 @@ fn main() {
         }
         Command::Elaborate(options) => elaborate_command(options),
         Command::Bench(options) => bench_command(options),
+        Command::Slice(options) => slice_command(options),
     };
     if let Err(e) = result {
         log::error!("{}", e);
@@ -287,9 +392,11 @@ fn parse_command(options: ParseCommandOptions) -> CliResult<()> {
     let (_, proof, _) = parser::parse_instance(
         problem,
         proof,
-        options.parsing.apply_function_defs,
-        options.parsing.expand_let_bindings,
-        options.parsing.allow_int_real_subtyping,
+        parser::Config {
+            apply_function_defs: options.parsing.apply_function_defs,
+            expand_lets: options.parsing.expand_let_bindings,
+            allow_int_real_subtyping: options.parsing.allow_int_real_subtyping,
+        },
     )
     .map_err(carcara::Error::from)?;
     print_proof(&proof.commands, options.printing.use_sharing)?;
@@ -298,11 +405,18 @@ fn parse_command(options: ParseCommandOptions) -> CliResult<()> {
 
 fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
     let (problem, proof) = get_instance(&options.input)?;
-    check(
-        problem,
-        proof,
-        build_carcara_options(options.parsing, options.checking),
-    )
+    let carc_options = build_carcara_options(options.parsing, options.checking, options.stats);
+    if options.num_threads == 1 {
+        check(problem, proof, carc_options)
+    } else {
+        check_parallel(
+            problem,
+            proof,
+            carc_options,
+            options.num_threads,
+            options.stack.stack_size,
+        )
+    }
     .map_err(Into::into)
 }
 
@@ -312,7 +426,7 @@ fn elaborate_command(options: ElaborateCommandOptions) -> CliResult<()> {
     let (_, elaborated) = check_and_elaborate(
         problem,
         proof,
-        build_carcara_options(options.parsing, options.checking),
+        build_carcara_options(options.parsing, options.checking, options.stats),
     )?;
     print_proof(&elaborated.commands, options.printing.use_sharing)?;
     Ok(())
@@ -331,12 +445,17 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         options.num_runs
     );
 
+    let carc_options = build_carcara_options(
+        options.parsing,
+        options.checking,
+        StatsOptions { stats: false },
+    );
     if options.dump_to_csv {
         benchmarking::run_csv_benchmark(
             &instances,
             options.num_runs,
-            options.num_threads,
-            &build_carcara_options(options.parsing, options.checking),
+            options.num_jobs,
+            &carc_options,
             options.elaborate,
             &mut File::create("runs.csv")?,
             &mut File::create("by-rule.csv")?,
@@ -347,8 +466,8 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
     let results: OnlineBenchmarkResults = benchmarking::run_benchmark(
         &instances,
         options.num_runs,
-        options.num_threads,
-        &build_carcara_options(options.parsing, options.checking),
+        options.num_jobs,
+        &carc_options,
         options.elaborate,
     );
     if results.is_empty() {
@@ -363,119 +482,29 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
     } else {
         println!("valid");
     }
-    print_benchmark_results(results, options.sort_by_total)
+    results.print(options.sort_by_total);
+    Ok(())
 }
 
-fn print_benchmark_results(results: OnlineBenchmarkResults, sort_by_total: bool) -> CliResult<()> {
-    let [parsing, checking, elaborating, accounted_for, total] = [
-        results.parsing(),
-        results.checking(),
-        results.elaborating(),
-        results.total_accounted_for(),
-        results.total(),
-    ]
-    .map(|m| {
-        if sort_by_total {
-            format!("{:#}", m)
-        } else {
-            format!("{}", m)
-        }
-    });
+fn slice_command(options: SliceCommandOption) -> CliResult<()> {
+    let (problem, proof) = get_instance(&options.input)?;
+    let config = parser::Config {
+        apply_function_defs: options.parsing.apply_function_defs,
+        expand_lets: options.parsing.expand_let_bindings,
+        allow_int_real_subtyping: options.parsing.allow_int_real_subtyping,
+    };
+    let (_, proof, _) =
+        parser::parse_instance(problem, proof, config).map_err(carcara::Error::from)?;
 
-    println!("parsing:             {}", parsing);
-    println!("checking:            {}", checking);
-    if !elaborating.is_empty() {
-        println!("elaborating:         {}", elaborating);
-    }
-    println!(
-        "on assume:           {} ({:.02}% of checking time)",
-        results.assume_time,
-        100.0 * results.assume_time.mean().as_secs_f64() / results.checking().mean().as_secs_f64(),
-    );
-    println!("on assume (core):    {}", results.assume_core_time);
-    println!("assume ratio:        {}", results.assume_time_ratio);
-    println!(
-        "on deep equality:    {} ({:.02}% of checking time)",
-        results.deep_eq_time,
-        100.0 * results.deep_eq_time.mean().as_secs_f64() / results.checking().mean().as_secs_f64(),
-    );
-    println!("deep equality ratio: {}", results.deep_eq_time_ratio);
-    println!("total accounted for: {}", accounted_for);
-    println!("total:               {}", total);
+    let source_index = proof
+        .commands
+        .iter()
+        .position(|c| c.id() == options.from)
+        .ok_or_else(|| CliError::InvalidSliceId(options.from.to_owned()))?;
 
-    let data_by_rule = results.step_time_by_rule();
-    let mut data_by_rule: Vec<_> = data_by_rule.iter().collect();
-    data_by_rule.sort_by_key(|(_, m)| if sort_by_total { m.total() } else { m.mean() });
-
-    println!("by rule:");
-    for (rule, data) in data_by_rule {
-        print!("    {: <18}", rule);
-        if sort_by_total {
-            println!("{:#}", data)
-        } else {
-            println!("{}", data)
-        }
-    }
-
-    println!("worst cases:");
-    let worst_step = results.step_time().max();
-    println!("    step:            {} ({:?})", worst_step.0, worst_step.1);
-
-    let worst_file_parsing = results.parsing().max();
-    println!(
-        "    file (parsing):  {} ({:?})",
-        worst_file_parsing.0 .0, worst_file_parsing.1
-    );
-
-    let worst_file_checking = results.checking().max();
-    println!(
-        "    file (checking): {} ({:?})",
-        worst_file_checking.0 .0, worst_file_checking.1
-    );
-
-    let worst_file_assume = results.assume_time_ratio.max();
-    println!(
-        "    file (assume):   {} ({:.04}%)",
-        worst_file_assume.0 .0,
-        worst_file_assume.1 * 100.0
-    );
-
-    let worst_file_deep_eq = results.deep_eq_time_ratio.max();
-    println!(
-        "    file (deep_eq):  {} ({:.04}%)",
-        worst_file_deep_eq.0 .0,
-        worst_file_deep_eq.1 * 100.0
-    );
-
-    let worst_file_total = results.total().max();
-    println!(
-        "    file overall:    {} ({:?})",
-        worst_file_total.0 .0, worst_file_total.1
-    );
-
-    let num_hard_assumes = results.num_assumes - results.num_easy_assumes;
-    let percent_easy = (results.num_easy_assumes as f64) * 100.0 / (results.num_assumes as f64);
-    let percent_hard = (num_hard_assumes as f64) * 100.0 / (results.num_assumes as f64);
-    println!("          number of assumes: {}", results.num_assumes);
-    println!(
-        "                     (easy): {} ({:.02}%)",
-        results.num_easy_assumes, percent_easy
-    );
-    println!(
-        "                     (hard): {} ({:.02}%)",
-        num_hard_assumes, percent_hard
-    );
-
-    let depths = results.deep_eq_depths;
-    if !depths.is_empty() {
-        println!("    max deep equality depth: {}", depths.max().1);
-        println!("  total deep equality depth: {}", depths.total());
-        println!("  number of deep equalities: {}", depths.count());
-        println!("                 mean depth: {:.4}", depths.mean());
-        println!(
-            "standard deviation of depth: {:.4}",
-            depths.standard_deviation()
-        );
-    }
+    let diff =
+        carcara::elaborator::slice_proof(&proof.commands, source_index, options.max_distance);
+    let slice = carcara::elaborator::apply_diff(diff, proof.commands);
+    print_proof(&slice, options.printing.use_sharing)?;
     Ok(())
 }

@@ -4,7 +4,7 @@ Carcara is a proof checker and elaborator for SMT proofs in the [Alethe format](
 
 ## Building
 
-To build Carcara, you will need Rust and Cargo 1.67 or newer. Build the project with `cargo build`.
+To build Carcara, you will need Rust and Cargo 1.72 or newer. Build the project with `cargo build`.
 When running on large proofs, we recommend compiling with optimizations enabled: `cargo build
 --release`.
 
@@ -17,12 +17,12 @@ the project with all optimizations enabled, and install the CLI binary in `$HOME
 To check a proof file, use the `check` command, passing both the proof file and the original
 SMT-LIB problem file.
 ```
-carcara check example.smt2.proof example.smt2
+carcara check example.smt2.alethe example.smt2
 ```
 
-If the problem file name is exactly the proof file name minus `.proof`, you can omit it:
+If the problem file name is exactly the proof file name minus `.alethe`, you can omit it:
 ```
-carcara check example.smt2.proof
+carcara check example.smt2.alethe
 ```
 
 By default, Carcara will return a checking error when encountering a rule it does not recognize. If
@@ -37,17 +37,47 @@ See `carcara help check` for more options.
 
 You can elaborate a proof file using the `elaborate` command.
 ```
-carcara elaborate example.smt2.proof example.smt2
+carcara elaborate example.smt2.alethe example.smt2
 ```
 This command will check the given proof while elaborating it, and print the elaborated proof to
 standard output. The `--print-with-sharing` flag controls whether the elaborated proof will be
 printed using term sharing.
 
-By default, elaboration of `lia_generic` steps using cvc5 is disabled. To enable it, pass the
-`--lia-via-cvc5` flag. You will need to have a working binary of cvc5 in your PATH.
-
 Many of the same flags used in the `check` command also apply to the `elaborate` command. See
 `carcara help elaborate` for more details.
+
+### `lia_generic` steps
+
+By default, Carcara ignores steps of the `lia_generic` rule when checking or elaborating a proof,
+instead considering them as holes. However, you can use an external solver to aid Carcara in
+checking these steps, using the `--lia-solver` option. For example, running
+```
+carcara check example.smt2.alethe --lia-solver cvc5
+```
+
+will check the proof using cvc5 (more precisely, the cvc5 binary in your `PATH`) to check any
+`lia_generic` steps. This is done by converting the `lia_generic` step into an SMT-LIB problem,
+giving it to the solver, and checking the Alethe proof that the solver produces. If instead of just
+checking we were also elaborating the proof, this would also insert the solver proof in the place of
+the `lia_generic` step.
+
+The value given to `--lia-solver` should be the path of the solver binary. Conceivably, any solver
+can be used (SMT or otherwise) as long as it is able to read SMT-LIB from stdin, solve the linear
+integer arithmetic problem, and output an Alethe proof to stdout.
+
+The `--lia-solver-args` option can be used to change the arguments passed to the solver binary. This
+option should receive a single value, where multiple arguments are separated by spaces. For example,
+if you wanted to instead check `lia_generic` steps using veriT, you might pass the following
+arguments:
+```
+carcara check example.smt2.alethe --lia-solver veriT --lia-solver-args "--proof=- --proof-with-sharing"
+```
+
+The default arguments for `--lia-solver-args` are as follows (note that they assume you use cvc5 as
+a solver):
+```
+--tlimit=10000 --lang=smt2 --proof-format-mode=alethe --proof-granularity=theory-rewrite --proof-alethe-res-pivots
+```
 
 ### Running benchmarks
 
@@ -55,13 +85,13 @@ The `bench` command is used to run benchmarks. For example, the following comman
 benchmark on three proof files.
 
 ```
-carcara bench a.smt2.proof b.smt2.proof c.smt2.proof
+carcara bench a.smt2.alethe b.smt2.alethe c.smt2.alethe
 ```
 
 The command takes as arguments any number of proof files or directories. If a directory is passed,
-the benchmark will be run on all `.proof` files in that directory. This command assumes that the
+the benchmark will be run on all `.alethe` files in that directory. This command assumes that the
 problem file associated with each proof is in the same directory as the proof, and that they follow
-the pattern `<filename>.smt2`/`<filename>.smt2.proof`.
+the pattern `<filename>.smt2`/`<filename>.smt2.alethe`.
 
 The benchmark will parse and check each file, and record performance data. If you pass the
 `--elaborate` flag, the proofs will also be elaborated (though the resulting elaborated proof is
@@ -75,7 +105,6 @@ using the `-n`/`--num-runs` option. By default, all benchmarks are run on a sing
 enable multiple threads using the `-j`/`--num-threads` option.
 
 See `carcara help bench` for more options.
-
 
 ## "Strict" checking
 

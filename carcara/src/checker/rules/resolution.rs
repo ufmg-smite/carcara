@@ -7,8 +7,8 @@ use crate::{
     checker::{error::ResolutionError, Elaborator},
     utils::DedupIterator,
 };
-use ahash::{AHashMap, AHashSet};
-use std::{collections::hash_map::Entry, iter::FromIterator};
+use indexmap::{map::Entry, IndexMap, IndexSet};
+use std::iter::FromIterator;
 
 type ResolutionTerm<'a> = (u32, &'a Rc<Term>);
 
@@ -34,7 +34,7 @@ impl<'a> ClauseCollection<'a> for Vec<ResolutionTerm<'a>> {
     }
 }
 
-impl<'a> ClauseCollection<'a> for AHashSet<ResolutionTerm<'a>> {
+impl<'a> ClauseCollection<'a> for IndexSet<ResolutionTerm<'a>> {
     fn insert_term(&mut self, item: ResolutionTerm<'a>) {
         self.insert(item);
     }
@@ -45,7 +45,7 @@ impl<'a> ClauseCollection<'a> for AHashSet<ResolutionTerm<'a>> {
 }
 
 /// Undoes the transformation done by `Rc<Term>::remove_all_negations`.
-fn unremove_all_negations(pool: &mut TermPool, (n, term): ResolutionTerm) -> Rc<Term> {
+fn unremove_all_negations(pool: &mut dyn TermPool, (n, term): ResolutionTerm) -> Rc<Term> {
     let mut term = term.clone();
     for _ in 0..n {
         term = build_term!(pool, (not { term }));
@@ -94,7 +94,7 @@ struct ResolutionTrace {
 fn greedy_resolution(
     conclusion: &[Rc<Term>],
     premises: &[Premise],
-    pool: &mut TermPool,
+    pool: &mut dyn TermPool,
     tracing: bool,
 ) -> Result<ResolutionTrace, CheckerError> {
     // If we are elaborating, we record which pivot was found for each binary resolution step, so we
@@ -113,21 +113,21 @@ fn greedy_resolution(
     // Without looking at the conclusion, it is unclear if the (not p) term should be removed by the
     // p term, or if the (not (not p)) should be removed by the (not (not (not p))). We can only
     // determine this by looking at the conclusion and using it to derive the pivots.
-    let conclusion: AHashSet<_> = conclusion
+    let conclusion: IndexSet<_> = conclusion
         .iter()
         .map(Rc::remove_all_negations)
         .map(|(n, t)| (n as i32, t))
         .collect();
 
     // The working clause contains the terms from the conclusion clause that we already encountered
-    let mut working_clause = AHashSet::new();
+    let mut working_clause = IndexSet::new();
 
     // The pivots are the encountered terms that are not present in the conclusion clause, and so
     // should be removed. After being used to eliminate a term, a pivot can still be used to
     // eliminate other terms. Because of that, we represent the pivots as a hash map to a boolean,
     // which represents if the pivot was already eliminated or not. At the end, this boolean should
     // be true for all pivots
-    let mut pivots = AHashMap::new();
+    let mut pivots = IndexMap::new();
 
     for premise in premises {
         // Only one pivot may be eliminated per clause. This restriction is required so logically
@@ -249,7 +249,7 @@ fn greedy_resolution(
 }
 
 fn rup_resolution(conclusion: &[Rc<Term>], premises: &[Premise]) -> bool {
-    let mut clauses: Vec<AHashSet<(bool, &Rc<Term>)>> = premises
+    let mut clauses: Vec<IndexSet<(bool, &Rc<Term>)>> = premises
         .iter()
         .map(|p| {
             p.clause
@@ -260,7 +260,7 @@ fn rup_resolution(conclusion: &[Rc<Term>], premises: &[Premise]) -> bool {
         .collect();
     clauses.extend(conclusion.iter().map(|t| {
         let (p, t) = t.remove_all_negations_with_polarity();
-        let mut clause = AHashSet::new();
+        let mut clause = IndexSet::new();
         clause.insert((!p, t));
         clause
     }));
@@ -294,9 +294,9 @@ pub fn resolution_with_args(
         conclusion, premises, args, pool, ..
     }: RuleArgs,
 ) -> RuleResult {
-    let resolution_result = apply_generic_resolution::<AHashSet<_>>(premises, args, pool)?;
+    let resolution_result = apply_generic_resolution::<IndexSet<_>>(premises, args, pool)?;
 
-    let conclusion: AHashSet<_> = conclusion.iter().map(Rc::remove_all_negations).collect();
+    let conclusion: IndexSet<_> = conclusion.iter().map(Rc::remove_all_negations).collect();
 
     if let Some(extra) = conclusion.difference(&resolution_result).next() {
         let extra = unremove_all_negations(pool, *extra);
@@ -341,7 +341,7 @@ pub fn strict_resolution(
 fn apply_generic_resolution<'a, C: ClauseCollection<'a>>(
     premises: &'a [Premise],
     args: &'a [ProofArg],
-    pool: &mut TermPool,
+    pool: &mut dyn TermPool,
 ) -> Result<C, CheckerError> {
     assert_num_premises(premises, 2..)?;
     let num_steps = premises.len() - 1;
@@ -377,7 +377,7 @@ fn apply_generic_resolution<'a, C: ClauseCollection<'a>>(
 }
 
 fn binary_resolution<'a, C: ClauseCollection<'a>>(
-    pool: &mut TermPool,
+    pool: &mut dyn TermPool,
     current: &mut C,
     next: &'a [Rc<Term>],
     pivot: ResolutionTerm<'a>,
@@ -551,7 +551,7 @@ pub fn tautology(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult 
     assert_is_bool_constant(&conclusion[0], true)?;
 
     let premise = premises[0].clause;
-    let mut seen = AHashSet::with_capacity(premise.len());
+    let mut seen = IndexSet::with_capacity(premise.len());
     let with_negations_removed = premise.iter().map(Rc::remove_all_negations_with_polarity);
     for (polarity, term) in with_negations_removed {
         if seen.contains(&(!polarity, term)) {
@@ -565,8 +565,8 @@ pub fn tautology(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult 
 pub fn contraction(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_num_premises(premises, 1)?;
 
-    let premise_set: AHashSet<_> = premises[0].clause.iter().collect();
-    let conclusion_set: AHashSet<_> = conclusion.iter().collect();
+    let premise_set: IndexSet<_> = premises[0].clause.iter().collect();
+    let conclusion_set: IndexSet<_> = conclusion.iter().collect();
     if let Some(&t) = premise_set.difference(&conclusion_set).next() {
         Err(CheckerError::ContractionMissingTerm(t.clone()))
     } else if let Some(&t) = conclusion_set.difference(&premise_set).next() {

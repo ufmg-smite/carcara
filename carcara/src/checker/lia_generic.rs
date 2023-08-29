@@ -1,6 +1,6 @@
 use super::*;
-use crate::{checker::error::LiaGenericError, parser};
-use ahash::AHashMap;
+use crate::{checker::error::LiaGenericError, parser, LiaGenericOptions};
+use indexmap::IndexMap;
 use std::{
     io::{BufRead, Write},
     process::{Command, Stdio},
@@ -24,18 +24,19 @@ fn get_problem_string(conclusion: &[Rc<Term>], prelude: &ProblemPrelude) -> Stri
     problem
 }
 
-pub fn lia_generic(
-    pool: &mut TermPool,
+pub fn lia_generic_single_thread(
+    pool: &mut PrimitivePool,
     conclusion: &[Rc<Term>],
     prelude: &ProblemPrelude,
     elaborator: Option<&mut Elaborator>,
     root_id: &str,
+    options: &LiaGenericOptions,
 ) -> bool {
     let problem = get_problem_string(conclusion, prelude);
-    let commands = match get_cvc5_proof(pool, problem) {
+    let commands = match get_solver_proof(pool, problem, options) {
         Ok(c) => c,
         Err(e) => {
-            log::warn!("failed to check `lia_generic` step using cvc5: {}", e);
+            log::warn!("failed to check `lia_generic` step: {}", e);
             if let Some(elaborator) = elaborator {
                 elaborator.unchanged(conclusion);
             }
@@ -44,46 +45,57 @@ pub fn lia_generic(
     };
 
     if let Some(elaborator) = elaborator {
-        insert_cvc5_proof(pool, elaborator, commands, conclusion, root_id);
+        insert_solver_proof(pool, elaborator, commands, conclusion, root_id);
     }
     false
 }
 
-fn get_cvc5_proof(
-    pool: &mut TermPool,
+pub fn lia_generic_multi_thread(
+    conclusion: &[Rc<Term>],
+    prelude: &ProblemPrelude,
+    options: &LiaGenericOptions,
+) -> bool {
+    let mut pool = PrimitivePool::new();
+    let problem = get_problem_string(conclusion, prelude);
+    if let Err(e) = get_solver_proof(&mut pool, problem, options) {
+        log::warn!("failed to check `lia_generic` step using: {}", e);
+        true
+    } else {
+        false
+    }
+}
+
+fn get_solver_proof(
+    pool: &mut PrimitivePool,
     problem: String,
+    options: &LiaGenericOptions,
 ) -> Result<Vec<ProofCommand>, LiaGenericError> {
-    let mut cvc5 = Command::new("cvc5")
-        .args([
-            "--tlimit=10000",
-            "--lang=smt2",
-            "--proof-format-mode=alethe",
-            "--proof-granularity=theory-rewrite",
-            "--proof-alethe-res-pivots",
-        ])
+    let mut process = Command::new(options.solver.as_ref())
+        .args(options.arguments.iter().map(AsRef::as_ref))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(LiaGenericError::FailedSpawnCvc5)?;
+        .map_err(LiaGenericError::FailedSpawnSolver)?;
 
-    cvc5.stdin
+    process
+        .stdin
         .take()
-        .expect("failed to open cvc5 stdin")
+        .expect("failed to open solver stdin")
         .write_all(problem.as_bytes())
-        .map_err(LiaGenericError::FailedWriteToCvc5Stdin)?;
+        .map_err(LiaGenericError::FailedWriteToSolverStdin)?;
 
-    let output = cvc5
+    let output = process
         .wait_with_output()
-        .map_err(LiaGenericError::FailedWaitForCvc5)?;
+        .map_err(LiaGenericError::FailedWaitForSolver)?;
 
     if !output.status.success() {
         if let Ok(s) = std::str::from_utf8(&output.stderr) {
-            if s.contains("cvc5 interrupted by timeout.") {
-                return Err(LiaGenericError::Cvc5Timeout);
+            if s.contains("interrupted by timeout.") {
+                return Err(LiaGenericError::SolverTimeout);
             }
         }
-        return Err(LiaGenericError::Cvc5NonZeroExitCode(output.status.code()));
+        return Err(LiaGenericError::NonZeroExitCode(output.status.code()));
     }
 
     let mut proof = output.stdout.as_slice();
@@ -91,28 +103,28 @@ fn get_cvc5_proof(
 
     proof
         .read_line(&mut first_line)
-        .map_err(|_| LiaGenericError::Cvc5GaveInvalidOutput)?;
+        .map_err(|_| LiaGenericError::SolverGaveInvalidOutput)?;
 
     if first_line.trim_end() != "unsat" {
-        return Err(LiaGenericError::Cvc5OutputNotUnsat);
+        return Err(LiaGenericError::OutputNotUnsat);
     }
 
-    parse_and_check_cvc5_proof(pool, problem.as_bytes(), proof)
+    parse_and_check_solver_proof(pool, problem.as_bytes(), proof)
         .map_err(|e| LiaGenericError::InnerProofError(Box::new(e)))
 }
 
-fn parse_and_check_cvc5_proof(
-    pool: &mut TermPool,
+fn parse_and_check_solver_proof(
+    pool: &mut PrimitivePool,
     problem: &[u8],
     proof: &[u8],
 ) -> CarcaraResult<Vec<ProofCommand>> {
-    let mut parser = parser::Parser::new(pool, problem, true, false, true)?;
+    let mut parser = parser::Parser::new(pool, parser::Config::new(), problem)?;
     let (prelude, premises) = parser.parse_problem()?;
     parser.reset(proof)?;
     let commands = parser.parse_proof()?;
     let proof = Proof { premises, commands };
 
-    ProofChecker::new(pool, Config::new(), prelude).check(&proof)?;
+    ProofChecker::new(pool, Config::new(), &prelude).check(&proof)?;
     Ok(proof.commands)
 }
 
@@ -139,13 +151,13 @@ fn update_premises(commands: &mut [ProofCommand], delta: usize, root_id: &str) {
 }
 
 fn insert_missing_assumes(
-    pool: &mut TermPool,
+    pool: &mut PrimitivePool,
     elaborator: &mut Elaborator,
     conclusion: &[Rc<Term>],
     proof: &[ProofCommand],
     root_id: &str,
 ) -> (Vec<Rc<Term>>, usize) {
-    let mut count_map: AHashMap<&Rc<Term>, usize> = AHashMap::new();
+    let mut count_map: IndexMap<&Rc<Term>, usize> = IndexMap::new();
     for c in conclusion {
         *count_map.entry(c).or_default() += 1;
     }
@@ -179,8 +191,8 @@ fn insert_missing_assumes(
     (all, num_added)
 }
 
-fn insert_cvc5_proof(
-    pool: &mut TermPool,
+fn insert_solver_proof(
+    pool: &mut PrimitivePool,
     elaborator: &mut Elaborator,
     mut commands: Vec<ProofCommand>,
     conclusion: &[Rc<Term>],
@@ -195,7 +207,7 @@ fn insert_cvc5_proof(
         conclusion,
         &commands,
         // This is a bit ugly, but we have to add the ".added" to avoid colliding with the first few
-        // steps in the cvc5 proof
+        // steps in the solver proof
         &format!("{}.added", root_id),
     );
 

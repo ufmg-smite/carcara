@@ -142,7 +142,7 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OnlineMetrics<K, T: MetricsUnit = Duration> {
     total: T,
     count: usize,

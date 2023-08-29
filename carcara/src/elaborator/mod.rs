@@ -1,13 +1,14 @@
 mod accumulator;
-mod deep_eq;
 mod diff;
+mod polyeq;
 mod pruning;
 
-use crate::{ast::*, utils::SymbolTable};
+pub use diff::{apply_diff, CommandDiff, ProofDiff};
+pub use pruning::{prune_proof, slice_proof};
+
+use crate::{ast::*, utils::HashMapStack};
 use accumulator::Accumulator;
-use deep_eq::DeepEqElaborator;
-use diff::{apply_diff, CommandDiff, ProofDiff};
-use pruning::prune_proof;
+use polyeq::PolyeqElaborator;
 
 #[derive(Debug, Default)]
 struct Frame {
@@ -33,7 +34,7 @@ impl Frame {
 #[derive(Debug)]
 pub struct Elaborator {
     stack: Vec<Frame>,
-    seen_clauses: SymbolTable<Vec<Rc<Term>>, usize>,
+    seen_clauses: HashMapStack<Vec<Rc<Term>>, usize>,
     accumulator: Accumulator,
 }
 
@@ -48,7 +49,7 @@ impl Elaborator {
         Self {
             stack: vec![Frame::default()],
             accumulator: Accumulator::new(),
-            seen_clauses: SymbolTable::new(),
+            seen_clauses: HashMapStack::new(),
         }
     }
 
@@ -199,7 +200,7 @@ impl Elaborator {
     /// index must already be mapped to the new index space.
     pub fn add_symm_step(
         &mut self,
-        pool: &mut TermPool,
+        pool: &mut dyn TermPool,
         original_premise: (usize, usize),
         original_equality: (Rc<Term>, Rc<Term>),
         id: String,
@@ -220,7 +221,7 @@ impl Elaborator {
     /// Adds a `refl` step that asserts that the two given terms are equal.
     pub fn add_refl_step(
         &mut self,
-        pool: &mut TermPool,
+        pool: &mut dyn TermPool,
         a: Rc<Term>,
         b: Rc<Term>,
         id: String,
@@ -236,20 +237,20 @@ impl Elaborator {
         self.add_new_step(step)
     }
 
-    pub fn elaborate_deep_eq(
+    pub fn elaborate_polyeq(
         &mut self,
-        pool: &mut TermPool,
+        pool: &mut dyn TermPool,
         root_id: &str,
         a: Rc<Term>,
         b: Rc<Term>,
         is_alpha_equivalence: bool,
     ) -> (usize, usize) {
-        DeepEqElaborator::new(self, root_id, is_alpha_equivalence).elaborate(pool, a, b)
+        PolyeqElaborator::new(self, root_id, is_alpha_equivalence).elaborate(pool, a, b)
     }
 
     pub fn elaborate_assume(
         &mut self,
-        pool: &mut TermPool,
+        pool: &mut dyn TermPool,
         premise: Rc<Term>,
         term: Rc<Term>,
         id: &str,
@@ -261,7 +262,7 @@ impl Elaborator {
             },
             false,
         );
-        let equality_step = self.elaborate_deep_eq(pool, id, premise.clone(), term.clone(), false);
+        let equality_step = self.elaborate_polyeq(pool, id, premise.clone(), term.clone(), false);
         let equiv1_step = {
             let new_id = self.get_new_id(id);
             let clause = vec![build_term!(pool, (not {premise.clone()})), term.clone()];

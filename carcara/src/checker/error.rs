@@ -248,29 +248,29 @@ pub enum LinearArithmeticError {
 
 #[derive(Debug, Error)]
 pub enum LiaGenericError {
-    #[error("failed to spawn cvc5 process")]
-    FailedSpawnCvc5(io::Error),
+    #[error("failed to spawn solver process")]
+    FailedSpawnSolver(io::Error),
 
-    #[error("failed to write to cvc5 stdin")]
-    FailedWriteToCvc5Stdin(io::Error),
+    #[error("failed to write to solver stdin")]
+    FailedWriteToSolverStdin(io::Error),
 
-    #[error("error while waiting for cvc5 to exit")]
-    FailedWaitForCvc5(io::Error),
+    #[error("error while waiting for solver to exit")]
+    FailedWaitForSolver(io::Error),
 
-    #[error("cvc5 gave invalid output")]
-    Cvc5GaveInvalidOutput,
+    #[error("solver gave invalid output")]
+    SolverGaveInvalidOutput,
 
-    #[error("cvc5 output not unsat")]
-    Cvc5OutputNotUnsat,
+    #[error("solver output not unsat")]
+    OutputNotUnsat,
 
-    #[error("cvc5 timed out when solving problem")]
-    Cvc5Timeout,
+    #[error("solver timed out when solving problem")]
+    SolverTimeout,
 
     #[error(
-        "cvc5 returned non-zero exit code: {}",
+        "solver returned non-zero exit code: {}",
         if let Some(i) = .0 { format!("{}", i) } else { "none".to_owned() }
     )]
-    Cvc5NonZeroExitCode(Option<i32>),
+    NonZeroExitCode(Option<i32>),
 
     #[error("error in inner proof: {0}")]
     InnerProofError(Box<crate::Error>),
@@ -281,6 +281,12 @@ pub enum LiaGenericError {
 pub enum SubproofError {
     #[error("discharge must be 'assume' command: '{0}'")]
     DischargeMustBeAssume(String),
+
+    #[error("local assumption '{0}' was not discharged")]
+    LocalAssumeNotDischarged(String),
+
+    #[error("only the `subproof` rule may discharge local assumptions")]
+    DischargeInWrongRule,
 
     #[error("binding '{0}' appears as free variable in phi")]
     BindBindingIsFreeVarInPhi(String),
@@ -330,7 +336,7 @@ impl<'a> fmt::Display for DisplayLinearComb<'a> {
             1 => write_var(f, vars.iter().next().unwrap()),
             _ => {
                 write!(f, "(+")?;
-                for var in vars.iter() {
+                for var in vars {
                     write!(f, " ")?;
                     write_var(f, var)?;
                 }

@@ -1,16 +1,16 @@
 [package]
 name = "carcara"
-version = "1.0.0"
-authors = ["Bruno Andreotti <bandreotti@proton.me>"]
+version = "1.1.0"
+authors = ["Bruno Andreotti <bandreotti@proton.me>", "Vinícius Braga Freire <vinicius.braga.freire@gmail.com>"]
 edition = "2021"
-rust-version = "1.67"
+rust-version = "1.72"
 license = "Apache-2.0"
 
 [dependencies]
-ahash = "0.8.3"
-log = "0.4.17"
-rug = { version = "1.19.2", features = ["integer", "rational"] }
-thiserror = "1.0.40"
+indexmap = "2.0.0"
+log = "0.4.20"
+rug = { version = "1.21.0", features = ["integer", "rational"] }
+thiserror = "1.0.47"
 
 [dev-dependencies]
 test-generator = { path = "../test-generator" }

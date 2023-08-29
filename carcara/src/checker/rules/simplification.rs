@@ -3,7 +3,7 @@ use super::{
     RuleResult,
 };
 use crate::{ast::*, utils::DedupIterator};
-use ahash::{AHashMap, AHashSet};
+use indexmap::{IndexMap, IndexSet};
 use rug::Rational;
 
 /// A macro to define the possible transformations for a "simplify" rule.
@@ -40,15 +40,15 @@ macro_rules! simplify {
 
 fn generic_simplify_rule(
     conclusion: &[Rc<Term>],
-    pool: &mut TermPool,
-    simplify_function: fn(&Term, &mut TermPool) -> Option<Rc<Term>>,
+    pool: &mut dyn TermPool,
+    simplify_function: fn(&Term, &mut dyn TermPool) -> Option<Rc<Term>>,
 ) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
 
     let mut simplify_until_fixed_point =
         |term: &Rc<Term>, goal: &Rc<Term>| -> Result<Rc<Term>, CheckerError> {
             let mut current = term.clone();
-            let mut seen = AHashSet::new();
+            let mut seen = IndexSet::new();
             loop {
                 if !seen.insert(current.clone()) {
                     return Err(CheckerError::CycleInSimplification(current));
@@ -160,7 +160,7 @@ pub fn eq_simplify(args: RuleArgs) -> RuleResult {
 /// Used for both the `and_simplify` and `or_simplify` rules, depending on `rule_kind`. `rule_kind`
 /// has to be either `Operator::And` or `Operator::Or`.
 fn generic_and_or_simplify(
-    pool: &mut TermPool,
+    pool: &mut dyn TermPool,
     conclusion: &[Rc<Term>],
     rule_kind: Operator,
 ) -> RuleResult {
@@ -213,14 +213,14 @@ fn generic_and_or_simplify(
     // Then, we remove all duplicate terms. We do this in place to avoid another allocation.
     // Similarly to the step that removes the "skip term", we check if we already found the result
     // after this step. This is also necessary in some examples
-    let mut seen = AHashSet::with_capacity(phis.len());
+    let mut seen = IndexSet::with_capacity(phis.len());
     phis.retain(|t| seen.insert(t.clone()));
     if result_args.iter().eq(&phis) {
         return Ok(());
     }
 
     // Finally, we check to see if the result was short-circuited
-    let seen: AHashSet<(bool, &Rc<Term>)> = phis
+    let seen: IndexSet<(bool, &Rc<Term>)> = phis
         .iter()
         .map(Rc::remove_all_negations_with_polarity)
         .collect();
@@ -349,10 +349,10 @@ pub fn equiv_simplify(args: RuleArgs) -> RuleResult {
             (= phi_1 false): (phi_1, _) => build_term!(pool, (not {phi_1.clone()})),
 
             // This is a special case for the `equiv_simplify` rule that was added to make
-            // elaboration of deep equalities less verbose. This transformation can very easily lead
-            // to cycles, so it must always be the last transformation rule. Unfortunately, this
-            // means that failed simplifications in the `equiv_simplify` rule will frequently reach
-            // this transformation and reach a cycle, in which case the error message may be a bit
+            // elaboration of polyequality less verbose. This transformation can very easily lead to
+            // cycles, so it must always be the last transformation rule. Unfortunately, this means
+            // that failed simplifications in the `equiv_simplify` rule will frequently reach this
+            // transformation and reach a cycle, in which case the error message may be a bit
             // confusing.
             //
             // phi_1 = phi_2 => phi_2 = phi_1
@@ -407,7 +407,7 @@ pub fn bool_simplify(args: RuleArgs) -> RuleResult {
 pub fn qnt_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
-    let (_, _, inner) = left.unwrap_quant_err()?;
+    let (_, _, inner) = left.as_quant_err()?;
     rassert!(
         inner.is_bool_false() || inner.is_bool_true(),
         CheckerError::ExpectedAnyBoolConstant(inner.clone())
@@ -430,7 +430,7 @@ pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
             CheckerError::ExpectedNumber(Rational::new(), right.clone())
         );
         Ok(())
-    } else if t_2.as_number().map_or(false, |n| n == 1) {
+    } else if t_2.as_number().is_some_and(|n| n == 1) {
         assert_eq(right, t_1)
     } else {
         let expected = t_1.as_signed_number_err()? / t_2.as_signed_number_err()?;
@@ -445,7 +445,7 @@ pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 /// Used for both the `sum_simplify` and `prod_simplify` rules, depending on `rule_kind`.
 /// `rule_kind` has to be either `Operator::Add` or `Operator::Mult`.
 fn generic_sum_prod_simplify_rule(
-    pool: &mut TermPool,
+    pool: &mut dyn TermPool,
     ts: &Rc<Term>,
     u: &Rc<Term>,
     rule_kind: Operator,
@@ -531,7 +531,7 @@ fn generic_sum_prod_simplify_rule(
     // Finally, we verify that the constant and the remaining arguments are what we expect
     rassert!(u_constant == constant_total && u_args.iter().eq(result), {
         let expected = {
-            let mut expected_args = vec![pool.add(Term::Terminal(Terminal::Real(constant_total)))];
+            let mut expected_args = vec![pool.add(Term::new_real(constant_total))];
             expected_args.extend(u_args.iter().cloned());
             pool.add(Term::Op(rule_kind, expected_args))
         };
@@ -557,7 +557,7 @@ pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     // the `minus_simplify` and the `unary_minus_simplify` rules
     fn try_unary_minus_simplify(t: &Rc<Term>, u: &Rc<Term>) -> bool {
         // First case of `unary_minus_simplify`
-        if match_term!((-(-t)) = t).map_or(false, |t| t == u) {
+        if match_term!((-(-t)) = t) == Some(u) {
             return true;
         }
 
@@ -667,8 +667,8 @@ pub fn comp_simplify(args: RuleArgs) -> RuleResult {
 }
 
 fn apply_ac_simp(
-    pool: &mut TermPool,
-    cache: &mut AHashMap<Rc<Term>, Rc<Term>>,
+    pool: &mut dyn TermPool,
+    cache: &mut IndexMap<Rc<Term>, Rc<Term>>,
     term: &Rc<Term>,
 ) -> Rc<Term> {
     if let Some(t) = cache.get(term) {
@@ -723,7 +723,7 @@ pub fn ac_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     let (original, flattened) = match_term_err!((= psi phis) = &conclusion[0])?;
     assert_eq(
         flattened,
-        &apply_ac_simp(pool, &mut AHashMap::new(), original),
+        &apply_ac_simp(pool, &mut IndexMap::new(), original),
     )
 }
 

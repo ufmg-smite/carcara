@@ -1,17 +1,13 @@
 use super::{
-    assert_clause_len, assert_deep_eq_is_expected, assert_eq, assert_is_expected, assert_num_args,
+    assert_clause_len, assert_eq, assert_is_expected, assert_num_args, assert_polyeq_expected,
     CheckerError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::QuantifierError, utils::DedupIterator};
-use ahash::{AHashMap, AHashSet};
+use indexmap::{IndexMap, IndexSet};
 
 pub fn forall_inst(
     RuleArgs {
-        conclusion,
-        args,
-        pool,
-        deep_eq_time,
-        ..
+        conclusion, args, pool, polyeq_time, ..
     }: RuleArgs,
 ) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
@@ -23,12 +19,12 @@ pub fn forall_inst(
 
     // Since the bindings and arguments may not be in the same order, we collect the bindings into
     // a hash set, and remove each binding from it as we find the associated argument
-    let mut bindings: AHashSet<_> = bindings.iter().cloned().collect();
-    let substitution: AHashMap<_, _> = args
+    let mut bindings: IndexSet<_> = bindings.iter().cloned().collect();
+    let substitution: IndexMap<_, _> = args
         .iter()
         .map(|arg| {
             let (arg_name, arg_value) = arg.as_assign()?;
-            let arg_sort = pool.add(Term::Sort(pool.sort(arg_value).clone()));
+            let arg_sort = pool.sort(arg_value);
             rassert!(
                 bindings.remove(&(arg_name.clone(), arg_sort.clone())),
                 QuantifierError::NoBindingMatchesArg(arg_name.clone())
@@ -46,10 +42,9 @@ pub fn forall_inst(
         QuantifierError::NoArgGivenForBinding(bindings.iter().next().unwrap().0.clone())
     );
 
-    // Equalities may be reordered in the final term, so we need to use deep equality modulo
-    // reordering
+    // Equalities may be reordered in the final term, so we need to compare for polyequality here
     let expected = substitution.apply(pool, original);
-    assert_deep_eq_is_expected(substituted, expected, deep_eq_time)
+    assert_polyeq_expected(substituted, expected, polyeq_time)
 }
 
 pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
@@ -57,9 +52,9 @@ pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
 
-    let (q_1, bindings_1, left) = left.unwrap_quant_err()?;
-    let (q_2, bindings_2, left) = left.unwrap_quant_err()?;
-    let (q_3, bindings_3, right) = right.unwrap_quant_err()?;
+    let (q_1, bindings_1, left) = left.as_quant_err()?;
+    let (q_2, bindings_2, left) = left.as_quant_err()?;
+    let (q_3, bindings_3, right) = right.as_quant_err()?;
 
     assert_eq(&q_1, &q_2)?;
     assert_eq(&q_2, &q_3)?;
@@ -81,9 +76,9 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
     assert_clause_len(conclusion, 1)?;
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
-    let (q_1, bindings_1, phi_1) = left.unwrap_quant_err()?;
+    let (q_1, bindings_1, phi_1) = left.as_quant_err()?;
 
-    let (bindings_2, phi_2) = match right.unwrap_quant() {
+    let (bindings_2, phi_2) = match right.as_quant() {
         Some((q_2, b, t)) => {
             assert_eq(&q_1, &q_2)?;
             (b, t)
@@ -96,7 +91,7 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
     assert_eq(phi_1, phi_2)?;
 
     // Cloning here may be unnecessary
-    let free_vars = pool.free_vars(phi_1).clone();
+    let free_vars = pool.free_vars(phi_1);
 
     let expected: Vec<_> = bindings_1
         .iter()
@@ -112,10 +107,10 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
 
 /// Converts a term into negation normal form, expanding all connectives.
 fn negation_normal_form(
-    pool: &mut TermPool,
+    pool: &mut dyn TermPool,
     term: &Rc<Term>,
     polarity: bool,
-    cache: &mut AHashMap<(Rc<Term>, bool), Rc<Term>>,
+    cache: &mut IndexMap<(Rc<Term>, bool), Rc<Term>>,
 ) -> Rc<Term> {
     if let Some(v) = cache.get(&(term.clone(), polarity)) {
         return v.clone();
@@ -153,13 +148,13 @@ fn negation_normal_form(
             true => build_term!(pool, (and (or {a} {b}) (or {c} {d}))),
             false => build_term!(pool, (or (and {a} {b}) (and {c} {d}))),
         }
-    } else if let Some((quant, bindings, inner)) = term.unwrap_quant() {
+    } else if let Some((quant, bindings, inner)) = term.as_quant() {
         let quant = if polarity { quant } else { !quant };
         let inner = negation_normal_form(pool, inner, polarity, cache);
         pool.add(Term::Quant(quant, bindings.clone(), inner))
     } else {
         match match_term!((= p q) = term) {
-            Some((left, right)) if *pool.sort(left) == Sort::Bool => {
+            Some((left, right)) if pool.sort(left).as_sort().unwrap() == &Sort::Bool => {
                 let a = negation_normal_form(pool, left, !polarity, cache);
                 let b = negation_normal_form(pool, right, polarity, cache);
                 let c = negation_normal_form(pool, right, !polarity, cache);
@@ -221,7 +216,7 @@ fn distribute(formulas: &[CnfFormula]) -> CnfFormula {
 
 /// Prenex all universal quantifiers in a term. This doesn't prenex existential quantifiers. This
 /// assumes the term is in negation normal form.
-fn prenex_forall<C>(pool: &mut TermPool, acc: &mut C, term: &Rc<Term>) -> Rc<Term>
+fn prenex_forall<C>(pool: &mut dyn TermPool, acc: &mut C, term: &Rc<Term>) -> Rc<Term>
 where
     C: Extend<SortedVar>,
 {
@@ -265,8 +260,8 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
     let (l_bindings, phi, r_bindings, phi_prime) = {
         let (l, r) = match_term_err!((or (not l) r) = &conclusion[0])?;
-        let (l_q, l_b, phi) = l.unwrap_quant_err()?;
-        let (r_q, r_b, phi_prime) = r.unwrap_quant_err()?;
+        let (l_q, l_b, phi) = l.as_quant_err()?;
+        let (r_q, r_b, phi_prime) = r.as_quant_err()?;
 
         // We expect both quantifiers to be `forall`
         assert_is_expected(&l_q, Quantifier::Forall)?;
@@ -275,10 +270,10 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         (l_b, phi, r_b, phi_prime)
     };
 
-    let r_bindings = r_bindings.iter().cloned().collect::<AHashSet<_>>();
-    let mut new_bindings = l_bindings.iter().cloned().collect::<AHashSet<_>>();
+    let r_bindings = r_bindings.iter().cloned().collect::<IndexSet<_>>();
+    let mut new_bindings = l_bindings.iter().cloned().collect::<IndexSet<_>>();
     let clauses: Vec<_> = {
-        let nnf = negation_normal_form(pool, phi, true, &mut AHashMap::new());
+        let nnf = negation_normal_form(pool, phi, true, &mut IndexMap::new());
         let prenexed = prenex_forall(pool, &mut new_bindings, &nnf);
         let cnf = conjunctive_normal_form(&prenexed);
         cnf.into_iter()
@@ -292,7 +287,7 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
     // `new_bindings` contains all bindings that existed in the original term, plus all bindings
     // added by the prenexing step. All bindings in the right side must be in this set
-    if let Some((var, _)) = r_bindings.iter().find(|b| !new_bindings.contains(b)) {
+    if let Some((var, _)) = r_bindings.iter().find(|&b| !new_bindings.contains(b)) {
         return Err(CheckerError::Quant(
             QuantifierError::CnfNewBindingIntroduced(var.clone()),
         ));
@@ -304,7 +299,7 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         .ok_or_else(|| QuantifierError::ClauseDoesntAppearInCnf(phi_prime.clone()))?;
 
     // Cloning here may be unnecessary
-    let free_vars = pool.free_vars(selected_clause).clone();
+    let free_vars = pool.free_vars(selected_clause);
 
     // While all bindings in `r_bindings` must also be in `new_bindings`, the same is not true in
     // the opposite direction. That is because some variables from the set may be omitted in the
@@ -469,8 +464,8 @@ mod tests {
         use super::*;
         use crate::parser::tests::*;
 
-        fn to_cnf_term(pool: &mut TermPool, term: &Rc<Term>) -> Rc<Term> {
-            let nnf = negation_normal_form(pool, term, true, &mut AHashMap::new());
+        fn to_cnf_term(pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term> {
+            let nnf = negation_normal_form(pool, term, true, &mut IndexMap::new());
             let mut bindings = Vec::new();
             let prenexed = prenex_forall(pool, &mut bindings, &nnf);
             let cnf = conjunctive_normal_form(&prenexed);
@@ -502,7 +497,7 @@ mod tests {
 
         fn run_tests(definitions: &str, cases: &[(&str, &str)]) {
             for &(term, expected) in cases {
-                let mut pool = TermPool::new();
+                let mut pool = crate::ast::pool::PrimitivePool::new();
                 let [term, expected] = parse_terms(&mut pool, definitions, [term, expected]);
                 let got = to_cnf_term(&mut pool, &term);
                 assert_eq!(expected, got);

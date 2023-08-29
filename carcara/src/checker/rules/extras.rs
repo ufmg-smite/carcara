@@ -5,7 +5,7 @@ use super::{
     EqualityError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::rules::assert_operation_len};
-use ahash::AHashSet;
+use indexmap::IndexSet;
 
 pub fn reordering(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_num_premises(premises, 1)?;
@@ -13,8 +13,8 @@ pub fn reordering(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult
     let premise = premises[0].clause;
     assert_clause_len(conclusion, premise.len())?;
 
-    let premise_set: AHashSet<_> = premise.iter().collect();
-    let conclusion_set: AHashSet<_> = conclusion.iter().collect();
+    let premise_set: IndexSet<_> = premise.iter().collect();
+    let conclusion_set: IndexSet<_> = conclusion.iter().collect();
     if let Some(&t) = premise_set.difference(&conclusion_set).next() {
         Err(CheckerError::ContractionMissingTerm(t.clone()))
     } else if let Some(&t) = conclusion_set.difference(&premise_set).next() {
@@ -80,8 +80,8 @@ pub fn bind_let(
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
 
-    let (l_bindings, left) = left.unwrap_let_err()?;
-    let (r_bindings, right) = right.unwrap_let_err()?;
+    let (l_bindings, left) = left.as_let_err()?;
+    let (r_bindings, right) = right.as_let_err()?;
 
     if l_bindings.len() != r_bindings.len() {
         return Err(EqualityError::ExpectedEqual(l_bindings.clone(), r_bindings.clone()).into());
@@ -149,7 +149,7 @@ fn la_mult_generic(conclusion: &[Rc<Term>], is_pos: bool) -> RuleResult {
         CheckerError::ExpectedNumber(Rational::new(), zero.clone())
     );
 
-    let (op, args) = original.unwrap_op_err()?;
+    let (op, args) = original.as_op_err()?;
     assert_operation_len(op, args, 2)?;
     let (l, r) = (&args[0], &args[1]);
 
@@ -317,7 +317,7 @@ mod tests {
                 (step t1.t1 (cl (= x y)) :rule hole)
                 (step t1 (cl (= (let ((a 0)) x) (let ((b 0)) y))) :rule bind_let)": false,
             }
-            "Deep equality in variable values" {
+            "Polyequality in variable values" {
                 "(anchor :step t1 :args ((x Int) (y Int)))
                 (step t1.t1 (cl (= (= 0 1) (= 1 0))) :rule hole)
                 (step t1.t2 (cl (= x y)) :rule hole)

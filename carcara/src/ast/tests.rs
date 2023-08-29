@@ -1,18 +1,18 @@
-use crate::{ast::TermPool, parser::tests::parse_terms};
-use ahash::AHashSet;
+use crate::{
+    ast::{pool::PrimitivePool, TermPool},
+    parser::tests::parse_terms,
+};
+use indexmap::IndexSet;
 
 #[test]
 fn test_free_vars() {
     fn run_tests(definitions: &str, cases: &[(&str, &[&str])]) {
         for &(term, expected) in cases {
-            let mut pool = TermPool::new();
+            let mut pool = PrimitivePool::new();
             let [root] = parse_terms(&mut pool, definitions, [term]);
-            let expected: AHashSet<_> = expected.iter().copied().collect();
-            let got: AHashSet<_> = pool
-                .free_vars(&root)
-                .iter()
-                .map(|t| t.as_var().unwrap())
-                .collect();
+            let expected: IndexSet<_> = expected.iter().copied().collect();
+            let set = pool.free_vars(&root);
+            let got: IndexSet<_> = set.iter().map(|t| t.as_var().unwrap()).collect();
 
             assert_eq!(expected, got);
         }
@@ -37,23 +37,23 @@ fn test_free_vars() {
 }
 
 #[test]
-fn test_deep_eq() {
+fn test_polyeq() {
     enum TestType {
-        ModReordering,
+        Polyeq,
         AlphaEquiv,
     }
 
     fn run_tests(definitions: &str, cases: &[(&str, &str)], test_type: TestType) {
-        let mut pool = TermPool::new();
+        let mut pool = PrimitivePool::new();
         for (a, b) in cases {
             let [a, b] = parse_terms(&mut pool, definitions, [a, b]);
             let mut time = std::time::Duration::ZERO;
             match test_type {
-                TestType::ModReordering => {
-                    assert!(super::deep_eq::deep_eq(&a, &b, &mut time));
+                TestType::Polyeq => {
+                    assert!(super::polyeq::polyeq(&a, &b, &mut time));
                 }
                 TestType::AlphaEquiv => {
-                    assert!(super::deep_eq::are_alpha_equivalent(&a, &b, &mut time));
+                    assert!(super::polyeq::alpha_equiv(&a, &b, &mut time));
                 }
             }
         }
@@ -77,7 +77,7 @@ fn test_deep_eq() {
                 "(ite (= b a) (= (+ x y) x) (and p (not (= y x))))",
             ),
         ],
-        TestType::ModReordering,
+        TestType::Polyeq,
     );
     run_tests(
         definitions,
