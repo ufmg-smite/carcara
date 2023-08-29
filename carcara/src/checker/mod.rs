@@ -48,7 +48,7 @@ impl<CR: CollectResults + Send + Default> fmt::Debug for CheckerStatistics<'_, C
 #[derive(Debug, Default, Clone)]
 pub struct Config {
     strict: bool,
-    skip_unknown_rules: bool,
+    ignore_unknown_rules: bool,
     lia_options: Option<LiaGenericOptions>,
 }
 
@@ -62,8 +62,8 @@ impl Config {
         self
     }
 
-    pub fn skip_unknown_rules(mut self, value: bool) -> Self {
-        self.skip_unknown_rules = value;
+    pub fn ignore_unknown_rules(mut self, value: bool) -> Self {
+        self.ignore_unknown_rules = value;
         self
     }
 
@@ -361,7 +361,7 @@ impl<'c> ProofChecker<'c> {
         } else {
             let rule = match Self::get_rule(&step.rule, self.config.strict) {
                 Some(r) => r,
-                None if self.config.skip_unknown_rules => {
+                None if self.config.ignore_unknown_rules => {
                     self.is_holey = true;
                     if let Some(elaborator) = &mut self.elaborator {
                         elaborator.unchanged(&step.clause);

@@ -123,8 +123,12 @@ struct CheckingOptions {
     #[clap(short, long)]
     strict: bool,
 
-    /// Skips rules that are not known by the checker.
-    #[clap(long)]
+    /// Allow steps with rules that are not known by the checker, and consider them as holes.
+    #[clap(short, long)]
+    ignore_unknown_rules: bool,
+
+    // Note: the `--skip-unknown-rules` flag has been deprecated in favor of `--ignore-unknown-rules`
+    #[clap(long, conflicts_with("ignore-unknown-rules"), hide = true)]
     skip_unknown_rules: bool,
 
     /// Check `lia_generic` steps using the provided solver.
@@ -161,6 +165,7 @@ fn build_carcara_options(
     }: ParsingOptions,
     CheckingOptions {
         strict,
+        ignore_unknown_rules,
         skip_unknown_rules,
         lia_solver,
         lia_via_cvc5,
@@ -181,7 +186,7 @@ fn build_carcara_options(
         allow_int_real_subtyping,
         lia_options,
         strict,
-        skip_unknown_rules,
+        ignore_unknown_rules: ignore_unknown_rules || skip_unknown_rules,
         stats,
     }
 }
@@ -328,8 +333,16 @@ fn main() {
     | Command::Elaborate(ElaborateCommandOptions { checking, .. })
     | Command::Bench(BenchCommandOptions { checking, .. }) = &cli.command
     {
+        if checking.skip_unknown_rules {
+            log::warn!(
+                "the `--skip-unknown-rules` option is deprecated, please use \
+                `--ignore-unknown-rules` instead"
+            )
+        }
         if checking.lia_via_cvc5 {
-            log::warn!("`--lia-via-cvc5` option is deprecated, please use `--lia-solver cvc5`")
+            log::warn!(
+                "the `--lia-via-cvc5` option is deprecated, please use `--lia-solver cvc5` instead"
+            )
         }
     }
 

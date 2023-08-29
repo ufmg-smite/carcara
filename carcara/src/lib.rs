@@ -90,9 +90,9 @@ pub struct CarcaraOptions {
     /// benefit).
     pub strict: bool,
 
-    /// If `true`, Carcara will skip any rules that it does not recognize, and will consider them as
+    /// If `true`, Carcara will skip any steps with rules that it does not recognize, and will consider them as
     /// holes. Normally, using an unknown rule is considered an error.
-    pub skip_unknown_rules: bool,
+    pub ignore_unknown_rules: bool,
 
     /// If `true`, Carcará will log the check and elaboration statistics of any
     /// `check` or `check_and_elaborate` run. If `false` no statistics are logged.
@@ -163,7 +163,7 @@ pub fn check<T: io::BufRead>(problem: T, proof: T, options: CarcaraOptions) -> R
 
     let config = checker::Config::new()
         .strict(options.strict)
-        .skip_unknown_rules(options.skip_unknown_rules)
+        .ignore_unknown_rules(options.ignore_unknown_rules)
         .lia_options(options.lia_options);
 
     // Checking
@@ -228,7 +228,7 @@ pub fn check_parallel<T: io::BufRead>(
 
     let config = checker::Config::new()
         .strict(options.strict)
-        .skip_unknown_rules(options.skip_unknown_rules)
+        .ignore_unknown_rules(options.ignore_unknown_rules)
         .lia_options(options.lia_options);
 
     // Checking
@@ -298,7 +298,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
 
     let config = checker::Config::new()
         .strict(options.strict)
-        .skip_unknown_rules(options.skip_unknown_rules)
+        .ignore_unknown_rules(options.ignore_unknown_rules)
         .lia_options(options.lia_options);
 
     // Checking

@@ -437,7 +437,7 @@ impl<'c> ParallelProofChecker<'c> {
         } else {
             let rule = match ProofChecker::get_rule(&step.rule, self.config.strict) {
                 Some(r) => r,
-                None if self.config.skip_unknown_rules => {
+                None if self.config.ignore_unknown_rules => {
                     self.is_holey = true;
                     return Ok(());
                 }
