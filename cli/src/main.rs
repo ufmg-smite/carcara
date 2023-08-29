@@ -269,9 +269,9 @@ struct BenchCommandOptions {
     #[clap(short, long, default_value_t = 1)]
     num_runs: usize,
 
-    /// Number of threads to use when running the benchmark.
+    /// Number of jobs to run simultaneously when running the benchmark.
     #[clap(short = 'j', long, default_value_t = 1)]
-    num_threads: usize,
+    num_jobs: usize,
 
     /// Show benchmark results sorted by total time taken, instead of by average time taken.
     #[clap(short = 't', long)]
@@ -454,7 +454,7 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         benchmarking::run_csv_benchmark(
             &instances,
             options.num_runs,
-            options.num_threads,
+            options.num_jobs,
             &carc_options,
             options.elaborate,
             &mut File::create("runs.csv")?,
@@ -466,7 +466,7 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
     let results: OnlineBenchmarkResults = benchmarking::run_benchmark(
         &instances,
         options.num_runs,
-        options.num_threads,
+        options.num_jobs,
         &carc_options,
         options.elaborate,
     );

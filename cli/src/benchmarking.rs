@@ -109,7 +109,7 @@ fn worker_thread<T: CollectResults + Default + Send>(
 pub fn run_benchmark<T: CollectResults + Default + Send>(
     instances: &[(PathBuf, PathBuf)],
     num_runs: usize,
-    num_threads: usize,
+    num_jobs: usize,
     options: &CarcaraOptions,
     elaborate: bool,
 ) -> T {
@@ -133,7 +133,7 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
         // We of course need to `collect` here to ensure we spawn all threads before starting to
         // `join` them
         #[allow(clippy::needless_collect)]
-        let workers: Vec<_> = (0..num_threads)
+        let workers: Vec<_> = (0..num_jobs)
             .map(|_| {
                 thread::Builder::new()
                     .stack_size(STACK_SIZE)
@@ -153,14 +153,14 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
 pub fn run_csv_benchmark(
     instances: &[(PathBuf, PathBuf)],
     num_runs: usize,
-    num_threads: usize,
+    num_jobs: usize,
     options: &CarcaraOptions,
     elaborate: bool,
     runs_dest: &mut dyn io::Write,
     by_rule_dest: &mut dyn io::Write,
 ) -> io::Result<()> {
     let result: CsvBenchmarkResults =
-        run_benchmark(instances, num_runs, num_threads, options, elaborate);
+        run_benchmark(instances, num_runs, num_jobs, options, elaborate);
     println!(
         "{} errors encountered during benchmark",
         result.num_errors()
