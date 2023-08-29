@@ -139,21 +139,25 @@ impl OnlineBenchmarkResults {
 
     /// Prints the benchmark results
     pub fn print(&self, sort_by_total: bool) {
-        let [parsing, checking, elaborating, scheduling, accounted_for, total] = [
-            self.parsing(),
-            self.checking(),
-            self.elaborating(),
-            self.scheduling(),
-            self.total_accounted_for(),
-            self.total(),
-        ]
-        .map(|m| {
-            if sort_by_total {
-                format!("{:#}", m)
-            } else {
-                format!("{}", m)
-            }
-        });
+        let [parsing, checking, elaborating, scheduling, accounted_for, total, assume_time, assume_core_time, polyeq_time] =
+            [
+                self.parsing(),
+                self.checking(),
+                self.elaborating(),
+                self.scheduling(),
+                self.total_accounted_for(),
+                self.total(),
+                &self.assume_time,
+                &self.assume_core_time,
+                &self.polyeq_time,
+            ]
+            .map(|m| {
+                if sort_by_total {
+                    format!("{:#}", m)
+                } else {
+                    format!("{}", m)
+                }
+            });
 
         println!("parsing:             {}", parsing);
         println!("checking:            {}", checking);
@@ -161,19 +165,21 @@ impl OnlineBenchmarkResults {
             println!("elaborating:         {}", elaborating);
         }
         println!("scheduling:          {}", scheduling);
+
         println!(
             "on assume:           {} ({:.02}% of checking time)",
-            self.assume_time,
+            assume_time,
             100.0 * self.assume_time.mean().as_secs_f64() / self.checking().mean().as_secs_f64(),
         );
-        println!("on assume (core):    {}", self.assume_core_time);
+        println!("on assume (core):    {}", assume_core_time);
         println!("assume ratio:        {}", self.assume_time_ratio);
         println!(
             "on polyeq:           {} ({:.02}% of checking time)",
-            self.polyeq_time,
+            polyeq_time,
             100.0 * self.polyeq_time.mean().as_secs_f64() / self.checking().mean().as_secs_f64(),
         );
         println!("polyeq ratio:        {}", self.polyeq_time_ratio);
+
         println!("total accounted for: {}", accounted_for);
         println!("total:               {}", total);
 
