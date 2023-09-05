@@ -433,7 +433,11 @@ pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     } else if t_2.as_number().is_some_and(|n| n == 1) {
         assert_eq(right, t_1)
     } else {
-        let expected = t_1.as_signed_number_err()? / t_2.as_signed_number_err()?;
+        let t_2 = t_2.as_signed_number_err()?;
+        if t_2.is_zero() {
+            return Err(CheckerError::DivOrModByZero);
+        }
+        let expected = t_1.as_signed_number_err()? / t_2;
         rassert!(
             right.as_fraction_err()? == expected,
             CheckerError::ExpectedNumber(expected, right.clone())
@@ -745,7 +749,9 @@ pub fn mod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 
     let result = right.as_signed_number_err()?;
 
-    // TODO: check for modulo by zero
+    if b.is_zero() {
+        return Err(CheckerError::DivOrModByZero);
+    }
 
     let expected = a.modulo(&b);
     rassert!(
@@ -1222,6 +1228,10 @@ mod tests {
                 "(step t1 (cl (= (/ 1.0 2.0) 0.5)) :rule div_simplify)": true,
                 "(step t1 (cl (= (/ 2.0 20.0) (/ 1.0 10.0))) :rule div_simplify)": true,
             }
+            "Division by zero" {
+                "(step t1 (cl (= (div 3 0) 1)) :rule div_simplify)": false,
+                "(step t1 (cl (= (/ 3.0 0.0) 1.0)) :rule div_simplify)": false,
+            }
         }
     }
 
@@ -1462,6 +1472,9 @@ mod tests {
                 "(step t1 (cl (= (mod (- 8) (- 3)) 1)) :rule mod_simplify)": true,
                 "(step t1 (cl (= (mod 8 (- 3)) 2)) :rule mod_simplify)": true,
                 "(step t1 (cl (= (mod 8 (- 3)) (- 1))) :rule mod_simplify)": false,
+            }
+            "Modulo by zero" {
+                "(step t1 (cl (= (mod 3 0) 1)) :rule mod_simplify)": false,
             }
         }
     }

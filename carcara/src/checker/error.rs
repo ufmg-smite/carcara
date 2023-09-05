@@ -126,6 +126,9 @@ pub enum CheckerError {
     #[error("this rule can only be used in the last step of a subproof")]
     MustBeLastStepInSubproof,
 
+    #[error("division or modulo by zero")]
+    DivOrModByZero,
+
     // Equality errors
     #[error(transparent)]
     TermEquality(#[from] EqualityError<Rc<Term>>),
