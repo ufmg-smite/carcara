@@ -727,6 +727,34 @@ pub fn ac_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     )
 }
 
+pub fn mod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
+    let (t1, t2) = match_term_err!((mod t1 t2) = left)?;
+
+    let [a, b] = [t1, t2].map(|term| {
+        let value = term.as_signed_number_err()?;
+        if !value.is_integer() {
+            return Err(CheckerError::ExpectedInteger(term.clone()));
+        }
+        Ok(value.into_numer_denom().0)
+    });
+    // I wouldn't need to do this if `array_try_map` was stable:
+    // https://github.com/rust-lang/rust/issues/79711
+    let [a, b] = [a?, b?];
+
+    let result = right.as_signed_number_err()?;
+
+    // TODO: check for modulo by zero
+
+    let expected = a.modulo(&b);
+    rassert!(
+        result == expected,
+        CheckerError::ExpectedNumber(expected.into(), right.clone())
+    );
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -1417,6 +1445,23 @@ mod tests {
                 "(step t1 (cl (= (or p p q r s) (or p q r s))) :rule ac_simp)": true,
                 "(step t1 (cl (= (and (and p q) (and q r)) (and p q r))) :rule ac_simp)": true,
                 "(step t1 (cl (= (and (and p q) (and q r)) (and p q q r))) :rule ac_simp)": false,
+            }
+        }
+    }
+
+    #[test]
+    fn mod_simplify() {
+        test_cases! {
+            definitions = "",
+            "Simple working examples" {
+                "(step t1 (cl (= (mod 2 2) 0)) :rule mod_simplify)": true,
+                "(step t1 (cl (= (mod 42 8) 2)) :rule mod_simplify)": true,
+            }
+            "Negative numbers" {
+                "(step t1 (cl (= (mod (- 13) 7) 1)) :rule mod_simplify)": true,
+                "(step t1 (cl (= (mod (- 8) (- 3)) 1)) :rule mod_simplify)": true,
+                "(step t1 (cl (= (mod 8 (- 3)) 2)) :rule mod_simplify)": true,
+                "(step t1 (cl (= (mod 8 (- 3)) (- 1))) :rule mod_simplify)": false,
             }
         }
     }

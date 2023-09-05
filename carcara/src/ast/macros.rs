@@ -138,6 +138,7 @@ macro_rules! match_term {
     (@GET_VARIANT *)        => { $crate::ast::Operator::Mult };
     (@GET_VARIANT div)      => { $crate::ast::Operator::IntDiv };
     (@GET_VARIANT /)        => { $crate::ast::Operator::RealDiv };
+    (@GET_VARIANT mod)      => { $crate::ast::Operator::Mod };
     (@GET_VARIANT <)        => { $crate::ast::Operator::LessThan };
     (@GET_VARIANT >)        => { $crate::ast::Operator::GreaterThan };
     (@GET_VARIANT <=)       => { $crate::ast::Operator::LessEq };

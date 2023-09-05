@@ -105,6 +105,9 @@ pub enum CheckerError {
     #[error("expected term '{0}' to be a numerical constant")]
     ExpectedAnyNumber(Rc<Term>),
 
+    #[error("expected term '{0}' to be an integer constant")]
+    ExpectedInteger(Rc<Term>),
+
     #[error("expected operation term, got '{0}'")]
     ExpectedOperationTerm(Rc<Term>),
 
