@@ -419,25 +419,33 @@ pub fn qnt_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
-    let (t_1, t_2) = match match_term!((div n d) = left) {
-        Some(v) => Ok(v),
-        None => match_term_err!((/ n d) = left),
-    }?;
 
-    if t_1 == t_2 {
+    let ((numer, denom), is_int_div) = match match_term!((div n d) = left) {
+        Some(v) => (v, true),
+        None => (match_term_err!((/ n d) = left)?, false),
+    };
+
+    if numer == denom {
         rassert!(
             right.as_signed_number_err()? == 1,
             CheckerError::ExpectedNumber(Rational::new(), right.clone())
         );
         Ok(())
-    } else if t_2.as_number().is_some_and(|n| n == 1) {
-        assert_eq(right, t_1)
+    } else if denom.as_number().is_some_and(|n| n == 1) {
+        assert_eq(right, numer)
     } else {
-        let t_2 = t_2.as_signed_number_err()?;
-        if t_2.is_zero() {
+        let denom = denom.as_signed_number_err()?;
+        if denom.is_zero() {
             return Err(CheckerError::DivOrModByZero);
         }
-        let expected = t_1.as_signed_number_err()? / t_2;
+        let numer = numer.as_signed_number_err()?;
+        let expected = if is_int_div {
+            assert!(numer.is_integer() && denom.is_integer()); // This is guaranteed by the Alethe typing rules
+            let [numer, denom] = [numer, denom].map(|n| n.into_numer_denom().0);
+            Rational::from(numer.div_rem_floor(denom).0)
+        } else {
+            numer / denom
+        };
         rassert!(
             right.as_fraction_err()? == expected,
             CheckerError::ExpectedNumber(expected, right.clone())
@@ -1201,6 +1209,9 @@ mod tests {
             "Division by zero" {
                 "(step t1 (cl (= (div 3 0) 1)) :rule div_simplify)": false,
                 "(step t1 (cl (= (/ 3.0 0.0) 1.0)) :rule div_simplify)": false,
+            }
+            "Integer division" {
+                "(step t1 (cl (= (div 5 2) 2)) :rule div_simplify)": true,
             }
         }
     }
