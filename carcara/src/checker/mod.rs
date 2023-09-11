@@ -538,7 +538,6 @@ impl<'c> ProofChecker<'c> {
             "comp_simplify" => simplification::comp_simplify,
             "nary_elim" => clausification::nary_elim,
             "ac_simp" => simplification::ac_simp,
-            "mod_simplify" => simplification::mod_simplify,
             "bfun_elim" => clausification::bfun_elim,
             "bind" => subproof::bind,
             "qnt_cnf" => quantifier::qnt_cnf,
@@ -555,6 +554,7 @@ impl<'c> ProofChecker<'c> {
             "bind_let" => extras::bind_let,
             "la_mult_pos" => extras::la_mult_pos,
             "la_mult_neg" => extras::la_mult_neg,
+            "mod_simplify" => extras::mod_simplify,
 
             // Special rules that always check as valid, and are used to indicate holes in the
             // proof.

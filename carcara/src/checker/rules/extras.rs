@@ -183,6 +183,36 @@ fn la_mult_generic(conclusion: &[Rc<Term>], is_pos: bool) -> RuleResult {
     assert_eq(r, r_2)
 }
 
+pub fn mod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
+    let (t1, t2) = match_term_err!((mod t1 t2) = left)?;
+
+    let [a, b] = [t1, t2].map(|term| {
+        let value = term.as_signed_number_err()?;
+        if !value.is_integer() {
+            return Err(CheckerError::ExpectedInteger(term.clone()));
+        }
+        Ok(value.into_numer_denom().0)
+    });
+    // I wouldn't need to do this if `array_try_map` was stable:
+    // https://github.com/rust-lang/rust/issues/79711
+    let [a, b] = [a?, b?];
+
+    let result = right.as_signed_number_err()?;
+
+    if b.is_zero() {
+        return Err(CheckerError::DivOrModByZero);
+    }
+
+    let expected = a.modulo(&b);
+    rassert!(
+        result == expected,
+        CheckerError::ExpectedNumber(expected.into(), right.clone())
+    );
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -363,6 +393,26 @@ mod tests {
                     (and (< (/ (- 1.0) 13.0) 0.0) (= x y))
                     (= (* (/ (- 1.0) 13.0) x) (* (/ (- 1.0) 13.0) y)))
                 ) :rule la_mult_neg)": true,
+            }
+        }
+    }
+
+    #[test]
+    fn mod_simplify() {
+        test_cases! {
+            definitions = "",
+            "Simple working examples" {
+                "(step t1 (cl (= (mod 2 2) 0)) :rule mod_simplify)": true,
+                "(step t1 (cl (= (mod 42 8) 2)) :rule mod_simplify)": true,
+            }
+            "Negative numbers" {
+                "(step t1 (cl (= (mod (- 13) 7) 1)) :rule mod_simplify)": true,
+                "(step t1 (cl (= (mod (- 8) (- 3)) 1)) :rule mod_simplify)": true,
+                "(step t1 (cl (= (mod 8 (- 3)) 2)) :rule mod_simplify)": true,
+                "(step t1 (cl (= (mod 8 (- 3)) (- 1))) :rule mod_simplify)": false,
+            }
+            "Modulo by zero" {
+                "(step t1 (cl (= (mod 3 0) 1)) :rule mod_simplify)": false,
             }
         }
     }
