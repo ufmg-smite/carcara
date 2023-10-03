@@ -102,6 +102,7 @@ impl PrimitivePool {
                 Constant::Integer(_) => Sort::Int,
                 Constant::Real(_) => Sort::Real,
                 Constant::String(_) => Sort::String,
+                Constant::BitVec(_,__ ) => Sort::BitVec,
             },
             Term::Var(_, sort) => sort.as_sort().unwrap().clone(),
             Term::Op(op, args) => match op {
@@ -123,7 +124,36 @@ impl PrimitivePool {
                 | Operator::SuffixOf
                 | Operator::Contains
                 | Operator::StrIsDigit
-                | Operator::StrInRe => Sort::Bool,
+                | Operator::StrInRe
+                | Operator::BvULt
+                | Operator::BvULe
+                | Operator::BvUGt
+                | Operator::BvUGe
+                | Operator::BvSLt
+                | Operator::BvSLe
+                | Operator::BvSGt
+                | Operator::BvSGe
+                | Operator::BvNot
+                | Operator::BvNeg
+                | Operator::BvAnd
+                | Operator::BvOr
+                | Operator::BvAdd
+                | Operator::BvMul
+                | Operator::BvUDiv
+                | Operator::BvURem
+                | Operator::BvShl
+                | Operator::BvLShr
+                | Operator::BvConcat
+                | Operator::BvNAnd
+                | Operator::BvNOr
+                | Operator::BvXor
+                | Operator::BvXNor
+                | Operator::BvComp
+                | Operator::BvSub
+                | Operator::BvSDiv
+                | Operator::BvSRem
+                | Operator::BvSMod
+                | Operator::BvAShr => Sort::Bool,
                 Operator::Ite => self.compute_sort(&args[1]).as_sort().unwrap().clone(),
                 Operator::Add | Operator::Sub | Operator::Mult => {
                     if args

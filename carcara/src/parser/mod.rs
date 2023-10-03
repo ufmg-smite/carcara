@@ -407,6 +407,38 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 SortError::assert_eq(&Sort::RegLan, sorts[1].as_sort().unwrap())?;
                 SortError::assert_eq(&Sort::String, sorts[2].as_sort().unwrap())?;
             }
+            Operator::BvNot
+            | Operator::BvNeg
+            | Operator::BvAnd
+            | Operator::BvOr
+            | Operator::BvAdd
+            | Operator::BvMul
+            | Operator::BvUDiv
+            | Operator::BvURem
+            | Operator::BvShl
+            | Operator::BvLShr
+            | Operator::BvULt
+            | Operator::BvConcat
+            | Operator::BvNAnd
+            | Operator::BvNOr
+            | Operator::BvXor
+            | Operator::BvXNor
+            | Operator::BvComp
+            | Operator::BvSub
+            | Operator::BvSDiv
+            | Operator::BvSRem
+            | Operator::BvSMod
+            | Operator::BvAShr
+            | Operator::BvULe
+            | Operator::BvUGt
+            | Operator::BvUGe
+            | Operator::BvSLt
+            | Operator::BvSLe
+            | Operator::BvSGt
+            | Operator::BvSGe => {
+                assert_num_args(&args, 2)?;
+                // todo: check that the arguments have the same bitvector sort
+            },
         }
         Ok(self.pool.add(Term::Op(op, args)))
     }

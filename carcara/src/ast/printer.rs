@@ -117,13 +117,13 @@ impl<'a> PrintProof for AlethePrinter<'a> {
         while let Some(command) = iter.next() {
             match command {
                 ProofCommand::Assume { id, term } => {
-                    write!(self.inner, "(assume {} ", quote_symbol(id))?;
+                    write!(self.inner, "(assume {} ", id)?;
                     term.print_with_sharing(self)?;
                     write!(self.inner, ")")?;
                 }
                 ProofCommand::Step(s) => self.write_step(&mut iter, s)?,
                 ProofCommand::Subproof(s) => {
-                    write!(self.inner, "(anchor :step {}", quote_symbol(command.id()))?;
+                    write!(self.inner, "(anchor :step {}", command.id())?;
 
                     if !s.variable_args.is_empty() || !s.assignment_args.is_empty() {
                         write!(self.inner, " :args (")?;
@@ -210,7 +210,7 @@ impl<'a> AlethePrinter<'a> {
     }
 
     fn write_step(&mut self, iter: &mut ProofIter, step: &ProofStep) -> io::Result<()> {
-        write!(self.inner, "(step {} (cl", quote_symbol(&step.id))?;
+        write!(self.inner, "(step {} (cl", step.id)?;
 
         for t in &step.clause {
             write!(self.inner, " ")?;
@@ -221,17 +221,9 @@ impl<'a> AlethePrinter<'a> {
         write!(self.inner, " :rule {}", step.rule)?;
 
         if let [head, tail @ ..] = step.premises.as_slice() {
-            write!(
-                self.inner,
-                " :premises ({}",
-                quote_symbol(iter.get_premise(*head).id())
-            )?;
+            write!(self.inner, " :premises ({}", iter.get_premise(*head).id())?;
             for premise in tail {
-                write!(
-                    self.inner,
-                    " {}",
-                    quote_symbol(iter.get_premise(*premise).id())
-                )?;
+                write!(self.inner, " {}", iter.get_premise(*premise).id())?;
             }
             write!(self.inner, ")")?;
         }
@@ -247,13 +239,9 @@ impl<'a> AlethePrinter<'a> {
         }
 
         if let [head, tail @ ..] = step.discharge.as_slice() {
-            write!(
-                self.inner,
-                " :discharge ({}",
-                quote_symbol(iter.get_premise(*head).id())
-            )?;
+            write!(self.inner, " :discharge ({}", iter.get_premise(*head).id())?;
             for id in tail {
-                write!(self.inner, " {}", quote_symbol(iter.get_premise(*id).id()))?;
+                write!(self.inner, " {}", iter.get_premise(*id).id())?;
             }
             write!(self.inner, ")")?;
         }
@@ -360,6 +348,7 @@ impl fmt::Display for Constant {
                 }
             }
             Constant::String(s) => write!(f, "\"{}\"", escape_string(s)),
+            Constant::BitVec(val, width) => write!(f, "{}, {}", val, width), // TODO: comeback to this
         }
     }
 }
@@ -408,6 +397,7 @@ impl fmt::Display for Sort {
             Sort::String => write!(f, "String"),
             Sort::RegLan => write!(f, "RegLan"),
             Sort::Array(x, y) => write_s_expr(f, "Array", &[x, y]),
+            Sort::BitVec => write!(f, "BitVec"),
         }
     }
 }
