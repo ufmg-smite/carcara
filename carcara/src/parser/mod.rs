@@ -557,8 +557,11 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
                     // When the problem's logic contains real numbers but not integers, integer
                     // literals should be parsed as reals. For instance, `1` should be interpreted
-                    // as `1.0`.
-                    self.interpret_integers_as_reals = logic.contains('R') && !logic.contains('I');
+                    // as `1.0`. We must be careful to avoid false positives with non-standard
+                    // logics like "HORN".
+                    self.interpret_integers_as_reals =
+                        (logic.contains("LRA") || logic.contains("NRA") || logic.contains("RDL"))
+                            && !logic.contains('I');
                 }
                 _ => {
                     // If the command is not one of the commands we care about, we just ignore it.
