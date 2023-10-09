@@ -32,10 +32,10 @@ pub enum ParserError {
     #[error("unexpected EOF in string literal")]
     EofInString,
 
-    /// The lexer encountered the end of the input while reading a numeral. This only happens when
-    /// the lexer reads a `#` character that is immediately followed by the end of the input.
-    #[error("unexpected EOF in numeral")]
-    EofInNumeral,
+    /// The lexer encountered a bitvector literal with no actual digits. This
+    /// happens when the bitvector literal is just `#`, `#b` or `#x`.
+    #[error("empty bitvector literal")]
+    EmptyBitvector,
 
     /// The parser encountered an unexpected token.
     #[error("unexpected token: '{0}'")]

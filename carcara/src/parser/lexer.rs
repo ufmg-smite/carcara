@@ -32,6 +32,9 @@ pub enum Token {
     /// A decimal numeral literal.
     Decimal(Rational),
 
+    /// A bitvector literal.
+    Bitvector { value: Integer, width: u64 },
+
     /// A string literal.
     String(String),
 
@@ -253,7 +256,7 @@ impl<R: BufRead> Lexer<R> {
             Some('"') => self.read_string(),
             Some('|') => self.read_quoted_symbol(),
             Some(':') => self.read_keyword(),
-            Some('#') => self.read_number_with_base(),
+            Some('#') => self.read_bitvector(),
             Some(c) if c.is_ascii_digit() => self.read_number(),
             Some(c) if is_symbol_character(c) => self.read_simple_symbol(),
             None => Ok(Token::Eof),
@@ -300,15 +303,16 @@ impl<R: BufRead> Lexer<R> {
         Ok(Token::Keyword(symbol))
     }
 
-    /// Reads a binary or hexadecimal literal, e.g. `#b0110` or `#x01Ab`.
+    /// Reads a binary or hexadecimal bitvector literal, e.g. `#b0110` or `#x01Ab`.
     ///
-    /// Returns an error if any character other than `b` or `x` is encountered after the `#`.
-    fn read_number_with_base(&mut self) -> CarcaraResult<Token> {
+    /// Returns an error if any character other than `b` or `x` is encountered after the `#`, or if
+    /// no digits are provided.
+    fn read_bitvector(&mut self) -> CarcaraResult<Token> {
         self.next_char()?; // Consume `#`
-        let base = match self.next_char()? {
-            Some('b') => 2,
-            Some('x') => 16,
-            None => return Err(Error::Parser(ParserError::EofInNumeral, self.position)),
+        let (base, bits_per_char) = match self.next_char()? {
+            Some('b') => (2, 1),
+            Some('x') => (16, 4),
+            None => return Err(Error::Parser(ParserError::EmptyBitvector, self.position)),
             Some(other) => {
                 return Err(Error::Parser(
                     ParserError::UnexpectedChar(other),
@@ -317,7 +321,13 @@ impl<R: BufRead> Lexer<R> {
             }
         };
         let s = self.read_chars_while(|c| c.is_digit(base as u32))?;
-        Ok(Token::Numeral(Integer::from_str_radix(&s, base).unwrap()))
+        if s.is_empty() {
+            return Err(Error::Parser(ParserError::EmptyBitvector, self.position));
+        }
+
+        let width = s.len() as u64 * bits_per_char;
+        let value = Integer::from_str_radix(&s, base).unwrap();
+        Ok(Token::Bitvector { value, width })
     }
 
     /// Reads an integer or decimal numerical literal.
@@ -446,12 +456,10 @@ mod tests {
 
     #[test]
     fn test_numerals_and_decimals() {
-        let input = "42 3.14159 #b101010 #x0ff";
+        let input = "42 3.14159";
         let expected = vec![
             Token::Numeral(42.into()),
             Token::Decimal((314_159, 100_000).into()),
-            Token::Numeral(42.into()),
-            Token::Numeral(255.into()),
         ];
         assert_eq!(expected, lex_all(input));
 
@@ -459,6 +467,21 @@ mod tests {
             lex_one("0123"),
             Err(Error::Parser(ParserError::LeadingZero(_), _))
         ));
+    }
+
+    #[test]
+    fn test_bitvectors() {
+        let input = "#b101010 #xdeadbeef #b1 #x0";
+        let expected = vec![
+            Token::Bitvector { value: 42.into(), width: 6 },
+            Token::Bitvector {
+                value: 0xdeadbeefu64.into(),
+                width: 32,
+            },
+            Token::Bitvector { value: 1.into(), width: 1 },
+            Token::Bitvector { value: 0.into(), width: 4 },
+        ];
+        assert_eq!(expected, lex_all(input));
 
         assert!(matches!(
             lex_one("#o123"),
@@ -467,7 +490,12 @@ mod tests {
 
         assert!(matches!(
             lex_one("#"),
-            Err(Error::Parser(ParserError::EofInNumeral, _)),
+            Err(Error::Parser(ParserError::EmptyBitvector, _)),
+        ));
+
+        assert!(matches!(
+            lex_one("#b"),
+            Err(Error::Parser(ParserError::EmptyBitvector, _)),
         ));
     }
 

@@ -440,6 +440,9 @@ impl fmt::Display for Token {
             Token::Keyword(k) => write!(f, ":{}", k),
             Token::Numeral(n) => write!(f, "{}", n),
             Token::Decimal(r) => write!(f, "{}", r),
+            Token::Bitvector { value, width } => {
+                write!(f, "#b{v:0>w$b}", v = value, w = *width as usize)
+            }
             Token::String(s) => write!(f, "\"{}\"", escape_string(s)),
             Token::ReservedWord(r) => write!(f, "{}", r),
             Token::Eof => write!(f, "EOF"),

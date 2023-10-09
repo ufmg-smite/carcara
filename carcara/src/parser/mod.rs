@@ -458,6 +458,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 Token::Symbol(_)
                 | Token::Numeral(_)
                 | Token::Decimal(_)
+                | Token::Bitvector { .. }
                 | Token::String(_)
                 | Token::ReservedWord(_) => {
                     self.next_token()?;
