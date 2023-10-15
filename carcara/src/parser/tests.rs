@@ -114,6 +114,7 @@ fn test_constant_terms() {
     assert_eq!(Term::new_int(42), *parse_term(&mut p, "42"));
     assert_eq!(Term::new_real((3, 2)), *parse_term(&mut p, "1.5"));
     assert_eq!(Term::new_string("foo"), *parse_term(&mut p, "\"foo\""));
+    assert_eq!(Term::new_bv(0, 4), *parse_term(&mut p, "(_ bv0 4)"));
 }
 
 #[test]
@@ -660,4 +661,34 @@ fn test_premises_in_subproofs() {
             discharge: Vec::new(),
         })
     );
+}
+
+#[test]
+fn test_bitvectors() {
+    let mut p = PrimitivePool::new();
+    let cases = [
+        (
+            "(assume a0 (not (bvuge (bvcomp (_ bv4 4) (_ bv4 4)) (_ bv1 1))))",
+            ProofCommand::Assume {
+                id: "a0".into(),
+                term: parse_term(
+                    &mut p,
+                    "(not (bvuge (bvcomp (_ bv4 4) (_ bv4 4)) (_ bv1 1)))",
+                ),
+            },
+        ),
+        (
+            "(assume a0 (not (bvuge (bvcomp #b0000 #b0000) #b1)))",
+            ProofCommand::Assume {
+                id: "a0".into(),
+                term: parse_term(&mut p, "(not (bvuge (bvcomp #b0000 #b0000) #b1)))"),
+            },
+        ),
+    ];
+
+    for (input, expected_value) in cases {
+        let proof = parse_proof(&mut p, input);
+        assert_eq!(proof.commands.len(), 1);
+        assert_eq!(&proof.commands[0], &expected_value);
+    }
 }

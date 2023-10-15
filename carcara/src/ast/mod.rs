@@ -546,7 +546,7 @@ pub enum Sort {
     ///  `BitVec` sort.
     ///
     /// The associated term is the BV width of this sort.
-    BitVec,
+    BitVec(Integer),
 }
 
 /// A quantifier, either `forall` or `exists`.

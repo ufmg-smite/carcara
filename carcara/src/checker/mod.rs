@@ -285,6 +285,7 @@ impl<'c> ProofChecker<'c> {
         let mut polyeq_time = Duration::ZERO;
         let mut core_time = Duration::ZERO;
 
+        dbg!(premises);
         for p in premises {
             let mut this_polyeq_time = Duration::ZERO;
             let (result, depth) = tracing_polyeq(term, p, &mut this_polyeq_time);
@@ -298,7 +299,7 @@ impl<'c> ProofChecker<'c> {
                 break;
             }
         }
-
+        dbg!(&found);
         let Some(p) = found else { return false };
 
         if let Some(elaborator) = &mut self.elaborator {

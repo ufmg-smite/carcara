@@ -199,6 +199,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
             }
             Operator::Ite => {
                 assert_num_args(&args, 3)?;
+                sorts
+                    .iter()
+                    .for_each(|s| println!("{:?}", s.as_sort().unwrap()));
                 SortError::assert_eq(&Sort::Bool, sorts[0].as_sort().unwrap())?;
                 SortError::assert_eq(sorts[1].as_sort().unwrap(), sorts[2].as_sort().unwrap())?;
             }
@@ -436,9 +439,11 @@ impl<'a, R: BufRead> Parser<'a, R> {
             | Operator::BvSLe
             | Operator::BvSGt
             | Operator::BvSGe => {
+                dbg!(&args);
                 assert_num_args(&args, 2)?;
-                // todo: check that the arguments have the same bitvector sort
-            },
+                // assume args are already bitvectors
+                // implement parser to build bitvectors
+            }
         }
         Ok(self.pool.add(Term::Op(op, args)))
     }
@@ -472,6 +477,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// Consumes the current token if it equals `expected`. Returns an error otherwise.
     fn expect_token(&mut self, expected: Token) -> CarcaraResult<()> {
         let (got, pos) = self.next_token()?;
+        // dbg!(&got, &expected);
         if got == expected {
             Ok(())
         } else {
@@ -1076,6 +1082,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// Parses a term.
     pub fn parse_term(&mut self) -> CarcaraResult<Rc<Term>> {
         let term = match self.next_token()? {
+            (Token::Bitvector { value, width }, _) => Term::new_bv(value, width),
             (Token::Numeral(n), _) if self.interpret_integers_as_reals => Term::new_real(n),
             (Token::Numeral(n), _) => Term::new_int(n),
             (Token::Decimal(r), _) => Term::new_real(r),
@@ -1110,6 +1117,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     fn parse_term_expecting_sort(&mut self, expected_sort: &Sort) -> CarcaraResult<Rc<Term>> {
         let pos = self.current_position;
         let term = self.parse_term()?;
+        dbg!(expected_sort);
         SortError::assert_eq(expected_sort, self.pool.sort(&term).as_sort().unwrap())
             .map_err(|e| Error::Parser(e.into(), pos))?;
         Ok(term)
@@ -1254,14 +1262,38 @@ impl<'a, R: BufRead> Parser<'a, R> {
         Ok(inner)
     }
 
+    /// Only parses (_ bv0 4) or (_ bv1 4)
+    fn parse_underscore_term(&mut self) -> CarcaraResult<Rc<Term>> {
+        let bv_symbol = self.expect_symbol()?;
+        let bv_width: Integer = self.expect_numeral()?;
+        self.expect_token(Token::CloseParen)?;
+        // split bv from number on the right
+        let splitted_symbols = bv_symbol.split_at(2);
+        let bv_value = match splitted_symbols {
+            ("bv", "0") => Integer::ZERO,
+            ("bv", x) => {
+                Integer::from(Integer::parse(x).unwrap()) << bv_width.to_u32().unwrap() - 1
+            }
+            _ => {
+                return Err(Error::Parser(
+                    ParserError::TooLargeBitvector,
+                    self.current_position,
+                ))
+            }
+        };
+        Ok(self.pool.add(Term::new_bv(bv_value, bv_width)))
+    }
+
     /// Parses any term that starts with `(`, that is, any term that is not a constant or a
     /// variable. This method assumes that the `(` token was already consumed.
     fn parse_application(&mut self) -> CarcaraResult<Rc<Term>> {
         let head_pos = self.current_position;
+        dbg!(&self.current_token);
         match &self.current_token {
             &Token::ReservedWord(reserved) => {
                 self.next_token()?;
                 match reserved {
+                    Reserved::Underscore => self.parse_underscore_term(),
                     Reserved::Exists => self.parse_quantifier(Quantifier::Exists),
                     Reserved::Forall => self.parse_quantifier(Quantifier::Forall),
                     Reserved::Choice => self.parse_choice_term(),

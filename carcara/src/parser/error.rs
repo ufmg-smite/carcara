@@ -33,6 +33,10 @@ pub enum ParserError {
     #[error("empty bitvector literal")]
     EmptyBitvector,
 
+    /// add new error for large bv
+    #[error("bitvector literal is too large")]
+    TooLargeBitvector,
+
     /// The parser encountered an unexpected token.
     #[error("unexpected token: '{0}'")]
     UnexpectedToken(Token),

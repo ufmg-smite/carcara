@@ -6,6 +6,7 @@ mod storage;
 use super::{Rc, Sort, Term};
 use crate::ast::Constant;
 use indexmap::{IndexMap, IndexSet};
+use rug::Integer;
 use storage::Storage;
 
 pub trait TermPool {
@@ -102,7 +103,7 @@ impl PrimitivePool {
                 Constant::Integer(_) => Sort::Int,
                 Constant::Real(_) => Sort::Real,
                 Constant::String(_) => Sort::String,
-                Constant::BitVec(_,__ ) => Sort::BitVec,
+                Constant::BitVec(_, w) => Sort::BitVec(w.clone()),
             },
             Term::Var(_, sort) => sort.as_sort().unwrap().clone(),
             Term::Op(op, args) => match op {
@@ -148,12 +149,15 @@ impl PrimitivePool {
                 | Operator::BvNOr
                 | Operator::BvXor
                 | Operator::BvXNor
-                | Operator::BvComp
                 | Operator::BvSub
                 | Operator::BvSDiv
                 | Operator::BvSRem
                 | Operator::BvSMod
-                | Operator::BvAShr => Sort::Bool,
+                | Operator::BvAShr => {
+                    dbg!(op, &args);
+                    Sort::Bool
+                },
+                Operator::BvComp => Sort::BitVec(Integer::ONE.into()),
                 Operator::Ite => self.compute_sort(&args[1]).as_sort().unwrap().clone(),
                 Operator::Add | Operator::Sub | Operator::Mult => {
                     if args
