@@ -102,6 +102,9 @@ pub enum Reserved {
     /// The `assert` reserved word.
     Assert,
 
+    /// The `check-sat-assuming` reserved word.
+    CheckSatAssuming,
+
     /// The `set-logic` reserved word.
     SetLogic,
 }
@@ -125,6 +128,7 @@ impl_str_conversion_traits!(Reserved {
     DeclareSort: "declare-sort",
     DefineFun: "define-fun",
     Assert: "assert",
+    CheckSatAssuming: "check-sat-assuming",
     SetLogic: "set-logic",
 });
 

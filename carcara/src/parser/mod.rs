@@ -551,6 +551,12 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     self.expect_token(Token::CloseParen)?;
                     self.premises().insert(term);
                 }
+                Token::ReservedWord(Reserved::CheckSatAssuming) => {
+                    self.expect_token(Token::OpenParen)?;
+                    let terms = self.parse_sequence(Self::parse_term, true)?;
+                    self.expect_token(Token::CloseParen)?;
+                    self.premises().extend(terms);
+                }
                 Token::ReservedWord(Reserved::SetLogic) => {
                     let logic = self.expect_symbol()?;
                     self.expect_token(Token::CloseParen)?;
