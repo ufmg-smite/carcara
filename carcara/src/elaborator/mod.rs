@@ -2,6 +2,7 @@ mod accumulator;
 mod diff;
 mod polyeq;
 mod pruning;
+mod resolution;
 
 pub use diff::{apply_diff, CommandDiff, ProofDiff};
 pub use pruning::{prune_proof, slice_proof};
