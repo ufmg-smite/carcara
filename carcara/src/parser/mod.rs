@@ -102,10 +102,24 @@ impl<'a, R: BufRead> Parser<'a, R> {
     pub fn new(pool: &'a mut PrimitivePool, config: Config, input: R) -> CarcaraResult<Self> {
         let mut state = ParserState::default();
         let bool_sort = pool.add(Term::Sort(Sort::Bool));
+
         for iden in ["true", "false"] {
             let iden = HashCache::new(Ident::Simple(iden.to_owned()));
             state.symbol_table.insert(iden, bool_sort.clone());
         }
+
+        for re_function in [
+            ("re.none", Operator::ReNone),
+            ("re.all", Operator::ReAll),
+            ("re.allchar", Operator::ReAllChar),
+        ] {
+            let term = pool.add(Term::Op(re_function.1, Vec::new()));
+            state.function_defs.insert(
+                re_function.0.to_string(),
+                FunctionDef { params: Vec::new(), body: term },
+            );
+        }
+
         let mut lexer = Lexer::new(input)?;
         let (current_token, current_position) = lexer.next_token()?;
         Ok(Parser {
@@ -326,6 +340,87 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         .into());
                     }
                 }
+            }
+            Operator::StrConcat => {
+                assert_num_args(&args, 2..)?;
+                for s in sorts {
+                    SortError::assert_eq(&Sort::String, s.as_sort().unwrap())?;
+                }
+            }
+            Operator::StrLen | Operator::StrIsDigit | Operator::StrToCode | Operator::StrToInt => {
+                assert_num_args(&args, 1)?;
+                SortError::assert_eq(&Sort::String, sorts[0].as_sort().unwrap())?;
+            }
+            Operator::LexOrdering
+            | Operator::ReflexiveClosure
+            | Operator::PrefixOf
+            | Operator::SuffixOf
+            | Operator::Contains
+            | Operator::ReRange => {
+                assert_num_args(&args, 2)?;
+                SortError::assert_eq(&Sort::String, sorts[0].as_sort().unwrap())?;
+                SortError::assert_eq(&Sort::String, sorts[1].as_sort().unwrap())?;
+            }
+            Operator::CharAt => {
+                assert_num_args(&args, 2)?;
+                SortError::assert_eq(&Sort::String, sorts[0].as_sort().unwrap())?;
+                SortError::assert_eq(&Sort::Int, sorts[1].as_sort().unwrap())?;
+            }
+            Operator::Substring => {
+                assert_num_args(&args, 3)?;
+                SortError::assert_eq(&Sort::String, sorts[0].as_sort().unwrap())?;
+                SortError::assert_eq(&Sort::Int, sorts[1].as_sort().unwrap())?;
+                SortError::assert_eq(&Sort::Int, sorts[2].as_sort().unwrap())?;
+            }
+            Operator::IndexOf => {
+                assert_num_args(&args, 3)?;
+                SortError::assert_eq(&Sort::String, sorts[0].as_sort().unwrap())?;
+                SortError::assert_eq(&Sort::String, sorts[1].as_sort().unwrap())?;
+                SortError::assert_eq(&Sort::Int, sorts[2].as_sort().unwrap())?;
+            }
+            Operator::Replace | Operator::ReplaceAll => {
+                assert_num_args(&args, 3)?;
+                SortError::assert_eq(&Sort::String, sorts[0].as_sort().unwrap())?;
+                SortError::assert_eq(&Sort::String, sorts[1].as_sort().unwrap())?;
+                SortError::assert_eq(&Sort::String, sorts[2].as_sort().unwrap())?;
+            }
+            Operator::StrFromCode | Operator::StrFromInt => {
+                assert_num_args(&args, 1)?;
+                SortError::assert_eq(&Sort::Int, sorts[0].as_sort().unwrap())?;
+            }
+            Operator::StrToRe => {
+                assert_num_args(&args, 1)?;
+                SortError::assert_eq(&Sort::String, sorts[0].as_sort().unwrap())?;
+            }
+            Operator::StrInRe => {
+                assert_num_args(&args, 2)?;
+                SortError::assert_eq(&Sort::String, sorts[0].as_sort().unwrap())?;
+                SortError::assert_eq(&Sort::RegLan, sorts[1].as_sort().unwrap())?;
+            }
+            Operator::ReNone | Operator::ReAll | Operator::ReAllChar => {
+                assert_num_args(&args, 0)?;
+            }
+            Operator::ReConcat
+            | Operator::ReUnion
+            | Operator::ReIntersection
+            | Operator::ReDiff => {
+                assert_num_args(&args, 2..)?;
+                for s in sorts {
+                    SortError::assert_eq(&Sort::RegLan, s.as_sort().unwrap())?;
+                }
+            }
+            Operator::ReKleeneClosure
+            | Operator::ReComplement
+            | Operator::ReKleeneCross
+            | Operator::ReOption => {
+                assert_num_args(&args, 1)?;
+                SortError::assert_eq(&Sort::RegLan, sorts[0].as_sort().unwrap())?;
+            }
+            Operator::ReplaceRe | Operator::ReplaceReAll => {
+                assert_num_args(&args, 3)?;
+                SortError::assert_eq(&Sort::String, sorts[0].as_sort().unwrap())?;
+                SortError::assert_eq(&Sort::RegLan, sorts[1].as_sort().unwrap())?;
+                SortError::assert_eq(&Sort::String, sorts[2].as_sort().unwrap())?;
             }
         }
         Ok(self.pool.add(Term::Op(op, args)))
@@ -1223,15 +1318,14 @@ impl<'a, R: BufRead> Parser<'a, R> {
         };
 
         let sort = match name.as_str() {
-            "Bool" | "Int" | "Real" | "String" if !args.is_empty() => Err(Error::Parser(
-                ParserError::WrongNumberOfArgs(0.into(), args.len()),
-                pos,
-            )),
+            "Bool" | "Int" | "Real" | "String" | "RegLan" if !args.is_empty() => Err(
+                Error::Parser(ParserError::WrongNumberOfArgs(0.into(), args.len()), pos),
+            ),
             "Bool" => Ok(Sort::Bool),
             "Int" => Ok(Sort::Int),
             "Real" => Ok(Sort::Real),
             "String" => Ok(Sort::String),
-
+            "RegLan" => Ok(Sort::RegLan),
             "Array" => match args.as_slice() {
                 [x, y] => Ok(Sort::Array(x.clone(), y.clone())),
                 _ => Err(Error::Parser(
