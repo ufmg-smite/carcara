@@ -668,12 +668,12 @@ fn test_bitvectors() {
     let mut p = PrimitivePool::new();
     let cases = [
         (
-            "(assume a0 (not (bvuge (bvcomp (_ bv4 4) (_ bv4 4)) (_ bv1 1))))",
+            "(assume a0 (not (bvuge (bvcomp (_ bv1 4) (_ bv1 4)) (_ bv1 1))))",
             ProofCommand::Assume {
                 id: "a0".into(),
                 term: parse_term(
                     &mut p,
-                    "(not (bvuge (bvcomp (_ bv4 4) (_ bv4 4)) (_ bv1 1)))",
+                    "(not (bvuge (bvcomp (_ bv1 4) (_ bv1 4)) (_ bv1 1)))",
                 ),
             },
         ),

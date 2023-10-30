@@ -105,6 +105,12 @@ impl PrintWithSharing for Operator {
     }
 }
 
+impl PrintWithSharing for IndexedOperator {
+    fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
+        write!(p.inner, "{}", self)
+    }
+}
+
 struct AlethePrinter<'a> {
     inner: &'a mut dyn io::Write,
     term_indices: Option<IndexMap<Rc<Term>, usize>>,
@@ -206,6 +212,9 @@ impl<'a> AlethePrinter<'a> {
                 term.print_with_sharing(self)?;
                 write!(self.inner, ")")
             }
+            Term::IndexedOp { op, op_args: _, args } => {
+                self.write_s_expr(op, args)
+            },
         }
     }
 

@@ -408,7 +408,24 @@ pub enum Operator {
     BvSLe,
     BvSGt,
     BvSGe,
+    BvBbTerm,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum IndexedOperator {
+    BvExtract,
+    BvZero,
+    BvOne,
+    BvBitOf,
+}
+
+impl_str_conversion_traits!(IndexedOperator {
+    BvExtract: "extract",
+    BvZero: "bv0",
+    BvOne: "bv1",
+    BvBitOf: "bit_of",
+});
+
 
 impl_str_conversion_traits!(Operator {
     Not: "not",
@@ -503,7 +520,7 @@ impl_str_conversion_traits!(Operator {
     BvSLe: "bvsle",
     BvSGt: "bvsgt",
     BvSGe: "bvsge",
-    // ! watch out bv extract
+    BvBbTerm: "bbterm",
 });
 
 /// A variable and an associated sort.
@@ -637,6 +654,13 @@ pub enum Term {
 
     /// A `lambda` term.
     Lambda(BindingList, Rc<Term>),
+
+    /// A `indexed` operator term.
+    IndexedOp {
+        op: IndexedOperator,
+        op_args: Vec<Constant>,
+        args: Vec<Rc<Term>>,
+    },
 }
 
 impl From<SortedVar> for Term {

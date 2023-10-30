@@ -144,7 +144,6 @@ impl PrimitivePool {
                 | Operator::BvURem
                 | Operator::BvShl
                 | Operator::BvLShr
-                | Operator::BvConcat
                 | Operator::BvNAnd
                 | Operator::BvNOr
                 | Operator::BvXor
@@ -154,10 +153,11 @@ impl PrimitivePool {
                 | Operator::BvSRem
                 | Operator::BvSMod
                 | Operator::BvAShr => {
-                    dbg!(op, &args);
+                    // dbg!(op, &args);
                     Sort::Bool
-                },
-                Operator::BvComp => Sort::BitVec(Integer::ONE.into()),
+                }
+                Operator::BvComp | Operator::BvBbTerm => Sort::BitVec(Integer::ONE.into()),
+                Operator::BvConcat => Sort::BitVec(Integer::from(3)),
                 Operator::Ite => self.compute_sort(&args[1]).as_sort().unwrap().clone(),
                 Operator::Add | Operator::Sub | Operator::Mult => {
                     if args
@@ -217,6 +217,12 @@ impl PrimitivePool {
                     bindings.iter().map(|(_name, sort)| sort.clone()).collect();
                 result.push(self.compute_sort(body));
                 Sort::Function(result)
+            }
+            Term::IndexedOp { op: _, op_args, args: __ } => {
+                // extract returns a bit vector of size n
+                // bit_of returns a bit vector of size n
+                // bvzero and bv one return a bit vector of size n
+                Sort::BitVec(Integer::from(op_args.len()))
             }
         };
         let sort = self.storage.add(Term::Sort(result));
@@ -311,6 +317,7 @@ impl PrimitivePool {
                 set
             }
             Term::Const(_) | Term::Sort(_) => IndexSet::new(),
+            Term::IndexedOp { op, op_args, args } => todo!(),
         };
         self.free_vars_cache.insert(term.clone(), set);
         self.free_vars_cache.get(term).unwrap().clone()
