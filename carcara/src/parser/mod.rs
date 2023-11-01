@@ -339,8 +339,8 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 assert_num_args(&args, 1)?;
                 SortError::assert_eq(&Sort::String, sorts[0].as_sort().unwrap())?;
             }
-            Operator::LexOrdering
-            | Operator::ReflexiveClosure
+            Operator::StrLessThan
+            | Operator::StrLessEq
             | Operator::PrefixOf
             | Operator::SuffixOf
             | Operator::Contains

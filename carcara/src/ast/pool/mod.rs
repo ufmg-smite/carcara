@@ -117,8 +117,8 @@ impl PrimitivePool {
                 | Operator::LessEq
                 | Operator::GreaterEq
                 | Operator::IsInt
-                | Operator::LexOrdering
-                | Operator::ReflexiveClosure
+                | Operator::StrLessThan
+                | Operator::StrLessEq
                 | Operator::PrefixOf
                 | Operator::SuffixOf
                 | Operator::Contains

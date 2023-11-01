@@ -281,10 +281,10 @@ pub enum Operator {
     StrLen,
 
     /// The `str.<` operator.
-    LexOrdering,
+    StrLessThan,
 
     /// The `str.<=` operator.
-    ReflexiveClosure,
+    StrLessEq,
 
     /// The `str.at` operator.
     CharAt,
@@ -405,8 +405,8 @@ impl_str_conversion_traits!(Operator {
 
     StrConcat: "str.++",
     StrLen: "str.len",
-    LexOrdering: "str.<",
-    ReflexiveClosure: "str.<=",
+    StrLessThan: "str.<",
+    StrLessEq: "str.<=",
     CharAt: "str.at",
     Substring: "str.substr",
     PrefixOf: "str.prefixof",
