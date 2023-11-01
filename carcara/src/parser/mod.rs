@@ -108,18 +108,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
             state.symbol_table.insert(iden, bool_sort.clone());
         }
 
-        for re_function in [
-            ("re.none", Operator::ReNone),
-            ("re.all", Operator::ReAll),
-            ("re.allchar", Operator::ReAllChar),
-        ] {
-            let term = pool.add(Term::Op(re_function.1, Vec::new()));
-            state.function_defs.insert(
-                re_function.0.to_string(),
-                FunctionDef { params: Vec::new(), body: term },
-            );
-        }
-
         let mut lexer = Lexer::new(input)?;
         let (current_token, current_position) = lexer.next_token()?;
         Ok(Parser {
@@ -1068,6 +1056,11 @@ impl<'a, R: BufRead> Parser<'a, R> {
                             pos,
                         ));
                     }
+                } else if let Ok(op) = Operator::from_str(&s) {
+                    let args = Vec::new();
+
+                    self.make_op(op, args)
+                        .map_err(|err| Error::Parser(err, pos))?
                 } else {
                     self.make_var(Ident::Simple(s))
                         .map_err(|err| Error::Parser(err, pos))?
