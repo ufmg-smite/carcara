@@ -426,6 +426,7 @@ impl fmt::Display for Sort {
             Sort::Int => write!(f, "Int"),
             Sort::Real => write!(f, "Real"),
             Sort::String => write!(f, "String"),
+            Sort::RegLan => write!(f, "RegLan"),
             Sort::Array(x, y) => write_s_expr(f, "Array", &[x, y]),
         }
     }

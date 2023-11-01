@@ -116,7 +116,14 @@ impl PrimitivePool {
                 | Operator::GreaterThan
                 | Operator::LessEq
                 | Operator::GreaterEq
-                | Operator::IsInt => Sort::Bool,
+                | Operator::IsInt
+                | Operator::StrLessThan
+                | Operator::StrLessEq
+                | Operator::PrefixOf
+                | Operator::SuffixOf
+                | Operator::Contains
+                | Operator::StrIsDigit
+                | Operator::StrInRe => Sort::Bool,
                 Operator::Ite => self.compute_sort(&args[1]).as_sort().unwrap().clone(),
                 Operator::Add | Operator::Sub | Operator::Mult => {
                     if args
@@ -135,6 +142,31 @@ impl PrimitivePool {
                     _ => unreachable!(),
                 },
                 Operator::Store => self.compute_sort(&args[0]).as_sort().unwrap().clone(),
+                Operator::StrLen | Operator::IndexOf | Operator::StrToCode | Operator::StrToInt => {
+                    Sort::Int
+                }
+                Operator::StrConcat
+                | Operator::CharAt
+                | Operator::Substring
+                | Operator::Replace
+                | Operator::ReplaceAll
+                | Operator::ReplaceRe
+                | Operator::ReplaceReAll
+                | Operator::StrFromCode
+                | Operator::StrFromInt => Sort::String,
+                Operator::StrToRe
+                | Operator::ReNone
+                | Operator::ReAll
+                | Operator::ReAllChar
+                | Operator::ReConcat
+                | Operator::ReUnion
+                | Operator::ReIntersection
+                | Operator::ReKleeneClosure
+                | Operator::ReComplement
+                | Operator::ReDiff
+                | Operator::ReKleeneCross
+                | Operator::ReOption
+                | Operator::ReRange => Sort::RegLan,
             },
             Term::App(f, _) => {
                 match self.compute_sort(f).as_sort().unwrap() {

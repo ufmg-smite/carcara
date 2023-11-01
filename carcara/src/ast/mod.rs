@@ -272,6 +272,107 @@ pub enum Operator {
 
     /// The `store` operator.
     Store,
+
+    // Strings
+    /// The `str.++` operator.
+    StrConcat,
+
+    /// The `str.len` operator.
+    StrLen,
+
+    /// The `str.<` operator.
+    StrLessThan,
+
+    /// The `str.<=` operator.
+    StrLessEq,
+
+    /// The `str.at` operator.
+    CharAt,
+
+    /// The `str.substr` operator.
+    Substring,
+
+    /// The `str.prefixof` operator.
+    PrefixOf,
+
+    /// The `str.suffixof` operator.
+    SuffixOf,
+
+    /// The `str.contains` operator.
+    Contains,
+
+    /// The `str.indexof` operator.
+    IndexOf,
+
+    /// The `str.replace` operator.
+    Replace,
+
+    /// The `str.replace_all` operator.
+    ReplaceAll,
+
+    /// The `str.replace_re` operator.
+    ReplaceRe,
+
+    /// The `str.replace_re_all` operator.
+    ReplaceReAll,
+
+    /// The `str.is_digit` operator.
+    StrIsDigit,
+
+    /// The `str.to_code` operator.
+    StrToCode,
+
+    /// The `str.from_code` operator.
+    StrFromCode,
+
+    /// The `str.to_int` operator.
+    StrToInt,
+
+    /// The `str.from_int` operator.
+    StrFromInt,
+
+    // Regular Expressions
+    /// The `str.to_re` operator.
+    StrToRe,
+
+    /// The `str.in_re` operator.
+    StrInRe,
+
+    /// The `re.none` operator.
+    ReNone,
+
+    /// The `re.all` operator.
+    ReAll,
+
+    /// The `re.allchar` operator.
+    ReAllChar,
+
+    /// The `re.++` operator.
+    ReConcat,
+
+    /// The `re.union` operator.
+    ReUnion,
+
+    /// The `re.inter` operator.
+    ReIntersection,
+
+    /// The `re.*` operator.
+    ReKleeneClosure,
+
+    /// The `re.comp` operator.
+    ReComplement,
+
+    /// The `re.diff` operator.
+    ReDiff,
+
+    /// The `re.+` operator.
+    ReKleeneCross,
+
+    /// The `re.opt` operator.
+    ReOption,
+
+    /// The `re.range` operator.
+    ReRange,
 }
 
 impl_str_conversion_traits!(Operator {
@@ -301,6 +402,41 @@ impl_str_conversion_traits!(Operator {
 
     Select: "select",
     Store: "store",
+
+    StrConcat: "str.++",
+    StrLen: "str.len",
+    StrLessThan: "str.<",
+    StrLessEq: "str.<=",
+    CharAt: "str.at",
+    Substring: "str.substr",
+    PrefixOf: "str.prefixof",
+    SuffixOf: "str.suffixof",
+    Contains: "str.contains",
+    IndexOf: "str.indexof",
+    Replace: "str.replace",
+    ReplaceAll: "str.replace_all",
+    ReplaceRe: "str.replace_re",
+    ReplaceReAll: "str.replace_re_all",
+    StrIsDigit: "str.is_digit",
+    StrToCode: "str.to_code",
+    StrFromCode: "str.from_code",
+    StrToInt: "str.to_int",
+    StrFromInt: "str.from_int",
+
+    StrToRe: "str.to_re",
+    StrInRe: "str.in_re",
+    ReNone: "re.none",
+    ReAll: "re.all",
+    ReAllChar: "re.allchar",
+    ReConcat: "re.++",
+    ReUnion: "re.union",
+    ReIntersection: "re.inter",
+    ReKleeneClosure: "re.*",
+    ReComplement: "re.comp",
+    ReDiff: "re.diff",
+    ReKleeneCross: "re.+",
+    ReOption: "re.opt",
+    ReRange: "re.range",
 });
 
 /// A variable and an associated sort.
@@ -332,6 +468,9 @@ pub enum Sort {
 
     /// The `String` primitive sort.
     String,
+
+    /// The `RegLan` primitive sort.
+    RegLan,
 
     /// An `Array` sort.
     ///
