@@ -417,6 +417,8 @@ pub enum IndexedOperator {
     BvZero,
     BvOne,
     BvBitOf,
+    ZeroExtend,
+    SignExtend,
 }
 
 impl_str_conversion_traits!(IndexedOperator {
@@ -424,6 +426,8 @@ impl_str_conversion_traits!(IndexedOperator {
     BvZero: "bv0",
     BvOne: "bv1",
     BvBitOf: "bit_of",
+    ZeroExtend: "zero_extend",
+    SignExtend: "sign_extend",
 });
 
 

@@ -410,8 +410,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 SortError::assert_eq(&Sort::RegLan, sorts[1].as_sort().unwrap())?;
                 SortError::assert_eq(&Sort::String, sorts[2].as_sort().unwrap())?;
             }
-            Operator::BvNot
-            | Operator::BvNeg
+            Operator::BvNot | Operator::BvNeg => assert_num_args(&args, 1)?,
             | Operator::BvAnd
             | Operator::BvOr
             | Operator::BvAdd
@@ -1323,6 +1322,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         match &op {
             IndexedOperator::BvZero | IndexedOperator::BvOne => {
                 // check if 1st op arg is an integer
+                dbg!(&op_args, &args);
                 assert_num_args(&op_args, 1)?;
                 assert_num_args(&args, 0)?;
                 for sort in sorts {
@@ -1335,6 +1335,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
             }
             IndexedOperator::BvBitOf => {
                 assert_num_args(&op_args, 1)?;
+            }
+            IndexedOperator::ZeroExtend | IndexedOperator::SignExtend => {
+                assert_num_args(&op_args, 1)?;
+                assert_num_args(&args, 1)?;
             }
         }
         Ok(self.pool.add(Term::IndexedOp { op, op_args, args }))
@@ -1419,13 +1423,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
             }
             Token::OpenParen => {
                 self.next_token()?;
-                // ! problem is here -> we might found double parenthesis. (assume a0 (= (concat #b000 ((_ extract 3 3) #b1000))))
-                if self.current_token == Token::ReservedWord(Reserved::Underscore) {
-                    self.next_token()?;
-                }
+                self.expect_token(Token::ReservedWord(Reserved::Underscore))?;
                 let (op, op_args) = self.parse_indexed_operator()?;
                 let args = self.parse_sequence(Self::parse_term, true)?;
-                self.expect_token(Token::CloseParen)?;
                 self.make_indexed_op(op, op_args, args)
                     .map_err(|err| Error::Parser(err, head_pos))
             }
@@ -1443,8 +1443,16 @@ impl<'a, R: BufRead> Parser<'a, R> {
         let pos = self.current_position;
         let (name, args) = match self.next_token()?.0 {
             Token::Symbol(s) => (s, Vec::new()),
-            Token::OpenParen => {
+            Token::OpenParen if self.current_token == Token::ReservedWord(Reserved::Underscore) => {
+                self.next_token()?;
                 let name = self.expect_symbol(None)?;
+                assert_eq!(name, "BitVec"); // TODO: Add proper error handling
+                let width = self.expect_numeral()?;
+                self.expect_token(Token::CloseParen)?;
+                return Ok(Term::Sort(Sort::BitVec(width)));
+            }
+            Token::OpenParen => {
+                let name = self.expect_symbol(Some(String::from("aaa")))?;
                 let args = self.parse_sequence(Parser::parse_sort, true)?;
                 (name, self.pool.add_all(args))
             }
