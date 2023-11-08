@@ -674,6 +674,12 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
         let mut finished_assumes = false;
 
+        // Some solvers print the satisfiability result (unsat) together with the proof. To save the
+        // user from having to remove this, we consume this first "unsat" token if it exists
+        if self.current_token == Token::Symbol("unsat".into()) {
+            self.next_token()?;
+        }
+
         while self.current_token != Token::Eof {
             self.expect_token(Token::OpenParen)?;
             let (token, position) = self.next_token()?;
