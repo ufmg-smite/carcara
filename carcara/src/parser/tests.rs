@@ -162,10 +162,6 @@ fn test_logic_ops() {
                 vec![p.bool_true(), p.bool_true(), p.bool_false()],
             )),
         ),
-        (
-            "(and true)",
-            p.add(Term::Op(Operator::And, vec![p.bool_true()])),
-        ),
         ("(or true (and false false))", {
             let false_and_false = p.add(Term::Op(
                 Operator::And,

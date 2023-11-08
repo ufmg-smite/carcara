@@ -183,8 +183,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 }
             }
             Operator::Or | Operator::And | Operator::Xor => {
-                // These operators can be called with only one argument
-                assert_num_args(&args, 1..)?;
+                assert_num_args(&args, 2..)?;
                 for s in sorts {
                     SortError::assert_eq(&Sort::Bool, s.as_sort().unwrap())?;
                 }
