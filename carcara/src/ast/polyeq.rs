@@ -7,9 +7,7 @@
 //! - `alpha_equiv` compares terms by alpha-equivalence, meaning it implements equality of terms
 //! modulo renaming of bound variables.
 
-use super::{
-    BindingList, Ident, Operator, ProofArg, ProofCommand, ProofStep, Rc, Sort, Subproof, Term,
-};
+use super::{BindingList, Operator, ProofArg, ProofCommand, ProofStep, Rc, Sort, Subproof, Term};
 use crate::utils::HashMapStack;
 use std::time::{Duration, Instant};
 
@@ -192,16 +190,14 @@ impl Polyeq for Term {
     fn eq(comp: &mut PolyeqComparator, a: &Self, b: &Self) -> bool {
         match (a, b) {
             (Term::Const(a), Term::Const(b)) => a == b,
-            (Term::Var(Ident::Simple(a), a_sort), Term::Var(Ident::Simple(b), b_sort))
-                if comp.de_bruijn_map.is_some() =>
-            {
+            (Term::Var(a, a_sort), Term::Var(b, b_sort)) if comp.de_bruijn_map.is_some() => {
                 // If we are checking for alpha-equivalence, and we encounter two variables, we
                 // check that they are equivalent using the De Bruijn map
-                let db = comp.de_bruijn_map.as_mut().unwrap();
-                db.compare(a, b) && Polyeq::eq(comp, a_sort, b_sort)
-            }
-            (Term::Var(a, a_sort), Term::Var(b, b_sort)) => {
-                a == b && Polyeq::eq(comp, a_sort, b_sort)
+                if let Some(db) = comp.de_bruijn_map.as_mut() {
+                    db.compare(a, b) && Polyeq::eq(comp, a_sort, b_sort)
+                } else {
+                    a == b && Polyeq::eq(comp, a_sort, b_sort)
+                }
             }
             (Term::App(f_a, args_a), Term::App(f_b, args_b)) => {
                 Polyeq::eq(comp, f_a, f_b) && Polyeq::eq(comp, args_a, args_b)

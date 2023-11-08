@@ -77,7 +77,7 @@ enum AnchorArg {
 /// pool used by the parser.
 #[derive(Default)]
 struct ParserState {
-    symbol_table: HashMapStack<HashCache<Ident>, Rc<Term>>,
+    symbol_table: HashMapStack<HashCache<String>, Rc<Term>>,
     function_defs: IndexMap<String, FunctionDef>,
     sort_declarations: IndexMap<String, usize>,
     step_ids: HashMapStack<HashCache<String>, usize>,
@@ -104,7 +104,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         let bool_sort = pool.add(Term::Sort(Sort::Bool));
 
         for iden in ["true", "false"] {
-            let iden = HashCache::new(Ident::Simple(iden.to_owned()));
+            let iden = HashCache::new(iden.to_owned());
             state.symbol_table.insert(iden, bool_sort.clone());
         }
 
@@ -145,9 +145,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Inserts a `SortedVar` into the parser symbol table.
     fn insert_sorted_var(&mut self, (symbol, sort): SortedVar) {
-        self.state
-            .symbol_table
-            .insert(HashCache::new(Ident::Simple(symbol)), sort);
+        self.state.symbol_table.insert(HashCache::new(symbol), sort);
     }
 
     /// Shortcut for `self.problem.as_mut().unwrap().0`
@@ -161,7 +159,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     /// Constructs and sort checks a variable term.
-    fn make_var(&mut self, iden: Ident) -> Result<Rc<Term>, ParserError> {
+    fn make_var(&mut self, iden: String) -> Result<Rc<Term>, ParserError> {
         let cached = HashCache::new(iden);
         let sort = match self.state.symbol_table.get(&cached) {
             Some(s) => s.clone(),
@@ -1062,8 +1060,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     self.make_op(op, args)
                         .map_err(|err| Error::Parser(err, pos))?
                 } else {
-                    self.make_var(Ident::Simple(s))
-                        .map_err(|err| Error::Parser(err, pos))?
+                    self.make_var(s).map_err(|err| Error::Parser(err, pos))?
                 });
             }
             (Token::OpenParen, _) => return self.parse_application(),

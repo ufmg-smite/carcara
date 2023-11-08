@@ -1,10 +1,6 @@
 //! The types for parser errors.
 
-use crate::{
-    ast::{Ident, Sort},
-    parser::Token,
-    utils::Range,
-};
+use crate::{ast::Sort, parser::Token, utils::Range};
 use rug::Integer;
 use std::fmt;
 use thiserror::Error;
@@ -55,7 +51,7 @@ pub enum ParserError {
 
     /// The parser encountered an identifier that was not defined.
     #[error("identifier '{0}' is not defined")]
-    UndefinedIden(Ident),
+    UndefinedIden(String),
 
     /// The parser encountered a sort that was not defined.
     #[error("sort '{0}' is not defined")]

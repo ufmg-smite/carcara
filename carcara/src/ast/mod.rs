@@ -544,7 +544,7 @@ pub enum Term {
     Const(Constant),
 
     /// A variable, consisting of an identifier and a sort.
-    Var(Ident, Rc<Term>),
+    Var(String, Rc<Term>),
 
     /// An application of a function to one or more terms.
     App(Rc<Term>, Vec<Rc<Term>>),
@@ -570,7 +570,7 @@ pub enum Term {
 
 impl From<SortedVar> for Term {
     fn from(var: SortedVar) -> Self {
-        Term::Var(Ident::Simple(var.0), var.1)
+        Term::Var(var.0, var.1)
     }
 }
 
@@ -592,7 +592,7 @@ impl Term {
 
     /// Constructs a new variable term.
     pub fn new_var(name: impl Into<String>, sort: Rc<Term>) -> Self {
-        Term::Var(Ident::Simple(name.into()), sort)
+        Term::Var(name.into(), sort)
     }
 
     /// Returns the sort of this term. This does not make use of a cache --- if possible, prefer to
@@ -666,14 +666,13 @@ impl Term {
 
     /// Returns `true` if the term is a variable.
     pub fn is_var(&self) -> bool {
-        matches!(self, Term::Var(Ident::Simple(_), _))
+        matches!(self, Term::Var(_, _))
     }
 
-    /// Tries to extract the variable name from a term. Returns `Some` if the term is a variable
-    /// with a simple identifier.
+    /// Tries to extract the variable name from a term. Returns `Some` if the term is a variable.
     pub fn as_var(&self) -> Option<&str> {
         match self {
-            Term::Var(Ident::Simple(var), _) => Some(var.as_str()),
+            Term::Var(var, _) => Some(var.as_str()),
             _ => None,
         }
     }
@@ -720,7 +719,7 @@ impl Term {
 
     /// Returns `true` if the term is the boolean constant `true`.
     pub fn is_bool_true(&self) -> bool {
-        if let Term::Var(Ident::Simple(name), sort) = self {
+        if let Term::Var(name, sort) = self {
             sort.as_sort() == Some(&Sort::Bool) && name == "true"
         } else {
             false
@@ -729,7 +728,7 @@ impl Term {
 
     /// Returns `true` if the term is the boolean constant `false`.
     pub fn is_bool_false(&self) -> bool {
-        if let Term::Var(Ident::Simple(name), sort) = self {
+        if let Term::Var(name, sort) = self {
             sort.as_sort() == Some(&Sort::Bool) && name == "false"
         } else {
             false
@@ -827,21 +826,4 @@ pub enum Constant {
 
     /// A string literal term.
     String(String),
-}
-
-/// An identifier.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Ident {
-    /// A simple identifier, consisting of a symbol.
-    Simple(String),
-
-    /// An indexed identifier, consisting of a symbol and one or more indices.
-    Indexed(String, Vec<IdentIndex>),
-}
-
-/// An index for an indexed identifier. This can be either a numeral or a symbol.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum IdentIndex {
-    Numeral(u64),
-    Symbol(String),
 }

@@ -174,7 +174,7 @@ impl<'a> AlethePrinter<'a> {
     fn write_raw_term(&mut self, term: &Term) -> io::Result<()> {
         match term {
             Term::Const(c) => write!(self.inner, "{}", c),
-            Term::Var(iden, _) => write!(self.inner, "{}", iden),
+            Term::Var(name, _) => write!(self.inner, "{}", quote_symbol(name)),
             Term::App(func, args) => self.write_s_expr(func, args),
             Term::Op(op, args) => self.write_s_expr(op, args),
             Term::Sort(sort) => write!(self.inner, "{}", sort),
@@ -360,26 +360,6 @@ impl fmt::Display for Constant {
                 }
             }
             Constant::String(s) => write!(f, "\"{}\"", escape_string(s)),
-        }
-    }
-}
-
-impl fmt::Display for Ident {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Ident::Simple(s) => write!(f, "{}", quote_symbol(s)),
-            Ident::Indexed(s, indices) => {
-                write_s_expr(f, format!("_ {}", quote_symbol(s)), indices)
-            }
-        }
-    }
-}
-
-impl fmt::Display for IdentIndex {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            IdentIndex::Numeral(n) => write!(f, "{}", n),
-            IdentIndex::Symbol(s) => write!(f, "{}", quote_symbol(s)),
         }
     }
 }
