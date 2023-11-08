@@ -15,7 +15,7 @@ pub enum CheckerError {
     #[error(transparent)]
     Substitution(#[from] SubstitutionError),
 
-    #[error("term '{0}' was not in original problem's assumptions")]
+    #[error("could not match term to any of the original problem premises: {0}")]
     Assume(Rc<Term>),
 
     // Rule specific errors
