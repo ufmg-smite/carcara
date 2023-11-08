@@ -60,12 +60,9 @@ fn get_premise_term<'a>(premise: &Premise<'a>) -> Result<&'a Rc<Term>, CheckerEr
     }
 }
 
-/// Asserts that the argument is true, and returns `None` otherwise. `rassert!(arg)` is identical
-/// to `to_option(arg)?`, but much more readable.
+/// Asserts that the first argument is true, and returns the error specified by the second argument
+/// otherwise.
 macro_rules! rassert {
-    ($arg:expr) => {
-        $crate::checker::rules::to_option($arg)?
-    };
     ($arg:expr, $err:expr $(,)?) => {
         match $arg {
             true => Ok(()),
