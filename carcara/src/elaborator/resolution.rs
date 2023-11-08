@@ -60,9 +60,11 @@ pub fn elaborate_resolution(
         })
         .collect();
     let naive_conclusion = apply_naive_resolution(&premises, &pivots);
-    let target_conclusion = step.clause.iter().map(Rc::remove_all_negations).collect();
+    let target_conclusion: HashSet<_> = step.clause.iter().map(Rc::remove_all_negations).collect();
 
-    let _ = find_needed_contractions(naive_conclusion, target_conclusion, premises, &pivots);
+    let crowding_literals =
+        find_crowding_literals(&naive_conclusion, &target_conclusion, &premises, &pivots);
+    let _ = find_needed_contractions(crowding_literals);
 
     todo!()
 }
@@ -74,19 +76,17 @@ struct CrowdingLiteralInfo {
 }
 
 fn find_crowding_literals<'a>(
-    naive_conclusion: Vec<Literal<'a>>,
-    target_conclusion: Vec<Literal<'a>>,
-    premises: Vec<Vec<Literal<'a>>>,
+    naive_conclusion: &[Literal<'a>],
+    target_conclusion: &HashSet<Literal<'a>>,
+    premises: &[Vec<Literal<'a>>],
     pivots: &[(Literal<'a>, bool)],
 ) -> HashMap<Literal<'a>, CrowdingLiteralInfo> {
-    let mut crowding_lits: HashMap<Literal, CrowdingLiteralInfo> = {
-        let target_conclusion: HashSet<_> = target_conclusion.iter().collect();
-        naive_conclusion
-            .iter()
-            .filter(|lit| !target_conclusion.contains(lit))
-            .map(|&l| (l, CrowdingLiteralInfo { last_inclusion: 0, eliminator: 0 }))
-            .collect()
-    };
+    let mut crowding_lits: HashMap<Literal, CrowdingLiteralInfo> = naive_conclusion
+        .iter()
+        .filter(|lit| !target_conclusion.contains(lit))
+        .map(|&l| (l, CrowdingLiteralInfo { last_inclusion: 0, eliminator: 0 }))
+        .collect();
+
     for (i, clause) in premises.iter().enumerate() {
         for lit in clause {
             if let Some(info) = crowding_lits.get_mut(lit) {
@@ -110,10 +110,7 @@ fn find_crowding_literals<'a>(
 }
 
 fn find_needed_contractions(
-    naive_conclusion: Vec<Literal>,
-    target_conclusion: Vec<Literal>,
-    premises: Vec<Vec<Literal>>,
-    pivots: &[(Literal, bool)],
+    crowding_literals: HashMap<Literal, CrowdingLiteralInfo>,
 ) -> Vec<usize> {
     #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
     enum Event {
@@ -121,10 +118,7 @@ fn find_needed_contractions(
         LastInclusion,
     }
 
-    let crowding_lits =
-        find_crowding_literals(naive_conclusion, target_conclusion, premises, pivots);
-
-    let mut events: Vec<_> = crowding_lits
+    let mut events: Vec<_> = crowding_literals
         .iter()
         .flat_map(|(lit, info)| {
             [
@@ -226,14 +220,10 @@ mod tests {
         let pivots = [x, y, a, z, b, c, d].map(|lit| (lit, true));
 
         let naive_conclusion = apply_naive_resolution(&premises, &pivots);
-        let target_conclusion = Vec::new();
+        let target_conclusion = HashSet::new();
 
-        let crowding_literals = find_crowding_literals(
-            naive_conclusion.clone(),
-            target_conclusion.clone(),
-            premises.clone(),
-            &pivots,
-        );
+        let crowding_literals =
+            find_crowding_literals(&naive_conclusion, &target_conclusion, &premises, &pivots);
 
         let expected = [
             (a, CrowdingLiteralInfo { last_inclusion: 1, eliminator: 3 }),
@@ -245,9 +235,6 @@ mod tests {
         .collect();
         assert_eq!(crowding_literals, expected);
 
-        assert_eq!(
-            find_needed_contractions(naive_conclusion, target_conclusion, premises, &pivots),
-            [3, 6, 7]
-        );
+        assert_eq!(find_needed_contractions(crowding_literals), [3, 6, 7]);
     }
 }
