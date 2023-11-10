@@ -175,11 +175,30 @@ impl Elaborator {
         let frame = self.top_frame_mut();
         let (old_index, new_index) = frame.push_new_index(depth);
 
-        if let Some((depth, &index)) = self.seen_clauses.get_with_depth(clause) {
+        if let Some((seen_depth, &index)) = self.seen_clauses.get_with_depth(clause) {
             let must_keep = self.must_keep(old_index) || is_assume && depth > 0;
-            if !must_keep {
+
+            // If this step is the last step in a subproof, deleting it will cause the entire
+            // subproof to be deleted. However, it might be the case that the step where this
+            // clause was previously seen is inside this subproof, in which case we cannot delete
+            // this step or we will have an invalid premise reference. Here is an example of when this
+            // happens, adapted from a real-world proof:
+            //
+            //   (anchor :step t2)
+            //   (assume t2.a0 u)
+            //   (step t2.t1 (cl (not u) t) :rule hole)
+            //   (step t2.t3 (cl t) :rule resolution :premises (t2.t1 t2.a0))
+            //   (step t2 (cl (not u) t) :rule subproof :discharge (t2.a0))
+            //
+            // Here, the clause in step `t2` was already seen in step `t2.t1`. However, we cannot
+            // delete `t2` as that would result in the deletion of the entire subproof, including
+            // `t2.t1`.
+            let will_delete_seen =
+                old_index + 1 == self.top_frame().subproof_length && seen_depth == depth;
+
+            if !must_keep && !will_delete_seen {
                 let frame = self.top_frame_mut();
-                frame.new_indices[old_index] = (depth, index);
+                frame.new_indices[old_index] = (seen_depth, index);
                 frame.diff.push((old_index, CommandDiff::Delete));
                 frame.current_offset -= 1;
             }
