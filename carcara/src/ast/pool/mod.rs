@@ -134,37 +134,34 @@ impl PrimitivePool {
                 | Operator::BvSLe
                 | Operator::BvSGt
                 | Operator::BvSGe
+                | Operator::BvShl
+                | Operator::BvLShr => Sort::Bool,
+                Operator::BvBbTerm => Sort::BitVec(Integer::from(args.len())),
+                Operator::BvAdd
+                | Operator::BvSub
                 | Operator::BvNot
                 | Operator::BvNeg
-                | Operator::BvAnd
-                | Operator::BvOr
-                | Operator::BvMul
-                | Operator::BvUDiv
-                | Operator::BvURem
-                | Operator::BvShl
-                | Operator::BvLShr
                 | Operator::BvNAnd
                 | Operator::BvNOr
+                | Operator::BvAnd
+                | Operator::BvOr
+                | Operator::BvUDiv
+                | Operator::BvURem
                 | Operator::BvXor
                 | Operator::BvXNor
+                | Operator::BvMul
                 | Operator::BvSDiv
                 | Operator::BvSRem
                 | Operator::BvSMod
                 | Operator::BvAShr => {
-                    // dbg!(op, &args);
-                    Sort::Bool
-                }
-                Operator::BvAdd | Operator::BvSub => {
                     // returns a bit vector of size n, where n is the width of the bitvectors
-                    // bvadd (x : BitVec n) (y : BitVec n) : BitVec n
                     let width = match self.compute_sort(&args[0]).as_sort().unwrap().clone() {
                         Sort::BitVec(x) => x,
-                        Sort::Bool => Integer::ONE.clone(),
                         _ => unreachable!(),
                     };
                     Sort::BitVec(width)
                 }
-                Operator::BvComp | Operator::BvBbTerm => Sort::BitVec(Integer::ONE.into()),
+                Operator::BvComp => Sort::BitVec(Integer::ONE.into()),
                 Operator::BvConcat => {
                     // concat returns a bit vector of size n + m, where n and m are > 0 and represent the width of the bitvectors
                     let mut total_width = Integer::ZERO;
@@ -172,7 +169,6 @@ impl PrimitivePool {
                         dbg!(self.compute_sort(arg).as_sort().unwrap());
                         let arg_width = match self.compute_sort(arg).as_sort().unwrap().clone() {
                             Sort::BitVec(x) => x,
-                            Sort::Bool => Integer::ONE.clone(), // TODO: how to handle this? (step t85 (cl (= (concat x #b0000) (concat x #b0000))) :rule refl)
                             _ => unreachable!(),
                         };
                         total_width += arg_width;
@@ -245,7 +241,7 @@ impl PrimitivePool {
                 // bit_of returns a bit vector of size n
                 // zero_extend returns a bit vector of size n
                 // bvzero and bv one return a bit vector of size n
-                let idx_width = match op {
+                let sort = match op {
                     IndexedOperator::BvExtract => {
                         let i = match &op_args[0] {
                             Constant::Integer(x) => x,
@@ -255,27 +251,27 @@ impl PrimitivePool {
                             Constant::Integer(x) => x,
                             _ => unreachable!(),
                         };
-                        i.to_owned() - j.to_owned() + Integer::ONE
+                        Sort::BitVec(i.to_owned() - j.to_owned() + Integer::ONE)
                     }
                     IndexedOperator::ZeroExtend | IndexedOperator::SignExtend => {
                         let extension_width = match &op_args[0] {
                             Constant::Integer(x) => x,
                             _ => unreachable!(),
                         };
-                        let bv_width = match self.compute_sort(&args[0]).as_sort().unwrap().clone() {
+                        let bv_width = match self.compute_sort(&args[0]).as_sort().unwrap().clone()
+                        {
                             Sort::BitVec(x) => x,
-                            Sort::Bool => Integer::ONE.clone(),
-                            _ => unreachable!()
+                            _ => unreachable!(),
                         };
                         dbg!(&extension_width, &bv_width);
-                        extension_width.to_owned() + bv_width
+                        Sort::BitVec(extension_width.to_owned() + bv_width)
                     }
-                    IndexedOperator::BvZero | IndexedOperator::BvOne | IndexedOperator::BvBitOf => {
-                        todo!()
+                    IndexedOperator::BvZero | IndexedOperator::BvOne => {
+                        Sort::BitVec(Integer::ONE.clone())
                     }
+                    IndexedOperator::BvBitOf => Sort::Bool,
                 };
-                dbg!(&idx_width);
-                Sort::BitVec(idx_width)
+                sort
             }
         };
         let sort = self.storage.add(Term::Sort(result));
