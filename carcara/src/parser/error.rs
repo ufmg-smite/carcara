@@ -33,7 +33,7 @@ pub enum ParserError {
     #[error("empty bitvector literal")]
     EmptyBitvector,
 
-    /// add new error for large bv
+    /// Bitvector literal is too large.
     #[error("bitvector literal is too large")]
     TooLargeBitvector,
 
@@ -89,6 +89,10 @@ pub enum ParserError {
     /// The parser encountered the end of the input while it was still inside a subproof.
     #[error("subproof '{0}' was not closed")]
     UnclosedSubproof(String),
+
+    /// The parser could not get bitvector width from Sort
+    #[error("could not get bitvector width from sort '{0}'")]
+    UnreachableBitVecWidth(Sort),
 }
 
 /// Returns an error if the length of `sequence` is not in the `expected` range.

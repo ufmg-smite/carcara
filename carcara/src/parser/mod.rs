@@ -410,20 +410,27 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 SortError::assert_eq(&Sort::RegLan, sorts[1].as_sort().unwrap())?;
                 SortError::assert_eq(&Sort::String, sorts[2].as_sort().unwrap())?;
             }
-            Operator::BvNot | Operator::BvNeg => assert_num_args(&args, 1)?,
-            | Operator::BvAnd
-            | Operator::BvOr
+            Operator::BvNot | Operator::BvNeg => {
+                assert_num_args(&args, 1)?;
+                let bv_width = self
+                    .get_bv_width_from_sort(sorts[0].as_sort().unwrap())
+                    .unwrap();
+                SortError::assert_eq(&Sort::BitVec(bv_width), sorts[0].as_sort().unwrap())?;
+            }
+            Operator::BvBbTerm => assert_num_args(&args, 1..)?,
+            Operator::BvConcat
             | Operator::BvAdd
             | Operator::BvMul
-            | Operator::BvUDiv
+            | Operator::BvAnd
+            | Operator::BvOr
+            | Operator::BvXor => assert_num_args(&args, 2..)?,
+            Operator::BvUDiv
             | Operator::BvURem
             | Operator::BvShl
             | Operator::BvLShr
             | Operator::BvULt
-            | Operator::BvConcat
             | Operator::BvNAnd
             | Operator::BvNOr
-            | Operator::BvXor
             | Operator::BvXNor
             | Operator::BvComp
             | Operator::BvSub
@@ -437,15 +444,28 @@ impl<'a, R: BufRead> Parser<'a, R> {
             | Operator::BvSLt
             | Operator::BvSLe
             | Operator::BvSGt
-            | Operator::BvSGe
-            | Operator::BvBbTerm => {
+            | Operator::BvSGe => {
                 dbg!(&op, &args);
                 assert_num_args(&args, 2)?;
-                // assume args are already bitvectors
-                // implement parser to build bitvectors
+                for s in sorts {
+                    let bv_width = self
+                        .get_bv_width_from_sort(&s.as_sort().unwrap().clone())
+                        .unwrap();
+                    SortError::assert_eq(&Sort::BitVec(bv_width), s.as_sort().unwrap())?;
+                }
             }
         }
         Ok(self.pool.add(Term::Op(op, args)))
+    }
+
+    fn get_bv_width_from_sort(&mut self, sort: &Sort) -> CarcaraResult<Integer> {
+        match sort {
+            Sort::BitVec(x) => Ok(Integer::from(x)),
+            other => Err(Error::Parser(
+                ParserError::UnreachableBitVecWidth(other.clone()),
+                self.current_position,
+            )),
+        }
     }
 
     /// Constructs and sort checks an application term.
@@ -488,11 +508,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Consumes the current token if it is a symbol, and returns the inner `String`. Returns an
     /// error otherwise.
-    fn expect_symbol(&mut self, word: Option<String>) -> CarcaraResult<String> {
-        match &word {
-            Some(w) => dbg!(w),
-            None => dbg!("None"),
-        };
+    fn expect_symbol(&mut self) -> CarcaraResult<String> {
         match self.next_token()? {
             (Token::Symbol(s), _) => Ok(s),
             (other, pos) => {
@@ -636,7 +652,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     continue;
                 }
                 Token::ReservedWord(Reserved::DeclareConst) => {
-                    let name = self.expect_symbol(None)?;
+                    let name = self.expect_symbol()?;
                     let sort = self.parse_sort()?;
                     let sort = self.pool.add(sort);
                     self.expect_token(Token::CloseParen)?;
@@ -691,7 +707,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     self.premises().extend(terms);
                 }
                 Token::ReservedWord(Reserved::SetLogic) => {
-                    let logic = self.expect_symbol(None)?;
+                    let logic = self.expect_symbol()?;
                     self.expect_token(Token::CloseParen)?;
                     self.prelude().logic = Some(logic.clone());
 
@@ -844,7 +860,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// Parses an `assume` proof command. This method assumes that the `(` and `assume` tokens were
     /// already consumed.
     fn parse_assume_command(&mut self) -> CarcaraResult<(String, Rc<Term>)> {
-        let id = self.expect_symbol(None)?;
+        let id = self.expect_symbol()?;
         let term = self.parse_term_expecting_sort(&Sort::Bool)?;
         self.ignore_remaining_attributes()?;
         self.expect_token(Token::CloseParen)?;
@@ -854,7 +870,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// Parses a `step` proof command. This method assumes that the `(` and `step` tokens were
     /// already consumed.
     fn parse_step_command(&mut self) -> CarcaraResult<ProofStep> {
-        let id = self.expect_symbol(None)?;
+        let id = self.expect_symbol()?;
         let clause = self.parse_clause()?;
         self.expect_token(Token::Keyword("rule".into()))?;
         let rule = match self.next_token()? {
@@ -917,7 +933,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// index used to reference commands in the AST.
     fn parse_step_premise(&mut self) -> CarcaraResult<(usize, usize)> {
         let position = self.current_position;
-        let id = HashCache::new(self.expect_symbol(None)?);
+        let id = HashCache::new(self.expect_symbol()?);
         self.state
             .step_ids
             .get_with_depth(&id)
@@ -933,7 +949,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// command considering both possibilities.
     fn parse_discharge_premise(&mut self, root_id: &str) -> CarcaraResult<(usize, usize)> {
         let position = self.current_position;
-        let id = self.expect_symbol(None)?;
+        let id = self.expect_symbol()?;
         let absolute_id = format!("{}.{}", root_id, &id);
         let id = HashCache::new(id);
         let absolute_id = HashCache::new(absolute_id);
@@ -952,7 +968,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// table which must be removed after parsing the subproof.
     fn parse_anchor_command(&mut self) -> CarcaraResult<AnchorCommand> {
         self.expect_token(Token::Keyword("step".into()))?;
-        let end_step_id = self.expect_symbol(None)?;
+        let end_step_id = self.expect_symbol()?;
 
         // We have to push a new scope into the symbol table in order to parse the subproof
         // arguments
@@ -986,14 +1002,14 @@ impl<'a, R: BufRead> Parser<'a, R> {
         self.expect_token(Token::OpenParen)?;
         Ok(if self.current_token == Token::Keyword("=".into()) {
             self.next_token()?;
-            let var = self.expect_symbol(None)?;
+            let var = self.expect_symbol()?;
             let value = self.parse_term()?;
             let sort = self.pool.sort(&value);
             self.insert_sorted_var((var.clone(), sort));
             self.expect_token(Token::CloseParen)?;
             AnchorArg::Assign(var, value)
         } else {
-            let symbol = self.expect_symbol(None)?;
+            let symbol = self.expect_symbol()?;
             let sort = self.parse_sort()?;
             let var = (symbol, self.pool.add(sort));
             self.insert_sorted_var(var.clone());
@@ -1005,7 +1021,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// Parses a `declare-fun` proof command. Returns the function name and a term representing its
     /// sort. This method assumes that the `(` and `declare-fun` tokens were already consumed.
     fn parse_declare_fun(&mut self) -> CarcaraResult<(String, Rc<Term>)> {
-        let name = self.expect_symbol(None)?;
+        let name = self.expect_symbol()?;
         let sort = {
             self.expect_token(Token::OpenParen)?;
             let mut sorts = self.parse_sequence(Self::parse_sort, false)?;
@@ -1024,7 +1040,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// Parses a declare-sort proof command. Returns the sort name and its arity. This method
     /// assumes that the `(` and `declare-sort` tokens were already consumed.
     fn parse_declare_sort(&mut self) -> CarcaraResult<(String, usize)> {
-        let name = self.expect_symbol(None)?;
+        let name = self.expect_symbol()?;
         let arity_pos = self.current_position;
         let arity = self.expect_numeral()?;
         self.expect_token(Token::CloseParen)?;
@@ -1038,7 +1054,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// Parses a `define-fun` proof command. Returns the function name and its definition. This
     /// method assumes that the `(` and `define-fun` tokens were already consumed.
     fn parse_define_fun(&mut self) -> CarcaraResult<(String, FunctionDef)> {
-        let name = self.expect_symbol(None)?;
+        let name = self.expect_symbol()?;
         self.expect_token(Token::OpenParen)?;
         let params = self.parse_sequence(Self::parse_sorted_var, false)?;
         let return_sort = self.parse_sort()?;
@@ -1074,7 +1090,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
             // lexer reads `:=` as a keyword with contents `=`.
             if self.current_token == Token::Keyword("=".into()) {
                 self.next_token()?; // Consume `:=` token
-                let name = self.expect_symbol(None)?;
+                let name = self.expect_symbol()?;
                 let value = self.parse_term()?;
                 self.expect_token(Token::CloseParen)?;
                 Ok(ProofArg::Assign(name, value))
@@ -1094,7 +1110,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// Parses a sorted variable of the form `(<symbol> <sort>)`.
     fn parse_sorted_var(&mut self) -> CarcaraResult<SortedVar> {
         self.expect_token(Token::OpenParen)?;
-        let symbol = self.expect_symbol(None)?;
+        let symbol = self.expect_symbol()?;
         let sort = self.parse_sort()?;
         self.expect_token(Token::CloseParen)?;
         Ok((symbol, self.pool.add(sort)))
@@ -1155,7 +1171,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     fn parse_term_expecting_sort(&mut self, expected_sort: &Sort) -> CarcaraResult<Rc<Term>> {
         let pos = self.current_position;
         let term = self.parse_term()?;
-        dbg!(expected_sort);
+        // dbg!(expected_sort);
         SortError::assert_eq(expected_sort, self.pool.sort(&term).as_sort().unwrap())
             .map_err(|e| Error::Parser(e.into(), pos))?;
         Ok(term)
@@ -1221,7 +1237,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         let bindings = self.parse_sequence(
             |p| {
                 p.expect_token(Token::OpenParen)?;
-                let name = p.expect_symbol(None)?;
+                let name = p.expect_symbol()?;
                 let value = p.parse_term()?;
                 let sort = p.pool.sort(&value);
                 p.insert_sorted_var((name.clone(), sort));
@@ -1267,7 +1283,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     "named" => {
                         // If the term has a `:named` attribute, we introduce a new nullary function
                         // definition that maps the name to the term
-                        let name = p.expect_symbol(None)?;
+                        let name = p.expect_symbol()?;
                         let func_def = FunctionDef {
                             params: Vec::new(),
                             body: inner.clone(),
@@ -1303,9 +1319,8 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// ! Now, we need to parse the extract and bit_of operators
     /// Parses (_ bvX W), (_extract)
     fn parse_indexed_operator(&mut self) -> CarcaraResult<(IndexedOperator, Vec<Constant>)> {
-        let word = Some(String::from("Bob"));
         dbg!(&self.current_token);
-        let bv_symbol = self.expect_symbol(word)?;
+        let bv_symbol = self.expect_symbol()?;
         let op = IndexedOperator::from_str(bv_symbol.as_str()).unwrap();
         let args = self.parse_sequence(Self::parse_constant, true)?;
         dbg!(op, &args);
@@ -1388,7 +1403,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
             }
             Token::Symbol(s) if self.state.function_defs.get(s).is_some() => {
                 let head_pos = self.current_position;
-                let func_name = self.expect_symbol(None)?;
+                let func_name = self.expect_symbol()?;
                 let args = self.parse_sequence(Self::parse_term, true)?;
                 let func = self.state.function_defs.get(&func_name).unwrap();
 
@@ -1445,14 +1460,14 @@ impl<'a, R: BufRead> Parser<'a, R> {
             Token::Symbol(s) => (s, Vec::new()),
             Token::OpenParen if self.current_token == Token::ReservedWord(Reserved::Underscore) => {
                 self.next_token()?;
-                let name = self.expect_symbol(None)?;
+                let name = self.expect_symbol()?;
                 assert_eq!(name, "BitVec"); // TODO: Add proper error handling
                 let width = self.expect_numeral()?;
                 self.expect_token(Token::CloseParen)?;
                 return Ok(Term::Sort(Sort::BitVec(width)));
             }
             Token::OpenParen => {
-                let name = self.expect_symbol(Some(String::from("aaa")))?;
+                let name = self.expect_symbol()?;
                 let args = self.parse_sequence(Parser::parse_sort, true)?;
                 (name, self.pool.add_all(args))
             }
