@@ -692,3 +692,46 @@ fn test_bitvectors() {
         assert_eq!(&proof.commands[0], &expected_value);
     }
 }
+
+#[test]
+fn test_indexed_operators() {
+    let mut p = PrimitivePool::new();
+    let cases = [
+        (
+            "(assume a0 (= ((_ zero_extend 2) #b100) #b00100))",
+            ProofCommand::Assume {
+                id: "a0".into(),
+                term: parse_term(
+                    &mut p,
+                    "(= ((_ zero_extend 2) #b100) #b00100)",
+                ),
+            },
+        ),
+        (
+            "(assume a0 (= ((_ sign_extend 2) #b100) #b00100))",
+            ProofCommand::Assume {
+                id: "a0".into(),
+                term: parse_term(
+                    &mut p,
+                    "(= ((_ sign_extend 2) #b100) #b00100)",
+                ),
+            },
+        ),
+        (
+            "(assume a0 (= ((_ zero_extend 2) (_ bv1 4)) (_ bv1 6)))",
+            ProofCommand::Assume {
+                id: "a0".into(),
+                term: parse_term(
+                    &mut p,
+                    "(= ((_ zero_extend 2) (_ bv1 4)) (_ bv1 6))",
+                ),
+            },
+        ),
+    ];
+
+    for (input, expected_value) in cases {
+        let proof = parse_proof(&mut p, input);
+        assert_eq!(proof.commands.len(), 1);
+        assert_eq!(&proof.commands[0], &expected_value);
+    }
+}

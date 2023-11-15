@@ -1,6 +1,10 @@
 //! The types for parser errors.
 
-use crate::{ast::Sort, parser::Token, utils::Range};
+use crate::{
+    ast::{Constant, Sort},
+    parser::Token,
+    utils::Range,
+};
 use rug::Integer;
 use std::fmt;
 use thiserror::Error;
@@ -49,6 +53,14 @@ pub enum ParserError {
     #[error("sort error: {0}")]
     SortError(#[from] SortError),
 
+    /// Expected BvSort
+    #[error("expected bitvector sort, got '{0}'")]
+    ExpectedBvSort(Sort),
+
+    // Expected Constant::Integer, got other Constant
+    #[error("expected Constant of type Integer, got '{0}'")]
+    ExpectedIntegerConstant(Constant),
+
     /// A term that is not a function was used as a function.
     #[error("'{0}' is not a function sort")]
     NotAFunction(Sort), // TODO: This should also carry the actual function term
@@ -68,6 +80,9 @@ pub enum ParserError {
     /// The wrong number of arguments was given to a function, operator or sort.
     #[error("expected {0} arguments, got {1}")]
     WrongNumberOfArgs(Range, usize),
+
+    #[error("expected argument value to be greater than {0}, got {1}")]
+    ExpectedGreaterThanArgs(usize, usize),
 
     /// A step id was used in more than one step.
     #[error("step id '{0}' was repeated")]
@@ -97,6 +112,19 @@ pub enum ParserError {
 
 /// Returns an error if the length of `sequence` is not in the `expected` range.
 pub fn assert_num_args<T, R>(sequence: &[T], range: R) -> Result<(), ParserError>
+where
+    R: Into<Range>,
+{
+    let range = range.into();
+    if range.contains(sequence.len()) {
+        Ok(())
+    } else {
+        Err(ParserError::WrongNumberOfArgs(range, sequence.len()))
+    }
+}
+
+/// Returns an error if the value of of `sequence` is not in the `expected` range.
+pub fn assert_args_value<T, R>(sequence: &[T], range: R) -> Result<(), ParserError>
 where
     R: Into<Range>,
 {

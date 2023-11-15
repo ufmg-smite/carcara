@@ -414,22 +414,19 @@ pub enum Operator {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IndexedOperator {
     BvExtract,
-    BvZero,
-    BvOne,
     BvBitOf,
     ZeroExtend,
     SignExtend,
+    BvConst,
 }
 
 impl_str_conversion_traits!(IndexedOperator {
     BvExtract: "extract",
-    BvZero: "bv0",
-    BvOne: "bv1",
     BvBitOf: "bit_of",
     ZeroExtend: "zero_extend",
     SignExtend: "sign_extend",
+    BvConst: "bv", 
 });
-
 
 impl_str_conversion_traits!(Operator {
     Not: "not",
@@ -932,4 +929,16 @@ pub enum Constant {
     String(String),
 
     BitVec(Integer, Integer),
+}
+
+impl Constant {
+    /// Returns the sort of a constant. In case it's a BitVec, we only return the width.
+    pub fn sort(&self) -> Sort {
+        match self {
+            Constant::Integer(_) => Sort::Int,
+            Constant::Real(_) => Sort::Real,
+            Constant::String(_) => Sort::String,
+            Constant::BitVec(_, width) => Sort::BitVec(width.clone()),
+        }
+    }
 }

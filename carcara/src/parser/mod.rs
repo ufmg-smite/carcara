@@ -412,18 +412,36 @@ impl<'a, R: BufRead> Parser<'a, R> {
             }
             Operator::BvNot | Operator::BvNeg => {
                 assert_num_args(&args, 1)?;
-                let bv_width = self
-                    .get_bv_width_from_sort(sorts[0].as_sort().unwrap())
-                    .unwrap();
-                SortError::assert_eq(&Sort::BitVec(bv_width), sorts[0].as_sort().unwrap())?;
+                for s in sorts {
+                    let s = s.as_sort().unwrap().clone();
+                    if !matches!(s, Sort::BitVec(_)) {
+                        return Err(ParserError::ExpectedBvSort(s));
+                    }
+                }
+                // TODO: create args value assertion 
+                // assert_args_value(&args, 1..)?;
             }
-            Operator::BvBbTerm => assert_num_args(&args, 1..)?,
+            Operator::BvBbTerm => {
+                assert_num_args(&args, 1..)?;
+                for s in sorts {
+                    let s = s.as_sort().unwrap().clone();
+                    SortError::assert_eq(&Sort::Bool, &s)?;
+                }
+            }
             Operator::BvConcat
             | Operator::BvAdd
             | Operator::BvMul
             | Operator::BvAnd
             | Operator::BvOr
-            | Operator::BvXor => assert_num_args(&args, 2..)?,
+            | Operator::BvXor => {
+                assert_num_args(&args, 2..)?;
+                for s in sorts {
+                    let s = s.as_sort().unwrap().clone();
+                    if !matches!(s, Sort::BitVec(_)) {
+                        return Err(ParserError::ExpectedBvSort(s));
+                    }
+                }
+            }
             Operator::BvUDiv
             | Operator::BvURem
             | Operator::BvShl
@@ -448,24 +466,14 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 dbg!(&op, &args);
                 assert_num_args(&args, 2)?;
                 for s in sorts {
-                    let bv_width = self
-                        .get_bv_width_from_sort(&s.as_sort().unwrap().clone())
-                        .unwrap();
-                    SortError::assert_eq(&Sort::BitVec(bv_width), s.as_sort().unwrap())?;
+                    let s = s.as_sort().unwrap().clone();
+                    if !matches!(s, Sort::BitVec(_)) {
+                        return Err(ParserError::ExpectedBvSort(s));
+                    }
                 }
             }
         }
         Ok(self.pool.add(Term::Op(op, args)))
-    }
-
-    fn get_bv_width_from_sort(&mut self, sort: &Sort) -> CarcaraResult<Integer> {
-        match sort {
-            Sort::BitVec(x) => Ok(Integer::from(x)),
-            other => Err(Error::Parser(
-                ParserError::UnreachableBitVecWidth(other.clone()),
-                self.current_position,
-            )),
-        }
     }
 
     /// Constructs and sort checks an application term.
@@ -1316,11 +1324,15 @@ impl<'a, R: BufRead> Parser<'a, R> {
         Ok(inner)
     }
 
-    /// ! Now, we need to parse the extract and bit_of operators
-    /// Parses (_ bvX W), (_extract)
     fn parse_indexed_operator(&mut self) -> CarcaraResult<(IndexedOperator, Vec<Constant>)> {
         dbg!(&self.current_token);
         let bv_symbol = self.expect_symbol()?;
+        if bv_symbol.starts_with("bv") {
+            let value = bv_symbol[2..].parse::<Integer>().unwrap();
+            let mut args = self.parse_sequence(Self::parse_constant, true)?;
+            args.insert(0, Constant::Integer(value));
+            return Ok((IndexedOperator::BvConst, args));
+        }
         let op = IndexedOperator::from_str(bv_symbol.as_str()).unwrap();
         let args = self.parse_sequence(Self::parse_constant, true)?;
         dbg!(op, &args);
@@ -1335,25 +1347,38 @@ impl<'a, R: BufRead> Parser<'a, R> {
     ) -> Result<Rc<Term>, ParserError> {
         let sorts: Vec<_> = args.iter().map(|t| self.pool.sort(t)).collect();
         match &op {
-            IndexedOperator::BvZero | IndexedOperator::BvOne => {
-                // check if 1st op arg is an integer
-                dbg!(&op_args, &args);
-                assert_num_args(&op_args, 1)?;
+            IndexedOperator::BvConst => {
+                assert_num_args(&op_args, 2)?;
                 assert_num_args(&args, 0)?;
-                for sort in sorts {
-                    dbg!(sort);
-                }
+                let Constant::Integer(value) = op_args[0].clone() else {
+                    return Err(ParserError::ExpectedIntegerConstant(op_args[0].clone()));
+                };
+                let Constant::Integer(width) = op_args[1].clone() else {
+                    return Err(ParserError::ExpectedIntegerConstant(op_args[1].clone()));
+                };
+                return Ok(self.pool.add(Term::Const(Constant::BitVec(value, width))));
             }
             IndexedOperator::BvExtract => {
                 assert_num_args(&op_args, 2)?;
                 assert_num_args(&args, 1)?;
+                let s = sorts[0].as_sort().unwrap().clone();
+                if !matches!(s, Sort::BitVec(_)) {
+                    return Err(ParserError::ExpectedBvSort(s));
+                }
+                for arg in &op_args {
+                    SortError::assert_eq(&Sort::Int, &arg.sort())?;
+                }
             }
-            IndexedOperator::BvBitOf => {
-                assert_num_args(&op_args, 1)?;
-            }
-            IndexedOperator::ZeroExtend | IndexedOperator::SignExtend => {
+            IndexedOperator::BvBitOf
+            | IndexedOperator::ZeroExtend
+            | IndexedOperator::SignExtend => {
                 assert_num_args(&op_args, 1)?;
                 assert_num_args(&args, 1)?;
+                SortError::assert_eq(&Sort::Int, &op_args[0].sort())?;
+                let s = sorts[0].as_sort().unwrap().clone();
+                if !matches!(s, Sort::BitVec(_)) {
+                    return Err(ParserError::ExpectedBvSort(s));
+                }
             }
         }
         Ok(self.pool.add(Term::IndexedOp { op, op_args, args }))

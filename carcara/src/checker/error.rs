@@ -199,6 +199,12 @@ pub enum CongruenceError {
 
     #[error("term is not an application or operation: '{0}'")]
     NotApplicationOrOperation(Rc<Term>),
+
+    #[error("indexed operators don't match: '{0}' and '{2}'")]
+    DifferentIndexedOperators(
+        IndexedOperator, Vec<Constant>,
+        IndexedOperator, Vec<Constant>,
+    ),
 }
 
 /// Errors relevant to the rules dealing with quantifiers.

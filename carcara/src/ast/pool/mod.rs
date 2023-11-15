@@ -136,7 +136,6 @@ impl PrimitivePool {
                 | Operator::BvSGe
                 | Operator::BvShl
                 | Operator::BvLShr => Sort::Bool,
-                Operator::BvBbTerm => Sort::BitVec(Integer::from(args.len())),
                 Operator::BvAdd
                 | Operator::BvSub
                 | Operator::BvNot
@@ -154,22 +153,24 @@ impl PrimitivePool {
                 | Operator::BvSRem
                 | Operator::BvSMod
                 | Operator::BvAShr => {
-                    // returns a bit vector of size n, where n is the width of the bitvectors
-                    let width = match self.compute_sort(&args[0]).as_sort().unwrap().clone() {
-                        Sort::BitVec(x) => x,
-                        _ => unreachable!(),
+                    let Sort::BitVec(width) =
+                        self.compute_sort(&args[0]).as_sort().unwrap().clone()
+                    else {
+                        todo!()
                     };
                     Sort::BitVec(width)
                 }
                 Operator::BvComp => Sort::BitVec(Integer::ONE.into()),
+                Operator::BvBbTerm => Sort::BitVec(Integer::from(args.len())),
                 Operator::BvConcat => {
                     // concat returns a bit vector of size n + m, where n and m are > 0 and represent the width of the bitvectors
                     let mut total_width = Integer::ZERO;
                     for arg in args {
                         dbg!(self.compute_sort(arg).as_sort().unwrap());
-                        let arg_width = match self.compute_sort(arg).as_sort().unwrap().clone() {
-                            Sort::BitVec(x) => x,
-                            _ => unreachable!(),
+                        let Sort::BitVec(arg_width) =
+                            self.compute_sort(arg).as_sort().unwrap().clone()
+                        else {
+                            unreachable!()
                         };
                         total_width += arg_width;
                     }
@@ -237,38 +238,49 @@ impl PrimitivePool {
                 Sort::Function(result)
             }
             Term::IndexedOp { op, op_args, args } => {
-                // extract returns a bit vector of size n
-                // bit_of returns a bit vector of size n
-                // zero_extend returns a bit vector of size n
-                // bvzero and bv one return a bit vector of size n
                 let sort = match op {
                     IndexedOperator::BvExtract => {
-                        let i = match &op_args[0] {
-                            Constant::Integer(x) => x,
-                            _ => unreachable!(),
+                        /*
+                        ! extract has restrictions regarding their op_args
+                        ((_ extract i j) (_ BitVec m) (_ BitVec n))
+
+                        where
+                        - i, j, m, n are numerals
+                        - m > i ≥ j ≥ 0,
+                        - n = i - j + 1
+                         */
+                        let Constant::Integer(i) = op_args[0].clone() else {
+                            todo!()
                         };
-                        let j = match &op_args[1] {
-                            Constant::Integer(x) => x,
-                            _ => unreachable!(),
+                        let Constant::Integer(j) = op_args[1].clone() else {
+                            todo!()
                         };
-                        Sort::BitVec(i.to_owned() - j.to_owned() + Integer::ONE)
+
+                        let Sort::BitVec(m) =
+                            self.compute_sort(&args[0]).as_sort().unwrap().clone()
+                        else {
+                            unreachable!()
+                        };
+                        if !(m > i && i >= j && j >= Integer::ZERO) {
+                            panic!("Wrong arguments for extract") // todo create error for this
+                        }
+                        Sort::BitVec(i - j + Integer::ONE)
                     }
                     IndexedOperator::ZeroExtend | IndexedOperator::SignExtend => {
-                        let extension_width = match &op_args[0] {
-                            Constant::Integer(x) => x,
-                            _ => unreachable!(),
+                        let Constant::Integer(extension_width) = op_args[0].clone() else {
+                            todo!()
                         };
-                        let bv_width = match self.compute_sort(&args[0]).as_sort().unwrap().clone()
-                        {
-                            Sort::BitVec(x) => x,
-                            _ => unreachable!(),
+                        let Sort::BitVec(bv_width) =
+                            self.compute_sort(&args[0]).as_sort().unwrap().clone()
+                        else {
+                            todo!()
                         };
                         dbg!(&extension_width, &bv_width);
-                        Sort::BitVec(extension_width.to_owned() + bv_width)
+                        Sort::BitVec(extension_width + bv_width)
                     }
-                    IndexedOperator::BvZero | IndexedOperator::BvOne => {
-                        Sort::BitVec(Integer::ONE.clone())
-                    }
+                    IndexedOperator::BvConst => unreachable!(
+                        "bv const should be handled by the parser and transfromed into a constant"
+                    ),
                     IndexedOperator::BvBitOf => Sort::Bool,
                 };
                 sort
@@ -366,7 +378,13 @@ impl PrimitivePool {
                 set
             }
             Term::Const(_) | Term::Sort(_) => IndexSet::new(),
-            Term::IndexedOp { op, op_args, args } => todo!(),
+            Term::IndexedOp { op: _, op_args: _, args } => {
+                let mut set = IndexSet::new();
+                for a in args {
+                    set.extend(self.free_vars_with_priorities(a, prior_pools).into_iter());
+                }
+                set
+            }
         };
         self.free_vars_cache.insert(term.clone(), set);
         self.free_vars_cache.get(term).unwrap().clone()
