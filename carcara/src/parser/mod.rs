@@ -17,6 +17,8 @@ use indexmap::{IndexMap, IndexSet};
 use rug::Integer;
 use std::{io::BufRead, str::FromStr};
 
+use self::error::assert_indexed_op_args_value;
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Config {
     pub apply_function_defs: bool,
@@ -418,8 +420,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         return Err(ParserError::ExpectedBvSort(s));
                     }
                 }
-                // TODO: create args value assertion 
-                // assert_args_value(&args, 1..)?;
             }
             Operator::BvBbTerm => {
                 assert_num_args(&args, 1..)?;
@@ -428,12 +428,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     SortError::assert_eq(&Sort::Bool, &s)?;
                 }
             }
-            Operator::BvConcat
-            | Operator::BvAdd
-            | Operator::BvMul
-            | Operator::BvAnd
-            | Operator::BvOr
-            | Operator::BvXor => {
+            Operator::BvConcat => {
                 assert_num_args(&args, 2..)?;
                 for s in sorts {
                     let s = s.as_sort().unwrap().clone();
@@ -441,6 +436,23 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         return Err(ParserError::ExpectedBvSort(s));
                     }
                 }
+            }
+            Operator::BvAdd
+            | Operator::BvMul
+            | Operator::BvAnd
+            | Operator::BvOr
+            | Operator::BvXor => {
+                assert_num_args(&args, 2..)?;
+                let first_sort = sorts[0].as_sort().unwrap().clone();
+                if !matches!(first_sort, Sort::BitVec(_)) {
+                    return Err(ParserError::ExpectedBvSort(first_sort));
+                }
+                SortError::assert_all_eq(
+                    &sorts
+                        .iter()
+                        .map(|op| op.as_sort().unwrap())
+                        .collect::<Vec<&Sort>>(),
+                )?;
             }
             Operator::BvUDiv
             | Operator::BvURem
@@ -465,12 +477,16 @@ impl<'a, R: BufRead> Parser<'a, R> {
             | Operator::BvSGe => {
                 dbg!(&op, &args);
                 assert_num_args(&args, 2)?;
-                for s in sorts {
-                    let s = s.as_sort().unwrap().clone();
-                    if !matches!(s, Sort::BitVec(_)) {
-                        return Err(ParserError::ExpectedBvSort(s));
-                    }
+                let first_sort = sorts[0].as_sort().unwrap().clone();
+                if !matches!(first_sort, Sort::BitVec(_)) {
+                    return Err(ParserError::ExpectedBvSort(first_sort));
                 }
+                SortError::assert_all_eq(
+                    &sorts
+                        .iter()
+                        .map(|op| op.as_sort().unwrap())
+                        .collect::<Vec<&Sort>>(),
+                )?;
             }
         }
         Ok(self.pool.add(Term::Op(op, args)))
@@ -1356,9 +1372,18 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 let Constant::Integer(width) = op_args[1].clone() else {
                     return Err(ParserError::ExpectedIntegerConstant(op_args[1].clone()));
                 };
+                assert_indexed_op_args_value(&op_args, 1..)?;
                 return Ok(self.pool.add(Term::Const(Constant::BitVec(value, width))));
             }
             IndexedOperator::BvExtract => {
+                /*
+                ((_ extract i j) (_ BitVec m) (_ BitVec n))
+
+                where
+                - i, j, m, n are numerals
+                - m > i ≥ j ≥ 0,
+                - n = i - j + 1
+                 */
                 assert_num_args(&op_args, 2)?;
                 assert_num_args(&args, 1)?;
                 let s = sorts[0].as_sort().unwrap().clone();
@@ -1367,6 +1392,19 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 }
                 for arg in &op_args {
                     SortError::assert_eq(&Sort::Int, &arg.sort())?;
+                }
+                assert_indexed_op_args_value(&op_args, 0..)?;
+                let i = op_args[0].as_integer().unwrap();
+                let j = op_args[1].as_integer().unwrap();
+                let Sort::BitVec(m) = sorts[0].as_sort().unwrap().clone() else {
+                    unreachable!()
+                };
+                if !(m > i && i >= j && j >= Integer::ZERO) {
+                    return Err(ParserError::InvalidExtractArgs(
+                        i.to_usize().unwrap(),
+                        j.to_usize().unwrap(),
+                        m.to_usize().unwrap(),
+                    ));
                 }
             }
             IndexedOperator::BvBitOf
@@ -1379,6 +1417,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 if !matches!(s, Sort::BitVec(_)) {
                     return Err(ParserError::ExpectedBvSort(s));
                 }
+                assert_indexed_op_args_value(&op_args, 0..)?;
             }
         }
         Ok(self.pool.add(Term::IndexedOp { op, op_args, args }))

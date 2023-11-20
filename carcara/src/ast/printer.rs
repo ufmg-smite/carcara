@@ -123,7 +123,7 @@ impl<'a> PrintProof for AlethePrinter<'a> {
         while let Some(command) = iter.next() {
             match command {
                 ProofCommand::Assume { id, term } => {
-                    write!(self.inner, "(assume {} ", id)?;
+                    write!(self.inner, "(assume {} ", quote_symbol(id))?;
                     term.print_with_sharing(self)?;
                     write!(self.inner, ")")?;
                 }
@@ -357,7 +357,7 @@ impl fmt::Display for Constant {
                 }
             }
             Constant::String(s) => write!(f, "\"{}\"", escape_string(s)),
-            Constant::BitVec(val, width) => write!(f, "{}, {}", val, width), // TODO: comeback to this
+            Constant::BitVec(val, width) => write!(f, "(_ bv{} {})", val, width), // TODO: comeback to this
         }
     }
 }
@@ -406,7 +406,7 @@ impl fmt::Display for Sort {
             Sort::String => write!(f, "String"),
             Sort::RegLan => write!(f, "RegLan"),
             Sort::Array(x, y) => write_s_expr(f, "Array", &[x, y]),
-            Sort::BitVec(w) => write!(f, "BitVec, {}",w),
+            Sort::BitVec(w) => write!(f, "(_ BitVec {})",w),
         }
     }
 }

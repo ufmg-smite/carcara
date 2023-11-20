@@ -156,14 +156,13 @@ impl PrimitivePool {
                     let Sort::BitVec(width) =
                         self.compute_sort(&args[0]).as_sort().unwrap().clone()
                     else {
-                        todo!()
+                        unreachable!()
                     };
                     Sort::BitVec(width)
                 }
                 Operator::BvComp => Sort::BitVec(Integer::ONE.into()),
                 Operator::BvBbTerm => Sort::BitVec(Integer::from(args.len())),
                 Operator::BvConcat => {
-                    // concat returns a bit vector of size n + m, where n and m are > 0 and represent the width of the bitvectors
                     let mut total_width = Integer::ZERO;
                     for arg in args {
                         dbg!(self.compute_sort(arg).as_sort().unwrap());
@@ -240,40 +239,16 @@ impl PrimitivePool {
             Term::IndexedOp { op, op_args, args } => {
                 let sort = match op {
                     IndexedOperator::BvExtract => {
-                        /*
-                        ! extract has restrictions regarding their op_args
-                        ((_ extract i j) (_ BitVec m) (_ BitVec n))
-
-                        where
-                        - i, j, m, n are numerals
-                        - m > i ≥ j ≥ 0,
-                        - n = i - j + 1
-                         */
-                        let Constant::Integer(i) = op_args[0].clone() else {
-                            todo!()
-                        };
-                        let Constant::Integer(j) = op_args[1].clone() else {
-                            todo!()
-                        };
-
-                        let Sort::BitVec(m) =
-                            self.compute_sort(&args[0]).as_sort().unwrap().clone()
-                        else {
-                            unreachable!()
-                        };
-                        if !(m > i && i >= j && j >= Integer::ZERO) {
-                            panic!("Wrong arguments for extract") // todo create error for this
-                        }
+                        let i = op_args[0].as_integer().unwrap();
+                        let j = op_args[1].as_integer().unwrap();
                         Sort::BitVec(i - j + Integer::ONE)
                     }
                     IndexedOperator::ZeroExtend | IndexedOperator::SignExtend => {
-                        let Constant::Integer(extension_width) = op_args[0].clone() else {
-                            todo!()
-                        };
+                        let extension_width = op_args[0].as_integer().unwrap();
                         let Sort::BitVec(bv_width) =
                             self.compute_sort(&args[0]).as_sort().unwrap().clone()
                         else {
-                            todo!()
+                            unreachable!()
                         };
                         dbg!(&extension_width, &bv_width);
                         Sort::BitVec(extension_width + bv_width)

@@ -425,7 +425,7 @@ impl_str_conversion_traits!(IndexedOperator {
     BvBitOf: "bit_of",
     ZeroExtend: "zero_extend",
     SignExtend: "sign_extend",
-    BvConst: "bv", 
+    BvConst: "bv",
 });
 
 impl_str_conversion_traits!(Operator {
@@ -939,6 +939,13 @@ impl Constant {
             Constant::Real(_) => Sort::Real,
             Constant::String(_) => Sort::String,
             Constant::BitVec(_, width) => Sort::BitVec(width.clone()),
+        }
+    }
+
+    pub fn as_integer(&self) -> Option<Integer> {
+        match self {
+            Constant::Integer(i) => Some(i.clone()),
+            _ => None,
         }
     }
 }

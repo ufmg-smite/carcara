@@ -81,8 +81,12 @@ pub enum ParserError {
     #[error("expected {0} arguments, got {1}")]
     WrongNumberOfArgs(Range, usize),
 
+    /// The argument values are not in the expected range.
     #[error("expected argument value to be greater than {0}, got {1}")]
-    ExpectedGreaterThanArgs(usize, usize),
+    ExpectedGreaterThanArgs(Range, usize),
+
+    #[error("extract arguments do not follow restrictions. Expected: {2} > {0} and {0} >= {1} and {1} >= 0")]
+    InvalidExtractArgs(usize, usize, usize),
 
     /// A step id was used in more than one step.
     #[error("step id '{0}' was repeated")]
@@ -104,10 +108,6 @@ pub enum ParserError {
     /// The parser encountered the end of the input while it was still inside a subproof.
     #[error("subproof '{0}' was not closed")]
     UnclosedSubproof(String),
-
-    /// The parser could not get bitvector width from Sort
-    #[error("could not get bitvector width from sort '{0}'")]
-    UnreachableBitVecWidth(Sort),
 }
 
 /// Returns an error if the length of `sequence` is not in the `expected` range.
@@ -124,15 +124,25 @@ where
 }
 
 /// Returns an error if the value of of `sequence` is not in the `expected` range.
-pub fn assert_args_value<T, R>(sequence: &[T], range: R) -> Result<(), ParserError>
+pub fn assert_indexed_op_args_value<R>(sequence: &Vec<Constant>, range: R) -> Result<(), ParserError>
 where
     R: Into<Range>,
 {
     let range = range.into();
-    if range.contains(sequence.len()) {
+    let mut wrong_value: usize = usize::MAX;
+    for x in sequence.iter() {
+        if let Constant::Integer(i) = x {
+            let value = i.to_usize().unwrap();
+            if !range.contains(value) {
+                wrong_value = value;
+                break;
+            }
+        }
+    }
+    if wrong_value == usize::MAX {
         Ok(())
     } else {
-        Err(ParserError::WrongNumberOfArgs(range, sequence.len()))
+        Err(ParserError::ExpectedGreaterThanArgs(range, wrong_value))
     }
 }
 
