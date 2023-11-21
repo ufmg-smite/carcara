@@ -123,14 +123,14 @@ where
     }
 }
 
-/// Returns an error if the value of of `sequence` is not in the `expected` range.
-pub fn assert_indexed_op_args_value<R>(sequence: &Vec<Constant>, range: R) -> Result<(), ParserError>
+/// Returns an error if the value of `sequence` is not in the `expected` range.
+pub fn assert_indexed_op_args_value<R>(sequence: &[Constant], range: R) -> Result<(), ParserError>
 where
     R: Into<Range>,
 {
     let range = range.into();
-    let mut wrong_value: usize = usize::MAX;
-    for x in sequence.iter() {
+    let mut wrong_value = usize::MAX;
+    for x in sequence {
         if let Constant::Integer(i) = x {
             let value = i.to_usize().unwrap();
             if !range.contains(value) {

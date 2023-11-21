@@ -201,9 +201,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
             }
             Operator::Ite => {
                 assert_num_args(&args, 3)?;
-                sorts
-                    .iter()
-                    .for_each(|s| println!("{:?}", s.as_sort().unwrap()));
                 SortError::assert_eq(&Sort::Bool, sorts[0].as_sort().unwrap())?;
                 SortError::assert_eq(sorts[1].as_sort().unwrap(), sorts[2].as_sort().unwrap())?;
             }
@@ -532,9 +529,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     fn expect_symbol(&mut self) -> CarcaraResult<String> {
         match self.next_token()? {
             (Token::Symbol(s), _) => Ok(s),
-            (other, pos) => {
-                Err(Error::Parser(ParserError::UnexpectedToken(other), pos))
-            }
+            (other, pos) => Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),
         }
     }
 
@@ -543,9 +538,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     fn expect_keyword(&mut self) -> CarcaraResult<String> {
         match self.next_token()? {
             (Token::Keyword(s), _) => Ok(s),
-            (other, pos) => {
-                Err(Error::Parser(ParserError::UnexpectedToken(other), pos))
-            }
+            (other, pos) => Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),
         }
     }
 
@@ -554,9 +547,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     fn expect_numeral(&mut self) -> CarcaraResult<Integer> {
         match self.next_token()? {
             (Token::Numeral(n), _) => Ok(n),
-            (other, pos) => {
-                Err(Error::Parser(ParserError::UnexpectedToken(other), pos))
-            }
+            (other, pos) => Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),
         }
     }
 
@@ -1169,11 +1160,11 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     pub fn parse_constant(&mut self) -> CarcaraResult<Constant> {
         let constant = match self.next_token()? {
-            (Token::Bitvector { value, width }, _) => Constant::BitVec(value.into(), width.into()),
+            (Token::Bitvector { value, width }, _) => Constant::BitVec(value, width.into()),
             (Token::Numeral(n), _) if self.interpret_integers_as_reals => Constant::Real(n.into()),
-            (Token::Numeral(n), _) => Constant::Integer(n.into()),
-            (Token::Decimal(r), _) => Constant::Real(r.into()),
-            (Token::String(s), _) => Constant::String(s.into()),
+            (Token::Numeral(n), _) => Constant::Integer(n),
+            (Token::Decimal(r), _) => Constant::Real(r),
+            (Token::String(s), _) => Constant::String(s),
             (other, pos) => {
                 return Err(Error::Parser(ParserError::UnexpectedToken(other), pos));
             }
@@ -1330,10 +1321,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     fn parse_indexed_operator(&mut self) -> CarcaraResult<(IndexedOperator, Vec<Constant>)> {
         let bv_symbol = self.expect_symbol()?;
-        if bv_symbol.starts_with("bv") {
-            let value = bv_symbol[2..].parse::<Integer>().unwrap();
+        if let Some(value) = bv_symbol.strip_prefix("bv") {
+            let parsed_value = value.parse::<Integer>().unwrap();
             let mut args = self.parse_sequence(Self::parse_constant, true)?;
-            args.insert(0, Constant::Integer(value));
+            args.insert(0, Constant::Integer(parsed_value));
             return Ok((IndexedOperator::BvConst, args));
         }
         let op = IndexedOperator::from_str(bv_symbol.as_str()).unwrap();
@@ -1429,12 +1420,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     Reserved::Lambda => self.parse_lambda_term(),
                     Reserved::Bang => self.parse_annotated_term(),
                     Reserved::Let => self.parse_let_term(),
-                    _ => {
-                        return Err(Error::Parser(
-                            ParserError::UnexpectedToken(Token::ReservedWord(reserved)),
-                            head_pos,
-                        ));
-                    }
+                    _ => Err(Error::Parser(
+                        ParserError::UnexpectedToken(Token::ReservedWord(reserved)),
+                        head_pos,
+                    )),
                 }
             }
             // Here, I would like to use an `if let` guard, like:

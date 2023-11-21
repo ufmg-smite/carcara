@@ -932,7 +932,7 @@ pub enum Constant {
 }
 
 impl Constant {
-    /// Returns the sort of a constant. In case it's a BitVec, we only return the width.
+    /// Returns the sort of a constant. In case it's a `BitVec`, we only return the width.
     pub fn sort(&self) -> Sort {
         match self {
             Constant::Integer(_) => Sort::Int,
