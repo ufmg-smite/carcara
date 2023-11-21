@@ -285,7 +285,6 @@ impl<'c> ProofChecker<'c> {
         let mut polyeq_time = Duration::ZERO;
         let mut core_time = Duration::ZERO;
 
-        dbg!(premises);
         for p in premises {
             let mut this_polyeq_time = Duration::ZERO;
             let (result, depth) = tracing_polyeq(term, p, &mut this_polyeq_time);
@@ -299,7 +298,7 @@ impl<'c> ProofChecker<'c> {
                 break;
             }
         }
-        dbg!(&found);
+
         let Some(p) = found else { return false };
 
         if let Some(elaborator) = &mut self.elaborator {
@@ -556,6 +555,7 @@ impl<'c> ProofChecker<'c> {
             "la_mult_pos" => extras::la_mult_pos,
             "la_mult_neg" => extras::la_mult_neg,
             "mod_simplify" => extras::mod_simplify,
+            "bitblast_extract" => bvextract::extract,
 
             // Special rules that always check as valid, and are used to indicate holes in the
             // proof.

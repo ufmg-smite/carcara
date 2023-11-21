@@ -475,7 +475,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
             | Operator::BvSLe
             | Operator::BvSGt
             | Operator::BvSGe => {
-                dbg!(&op, &args);
                 assert_num_args(&args, 2)?;
                 let first_sort = sorts[0].as_sort().unwrap().clone();
                 if !matches!(first_sort, Sort::BitVec(_)) {
@@ -521,11 +520,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// Consumes the current token if it equals `expected`. Returns an error otherwise.
     fn expect_token(&mut self, expected: Token) -> CarcaraResult<()> {
         let (got, pos) = self.next_token()?;
-        // dbg!(&got, &expected);
         if got == expected {
             Ok(())
         } else {
-            dbg!("Err(Error::Parser(ParserError::UnexpectedToken(got), pos))");
             Err(Error::Parser(ParserError::UnexpectedToken(got), pos))
         }
     }
@@ -536,7 +533,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
         match self.next_token()? {
             (Token::Symbol(s), _) => Ok(s),
             (other, pos) => {
-                dbg!("Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),");
                 Err(Error::Parser(ParserError::UnexpectedToken(other), pos))
             }
         }
@@ -548,7 +544,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
         match self.next_token()? {
             (Token::Keyword(s), _) => Ok(s),
             (other, pos) => {
-                dbg!("Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),");
                 Err(Error::Parser(ParserError::UnexpectedToken(other), pos))
             }
         }
@@ -560,7 +555,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
         match self.next_token()? {
             (Token::Numeral(n), _) => Ok(n),
             (other, pos) => {
-                dbg!("Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),");
                 Err(Error::Parser(ParserError::UnexpectedToken(other), pos))
             }
         }
@@ -599,7 +593,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 (Token::OpenParen, _) => 1,
                 (Token::CloseParen, _) => -1,
                 (Token::Eof, pos) => {
-                    dbg!("Err(Error::Parser(ParserError::UnexpectedToken(Token::Eof), pos))");
                     return Err(Error::Parser(ParserError::UnexpectedToken(Token::Eof), pos));
                 }
                 _ => 0,
@@ -811,7 +804,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     continue;
                 }
                 _ => {
-                    dbg!("Err(Error::Parser(ParserError::UnexpectedToken(token), position)),");
                     return Err(Error::Parser(ParserError::UnexpectedToken(token), position));
                 }
             };
@@ -901,7 +893,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
             (Token::Symbol(s), _) => s,
             (Token::ReservedWord(r), _) => format!("{}", r),
             (other, pos) => {
-                dbg!("Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),");
                 return Err(Error::Parser(ParserError::UnexpectedToken(other), pos));
             }
         };
@@ -1170,7 +1161,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
             }
             (Token::OpenParen, _) => return self.parse_application(),
             (other, pos) => {
-                dbg!("Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),");
                 return Err(Error::Parser(ParserError::UnexpectedToken(other), pos));
             }
         };
@@ -1185,7 +1175,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
             (Token::Decimal(r), _) => Constant::Real(r.into()),
             (Token::String(s), _) => Constant::String(s.into()),
             (other, pos) => {
-                dbg!("Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),");
                 return Err(Error::Parser(ParserError::UnexpectedToken(other), pos));
             }
         };
@@ -1195,7 +1184,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
     fn parse_term_expecting_sort(&mut self, expected_sort: &Sort) -> CarcaraResult<Rc<Term>> {
         let pos = self.current_position;
         let term = self.parse_term()?;
-        // dbg!(expected_sort);
         SortError::assert_eq(expected_sort, self.pool.sort(&term).as_sort().unwrap())
             .map_err(|e| Error::Parser(e.into(), pos))?;
         Ok(term)
@@ -1341,7 +1329,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     fn parse_indexed_operator(&mut self) -> CarcaraResult<(IndexedOperator, Vec<Constant>)> {
-        dbg!(&self.current_token);
         let bv_symbol = self.expect_symbol()?;
         if bv_symbol.starts_with("bv") {
             let value = bv_symbol[2..].parse::<Integer>().unwrap();
@@ -1351,7 +1338,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
         }
         let op = IndexedOperator::from_str(bv_symbol.as_str()).unwrap();
         let args = self.parse_sequence(Self::parse_constant, true)?;
-        dbg!(op, &args);
         Ok((op, args))
     }
 
@@ -1433,7 +1419,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 self.next_token()?;
                 match reserved {
                     Reserved::Underscore => {
-                        print!("found underscore at {:?}", head_pos);
                         let (op, op_args) = self.parse_indexed_operator()?;
                         self.make_indexed_op(op, op_args, Vec::new())
                             .map_err(|err| Error::Parser(err, head_pos))
@@ -1445,7 +1430,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     Reserved::Bang => self.parse_annotated_term(),
                     Reserved::Let => self.parse_let_term(),
                     _ => {
-                        dbg!(ParserError::UnexpectedToken(Token::ReservedWord(reserved)));
                         return Err(Error::Parser(
                             ParserError::UnexpectedToken(Token::ReservedWord(reserved)),
                             head_pos,
@@ -1537,7 +1521,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 (name, self.pool.add_all(args))
             }
             other => {
-                dbg!("Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),");
                 return Err(Error::Parser(ParserError::UnexpectedToken(other), pos));
             }
         };

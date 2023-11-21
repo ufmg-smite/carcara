@@ -165,7 +165,6 @@ impl PrimitivePool {
                 Operator::BvConcat => {
                     let mut total_width = Integer::ZERO;
                     for arg in args {
-                        dbg!(self.compute_sort(arg).as_sort().unwrap());
                         let Sort::BitVec(arg_width) =
                             self.compute_sort(arg).as_sort().unwrap().clone()
                         else {
@@ -173,7 +172,6 @@ impl PrimitivePool {
                         };
                         total_width += arg_width;
                     }
-                    dbg!(&total_width);
                     Sort::BitVec(total_width)
                 }
                 Operator::Ite => self.compute_sort(&args[1]).as_sort().unwrap().clone(),
@@ -250,7 +248,6 @@ impl PrimitivePool {
                         else {
                             unreachable!()
                         };
-                        dbg!(&extension_width, &bv_width);
                         Sort::BitVec(extension_width + bv_width)
                     }
                     IndexedOperator::BvConst => unreachable!(
