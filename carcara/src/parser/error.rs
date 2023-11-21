@@ -83,7 +83,7 @@ pub enum ParserError {
 
     /// The argument values are not in the expected range.
     #[error("expected argument value to be greater than {0}, got {1}")]
-    ExpectedGreaterThanArgs(Range, usize),
+    WrongValueOfArgs(Range, usize),
 
     #[error("extract arguments do not follow restrictions. Expected: {2} > {0} and {0} >= {1} and {1} >= 0")]
     InvalidExtractArgs(usize, usize, usize),
@@ -142,7 +142,7 @@ where
     if wrong_value == usize::MAX {
         Ok(())
     } else {
-        Err(ParserError::ExpectedGreaterThanArgs(range, wrong_value))
+        Err(ParserError::WrongValueOfArgs(range, wrong_value))
     }
 }
 
