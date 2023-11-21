@@ -1355,6 +1355,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         Ok((op, args))
     }
 
+    /// Constructs, check operation arguments and sort checks an indexed operation term.
     fn make_indexed_op(
         &mut self,
         op: IndexedOperator,
