@@ -1477,11 +1477,18 @@ impl<'a, R: BufRead> Parser<'a, R> {
             }
             Token::OpenParen => {
                 self.next_token()?;
-                self.expect_token(Token::ReservedWord(Reserved::Underscore))?;
-                let (op, op_args) = self.parse_indexed_operator()?;
-                let args = self.parse_sequence(Self::parse_term, true)?;
-                self.make_indexed_op(op, op_args, args)
-                    .map_err(|err| Error::Parser(err, head_pos))
+                if self.current_token == Token::ReservedWord(Reserved::Underscore) {
+                    self.next_token()?;
+                    let (op, op_args) = self.parse_indexed_operator()?;
+                    let args = self.parse_sequence(Self::parse_term, true)?;
+                    self.make_indexed_op(op, op_args, args)
+                        .map_err(|err| Error::Parser(err, head_pos))
+                } else {
+                    let func = self.parse_application()?;
+                    let args = self.parse_sequence(Self::parse_term, true)?;
+                    self.make_app(func, args)
+                        .map_err(|err| Error::Parser(err, head_pos))
+                }
             }
             _ => {
                 let func = self.parse_term()?;
