@@ -701,30 +701,21 @@ fn test_indexed_operators() {
             "(assume a0 (= ((_ zero_extend 2) #b100) #b00100))",
             ProofCommand::Assume {
                 id: "a0".into(),
-                term: parse_term(
-                    &mut p,
-                    "(= ((_ zero_extend 2) #b100) #b00100)",
-                ),
+                term: parse_term(&mut p, "(= ((_ zero_extend 2) #b100) #b00100)"),
             },
         ),
         (
             "(assume a0 (= ((_ sign_extend 2) #b100) #b00100))",
             ProofCommand::Assume {
                 id: "a0".into(),
-                term: parse_term(
-                    &mut p,
-                    "(= ((_ sign_extend 2) #b100) #b00100)",
-                ),
+                term: parse_term(&mut p, "(= ((_ sign_extend 2) #b100) #b00100)"),
             },
         ),
         (
             "(assume a0 (= ((_ zero_extend 2) (_ bv1 4)) (_ bv1 6)))",
             ProofCommand::Assume {
                 id: "a0".into(),
-                term: parse_term(
-                    &mut p,
-                    "(= ((_ zero_extend 2) (_ bv1 4)) (_ bv1 6))",
-                ),
+                term: parse_term(&mut p, "(= ((_ zero_extend 2) (_ bv1 4)) (_ bv1 6))"),
             },
         ),
     ];

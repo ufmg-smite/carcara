@@ -212,9 +212,7 @@ impl<'a> AlethePrinter<'a> {
                 term.print_with_sharing(self)?;
                 write!(self.inner, ")")
             }
-            Term::IndexedOp { op, op_args: _, args } => {
-                self.write_s_expr(op, args)
-            },
+            Term::IndexedOp { op, op_args: _, args } => self.write_s_expr(op, args),
         }
     }
 
@@ -406,7 +404,7 @@ impl fmt::Display for Sort {
             Sort::String => write!(f, "String"),
             Sort::RegLan => write!(f, "RegLan"),
             Sort::Array(x, y) => write_s_expr(f, "Array", &[x, y]),
-            Sort::BitVec(w) => write!(f, "(_ BitVec {})",w),
+            Sort::BitVec(w) => write!(f, "(_ BitVec {})", w),
         }
     }
 }

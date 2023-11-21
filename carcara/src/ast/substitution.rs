@@ -212,7 +212,7 @@ impl Substitution {
                     op_args: op_args.clone(),
                     args: new_args,
                 })
-            },
+            }
         };
 
         // Since frequently a term will have more than one identical subterms, we insert the

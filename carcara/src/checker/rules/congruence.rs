@@ -185,8 +185,10 @@ pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
         ) => {
             if f_op != g_op || f_op_args != g_op_args {
                 Err(CongruenceError::DifferentIndexedOperators(
-                    *f_op, f_op_args.clone(),
-                    *g_op, g_op_args.clone(),
+                    *f_op,
+                    f_op_args.clone(),
+                    *g_op,
+                    g_op_args.clone(),
                 ))
             } else {
                 Ok((f_args, g_args))
