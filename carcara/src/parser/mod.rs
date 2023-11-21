@@ -1350,7 +1350,8 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 let Constant::Integer(width) = op_args[1].clone() else {
                     return Err(ParserError::ExpectedIntegerConstant(op_args[1].clone()));
                 };
-                assert_indexed_op_args_value(&op_args, 1..)?;
+                assert_indexed_op_args_value(&[op_args[0].clone()], 0..)?;
+                assert_indexed_op_args_value(&[op_args[1].clone()], 1..)?;
                 return Ok(self.pool.add(Term::Const(Constant::BitVec(value, width))));
             }
             IndexedOperator::BvExtract => {
