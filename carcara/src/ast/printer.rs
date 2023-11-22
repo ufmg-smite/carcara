@@ -99,6 +99,12 @@ impl PrintWithSharing for BindingList {
     }
 }
 
+impl PrintWithSharing for Constant {
+    fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
+        write!(p.inner, "{}", self)
+    }
+}
+
 impl PrintWithSharing for Operator {
     fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
         write!(p.inner, "{}", self)
@@ -170,6 +176,10 @@ impl<'a> AlethePrinter<'a> {
     {
         write!(self.inner, "(")?;
         head.print_with_sharing(self)?;
+        self.write_s_expr_tail(tail)
+    }
+
+    fn write_s_expr_tail<T: PrintWithSharing>(&mut self, tail: &[T]) -> io::Result<()> {
         for t in tail {
             write!(self.inner, " ")?;
             t.print_with_sharing(self)?;
@@ -212,7 +222,17 @@ impl<'a> AlethePrinter<'a> {
                 term.print_with_sharing(self)?;
                 write!(self.inner, ")")
             }
-            Term::IndexedOp { op, op_args: _, args } => self.write_s_expr(op, args),
+            Term::IndexedOp { op, op_args, args } => {
+                if !args.is_empty() {
+                    write!(self.inner, "(")?;
+                }
+                write!(self.inner, "(_ {}", op)?;
+                self.write_s_expr_tail(op_args)?;
+                if !args.is_empty() {
+                    self.write_s_expr_tail(args)?;
+                }
+                Ok(())
+            }
         }
     }
 
