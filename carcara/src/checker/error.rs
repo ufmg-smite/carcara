@@ -202,8 +202,10 @@ pub enum CongruenceError {
 
     #[error("indexed operators don't match: '{0}' and '{2}'")]
     DifferentIndexedOperators(
-        IndexedOperator, Vec<Constant>,
-        IndexedOperator, Vec<Constant>,
+        IndexedOperator,
+        Vec<Constant>,
+        IndexedOperator,
+        Vec<Constant>,
     ),
 }
 
