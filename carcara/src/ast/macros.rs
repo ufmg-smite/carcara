@@ -93,6 +93,21 @@ macro_rules! match_term {
         }
     };
     ($bind:ident = $var:expr) => { Some($var) };
+    (((_ $indexed_op:tt $($op_args:tt)+) $($args:tt)+) = $var:expr) => {{
+        if let $crate::ast::Term::IndexedOp {
+            op: match_term!(@GET_VARIANT $indexed_op),
+            op_args,
+            args,
+        } = &$var as &$crate::ast::Term {
+            match_term!(@ARGS ($($op_args)+) = op_args.as_slice()).and_then(|op_args| {
+                match_term!(@ARGS ($($args)+) = args.as_slice()).map(|args| {
+                    (op_args, args)
+                })
+            })
+        } else {
+            None
+        }
+    }};
     (($op:tt $($args:tt)+) = $var:expr) => {{
         if let $crate::ast::Term::Op(match_term!(@GET_VARIANT $op), args) =
             &$var as &$crate::ast::Term
@@ -143,6 +158,11 @@ macro_rules! match_term {
     (@GET_VARIANT >)        => { $crate::ast::Operator::GreaterThan };
     (@GET_VARIANT <=)       => { $crate::ast::Operator::LessEq };
     (@GET_VARIANT >=)       => { $crate::ast::Operator::GreaterEq };
+
+    (@GET_VARIANT extract)     => { $crate::ast::IndexedOperator::BvExtract };
+    (@GET_VARIANT bit_of)      => { $crate::ast::IndexedOperator::BvBitOf };
+    (@GET_VARIANT zero_extend) => { $crate::ast::IndexedOperator::ZeroExtend };
+    (@GET_VARIANT sign_extend) => { $crate::ast::IndexedOperator::SignExtend };
 }
 
 /// A variant of `match_term` that returns a `Result<_, CheckerError>` instead of an `Option`.
@@ -294,6 +314,24 @@ mod tests {
             }
             _ => panic!(),
         }
+
+        let term = parse_term(&mut p, "((_ extract 3 1) (_ bv0 5))");
+        let ((i, j), b): ((&Constant, &Constant), &Rc<Term>) =
+            match_term!(((_ extract i j) b) = term).unwrap();
+        assert_eq!(Constant::Integer(3.into()), *i);
+        assert_eq!(Constant::Integer(1.into()), *j);
+        assert_eq!(Term::new_bv(0, 5), **b);
+
+        let term = parse_term(&mut p, "((_ bit_of 2) (_ bv0 5))");
+        let (i, b): (&Constant, &[Rc<Term>]) = match_term!(((_ bit_of i) ...) = term).unwrap();
+        assert_eq!(Constant::Integer(2.into()), *i);
+        assert_eq!(Term::new_bv(0, 5), *b[0]);
+
+        let term = parse_term(&mut p, "((_ zero_extend 3) (_ bv0 5))");
+        let (i, b): (&[Constant], &[Rc<Term>]) =
+            match_term!(((_ zero_extend ...) ...) = term).unwrap();
+        assert_eq!(Constant::Integer(3.into()), i[0]);
+        assert_eq!(Term::new_bv(0, 5), *b[0]);
     }
 
     #[test]
