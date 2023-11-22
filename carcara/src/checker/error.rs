@@ -171,6 +171,18 @@ pub enum ResolutionError {
     PivotNotFound(Rc<Term>),
 }
 
+struct DisplayIndexedOp<'a>(&'a IndexedOperator, &'a Vec<Constant>);
+
+impl<'a> fmt::Display for DisplayIndexedOp<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "(_ {}", self.0)?;
+        for a in self.1 {
+            write!(f, " {}", a)?;
+        }
+        write!(f, ")")
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum CongruenceError {
     #[error("too many premises")]
@@ -200,12 +212,13 @@ pub enum CongruenceError {
     #[error("term is not an application or operation: '{0}'")]
     NotApplicationOrOperation(Rc<Term>),
 
-    #[error("indexed operators don't match: '{0}' and '{2}'")]
+    #[error(
+        "indexed operators don't match: '{}' and '{}'",
+        DisplayIndexedOp(&(.0).0, &(.0).1), DisplayIndexedOp(&(.1).0, &(.1).1)
+    )]
     DifferentIndexedOperators(
-        IndexedOperator,
-        Vec<Constant>,
-        IndexedOperator,
-        Vec<Constant>,
+        (IndexedOperator, Vec<Constant>),
+        (IndexedOperator, Vec<Constant>),
     ),
 }
 
