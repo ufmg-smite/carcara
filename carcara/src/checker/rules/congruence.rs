@@ -171,6 +171,29 @@ pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
             true => Ok((f_args, g_args)),
             false => Err(CongruenceError::DifferentOperators(*f, *g)),
         },
+        (
+            Term::IndexedOp {
+                op: f_op,
+                op_args: f_op_args,
+                args: f_args,
+            },
+            Term::IndexedOp {
+                op: g_op,
+                args: g_args,
+                op_args: g_op_args,
+            },
+        ) => {
+            if f_op != g_op || f_op_args != g_op_args {
+                Err(CongruenceError::DifferentIndexedOperators(
+                    *f_op,
+                    f_op_args.clone(),
+                    *g_op,
+                    g_op_args.clone(),
+                ))
+            } else {
+                Ok((f_args, g_args))
+            }
+        }
         (Term::Op(..) | Term::App(..), _) => {
             // Note: this error also triggers when `f` is an operation and `g` an application, or
             // vice-versa. This means the error message may be a bit confusing

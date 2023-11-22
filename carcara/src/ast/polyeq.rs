@@ -202,6 +202,18 @@ impl Polyeq for Term {
             (Term::App(f_a, args_a), Term::App(f_b, args_b)) => {
                 Polyeq::eq(comp, f_a, f_b) && Polyeq::eq(comp, args_a, args_b)
             }
+            (
+                Term::IndexedOp {
+                    op: op_a,
+                    op_args: op_args_a,
+                    args: args_a,
+                },
+                Term::IndexedOp {
+                    op: op_b,
+                    op_args: op_args_b,
+                    args: args_b,
+                },
+            ) => op_a == op_b && op_args_a == op_args_b && Polyeq::eq(comp, args_a, args_b),
             (Term::Op(op_a, args_a), Term::Op(op_b, args_b)) => {
                 if comp.is_mod_reordering {
                     if let (Operator::Equals, [a_1, a_2], Operator::Equals, [b_1, b_2]) =

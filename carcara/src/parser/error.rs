@@ -1,6 +1,10 @@
 //! The types for parser errors.
 
-use crate::{ast::Sort, parser::Token, utils::Range};
+use crate::{
+    ast::{Constant, Sort},
+    parser::Token,
+    utils::Range,
+};
 use rug::Integer;
 use std::fmt;
 use thiserror::Error;
@@ -33,6 +37,10 @@ pub enum ParserError {
     #[error("empty bitvector literal")]
     EmptyBitvector,
 
+    /// Bitvector literal is too large.
+    #[error("bitvector literal is too large")]
+    TooLargeBitvector,
+
     /// The parser encountered an unexpected token.
     #[error("unexpected token: '{0}'")]
     UnexpectedToken(Token),
@@ -44,6 +52,14 @@ pub enum ParserError {
     /// An error in sort checking.
     #[error("sort error: {0}")]
     SortError(#[from] SortError),
+
+    /// Expected BvSort
+    #[error("expected bitvector sort, got '{0}'")]
+    ExpectedBvSort(Sort),
+
+    // Expected Constant::Integer, got other Constant
+    #[error("expected Constant of type Integer, got '{0}'")]
+    ExpectedIntegerConstant(Constant),
 
     /// A term that is not a function was used as a function.
     #[error("'{0}' is not a function sort")]
@@ -64,6 +80,13 @@ pub enum ParserError {
     /// The wrong number of arguments was given to a function, operator or sort.
     #[error("expected {0} arguments, got {1}")]
     WrongNumberOfArgs(Range, usize),
+
+    /// The argument values are not in the expected range.
+    #[error("expected argument value to be greater than {0}, got {1}")]
+    WrongValueOfArgs(Range, usize),
+
+    #[error("extract arguments do not follow restrictions. Expected: {2} > {0} and {0} >= {1} and {1} >= 0")]
+    InvalidExtractArgs(usize, usize, usize),
 
     /// A step id was used in more than one step.
     #[error("step id '{0}' was repeated")]
@@ -97,6 +120,29 @@ where
         Ok(())
     } else {
         Err(ParserError::WrongNumberOfArgs(range, sequence.len()))
+    }
+}
+
+/// Returns an error if the value of `sequence` is not in the `expected` range.
+pub fn assert_indexed_op_args_value<R>(sequence: &[Constant], range: R) -> Result<(), ParserError>
+where
+    R: Into<Range>,
+{
+    let range = range.into();
+    let mut wrong_value = usize::MAX;
+    for x in sequence {
+        if let Constant::Integer(i) = x {
+            let value = i.to_usize().unwrap();
+            if !range.contains(value) {
+                wrong_value = value;
+                break;
+            }
+        }
+    }
+    if wrong_value == usize::MAX {
+        Ok(())
+    } else {
+        Err(ParserError::WrongValueOfArgs(range, wrong_value))
     }
 }
 

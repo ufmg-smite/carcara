@@ -4,8 +4,9 @@ pub mod advanced;
 mod storage;
 
 use super::{Rc, Sort, Term};
-use crate::ast::Constant;
+use crate::ast::{Constant, IndexedOperator};
 use indexmap::{IndexMap, IndexSet};
+use rug::Integer;
 use storage::Storage;
 
 pub trait TermPool {
@@ -102,6 +103,7 @@ impl PrimitivePool {
                 Constant::Integer(_) => Sort::Int,
                 Constant::Real(_) => Sort::Real,
                 Constant::String(_) => Sort::String,
+                Constant::BitVec(_, w) => Sort::BitVec(w.clone()),
             },
             Term::Var(_, sort) => sort.as_sort().unwrap().clone(),
             Term::Op(op, args) => match op {
@@ -123,7 +125,55 @@ impl PrimitivePool {
                 | Operator::SuffixOf
                 | Operator::Contains
                 | Operator::StrIsDigit
-                | Operator::StrInRe => Sort::Bool,
+                | Operator::StrInRe
+                | Operator::BvULt
+                | Operator::BvULe
+                | Operator::BvUGt
+                | Operator::BvUGe
+                | Operator::BvSLt
+                | Operator::BvSLe
+                | Operator::BvSGt
+                | Operator::BvSGe
+                | Operator::BvShl
+                | Operator::BvLShr => Sort::Bool,
+                Operator::BvAdd
+                | Operator::BvSub
+                | Operator::BvNot
+                | Operator::BvNeg
+                | Operator::BvNAnd
+                | Operator::BvNOr
+                | Operator::BvAnd
+                | Operator::BvOr
+                | Operator::BvUDiv
+                | Operator::BvURem
+                | Operator::BvXor
+                | Operator::BvXNor
+                | Operator::BvMul
+                | Operator::BvSDiv
+                | Operator::BvSRem
+                | Operator::BvSMod
+                | Operator::BvAShr => {
+                    let Sort::BitVec(width) =
+                        self.compute_sort(&args[0]).as_sort().unwrap().clone()
+                    else {
+                        unreachable!()
+                    };
+                    Sort::BitVec(width)
+                }
+                Operator::BvComp => Sort::BitVec(Integer::ONE.into()),
+                Operator::BvBbTerm => Sort::BitVec(Integer::from(args.len())),
+                Operator::BvConcat => {
+                    let mut total_width = Integer::ZERO;
+                    for arg in args {
+                        let Sort::BitVec(arg_width) =
+                            self.compute_sort(arg).as_sort().unwrap().clone()
+                        else {
+                            unreachable!()
+                        };
+                        total_width += arg_width;
+                    }
+                    Sort::BitVec(total_width)
+                }
                 Operator::Ite => self.compute_sort(&args[1]).as_sort().unwrap().clone(),
                 Operator::Add | Operator::Sub | Operator::Mult => {
                     if args
@@ -183,6 +233,29 @@ impl PrimitivePool {
                     bindings.iter().map(|(_name, sort)| sort.clone()).collect();
                 result.push(self.compute_sort(body));
                 Sort::Function(result)
+            }
+            Term::IndexedOp { op, op_args, args } => {
+                let sort = match op {
+                    IndexedOperator::BvExtract => {
+                        let i = op_args[0].as_integer().unwrap();
+                        let j = op_args[1].as_integer().unwrap();
+                        Sort::BitVec(i - j + Integer::ONE)
+                    }
+                    IndexedOperator::ZeroExtend | IndexedOperator::SignExtend => {
+                        let extension_width = op_args[0].as_integer().unwrap();
+                        let Sort::BitVec(bv_width) =
+                            self.compute_sort(&args[0]).as_sort().unwrap().clone()
+                        else {
+                            unreachable!()
+                        };
+                        Sort::BitVec(extension_width + bv_width)
+                    }
+                    IndexedOperator::BvConst => unreachable!(
+                        "bv const should be handled by the parser and transfromed into a constant"
+                    ),
+                    IndexedOperator::BvBitOf => Sort::Bool,
+                };
+                sort
             }
         };
         let sort = self.storage.add(Term::Sort(result));
@@ -277,6 +350,13 @@ impl PrimitivePool {
                 set
             }
             Term::Const(_) | Term::Sort(_) => IndexSet::new(),
+            Term::IndexedOp { op: _, op_args: _, args } => {
+                let mut set = IndexSet::new();
+                for a in args {
+                    set.extend(self.free_vars_with_priorities(a, prior_pools).into_iter());
+                }
+                set
+            }
         };
         self.free_vars_cache.insert(term.clone(), set);
         self.free_vars_cache.get(term).unwrap().clone()

@@ -373,7 +373,60 @@ pub enum Operator {
 
     /// The `re.range` operator.
     ReRange,
+
+    // BV operators (unary)
+    BvNot,
+    BvNeg,
+    // BV operators (binary, left-assoc)
+    BvAnd,
+    BvOr,
+    BvAdd,
+    BvMul,
+    // BV operators (binary)
+    BvUDiv,
+    BvURem,
+    BvShl,
+    BvLShr,
+    BvULt,
+
+    BvConcat,
+    BvNAnd,
+    BvNOr,
+    BvXor,
+    BvXNor,
+    BvComp,
+    BvSub,
+    BvSDiv,
+    BvSRem,
+    BvSMod,
+    BvAShr,
+
+    BvULe,
+    BvUGt,
+    BvUGe,
+    BvSLt,
+    BvSLe,
+    BvSGt,
+    BvSGe,
+    BvBbTerm,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum IndexedOperator {
+    BvExtract,
+    BvBitOf,
+    ZeroExtend,
+    SignExtend,
+    BvConst,
+}
+
+impl_str_conversion_traits!(IndexedOperator {
+    BvExtract: "extract",
+    BvBitOf: "bit_of",
+    ZeroExtend: "zero_extend",
+    SignExtend: "sign_extend",
+    BvConst: "bv",
+});
 
 impl_str_conversion_traits!(Operator {
     Not: "not",
@@ -437,6 +490,38 @@ impl_str_conversion_traits!(Operator {
     ReKleeneCross: "re.+",
     ReOption: "re.opt",
     ReRange: "re.range",
+    BvNot: "bvnot",
+    BvNeg: "bvneg",
+    BvAnd: "bvand",
+    BvOr: "bvor",
+    BvAdd: "bvadd",
+    BvMul: "bvmul",
+    BvUDiv: "bvudiv",
+    BvURem: "bvurem",
+    BvShl: "bvshl",
+    BvLShr: "bvlshr",
+    BvULt: "bvult",
+
+    BvConcat: "concat",
+    BvNAnd: "bvnand",
+    BvNOr: "bvnor",
+    BvXor: "bvxor",
+    BvXNor: "bvxnor",
+    BvComp: "bvcomp",
+    BvSub: "bvsub",
+    BvSDiv: "bvsdiv",
+    BvSRem: "bvsrem",
+    BvSMod: "bvsmod",
+    BvAShr: "bvashr",
+
+    BvULe: "bvule",
+    BvUGt: "bvugt",
+    BvUGe: "bvuge",
+    BvSLt: "bvslt",
+    BvSLe: "bvsle",
+    BvSGt: "bvsgt",
+    BvSGe: "bvsge",
+    BvBbTerm: "bbterm",
 });
 
 /// A variable and an associated sort.
@@ -476,6 +561,10 @@ pub enum Sort {
     ///
     /// The two associated terms are the sort arguments for this sort.
     Array(Rc<Term>, Rc<Term>),
+    ///  `BitVec` sort.
+    ///
+    /// The associated term is the BV width of this sort.
+    BitVec(Integer),
 }
 
 /// A quantifier, either `forall` or `exists`.
@@ -566,6 +655,13 @@ pub enum Term {
 
     /// A `lambda` term.
     Lambda(BindingList, Rc<Term>),
+
+    /// A `indexed` operator term.
+    IndexedOp {
+        op: IndexedOperator,
+        op_args: Vec<Constant>,
+        args: Vec<Rc<Term>>,
+    },
 }
 
 impl From<SortedVar> for Term {
@@ -588,6 +684,11 @@ impl Term {
     /// Constructs a new string term.
     pub fn new_string(value: impl Into<String>) -> Self {
         Term::Const(Constant::String(value.into()))
+    }
+
+    /// Constructs a new bv term.
+    pub fn new_bv(value: impl Into<Integer>, widht: impl Into<Integer>) -> Self {
+        Term::Const(Constant::BitVec(value.into(), widht.into()))
     }
 
     /// Constructs a new variable term.
@@ -826,4 +927,25 @@ pub enum Constant {
 
     /// A string literal term.
     String(String),
+
+    BitVec(Integer, Integer),
+}
+
+impl Constant {
+    /// Returns the sort of a constant. In case it's a `BitVec`, we only return the width.
+    pub fn sort(&self) -> Sort {
+        match self {
+            Constant::Integer(_) => Sort::Int,
+            Constant::Real(_) => Sort::Real,
+            Constant::String(_) => Sort::String,
+            Constant::BitVec(_, width) => Sort::BitVec(width.clone()),
+        }
+    }
+
+    pub fn as_integer(&self) -> Option<Integer> {
+        match self {
+            Constant::Integer(i) => Some(i.clone()),
+            _ => None,
+        }
+    }
 }
