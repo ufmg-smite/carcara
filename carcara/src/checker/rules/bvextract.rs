@@ -31,7 +31,7 @@ pub fn extract(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         Term::Op(Operator::BvBbTerm, args) => {
             assert_eq!(args.len(), size);
             let (_, left_x_args) = left_x.as_op().unwrap();
-            dbg!(args, left_x_args);
+            // dbg!(args, left_x_args);
             assert_eq!(args, &left_x_args[left_j..=left_i]);
             Ok(())
         }
