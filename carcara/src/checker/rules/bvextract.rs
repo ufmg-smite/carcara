@@ -1,6 +1,9 @@
 use crate::{
     ast::{IndexedOperator, Operator, Term},
-    checker::{error::{ExtractError, CheckerError}, rules::assert_clause_len},
+    checker::{
+        error::{CheckerError, ExtractError},
+        rules::assert_clause_len,
+    },
 };
 
 use super::{RuleArgs, RuleResult};
