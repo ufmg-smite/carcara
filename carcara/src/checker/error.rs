@@ -37,9 +37,6 @@ pub enum CheckerError {
     #[error(transparent)]
     Subproof(#[from] SubproofError),
 
-    #[error(transparent)]
-    Extract(#[from] ExtractError),
-
     #[error("reflexivity failed with terms '{0}' and '{1}'")]
     ReflexivityFailed(Rc<Term>, Rc<Term>),
 
@@ -131,8 +128,6 @@ pub enum CheckerError {
 
     #[error("division or modulo by zero")]
     DivOrModByZero,
-
-    
 
     // Equality errors
     #[error(transparent)]
@@ -346,15 +341,6 @@ pub enum SubproofError {
 
     #[error("expected binding list in right-hand side to be '{0}'")]
     OnePointWrongBindings(BindingList),
-}
-
-#[derive(Debug, Error)]
-pub enum ExtractError {
-    #[error("expected operator in the left side to be an IndexedOperator::BvExtract")]
-    WrongLeftTerm,
-
-    #[error("expected operator in the right side to be an Operator::BvBbTerm")]
-    WrongRightTerm,
 }
 
 /// A wrapper struct that implements `fmt::Display` for linear combinations.
