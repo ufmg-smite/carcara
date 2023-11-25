@@ -44,12 +44,15 @@ mod tests {
             definitions = "
             (declare-fun a () Bool)
             (declare-fun zz () (_ BitVec 12))
+            (declare-fun xx () (_ BitVec 12))
             ",
             "Simple working examples" {
               "(step t2 (cl (= ((_ extract 1 0) (bbterm ((_ bit_of 0) (ite a #b110 #b011)) ((_ bit_of 1) (ite a #b110 #b011)) ((_ bit_of 2) (ite a #b110 #b011)))) (bbterm ((_ bit_of 0) (ite a #b110 #b011)) ((_ bit_of 1) (ite a #b110 #b011))))) :rule bitblast_extract)": true,
               "(step t3 (cl (= ((_ extract 1 0) (bbterm ((_ bit_of 0) (ite a #b110 #b011)) ((_ bit_of 1) (ite a #b110 #b011)) ((_ bit_of 2) (ite a #b110 #b011)))) (bbterm ((_ bit_of 0) (ite a #b111 #b011)) ((_ bit_of 1) (ite a #b111 #b011))))) :rule bitblast_extract)": false,
+              "(step t2 (cl (= ((_ extract 1 0) (bbterm ((_ bit_of 0) (ite a #b110 #b011)) ((_ bit_of 1) (ite a #b110 #b011)) ((_ bit_of 2) (ite a #b110 #b011)))) (bbterm ((_ bit_of 1) (ite a #b110 #b011)) ((_ bit_of 1) (ite a #b110 #b011))))) :rule bitblast_extract)": false,
               "(step t4 (cl (= ((_ extract 11 4) (bbterm ((_ bit_of 0) zz) ((_ bit_of 1) zz) ((_ bit_of 2) zz) ((_ bit_of 3) zz) ((_ bit_of 4) zz) ((_ bit_of 5) zz) ((_ bit_of 6) zz) ((_ bit_of 7) zz) ((_ bit_of 8) zz) ((_ bit_of 9) zz) ((_ bit_of 10) zz) ((_ bit_of 11) zz))) (bbterm ((_ bit_of 4) zz) ((_ bit_of 5) zz) ((_ bit_of 6) zz) ((_ bit_of 7) zz) ((_ bit_of 8) zz) ((_ bit_of 9) zz) ((_ bit_of 10) zz) ((_ bit_of 11) zz)))) :rule bitblast_extract)": true,
               "(step t5 (cl (= ((_ extract 11 4) (bbterm ((_ bit_of 0) zz) ((_ bit_of 1) zz) ((_ bit_of 2) zz) ((_ bit_of 3) zz) ((_ bit_of 4) zz) ((_ bit_of 5) zz) ((_ bit_of 6) zz) ((_ bit_of 7) zz) ((_ bit_of 8) zz) ((_ bit_of 9) zz) ((_ bit_of 10) zz) ((_ bit_of 11) zz))) (bbterm ((_ bit_of 3) zz) ((_ bit_of 5) zz) ((_ bit_of 6) zz) ((_ bit_of 7) zz) ((_ bit_of 8) zz) ((_ bit_of 9) zz) ((_ bit_of 10) zz) ((_ bit_of 11) zz)))) :rule bitblast_extract)": false,
+              "(step t5 (cl (= ((_ extract 11 4) (bbterm ((_ bit_of 0) zz) ((_ bit_of 1) zz) ((_ bit_of 2) zz) ((_ bit_of 3) zz) ((_ bit_of 4) zz) ((_ bit_of 5) zz) ((_ bit_of 6) zz) ((_ bit_of 7) zz) ((_ bit_of 8) zz) ((_ bit_of 9) zz) ((_ bit_of 10) zz) ((_ bit_of 11) zz))) (bbterm ((_ bit_of 4) xx) ((_ bit_of 5) zz) ((_ bit_of 6) zz) ((_ bit_of 7) zz) ((_ bit_of 8) zz) ((_ bit_of 9) zz) ((_ bit_of 10) zz) ((_ bit_of 11) zz)))) :rule bitblast_extract)": false,
             }
         }
     }
