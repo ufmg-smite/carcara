@@ -158,6 +158,7 @@ macro_rules! match_term {
     (@GET_VARIANT >)        => { $crate::ast::Operator::GreaterThan };
     (@GET_VARIANT <=)       => { $crate::ast::Operator::LessEq };
     (@GET_VARIANT >=)       => { $crate::ast::Operator::GreaterEq };
+    (@GET_VARIANT bvult)    => { $crate::ast::Operator::BvULt };
 
     (@GET_VARIANT extract)     => { $crate::ast::IndexedOperator::BvExtract };
     (@GET_VARIANT bit_of)      => { $crate::ast::IndexedOperator::BvBitOf };
