@@ -406,10 +406,13 @@ mod tests {
                 "(step t1 (cl (= (mod 42 8) 2)) :rule mod_simplify)": true,
             }
             "Negative numbers" {
-                "(step t1 (cl (= (mod (- 13) 7) 1)) :rule mod_simplify)": true,
-                "(step t1 (cl (= (mod (- 8) (- 3)) 1)) :rule mod_simplify)": true,
+                "(step t1 (cl (= (mod (- 8) 3) 1)) :rule mod_simplify)": true,
                 "(step t1 (cl (= (mod 8 (- 3)) 2)) :rule mod_simplify)": true,
+                "(step t1 (cl (= (mod (- 8) (- 3)) 1)) :rule mod_simplify)": true,
+
+                "(step t1 (cl (= (mod (- 8) 3) (- 2))) :rule mod_simplify)": false,
                 "(step t1 (cl (= (mod 8 (- 3)) (- 1))) :rule mod_simplify)": false,
+                "(step t1 (cl (= (mod (- 8) (- 3)) (- 2))) :rule mod_simplify)": false,
             }
             "Modulo by zero" {
                 "(step t1 (cl (= (mod 3 0) 1)) :rule mod_simplify)": false,

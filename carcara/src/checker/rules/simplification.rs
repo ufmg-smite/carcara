@@ -432,7 +432,7 @@ pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         let expected = if is_int_div {
             assert!(numer.is_integer() && denom.is_integer()); // This is guaranteed by the Alethe typing rules
             let [numer, denom] = [numer, denom].map(|n| n.into_numer_denom().0);
-            Rational::from(numer.div_rem_floor(denom).0)
+            Rational::from(numer.div_rem_euc(denom).0)
         } else {
             numer / denom
         };
@@ -1181,7 +1181,14 @@ mod tests {
                 "(step t1 (cl (= (/ 3.0 0.0) 1.0)) :rule div_simplify)": false,
             }
             "Integer division" {
-                "(step t1 (cl (= (div 5 2) 2)) :rule div_simplify)": true,
+                "(step t1 (cl (= (div 8 3) 2)) :rule div_simplify)": true,
+                "(step t1 (cl (= (div (- 8) 3) (- 3))) :rule div_simplify)": true,
+                "(step t1 (cl (= (div 8 (- 3)) (- 2))) :rule div_simplify)": true,
+                "(step t1 (cl (= (div (- 8) (- 3)) 3)) :rule div_simplify)": true,
+
+                "(step t1 (cl (= (div (- 8) 3) (- 2))) :rule div_simplify)": false,
+                "(step t1 (cl (= (div 8 (- 3)) (- 3))) :rule div_simplify)": false,
+                "(step t1 (cl (= (div (- 8) (- 3)) 2)) :rule div_simplify)": false,
             }
         }
     }
