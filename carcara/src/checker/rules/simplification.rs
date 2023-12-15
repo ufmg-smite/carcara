@@ -190,6 +190,16 @@ fn generic_and_or_simplify(
         _ => std::slice::from_ref(result_term),
     };
 
+    // Sometimes, the `and_simplify` and `or_simplify` rules are used on a nested application of
+    // the rule operator, where the outer operation only has one argument, e.g. `(and (and p q r))`.
+    // If we encounter this, we remove the outer application
+    if phis.len() == 1 {
+        match phis[0].as_ref() {
+            Term::Op(op, args) if *op == rule_kind => phis = args.clone(),
+            _ => (),
+        }
+    }
+
     // First, we remove all "skip term"s from the arguments. If at this point we already found the
     // result, we return true. While doing this before the main loop requires an additional
     // allocation for the `phis` vector, it allows us to exit early in some cases, which overall
@@ -826,6 +836,8 @@ mod tests {
             ",
             "Transformation #1" {
                 "(step t1 (cl (= (and true true true) true)) :rule and_simplify)": true,
+                "(step t1 (cl (= (and true true true) (and true))) :rule and_simplify)": true,
+                "(step t1 (cl (= (and true) true)) :rule and_simplify)": true,
 
                 "(step t1 (cl (= (and true p true) true)) :rule and_simplify)": false,
                 "(step t1 (cl (= (and true true) false)) :rule and_simplify)": false,
@@ -834,12 +846,14 @@ mod tests {
                 "(step t1 (cl (= (and p true q) (and p q))) :rule and_simplify)": true,
                 "(step t1 (cl (= (and p true q r true true) (and p q r))) :rule and_simplify)": true,
                 "(step t1 (cl (= (and true q true true) q)) :rule and_simplify)": true,
+                "(step t1 (cl (= (and true q true true) (and q))) :rule and_simplify)": true,
 
                 "(step t1 (cl (= (and p true q true) (and p true q))) :rule and_simplify)": false,
                 "(step t1 (cl (= (and p true q r true true) (and p r))) :rule and_simplify)": false,
             }
             "Transformation #3" {
                 "(step t1 (cl (= (and p p q q q r) (and p q r))) :rule and_simplify)": true,
+                "(step t1 (cl (= (and p p) (and p))) :rule and_simplify)": true,
                 "(step t1 (cl (= (and p p) p)) :rule and_simplify)": true,
 
                 "(step t1 (cl (= (and p p q q q r) (and p q q r))) :rule and_simplify)": false,
@@ -847,6 +861,7 @@ mod tests {
             }
             "Transformation #4" {
                 "(step t1 (cl (= (and p q false r) false)) :rule and_simplify)": true,
+                "(step t1 (cl (= (and p q false r) (and false))) :rule and_simplify)": true,
                 "(step t1 (cl (= (and false true) false)) :rule and_simplify)": true,
 
                 "(step t1 (cl (= (and p q false r) (and p q r))) :rule and_simplify)": false,
@@ -854,6 +869,7 @@ mod tests {
             }
             "Transformation #5" {
                 "(step t1 (cl (= (and p q (not q) r) false)) :rule and_simplify)": true,
+                "(step t1 (cl (= (and p q (not q) r) (and false))) :rule and_simplify)": true,
                 "(step t1 (cl (= (and p (not (not q)) (not q) r) false)) :rule and_simplify)": true,
                 "(step t1 (cl (= (and p (not (not (not p))) (not p)) false))
                     :rule and_simplify)": true,
@@ -869,6 +885,10 @@ mod tests {
                 "(step t1 (cl (= (and p false p (not p) q true q r) false))
                     :rule and_simplify)": true,
             }
+            "Nested \"and\" term" {
+                "(step t1 (cl (= (and (and p p true q q true q r)) (and p q r)))
+                    :rule and_simplify)": true,
+            }
         }
     }
 
@@ -882,6 +902,8 @@ mod tests {
             ",
             "Transformation #1" {
                 "(step t1 (cl (= (or false false false) false)) :rule or_simplify)": true,
+                "(step t1 (cl (= (or false false false) (or false))) :rule or_simplify)": true,
+                "(step t1 (cl (= (or false) false)) :rule or_simplify)": true,
 
                 "(step t1 (cl (= (or false p false) false)) :rule or_simplify)": false,
                 "(step t1 (cl (= (or false false) true)) :rule or_simplify)": false,
@@ -890,12 +912,14 @@ mod tests {
                 "(step t1 (cl (= (or p false q) (or p q))) :rule or_simplify)": true,
                 "(step t1 (cl (= (or p false q r false false) (or p q r))) :rule or_simplify)": true,
                 "(step t1 (cl (= (or false q false false) q)) :rule or_simplify)": true,
+                "(step t1 (cl (= (or false q false false) (or q))) :rule or_simplify)": true,
 
                 "(step t1 (cl (= (or p false q false) (or p false q))) :rule or_simplify)": false,
                 "(step t1 (cl (= (or p false q r false false) (or p r))) :rule or_simplify)": false,
             }
             "Transformation #3" {
                 "(step t1 (cl (= (or p p q q q r) (or p q r))) :rule or_simplify)": true,
+                "(step t1 (cl (= (or p p) (or p))) :rule or_simplify)": true,
                 "(step t1 (cl (= (or p p) p)) :rule or_simplify)": true,
 
                 "(step t1 (cl (= (or p p q q q r) (or p q q r))) :rule or_simplify)": false,
@@ -903,6 +927,7 @@ mod tests {
             }
             "Transformation #4" {
                 "(step t1 (cl (= (or p q true r) true)) :rule or_simplify)": true,
+                "(step t1 (cl (= (or p q true r) (or true))) :rule or_simplify)": true,
                 "(step t1 (cl (= (or true false) true)) :rule or_simplify)": true,
 
                 "(step t1 (cl (= (or p q true r) (or p q r))) :rule or_simplify)": false,
@@ -910,6 +935,7 @@ mod tests {
             }
             "Transformation #5" {
                 "(step t1 (cl (= (or p q (not q) r) true)) :rule or_simplify)": true,
+                "(step t1 (cl (= (or p q (not q) r) (or true))) :rule or_simplify)": true,
                 "(step t1 (cl (= (or p (not (not q)) (not q) r) true)) :rule or_simplify)": true,
                 "(step t1 (cl (= (or p (not (not (not p))) (not p)) true)) :rule or_simplify)": true,
 
@@ -921,6 +947,10 @@ mod tests {
                 "(step t1 (cl (= (or p p false q q false q r) (or p q r))) :rule or_simplify)": true,
                 "(step t1 (cl (= (or p p (not p) q q false q r) true)) :rule or_simplify)": true,
                 "(step t1 (cl (= (or p true p (not p) q false q r) true)) :rule or_simplify)": true,
+            }
+            "Nested \"or\" term" {
+                "(step t1 (cl (= (or (or p p false q q false q r)) (or p q r)))
+                    :rule or_simplify)": true,
             }
         }
     }

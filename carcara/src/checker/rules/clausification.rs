@@ -844,6 +844,7 @@ mod tests {
             ",
             "Chainable operators" {
                 "(step t1 (cl (= (= a b c d) (and (= a b) (= b c) (= c d)))) :rule nary_elim)": true,
+                "(step t1 (cl (= (= a b) (and (= a b)))) :rule nary_elim)": true,
                 "(step t1 (cl (= (= a b c) (and (= b c) (= a b)))) :rule nary_elim)": false,
                 "(step t1 (cl (= (= a b c d) (and (= a b) (= c d)))) :rule nary_elim)": false,
             }
