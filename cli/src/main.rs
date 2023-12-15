@@ -115,14 +115,18 @@ struct ParsingOptions {
     /// to arithmetic operators that are expecting a term of sort `Real`.
     #[clap(long)]
     allow_int_real_subtyping: bool,
+
+    /// Enables strict parsing and checking.
+    ///
+    /// When this flag is enabled: unary `and`, `or` and `xor` terms are not allowed; for the `refl`
+    /// and `assume` rules, implicit reordering of equalities is not allowed; for the `resolution`
+    /// and `th_resolution` rules, the pivots used must be passed as arguments.
+    #[clap(short, long)]
+    strict: bool,
 }
 
 #[derive(Args, Clone)]
 struct CheckingOptions {
-    /// Enables the strict checking of certain rules.
-    #[clap(short, long)]
-    strict: bool,
-
     /// Allow steps with rules that are not known by the checker, and consider them as holes.
     #[clap(short, long)]
     ignore_unknown_rules: bool,
@@ -162,9 +166,9 @@ fn build_carcara_options(
         apply_function_defs,
         expand_let_bindings,
         allow_int_real_subtyping,
+        strict,
     }: ParsingOptions,
     CheckingOptions {
-        strict,
         ignore_unknown_rules,
         skip_unknown_rules,
         lia_solver,
@@ -396,6 +400,7 @@ fn parse_command(options: ParseCommandOptions) -> CliResult<()> {
             apply_function_defs: options.parsing.apply_function_defs,
             expand_lets: options.parsing.expand_let_bindings,
             allow_int_real_subtyping: options.parsing.allow_int_real_subtyping,
+            allow_unary_logical_ops: !options.parsing.strict,
         },
     )
     .map_err(carcara::Error::from)?;
@@ -492,6 +497,7 @@ fn slice_command(options: SliceCommandOption) -> CliResult<()> {
         apply_function_defs: options.parsing.apply_function_defs,
         expand_lets: options.parsing.expand_let_bindings,
         allow_int_real_subtyping: options.parsing.allow_int_real_subtyping,
+        allow_unary_logical_ops: !options.parsing.strict,
     };
     let (_, proof, _) =
         parser::parse_instance(problem, proof, config).map_err(carcara::Error::from)?;

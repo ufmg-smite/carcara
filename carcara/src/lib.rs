@@ -157,6 +157,7 @@ pub fn check<T: io::BufRead>(problem: T, proof: T, options: CarcaraOptions) -> R
         apply_function_defs: options.apply_function_defs,
         expand_lets: options.expand_lets,
         allow_int_real_subtyping: options.allow_int_real_subtyping,
+        allow_unary_logical_ops: !options.strict,
     };
     let (prelude, proof, mut pool) = parser::parse_instance(problem, proof, config)?;
     run_measures.parsing = total.elapsed();
@@ -222,6 +223,7 @@ pub fn check_parallel<T: io::BufRead>(
         apply_function_defs: options.apply_function_defs,
         expand_lets: options.expand_lets,
         allow_int_real_subtyping: options.allow_int_real_subtyping,
+        allow_unary_logical_ops: !options.strict,
     };
     let (prelude, proof, pool) = parser::parse_instance(problem, proof, config)?;
     run_measures.parsing = total.elapsed();
@@ -292,6 +294,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
         apply_function_defs: options.apply_function_defs,
         expand_lets: options.expand_lets,
         allow_int_real_subtyping: options.allow_int_real_subtyping,
+        allow_unary_logical_ops: !options.strict,
     };
     let (prelude, proof, mut pool) = parser::parse_instance(problem, proof, config)?;
     run_measures.parsing = total.elapsed();

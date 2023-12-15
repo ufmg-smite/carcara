@@ -41,6 +41,7 @@ fn run_job<T: CollectResults + Default + Send>(
         apply_function_defs: options.apply_function_defs,
         expand_lets: options.expand_lets,
         allow_int_real_subtyping: options.allow_int_real_subtyping,
+        allow_unary_logical_ops: !options.strict,
     };
     let (prelude, proof, mut pool) = parser::parse_instance(
         BufReader::new(File::open(job.problem_file)?),

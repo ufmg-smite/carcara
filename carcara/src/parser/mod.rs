@@ -19,16 +19,28 @@ use std::{io::BufRead, str::FromStr};
 
 use self::error::assert_indexed_op_args_value;
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Config {
     pub apply_function_defs: bool,
     pub expand_lets: bool,
     pub allow_int_real_subtyping: bool,
+    pub allow_unary_logical_ops: bool,
 }
 
 impl Config {
     pub fn new() -> Self {
-        Self::default()
+        Config {
+            apply_function_defs: false,
+            expand_lets: false,
+            allow_int_real_subtyping: false,
+            allow_unary_logical_ops: true,
+        }
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -185,8 +197,14 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 }
             }
             Operator::Or | Operator::And | Operator::Xor => {
-                // These operators can be called with only one argument
-                assert_num_args(&args, 1..)?;
+                // If we are not in "strict" parsing mode, we allow these operators to be called
+                // with just one argument
+                let range = if self.config.allow_unary_logical_ops {
+                    1..
+                } else {
+                    2..
+                };
+                assert_num_args(&args, range)?;
                 for s in sorts {
                     SortError::assert_eq(&Sort::Bool, s.as_sort().unwrap())?;
                 }
