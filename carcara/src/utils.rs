@@ -1,5 +1,6 @@
 use crate::ast::{BindingList, Quantifier, Rc, Term};
 use indexmap::{IndexMap, IndexSet};
+use rug::Integer;
 use std::{
     borrow::Borrow,
     fmt,
@@ -166,15 +167,28 @@ impl<K, V> Default for HashMapStack<K, V> {
 
 // TODO: Document this struct
 #[derive(Debug)]
-pub struct Range(Option<usize>, Option<usize>);
+pub struct Range<T = usize>(Option<T>, Option<T>);
 
-impl Range {
-    pub fn contains(&self, n: usize) -> bool {
-        self.0.map_or(true, |bound| n >= bound) && self.1.map_or(true, |bound| n <= bound)
+impl<T: std::cmp::PartialOrd> Range<T> {
+    pub fn contains(&self, n: T) -> bool {
+        self.0.as_ref().map_or(true, |bound| n >= *bound)
+            && self.1.as_ref().map_or(true, |bound| n <= *bound)
     }
 }
 
-impl fmt::Display for Range {
+impl fmt::Display for Range<usize> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Range(Some(a), Some(b)) if a == b => write!(f, "{}", a),
+            Range(Some(a), Some(b)) => write!(f, "between {} and {}", a, b),
+            Range(Some(a), None) => write!(f, "at least {}", a),
+            Range(None, Some(b)) => write!(f, "up to {}", b),
+            Range(None, None) => write!(f, "any number of"),
+        }
+    }
+}
+
+impl fmt::Display for Range<Integer> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Range(Some(a), Some(b)) if a == b => write!(f, "{}", a),
@@ -201,6 +215,12 @@ impl From<ops::Range<usize>> for Range {
 impl From<ops::RangeFrom<usize>> for Range {
     fn from(r: ops::RangeFrom<usize>) -> Self {
         Self(Some(r.start), None)
+    }
+}
+
+impl From<ops::RangeFrom<i32>> for Range<Integer> {
+    fn from(r: ops::RangeFrom<i32>) -> Self {
+        Self(Some(Integer::from(r.start)), None)
     }
 }
 
