@@ -176,19 +176,7 @@ impl<T: std::cmp::PartialOrd> Range<T> {
     }
 }
 
-impl fmt::Display for Range<usize> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Range(Some(a), Some(b)) if a == b => write!(f, "{}", a),
-            Range(Some(a), Some(b)) => write!(f, "between {} and {}", a, b),
-            Range(Some(a), None) => write!(f, "at least {}", a),
-            Range(None, Some(b)) => write!(f, "up to {}", b),
-            Range(None, None) => write!(f, "any number of"),
-        }
-    }
-}
-
-impl fmt::Display for Range<Integer> {
+impl<T: fmt::Display + std::cmp::PartialEq> fmt::Display for Range<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Range(Some(a), Some(b)) if a == b => write!(f, "{}", a),

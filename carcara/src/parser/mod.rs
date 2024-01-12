@@ -1441,8 +1441,8 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 assert_num_args(&op_args, 1)?;
                 assert_num_args(&args, 1)?;
                 SortError::assert_eq(&Sort::Int, &op_args[0].sort())?;
-                SortError::assert_eq(&Sort::RegLan, &args[0].raw_sort())?;
-                assert_indexed_op_args_value(&[op_args[0].clone()], 0..)?;
+                SortError::assert_eq(&Sort::RegLan, sorts[0].as_sort().unwrap())?;
+                assert_indexed_op_args_value(&op_args, 0..)?;
             }
             IndexedOperator::ReLoop => {
                 assert_num_args(&op_args, 2)?;
@@ -1450,7 +1450,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 for arg in &op_args {
                     SortError::assert_eq(&Sort::Int, &arg.sort())?;
                 }
-                SortError::assert_eq(&Sort::RegLan, &args[0].raw_sort())?;
+                SortError::assert_eq(&Sort::RegLan, sorts[0].as_sort().unwrap())?;
                 assert_indexed_op_args_value(&op_args, 0..)?;
             }
         }
