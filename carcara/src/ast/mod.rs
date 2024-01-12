@@ -418,6 +418,9 @@ pub enum IndexedOperator {
     ZeroExtend,
     SignExtend,
     BvConst,
+
+    RePower,
+    ReLoop,
 }
 
 impl_str_conversion_traits!(IndexedOperator {
@@ -426,6 +429,9 @@ impl_str_conversion_traits!(IndexedOperator {
     ZeroExtend: "zero_extend",
     SignExtend: "sign_extend",
     BvConst: "bv",
+
+    RePower: "re.^",
+    ReLoop: "re.loop"
 });
 
 impl_str_conversion_traits!(Operator {
@@ -733,6 +739,14 @@ impl Term {
         }
     }
 
+    /// Tries to extract a `Integer` from a term. Returns `Some` if the term is an integer constant.
+    pub fn as_integer_number(&self) -> Option<Integer> {
+        match self {
+            Term::Const(Constant::Integer(i)) => Some(i.clone()),
+            _ => None,
+        }
+    }
+
     /// Tries to extract a `Rational` from a term, allowing negative values represented with the
     /// unary `-` operator. Returns `Some` if the term is an integer or real constant, or one such
     /// constant negated with the `-` operator.
@@ -740,6 +754,16 @@ impl Term {
         match match_term!((-x) = self) {
             Some(x) => x.as_number().map(|r| -r),
             None => self.as_number(),
+        }
+    }
+
+    /// Tries to extract a `Integer` from a term, allowing negative values represented with the
+    /// unary `-` operator. Returns `Some` if the term is an integer constant, or one such
+    /// constant negated with the `-` operator.
+    pub fn as_signed_integer(&self) -> Option<Integer> {
+        match match_term!((-x) = self) {
+            Some(x) => x.as_integer_number().map(|r| -r),
+            None => self.as_integer_number(),
         }
     }
 

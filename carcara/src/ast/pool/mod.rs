@@ -254,6 +254,7 @@ impl PrimitivePool {
                         "bv const should be handled by the parser and transfromed into a constant"
                     ),
                     IndexedOperator::BvBitOf => Sort::Bool,
+                    IndexedOperator::RePower | IndexedOperator::ReLoop => Sort::RegLan,
                 };
                 sort
             }

@@ -1,7 +1,7 @@
 //! The types for parser errors.
 
 use crate::{
-    ast::{Constant, Sort},
+    ast::{Constant, Rc, Sort, Term},
     parser::Token,
     utils::Range,
 };
@@ -57,9 +57,9 @@ pub enum ParserError {
     #[error("expected bitvector sort, got '{0}'")]
     ExpectedBvSort(Sort),
 
-    // Expected Constant::Integer, got other Constant
+    // Expected Constant::Integer, got other Term
     #[error("expected Constant of type Integer, got '{0}'")]
-    ExpectedIntegerConstant(Constant),
+    ExpectedIntegerConstant(Rc<Term>),
 
     /// A term that is not a function was used as a function.
     #[error("'{0}' is not a function sort")]
@@ -83,7 +83,7 @@ pub enum ParserError {
 
     /// The argument values are not in the expected range.
     #[error("expected argument value to be greater than {0}, got {1}")]
-    WrongValueOfArgs(Range, usize),
+    WrongValueOfArgs(Range<Integer>, Integer),
 
     #[error("extract arguments do not follow restrictions. Expected: {2} > {0} and {0} >= {1} and {1} >= 0")]
     InvalidExtractArgs(usize, usize, usize),
@@ -126,24 +126,17 @@ where
 /// Returns an error if the value of `sequence` is not in the `expected` range.
 pub fn assert_indexed_op_args_value<R>(sequence: &[Constant], range: R) -> Result<(), ParserError>
 where
-    R: Into<Range>,
+    R: Into<Range<Integer>>,
 {
     let range = range.into();
-    let mut wrong_value = usize::MAX;
     for x in sequence {
         if let Constant::Integer(i) = x {
-            let value = i.to_usize().unwrap();
-            if !range.contains(value) {
-                wrong_value = value;
-                break;
+            if !range.contains(i.clone()) {
+                return Err(ParserError::WrongValueOfArgs(range, i.clone()));
             }
         }
     }
-    if wrong_value == usize::MAX {
-        Ok(())
-    } else {
-        Err(ParserError::WrongValueOfArgs(range, wrong_value))
-    }
+    Ok(())
 }
 
 /// An error in sort checking.

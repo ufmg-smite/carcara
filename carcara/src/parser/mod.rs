@@ -1340,15 +1340,39 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     fn parse_indexed_operator(&mut self) -> CarcaraResult<(IndexedOperator, Vec<Constant>)> {
         let bv_symbol = self.expect_symbol()?;
+
         if let Some(value) = bv_symbol.strip_prefix("bv") {
             let parsed_value = value.parse::<Integer>().unwrap();
-            let mut args = self.parse_sequence(Self::parse_constant, true)?;
-            args.insert(0, Constant::Integer(parsed_value));
-            return Ok((IndexedOperator::BvConst, args));
+            let args = self.parse_sequence(Self::parse_term, true)?;
+            let mut constant_args = Vec::new();
+            for arg in args {
+                if let Some(i) = arg.as_signed_integer() {
+                    constant_args.push(Constant::Integer(i));
+                } else {
+                    return Err(Error::Parser(
+                        ParserError::ExpectedIntegerConstant(arg.clone()),
+                        self.current_position,
+                    ));
+                }
+            }
+            constant_args.insert(0, Constant::Integer(parsed_value));
+            return Ok((IndexedOperator::BvConst, constant_args));
         }
+
         let op = IndexedOperator::from_str(bv_symbol.as_str()).unwrap();
-        let args = self.parse_sequence(Self::parse_constant, true)?;
-        Ok((op, args))
+        let args = self.parse_sequence(Self::parse_term, true)?;
+        let mut constant_args = Vec::new();
+        for arg in args {
+            if let Some(i) = arg.as_signed_integer() {
+                constant_args.push(Constant::Integer(i));
+            } else {
+                return Err(Error::Parser(
+                    ParserError::ExpectedIntegerConstant(arg.clone()),
+                    self.current_position,
+                ));
+            }
+        }
+        Ok((op, constant_args))
     }
 
     /// Constructs, check operation arguments and sort checks an indexed operation term.
@@ -1363,12 +1387,8 @@ impl<'a, R: BufRead> Parser<'a, R> {
             IndexedOperator::BvConst => {
                 assert_num_args(&op_args, 2)?;
                 assert_num_args(&args, 0)?;
-                let Constant::Integer(value) = op_args[0].clone() else {
-                    return Err(ParserError::ExpectedIntegerConstant(op_args[0].clone()));
-                };
-                let Constant::Integer(width) = op_args[1].clone() else {
-                    return Err(ParserError::ExpectedIntegerConstant(op_args[1].clone()));
-                };
+                let value = op_args[0].as_integer().unwrap();
+                let width = op_args[1].as_integer().unwrap();
                 assert_indexed_op_args_value(&[op_args[0].clone()], 0..)?;
                 assert_indexed_op_args_value(&[op_args[1].clone()], 1..)?;
                 return Ok(self.pool.add(Term::Const(Constant::BitVec(value, width))));
@@ -1415,6 +1435,22 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 if !matches!(s, Sort::BitVec(_)) {
                     return Err(ParserError::ExpectedBvSort(s));
                 }
+                assert_indexed_op_args_value(&op_args, 0..)?;
+            }
+            IndexedOperator::RePower => {
+                assert_num_args(&op_args, 1)?;
+                assert_num_args(&args, 1)?;
+                SortError::assert_eq(&Sort::Int, &op_args[0].sort())?;
+                SortError::assert_eq(&Sort::RegLan, sorts[0].as_sort().unwrap())?;
+                assert_indexed_op_args_value(&op_args, 0..)?;
+            }
+            IndexedOperator::ReLoop => {
+                assert_num_args(&op_args, 2)?;
+                assert_num_args(&args, 1)?;
+                for arg in &op_args {
+                    SortError::assert_eq(&Sort::Int, &arg.sort())?;
+                }
+                SortError::assert_eq(&Sort::RegLan, sorts[0].as_sort().unwrap())?;
                 assert_indexed_op_args_value(&op_args, 0..)?;
             }
         }
