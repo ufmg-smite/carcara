@@ -739,6 +739,19 @@ impl Term {
         }
     }
 
+    /// Tries to extract a `bool` from a term. Returns `Some` if the term is an boolean
+    /// constant.
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Term::Var(name, sort) if sort.as_sort() == Some(&Sort::Bool) => match name.as_str() {
+                "true" => Some(true),
+                "false" => Some(false),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
     /// Tries to extract a `Integer` from a term. Returns `Some` if the term is an integer constant.
     pub fn as_integer_number(&self) -> Option<Integer> {
         match self {
@@ -916,6 +929,12 @@ impl Rc<Term> {
     pub fn as_fraction_err(&self) -> Result<Rational, CheckerError> {
         self.as_fraction()
             .ok_or_else(|| CheckerError::ExpectedAnyNumber(self.clone()))
+    }
+
+    /// Similar to `Term::as_bool`, but returns a `CheckerError` on failure.
+    pub fn as_bool_err(&self) -> Result<bool, CheckerError> {
+        self.as_bool()
+            .ok_or_else(|| CheckerError::ExpectedAnyBoolConstant(self.clone()))
     }
 
     /// Tries to unwrap an operation term, returning the `Operator` and the arguments. Returns a
