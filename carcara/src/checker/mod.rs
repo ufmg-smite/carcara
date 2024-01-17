@@ -559,6 +559,8 @@ impl<'c> ProofChecker<'c> {
             "bitblast_bvadd" => bitvectors::add,
             "bitblast_ult" => bitvectors::ult,
 
+            "concat_eq" => strings::concat_eq,
+
             // Special rules that always check as valid, and are used to indicate holes in the
             // proof.
             "hole" => |_| Ok(()),
