@@ -205,6 +205,8 @@ macro_rules! match_term_err {
 /// ```
 #[macro_export]
 macro_rules! build_term {
+    ($pool:expr, true) => { $pool.bool_true() };
+    ($pool:expr, false) => { $pool.bool_false() };
     ($pool:expr, {$terminal:expr}) => { $terminal };
     ($pool:expr, ((_ $indexed_op:tt $($op_args:tt)+) $($args:tt)+)) => {{
         let term = $crate::ast::Term::IndexedOp {
@@ -398,6 +400,7 @@ mod tests {
                     ((_ bit_of const_one) ((_ extract const_three const_two) {zeros}))
                 ),
             ),
+            ("(and true false)", build_term!(pool, (and true false))),
         ];
 
         for (s, got) in &cases {
