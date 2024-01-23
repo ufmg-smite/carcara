@@ -409,6 +409,10 @@ pub enum Operator {
     BvSGt,
     BvSGe,
     BvBbTerm,
+
+    // Misc.
+    /// The `rare-list` operator, used to represent RARE lists.
+    RareList,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -528,6 +532,8 @@ impl_str_conversion_traits!(Operator {
     BvSGt: "bvsgt",
     BvSGe: "bvsge",
     BvBbTerm: "bbterm",
+
+    RareList: "rare-list",
 });
 
 /// A variable and an associated sort.
@@ -571,6 +577,9 @@ pub enum Sort {
     ///
     /// The associated term is the BV width of this sort.
     BitVec(Integer),
+
+    /// The sort of RARE lists.
+    RareList,
 }
 
 /// A quantifier, either `forall` or `exists`.
