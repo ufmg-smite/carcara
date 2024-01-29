@@ -15,19 +15,19 @@ pub type Rule = fn(RuleArgs) -> RuleResult;
 pub type ElaborationRule = fn(RuleArgs, String, &mut Elaborator) -> Result<(), CheckerError>;
 
 pub struct RuleArgs<'a> {
-    pub(super) conclusion: &'a [Rc<Term>],
-    pub(super) premises: &'a [Premise<'a>],
-    pub(super) args: &'a [ProofArg],
-    pub(super) pool: &'a mut dyn TermPool,
-    pub(super) context: &'a mut ContextStack,
+    pub conclusion: &'a [Rc<Term>],
+    pub premises: &'a [Premise<'a>],
+    pub args: &'a [ProofArg],
+    pub pool: &'a mut dyn TermPool,
+    pub context: &'a mut ContextStack,
 
     // For rules that end a subproof, we need to pass the previous command in the subproof that it
     // is closing, because it may be implicitly referenced, and it is not given as premises. If a
     // rule is not ending a subproof, this should be `None`.
-    pub(super) previous_command: Option<Premise<'a>>,
-    pub(super) discharge: &'a [&'a ProofCommand],
+    pub previous_command: Option<Premise<'a>>,
+    pub discharge: &'a [&'a ProofCommand],
 
-    pub(super) polyeq_time: &'a mut Duration,
+    pub polyeq_time: &'a mut Duration,
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]

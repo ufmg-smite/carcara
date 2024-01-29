@@ -12,7 +12,7 @@ use crate::{
 use error::{CheckerError, SubproofError};
 use indexmap::IndexSet;
 pub use parallel::{scheduler::Scheduler, ParallelProofChecker};
-use rules::{ElaborationRule, Premise, Rule, RuleArgs, RuleResult};
+pub(crate) use rules::{ElaborationRule, Premise, Rule, RuleArgs, RuleResult};
 use std::{
     fmt,
     time::{Duration, Instant},
