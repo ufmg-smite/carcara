@@ -78,21 +78,7 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
     let (q_1, bindings_1, phi_1) = left.as_quant_err()?;
 
-    let (bindings_2, phi_2) = match right.as_quant() {
-        Some((q_2, b, t)) => {
-            assert_eq(&q_1, &q_2)?;
-            (b, t)
-        }
-
-        // If the right-hand side term is not a quantifier, we consider it a quantifier with an
-        // empty list of bindings
-        None => (BindingList::EMPTY, right),
-    };
-    assert_eq(phi_1, phi_2)?;
-
-    // Cloning here may be unnecessary
     let free_vars = pool.free_vars(phi_1);
-
     let expected: Vec<_> = bindings_1
         .iter()
         .filter(|&var| {
@@ -102,7 +88,16 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
         .cloned()
         .collect();
 
-    assert_is_expected(bindings_2, BindingList(expected))
+    // If all variables in the quantifier were unused, the quantifier is removed leaving only the
+    // inner term in the right-hand side
+    if expected.is_empty() {
+        return assert_eq(phi_1, right);
+    }
+
+    let (q_2, new_bindings, phi_2) = right.as_quant_err()?;
+    assert_eq(&q_1, &q_2)?;
+    assert_eq(phi_1, phi_2)?;
+    assert_is_expected(new_bindings, BindingList(expected))
 }
 
 /// Converts a term into negation normal form, expanding all connectives.
@@ -455,6 +450,12 @@ mod tests {
                     (forall ((x Real) (y Real) (z Real) (w Real)) (= y y))
                     (forall ((y Real) (w Real)) (= y y))
                 )) :rule qnt_rm_unused)": false,
+            }
+            "Inner term is the opposite quantifier" {
+                "(step t1 (cl (=
+                    (exists ((?v0 Int)) (forall ((?v1 Int) (?v2 Int)) (= ?v1 ?v2)))
+                    (forall ((?v1 Int) (?v2 Int)) (= ?v1 ?v2))
+                )) :rule qnt_rm_unused)": true,
             }
         }
     }
