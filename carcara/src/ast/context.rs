@@ -7,6 +7,39 @@ pub struct Context {
     pub cumulative_substitution: Option<Substitution>,
 }
 
+impl Context {
+    /// Builds a new context form the arguments to an `anchor`. This does not initalize the
+    /// `cumulative_substitution` field.
+    fn build(
+        pool: &mut dyn TermPool,
+        assignment_args: &[(String, Rc<Term>)],
+        variable_args: &[SortedVar],
+    ) -> Result<Self, SubstitutionError> {
+        // We build the context mappings incrementally, using the mappings already
+        // introduced to transform the result of a new mapping before adding it. So for
+        // instance, if the mappings are `(:= y z)` and `(:= x (f y))`, we insert the first
+        // mapping, and then, when introducing the second, we use the current state of the
+        // substitutions to transform `(f y)` into `(f z)`. The resulting mappings will then
+        // contain `(:= y z)` and `(:= x (f z))`
+        let mut substitution = Substitution::empty();
+        let mappings = assignment_args
+            .iter()
+            .map(|(var, value)| {
+                let var_term = pool.add(Term::new_var(var, pool.sort(value)));
+                let new_value = substitution.apply(pool, value);
+                substitution.insert(pool, var_term.clone(), new_value.clone())?;
+                Ok((var_term, new_value))
+            })
+            .collect::<Result<_, _>>()?;
+
+        Ok(Self {
+            mappings,
+            bindings: variable_args.iter().cloned().collect(),
+            cumulative_substitution: None,
+        })
+    }
+}
+
 /// A tuple that will represent a single `Context` and allows a `Context` to be shared between threads.
 ///
 /// `0`: Number of threads that will use this context.
@@ -106,28 +139,7 @@ impl ContextStack {
             // It's the first thread trying to build this context. It will
             // build this context at the context vec (accessible for all threads)
             if ctx_write_guard.is_none() {
-                // We build the context mappings incrementally, using the mappings already
-                // introduced to transform the result of a new mapping before adding it. So for
-                // instance, if the mappings are `(:= y z)` and `(:= x (f y))`, we insert the first
-                // mapping, and then, when introducing the second, we use the current state of the
-                // substitutions to transform `(f y)` into `(f z)`. The resulting mappings will then
-                // contain `(:= y z)` and `(:= x (f z))`
-                let mut substitution = Substitution::empty();
-                let mappings = assignment_args
-                    .iter()
-                    .map(|(var, value)| {
-                        let var_term = pool.add(Term::new_var(var, pool.sort(value)));
-                        let new_value = substitution.apply(pool, value);
-                        substitution.insert(pool, var_term.clone(), new_value.clone())?;
-                        Ok((var_term, new_value))
-                    })
-                    .collect::<Result<_, _>>()?;
-
-                *ctx_write_guard = Some(Context {
-                    mappings,
-                    bindings: variable_args.iter().cloned().collect(),
-                    cumulative_substitution: None,
-                });
+                *ctx_write_guard = Some(Context::build(pool, assignment_args, variable_args)?);
             }
         }
         // Adds this context in the stack
