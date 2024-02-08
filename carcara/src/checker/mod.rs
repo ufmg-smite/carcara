@@ -560,6 +560,7 @@ impl<'c> ProofChecker<'c> {
             "bitblast_ult" => bitvectors::ult,
 
             "concat_eq" => strings::concat_eq,
+            "concat_unify" => strings::concat_unify,
 
             // Special rules that always check as valid, and are used to indicate holes in the
             // proof.

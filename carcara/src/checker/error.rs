@@ -123,6 +123,9 @@ pub enum CheckerError {
     #[error("expected assign style '(:= ...)' argument, got term style argument: '{0}'")]
     ExpectedAssignStyleArg(Rc<Term>),
 
+    #[error("expected term {0} to be a prefix of {1}")]
+    ExpectedToBePrefix(Rc<Term>, Rc<Term>),
+
     #[error("this rule can only be used in the last step of a subproof")]
     MustBeLastStepInSubproof,
 
