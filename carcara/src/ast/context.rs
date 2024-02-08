@@ -106,38 +106,26 @@ impl ContextStack {
             // It's the first thread trying to build this context. It will
             // build this context at the context vec (accessible for all threads)
             if ctx_write_guard.is_none() {
-                // Since some rules (like `refl`) need to apply substitutions until a fixed point, we
-                // precompute these substitutions into a separate hash map. This assumes that the assignment
-                // arguments are in the correct order.
+                // We build the context mappings incrementally, using the mappings already
+                // introduced to transform the result of a new mapping before adding it. So for
+                // instance, if the mappings are `(:= y z)` and `(:= x (f y))`, we insert the first
+                // mapping, and then, when introducing the second, we use the current state of the
+                // substitutions to transform `(f y)` into `(f z)`. The resulting mappings will then
+                // contain `(:= y z)` and `(:= x (f z))`
                 let mut substitution = Substitution::empty();
-                let mut substitution_until_fixed_point = Substitution::empty();
-
-                // We build the `substitution_until_fixed_point` hash map from the bottom up, by using the
-                // substitutions already introduced to transform the result of a new substitution before
-                // inserting it into the hash map. So for instance, if the substitutions are `(:= y z)` and
-                // `(:= x (f y))`, we insert the first substitution, and then, when introducing the second,
-                // we use the current state of the hash map to transform `(f y)` into `(f z)`. The
-                // resulting hash map will then contain `(:= y z)` and `(:= x (f z))`
-                for (var, value) in assignment_args {
-                    let var_term = Term::new_var(var, pool.sort(value));
-                    let var_term = pool.add(var_term);
-                    substitution.insert(pool, var_term.clone(), value.clone())?;
-                    let new_value = substitution_until_fixed_point.apply(pool, value);
-                    substitution_until_fixed_point.insert(pool, var_term, new_value)?;
-                }
-
                 let mappings = assignment_args
                     .iter()
                     .map(|(var, value)| {
-                        let var_term = (var.clone(), pool.sort(value)).into();
-                        (pool.add(var_term), value.clone())
+                        let var_term = pool.add(Term::new_var(var, pool.sort(value)));
+                        let new_value = substitution.apply(pool, value);
+                        substitution.insert(pool, var_term.clone(), new_value.clone())?;
+                        Ok((var_term, new_value))
                     })
-                    .collect();
-                let bindings = variable_args.iter().cloned().collect();
-                // Finally creates the new context under this RwLock
+                    .collect::<Result<_, _>>()?;
+
                 *ctx_write_guard = Some(Context {
                     mappings,
-                    bindings,
+                    bindings: variable_args.iter().cloned().collect(),
                     cumulative_substitution: None,
                 });
             }
