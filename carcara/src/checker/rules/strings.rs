@@ -1,10 +1,10 @@
-use std::cmp;
+use std::{cmp, time::Duration};
 
 use super::{
-    assert_clause_len, assert_eq, assert_num_args, assert_num_premises, get_premise_term, RuleArgs,
-    RuleResult,
+    assert_clause_len, assert_eq, assert_num_args, assert_num_premises, assert_polyeq_expected,
+    get_premise_term, RuleArgs, RuleResult,
 };
-use crate::ast::*;
+use crate::{ast::*, checker::error::CheckerError};
 
 fn flatten(term: Rc<Term>, pool: &mut dyn TermPool) -> Vec<Rc<Term>> {
     let mut flattened = Vec::new();
@@ -29,6 +29,32 @@ fn concat_terms(terms: Vec<Rc<Term>>, pool: &mut dyn TermPool) -> Rc<Term> {
         1 => terms[0].clone(),
         _ => pool.add(Term::Op(Operator::StrConcat, terms)),
     }
+}
+
+fn is_prefix(
+    term: Rc<Term>,
+    pref: Rc<Term>,
+    pool: &mut dyn TermPool,
+    rev: bool,
+    polyeq_time: &mut Duration,
+) -> Result<Vec<Rc<Term>>, CheckerError> {
+    let mut t_flat = flatten(term.clone(), pool);
+    let mut p_flat = flatten(pref.clone(), pool);
+
+    if rev {
+        t_flat.reverse();
+        p_flat.reverse();
+    }
+
+    if p_flat.len() > t_flat.len() {
+        return Err(CheckerError::ExpectedToBePrefix(pref, term));
+    }
+
+    for (i, el) in p_flat.iter().enumerate() {
+        assert_polyeq_expected(el, t_flat[i].clone(), polyeq_time)?;
+    }
+
+    Ok(p_flat)
 }
 
 pub fn concat_eq(
@@ -90,6 +116,49 @@ pub fn concat_eq(
     ));
 
     assert_eq(&expected, &expanded_conc)
+}
+
+pub fn concat_unify(
+    RuleArgs {
+        premises,
+        args,
+        conclusion,
+        pool,
+        polyeq_time,
+        ..
+    }: RuleArgs,
+) -> RuleResult {
+    assert_num_premises(premises, 2)?;
+    assert_num_args(args, 1)?;
+    assert_clause_len(conclusion, 1)?;
+
+    let term = get_premise_term(&premises[0])?;
+    let prefixes = get_premise_term(&premises[1])?;
+    let rev = args[0].as_term()?.as_bool_err()?;
+    let (l, r) = match_term_err!((= l r) = term)?;
+
+    let (l_pref, r_pref) = match_term_err!((= (strlen l) (strlen r)) = prefixes)?;
+    let mut l_pref_flat = is_prefix(l.clone(), l_pref.clone(), pool, rev, polyeq_time)?;
+    let mut r_pref_flat = is_prefix(r.clone(), r_pref.clone(), pool, rev, polyeq_time)?;
+
+    if rev {
+        l_pref_flat.reverse();
+        r_pref_flat.reverse();
+    }
+
+    let left_concat = concat_terms(l_pref_flat, pool);
+    let right_concat = concat_terms(r_pref_flat, pool);
+    let expected = pool.add(Term::Op(Operator::Equals, vec![left_concat, right_concat]));
+
+    let (l_conc, r_conc) = match_term_err!((= l r) = &conclusion[0])?;
+    let l_conc_concat = concat_terms(flatten(l_conc.clone(), pool), pool);
+    let r_conc_concat = concat_terms(flatten(r_conc.clone(), pool), pool);
+    let expanded = pool.add(Term::Op(
+        Operator::Equals,
+        vec![l_conc_concat, r_conc_concat],
+    ));
+
+    assert_eq(&expected, &expanded)
 }
 
 mod tests {
@@ -172,6 +241,101 @@ mod tests {
                    (step t1 (cl (= "w" a)) :rule concat_eq :premises (h1) :args (false))"#: false,
                 r#"(assume h1 (= (str.++ "A" (str.++ b "A")) (str.++ (str.at c (str.len c)) "AA")))
                    (step t1 (cl (= (str.++ "A" b) (str.++ (str.at c (str.len c)) "A"))) :rule concat_eq :premises (h1) :args (false))"#: false,
+            }
+        }
+    }
+
+    #[test]
+    fn concat_unify() {
+        test_cases! {
+            definitions = "
+                (declare-fun a () String)
+                (declare-fun b () String)
+                (declare-fun c () String)
+                (declare-fun d () String)
+            ",
+            "Simple working examples" {
+                r#"(assume h1 (= "abcd" "abcd"))
+                   (assume h2 (= (str.len "abc") (str.len "abc")))
+                   (step t1 (cl (= "abc" "abc")) :rule concat_unify :premises (h1 h2) :args (false))"#: true,
+                r#"(assume h1 (= (str.++ "a" b "c" (str.++ d "e")) (str.++ "a" c "de")))
+                   (assume h2 (= (str.len (str.++ "a" b)) (str.len "a")))
+                   (step t1 (cl (= (str.++ "a" b) "a")) :rule concat_unify :premises (h1 h2) :args (false))"#: true,
+                r#"(assume h1 (= (str.++ a b c) d))
+                   (assume h2 (= (str.len (str.++ a b)) (str.len "")))
+                   (step t1 (cl (= (str.++ a b) "")) :rule concat_unify :premises (h1 h2) :args (false))"#: true,
+            }
+            "Reverse argument set to true" {
+                r#"(assume h1 (= "abcd" "abcd"))
+                   (assume h2 (= (str.len "cd") (str.len "cd")))
+                   (step t1 (cl (= "cd" "cd")) :rule concat_unify :premises (h1 h2) :args (true))"#: true,
+                r#"(assume h1 (= (str.++ "a" b "c" (str.++ d "e")) (str.++ "a" c "de")))
+                   (assume h2 (= (str.len (str.++ d "e")) (str.len (str.++ "d" "e"))))
+                   (step t1 (cl (= (str.++ d "e") "de")) :rule concat_unify :premises (h1 h2) :args (true))"#: true,
+            }
+            "Failing examples" {
+                r#"(assume h1 (= (str.++ "a" b "c" (str.++ d "e")) (str.++ a c "de")))
+                   (assume h2 (= (str.len (str.++ "a" "b")) (str.len a)))
+                   (step t1 (cl (= (str.++ "a" b) a)) :rule concat_unify :premises (h1 h2) :args (false))"#: false,
+                r#"(assume h1 (= (str.++ "a" b "c" (str.++ d "e")) (str.++ a c "de")))
+                   (assume h2 (= (str.len (str.++ "a" "b")) (str.len a)))
+                   (step t1 (cl (= (str.++ a b) "")) :rule concat_unify :premises (h1 h2) :args (false))"#: false,
+            }
+            "Invalid argument type" {
+                r#"(assume h1 (= (str.++ a "b" c) (str.++ a d "e")))
+                   (assume h2 (= (str.len a) (str.len "")))
+                   (step t1 (cl (= a "")) :rule concat_unify :premises (h1 h2) :args (1))"#: false,
+                r#"(assume h1 (= (str.++ a "b" c) (str.++ a d "e")))
+                   (assume h2 (= (str.len a) (str.len "")))
+                   (step t1 (cl (= a "")) :rule concat_unify :premises (h1 h2) :args ((- 1)))"#: false,
+                r#"(assume h1 (= (str.++ a "b" c) (str.++ a d "e")))
+                   (assume h2 (= (str.len a) (str.len "")))
+                   (step t1 (cl (= a "")) :rule concat_unify :premises (h1 h2) :args ("test"))"#: false,
+            }
+            "Premise term is not an equality" {
+                r#"(assume h1 (not (= (str.++ a "b" c) (str.++ a d "e"))))
+                   (assume h2 (= (str.len a) (str.len "")))
+                   (step t1 (cl (= a "")) :rule concat_unify :premises (h1 h2) :args (false))"#: false,
+                r#"(assume h1 (= (str.++ a "b" c) (str.++ a d "e")))
+                   (assume h2 (not (= (str.len a) (str.len ""))))
+                   (step t1 (cl (= a "")) :rule concat_unify :premises (h1 h2) :args (false))"#: false,
+            }
+            "Conclusion term is not an equality" {
+                r#"(assume h1 (= (str.++ a "b" c) (str.++ a d "e")))
+                   (assume h2 (= (str.len a) (str.len "")))
+                   (step t1 (cl (not (= a ""))) :rule concat_unify :premises (h1 h2) :args (false))"#: false,
+            }
+            "Switched conclusion terms" {
+                r#"(assume h1 (= (str.++ "a" b "c" (str.++ d "e")) (str.++ "a" c "de")))
+                   (assume h2 (= (str.len (str.++ "a" b)) (str.len "a")))
+                   (step t1 (cl (= "a" (str.++ "a" b))) :rule concat_unify :premises (h1 h2) :args (false))"#: false,
+                r#"(assume h1 (= (str.++ "a" c "de") (str.++ "a" b "c" (str.++ d "e"))))
+                   (assume h2 (= (str.len "a") (str.len (str.++ "a" b))))
+                   (step t1 (cl (= (str.++ "a" b) "a")) :rule concat_unify :premises (h1 h2) :args (false))"#: false,
+            }
+            "Inverted argument value" {
+                r#"(assume h1 (= (str.++ "x" (str.++ a "y") b) (str.++ "x" c "de")))
+                   (assume h2 (= (str.len (str.++ "y" b)) (str.len (str.++ c "d"))))
+                   (step t1 (cl (= (str.++ "y" b) (str.++ c "d"))) :rule concat_unify :premises (h1 h2) :args (false))"#: false,
+                r#"(assume h1 (= (str.++ "a" b "c" (str.++ d "e")) (str.++ "a" c "de")))
+                   (assume h2 (= (str.len (str.++ d "e")) (str.len (str.++ c "de"))))
+                   (step t1 (cl (= (str.++ d "e") (str.++ c "de"))) :rule concat_unify :premises (h1 h2) :args (false))"#: false,
+            }
+            "Invalid prefixes" {
+                r#"(assume h1 (= (str.++ "a" b "c" (str.++ d "e")) (str.++ "a" c "de")))
+                   (assume h2 (= (str.len (str.++ "a" "b")) (str.len "a")))
+                   (step t1 (cl (= (str.++ "a" "b") "a")) :rule concat_unify :premises (h1 h2) :args (false))"#: false,
+                r#"(assume h1 (= (str.++ "a" b "c" (str.++ d "e")) (str.++ "a" c "de")))
+                   (assume h2 (= (str.len (str.++ "a" b)) (str.len "b")))
+                   (step t1 (cl (= (str.++ "a" b) "b")) :rule concat_unify :premises (h1 h2) :args (false))"#: false,
+            }
+            "Prefix is bigger than the term" {
+                r#"(assume h1 (= (str.++ "a" b "c") (str.++ "a" c "de")))
+                   (assume h2 (= (str.len (str.++ "a" b "c" "d")) (str.len (str.++ "a" c))))
+                   (step t1 (cl (= (str.++ "a" b "c" "d") (str.++ "a" c))) :rule concat_unify :premises (h1 h2) :args (false))"#: false,
+                r#"(assume h1 (= (str.++ "a" b "c") (str.++ "a" c "de")))
+                   (assume h2 (= (str.len (str.++ "a" b)) (str.len (str.++ "a" c "de" "f"))))
+                   (step t1 (cl (= (str.++ "a" b) (str.++ "a" c (str.++ "de" "f")))) :rule concat_unify :premises (h1 h2) :args (false))"#: false,
             }
         }
     }
