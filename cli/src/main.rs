@@ -54,6 +54,10 @@ struct Cli {
     /// Disables output coloring.
     #[clap(global = true, long)]
     no_color: bool,
+
+    /// Use sharing when printing terms in error messages.
+    #[clap(global = true, short, long)]
+    quiet: bool,
 }
 
 #[derive(Subcommand)]
@@ -331,6 +335,10 @@ impl From<LogLevel> for log::LevelFilter {
 fn main() {
     let cli = Cli::parse();
     let colors_enabled = !cli.no_color && std::io::stderr().is_terminal();
+
+    carcara::ast::USE_SHARING_IN_TERM_DISPLAY
+        .store(cli.quiet, std::sync::atomic::Ordering::Relaxed);
+
     logger::init(cli.log_level.into(), colors_enabled);
 
     if let Command::Check(CheckCommandOptions { checking, .. })

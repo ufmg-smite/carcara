@@ -6,7 +6,13 @@ use crate::{
     utils::{is_symbol_character, DedupIterator},
 };
 use indexmap::IndexMap;
-use std::{borrow::Cow, fmt, io};
+use std::{
+    borrow::Cow,
+    fmt, io,
+    sync::atomic::{AtomicBool, Ordering},
+};
+
+pub static USE_SHARING_IN_TERM_DISPLAY: AtomicBool = AtomicBool::new(false);
 
 /// Prints a proof to the standard output.
 ///
@@ -347,8 +353,9 @@ fn escape_string(string: &str) -> Cow<str> {
 
 impl fmt::Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // If the alternate flag (`#`) is passed, we disable printing with sharing
-        let use_sharing = !f.alternate();
+        // If the alternate flag (`#`) is passed, or the global `USE_SHARING_IN_TERM_DISPLAY` is
+        // false, we disable printing with sharing
+        let use_sharing = USE_SHARING_IN_TERM_DISPLAY.load(Ordering::Relaxed) && !f.alternate();
         let mut buf = Vec::new();
         let mut printer = AlethePrinter {
             inner: &mut buf,
