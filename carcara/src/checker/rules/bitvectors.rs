@@ -23,39 +23,20 @@ fn build_term_vec(term: &Rc<Term>, size: usize, pool: &mut dyn TermPool) -> Vec<
     term
 }
 
-pub fn value(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
-    assert_clause_len(conclusion, 1)?;
-    let (x, res_args) = match_term_err!((= x (bbterm ...)) = &conclusion[0])?;
+// pub fn value(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+//     assert_clause_len(conclusion, 1)?;
+//     let (v, res_args) = match_term_err!((= v (bbterm ...)) = &conclusion[0])?;
 
-    if let Some((Operator::BvBbTerm, args)) = left_x.as_op() {
-        let mut index = index.to_usize().unwrap();
-        for arg in right {
-            assert_eq(&args[index], arg)?;
-            index += 1;
-        }
-        return Ok(());
-    }
+//     match v.as_bitvec() {
+//        Some((m, w)) => ...
+//        _ => ...
+//    }
 
-    let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
-        unreachable!();
-    };
+//     if let Some((m, w)) = v.as_bitvec() {
 
-    let x = build_term_vec(x, size, pool);
-    let y = build_term_vec(y, size, pool);
-
-    let res_args: Vec<_> = (0..size)
-        .map(|i| {
-            build_term!(
-              pool,
-              (and {x[i].clone()} {y[i].clone()})
-            )
-        })
-        .collect();
-
-    let expected_res = pool.add(Term::Op(Operator::BvBbTerm, res_args));
-
-    assert_eq(&expected_res, res)
-}
+//         return Ok(());
+//     }
+// }
 
 pub fn and(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
