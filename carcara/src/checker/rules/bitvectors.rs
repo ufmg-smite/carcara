@@ -1,9 +1,9 @@
+use super::{assert_eq, CheckerError, RuleArgs, RuleResult};
 use crate::{
     ast::{pool::TermPool, Operator, ParamOperator, Rc, Sort, Term},
     checker::rules::assert_clause_len,
 };
-
-use super::{assert_eq, RuleArgs, RuleResult};
+use rug::Integer;
 
 fn build_term_vec(term: &Rc<Term>, size: usize, pool: &mut dyn TermPool) -> Vec<Rc<Term>> {
     let term = if let Some((Operator::BvBbTerm, args_x)) = term.as_op() {
@@ -23,20 +23,38 @@ fn build_term_vec(term: &Rc<Term>, size: usize, pool: &mut dyn TermPool) -> Vec<
     term
 }
 
-// pub fn value(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
-//     assert_clause_len(conclusion, 1)?;
-//     let (v, res_args) = match_term_err!((= v (bbterm ...)) = &conclusion[0])?;
+pub fn value(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (v, res_args) = match_term_err!((= v (bbterm ...)) = &conclusion[0])?;
 
-//     match v.as_bitvec() {
-//        Some((m, w)) => ...
-//        _ => ...
-//    }
-
-//     if let Some((m, w)) = v.as_bitvec() {
-
-//         return Ok(());
-//     }
-// }
+    match v.as_bitvector() {
+        Some((m, w)) => {
+            let size = w.to_usize().unwrap();
+            let true_term = pool.bool_true();
+            let false_term = pool.bool_false();
+            // the number of arguments of bbterm must be the same as the width of v
+            if size != res_args.len() {
+                return Err(CheckerError::Unspecified);
+            }
+            // the computed value from res_args must be the same as m
+            let mut computed_value = 0;
+            for i in 0..size - 1 {
+                if res_args[i] == true_term {
+                    computed_value += 2 * i;
+                } else if res_args[i] != false_term {
+                    return Err(CheckerError::Unspecified);
+                }
+            }
+            if m != Integer::from(computed_value) {
+                return Err(CheckerError::Unspecified);
+            }
+        }
+        _ => {
+            return Err(CheckerError::Unspecified);
+        }
+    }
+    Ok(())
+}
 
 pub fn and(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
@@ -54,8 +72,13 @@ pub fn and(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     let res_args: Vec<_> = (0..size)
         .map(|i| {
             build_term!(
+<<<<<<< HEAD
               pool,
               (and {x[i].clone()} {y[i].clone()})
+=======
+                pool,
+                (and {x[i].clone()} {y[i].clone()})
+>>>>>>> a674a7e (adding checking for value bitblasting)
             )
         })
         .collect();
