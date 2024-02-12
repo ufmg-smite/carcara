@@ -72,13 +72,8 @@ pub fn and(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     let res_args: Vec<_> = (0..size)
         .map(|i| {
             build_term!(
-<<<<<<< HEAD
-              pool,
-              (and {x[i].clone()} {y[i].clone()})
-=======
                 pool,
                 (and {x[i].clone()} {y[i].clone()})
->>>>>>> a674a7e (adding checking for value bitblasting)
             )
         })
         .collect();
