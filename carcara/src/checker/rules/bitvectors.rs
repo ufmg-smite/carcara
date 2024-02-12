@@ -469,41 +469,51 @@ pub fn extract(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
 pub fn concat(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
-    let ((x, y), res_vec) = match_term_err!((= (concat x y) (bbterm ...)) = &conclusion[0])?;
+    let (concat_args, res_args) = match_term_err!((= (concat ...) (bbterm ...)) = &conclusion[0])?;
 
-    let Sort::BitVec(size1) = pool.sort(x).as_sort().cloned().unwrap() else {
+    let Sort::BitVec(size) = pool
+        .sort(&concat_args[concat_args.len() - 1])
+        .as_sort()
+        .cloned()
+        .unwrap()
+    else {
         unreachable!();
     };
-    let size1 = size1.to_usize().unwrap();
+    let mut size = size.to_usize().unwrap();
+    let mut expected_res = build_term_vec(&concat_args[concat_args.len() - 1], size, pool);
 
-    let Sort::BitVec(size2) = pool.sort(y).as_sort().cloned().unwrap() else {
-        unreachable!();
-    };
-    let size2 = size2.to_usize().unwrap();
+    let mut i = 1;
+    while i < concat_args.len() {
+        let Sort::BitVec(size_i) = pool
+            .sort(&concat_args[concat_args.len() - 1 - i])
+            .as_sort()
+            .cloned()
+            .unwrap()
+        else {
+            unreachable!();
+        };
+        let size_i = size_i.to_usize().unwrap();
+        expected_res.extend(build_term_vec(
+            &concat_args[concat_args.len() - 1 - i],
+            size_i,
+            pool,
+        ));
 
-    if res_vec.len() != size1 + size2 {
+        size += size_i;
+        i += 1;
+    }
+
+    if res_args.len() != size {
         return Err(CheckerError::Explanation(format!(
-            "Concat size {} different from sum of argument size {} + {}",
-            res_vec.len(),
-            size1,
-            size2
+            "Concat size {} different from sum of argument size {}",
+            res_args.len(),
+            size
         )));
     }
-
-    let x = build_term_vec(x, size1, pool);
-    let y = build_term_vec(y, size2, pool);
-
-    let mut index = 0;
-    for arg in res_vec {
-        if index < size2 {
-            assert_eq(&y[index], arg)?;
-        } else {
-            assert_eq(&x[index - size2], arg)?;
-        }
-
-        index += 1;
-    }
-    Ok(())
+    assert_eq(
+        &pool.add(Term::Op(Operator::BvBbTerm, expected_res)),
+        &pool.add(Term::Op(Operator::BvBbTerm, res_args.to_vec())),
+    )
 }
 
 pub fn sign_extend(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
