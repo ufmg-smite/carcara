@@ -286,6 +286,11 @@ pub fn slt(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     let x = build_term_vec(x, size, pool);
     let y = build_term_vec(y, size, pool);
 
+    // if size is 1, check directly if x, whose only bit is its LSB,
+    // is negative (i.e., first bit is 1) and y positive (i.e., it is
+    // zero)
+    if size == 1 { return assert_eq(&build_term!(pool, (and {x[0].clone()} (not {y[0].clone()}))), res); }
+
     let mut expected_res = build_term!(pool, (and (not {x[0].clone()}) {y[0].clone()}));
 
     for i in 1..(size - 1) {
