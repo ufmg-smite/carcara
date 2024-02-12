@@ -62,6 +62,71 @@ fn ripple_carry_adder(
     pool.add(Term::Op(Operator::BvBbTerm, res_args))
 }
 
+fn shift_add_multiplier(
+    x: &Rc<Term>,
+    y: &Rc<Term>,
+    size: usize,
+    pool: &mut dyn TermPool,
+) -> Rc<Term> {
+    let x = build_term_vec(x, size, pool);
+    let y = build_term_vec(y, size, pool);
+
+    let false_term = pool.bool_false();
+    let shift: Vec<Vec<_>> = (0..size)
+        .map(|j| {
+            (0..size)
+                .map(|i| {
+                    // if j <= i { build_term!(pool, (and {x[i-j].clone()} {y[j].clone()})) }
+                    if j <= i {
+                        build_term!(pool, (and {y[j].clone()} {x[i-j].clone()}))
+                    } else {
+                        false_term.clone()
+                    }
+                })
+                .collect()
+        })
+        .collect();
+
+    let mut carry: Vec<Vec<_>> = vec![(0..size).map(|_i| false_term.clone()).collect()];
+    let mut res: Vec<Vec<_>> = vec![(0..size).map(|i| shift[0][i].clone()).collect()];
+
+    for j in 1..size {
+        // carry^j+1_i+1
+        carry.push(vec![false_term.clone()]);
+        for i in 1..size {
+            let prev_carry = if j < i {
+                carry[j][i - 1].clone()
+            } else {
+                false_term.clone()
+            };
+            carry[j].push(
+                if j < i {
+                    build_term!(pool,
+                                (or (and {res[j-1][i-1].clone()} {shift[j][i-1].clone()})
+                                 (and (xor {res[j-1][i-1].clone()} {shift[j][i-1].clone()}) {prev_carry})
+                                )
+                    )
+                }
+                else {false_term.clone()});
+        }
+
+        // res^j+1_i
+        res.push((0..size)
+                      .map(|i| {
+                          // res^j_0 = sh^0_0
+                          if i == 0 { shift[0][0].clone() }
+                          else if j > i { res[i][i].clone() }
+                          else {
+                              build_term!(pool,
+                                    (xor (xor {res[j-1][i].clone()} {shift[j][i].clone()}) {carry[j][i].clone()})
+                              )
+                          }
+                      }).collect());
+    }
+
+    pool.add(Term::Op(Operator::BvBbTerm, res[size - 1].to_vec()))
+}
+
 pub fn value(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (v, res_args) = match_term_err!((= v (bbterm ...)) = &conclusion[0])?;
@@ -289,7 +354,12 @@ pub fn slt(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     // if size is 1, check directly if x, whose only bit is its LSB,
     // is negative (i.e., first bit is 1) and y positive (i.e., it is
     // zero)
-    if size == 1 { return assert_eq(&build_term!(pool, (and {x[0].clone()} (not {y[0].clone()}))), res); }
+    if size == 1 {
+        return assert_eq(
+            &build_term!(pool, (and {x[0].clone()} (not {y[0].clone()}))),
+            res,
+        );
+    }
 
     let mut expected_res = build_term!(pool, (and (not {x[0].clone()}) {y[0].clone()}));
 
@@ -341,6 +411,38 @@ pub fn add(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     let mut expected_res = add_args[0].clone();
     while i < add_args.len() {
         expected_res = ripple_carry_adder(&expected_res, &add_args[i], size, pool);
+        i += 1;
+    }
+    assert_eq(&expected_res, &res)
+}
+
+pub fn mult(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (mult_args, res) = match_term_err!((= (bvmul ...) res) = &conclusion[0])?;
+
+    let Sort::BitVec(size) = pool.sort(&mult_args[0]).as_sort().cloned().unwrap() else {
+        unreachable!();
+    };
+
+    // check all arguments have the same size
+    for arg in mult_args {
+        let Sort::BitVec(size1) = pool.sort(arg).as_sort().cloned().unwrap() else {
+            unreachable!();
+        };
+        if size1 != size {
+            return Err(CheckerError::Explanation(format!(
+                "Multiplication arguments {} and {} have different sizes",
+                mult_args[0], arg
+            )));
+        }
+    }
+
+    let size = size.to_usize().unwrap();
+
+    let mut i = 1;
+    let mut expected_res = mult_args[0].clone();
+    while i < mult_args.len() {
+        expected_res = shift_add_multiplier(&expected_res, &mult_args[i], size, pool);
         i += 1;
     }
     assert_eq(&expected_res, &res)
