@@ -23,6 +23,45 @@ fn build_term_vec(term: &Rc<Term>, size: usize, pool: &mut dyn TermPool) -> Vec<
     term
 }
 
+fn ripple_carry_adder(
+    x: &Rc<Term>,
+    y: &Rc<Term>,
+    size: usize,
+    pool: &mut dyn TermPool,
+) -> Rc<Term> {
+    let x = build_term_vec(x, size, pool);
+    let y = build_term_vec(y, size, pool);
+
+    let mut carries = vec![pool.bool_false()];
+
+    for i in 1..size {
+        let carry_i = build_term!(
+          pool,
+            (or
+              (and
+                {x[i - 1].clone()}
+                {y[i - 1].clone()})
+              (and
+                (xor
+                  {x[i - 1].clone()}
+                  {y[i - 1].clone()})
+                {carries[i - 1].clone()}))
+        );
+        carries.push(carry_i);
+    }
+
+    let res_args: Vec<_> = (0..size)
+        .map(|i| {
+            build_term!(
+                pool,
+                (xor (xor {x[i].clone()} {y[i].clone()}) {carries[i].clone()})
+            )
+        })
+        .collect();
+
+    pool.add(Term::Op(Operator::BvBbTerm, res_args))
+}
+
 pub fn value(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (v, res_args) = match_term_err!((= v (bbterm ...)) = &conclusion[0])?;
@@ -272,37 +311,34 @@ pub fn slt(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
 pub fn add(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
-    let ((x, y), res) = match_term_err!((= (bvadd x y) res) = &conclusion[0])?;
+    let (add_args, res) = match_term_err!((= (bvadd ...) res) = &conclusion[0])?;
 
-    let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
+    let Sort::BitVec(size) = pool.sort(&add_args[0]).as_sort().cloned().unwrap() else {
         unreachable!();
     };
 
-    let x = build_term_vec(x, size, pool);
-    let y = build_term_vec(y, size, pool);
-
-    let mut carries = vec![pool.bool_false()];
-
-    for i in 1..size {
-        let carry_i = build_term!(
-          pool,
-          (or (and {x[i - 1].clone()} {y[i - 1].clone()}) (and (xor {x[i - 1].clone()} {y[i - 1].clone()}) {carries[i - 1].clone()}))
-        );
-        carries.push(carry_i);
+    // check all arguments have the same size
+    for arg in add_args {
+        let Sort::BitVec(size1) = pool.sort(arg).as_sort().cloned().unwrap() else {
+            unreachable!();
+        };
+        if size1 != size {
+            return Err(CheckerError::Explanation(format!(
+                "Addition arguments {} and {} have different sizes",
+                add_args[0], arg
+            )));
+        }
     }
 
-    let res_args: Vec<_> = (0..size)
-        .map(|i| {
-            build_term!(
-              pool,
-              (xor (xor {x[i].clone()} {y[i].clone()}) {carries[i].clone()})
-            )
-        })
-        .collect();
+    let size = size.to_usize().unwrap();
 
-    let expected_res = pool.add(Term::Op(Operator::BvBbTerm, res_args));
-
-    assert_eq(&expected_res, res)
+    let mut i = 1;
+    let mut expected_res = add_args[0].clone();
+    while i < add_args.len() {
+        expected_res = ripple_carry_adder(&expected_res, &add_args[i], size, pool);
+        i += 1;
+    }
+    assert_eq(&expected_res, &res)
 }
 
 pub fn neg(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
