@@ -93,7 +93,7 @@ enum AnchorArg {
 struct ParserState {
     symbol_table: HashMapStack<HashCache<String>, Rc<Term>>,
     function_defs: IndexMap<String, FunctionDef>,
-    sort_declarations: IndexMap<String, usize>,
+    sort_declarations: HashMapStack<String, usize>,
     step_ids: HashMapStack<HashCache<String>, usize>,
 }
 
@@ -642,7 +642,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 Token::ReservedWord(Reserved::DeclareConst) => {
                     let name = self.expect_symbol()?;
                     let sort = self.parse_sort()?;
-                    let sort = self.pool.add(sort);
                     self.expect_token(Token::CloseParen)?;
                     self.insert_sorted_var((name.clone(), sort.clone()));
                     self.prelude().function_declarations.push((name, sort));
@@ -997,7 +996,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         } else {
             let symbol = self.expect_symbol()?;
             let sort = self.parse_sort()?;
-            let var = (symbol, self.pool.add(sort));
+            let var = (symbol, sort);
             self.insert_sorted_var(var.clone());
             self.expect_token(Token::CloseParen)?;
             AnchorArg::Variable(var)
@@ -1012,7 +1011,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
             self.expect_token(Token::OpenParen)?;
             let mut sorts = self.parse_sequence(Self::parse_sort, false)?;
             sorts.push(self.parse_sort()?);
-            let sorts = self.pool.add_all(sorts);
             if sorts.len() == 1 {
                 sorts.into_iter().next().unwrap()
             } else {
@@ -1099,7 +1097,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         let symbol = self.expect_symbol()?;
         let sort = self.parse_sort()?;
         self.expect_token(Token::CloseParen)?;
-        Ok((symbol, self.pool.add(sort)))
+        Ok((symbol, sort))
     }
 
     /// Parses a term.
@@ -1515,7 +1513,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     /// Parses a sort.
-    fn parse_sort(&mut self) -> CarcaraResult<Term> {
+    fn parse_sort(&mut self) -> CarcaraResult<Rc<Term>> {
         let pos = self.current_position;
         let (name, args) = match self.next_token()?.0 {
             Token::Symbol(s) => (s, Vec::new()),
@@ -1525,12 +1523,12 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 assert_eq!(name, "BitVec"); // TODO: Add proper error handling
                 let width = self.expect_numeral()?;
                 self.expect_token(Token::CloseParen)?;
-                return Ok(Term::Sort(Sort::BitVec(width)));
+                return Ok(self.pool.add(Term::Sort(Sort::BitVec(width))));
             }
             Token::OpenParen => {
                 let name = self.expect_symbol()?;
                 let args = self.parse_sequence(Parser::parse_sort, true)?;
-                (name, self.pool.add_all(args))
+                (name, args)
             }
             other => {
                 return Err(Error::Parser(ParserError::UnexpectedToken(other), pos));
@@ -1562,6 +1560,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 None => Err(Error::Parser(ParserError::UndefinedSort(name), pos)),
             },
         }?;
-        Ok(Term::Sort(sort))
+        Ok(self.pool.add(Term::Sort(sort)))
     }
 }
