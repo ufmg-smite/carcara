@@ -739,11 +739,6 @@ impl Term {
         pool.sort(&added).as_sort().unwrap().clone()
     }
 
-    /// Returns `true` if the term is a terminal, that is, if it is a constant or a variable.
-    pub fn is_terminal(&self) -> bool {
-        matches!(self, Term::Const(_) | Term::Var(..))
-    }
-
     /// Returns `true` if the term is an integer or real constant.
     pub fn is_number(&self) -> bool {
         matches!(self, Term::Const(Constant::Real(_) | Constant::Integer(_)))
@@ -825,6 +820,11 @@ impl Term {
             Some(x) => as_unsigned_fraction(x).map(|r| -r),
             None => as_unsigned_fraction(self),
         }
+    }
+
+    /// Returns `true` if the term is a constant.
+    pub fn is_const(&self) -> bool {
+        matches!(self, Term::Const(_))
     }
 
     /// Returns `true` if the term is a variable.
