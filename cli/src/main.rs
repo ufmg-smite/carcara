@@ -4,8 +4,8 @@ mod logger;
 mod path_args;
 
 use carcara::{
-    ast::print_proof, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate,
-    check_parallel, parser, CarcaraOptions, LiaGenericOptions,
+    ast, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate, check_parallel, parser,
+    CarcaraOptions, LiaGenericOptions,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -16,6 +16,7 @@ use std::{
     fs::File,
     io::{self, BufRead, IsTerminal},
     path::Path,
+    sync::atomic,
 };
 
 // `git describe --all` will try to find any ref (including tags) that describes the current commit.
@@ -55,9 +56,9 @@ struct Cli {
     #[clap(global = true, long)]
     no_color: bool,
 
-    /// Use sharing when printing terms in error messages.
-    #[clap(global = true, short, long)]
-    quiet: bool,
+    /// Don't use sharing when printing terms.
+    #[clap(global = true, short = 'v', long)]
+    no_print_with_sharing: bool,
 }
 
 #[derive(Subcommand)]
@@ -158,13 +159,6 @@ struct CheckingOptions {
     lia_via_cvc5: bool,
 }
 
-#[derive(Args)]
-struct PrintingOptions {
-    /// Use sharing when printing proof terms.
-    #[clap(long = "print-with-sharing")]
-    use_sharing: bool,
-}
-
 fn build_carcara_options(
     ParsingOptions {
         apply_function_defs,
@@ -206,9 +200,6 @@ struct ParseCommandOptions {
 
     #[clap(flatten)]
     parsing: ParsingOptions,
-
-    #[clap(flatten)]
-    printing: PrintingOptions,
 }
 
 #[derive(Args)]
@@ -253,9 +244,6 @@ struct ElaborateCommandOptions {
 
     #[clap(flatten)]
     checking: CheckingOptions,
-
-    #[clap(flatten)]
-    printing: PrintingOptions,
 
     #[clap(flatten)]
     stats: StatsOptions,
@@ -303,9 +291,6 @@ struct SliceCommandOption {
     #[clap(flatten)]
     parsing: ParsingOptions,
 
-    #[clap(flatten)]
-    printing: PrintingOptions,
-
     #[clap(long)]
     from: String,
 
@@ -336,8 +321,7 @@ fn main() {
     let cli = Cli::parse();
     let colors_enabled = !cli.no_color && std::io::stderr().is_terminal();
 
-    carcara::ast::USE_SHARING_IN_TERM_DISPLAY
-        .store(cli.quiet, std::sync::atomic::Ordering::Relaxed);
+    ast::USE_SHARING_IN_TERM_DISPLAY.store(!cli.no_print_with_sharing, atomic::Ordering::Relaxed);
 
     logger::init(cli.log_level.into(), colors_enabled);
 
@@ -358,8 +342,12 @@ fn main() {
         }
     }
 
+    let print_proof = |commands: Vec<ast::ProofCommand>| -> CliResult<()> {
+        ast::print_proof(&commands, !cli.no_print_with_sharing)?;
+        Ok(())
+    };
     let result = match cli.command {
-        Command::Parse(options) => parse_command(options),
+        Command::Parse(options) => parse_command(options).and_then(|p| print_proof(p.commands)),
         Command::Check(options) => {
             match check_command(options) {
                 Ok(false) => println!("valid"),
@@ -372,9 +360,11 @@ fn main() {
             }
             return;
         }
-        Command::Elaborate(options) => elaborate_command(options),
+        Command::Elaborate(options) => {
+            elaborate_command(options).and_then(|p| print_proof(p.commands))
+        }
         Command::Bench(options) => bench_command(options),
-        Command::Slice(options) => slice_command(options),
+        Command::Slice(options) => slice_command(options).and_then(print_proof),
     };
     if let Err(e) = result {
         log::error!("{}", e);
@@ -399,7 +389,7 @@ fn get_instance(options: &Input) -> CliResult<(Box<dyn BufRead>, Box<dyn BufRead
     }
 }
 
-fn parse_command(options: ParseCommandOptions) -> CliResult<()> {
+fn parse_command(options: ParseCommandOptions) -> CliResult<ast::Proof> {
     let (problem, proof) = get_instance(&options.input)?;
     let (_, proof, _) = parser::parse_instance(
         problem,
@@ -412,8 +402,7 @@ fn parse_command(options: ParseCommandOptions) -> CliResult<()> {
         },
     )
     .map_err(carcara::Error::from)?;
-    print_proof(&proof.commands, options.printing.use_sharing)?;
-    Ok(())
+    Ok(proof)
 }
 
 fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
@@ -433,7 +422,7 @@ fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
     .map_err(Into::into)
 }
 
-fn elaborate_command(options: ElaborateCommandOptions) -> CliResult<()> {
+fn elaborate_command(options: ElaborateCommandOptions) -> CliResult<ast::Proof> {
     let (problem, proof) = get_instance(&options.input)?;
 
     let (_, elaborated) = check_and_elaborate(
@@ -441,8 +430,7 @@ fn elaborate_command(options: ElaborateCommandOptions) -> CliResult<()> {
         proof,
         build_carcara_options(options.parsing, options.checking, options.stats),
     )?;
-    print_proof(&elaborated.commands, options.printing.use_sharing)?;
-    Ok(())
+    Ok(elaborated)
 }
 
 fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
@@ -499,7 +487,7 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
     Ok(())
 }
 
-fn slice_command(options: SliceCommandOption) -> CliResult<()> {
+fn slice_command(options: SliceCommandOption) -> CliResult<Vec<ast::ProofCommand>> {
     let (problem, proof) = get_instance(&options.input)?;
     let config = parser::Config {
         apply_function_defs: options.parsing.apply_function_defs,
@@ -518,7 +506,5 @@ fn slice_command(options: SliceCommandOption) -> CliResult<()> {
 
     let diff =
         carcara::elaborator::slice_proof(&proof.commands, source_index, options.max_distance);
-    let slice = carcara::elaborator::apply_diff(diff, proof.commands);
-    print_proof(&slice, options.printing.use_sharing)?;
-    Ok(())
+    Ok(carcara::elaborator::apply_diff(diff, proof.commands))
 }
