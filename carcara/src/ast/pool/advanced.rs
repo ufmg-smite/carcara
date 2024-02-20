@@ -38,14 +38,6 @@ impl ContextPool {
 }
 
 impl TermPool for ContextPool {
-    fn bool_true(&self) -> Rc<Term> {
-        self.global_pool.bool_true.clone()
-    }
-
-    fn bool_false(&self) -> Rc<Term> {
-        self.global_pool.bool_false.clone()
-    }
-
     fn add(&mut self, term: Term) -> Rc<Term> {
         // If the global pool has the term
         if let Some(entry) = self.global_pool.storage.get(&term) {
@@ -107,14 +99,6 @@ impl LocalPool {
 }
 
 impl TermPool for LocalPool {
-    fn bool_true(&self) -> Rc<Term> {
-        self.ctx_pool.global_pool.bool_true.clone()
-    }
-
-    fn bool_false(&self) -> Rc<Term> {
-        self.ctx_pool.global_pool.bool_false.clone()
-    }
-
     fn add(&mut self, term: Term) -> Rc<Term> {
         // If there is a constant pool and has the term
         if let Some(entry) = self.ctx_pool.global_pool.storage.get(&term) {

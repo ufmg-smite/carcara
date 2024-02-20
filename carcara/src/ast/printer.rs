@@ -198,7 +198,13 @@ impl<'a> AlethePrinter<'a> {
             Term::Const(c) => write!(self.inner, "{}", c),
             Term::Var(name, _) => write!(self.inner, "{}", quote_symbol(name)),
             Term::App(func, args) => self.write_s_expr(func, args),
-            Term::Op(op, args) => self.write_s_expr(op, args),
+            Term::Op(op, args) => {
+                if args.is_empty() {
+                    write!(self.inner, "{}", op)
+                } else {
+                    self.write_s_expr(op, args)
+                }
+            }
             Term::Sort(sort) => write!(self.inner, "{}", sort),
             Term::Quant(quantifier, bindings, term) => {
                 write!(self.inner, "({} ", quantifier)?;

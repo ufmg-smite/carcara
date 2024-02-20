@@ -121,14 +121,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
     ///
     /// This operation can fail if there is an IO or lexer error on the first token.
     pub fn new(pool: &'a mut PrimitivePool, config: Config, input: R) -> CarcaraResult<Self> {
-        let mut state = ParserState::default();
-        let bool_sort = pool.add(Term::Sort(Sort::Bool));
-
-        for iden in ["true", "false"] {
-            let iden = HashCache::new(iden.to_owned());
-            state.symbol_table.insert(iden, bool_sort.clone());
-        }
-
         let mut lexer = Lexer::new(input)?;
         let (current_token, current_position) = lexer.next_token()?;
         Ok(Parser {
@@ -137,7 +129,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
             lexer,
             current_token,
             current_position,
-            state,
+            state: ParserState::default(),
             interpret_integers_as_reals: false,
             problem: None,
         })
@@ -194,6 +186,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         let sorts: Vec<_> = args.iter().map(|t| self.pool.sort(t)).collect();
         let sorts: Vec<_> = sorts.iter().map(|s| s.as_sort().unwrap()).collect();
         match op {
+            Operator::True | Operator::False => assert_num_args(&args, 0)?,
             Operator::Not => {
                 assert_num_args(&args, 1)?;
                 SortError::assert_eq(&Sort::Bool, sorts[0])?;

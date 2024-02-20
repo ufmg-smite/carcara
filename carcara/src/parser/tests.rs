@@ -53,10 +53,10 @@ pub fn parse_proof(pool: &mut PrimitivePool, input: &str) -> Proof {
     Proof { premises: IndexSet::new(), commands }
 }
 
-fn run_parser_tests(pool: &mut PrimitivePool, cases: &[(&str, Rc<Term>)]) {
+fn run_parser_tests(pool: &mut PrimitivePool, cases: &[(&str, Term)]) {
     for (case, expected) in cases {
         let got = parse_term(pool, case);
-        assert_eq!(expected, &got);
+        assert_eq!(expected, &*got);
     }
 }
 
@@ -84,14 +84,8 @@ fn test_hash_consing() {
     //   (* 2 2)
     //   (- (- ...) (* 2 2))
     let expected = vec![
-        // The `Type` and `Bool` sorts, and the boolean constants `true` and `false` are always
-        // added to the terms map
-        "Type",
-        "Bool",
-        "true",
-        "false",
-        "1",
         "Int",
+        "1",
         "2",
         "(+ 1 2)",
         "(* (+ 1 2) (+ 1 2))",
@@ -126,19 +120,19 @@ fn test_arithmetic_ops() {
     let cases = [
         (
             "(+ 2 3)",
-            p.add(Term::Op(Operator::Add, vec![two.clone(), three.clone()])),
+            Term::Op(Operator::Add, vec![two.clone(), three.clone()]),
         ),
         (
             "(* 2 3 5 7)",
-            p.add(Term::Op(
+            Term::Op(
                 Operator::Mult,
                 vec![two.clone(), three, five.clone(), seven],
-            )),
+            ),
         ),
-        ("(- 5)", p.add(Term::Op(Operator::Sub, vec![five]))),
+        ("(- 5)", Term::Op(Operator::Sub, vec![five])),
         ("(- (+ 1 1) 2)", {
             let one_plus_one = p.add(Term::Op(Operator::Add, vec![one.clone(), one]));
-            p.add(Term::Op(Operator::Sub, vec![one_plus_one, two]))
+            Term::Op(Operator::Sub, vec![one_plus_one, two])
         }),
     ];
     run_parser_tests(&mut p, &cases);
@@ -156,51 +150,42 @@ fn test_logic_ops() {
     let cases = [
         (
             "(and true false)",
-            p.add(Term::Op(Operator::And, vec![p.bool_true(), p.bool_false()])),
+            Term::Op(Operator::And, vec![p.bool_true(), p.bool_false()]),
         ),
         (
             "(or true true false)",
-            p.add(Term::Op(
+            Term::Op(
                 Operator::Or,
                 vec![p.bool_true(), p.bool_true(), p.bool_false()],
-            )),
+            ),
         ),
-        (
-            "(and true)",
-            p.add(Term::Op(Operator::And, vec![p.bool_true()])),
-        ),
+        ("(and true)", Term::Op(Operator::And, vec![p.bool_true()])),
         ("(or true (and false false))", {
-            let false_and_false = p.add(Term::Op(
-                Operator::And,
-                vec![p.bool_false(), p.bool_false()],
-            ));
-            p.add(Term::Op(Operator::Or, vec![p.bool_true(), false_and_false]))
+            let false_and_false = Term::Op(Operator::And, vec![p.bool_false(), p.bool_false()]);
+            Term::Op(Operator::Or, vec![p.bool_true(), p.add(false_and_false)])
         }),
         (
             "(xor true false false)",
-            p.add(Term::Op(
+            Term::Op(
                 Operator::Xor,
                 vec![p.bool_true(), p.bool_false(), p.bool_false()],
-            )),
+            ),
         ),
         (
             "(= 2 3)",
-            p.add(Term::Op(Operator::Equals, vec![two.clone(), three])),
+            Term::Op(Operator::Equals, vec![two.clone(), three]),
         ),
-        (
-            "(not false)",
-            p.add(Term::Op(Operator::Not, vec![p.bool_false()])),
-        ),
+        ("(not false)", Term::Op(Operator::Not, vec![p.bool_false()])),
         (
             "(distinct 4 2)",
-            p.add(Term::Op(Operator::Distinct, vec![four, two])),
+            Term::Op(Operator::Distinct, vec![four, two]),
         ),
         ("(=> (= 0 1) true false)", {
             let zero_equals_one = p.add(Term::Op(Operator::Equals, vec![zero, one]));
-            p.add(Term::Op(
+            Term::Op(
                 Operator::Implies,
                 vec![zero_equals_one, p.bool_true(), p.bool_false()],
-            ))
+            )
         }),
     ];
     run_parser_tests(&mut p, &cases);
@@ -238,18 +223,12 @@ fn test_ite() {
     let cases = [
         (
             "(ite true 2 3)",
-            p.add(Term::Op(
-                Operator::Ite,
-                vec![p.bool_true(), two.clone(), three],
-            )),
+            Term::Op(Operator::Ite, vec![p.bool_true(), two.clone(), three]),
         ),
         ("(ite (not true) 2 (ite false 2 1))", {
-            let not_true = p.add(Term::Op(Operator::Not, vec![p.bool_true()]));
-            let ite = p.add(Term::Op(
-                Operator::Ite,
-                vec![p.bool_false(), two.clone(), one],
-            ));
-            p.add(Term::Op(Operator::Ite, vec![not_true, two, ite]))
+            let not_true = Term::Op(Operator::Not, vec![p.bool_true()]);
+            let ite = Term::Op(Operator::Ite, vec![p.bool_false(), two.clone(), one]);
+            Term::Op(Operator::Ite, vec![p.add(not_true), two, p.add(ite)])
         }),
     ];
     run_parser_tests(&mut p, &cases);
@@ -276,25 +255,25 @@ fn test_quantifiers() {
     let cases = [
         ("(exists ((p Bool)) p)", {
             let inner = p.add(Term::new_var("p", bool_sort.clone()));
-            p.add(Term::Quant(
+            Term::Quant(
                 Quantifier::Exists,
                 BindingList(vec![("p".into(), bool_sort)]),
                 inner,
-            ))
+            )
         }),
         ("(forall ((x Real) (y Real)) (= (+ x y) 0.0))", {
             let [x, y] = ["x", "y"].map(|s| p.add(Term::new_var(s, real_sort.clone())));
             let x_plus_y = p.add(Term::Op(Operator::Add, vec![x, y]));
             let zero = p.add(Term::new_real(0));
             let inner = p.add(Term::Op(Operator::Equals, vec![x_plus_y, zero]));
-            p.add(Term::Quant(
+            Term::Quant(
                 Quantifier::Forall,
                 BindingList(vec![
                     ("x".into(), real_sort.clone()),
                     ("y".into(), real_sort),
                 ]),
                 inner,
-            ))
+            )
         }),
     ];
     run_parser_tests(&mut p, &cases);
@@ -316,13 +295,13 @@ fn test_choice_terms() {
     let cases = [
         ("(choice ((p Bool)) p)", {
             let inner = p.add(Term::new_var("p", bool_sort.clone()));
-            p.add(Term::Choice(("p".into(), bool_sort), inner))
+            Term::Choice(("p".into(), bool_sort), inner)
         }),
         ("(choice ((x Int)) (= x 0))", {
             let x = p.add(Term::new_var("x", int_sort.clone()));
             let zero = p.add(Term::new_int(0));
             let inner = p.add(Term::Op(Operator::Equals, vec![x, zero]));
-            p.add(Term::Choice(("x".into(), int_sort), inner))
+            Term::Choice(("x".into(), int_sort), inner)
         }),
     ];
     run_parser_tests(&mut p, &cases);
@@ -344,19 +323,16 @@ fn test_let_terms() {
     let cases = [
         ("(let ((p false)) p)", {
             let inner = p.add(Term::new_var("p", bool_sort));
-            p.add(Term::Let(
-                BindingList(vec![("p".into(), p.bool_false())]),
-                inner,
-            ))
+            Term::Let(BindingList(vec![("p".into(), p.bool_false())]), inner)
         }),
         ("(let ((x 1) (y 2)) (+ x y))", {
             let [one, two] = [1, 2].map(|n| p.add(Term::new_int(n)));
             let [x, y] = ["x", "y"].map(|s| p.add(Term::new_var(s, int_sort.clone())));
             let inner = p.add(Term::Op(Operator::Add, vec![x, y]));
-            p.add(Term::Let(
+            Term::Let(
                 BindingList(vec![("x".into(), one), ("y".into(), two)]),
                 inner,
-            ))
+            )
         }),
     ];
     run_parser_tests(&mut p, &cases);
@@ -373,18 +349,15 @@ fn test_lambda_terms() {
     let cases = [
         ("(lambda ((x Int)) x)", {
             let x = p.add(Term::new_var("x", int_sort.clone()));
-            p.add(Term::Lambda(
-                BindingList(vec![("x".into(), int_sort.clone())]),
-                x,
-            ))
+            Term::Lambda(BindingList(vec![("x".into(), int_sort.clone())]), x)
         }),
         ("(lambda ((x Int) (y Int)) (+ x y))", {
             let [x, y] = ["x", "y"].map(|s| p.add(Term::new_var(s, int_sort.clone())));
             let inner = p.add(Term::Op(Operator::Add, vec![x, y]));
-            p.add(Term::Lambda(
+            Term::Lambda(
                 BindingList(vec![("x".into(), int_sort.clone()), ("y".into(), int_sort)]),
                 inner,
-            ))
+            )
         }),
     ];
     run_parser_tests(&mut p, &cases);
@@ -401,14 +374,15 @@ fn test_lambda_terms() {
 #[test]
 fn test_annotated_terms() {
     let mut p = PrimitivePool::new();
-    let [zero, two, three] = [0, 2, 3].map(|n| p.add(Term::new_int(n)));
+    let zero = Term::new_int(0);
+    let [two, three] = [2, 3].map(|n| p.add(Term::new_int(n)));
     let cases = [
         ("(! 0 :named foo)", zero.clone()),
         ("(! (! 0 :named foo) :named bar)", zero.clone()),
         ("(! 0 :named foo :named bar)", zero.clone()),
         ("(! (! 0 :pattern ((+ 1 0) 3)) :named bar)", zero.clone()),
         ("(ite (! true :named baz) 2 3)", {
-            p.add(Term::Op(Operator::Ite, vec![p.bool_true(), two, three]))
+            Term::Op(Operator::Ite, vec![p.bool_true(), two, three])
         }),
         ("(! 0 :unknown foo)", zero.clone()),
         ("(! 0 :unknown (list of tokens) :named foo)", zero.clone()),

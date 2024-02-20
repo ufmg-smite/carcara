@@ -3,7 +3,7 @@
 pub mod advanced;
 mod storage;
 
-use super::{Rc, Sort, Term};
+use super::{Operator, Rc, Sort, Term};
 use crate::ast::{Constant, IndexedOperator};
 use indexmap::{IndexMap, IndexSet};
 use rug::Integer;
@@ -11,16 +11,20 @@ use storage::Storage;
 
 pub trait TermPool {
     /// Returns the term corresponding to the boolean constant `true`.
-    fn bool_true(&self) -> Rc<Term>;
-    /// Returns the term corresponding to the boolean constant `false`.
-    fn bool_false(&self) -> Rc<Term>;
-    /// Returns the term corresponding to the boolean constant determined by `value`.
-    fn bool_constant(&self, value: bool) -> Rc<Term> {
-        match value {
-            true => self.bool_true(),
-            false => self.bool_false(),
-        }
+    fn bool_true(&mut self) -> Rc<Term> {
+        self.bool_constant(true)
     }
+
+    /// Returns the term corresponding to the boolean constant `false`.
+    fn bool_false(&mut self) -> Rc<Term> {
+        self.bool_constant(false)
+    }
+
+    /// Returns the term corresponding to the boolean constant determined by `value`.
+    fn bool_constant(&mut self, value: bool) -> Rc<Term> {
+        self.add(Term::new_bool(value))
+    }
+
     /// Takes a term and returns a possibly newly allocated `Rc` that references it.
     ///
     /// If the term was not originally in the term pool, it is added to it. Otherwise, this method
@@ -52,50 +56,22 @@ pub trait TermPool {
 ///
 /// This struct also provides other utility methods, like computing the sort of a term (see
 /// [`PrimitivePool::sort`]) or its free variables (see [`PrimitivePool::free_vars`]).
+#[derive(Debug, Default)]
 pub struct PrimitivePool {
     pub(crate) storage: Storage,
     pub(crate) free_vars_cache: IndexMap<Rc<Term>, IndexSet<Rc<Term>>>,
     pub(crate) sorts_cache: IndexMap<Rc<Term>, Rc<Term>>,
-    pub(crate) bool_true: Rc<Term>,
-    pub(crate) bool_false: Rc<Term>,
-}
-
-impl Default for PrimitivePool {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl PrimitivePool {
     /// Constructs a new `TermPool`. This new pool will already contain the boolean constants `true`
     /// and `false`, as well as the `Bool` sort.
     pub fn new() -> Self {
-        let mut storage = Storage::new();
-        let mut sorts_cache = IndexMap::new();
-        let sort_sort = storage.add(Term::Sort(Sort::Type));
-        let bool_sort = storage.add(Term::Sort(Sort::Bool));
-
-        let [bool_true, bool_false] =
-            ["true", "false"].map(|b| storage.add(Term::new_var(b, bool_sort.clone())));
-
-        sorts_cache.insert(bool_false.clone(), bool_sort.clone());
-        sorts_cache.insert(bool_true.clone(), bool_sort.clone());
-        sorts_cache.insert(bool_sort, sort_sort.clone());
-        sorts_cache.insert(sort_sort.clone(), sort_sort);
-
-        Self {
-            storage,
-            free_vars_cache: IndexMap::new(),
-            sorts_cache,
-            bool_true,
-            bool_false,
-        }
+        Self::default()
     }
 
     /// Computes the sort of a term and adds it to the sort cache.
     fn compute_sort(&mut self, term: &Rc<Term>) -> Rc<Term> {
-        use super::Operator;
-
         if let Some(sort) = self.sorts_cache.get(term) {
             return sort.clone();
         }
@@ -109,7 +85,9 @@ impl PrimitivePool {
             },
             Term::Var(_, sort) => sort.as_sort().unwrap().clone(),
             Term::Op(op, args) => match op {
-                Operator::Not
+                Operator::True
+                | Operator::False
+                | Operator::Not
                 | Operator::Implies
                 | Operator::And
                 | Operator::Or
@@ -368,14 +346,6 @@ impl PrimitivePool {
 }
 
 impl TermPool for PrimitivePool {
-    fn bool_true(&self) -> Rc<Term> {
-        self.bool_true.clone()
-    }
-
-    fn bool_false(&self) -> Rc<Term> {
-        self.bool_false.clone()
-    }
-
     fn add(&mut self, term: Term) -> Rc<Term> {
         let term = self.storage.add(term);
         self.compute_sort(&term);

@@ -198,6 +198,12 @@ impl ProofArg {
 /// The operator of an operation term.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Operator {
+    /// The `true` boolean constant.
+    True,
+
+    /// The `false` boolean constant.
+    False,
+
     // Logic
     /// The `not` operator.
     Not,
@@ -439,6 +445,9 @@ impl_str_conversion_traits!(IndexedOperator {
 });
 
 impl_str_conversion_traits!(Operator {
+    True: "true",
+    False: "false",
+
     Not: "not",
     Implies: "=>",
     And: "and",
@@ -689,6 +698,14 @@ impl From<SortedVar> for Term {
 }
 
 impl Term {
+    pub fn new_bool(value: impl Into<bool>) -> Self {
+        let op = match value.into() {
+            true => Operator::True,
+            false => Operator::False,
+        };
+        Term::Op(op, Vec::new())
+    }
+
     /// Constructs a new integer term.
     pub fn new_int(value: impl Into<Integer>) -> Self {
         Term::Const(Constant::Integer(value.into()))
@@ -751,15 +768,11 @@ impl Term {
         }
     }
 
-    /// Tries to extract a `bool` from a term. Returns `Some` if the term is an boolean
-    /// constant.
+    /// Tries to extract a `bool` from a term. Returns `Some` if the term is a boolean constant.
     pub fn as_bool(&self) -> Option<bool> {
         match self {
-            Term::Var(name, sort) if sort.as_sort() == Some(&Sort::Bool) => match name.as_str() {
-                "true" => Some(true),
-                "false" => Some(false),
-                _ => None,
-            },
+            Term::Op(Operator::True, _) => Some(true),
+            Term::Op(Operator::False, _) => Some(false),
             _ => None,
         }
     }
@@ -874,20 +887,12 @@ impl Term {
 
     /// Returns `true` if the term is the boolean constant `true`.
     pub fn is_bool_true(&self) -> bool {
-        if let Term::Var(name, sort) = self {
-            sort.as_sort() == Some(&Sort::Bool) && name == "true"
-        } else {
-            false
-        }
+        *self == Term::Op(Operator::True, Vec::new())
     }
 
     /// Returns `true` if the term is the boolean constant `false`.
     pub fn is_bool_false(&self) -> bool {
-        if let Term::Var(name, sort) = self {
-            sort.as_sort() == Some(&Sort::Bool) && name == "false"
-        } else {
-            false
-        }
+        *self == Term::Op(Operator::False, Vec::new())
     }
 
     /// Returns `true` if the term is the given boolean constant `b`.

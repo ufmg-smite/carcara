@@ -37,10 +37,6 @@ impl Borrow<Term> for ByValue {
 pub struct Storage(IndexSet<ByValue>);
 
 impl Storage {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     pub fn add(&mut self, term: Term) -> Rc<Term> {
         // If the `hash_set_entry` feature was stable, this would be much simpler to do using
         // `get_or_insert_with` (and would avoid rehashing the term)
