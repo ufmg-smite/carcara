@@ -1,6 +1,6 @@
 //! Algorithms for creating and applying capture-avoiding substitutions over terms.
 
-use super::{BindingList, Rc, SortedVar, Term, TermPool};
+use super::{BindingList, Rc, Sort, SortedVar, Term, TermPool};
 use indexmap::{IndexMap, IndexSet};
 use thiserror::Error;
 
@@ -70,7 +70,7 @@ impl Substitution {
         map: IndexMap<Rc<Term>, Rc<Term>>,
     ) -> SubstitutionResult<Self> {
         for (k, v) in &map {
-            if !k.is_var() {
+            if !k.is_var() && !k.is_sort_var() {
                 return Err(SubstitutionError::NotAVariable(k.clone()));
             }
             if pool.sort(k) != pool.sort(v) {
@@ -98,7 +98,7 @@ impl Substitution {
         x: Rc<Term>,
         t: Rc<Term>,
     ) -> SubstitutionResult<()> {
-        if !x.is_var() {
+        if !x.is_var() && !x.is_sort_var() {
             return Err(SubstitutionError::NotAVariable(x));
         }
         if pool.sort(&x) != pool.sort(&t) {
@@ -204,7 +204,7 @@ impl Substitution {
             Term::Lambda(b, t) => {
                 self.apply_to_binder(pool, term, b.as_ref(), t, true, Term::Lambda)
             }
-            Term::Const(_) | Term::Var(..) | Term::Sort(_) => term.clone(),
+            Term::Const(_) | Term::Var(..) => term.clone(),
             Term::IndexedOp { op, op_args, args } => {
                 let new_args = apply_to_sequence!(args);
                 pool.add(Term::IndexedOp {
@@ -213,6 +213,15 @@ impl Substitution {
                     args: new_args,
                 })
             }
+            Term::Sort(Sort::Atom(sort, args)) => {
+                let new_args = apply_to_sequence!(args);
+                pool.add(Term::Sort(Sort::Atom(sort.clone(), new_args)))
+            }
+            Term::Sort(Sort::Array(x, y)) => {
+                let [x, y] = [x, y].map(|s| self.apply(pool, s));
+                pool.add(Term::Sort(Sort::Array(x, y)))
+            }
+            Term::Sort(_) => term.clone(),
         };
 
         // Since frequently a term will have more than one identical subterms, we insert the

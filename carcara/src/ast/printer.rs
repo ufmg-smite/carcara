@@ -437,6 +437,7 @@ impl fmt::Display for Sort {
             Sort::Array(x, y) => write_s_expr(f, "Array", &[x, y]),
             Sort::BitVec(w) => write!(f, "(_ BitVec {})", w),
             Sort::RareList => unreachable!("RARE list sort should never be displayed"),
+            Sort::Type => write!(f, "Type"),
         }
     }
 }

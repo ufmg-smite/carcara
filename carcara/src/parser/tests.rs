@@ -84,8 +84,9 @@ fn test_hash_consing() {
     //   (* 2 2)
     //   (- (- ...) (* 2 2))
     let expected = vec![
-        // The `Bool` sort and the boolean constants `true` and `false` are always added to the
-        // terms map
+        // The `Type` and `Bool` sorts, and the boolean constants `true` and `false` are always
+        // added to the terms map
+        "Type",
         "Bool",
         "true",
         "false",
@@ -495,6 +496,37 @@ fn test_define_fun() {
         ["(g 2 3)"],
     );
     let expected = parse_term(&mut p, "(* (+ 2 1) (+ 3 1))");
+    assert_eq!(expected, got);
+}
+
+#[test]
+fn test_define_sort() {
+    let mut p = PrimitivePool::new();
+    let [got] = parse_terms(
+        &mut p,
+        "(define-sort booool () Bool)",
+        ["(exists ((b booool)) b)"],
+    );
+    assert_eq!(parse_term(&mut p, "(exists ((b Bool)) b)"), got);
+
+    let [got] = parse_terms(
+        &mut p,
+        "(define-sort yarrA (Value Key) (Array Key Value))",
+        ["(exists ((a (yarrA String Int))) false)"],
+    );
+    let expected = parse_term(&mut p, "(exists ((a (Array Int String))) false)");
+    assert_eq!(expected, got);
+
+    let [got] = parse_terms(
+        &mut p,
+        "(define-sort vector (T) (Array Int T))
+        (define-sort matrix (T) (vector (vector T)))",
+        ["(exists ((a (Array String (Array Int (matrix Bool))))) false)"],
+    );
+    let expected = parse_term(
+        &mut p,
+        "(exists ((a (Array String (Array Int (Array Int (Array Int Bool)))))) false)",
+    );
     assert_eq!(expected, got);
 }
 

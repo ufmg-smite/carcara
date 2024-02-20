@@ -70,6 +70,12 @@ struct FunctionDef {
     body: Rc<Term>,
 }
 
+/// A sort definition, from a `define-sort` command.
+struct SortDef {
+    params: Vec<String>,
+    body: Rc<Term>,
+}
+
 /// Represents a "raw" `anchor` command. This is only used while parsing, and does not appear in
 /// the final AST.
 struct AnchorCommand {
@@ -94,6 +100,7 @@ struct ParserState {
     symbol_table: HashMapStack<HashCache<String>, Rc<Term>>,
     function_defs: IndexMap<String, FunctionDef>,
     sort_declarations: HashMapStack<String, usize>,
+    sort_defs: IndexMap<String, SortDef>,
     step_ids: HashMapStack<HashCache<String>, usize>,
 }
 
@@ -655,7 +662,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     // User declared sorts are represented with the `Atom` sort kind, and an
                     // argument which is a string terminal representing the sort name.
                     self.state.sort_declarations.insert(name, arity);
-                    continue;
                 }
                 Token::ReservedWord(Reserved::DefineFun) => {
                     let (name, func_def) = self.parse_define_fun()?;
@@ -681,6 +687,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         self.premises().insert(assertion_term);
                     }
                     continue;
+                }
+                Token::ReservedWord(Reserved::DefineSort) => {
+                    let (name, def) = self.parse_define_sort()?;
+                    self.state.sort_defs.insert(name, def);
                 }
                 Token::ReservedWord(Reserved::Assert) => {
                     let term = self.parse_term()?;
@@ -1055,6 +1065,27 @@ impl<'a, R: BufRead> Parser<'a, R> {
         self.expect_token(Token::CloseParen)?;
 
         Ok((name, FunctionDef { params, body }))
+    }
+
+    /// Parses a `define-sort` proof command. Returns the sort name and its definition. This method
+    /// assumes that the `(` and `define-sort` tokens were already consumed.
+    fn parse_define_sort(&mut self) -> CarcaraResult<(String, SortDef)> {
+        let name = self.expect_symbol()?;
+        self.expect_token(Token::OpenParen)?;
+        let params = self.parse_sequence(Self::expect_symbol, false)?;
+
+        // In order to correctly parse the sort definition, we push a new scope to the sort
+        // declarations table and add the sort parameters to it.
+        self.state.sort_declarations.push_scope();
+        for s in &params {
+            self.state.sort_declarations.insert(s.clone(), 0);
+        }
+        let body = self.parse_sort()?;
+        self.state.sort_declarations.pop_scope();
+
+        self.expect_token(Token::CloseParen)?;
+
+        Ok((name, SortDef { params, body }))
     }
 
     /// Parses a clause of the form `(cl <term>*)`.
@@ -1551,6 +1582,30 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     pos,
                 )),
             },
+            other if self.state.sort_defs.get(other).is_some() => {
+                let def = self.state.sort_defs.get(other).unwrap();
+                return if def.params.len() != args.len() {
+                    Err(Error::Parser(
+                        ParserError::WrongNumberOfArgs(def.params.len().into(), args.len()),
+                        pos,
+                    ))
+                } else if def.params.is_empty() {
+                    Ok(def.body.clone())
+                } else {
+                    let substitution = def
+                        .params
+                        .iter()
+                        .cloned()
+                        .map(|name| self.pool.add(Term::Sort(Sort::Atom(name, Vec::new()))))
+                        .zip(args)
+                        .collect();
+
+                    let result = Substitution::new(self.pool, substitution)
+                        .unwrap()
+                        .apply(self.pool, &def.body);
+                    Ok(result)
+                };
+            }
             _ => match self.state.sort_declarations.get(&name) {
                 Some(arity) if *arity == args.len() => Ok(Sort::Atom(name, args)),
                 Some(arity) => Err(Error::Parser(

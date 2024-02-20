@@ -580,6 +580,9 @@ pub enum Sort {
 
     /// The sort of RARE lists.
     RareList,
+
+    /// The sort of sorts.
+    Type,
 }
 
 /// A quantifier, either `forall` or `exists`.
@@ -835,6 +838,11 @@ impl Term {
             Term::Sort(s) => Some(s),
             _ => None,
         }
+    }
+
+    /// Returns `true` if the term is a user defined sort with arity zero, or a sort variable.
+    pub fn is_sort_var(&self) -> bool {
+        matches!(self, Term::Sort(Sort::Atom(_, args)) if args.is_empty())
     }
 
     /// Tries to unwrap an operation term, returning the `Operator` and the arguments. Returns
