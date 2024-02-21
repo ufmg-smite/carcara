@@ -287,7 +287,7 @@ impl<'c> ProofChecker<'c> {
 
         for p in premises {
             let mut this_polyeq_time = Duration::ZERO;
-            let (result, depth) = tracing_polyeq(term, p, &mut this_polyeq_time);
+            let (result, depth) = tracing_polyeq_mod_nary(term, p, &mut this_polyeq_time);
             polyeq_time += this_polyeq_time;
             if let Some(s) = &mut stats {
                 s.results.add_polyeq_depth(depth);

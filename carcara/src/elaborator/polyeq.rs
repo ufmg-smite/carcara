@@ -18,7 +18,7 @@ impl<'a> PolyeqElaborator<'a> {
             inner,
             root_id,
             cache: HashMapStack::new(),
-            checker: PolyeqComparator::new(true, is_alpha_equivalence),
+            checker: PolyeqComparator::new(true, is_alpha_equivalence, false),
             context: is_alpha_equivalence.then(ContextStack::new),
         }
     }

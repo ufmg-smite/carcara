@@ -1,5 +1,5 @@
 use crate::{
-    ast::{pool::PrimitivePool, TermPool},
+    ast::{pool::PrimitivePool, Polyeq, PolyeqComparator, TermPool},
     parser::tests::parse_terms,
 };
 use indexmap::IndexSet;
@@ -39,23 +39,24 @@ fn test_free_vars() {
 #[test]
 fn test_polyeq() {
     enum TestType {
-        Polyeq,
+        ModReordering,
         AlphaEquiv,
+        ModNary,
     }
 
     fn run_tests(definitions: &str, cases: &[(&str, &str)], test_type: TestType) {
         let mut pool = PrimitivePool::new();
-        for (a, b) in cases {
+        for (i, (a, b)) in cases.iter().enumerate() {
             let [a, b] = parse_terms(&mut pool, definitions, [a, b]);
-            let mut time = std::time::Duration::ZERO;
-            match test_type {
-                TestType::Polyeq => {
-                    assert!(super::polyeq::polyeq(&a, &b, &mut time));
-                }
-                TestType::AlphaEquiv => {
-                    assert!(super::polyeq::alpha_equiv(&a, &b, &mut time));
-                }
-            }
+            let mut comp = match test_type {
+                TestType::ModReordering => PolyeqComparator::new(true, false, false),
+                TestType::AlphaEquiv => PolyeqComparator::new(true, true, false),
+                TestType::ModNary => PolyeqComparator::new(false, false, true),
+            };
+            assert!(
+                Polyeq::eq(&mut comp, &a, &b),
+                "test case #{i} failed: `{a}` != `{b}`"
+            );
         }
     }
     let definitions = "
@@ -64,6 +65,9 @@ fn test_polyeq() {
             (declare-fun b () T)
             (declare-fun p () Bool)
             (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (declare-fun s () Bool)
+            (declare-fun t () Bool)
             (declare-fun x () Int)
             (declare-fun y () Int)
         ";
@@ -77,7 +81,7 @@ fn test_polyeq() {
                 "(ite (= b a) (= (+ x y) x) (and p (not (= y x))))",
             ),
         ],
-        TestType::Polyeq,
+        TestType::ModReordering,
     );
     run_tests(
         definitions,
@@ -102,5 +106,22 @@ fn test_polyeq() {
             ),
         ],
         TestType::AlphaEquiv,
+    );
+    run_tests(
+        definitions,
+        &[
+            // Chainable
+            ("(= p q r s)", "(and (= p q) (= q r) (= r s))"),
+            ("(and (= p q) (= q r) (= r s))", "(= p q r s)"),
+            // Left-associative
+            ("(and (and (and p q) r) s)", "(and p q r s)"),
+            ("(and p q r s)", "(and (and (and p q) r) s)"),
+            ("(and (and (and p q) r) s t)", "(and (and (and p q r) s) t)"),
+            // Right-associative
+            ("(=> p (=> q (=> r s)))", "(=> p q r s)"),
+            ("(=> p q r s)", "(=> p (=> q (=> r s)))"),
+            ("(=> p q (=> r (=> s t)))", "(=> p (=> q (=> r s t)))"),
+        ],
+        TestType::ModNary,
     );
 }
