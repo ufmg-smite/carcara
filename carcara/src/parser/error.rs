@@ -20,6 +20,10 @@ pub enum ParserError {
     #[error("leading zero in numeral '{0}'")]
     LeadingZero(String),
 
+    /// The lexer encountered a numerical literal that contained a division by zero, e.g. '1/0'.
+    #[error("divison by zero in numerical literal: '{0}'")]
+    DivisionByZeroInLiteral(String),
+
     /// The lexer encountered a `\` character while reading a quoted symbol.
     #[error("quoted symbol contains backslash")]
     BackslashInQuotedSymbol,

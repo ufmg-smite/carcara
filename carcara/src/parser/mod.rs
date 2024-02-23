@@ -14,7 +14,7 @@ use crate::{
 };
 use error::assert_num_args;
 use indexmap::{IndexMap, IndexSet};
-use rug::Integer;
+use rug::{Integer, Rational};
 use std::{io::BufRead, str::FromStr};
 
 use self::error::assert_indexed_op_args_value;
@@ -257,6 +257,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     SortError::assert_eq(&Sort::Real, sorts[0])?;
                     SortError::assert_all_eq(&sorts)?;
                 }
+
+                if let Some(r) = self.interpret_div_as_real_lit(&args[0], &args[1]) {
+                    return Ok(r);
+                }
             }
             Operator::Mod => {
                 assert_num_args(&args, 2)?;
@@ -434,6 +438,29 @@ impl<'a, R: BufRead> Parser<'a, R> {
             Operator::RareList => SortError::assert_all_eq(&sorts)?,
         }
         Ok(self.pool.add(Term::Op(op, args)))
+    }
+
+    fn interpret_div_as_real_lit(&mut self, a: &Rc<Term>, b: &Rc<Term>) -> Option<Rc<Term>> {
+        // If the term is a division between two positive integer constants, and their GCD is 1,
+        // then it should be interpreted as a rational literal. The only exception to this is the
+        // term '(/ 1 1)', which is still interpreted as a divison term.
+
+        let [a, b] = [a, b].map(|t| match t.as_ref() {
+            Term::Const(Constant::Integer(i)) => Some(i),
+            Term::Const(Constant::Real(r))
+                if self.interpret_integers_as_reals && r.is_integer() =>
+            {
+                Some(r.numer())
+            }
+            _ => None,
+        });
+        let [a, b] = [a?, b?];
+
+        if *a > 0 && *b > 0 && !(*a == 1 && *b == 1) && a.clone().gcd(b) == 1 {
+            Some(self.pool.add(Term::new_real(Rational::from((a, b)))))
+        } else {
+            None
+        }
     }
 
     /// Constructs and sort checks an application term.

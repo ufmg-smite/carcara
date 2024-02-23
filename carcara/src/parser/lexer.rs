@@ -265,7 +265,21 @@ impl<R: BufRead> Lexer<R> {
             Some('|') => self.read_quoted_symbol(),
             Some(':') => self.read_keyword(),
             Some('#') => self.read_bitvector(),
-            Some(c) if c.is_ascii_digit() => self.read_number(),
+            Some('-') => {
+                // If we encounter the '-' character, the token can either be a GMP-style numerical
+                // literal (e.g. '-5'), or a symbol that starts with '-' (e.g. the '-' operator
+                // itself)
+                self.next_char()?;
+                if self.current_char.as_ref().is_some_and(char::is_ascii_digit) {
+                    self.read_number(true)
+                } else {
+                    // This assumes that the symbol is never a reserved a word.
+                    let mut symbol = self.read_chars_while(is_symbol_character)?;
+                    symbol.insert(0, '-');
+                    Ok(Token::Symbol(symbol))
+                }
+            }
+            Some(c) if c.is_ascii_digit() => self.read_number(false),
             Some(c) if is_symbol_character(c) => self.read_simple_symbol(),
             None => Ok(Token::Eof),
             Some(other) => Err(Error::Parser(
@@ -339,25 +353,45 @@ impl<R: BufRead> Lexer<R> {
     }
 
     /// Reads an integer or decimal numerical literal.
-    fn read_number(&mut self) -> CarcaraResult<Token> {
-        let int_part = self.read_chars_while(|c| c.is_ascii_digit())?;
+    fn read_number(&mut self, negated: bool) -> CarcaraResult<Token> {
+        let first_part = self.read_chars_while(|c| c.is_ascii_digit())?;
 
-        if int_part.len() > 1 && int_part.starts_with('0') {
+        if first_part.len() > 1 && first_part.starts_with('0') {
             return Err(Error::Parser(
-                ParserError::LeadingZero(int_part),
+                ParserError::LeadingZero(first_part),
                 self.position,
             ));
         }
 
-        if self.current_char == Some('.') {
+        if let Some(delimiter @ ('/' | '.')) = self.current_char {
             self.next_char()?;
-            let frac_part = self.read_chars_while(|c| c.is_ascii_digit())?;
-            let denom = Integer::from(10u32).pow(frac_part.len() as u32);
-            let numer = (int_part + &frac_part).parse::<Integer>().unwrap();
-            let r = (numer, denom).into();
-            Ok(Token::Decimal(r))
+            let second_part = self.read_chars_while(|c| c.is_ascii_digit())?;
+            if let Some('/' | '.') = self.current_char {
+                // A number can have only one delimiter
+                let e = ParserError::UnexpectedChar(self.current_char.unwrap());
+                return Err(Error::Parser(e, self.position));
+            }
+            let r = match delimiter {
+                '/' => {
+                    let [numer, denom] =
+                        [first_part, second_part].map(|s| s.parse::<Integer>().unwrap());
+                    if denom.is_zero() {
+                        let e = ParserError::DivisionByZeroInLiteral(format!("{numer}/{denom}"));
+                        return Err(Error::Parser(e, self.position));
+                    }
+                    Rational::from((numer, denom))
+                }
+                '.' => {
+                    let denom = Integer::from(10u32).pow(second_part.len() as u32);
+                    let numer = (first_part + &second_part).parse::<Integer>().unwrap();
+                    Rational::from((numer, denom))
+                }
+                _ => unreachable!(),
+            };
+            Ok(Token::Decimal(if negated { -r } else { r }))
         } else {
-            Ok(Token::Numeral(int_part.parse().unwrap()))
+            let i: Integer = first_part.parse().unwrap();
+            Ok(Token::Numeral(if negated { -i } else { i }))
         }
     }
 
@@ -428,13 +462,15 @@ mod tests {
 
     #[test]
     fn test_simple_symbols_and_keywords() {
-        let input = "foo123 :foo123 :a:b +-/*=%?!.$_~&^<>@";
+        let input = "foo123 :foo123 :a:b +-/*=%?!.$_~&^<>@ -starts-with-dash --double-dash";
         let expected = vec![
             Token::Symbol("foo123".into()),
             Token::Keyword("foo123".into()),
             Token::Keyword("a".into()),
             Token::Keyword("b".into()),
             Token::Symbol("+-/*=%?!.$_~&^<>@".into()),
+            Token::Symbol("-starts-with-dash".into()),
+            Token::Symbol("--double-dash".into()),
         ];
         assert_eq!(expected, lex_all(input));
     }
@@ -464,16 +500,37 @@ mod tests {
 
     #[test]
     fn test_numerals_and_decimals() {
-        let input = "42 3.14159";
+        let input = "42 3.14159 -137 8/3 -5/2 1/1 0/2";
         let expected = vec![
             Token::Numeral(42.into()),
             Token::Decimal((314_159, 100_000).into()),
+            Token::Numeral((-137).into()),
+            Token::Decimal((8, 3).into()),
+            Token::Decimal((-5, 2).into()),
+            Token::Decimal(1.into()),
+            Token::Decimal(0.into()),
         ];
         assert_eq!(expected, lex_all(input));
 
         assert!(matches!(
             lex_one("0123"),
             Err(Error::Parser(ParserError::LeadingZero(_), _))
+        ));
+        assert!(matches!(
+            lex_one("1.2.3"),
+            Err(Error::Parser(ParserError::UnexpectedChar(_), _))
+        ));
+        assert!(matches!(
+            lex_one("1/2.3"),
+            Err(Error::Parser(ParserError::UnexpectedChar(_), _))
+        ));
+        assert!(matches!(
+            lex_one("1.2/3"),
+            Err(Error::Parser(ParserError::UnexpectedChar(_), _))
+        ));
+        assert!(matches!(
+            lex_one("1/0"),
+            Err(Error::Parser(ParserError::DivisionByZeroInLiteral(_), _))
         ));
     }
 
