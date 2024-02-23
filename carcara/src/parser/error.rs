@@ -1,7 +1,7 @@
 //! The types for parser errors.
 
 use crate::{
-    ast::{Constant, Rc, Sort, Term},
+    ast::{Constant, PrimitivePool, Rc, Sort, Term, TermPool},
     parser::Token,
     utils::Range,
 };
@@ -108,6 +108,14 @@ pub enum ParserError {
     /// The parser encountered the end of the input while it was still inside a subproof.
     #[error("subproof '{0}' was not closed")]
     UnclosedSubproof(String),
+
+    /// The parser encountered an unknown indexed operator.
+    #[error("not a valid indexed operator: '{0}'")]
+    InvalidIndexedOp(String),
+
+    /// The parser encountered an unknown qualified operator.
+    #[error("not a valid qualified operator: '{0}'")]
+    InvalidQualifiedOp(String),
 }
 
 /// Returns an error if the length of `sequence` is not in the `expected` range.
@@ -196,5 +204,29 @@ impl SortError {
                 got: got.clone(),
             })
         }
+    }
+
+    pub(crate) fn assert_array_sort(
+        pool: &mut PrimitivePool,
+        key: Option<&Sort>,
+        value: Option<&Sort>,
+        got: &Sort,
+    ) -> Result<(), Self> {
+        let any = Sort::Atom("?".to_owned(), Vec::new());
+
+        let expected = {
+            let key = pool.add(Term::Sort(key.cloned().unwrap_or_else(|| any.clone())));
+            let value = pool.add(Term::Sort(value.cloned().unwrap_or_else(|| any.clone())));
+            vec![Sort::Array(key, value)]
+        };
+        let Sort::Array(got_key, got_value) = got else {
+            return Err(Self { expected, got: got.clone() });
+        };
+        if key.is_some_and(|k| got_key.as_sort().unwrap() != k)
+            || value.is_some_and(|v| got_value.as_sort().unwrap() != v)
+        {
+            return Err(Self { expected, got: got.clone() });
+        }
+        Ok(())
     }
 }

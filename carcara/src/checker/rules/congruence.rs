@@ -172,12 +172,12 @@ pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
             false => Err(CongruenceError::DifferentOperators(*f, *g)),
         },
         (
-            Term::IndexedOp {
+            Term::ParamOp {
                 op: f_op,
                 op_args: f_op_args,
                 args: f_args,
             },
-            Term::IndexedOp {
+            Term::ParamOp {
                 op: g_op,
                 args: g_args,
                 op_args: g_op_args,

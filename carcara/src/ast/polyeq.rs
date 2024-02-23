@@ -315,12 +315,12 @@ impl Polyeq for Term {
                 Polyeq::eq(comp, f_a, f_b) && Polyeq::eq(comp, args_a, args_b)
             }
             (
-                Term::IndexedOp {
+                Term::ParamOp {
                     op: op_a,
                     op_args: op_args_a,
                     args: args_a,
                 },
-                Term::IndexedOp {
+                Term::ParamOp {
                     op: op_b,
                     op_args: op_args_b,
                     args: args_b,

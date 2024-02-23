@@ -737,3 +737,27 @@ fn test_indexed_operators() {
         assert_eq!(&proof.commands[0], &expected_value);
     }
 }
+
+#[test]
+fn test_qualified_operators() {
+    let mut p = PrimitivePool::new();
+    let cases = [("((as const (Array Int Real)) 0.0)", {
+        let [int, real] = [Sort::Int, Sort::Real].map(|s| p.add(Term::Sort(s)));
+        let sort = p.add(Term::Sort(Sort::Array(int, real)));
+        Term::ParamOp {
+            op: ParamOperator::ArrayConst,
+            op_args: vec![sort],
+            args: vec![p.add(Term::new_real(0))],
+        }
+    })];
+    run_parser_tests(&mut p, &cases);
+
+    assert!(matches!(
+        parse_term_err("((as const Real) 0.0)"),
+        Error::Parser(ParserError::SortError(_), _),
+    ));
+    assert!(matches!(
+        parse_term_err("((as undefined (Array Int Int)) 1)"),
+        Error::Parser(ParserError::InvalidQualifiedOp(_), _),
+    ));
+}

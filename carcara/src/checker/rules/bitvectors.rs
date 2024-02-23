@@ -1,5 +1,5 @@
 use crate::{
-    ast::{pool::TermPool, Constant, IndexedOperator, Operator, Rc, Sort, Term},
+    ast::{pool::TermPool, Operator, ParamOperator, Rc, Sort, Term},
     checker::rules::assert_clause_len,
 };
 
@@ -11,9 +11,10 @@ fn build_term_vec(term: &Rc<Term>, size: usize, pool: &mut dyn TermPool) -> Vec<
     } else {
         (0..size)
             .map(|i| {
-                pool.add(Term::IndexedOp {
-                    op: IndexedOperator::BvBitOf,
-                    op_args: vec![Constant::Integer(i.into())],
+                let op_args = vec![pool.add(Term::new_int(i))];
+                pool.add(Term::ParamOp {
+                    op: ParamOperator::BvBitOf,
+                    op_args,
                     args: vec![term.clone()],
                 })
             })
@@ -104,9 +105,9 @@ pub fn extract(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     }
 
     for arg in right {
-        let expected_arg = Term::IndexedOp {
-            op: IndexedOperator::BvBitOf,
-            op_args: vec![Constant::Integer(index.clone())],
+        let expected_arg = Term::ParamOp {
+            op: ParamOperator::BvBitOf,
+            op_args: vec![pool.add(Term::new_int(index.clone()))],
             args: vec![left_x.clone()],
         };
         let new_arg = pool.add(expected_arg);

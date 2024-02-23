@@ -4,7 +4,7 @@ pub mod advanced;
 mod storage;
 
 use super::{Operator, Rc, Sort, Term};
-use crate::ast::{Constant, IndexedOperator};
+use crate::ast::{Constant, ParamOperator};
 use indexmap::{IndexMap, IndexSet};
 use rug::Integer;
 use storage::Storage;
@@ -215,14 +215,14 @@ impl PrimitivePool {
                 result.push(self.compute_sort(body));
                 Sort::Function(result)
             }
-            Term::IndexedOp { op, op_args, args } => {
+            Term::ParamOp { op, op_args, args } => {
                 let sort = match op {
-                    IndexedOperator::BvExtract => {
+                    ParamOperator::BvExtract => {
                         let i = op_args[0].as_integer().unwrap();
                         let j = op_args[1].as_integer().unwrap();
                         Sort::BitVec(i - j + Integer::ONE)
                     }
-                    IndexedOperator::ZeroExtend | IndexedOperator::SignExtend => {
+                    ParamOperator::ZeroExtend | ParamOperator::SignExtend => {
                         let extension_width = op_args[0].as_integer().unwrap();
                         let Sort::BitVec(bv_width) =
                             self.compute_sort(&args[0]).as_sort().unwrap().clone()
@@ -231,11 +231,12 @@ impl PrimitivePool {
                         };
                         Sort::BitVec(extension_width + bv_width)
                     }
-                    IndexedOperator::BvConst => unreachable!(
+                    ParamOperator::BvConst => unreachable!(
                         "bv const should be handled by the parser and transfromed into a constant"
                     ),
-                    IndexedOperator::BvBitOf => Sort::Bool,
-                    IndexedOperator::RePower | IndexedOperator::ReLoop => Sort::RegLan,
+                    ParamOperator::BvBitOf => Sort::Bool,
+                    ParamOperator::RePower | ParamOperator::ReLoop => Sort::RegLan,
+                    ParamOperator::ArrayConst => op_args[0].as_sort().unwrap().clone(),
                 };
                 sort
             }
@@ -332,7 +333,7 @@ impl PrimitivePool {
                 set
             }
             Term::Const(_) | Term::Sort(_) => IndexSet::new(),
-            Term::IndexedOp { op: _, op_args: _, args } => {
+            Term::ParamOp { op: _, op_args: _, args } => {
                 let mut set = IndexSet::new();
                 for a in args {
                     set.extend(self.free_vars_with_priorities(a, prior_pools).into_iter());

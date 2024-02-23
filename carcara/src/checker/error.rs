@@ -174,7 +174,7 @@ pub enum ResolutionError {
     PivotNotFound(Rc<Term>),
 }
 
-struct DisplayIndexedOp<'a>(&'a IndexedOperator, &'a Vec<Constant>);
+struct DisplayIndexedOp<'a>(&'a ParamOperator, &'a Vec<Rc<Term>>);
 
 impl<'a> fmt::Display for DisplayIndexedOp<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -220,8 +220,8 @@ pub enum CongruenceError {
         DisplayIndexedOp(&(.0).0, &(.0).1), DisplayIndexedOp(&(.1).0, &(.1).1)
     )]
     DifferentIndexedOperators(
-        (IndexedOperator, Vec<Constant>),
-        (IndexedOperator, Vec<Constant>),
+        (ParamOperator, Vec<Rc<Term>>),
+        (ParamOperator, Vec<Rc<Term>>),
     ),
 }
 

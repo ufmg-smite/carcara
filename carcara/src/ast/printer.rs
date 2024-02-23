@@ -117,7 +117,7 @@ impl PrintWithSharing for Operator {
     }
 }
 
-impl PrintWithSharing for IndexedOperator {
+impl PrintWithSharing for ParamOperator {
     fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
         write!(p.inner, "{}", self)
     }
@@ -234,7 +234,7 @@ impl<'a> AlethePrinter<'a> {
                 term.print_with_sharing(self)?;
                 write!(self.inner, ")")
             }
-            Term::IndexedOp { op, op_args, args } => {
+            Term::ParamOp { op, op_args, args } => {
                 if !args.is_empty() {
                     write!(self.inner, "(")?;
                 }

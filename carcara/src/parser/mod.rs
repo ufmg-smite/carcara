@@ -285,43 +285,11 @@ impl<'a, R: BufRead> Parser<'a, R> {
             }
             Operator::Select => {
                 assert_num_args(&args, 2)?;
-                match sorts[0] {
-                    Sort::Array(_, _) => (),
-                    got => {
-                        // Instead of creating some special case for sort errors with parametric
-                        // sorts, we just create a sort `Y` to represent the sort parameter. We
-                        // infer the `X` sort from the second operator argument. This may be
-                        // changed later
-                        let got = got.clone();
-                        let x = self.pool.add(Term::Sort(sorts[1].clone()));
-                        let y = self
-                            .pool
-                            .add(Term::Sort(Sort::Atom("Y".to_owned(), Vec::new())));
-                        return Err(SortError {
-                            expected: vec![Sort::Array(x, y)],
-                            got,
-                        }
-                        .into());
-                    }
-                }
+                SortError::assert_array_sort(self.pool, Some(sorts[1]), None, sorts[0])?;
             }
             Operator::Store => {
                 assert_num_args(&args, 3)?;
-                match sorts[0] {
-                    Sort::Array(x, y) => {
-                        SortError::assert_eq(x.as_sort().unwrap(), sorts[1])?;
-                        SortError::assert_eq(y.as_sort().unwrap(), sorts[2])?;
-                    }
-                    got => {
-                        let got = got.clone();
-                        let [x, y] = [sorts[0], sorts[1]].map(|s| Term::Sort(s.clone()));
-                        return Err(SortError {
-                            expected: vec![Sort::Array(self.pool.add(x), self.pool.add(y))],
-                            got,
-                        }
-                        .into());
-                    }
-                }
+                SortError::assert_array_sort(self.pool, Some(sorts[1]), Some(sorts[2]), sorts[0])?;
             }
             Operator::StrConcat => {
                 assert_num_args(&args, 2..)?;
@@ -1321,10 +1289,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
         Ok(inner)
     }
 
-    fn parse_indexed_operator(&mut self) -> CarcaraResult<(IndexedOperator, Vec<Constant>)> {
-        let bv_symbol = self.expect_symbol()?;
+    fn parse_indexed_operator(&mut self) -> CarcaraResult<(ParamOperator, Vec<Constant>)> {
+        let op_symbol = self.expect_symbol()?;
 
-        if let Some(value) = bv_symbol.strip_prefix("bv") {
+        if let Some(value) = op_symbol.strip_prefix("bv") {
             let parsed_value = value.parse::<Integer>().unwrap();
             let args = self.parse_sequence(Self::parse_term, true)?;
             let mut constant_args = Vec::new();
@@ -1339,10 +1307,15 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 }
             }
             constant_args.insert(0, Constant::Integer(parsed_value));
-            return Ok((IndexedOperator::BvConst, constant_args));
+            return Ok((ParamOperator::BvConst, constant_args));
         }
 
-        let op = IndexedOperator::from_str(bv_symbol.as_str()).unwrap();
+        let op = ParamOperator::from_str(op_symbol.as_str()).map_err(|_| {
+            Error::Parser(
+                ParserError::InvalidIndexedOp(op_symbol),
+                self.current_position,
+            )
+        })?;
         let args = self.parse_sequence(Self::parse_term, true)?;
         let mut constant_args = Vec::new();
         for arg in args {
@@ -1358,17 +1331,30 @@ impl<'a, R: BufRead> Parser<'a, R> {
         Ok((op, constant_args))
     }
 
+    fn parse_qualified_operator(&mut self) -> CarcaraResult<(ParamOperator, Rc<Term>)> {
+        let op_symbol = self.expect_symbol()?;
+        let op = ParamOperator::from_str(op_symbol.as_str()).map_err(|_| {
+            Error::Parser(
+                ParserError::InvalidQualifiedOp(op_symbol),
+                self.current_position,
+            )
+        })?;
+        let sort = self.parse_sort()?;
+        self.expect_token(Token::CloseParen)?;
+        Ok((op, sort))
+    }
+
     /// Constructs, check operation arguments and sort checks an indexed operation term.
     fn make_indexed_op(
         &mut self,
-        op: IndexedOperator,
+        op: ParamOperator,
         op_args: Vec<Constant>,
         args: Vec<Rc<Term>>,
     ) -> Result<Rc<Term>, ParserError> {
         let sorts: Vec<_> = args.iter().map(|t| self.pool.sort(t)).collect();
         let sorts: Vec<_> = sorts.iter().map(|s| s.as_sort().unwrap()).collect();
         match &op {
-            IndexedOperator::BvConst => {
+            ParamOperator::BvConst => {
                 assert_num_args(&op_args, 2)?;
                 assert_num_args(&args, 0)?;
                 let value = op_args[0].as_integer().unwrap();
@@ -1377,7 +1363,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 assert_indexed_op_args_value(&[op_args[1].clone()], 1..)?;
                 return Ok(self.pool.add(Term::Const(Constant::BitVec(value, width))));
             }
-            IndexedOperator::BvExtract => {
+            ParamOperator::BvExtract => {
                 /*
                 ((_ extract i j) (_ BitVec m) (_ BitVec n))
 
@@ -1408,9 +1394,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     ));
                 }
             }
-            IndexedOperator::BvBitOf
-            | IndexedOperator::ZeroExtend
-            | IndexedOperator::SignExtend => {
+            ParamOperator::BvBitOf | ParamOperator::ZeroExtend | ParamOperator::SignExtend => {
                 assert_num_args(&op_args, 1)?;
                 assert_num_args(&args, 1)?;
                 SortError::assert_eq(&Sort::Int, &op_args[0].sort())?;
@@ -1419,14 +1403,14 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 }
                 assert_indexed_op_args_value(&op_args, 0..)?;
             }
-            IndexedOperator::RePower => {
+            ParamOperator::RePower => {
                 assert_num_args(&op_args, 1)?;
                 assert_num_args(&args, 1)?;
                 SortError::assert_eq(&Sort::Int, &op_args[0].sort())?;
                 SortError::assert_eq(&Sort::RegLan, sorts[0])?;
                 assert_indexed_op_args_value(&op_args, 0..)?;
             }
-            IndexedOperator::ReLoop => {
+            ParamOperator::ReLoop => {
                 assert_num_args(&op_args, 2)?;
                 assert_num_args(&args, 1)?;
                 for arg in &op_args {
@@ -1435,8 +1419,38 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 SortError::assert_eq(&Sort::RegLan, sorts[0])?;
                 assert_indexed_op_args_value(&op_args, 0..)?;
             }
+            ParamOperator::ArrayConst => return Err(ParserError::InvalidIndexedOp(op.to_string())),
         }
-        Ok(self.pool.add(Term::IndexedOp { op, op_args, args }))
+        let op_args = op_args
+            .into_iter()
+            .map(|c| self.pool.add(Term::Const(c)))
+            .collect();
+        Ok(self.pool.add(Term::ParamOp { op, op_args, args }))
+    }
+
+    /// Constructs and sort checks a qualified operation term
+    fn make_qualified_op(
+        &mut self,
+        op: ParamOperator,
+        op_sort: Rc<Term>,
+        args: Vec<Rc<Term>>,
+    ) -> Result<Rc<Term>, ParserError> {
+        let sorts: Vec<_> = args.iter().map(|t| self.pool.sort(t)).collect();
+        let sorts: Vec<_> = sorts.iter().map(|s| s.as_sort().unwrap()).collect();
+        match &op {
+            ParamOperator::ArrayConst => {
+                assert_num_args(&args, 1)?;
+                SortError::assert_array_sort(
+                    self.pool,
+                    None,
+                    Some(sorts[0]),
+                    op_sort.as_sort().unwrap(),
+                )?;
+            }
+            _ => return Err(ParserError::InvalidQualifiedOp(op.to_string())),
+        }
+        let op_args = vec![op_sort];
+        Ok(self.pool.add(Term::ParamOp { op, op_args, args }))
     }
 
     /// Parses any term that starts with `(`, that is, any term that is not a constant or a
@@ -1450,6 +1464,11 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     Reserved::Underscore => {
                         let (op, op_args) = self.parse_indexed_operator()?;
                         self.make_indexed_op(op, op_args, Vec::new())
+                            .map_err(|err| Error::Parser(err, head_pos))
+                    }
+                    Reserved::As => {
+                        let (op, sort) = self.parse_qualified_operator()?;
+                        self.make_qualified_op(op, sort, Vec::new())
                             .map_err(|err| Error::Parser(err, head_pos))
                     }
                     Reserved::Exists => self.parse_quantifier(Quantifier::Exists),
@@ -1514,17 +1533,27 @@ impl<'a, R: BufRead> Parser<'a, R> {
             }
             Token::OpenParen => {
                 self.next_token()?;
-                if self.current_token == Token::ReservedWord(Reserved::Underscore) {
-                    self.next_token()?;
-                    let (op, op_args) = self.parse_indexed_operator()?;
-                    let args = self.parse_sequence(Self::parse_term, true)?;
-                    self.make_indexed_op(op, op_args, args)
-                        .map_err(|err| Error::Parser(err, head_pos))
-                } else {
-                    let func = self.parse_application()?;
-                    let args = self.parse_sequence(Self::parse_term, true)?;
-                    self.make_app(func, args)
-                        .map_err(|err| Error::Parser(err, head_pos))
+                match self.current_token {
+                    Token::ReservedWord(Reserved::Underscore) => {
+                        self.next_token()?;
+                        let (op, op_args) = self.parse_indexed_operator()?;
+                        let args = self.parse_sequence(Self::parse_term, true)?;
+                        self.make_indexed_op(op, op_args, args)
+                            .map_err(|err| Error::Parser(err, head_pos))
+                    }
+                    Token::ReservedWord(Reserved::As) => {
+                        self.next_token()?;
+                        let (op, op_sort) = self.parse_qualified_operator()?;
+                        let args = self.parse_sequence(Self::parse_term, true)?;
+                        self.make_qualified_op(op, op_sort, args)
+                            .map_err(|err| Error::Parser(err, head_pos))
+                    }
+                    _ => {
+                        let func = self.parse_application()?;
+                        let args = self.parse_sequence(Self::parse_term, true)?;
+                        self.make_app(func, args)
+                            .map_err(|err| Error::Parser(err, head_pos))
+                    }
                 }
             }
             _ => {
