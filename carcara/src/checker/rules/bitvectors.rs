@@ -181,27 +181,40 @@ pub fn var(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
 pub fn and(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
-    let ((x, y), res) = match_term_err!((= (bvand x y) res) = &conclusion[0])?;
+    let (bvand_args, res) = match_term_err!((= (bvand ...) res) = &conclusion[0])?;
 
-    let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
+    let Sort::BitVec(size) = pool.sort(&bvand_args[0]).as_sort().cloned().unwrap() else {
         unreachable!();
     };
+    // check all arguments have the same size
+    for arg in bvand_args {
+        let Sort::BitVec(size1) = pool.sort(arg).as_sort().cloned().unwrap() else {
+            unreachable!();
+        };
+        if size1 != size { return Err(CheckerError::Explanation(format!("bvand arguments {} and {} have different sizes", bvand_args[0], arg)));}
+    }
 
     let size = size.to_usize().unwrap();
 
-    let x = build_term_vec(x, size, pool);
-    let y = build_term_vec(y, size, pool);
+    // the conjunction is build left-to-right
+    let mut i = 1;
+    let mut expected_res = bvand_args[0].clone();
 
-    let res_args: Vec<_> = (0..size)
-        .map(|i| {
-            build_term!(
-                pool,
-                (and {x[i].clone()} {y[i].clone()})
-            )
-        })
-        .collect();
+    while i < bvand_args.len() {
+        let x = build_term_vec(&expected_res, size, pool);
+        let y = build_term_vec(&bvand_args[i], size, pool);
 
-    let expected_res = pool.add(Term::Op(Operator::BvBbTerm, res_args));
+        let res_args: Vec<_> = (0..size)
+            .map(|i| {
+                build_term!(
+                    pool,
+                    (and {x[i].clone()} {y[i].clone()})
+                )
+            })
+            .collect();
+        expected_res = pool.add(Term::Op(Operator::BvBbTerm, res_args));
+        i += 1;
+    }
 
     assert_eq(&expected_res, res)
 }
