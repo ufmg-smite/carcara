@@ -424,6 +424,8 @@ pub enum Operator {
     BvSLe,
     BvSGt,
     BvSGe,
+    Bv2Nat,
+
     BvBbTerm,
 
     // Misc.
@@ -434,13 +436,16 @@ pub enum Operator {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IndexedOperator {
     BvExtract,
-    BvBitOf,
     ZeroExtend,
     SignExtend,
     RotateLeft,
     RotateRight,
     Repeat,
     BvConst,
+
+    Int2BV,
+
+    BvBitOf,
 
     RePower,
     ReLoop,
@@ -455,6 +460,8 @@ impl_str_conversion_traits!(IndexedOperator {
     RotateRight: "rotate_right",
     Repeat: "repeat",
     BvConst: "bv",
+
+    Int2BV: "int2bv",
 
     RePower: "re.^",
     ReLoop: "re.loop"
@@ -553,6 +560,7 @@ impl_str_conversion_traits!(Operator {
     BvSLe: "bvsle",
     BvSGt: "bvsgt",
     BvSGe: "bvsge",
+    Bv2Nat: "bv2nat",
     BvBbTerm: "bbT",
 
     RareList: "rare-list",
