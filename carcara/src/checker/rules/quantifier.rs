@@ -1,5 +1,5 @@
 use super::{
-    assert_clause_len, assert_eq, assert_is_expected, assert_num_args, assert_polyeq_expected,
+    assert_alpha_equiv_expected, assert_clause_len, assert_eq, assert_is_expected, assert_num_args,
     CheckerError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::QuantifierError, utils::DedupIterator};
@@ -42,9 +42,10 @@ pub fn forall_inst(
         QuantifierError::NoArgGivenForBinding(bindings.iter().next().unwrap().0.clone())
     );
 
-    // Equalities may be reordered in the final term, so we need to compare for polyequality here
+    // Equalities may be reordered, and the application of the substitution might rename bound
+    // variables, so we need to compare for alpha-equivalence here
     let expected = substitution.apply(pool, original);
-    assert_polyeq_expected(substituted, expected, polyeq_time)
+    assert_alpha_equiv_expected(substituted, expected, polyeq_time)
 }
 
 pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
@@ -338,6 +339,13 @@ mod tests {
             "Equalities may be flipped" {
                 "(step t1 (cl (or (not (forall ((x Real) (y Real)) (and (= x y) (= 1 0))))
                     (and (= b a) (= 1 0)))) :rule forall_inst :args ((:= x a) (:= y b)))": true,
+            }
+            "Bound variables may be renamed by substitution" {
+                // The variable shadowing makes it so the substitution applied by Carcara renames p
+                "(step t1 (cl (or
+                    (not (forall ((p Bool) (r Bool)) (and p (forall ((p Bool)) p))))
+                    (and q (forall ((p Bool)) p))
+                )) :rule forall_inst :args ((:= p q) (:= r q)))": true,
             }
             "Argument is not in quantifier bindings" {
                 "(step t1 (cl (or (not (forall ((x Real)) (= x a))) (= b 0.0)))

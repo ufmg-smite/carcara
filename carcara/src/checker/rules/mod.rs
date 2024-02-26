@@ -139,6 +139,17 @@ fn assert_polyeq_expected(got: &Rc<Term>, expected: Rc<Term>, time: &mut Duratio
     Ok(())
 }
 
+fn assert_alpha_equiv_expected(
+    got: &Rc<Term>,
+    expected: Rc<Term>,
+    time: &mut Duration,
+) -> RuleResult {
+    if !alpha_equiv(got, &expected, time) {
+        return Err(EqualityError::ExpectedToBe { expected, got: got.clone() }.into());
+    }
+    Ok(())
+}
+
 fn assert_is_bool_constant(got: &Rc<Term>, expected: bool) -> RuleResult {
     if !got.is_bool_constant(expected) {
         return Err(CheckerError::ExpectedBoolConstant(expected, got.clone()));
