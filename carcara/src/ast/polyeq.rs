@@ -482,7 +482,7 @@ impl DeBruijnMap {
     }
 
     fn is_empty(&self) -> bool {
-        self.indices.0.is_empty() && self.indices.1.is_empty() && self.counter.is_empty()
+        self.indices.0.is_empty() && self.indices.1.is_empty()
     }
 
     fn push(&mut self) {
