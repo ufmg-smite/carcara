@@ -364,10 +364,14 @@ impl Polyeq for Sort {
             (Sort::Bool, Sort::Bool)
             | (Sort::Int, Sort::Int)
             | (Sort::Real, Sort::Real)
-            | (Sort::String, Sort::String) => true,
+            | (Sort::String, Sort::String)
+            | (Sort::RegLan, Sort::RegLan)
+            | (Sort::RareList, Sort::RareList)
+            | (Sort::Type, Sort::Type) => true,
             (Sort::Array(x_a, y_a), Sort::Array(x_b, y_b)) => {
                 Polyeq::eq(comp, x_a, x_b) && Polyeq::eq(comp, y_a, y_b)
             }
+            (Sort::BitVec(a), Sort::BitVec(b)) => a == b,
             _ => false,
         }
     }
