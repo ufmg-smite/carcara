@@ -36,6 +36,10 @@ pub enum ParserError {
     #[error("unexpected EOF in string literal")]
     EofInString,
 
+    /// The lexer encountered an invalid unicode value in an escape sequence.
+    #[error("invalid unicode value: 0x'{0}'")]
+    InvalidUnicode(String),
+
     /// The lexer encountered a bitvector literal with no actual digits. This
     /// happens when the bitvector literal is just `#`, `#b` or `#x`.
     #[error("empty bitvector literal")]

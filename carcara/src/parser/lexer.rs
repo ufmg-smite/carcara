@@ -400,19 +400,89 @@ impl<R: BufRead> Lexer<R> {
         self.next_char()?; // Consume `"`
         let mut result = String::new();
         loop {
-            result += &self.read_chars_while(|c| c != '"')?;
-            if self.current_char.is_none() {
+            let Some(c) = self.current_char else {
                 return Err(Error::Parser(ParserError::EofInString, self.position));
-            }
-            self.next_char()?; // Consume `"`
-            if self.current_char == Some('"') {
+            };
+            if c == '"' {
                 self.next_char()?;
-                result.push('"');
+                if self.current_char == Some('"') {
+                    result.push('"');
+                    self.next_char()?;
+                } else {
+                    break;
+                }
+            } else if c == '\\' {
+                self.next_char()?;
+                if self.current_char == Some('u') {
+                    self.next_char()?;
+                    self.read_unicode_escape_sequence(&mut result)?;
+                } else {
+                    result.push('\\');
+                }
             } else {
-                break;
+                result.push(c);
+                self.next_char()?;
             }
         }
         Ok(Token::String(result))
+    }
+
+    fn read_unicode_escape_sequence(&mut self, result: &mut String) -> CarcaraResult<()> {
+        // At this point, '\' and 'u' have already been read
+        let contents = match self.current_char {
+            Some('{') => {
+                self.next_char()?;
+                // Read the contents inside the {} braces, up to five hex characters
+                let mut contents = String::new();
+                for _ in 0..5 {
+                    let Some(c) = self.current_char else {
+                        return Err(Error::Parser(ParserError::EofInString, self.position));
+                    };
+                    if c == '}' || !c.is_ascii_hexdigit() {
+                        break;
+                    }
+                    contents.push(c);
+                    self.next_char()?;
+                }
+                if self.current_char == Some('}') {
+                    self.next_char()?;
+                    contents
+                } else {
+                    // If the contents are not up to 5 hex digits followed by '}', this is not a
+                    // well-formed unicode escape sequence, so we abort
+                    result.push_str("\\u{");
+                    result.push_str(&contents);
+                    return Ok(());
+                }
+            }
+            Some(_) => {
+                let mut contents = String::new();
+                for _ in 0..4 {
+                    let Some(c) = self.current_char else {
+                        return Err(Error::Parser(ParserError::EofInString, self.position));
+                    };
+                    if !c.is_ascii_hexdigit() {
+                        break;
+                    }
+                    contents.push(c);
+                    self.next_char()?;
+                }
+                if contents.len() != 4 {
+                    // If the contents are not exactly 4 hex digits, this is not a well-formed
+                    // unicode escape sequence, so we abort
+                    result.push_str("\\u");
+                    result.push_str(&contents);
+                    return Ok(());
+                }
+                contents
+            }
+            None => return Err(Error::Parser(ParserError::EofInString, self.position)),
+        };
+        let code = u32::from_str_radix(&contents, 16).unwrap();
+        let c = char::from_u32(code)
+            .ok_or_else(|| Error::Parser(ParserError::InvalidUnicode(contents), self.position))?;
+        result.push(c);
+        Ok(())
     }
 }
 
@@ -566,12 +636,14 @@ mod tests {
 
     #[test]
     fn test_strings() {
-        let input = r#" "string" "escaped quote: """ """" """""" "#;
+        let input = r#" "string" "escaped quote: """ """" """""" "\u0061" "\u{0061}" "#;
         let expected = vec![
             Token::String("string".into()),
             Token::String("escaped quote: \"".into()),
             Token::String("\"".into()),
             Token::String("\"\"".into()),
+            Token::String("a".into()),
+            Token::String("a".into()),
         ];
         assert_eq!(expected, lex_all(input));
 
@@ -579,6 +651,29 @@ mod tests {
             lex_one("\""),
             Err(Error::Parser(ParserError::EofInString, _))
         ));
+        assert!(matches!(
+            lex_one("\"\\u{de01}\""),
+            Err(Error::Parser(ParserError::InvalidUnicode(_), _))
+        ));
+    }
+
+    #[test]
+    fn test_weird_unicode_escape_sequences() {
+        let input =
+            r#" "\u{61}" "\u{00061}" "\u{000061}" "\u00061" "\u61" "\u" "\u{12x4}" "\u{123" "#;
+        let expected = [
+            "a",
+            "a",
+            "\\u{000061}",
+            "\u{0006}1",
+            "\\u61",
+            "\\u",
+            "\\u{12x4}",
+            "\\u{123",
+        ]
+        .map(str::to_owned)
+        .map(Token::String);
+        assert_eq!(expected.as_slice(), lex_all(input));
     }
 
     #[test]
