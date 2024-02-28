@@ -143,7 +143,6 @@ fn la_mult_generic(conclusion: &[Rc<Term>], is_pos: bool) -> RuleResult {
     } else {
         match_term_err!((< m zero) = m_comparison)
     }?;
-    let m = m.as_fraction_err()?;
     rassert!(
         zero.as_number_err()? == 0,
         CheckerError::ExpectedNumber(Rational::new(), zero.clone())
@@ -171,14 +170,9 @@ fn la_mult_generic(conclusion: &[Rc<Term>], is_pos: bool) -> RuleResult {
         match_term_err!((* m l) = ml)?,
         match_term_err!((* m r) = mr)?,
     );
-    rassert!(
-        m_1.as_fraction_err()? == m,
-        CheckerError::ExpectedNumber(m.clone(), m_1.clone())
-    );
-    rassert!(
-        m_2.as_fraction_err()? == m,
-        CheckerError::ExpectedNumber(m, m_2.clone())
-    );
+    assert_eq(m, m_1)?;
+    assert_eq(m, m_2)?;
+
     assert_eq(l, l_1)?;
     assert_eq(r, r_2)
 }
