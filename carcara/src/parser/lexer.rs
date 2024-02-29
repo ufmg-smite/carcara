@@ -99,6 +99,9 @@ pub enum Reserved {
     /// The `define-fun` reserved word.
     DefineFun,
 
+    /// The `define-fun-rec` reserved word.
+    DefineFunRec,
+
     /// The `define-sort` reserved word.
     DefineSort,
 
@@ -130,6 +133,7 @@ impl_str_conversion_traits!(Reserved {
     DeclareConst: "declare-const",
     DeclareSort: "declare-sort",
     DefineFun: "define-fun",
+    DefineFunRec: "define-fun-rec",
     DefineSort: "define-sort",
     Assert: "assert",
     CheckSatAssuming: "check-sat-assuming",

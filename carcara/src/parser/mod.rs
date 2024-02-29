@@ -652,7 +652,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     self.state.sort_declarations.insert(name, arity);
                 }
                 Token::ReservedWord(Reserved::DefineFun) => {
-                    let (name, func_def) = self.parse_define_fun()?;
+                    let (name, func_def) = self.parse_define_fun(false)?;
 
                     if self.config.apply_function_defs {
                         self.state.function_defs.insert(name, func_def);
@@ -675,6 +675,44 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         self.premises().insert(assertion_term);
                     }
                     continue;
+                }
+                Token::ReservedWord(Reserved::DefineFunRec) => {
+                    // When we encounter a `define-func-rec`, we add a new premise that asserts that,
+                    // forall values of the arguments, the function application is equal to the
+                    // function body. For example,
+                    // ```
+                    // (define-fun-rec sumr ((x Int)) Int (+ x (ite (> x 0) (sumr (- x 1)) 0)))
+                    // ```
+                    // becomes
+                    // ```
+                    // (assert (forall ((x Int)) (= (sumr x) (+ x (ite (> x 0) (sumr (- x 1)) 0)))))
+                    // ```
+                    let (name, func_def) = self.parse_define_fun(true)?;
+                    let application = {
+                        let cached = HashCache::new(name);
+                        let func_sort = self.state.symbol_table.get(&cached).unwrap();
+                        let name = cached.unwrap();
+                        let func_term = self.pool.add((name, func_sort.clone()).into());
+                        if func_def.params.is_empty() {
+                            func_term
+                        } else {
+                            let args = func_def
+                                .params
+                                .iter()
+                                .map(|var| self.pool.add(var.clone().into()))
+                                .collect();
+                            self.pool.add(Term::App(func_term, args))
+                        }
+                    };
+                    let equality_term = build_term!(self.pool, (= {application} {func_def.body}));
+                    let premise = if func_def.params.is_empty() {
+                        equality_term
+                    } else {
+                        let bindings = BindingList(func_def.params);
+                        self.pool
+                            .add(Term::Quant(Quantifier::Forall, bindings, equality_term))
+                    };
+                    self.premises().insert(premise);
                 }
                 Token::ReservedWord(Reserved::DefineSort) => {
                     let (name, def) = self.parse_define_sort()?;
@@ -750,7 +788,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     (step.id.clone(), ProofCommand::Step(step))
                 }
                 Token::ReservedWord(Reserved::DefineFun) => {
-                    let (name, func_def) = self.parse_define_fun()?;
+                    let (name, func_def) = self.parse_define_fun(false)?;
                     self.state.function_defs.insert(name, func_def);
                     continue;
                 }
@@ -1033,13 +1071,29 @@ impl<'a, R: BufRead> Parser<'a, R> {
         Ok((name, arity))
     }
 
-    /// Parses a `define-fun` proof command. Returns the function name and its definition. This
-    /// method assumes that the `(` and `define-fun` tokens were already consumed.
-    fn parse_define_fun(&mut self) -> CarcaraResult<(String, FunctionDef)> {
+    /// Parses a `define-fun` or `define-fun-rec` proof command. Returns the function name and its
+    /// definition. This method assumes that the `(` and `define-fun`/`define-fun-rec` tokens were
+    /// already consumed.
+    fn parse_define_fun(&mut self, is_rec: bool) -> CarcaraResult<(String, FunctionDef)> {
         let name = self.expect_symbol()?;
         self.expect_token(Token::OpenParen)?;
         let params = self.parse_sequence(Self::parse_sorted_var, false)?;
         let return_sort = self.parse_sort()?;
+
+        // If this is a `define-fun-rec`, we need to add the function itself to the symbol
+        // table. Note that we add it before pushing the new scope, so this entry survives for
+        // the rest of the proof
+        if is_rec {
+            let sort = if params.is_empty() {
+                return_sort.as_sort().unwrap().clone()
+            } else {
+                let mut param_sorts: Vec<_> = params.iter().map(|(_, sort)| sort.clone()).collect();
+                param_sorts.push(return_sort.clone());
+                Sort::Function(param_sorts)
+            };
+            let sort = self.pool.add(Term::Sort(sort));
+            self.insert_sorted_var((name.clone(), sort));
+        }
 
         // In order to correctly parse the function body, we push a new scope to the symbol table
         // and add the functions arguments to it.
