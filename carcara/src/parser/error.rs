@@ -83,7 +83,7 @@ pub enum ParserError {
 
     /// The parser encountered a step id that was not defined.
     #[error("step id '{0}' is not defined")]
-    UndefinedStepIndex(String),
+    UndefinedStepId(String),
 
     /// The wrong number of arguments was given to a function, operator or sort.
     #[error("expected {0} arguments, got {1}")]
@@ -98,7 +98,7 @@ pub enum ParserError {
 
     /// A step id was used in more than one step.
     #[error("step id '{0}' was repeated")]
-    RepeatedStepIndex(String),
+    RepeatedStepId(String),
 
     /// The number given as the arity in a `declare-sort` command is too large. This only happens
     /// if the number is too big to fit in a `usize`, so it almost never happens.
