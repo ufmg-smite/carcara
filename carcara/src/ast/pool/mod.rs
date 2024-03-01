@@ -3,7 +3,7 @@
 pub mod advanced;
 mod storage;
 
-use super::{Operator, Rc, Sort, Term};
+use super::{Binder, Operator, Rc, Sort, Term};
 use crate::ast::{Constant, ParamOperator};
 use indexmap::{IndexMap, IndexSet};
 use rug::Integer;
@@ -206,15 +206,15 @@ impl PrimitivePool {
                 }
             }
             Term::Sort(_) => Sort::Type,
-            Term::Quant(_, _, _) => Sort::Bool,
-            Term::Choice((_, sort), _) => sort.as_sort().unwrap().clone(),
-            Term::Let(_, inner) => self.compute_sort(inner).as_sort().unwrap().clone(),
-            Term::Lambda(bindings, body) => {
+            Term::Binder(Binder::Forall | Binder::Exists, _, _) => Sort::Bool,
+            Term::Binder(Binder::Choice, v, _) => v[0].1.as_sort().unwrap().clone(),
+            Term::Binder(Binder::Lambda, bindings, body) => {
                 let mut result: Vec<_> =
                     bindings.iter().map(|(_name, sort)| sort.clone()).collect();
                 result.push(self.compute_sort(body));
                 Sort::Function(result)
             }
+            Term::Let(_, inner) => self.compute_sort(inner).as_sort().unwrap().clone(),
             Term::ParamOp { op, op_args, args } => {
                 let sort = match op {
                     ParamOperator::BvExtract => {
@@ -304,7 +304,7 @@ impl PrimitivePool {
                 }
                 set
             }
-            Term::Quant(_, bindings, inner) | Term::Lambda(bindings, inner) => {
+            Term::Binder(_, bindings, inner) => {
                 let mut vars = self.free_vars_with_priorities(inner, prior_pools);
                 for bound_var in bindings {
                     let term = self.add_with_priorities(bound_var.clone().into(), prior_pools);
@@ -319,12 +319,6 @@ impl PrimitivePool {
                     let term = self.add_with_priorities((var.clone(), sort).into(), prior_pools);
                     vars.remove(&term);
                 }
-                vars
-            }
-            Term::Choice(bound_var, inner) => {
-                let mut vars = self.free_vars_with_priorities(inner, prior_pools);
-                let term = self.add_with_priorities(bound_var.clone().into(), prior_pools);
-                vars.remove(&term);
                 vars
             }
             Term::Var(..) => {

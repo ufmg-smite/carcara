@@ -62,11 +62,9 @@ pub fn bind(
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
 
-    // While the documentation indicates this rule is only called with `forall` quantifiers, in
-    // some of the tests examples it is also called with the `exists` quantifier
-    let (l_quant, l_bindings, left) = left.as_quant_err()?;
-    let (r_quant, r_bindings, right) = right.as_quant_err()?;
-    assert_eq(&l_quant, &r_quant)?;
+    let (l_binder, l_bindings, left) = left.as_binder_err()?;
+    let (r_binder, r_bindings, right) = right.as_binder_err()?;
+    assert_eq(&l_binder, &r_binder)?;
 
     let [l_bindings, r_bindings] = [l_bindings, r_bindings].map(|b| {
         b.iter()
@@ -199,7 +197,7 @@ pub fn r#let(
     Ok(())
 }
 
-fn extract_points(quant: Quantifier, term: &Rc<Term>) -> IndexSet<(Rc<Term>, Rc<Term>)> {
+fn extract_points(quant: Binder, term: &Rc<Term>) -> IndexSet<(Rc<Term>, Rc<Term>)> {
     fn find_points(acc: &mut IndexSet<(Rc<Term>, Rc<Term>)>, polarity: bool, term: &Rc<Term>) {
         // This does not make use of a cache, so there may be performance issues
         // TODO: Measure the performance of this function, and see if a cache is needed
@@ -234,7 +232,7 @@ fn extract_points(quant: Quantifier, term: &Rc<Term>) -> IndexSet<(Rc<Term>, Rc<
     }
 
     let mut result = IndexSet::new();
-    find_points(&mut result, quant == Quantifier::Exists, term);
+    find_points(&mut result, quant == Binder::Exists, term);
     result
 }
 
@@ -338,7 +336,7 @@ pub fn onepoint(
 }
 
 fn generic_skolemization_rule(
-    rule_type: Quantifier,
+    rule_type: Binder,
     RuleArgs {
         conclusion,
         pool,
@@ -390,7 +388,7 @@ fn generic_skolemization_rule(
             // If this is the last binding, all bindings were skolemized, so we don't need to wrap
             // the term in a quantifier
             if i < bindings.len() - 1 {
-                inner = pool.add(Term::Quant(
+                inner = pool.add(Term::Binder(
                     rule_type,
                     BindingList(bindings.0[i + 1..].to_vec()),
                     inner,
@@ -398,10 +396,11 @@ fn generic_skolemization_rule(
             }
 
             // If the rule is `sko_forall`, the predicate in the choice term should be negated
-            if rule_type == Quantifier::Forall {
+            if rule_type == Binder::Forall {
                 inner = build_term!(pool, (not { inner }));
             }
-            pool.add(Term::Choice(x.clone(), inner))
+            let binding_list = BindingList(vec![x.clone()]);
+            pool.add(Term::Binder(Binder::Choice, binding_list, inner))
         };
         if !alpha_equiv(t, &expected, polyeq_time) {
             return Err(EqualityError::ExpectedEqual(t.clone(), expected).into());
@@ -415,11 +414,11 @@ fn generic_skolemization_rule(
 }
 
 pub fn sko_ex(args: RuleArgs) -> RuleResult {
-    generic_skolemization_rule(Quantifier::Exists, args)
+    generic_skolemization_rule(Binder::Exists, args)
 }
 
 pub fn sko_forall(args: RuleArgs) -> RuleResult {
-    generic_skolemization_rule(Quantifier::Forall, args)
+    generic_skolemization_rule(Binder::Forall, args)
 }
 
 #[cfg(test)]
@@ -504,6 +503,15 @@ mod tests {
                 (step t1.t1 (cl (= p q)) :rule hole)
                 (step t1 (cl (= (forall ((x Real) (z Real)) p)
                     (forall ((y Real) (z Real)) q))) :rule bind)": true,
+            }
+            "Binding `lambda` and `choice` terms" {
+                "(anchor :step t1 :args ((y Real) (:= x y)))
+                (step t1.t1 (cl (= x y)) :rule hole)
+                (step t1 (cl (= (lambda ((x Real)) x) (lambda ((y Real)) y))) :rule bind)": true,
+
+                "(anchor :step t1 :args ((y Int) (:= x y)))
+                (step t1.t1 (cl (= p q)) :rule hole)
+                (step t1 (cl (= (choice ((x Int)) p) (choice ((y Int)) q))) :rule bind)": true,
             }
             "y_i appears in phi as a free variable" {
                 "(anchor :step t1 :args ((y Real) (:= x y)))

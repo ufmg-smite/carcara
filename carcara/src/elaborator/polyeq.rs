@@ -77,7 +77,15 @@ impl<'a> PolyeqElaborator<'a> {
                 self.build_cong(pool, (&a, &b), (a_args, b_args))
             }
 
-            (Term::Quant(a_q, a_bindings, a_inner), Term::Quant(b_q, b_bindings, b_inner)) => {
+            // Since `choice` and `lambda` terms are not in the SMT-LIB standard, they cannot appear
+            // in the premises of a proof, so we would never need to elaborate polyequalities that
+            // use these terms.
+            (Term::Binder(b @ (Binder::Choice | Binder::Lambda), _, _), _)
+            | (_, Term::Binder(b @ (Binder::Choice | Binder::Lambda), _, _)) => {
+                log::error!("Trying to elaborate polyequality between `{b}` terms");
+                panic!()
+            }
+            (Term::Binder(a_q, a_bindings, a_inner), Term::Binder(b_q, b_bindings, b_inner)) => {
                 assert_eq!(a_q, b_q);
 
                 let (variable_args, assignment_args) = match &mut self.context {
@@ -178,18 +186,6 @@ impl<'a> PolyeqElaborator<'a> {
                         discharge: Vec::new(),
                     },
                 )
-            }
-
-            // Since `choice` and `lambda` terms are not in the SMT-LIB standard, they cannot appear
-            // in the premises of a proof, so we would never need to elaborate polyequalities that
-            // use these terms.
-            (Term::Choice(_, _), Term::Choice(_, _)) => {
-                log::error!("Trying to elaborate polyequality between `choice` terms");
-                panic!()
-            }
-            (Term::Lambda(_, _), Term::Lambda(_, _)) => {
-                log::error!("Trying to elaborate polyequality between `lambda` terms");
-                panic!()
             }
             _ => panic!("terms not equal!"),
         }

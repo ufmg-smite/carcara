@@ -600,23 +600,30 @@ pub enum Sort {
     Type,
 }
 
-/// A quantifier, either `forall` or `exists`.
+/// A binder, either a quantifier (`forall` or `exists`), `choice`, or `lambda`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Quantifier {
+pub enum Binder {
     /// The `forall` quantifier.
     Forall,
 
     /// The `exists` quantifier.
     Exists,
+
+    /// The `choice` binder.
+    Choice,
+
+    /// The `lambda` binder.
+    Lambda,
 }
 
-impl std::ops::Not for Quantifier {
+impl std::ops::Not for Binder {
     type Output = Self;
 
     fn not(self) -> Self::Output {
         match self {
-            Quantifier::Forall => Quantifier::Exists,
-            Quantifier::Exists => Quantifier::Forall,
+            Binder::Forall => Binder::Exists,
+            Binder::Exists => Binder::Forall,
+            _ => panic!("logical negation is only defined for quantifier binders"),
         }
     }
 }
@@ -677,17 +684,12 @@ pub enum Term {
     /// A sort.
     Sort(Sort),
 
-    /// A quantifier binder term.
-    Quant(Quantifier, BindingList, Rc<Term>),
-
-    /// A `choice` term.
-    Choice(SortedVar, Rc<Term>),
+    /// A binder term. This can be either a quantifier term (`forall`/`exists`), a `choice` term, or
+    /// a `lambda` term.
+    Binder(Binder, BindingList, Rc<Term>),
 
     /// A `let` binder term.
     Let(BindingList, Rc<Term>),
-
-    /// A `lambda` term.
-    Lambda(BindingList, Rc<Term>),
 
     /// A parameterized operation term, that is, an operation term whose operator receives extra
     /// parameters.
@@ -880,11 +882,20 @@ impl Term {
         }
     }
 
-    /// Tries to unwrap a quantifier term, returning the `Quantifier`, the bindings and the inner
-    /// term. Returns `None` if the term is not a quantifier term.
-    pub fn as_quant(&self) -> Option<(Quantifier, &BindingList, &Rc<Term>)> {
+    /// Tries to unwrap a quantifier term, returning the `Binder`, the bindings and the inner term.
+    /// Returns `None` if the term is not a quantifier term.
+    pub fn as_quant(&self) -> Option<(Binder, &BindingList, &Rc<Term>)> {
         match self {
-            Term::Quant(q, b, t) => Some((*q, b, t)),
+            Term::Binder(q @ (Binder::Forall | Binder::Exists), b, t) => Some((*q, b, t)),
+            _ => None,
+        }
+    }
+
+    /// Tries to unwrap a binder term, returning the `Binder`, the bindings and the inner term.
+    /// Returns `None` if the term is not a binder term.
+    pub fn as_binder(&self) -> Option<(Binder, &BindingList, &Rc<Term>)> {
+        match self {
+            Term::Binder(binder, bindings, inner) => Some((*binder, bindings, inner)),
             _ => None,
         }
     }
@@ -979,11 +990,18 @@ impl Rc<Term> {
             .ok_or_else(|| CheckerError::ExpectedOperationTerm(self.clone()))
     }
 
-    /// Tries to unwrap a quantifier term, returning the `Quantifier`, the bindings and the inner
-    /// term. Returns a `CheckerError` if the term is not a quantifier term.
-    pub fn as_quant_err(&self) -> Result<(Quantifier, &BindingList, &Rc<Term>), CheckerError> {
+    /// Tries to unwrap a quantifier term, returning the `Binder`, the bindings and the inner term.
+    /// Returns a `CheckerError` if the term is not a quantifier term.
+    pub fn as_quant_err(&self) -> Result<(Binder, &BindingList, &Rc<Term>), CheckerError> {
         self.as_quant()
             .ok_or_else(|| CheckerError::ExpectedQuantifierTerm(self.clone()))
+    }
+
+    /// Tries to unwrap a binder term, returning the `Binder`, the bindings and the inner term.
+    /// Returns a `CheckerError` if the term is not a binder term.
+    pub fn as_binder_err(&self) -> Result<(Binder, &BindingList, &Rc<Term>), CheckerError> {
+        self.as_binder()
+            .ok_or_else(|| CheckerError::ExpectedBinderTerm(self.clone()))
     }
 
     /// Tries to unwrap a `let` term, returning the bindings and the inner

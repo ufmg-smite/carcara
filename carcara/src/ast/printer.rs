@@ -206,29 +206,15 @@ impl<'a> AlethePrinter<'a> {
                 }
             }
             Term::Sort(sort) => write!(self.inner, "{}", sort),
-            Term::Quant(quantifier, bindings, term) => {
-                write!(self.inner, "({} ", quantifier)?;
+            Term::Binder(binder, bindings, term) => {
+                write!(self.inner, "({} ", binder)?;
                 bindings.print_with_sharing(self)?;
                 write!(self.inner, " ")?;
-                term.print_with_sharing(self)?;
-                write!(self.inner, ")")
-            }
-            Term::Choice(var, term) => {
-                write!(self.inner, "(choice (")?;
-                var.print_with_sharing(self)?;
-                write!(self.inner, ") ")?;
                 term.print_with_sharing(self)?;
                 write!(self.inner, ")")
             }
             Term::Let(bindings, term) => {
                 write!(self.inner, "(let ")?;
-                bindings.print_with_sharing(self)?;
-                write!(self.inner, " ")?;
-                term.print_with_sharing(self)?;
-                write!(self.inner, ")")
-            }
-            Term::Lambda(bindings, term) => {
-                write!(self.inner, "(lambda ")?;
                 bindings.print_with_sharing(self)?;
                 write!(self.inner, " ")?;
                 term.print_with_sharing(self)?;
@@ -397,16 +383,15 @@ impl fmt::Display for Constant {
     }
 }
 
-impl fmt::Display for Quantifier {
+impl fmt::Display for Binder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Quantifier::Forall => "forall",
-                Quantifier::Exists => "exists",
-            }
-        )
+        let s = match self {
+            Binder::Forall => "forall",
+            Binder::Exists => "exists",
+            Binder::Choice => "choice",
+            Binder::Lambda => "lambda",
+        };
+        write!(f, "{}", s)
     }
 }
 

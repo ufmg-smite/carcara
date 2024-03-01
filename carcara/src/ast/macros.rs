@@ -75,7 +75,7 @@ macro_rules! match_term {
         if $var.is_bool_false() { Some(()) } else { None }
     };
     ((forall ... $args:tt) = $var:expr) => {
-        if let $crate::ast::Term::Quant($crate::ast::Quantifier::Forall, bindings, inner) =
+        if let $crate::ast::Term::Binder($crate::ast::Binder::Forall, bindings, inner) =
             &$var as &$crate::ast::Term
         {
             match_term!($args = inner).and_then(|inner| Some((bindings, inner)))
@@ -84,7 +84,7 @@ macro_rules! match_term {
         }
     };
     ((exists ... $args:tt) = $var:expr) => {
-        if let $crate::ast::Term::Quant($crate::ast::Quantifier::Exists, bindings, inner) =
+        if let $crate::ast::Term::Binder($crate::ast::Binder::Exists, bindings, inner) =
             &$var as &$crate::ast::Term
         {
             match_term!($args = inner).and_then(|inner| Some((bindings, inner)))

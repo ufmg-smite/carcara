@@ -147,7 +147,7 @@ fn negation_normal_form(
     } else if let Some((quant, bindings, inner)) = term.as_quant() {
         let quant = if polarity { quant } else { !quant };
         let inner = negation_normal_form(pool, inner, polarity, cache);
-        pool.add(Term::Quant(quant, bindings.clone(), inner))
+        pool.add(Term::Binder(quant, bindings.clone(), inner))
     } else {
         match match_term!((= p q) = term) {
             Some((left, right)) if pool.sort(left).as_sort().unwrap() == &Sort::Bool => {
@@ -223,7 +223,7 @@ where
             let args = args.iter().map(|a| prenex_forall(pool, acc, a)).collect();
             pool.add(Term::Op(*op, args))
         }
-        Term::Quant(Quantifier::Forall, bindings, inner) => {
+        Term::Binder(Binder::Forall, bindings, inner) => {
             acc.extend(bindings.iter().cloned());
             prenex_forall(pool, acc, inner)
         }
@@ -260,8 +260,8 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         let (r_q, r_b, phi_prime) = r.as_quant_err()?;
 
         // We expect both quantifiers to be `forall`
-        assert_is_expected(&l_q, Quantifier::Forall)?;
-        assert_is_expected(&r_q, Quantifier::Forall)?;
+        assert_is_expected(&l_q, Binder::Forall)?;
+        assert_is_expected(&r_q, Binder::Forall)?;
 
         (l_b, phi, r_b, phi_prime)
     };
@@ -496,8 +496,8 @@ mod tests {
             if bindings.is_empty() {
                 conjunctions
             } else {
-                pool.add(Term::Quant(
-                    Quantifier::Forall,
+                pool.add(Term::Binder(
+                    Binder::Forall,
                     BindingList(bindings),
                     conjunctions,
                 ))

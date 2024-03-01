@@ -1,4 +1,4 @@
-use crate::ast::{BindingList, Quantifier, Rc, Term};
+use crate::ast::{Binder, BindingList, Rc, Term};
 use indexmap::{IndexMap, IndexSet};
 use rug::Integer;
 use std::{
@@ -238,8 +238,8 @@ impl TypeName for Rc<Term> {
     const NAME: &'static str = "term";
 }
 
-impl TypeName for Quantifier {
-    const NAME: &'static str = "quantifier";
+impl TypeName for Binder {
+    const NAME: &'static str = "binder";
 }
 
 impl TypeName for BindingList {

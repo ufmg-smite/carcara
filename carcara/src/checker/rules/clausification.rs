@@ -341,10 +341,16 @@ fn apply_bfun_elim(
                 .collect::<Result<_, _>>()?;
             pool.add(Term::Op(*op, args))
         }
-        Term::Quant(q, bindings, inner) => {
-            let op = match q {
-                Quantifier::Forall => Operator::And,
-                Quantifier::Exists => Operator::Or,
+        Term::Binder(b, bindings, inner) => {
+            let op = match b {
+                Binder::Forall => Operator::And,
+                Binder::Exists => Operator::Or,
+                Binder::Choice | Binder::Lambda => {
+                    let inner = apply_bfun_elim(pool, inner, cache)?;
+                    let result = pool.add(Term::Binder(*b, bindings.clone(), inner));
+                    cache.insert(term.clone(), result.clone());
+                    return Ok(result);
+                }
             };
             let mut args = Vec::with_capacity(2usize.pow(bindings.len() as u32));
             bfun_elim_first_step(pool, bindings.as_slice(), inner, &mut args)?;
@@ -364,20 +370,12 @@ fn apply_bfun_elim(
             if new_bindings.is_empty() {
                 op_term
             } else {
-                pool.add(Term::Quant(*q, BindingList(new_bindings), op_term))
+                pool.add(Term::Binder(*b, BindingList(new_bindings), op_term))
             }
-        }
-        Term::Choice(var, inner) => {
-            let inner = apply_bfun_elim(pool, inner, cache)?;
-            pool.add(Term::Choice(var.clone(), inner))
         }
         Term::Let(bindings, inner) => {
             let inner = apply_bfun_elim(pool, inner, cache)?;
             pool.add(Term::Let(bindings.clone(), inner))
-        }
-        Term::Lambda(bindings, inner) => {
-            let inner = apply_bfun_elim(pool, inner, cache)?;
-            pool.add(Term::Lambda(bindings.clone(), inner))
         }
         _ => term.clone(),
     };

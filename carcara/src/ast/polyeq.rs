@@ -330,16 +330,11 @@ impl Polyeq for Term {
                 comp.compare_op(*op_a, args_a, *op_b, args_b)
             }
             (Term::Sort(a), Term::Sort(b)) => Polyeq::eq(comp, a, b),
-            (Term::Quant(q_a, _, _), Term::Quant(q_b, _, _)) if q_a != q_b => false,
-            (Term::Quant(_, a_binds, a), Term::Quant(_, b_binds, b))
-            | (Term::Let(a_binds, a), Term::Let(b_binds, b))
-            | (Term::Lambda(a_binds, a), Term::Lambda(b_binds, b)) => {
-                comp.compare_binder(a_binds, b_binds, a, b)
+            (Term::Binder(q_a, binds_a, a), Term::Binder(q_b, binds_b, b)) => {
+                q_a == q_b && comp.compare_binder(binds_a, binds_b, a, b)
             }
-            (Term::Choice(a_var, a), Term::Choice(b_var, b)) => {
-                let a_binds = BindingList(vec![a_var.clone()]);
-                let b_binds = BindingList(vec![b_var.clone()]);
-                comp.compare_binder(&a_binds, &b_binds, a, b)
+            (Term::Let(binds_a, a), Term::Let(binds_b, b)) => {
+                comp.compare_binder(binds_a, binds_b, a, b)
             }
             _ => false,
         }

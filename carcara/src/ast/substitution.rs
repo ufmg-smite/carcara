@@ -1,6 +1,6 @@
 //! Algorithms for creating and applying capture-avoiding substitutions over terms.
 
-use super::{BindingList, Rc, Sort, SortedVar, Term, TermPool};
+use super::{Binder, BindingList, Rc, Sort, SortedVar, Term, TermPool};
 use indexmap::{IndexMap, IndexSet};
 use thiserror::Error;
 
@@ -187,22 +187,21 @@ impl Substitution {
                 let new_args = apply_to_sequence!(args);
                 pool.add(Term::Op(*op, new_args))
             }
-            Term::Quant(q, b, t) => {
-                self.apply_to_binder(pool, term, b.as_ref(), t, false, |b, t| {
-                    Term::Quant(*q, b, t)
-                })
+            Term::Binder(binder, binding_list, inner) => {
+                self.apply_to_binder(pool, term, *binder, binding_list.as_ref(), inner)
             }
-            Term::Choice(var, t) => self.apply_to_binder(
-                pool,
-                term,
-                std::slice::from_ref(var),
-                t,
-                true,
-                |mut b, t| Term::Choice(b.0.pop().unwrap(), t),
-            ),
-            Term::Let(b, t) => self.apply_to_binder(pool, term, b.as_ref(), t, true, Term::Let),
-            Term::Lambda(b, t) => {
-                self.apply_to_binder(pool, term, b.as_ref(), t, true, Term::Lambda)
+            Term::Let(binding_list, inner) => {
+                let (new_bindings, mut renaming) =
+                    self.rename_binding_list(pool, binding_list, true);
+                let new_term = if renaming.is_empty() {
+                    self.apply(pool, inner)
+                } else {
+                    // If there are variables that would be captured by the substitution, we need
+                    // to rename them first
+                    let renamed = renaming.apply(pool, inner);
+                    self.apply(pool, &renamed)
+                };
+                pool.add(Term::Let(new_bindings, new_term))
             }
             Term::Const(_) | Term::Var(..) => term.clone(),
             Term::ParamOp { op, op_args, args } => {
@@ -260,17 +259,14 @@ impl Substitution {
             && should_be_renamed.next().is_none()
     }
 
-    /// Applies the substitution to a binder term, renaming any bound variables as needed. This
-    /// method uses the function `build_function` to construct the resulting binder term. If the
-    /// binder is a `let` or `lambda` term, `is_value_list` should be true.
-    fn apply_to_binder<F: Fn(BindingList, Rc<Term>) -> Term>(
+    /// Applies the substitution to a binder term, renaming any bound variables as needed.
+    fn apply_to_binder(
         &mut self,
         pool: &mut dyn TermPool,
         original_term: &Rc<Term>,
+        binder: Binder,
         binding_list: &[SortedVar],
         inner: &Rc<Term>,
-        is_value_list: bool,
-        build_function: F,
     ) -> Rc<Term> {
         self.compute_should_be_renamed(pool);
 
@@ -282,14 +278,12 @@ impl Substitution {
         // applying the substitution to the binder term. In this case, as there is only one mapping,
         // we can just skip the substitution entirely, which is way faster in some cases. In
         // particular, the skolemization rules require this optimization to have acceptable
-        // performance. Currently, this kind of skipping in only supported for "sort" binding lists,
-        // meaning quantifier and `choice` terms.
-        if !is_value_list && self.can_skip_instead_of_renaming(pool, binding_list) {
+        // performance.
+        if self.can_skip_instead_of_renaming(pool, binding_list) {
             return original_term.clone();
         }
 
-        let (new_bindings, mut renaming) =
-            self.rename_binding_list(pool, binding_list, is_value_list);
+        let (new_bindings, mut renaming) = self.rename_binding_list(pool, binding_list, false);
         let new_term = if renaming.is_empty() {
             self.apply(pool, inner)
         } else {
@@ -298,7 +292,7 @@ impl Substitution {
             let renamed = renaming.apply(pool, inner);
             self.apply(pool, &renamed)
         };
-        pool.add(build_function(new_bindings, new_term))
+        pool.add(Term::Binder(binder, new_bindings, new_term))
     }
 
     /// Creates a new substitution that renames all variables in the binding list that may be

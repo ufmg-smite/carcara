@@ -255,8 +255,8 @@ fn test_quantifiers() {
     let cases = [
         ("(exists ((p Bool)) p)", {
             let inner = p.add(Term::new_var("p", bool_sort.clone()));
-            Term::Quant(
-                Quantifier::Exists,
+            Term::Binder(
+                Binder::Exists,
                 BindingList(vec![("p".into(), bool_sort)]),
                 inner,
             )
@@ -266,8 +266,8 @@ fn test_quantifiers() {
             let x_plus_y = p.add(Term::Op(Operator::Add, vec![x, y]));
             let zero = p.add(Term::new_real(0));
             let inner = p.add(Term::Op(Operator::Equals, vec![x_plus_y, zero]));
-            Term::Quant(
-                Quantifier::Forall,
+            Term::Binder(
+                Binder::Forall,
                 BindingList(vec![
                     ("x".into(), real_sort.clone()),
                     ("y".into(), real_sort),
@@ -295,13 +295,15 @@ fn test_choice_terms() {
     let cases = [
         ("(choice ((p Bool)) p)", {
             let inner = p.add(Term::new_var("p", bool_sort.clone()));
-            Term::Choice(("p".into(), bool_sort), inner)
+            let bindings = BindingList(vec![("p".into(), bool_sort)]);
+            Term::Binder(Binder::Choice, bindings, inner)
         }),
         ("(choice ((x Int)) (= x 0))", {
             let x = p.add(Term::new_var("x", int_sort.clone()));
             let zero = p.add(Term::new_int(0));
             let inner = p.add(Term::Op(Operator::Equals, vec![x, zero]));
-            Term::Choice(("x".into(), int_sort), inner)
+            let bindings = BindingList(vec![("x".into(), int_sort)]);
+            Term::Binder(Binder::Choice, bindings, inner)
         }),
     ];
     run_parser_tests(&mut p, &cases);
@@ -349,15 +351,15 @@ fn test_lambda_terms() {
     let cases = [
         ("(lambda ((x Int)) x)", {
             let x = p.add(Term::new_var("x", int_sort.clone()));
-            Term::Lambda(BindingList(vec![("x".into(), int_sort.clone())]), x)
+            let bindings = BindingList(vec![("x".into(), int_sort.clone())]);
+            Term::Binder(Binder::Lambda, bindings, x)
         }),
         ("(lambda ((x Int) (y Int)) (+ x y))", {
             let [x, y] = ["x", "y"].map(|s| p.add(Term::new_var(s, int_sort.clone())));
             let inner = p.add(Term::Op(Operator::Add, vec![x, y]));
-            Term::Lambda(
-                BindingList(vec![("x".into(), int_sort.clone()), ("y".into(), int_sort)]),
-                inner,
-            )
+            let bindings =
+                BindingList(vec![("x".into(), int_sort.clone()), ("y".into(), int_sort)]);
+            Term::Binder(Binder::Lambda, bindings, inner)
         }),
     ];
     run_parser_tests(&mut p, &cases);

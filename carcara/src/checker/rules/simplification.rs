@@ -719,8 +719,8 @@ fn apply_ac_simp(
                 .collect();
             Term::App(func.clone(), args)
         }
-        Term::Quant(q, bindings, inner) => {
-            Term::Quant(*q, bindings.clone(), apply_ac_simp(pool, cache, inner))
+        Term::Binder(q, bindings, inner) => {
+            Term::Binder(*q, bindings.clone(), apply_ac_simp(pool, cache, inner))
         }
         Term::Let(binding, inner) => Term::Let(binding.clone(), apply_ac_simp(pool, cache, inner)),
         _ => return term.clone(),

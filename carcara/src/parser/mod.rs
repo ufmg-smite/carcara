@@ -689,8 +689,11 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         let lambda_term = if func_def.params.is_empty() {
                             func_def.body
                         } else {
-                            self.pool
-                                .add(Term::Lambda(BindingList(func_def.params), func_def.body))
+                            self.pool.add(Term::Binder(
+                                Binder::Lambda,
+                                BindingList(func_def.params),
+                                func_def.body,
+                            ))
                         };
                         let sort = self.pool.sort(&lambda_term);
                         let var = (name, sort);
@@ -736,7 +739,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     } else {
                         let bindings = BindingList(func_def.params);
                         self.pool
-                            .add(Term::Quant(Quantifier::Forall, bindings, equality_term))
+                            .add(Term::Binder(Binder::Forall, bindings, equality_term))
                     };
                     self.premises().insert(premise);
                 }
@@ -1251,56 +1254,33 @@ impl<'a, R: BufRead> Parser<'a, R> {
         Ok(term)
     }
 
-    /// Parses a quantifier term. This method assumes that the `(` and quantifier tokens were
+    /// Parses a binder term. This method assumes that the `(` and binder tokens were
     /// already consumed.
-    fn parse_quantifier(&mut self, quantifier: Quantifier) -> CarcaraResult<Rc<Term>> {
+    fn parse_binder(&mut self, binder: Binder) -> CarcaraResult<Rc<Term>> {
         self.expect_token(Token::OpenParen)?;
         self.state.symbol_table.push_scope();
-        let bindings = self.parse_sequence(
-            |p| {
-                let var = p.parse_sorted_var()?;
-                p.insert_sorted_var(var.clone());
-                Ok(var)
-            },
-            true,
-        )?;
-        let term = self.parse_term_expecting_sort(&Sort::Bool)?;
+        let bindings = if binder == Binder::Choice {
+            let var = self.parse_sorted_var()?;
+            self.insert_sorted_var(var.clone());
+            self.expect_token(Token::CloseParen)?;
+            BindingList(vec![var])
+        } else {
+            BindingList(self.parse_sequence(
+                |p| {
+                    let var = p.parse_sorted_var()?;
+                    p.insert_sorted_var(var.clone());
+                    Ok(var)
+                },
+                true,
+            )?)
+        };
+        let term = match binder {
+            Binder::Lambda => self.parse_term()?,
+            _ => self.parse_term_expecting_sort(&Sort::Bool)?,
+        };
         self.state.symbol_table.pop_scope();
         self.expect_token(Token::CloseParen)?;
-        Ok(self
-            .pool
-            .add(Term::Quant(quantifier, BindingList(bindings), term)))
-    }
-
-    /// Parses a `choice` term. This method assumes that the `(` and `choice` tokens were already
-    /// consumed.
-    fn parse_choice_term(&mut self) -> CarcaraResult<Rc<Term>> {
-        self.expect_token(Token::OpenParen)?;
-        let var = self.parse_sorted_var()?;
-        self.insert_sorted_var(var.clone());
-        self.expect_token(Token::CloseParen)?;
-        let inner = self.parse_term()?;
-        self.expect_token(Token::CloseParen)?;
-        Ok(self.pool.add(Term::Choice(var, inner)))
-    }
-
-    /// Parses a `lambda` term. This method assumes that the `(` and `let` tokens were already
-    /// consumed.
-    fn parse_lambda_term(&mut self) -> CarcaraResult<Rc<Term>> {
-        self.expect_token(Token::OpenParen)?;
-        self.state.symbol_table.push_scope();
-        let bindings = self.parse_sequence(
-            |p| {
-                let var = p.parse_sorted_var()?;
-                p.insert_sorted_var(var.clone());
-                Ok(var)
-            },
-            true,
-        )?;
-        let body = self.parse_term()?;
-        self.state.symbol_table.pop_scope();
-        self.expect_token(Token::CloseParen)?;
-        Ok(self.pool.add(Term::Lambda(BindingList(bindings), body)))
+        Ok(self.pool.add(Term::Binder(binder, bindings, term)))
     }
 
     /// Parses a `let` term. This method assumes that the `(` and `let` tokens were already
@@ -1572,10 +1552,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         self.make_qualified_op(op, sort, Vec::new())
                             .map_err(|err| Error::Parser(err, head_pos))
                     }
-                    Reserved::Exists => self.parse_quantifier(Quantifier::Exists),
-                    Reserved::Forall => self.parse_quantifier(Quantifier::Forall),
-                    Reserved::Choice => self.parse_choice_term(),
-                    Reserved::Lambda => self.parse_lambda_term(),
+                    Reserved::Exists => self.parse_binder(Binder::Exists),
+                    Reserved::Forall => self.parse_binder(Binder::Forall),
+                    Reserved::Choice => self.parse_binder(Binder::Choice),
+                    Reserved::Lambda => self.parse_binder(Binder::Lambda),
                     Reserved::Bang => self.parse_annotated_term(),
                     Reserved::Let => self.parse_let_term(),
                     _ => Err(Error::Parser(
