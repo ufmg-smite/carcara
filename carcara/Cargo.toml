@@ -9,7 +9,7 @@ license = "Apache-2.0"
 [dependencies]
 indexmap = "2.0.0"
 log = "0.4.20"
-rug = { version = "1.21.0", features = ["integer", "rational"] }
+rug = { version = "1.21.0", default-features = false, features = ["integer", "rational"] }
 thiserror = "1.0.47"
 
 [dev-dependencies]
