@@ -99,6 +99,9 @@ pub enum CheckerError {
     #[error("expected term '{0}' to be a boolean constant")]
     ExpectedAnyBoolConstant(Rc<Term>),
 
+    #[error("expected term '{0}' to be a 'str.++' application")]
+    ExpectedConcatApplication(Rc<Term>),
+
     #[error("expected term '{1}' to be numerical constant {:?}", .0.to_f64())]
     ExpectedNumber(Rational, Rc<Term>),
 
