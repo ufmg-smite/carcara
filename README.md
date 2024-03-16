@@ -1,6 +1,6 @@
 # Carcara
 
-Carcara is a proof checker and elaborator for SMT proofs in the [Alethe format](https://verit.gitlabpages.uliege.be/alethe/specification.pdf).
+Carcara is a proof checker and elaborator for SMT proofs in the [Alethe format](https://verit.gitlabpages.uliege.be/alethe/specification.pdf). A research paper describing Carcara has been [published at TACAS 2023](https://link.springer.com/chapter/10.1007/978-3-031-30823-9_19).
 
 ## Building
 
