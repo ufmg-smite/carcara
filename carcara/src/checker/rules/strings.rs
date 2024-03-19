@@ -25,7 +25,7 @@ fn flatten(term: Rc<Term>, pool: &mut dyn TermPool) -> Vec<Rc<Term>> {
 
 fn reconstruct_term(terms: Vec<Rc<Term>>, pool: &mut dyn TermPool) -> Rc<Term> {
     match terms.len() {
-        0 => pool.add(Term::Const(Constant::String(String::from("")))),
+        0 => pool.add(Term::Const(Constant::String("".to_owned()))),
         1 => terms[0].clone(),
         _ => pool.add(Term::Op(Operator::StrConcat, terms)),
     }
@@ -57,13 +57,15 @@ fn is_prefix(
     Ok(p_flat)
 }
 
+type Suffixes = (Vec<Rc<Term>>, Vec<Rc<Term>>);
+
 fn strip_prefix(
     s: Rc<Term>,
     t: Rc<Term>,
     pool: &mut dyn TermPool,
     rev: bool,
     polyeq_time: &mut Duration,
-) -> Result<(Vec<Rc<Term>>, Vec<Rc<Term>>), CheckerError> {
+) -> Result<Suffixes, CheckerError> {
     let mut s_flat = flatten(s.clone(), pool);
     let mut t_flat = flatten(t.clone(), pool);
 
@@ -72,11 +74,11 @@ fn strip_prefix(
         t_flat.reverse();
     }
 
-    if s_flat.len() == 0 {
-        return Err(CheckerError::ExpectedConcatApplication(s));
+    if s_flat.is_empty() {
+        return Err(CheckerError::TermOfWrongForm("(str.++ ...)", s));
     }
-    if t_flat.len() == 0 {
-        return Err(CheckerError::ExpectedConcatApplication(t));
+    if t_flat.is_empty() {
+        return Err(CheckerError::TermOfWrongForm("(str.++ ...)", t));
     }
 
     let mut prefix = 0;
@@ -86,15 +88,19 @@ fn strip_prefix(
         prefix += 1;
     }
 
-    let mut s_suffix = s_flat.get(prefix..).unwrap_or_default().to_vec();
-    let mut t_suffix = t_flat.get(prefix..).unwrap_or_default().to_vec();
-
-    if rev {
-        s_suffix.reverse();
-        t_suffix.reverse();
-    }
+    let s_suffix = s_flat.get(prefix..).unwrap_or_default().to_vec();
+    let t_suffix = t_flat.get(prefix..).unwrap_or_default().to_vec();
 
     Ok((s_suffix, t_suffix))
+}
+
+fn string_check_length_one(term: Rc<Term>) -> Result<(), CheckerError> {
+    if let Term::Const(Constant::String(s)) = term.as_ref() {
+        if s.len() == 1 {
+            return Ok(());
+        }
+    }
+    Err(CheckerError::ExpectedStringConstantOfLengthOne(term))
 }
 
 pub fn concat_eq(
@@ -115,7 +121,12 @@ pub fn concat_eq(
     let rev = args[0].as_term()?.as_bool_err()?;
     let (l, r) = match_term_err!((= l r) = term)?;
 
-    let (l_suffix, r_suffix) = strip_prefix(l.clone(), r.clone(), pool, rev, polyeq_time)?;
+    let (mut l_suffix, mut r_suffix) = strip_prefix(l.clone(), r.clone(), pool, rev, polyeq_time)?;
+
+    if rev {
+        l_suffix.reverse();
+        r_suffix.reverse();
+    }
 
     let l_concat = reconstruct_term(l_suffix, pool);
     let r_concat = reconstruct_term(r_suffix, pool);
@@ -175,6 +186,51 @@ pub fn concat_unify(
     ));
 
     assert_eq(&expected, &expanded)
+}
+
+pub fn concat_conflict(
+    RuleArgs {
+        premises,
+        args,
+        conclusion,
+        pool,
+        polyeq_time,
+        ..
+    }: RuleArgs,
+) -> RuleResult {
+    assert_num_premises(premises, 1)?;
+    assert_num_args(args, 1)?;
+    assert_clause_len(conclusion, 1)?;
+
+    let term = get_premise_term(&premises[0])?;
+    let rev = args[0].as_term()?.as_bool_err()?;
+
+    if conclusion[0].as_bool_err()? {
+        return Err(CheckerError::ExpectedBoolConstant(
+            false,
+            conclusion[0].clone(),
+        ));
+    }
+
+    let (l, r) = match_term_err!((= l r) = term)?;
+
+    let (l_suffix, r_suffix) = strip_prefix(l.clone(), r.clone(), pool, rev, polyeq_time)?;
+
+    if let Some(l_head) = l_suffix.first() {
+        string_check_length_one(l_head.clone())?;
+        if let Some(r_head) = r_suffix.first() {
+            string_check_length_one(r_head.clone())?;
+        }
+    } else if let Some(r_head) = r_suffix.first() {
+        string_check_length_one(r_head.clone())?;
+    } else {
+        return Err(CheckerError::ExpectedDifferentConstantPrefixes(
+            l.clone(),
+            r.clone(),
+        ));
+    }
+
+    Ok(())
 }
 
 mod tests {
@@ -354,6 +410,101 @@ mod tests {
                 r#"(assume h1 (= (str.++ "a" b "c") (str.++ "a" c "de")))
                    (assume h2 (= (str.len (str.++ "a" b)) (str.len (str.++ "a" c "de" "f"))))
                    (step t1 (cl (= (str.++ "a" b) (str.++ "a" c (str.++ "de" "f")))) :rule concat_unify :premises (h1 h2) :args (false))"#: false,
+            }
+        }
+    }
+
+    #[test]
+    fn concat_conflict() {
+        test_cases! {
+            definitions = "
+                (declare-fun a () String)
+                (declare-fun b () String)
+                (declare-fun c () String)
+                (declare-fun d () String)
+                (declare-fun e () String)
+            ",
+            "Simple working examples" {
+                r#"(assume h1 (= (str.++ "ab" c) (str.++ "c" e)))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: true,
+                r#"(assume h1 (= (str.++ "abc" d) (str.++ "abd" (str.++ c e))))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: true,
+                r#"(assume h1 (= (str.++ "ac" (str.++ b d)) (str.++ "abd" (str.++ a b))))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: true,
+            }
+            "Reverse argument set to true" {
+                r#"(assume h1 (= (str.++ d "cba") (str.++ (str.++ e c) "dba")))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (true))"#: true,
+                r#"(assume h1 (= (str.++ (str.++ d b) "ac") (str.++ (str.++ b a) "dba")))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (true))"#: true,
+            }
+            "All possible constants are prefixes of each other" {
+                r#"(assume h1 (= (str.++ "ac" "bd" c e) (str.++ "acb" b c)))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: false,
+                r#"(assume h1 (= (str.++ "d" a b) (str.++ "de" c d)))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: false,
+                r#"(assume h1 (= (str.++ "ab" a b) (str.++ "ab" c d)))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: false,
+            }
+            "Remaining suffix is empty" {
+                r#"(assume h1 (= "ab" (str.++ "ab" c d)))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: false,
+                r#"(assume h1 (= "ab" (str.++ "ab" (str.++ "" c d))))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: false,
+                r#"(assume h1 (= "cbd" (str.++ "c" "bd")))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: false,
+                r#"(assume h1 (= (str.++ "cbd" a) (str.++ "c" (str.++ "bd" a))))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: false,
+                r#"(assume h1 (= (str.++ "ab" c d) "ab"))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: false,
+                r#"(assume h1 (= (str.++ "ab" (str.++ "" c d)) "ab"))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: false,
+            }
+            "Term does not have a constant prefix" {
+                r#"(assume h1 (= (str.++ a "bc" d) (str.++ "ab" c)))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: false,
+                r#"(assume h1 (= (str.++ "b" "cd" e) (str.++ b "cb" e)))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: false,
+            }
+            "Term are not a str.++ application" {
+                r#"(assume h1 (= (str.++ "ac" "bd" c e) ""))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: false,
+                r#"(assume h1 (= "" (str.++ "ab" c)))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: false,
+            }
+            "Invalid argument type" {
+                r#"(assume h1 (= (str.++ "ab" c) (str.++ "c" e)))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (1))"#: false,
+                r#"(assume h1 (= (str.++ "ab" c) (str.++ "c" e)))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (1.5))"#: false,
+                r#"(assume h1 (= (str.++ "ab" c) (str.++ "c" e)))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args ((- 1)))"#: false,
+                r#"(assume h1 (= (str.++ "ab" c) (str.++ "c" e)))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args ("test"))"#: false,
+            }
+            "Premise term is not an equality" {
+                r#"(assume h1 (not (= (str.++ "ab" c) (str.++ "c" e))))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: false,
+            }
+            "Conclusion term is not the false bool constant" {
+                r#"(assume h1 (= (str.++ "ab" c) (str.++ "c" e)))
+                   (step t1 (cl true) :rule concat_conflict :premises (h1) :args (false))"#: false,
+                r#"(assume h1 (= (str.++ "ab" c) (str.++ "c" e)))
+                   (step t1 (cl (= "a" b)) :rule concat_conflict :premises (h1) :args (false))"#: false,
+                r#"(assume h1 (= (str.++ "ab" c) (str.++ "c" e)))
+                   (step t1 (cl (= "a" "b")) :rule concat_conflict :premises (h1) :args (false))"#: false,
+                r#"(assume h1 (= (str.++ "ab" c) (str.++ "c" e)))
+                   (step t1 (cl (not (= "a" "b"))) :rule concat_conflict :premises (h1) :args (false))"#: false,
+            }
+            "Inverted argument value" {
+                r#"(assume h1 (= (str.++ "ab" c) (str.++ "c" e)))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (true))"#: false,
+                r#"(assume h1 (= (str.++ "abc" d) (str.++ "abd" (str.++ c e))))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (true))"#: false,
+                r#"(assume h1 (= (str.++ d "cba") (str.++ (str.++ e c) "dba")))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: false,
+                r#"(assume h1 (= (str.++ (str.++ d b) "ac") (str.++ (str.++ b a) "dba")))
+                   (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: false,
             }
         }
     }
