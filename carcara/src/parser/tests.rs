@@ -476,6 +476,46 @@ fn test_define_fun() {
 }
 
 #[test]
+fn test_define_fun_rec() {
+    fn run_test(pool: &mut PrimitivePool, problem: &str, expected_premises: &[&str]) {
+        let mut parser = Parser::new(pool, TEST_CONFIG, problem.as_bytes()).expect(ERROR_MESSAGE);
+        let got = parser.parse_problem().expect(ERROR_MESSAGE).1;
+        assert_eq!(expected_premises.len(), got.len());
+        for p in expected_premises {
+            parser.reset(p.as_bytes()).expect(ERROR_MESSAGE);
+            let expected = parser.parse_term().expect(ERROR_MESSAGE);
+            assert!(got.contains(&expected));
+        }
+    }
+    let mut p = PrimitivePool::new();
+
+    run_test(
+        &mut p,
+        "(define-fun-rec sumr ((x Int)) Int (+ x (ite (> x 0) (sumr (- x 1)) 0)))",
+        &["(forall ((x Int))  (= (sumr x) (+ x (ite (> x 0) (sumr (- x 1)) 0))))"],
+    );
+
+    run_test(&mut p, "(define-fun-rec five () Int 5)", &["(= five 5)"]);
+
+    run_test(
+        &mut p,
+        "(define-funs-rec
+            ((is-even ((n Int)) Bool) (is-odd ((n Int)) Bool) (zero () Int))
+            (
+                (ite (= n zero) true (is-odd (- n 1)))
+                (ite (= n zero) false (is-even (- n 1)))
+                0
+            )
+        )",
+        &[
+            "(forall ((n Int)) (= (is-even n) (ite (= n zero) true (is-odd (- n 1)))))",
+            "(forall ((n Int)) (= (is-odd n) (ite (= n zero) false (is-even (- n 1)))))",
+            "(= zero 0)",
+        ],
+    );
+}
+
+#[test]
 fn test_define_sort() {
     let mut p = PrimitivePool::new();
     let [got] = parse_terms(
