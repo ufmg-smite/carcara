@@ -1656,33 +1656,11 @@ impl<'a, R: BufRead> Parser<'a, R> {
         }
     }
 
-    /// Parses a sort.
-    fn parse_sort(&mut self) -> CarcaraResult<Rc<Term>> {
-        let pos = self.current_position;
-        let (name, args) = match self.next_token()?.0 {
-            Token::Symbol(s) => (s, Vec::new()),
-            Token::OpenParen if self.current_token == Token::ReservedWord(Reserved::Underscore) => {
-                self.next_token()?;
-                let name = self.expect_symbol()?;
-                assert_eq!(name, "BitVec"); // TODO: Add proper error handling
-                let width = self.expect_numeral()?;
-                self.expect_token(Token::CloseParen)?;
-                return Ok(self.pool.add(Term::Sort(Sort::BitVec(width))));
-            }
-            Token::OpenParen => {
-                let name = self.expect_symbol()?;
-                let args = self.parse_sequence(Parser::parse_sort, true)?;
-                (name, args)
-            }
-            other => {
-                return Err(Error::Parser(ParserError::UnexpectedToken(other), pos));
-            }
-        };
-
+    fn make_sort(&mut self, name: String, args: Vec<Rc<Term>>) -> Result<Rc<Term>, ParserError> {
         let sort = match name.as_str() {
-            "Bool" | "Int" | "Real" | "String" | "RegLan" if !args.is_empty() => Err(
-                Error::Parser(ParserError::WrongNumberOfArgs(0.into(), args.len()), pos),
-            ),
+            "Bool" | "Int" | "Real" | "String" | "RegLan" if !args.is_empty() => {
+                Err(ParserError::WrongNumberOfArgs(0.into(), args.len()))
+            }
             "Bool" => Ok(Sort::Bool),
             "Int" => Ok(Sort::Int),
             "Real" => Ok(Sort::Real),
@@ -1690,17 +1668,14 @@ impl<'a, R: BufRead> Parser<'a, R> {
             "RegLan" => Ok(Sort::RegLan),
             "Array" => match args.as_slice() {
                 [x, y] => Ok(Sort::Array(x.clone(), y.clone())),
-                _ => Err(Error::Parser(
-                    ParserError::WrongNumberOfArgs(2.into(), args.len()),
-                    pos,
-                )),
+                _ => Err(ParserError::WrongNumberOfArgs(2.into(), args.len())),
             },
             other if self.state.sort_defs.get(other).is_some() => {
                 let def = self.state.sort_defs.get(other).unwrap();
                 return if def.params.len() != args.len() {
-                    Err(Error::Parser(
-                        ParserError::WrongNumberOfArgs(def.params.len().into(), args.len()),
-                        pos,
+                    Err(ParserError::WrongNumberOfArgs(
+                        def.params.len().into(),
+                        args.len(),
                     ))
                 } else if def.params.is_empty() {
                     Ok(def.body.clone())
@@ -1721,13 +1696,56 @@ impl<'a, R: BufRead> Parser<'a, R> {
             }
             _ => match self.state.sort_declarations.get(&name) {
                 Some(arity) if *arity == args.len() => Ok(Sort::Atom(name, args)),
-                Some(arity) => Err(Error::Parser(
-                    ParserError::WrongNumberOfArgs((*arity).into(), args.len()),
-                    pos,
-                )),
-                None => Err(Error::Parser(ParserError::UndefinedSort(name), pos)),
+                Some(arity) => Err(ParserError::WrongNumberOfArgs((*arity).into(), args.len())),
+                None => Err(ParserError::UndefinedSort(name)),
             },
         }?;
         Ok(self.pool.add(Term::Sort(sort)))
+    }
+
+    fn make_indexed_sort(
+        &mut self,
+        name: String,
+        args: Vec<Rc<Term>>,
+    ) -> Result<Rc<Term>, ParserError> {
+        match name.as_str() {
+            "BitVec" => {
+                if args.len() != 1 {
+                    return Err(ParserError::WrongNumberOfArgs(1.into(), args.len()));
+                }
+                if let Some(width) = args[0].as_integer() {
+                    Ok(self.pool.add(Term::Sort(Sort::BitVec(width))))
+                } else {
+                    Err(ParserError::ExpectedIntegerConstant(args[0].clone()))
+                }
+            }
+            _ => Err(ParserError::UndefinedSort(name)),
+        }
+    }
+
+    /// Parses a sort.
+    fn parse_sort(&mut self) -> CarcaraResult<Rc<Term>> {
+        let pos = self.current_position;
+        let (name, args) = match self.next_token()?.0 {
+            Token::Symbol(s) => (s, Vec::new()),
+            Token::OpenParen if self.current_token == Token::ReservedWord(Reserved::Underscore) => {
+                self.next_token()?;
+                let name = self.expect_symbol()?;
+                let args = self.parse_sequence(Self::parse_term, true)?;
+                return self
+                    .make_indexed_sort(name, args)
+                    .map_err(|e| Error::Parser(e, pos));
+            }
+            Token::OpenParen => {
+                let name = self.expect_symbol()?;
+                let args = self.parse_sequence(Parser::parse_sort, true)?;
+                (name, args)
+            }
+            other => {
+                return Err(Error::Parser(ParserError::UnexpectedToken(other), pos));
+            }
+        };
+        self.make_sort(name, args)
+            .map_err(|e| Error::Parser(e, pos))
     }
 }

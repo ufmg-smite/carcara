@@ -66,7 +66,7 @@ pub enum ParserError {
     ExpectedBvSort(Sort),
 
     // Expected Constant::Integer, got other Term
-    #[error("expected Constant of type Integer, got '{0}'")]
+    #[error("expected integer constant, got '{0}'")]
     ExpectedIntegerConstant(Rc<Term>),
 
     /// A term that is not a function was used as a function.
