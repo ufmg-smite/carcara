@@ -445,6 +445,20 @@ pub fn elaborate_resolution(
         }
     }
 
+    // In some cases, due to a bug in veriT, a resolution step will conclude the empty clause, and
+    // will have multiple premises, of which one has an empty clause as its conclusion. The checker
+    // can already deal with this case safely, but not the elaborator, so if we detect it we skip
+    // elaborating this step. Either way, since this step has a premise which concludes the empty
+    // clause, it is not actually necessary, and will be pruned during post-processing.
+    if conclusion.is_empty() {
+        for p in premises {
+            if p.clause.is_empty() {
+                elaborator.unchanged(conclusion);
+                return Ok(());
+            }
+        }
+    }
+
     let mut premises: Vec<_> = premises.iter().dedup().copied().collect();
     let ResolutionTrace { not_not_added, pivot_trace } =
         greedy_resolution(conclusion, &premises, pool, true).or_else(|_| {
