@@ -76,7 +76,7 @@ enum Command {
     Bench(BenchCommandOptions),
 
     /// Given a step, takes a slice of a proof consisting of all its transitive premises.
-    Slice(SliceCommandOption),
+    Slice(SliceCommandOptions),
 }
 
 #[derive(Args)]
@@ -284,7 +284,7 @@ struct BenchCommandOptions {
 }
 
 #[derive(Args)]
-struct SliceCommandOption {
+struct SliceCommandOptions {
     #[clap(flatten)]
     input: Input,
 
@@ -296,6 +296,15 @@ struct SliceCommandOption {
 
     #[clap(long, short = 'd')]
     max_distance: Option<usize>,
+
+    // To make slice more convenient to use, we accept (and ignore!) some options from the `check`
+    // subcommand
+    #[clap(short, long, hide = true)]
+    ignore_unknown_rules: bool,
+    #[clap(long, hide = true)]
+    lia_solver: Option<String>,
+    #[clap(long, allow_hyphen_values = true, hide = true)]
+    lia_solver_args: Option<String>,
 }
 
 #[derive(ArgEnum, Clone)]
@@ -487,7 +496,7 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
     Ok(())
 }
 
-fn slice_command(options: SliceCommandOption) -> CliResult<Vec<ast::ProofCommand>> {
+fn slice_command(options: SliceCommandOptions) -> CliResult<Vec<ast::ProofCommand>> {
     let (problem, proof) = get_instance(&options.input)?;
     let config = parser::Config {
         apply_function_defs: options.parsing.apply_function_defs,
