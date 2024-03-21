@@ -99,6 +99,12 @@ pub enum CheckerError {
     #[error("expected term '{0}' to be a boolean constant")]
     ExpectedAnyBoolConstant(Rc<Term>),
 
+    #[error("expected term '{0}' to be a string constant of length one")]
+    ExpectedStringConstantOfLengthOne(Rc<Term>),
+
+    #[error("expected terms '{0}' and '{1}' to have different constant prefixes")]
+    ExpectedDifferentConstantPrefixes(Rc<Term>, Rc<Term>),
+
     #[error("expected term '{1}' to be numerical constant {:?}", .0.to_f64())]
     ExpectedNumber(Rational, Rc<Term>),
 
