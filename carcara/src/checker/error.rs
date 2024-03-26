@@ -3,7 +3,7 @@ use crate::{
     checker::rules::linear_arithmetic::LinearComb,
     utils::{Range, TypeName},
 };
-use rug::Rational;
+use rug::{Integer, Rational};
 use std::{fmt, io};
 use thiserror::Error;
 
@@ -108,11 +108,14 @@ pub enum CheckerError {
     #[error("expected term '{1}' to be numerical constant {:?}", .0.to_f64())]
     ExpectedNumber(Rational, Rc<Term>),
 
+    #[error("expected term '{1}' to be integer constant {:?}", .0.to_i32())]
+    ExpectedInteger(Integer, Rc<Term>),
+
     #[error("expected term '{0}' to be a numerical constant")]
     ExpectedAnyNumber(Rc<Term>),
 
     #[error("expected term '{0}' to be an integer constant")]
-    ExpectedInteger(Rc<Term>),
+    ExpectedAnyInteger(Rc<Term>),
 
     #[error("expected operation term, got '{0}'")]
     ExpectedOperationTerm(Rc<Term>),

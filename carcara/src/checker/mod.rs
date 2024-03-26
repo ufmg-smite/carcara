@@ -562,6 +562,7 @@ impl<'c> ProofChecker<'c> {
             "concat_eq" => strings::concat_eq,
             "concat_unify" => strings::concat_unify,
             "concat_conflict" => strings::concat_conflict,
+            "concat_csplit" => strings::concat_csplit,
 
             // Special rules that always check as valid, and are used to indicate holes in the
             // proof.
