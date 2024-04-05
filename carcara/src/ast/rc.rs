@@ -95,16 +95,6 @@ impl<T: ?Sized> AsRef<T> for Rc<T> {
     }
 }
 
-// Implements `From<U>` for every `U` that can be converted into an `rc::Rc<T>`
-impl<T: ?Sized, U> From<U> for Rc<T>
-where
-    sync::Arc<T>: From<U>,
-{
-    fn from(inner: U) -> Self {
-        Self(inner.into())
-    }
-}
-
 impl<T, const N: usize> Rc<[T; N]> {
     /// Converts an `Rc` of an array into an `Rc` of a slice.
     pub fn to_rc_of_slice(self) -> Rc<[T]> {
