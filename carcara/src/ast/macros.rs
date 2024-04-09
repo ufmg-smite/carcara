@@ -168,7 +168,8 @@ macro_rules! match_term {
     (@GET_VARIANT sign_extend) => { $crate::ast::ParamOperator::SignExtend };
 
     (@GET_VARIANT strconcat) => { $crate::ast::Operator::StrConcat };
-    (@GET_VARIANT strlen) => { $crate::ast::Operator::StrLen };
+    (@GET_VARIANT strsubstr) => { $crate::ast::Operator::Substring };
+    (@GET_VARIANT strlen)    => { $crate::ast::Operator::StrLen };
 }
 
 /// A variant of `match_term` that returns a `Result<_, CheckerError>` instead of an `Option`.

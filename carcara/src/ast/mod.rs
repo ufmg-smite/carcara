@@ -965,6 +965,12 @@ impl Rc<Term> {
             .ok_or_else(|| CheckerError::ExpectedAnyNumber(self.clone()))
     }
 
+    /// Similar to `Term::as_integer`, but returns a `CheckerError` on failure.
+    pub fn as_integer_err(&self) -> Result<Integer, CheckerError> {
+        self.as_integer()
+            .ok_or_else(|| CheckerError::ExpectedAnyInteger(self.clone()))
+    }
+
     /// Similar to `Term::as_signed_number`, but returns a `CheckerError` on failure.
     pub fn as_signed_number_err(&self) -> Result<Rational, CheckerError> {
         self.as_signed_number()

@@ -185,7 +185,7 @@ pub fn mod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     let [a, b] = [t1, t2].map(|term| {
         let value = term.as_signed_number_err()?;
         if !value.is_integer() {
-            return Err(CheckerError::ExpectedInteger(term.clone()));
+            return Err(CheckerError::ExpectedAnyInteger(term.clone()));
         }
         Ok(value.into_numer_denom().0)
     });

@@ -1,10 +1,10 @@
-use std::{cmp, time::Duration};
-
 use super::{
     assert_clause_len, assert_eq, assert_num_args, assert_num_premises, assert_polyeq_expected,
     get_premise_term, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::CheckerError};
+use rug::Integer;
+use std::{cmp, time::Duration};
 
 fn flatten(term: Rc<Term>, pool: &mut dyn TermPool) -> Vec<Rc<Term>> {
     let mut flattened = Vec::new();
@@ -29,6 +29,15 @@ fn reconstruct_term(terms: Vec<Rc<Term>>, pool: &mut dyn TermPool) -> Rc<Term> {
         1 => terms[0].clone(),
         _ => pool.add(Term::Op(Operator::StrConcat, terms)),
     }
+}
+
+fn build_skolem_prefix(u: Rc<Term>, pool: &mut dyn TermPool) -> Rc<Term> {
+    build_term!(pool, (strsubstr {u.clone()} 0 (- (strlen {u.clone()}) 1)))
+}
+
+fn build_skolem_suffix(u: Rc<Term>, n: usize, pool: &mut dyn TermPool) -> Rc<Term> {
+    let n = pool.add(Term::new_int(n));
+    build_term!(pool, (strsubstr {u.clone()} {n.clone()} (- (strlen {u.clone()}) {n})))
 }
 
 fn is_prefix(
@@ -231,6 +240,83 @@ pub fn concat_conflict(
     }
 
     Ok(())
+}
+
+pub fn concat_csplit(
+    RuleArgs {
+        premises,
+        args,
+        conclusion,
+        pool,
+        polyeq_time,
+        ..
+    }: RuleArgs,
+) -> RuleResult {
+    assert_num_premises(premises, 2)?;
+    assert_num_args(args, 1)?;
+    assert_clause_len(conclusion, 1)?;
+
+    let terms = get_premise_term(&premises[0])?;
+    let length = get_premise_term(&premises[1])?;
+    let rev = args[0].as_term()?.as_bool_err()?;
+
+    let (t, s) = match_term_err!((= t s) = terms)?;
+    let (u, zero) = match_term_err!((not (= (strlen u) zero)) = length)?;
+    if zero.as_integer_err()? != 0 {
+        return Err(CheckerError::ExpectedInteger(
+            Integer::from(0),
+            zero.clone(),
+        ));
+    }
+
+    let mut t_flat = flatten(t.clone(), pool);
+    let mut s_flat = flatten(s.clone(), pool);
+
+    if t_flat.is_empty() {
+        return Err(CheckerError::TermOfWrongForm("(str.++ ...)", t.clone()));
+    }
+    if s_flat.is_empty() {
+        return Err(CheckerError::TermOfWrongForm("(str.++ ...)", s.clone()));
+    }
+
+    if rev {
+        t_flat.reverse();
+        s_flat.reverse();
+    }
+
+    let mut lhs = is_prefix(t.clone(), u.clone(), pool, rev, polyeq_time)?;
+    if rev {
+        lhs.reverse();
+    }
+
+    let mut rhs: Vec<Rc<Term>> = vec![];
+    if let Some(s_head) = s_flat.first() {
+        string_check_length_one(s_head.clone())?;
+        if rev {
+            rhs.push(build_skolem_suffix(u.clone(), 1, pool).clone());
+            rhs.push(s_head.clone());
+        } else {
+            rhs.push(s_head.clone());
+            rhs.push(build_skolem_prefix(u.clone(), pool).clone());
+        }
+    }
+
+    let lhs_reconstructed = reconstruct_term(lhs, pool);
+    let rhs_reconstructed = reconstruct_term(rhs, pool);
+    let expected = pool.add(Term::Op(
+        Operator::Equals,
+        vec![lhs_reconstructed, rhs_reconstructed],
+    ));
+
+    let (l_conc, r_conc) = match_term_err!((= l r) = &conclusion[0])?;
+    let l_conc_reconstructed = reconstruct_term(flatten(l_conc.clone(), pool), pool);
+    let r_conc_reconstructed = reconstruct_term(flatten(r_conc.clone(), pool), pool);
+    let expanded = pool.add(Term::Op(
+        Operator::Equals,
+        vec![l_conc_reconstructed, r_conc_reconstructed],
+    ));
+
+    assert_eq(&expected, &expanded)
 }
 
 mod tests {
@@ -505,6 +591,98 @@ mod tests {
                    (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: false,
                 r#"(assume h1 (= (str.++ (str.++ d b) "ac") (str.++ (str.++ b a) "dba")))
                    (step t1 (cl false) :rule concat_conflict :premises (h1) :args (false))"#: false,
+            }
+        }
+    }
+
+    #[test]
+    fn concat_csplit() {
+        test_cases! {
+            definitions = "
+                (declare-fun a () String)
+                (declare-fun b () String)
+                (declare-fun c () String)
+                (declare-fun d () String)
+            ",
+            "Simple working examples" {
+                r#"(assume h1 (= (str.++ "a" "b" b) (str.++ "a" c)))
+                   (assume h2 (not (= (str.len "a") 0)))
+                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 0 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: true,
+                r#"(assume h1 (= (str.++ a "b" c) (str.++ "ab" c)))
+                   (assume h2 (not (= (str.len (str.++ a "b")) 0)))
+                   (step t1 (cl (= (str.++ a "b") (str.++ "a" (str.substr (str.++ a "b") 0 (- (str.len (str.++ a "b")) 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: true,
+                r#"(assume h1 (= (str.++ d (str.++ c (str.++ b "a"))) (str.++ "b" (str.++ "c" d))))
+                   (assume h2 (not (= (str.len (str.++ d c)) 0)))
+                   (step t1 (cl (= (str.++ d c) (str.++ "b" (str.substr (str.++ d c) 0 (- (str.len (str.++ d c)) 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: true,
+            }
+            "Reverse argument set to true" {
+                r#"(assume h1 (= (str.++ "c" "b" a) (str.++ "a" (str.++ c "b"))))
+                   (assume h2 (not (= (str.len (str.++ "b" a)) 0)))
+                   (step t1 (cl (= (str.++ "b" a) (str.++ (str.substr (str.++ "b" a) 1 (- (str.len (str.++ "b" a)) 1)) "b"))) :rule concat_csplit :premises (h1 h2) :args (true))"#: true,
+                r#"(assume h1 (= (str.++ d (str.++ c (str.++ "b" a))) (str.++ "b" (str.++ "c" "de"))))
+                   (assume h2 (not (= (str.len (str.++ c (str.++ "b" a))) 0)))
+                   (step t1 (cl (= (str.++ c (str.++ "b" a)) (str.++ (str.substr (str.++ c (str.++ "b" a)) 1 (- (str.len (str.++ c (str.++ "b" a))) 1)) "e"))) :rule concat_csplit :premises (h1 h2) :args (true))"#: true,
+            }
+            "Term does not have a constant prefix" {
+                r#"(assume h1 (= (str.++ d (str.++ c (str.++ b "a"))) (str.++ b (str.++ "c" d))))
+                   (assume h2 (not (= (str.len (str.++ d c)) 0)))
+                   (step t1 (cl (= (str.++ d c) (str.++ b (str.substr (str.++ d c) 0 (- (str.len (str.++ d c)) 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
+            }
+            "Term are not a str.++ application" {
+                r#"(assume h1 (= (str.++ "a" "b" b) ""))
+                   (assume h2 (not (= (str.len "a") 0)))
+                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 0 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
+                r#"(assume h1 (= "" (str.++ "a" c)))
+                   (assume h2 (not (= (str.len "a") 0)))
+                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 0 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
+            }
+            "Invalid argument type" {
+                r#"(assume h1 (= (str.++ "a" "b" b) (str.++ "a" c)))
+                   (assume h2 (not (= (str.len "a") 0)))
+                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 0 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args (1))"#: false,
+                r#"(assume h1 (= (str.++ "a" "b" b) (str.++ "a" c)))
+                   (assume h2 (not (= (str.len "a") 0)))
+                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 0 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args (1.5))"#: false,
+                r#"(assume h1 (= (str.++ "a" "b" b) (str.++ "a" c)))
+                   (assume h2 (not (= (str.len "a") 0)))
+                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 0 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args ((- 1)))"#: false,
+                r#"(assume h1 (= (str.++ "a" "b" b) (str.++ "a" c)))
+                   (assume h2 (not (= (str.len "a") 0)))
+                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 0 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args ("test"))"#: false,
+            }
+            "Premise term is not an equality" {
+                r#"(assume h1 (not (= (str.++ d (str.++ c (str.++ b "a"))) (str.++ "b" (str.++ "c" d)))))
+                   (assume h2 (not (= (str.len (str.++ d c)) 0)))
+                   (step t1 (cl (= (str.++ d c) (str.++ "b" (str.substr (str.++ d c) 0 (- (str.len (str.++ d c)) 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
+            }
+            "Premise term is not an inequality of the form (not (= (str.len str) 0))" {
+                r#"(assume h1 (= (str.++ d (str.++ c (str.++ b "a"))) (str.++ "b" (str.++ "c" d))))
+                   (assume h2 (= (str.len (str.++ d c)) 0))
+                   (step t1 (cl (= (str.++ d c) (str.++ "b" (str.substr (str.++ d c) 0 (- (str.len (str.++ d c)) 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
+                r#"(assume h1 (= (str.++ d (str.++ c (str.++ b "a"))) (str.++ "b" (str.++ "c" d))))
+                   (assume h2 (not (= (str.len (str.++ d c)) 1)))
+                   (step t1 (cl (= (str.++ d c) (str.++ "b" (str.substr (str.++ d c) 0 (- (str.len (str.++ d c)) 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
+            }
+            "Conclusion term is not an equality" {
+                r#"(assume h1 (= (str.++ d (str.++ c (str.++ b "a"))) (str.++ "b" (str.++ "c" d))))
+                   (assume h2 (not (= (str.len (str.++ d c)) 0)))
+                   (step t1 (cl (not (= (str.++ d c) (str.++ "b" (str.substr (str.++ d c) 0 (- (str.len (str.++ d c)) 1)))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
+            }
+            "Switched conclusion terms" {
+                r#"(assume h1 (= (str.++ d (str.++ c (str.++ b "a"))) (str.++ "b" (str.++ "c" d))))
+                   (assume h2 (not (= (str.len (str.++ d c)) 0)))
+                   (step t1 (cl (= (str.++ "b" (str.substr (str.++ d c) 0 (- (str.len (str.++ d c)) 1))) (str.++ d c))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
+                r#"(assume h1 (= (str.++ d (str.++ c (str.++ "b" a))) (str.++ "b" (str.++ "c" "de"))))
+                   (assume h2 (not (= (str.len (str.++ c (str.++ "b" a))) 0)))
+                   (step t1 (cl (= (str.++ (str.substr (str.++ c (str.++ "b" a)) 1 (- (str.len (str.++ c (str.++ "b" a))) 1)) "e") (str.++ c (str.++ "b" a)))) :rule concat_csplit :premises (h1 h2) :args (true))"#: false,
+            }
+            "Inverted argument value" {
+                r#"(assume h1 (= (str.++ d (str.++ c (str.++ b "a"))) (str.++ "b" (str.++ "c" d))))
+                   (assume h2 (not (= (str.len (str.++ d c)) 0)))
+                   (step t1 (cl (= (str.++ d c) (str.++ "b" (str.substr (str.++ d c) 0 (- (str.len (str.++ d c)) 1))))) :rule concat_csplit :premises (h1 h2) :args (true))"#: false,
+                r#"(assume h1 (= (str.++ d (str.++ c (str.++ "b" a))) (str.++ "b" (str.++ "c" "de"))))
+                   (assume h2 (not (= (str.len (str.++ c (str.++ "b" a))) 0)))
+                   (step t1 (cl (= (str.++ c (str.++ "b" a)) (str.++ (str.substr (str.++ c (str.++ "b" a)) 1 (- (str.len (str.++ c (str.++ "b" a))) 1)) "e"))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
             }
         }
     }
