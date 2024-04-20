@@ -138,10 +138,11 @@ pub fn value(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         // the number of arguments of bbterm must be the same as the width of v
         if size == res_args.len() {
             // the computed value from res_args must be the same as m
-            let mut computed_value = 0;
+            let mut computed_value = Integer::new();
             for i in 0..size {
                 if res_args[i] == true_term {
-                    computed_value += u32::pow(2, i.try_into().unwrap());
+                    computed_value =
+                        &computed_value + Integer::from(Integer::i_pow_u(2, i.try_into().unwrap()));
                 } else if res_args[i] != false_term {
                     return Err(CheckerError::Explanation(format!(
                         "bitblasted const {}-th arg neither true nor false",
@@ -149,7 +150,7 @@ pub fn value(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
                     )));
                 }
             }
-            if m == Integer::from(computed_value) {
+            if m == computed_value {
                 return Ok(());
             }
             return Err(CheckerError::Explanation(format!(
