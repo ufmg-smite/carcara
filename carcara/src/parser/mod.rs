@@ -62,10 +62,10 @@ pub fn parse_instance<T: BufRead>(
     problem: T,
     proof: T,
     config: Config,
-) -> CarcaraResult<(ProblemPrelude, Proof, PrimitivePool)> {
+) -> CarcaraResult<(ProblemPrelude, Proof, PrimitivePool, IndexMap<String, FunctionDef>)> {
     let mut pool = PrimitivePool::new();
     parse_instance_with_pool(problem, proof, config, &mut pool)
-        .map(|(prelude, proof)| (prelude, proof, pool))
+        .map(|(prelude, proof, named_map)| (prelude, proof, pool, named_map))
 }
 
 pub fn parse_instance_with_pool<T: BufRead>(
@@ -73,19 +73,23 @@ pub fn parse_instance_with_pool<T: BufRead>(
     proof: T,
     config: Config,
     pool: &mut PrimitivePool,
-) -> CarcaraResult<(ProblemPrelude, Proof)> {
+) -> CarcaraResult<(ProblemPrelude, Proof, IndexMap<String, FunctionDef>)> {
     let mut parser = Parser::new(pool, config, problem)?;
     let (prelude, premises) = parser.parse_problem()?;
     parser.reset(proof)?;
     let mut proof = parser.parse_proof()?;
+
     proof.premises = premises;
-    Ok((prelude, proof))
+
+    let named_map = parser.state.function_defs;
+
+    Ok((prelude, proof, named_map))
 }
 
 /// A function definition, from a `define-fun` command.
-struct FunctionDef {
-    params: Vec<SortedVar>,
-    body: Rc<Term>,
+pub struct FunctionDef {
+    pub params: Vec<SortedVar>,
+    pub body: Rc<Term>,
 }
 
 impl FunctionDef {

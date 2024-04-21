@@ -426,11 +426,11 @@ impl fmt::Display for Term {
     }
 }
 
-impl fmt::Debug for Term {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(self, f)
-    }
-}
+// impl fmt::Debug for Term {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         fmt::Display::fmt(self, f)
+//     }
+// }
 
 impl fmt::Display for Constant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

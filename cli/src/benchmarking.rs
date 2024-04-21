@@ -38,7 +38,7 @@ fn run_job<T: CollectResults + Default + Send>(
     let total = Instant::now();
 
     let parsing = Instant::now();
-    let (prelude, proof, mut pool) = parser::parse_instance(
+    let (prelude, proof, mut pool, _) = parser::parse_instance(
         BufReader::new(File::open(job.problem_file)?),
         BufReader::new(File::open(job.proof_file)?),
         parser_config,

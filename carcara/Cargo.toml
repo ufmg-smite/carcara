@@ -11,7 +11,11 @@ indexmap = "2.0.0"
 log = "0.4.20"
 rug = { version = "1.21.0", default-features = false, features = ["integer", "rational"] }
 thiserror = "1.0.47"
+itertools = "0.11"
+try_match = "0.4.1"
+pretty = "0.12.3"
 
 [dev-dependencies]
 test-generator = { path = "../test-generator" }
 rand = "0.8.5"
+pretty_assertions = "1.4.0"

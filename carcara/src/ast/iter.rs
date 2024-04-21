@@ -1,6 +1,8 @@
 //! This module implements `ProofIter`, an iterator that recursively iterates over the proof
 //! commands in a proof.
 
+use std::borrow::Borrow;
+
 use super::*;
 
 /// An iterator over the proof commands in a proof.
@@ -28,7 +30,7 @@ use super::*;
 ///     (step t5 (cl) :rule resolution :premises (t4 h1 h2))
 /// "
 /// .as_bytes();
-/// let (_, proof, _) = parser::parse_instance("".as_bytes(), proof, parser::Config::new())?;
+/// let (_, proof, _, _) = parser::parse_instance("".as_bytes(), proof, parser::Config::new())?;
 /// let ids: Vec<_> = proof.iter().map(|c| c.id()).collect();
 /// assert_eq!(ids, ["h1", "h2", "t3", "t3.t1", "t3.t2", "t3", "t4", "t5"]);
 /// # Ok(())
@@ -75,6 +77,18 @@ impl<'a> ProofIter<'a> {
     /// This method may panic if the premise index does not refer to a valid command.
     pub fn get_premise(&self, (depth, index): (usize, usize)) -> &ProofCommand {
         &self.stack[depth].1[index]
+    }
+
+    /// Returns the id of the command
+    /// This method may panic if the premise index does not refer to a valid command.
+    pub fn get_premise_id(&self, (depth, index): (usize, usize)) -> String {
+        match self.stack[depth].1[index].borrow() {
+            ProofCommand::Assume { id, .. } => id.to_string(),
+            ProofCommand::Step(ProofStep { id, .. }) => id.to_string(),
+            ProofCommand::Subproof(Subproof { commands, .. }) => {
+                commands.last().unwrap().id().to_string()
+            }
+        }
     }
 }
 

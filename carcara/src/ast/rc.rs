@@ -114,7 +114,7 @@ impl<T: ?Sized + fmt::Display> fmt::Display for Rc<T> {
     }
 }
 
-impl<T> Rc<T> {
+impl<T: Clone> Rc<T> {
     /// Constructs a new `Rc<T>`.
     pub fn new(value: T) -> Self {
         #[allow(clippy::disallowed_methods)]

@@ -39,6 +39,7 @@ pub mod ast;
 pub mod benchmarking;
 pub mod checker;
 pub mod elaborator;
+pub mod lambdapi;
 pub mod parser;
 mod resolution;
 mod utils;
@@ -93,7 +94,7 @@ pub fn check<T: io::BufRead>(
 
     // Parsing
     let total = Instant::now();
-    let (_, proof, mut pool) = parser::parse_instance(problem, proof, parser_config)?;
+    let (_, proof, mut pool, _) = parser::parse_instance(problem, proof, parser_config)?;
     run_measures.parsing = total.elapsed();
 
     // Checking
@@ -149,7 +150,7 @@ pub fn check_parallel<T: io::BufRead>(
 
     // Parsing
     let total = Instant::now();
-    let (prelude, proof, pool) = parser::parse_instance(problem, proof, parser_config)?;
+    let (prelude, proof, pool, _) = parser::parse_instance(problem, proof, parser_config)?;
     run_measures.parsing = total.elapsed();
 
     // Checking
@@ -212,7 +213,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
 
     // Parsing
     let total = Instant::now();
-    let (prelude, proof, mut pool) = parser::parse_instance(problem, proof, parser_config)?;
+    let (prelude, proof, mut pool, _) = parser::parse_instance(problem, proof, parser_config)?;
     run.parsing = total.elapsed();
 
     let mut stats = OnlineBenchmarkResults::new();
@@ -272,7 +273,7 @@ pub fn generate_lia_smt_instances<T: io::BufRead>(
     use_sharing: bool,
 ) -> Result<Vec<(String, String)>, Error> {
     use std::fmt::Write;
-    let (prelude, proof, mut pool) = parser::parse_instance(problem, proof, config)?;
+    let (prelude, proof, mut pool, _) = parser::parse_instance(problem, proof, config)?;
 
     let mut iter = proof.iter();
     let mut result = Vec::new();
@@ -308,4 +309,33 @@ pub fn generate_lia_smt_instances<T: io::BufRead>(
         }
     }
     Ok(result)
+}
+
+pub fn produce_lambdapi_proof<'a, T: io::BufRead>(
+    problem: T,
+    proof: T,
+    options: CarcaraOptions,
+) -> Result<lambdapi::output::ProofFile, Box<dyn std::error::Error>> {
+    let config: parser::Config = parser::Config {
+        apply_function_defs: options.apply_function_defs,
+        expand_lets: options.expand_lets,
+        allow_int_real_subtyping: options.allow_int_real_subtyping,
+        allow_unary_logical_ops: !options.strict,
+    };
+
+    let (prelude, proof, mut pool, named_map) = parser::parse_instance(problem, proof, config)?;
+
+    let config = checker::Config::new()
+        .strict(options.strict)
+        .ignore_unknown_rules(options.ignore_unknown_rules);
+
+    let (_, proof_elaborated) = checker::ProofChecker::new(&mut pool, config, &prelude)
+        .check_and_elaborate(proof)
+        .map_err::<Error, _>(From::from)?;
+
+    Ok(lambdapi::produce_lambdapi_proof(
+        prelude,
+        proof_elaborated,
+        named_map,
+    )?)
 }
