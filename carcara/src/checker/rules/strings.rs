@@ -6,7 +6,7 @@ use crate::{ast::*, checker::error::CheckerError};
 use rug::Integer;
 use std::{cmp, time::Duration};
 
-fn flatten(term: Rc<Term>, pool: &mut dyn TermPool) -> Vec<Rc<Term>> {
+fn flatten(pool: &mut dyn TermPool, term: Rc<Term>) -> Vec<Rc<Term>> {
     let mut flattened = Vec::new();
     if let Term::Const(Constant::String(s)) = term.as_ref() {
         flattened.extend(
@@ -15,7 +15,7 @@ fn flatten(term: Rc<Term>, pool: &mut dyn TermPool) -> Vec<Rc<Term>> {
         );
     } else if let Some(args) = match_term!((strconcat ...) = term) {
         for arg in args {
-            flattened.extend(flatten(arg.clone(), pool));
+            flattened.extend(flatten(pool, arg.clone()));
         }
     } else {
         flattened.push(term.clone());
@@ -23,84 +23,173 @@ fn flatten(term: Rc<Term>, pool: &mut dyn TermPool) -> Vec<Rc<Term>> {
     flattened
 }
 
-fn reconstruct_term(terms: Vec<Rc<Term>>, pool: &mut dyn TermPool) -> Rc<Term> {
+fn expand_string_constants(pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term> {
+    match term.as_ref() {
+        Term::Const(Constant::String(s)) => {
+            let args: Vec<Rc<Term>> = s
+                .chars()
+                .map(|c| pool.add(Term::Const(Constant::String(c.to_string()))))
+                .collect();
+            match args.len() {
+                0 => pool.add(Term::new_string("")),
+                1 => args[0].clone(),
+                _ => pool.add(Term::Op(Operator::StrConcat, args)),
+            }
+        }
+        Term::Op(op, args) => match op {
+            Operator::StrConcat => {
+                let mut new_args = Vec::new();
+                // (str.++ "a" (str.++ "b" "c")) => (str.++ "a" "b" "c")
+                for arg in args {
+                    new_args.extend(flatten(pool, arg.clone()));
+                }
+                pool.add(Term::Op(*op, new_args))
+            }
+            _ => {
+                let new_args = args
+                    .iter()
+                    .map(|a| expand_string_constants(pool, a))
+                    .collect();
+                pool.add(Term::Op(*op, new_args))
+            }
+        },
+        Term::App(func, args) => {
+            let new_args = args
+                .iter()
+                .map(|term| expand_string_constants(pool, term))
+                .collect();
+            pool.add(Term::App(func.clone(), new_args))
+        }
+        Term::Let(binding, inner) => {
+            let new_inner = expand_string_constants(pool, inner);
+            pool.add(Term::Let(binding.clone(), new_inner))
+        }
+        Term::Binder(q, bindings, inner) => {
+            let new_inner = expand_string_constants(pool, inner);
+            pool.add(Term::Binder(*q, bindings.clone(), new_inner))
+        }
+        Term::ParamOp { op, op_args, args } => {
+            let new_op_args = op_args
+                .iter()
+                .map(|term| expand_string_constants(pool, term))
+                .collect();
+            let new_args = args
+                .iter()
+                .map(|term| expand_string_constants(pool, term))
+                .collect();
+            pool.add(Term::ParamOp {
+                op: *op,
+                op_args: new_op_args,
+                args: new_args,
+            })
+        }
+        Term::Var(..) | Term::Const(_) | Term::Sort(_) => term.clone(),
+    }
+}
+
+fn concat(pool: &mut dyn TermPool, terms: Vec<Rc<Term>>) -> Rc<Term> {
     match terms.len() {
-        0 => pool.add(Term::Const(Constant::String("".to_owned()))),
+        0 => pool.add(Term::new_string("")),
         1 => terms[0].clone(),
         _ => pool.add(Term::Op(Operator::StrConcat, terms)),
     }
 }
 
-fn build_skolem_prefix(u: Rc<Term>, pool: &mut dyn TermPool) -> Rc<Term> {
-    build_term!(pool, (strsubstr {u.clone()} 0 (- (strlen {u.clone()}) 1)))
-}
-
-fn build_skolem_suffix(u: Rc<Term>, n: usize, pool: &mut dyn TermPool) -> Rc<Term> {
-    let n = pool.add(Term::new_int(n));
-    build_term!(pool, (strsubstr {u.clone()} {n.clone()} (- (strlen {u.clone()}) {n})))
-}
-
-fn is_prefix(
+fn is_prefix_or_suffix(
+    pool: &mut dyn TermPool,
     term: Rc<Term>,
     pref: Rc<Term>,
-    pool: &mut dyn TermPool,
     rev: bool,
     polyeq_time: &mut Duration,
 ) -> Result<Vec<Rc<Term>>, CheckerError> {
-    let mut t_flat = flatten(term.clone(), pool);
-    let mut p_flat = flatten(pref.clone(), pool);
-
+    let mut t_flat = flatten(pool, term.clone());
+    let mut p_flat = flatten(pool, pref.clone());
     if rev {
         t_flat.reverse();
         p_flat.reverse();
     }
-
     if p_flat.len() > t_flat.len() {
         return Err(CheckerError::ExpectedToBePrefix(pref, term));
     }
-
     for (i, el) in p_flat.iter().enumerate() {
         assert_polyeq_expected(el, t_flat[i].clone(), polyeq_time)?;
     }
-
+    if rev {
+        p_flat.reverse();
+    }
     Ok(p_flat)
+}
+
+fn is_prefix(
+    pool: &mut dyn TermPool,
+    term: Rc<Term>,
+    pref: Rc<Term>,
+    polyeq_time: &mut Duration,
+) -> Result<Vec<Rc<Term>>, CheckerError> {
+    is_prefix_or_suffix(pool, term, pref, false, polyeq_time)
+}
+
+fn is_suffix(
+    pool: &mut dyn TermPool,
+    term: Rc<Term>,
+    pref: Rc<Term>,
+    polyeq_time: &mut Duration,
+) -> Result<Vec<Rc<Term>>, CheckerError> {
+    is_prefix_or_suffix(pool, term, pref, true, polyeq_time)
 }
 
 type Suffixes = (Vec<Rc<Term>>, Vec<Rc<Term>>);
 
-fn strip_prefix(
+fn strip_prefix_or_suffix(
+    pool: &mut dyn TermPool,
     s: Rc<Term>,
     t: Rc<Term>,
-    pool: &mut dyn TermPool,
     rev: bool,
     polyeq_time: &mut Duration,
 ) -> Result<Suffixes, CheckerError> {
-    let mut s_flat = flatten(s.clone(), pool);
-    let mut t_flat = flatten(t.clone(), pool);
-
+    let mut s_flat = flatten(pool, s.clone());
+    let mut t_flat = flatten(pool, t.clone());
     if rev {
         s_flat.reverse();
         t_flat.reverse();
     }
-
     if s_flat.is_empty() {
         return Err(CheckerError::TermOfWrongForm("(str.++ ...)", s));
     }
     if t_flat.is_empty() {
         return Err(CheckerError::TermOfWrongForm("(str.++ ...)", t));
     }
-
     let mut prefix = 0;
     while (prefix < cmp::min(s_flat.len(), t_flat.len()))
         && polyeq(&s_flat[prefix], &t_flat[prefix], polyeq_time)
     {
         prefix += 1;
     }
-
-    let s_suffix = s_flat.get(prefix..).unwrap_or_default().to_vec();
-    let t_suffix = t_flat.get(prefix..).unwrap_or_default().to_vec();
-
+    let mut s_suffix = s_flat.get(prefix..).unwrap_or_default().to_vec();
+    let mut t_suffix = t_flat.get(prefix..).unwrap_or_default().to_vec();
+    if rev {
+        s_suffix.reverse();
+        t_suffix.reverse();
+    }
     Ok((s_suffix, t_suffix))
+}
+
+fn strip_prefix(
+    pool: &mut dyn TermPool,
+    s: Rc<Term>,
+    t: Rc<Term>,
+    polyeq_time: &mut Duration,
+) -> Result<Suffixes, CheckerError> {
+    strip_prefix_or_suffix(pool, s, t, false, polyeq_time)
+}
+
+fn strip_suffix(
+    pool: &mut dyn TermPool,
+    s: Rc<Term>,
+    t: Rc<Term>,
+    polyeq_time: &mut Duration,
+) -> Result<Suffixes, CheckerError> {
+    strip_prefix_or_suffix(pool, s, t, false, polyeq_time)
 }
 
 fn string_check_length_one(term: Rc<Term>) -> Result<(), CheckerError> {
@@ -110,6 +199,14 @@ fn string_check_length_one(term: Rc<Term>) -> Result<(), CheckerError> {
         }
     }
     Err(CheckerError::ExpectedStringConstantOfLengthOne(term))
+}
+
+fn build_skolem_prefix(pool: &mut dyn TermPool, u: Rc<Term>, n: Rc<Term>) -> Rc<Term> {
+    build_term!(pool, (strsubstr {u.clone()} 0 {n.clone()}))
+}
+
+fn build_skolem_suffix(pool: &mut dyn TermPool, u: Rc<Term>, n: Rc<Term>) -> Rc<Term> {
+    build_term!(pool, (strsubstr {u.clone()} {n.clone()} (- (strlen {u.clone()}) {n})))
 }
 
 pub fn concat_eq(
@@ -128,30 +225,19 @@ pub fn concat_eq(
 
     let term = get_premise_term(&premises[0])?;
     let rev = args[0].as_term()?.as_bool_err()?;
-    let (l, r) = match_term_err!((= l r) = term)?;
+    let (s, t) = match_term_err!((= s t) = term)?;
 
-    let (mut l_suffix, mut r_suffix) = strip_prefix(l.clone(), r.clone(), pool, rev, polyeq_time)?;
+    let (ss, ts) = strip_prefix_or_suffix(pool, s.clone(), t.clone(), rev, polyeq_time)?;
+    let ss_concat = concat(pool, ss);
+    let ts_concat = concat(pool, ts);
+    let expected = build_term!(
+        pool,
+        (= {ss_concat.clone()} {ts_concat.clone()})
+    );
 
-    if rev {
-        l_suffix.reverse();
-        r_suffix.reverse();
-    }
+    let expanded = expand_string_constants(pool, &conclusion[0]);
 
-    let l_concat = reconstruct_term(l_suffix, pool);
-    let r_concat = reconstruct_term(r_suffix, pool);
-    let expected = pool.add(Term::Op(Operator::Equals, vec![l_concat, r_concat]));
-
-    let (l_conc, r_conc) = match_term_err!((= l r) = &conclusion[0])?;
-    let l_conc_flat = flatten(l_conc.clone(), pool);
-    let r_conc_flat = flatten(r_conc.clone(), pool);
-    let l_conc_concat = reconstruct_term(l_conc_flat.clone(), pool);
-    let r_conc_concat = reconstruct_term(r_conc_flat.clone(), pool);
-    let expanded_conc = pool.add(Term::Op(
-        Operator::Equals,
-        vec![l_conc_concat, r_conc_concat],
-    ));
-
-    assert_eq(&expected, &expanded_conc)
+    assert_eq(&expected, &expanded)
 }
 
 pub fn concat_unify(
@@ -171,28 +257,19 @@ pub fn concat_unify(
     let term = get_premise_term(&premises[0])?;
     let prefixes = get_premise_term(&premises[1])?;
     let rev = args[0].as_term()?.as_bool_err()?;
-    let (l, r) = match_term_err!((= l r) = term)?;
+    let (s, t) = match_term_err!((= s t) = term)?;
+    let (s_1, t_1) = match_term_err!((= (strlen s_1) (strlen t_1)) = prefixes)?;
 
-    let (l_pref, r_pref) = match_term_err!((= (strlen l) (strlen r)) = prefixes)?;
-    let mut l_pref_flat = is_prefix(l.clone(), l_pref.clone(), pool, rev, polyeq_time)?;
-    let mut r_pref_flat = is_prefix(r.clone(), r_pref.clone(), pool, rev, polyeq_time)?;
+    let s_1 = is_prefix_or_suffix(pool, s.clone(), s_1.clone(), rev, polyeq_time)?;
+    let t_1 = is_prefix_or_suffix(pool, t.clone(), t_1.clone(), rev, polyeq_time)?;
+    let s_concat = concat(pool, s_1);
+    let t_concat = concat(pool, t_1);
+    let expected = build_term!(
+        pool,
+        (= {s_concat.clone()} {t_concat.clone()})
+    );
 
-    if rev {
-        l_pref_flat.reverse();
-        r_pref_flat.reverse();
-    }
-
-    let l_concat = reconstruct_term(l_pref_flat, pool);
-    let r_concat = reconstruct_term(r_pref_flat, pool);
-    let expected = pool.add(Term::Op(Operator::Equals, vec![l_concat, r_concat]));
-
-    let (l_conc, r_conc) = match_term_err!((= l r) = &conclusion[0])?;
-    let l_conc_concat = reconstruct_term(flatten(l_conc.clone(), pool), pool);
-    let r_conc_concat = reconstruct_term(flatten(r_conc.clone(), pool), pool);
-    let expanded = pool.add(Term::Op(
-        Operator::Equals,
-        vec![l_conc_concat, r_conc_concat],
-    ));
+    let expanded = expand_string_constants(pool, &conclusion[0]);
 
     assert_eq(&expected, &expanded)
 }
@@ -213,7 +290,6 @@ pub fn concat_conflict(
 
     let term = get_premise_term(&premises[0])?;
     let rev = args[0].as_term()?.as_bool_err()?;
-
     if conclusion[0].as_bool_err()? {
         return Err(CheckerError::ExpectedBoolConstant(
             false,
@@ -221,21 +297,24 @@ pub fn concat_conflict(
         ));
     }
 
-    let (l, r) = match_term_err!((= l r) = term)?;
+    let (s, t) = match_term_err!((= s t) = term)?;
+    let (mut ss, mut ts) = strip_prefix_or_suffix(pool, s.clone(), t.clone(), rev, polyeq_time)?;
+    if rev {
+        ss.reverse();
+        ts.reverse();
+    }
 
-    let (l_suffix, r_suffix) = strip_prefix(l.clone(), r.clone(), pool, rev, polyeq_time)?;
-
-    if let Some(l_head) = l_suffix.first() {
-        string_check_length_one(l_head.clone())?;
-        if let Some(r_head) = r_suffix.first() {
-            string_check_length_one(r_head.clone())?;
+    if let Some(ss_head) = ss.first() {
+        string_check_length_one(ss_head.clone())?;
+        if let Some(ts_head) = ts.first() {
+            string_check_length_one(ts_head.clone())?;
         }
-    } else if let Some(r_head) = r_suffix.first() {
-        string_check_length_one(r_head.clone())?;
+    } else if let Some(ts_head) = ts.first() {
+        string_check_length_one(ts_head.clone())?;
     } else {
         return Err(CheckerError::ExpectedDifferentConstantPrefixes(
-            l.clone(),
-            r.clone(),
+            s.clone(),
+            t.clone(),
         ));
     }
 
@@ -259,7 +338,6 @@ pub fn concat_csplit(
     let terms = get_premise_term(&premises[0])?;
     let length = get_premise_term(&premises[1])?;
     let rev = args[0].as_term()?.as_bool_err()?;
-
     let (t, s) = match_term_err!((= t s) = terms)?;
     let (u, zero) = match_term_err!((not (= (strlen u) zero)) = length)?;
     if zero.as_integer_err()? != 0 {
@@ -269,10 +347,8 @@ pub fn concat_csplit(
         ));
     }
 
-    let mut t_flat = flatten(t.clone(), pool);
-    let mut s_flat = flatten(s.clone(), pool);
-
-    if t_flat.is_empty() {
+    let mut s_flat = flatten(pool, s.clone());
+    if flatten(pool, t.clone()).is_empty() {
         return Err(CheckerError::TermOfWrongForm("(str.++ ...)", t.clone()));
     }
     if s_flat.is_empty() {
@@ -280,41 +356,32 @@ pub fn concat_csplit(
     }
 
     if rev {
-        t_flat.reverse();
         s_flat.reverse();
     }
 
-    let mut lhs = is_prefix(t.clone(), u.clone(), pool, rev, polyeq_time)?;
-    if rev {
-        lhs.reverse();
-    }
-
-    let mut rhs: Vec<Rc<Term>> = vec![];
+    let left_eq = is_prefix_or_suffix(pool, t.clone(), u.clone(), rev, polyeq_time)?;
+    let mut right_eq: Vec<Rc<Term>> = vec![];
     if let Some(s_head) = s_flat.first() {
         string_check_length_one(s_head.clone())?;
         if rev {
-            rhs.push(build_skolem_suffix(u.clone(), 1, pool).clone());
-            rhs.push(s_head.clone());
+            let n = pool.add(Term::new_int(1));
+            right_eq.push(build_skolem_suffix(pool, u.clone(), n).clone());
+            right_eq.push(s_head.clone());
         } else {
-            rhs.push(s_head.clone());
-            rhs.push(build_skolem_prefix(u.clone(), pool).clone());
+            right_eq.push(s_head.clone());
+            let n = build_term!(pool, (- (strlen {u.clone()}) 1));
+            right_eq.push(build_skolem_prefix(pool, u.clone(), n).clone());
         }
     }
 
-    let lhs_reconstructed = reconstruct_term(lhs, pool);
-    let rhs_reconstructed = reconstruct_term(rhs, pool);
-    let expected = pool.add(Term::Op(
-        Operator::Equals,
-        vec![lhs_reconstructed, rhs_reconstructed],
-    ));
+    let left_eq_concat = concat(pool, left_eq);
+    let right_eq_concat = concat(pool, right_eq);
+    let expected = build_term!(
+        pool,
+        (= {left_eq_concat.clone()} {right_eq_concat.clone()})
+    );
 
-    let (l_conc, r_conc) = match_term_err!((= l r) = &conclusion[0])?;
-    let l_conc_reconstructed = reconstruct_term(flatten(l_conc.clone(), pool), pool);
-    let r_conc_reconstructed = reconstruct_term(flatten(r_conc.clone(), pool), pool);
-    let expanded = pool.add(Term::Op(
-        Operator::Equals,
-        vec![l_conc_reconstructed, r_conc_reconstructed],
-    ));
+    let expanded = expand_string_constants(pool, &conclusion[0]);
 
     assert_eq(&expected, &expanded)
 }
