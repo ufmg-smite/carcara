@@ -754,6 +754,14 @@ impl Term {
         pool.sort(&added).as_sort().unwrap().clone()
     }
 
+    /// Returns `true` if the term is the empty String.
+    pub fn is_empty_string(&self) -> bool {
+        match self {
+            Term::Const(Constant::String(s)) => s.is_empty(),
+            _ => false,
+        }
+    }
+
     /// Returns `true` if the term is an integer or real constant.
     pub fn is_number(&self) -> bool {
         matches!(self, Term::Const(Constant::Real(_) | Constant::Integer(_)))
