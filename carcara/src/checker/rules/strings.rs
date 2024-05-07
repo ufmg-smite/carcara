@@ -69,17 +69,13 @@ fn expand_string_constants(pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term>
             pool.add(Term::Binder(*q, bindings.clone(), new_inner))
         }
         Term::ParamOp { op, op_args, args } => {
-            let new_op_args = op_args
-                .iter()
-                .map(|term| expand_string_constants(pool, term))
-                .collect();
             let new_args = args
                 .iter()
                 .map(|term| expand_string_constants(pool, term))
                 .collect();
             pool.add(Term::ParamOp {
                 op: *op,
-                op_args: new_op_args,
+                op_args: op_args.clone(),
                 args: new_args,
             })
         }
