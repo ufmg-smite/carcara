@@ -6,6 +6,19 @@ use crate::{ast::*, checker::error::CheckerError};
 use rug::Integer;
 use std::{cmp, time::Duration};
 
+/// A function that takes an `Rc<Term>` and returns a vector corresponding to
+/// the flat form of that term.
+///
+/// In this flat form, all `str.++` applications are dissolved and every
+/// argument of those applications is inserted into the vector (e.g., `(str.++
+/// a (str.++ b c))` would lead to `[a, b, c]`, where `a`, `b` e `c` são
+/// arbitrary String terms). Furthermore, all String constants are broken
+/// into constants of size one and are inserted into the vector too.
+///
+/// All String terms that aren't `str.++` applications can be seen as `(str.++ term "")`.
+/// So, applying `flatten` to them would lead to `[term]`. Furthermore,
+/// the empty String isn't mapped to any entry in the vector, so `flatten`
+/// applied to `""` lead to an empty vector.
 fn flatten(pool: &mut dyn TermPool, term: Rc<Term>) -> Vec<Rc<Term>> {
     let mut flattened = Vec::new();
     if let Term::Const(Constant::String(s)) = term.as_ref() {
@@ -23,6 +36,14 @@ fn flatten(pool: &mut dyn TermPool, term: Rc<Term>) -> Vec<Rc<Term>> {
     flattened
 }
 
+/// A function to standardize String constants and `str.++` applications
+/// across a term.
+///
+/// It takes an `Rc<Term>` and returns an equivalent `Rc<Term>` where all String
+/// constants of size greater than one are broken into `str.++` applications
+/// of their characters (`"abc"` would become `(str.++ "a" "b" "c")`), and
+/// nested `str.++` applications are dissolved, remaining just one application
+/// with all the previous nested arguments (e.g., `(str.++ a (str.++ b (str.++ c "")))` would lead to `(str.++ a b c)`).
 fn expand_string_constants(pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term> {
     match term.as_ref() {
         Term::Const(Constant::String(s)) => {
@@ -83,6 +104,15 @@ fn expand_string_constants(pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term>
     }
 }
 
+/// A function to reconstruct a term given its flat form.
+///
+/// It takes a vector of `Rc<Term>` and returns a new term based on the length
+/// of the flat form vector. If the vector is empty, it's equivalent to the
+/// empty String. If the length is equal to one, the only term of the vector
+/// is returned. Finally, if the length is greater than one, an `str.++`
+/// application is returned with the flat form vector as its arguments (e.g.,
+/// `[a, "b", c]` would lead to `(str.++ a "b" c)`, where `a` and `c` are
+/// arbitrary terms).
 fn concat(pool: &mut dyn TermPool, terms: Vec<Rc<Term>>) -> Rc<Term> {
     match terms.len() {
         0 => pool.add(Term::new_string("")),
@@ -91,6 +121,14 @@ fn concat(pool: &mut dyn TermPool, terms: Vec<Rc<Term>>) -> Rc<Term> {
     }
 }
 
+/// A function to check if a term is a prefix or suffix of another.
+///
+/// It takes two `Rc<Term>` and a reverse parameter. If the reverse parameter is
+/// set to `false`, it checks if the second term is a prefix of the first one,
+/// and if it's set to `true`, it checks if it's a suffix.
+///
+/// The function throws an error if the prefix/suffix is larger than the main
+/// term. It returns the prefix/suffix in flat form if the check was successful.
 fn is_prefix_or_suffix(
     pool: &mut dyn TermPool,
     term: Rc<Term>,
@@ -116,6 +154,8 @@ fn is_prefix_or_suffix(
     Ok(p_flat)
 }
 
+/// An application of `is_prefix_or_suffix` where the reverse parameter is set
+/// to `false` by default.
 fn is_prefix(
     pool: &mut dyn TermPool,
     term: Rc<Term>,
@@ -125,6 +165,8 @@ fn is_prefix(
     is_prefix_or_suffix(pool, term, pref, false, polyeq_time)
 }
 
+/// An application of `is_prefix_or_suffix` where the reverse parameter is set
+/// to `true` by default.
 fn is_suffix(
     pool: &mut dyn TermPool,
     term: Rc<Term>,
@@ -136,6 +178,19 @@ fn is_suffix(
 
 type Suffixes = (Vec<Rc<Term>>, Vec<Rc<Term>>);
 
+/// A function to remove the longest common prefix or suffix.
+///
+/// It takes two `Rc<Term>` and a reverse parameter. If the parameter is set to
+/// `false`, it removes the longest common prefix, and if it's set to `true`,
+/// the longest common suffix.
+///
+/// The function throws an error if the terms aren't `str.++` applications.
+/// It returns two vectors with the remaining terms after the removal in flat
+/// form (e.g., the remaining suffixes after a prefix removal or vice versa).
+///
+/// If the terms don't share common prefixes or suffixes, the function
+/// doesn't remove anything, so the tuple returned is the flat form for both of
+/// them.
 fn strip_prefix_or_suffix(
     pool: &mut dyn TermPool,
     s: Rc<Term>,
@@ -170,6 +225,11 @@ fn strip_prefix_or_suffix(
     Ok((s_suffix, t_suffix))
 }
 
+/// A function to check if a String has a length equal to one.
+///
+/// It takes an `Rc<Term>` and throws an error if the term isn't a String
+/// constant (we can't compute lengths properly in this case) or isn't a String
+/// constant of size one.
 fn string_check_length_one(term: Rc<Term>) -> Result<(), CheckerError> {
     if let Term::Const(Constant::String(s)) = term.as_ref() {
         if s.len() == 1 {
