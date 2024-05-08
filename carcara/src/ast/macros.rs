@@ -74,6 +74,14 @@ macro_rules! match_term {
     (false = $var:expr $(, $flag:ident)?) => {
         if $var.is_bool_false() { Some(()) } else { None }
     };
+    (0 = $var:expr $(, $flag:ident)?) => {
+        if let Some(i) = $var.as_integer() {
+            if i == 0 { Some(()) } else { None }
+        } else { None }
+    };
+    ("" = $var:expr $(, $flag:ident)?) => {
+        if $var.is_empty_string() { Some(()) } else { None }
+    };
     ((forall ... $args:tt) = $var:expr) => {
         if let $crate::ast::Term::Binder($crate::ast::Binder::Forall, bindings, inner) =
             &$var as &$crate::ast::Term

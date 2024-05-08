@@ -6,7 +6,20 @@ use crate::{ast::*, checker::error::CheckerError};
 use rug::Integer;
 use std::{cmp, time::Duration};
 
-fn flatten(term: Rc<Term>, pool: &mut dyn TermPool) -> Vec<Rc<Term>> {
+/// A function that takes an `Rc<Term>` and returns a vector corresponding to
+/// the flat form of that term.
+///
+/// In this flat form, all `str.++` applications are dissolved and every
+/// argument of those applications is inserted into the vector (e.g., `(str.++
+/// a (str.++ b c))` would lead to `[a, b, c]`, where `a`, `b` and `c` are
+/// arbitrary String terms). Furthermore, all String constants are broken
+/// into constants of size one and are inserted into the vector too.
+///
+/// All String terms that aren't `str.++` applications can be seen as `(str.++ term "")`.
+/// So, applying `flatten` to them would lead to `[term]`. Furthermore,
+/// the empty String isn't mapped to any entry in the vector, so `flatten`
+/// applied to `""` leads to an empty vector.
+fn flatten(pool: &mut dyn TermPool, term: Rc<Term>) -> Vec<Rc<Term>> {
     let mut flattened = Vec::new();
     if let Term::Const(Constant::String(s)) = term.as_ref() {
         flattened.extend(
@@ -15,7 +28,7 @@ fn flatten(term: Rc<Term>, pool: &mut dyn TermPool) -> Vec<Rc<Term>> {
         );
     } else if let Some(args) = match_term!((strconcat ...) = term) {
         for arg in args {
-            flattened.extend(flatten(arg.clone(), pool));
+            flattened.extend(flatten(pool, arg.clone()));
         }
     } else {
         flattened.push(term.clone());
@@ -23,86 +36,204 @@ fn flatten(term: Rc<Term>, pool: &mut dyn TermPool) -> Vec<Rc<Term>> {
     flattened
 }
 
-fn reconstruct_term(terms: Vec<Rc<Term>>, pool: &mut dyn TermPool) -> Rc<Term> {
+/// A function to standardize String constants and `str.++` applications
+/// across a term.
+///
+/// It takes an `Rc<Term>` and returns an equivalent `Rc<Term>` where all String
+/// constants of size greater than one are broken into `str.++` applications
+/// of their characters (`"abc"` would become `(str.++ "a" "b" "c")`), and
+/// nested `str.++` applications are dissolved, remaining just one application
+/// with all the previous nested arguments (e.g., `(str.++ a (str.++ b (str.++ c "")))` would lead to `(str.++ a b c)`).
+fn expand_string_constants(pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term> {
+    match term.as_ref() {
+        Term::Const(Constant::String(s)) => {
+            let args: Vec<Rc<Term>> = s
+                .chars()
+                .map(|c| pool.add(Term::Const(Constant::String(c.to_string()))))
+                .collect();
+            match args.len() {
+                0 => pool.add(Term::new_string("")),
+                1 => args[0].clone(),
+                _ => pool.add(Term::Op(Operator::StrConcat, args)),
+            }
+        }
+        Term::Op(op, args) => match op {
+            Operator::StrConcat => {
+                let mut new_args = Vec::new();
+                // (str.++ "a" (str.++ "b" "c")) => (str.++ "a" "b" "c")
+                for arg in args {
+                    new_args.extend(flatten(pool, arg.clone()));
+                }
+                pool.add(Term::Op(*op, new_args))
+            }
+            _ => {
+                let new_args = args
+                    .iter()
+                    .map(|a| expand_string_constants(pool, a))
+                    .collect();
+                pool.add(Term::Op(*op, new_args))
+            }
+        },
+        Term::App(func, args) => {
+            let new_args = args
+                .iter()
+                .map(|term| expand_string_constants(pool, term))
+                .collect();
+            pool.add(Term::App(func.clone(), new_args))
+        }
+        Term::Let(binding, inner) => {
+            let new_inner = expand_string_constants(pool, inner);
+            pool.add(Term::Let(binding.clone(), new_inner))
+        }
+        Term::Binder(q, bindings, inner) => {
+            let new_inner = expand_string_constants(pool, inner);
+            pool.add(Term::Binder(*q, bindings.clone(), new_inner))
+        }
+        Term::ParamOp { op, op_args, args } => {
+            let new_args = args
+                .iter()
+                .map(|term| expand_string_constants(pool, term))
+                .collect();
+            pool.add(Term::ParamOp {
+                op: *op,
+                op_args: op_args.clone(),
+                args: new_args,
+            })
+        }
+        Term::Var(..) | Term::Const(_) | Term::Sort(_) => term.clone(),
+    }
+}
+
+/// A function to reconstruct a term given its flat form.
+///
+/// It takes a vector of `Rc<Term>` and returns a new term based on the length
+/// of the flat form vector. If the vector is empty, it's equivalent to the
+/// empty String. If the length is equal to one, the only term of the vector
+/// is returned. Finally, if the length is greater than one, an `str.++`
+/// application is returned with the flat form vector as its arguments (e.g.,
+/// `[a, "b", c]` would lead to `(str.++ a "b" c)`, where `a` and `c` are
+/// arbitrary terms).
+fn concat(pool: &mut dyn TermPool, terms: Vec<Rc<Term>>) -> Rc<Term> {
     match terms.len() {
-        0 => pool.add(Term::Const(Constant::String("".to_owned()))),
+        0 => pool.add(Term::new_string("")),
         1 => terms[0].clone(),
         _ => pool.add(Term::Op(Operator::StrConcat, terms)),
     }
 }
 
-fn build_skolem_prefix(u: Rc<Term>, pool: &mut dyn TermPool) -> Rc<Term> {
-    build_term!(pool, (strsubstr {u.clone()} 0 (- (strlen {u.clone()}) 1)))
-}
-
-fn build_skolem_suffix(u: Rc<Term>, n: usize, pool: &mut dyn TermPool) -> Rc<Term> {
-    let n = pool.add(Term::new_int(n));
-    build_term!(pool, (strsubstr {u.clone()} {n.clone()} (- (strlen {u.clone()}) {n})))
-}
-
-fn is_prefix(
+/// A function to check if a term is a prefix or suffix of another.
+///
+/// It takes two `Rc<Term>` and a reverse parameter. If the reverse parameter is
+/// set to `false`, it checks if the second term is a prefix of the first one,
+/// and if it's set to `true`, it checks if it's a suffix.
+///
+/// The function throws an error if the prefix/suffix is larger than the main
+/// term. It returns the prefix/suffix in flat form if the check was successful.
+fn is_prefix_or_suffix(
+    pool: &mut dyn TermPool,
     term: Rc<Term>,
     pref: Rc<Term>,
-    pool: &mut dyn TermPool,
     rev: bool,
     polyeq_time: &mut Duration,
 ) -> Result<Vec<Rc<Term>>, CheckerError> {
-    let mut t_flat = flatten(term.clone(), pool);
-    let mut p_flat = flatten(pref.clone(), pool);
-
+    let mut t_flat = flatten(pool, term.clone());
+    let mut p_flat = flatten(pool, pref.clone());
     if rev {
         t_flat.reverse();
         p_flat.reverse();
     }
-
     if p_flat.len() > t_flat.len() {
-        return Err(CheckerError::ExpectedToBePrefix(pref, term));
+        if rev {
+            return Err(CheckerError::ExpectedToBeSuffix(pref, term));
+        } else {
+            return Err(CheckerError::ExpectedToBePrefix(pref, term));
+        }
     }
-
     for (i, el) in p_flat.iter().enumerate() {
         assert_polyeq_expected(el, t_flat[i].clone(), polyeq_time)?;
     }
-
+    if rev {
+        p_flat.reverse();
+    }
     Ok(p_flat)
+}
+
+/// An application of `is_prefix_or_suffix` where the reverse parameter is set
+/// to `false` by default.
+fn is_prefix(
+    pool: &mut dyn TermPool,
+    term: Rc<Term>,
+    pref: Rc<Term>,
+    polyeq_time: &mut Duration,
+) -> Result<Vec<Rc<Term>>, CheckerError> {
+    is_prefix_or_suffix(pool, term, pref, false, polyeq_time)
+}
+
+/// An application of `is_prefix_or_suffix` where the reverse parameter is set
+/// to `true` by default.
+fn is_suffix(
+    pool: &mut dyn TermPool,
+    term: Rc<Term>,
+    pref: Rc<Term>,
+    polyeq_time: &mut Duration,
+) -> Result<Vec<Rc<Term>>, CheckerError> {
+    is_prefix_or_suffix(pool, term, pref, true, polyeq_time)
 }
 
 type Suffixes = (Vec<Rc<Term>>, Vec<Rc<Term>>);
 
-fn strip_prefix(
+/// A function to remove the longest common prefix or suffix.
+///
+/// It takes two `Rc<Term>` and a reverse parameter. If the parameter is set to
+/// `false`, it removes the longest common prefix, and if it's set to `true`,
+/// the longest common suffix.
+///
+/// The function throws an error if the terms aren't `str.++` applications.
+/// It returns two vectors with the remaining terms after the removal in flat
+/// form (e.g., the remaining suffixes after a prefix removal or vice versa).
+///
+/// If the terms don't share common prefixes or suffixes, the function
+/// doesn't remove anything, so the tuple returned is the flat form for both of
+/// them.
+fn strip_prefix_or_suffix(
+    pool: &mut dyn TermPool,
     s: Rc<Term>,
     t: Rc<Term>,
-    pool: &mut dyn TermPool,
     rev: bool,
     polyeq_time: &mut Duration,
 ) -> Result<Suffixes, CheckerError> {
-    let mut s_flat = flatten(s.clone(), pool);
-    let mut t_flat = flatten(t.clone(), pool);
-
+    let mut s_flat = flatten(pool, s.clone());
+    let mut t_flat = flatten(pool, t.clone());
     if rev {
         s_flat.reverse();
         t_flat.reverse();
     }
-
     if s_flat.is_empty() {
         return Err(CheckerError::TermOfWrongForm("(str.++ ...)", s));
     }
     if t_flat.is_empty() {
         return Err(CheckerError::TermOfWrongForm("(str.++ ...)", t));
     }
-
     let mut prefix = 0;
     while (prefix < cmp::min(s_flat.len(), t_flat.len()))
         && polyeq(&s_flat[prefix], &t_flat[prefix], polyeq_time)
     {
         prefix += 1;
     }
-
-    let s_suffix = s_flat.get(prefix..).unwrap_or_default().to_vec();
-    let t_suffix = t_flat.get(prefix..).unwrap_or_default().to_vec();
-
+    let mut s_suffix = s_flat.get(prefix..).unwrap_or_default().to_vec();
+    let mut t_suffix = t_flat.get(prefix..).unwrap_or_default().to_vec();
+    if rev {
+        s_suffix.reverse();
+        t_suffix.reverse();
+    }
     Ok((s_suffix, t_suffix))
 }
 
+/// A function to check if a String has a length equal to one.
+///
+/// It takes an `Rc<Term>` and throws an error if the term isn't a String
+/// constant (we can't compute lengths properly in this case) or isn't a String
+/// constant of size one.
 fn string_check_length_one(term: Rc<Term>) -> Result<(), CheckerError> {
     if let Term::Const(Constant::String(s)) = term.as_ref() {
         if s.len() == 1 {
@@ -110,6 +241,32 @@ fn string_check_length_one(term: Rc<Term>) -> Result<(), CheckerError> {
         }
     }
     Err(CheckerError::ExpectedStringConstantOfLengthOne(term))
+}
+
+fn build_skolem_prefix(pool: &mut dyn TermPool, u: Rc<Term>, n: Rc<Term>) -> Rc<Term> {
+    build_term!(pool, (strsubstr {u.clone()} 0 {n.clone()}))
+}
+
+fn build_skolem_suffix_rem(pool: &mut dyn TermPool, u: Rc<Term>, n: Rc<Term>) -> Rc<Term> {
+    build_term!(pool, (strsubstr {u.clone()} {n.clone()} (- (strlen {u.clone()}) {n})))
+}
+
+fn build_skolem_unify_split_prefix(pool: &mut dyn TermPool, t: Rc<Term>, s: Rc<Term>) -> Rc<Term> {
+    let t_len = pool.add(Term::Op(Operator::StrLen, vec![t.clone()]));
+    let s_len = pool.add(Term::Op(Operator::StrLen, vec![s.clone()]));
+    let true_branch = build_skolem_suffix_rem(pool, t.clone(), s_len).clone();
+    let false_branch = build_skolem_suffix_rem(pool, s.clone(), t_len).clone();
+    build_term!(pool, (ite (>= (strlen {t.clone()}) (strlen {s.clone()})) {true_branch} {false_branch}))
+}
+
+fn build_skolem_unify_split_suffix(pool: &mut dyn TermPool, t: Rc<Term>, s: Rc<Term>) -> Rc<Term> {
+    let t_len = pool.add(Term::Op(Operator::StrLen, vec![t.clone()]));
+    let s_len = pool.add(Term::Op(Operator::StrLen, vec![s.clone()]));
+    let n_t = build_term!(pool, (- {t_len.clone()} {s_len.clone()}));
+    let n_s = build_term!(pool, (- {s_len.clone()} {t_len.clone()}));
+    let true_branch = build_skolem_prefix(pool, t.clone(), n_t).clone();
+    let false_branch = build_skolem_prefix(pool, s.clone(), n_s).clone();
+    build_term!(pool, (ite (>= (strlen {t.clone()}) (strlen {s.clone()})) {true_branch} {false_branch}))
 }
 
 pub fn concat_eq(
@@ -128,30 +285,19 @@ pub fn concat_eq(
 
     let term = get_premise_term(&premises[0])?;
     let rev = args[0].as_term()?.as_bool_err()?;
-    let (l, r) = match_term_err!((= l r) = term)?;
+    let (s, t) = match_term_err!((= s t) = term)?;
 
-    let (mut l_suffix, mut r_suffix) = strip_prefix(l.clone(), r.clone(), pool, rev, polyeq_time)?;
+    let (ss, ts) = strip_prefix_or_suffix(pool, s.clone(), t.clone(), rev, polyeq_time)?;
+    let ss_concat = concat(pool, ss);
+    let ts_concat = concat(pool, ts);
+    let expected = build_term!(
+        pool,
+        (= {ss_concat.clone()} {ts_concat.clone()})
+    );
 
-    if rev {
-        l_suffix.reverse();
-        r_suffix.reverse();
-    }
+    let expanded = expand_string_constants(pool, &conclusion[0]);
 
-    let l_concat = reconstruct_term(l_suffix, pool);
-    let r_concat = reconstruct_term(r_suffix, pool);
-    let expected = pool.add(Term::Op(Operator::Equals, vec![l_concat, r_concat]));
-
-    let (l_conc, r_conc) = match_term_err!((= l r) = &conclusion[0])?;
-    let l_conc_flat = flatten(l_conc.clone(), pool);
-    let r_conc_flat = flatten(r_conc.clone(), pool);
-    let l_conc_concat = reconstruct_term(l_conc_flat.clone(), pool);
-    let r_conc_concat = reconstruct_term(r_conc_flat.clone(), pool);
-    let expanded_conc = pool.add(Term::Op(
-        Operator::Equals,
-        vec![l_conc_concat, r_conc_concat],
-    ));
-
-    assert_eq(&expected, &expanded_conc)
+    assert_eq(&expected, &expanded)
 }
 
 pub fn concat_unify(
@@ -171,28 +317,19 @@ pub fn concat_unify(
     let term = get_premise_term(&premises[0])?;
     let prefixes = get_premise_term(&premises[1])?;
     let rev = args[0].as_term()?.as_bool_err()?;
-    let (l, r) = match_term_err!((= l r) = term)?;
+    let (s, t) = match_term_err!((= s t) = term)?;
+    let (s_1, t_1) = match_term_err!((= (strlen s_1) (strlen t_1)) = prefixes)?;
 
-    let (l_pref, r_pref) = match_term_err!((= (strlen l) (strlen r)) = prefixes)?;
-    let mut l_pref_flat = is_prefix(l.clone(), l_pref.clone(), pool, rev, polyeq_time)?;
-    let mut r_pref_flat = is_prefix(r.clone(), r_pref.clone(), pool, rev, polyeq_time)?;
+    let s_1 = is_prefix_or_suffix(pool, s.clone(), s_1.clone(), rev, polyeq_time)?;
+    let t_1 = is_prefix_or_suffix(pool, t.clone(), t_1.clone(), rev, polyeq_time)?;
+    let s_concat = concat(pool, s_1);
+    let t_concat = concat(pool, t_1);
+    let expected = build_term!(
+        pool,
+        (= {s_concat.clone()} {t_concat.clone()})
+    );
 
-    if rev {
-        l_pref_flat.reverse();
-        r_pref_flat.reverse();
-    }
-
-    let l_concat = reconstruct_term(l_pref_flat, pool);
-    let r_concat = reconstruct_term(r_pref_flat, pool);
-    let expected = pool.add(Term::Op(Operator::Equals, vec![l_concat, r_concat]));
-
-    let (l_conc, r_conc) = match_term_err!((= l r) = &conclusion[0])?;
-    let l_conc_concat = reconstruct_term(flatten(l_conc.clone(), pool), pool);
-    let r_conc_concat = reconstruct_term(flatten(r_conc.clone(), pool), pool);
-    let expanded = pool.add(Term::Op(
-        Operator::Equals,
-        vec![l_conc_concat, r_conc_concat],
-    ));
+    let expanded = expand_string_constants(pool, &conclusion[0]);
 
     assert_eq(&expected, &expanded)
 }
@@ -213,7 +350,6 @@ pub fn concat_conflict(
 
     let term = get_premise_term(&premises[0])?;
     let rev = args[0].as_term()?.as_bool_err()?;
-
     if conclusion[0].as_bool_err()? {
         return Err(CheckerError::ExpectedBoolConstant(
             false,
@@ -221,21 +357,24 @@ pub fn concat_conflict(
         ));
     }
 
-    let (l, r) = match_term_err!((= l r) = term)?;
+    let (s, t) = match_term_err!((= s t) = term)?;
+    let (mut ss, mut ts) = strip_prefix_or_suffix(pool, s.clone(), t.clone(), rev, polyeq_time)?;
+    if rev {
+        ss.reverse();
+        ts.reverse();
+    }
 
-    let (l_suffix, r_suffix) = strip_prefix(l.clone(), r.clone(), pool, rev, polyeq_time)?;
-
-    if let Some(l_head) = l_suffix.first() {
-        string_check_length_one(l_head.clone())?;
-        if let Some(r_head) = r_suffix.first() {
-            string_check_length_one(r_head.clone())?;
+    if let Some(ss_head) = ss.first() {
+        string_check_length_one(ss_head.clone())?;
+        if let Some(ts_head) = ts.first() {
+            string_check_length_one(ts_head.clone())?;
         }
-    } else if let Some(r_head) = r_suffix.first() {
-        string_check_length_one(r_head.clone())?;
+    } else if let Some(ts_head) = ts.first() {
+        string_check_length_one(ts_head.clone())?;
     } else {
         return Err(CheckerError::ExpectedDifferentConstantPrefixes(
-            l.clone(),
-            r.clone(),
+            s.clone(),
+            t.clone(),
         ));
     }
 
@@ -259,7 +398,6 @@ pub fn concat_csplit(
     let terms = get_premise_term(&premises[0])?;
     let length = get_premise_term(&premises[1])?;
     let rev = args[0].as_term()?.as_bool_err()?;
-
     let (t, s) = match_term_err!((= t s) = terms)?;
     let (u, zero) = match_term_err!((not (= (strlen u) zero)) = length)?;
     if zero.as_integer_err()? != 0 {
@@ -269,10 +407,8 @@ pub fn concat_csplit(
         ));
     }
 
-    let mut t_flat = flatten(t.clone(), pool);
-    let mut s_flat = flatten(s.clone(), pool);
-
-    if t_flat.is_empty() {
+    let mut s_flat = flatten(pool, s.clone());
+    if flatten(pool, t.clone()).is_empty() {
         return Err(CheckerError::TermOfWrongForm("(str.++ ...)", t.clone()));
     }
     if s_flat.is_empty() {
@@ -280,41 +416,168 @@ pub fn concat_csplit(
     }
 
     if rev {
-        t_flat.reverse();
         s_flat.reverse();
     }
 
-    let mut lhs = is_prefix(t.clone(), u.clone(), pool, rev, polyeq_time)?;
-    if rev {
-        lhs.reverse();
-    }
-
-    let mut rhs: Vec<Rc<Term>> = vec![];
+    let left_eq = is_prefix_or_suffix(pool, t.clone(), u.clone(), rev, polyeq_time)?;
+    let mut right_eq: Vec<Rc<Term>> = vec![];
     if let Some(s_head) = s_flat.first() {
         string_check_length_one(s_head.clone())?;
         if rev {
-            rhs.push(build_skolem_suffix(u.clone(), 1, pool).clone());
-            rhs.push(s_head.clone());
+            let n = build_term!(pool, (- (strlen {u.clone()}) 1));
+            right_eq.push(build_skolem_prefix(pool, u.clone(), n).clone());
+            right_eq.push(s_head.clone());
         } else {
-            rhs.push(s_head.clone());
-            rhs.push(build_skolem_prefix(u.clone(), pool).clone());
+            right_eq.push(s_head.clone());
+            let n = pool.add(Term::new_int(1));
+            right_eq.push(build_skolem_suffix_rem(pool, u.clone(), n).clone());
         }
     }
 
-    let lhs_reconstructed = reconstruct_term(lhs, pool);
-    let rhs_reconstructed = reconstruct_term(rhs, pool);
-    let expected = pool.add(Term::Op(
-        Operator::Equals,
-        vec![lhs_reconstructed, rhs_reconstructed],
-    ));
+    let left_eq_concat = concat(pool, left_eq);
+    let right_eq_concat = concat(pool, right_eq);
+    let expected = build_term!(
+        pool,
+        (= {left_eq_concat.clone()} {right_eq_concat.clone()})
+    );
 
-    let (l_conc, r_conc) = match_term_err!((= l r) = &conclusion[0])?;
-    let l_conc_reconstructed = reconstruct_term(flatten(l_conc.clone(), pool), pool);
-    let r_conc_reconstructed = reconstruct_term(flatten(r_conc.clone(), pool), pool);
-    let expanded = pool.add(Term::Op(
-        Operator::Equals,
-        vec![l_conc_reconstructed, r_conc_reconstructed],
-    ));
+    let expanded = expand_string_constants(pool, &conclusion[0]);
+
+    assert_eq(&expected, &expanded)
+}
+
+pub fn concat_split_prefix(
+    RuleArgs {
+        premises,
+        conclusion,
+        pool,
+        polyeq_time,
+        ..
+    }: RuleArgs,
+) -> RuleResult {
+    assert_num_premises(premises, 2)?;
+    assert_clause_len(conclusion, 1)?;
+
+    match_term_err!(
+        (and
+            (or (= t_1 x) (= s_1 y))
+            (not (= r ""))
+            (> (strlen r) 0)
+        ) = &conclusion[0]
+    )?;
+
+    let terms = get_premise_term(&premises[0])?;
+    let length = get_premise_term(&premises[1])?;
+    let (t, s) = match_term_err!((= t s) = terms)?;
+    let (t_1, s_1) = match_term_err!((not (= (strlen t_1) (strlen s_1))) = length)?;
+
+    if flatten(pool, t.clone()).is_empty() {
+        return Err(CheckerError::TermOfWrongForm("(str.++ ...)", t.clone()));
+    }
+    if flatten(pool, s.clone()).is_empty() {
+        return Err(CheckerError::TermOfWrongForm("(str.++ ...)", s.clone()));
+    }
+
+    is_prefix(pool, t.clone(), t_1.clone(), polyeq_time)?;
+    is_prefix(pool, s.clone(), s_1.clone(), polyeq_time)?;
+    let t_1 = expand_string_constants(pool, t_1);
+    let s_1 = expand_string_constants(pool, s_1);
+    let r = build_skolem_unify_split_prefix(pool, t_1.clone(), s_1.clone());
+
+    let or = build_term!(
+        pool,
+        (or
+            (=
+                {t_1.clone()}
+                (strconcat {s_1.clone()} {r.clone()})
+            )
+            (=
+                {s_1.clone()}
+                (strconcat {t_1.clone()} {r.clone()})
+            )
+        )
+    );
+
+    let empty = pool.add(Term::new_string(""));
+    let expanded = build_term!(
+        pool,
+        (and
+            {or.clone()}
+            (not (= {r.clone()} {empty.clone()}))
+            (> (strlen {r.clone()}) 0)
+        )
+    );
+
+    let expanded = expand_string_constants(pool, &expanded);
+    let expected = expand_string_constants(pool, &conclusion[0]);
+
+    assert_eq(&expected, &expanded)
+}
+
+pub fn concat_split_suffix(
+    RuleArgs {
+        premises,
+        conclusion,
+        pool,
+        polyeq_time,
+        ..
+    }: RuleArgs,
+) -> RuleResult {
+    assert_num_premises(premises, 2)?;
+    assert_clause_len(conclusion, 1)?;
+
+    match_term_err!(
+        (and
+            (or (= t_2 x) (= s_2 y))
+            (not (= r ""))
+            (> (strlen r) 0)
+        ) = &conclusion[0]
+    )?;
+
+    let terms = get_premise_term(&premises[0])?;
+    let length = get_premise_term(&premises[1])?;
+    let (t, s) = match_term_err!((= t s) = terms)?;
+    let (t_2, s_2) = match_term_err!((not (= (strlen t_2) (strlen s_2))) = length)?;
+
+    if flatten(pool, t.clone()).is_empty() {
+        return Err(CheckerError::TermOfWrongForm("(str.++ ...)", t.clone()));
+    }
+    if flatten(pool, s.clone()).is_empty() {
+        return Err(CheckerError::TermOfWrongForm("(str.++ ...)", s.clone()));
+    }
+
+    is_suffix(pool, t.clone(), t_2.clone(), polyeq_time)?;
+    is_suffix(pool, s.clone(), s_2.clone(), polyeq_time)?;
+    let t_2 = expand_string_constants(pool, t_2);
+    let s_2 = expand_string_constants(pool, s_2);
+    let r = build_skolem_unify_split_suffix(pool, t_2.clone(), s_2.clone());
+
+    let or = build_term!(
+        pool,
+        (or
+            (=
+                {t_2.clone()}
+                (strconcat {r.clone()} {s_2.clone()})
+            )
+            (=
+                {s_2.clone()}
+                (strconcat {r.clone()} {t_2.clone()})
+            )
+        )
+    );
+
+    let empty = pool.add(Term::new_string(""));
+    let expanded = build_term!(
+        pool,
+        (and
+            {or.clone()}
+            (not (= {r.clone()} {empty.clone()}))
+            (> (strlen {r.clone()}) 0)
+        )
+    );
+
+    let expanded = expand_string_constants(pool, &expanded);
+    let expected = expand_string_constants(pool, &conclusion[0]);
 
     assert_eq(&expected, &expanded)
 }
@@ -607,74 +870,74 @@ mod tests {
             "Simple working examples" {
                 r#"(assume h1 (= (str.++ "a" "b" b) (str.++ "a" c)))
                    (assume h2 (not (= (str.len "a") 0)))
-                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 0 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: true,
+                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 1 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: true,
                 r#"(assume h1 (= (str.++ a "b" c) (str.++ "ab" c)))
                    (assume h2 (not (= (str.len (str.++ a "b")) 0)))
-                   (step t1 (cl (= (str.++ a "b") (str.++ "a" (str.substr (str.++ a "b") 0 (- (str.len (str.++ a "b")) 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: true,
+                   (step t1 (cl (= (str.++ a "b") (str.++ "a" (str.substr (str.++ a "b") 1 (- (str.len (str.++ a "b")) 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: true,
                 r#"(assume h1 (= (str.++ d (str.++ c (str.++ b "a"))) (str.++ "b" (str.++ "c" d))))
                    (assume h2 (not (= (str.len (str.++ d c)) 0)))
-                   (step t1 (cl (= (str.++ d c) (str.++ "b" (str.substr (str.++ d c) 0 (- (str.len (str.++ d c)) 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: true,
+                   (step t1 (cl (= (str.++ d c) (str.++ "b" (str.substr (str.++ d c) 1 (- (str.len (str.++ d c)) 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: true,
             }
             "Reverse argument set to true" {
                 r#"(assume h1 (= (str.++ "c" "b" a) (str.++ "a" (str.++ c "b"))))
                    (assume h2 (not (= (str.len (str.++ "b" a)) 0)))
-                   (step t1 (cl (= (str.++ "b" a) (str.++ (str.substr (str.++ "b" a) 1 (- (str.len (str.++ "b" a)) 1)) "b"))) :rule concat_csplit :premises (h1 h2) :args (true))"#: true,
+                   (step t1 (cl (= (str.++ "b" a) (str.++ (str.substr (str.++ "b" a) 0 (- (str.len (str.++ "b" a)) 1)) "b"))) :rule concat_csplit :premises (h1 h2) :args (true))"#: true,
                 r#"(assume h1 (= (str.++ d (str.++ c (str.++ "b" a))) (str.++ "b" (str.++ "c" "de"))))
                    (assume h2 (not (= (str.len (str.++ c (str.++ "b" a))) 0)))
-                   (step t1 (cl (= (str.++ c (str.++ "b" a)) (str.++ (str.substr (str.++ c (str.++ "b" a)) 1 (- (str.len (str.++ c (str.++ "b" a))) 1)) "e"))) :rule concat_csplit :premises (h1 h2) :args (true))"#: true,
+                   (step t1 (cl (= (str.++ c (str.++ "b" a)) (str.++ (str.substr (str.++ c (str.++ "b" a)) 0 (- (str.len (str.++ c (str.++ "b" a))) 1)) "e"))) :rule concat_csplit :premises (h1 h2) :args (true))"#: true,
             }
             "Term does not have a constant prefix" {
                 r#"(assume h1 (= (str.++ d (str.++ c (str.++ b "a"))) (str.++ b (str.++ "c" d))))
                    (assume h2 (not (= (str.len (str.++ d c)) 0)))
-                   (step t1 (cl (= (str.++ d c) (str.++ b (str.substr (str.++ d c) 0 (- (str.len (str.++ d c)) 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
+                   (step t1 (cl (= (str.++ d c) (str.++ b (str.substr (str.++ d c) 1 (- (str.len (str.++ d c)) 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
             }
             "Term are not a str.++ application" {
                 r#"(assume h1 (= (str.++ "a" "b" b) ""))
                    (assume h2 (not (= (str.len "a") 0)))
-                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 0 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
+                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 1 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
                 r#"(assume h1 (= "" (str.++ "a" c)))
                    (assume h2 (not (= (str.len "a") 0)))
-                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 0 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
+                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 1 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
             }
             "Invalid argument type" {
                 r#"(assume h1 (= (str.++ "a" "b" b) (str.++ "a" c)))
                    (assume h2 (not (= (str.len "a") 0)))
-                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 0 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args (1))"#: false,
+                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 1 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args (1))"#: false,
                 r#"(assume h1 (= (str.++ "a" "b" b) (str.++ "a" c)))
                    (assume h2 (not (= (str.len "a") 0)))
-                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 0 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args (1.5))"#: false,
+                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 1 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args (1.5))"#: false,
                 r#"(assume h1 (= (str.++ "a" "b" b) (str.++ "a" c)))
                    (assume h2 (not (= (str.len "a") 0)))
-                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 0 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args ((- 1)))"#: false,
+                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 1 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args ((- 1)))"#: false,
                 r#"(assume h1 (= (str.++ "a" "b" b) (str.++ "a" c)))
                    (assume h2 (not (= (str.len "a") 0)))
-                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 0 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args ("test"))"#: false,
+                   (step t1 (cl (= "a" (str.++ "a" (str.substr "a" 1 (- (str.len "a") 1))))) :rule concat_csplit :premises (h1 h2) :args ("test"))"#: false,
             }
             "Premise term is not an equality" {
                 r#"(assume h1 (not (= (str.++ d (str.++ c (str.++ b "a"))) (str.++ "b" (str.++ "c" d)))))
                    (assume h2 (not (= (str.len (str.++ d c)) 0)))
-                   (step t1 (cl (= (str.++ d c) (str.++ "b" (str.substr (str.++ d c) 0 (- (str.len (str.++ d c)) 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
+                   (step t1 (cl (= (str.++ d c) (str.++ "b" (str.substr (str.++ d c) 1 (- (str.len (str.++ d c)) 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
             }
             "Premise term is not an inequality of the form (not (= (str.len str) 0))" {
                 r#"(assume h1 (= (str.++ d (str.++ c (str.++ b "a"))) (str.++ "b" (str.++ "c" d))))
                    (assume h2 (= (str.len (str.++ d c)) 0))
-                   (step t1 (cl (= (str.++ d c) (str.++ "b" (str.substr (str.++ d c) 0 (- (str.len (str.++ d c)) 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
+                   (step t1 (cl (= (str.++ d c) (str.++ "b" (str.substr (str.++ d c) 1 (- (str.len (str.++ d c)) 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
                 r#"(assume h1 (= (str.++ d (str.++ c (str.++ b "a"))) (str.++ "b" (str.++ "c" d))))
                    (assume h2 (not (= (str.len (str.++ d c)) 1)))
-                   (step t1 (cl (= (str.++ d c) (str.++ "b" (str.substr (str.++ d c) 0 (- (str.len (str.++ d c)) 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
+                   (step t1 (cl (= (str.++ d c) (str.++ "b" (str.substr (str.++ d c) 1 (- (str.len (str.++ d c)) 1))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
             }
             "Conclusion term is not an equality" {
                 r#"(assume h1 (= (str.++ d (str.++ c (str.++ b "a"))) (str.++ "b" (str.++ "c" d))))
                    (assume h2 (not (= (str.len (str.++ d c)) 0)))
-                   (step t1 (cl (not (= (str.++ d c) (str.++ "b" (str.substr (str.++ d c) 0 (- (str.len (str.++ d c)) 1)))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
+                   (step t1 (cl (not (= (str.++ d c) (str.++ "b" (str.substr (str.++ d c) 1 (- (str.len (str.++ d c)) 1)))))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
             }
             "Switched conclusion terms" {
                 r#"(assume h1 (= (str.++ d (str.++ c (str.++ b "a"))) (str.++ "b" (str.++ "c" d))))
                    (assume h2 (not (= (str.len (str.++ d c)) 0)))
-                   (step t1 (cl (= (str.++ "b" (str.substr (str.++ d c) 0 (- (str.len (str.++ d c)) 1))) (str.++ d c))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
+                   (step t1 (cl (= (str.++ "b" (str.substr (str.++ d c) 1 (- (str.len (str.++ d c)) 1))) (str.++ d c))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
                 r#"(assume h1 (= (str.++ d (str.++ c (str.++ "b" a))) (str.++ "b" (str.++ "c" "de"))))
                    (assume h2 (not (= (str.len (str.++ c (str.++ "b" a))) 0)))
-                   (step t1 (cl (= (str.++ (str.substr (str.++ c (str.++ "b" a)) 1 (- (str.len (str.++ c (str.++ "b" a))) 1)) "e") (str.++ c (str.++ "b" a)))) :rule concat_csplit :premises (h1 h2) :args (true))"#: false,
+                   (step t1 (cl (= (str.++ (str.substr (str.++ c (str.++ "b" a)) 0 (- (str.len (str.++ c (str.++ "b" a))) 1)) "e") (str.++ c (str.++ "b" a)))) :rule concat_csplit :premises (h1 h2) :args (true))"#: false,
             }
             "Inverted argument value" {
                 r#"(assume h1 (= (str.++ d (str.++ c (str.++ b "a"))) (str.++ "b" (str.++ "c" d))))
@@ -683,6 +946,156 @@ mod tests {
                 r#"(assume h1 (= (str.++ d (str.++ c (str.++ "b" a))) (str.++ "b" (str.++ "c" "de"))))
                    (assume h2 (not (= (str.len (str.++ c (str.++ "b" a))) 0)))
                    (step t1 (cl (= (str.++ c (str.++ "b" a)) (str.++ (str.substr (str.++ c (str.++ "b" a)) 1 (- (str.len (str.++ c (str.++ "b" a))) 1)) "e"))) :rule concat_csplit :premises (h1 h2) :args (false))"#: false,
+            }
+        }
+    }
+
+    #[test]
+    fn concat_split_prefix() {
+        test_cases! {
+            definitions = "
+                (declare-fun a () String)
+                (declare-fun b () String)
+                (declare-fun c () String)
+                (declare-fun d () String)
+                (declare-fun e () String)
+            ",
+            "Simple working examples" {
+                r#"(assume h1 (= (str.++ "a" "b" b) (str.++ "a" c)))
+                   (assume h2 (not (= (str.len "a") (str.len (str.++ "a" c)))))
+                   (define-fun r_skolem () String (ite (>= (str.len "a") (str.len (str.++ "a" c))) (str.substr "a" (str.len (str.++ "a" c)) (- (str.len "a") (str.len (str.++ "a" c)))) (str.substr (str.++ "a" c) (str.len "a") (- (str.len (str.++ "a" c)) (str.len "a")))))
+                   (step t1 (cl (and (or (= "a" (str.++ "a" c r_skolem)) (= (str.++ "a" c) (str.++ "a" r_skolem))) (not (= r_skolem "")) (> (str.len r_skolem) 0))) :rule concat_split_prefix :premises (h1 h2))"#: true,
+                r#"(assume h1 (= (str.++ a b c) (str.++ c d e)))
+                   (assume h2 (not (= (str.len (str.++ a b)) (str.len c))))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ a b)) (str.len c)) (str.substr (str.++ a b) (str.len c) (- (str.len (str.++ a b)) (str.len c))) (str.substr c (str.len (str.++ a b)) (- (str.len c) (str.len (str.++ a b))))))
+                   (step t1 (cl (and (or (= (str.++ a b) (str.++ c r_skolem)) (= c (str.++ a b r_skolem))) (not (= r_skolem "")) (> (str.len r_skolem) 0))) :rule concat_split_prefix :premises (h1 h2))"#: true,
+            }
+            "Terms are not str.++ applications" {
+                r#"(assume h1 (= "" (str.++ "a" c)))
+                   (assume h2 (not (= (str.len "a") (str.len (str.++ "a" c)))))
+                   (define-fun r_skolem () String (ite (>= (str.len "a") (str.len (str.++ "a" c))) (str.substr "a" (str.len (str.++ "a" c)) (- (str.len "a") (str.len (str.++ "a" c)))) (str.substr (str.++ "a" c) (str.len "a") (- (str.len (str.++ "a" c)) (str.len "a")))))
+                   (step t1 (cl (and (or (= "a" (str.++ "a" c r_skolem)) (= (str.++ "a" c) (str.++ "a" r_skolem))) (not (= r_skolem "")) (> (str.len r_skolem) 0))) :rule concat_split_prefix :premises (h1 h2))"#: false,
+                r#"(assume h1 (= (str.++ "a" "b" b) ""))
+                   (assume h2 (not (= (str.len "a") (str.len (str.++ "a" c)))))
+                   (define-fun r_skolem () String (ite (>= (str.len "a") (str.len (str.++ "a" c))) (str.substr "a" (str.len (str.++ "a" c)) (- (str.len "a") (str.len (str.++ "a" c)))) (str.substr (str.++ "a" c) (str.len "a") (- (str.len (str.++ "a" c)) (str.len "a")))))
+                   (step t1 (cl (and (or (= "a" (str.++ "a" c r_skolem)) (= (str.++ "a" c) (str.++ "a" r_skolem))) (not (= r_skolem "")) (> (str.len r_skolem) 0))) :rule concat_split_prefix :premises (h1 h2))"#: false,
+            }
+            "Premise term is not an equality" {
+                r#"(assume h1 (not (= (str.++ a b c) (str.++ c d e))))
+                   (assume h2 (not (= (str.len (str.++ a b)) (str.len c))))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ a b)) (str.len c)) (str.substr (str.++ a b) (str.len c) (- (str.len (str.++ a b)) (str.len c))) (str.substr c (str.len (str.++ a b)) (- (str.len c) (str.len (str.++ a b))))))
+                   (step t1 (cl (and (or (= (str.++ a b) (str.++ c r_skolem)) (= c (str.++ a b r_skolem))) (not (= r_skolem "")) (> (str.len r_skolem) 0))) :rule concat_split_prefix :premises (h1 h2))"#: false,
+            }
+            "Premise term is not an inequality of the form (not (= (str.len t_1) (str.len s_1)))" {
+                r#"(assume h1 (= (str.++ "a" "b" b) (str.++ "a" c)))
+                   (assume h2 (= (str.len "a") (str.len (str.++ "a" c))))
+                   (define-fun r_skolem () String (ite (>= (str.len "a") (str.len (str.++ "a" c))) (str.substr "a" (str.len (str.++ "a" c)) (- (str.len "a") (str.len (str.++ "a" c)))) (str.substr (str.++ "a" c) (str.len "a") (- (str.len (str.++ "a" c)) (str.len "a")))))
+                   (step t1 (cl (and (or (= "a" (str.++ "a" c r_skolem)) (= (str.++ "a" c) (str.++ "a" r_skolem))) (not (= r_skolem "")) (> (str.len r_skolem) 0))) :rule concat_split_prefix :premises (h1 h2))"#: false,
+                r#"(assume h1 (= (str.++ "a" "b" b) (str.++ "a" c)))
+                   (assume h2 (not (= (str.to_code "a") (str.to_code (str.++ "a" c)))))
+                   (define-fun r_skolem () String (ite (>= (str.len "a") (str.len (str.++ "a" c))) (str.substr "a" (str.len (str.++ "a" c)) (- (str.len "a") (str.len (str.++ "a" c)))) (str.substr (str.++ "a" c) (str.len "a") (- (str.len (str.++ "a" c)) (str.len "a")))))
+                   (step t1 (cl (and (or (= "a" (str.++ "a" c r_skolem)) (= (str.++ "a" c) (str.++ "a" r_skolem))) (not (= r_skolem "")) (> (str.len r_skolem) 0))) :rule concat_split_prefix :premises (h1 h2))"#: false,
+            }
+            r#"Conclusion term is not of the form (and (or (= x y) (= z w)) (not (= r "")) (> (str.len r) 0))"# {
+                r#"(assume h1 (= (str.++ a b c) (str.++ c d e)))
+                   (assume h2 (not (= (str.len (str.++ a b)) (str.len c))))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ a b)) (str.len c)) (str.substr (str.++ a b) (str.len c) (- (str.len (str.++ a b)) (str.len c))) (str.substr c (str.len (str.++ a b)) (- (str.len c) (str.len (str.++ a b))))))
+                   (step t1 (cl (or (or (= (str.++ a b) (str.++ c r_skolem)) (= c (str.++ a b r_skolem))) (not (= r_skolem "")) (> (str.len r_skolem) 0))) :rule concat_split_prefix :premises (h1 h2))"#: false,
+                r#"(assume h1 (= (str.++ a b c) (str.++ c d e)))
+                   (assume h2 (not (= (str.len (str.++ a b)) (str.len c))))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ a b)) (str.len c)) (str.substr (str.++ a b) (str.len c) (- (str.len (str.++ a b)) (str.len c))) (str.substr c (str.len (str.++ a b)) (- (str.len c) (str.len (str.++ a b))))))
+                   (step t1 (cl (and (and (= (str.++ a b) (str.++ c r_skolem)) (= c (str.++ a b r_skolem))) (not (= r_skolem "")) (> (str.len r_skolem) 0))) :rule concat_split_prefix :premises (h1 h2))"#: false,
+                r#"(assume h1 (= (str.++ a b c) (str.++ c d e)))
+                   (assume h2 (not (= (str.len (str.++ a b)) (str.len c))))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ a b)) (str.len c)) (str.substr (str.++ a b) (str.len c) (- (str.len (str.++ a b)) (str.len c))) (str.substr c (str.len (str.++ a b)) (- (str.len c) (str.len (str.++ a b))))))
+                   (step t1 (cl (and (or (not (= (str.++ a b) (str.++ c r_skolem))) (not (= c (str.++ a b r_skolem)))) (not (= r_skolem "")) (> (str.len r_skolem) 0))) :rule concat_split_prefix :premises (h1 h2))"#: false,
+                r#"(assume h1 (= (str.++ a b c) (str.++ c d e)))
+                   (assume h2 (not (= (str.len (str.++ a b)) (str.len c))))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ a b)) (str.len c)) (str.substr (str.++ a b) (str.len c) (- (str.len (str.++ a b)) (str.len c))) (str.substr c (str.len (str.++ a b)) (- (str.len c) (str.len (str.++ a b))))))
+                   (step t1 (cl (and (or (= (str.++ a b) (str.++ c r_skolem)) (= c (str.++ a b r_skolem))) (= r_skolem "") (> (str.len r_skolem) 0))) :rule concat_split_prefix :premises (h1 h2))"#: false,
+                r#"(assume h1 (= (str.++ a b c) (str.++ c d e)))
+                   (assume h2 (not (= (str.len (str.++ a b)) (str.len c))))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ a b)) (str.len c)) (str.substr (str.++ a b) (str.len c) (- (str.len (str.++ a b)) (str.len c))) (str.substr c (str.len (str.++ a b)) (- (str.len c) (str.len (str.++ a b))))))
+                   (step t1 (cl (and (or (= (str.++ a b) (str.++ c r_skolem)) (= c (str.++ a b r_skolem))) (not (= r_skolem "")) (> (str.len r_skolem) 1))) :rule concat_split_prefix :premises (h1 h2))"#: false,
+                r#"(assume h1 (= (str.++ a b c) (str.++ c d e)))
+                   (assume h2 (not (= (str.len (str.++ a b)) (str.len c))))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ a b)) (str.len c)) (str.substr (str.++ a b) (str.len c) (- (str.len (str.++ a b)) (str.len c))) (str.substr c (str.len (str.++ a b)) (- (str.len c) (str.len (str.++ a b))))))
+                   (step t1 (cl (and (or (= (str.++ a b) (str.++ c r_skolem)) (= c (str.++ a b r_skolem))) (not (= r_skolem "")) (< (str.len r_skolem) 0))) :rule concat_split_prefix :premises (h1 h2))"#: false,
+            }
+        }
+    }
+
+    #[test]
+    fn concat_split_suffix() {
+        test_cases! {
+            definitions = "
+                (declare-fun a () String)
+                (declare-fun b () String)
+                (declare-fun c () String)
+                (declare-fun d () String)
+                (declare-fun e () String)
+            ",
+            "Simple working examples" {
+                r#"(assume h1 (= (str.++ "a" "b" b) (str.++ "a" c)))
+                   (assume h2 (not (= (str.len (str.++ "b" b)) (str.len c))))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ "b" b)) (str.len c)) (str.substr (str.++ "b" b) 0 (- (str.len (str.++ "b" b)) (str.len c))) (str.substr c 0 (- (str.len c) (str.len (str.++ "b" b))))))
+                   (step t1 (cl (and (or (= (str.++ "b" b) (str.++ r_skolem c)) (= c (str.++ r_skolem (str.++ "b" b)))) (not (= r_skolem "")) (> (str.len r_skolem) 0))) :rule concat_split_suffix :premises (h1 h2))"#: true,
+                r#"(assume h1 (= (str.++ a b c d) (str.++ b c d e)))
+                   (assume h2 (not (= (str.len (str.++ c d)) (str.len (str.++ c d e)))))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ c d)) (str.len (str.++ c d e))) (str.substr (str.++ c d) 0 (- (str.len (str.++ c d)) (str.len (str.++ c d e)))) (str.substr (str.++ c d e) 0 (- (str.len (str.++ c d e)) (str.len (str.++ c d))))))
+                   (step t1 (cl (and (or (= (str.++ c d) (str.++ r_skolem (str.++ c d e))) (= (str.++ c d e) (str.++ r_skolem (str.++ c d)))) (not (= r_skolem "")) (> (str.len r_skolem) 0))) :rule concat_split_suffix :premises (h1 h2))"#: true,
+            }
+            "Terms are not str.++ applications" {
+                r#"(assume h1 (= "" (str.++ "a" c)))
+                   (assume h2 (not (= (str.len (str.++ "b" b)) (str.len c))))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ "b" b)) (str.len c)) (str.substr (str.++ "b" b) 0 (- (str.len (str.++ "b" b)) (str.len c))) (str.substr c 0 (- (str.len c) (str.len (str.++ "b" b))))))
+                   (step t1 (cl (and (or (= (str.++ "b" b) (str.++ r_skolem c)) (= c (str.++ r_skolem (str.++ "b" b)))) (not (= r_skolem "")) (> (str.len r_skolem) 0))) :rule concat_split_suffix :premises (h1 h2))"#: false,
+                r#"(assume h1 (= (str.++ "a" "b" b) ""))
+                   (assume h2 (not (= (str.len (str.++ "b" b)) (str.len c))))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ "b" b)) (str.len c)) (str.substr (str.++ "b" b) 0 (- (str.len (str.++ "b" b)) (str.len c))) (str.substr c 0 (- (str.len c) (str.len (str.++ "b" b))))))
+                   (step t1 (cl (and (or (= (str.++ "b" b) (str.++ r_skolem c)) (= c (str.++ r_skolem (str.++ "b" b)))) (not (= r_skolem "")) (> (str.len r_skolem) 0))) :rule concat_split_suffix :premises (h1 h2))"#: false,
+            }
+            "Premise term is not an equality" {
+                r#"(assume h1 (not (= (str.++ a b c d) (str.++ b c d e))))
+                   (assume h2 (not (= (str.len (str.++ c d)) (str.len (str.++ c d e)))))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ c d)) (str.len (str.++ c d e))) (str.substr (str.++ c d) 0 (- (str.len (str.++ c d)) (str.len (str.++ c d e)))) (str.substr (str.++ c d e) 0 (- (str.len (str.++ c d e)) (str.len (str.++ c d))))))
+                   (step t1 (cl (and (or (= (str.++ c d) (str.++ r_skolem (str.++ c d e))) (= (str.++ c d e) (str.++ r_skolem (str.++ c d)))) (not (= r_skolem "")) (> (str.len r_skolem) 0))) :rule concat_split_suffix :premises (h1 h2))"#: false,
+            }
+            "Premise term is not an inequality of the form (not (= (str.len t_2) (str.len s_2)))" {
+                r#"(assume h1 (= (str.++ "a" "b" b) (str.++ "a" c)))
+                   (assume h2 (= (str.len (str.++ "b" b)) (str.len c)))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ "b" b)) (str.len c)) (str.substr (str.++ "b" b) 0 (- (str.len (str.++ "b" b)) (str.len c))) (str.substr c 0 (- (str.len c) (str.len (str.++ "b" b))))))
+                   (step t1 (cl (and (or (= (str.++ "b" b) (str.++ r_skolem c)) (= c (str.++ r_skolem (str.++ "b" b)))) (not (= r_skolem "")) (> (str.len r_skolem) 0))) :rule concat_split_suffix :premises (h1 h2))"#: false,
+                r#"(assume h1 (= (str.++ "a" "b" b) (str.++ "a" c)))
+                   (assume h2 (not (= (str.to_code (str.++ "b" b)) (str.to_code c))))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ "b" b)) (str.len c)) (str.substr (str.++ "b" b) 0 (- (str.len (str.++ "b" b)) (str.len c))) (str.substr c 0 (- (str.len c) (str.len (str.++ "b" b))))))
+                   (step t1 (cl (and (or (= (str.++ "b" b) (str.++ r_skolem c)) (= c (str.++ r_skolem (str.++ "b" b)))) (not (= r_skolem "")) (> (str.len r_skolem) 0))) :rule concat_split_suffix :premises (h1 h2))"#: false,
+            }
+            r#"Conclusion term is not of the form (and (or (= x y) (= z w)) (not (= r "")) (> (str.len r) 0))"# {
+                r#"(assume h1 (= (str.++ a b c d) (str.++ b c d e)))
+                   (assume h2 (not (= (str.len (str.++ c d)) (str.len (str.++ c d e)))))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ c d)) (str.len (str.++ c d e))) (str.substr (str.++ c d) 0 (- (str.len (str.++ c d)) (str.len (str.++ c d e)))) (str.substr (str.++ c d e) 0 (- (str.len (str.++ c d e)) (str.len (str.++ c d))))))
+                   (step t1 (cl (or (or (= (str.++ c d) (str.++ r_skolem (str.++ c d e))) (= (str.++ c d e) (str.++ r_skolem (str.++ c d)))) (not (= r_skolem "")) (> (str.len r_skolem) 0))) :rule concat_split_suffix :premises (h1 h2))"#: false,
+                r#"(assume h1 (= (str.++ a b c d) (str.++ b c d e)))
+                   (assume h2 (not (= (str.len (str.++ c d)) (str.len (str.++ c d e)))))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ c d)) (str.len (str.++ c d e))) (str.substr (str.++ c d) 0 (- (str.len (str.++ c d)) (str.len (str.++ c d e)))) (str.substr (str.++ c d e) 0 (- (str.len (str.++ c d e)) (str.len (str.++ c d))))))
+                   (step t1 (cl (and (and (= (str.++ c d) (str.++ r_skolem (str.++ c d e))) (= (str.++ c d e) (str.++ r_skolem (str.++ c d)))) (not (= r_skolem "")) (> (str.len r_skolem) 0))) :rule concat_split_suffix :premises (h1 h2))"#: false,
+                r#"(assume h1 (= (str.++ a b c d) (str.++ b c d e)))
+                   (assume h2 (not (= (str.len (str.++ c d)) (str.len (str.++ c d e)))))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ c d)) (str.len (str.++ c d e))) (str.substr (str.++ c d) 0 (- (str.len (str.++ c d)) (str.len (str.++ c d e)))) (str.substr (str.++ c d e) 0 (- (str.len (str.++ c d e)) (str.len (str.++ c d))))))
+                   (step t1 (cl (and (or (= (str.++ c d) (str.++ r_skolem (str.++ c d e))) (not (= (str.++ c d e) (str.++ r_skolem (str.++ c d))))) (not (= r_skolem "")) (> (str.len r_skolem) 0))) :rule concat_split_suffix :premises (h1 h2))"#: false,
+                r#"(assume h1 (= (str.++ a b c d) (str.++ b c d e)))
+                   (assume h2 (not (= (str.len (str.++ c d)) (str.len (str.++ c d e)))))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ c d)) (str.len (str.++ c d e))) (str.substr (str.++ c d) 0 (- (str.len (str.++ c d)) (str.len (str.++ c d e)))) (str.substr (str.++ c d e) 0 (- (str.len (str.++ c d e)) (str.len (str.++ c d))))))
+                   (step t1 (cl (and (or (= (str.++ c d) (str.++ r_skolem (str.++ c d e))) (= (str.++ c d e) (str.++ r_skolem (str.++ c d)))) (= r_skolem "") (> (str.len r_skolem) 0))) :rule concat_split_suffix :premises (h1 h2))"#: false,
+                r#"(assume h1 (= (str.++ a b c d) (str.++ b c d e)))
+                   (assume h2 (not (= (str.len (str.++ c d)) (str.len (str.++ c d e)))))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ c d)) (str.len (str.++ c d e))) (str.substr (str.++ c d) 0 (- (str.len (str.++ c d)) (str.len (str.++ c d e)))) (str.substr (str.++ c d e) 0 (- (str.len (str.++ c d e)) (str.len (str.++ c d))))))
+                   (step t1 (cl (and (or (= (str.++ c d) (str.++ r_skolem (str.++ c d e))) (= (str.++ c d e) (str.++ r_skolem (str.++ c d)))) (not (= r_skolem "")) (> (str.len r_skolem) 1))) :rule concat_split_suffix :premises (h1 h2))"#: false,
+                r#"(assume h1 (= (str.++ a b c d) (str.++ b c d e)))
+                   (assume h2 (not (= (str.len (str.++ c d)) (str.len (str.++ c d e)))))
+                   (define-fun r_skolem () String (ite (>= (str.len (str.++ c d)) (str.len (str.++ c d e))) (str.substr (str.++ c d) 0 (- (str.len (str.++ c d)) (str.len (str.++ c d e)))) (str.substr (str.++ c d e) 0 (- (str.len (str.++ c d e)) (str.len (str.++ c d))))))
+                   (step t1 (cl (and (or (= (str.++ c d) (str.++ r_skolem (str.++ c d e))) (= (str.++ c d e) (str.++ r_skolem (str.++ c d)))) (not (= r_skolem "")) (< (str.len r_skolem) 0))) :rule concat_split_suffix :premises (h1 h2))"#: false,
             }
         }
     }
