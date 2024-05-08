@@ -143,7 +143,11 @@ fn is_prefix_or_suffix(
         p_flat.reverse();
     }
     if p_flat.len() > t_flat.len() {
-        return Err(CheckerError::ExpectedToBePrefix(pref, term));
+        if rev {
+            return Err(CheckerError::ExpectedToBeSuffix(pref, term));
+        } else {
+            return Err(CheckerError::ExpectedToBePrefix(pref, term));
+        }
     }
     for (i, el) in p_flat.iter().enumerate() {
         assert_polyeq_expected(el, t_flat[i].clone(), polyeq_time)?;
