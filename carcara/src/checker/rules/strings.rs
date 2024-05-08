@@ -11,14 +11,14 @@ use std::{cmp, time::Duration};
 ///
 /// In this flat form, all `str.++` applications are dissolved and every
 /// argument of those applications is inserted into the vector (e.g., `(str.++
-/// a (str.++ b c))` would lead to `[a, b, c]`, where `a`, `b` e `c` são
+/// a (str.++ b c))` would lead to `[a, b, c]`, where `a`, `b` and `c` are
 /// arbitrary String terms). Furthermore, all String constants are broken
 /// into constants of size one and are inserted into the vector too.
 ///
 /// All String terms that aren't `str.++` applications can be seen as `(str.++ term "")`.
 /// So, applying `flatten` to them would lead to `[term]`. Furthermore,
 /// the empty String isn't mapped to any entry in the vector, so `flatten`
-/// applied to `""` lead to an empty vector.
+/// applied to `""` leads to an empty vector.
 fn flatten(pool: &mut dyn TermPool, term: Rc<Term>) -> Vec<Rc<Term>> {
     let mut flattened = Vec::new();
     if let Term::Const(Constant::String(s)) = term.as_ref() {
