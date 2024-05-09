@@ -282,6 +282,8 @@ pub fn concat_eq(
     assert_num_args(args, 1)?;
     assert_clause_len(conclusion, 1)?;
 
+    match_term_err!((= x y) = &conclusion[0]);
+
     let term = get_premise_term(&premises[0])?;
     let rev = args[0].as_term()?.as_bool_err()?;
     let (s, t) = match_term_err!((= s t) = term)?;
@@ -312,6 +314,8 @@ pub fn concat_unify(
     assert_num_premises(premises, 2)?;
     assert_num_args(args, 1)?;
     assert_clause_len(conclusion, 1)?;
+
+    match_term_err!((= x y) = &conclusion[0]);
 
     let term = get_premise_term(&premises[0])?;
     let prefixes = get_premise_term(&premises[1])?;
