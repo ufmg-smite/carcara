@@ -1011,14 +1011,13 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     /// Parses an argument for an `anchor` proof command. This can be either a variable binding of
-    /// the form `(<symbol> <sort>)` or an assignment, of the form `(:= <symbol> <term>)`.
+    /// the form `(<symbol> <sort>)` or an assignment, of the form `(:= (<symbol> <sort>) <term>)`.
     fn parse_anchor_argument(&mut self) -> CarcaraResult<AnchorArg> {
         self.expect_token(Token::OpenParen)?;
         Ok(if self.current_token == Token::Keyword("=".into()) {
             self.next_token()?;
-            let var = self.expect_symbol()?;
+            let (var, sort) = self.parse_sorted_var()?;
             let value = self.parse_term()?;
-            let sort = self.pool.sort(&value);
             self.insert_sorted_var((var.clone(), sort));
             self.expect_token(Token::CloseParen)?;
             AnchorArg::Assign(var, value)
