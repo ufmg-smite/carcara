@@ -287,37 +287,43 @@ fn insert_solver_proof(
     });
 }
 
-pub fn sat_external_prove_lemmas(RuleArgs { conclusion, pool, args, .. }: RuleArgs) -> RuleResult {
-    // TODO check first two args are String terms
-    // TODO check third arg is a Bool term
+pub fn sat_external_prove_lemmas(RuleArgs { pool, args, .. }: RuleArgs) -> RuleResult {
+    let Sort::String = pool.sort(&args[0].as_term().unwrap()).as_sort().cloned().unwrap() else {
+        unreachable!();
+    };
+    let Sort::String = pool.sort(&args[1].as_term().unwrap()).as_sort().cloned().unwrap() else {
+        unreachable!();
+    };
+    let Sort::Bool = pool.sort(&args[2].as_term().unwrap()).as_sort().cloned().unwrap() else {
+        unreachable!();
+    };
 
-    // {:#} never would use sharing
+    let lemmas = args[2].as_term().unwrap();
 
-    let t = args[2].as_term().unwrap();
-
-    // transform each AND arg into a string (as below) and build a
-    // string "(and ...)" so that each lemma is individually shared
-    let and_args = match_term_err!((and ...) = t)?;
-
-    use std::fmt::Write;
-    let mut term_str = String::new();
-    write!(&mut term_str, "(and").unwrap();
-
-    let mut i = 0;
-    while i < and_args.len() {
-        if i < and_args.len() - 1 {
-            write!(&mut term_str, " {}", and_args[i]).unwrap();
+    // transform each AND arg, if any, into a string and build a
+    // string "(and ... )" so that each lemma has its own names
+    let term_str = if let Some(and_args) = match_term!((and ...) = lemmas) {
+        let mut j = 0;
+        let mut term_str2 = String::new();
+        use std::fmt::Write;
+        write!(&mut term_str2, "(and").unwrap();
+        while j < and_args.len() {
+            if j < and_args.len() - 1 {
+                write!(&mut term_str2, " {}", and_args[j]).unwrap();
+            }
+            else {
+                write!(&mut term_str2, "{}", and_args[j]).unwrap();
+            }
+            j += 1;
         }
-        else {
-            write!(&mut term_str, "{}", and_args[i]).unwrap();
-        }
-        i += 1;
-    }
-    write!(&mut term_str, ")").unwrap();
-    print!("{}\n", term_str);
+        write!(&mut term_str2, ")").unwrap();
+        term_str2
+    } else {
+        format!("{}", lemmas)
+    };
 
     let string = format!("(\n{}\n{}\n{}\n)",
-                         args[0].as_term().unwrap(), args[1].as_term().unwrap(), t);
+                         args[0].as_term().unwrap(), args[1].as_term().unwrap(), term_str);
 
     // this will make it expect this script from where you are running Carcara
     let mut process = Command::new("./sat-lemmas-prove.sh")
@@ -347,8 +353,6 @@ pub fn sat_external_prove_lemmas(RuleArgs { conclusion, pool, args, .. }: RuleAr
         return Err(CheckerError::Unspecified);
     }
     let res = output.stdout.as_slice();
-
-    print!("{}", std::str::from_utf8(res).unwrap());
 
     if res == b"true\n" {
         return Ok(());
