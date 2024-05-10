@@ -19,7 +19,7 @@ use super::*;
 /// let proof = "
 ///     (assume h1 (forall ((x Int)) (> x 0)))
 ///     (assume h2 (not (forall ((y Int)) (> y 0))))
-///     (anchor :step t3 :args ((y Int) (:= x y)))
+///     (anchor :step t3 :args ((y Int) (:= (x Int) y)))
 ///     (step t3.t1 (cl (= x y)) :rule refl)
 ///     (step t3.t2 (cl (= (> x 0) (> y 0))) :rule cong :premises (t3.t1))
 ///     (step t3 (cl (= (forall ((x Int)) (> x 0)) (forall ((y Int)) (> y 0)))) :rule bind)
