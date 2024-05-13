@@ -156,7 +156,7 @@ pub struct Subproof {
     pub commands: Vec<ProofCommand>,
 
     /// The "assignment" style arguments of the subproof, of the form `(:= <symbol> <term>)`.
-    pub assignment_args: Vec<(String, Rc<Term>)>,
+    pub assignment_args: Vec<(SortedVar, Rc<Term>)>,
 
     /// The "variable" style arguments of the subproof, of the form `(<symbol> <sort>)`.
     pub variable_args: Vec<SortedVar>,

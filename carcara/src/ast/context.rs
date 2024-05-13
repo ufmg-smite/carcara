@@ -12,7 +12,7 @@ impl Context {
     /// `cumulative_substitution` field.
     fn build(
         pool: &mut dyn TermPool,
-        assignment_args: &[(String, Rc<Term>)],
+        assignment_args: &[(SortedVar, Rc<Term>)],
         variable_args: &[SortedVar],
     ) -> Result<Self, SubstitutionError> {
         // We build the context mappings incrementally, using the mappings already
@@ -25,7 +25,7 @@ impl Context {
         let mappings = assignment_args
             .iter()
             .map(|(var, value)| {
-                let var_term = pool.add(Term::new_var(var, pool.sort(value)));
+                let var_term = pool.add(Term::Var(var.0.clone(), var.1.clone()));
                 let new_value = substitution.apply(pool, value);
                 substitution.insert(pool, var_term.clone(), new_value.clone())?;
                 Ok((var_term, new_value))
@@ -130,7 +130,7 @@ impl ContextStack {
     pub fn push(
         &mut self,
         pool: &mut dyn TermPool,
-        assignment_args: &[(String, Rc<Term>)],
+        assignment_args: &[(SortedVar, Rc<Term>)],
         variable_args: &[SortedVar],
         context_id: usize,
     ) -> Result<(), SubstitutionError> {

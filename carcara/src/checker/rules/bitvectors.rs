@@ -76,9 +76,9 @@ pub fn add(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     let res_args: Vec<_> = (0..size)
         .map(|i| {
             build_term!(
-          pool,
-          (xor (xor {x[i].clone()} {y[i].clone()}) {carries[i].clone()})
-        )
+              pool,
+              (xor (xor {x[i].clone()} {y[i].clone()}) {carries[i].clone()})
+            )
         })
         .collect();
 

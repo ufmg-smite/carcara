@@ -153,12 +153,14 @@ impl<'a> PrintProof for AlethePrinter<'a> {
                             is_first = false;
                             var.print_with_sharing(self)?;
                         }
-                        for (name, value) in &s.assignment_args {
+                        for (var, value) in &s.assignment_args {
                             if !is_first {
                                 write!(self.inner, " ")?;
                             }
                             is_first = false;
-                            write!(self.inner, "(:= {} ", name)?;
+                            write!(self.inner, "(:= ")?;
+                            var.print_with_sharing(self)?;
+                            write!(self.inner, " ")?;
                             value.print_with_sharing(self)?;
                             write!(self.inner, ")")?;
                         }
