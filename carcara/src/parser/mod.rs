@@ -1017,7 +1017,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         Ok(if self.current_token == Token::Keyword("=".into()) {
             self.next_token()?;
             let (var, sort) = self.parse_sorted_var()?;
-            let value = self.parse_term()?;
+            let value = self.parse_term_expecting_sort(sort.as_sort().unwrap())?;
             self.insert_sorted_var((var.clone(), sort));
             self.expect_token(Token::CloseParen)?;
             AnchorArg::Assign(var, value)
