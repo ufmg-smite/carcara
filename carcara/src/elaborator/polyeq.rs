@@ -94,7 +94,7 @@ impl<'a> PolyeqElaborator<'a> {
                         let assignment_args: Vec<_> = a_bindings
                             .iter()
                             .map(|x| {
-                                let var = x.0.clone();
+                                let var = (x.0.clone(), pool.sort(&x.1));
                                 let term = pool.add(x.clone().into());
                                 (var, term)
                             })
@@ -117,7 +117,7 @@ impl<'a> PolyeqElaborator<'a> {
                         let assigment_args: Vec<_> = a_bindings
                             .iter()
                             .zip(b_bindings)
-                            .map(|((a_var, _), b)| (a_var.clone(), pool.add(b.clone().into())))
+                            .map(|((a_var, a_sort), b)| ((a_var.clone(), a_sort.clone()), pool.add(b.clone().into())))
                             .collect();
 
                         let new_context_id = c.force_new_context();
@@ -338,7 +338,7 @@ impl<'a> PolyeqElaborator<'a> {
 
     fn close_subproof(
         &mut self,
-        assignment_args: Vec<(String, Rc<Term>)>,
+        assignment_args: Vec<(SortedVar, Rc<Term>)>,
         variable_args: Vec<SortedVar>,
         end_step: ProofStep,
     ) -> (usize, usize) {

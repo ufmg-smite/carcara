@@ -50,7 +50,7 @@ impl Accumulator {
 
     pub fn close_subproof(
         &mut self,
-        assignment_args: Vec<(String, Rc<Term>)>,
+        assignment_args: Vec<(SortedVar, Rc<Term>)>,
         variable_args: Vec<SortedVar>,
         root_id: &str,
     ) -> ProofCommand {
