@@ -997,7 +997,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
             for a in args {
                 match a {
                     AnchorArg::Assign(var, value) => {
-                        assignment_args.push(((var.clone(), self.pool.sort(&value)), value))
+                        assignment_args.push(((var.clone(), self.pool.sort(&value)), value));
                     }
                     AnchorArg::Variable(var) => variable_args.push(var.clone()),
                 }
