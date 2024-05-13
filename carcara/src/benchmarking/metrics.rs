@@ -17,7 +17,7 @@ pub trait MetricsUnit:
 
     fn display(&self, f: &mut fmt::Formatter) -> fmt::Result;
 
-    fn abs_diff(self, other: Self) -> Self {
+    fn absolute_diff(self, other: Self) -> Self {
         if self > other {
             self - other
         } else {
@@ -42,7 +42,7 @@ impl MetricsUnit for Duration {
     }
 
     fn mean_diff(self, mean: Self::MeanType) -> Self::MeanType {
-        self.abs_diff(mean)
+        self.absolute_diff(mean)
     }
 
     fn display(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -239,7 +239,7 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OnlineMetrics<K, T> {
 
         // To combine the two variances, we use a generalization of Welford's algorithm. See:
         // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
-        let delta = other.mean.abs_diff(self.mean).as_f64();
+        let delta = other.mean.absolute_diff(self.mean).as_f64();
         let sum_of_squared_distances = self.sum_of_squared_distances
             + other.sum_of_squared_distances
             + delta * delta * (self.count * other.count / count) as f64;

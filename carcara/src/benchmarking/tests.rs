@@ -14,7 +14,7 @@ macro_rules! assert_is_close {
 
 impl IsClose for Duration {
     fn is_close(&self, other: Self) -> bool {
-        self.abs_diff(other).as_nanos() <= 2
+        self.absolute_diff(other).as_nanos() <= 2
     }
 }
 

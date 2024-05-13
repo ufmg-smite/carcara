@@ -364,8 +364,8 @@ fn apply_bfun_elim(
 
             let new_bindings: Vec<_> = bindings
                 .iter()
-                .cloned()
                 .filter(|(_, sort)| *sort.as_sort().unwrap() != Sort::Bool)
+                .cloned()
                 .collect();
             if new_bindings.is_empty() {
                 op_term
