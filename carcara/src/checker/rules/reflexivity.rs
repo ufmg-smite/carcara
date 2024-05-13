@@ -218,7 +218,7 @@ mod tests {
                 (declare-fun z () Real)
             ",
             "Simple working examples" {
-                "(anchor :step t1 :args ((y Real) (:= x y)))
+                "(anchor :step t1 :args ((y Real) (:= (x Real) y)))
                 (step t1.t1 (cl (= x y)) :rule refl)
                 (step t1 (cl) :rule hole)": true,
 
@@ -228,7 +228,7 @@ mod tests {
 
             }
             "Multiple substitutions in sequence" {
-                "(anchor :step t1 :args ((z Real) (:= y z) (:= x y)))
+                "(anchor :step t1 :args ((z Real) (:= (y Real) z) (:= (x Real) y)))
                 (step t1.t1 (cl (= x z)) :rule refl)
                 (step t1 (cl) :rule hole)": true,
             }
@@ -236,20 +236,20 @@ mod tests {
                 // Since an inner subproof cannot end an outer subproof, we need to have a dummy
                 // step to the end the outer subproofs in these examples
 
-                "(anchor :step t1 :args ((z Real) (:= x z)))
-                (anchor :step t1.t1 :args ((z Real) (:= y z)))
+                "(anchor :step t1 :args ((z Real) (:= (x Real) z)))
+                (anchor :step t1.t1 :args ((z Real) (:= (y Real) z)))
                 (step t1.t1.t1 (cl (= x y)) :rule refl)
                 (step t1.t1 (cl) :rule hole)
                 (step t1 (cl) :rule hole)": true,
 
-                "(anchor :step t1 :args ((y Real) (:= x y)))
-                (anchor :step t1.t1 :args ((z Real) (:= y z)))
+                "(anchor :step t1 :args ((y Real) (:= (x Real) y)))
+                (anchor :step t1.t1 :args ((z Real) (:= (y Real) z)))
                 (step t1.t1.t1 (cl (= x z)) :rule refl)
                 (step t1.t1 (cl) :rule hole)
                 (step t1 (cl) :rule hole)": true,
             }
             "Terms aren't equal after applying context substitution" {
-                "(anchor :step t1 :args ((y Real) (:= x y)))
+                "(anchor :step t1 :args ((y Real) (:= (x Real) y)))
                 (step t1.t1 (cl (= x z)) :rule refl)
                 (step t1 (cl) :rule hole)": false,
             }
