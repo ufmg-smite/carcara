@@ -117,7 +117,9 @@ impl<'a> PolyeqElaborator<'a> {
                         let assigment_args: Vec<_> = a_bindings
                             .iter()
                             .zip(b_bindings)
-                            .map(|((a_var, a_sort), b)| ((a_var.clone(), a_sort.clone()), pool.add(b.clone().into())))
+                            .map(|((a_var, a_sort), b)| {
+                                ((a_var.clone(), a_sort.clone()), pool.add(b.clone().into()))
+                            })
                             .collect();
 
                         let new_context_id = c.force_new_context();
