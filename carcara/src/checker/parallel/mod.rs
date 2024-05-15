@@ -287,22 +287,7 @@ impl<'c> ParallelProofChecker<'c> {
                     let time = Instant::now();
                     let step_id = command.id();
 
-                    self.context
-                        .push(
-                            &mut pool.ctx_pool,
-                            &s.assignment_args,
-                            &s.variable_args,
-                            s.context_id,
-                        )
-                        .map_err(|e| {
-                            // Signalize to other threads to stop the proof checking
-                            should_abort.store(true, Ordering::Release);
-                            Error::Checker {
-                                inner: e.into(),
-                                rule: "anchor".into(),
-                                step: step_id.to_owned(),
-                            }
-                        })?;
+                    self.context.push(&s.args, s.context_id);
 
                     if let Some(stats) = &mut stats {
                         // Collects statistics

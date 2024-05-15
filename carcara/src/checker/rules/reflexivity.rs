@@ -236,17 +236,21 @@ mod tests {
                 // Since an inner subproof cannot end an outer subproof, we need to have a dummy
                 // step to the end the outer subproofs in these examples
 
-                "(anchor :step t1 :args ((z Real) (:= (x Real) z)))
-                (anchor :step t1.t1 :args ((z Real) (:= (y Real) z)))
-                (step t1.t1.t1 (cl (= x y)) :rule refl)
+                // This step is valid because the outer context transforms the `y` in the `(:= x y)`
+                // mapping, such that the context becomes `(:= x z)`
+                "(anchor :step t1 :args ((z Real) (:= (y Real) z)))
+                (anchor :step t1.t1 :args ((:= (x Real) y)))
+                (step t1.t1.t1 (cl (= x z)) :rule refl)
                 (step t1.t1 (cl) :rule hole)
                 (step t1 (cl) :rule hole)": true,
 
+                // This should fail because the semantics of `refl` are such that the substitution
+                // is simultaneous, and not until a fixed point
                 "(anchor :step t1 :args ((y Real) (:= (x Real) y)))
                 (anchor :step t1.t1 :args ((z Real) (:= (y Real) z)))
                 (step t1.t1.t1 (cl (= x z)) :rule refl)
                 (step t1.t1 (cl) :rule hole)
-                (step t1 (cl) :rule hole)": true,
+                (step t1 (cl) :rule hole)": false,
             }
             "Terms aren't equal after applying context substitution" {
                 "(anchor :step t1 :args ((y Real) (:= (x Real) y)))

@@ -161,18 +161,7 @@ impl<'c> ProofChecker<'c> {
                     let step_id = command.id();
 
                     let new_context_id = self.context.force_new_context();
-                    self.context
-                        .push(
-                            self.pool,
-                            &s.assignment_args,
-                            &s.variable_args,
-                            new_context_id,
-                        )
-                        .map_err(|e| Error::Checker {
-                            inner: e.into(),
-                            rule: "anchor".into(),
-                            step: step_id.to_owned(),
-                        })?;
+                    self.context.push(&s.args, new_context_id);
 
                     if let Some(elaborator) = &mut self.elaborator {
                         elaborator.open_subproof(s.commands.len());

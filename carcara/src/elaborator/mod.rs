@@ -150,8 +150,7 @@ impl Elaborator {
     /// make sure it is the next `id` in the outer subproof.
     pub fn close_accumulator_subproof(
         &mut self,
-        assignment_args: Vec<(SortedVar, Rc<Term>)>,
-        variable_args: Vec<SortedVar>,
+        args: Vec<AnchorArg>,
         end_step: ProofStep,
         root_id: &str,
     ) -> (usize, usize) {
@@ -164,9 +163,7 @@ impl Elaborator {
             return (d, i);
         }
         self.add_new_step(end_step);
-        let s = self
-            .accumulator
-            .close_subproof(assignment_args, variable_args, root_id);
+        let s = self.accumulator.close_subproof(args, root_id);
         self.add_new_command(s, true)
     }
 

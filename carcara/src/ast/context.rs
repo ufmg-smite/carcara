@@ -1,42 +1,17 @@
 use crate::ast::*;
 use std::sync::{atomic::AtomicUsize, Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
+#[derive(Debug)]
 pub struct Context {
-    pub mappings: Vec<(Rc<Term>, Rc<Term>)>,
-    pub bindings: IndexSet<SortedVar>,
+    pub args: Vec<AnchorArg>,
     pub cumulative_substitution: Option<Substitution>,
 }
 
 impl Context {
     /// Builds a new context form the arguments to an `anchor`. This does not initalize the
     /// `cumulative_substitution` field.
-    fn build(
-        pool: &mut dyn TermPool,
-        assignment_args: &[(SortedVar, Rc<Term>)],
-        variable_args: &[SortedVar],
-    ) -> Result<Self, SubstitutionError> {
-        // We build the context mappings incrementally, using the mappings already
-        // introduced to transform the result of a new mapping before adding it. So for
-        // instance, if the mappings are `(:= y z)` and `(:= x (f y))`, we insert the first
-        // mapping, and then, when introducing the second, we use the current state of the
-        // substitutions to transform `(f y)` into `(f z)`. The resulting mappings will then
-        // contain `(:= y z)` and `(:= x (f z))`
-        let mut substitution = Substitution::empty();
-        let mappings = assignment_args
-            .iter()
-            .map(|(var, value)| {
-                let var_term = pool.add(Term::Var(var.0.clone(), var.1.clone()));
-                let new_value = substitution.apply(pool, value);
-                substitution.insert(pool, var_term.clone(), new_value.clone())?;
-                Ok((var_term, new_value))
-            })
-            .collect::<Result<_, _>>()?;
-
-        Ok(Self {
-            mappings,
-            bindings: variable_args.iter().cloned().collect(),
-            cumulative_substitution: None,
-        })
+    fn new(args: Vec<AnchorArg>) -> Self {
+        Self { args, cumulative_substitution: None }
     }
 }
 
@@ -47,11 +22,11 @@ impl Context {
 /// `1`: Shareable and droppable slot for the context.
 type ContextInfo = (AtomicUsize, RwLock<Option<Context>>);
 
-#[derive(Default)]
 /// Struct that implements a thread-shared context stack. That way, this stack
 /// tries to use an already existing global `Context` (built by another thread).
 /// If it was still not built, then the current thread is going to build this
 /// context so other threads can also use it.
+#[derive(Default, Debug)]
 pub struct ContextStack {
     /// The context vector that is shared globally between all the threads.
     /// The contexts storage is index based (which the index of each context is
@@ -127,19 +102,13 @@ impl ContextStack {
         ctx_vec.len() - 1
     }
 
-    pub fn push(
-        &mut self,
-        pool: &mut dyn TermPool,
-        assignment_args: &[(SortedVar, Rc<Term>)],
-        variable_args: &[SortedVar],
-        context_id: usize,
-    ) -> Result<(), SubstitutionError> {
+    pub fn push(&mut self, args: &[AnchorArg], context_id: usize) {
         // The write guard was yielded to this thread
         if let Ok(mut ctx_write_guard) = self.context_vec[context_id].1.try_write() {
             // It's the first thread trying to build this context. It will
             // build this context at the context vec (accessible for all threads)
             if ctx_write_guard.is_none() {
-                *ctx_write_guard = Some(Context::build(pool, assignment_args, variable_args)?);
+                *ctx_write_guard = Some(Context::new(args.to_vec()));
             }
         }
         // Adds this context in the stack
@@ -148,7 +117,6 @@ impl ContextStack {
         // required at any moment, then we are assured it will wait until the
         // fully context construction
         self.stack.push(context_id);
-        Ok(())
     }
 
     pub fn pop(&mut self) {
@@ -180,12 +148,9 @@ impl ContextStack {
             // necessary, we require the write guard. This tries to avoid bigger
             // overheads
             let context_guard = self.context_vec[self.stack[i]].1.read().unwrap();
-            let curr_context = context_guard.as_ref().unwrap();
+            let current_context = context_guard.as_ref().unwrap();
 
-            let simultaneous = build_simultaneous_substitution(pool, &curr_context.mappings).map;
-            let mut cumulative_substitution = simultaneous.clone();
-
-            if i > 0 {
+            let mut substitution = if i > 0 {
                 // Waits until OS allows to read this previous context. The code structure
                 // makes sure that this context, when released for reading, will be already
                 // instantiated since there are only 2 cases:
@@ -194,31 +159,39 @@ impl ContextStack {
                 //  - Another thread was assigned to build this context. Then, it doesn't
                 //      matter if this other thread has already finished the process, the
                 //      current thread will have to wait until the guard is released.
-                if let Some(previous_context) = self
-                    .stack
-                    .get(i - 1)
-                    .map(|id| self.context_vec[*id].1.read().unwrap())
-                {
-                    let previous_context = previous_context.as_ref().unwrap();
-                    let previous_substitution =
-                        previous_context.cumulative_substitution.as_ref().unwrap();
+                let guard = self.context_vec[self.stack[i - 1]].1.read().unwrap();
+                guard
+                    .as_ref()
+                    .unwrap()
+                    .cumulative_substitution
+                    .clone()
+                    .unwrap()
+            } else {
+                Substitution::empty()
+            };
 
-                    for (k, v) in &previous_substitution.map {
-                        let value = match simultaneous.get(v) {
-                            Some(new_value) => new_value,
-                            None => v,
-                        };
-                        cumulative_substitution.insert(k.clone(), value.clone());
+            for a in &current_context.args {
+                match a {
+                    AnchorArg::Variable((name, sort)) => {
+                        let var_term = pool.add(Term::new_var(name, sort.clone()));
+                        substitution.remove(&var_term);
+                    }
+                    AnchorArg::Assign(var, value) => {
+                        let var_term = pool.add(var.clone().into());
+                        let new_value = substitution.apply(pool, value);
+                        // It is safe to unwrap here because we ensure by contruction that
+                        // `var_term` is a variable term, with he same sort as `value`
+                        substitution
+                            .insert(pool, var_term, new_value.clone())
+                            .unwrap();
                     }
                 }
             }
-            drop(context_guard);
 
-            // Waits until the OS allows to mutate at this context
-            // TODO: Does it really needs to require a write guard here instead of up there
+            // Drop the read guard, and acquire a write guard
+            drop(context_guard);
             let mut context_guard = self.context_vec[self.stack[i]].1.write().unwrap();
-            context_guard.as_mut().unwrap().cumulative_substitution =
-                Some(Substitution::new(pool, cumulative_substitution).unwrap());
+            context_guard.as_mut().unwrap().cumulative_substitution = Some(substitution);
             self.num_cumulative_calculated = i + 1;
         }
     }
@@ -260,26 +233,4 @@ impl ContextStack {
                 .apply(pool, term)
         }
     }
-}
-
-fn build_simultaneous_substitution(
-    pool: &mut dyn TermPool,
-    mappings: &[(Rc<Term>, Rc<Term>)],
-) -> Substitution {
-    let mut result = Substitution::empty();
-
-    // We build the simultaneous substitution from the bottom up, by using the mappings already
-    // introduced to transform the result of a new mapping before inserting it into the
-    // substitution. So for instance, if the mappings are `y -> z` and `x -> (f y)`, we insert the
-    // first mapping, and then, when introducing the second, we use the current state of the
-    // substitution to transform `(f y)` into `(f z)`. The result will then contain `y -> z` and
-    // `x -> (f z)`.
-    for (var, value) in mappings {
-        let new_value = result.apply(pool, value);
-
-        // We can unwrap here safely because, by construction, the sort of `var` is the
-        // same as the sort of `new_value`
-        result.insert(pool, var.clone(), new_value).unwrap();
-    }
-    result
 }

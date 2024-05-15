@@ -4,6 +4,8 @@ mod error;
 mod lexer;
 pub(crate) mod tests;
 
+use std::iter::Iterator;
+
 pub use error::{ParserError, SortError};
 pub use lexer::{Lexer, Position, Reserved, Token};
 
@@ -103,21 +105,6 @@ impl FunctionDef {
 struct SortDef {
     params: Vec<String>,
     body: Rc<Term>,
-}
-
-/// Represents a "raw" `anchor` command. This is only used while parsing, and does not appear in
-/// the final AST.
-struct AnchorCommand {
-    end_step_id: String,
-    assignment_args: Vec<(SortedVar, Rc<Term>)>,
-    variable_args: Vec<SortedVar>,
-}
-
-/// Represents a "raw" `anchor` argument. This is only used while parsing, and does not appear in
-/// the final AST.
-enum AnchorArg {
-    Assign(String, Rc<Term>),
-    Variable(SortedVar),
 }
 
 /// The state of the parser.
@@ -749,12 +736,14 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// should already be in the parser state.
     pub fn parse_proof(&mut self) -> CarcaraResult<Vec<ProofCommand>> {
         // To avoid stack overflows in proofs with many nested subproofs, we parse the subproofs
-        // iteratively, instead of recursively
-        let mut commands_stack = vec![Vec::new()];
-        let mut end_step_stack = Vec::new();
-        let mut subproof_args_stack = Vec::new();
-        let mut subproof_id_stack = Vec::new();
-        let mut last_subproof_id: i64 = -1;
+        // iteratively, instead of recursively. Therefore, we need to manually keep a stack.
+        //
+        // Each frame of the stack stores the subproof that is being constructed, and the id of the
+        // step that will end it. The first frame of the stack represents the root proof, so every
+        // field except for the subproof commands is irrelevant.
+        let mut stack: Vec<(Subproof, String)> = vec![(Subproof::default(), String::new())];
+
+        let mut next_subproof_context_id = 0;
 
         let mut finished_assumes = false;
 
@@ -770,7 +759,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
             let (id, command) = match token {
                 Token::ReservedWord(Reserved::Assume) => {
                     let (id, term) = self.parse_assume_command()?;
-                    if end_step_stack.is_empty() && finished_assumes {
+                    if stack.len() == 1 && finished_assumes {
                         log::warn!("`assume` command '{}' appears after `step` commands", &id);
                     }
                     (id.clone(), ProofCommand::Assume { id, term })
@@ -786,7 +775,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     continue;
                 }
                 Token::ReservedWord(Reserved::Anchor) => {
-                    let anchor = self.parse_anchor_command()?;
+                    let (end_step_id, args) = self.parse_anchor_command()?;
 
                     // When we encounter an `anchor` command, we push a new scope into the step ids
                     // symbol table, a fresh commands vector into the commands stack for the
@@ -795,11 +784,13 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     // We don't need to push a new scope into the symbol table because
                     // `Parser::parse_anchor_command` already does that for us
                     self.state.step_ids.push_scope();
-                    commands_stack.push(Vec::new());
-                    end_step_stack.push(anchor.end_step_id);
-                    subproof_args_stack.push((anchor.assignment_args, anchor.variable_args));
-                    last_subproof_id += 1;
-                    subproof_id_stack.push(last_subproof_id as usize);
+                    let subproof = Subproof {
+                        commands: Vec::new(),
+                        args,
+                        context_id: next_subproof_context_id,
+                    };
+                    stack.push((subproof, end_step_id));
+                    next_subproof_context_id += 1;
                     continue;
                 }
                 _ => {
@@ -814,20 +805,18 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 ));
             }
 
-            commands_stack.last_mut().unwrap().push(command);
-            if end_step_stack.last() == Some(id.as_ref()) {
+            let (top_subproof, top_end_step) = stack.last_mut().unwrap();
+            top_subproof.commands.push(command);
+            if top_end_step == id.as_ref() {
                 // If this is the last step in a subproof, we need to pop all the subproof data off
                 // of the stacks and build the subproof command with it
                 self.state.symbol_table.pop_scope();
                 self.state.step_ids.pop_scope();
-                let commands = commands_stack.pop().unwrap();
-                end_step_stack.pop().unwrap();
-                let (assignment_args, variable_args) = subproof_args_stack.pop().unwrap();
-                let subproof_id = subproof_id_stack.pop().unwrap();
+                let (subproof, _) = stack.pop().unwrap();
 
                 // The subproof must contain at least two commands: the end step and the previous
                 // command it implicitly references
-                if commands.len() < 2 {
+                if subproof.commands.len() < 2 {
                     return Err(Error::Parser(
                         ParserError::EmptySubproof(id.unwrap()),
                         position,
@@ -835,38 +824,27 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 }
 
                 // We also need to make sure that the last command is in fact a `step`
-                match commands.last() {
-                    Some(ProofCommand::Step(_)) => (),
-                    _ => {
-                        return Err(Error::Parser(
-                            ParserError::LastSubproofStepIsNotStep(id.unwrap()),
-                            position,
-                        ))
-                    }
-                };
+                if !subproof.commands.last().unwrap().is_step() {
+                    return Err(Error::Parser(
+                        ParserError::LastSubproofStepIsNotStep(id.unwrap()),
+                        position,
+                    ));
+                }
 
-                commands_stack
-                    .last_mut()
-                    .unwrap()
-                    .push(ProofCommand::Subproof(Subproof {
-                        commands,
-                        assignment_args,
-                        variable_args,
-                        context_id: subproof_id,
-                    }));
+                let (outer, _) = stack.last_mut().unwrap();
+                outer.commands.push(ProofCommand::Subproof(subproof));
             }
-            self.state
-                .step_ids
-                .insert(id, commands_stack.last().unwrap().len() - 1);
+            let index = stack.last().unwrap().0.commands.len() - 1;
+            self.state.step_ids.insert(id, index);
         }
-        match commands_stack.len() {
+        match stack.len() {
             0 => unreachable!(),
-            1 => Ok(commands_stack.pop().unwrap()),
+            1 => Ok(stack.pop().unwrap().0.commands),
 
             // If there is more than one vector in the commands stack, we are inside a subproof
             // that should be closed before the outer proof is finished
             _ => Err(Error::Parser(
-                ParserError::UnclosedSubproof(end_step_stack.pop().unwrap()),
+                ParserError::UnclosedSubproof(stack.pop().unwrap().1),
                 self.current_position,
             )),
         }
@@ -980,7 +958,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     ///
     /// In order to parse the subproof arguments, this method pushes a new scope into the symbol
     /// table which must be removed after parsing the subproof.
-    fn parse_anchor_command(&mut self) -> CarcaraResult<AnchorCommand> {
+    fn parse_anchor_command(&mut self) -> CarcaraResult<(String, Vec<AnchorArg>)> {
         self.expect_token(Token::Keyword("step".into()))?;
         let end_step_id = self.expect_symbol()?;
 
@@ -988,28 +966,16 @@ impl<'a, R: BufRead> Parser<'a, R> {
         // arguments
         self.state.symbol_table.push_scope();
 
-        let mut assignment_args = Vec::new();
-        let mut variable_args = Vec::new();
-        if self.current_token == Token::Keyword("args".into()) {
+        let args = if self.current_token == Token::Keyword("args".into()) {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
-            let args = self.parse_sequence(Parser::parse_anchor_argument, true)?;
-            for a in args {
-                match a {
-                    AnchorArg::Assign(var, value) => {
-                        assignment_args.push(((var.clone(), self.pool.sort(&value)), value));
-                    }
-                    AnchorArg::Variable(var) => variable_args.push(var.clone()),
-                }
-            }
-        }
+            self.parse_sequence(Parser::parse_anchor_argument, true)?
+        } else {
+            Vec::new()
+        };
         self.ignore_remaining_attributes()?;
         self.expect_token(Token::CloseParen)?;
-        Ok(AnchorCommand {
-            end_step_id,
-            assignment_args,
-            variable_args,
-        })
+        Ok((end_step_id, args))
     }
 
     /// Parses an argument for an `anchor` proof command. This can be either a variable binding of
@@ -1018,18 +984,30 @@ impl<'a, R: BufRead> Parser<'a, R> {
         self.expect_token(Token::OpenParen)?;
         Ok(if self.current_token == Token::Keyword("=".into()) {
             self.next_token()?;
-            let (var, sort) = self.parse_sorted_var()?;
-            let value = self.parse_term_expecting_sort(sort.as_sort().unwrap())?;
-            self.insert_sorted_var((var.clone(), sort));
+
+            // To make Carcara more robust to recent changes in the Alethe format, we support
+            // parsing the two versions of assign-style anchor arguments:
+            // - the old version, without the sort hint: `(:= <symbol> <term>)`
+            // - and the new version, with the sort hint: `(:= (<symbol> <sort>) <term>)`
+            let (var, value, sort) = if matches!(self.current_token, Token::Symbol(_)) {
+                let var = self.expect_symbol()?;
+                let value = self.parse_term()?;
+                let sort = self.pool.sort(&value);
+                (var, value, sort)
+            } else {
+                let (var, sort) = self.parse_sorted_var()?;
+                let value = self.parse_term_expecting_sort(sort.as_sort().unwrap())?;
+                (var, value, sort)
+            };
+            self.insert_sorted_var((var.clone(), sort.clone()));
             self.expect_token(Token::CloseParen)?;
-            AnchorArg::Assign(var, value)
+            AnchorArg::Assign((var, sort), value)
         } else {
             let symbol = self.expect_symbol()?;
             let sort = self.parse_sort()?;
-            let var = (symbol, sort);
-            self.insert_sorted_var(var.clone());
+            self.insert_sorted_var((symbol.clone(), sort.clone()));
             self.expect_token(Token::CloseParen)?;
-            AnchorArg::Variable(var)
+            AnchorArg::Variable((symbol, sort))
         })
     }
 

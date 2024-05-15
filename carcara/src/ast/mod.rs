@@ -155,13 +155,13 @@ pub struct Subproof {
     /// The proof commands inside the subproof.
     pub commands: Vec<ProofCommand>,
 
-    /// The "assignment" style arguments of the subproof, of the form `(:= <symbol> <term>)`.
-    pub assignment_args: Vec<(SortedVar, Rc<Term>)>,
+    /// The arguments of the subproof.
+    ///
+    /// They can be either a variable declaration, of the form `(<symbol> <sort>)`, or an
+    /// assignment, of the form `(:= <symbol> <term>)`.
+    pub args: Vec<AnchorArg>,
 
-    /// The "variable" style arguments of the subproof, of the form `(<symbol> <sort>)`.
-    pub variable_args: Vec<SortedVar>,
-
-    /// Subproof id used for context hashing purpose
+    /// Subproof id used for context hashing purposes.
     pub context_id: usize,
 }
 
@@ -192,6 +192,44 @@ impl ProofArg {
             ProofArg::Assign(s, t) => Ok((s, t)),
             ProofArg::Term(t) => Err(CheckerError::ExpectedAssignStyleArg(t.clone())),
         }
+    }
+}
+
+/// An argument for an `anchor` command.
+#[derive(Debug, Clone, PartialEq)]
+pub enum AnchorArg {
+    /// A "variable declaration" style argument, of the form `(<symbol> <sort>)`.
+    Variable(SortedVar),
+
+    /// An "assignment" style argument, of the form `(:= (<symbol> <sort>) <term>)`.
+    Assign(SortedVar, Rc<Term>),
+}
+
+impl AnchorArg {
+    /// Returns `Some` if the anchor arg is a "variable" style argument.
+    pub fn as_variable(&self) -> Option<&SortedVar> {
+        match self {
+            AnchorArg::Variable(v) => Some(v),
+            AnchorArg::Assign(_, _) => None,
+        }
+    }
+
+    /// Returns `true` if the anchor arg is a "variable" style argument.
+    pub fn is_variable(&self) -> bool {
+        matches!(self, Self::Variable(_))
+    }
+
+    /// Returns `Some` if the anchor arg is an "assignment" style argument.
+    pub fn as_assign(&self) -> Option<(&String, &Rc<Term>)> {
+        match self {
+            AnchorArg::Variable(_) => None,
+            AnchorArg::Assign((name, _), value) => Some((name, value)),
+        }
+    }
+
+    /// Returns `true` if the anchor arg is an "assignment" style argument.
+    pub fn is_assign(&self) -> bool {
+        matches!(self, Self::Assign(..))
     }
 }
 

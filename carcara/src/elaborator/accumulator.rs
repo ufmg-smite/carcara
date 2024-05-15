@@ -48,12 +48,7 @@ impl Accumulator {
         self.stack.push(Frame::default());
     }
 
-    pub fn close_subproof(
-        &mut self,
-        assignment_args: Vec<(SortedVar, Rc<Term>)>,
-        variable_args: Vec<SortedVar>,
-        root_id: &str,
-    ) -> ProofCommand {
+    pub fn close_subproof(&mut self, args: Vec<AnchorArg>, root_id: &str) -> ProofCommand {
         let mut commands = self.stack.pop().unwrap().commands;
 
         // We overwrite the last step id to be correct in relation to the outer subproof
@@ -62,12 +57,7 @@ impl Accumulator {
             _ => unreachable!(),
         }
 
-        ProofCommand::Subproof(Subproof {
-            commands,
-            assignment_args,
-            variable_args,
-            context_id: 0,
-        })
+        ProofCommand::Subproof(Subproof { commands, args, context_id: 0 })
     }
 
     pub fn drop_subproof(&mut self) {

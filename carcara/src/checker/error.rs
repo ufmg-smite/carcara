@@ -336,6 +336,9 @@ pub enum SubproofError {
     #[error("binding '{0}' appears as free variable in phi")]
     BindBindingIsFreeVarInPhi(String),
 
+    #[error("unexpected anchor argument: '{0}'")]
+    BindUnexpectedVarArgument(String),
+
     #[error("right and left quantifiers have different number of bindings: {0} and {1}")]
     BindDifferentNumberOfBindings(usize, usize),
 
@@ -355,10 +358,13 @@ pub enum SubproofError {
     },
 
     #[error("substitution '(:= {0} {1})' doesn't appear as a point in phi")]
-    NoPointForSubstitution(Rc<Term>, Rc<Term>),
+    NoPointForSubstitution(String, Rc<Term>),
+
+    #[error("expected binding list in left-hand side to be '{0}'")]
+    OnepointWrongLeftBindings(BindingList),
 
     #[error("expected binding list in right-hand side to be '{0}'")]
-    OnePointWrongBindings(BindingList),
+    OnepointWrongRightBindings(BindingList),
 }
 
 /// A wrapper struct that implements `fmt::Display` for linear combinations.

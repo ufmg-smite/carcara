@@ -4,6 +4,7 @@ use super::{
 };
 use crate::{ast::*, checker::error::SubproofError};
 use indexmap::{IndexMap, IndexSet};
+use std::collections::{HashMap, HashSet};
 
 pub fn subproof(
     RuleArgs {
@@ -91,26 +92,32 @@ pub fn bind(
     let context = context.last().unwrap();
     let context = context.as_ref().unwrap();
 
-    // The quantifier binders must be the xs and ys of the context substitution
-    let (xs, ys): (IndexSet<_>, IndexSet<_>) = context
-        .mappings
-        .iter()
-        // We skip terms which are not simply variables
-        .filter(|&(x, y)| x.is_var() && y.is_var())
-        .map(|(x, y)| (x.clone(), y.clone()))
-        .chain(
-            // Sometimes, the context bindings also appear as bindings in the quantifiers, so we
-            // include them in the `xs` and `ys`
-            context.bindings.iter().map(|var| {
-                let term = pool.add(var.clone().into());
-                (term.clone(), term)
-            }),
-        )
-        .unzip();
+    let (xs, ys): (IndexSet<_>, IndexSet<_>) = {
+        let (mut xs, mut ys) = (IndexSet::new(), IndexSet::new());
+        for arg in &context.args {
+            match arg {
+                AnchorArg::Variable((name, _)) if !xs.is_empty() => {
+                    return Err(SubproofError::BindUnexpectedVarArgument(name.clone()).into());
+                }
+                AnchorArg::Variable(var) => {
+                    ys.insert(pool.add(var.clone().into()));
+                }
+                AnchorArg::Assign(var, _) => {
+                    xs.insert(pool.add(var.clone().into()));
+                }
+            }
+        }
+        (xs, ys)
+    };
 
     rassert!(
         l_bindings.len() == r_bindings.len(),
         SubproofError::BindDifferentNumberOfBindings(l_bindings.len(), r_bindings.len())
+    );
+
+    let (l_bindings, r_bindings): (IndexSet<_>, IndexSet<_>) = (
+        l_bindings.difference(&r_bindings).cloned().collect(),
+        r_bindings.difference(&r_bindings).cloned().collect(),
     );
 
     // `l_bindings` should be a subset of `xs` and `r_bindigns` should be a subset of `ys`
@@ -139,16 +146,16 @@ pub fn r#let(
 
     assert_clause_len(conclusion, 1)?;
 
-    // Since we are closing a subproof, we only care about the substitutions that were introduced
-    // in it
-    let substitution: IndexMap<Rc<Term>, Rc<Term>> = context
-        .last()
-        .unwrap()
-        .as_ref()
-        .unwrap()
-        .mappings
+    // Since we are closing a subproof, we only care about the mappings that were introduced in it
+    let context = context.last().unwrap();
+    let args = &context.as_ref().unwrap().args;
+    let mappings: IndexMap<Rc<Term>, Rc<Term>> = args
         .iter()
-        .cloned()
+        .filter_map(|arg| {
+            let (name, value) = arg.as_assign()?;
+            let var = Term::new_var(name, pool.sort(value));
+            Some((pool.add(var), value.clone()))
+        })
         .collect();
 
     let (let_term, u_prime) = match_term_err!((= l u) = &conclusion[0])?;
@@ -165,8 +172,8 @@ pub fn r#let(
     assert_eq(u_prime, previous_u_prime)?;
 
     rassert!(
-        let_bindings.len() == substitution.len(),
-        SubproofError::WrongNumberOfLetBindings(substitution.len(), let_bindings.len())
+        let_bindings.len() == mappings.len(),
+        SubproofError::WrongNumberOfLetBindings(mappings.len(), let_bindings.len())
     );
 
     let mut pairs: Vec<_> = let_bindings
@@ -174,7 +181,7 @@ pub fn r#let(
         .map(|(x, t)| {
             let sort = pool.sort(t);
             let x_term = pool.add((x.clone(), sort).into());
-            let s = substitution
+            let s = mappings
                 .get(&x_term)
                 .ok_or_else(|| SubproofError::BindingIsNotInContext(x.clone()))?;
             Ok((s, t))
@@ -197,42 +204,55 @@ pub fn r#let(
     Ok(())
 }
 
-fn extract_points(quant: Binder, term: &Rc<Term>) -> IndexSet<(Rc<Term>, Rc<Term>)> {
-    fn find_points(acc: &mut IndexSet<(Rc<Term>, Rc<Term>)>, polarity: bool, term: &Rc<Term>) {
-        // This does not make use of a cache, so there may be performance issues
-        // TODO: Measure the performance of this function, and see if a cache is needed
+fn extract_points(quant: Binder, term: &Rc<Term>) -> HashSet<(String, Rc<Term>)> {
+    fn find_points(
+        acc: &mut HashSet<(String, Rc<Term>)>,
+        seen: &mut HashSet<Rc<Term>>,
+        polarity: bool,
+        term: &Rc<Term>,
+    ) {
+        if seen.contains(term) {
+            return;
+        }
+        seen.insert(term.clone());
 
         if let Some(inner) = term.remove_negation() {
-            return find_points(acc, !polarity, inner);
+            return find_points(acc, seen, !polarity, inner);
         }
         if let Some((_, _, inner)) = term.as_quant() {
-            return find_points(acc, polarity, inner);
+            return find_points(acc, seen, polarity, inner);
         }
         match polarity {
             true => {
-                if let Some((x, t)) = match_term!((= x t) = term) {
-                    acc.insert((x.clone(), t.clone()));
+                if let Some((a, b)) = match_term!((= a b) = term) {
+                    if let Some(a) = a.as_var() {
+                        acc.insert((a.to_owned(), b.clone()));
+                    }
+                    if let Some(b) = b.as_var() {
+                        acc.insert((b.to_owned(), a.clone()));
+                    }
                 } else if let Some(args) = match_term!((and ...) = term) {
                     for a in args {
-                        find_points(acc, true, a);
+                        find_points(acc, seen, true, a);
                     }
                 }
             }
             false => {
                 if let Some((p, q)) = match_term!((=> p q) = term) {
-                    find_points(acc, true, p);
-                    find_points(acc, false, q);
+                    find_points(acc, seen, true, p);
+                    find_points(acc, seen, false, q);
                 } else if let Some(args) = match_term!((or ...) = term) {
                     for a in args {
-                        find_points(acc, false, a);
+                        find_points(acc, seen, false, a);
                     }
                 }
             }
         }
     }
 
-    let mut result = IndexSet::new();
-    find_points(&mut result, quant == Binder::Exists, term);
+    let mut result = HashSet::new();
+    let mut seen = HashSet::new();
+    find_points(&mut result, &mut seen, quant == Binder::Exists, term);
     result
 }
 
@@ -271,67 +291,66 @@ pub fn onepoint(
         }
     );
 
-    let last_context = context.last().unwrap();
-    if let Some((var, _)) = {
-        let last_context = last_context.as_ref().unwrap();
-        r_bindings
-            .iter()
-            .find(|&b| !last_context.bindings.contains(b))
-    } {
-        return Err(SubproofError::BindingIsNotInContext(var.clone()).into());
-    }
-
-    let l_bindings_set: IndexSet<_> = l_bindings
-        .iter()
-        .map(|var| pool.add(var.clone().into()))
-        .collect();
-    let r_bindings_set: IndexSet<_> = r_bindings
-        .iter()
-        .map(|var| pool.add(var.clone().into()))
-        .collect();
-    let substitution_vars: IndexSet<_> = last_context
-        .as_ref()
-        .unwrap()
-        .mappings
-        .iter()
-        .map(|(k, _)| k.clone())
-        .collect();
-    drop(last_context);
-
     let points = extract_points(quant, left);
 
     // Since a substitution may use a variable introduced in a previous substitution, we apply the
-    // substitution to the points in order to replace these variables by their value. We also
-    // create a duplicate of every point in the reverse order, since the order of equalities may be
-    // flipped
-    let points: IndexSet<_> = points
+    // substitution to the points in order to replace these variables by their value.
+    let points: HashSet<_> = points
         .into_iter()
-        .flat_map(|(x, t)| [(x.clone(), t.clone()), (t, x)])
         .map(|(x, t)| (x, context.apply(pool, &t)))
         .collect();
 
-    let last_context = context.last().unwrap();
-    let last_context = last_context.as_ref().unwrap();
+    let context = context.last().unwrap();
+    let context = context.as_ref().unwrap();
+    let mut mappings = context.args.iter().filter_map(AnchorArg::as_assign);
+
     // For each substitution (:= x t) in the context, the equality (= x t) must appear in phi
-    if let Some((k, v)) = last_context
-        .mappings
-        .iter()
-        .find(|(k, v)| !points.contains(&(k.clone(), v.clone())))
-    {
+    if let Some((k, v)) = mappings.find(|&(k, v)| !points.contains(&(k.clone(), v.clone()))) {
         return Err(SubproofError::NoPointForSubstitution(k.clone(), v.clone()).into());
     }
 
-    rassert!(l_bindings_set == &r_bindings_set | &substitution_vars, {
-        let expected: Vec<_> = l_bindings
-            .iter()
-            .filter(|&v| {
-                let t = pool.add(v.clone().into());
-                !last_context.mappings.iter().any(|(k, _)| *k == t)
-            })
-            .cloned()
-            .collect();
-        SubproofError::OnePointWrongBindings(BindingList(expected))
-    });
+    // Here we check that the right variables were eliminated. Using the notation in the
+    // specification, we have that:
+    //
+    // - `var_args` are the x_k_1, ..., x_k_m variables that appear as the variable arguments to the
+    // anchor
+    // - `point_vars` are the x_j_1, ..., x_j_o variables that appear as the left-hand side of the
+    // assign arguments in the anchor
+    // - `l_bindings` are the x_1, ..., x_n variables in the binding list of the left-hand
+    // quantifier
+    // - `r_bindings` are the x_k_1, ..., x_k_m variables in the binding list of the right-hand
+    // quantifier
+    //
+    // We must then make sure that `var_args == r_bindings`, and that
+    // `union(var_args, point_vars) == l_bindings`.
+    let var_args: Vec<_> = context
+        .args
+        .iter()
+        .filter_map(AnchorArg::as_variable)
+        .cloned()
+        .collect();
+
+    let mappings = context.args.iter().filter_map(AnchorArg::as_assign);
+    let point_vars: Vec<_> = mappings
+        .map(|(name, value)| (name.clone(), pool.sort(value)))
+        .collect();
+    let point_vars: HashSet<_> = point_vars.iter().collect();
+
+    if var_args != r_bindings.as_ref() {
+        return Err(SubproofError::OnepointWrongRightBindings(BindingList(var_args)).into());
+    }
+
+    let l_bindings: HashSet<_> = l_bindings.iter().collect();
+
+    // Convert `var_args` into a set so we can do union operation
+    let var_args: HashSet<_> = var_args.iter().collect();
+
+    let expected = &var_args | &point_vars;
+    if l_bindings != expected {
+        let expected: Vec<_> = expected.into_iter().cloned().collect();
+        return Err(SubproofError::OnepointWrongLeftBindings(BindingList(expected)).into());
+    }
+
     Ok(())
 }
 
@@ -365,15 +384,17 @@ fn generic_skolemization_rule(
         current_phi = context.apply_previous(pool, &current_phi);
     }
 
-    let substitution: IndexMap<Rc<Term>, Rc<Term>> = context
-        .last()
-        .unwrap()
-        .as_ref()
-        .unwrap()
-        .mappings
-        .iter()
-        .cloned()
+    let context = context.last().unwrap();
+    let args = context.as_ref().unwrap().args.iter();
+
+    let substitution: HashMap<Rc<Term>, Rc<Term>> = args
+        .filter_map(AnchorArg::as_assign)
+        .map(|(k, v)| {
+            let var = Term::new_var(k, pool.sort(v));
+            (pool.add(var), v.clone())
+        })
         .collect();
+
     for (i, x) in bindings.iter().enumerate() {
         let x_term = pool.add(Term::from(x.clone()));
         let t = substitution
@@ -504,6 +525,12 @@ mod tests {
                 (step t1 (cl (= (forall ((x Real) (z Real)) p)
                     (forall ((y Real) (z Real)) q))) :rule bind)": true,
             }
+            "Out-of-place variable argument in anchor" {
+                "(anchor :step t1 :args ((y1 Real) (:= (x1 Real) y1) (y2 Real) (:= (x2 Real) y2)))
+                (step t1.t1 (cl (= (= x1 x2) (= y1 y2))) :rule hole)
+                (step t1 (cl (= (forall ((x1 Real) (x2 Real)) (= x1 x2))
+                    (forall ((y1 Real) (y2 Real)) (= y1 y2)))) :rule bind)": false,
+            }
             "Binding `lambda` and `choice` terms" {
                 "(anchor :step t1 :args ((y Real) (:= (x Real) y)))
                 (step t1.t1 (cl (= x y)) :rule hole)
@@ -610,25 +637,30 @@ mod tests {
     #[test]
     fn onepoint() {
         test_cases! {
-            definitions = "(declare-fun p () Bool)",
+            definitions = "
+                (declare-const p Bool)
+                (declare-const t Int)
+                (declare-const u Int)
+                (declare-const v Int)
+            ",
             "Simple working examples" {
-                "(anchor :step t1 :args ((t Int) (:= (x Int) t)))
+                "(anchor :step t1 :args ((:= (x Int) t)))
                 (step t1.t1 (cl (= (=> (= x t) p) (=> (= t t) p))) :rule hole)
                 (step t1 (cl (= (forall ((x Int)) (=> (= x t) p)) (=> (= t t) p)))
                     :rule onepoint)": true,
 
-                "(anchor :step t1 :args ((t Int) (:= (x Int) t)))
+                "(anchor :step t1 :args ((:= (x Int) t)))
                 (step t1.t1 (cl (= (or (not (= x t)) p) (or (not (= t t)) p))) :rule hole)
                 (step t1 (cl (= (forall ((x Int)) (or (not (= x t)) p)) (or (not (= t t)) p)))
                     :rule onepoint)": true,
 
-                "(anchor :step t1 :args ((t Int) (:= (x Int) t)))
+                "(anchor :step t1 :args ((:= (x Int) t)))
                 (step t1.t1 (cl (= (and (= x t) p) (and (= t t) p))) :rule hole)
                 (step t1 (cl (= (exists ((x Int)) (and (= x t) p)) (and (= t t) p)))
                     :rule onepoint)": true,
             }
             "Multiple quantifier bindings" {
-                "(anchor :step t1 :args ((x Int) (y Int) (t Int) (:= (z Int) t)))
+                "(anchor :step t1 :args ((x Int) (y Int) (:= (z Int) t)))
                 (step t1.t1 (cl (= (=> (= z t) (= (+ x y) (+ z t)))
                                    (=> (= t t) (= (+ x y) (+ t t))))) :rule hole)
                 (step t1 (cl (=
@@ -636,7 +668,7 @@ mod tests {
                     (forall ((x Int) (y Int))         (=> (= t t) (= (+ x y) (+ t t))))
                 )) :rule onepoint)": true,
 
-                "(anchor :step t1 :args ((x Int) (y Int) (t Int) (:= (z Int) t)))
+                "(anchor :step t1 :args ((x Int) (y Int) (:= (z Int) t)))
                 (step t1.t1 (cl (= (and (= z t) (= (+ x y) (+ z t)))
                                    (and (= t t) (= (+ x y) (+ t t))))) :rule hole)
                 (step t1 (cl (=
@@ -645,7 +677,7 @@ mod tests {
                 )) :rule onepoint)": true,
             }
             "Multiple quantifier bindings eliminated" {
-                "(anchor :step t1 :args ((t Int) (u Int) (v Int) (:= (x Int) t) (:= (y Int) u) (:= (z Int) v)))
+                "(anchor :step t1 :args ((:= (x Int) t) (:= (y Int) u) (:= (z Int) v)))
                 (step t1.t1 (cl (= (=> (= x t) (=> (= y u) (=> (= z v) p)))
                                    (=> (= t t) (=> (= u u) (=> (= v v) p))))) :rule hole)
                 (step t1 (cl (=
@@ -653,7 +685,7 @@ mod tests {
                     (=> (= t t) (=> (= u u) (=> (= v v) p)))
                 )) :rule onepoint)": true,
 
-                "(anchor :step t1 :args ((t Int) (u Int) (v Int) (:= (x Int) t) (:= (y Int) u) (:= (z Int) v)))
+                "(anchor :step t1 :args ((:= (x Int) t) (:= (y Int) u) (:= (z Int) v)))
                 (step t1.t1 (cl (= (or (not (= x t)) (or (not (= y u)) (or (not (= z v)) p)))
                                    (or (not (= t t)) (or (not (= u u)) (or (not (= v v)) p)))
                 )) :rule hole)
@@ -663,7 +695,7 @@ mod tests {
                     (or (not (= t t)) (or (not (= u u)) (or (not (= v v)) p)))
                 )) :rule onepoint)": true,
 
-                "(anchor :step t1 :args ((t Int) (u Int) (v Int) (:= (x Int) t) (:= (y Int) u) (:= (z Int) v)))
+                "(anchor :step t1 :args ((:= (x Int) t) (:= (y Int) u) (:= (z Int) v)))
                 (step t1.t1 (cl (= (=> (and (= x t) (and (= y u) (= z v))) p)
                                    (=> (and (= t t) (and (= u u) (= v v))) p))) :rule hole)
                 (step t1 (cl (=
@@ -671,7 +703,7 @@ mod tests {
                     (=> (and (= t t) (and (= u u) (= v v))) p)
                 )) :rule onepoint)": true,
 
-                "(anchor :step t1 :args ((t Int) (u Int) (v Int) (:= (x Int) t) (:= (y Int) u) (:= (z Int) v)))
+                "(anchor :step t1 :args ((:= (x Int) t) (:= (y Int) u) (:= (z Int) v)))
                 (step t1.t1 (cl (= (and (= x t) (and (= y u) (and (= z v) p)))
                                    (and (= t t) (and (= u u) (and (= v v) p))))) :rule hole)
                 (step t1 (cl (=

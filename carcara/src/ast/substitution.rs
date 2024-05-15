@@ -34,9 +34,10 @@ type SubstitutionResult<T> = Result<T, SubstitutionError>;
 /// substitutions are also capture-avoiding. This is done by renaming the binder variable when
 /// necessary before applying the substitution. In the earlier example, the resulting term would
 /// actually be `(forall ((y' Int)) (= y y'))`.
+#[derive(Debug, Clone)]
 pub struct Substitution {
     /// The substitution's mappings.
-    pub(crate) map: IndexMap<Rc<Term>, Rc<Term>>,
+    map: IndexMap<Rc<Term>, Rc<Term>>,
 
     /// The variables that should be renamed to preserve capture-avoidance, if they are bound by a
     /// binder term.
@@ -121,6 +122,17 @@ impl Substitution {
 
         self.map.insert(x, t);
         Ok(())
+    }
+
+    /// Removes a mapping from the substitution.
+    ///
+    /// This will clear `self.should_be_renamed`, such that it might need to be recomputed later.
+    /// Therefore, you should avoid using this method if possible.
+    pub(super) fn remove(&mut self, x: &Rc<Term>) {
+        let was_present = self.map.remove(x).is_some();
+        if was_present {
+            self.should_be_renamed = None;
+        }
     }
 
     /// Computes which binder variables will need to be renamed, and stores the result in

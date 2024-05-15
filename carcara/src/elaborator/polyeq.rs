@@ -88,44 +88,44 @@ impl<'a> PolyeqElaborator<'a> {
             (Term::Binder(a_q, a_bindings, a_inner), Term::Binder(b_q, b_bindings, b_inner)) => {
                 assert_eq!(a_q, b_q);
 
-                let (variable_args, assignment_args) = match &mut self.context {
+                let args: Vec<_> = match &mut self.context {
                     None => {
                         assert_eq!(a_bindings, b_bindings);
-                        let assignment_args: Vec<_> = a_bindings
-                            .iter()
-                            .map(|x| {
-                                let var = (x.0.clone(), pool.sort(&x.1));
-                                let term = pool.add(x.clone().into());
-                                (var, term)
-                            })
-                            .collect();
 
-                        (a_bindings.to_vec(), assignment_args)
+                        let variable_args = a_bindings.iter().cloned().map(AnchorArg::Variable);
+
+                        let assign_args = a_bindings.iter().map(|(name, sort)| {
+                            let value = pool.add(Term::new_var(name, sort.clone()));
+                            AnchorArg::Assign((name.clone(), sort.clone()), value)
+                        });
+
+                        variable_args.chain(assign_args).collect()
                     }
                     Some(c) => {
-                        assert!(a_bindings
-                            .iter()
-                            .map(|(_, sort)| sort)
-                            .eq(b_bindings.iter().map(|(_, sort)| sort)));
-                        let variable_args: Vec<_> = a_bindings
+                        let a_sorts = a_bindings.iter().map(|(_, sort)| sort);
+                        assert!(a_sorts.eq(b_bindings.iter().map(|(_, sort)| sort)));
+
+                        let variable_args = a_bindings
                             .iter()
                             .chain(b_bindings)
                             .dedup()
                             .cloned()
-                            .collect();
+                            .map(AnchorArg::Variable);
 
-                        let assigment_args: Vec<_> = a_bindings
-                            .iter()
-                            .zip(b_bindings)
-                            .map(|((a_var, a_sort), b)| {
-                                ((a_var.clone(), a_sort.clone()), pool.add(b.clone().into()))
-                            })
-                            .collect();
+                        let assign_args =
+                            a_bindings.iter().zip(b_bindings).map(|((name, sort), b)| {
+                                AnchorArg::Assign(
+                                    (name.clone(), sort.clone()),
+                                    pool.add(b.clone().into()),
+                                )
+                            });
+
+                        let args: Vec<_> = variable_args.chain(assign_args).collect();
 
                         let new_context_id = c.force_new_context();
-                        c.push(pool, &assigment_args, &variable_args, new_context_id)
-                            .unwrap();
-                        (variable_args, assigment_args)
+                        c.push(&args, new_context_id);
+
+                        args
                     }
                 };
 
@@ -136,8 +136,7 @@ impl<'a> PolyeqElaborator<'a> {
                     c.pop();
                 }
                 self.close_subproof(
-                    assignment_args,
-                    variable_args,
+                    args,
                     ProofStep {
                         id: String::new(),
                         clause: vec![build_term!(pool, (= {a.clone()} {b.clone()}))],
@@ -152,9 +151,9 @@ impl<'a> PolyeqElaborator<'a> {
             (Term::Let(a_bindings, a_inner), Term::Let(b_bindings, b_inner)) => {
                 assert_eq!(a_bindings.len(), b_bindings.len());
 
-                let variable_args: Vec<_> = a_bindings
+                let args: Vec<_> = a_bindings
                     .iter()
-                    .map(|(name, value)| (name.clone(), pool.sort(value)))
+                    .map(|(name, value)| AnchorArg::Variable((name.clone(), pool.sort(value))))
                     .collect();
 
                 self.open_subproof();
@@ -177,8 +176,7 @@ impl<'a> PolyeqElaborator<'a> {
 
                 self.create_bind_subproof(pool, (a_inner.clone(), b_inner.clone()));
                 self.close_subproof(
-                    Vec::new(),
-                    variable_args,
+                    args,
                     ProofStep {
                         id: String::new(),
                         clause: vec![build_term!(pool, (= {a.clone()} {b.clone()}))],
@@ -338,19 +336,10 @@ impl<'a> PolyeqElaborator<'a> {
         self.inner.open_accumulator_subproof();
     }
 
-    fn close_subproof(
-        &mut self,
-        assignment_args: Vec<(SortedVar, Rc<Term>)>,
-        variable_args: Vec<SortedVar>,
-        end_step: ProofStep,
-    ) -> (usize, usize) {
+    fn close_subproof(&mut self, args: Vec<AnchorArg>, end_step: ProofStep) -> (usize, usize) {
         self.cache.pop_scope();
-        self.inner.close_accumulator_subproof(
-            assignment_args,
-            variable_args,
-            end_step,
-            self.root_id,
-        )
+        self.inner
+            .close_accumulator_subproof(args, end_step, self.root_id)
     }
 
     /// Creates the subproof for a `bind` or `bind_let` step, used to derive the equality of

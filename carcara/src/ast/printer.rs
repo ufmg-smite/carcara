@@ -143,29 +143,33 @@ impl<'a> PrintProof for AlethePrinter<'a> {
                 ProofCommand::Subproof(s) => {
                     write!(self.inner, "(anchor :step {}", quote_symbol(command.id()))?;
 
-                    if !s.variable_args.is_empty() || !s.assignment_args.is_empty() {
+                    if !s.args.is_empty() {
                         write!(self.inner, " :args (")?;
                         let mut is_first = true;
-                        for var in &s.variable_args {
+                        for arg in &s.args {
                             if !is_first {
                                 write!(self.inner, " ")?;
                             }
                             is_first = false;
-                            var.print_with_sharing(self)?;
-                        }
-                        for (var, value) in &s.assignment_args {
-                            if !is_first {
-                                write!(self.inner, " ")?;
+
+                            match arg {
+                                AnchorArg::Variable((name, sort)) => {
+                                    write!(self.inner, "({} ", quote_symbol(name))?;
+                                    sort.print_with_sharing(self)?;
+                                    write!(self.inner, ")")?;
+                                }
+                                AnchorArg::Assign(var, value) => {
+                                    write!(self.inner, "(:= ")?;
+                                    var.print_with_sharing(self)?;
+                                    write!(self.inner, " ")?;
+                                    value.print_with_sharing(self)?;
+                                    write!(self.inner, ")")?;
+                                }
                             }
-                            is_first = false;
-                            write!(self.inner, "(:= ")?;
-                            var.print_with_sharing(self)?;
-                            write!(self.inner, " ")?;
-                            value.print_with_sharing(self)?;
-                            write!(self.inner, ")")?;
                         }
                         write!(self.inner, ")")?;
                     }
+
                     write!(self.inner, ")")?;
                 }
             }

@@ -7,7 +7,9 @@
 //! - `alpha_equiv` compares terms by alpha-equivalence, meaning it implements equality of terms
 //! modulo renaming of bound variables.
 
-use super::{BindingList, Operator, ProofArg, ProofCommand, ProofStep, Rc, Sort, Subproof, Term};
+use super::{
+    AnchorArg, BindingList, Operator, ProofArg, ProofCommand, ProofStep, Rc, Sort, Subproof, Term,
+};
 use crate::utils::HashMapStack;
 use std::time::{Duration, Instant};
 
@@ -402,6 +404,18 @@ impl Polyeq for String {
     }
 }
 
+impl Polyeq for AnchorArg {
+    fn eq(comp: &mut PolyeqComparator, a: &Self, b: &Self) -> bool {
+        match (a, b) {
+            (AnchorArg::Variable(a), AnchorArg::Variable(b)) => Polyeq::eq(comp, a, b),
+            (AnchorArg::Assign(a_name, a_value), AnchorArg::Assign(b_name, b_value)) => {
+                a_name == b_name && Polyeq::eq(comp, a_value, b_value)
+            }
+            _ => false,
+        }
+    }
+}
+
 impl Polyeq for ProofArg {
     fn eq(comp: &mut PolyeqComparator, a: &Self, b: &Self) -> bool {
         match (a, b) {
@@ -441,9 +455,7 @@ impl Polyeq for ProofStep {
 
 impl Polyeq for Subproof {
     fn eq(comp: &mut PolyeqComparator, a: &Self, b: &Self) -> bool {
-        Polyeq::eq(comp, &a.commands, &b.commands)
-            && Polyeq::eq(comp, &a.assignment_args, &b.assignment_args)
-            && Polyeq::eq(comp, &a.variable_args, &b.variable_args)
+        Polyeq::eq(comp, &a.commands, &b.commands) && Polyeq::eq(comp, &a.args, &b.args)
     }
 }
 

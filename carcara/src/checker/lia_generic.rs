@@ -228,7 +228,6 @@ fn insert_solver_proof(
 
     let subproof = elaborator.close_accumulator_subproof(
         Vec::new(),
-        Vec::new(),
         ProofStep {
             id: subproof_id,
             clause: clause.clone(),
