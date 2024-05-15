@@ -4,8 +4,8 @@ mod logger;
 mod path_args;
 
 use carcara::{
-    ast, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate, check_parallel,
-    generate_lia_smt_instances, parser, CarcaraOptions, LiaGenericOptions,
+    ast, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate, check_parallel, checker,
+    elaborator, generate_lia_smt_instances, parser,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -124,13 +124,28 @@ struct ParsingOptions {
     #[clap(long)]
     allow_int_real_subtyping: bool,
 
-    /// Enables strict parsing and checking.
+    /// Enables strict parsing.
     ///
-    /// When this flag is enabled: unary `and`, `or` and `xor` terms are not allowed; for the `refl`
-    /// and `assume` rules, implicit reordering of equalities is not allowed; for the `resolution`
-    /// and `th_resolution` rules, the pivots used must be passed as arguments.
-    #[clap(short, long)]
+    /// When this flag is enabled: unary `and`, `or` and `xor` terms are not allowed;
+    #[clap(short, long = "strict-parsing")]
     strict: bool,
+}
+
+impl From<ParsingOptions> for parser::Config {
+    fn from(val: ParsingOptions) -> Self {
+        Self {
+            apply_function_defs: val.apply_function_defs,
+            expand_lets: val.expand_let_bindings,
+            allow_int_real_subtyping: val.allow_int_real_subtyping,
+            strict: val.strict,
+        }
+    }
+}
+
+#[derive(ArgEnum, Clone, Copy, PartialEq, Eq)]
+enum CheckGranularity {
+    Normal,
+    Elaborated,
 }
 
 #[derive(Args, Clone)]
@@ -143,7 +158,43 @@ struct CheckingOptions {
     #[clap(long, conflicts_with("ignore-unknown-rules"), hide = true)]
     skip_unknown_rules: bool,
 
-    /// Check `lia_generic` steps using the provided solver.
+    /// A set of extra rules to be allowed by the checker, and considered as holes.
+    #[clap(long, multiple = true, conflicts_with = "ignore-unknown-rules")]
+    allowed_rules: Option<Vec<String>>,
+
+    /// Enforce restrictions on the granularity of the proof.
+    ///
+    /// If this is "normal", the proof is checked normally, with no extra restrictions. If this
+    /// is "elaborated", the checker will expect the proof to have previously been elaborated by
+    /// Carcara, and will enforce extra restrictions. In particular:
+    /// - the implicit reordering of equalities is not allowed
+    /// - the pivots for `resolution` steps must be given as arguments
+    #[clap(arg_enum, long, default_value = "normal", verbatim_doc_comment)]
+    check_granularity: CheckGranularity,
+}
+
+impl From<CheckingOptions> for checker::Config {
+    fn from(val: CheckingOptions) -> Self {
+        Self {
+            elaborated: val.check_granularity == CheckGranularity::Elaborated,
+            ignore_unknown_rules: val.ignore_unknown_rules,
+            allowed_rules: val.allowed_rules.unwrap_or_default().into_iter().collect(),
+        }
+    }
+}
+
+#[derive(ArgEnum, Clone)]
+enum ElaborationStep {
+    Polyeq,
+    LiaGeneric,
+    Local,
+    Uncrowd,
+    Reordering,
+}
+
+#[derive(Args, Clone)]
+struct ElaborationOptions {
+    /// Elaborate `lia_generic` steps using the provided solver.
     #[clap(long)]
     lia_solver: Option<String>,
 
@@ -157,42 +208,38 @@ struct CheckingOptions {
     )]
     lia_solver_args: String,
 
-    /// Check `lia_generic` steps by calling into cvc5 (deprecated).
-    #[clap(long, conflicts_with("lia-solver"))]
-    lia_via_cvc5: bool,
+    /// The pipeline of elaboration steps to use.
+    #[clap(
+        arg_enum,
+        long,
+        multiple = true,
+        default_values = &["polyeq", "lia-generic", "local", "uncrowd", "reordering"]
+    )]
+    pipeline: Vec<ElaborationStep>,
 }
 
-fn build_carcara_options(
-    ParsingOptions {
-        apply_function_defs,
-        expand_let_bindings,
-        allow_int_real_subtyping,
-        strict,
-    }: ParsingOptions,
-    CheckingOptions {
-        ignore_unknown_rules,
-        skip_unknown_rules,
-        lia_solver,
-        lia_via_cvc5,
-        lia_solver_args,
-    }: CheckingOptions,
-    StatsOptions { stats }: StatsOptions,
-) -> CarcaraOptions {
-    // If no solver is provided by the `--lia-solver` option, *and* the `--lia-via-cvc5` option was
-    // passed, we default to cvc5 as a solver
-    let solver = lia_solver.or_else(|| lia_via_cvc5.then(|| "cvc5".into()));
-    let lia_options = solver.map(|solver| LiaGenericOptions {
-        solver: solver.into(),
-        arguments: lia_solver_args.split_whitespace().map(Into::into).collect(),
-    });
-    CarcaraOptions {
-        apply_function_defs,
-        expand_lets: expand_let_bindings,
-        allow_int_real_subtyping,
-        lia_options,
-        strict,
-        ignore_unknown_rules: ignore_unknown_rules || skip_unknown_rules,
-        stats,
+impl From<ElaborationOptions> for (elaborator::Config, Vec<elaborator::ElaborationStep>) {
+    fn from(val: ElaborationOptions) -> Self {
+        let pipeline: Vec<_> = val
+            .pipeline
+            .into_iter()
+            .map(|s| match s {
+                ElaborationStep::Polyeq => elaborator::ElaborationStep::Polyeq,
+                ElaborationStep::LiaGeneric => elaborator::ElaborationStep::LiaGeneric,
+                ElaborationStep::Local => elaborator::ElaborationStep::Local,
+                ElaborationStep::Uncrowd => elaborator::ElaborationStep::Uncrowd,
+                ElaborationStep::Reordering => elaborator::ElaborationStep::Reordering,
+            })
+            .collect();
+        let lia_options = val.lia_solver.map(|solver| elaborator::LiaGenericOptions {
+            solver: solver.into(),
+            arguments: val
+                .lia_solver_args
+                .split_whitespace()
+                .map(Into::into)
+                .collect(),
+        });
+        (elaborator::Config { lia_options }, pipeline)
     }
 }
 
@@ -249,6 +296,9 @@ struct ElaborateCommandOptions {
     checking: CheckingOptions,
 
     #[clap(flatten)]
+    elaboration: ElaborationOptions,
+
+    #[clap(flatten)]
     stats: StatsOptions,
 }
 
@@ -263,6 +313,9 @@ struct BenchCommandOptions {
     /// Also elaborate each proof in addition to parsing and checking.
     #[clap(long)]
     elaborate: bool,
+
+    #[clap(flatten)]
+    elaboration: ElaborationOptions,
 
     /// Number of times to run the benchmark for each file.
     #[clap(short, long, default_value_t = 1)]
@@ -347,19 +400,13 @@ fn main() {
                 `--ignore-unknown-rules` instead"
             )
         }
-        if checking.lia_via_cvc5 {
-            log::warn!(
-                "the `--lia-via-cvc5` option is deprecated, please use `--lia-solver cvc5` instead"
-            )
-        }
     }
 
-    let print_proof = |commands: Vec<ast::ProofCommand>| -> CliResult<()> {
-        ast::print_proof(&commands, !cli.no_print_with_sharing)?;
-        Ok(())
-    };
     let result = match cli.command {
-        Command::Parse(options) => parse_command(options).and_then(|p| print_proof(p.commands)),
+        Command::Parse(options) => parse_command(options).and_then(|(prelude, proof, mut pool)| {
+            ast::print_proof(&mut pool, &prelude, &proof, !cli.no_print_with_sharing)?;
+            Ok(())
+        }),
         Command::Check(options) => {
             match check_command(options) {
                 Ok(false) => println!("valid"),
@@ -373,10 +420,21 @@ fn main() {
             return;
         }
         Command::Elaborate(options) => {
-            elaborate_command(options).and_then(|p| print_proof(p.commands))
+            elaborate_command(options).and_then(|(res, prelude, proof, mut pool)| {
+                if res {
+                    println!("holey");
+                } else {
+                    println!("valid");
+                }
+                ast::print_proof(&mut pool, &prelude, &proof, !cli.no_print_with_sharing)?;
+                Ok(())
+            })
         }
         Command::Bench(options) => bench_command(options),
-        Command::Slice(options) => slice_command(options).and_then(print_proof),
+        Command::Slice(options) => slice_command(options).and_then(|(prelude, proof, mut pool)| {
+            ast::print_proof(&mut pool, &prelude, &proof, !cli.no_print_with_sharing)?;
+            Ok(())
+        }),
         Command::GenerateLiaProblems(options) => {
             generate_lia_problems_command(options, !cli.no_print_with_sharing)
         }
@@ -404,32 +462,29 @@ fn get_instance(options: &Input) -> CliResult<(Box<dyn BufRead>, Box<dyn BufRead
     }
 }
 
-fn parse_command(options: ParseCommandOptions) -> CliResult<ast::Proof> {
+fn parse_command(
+    options: ParseCommandOptions,
+) -> CliResult<(ast::ProblemPrelude, ast::Proof, ast::PrimitivePool)> {
     let (problem, proof) = get_instance(&options.input)?;
-    let (_, proof, _) = parser::parse_instance(
-        problem,
-        proof,
-        parser::Config {
-            apply_function_defs: options.parsing.apply_function_defs,
-            expand_lets: options.parsing.expand_let_bindings,
-            allow_int_real_subtyping: options.parsing.allow_int_real_subtyping,
-            allow_unary_logical_ops: !options.parsing.strict,
-        },
-    )
-    .map_err(carcara::Error::from)?;
-    Ok(proof)
+    let result = parser::parse_instance(problem, proof, options.parsing.into())
+        .map_err(carcara::Error::from)?;
+    Ok(result)
 }
 
 fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
     let (problem, proof) = get_instance(&options.input)?;
-    let carc_options = build_carcara_options(options.parsing, options.checking, options.stats);
+    let parser_config = options.parsing.into();
+    let checker_config = options.checking.into();
+    let collect_stats = options.stats.stats;
     if options.num_threads == 1 {
-        check(problem, proof, carc_options)
+        check(problem, proof, parser_config, checker_config, collect_stats)
     } else {
         check_parallel(
             problem,
             proof,
-            carc_options,
+            parser_config,
+            checker_config,
+            collect_stats,
             options.num_threads,
             options.stack.stack_size,
         )
@@ -437,15 +492,22 @@ fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
     .map_err(Into::into)
 }
 
-fn elaborate_command(options: ElaborateCommandOptions) -> CliResult<ast::Proof> {
+fn elaborate_command(
+    options: ElaborateCommandOptions,
+) -> CliResult<(bool, ast::ProblemPrelude, ast::Proof, ast::PrimitivePool)> {
     let (problem, proof) = get_instance(&options.input)?;
 
-    let (_, elaborated) = check_and_elaborate(
+    let (elab_config, pipeline) = options.elaboration.into();
+    check_and_elaborate(
         problem,
         proof,
-        build_carcara_options(options.parsing, options.checking, options.stats),
-    )?;
-    Ok(elaborated)
+        options.parsing.into(),
+        options.checking.into(),
+        elab_config,
+        pipeline,
+        options.stats.stats,
+    )
+    .map_err(CliError::CarcaraError)
 }
 
 fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
@@ -461,20 +523,16 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         options.num_runs
     );
 
-    let carc_options = build_carcara_options(
-        options.parsing,
-        options.checking,
-        StatsOptions { stats: false },
-    );
     if options.dump_to_csv {
         benchmarking::run_csv_benchmark(
             &instances,
             options.num_runs,
             options.num_jobs,
-            &carc_options,
-            options.elaborate,
+            options.parsing.into(),
+            options.checking.into(),
+            options.elaborate.then(|| options.elaboration.into()),
             &mut File::create("runs.csv")?,
-            &mut File::create("by-rule.csv")?,
+            &mut File::create("steps.csv")?,
         )?;
         return Ok(());
     }
@@ -483,8 +541,9 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         &instances,
         options.num_runs,
         options.num_jobs,
-        &carc_options,
-        options.elaborate,
+        options.parsing.into(),
+        options.checking.into(),
+        options.elaborate.then(|| options.elaboration.into()),
     );
     if results.is_empty() {
         println!("no benchmark data collected");
@@ -502,26 +561,21 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
     Ok(())
 }
 
-fn slice_command(options: SliceCommandOptions) -> CliResult<Vec<ast::ProofCommand>> {
+fn slice_command(
+    options: SliceCommandOptions,
+) -> CliResult<(ast::ProblemPrelude, ast::Proof, ast::PrimitivePool)> {
     let (problem, proof) = get_instance(&options.input)?;
-    let config = parser::Config {
-        apply_function_defs: options.parsing.apply_function_defs,
-        expand_lets: options.parsing.expand_let_bindings,
-        allow_int_real_subtyping: options.parsing.allow_int_real_subtyping,
-        allow_unary_logical_ops: !options.parsing.strict,
+    let (prelude, proof, pool) = parser::parse_instance(problem, proof, options.parsing.into())
+        .map_err(carcara::Error::from)?;
+
+    let node = ast::ProofNode::from_commands_with_root_id(proof.commands, &options.from)
+        .ok_or_else(|| CliError::InvalidSliceId(options.from))?;
+    let sliced = ast::Proof {
+        commands: node.into_commands(),
+        ..proof
     };
-    let (_, proof, _) =
-        parser::parse_instance(problem, proof, config).map_err(carcara::Error::from)?;
 
-    let source_index = proof
-        .commands
-        .iter()
-        .position(|c| c.id() == options.from)
-        .ok_or_else(|| CliError::InvalidSliceId(options.from.to_owned()))?;
-
-    let diff =
-        carcara::elaborator::slice_proof(&proof.commands, source_index, options.max_distance);
-    Ok(carcara::elaborator::apply_diff(diff, proof.commands))
+    Ok((prelude, sliced, pool))
 }
 
 fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool) -> CliResult<()> {
@@ -530,17 +584,8 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
     let root_file_name = options.input.proof_file.clone();
     let (problem, proof) = get_instance(&options.input)?;
 
-    let instances = generate_lia_smt_instances(
-        problem,
-        proof,
-        parser::Config {
-            apply_function_defs: options.parsing.apply_function_defs,
-            expand_lets: options.parsing.expand_let_bindings,
-            allow_int_real_subtyping: options.parsing.allow_int_real_subtyping,
-            allow_unary_logical_ops: !options.parsing.strict,
-        },
-        use_sharing,
-    )?;
+    let instances =
+        generate_lia_smt_instances(problem, proof, options.parsing.into(), use_sharing)?;
     for (id, content) in instances {
         let file_name = format!("{}.{}.lia_smt2", root_file_name, id);
         let mut f = File::create(file_name)?;

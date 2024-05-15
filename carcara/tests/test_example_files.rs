@@ -40,22 +40,30 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
     )?;
 
     // First, we check the proof normally
-    checker::ProofChecker::new(&mut pool, Config::new(), &prelude).check(&proof)?;
+    checker::ProofChecker::new(&mut pool, Config::new()).check(&proof)?;
 
-    // Then, we check it while elaborating the proof
-    let mut checker = checker::ProofChecker::new(&mut pool, Config::new(), &prelude);
-    let (_, elaborated) = checker.check_and_elaborate(proof)?;
+    // Then we elaborate it
+    let config = elaborator::Config { lia_options: None };
+    let node = ast::ProofNode::from_commands(proof.commands.clone());
+    let elaborated_node =
+        elaborator::Elaborator::new(&mut pool, &proof.premises, &prelude, config.clone())
+            .elaborate_with_default_pipeline(&node);
+    let elaborated = ast::Proof {
+        premises: proof.premises.clone(),
+        constant_definitions: proof.constant_definitions.clone(),
+        commands: elaborated_node.into_commands(),
+    };
 
-    // After that, we check the elaborated proof normally, to make sure it is valid
-    checker::ProofChecker::new(&mut pool, Config::new().strict(true), &prelude)
-        .check(&elaborated)?;
+    // After that, we check the elaborated proof to make sure it is valid
+    checker::ProofChecker::new(&mut pool, Config::new()).check(&elaborated)?;
 
     // Finally, we elaborate the already elaborated proof, to make sure the elaboration step is
     // idempotent
-    let mut checker = checker::ProofChecker::new(&mut pool, Config::new().strict(true), &prelude);
-    let (_, elaborated_twice) = checker.check_and_elaborate(elaborated.clone())?;
+    let elaborated_twice =
+        elaborator::Elaborator::new(&mut pool, &proof.premises, &prelude, config)
+            .elaborate_with_default_pipeline(&elaborated_node);
     assert!(
-        elaborated.commands == elaborated_twice.commands,
+        elaborated.commands == elaborated_twice.into_commands(),
         "elaboration was not idempotent!"
     );
 
