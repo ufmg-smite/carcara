@@ -5,7 +5,8 @@
 //* clone it; otherwise, we allocate a new `Rc`.
 
 use crate::ast::*;
-use std::borrow::Borrow;
+use indexmap::IndexSet;
+use std::{borrow::Borrow, hash::Hash};
 
 /// Since `ast::Rc` intentionally implements hashing and equality by reference (instead of by
 /// value), we cannot safely implement `Borrow<Term>` for `Rc<Term>`, so we cannot access a

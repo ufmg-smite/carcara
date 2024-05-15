@@ -1,5 +1,5 @@
 use crate::{
-    ast::{pool::PrimitivePool, Polyeq, PolyeqComparator, TermPool},
+    ast::{node::proof_node_to_list, pool::PrimitivePool, Polyeq, PolyeqComparator, TermPool},
     parser::tests::parse_terms,
 };
 use indexmap::IndexSet;
@@ -124,4 +124,45 @@ fn test_polyeq() {
         ],
         TestType::ModNary,
     );
+}
+
+#[test]
+fn test_node() {
+    use super::proof_list_to_node;
+    use crate::parser::tests::*;
+
+    let original = "
+        (assume h0 (= 0 0))
+        (assume h1 (= 1 1))
+        (assume h2 (= 2 2))
+        (step t3 (cl true) :rule blah :premises (h0 h2))
+        (step t4 (cl true) :rule blah)
+        (anchor :step t5)
+            (assume t5.h1 (= 3 3))
+            (step t5.t2 (cl true) :rule blah :premises (t4))
+            (step t5.t3 (cl true) :rule blah)
+            (step t5.t4 (cl true) :rule blah)
+            (step t5 (cl true) :rule blah :premises (t5.t2) :discharge (t5.h1))
+        (step t6 (cl) :rule blah :premises (t3 t5))
+    ";
+    let expected = "
+        (assume h0 (= 0 0))
+        (assume h2 (= 2 2))
+        (step t3 (cl true) :rule blah :premises (h0 h2))
+        (step t4 (cl true) :rule blah)
+        (anchor :step t5)
+            (step t5.t2 (cl true) :rule blah :premises (t4))
+            (assume t5.h1 (= 3 3))
+            (step t5.t4 (cl true) :rule blah)
+            (step t5 (cl true) :rule blah :premises (t5.t2) :discharge (t5.h1))
+        (step t6 (cl) :rule blah :premises (t3 t5))
+    ";
+    let mut pool = PrimitivePool::new();
+    let original = parse_proof(&mut pool, original);
+
+    let expected = parse_proof(&mut pool, expected);
+
+    let node = proof_list_to_node(original.commands);
+    let got = proof_node_to_list(&node);
+    assert_eq!(expected.commands, got);
 }

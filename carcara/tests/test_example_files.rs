@@ -42,6 +42,16 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
     // First, we check the proof normally
     checker::ProofChecker::new(&mut pool, Config::new(), &prelude).check(&proof)?;
 
+    // Then we convert the proof to a node proof and back, and check the resulting proof
+    {
+        let node = ast::proof_list_to_node(proof.commands.clone());
+        let and_back_again = ast::Proof {
+            premises: proof.premises.clone(),
+            commands: ast::proof_node_to_list(&node),
+        };
+        checker::ProofChecker::new(&mut pool, Config::new(), &prelude).check(&and_back_again)?;
+    }
+
     // Then, we check it while elaborating the proof
     let mut checker = checker::ProofChecker::new(&mut pool, Config::new(), &prelude);
     let (_, elaborated) = checker.check_and_elaborate(proof)?;
