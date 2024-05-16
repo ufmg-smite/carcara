@@ -121,10 +121,7 @@ impl<'a> PolyeqElaborator<'a> {
                             });
 
                         let args: Vec<_> = variable_args.chain(assign_args).collect();
-
-                        let new_context_id = c.force_new_context();
-                        c.push(&args, new_context_id);
-
+                        c.push(&args);
                         args
                     }
                 };

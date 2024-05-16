@@ -160,8 +160,7 @@ impl<'c> ProofChecker<'c> {
                     let time = Instant::now();
                     let step_id = command.id();
 
-                    let new_context_id = self.context.force_new_context();
-                    self.context.push(&s.args, new_context_id);
+                    self.context.push(&s.args);
 
                     if let Some(elaborator) = &mut self.elaborator {
                         elaborator.open_subproof(s.commands.len());

@@ -96,13 +96,18 @@ impl ContextStack {
     /// how many contexts there are in the proof (and it's not needed since we
     /// can always add a new context at the end of the vector just like an usual
     /// stack)
-    pub fn force_new_context(&mut self) -> usize {
+    fn force_new_context(&mut self) -> usize {
         let ctx_vec = Arc::get_mut(&mut self.context_vec).unwrap();
         ctx_vec.push((AtomicUsize::new(1), RwLock::new(None)));
         ctx_vec.len() - 1
     }
 
-    pub fn push(&mut self, args: &[AnchorArg], context_id: usize) {
+    pub fn push(&mut self, args: &[AnchorArg]) {
+        let id = self.force_new_context();
+        self.push_with_id(args, id);
+    }
+
+    pub fn push_with_id(&mut self, args: &[AnchorArg], context_id: usize) {
         // The write guard was yielded to this thread
         if let Ok(mut ctx_write_guard) = self.context_vec[context_id].1.try_write() {
             // It's the first thread trying to build this context. It will

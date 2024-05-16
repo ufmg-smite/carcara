@@ -287,7 +287,7 @@ impl<'c> ParallelProofChecker<'c> {
                     let time = Instant::now();
                     let step_id = command.id();
 
-                    self.context.push(&s.args, s.context_id);
+                    self.context.push_with_id(&s.args, s.context_id);
 
                     if let Some(stats) = &mut stats {
                         // Collects statistics
