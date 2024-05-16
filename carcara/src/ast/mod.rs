@@ -19,7 +19,7 @@ mod tests;
 
 pub use context::{Context, ContextStack};
 pub use iter::ProofIter;
-pub use node::{proof_list_to_node, proof_node_to_list, ProofNode, StepNode, SubproofNode};
+pub use node::{ProofNode, StepNode, SubproofNode};
 pub use polyeq::{alpha_equiv, polyeq, polyeq_mod_nary, tracing_polyeq_mod_nary};
 pub use pool::{PrimitivePool, TermPool};
 pub use printer::{print_proof, USE_SHARING_IN_TERM_DISPLAY};

@@ -111,6 +111,10 @@ impl<K, V> HashMapStack<K, V> {
         Self { scopes: vec![IndexMap::new()] }
     }
 
+    pub fn height(&self) -> usize {
+        self.scopes.len()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.scopes.iter().all(IndexMap::is_empty)
     }

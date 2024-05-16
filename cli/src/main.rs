@@ -513,15 +513,10 @@ fn slice_command(options: SliceCommandOptions) -> CliResult<Vec<ast::ProofComman
     let (_, proof, _) =
         parser::parse_instance(problem, proof, config).map_err(carcara::Error::from)?;
 
-    let source_index = proof
-        .commands
-        .iter()
-        .position(|c| c.id() == options.from)
-        .ok_or_else(|| CliError::InvalidSliceId(options.from.to_owned()))?;
+    let node = ast::ProofNode::from_commands_with_root_id(proof.commands, &options.from)
+        .ok_or_else(|| CliError::InvalidSliceId(options.from))?;
 
-    let diff =
-        carcara::elaborator::slice_proof(&proof.commands, source_index, options.max_distance);
-    Ok(carcara::elaborator::apply_diff(diff, proof.commands))
+    Ok(node.into_commands())
 }
 
 fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool) -> CliResult<()> {

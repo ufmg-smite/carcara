@@ -41,6 +41,7 @@ pub mod benchmarking;
 pub mod checker;
 pub mod elaborator;
 pub mod parser;
+mod resolution;
 mod utils;
 
 use crate::benchmarking::{CollectResults, OnlineBenchmarkResults, RunMeasurement};
@@ -159,7 +160,7 @@ pub fn check<T: io::BufRead>(problem: T, proof: T, options: CarcaraOptions) -> R
         allow_int_real_subtyping: options.allow_int_real_subtyping,
         allow_unary_logical_ops: !options.strict,
     };
-    let (prelude, proof, mut pool) = parser::parse_instance(problem, proof, config)?;
+    let (_, proof, mut pool) = parser::parse_instance(problem, proof, config)?;
     run_measures.parsing = total.elapsed();
 
     let config = checker::Config::new()
@@ -169,11 +170,10 @@ pub fn check<T: io::BufRead>(problem: T, proof: T, options: CarcaraOptions) -> R
 
     // Checking
     let checking = Instant::now();
-    let mut checker = checker::ProofChecker::new(&mut pool, config, &prelude);
+    let mut checker = checker::ProofChecker::new(&mut pool, config);
     if options.stats {
         let mut checker_stats = CheckerStatistics {
             file_name: "this",
-            elaboration_time: Duration::ZERO,
             polyeq_time: Duration::ZERO,
             assume_time: Duration::ZERO,
             assume_core_time: Duration::ZERO,
@@ -189,7 +189,7 @@ pub fn check<T: io::BufRead>(problem: T, proof: T, options: CarcaraOptions) -> R
             RunMeasurement {
                 parsing: run_measures.parsing,
                 checking: run_measures.checking,
-                elaboration: checker_stats.elaboration_time,
+                elaboration: run_measures.elaboration,
                 scheduling: run_measures.scheduling,
                 total: run_measures.total,
                 polyeq: checker_stats.polyeq_time,
@@ -248,7 +248,6 @@ pub fn check_parallel<T: io::BufRead>(
     if options.stats {
         let mut checker_stats = CheckerStatistics {
             file_name: "this",
-            elaboration_time: Duration::ZERO,
             polyeq_time: Duration::ZERO,
             assume_time: Duration::ZERO,
             assume_core_time: Duration::ZERO,
@@ -264,7 +263,7 @@ pub fn check_parallel<T: io::BufRead>(
             RunMeasurement {
                 parsing: run_measures.parsing,
                 checking: run_measures.checking,
-                elaboration: checker_stats.elaboration_time,
+                elaboration: run_measures.elaboration,
                 scheduling: run_measures.scheduling,
                 total: run_measures.total,
                 polyeq: checker_stats.polyeq_time,
@@ -301,23 +300,21 @@ pub fn check_and_elaborate<T: io::BufRead>(
 
     let config = checker::Config::new()
         .strict(options.strict)
-        .ignore_unknown_rules(options.ignore_unknown_rules)
-        .lia_options(options.lia_options);
+        .ignore_unknown_rules(options.ignore_unknown_rules);
 
     // Checking
     let checking = Instant::now();
-    let mut checker = checker::ProofChecker::new(&mut pool, config, &prelude);
-    if options.stats {
+    let mut checker = checker::ProofChecker::new(&mut pool, config);
+    let checking_result = if options.stats {
         let mut checker_stats = CheckerStatistics {
             file_name: "this",
-            elaboration_time: Duration::ZERO,
             polyeq_time: Duration::ZERO,
             assume_time: Duration::ZERO,
             assume_core_time: Duration::ZERO,
             results: OnlineBenchmarkResults::new(),
         };
 
-        let res = checker.check_and_elaborate_with_stats(proof, &mut checker_stats);
+        let res = checker.check_with_stats(&proof, &mut checker_stats);
         run_measures.checking = checking.elapsed();
         run_measures.total = total.elapsed();
 
@@ -326,7 +323,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
             RunMeasurement {
                 parsing: run_measures.parsing,
                 checking: run_measures.checking,
-                elaboration: checker_stats.elaboration_time,
+                elaboration: run_measures.elaboration,
                 scheduling: run_measures.scheduling,
                 total: run_measures.total,
                 polyeq: checker_stats.polyeq_time,
@@ -339,8 +336,19 @@ pub fn check_and_elaborate<T: io::BufRead>(
 
         res
     } else {
-        checker.check_and_elaborate(proof)
-    }
+        checker.check(&proof)
+    }?;
+
+    // Elaborating
+    let node = ast::ProofNode::from_commands(proof.commands);
+    let lia_options = options.lia_options.as_ref().map(|lia| (lia, &prelude));
+    let elaborated = elaborator::elaborate(&mut pool, &proof.premises, &node, lia_options);
+
+    let elaborated = ast::Proof {
+        premises: proof.premises,
+        commands: elaborated.into_commands(),
+    };
+    Ok((checking_result, elaborated))
 }
 
 pub fn generate_lia_smt_instances<T: io::BufRead>(
@@ -349,6 +357,35 @@ pub fn generate_lia_smt_instances<T: io::BufRead>(
     config: parser::Config,
     use_sharing: bool,
 ) -> Result<Vec<(String, String)>, Error> {
+    use std::fmt::Write;
     let (prelude, proof, _) = parser::parse_instance(problem, proof, config)?;
-    checker::generate_lia_smt_instances(prelude, &proof, use_sharing)
+
+    let mut iter = proof.iter();
+    let mut result = Vec::new();
+    while let Some(command) = iter.next() {
+        if let ast::ProofCommand::Step(step) = command {
+            if step.rule == "lia_generic" {
+                if iter.depth() > 0 {
+                    log::error!(
+                        "generating SMT instance for step inside subproof is not supported"
+                    );
+                    continue;
+                }
+
+                let mut problem = String::new();
+                write!(&mut problem, "{}", prelude).unwrap();
+
+                let mut bytes = Vec::new();
+                ast::printer::write_lia_smt_instance(&mut bytes, &step.clause, use_sharing)
+                    .unwrap();
+                write!(&mut problem, "{}", String::from_utf8(bytes).unwrap()).unwrap();
+
+                writeln!(&mut problem, "(check-sat)").unwrap();
+                writeln!(&mut problem, "(exit)").unwrap();
+
+                result.push((step.id.clone(), problem));
+            }
+        }
+    }
+    Ok(result)
 }

@@ -1,5 +1,5 @@
 use crate::{
-    ast::{node::proof_node_to_list, pool::PrimitivePool, Polyeq, PolyeqComparator, TermPool},
+    ast::{node::ProofNode, pool::PrimitivePool, Polyeq, PolyeqComparator, TermPool},
     parser::tests::parse_terms,
 };
 use indexmap::IndexSet;
@@ -128,7 +128,6 @@ fn test_polyeq() {
 
 #[test]
 fn test_node() {
-    use super::proof_list_to_node;
     use crate::parser::tests::*;
 
     let original = "
@@ -162,7 +161,7 @@ fn test_node() {
 
     let expected = parse_proof(&mut pool, expected);
 
-    let node = proof_list_to_node(original.commands);
-    let got = proof_node_to_list(&node);
+    let node = ProofNode::from_commands(original.commands);
+    let got = node.into_commands();
     assert_eq!(expected.commands, got);
 }

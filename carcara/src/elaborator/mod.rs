@@ -1,349 +1,246 @@
-mod accumulator;
-mod diff;
+mod lia_generic;
 mod polyeq;
-mod pruning;
+mod reflexivity;
+mod resolution;
+mod transitivity;
 
-pub use diff::{apply_diff, CommandDiff, ProofDiff};
-pub use pruning::{prune_proof, slice_proof};
-
-use crate::{ast::*, utils::HashMapStack};
-use accumulator::Accumulator;
+use crate::{ast::*, CheckerError, LiaGenericOptions};
+use indexmap::IndexSet;
 use polyeq::PolyeqElaborator;
+use std::collections::{HashMap, HashSet};
 
-#[derive(Debug, Default)]
-struct Frame {
-    diff: Vec<(usize, CommandDiff)>,
-    new_indices: Vec<(usize, usize)>,
-    current_offset: isize,
-    subproof_length: usize,
+#[allow(unused)]
+pub fn elaborate(
+    pool: &mut PrimitivePool,
+    premises: &IndexSet<Rc<Term>>,
+    root: &Rc<ProofNode>,
+    lia_options: Option<(&LiaGenericOptions, &ProblemPrelude)>,
+) -> Rc<ProofNode> {
+    mutate(root, |context, node| {
+        match node.as_ref() {
+            ProofNode::Assume { id, depth, term }
+                if context.is_empty() && !premises.contains(term) =>
+            {
+                return elaborate_assume(pool, premises, id, *depth, term)
+            }
+            ProofNode::Step(s) => {
+                if let Some(func) = get_elaboration_function(&s.rule) {
+                    return func(pool, context, s).unwrap(); // TODO: add proper error handling
+                }
+                if let Some((lia_options, prelude)) = lia_options {
+                    if s.rule == "lia_generic" {
+                        return lia_generic::lia_generic(pool, s, prelude, lia_options)
+                            .unwrap_or_else(|| node.clone());
+                    }
+                }
+            }
+            ProofNode::Subproof(_) => unreachable!(),
+            ProofNode::Assume { .. } => (),
+        }
+        node.clone()
+    })
 }
 
-impl Frame {
-    fn current_index(&self) -> usize {
-        self.new_indices.len()
+fn elaborate_assume(
+    pool: &mut dyn TermPool,
+    premises: &IndexSet<Rc<Term>>,
+    id: &str,
+    depth: usize,
+    term: &Rc<Term>,
+) -> Rc<ProofNode> {
+    let mut found = None;
+    let mut polyeq_time = std::time::Duration::ZERO;
+    for p in premises {
+        if polyeq_mod_nary(term, p, &mut polyeq_time) {
+            found = Some(p.clone());
+            break;
+        }
     }
+    let premise = found.expect("trying to elaborate assume, but it is invalid!");
 
-    fn push_new_index(&mut self, current_depth: usize) -> (usize, usize) {
-        let old_index = self.current_index();
-        let new_index = (self.current_index() as isize + self.current_offset) as usize;
-        self.new_indices.push((current_depth, new_index));
-        (old_index, new_index)
+    let new_assume = Rc::new(ProofNode::Assume {
+        id: id.to_owned(),
+        depth,
+        term: premise.clone(),
+    });
+
+    let mut ids = IdHelper::new(id);
+    let equality_step = PolyeqElaborator::new(&mut ids, depth, false).elaborate(
+        pool,
+        premise.clone(),
+        term.clone(),
+    );
+
+    let equiv1_step = Rc::new(ProofNode::Step(StepNode {
+        id: ids.next_id(),
+        depth,
+        clause: vec![build_term!(pool, (not {premise.clone()})), term.clone()],
+        rule: "equiv1".to_owned(),
+        premises: vec![equality_step],
+        ..Default::default()
+    }));
+
+    Rc::new(ProofNode::Step(StepNode {
+        id: ids.next_id(),
+        depth,
+        clause: vec![term.clone()],
+        rule: "resolution".to_owned(),
+        premises: vec![new_assume, equiv1_step],
+        args: vec![ProofArg::Term(premise), ProofArg::Term(pool.bool_true())],
+        ..Default::default()
+    }))
+}
+
+pub fn add_refl_step(
+    pool: &mut dyn TermPool,
+    a: Rc<Term>,
+    b: Rc<Term>,
+    id: String,
+    depth: usize,
+) -> Rc<ProofNode> {
+    Rc::new(ProofNode::Step(StepNode {
+        id,
+        depth,
+        clause: vec![build_term!(pool, (= {a} {b}))],
+        rule: "refl".to_owned(),
+        premises: Vec::new(),
+        args: Vec::new(),
+        discharge: Vec::new(),
+        previous_step: None,
+    }))
+}
+
+type ElaborationFunc =
+    fn(&mut PrimitivePool, &mut ContextStack, &StepNode) -> Result<Rc<ProofNode>, CheckerError>;
+
+fn get_elaboration_function(rule: &str) -> Option<ElaborationFunc> {
+    Some(match rule {
+        "eq_transitive" => transitivity::eq_transitive,
+        "trans" => transitivity::trans,
+        "refl" => reflexivity::refl,
+        "resolution" | "th_resolution" => resolution::resolution,
+        _ => return None,
+    })
+}
+
+fn mutate<F>(root: &Rc<ProofNode>, mut mutate_func: F) -> Rc<ProofNode>
+where
+    F: FnMut(&mut ContextStack, &Rc<ProofNode>) -> Rc<ProofNode>,
+{
+    let mut cache: HashMap<&Rc<ProofNode>, Rc<ProofNode>> = HashMap::new();
+    let mut did_outbound: HashSet<&Rc<ProofNode>> = HashSet::new();
+    let mut todo = vec![(root, false)];
+
+    let mut outbound_premises_stack = vec![IndexSet::new()];
+    let mut context = ContextStack::new();
+
+    while let Some((node, is_done)) = todo.pop() {
+        if cache.contains_key(node) {
+            continue;
+        }
+
+        let mutated = match node.as_ref() {
+            ProofNode::Assume { .. } => mutate_func(&mut context, node),
+            ProofNode::Step(s) if !is_done => {
+                todo.push((node, true));
+
+                let all_premises = s
+                    .premises
+                    .iter()
+                    .chain(&s.discharge)
+                    .chain(&s.previous_step)
+                    .rev();
+                todo.extend(
+                    all_premises.filter_map(|p| (!cache.contains_key(p)).then_some((p, false))),
+                );
+
+                continue;
+            }
+            ProofNode::Step(s) => {
+                let premises: Vec<_> = s.premises.iter().map(|p| cache[p].clone()).collect();
+                let discharge: Vec<_> = s.discharge.iter().map(|p| cache[p].clone()).collect();
+                let previous_step = s.previous_step.as_ref().map(|p| cache[p].clone());
+
+                let new_node = Rc::new(ProofNode::Step(StepNode {
+                    premises,
+                    discharge,
+                    previous_step,
+                    ..s.clone()
+                }));
+                mutate_func(&mut context, &new_node)
+            }
+            ProofNode::Subproof(s) if !is_done => {
+                assert!(
+                    node.depth() == outbound_premises_stack.len() - 1,
+                    "all outbound premises should have already been dealt with!"
+                );
+
+                if !did_outbound.contains(node) {
+                    did_outbound.insert(node);
+                    todo.push((node, false));
+                    todo.extend(s.outbound_premises.iter().map(|premise| (premise, false)));
+                    continue;
+                }
+
+                todo.push((node, true));
+                todo.push((&s.last_step, false));
+                outbound_premises_stack.push(IndexSet::new());
+                context.push(&s.args);
+                continue;
+            }
+            ProofNode::Subproof(s) => {
+                context.pop();
+                let outbound_premises =
+                    outbound_premises_stack.pop().unwrap().into_iter().collect();
+                Rc::new(ProofNode::Subproof(SubproofNode {
+                    last_step: cache[&s.last_step].clone(),
+                    args: s.args.clone(),
+                    outbound_premises,
+                }))
+            }
+        };
+        outbound_premises_stack
+            .last_mut()
+            .unwrap()
+            .extend(mutated.get_outbound_premises());
+        cache.insert(node, mutated);
     }
+    assert!(outbound_premises_stack.len() == 1 && outbound_premises_stack[0].is_empty());
+    cache[root].clone()
 }
 
-#[derive(Debug)]
-pub struct Elaborator {
-    stack: Vec<Frame>,
-    seen_clauses: HashMapStack<Vec<Rc<Term>>, usize>,
-    accumulator: Accumulator,
+struct IdHelper {
+    root: String,
+    stack: Vec<usize>,
 }
 
-impl Default for Elaborator {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Elaborator {
-    pub fn new() -> Self {
+impl IdHelper {
+    fn new(root: &str) -> Self {
         Self {
-            stack: vec![Frame::default()],
-            accumulator: Accumulator::new(),
-            seen_clauses: HashMapStack::new(),
+            root: root.to_owned(),
+            stack: vec![0],
         }
     }
 
-    fn top_frame(&self) -> &Frame {
-        self.stack.last().unwrap()
-    }
+    fn next_id(&mut self) -> String {
+        use std::fmt::Write;
 
-    fn top_frame_mut(&mut self) -> &mut Frame {
-        self.stack.last_mut().unwrap()
-    }
-
-    fn depth(&self) -> usize {
-        self.stack.len() - 1
-    }
-
-    /// Returns `true` if the command on the current frame at index `index` cannot be deleted.
-    fn must_keep(&self, index: usize) -> bool {
-        // If the command is the second to last in a subproof, it may be implicitly used by the last
-        // step in the subproof, so we cannot delete it
-        if index + 2 == self.top_frame().subproof_length {
-            return true;
+        let mut current = self.root.clone();
+        for i in &self.stack {
+            write!(&mut current, ".t{}", i + 1).unwrap();
         }
-
-        // We must also consider the edge case when the step closes a subproof that
-        // is itself the second to last command in an outer subproof. If we delete this
-        // step, the inner subproof will also be deleted, which will invalidate the implicit
-        // reference used in the last step of the outer subproof
-        let depth = self.depth();
-        if depth >= 2 {
-            let outer_frame = &self.stack[depth - 1];
-            let index_in_outer = outer_frame.current_index();
-            index_in_outer + 2 == outer_frame.subproof_length
-        } else {
-            false
-        }
+        *self.stack.last_mut().unwrap() += 1;
+        current
     }
 
-    /// Maps the index of a command in the original proof to the index of that command in the
-    /// elaborated proof, taking into account the offset created by new steps introduced.
-    pub fn map_index(&self, (depth, i): (usize, usize)) -> (usize, usize) {
-        self.stack[depth].new_indices[i]
+    #[allow(unused)]
+    fn push(&mut self) {
+        self.stack.push(0);
     }
 
-    pub fn add_new_command(&mut self, command: ProofCommand, must_keep: bool) -> (usize, usize) {
-        if !must_keep {
-            if let Some((d, &i)) = self.seen_clauses.get_with_depth(command.clause()) {
-                return (d, i);
-            }
-        }
-
-        let index = if self.accumulator.depth() == 0 {
-            let frame = self.top_frame_mut();
-            frame.current_offset += 1;
-            (frame.new_indices.len() as isize + frame.current_offset - 1) as usize
-        } else {
-            self.accumulator.top_frame_len()
-        };
-        self.seen_clauses.insert(command.clause().to_vec(), index);
-        self.accumulator.push_command(command);
-        (self.depth() + self.accumulator.depth(), index)
-    }
-
-    pub fn add_new_step(&mut self, step: ProofStep) -> (usize, usize) {
-        self.add_new_command(ProofCommand::Step(step), false)
-    }
-
-    pub fn get_new_id(&mut self, root_id: &str) -> String {
-        self.accumulator.next_id(root_id)
-    }
-
-    pub fn push_elaborated_step(&mut self, step: ProofStep) -> (usize, usize) {
-        // TODO: discard elaborated steps that introduce already seen conclusions (and can be
-        // deleted)
-
-        let clause = step.clause.clone();
-        let elaboration = {
-            let mut added = std::mem::take(&mut self.accumulator).end();
-            added.push(ProofCommand::Step(step));
-            CommandDiff::Step(added)
-        };
-
-        let depth = self.depth();
-        let frame = self.top_frame_mut();
-        let (old_index, new_index) = frame.push_new_index(depth);
-
-        frame.diff.push((old_index, elaboration));
-
-        self.seen_clauses.insert(clause, new_index);
-        (self.depth(), new_index)
-    }
-
-    pub fn open_accumulator_subproof(&mut self) {
-        self.seen_clauses.push_scope();
-        self.accumulator.open_subproof();
-    }
-
-    /// Closes a subproof in the accumulator. This method will overwrite the `id` in `end_step`, to
-    /// make sure it is the next `id` in the outer subproof.
-    pub fn close_accumulator_subproof(
-        &mut self,
-        args: Vec<AnchorArg>,
-        end_step: ProofStep,
-        root_id: &str,
-    ) -> (usize, usize) {
-        self.seen_clauses.pop_scope();
-
-        // If the end step clause was already seen, we must skip the subproof as a whole, and not
-        // just the end step itself
-        if let Some((d, &i)) = self.seen_clauses.get_with_depth(&end_step.clause) {
-            self.accumulator.drop_subproof();
-            return (d, i);
-        }
-        self.add_new_step(end_step);
-        let s = self.accumulator.close_subproof(args, root_id);
-        self.add_new_command(s, true)
-    }
-
-    fn push_command(&mut self, clause: &[Rc<Term>], is_assume: bool) {
-        let depth = self.depth();
-        let frame = self.top_frame_mut();
-        let (old_index, new_index) = frame.push_new_index(depth);
-
-        if let Some((seen_depth, &index)) = self.seen_clauses.get_with_depth(clause) {
-            let must_keep = self.must_keep(old_index) || is_assume && depth > 0;
-
-            // If this step is the last step in a subproof, deleting it will cause the entire
-            // subproof to be deleted. However, it might be the case that the step where this
-            // clause was previously seen is inside this subproof, in which case we cannot delete
-            // this step or we will have an invalid premise reference. Here is an example of when this
-            // happens, adapted from a real-world proof:
-            //
-            //   (anchor :step t2)
-            //   (assume t2.a0 u)
-            //   (step t2.t1 (cl (not u) t) :rule hole)
-            //   (step t2.t3 (cl t) :rule resolution :premises (t2.t1 t2.a0))
-            //   (step t2 (cl (not u) t) :rule subproof :discharge (t2.a0))
-            //
-            // Here, the clause in step `t2` was already seen in step `t2.t1`. However, we cannot
-            // delete `t2` as that would result in the deletion of the entire subproof, including
-            // `t2.t1`.
-            let will_delete_seen =
-                old_index + 1 == self.top_frame().subproof_length && seen_depth == depth;
-
-            if !must_keep && !will_delete_seen {
-                let frame = self.top_frame_mut();
-                frame.new_indices[old_index] = (seen_depth, index);
-                frame.diff.push((old_index, CommandDiff::Delete));
-                frame.current_offset -= 1;
-            }
-        } else {
-            self.seen_clauses.insert(clause.to_vec(), new_index);
-        }
-    }
-
-    pub fn assume(&mut self, term: &Rc<Term>) {
-        self.push_command(std::slice::from_ref(term), true);
-    }
-
-    pub fn unchanged(&mut self, clause: &[Rc<Term>]) {
-        self.push_command(clause, false);
-    }
-
-    /// Adds a `symm` step that flips the equality of the given premise. The `original_premise`
-    /// index must already be mapped to the new index space.
-    pub fn add_symm_step(
-        &mut self,
-        pool: &mut dyn TermPool,
-        original_premise: (usize, usize),
-        original_equality: (Rc<Term>, Rc<Term>),
-        id: String,
-    ) -> (usize, usize) {
-        let (a, b) = original_equality;
-        let clause = vec![build_term!(pool, (= {b} {a}))];
-        let step = ProofStep {
-            id,
-            clause,
-            rule: "symm".into(),
-            premises: vec![original_premise],
-            args: Vec::new(),
-            discharge: Vec::new(),
-        };
-        self.add_new_step(step)
-    }
-
-    /// Adds a `refl` step that asserts that the two given terms are equal.
-    pub fn add_refl_step(
-        &mut self,
-        pool: &mut dyn TermPool,
-        a: Rc<Term>,
-        b: Rc<Term>,
-        id: String,
-    ) -> (usize, usize) {
-        let step = ProofStep {
-            id,
-            clause: vec![build_term!(pool, (= {a} {b}))],
-            rule: "refl".into(),
-            premises: Vec::new(),
-            args: Vec::new(),
-            discharge: Vec::new(),
-        };
-        self.add_new_step(step)
-    }
-
-    pub fn elaborate_polyeq(
-        &mut self,
-        pool: &mut dyn TermPool,
-        root_id: &str,
-        a: Rc<Term>,
-        b: Rc<Term>,
-        is_alpha_equivalence: bool,
-    ) -> (usize, usize) {
-        PolyeqElaborator::new(self, root_id, is_alpha_equivalence).elaborate(pool, a, b)
-    }
-
-    pub fn elaborate_assume(
-        &mut self,
-        pool: &mut dyn TermPool,
-        premise: Rc<Term>,
-        term: Rc<Term>,
-        id: &str,
-    ) -> (usize, usize) {
-        let new_assume = self.add_new_command(
-            ProofCommand::Assume {
-                id: id.to_owned(),
-                term: premise.clone(),
-            },
-            false,
-        );
-        let equality_step = self.elaborate_polyeq(pool, id, premise.clone(), term.clone(), false);
-        let equiv1_step = {
-            let new_id = self.get_new_id(id);
-            let clause = vec![build_term!(pool, (not {premise.clone()})), term.clone()];
-            self.add_new_step(ProofStep {
-                id: new_id,
-                clause,
-                rule: "equiv1".to_owned(),
-                premises: vec![equality_step],
-                args: Vec::new(),
-                discharge: Vec::new(),
-            })
-        };
-
-        let new_id = self.get_new_id(id);
-        self.push_elaborated_step(ProofStep {
-            id: new_id,
-            clause: vec![term],
-            rule: "resolution".to_owned(),
-            premises: vec![new_assume, equiv1_step],
-            args: vec![ProofArg::Term(premise), ProofArg::Term(pool.bool_true())],
-            discharge: Vec::new(),
-        })
-    }
-
-    pub fn open_subproof(&mut self, length: usize) {
-        self.seen_clauses.push_scope();
-        self.stack.push(Frame {
-            diff: Vec::new(),
-            new_indices: Vec::new(),
-            current_offset: 0,
-            subproof_length: length,
-        });
-    }
-
-    pub fn close_subproof(&mut self) {
-        self.seen_clauses.pop_scope();
-        let inner = self.stack.pop().expect("can't close root subproof");
-
-        let depth = self.depth();
-        let frame = self.top_frame_mut();
-        let (old_index, _) = frame.push_new_index(depth);
-
-        let last_command_index = inner.current_index() - 1;
-        let diff = if inner.diff.last() == Some(&(last_command_index, CommandDiff::Delete)) {
-            frame.current_offset -= 1;
-            CommandDiff::Delete
-        } else {
-            // Even if the subproof diff is empty, we still need to update the indices of the
-            // premises of steps inside the subproof, so we push a `CommandDiff` anyway
-            CommandDiff::Subproof(ProofDiff {
-                commands: inner.diff,
-                new_indices: inner.new_indices,
-            })
-        };
-        frame.diff.push((old_index, diff));
-    }
-
-    pub fn end(&mut self, original: Vec<ProofCommand>) -> Vec<ProofCommand> {
-        assert!(
-            self.depth() == 0,
-            "trying to end proof building before closing subproof"
-        );
-        let Frame { diff, new_indices, .. } = self.stack.pop().unwrap();
-        let diff = ProofDiff { commands: diff, new_indices };
-        let elaborated = apply_diff(diff, original);
-        apply_diff(prune_proof(&elaborated), elaborated)
+    #[allow(unused)]
+    fn pop(&mut self) {
+        assert!(self.stack.len() >= 2, "can't pop last frame from the stack");
+        self.stack.pop();
     }
 }

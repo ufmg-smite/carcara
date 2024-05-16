@@ -1,18 +1,16 @@
 pub mod error;
-mod lia_generic;
 mod parallel;
 mod rules;
 
 use crate::{
     ast::*,
     benchmarking::{CollectResults, OnlineBenchmarkResults},
-    elaborator::Elaborator,
     CarcaraResult, Error, LiaGenericOptions,
 };
 use error::{CheckerError, SubproofError};
 use indexmap::IndexSet;
 pub use parallel::{scheduler::Scheduler, ParallelProofChecker};
-use rules::{ElaborationRule, Premise, Rule, RuleArgs, RuleResult};
+use rules::{Premise, Rule, RuleArgs, RuleResult};
 use std::{
     fmt,
     time::{Duration, Instant},
@@ -21,7 +19,6 @@ use std::{
 #[derive(Clone)]
 pub struct CheckerStatistics<'s, CR: CollectResults + Send + Default> {
     pub file_name: &'s str,
-    pub elaboration_time: Duration,
     pub polyeq_time: Duration,
     pub assume_time: Duration,
 
@@ -37,7 +34,6 @@ impl<CR: CollectResults + Send + Default> fmt::Debug for CheckerStatistics<'_, C
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CheckerStatistics")
             .field("file_name", &self.file_name)
-            .field("elaboration_time", &self.elaboration_time)
             .field("polyeq_time", &self.polyeq_time)
             .field("assume_time", &self.assume_time)
             .field("assume_core_time", &self.assume_core_time)
@@ -76,21 +72,17 @@ impl Config {
 pub struct ProofChecker<'c> {
     pool: &'c mut PrimitivePool,
     config: Config,
-    prelude: &'c ProblemPrelude,
     context: ContextStack,
-    elaborator: Option<Elaborator>,
     reached_empty_clause: bool,
     is_holey: bool,
 }
 
 impl<'c> ProofChecker<'c> {
-    pub fn new(pool: &'c mut PrimitivePool, config: Config, prelude: &'c ProblemPrelude) -> Self {
+    pub fn new(pool: &'c mut PrimitivePool, config: Config) -> Self {
         ProofChecker {
             pool,
             config,
-            prelude,
             context: ContextStack::new(),
-            elaborator: None,
             reached_empty_clause: false,
             is_holey: false,
         }
@@ -147,9 +139,6 @@ impl<'c> ProofChecker<'c> {
                     // in a subproof is always a `step` command
                     if is_end_of_subproof {
                         self.context.pop();
-                        if let Some(elaborator) = &mut self.elaborator {
-                            elaborator.close_subproof();
-                        }
                     }
 
                     if step.clause.is_empty() {
@@ -161,10 +150,6 @@ impl<'c> ProofChecker<'c> {
                     let step_id = command.id();
 
                     self.context.push(&s.args);
-
-                    if let Some(elaborator) = &mut self.elaborator {
-                        elaborator.open_subproof(s.commands.len());
-                    }
 
                     if let Some(stats) = &mut stats {
                         let rule_name = match s.commands.last() {
@@ -197,40 +182,6 @@ impl<'c> ProofChecker<'c> {
         }
     }
 
-    pub fn check_and_elaborate(&mut self, mut proof: Proof) -> CarcaraResult<(bool, Proof)> {
-        self.elaborator = Some(Elaborator::new());
-        let result = self.check(&proof);
-
-        // We reset `self.elaborator` before returning any errors encountered while checking so
-        // we don't leave the checker in an invalid state
-        let mut elaborator = self.elaborator.take().unwrap();
-        result?;
-
-        proof.commands = elaborator.end(proof.commands);
-
-        Ok((self.is_holey, proof))
-    }
-
-    pub fn check_and_elaborate_with_stats<'s, CR: CollectResults + Send + Default>(
-        &'s mut self,
-        mut proof: Proof,
-        stats: &'s mut CheckerStatistics<CR>,
-    ) -> CarcaraResult<(bool, Proof)> {
-        self.elaborator = Some(Elaborator::new());
-        let result = self.check_with_stats(&proof, stats);
-
-        // We reset `self.elaborator` before returning any errors encountered while checking so we
-        // don't leave the checker in an invalid state
-        let mut elaborator = self.elaborator.take().unwrap();
-        result?;
-
-        let elaboration_time = Instant::now();
-        proof.commands = elaborator.end(proof.commands);
-        stats.elaboration_time += elaboration_time.elapsed();
-
-        Ok((self.is_holey, proof))
-    }
-
     fn check_assume<'i, CR: CollectResults + Send + Default>(
         &mut self,
         id: &str,
@@ -245,9 +196,6 @@ impl<'c> ProofChecker<'c> {
         // problem premises, but are instead local assumptions that are discharged by the subproof's
         // final step, so we ignore the `assume` command if it is inside a subproof.
         if iter.is_in_subproof() {
-            if let Some(elaborator) = &mut self.elaborator {
-                elaborator.assume(term);
-            }
             return true;
         }
 
@@ -259,9 +207,6 @@ impl<'c> ProofChecker<'c> {
                 s.results
                     .add_assume_measurement(s.file_name, id, true, time);
             }
-            if let Some(elaborator) = &mut self.elaborator {
-                elaborator.assume(term);
-            }
             return true;
         }
 
@@ -269,7 +214,7 @@ impl<'c> ProofChecker<'c> {
             return false;
         }
 
-        let mut found = None;
+        let mut found = false;
         let mut polyeq_time = Duration::ZERO;
         let mut core_time = Duration::ZERO;
 
@@ -282,22 +227,13 @@ impl<'c> ProofChecker<'c> {
             }
             if result {
                 core_time = this_polyeq_time;
-                found = Some(p.clone());
+                found = true;
                 break;
             }
         }
-
-        let Some(p) = found else { return false };
-
-        if let Some(elaborator) = &mut self.elaborator {
-            let elaboration_time = Instant::now();
-
-            elaborator.elaborate_assume(self.pool, p, term.clone(), id);
-
-            if let Some(s) = &mut stats {
-                s.elaboration_time += elaboration_time.elapsed();
-            }
-        }
+        if !found {
+            return false;
+        };
 
         if let Some(s) = &mut stats {
             let time = time.elapsed();
@@ -326,80 +262,45 @@ impl<'c> ProofChecker<'c> {
             return Err(CheckerError::Subproof(SubproofError::DischargeInWrongRule));
         }
 
-        let mut elaborated = false;
-        if step.rule == "lia_generic" {
-            if let Some(options) = &self.config.lia_options {
-                let is_hole = lia_generic::lia_generic_single_thread(
-                    self.pool,
-                    &step.clause,
-                    self.prelude,
-                    self.elaborator.as_mut(),
-                    &step.id,
-                    options,
-                );
-                self.is_holey = self.is_holey || is_hole;
-                elaborated = self.elaborator.is_some();
-            } else {
-                log::warn!("encountered \"lia_generic\" rule, ignoring");
+        let rule = match Self::get_rule(&step.rule, self.config.strict) {
+            Some(r) => r,
+            None if self.config.ignore_unknown_rules => {
                 self.is_holey = true;
-                if let Some(elaborator) = &mut self.elaborator {
-                    elaborator.unchanged(&step.clause);
-                }
+                return Ok(());
             }
-        } else {
-            let rule = match Self::get_rule(&step.rule, self.config.strict) {
-                Some(r) => r,
-                None if self.config.ignore_unknown_rules => {
-                    self.is_holey = true;
-                    if let Some(elaborator) = &mut self.elaborator {
-                        elaborator.unchanged(&step.clause);
-                    }
-                    return Ok(());
-                }
-                None => return Err(CheckerError::UnknownRule),
-            };
+            None => return Err(CheckerError::UnknownRule),
+        };
 
-            if step.rule == "hole" {
-                self.is_holey = true;
-            }
-
-            let premises: Vec<_> = step
-                .premises
-                .iter()
-                .map(|&p| {
-                    let command = iter.get_premise(p);
-                    Premise::new(p, command)
-                })
-                .collect();
-            let discharge: Vec<_> = step
-                .discharge
-                .iter()
-                .map(|&i| iter.get_premise(i))
-                .collect();
-
-            let rule_args = RuleArgs {
-                conclusion: &step.clause,
-                premises: &premises,
-                args: &step.args,
-                pool: self.pool,
-                context: &mut self.context,
-                previous_command,
-                discharge: &discharge,
-                polyeq_time: &mut polyeq_time,
-            };
-
-            if let Some(elaborator) = &mut self.elaborator {
-                if let Some(elaboration_rule) = Self::get_elaboration_rule(&step.rule) {
-                    elaboration_rule(rule_args, step.id.clone(), elaborator)?;
-                    elaborated = true;
-                } else {
-                    rule(rule_args)?;
-                    elaborator.unchanged(&step.clause);
-                }
-            } else {
-                rule(rule_args)?;
-            }
+        if step.rule == "hole" || step.rule == "lia_generic" {
+            self.is_holey = true;
         }
+
+        let premises: Vec<_> = step
+            .premises
+            .iter()
+            .map(|&p| {
+                let command = iter.get_premise(p);
+                Premise::new(p, command)
+            })
+            .collect();
+        let discharge: Vec<_> = step
+            .discharge
+            .iter()
+            .map(|&i| iter.get_premise(i))
+            .collect();
+
+        let rule_args = RuleArgs {
+            conclusion: &step.clause,
+            premises: &premises,
+            args: &step.args,
+            pool: self.pool,
+            context: &mut self.context,
+            previous_command,
+            discharge: &discharge,
+            polyeq_time: &mut polyeq_time,
+        };
+
+        rule(rule_args)?;
 
         if iter.is_end_step() {
             let subproof = iter.current_subproof().unwrap();
@@ -412,9 +313,6 @@ impl<'c> ProofChecker<'c> {
             s.results
                 .add_step_measurement(s.file_name, &step.id, &step.rule, time);
             s.polyeq_time += polyeq_time;
-            if elaborated {
-                s.elaboration_time += time;
-            }
         }
         Ok(())
     }
@@ -562,6 +460,10 @@ impl<'c> ProofChecker<'c> {
             // Special rules that always check as valid, and are used to indicate holes in the
             // proof.
             "hole" => |_| Ok(()),
+            "lia_generic" => |_| {
+                log::warn!("encountered \"lia_generic\" rule, ignoring");
+                Ok(())
+            },
 
             // The Alethe specification does not yet describe how this more strict version of the
             // resolution rule will be called. Until that is decided and added to the specification,
@@ -571,52 +473,4 @@ impl<'c> ProofChecker<'c> {
             _ => return None,
         })
     }
-
-    fn get_elaboration_rule(rule_name: &str) -> Option<ElaborationRule> {
-        use rules::*;
-
-        Some(match rule_name {
-            "eq_transitive" => transitivity::elaborate_eq_transitive,
-            "resolution" | "th_resolution" => resolution::elaborate_resolution,
-            "refl" => reflexivity::elaborate_refl,
-            "trans" => transitivity::elaborate_trans,
-            _ => return None,
-        })
-    }
-}
-
-pub fn generate_lia_smt_instances(
-    prelude: ProblemPrelude,
-    proof: &Proof,
-    use_sharing: bool,
-) -> CarcaraResult<Vec<(String, String)>> {
-    use std::fmt::Write;
-
-    let mut iter = proof.iter();
-    let mut result = Vec::new();
-    while let Some(command) = iter.next() {
-        if let ProofCommand::Step(step) = command {
-            if step.rule == "lia_generic" {
-                if iter.depth() > 0 {
-                    log::error!(
-                        "generating SMT instance for step inside subproof is not supported"
-                    );
-                    continue;
-                }
-
-                let mut problem = String::new();
-                write!(&mut problem, "{}", prelude).unwrap();
-
-                let mut bytes = Vec::new();
-                printer::write_lia_smt_instance(&mut bytes, &step.clause, use_sharing).unwrap();
-                write!(&mut problem, "{}", String::from_utf8(bytes).unwrap()).unwrap();
-
-                writeln!(&mut problem, "(check-sat)").unwrap();
-                writeln!(&mut problem, "(exit)").unwrap();
-
-                result.push((step.id.clone(), problem));
-            }
-        }
-    }
-    Ok(result)
 }

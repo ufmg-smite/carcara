@@ -1,6 +1,7 @@
 use carcara::{
+    ast,
     benchmarking::{CollectResults, CsvBenchmarkResults, RunMeasurement},
-    checker, parser, CarcaraOptions,
+    checker, elaborator, parser, CarcaraOptions,
 };
 use crossbeam_queue::ArrayQueue;
 use std::{
@@ -27,7 +28,6 @@ fn run_job<T: CollectResults + Default + Send>(
     let proof_file_name = job.proof_file.to_str().unwrap();
     let mut checker_stats = checker::CheckerStatistics {
         file_name: proof_file_name,
-        elaboration_time: Duration::ZERO,
         polyeq_time: Duration::ZERO,
         assume_time: Duration::ZERO,
         assume_core_time: Duration::ZERO,
@@ -54,18 +54,23 @@ fn run_job<T: CollectResults + Default + Send>(
         .strict(options.strict)
         .ignore_unknown_rules(options.ignore_unknown_rules)
         .lia_options(options.lia_options.clone());
-    let mut checker = checker::ProofChecker::new(&mut pool, config, &prelude);
+    let mut checker = checker::ProofChecker::new(&mut pool, config);
 
     let checking = Instant::now();
 
-    let checking_result = if elaborate {
-        checker
-            .check_and_elaborate_with_stats(proof, &mut checker_stats)
-            .map(|(is_holey, _)| is_holey)
-    } else {
-        checker.check_with_stats(&proof, &mut checker_stats)
-    };
+    let checking_result = checker.check_with_stats(&proof, &mut checker_stats);
     let checking = checking.elapsed();
+
+    let elaboration = if elaborate {
+        let elaboration = Instant::now();
+        let node = ast::ProofNode::from_commands(proof.commands);
+        let lia_options = options.lia_options.as_ref().map(|lia| (lia, &prelude));
+        let elaborated = elaborator::elaborate(&mut pool, &proof.premises, &node, lia_options);
+        elaborated.into_commands();
+        elaboration.elapsed()
+    } else {
+        Duration::ZERO
+    };
 
     let total = total.elapsed();
 
@@ -74,7 +79,7 @@ fn run_job<T: CollectResults + Default + Send>(
         RunMeasurement {
             parsing,
             checking,
-            elaboration: checker_stats.elaboration_time,
+            elaboration,
             scheduling: Duration::ZERO,
             total,
             polyeq: checker_stats.polyeq_time,
