@@ -420,6 +420,16 @@ pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
 
+    // in the case l is (/ c1 c2), this term will have been parsed to
+    // a rational constant. So we check that l is the same as r in
+    // this case
+    if left.is_const() {
+        if let Term::Const(Constant::Real(_)) = right.as_ref() {
+            return assert_eq(left, right);
+        }
+        return Err(CheckerError::ExpectedNumber(Rational::new(), right.clone()));
+    }
+
     let ((numer, denom), is_int_div) = match match_term!((div n d) = left) {
         Some(v) => (v, true),
         None => (match_term_err!((/ n d) = left)?, false),
