@@ -425,9 +425,9 @@ pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     // this case
     if left.is_const() {
         if let Term::Const(Constant::Real(_)) = right.as_ref() {
-            return assert_eq(left, right)
+            return assert_eq(left, right);
         }
-        return Err(CheckerError::ExpectedNumber(Rational::new(), right.clone()))
+        return Err(CheckerError::ExpectedNumber(Rational::new(), right.clone()));
     }
 
     let ((numer, denom), is_int_div) = match match_term!((div n d) = left) {
