@@ -342,3 +342,13 @@ pub fn check_and_elaborate<T: io::BufRead>(
         checker.check_and_elaborate(proof)
     }
 }
+
+pub fn generate_lia_smt_instances<T: io::BufRead>(
+    problem: T,
+    proof: T,
+    config: parser::Config,
+    use_sharing: bool,
+) -> Result<Vec<(String, String)>, Error> {
+    let (prelude, proof, _) = parser::parse_instance(problem, proof, config)?;
+    checker::generate_lia_smt_instances(prelude, &proof, use_sharing)
+}

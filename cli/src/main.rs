@@ -4,8 +4,8 @@ mod logger;
 mod path_args;
 
 use carcara::{
-    ast, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate, check_parallel, parser,
-    CarcaraOptions, LiaGenericOptions,
+    ast, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate, check_parallel,
+    generate_lia_smt_instances, parser, CarcaraOptions, LiaGenericOptions,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -77,6 +77,9 @@ enum Command {
 
     /// Given a step, takes a slice of a proof consisting of all its transitive premises.
     Slice(SliceCommandOptions),
+
+    /// Generates the equivalent SMT instance for every `lia_generic` step in a proof.
+    GenerateLiaProblems(ParseCommandOptions),
 }
 
 #[derive(Args)]
@@ -374,6 +377,9 @@ fn main() {
         }
         Command::Bench(options) => bench_command(options),
         Command::Slice(options) => slice_command(options).and_then(print_proof),
+        Command::GenerateLiaProblems(options) => {
+            generate_lia_problems_command(options, !cli.no_print_with_sharing)
+        }
     };
     if let Err(e) = result {
         log::error!("{}", e);
@@ -516,4 +522,30 @@ fn slice_command(options: SliceCommandOptions) -> CliResult<Vec<ast::ProofComman
     let diff =
         carcara::elaborator::slice_proof(&proof.commands, source_index, options.max_distance);
     Ok(carcara::elaborator::apply_diff(diff, proof.commands))
+}
+
+fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool) -> CliResult<()> {
+    use std::io::Write;
+
+    let root_file_name = options.input.proof_file.clone();
+    let (problem, proof) = get_instance(&options.input)?;
+
+    let instances = generate_lia_smt_instances(
+        problem,
+        proof,
+        parser::Config {
+            apply_function_defs: options.parsing.apply_function_defs,
+            expand_lets: options.parsing.expand_let_bindings,
+            allow_int_real_subtyping: options.parsing.allow_int_real_subtyping,
+            allow_unary_logical_ops: !options.parsing.strict,
+        },
+        use_sharing,
+    )?;
+    for (id, content) in instances {
+        let file_name = format!("{}.{}.lia_smt2", root_file_name, id);
+        let mut f = File::create(file_name)?;
+        write!(f, "{}", content)?;
+    }
+
+    Ok(())
 }
