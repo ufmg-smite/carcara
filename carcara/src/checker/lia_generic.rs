@@ -118,13 +118,20 @@ fn parse_and_check_solver_proof(
     problem: &[u8],
     proof: &[u8],
 ) -> CarcaraResult<Vec<ProofCommand>> {
-    let mut parser = parser::Parser::new(pool, parser::Config::new(), problem)?;
+    let config = parser::Config {
+        apply_function_defs: false,
+        expand_lets: true,
+        allow_int_real_subtyping: true,
+        allow_unary_logical_ops: true,
+    };
+    let mut parser = parser::Parser::new(pool, config, problem)?;
     let (prelude, premises) = parser.parse_problem()?;
     parser.reset(proof)?;
     let commands = parser.parse_proof()?;
     let proof = Proof { premises, commands };
 
-    ProofChecker::new(pool, Config::new(), &prelude).check(&proof)?;
+    let config = Config::new().ignore_unknown_rules(true);
+    ProofChecker::new(pool, config, &prelude).check(&proof)?;
     Ok(proof.commands)
 }
 
