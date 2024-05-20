@@ -207,14 +207,15 @@ pub fn r#let(
 fn extract_points(quant: Binder, term: &Rc<Term>) -> HashSet<(String, Rc<Term>)> {
     fn find_points(
         acc: &mut HashSet<(String, Rc<Term>)>,
-        seen: &mut HashSet<Rc<Term>>,
+        seen: &mut HashSet<(Rc<Term>, bool)>,
         polarity: bool,
         term: &Rc<Term>,
     ) {
-        if seen.contains(term) {
+        let key = (term.clone(), polarity);
+        if seen.contains(&key) {
             return;
         }
-        seen.insert(term.clone());
+        seen.insert(key);
 
         if let Some(inner) = term.remove_negation() {
             return find_points(acc, seen, !polarity, inner);
@@ -709,6 +710,19 @@ mod tests {
                 (step t1 (cl (=
                     (exists ((x Int) (y Int) (z Int)) (and (= x t) (and (= y u) (and (= z v) p))))
                     (and (= t t) (and (= u u) (and (= v v) p)))
+                )) :rule onepoint)": true,
+            }
+            "Multiple occurrences with different polarity" {
+                // This test reproduces a bug that existed where the cache didn't take into account
+                // the polarity of a seen term.
+                "(anchor :step t3 :args ((:= (?x Int) 0)))
+                (step t3.t8 (cl (=
+                    (=> (not (= 0 ?x)) (=> (= 2 2) (=> (= 0 ?x) (= 1 2))))
+                    (=> (not (= 0 0)) (=> (= 2 2) (=> (= 0 0) (= 1 2))))
+                )) :rule hole)
+                (step t3 (cl (=
+                    (forall ((?x Int)) (=> (not (= 0 ?x)) (=> (= 2 2) (=> (= 0 ?x) (= 1 2)))))
+                    (=> (not (= 0 0)) (=> (= 2 2) (=> (= 0 0) (= 1 2))))
                 )) :rule onepoint)": true,
             }
         }
