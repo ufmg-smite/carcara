@@ -380,7 +380,7 @@ impl fmt::Display for Constant {
                 if r.is_integer() {
                     write!(f, "{:?}.0", r.numer())
                 } else {
-                    write!(f, "{:?}", r.to_f64())
+                    write!(f, "(/ {} {})", r.numer(), r.denom())
                 }
             }
             Constant::String(s) => write!(f, "\"{}\"", escape_string(s)),
