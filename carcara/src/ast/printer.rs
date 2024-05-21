@@ -378,9 +378,9 @@ impl fmt::Display for Constant {
             Constant::Integer(i) => write!(f, "{}", i),
             Constant::Real(r) => {
                 if r.is_integer() {
-                    write!(f, "{:?}.0", r.numer())
+                    write!(f, "{}.0", r.numer())
                 } else {
-                    write!(f, "(/ {} {})", r.numer(), r.denom())
+                    write!(f, "(/ {}.0 {}.0)", r.numer(), r.denom())
                 }
             }
             Constant::String(s) => write!(f, "\"{}\"", escape_string(s)),
