@@ -26,7 +26,6 @@
 #![warn(clippy::multiple_crate_versions)]
 #![warn(clippy::redundant_closure_for_method_calls)]
 #![warn(clippy::redundant_pub_crate)]
-#![warn(clippy::redundant_type_annotations)]
 #![warn(clippy::semicolon_if_nothing_returned)]
 #![warn(clippy::str_to_string)]
 #![warn(clippy::string_to_string)]
@@ -46,6 +45,7 @@ mod utils;
 
 use crate::benchmarking::{CollectResults, OnlineBenchmarkResults, RunMeasurement};
 use checker::{error::CheckerError, CheckerStatistics};
+use elaborator::ResolutionGranularity;
 use parser::{ParserError, Position};
 use std::io;
 use std::time::{Duration, Instant};
@@ -79,6 +79,9 @@ pub struct CarcaraOptions {
     /// problem, checking the proof, and discarding it. When elaborating, the proof will instead be
     /// inserted in the place of the `lia_generic` step. See [`LiaGenericOptions`] for more details.
     pub lia_options: Option<LiaGenericOptions>,
+
+    /// Controls the granularity of the elaboration of resolution steps.
+    pub resolution_granularity: ResolutionGranularity,
 
     /// Enables "strict" checking of some rules.
     ///
@@ -342,7 +345,13 @@ pub fn check_and_elaborate<T: io::BufRead>(
     // Elaborating
     let node = ast::ProofNode::from_commands(proof.commands);
     let lia_options = options.lia_options.as_ref().map(|lia| (lia, &prelude));
-    let elaborated = elaborator::elaborate(&mut pool, &proof.premises, &node, lia_options);
+    let elaborated = elaborator::elaborate(
+        &mut pool,
+        &proof.premises,
+        &node,
+        lia_options,
+        options.resolution_granularity,
+    );
 
     let elaborated = ast::Proof {
         premises: proof.premises,

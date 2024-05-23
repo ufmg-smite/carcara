@@ -65,7 +65,9 @@ fn run_job<T: CollectResults + Default + Send>(
         let elaboration = Instant::now();
         let node = ast::ProofNode::from_commands(proof.commands);
         let lia_options = options.lia_options.as_ref().map(|lia| (lia, &prelude));
-        let elaborated = elaborator::elaborate(&mut pool, &proof.premises, &node, lia_options);
+        let granularity = options.resolution_granularity;
+        let elaborated =
+            elaborator::elaborate(&mut pool, &proof.premises, &node, lia_options, granularity);
         elaborated.into_commands();
         elaboration.elapsed()
     } else {

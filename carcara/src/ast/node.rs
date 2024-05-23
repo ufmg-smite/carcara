@@ -424,3 +424,43 @@ fn proof_node_to_list(root: &Rc<ProofNode>) -> Vec<ProofCommand> {
         stack[d].push(command);
     }
 }
+
+#[cfg(test)]
+pub fn compare_nodes(a: &Rc<ProofNode>, b: &Rc<ProofNode>) -> bool {
+    if a == b {
+        return true;
+    }
+    match (a.as_ref(), b.as_ref()) {
+        (
+            ProofNode::Assume {
+                id: a_id,
+                depth: a_depth,
+                term: a_term,
+            },
+            ProofNode::Assume {
+                id: b_id,
+                depth: b_depth,
+                term: b_term,
+            },
+        ) => a_id == b_id && a_depth == b_depth && a_term == b_term,
+        (ProofNode::Step(a), ProofNode::Step(b)) => {
+            a.id == b.id && a.depth == b.depth && a.clause == b.clause && a.args == b.args && {
+                let a_prems = a
+                    .premises
+                    .iter()
+                    .chain(&a.discharge)
+                    .chain(&a.previous_step);
+                let b_prems = b
+                    .premises
+                    .iter()
+                    .chain(&b.discharge)
+                    .chain(&b.previous_step);
+                a_prems.zip(b_prems).all(|(a, b)| compare_nodes(a, b))
+            }
+        }
+        (ProofNode::Subproof(a), ProofNode::Subproof(b)) => {
+            a.args == b.args && compare_nodes(&a.last_step, &b.last_step)
+        }
+        _ => false,
+    }
+}

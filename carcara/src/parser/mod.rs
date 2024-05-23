@@ -57,13 +57,23 @@ pub fn parse_instance<T: BufRead>(
     config: Config,
 ) -> CarcaraResult<(ProblemPrelude, Proof, PrimitivePool)> {
     let mut pool = PrimitivePool::new();
-    let mut parser = Parser::new(&mut pool, config, problem)?;
+    parse_instance_with_pool(problem, proof, config, &mut pool)
+        .map(|(prelude, proof)| (prelude, proof, pool))
+}
+
+pub fn parse_instance_with_pool<T: BufRead>(
+    problem: T,
+    proof: T,
+    config: Config,
+    pool: &mut PrimitivePool,
+) -> CarcaraResult<(ProblemPrelude, Proof)> {
+    let mut parser = Parser::new(pool, config, problem)?;
     let (prelude, premises) = parser.parse_problem()?;
     parser.reset(proof)?;
     let commands = parser.parse_proof()?;
 
     let proof = Proof { premises, commands };
-    Ok((prelude, proof, pool))
+    Ok((prelude, proof))
 }
 
 /// A function definition, from a `define-fun` command.

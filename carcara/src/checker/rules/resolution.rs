@@ -91,11 +91,11 @@ pub fn resolution_with_args(
     let conclusion: IndexSet<_> = conclusion.iter().map(Rc::remove_all_negations).collect();
 
     if let Some(extra) = conclusion.difference(&resolution_result).next() {
-        let extra = unremove_all_negations(pool, *extra);
+        let extra = literal_to_term(pool, *extra);
         return Err(ResolutionError::ExtraTermInConclusion(extra).into());
     }
     if let Some(missing) = resolution_result.difference(&conclusion).next() {
-        let missing = unremove_all_negations(pool, *missing);
+        let missing = literal_to_term(pool, *missing);
         return Err(ResolutionError::MissingTermInConclusion(missing).into());
     }
     Ok(())
@@ -112,7 +112,7 @@ pub fn strict_resolution(
 
     match conclusion.len().cmp(&resolution_result.len()) {
         Ordering::Less => {
-            let missing = unremove_all_negations(pool, resolution_result[conclusion.len()]);
+            let missing = literal_to_term(pool, resolution_result[conclusion.len()]);
             Err(ResolutionError::MissingTermInConclusion(missing).into())
         }
         Ordering::Greater => {
@@ -122,7 +122,7 @@ pub fn strict_resolution(
         Ordering::Equal => {
             for (t, u) in resolution_result.into_iter().zip(conclusion) {
                 if t != u.remove_all_negations() {
-                    assert_eq(&unremove_all_negations(pool, t), u)?;
+                    assert_eq(&literal_to_term(pool, t), u)?;
                 }
             }
             Ok(())
@@ -172,7 +172,7 @@ fn binary_resolution<'a, C: ClauseCollection<'a>>(
     pool: &mut dyn TermPool,
     current: &mut C,
     next: &'a [Rc<Term>],
-    pivot: ResolutionTerm<'a>,
+    pivot: Literal<'a>,
     is_pivot_in_current: bool,
 ) -> Result<(), ResolutionError> {
     let negated_pivot = (pivot.0 + 1, pivot.1);
@@ -182,7 +182,7 @@ fn binary_resolution<'a, C: ClauseCollection<'a>>(
         (negated_pivot, pivot)
     };
     if !current.remove_term(&pivot_in_current) {
-        let p = unremove_all_negations(pool, pivot_in_current);
+        let p = literal_to_term(pool, pivot_in_current);
         return Err(ResolutionError::PivotNotFound(p));
     }
 
@@ -196,7 +196,7 @@ fn binary_resolution<'a, C: ClauseCollection<'a>>(
         }
     }
     if !found {
-        let p = unremove_all_negations(pool, pivot_in_next);
+        let p = literal_to_term(pool, pivot_in_next);
         return Err(ResolutionError::PivotNotFound(p));
     }
     Ok(())

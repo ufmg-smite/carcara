@@ -28,6 +28,9 @@ pub use rc::Rc;
 pub use substitution::{Substitution, SubstitutionError};
 pub use term::{Binder, BindingList, Constant, Operator, ParamOperator, Sort, SortedVar, Term};
 
+#[cfg(test)]
+pub(crate) use node::compare_nodes;
+
 pub(crate) use polyeq::{Polyeq, PolyeqComparator};
 
 /// The prelude of an SMT-LIB problem instance.

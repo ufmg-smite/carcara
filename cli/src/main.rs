@@ -5,7 +5,7 @@ mod path_args;
 
 use carcara::{
     ast, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate, check_parallel,
-    generate_lia_smt_instances, parser, CarcaraOptions, LiaGenericOptions,
+    elaborator, generate_lia_smt_instances, parser, CarcaraOptions, LiaGenericOptions,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -177,6 +177,7 @@ fn build_carcara_options(
         lia_solver_args,
     }: CheckingOptions,
     StatsOptions { stats }: StatsOptions,
+    resolution_granularity: ResolutionGranularity,
 ) -> CarcaraOptions {
     // If no solver is provided by the `--lia-solver` option, *and* the `--lia-via-cvc5` option was
     // passed, we default to cvc5 as a solver
@@ -185,11 +186,17 @@ fn build_carcara_options(
         solver: solver.into(),
         arguments: lia_solver_args.split_whitespace().map(Into::into).collect(),
     });
+    let resolution_granularity = match resolution_granularity {
+        ResolutionGranularity::Pivots => elaborator::ResolutionGranularity::Pivots,
+        ResolutionGranularity::Uncrowd => elaborator::ResolutionGranularity::Uncrowd,
+        ResolutionGranularity::Reordering => elaborator::ResolutionGranularity::Reordering,
+    };
     CarcaraOptions {
         apply_function_defs,
         expand_lets: expand_let_bindings,
         allow_int_real_subtyping,
         lia_options,
+        resolution_granularity,
         strict,
         ignore_unknown_rules: ignore_unknown_rules || skip_unknown_rules,
         stats,
@@ -237,6 +244,28 @@ struct CheckCommandOptions {
     stack: StackOptions,
 }
 
+#[derive(ArgEnum, Clone)]
+enum ResolutionGranularity {
+    Pivots,
+    Uncrowd,
+    Reordering,
+}
+
+#[derive(Args)]
+struct ResolutionElaborationOptions {
+    /// Controls the granularity of the elaboration of resolution steps.
+    ///
+    /// - `pivots`: the elaborator will try to find the pivots of resolution steps.
+    ///
+    /// - `uncrowd`: the elaborator will also remove the implicit clause reordering and removal of
+    /// duplicates in resolution steps, by adding explicit `contraction` and `reordering` steps.
+    ///
+    /// - `reordering`: the elaborator will also globally remove all `reordering` steps in the
+    /// proof.
+    #[clap(arg_enum, long, default_value_t = ResolutionGranularity::Reordering)]
+    resolution_granularity: ResolutionGranularity,
+}
+
 #[derive(Args)]
 struct ElaborateCommandOptions {
     #[clap(flatten)]
@@ -250,6 +279,9 @@ struct ElaborateCommandOptions {
 
     #[clap(flatten)]
     stats: StatsOptions,
+
+    #[clap(flatten)]
+    resolution_elab: ResolutionElaborationOptions,
 }
 
 #[derive(Args)]
@@ -263,6 +295,9 @@ struct BenchCommandOptions {
     /// Also elaborate each proof in addition to parsing and checking.
     #[clap(long)]
     elaborate: bool,
+
+    #[clap(flatten)]
+    resolution_elab: ResolutionElaborationOptions,
 
     /// Number of times to run the benchmark for each file.
     #[clap(short, long, default_value_t = 1)]
@@ -422,7 +457,12 @@ fn parse_command(options: ParseCommandOptions) -> CliResult<ast::Proof> {
 
 fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
     let (problem, proof) = get_instance(&options.input)?;
-    let carc_options = build_carcara_options(options.parsing, options.checking, options.stats);
+    let carc_options = build_carcara_options(
+        options.parsing,
+        options.checking,
+        options.stats,
+        ResolutionGranularity::Reordering,
+    );
     if options.num_threads == 1 {
         check(problem, proof, carc_options)
     } else {
@@ -443,7 +483,12 @@ fn elaborate_command(options: ElaborateCommandOptions) -> CliResult<ast::Proof> 
     let (_, elaborated) = check_and_elaborate(
         problem,
         proof,
-        build_carcara_options(options.parsing, options.checking, options.stats),
+        build_carcara_options(
+            options.parsing,
+            options.checking,
+            options.stats,
+            options.resolution_elab.resolution_granularity,
+        ),
     )?;
     Ok(elaborated)
 }
@@ -465,6 +510,7 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         options.parsing,
         options.checking,
         StatsOptions { stats: false },
+        options.resolution_elab.resolution_granularity,
     );
     if options.dump_to_csv {
         benchmarking::run_csv_benchmark(
