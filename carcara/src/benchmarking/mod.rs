@@ -330,7 +330,7 @@ impl CsvBenchmarkResults {
         )?;
 
         for (id, m) in data {
-            let total_accounted_for = m.parsing + m.checking;
+            let total_accounted_for = m.parsing + m.checking + m.elaboration;
             let polyeq_ratio = m.polyeq.as_secs_f64() / m.checking.as_secs_f64();
             let assume_ratio = m.assume.as_secs_f64() / m.checking.as_secs_f64();
             writeln!(
@@ -444,7 +444,8 @@ impl CollectResults for OnlineBenchmarkResults {
         self.checking.add_sample(id, checking);
         self.elaborating.add_sample(id, elaboration);
         self.scheduling.add_sample(id, scheduling);
-        self.total_accounted_for.add_sample(id, parsing + checking);
+        self.total_accounted_for
+            .add_sample(id, parsing + checking + elaboration);
         self.total.add_sample(id, total);
 
         self.polyeq_time.add_sample(id, polyeq);

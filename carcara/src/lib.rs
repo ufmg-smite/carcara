@@ -288,7 +288,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
     proof: T,
     options: CarcaraOptions,
 ) -> Result<(bool, ast::Proof), Error> {
-    let mut run_measures: RunMeasurement = RunMeasurement::default();
+    let mut run: RunMeasurement = RunMeasurement::default();
 
     // Parsing
     let total = Instant::now();
@@ -299,11 +299,13 @@ pub fn check_and_elaborate<T: io::BufRead>(
         allow_unary_logical_ops: !options.strict,
     };
     let (prelude, proof, mut pool) = parser::parse_instance(problem, proof, config)?;
-    run_measures.parsing = total.elapsed();
+    run.parsing = total.elapsed();
 
     let config = checker::Config::new()
         .strict(options.strict)
         .ignore_unknown_rules(options.ignore_unknown_rules);
+
+    let mut stats = OnlineBenchmarkResults::new();
 
     // Checking
     let checking = Instant::now();
@@ -314,35 +316,24 @@ pub fn check_and_elaborate<T: io::BufRead>(
             polyeq_time: Duration::ZERO,
             assume_time: Duration::ZERO,
             assume_core_time: Duration::ZERO,
-            results: OnlineBenchmarkResults::new(),
+            results: std::mem::take(&mut stats),
         };
 
         let res = checker.check_with_stats(&proof, &mut checker_stats);
-        run_measures.checking = checking.elapsed();
-        run_measures.total = total.elapsed();
+        run.checking = checking.elapsed();
+        run.polyeq = checker_stats.polyeq_time;
+        run.assume = checker_stats.assume_time;
+        run.assume_core = checker_stats.assume_core_time;
 
-        checker_stats.results.add_run_measurement(
-            &("this".to_owned(), 0),
-            RunMeasurement {
-                parsing: run_measures.parsing,
-                checking: run_measures.checking,
-                elaboration: run_measures.elaboration,
-                scheduling: run_measures.scheduling,
-                total: run_measures.total,
-                polyeq: checker_stats.polyeq_time,
-                assume: checker_stats.assume_time,
-                assume_core: checker_stats.assume_core_time,
-            },
-        );
-        // Print the statistics
-        checker_stats.results.print(false);
-
+        stats = checker_stats.results;
         res
     } else {
         checker.check(&proof)
     }?;
 
     // Elaborating
+    let elaboration = Instant::now();
+
     let node = ast::ProofNode::from_commands(proof.commands);
     let lia_options = options.lia_options.as_ref().map(|lia| (lia, &prelude));
     let elaborated = elaborator::elaborate(
@@ -352,11 +343,20 @@ pub fn check_and_elaborate<T: io::BufRead>(
         lia_options,
         options.resolution_granularity,
     );
-
     let elaborated = ast::Proof {
         premises: proof.premises,
         commands: elaborated.into_commands(),
     };
+
+    if options.stats {
+        run.elaboration = elaboration.elapsed();
+        run.total = total.elapsed();
+
+        stats.add_run_measurement(&("this".to_owned(), 0), run);
+
+        stats.print(false);
+    }
+
     Ok((checking_result, elaborated))
 }
 
