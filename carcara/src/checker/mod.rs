@@ -556,6 +556,8 @@ impl<'c> ProofChecker<'c> {
             "concat_split_suffix" => strings::concat_split_suffix,
             "concat_lprop_prefix" => strings::concat_lprop_prefix,
             "concat_lprop_suffix" => strings::concat_lprop_suffix,
+            "concat_cprop_prefix" => strings::concat_cprop_prefix,
+            "concat_cprop_suffix" => strings::concat_cprop_suffix,
 
             // Special rules that always check as valid, and are used to indicate holes in the
             // proof.
