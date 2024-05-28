@@ -281,7 +281,7 @@ type InternedRunId = (Arc<str>, usize);
 pub struct CsvBenchmarkResults {
     strings: IndexSet<Arc<str>>,
     runs: IndexMap<InternedRunId, RunMeasurement>,
-    step_time_by_rule: IndexMap<Arc<str>, OfflineMetrics<InternedStepId>>,
+    steps: Vec<(Arc<str>, Duration)>,
     is_holey: bool,
     num_errors: usize,
 }
@@ -313,10 +313,10 @@ impl CsvBenchmarkResults {
     pub fn write_csv(
         self,
         runs_dest: &mut dyn io::Write,
-        by_rule_dest: &mut dyn io::Write,
+        steps_dest: &mut dyn io::Write,
     ) -> io::Result<()> {
         Self::write_runs_csv(self.runs, runs_dest)?;
-        Self::write_by_rule_csv(self.step_time_by_rule, by_rule_dest)
+        Self::write_steps_csv(self.steps, steps_dest)
     }
 
     fn write_runs_csv(
@@ -353,33 +353,13 @@ impl CsvBenchmarkResults {
         Ok(())
     }
 
-    fn write_by_rule_csv(
-        data: IndexMap<Arc<str>, OfflineMetrics<InternedStepId>>,
+    fn write_steps_csv(
+        data: Vec<(Arc<str>, Duration)>,
         dest: &mut dyn io::Write,
     ) -> io::Result<()> {
-        let mut data: Vec<_> = data.into_iter().collect();
-        data.sort_unstable_by_key(|m| m.1.total());
-
-        writeln!(
-            dest,
-            "rule,count,total,mean,lower_whisker,first_quartile,median,third_quartile,upper_whisker"
-        )?;
-        for (rule, mut m) in data {
-            let [lower_whisker, first_quartile, median, third_quartile, upper_whisker] =
-                m.quartiles().map(|(_, t)| t.as_nanos());
-            writeln!(
-                dest,
-                "{},{},{},{},{},{},{},{},{}",
-                rule,
-                m.count(),
-                m.total().as_nanos(),
-                m.mean().as_nanos(),
-                lower_whisker,
-                first_quartile,
-                median,
-                third_quartile,
-                upper_whisker,
-            )?;
+        writeln!(dest, "rule,time")?;
+        for (rule, t) in data {
+            writeln!(dest, "{},{}", rule, t.as_nanos())?;
         }
         Ok(())
     }
@@ -494,17 +474,9 @@ impl CollectResults for OnlineBenchmarkResults {
 }
 
 impl CollectResults for CsvBenchmarkResults {
-    fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration) {
+    fn add_step_measurement(&mut self, _: &str, _: &str, rule: &str, time: Duration) {
         let rule = self.intern(rule);
-        let id = InternedStepId {
-            file: self.intern(file),
-            step_id: self.intern(step_id),
-            rule: rule.clone(),
-        };
-        self.step_time_by_rule
-            .entry(rule)
-            .or_default()
-            .add_sample(&id, time);
+        self.steps.push((rule, time));
     }
 
     fn add_assume_measurement(&mut self, file: &str, id: &str, _: bool, time: Duration) {
@@ -530,7 +502,7 @@ impl CollectResults for CsvBenchmarkResults {
         // This assumes that the same run never appears in both `a` and `b`. This should be the case
         // in benchmarks anyway
         a.runs.extend(b.runs);
-        a.step_time_by_rule = combine_map(a.step_time_by_rule, b.step_time_by_rule);
+        a.steps.extend(b.steps);
         a.num_errors += b.num_errors;
         a
     }

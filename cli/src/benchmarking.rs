@@ -165,7 +165,7 @@ pub fn run_csv_benchmark(
     options: &CarcaraOptions,
     elaborate: bool,
     runs_dest: &mut dyn io::Write,
-    by_rule_dest: &mut dyn io::Write,
+    steps_dest: &mut dyn io::Write,
 ) -> io::Result<()> {
     let result: CsvBenchmarkResults =
         run_benchmark(instances, num_runs, num_jobs, options, elaborate);
@@ -180,5 +180,5 @@ pub fn run_csv_benchmark(
     } else {
         println!("valid");
     }
-    result.write_csv(runs_dest, by_rule_dest)
+    result.write_csv(runs_dest, steps_dest)
 }

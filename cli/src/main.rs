@@ -520,7 +520,7 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
             &carc_options,
             options.elaborate,
             &mut File::create("runs.csv")?,
-            &mut File::create("by-rule.csv")?,
+            &mut File::create("steps.csv")?,
         )?;
         return Ok(());
     }
