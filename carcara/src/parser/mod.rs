@@ -307,7 +307,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
             }
             Operator::ToReal => {
                 assert_num_args(&args, 1)?;
-                SortError::assert_eq(&Sort::Int, sorts[0])?;
+                // If the logic contains reals but not integers, integer constants are interpreted
+                // as reals, so the argument might have sort Real instead of the expected Int
+                SortError::assert_one_of(&[Sort::Int, Sort::Real], sorts[0])?;
             }
             Operator::ToInt | Operator::IsInt => {
                 assert_num_args(&args, 1)?;
