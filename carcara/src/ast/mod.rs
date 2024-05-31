@@ -453,7 +453,7 @@ pub enum IndexedOperator {
 
 impl_str_conversion_traits!(IndexedOperator {
     BvExtract: "extract",
-    BvBitOf: "bitOf",
+    BvBitOf: "@bitOf",
     ZeroExtend: "zero_extend",
     SignExtend: "sign_extend",
     RotateLeft: "rotate_left",
@@ -561,7 +561,7 @@ impl_str_conversion_traits!(Operator {
     BvSGt: "bvsgt",
     BvSGe: "bvsge",
     Bv2Nat: "bv2nat",
-    BvBbTerm: "bbT",
+    BvBbTerm: "@bbT",
 
     RareList: "rare-list",
 });
