@@ -407,9 +407,14 @@ fn main() {
             }
             return;
         }
-        Command::Elaborate(options) => {
-            elaborate_command(options).and_then(|p| print_proof(p.commands))
-        }
+        Command::Elaborate(options) => elaborate_command(options).and_then(|(res, p)| {
+            if res {
+                println!("holey");
+            } else {
+                println!("valid");
+            }
+            print_proof(p.commands)
+        }),
         Command::Bench(options) => bench_command(options),
         Command::Slice(options) => slice_command(options).and_then(print_proof),
         Command::GenerateLiaProblems(options) => {
@@ -477,10 +482,10 @@ fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
     .map_err(Into::into)
 }
 
-fn elaborate_command(options: ElaborateCommandOptions) -> CliResult<ast::Proof> {
+fn elaborate_command(options: ElaborateCommandOptions) -> CliResult<(bool, ast::Proof)> {
     let (problem, proof) = get_instance(&options.input)?;
 
-    let (_, elaborated) = check_and_elaborate(
+    let (res, elaborated) = check_and_elaborate(
         problem,
         proof,
         build_carcara_options(
@@ -490,7 +495,7 @@ fn elaborate_command(options: ElaborateCommandOptions) -> CliResult<ast::Proof> 
             options.resolution_elab.resolution_granularity,
         ),
     )?;
-    Ok(elaborated)
+    Ok((res, elaborated))
 }
 
 fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
