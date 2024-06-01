@@ -1,7 +1,7 @@
 use carcara::{
     ast,
     benchmarking::{CollectResults, CsvBenchmarkResults, RunMeasurement},
-    checker, elaborator, parser, CarcaraOptions,
+    checker, elaborator, parser,
 };
 use crossbeam_queue::ArrayQueue;
 use std::{
@@ -22,8 +22,9 @@ struct JobDescriptor<'a> {
 fn run_job<T: CollectResults + Default + Send>(
     results: &mut T,
     job: JobDescriptor,
-    options: &CarcaraOptions,
-    elaborate: bool,
+    parser_config: parser::Config,
+    checker_config: checker::Config,
+    elaborator_config: Option<elaborator::Config>,
 ) -> Result<bool, carcara::Error> {
     let proof_file_name = job.proof_file.to_str().unwrap();
     let mut checker_stats = checker::CheckerStatistics {
@@ -37,37 +38,24 @@ fn run_job<T: CollectResults + Default + Send>(
     let total = Instant::now();
 
     let parsing = Instant::now();
-    let config = parser::Config {
-        apply_function_defs: options.apply_function_defs,
-        expand_lets: options.expand_lets,
-        allow_int_real_subtyping: options.allow_int_real_subtyping,
-        allow_unary_logical_ops: !options.strict,
-    };
     let (prelude, proof, mut pool) = parser::parse_instance(
         BufReader::new(File::open(job.problem_file)?),
         BufReader::new(File::open(job.proof_file)?),
-        config,
+        parser_config,
     )?;
     let parsing = parsing.elapsed();
 
-    let config = checker::Config::new()
-        .strict(options.strict)
-        .ignore_unknown_rules(options.ignore_unknown_rules)
-        .lia_options(options.lia_options.clone());
-    let mut checker = checker::ProofChecker::new(&mut pool, config);
+    let mut checker = checker::ProofChecker::new(&mut pool, checker_config);
 
     let checking = Instant::now();
 
     let checking_result = checker.check_with_stats(&proof, &mut checker_stats);
     let checking = checking.elapsed();
 
-    let elaboration = if elaborate {
+    let elaboration = if let Some(config) = elaborator_config {
         let elaboration = Instant::now();
         let node = ast::ProofNode::from_commands(proof.commands);
-        let lia_options = options.lia_options.as_ref().map(|lia| (lia, &prelude));
-        let granularity = options.resolution_granularity;
-        let elaborated =
-            elaborator::elaborate(&mut pool, &proof.premises, &node, lia_options, granularity);
+        let elaborated = elaborator::elaborate(&mut pool, &proof.premises, &prelude, &node, config);
         elaborated.into_commands();
         elaboration.elapsed()
     } else {
@@ -95,13 +83,21 @@ fn run_job<T: CollectResults + Default + Send>(
 
 fn worker_thread<T: CollectResults + Default + Send>(
     jobs_queue: &ArrayQueue<JobDescriptor>,
-    options: &CarcaraOptions,
-    elaborate: bool,
+    parser_config: parser::Config,
+    checker_config: checker::Config,
+    elaborator_config: Option<elaborator::Config>,
 ) -> T {
     let mut results = T::default();
 
     while let Some(job) = jobs_queue.pop() {
-        match run_job(&mut results, job, options, elaborate) {
+        let result = run_job(
+            &mut results,
+            job,
+            parser_config,
+            checker_config,
+            elaborator_config.clone(),
+        );
+        match result {
             Ok(true) => results.register_holey(),
             Err(e) => {
                 log::error!("encountered error in file '{}'", job.proof_file.display());
@@ -118,8 +114,9 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
     instances: &[(PathBuf, PathBuf)],
     num_runs: usize,
     num_jobs: usize,
-    options: &CarcaraOptions,
-    elaborate: bool,
+    parser_config: parser::Config,
+    checker_config: checker::Config,
+    elaborator_config: Option<elaborator::Config>,
 ) -> T {
     const STACK_SIZE: usize = 128 * 1024 * 1024;
 
@@ -143,9 +140,12 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
         #[allow(clippy::needless_collect)]
         let workers: Vec<_> = (0..num_jobs)
             .map(|_| {
+                let elaborator_config = elaborator_config.clone();
                 thread::Builder::new()
                     .stack_size(STACK_SIZE)
-                    .spawn_scoped(s, move || worker_thread(jobs_queue, options, elaborate))
+                    .spawn_scoped(s, move || {
+                        worker_thread(jobs_queue, parser_config, checker_config, elaborator_config)
+                    })
                     .unwrap()
             })
             .collect();
@@ -158,17 +158,25 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
     })
 }
 
+#[allow(clippy::too_many_arguments)] // TODO: refactor this
 pub fn run_csv_benchmark(
     instances: &[(PathBuf, PathBuf)],
     num_runs: usize,
     num_jobs: usize,
-    options: &CarcaraOptions,
-    elaborate: bool,
+    parser_config: parser::Config,
+    checker_config: checker::Config,
+    elaborator_config: Option<elaborator::Config>,
     runs_dest: &mut dyn io::Write,
     steps_dest: &mut dyn io::Write,
 ) -> io::Result<()> {
-    let result: CsvBenchmarkResults =
-        run_benchmark(instances, num_runs, num_jobs, options, elaborate);
+    let result: CsvBenchmarkResults = run_benchmark(
+        instances,
+        num_runs,
+        num_jobs,
+        parser_config,
+        checker_config,
+        elaborator_config,
+    );
     println!(
         "{} errors encountered during benchmark",
         result.num_errors()

@@ -6,10 +6,22 @@ mod resolution;
 mod transitivity;
 mod uncrowding;
 
-use crate::{ast::*, CheckerError, LiaGenericOptions};
+use crate::{ast::*, CheckerError};
 use indexmap::IndexSet;
 use polyeq::PolyeqElaborator;
 use std::collections::{HashMap, HashSet};
+
+#[derive(Debug, Clone)]
+pub struct Config {
+    /// Controls the granularity of the elaboration of resolution steps.
+    pub resolution_granularity: ResolutionGranularity,
+
+    /// If `Some`, enables the elaboration of `lia_generic` steps using an external solver. When
+    /// checking a proof, this means calling the solver to solve the linear integer arithmetic
+    /// problem, checking the proof, and discarding it. When elaborating, the proof will instead be
+    /// inserted in the place of the `lia_generic` step. See [`LiaGenericOptions`] for more details.
+    pub lia_options: Option<LiaGenericOptions>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ResolutionGranularity {
@@ -24,12 +36,23 @@ impl Default for ResolutionGranularity {
     }
 }
 
+/// The options that control how `lia_generic` steps are elaborated using an external solver.
+#[derive(Debug, Clone)]
+pub struct LiaGenericOptions {
+    /// The external solver path. The solver should be a binary that can read SMT-LIB from stdin and
+    /// output an Alethe proof to stdout.
+    pub solver: Box<str>,
+
+    /// The arguments to pass to the solver.
+    pub arguments: Vec<Box<str>>,
+}
+
 pub fn elaborate(
     pool: &mut PrimitivePool,
     premises: &IndexSet<Rc<Term>>,
+    prelude: &ProblemPrelude,
     root: &Rc<ProofNode>,
-    lia_options: Option<(&LiaGenericOptions, &ProblemPrelude)>,
-    resolution_granularity: ResolutionGranularity,
+    config: Config,
 ) -> Rc<ProofNode> {
     let elaborated = mutate(root, |context, node| {
         match node.as_ref() {
@@ -42,7 +65,7 @@ pub fn elaborate(
                 if let Some(func) = get_elaboration_function(&s.rule) {
                     return func(pool, context, s).unwrap(); // TODO: add proper error handling
                 }
-                if let Some((lia_options, prelude)) = lia_options {
+                if let Some(lia_options) = &config.lia_options {
                     if s.rule == "lia_generic" {
                         return lia_generic::lia_generic(pool, s, prelude, lia_options)
                             .unwrap_or_else(|| node.clone());
@@ -55,7 +78,7 @@ pub fn elaborate(
         node.clone()
     });
 
-    if resolution_granularity >= ResolutionGranularity::Uncrowd {
+    if config.resolution_granularity >= ResolutionGranularity::Uncrowd {
         let uncrowded = mutate(&elaborated, |_, node| {
             if let Some(s) = node.as_step() {
                 if (s.rule == "resolution" || s.rule == "th_resolution") && !s.args.is_empty() {
@@ -64,7 +87,7 @@ pub fn elaborate(
             }
             node.clone()
         });
-        if resolution_granularity >= ResolutionGranularity::Reordering {
+        if config.resolution_granularity >= ResolutionGranularity::Reordering {
             reordering::remove_reorderings(&uncrowded)
         } else {
             uncrowded

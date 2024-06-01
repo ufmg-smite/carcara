@@ -4,8 +4,8 @@ mod logger;
 mod path_args;
 
 use carcara::{
-    ast, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate, check_parallel,
-    elaborator, generate_lia_smt_instances, parser, CarcaraOptions, LiaGenericOptions,
+    ast, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate, check_parallel, checker,
+    elaborator, generate_lia_smt_instances, parser,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -133,6 +133,17 @@ struct ParsingOptions {
     strict: bool,
 }
 
+impl From<ParsingOptions> for parser::Config {
+    fn from(val: ParsingOptions) -> Self {
+        Self {
+            apply_function_defs: val.apply_function_defs,
+            expand_lets: val.expand_let_bindings,
+            allow_int_real_subtyping: val.allow_int_real_subtyping,
+            allow_unary_logical_ops: !val.strict,
+        }
+    }
+}
+
 #[derive(Args, Clone)]
 struct CheckingOptions {
     /// Allow steps with rules that are not known by the checker, and consider them as holes.
@@ -143,7 +154,41 @@ struct CheckingOptions {
     #[clap(long, conflicts_with("ignore-unknown-rules"), hide = true)]
     skip_unknown_rules: bool,
 
-    /// Check `lia_generic` steps using the provided solver.
+    #[clap(long, hide = true)] // TODO
+    strict: bool,
+}
+
+impl From<CheckingOptions> for checker::Config {
+    fn from(val: CheckingOptions) -> Self {
+        Self {
+            strict: val.strict,
+            ignore_unknown_rules: val.ignore_unknown_rules,
+        }
+    }
+}
+
+#[derive(ArgEnum, Clone)]
+enum ResolutionGranularity {
+    Pivots,
+    Uncrowd,
+    Reordering,
+}
+
+#[derive(Args, Clone)]
+struct ElaborationOptions {
+    /// Controls the granularity of the elaboration of resolution steps.
+    ///
+    /// - `pivots`: the elaborator will try to find the pivots of resolution steps.
+    ///
+    /// - `uncrowd`: the elaborator will also remove the implicit clause reordering and removal of
+    /// duplicates in resolution steps, by adding explicit `contraction` and `reordering` steps.
+    ///
+    /// - `reordering`: the elaborator will also globally remove all `reordering` steps in the
+    /// proof.
+    #[clap(arg_enum, long, default_value_t = ResolutionGranularity::Reordering)]
+    resolution_granularity: ResolutionGranularity,
+
+    /// Elaborate `lia_generic` steps using the provided solver.
     #[clap(long)]
     lia_solver: Option<String>,
 
@@ -156,50 +201,24 @@ struct CheckingOptions {
         default_value = "--tlimit=10000 --lang=smt2 --proof-format-mode=alethe --proof-granularity=theory-rewrite --proof-alethe-res-pivots"
     )]
     lia_solver_args: String,
-
-    /// Check `lia_generic` steps by calling into cvc5 (deprecated).
-    #[clap(long, conflicts_with("lia-solver"))]
-    lia_via_cvc5: bool,
 }
 
-fn build_carcara_options(
-    ParsingOptions {
-        apply_function_defs,
-        expand_let_bindings,
-        allow_int_real_subtyping,
-        strict,
-    }: ParsingOptions,
-    CheckingOptions {
-        ignore_unknown_rules,
-        skip_unknown_rules,
-        lia_solver,
-        lia_via_cvc5,
-        lia_solver_args,
-    }: CheckingOptions,
-    StatsOptions { stats }: StatsOptions,
-    resolution_granularity: ResolutionGranularity,
-) -> CarcaraOptions {
-    // If no solver is provided by the `--lia-solver` option, *and* the `--lia-via-cvc5` option was
-    // passed, we default to cvc5 as a solver
-    let solver = lia_solver.or_else(|| lia_via_cvc5.then(|| "cvc5".into()));
-    let lia_options = solver.map(|solver| LiaGenericOptions {
-        solver: solver.into(),
-        arguments: lia_solver_args.split_whitespace().map(Into::into).collect(),
-    });
-    let resolution_granularity = match resolution_granularity {
-        ResolutionGranularity::Pivots => elaborator::ResolutionGranularity::Pivots,
-        ResolutionGranularity::Uncrowd => elaborator::ResolutionGranularity::Uncrowd,
-        ResolutionGranularity::Reordering => elaborator::ResolutionGranularity::Reordering,
-    };
-    CarcaraOptions {
-        apply_function_defs,
-        expand_lets: expand_let_bindings,
-        allow_int_real_subtyping,
-        lia_options,
-        resolution_granularity,
-        strict,
-        ignore_unknown_rules: ignore_unknown_rules || skip_unknown_rules,
-        stats,
+impl From<ElaborationOptions> for elaborator::Config {
+    fn from(val: ElaborationOptions) -> Self {
+        let resolution_granularity = match val.resolution_granularity {
+            ResolutionGranularity::Pivots => elaborator::ResolutionGranularity::Pivots,
+            ResolutionGranularity::Uncrowd => elaborator::ResolutionGranularity::Uncrowd,
+            ResolutionGranularity::Reordering => elaborator::ResolutionGranularity::Reordering,
+        };
+        let lia_options = val.lia_solver.map(|solver| elaborator::LiaGenericOptions {
+            solver: solver.into(),
+            arguments: val
+                .lia_solver_args
+                .split_whitespace()
+                .map(Into::into)
+                .collect(),
+        });
+        Self { resolution_granularity, lia_options }
     }
 }
 
@@ -244,28 +263,6 @@ struct CheckCommandOptions {
     stack: StackOptions,
 }
 
-#[derive(ArgEnum, Clone)]
-enum ResolutionGranularity {
-    Pivots,
-    Uncrowd,
-    Reordering,
-}
-
-#[derive(Args)]
-struct ResolutionElaborationOptions {
-    /// Controls the granularity of the elaboration of resolution steps.
-    ///
-    /// - `pivots`: the elaborator will try to find the pivots of resolution steps.
-    ///
-    /// - `uncrowd`: the elaborator will also remove the implicit clause reordering and removal of
-    /// duplicates in resolution steps, by adding explicit `contraction` and `reordering` steps.
-    ///
-    /// - `reordering`: the elaborator will also globally remove all `reordering` steps in the
-    /// proof.
-    #[clap(arg_enum, long, default_value_t = ResolutionGranularity::Reordering)]
-    resolution_granularity: ResolutionGranularity,
-}
-
 #[derive(Args)]
 struct ElaborateCommandOptions {
     #[clap(flatten)]
@@ -278,10 +275,10 @@ struct ElaborateCommandOptions {
     checking: CheckingOptions,
 
     #[clap(flatten)]
-    stats: StatsOptions,
+    elaboration: ElaborationOptions,
 
     #[clap(flatten)]
-    resolution_elab: ResolutionElaborationOptions,
+    stats: StatsOptions,
 }
 
 #[derive(Args)]
@@ -297,7 +294,7 @@ struct BenchCommandOptions {
     elaborate: bool,
 
     #[clap(flatten)]
-    resolution_elab: ResolutionElaborationOptions,
+    elaboration: ElaborationOptions,
 
     /// Number of times to run the benchmark for each file.
     #[clap(short, long, default_value_t = 1)]
@@ -382,11 +379,6 @@ fn main() {
                 `--ignore-unknown-rules` instead"
             )
         }
-        if checking.lia_via_cvc5 {
-            log::warn!(
-                "the `--lia-via-cvc5` option is deprecated, please use `--lia-solver cvc5` instead"
-            )
-        }
     }
 
     let print_proof = |commands: Vec<ast::ProofCommand>| -> CliResult<()> {
@@ -462,19 +454,18 @@ fn parse_command(options: ParseCommandOptions) -> CliResult<ast::Proof> {
 
 fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
     let (problem, proof) = get_instance(&options.input)?;
-    let carc_options = build_carcara_options(
-        options.parsing,
-        options.checking,
-        options.stats,
-        ResolutionGranularity::Reordering,
-    );
+    let parser_config = options.parsing.into();
+    let checker_config = options.checking.into();
+    let collect_stats = options.stats.stats;
     if options.num_threads == 1 {
-        check(problem, proof, carc_options)
+        check(problem, proof, parser_config, checker_config, collect_stats)
     } else {
         check_parallel(
             problem,
             proof,
-            carc_options,
+            parser_config,
+            checker_config,
+            collect_stats,
             options.num_threads,
             options.stack.stack_size,
         )
@@ -488,12 +479,10 @@ fn elaborate_command(options: ElaborateCommandOptions) -> CliResult<(bool, ast::
     let (res, elaborated) = check_and_elaborate(
         problem,
         proof,
-        build_carcara_options(
-            options.parsing,
-            options.checking,
-            options.stats,
-            options.resolution_elab.resolution_granularity,
-        ),
+        options.parsing.into(),
+        options.checking.into(),
+        options.elaboration.into(),
+        options.stats.stats,
     )?;
     Ok((res, elaborated))
 }
@@ -511,19 +500,14 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         options.num_runs
     );
 
-    let carc_options = build_carcara_options(
-        options.parsing,
-        options.checking,
-        StatsOptions { stats: false },
-        options.resolution_elab.resolution_granularity,
-    );
     if options.dump_to_csv {
         benchmarking::run_csv_benchmark(
             &instances,
             options.num_runs,
             options.num_jobs,
-            &carc_options,
-            options.elaborate,
+            options.parsing.into(),
+            options.checking.into(),
+            options.elaborate.then(|| options.elaboration.into()),
             &mut File::create("runs.csv")?,
             &mut File::create("steps.csv")?,
         )?;
@@ -534,8 +518,9 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         &instances,
         options.num_runs,
         options.num_jobs,
-        &carc_options,
-        options.elaborate,
+        options.parsing.into(),
+        options.checking.into(),
+        options.elaborate.then(|| options.elaboration.into()),
     );
     if results.is_empty() {
         println!("no benchmark data collected");

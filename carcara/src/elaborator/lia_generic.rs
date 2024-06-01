@@ -1,5 +1,5 @@
 use super::*;
-use crate::{checker, parser, CarcaraResult, LiaGenericOptions};
+use crate::{checker, parser, CarcaraResult};
 use std::{
     io::{self, BufRead, Write},
     process::{Command, Stdio},

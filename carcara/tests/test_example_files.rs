@@ -33,7 +33,7 @@ fn run_parallel_checker_test(
 fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
     use checker::Config;
 
-    let (_, proof, mut pool) = parser::parse_instance(
+    let (prelude, proof, mut pool) = parser::parse_instance(
         io::BufReader::new(fs::File::open(problem_path)?),
         io::BufReader::new(fs::File::open(proof_path)?),
         parser::Config::new(),
@@ -43,14 +43,13 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
     checker::ProofChecker::new(&mut pool, Config::new()).check(&proof)?;
 
     // Then we elaborate it
+    let config = elaborator::Config {
+        lia_options: None,
+        resolution_granularity: elaborator::ResolutionGranularity::Reordering,
+    };
     let node = ast::ProofNode::from_commands(proof.commands.clone());
-    let elaborated_node = elaborator::elaborate(
-        &mut pool,
-        &proof.premises,
-        &node,
-        None,
-        elaborator::ResolutionGranularity::Reordering,
-    );
+    let elaborated_node =
+        elaborator::elaborate(&mut pool, &proof.premises, &prelude, &node, config.clone());
     let elaborated = ast::Proof {
         premises: proof.premises.clone(),
         commands: elaborated_node.into_commands(),
@@ -64,9 +63,9 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
     let elaborated_twice = elaborator::elaborate(
         &mut pool,
         &proof.premises,
+        &prelude,
         &elaborated_node,
-        None,
-        elaborator::ResolutionGranularity::Reordering,
+        config,
     );
     assert!(
         elaborated.commands == elaborated_twice.into_commands(),

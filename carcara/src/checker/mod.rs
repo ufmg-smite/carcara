@@ -5,7 +5,7 @@ mod rules;
 use crate::{
     ast::*,
     benchmarking::{CollectResults, OnlineBenchmarkResults},
-    CarcaraResult, Error, LiaGenericOptions,
+    CarcaraResult, Error,
 };
 use error::{CheckerError, SubproofError};
 use indexmap::IndexSet;
@@ -41,11 +41,22 @@ impl<CR: CollectResults + Send + Default> fmt::Debug for CheckerStatistics<'_, C
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct Config {
-    strict: bool,
-    ignore_unknown_rules: bool,
-    lia_options: Option<LiaGenericOptions>,
+    /// Enables "strict" checking of some rules.
+    ///
+    /// Currently, if enabled, the following rules are affected:
+    /// - `assume` and `refl`: implicit reordering of equalities is not allowed
+    /// - `resolution` and `th_resolution`: the pivots must be provided as arguments
+    ///
+    /// In general, the invariant we aim for is that, if you are checking a proof that was
+    /// elaborated by Carcara, you can safely enable this option (and possibly get a performance
+    /// benefit).
+    pub strict: bool,
+
+    /// If `true`, the checker will skip any steps with rules that it does not recognize, and will
+    /// consider them as holes. Normally, using an unknown rule is considered an error.
+    pub ignore_unknown_rules: bool,
 }
 
 impl Config {
@@ -60,11 +71,6 @@ impl Config {
 
     pub fn ignore_unknown_rules(mut self, value: bool) -> Self {
         self.ignore_unknown_rules = value;
-        self
-    }
-
-    pub fn lia_options(mut self, value: impl Into<Option<LiaGenericOptions>>) -> Self {
-        self.lia_options = value.into();
         self
     }
 }

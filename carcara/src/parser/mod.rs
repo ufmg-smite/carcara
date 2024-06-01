@@ -23,9 +23,24 @@ use self::error::assert_indexed_op_args_value;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Config {
+    /// If `true`, the parser will automatically expand function definitions introduced by
+    /// `define-fun` commands in the SMT problem. If `false`, those `define-fun`s are instead
+    /// interpreted as a function declaration and an `assert` command that defines the function
+    /// as equal to its body (or to a lambda term, if it contains arguments). Note that function
+    /// definitions in the proof are always expanded.
     pub apply_function_defs: bool,
+
+    /// If `true`, the parser will eliminate `let` bindings from terms during parsing. This is done
+    /// by replacing any occurence of a variable bound in the `let` binding with its corresponding
+    /// value.
     pub expand_lets: bool,
+
+    /// If `true`, this relaxes the type checking rules in Carcara to allow `Int`-`Real` subtyping.
+    /// That is, terms of sort `Int` will be allowed in arithmetic operations where a `Real` term
+    /// was expected. Note that this only applies to predefined operators --- passing an `Int` term
+    /// to a function that expects a `Real` will still be an error.
     pub allow_int_real_subtyping: bool,
+
     pub allow_unary_logical_ops: bool,
 }
 

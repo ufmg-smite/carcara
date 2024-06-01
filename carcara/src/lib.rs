@@ -45,82 +45,12 @@ mod utils;
 
 use crate::benchmarking::{CollectResults, OnlineBenchmarkResults, RunMeasurement};
 use checker::{error::CheckerError, CheckerStatistics};
-use elaborator::ResolutionGranularity;
 use parser::{ParserError, Position};
 use std::io;
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
 pub type CarcaraResult<T> = Result<T, Error>;
-
-/// The options that control how Carcara parses, checks and elaborates a proof.
-#[derive(Default)]
-pub struct CarcaraOptions {
-    /// If `true`, Carcara will automatically expand function definitions introduced by `define-fun`
-    /// commands in the SMT problem. If `false`, those `define-fun`s are instead interpreted as a
-    /// function declaration and an `assert` command that defines the function as equal to its body
-    /// (or to a lambda term, if it contains arguments). Note that function definitions in the proof
-    /// are always expanded.
-    pub apply_function_defs: bool,
-
-    /// If `true`, Carcara will eliminate `let` bindings from terms during parsing. This is done by
-    /// replacing any occurence of a variable bound in the `let` binding with its corresponding
-    /// value.
-    pub expand_lets: bool,
-
-    /// If `true`, this relaxes the type checking rules in Carcara to allow `Int`-`Real` subtyping.
-    /// That is, terms of sort `Int` will be allowed in arithmetic operations where a `Real` term
-    /// was expected. Note that this only applies to predefined operators --- passing an `Int` term
-    /// to a function that expects a `Real` will still be an error.
-    pub allow_int_real_subtyping: bool,
-
-    /// If `Some`, enables the checking/elaboration of `lia_generic` steps using an external solver.
-    /// When checking a proof, this means calling the solver to solve the linear integer arithmetic
-    /// problem, checking the proof, and discarding it. When elaborating, the proof will instead be
-    /// inserted in the place of the `lia_generic` step. See [`LiaGenericOptions`] for more details.
-    pub lia_options: Option<LiaGenericOptions>,
-
-    /// Controls the granularity of the elaboration of resolution steps.
-    pub resolution_granularity: ResolutionGranularity,
-
-    /// Enables "strict" checking of some rules.
-    ///
-    /// Currently, if enabled, the following rules are affected:
-    /// - `assume` and `refl`: implicit reordering of equalities is not allowed
-    /// - `resolution` and `th_resolution`: the pivots must be provided as arguments
-    ///
-    /// In general, the invariant we aim for is that, if you are checking a proof that was
-    /// elaborated by Carcara, you can safely enable this option (and possibly get a performance
-    /// benefit).
-    pub strict: bool,
-
-    /// If `true`, Carcara will skip any steps with rules that it does not recognize, and will consider them as
-    /// holes. Normally, using an unknown rule is considered an error.
-    pub ignore_unknown_rules: bool,
-
-    /// If `true`, Carcará will log the check and elaboration statistics of any
-    /// `check` or `check_and_elaborate` run. If `false` no statistics are logged.
-    pub stats: bool,
-}
-
-/// The options that control how `lia_generic` steps are checked/elaborated using an external
-/// solver.
-#[derive(Debug, Clone)]
-pub struct LiaGenericOptions {
-    /// The external solver path. The solver should be a binary that can read SMT-LIB from stdin and
-    /// output an Alethe proof to stdout.
-    pub solver: Box<str>,
-
-    /// The arguments to pass to the solver.
-    pub arguments: Vec<Box<str>>,
-}
-
-impl CarcaraOptions {
-    /// Constructs a new `CarcaraOptions` with all options set to `false`.
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
 
 fn wrap_parser_error_message(e: &ParserError, pos: &Position) -> String {
     // For unclosed subproof errors, we don't print the position
@@ -152,29 +82,24 @@ pub enum Error {
     DoesNotReachEmptyClause,
 }
 
-pub fn check<T: io::BufRead>(problem: T, proof: T, options: CarcaraOptions) -> Result<bool, Error> {
+pub fn check<T: io::BufRead>(
+    problem: T,
+    proof: T,
+    parser_config: parser::Config,
+    checker_config: checker::Config,
+    collect_stats: bool,
+) -> Result<bool, Error> {
     let mut run_measures: RunMeasurement = RunMeasurement::default();
 
     // Parsing
     let total = Instant::now();
-    let config = parser::Config {
-        apply_function_defs: options.apply_function_defs,
-        expand_lets: options.expand_lets,
-        allow_int_real_subtyping: options.allow_int_real_subtyping,
-        allow_unary_logical_ops: !options.strict,
-    };
-    let (_, proof, mut pool) = parser::parse_instance(problem, proof, config)?;
+    let (_, proof, mut pool) = parser::parse_instance(problem, proof, parser_config)?;
     run_measures.parsing = total.elapsed();
-
-    let config = checker::Config::new()
-        .strict(options.strict)
-        .ignore_unknown_rules(options.ignore_unknown_rules)
-        .lia_options(options.lia_options);
 
     // Checking
     let checking = Instant::now();
-    let mut checker = checker::ProofChecker::new(&mut pool, config);
-    if options.stats {
+    let mut checker = checker::ProofChecker::new(&mut pool, checker_config);
+    if collect_stats {
         let mut checker_stats = CheckerStatistics {
             file_name: "this",
             polyeq_time: Duration::ZERO,
@@ -212,7 +137,9 @@ pub fn check<T: io::BufRead>(problem: T, proof: T, options: CarcaraOptions) -> R
 pub fn check_parallel<T: io::BufRead>(
     problem: T,
     proof: T,
-    options: CarcaraOptions,
+    parser_config: parser::Config,
+    checker_config: checker::Config,
+    collect_stats: bool,
     num_threads: usize,
     stack_size: usize,
 ) -> Result<bool, Error> {
@@ -222,19 +149,8 @@ pub fn check_parallel<T: io::BufRead>(
 
     // Parsing
     let total = Instant::now();
-    let config = parser::Config {
-        apply_function_defs: options.apply_function_defs,
-        expand_lets: options.expand_lets,
-        allow_int_real_subtyping: options.allow_int_real_subtyping,
-        allow_unary_logical_ops: !options.strict,
-    };
-    let (prelude, proof, pool) = parser::parse_instance(problem, proof, config)?;
+    let (prelude, proof, pool) = parser::parse_instance(problem, proof, parser_config)?;
     run_measures.parsing = total.elapsed();
-
-    let config = checker::Config::new()
-        .strict(options.strict)
-        .ignore_unknown_rules(options.ignore_unknown_rules)
-        .lia_options(options.lia_options);
 
     // Checking
     let checking = Instant::now();
@@ -242,13 +158,13 @@ pub fn check_parallel<T: io::BufRead>(
     run_measures.scheduling = checking.elapsed();
     let mut checker = checker::ParallelProofChecker::new(
         Arc::new(pool),
-        config,
+        checker_config,
         &prelude,
         &schedule_context_usage,
         stack_size,
     );
 
-    if options.stats {
+    if collect_stats {
         let mut checker_stats = CheckerStatistics {
             file_name: "this",
             polyeq_time: Duration::ZERO,
@@ -286,31 +202,24 @@ pub fn check_parallel<T: io::BufRead>(
 pub fn check_and_elaborate<T: io::BufRead>(
     problem: T,
     proof: T,
-    options: CarcaraOptions,
+    parser_config: parser::Config,
+    checker_config: checker::Config,
+    elaborator_config: elaborator::Config,
+    collect_stats: bool,
 ) -> Result<(bool, ast::Proof), Error> {
     let mut run: RunMeasurement = RunMeasurement::default();
 
     // Parsing
     let total = Instant::now();
-    let config = parser::Config {
-        apply_function_defs: options.apply_function_defs,
-        expand_lets: options.expand_lets,
-        allow_int_real_subtyping: options.allow_int_real_subtyping,
-        allow_unary_logical_ops: !options.strict,
-    };
-    let (prelude, proof, mut pool) = parser::parse_instance(problem, proof, config)?;
+    let (prelude, proof, mut pool) = parser::parse_instance(problem, proof, parser_config)?;
     run.parsing = total.elapsed();
-
-    let config = checker::Config::new()
-        .strict(options.strict)
-        .ignore_unknown_rules(options.ignore_unknown_rules);
 
     let mut stats = OnlineBenchmarkResults::new();
 
     // Checking
     let checking = Instant::now();
-    let mut checker = checker::ProofChecker::new(&mut pool, config);
-    let checking_result = if options.stats {
+    let mut checker = checker::ProofChecker::new(&mut pool, checker_config);
+    let checking_result = if collect_stats {
         let mut checker_stats = CheckerStatistics {
             file_name: "this",
             polyeq_time: Duration::ZERO,
@@ -335,20 +244,19 @@ pub fn check_and_elaborate<T: io::BufRead>(
     let elaboration = Instant::now();
 
     let node = ast::ProofNode::from_commands(proof.commands);
-    let lia_options = options.lia_options.as_ref().map(|lia| (lia, &prelude));
     let elaborated = elaborator::elaborate(
         &mut pool,
         &proof.premises,
+        &prelude,
         &node,
-        lia_options,
-        options.resolution_granularity,
+        elaborator_config,
     );
     let elaborated = ast::Proof {
         premises: proof.premises,
         commands: elaborated.into_commands(),
     };
 
-    if options.stats {
+    if collect_stats {
         run.elaboration = elaboration.elapsed();
         run.total = total.elapsed();
 
