@@ -205,6 +205,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
     parser_config: parser::Config,
     checker_config: checker::Config,
     elaborator_config: elaborator::Config,
+    pipeline: Vec<elaborator::ElaborationStep>,
     collect_stats: bool,
 ) -> Result<(bool, ast::Proof), Error> {
     let mut run: RunMeasurement = RunMeasurement::default();
@@ -246,7 +247,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
     let node = ast::ProofNode::from_commands(proof.commands);
     let elaborated =
         elaborator::Elaborator::new(&mut pool, &proof.premises, &prelude, elaborator_config)
-            .elaborate_with_default_pipeline(&node);
+            .elaborate(&node, pipeline);
     let elaborated = ast::Proof {
         premises: proof.premises,
         commands: elaborated.into_commands(),

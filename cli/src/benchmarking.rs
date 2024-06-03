@@ -24,7 +24,7 @@ fn run_job<T: CollectResults + Default + Send>(
     job: JobDescriptor,
     parser_config: parser::Config,
     checker_config: checker::Config,
-    elaborator_config: Option<elaborator::Config>,
+    elaborator_config: Option<(elaborator::Config, Vec<elaborator::ElaborationStep>)>,
 ) -> Result<bool, carcara::Error> {
     let proof_file_name = job.proof_file.to_str().unwrap();
     let mut checker_stats = checker::CheckerStatistics {
@@ -52,11 +52,11 @@ fn run_job<T: CollectResults + Default + Send>(
     let checking_result = checker.check_with_stats(&proof, &mut checker_stats);
     let checking = checking.elapsed();
 
-    let elaboration = if let Some(config) = elaborator_config {
+    let elaboration = if let Some((config, pipeline)) = elaborator_config {
         let elaboration = Instant::now();
         let node = ast::ProofNode::from_commands(proof.commands);
         let elaborated = elaborator::Elaborator::new(&mut pool, &proof.premises, &prelude, config)
-            .elaborate_with_default_pipeline(&node);
+            .elaborate(&node, pipeline);
         elaborated.into_commands();
         elaboration.elapsed()
     } else {
@@ -86,7 +86,7 @@ fn worker_thread<T: CollectResults + Default + Send>(
     jobs_queue: &ArrayQueue<JobDescriptor>,
     parser_config: parser::Config,
     checker_config: checker::Config,
-    elaborator_config: Option<elaborator::Config>,
+    elaborator_config: Option<(elaborator::Config, Vec<elaborator::ElaborationStep>)>,
 ) -> T {
     let mut results = T::default();
 
@@ -117,7 +117,7 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
     num_jobs: usize,
     parser_config: parser::Config,
     checker_config: checker::Config,
-    elaborator_config: Option<elaborator::Config>,
+    elaborator_config: Option<(elaborator::Config, Vec<elaborator::ElaborationStep>)>,
 ) -> T {
     const STACK_SIZE: usize = 128 * 1024 * 1024;
 
@@ -166,7 +166,7 @@ pub fn run_csv_benchmark(
     num_jobs: usize,
     parser_config: parser::Config,
     checker_config: checker::Config,
-    elaborator_config: Option<elaborator::Config>,
+    elaborator_config: Option<(elaborator::Config, Vec<elaborator::ElaborationStep>)>,
     runs_dest: &mut dyn io::Write,
     steps_dest: &mut dyn io::Write,
 ) -> io::Result<()> {

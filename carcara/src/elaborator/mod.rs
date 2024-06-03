@@ -13,9 +13,6 @@ use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// Controls the granularity of the elaboration of resolution steps.
-    pub resolution_granularity: ResolutionGranularity,
-
     /// If `Some`, enables the elaboration of `lia_generic` steps using an external solver. When
     /// checking a proof, this means calling the solver to solve the linear integer arithmetic
     /// problem, checking the proof, and discarding it. When elaborating, the proof will instead be
@@ -23,19 +20,7 @@ pub struct Config {
     pub lia_options: Option<LiaGenericOptions>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ResolutionGranularity {
-    Pivots,
-    Uncrowd,
-    Reordering,
-}
-
-impl Default for ResolutionGranularity {
-    fn default() -> Self {
-        Self::Reordering
-    }
-}
-
+#[derive(Debug, Clone, Copy)]
 pub enum ElaborationStep {
     Polyeq,
     LiaGeneric,

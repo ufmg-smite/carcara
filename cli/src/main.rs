@@ -166,26 +166,16 @@ impl From<CheckingOptions> for checker::Config {
 }
 
 #[derive(ArgEnum, Clone)]
-enum ResolutionGranularity {
-    Pivots,
+enum ElaborationStep {
+    Polyeq,
+    LiaGeneric,
+    Local,
     Uncrowd,
     Reordering,
 }
 
 #[derive(Args, Clone)]
 struct ElaborationOptions {
-    /// Controls the granularity of the elaboration of resolution steps.
-    ///
-    /// - `pivots`: the elaborator will try to find the pivots of resolution steps.
-    ///
-    /// - `uncrowd`: the elaborator will also remove the implicit clause reordering and removal of
-    /// duplicates in resolution steps, by adding explicit `contraction` and `reordering` steps.
-    ///
-    /// - `reordering`: the elaborator will also globally remove all `reordering` steps in the
-    /// proof.
-    #[clap(arg_enum, long, default_value_t = ResolutionGranularity::Reordering)]
-    resolution_granularity: ResolutionGranularity,
-
     /// Elaborate `lia_generic` steps using the provided solver.
     #[clap(long)]
     lia_solver: Option<String>,
@@ -199,15 +189,30 @@ struct ElaborationOptions {
         default_value = "--tlimit=10000 --lang=smt2 --proof-format-mode=alethe --proof-granularity=theory-rewrite --proof-alethe-res-pivots"
     )]
     lia_solver_args: String,
+
+    /// The pipeline of elaboration steps to use.
+    #[clap(
+        arg_enum,
+        long,
+        multiple = true,
+        default_values = &["polyeq", "lia-generic", "local", "uncrowd", "reordering"]
+    )]
+    pipeline: Vec<ElaborationStep>,
 }
 
-impl From<ElaborationOptions> for elaborator::Config {
+impl From<ElaborationOptions> for (elaborator::Config, Vec<elaborator::ElaborationStep>) {
     fn from(val: ElaborationOptions) -> Self {
-        let resolution_granularity = match val.resolution_granularity {
-            ResolutionGranularity::Pivots => elaborator::ResolutionGranularity::Pivots,
-            ResolutionGranularity::Uncrowd => elaborator::ResolutionGranularity::Uncrowd,
-            ResolutionGranularity::Reordering => elaborator::ResolutionGranularity::Reordering,
-        };
+        let pipeline: Vec<_> = val
+            .pipeline
+            .into_iter()
+            .map(|s| match s {
+                ElaborationStep::Polyeq => elaborator::ElaborationStep::Polyeq,
+                ElaborationStep::LiaGeneric => elaborator::ElaborationStep::LiaGeneric,
+                ElaborationStep::Local => elaborator::ElaborationStep::Local,
+                ElaborationStep::Uncrowd => elaborator::ElaborationStep::Uncrowd,
+                ElaborationStep::Reordering => elaborator::ElaborationStep::Reordering,
+            })
+            .collect();
         let lia_options = val.lia_solver.map(|solver| elaborator::LiaGenericOptions {
             solver: solver.into(),
             arguments: val
@@ -216,7 +221,7 @@ impl From<ElaborationOptions> for elaborator::Config {
                 .map(Into::into)
                 .collect(),
         });
-        Self { resolution_granularity, lia_options }
+        (elaborator::Config { lia_options }, pipeline)
     }
 }
 
@@ -474,12 +479,14 @@ fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
 fn elaborate_command(options: ElaborateCommandOptions) -> CliResult<(bool, ast::Proof)> {
     let (problem, proof) = get_instance(&options.input)?;
 
+    let (elab_config, pipeline) = options.elaboration.into();
     let (res, elaborated) = check_and_elaborate(
         problem,
         proof,
         options.parsing.into(),
         options.checking.into(),
-        options.elaboration.into(),
+        elab_config,
+        pipeline,
         options.stats.stats,
     )?;
     Ok((res, elaborated))
