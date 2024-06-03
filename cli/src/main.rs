@@ -124,12 +124,10 @@ struct ParsingOptions {
     #[clap(long)]
     allow_int_real_subtyping: bool,
 
-    /// Enables strict parsing and checking.
+    /// Enables strict parsing.
     ///
-    /// When this flag is enabled: unary `and`, `or` and `xor` terms are not allowed; for the `refl`
-    /// and `assume` rules, implicit reordering of equalities is not allowed; for the `resolution`
-    /// and `th_resolution` rules, the pivots used must be passed as arguments.
-    #[clap(short, long)]
+    /// When this flag is enabled: unary `and`, `or` and `xor` terms are not allowed;
+    #[clap(short, long = "strict-parsing")]
     strict: bool,
 }
 
@@ -155,13 +153,13 @@ struct CheckingOptions {
     skip_unknown_rules: bool,
 
     #[clap(long, hide = true)] // TODO
-    strict: bool,
+    strict_checking: bool,
 }
 
 impl From<CheckingOptions> for checker::Config {
     fn from(val: CheckingOptions) -> Self {
         Self {
-            strict: val.strict,
+            strict: val.strict_checking,
             ignore_unknown_rules: val.ignore_unknown_rules,
         }
     }
