@@ -59,7 +59,7 @@ impl<'e> Elaborator<'e> {
 
     pub fn elaborate_with_default_pipeline(&mut self, root: &Rc<ProofNode>) -> Rc<ProofNode> {
         use ElaborationStep::*;
-        let pipeline = vec![Polyeq, LiaGeneric, Local, Uncrowd, Reordering];
+        let pipeline = vec![Polyeq, Local, Uncrowd, Reordering];
         self.elaborate(root, pipeline)
     }
 
