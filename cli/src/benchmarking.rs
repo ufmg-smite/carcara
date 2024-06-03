@@ -55,14 +55,8 @@ fn run_job<T: CollectResults + Default + Send>(
     let elaboration = if let Some(config) = elaborator_config {
         let elaboration = Instant::now();
         let node = ast::ProofNode::from_commands(proof.commands);
-        let elaborated = elaborator::elaborate(
-            &mut pool,
-            &proof.premises,
-            &prelude,
-            &node,
-            config,
-            elaborator::default_pipeline(),
-        );
+        let elaborated = elaborator::Elaborator::new(&mut pool, &proof.premises, &prelude, config)
+            .elaborate_with_default_pipeline(&node);
         elaborated.into_commands();
         elaboration.elapsed()
     } else {

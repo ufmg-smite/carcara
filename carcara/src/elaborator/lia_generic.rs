@@ -54,14 +54,10 @@ fn get_problem_string(conclusion: &[Rc<Term>], prelude: &ProblemPrelude) -> Stri
     problem
 }
 
-pub fn lia_generic(
-    pool: &mut PrimitivePool,
-    step: &StepNode,
-    prelude: &ProblemPrelude,
-    options: &LiaGenericOptions,
-) -> Option<Rc<ProofNode>> {
-    let problem = get_problem_string(&step.clause, prelude);
-    let commands = match get_solver_proof(pool, problem, options) {
+pub fn lia_generic(elaborator: &mut Elaborator, step: &StepNode) -> Option<Rc<ProofNode>> {
+    let problem = get_problem_string(&step.clause, elaborator.prelude);
+    let options = elaborator.config.lia_options.as_ref().unwrap();
+    let commands = match get_solver_proof(elaborator.pool, problem, options) {
         Ok(c) => c,
         Err(e) => {
             log::warn!("failed to elaborate `lia_generic` step: {}", e);
@@ -69,8 +65,13 @@ pub fn lia_generic(
         }
     };
 
-    let elaborated = insert_solver_proof(pool, commands, &step.clause, &step.id, step.depth);
-    Some(elaborated)
+    Some(insert_solver_proof(
+        elaborator.pool,
+        commands,
+        &step.clause,
+        &step.id,
+        step.depth,
+    ))
 }
 
 fn get_solver_proof(

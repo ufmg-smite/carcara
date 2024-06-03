@@ -244,14 +244,9 @@ pub fn check_and_elaborate<T: io::BufRead>(
     let elaboration = Instant::now();
 
     let node = ast::ProofNode::from_commands(proof.commands);
-    let elaborated = elaborator::elaborate(
-        &mut pool,
-        &proof.premises,
-        &prelude,
-        &node,
-        elaborator_config,
-        elaborator::default_pipeline(),
-    );
+    let elaborated =
+        elaborator::Elaborator::new(&mut pool, &proof.premises, &prelude, elaborator_config)
+            .elaborate_with_default_pipeline(&node);
     let elaborated = ast::Proof {
         premises: proof.premises,
         commands: elaborated.into_commands(),

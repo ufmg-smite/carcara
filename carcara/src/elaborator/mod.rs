@@ -55,138 +55,149 @@ pub struct LiaGenericOptions {
     pub arguments: Vec<Box<str>>,
 }
 
-pub fn default_pipeline() -> Vec<ElaborationStep> {
-    use ElaborationStep::*;
-    vec![Polyeq, LiaGeneric, Local, Uncrowd, Reordering]
-}
-
-pub fn elaborate(
-    pool: &mut PrimitivePool,
-    premises: &IndexSet<Rc<Term>>,
-    prelude: &ProblemPrelude,
-    root: &Rc<ProofNode>,
+pub struct Elaborator<'e> {
+    pool: &'e mut PrimitivePool,
+    premises: &'e IndexSet<Rc<Term>>,
+    prelude: &'e ProblemPrelude,
     config: Config,
-    pipeline: Vec<ElaborationStep>,
-) -> Rc<ProofNode> {
-    let mut current = root.clone();
-    for step in pipeline {
-        current = match step {
-            ElaborationStep::Polyeq => elaborate_polyeq(pool, premises, &current),
-            ElaborationStep::LiaGeneric => mutate(&current, |_, node| match node.as_ref() {
-                ProofNode::Step(s) if s.rule == "lia_generic" => {
-                    lia_generic::lia_generic(pool, s, prelude, config.lia_options.as_ref().unwrap())
-                        .unwrap_or_else(|| node.clone())
-                }
-                _ => node.clone(),
-            }),
-            ElaborationStep::Local => elaborate_local(pool, &current),
-            ElaborationStep::Uncrowd => mutate(&current, |_, node| match node.as_ref() {
-                ProofNode::Step(s)
-                    if (s.rule == "resolution" || s.rule == "th_resolution")
-                        && !s.args.is_empty() =>
-                {
-                    uncrowding::uncrowd_resolution(pool, s)
-                }
-                _ => node.clone(),
-            }),
-            ElaborationStep::Reordering => reordering::remove_reorderings(&current),
-        };
+}
+
+impl<'e> Elaborator<'e> {
+    pub fn new(
+        pool: &'e mut PrimitivePool,
+        premises: &'e IndexSet<Rc<Term>>,
+        prelude: &'e ProblemPrelude,
+        config: Config,
+    ) -> Self {
+        Self { pool, premises, prelude, config }
     }
-    current
-}
 
-fn elaborate_polyeq(
-    pool: &mut PrimitivePool,
-    premises: &IndexSet<Rc<Term>>,
-    root: &Rc<ProofNode>,
-) -> Rc<ProofNode> {
-    mutate(root, |context, node| {
-        match node.as_ref() {
-            ProofNode::Assume { id, depth, term }
-                if context.is_empty() && !premises.contains(term) =>
-            {
-                elaborate_assume(pool, premises, id, *depth, term)
-            }
-            ProofNode::Step(s) if s.rule == "refl" => {
-                reflexivity::refl(pool, context, s).unwrap() // TODO: add proper error handling
-            }
-            _ => node.clone(),
+    pub fn elaborate_with_default_pipeline(&mut self, root: &Rc<ProofNode>) -> Rc<ProofNode> {
+        use ElaborationStep::*;
+        let pipeline = vec![Polyeq, LiaGeneric, Local, Uncrowd, Reordering];
+        self.elaborate(root, pipeline)
+    }
+
+    pub fn elaborate(
+        &mut self,
+        root: &Rc<ProofNode>,
+        pipeline: Vec<ElaborationStep>,
+    ) -> Rc<ProofNode> {
+        let mut current = root.clone();
+        for step in pipeline {
+            current = match step {
+                ElaborationStep::Polyeq => self.elaborate_polyeq(&current),
+                ElaborationStep::LiaGeneric => mutate(&current, |_, node| match node.as_ref() {
+                    ProofNode::Step(s) if s.rule == "lia_generic" => {
+                        lia_generic::lia_generic(self, s).unwrap_or_else(|| node.clone())
+                    }
+                    _ => node.clone(),
+                }),
+                ElaborationStep::Local => self.elaborate_local(&current),
+                ElaborationStep::Uncrowd => mutate(&current, |_, node| match node.as_ref() {
+                    ProofNode::Step(s)
+                        if (s.rule == "resolution" || s.rule == "th_resolution")
+                            && !s.args.is_empty() =>
+                    {
+                        uncrowding::uncrowd_resolution(self.pool, s)
+                    }
+                    _ => node.clone(),
+                }),
+                ElaborationStep::Reordering => reordering::remove_reorderings(&current),
+            };
         }
-    })
-}
+        current
+    }
 
-fn elaborate_local(pool: &mut PrimitivePool, root: &Rc<ProofNode>) -> Rc<ProofNode> {
-    fn get_elaboration_function(rule: &str) -> Option<ElaborationFunc> {
-        Some(match rule {
-            "eq_transitive" => transitivity::eq_transitive,
-            "trans" => transitivity::trans,
-            "resolution" | "th_resolution" => resolution::resolution,
-            _ => return None,
+    fn elaborate_polyeq(&mut self, root: &Rc<ProofNode>) -> Rc<ProofNode> {
+        mutate(root, |context, node| {
+            match node.as_ref() {
+                ProofNode::Assume { id, depth, term }
+                    if context.is_empty() && !self.premises.contains(term) =>
+                {
+                    self.elaborate_assume(id, *depth, term)
+                }
+                ProofNode::Step(s) if s.rule == "refl" => {
+                    reflexivity::refl(self.pool, context, s).unwrap() // TODO: add proper error handling
+                }
+                _ => node.clone(),
+            }
         })
     }
 
-    mutate(root, |context, node| {
-        match node.as_ref() {
-            ProofNode::Step(s) => {
-                if let Some(func) = get_elaboration_function(&s.rule) {
-                    return func(pool, context, s).unwrap(); // TODO: add proper error handling
+    fn elaborate_local(&mut self, root: &Rc<ProofNode>) -> Rc<ProofNode> {
+        fn get_elaboration_function(rule: &str) -> Option<ElaborationFunc> {
+            Some(match rule {
+                "eq_transitive" => transitivity::eq_transitive,
+                "trans" => transitivity::trans,
+                "resolution" | "th_resolution" => resolution::resolution,
+                _ => return None,
+            })
+        }
+
+        mutate(root, |context, node| {
+            match node.as_ref() {
+                ProofNode::Step(s) => {
+                    if let Some(func) = get_elaboration_function(&s.rule) {
+                        return func(self.pool, context, s).unwrap(); // TODO: add proper error handling
+                    }
                 }
+                ProofNode::Subproof(_) => unreachable!(),
+                ProofNode::Assume { .. } => (),
             }
-            ProofNode::Subproof(_) => unreachable!(),
-            ProofNode::Assume { .. } => (),
-        }
-        node.clone()
-    })
-}
-
-fn elaborate_assume(
-    pool: &mut dyn TermPool,
-    premises: &IndexSet<Rc<Term>>,
-    id: &str,
-    depth: usize,
-    term: &Rc<Term>,
-) -> Rc<ProofNode> {
-    let mut found = None;
-    let mut polyeq_time = std::time::Duration::ZERO;
-    for p in premises {
-        if polyeq_mod_nary(term, p, &mut polyeq_time) {
-            found = Some(p.clone());
-            break;
-        }
+            node.clone()
+        })
     }
-    let premise = found.expect("trying to elaborate assume, but it is invalid!");
 
-    let new_assume = Rc::new(ProofNode::Assume {
-        id: id.to_owned(),
-        depth,
-        term: premise.clone(),
-    });
+    fn elaborate_assume(&mut self, id: &str, depth: usize, term: &Rc<Term>) -> Rc<ProofNode> {
+        let mut found = None;
+        let mut polyeq_time = std::time::Duration::ZERO;
+        for p in self.premises {
+            if polyeq_mod_nary(term, p, &mut polyeq_time) {
+                found = Some(p.clone());
+                break;
+            }
+        }
+        let premise = found.expect("trying to elaborate assume, but it is invalid!");
 
-    let mut ids = IdHelper::new(id);
-    let equality_step = PolyeqElaborator::new(&mut ids, depth, false).elaborate(
-        pool,
-        premise.clone(),
-        term.clone(),
-    );
+        let new_assume = Rc::new(ProofNode::Assume {
+            id: id.to_owned(),
+            depth,
+            term: premise.clone(),
+        });
 
-    let equiv1_step = Rc::new(ProofNode::Step(StepNode {
-        id: ids.next_id(),
-        depth,
-        clause: vec![build_term!(pool, (not {premise.clone()})), term.clone()],
-        rule: "equiv1".to_owned(),
-        premises: vec![equality_step],
-        ..Default::default()
-    }));
+        let mut ids = IdHelper::new(id);
+        let equality_step = PolyeqElaborator::new(&mut ids, depth, false).elaborate(
+            self.pool,
+            premise.clone(),
+            term.clone(),
+        );
 
-    Rc::new(ProofNode::Step(StepNode {
-        id: ids.next_id(),
-        depth,
-        clause: vec![term.clone()],
-        rule: "resolution".to_owned(),
-        premises: vec![new_assume, equiv1_step],
-        args: vec![ProofArg::Term(premise), ProofArg::Term(pool.bool_true())],
-        ..Default::default()
-    }))
+        let equiv1_step = Rc::new(ProofNode::Step(StepNode {
+            id: ids.next_id(),
+            depth,
+            clause: vec![
+                build_term!(self.pool, (not {premise.clone()})),
+                term.clone(),
+            ],
+            rule: "equiv1".to_owned(),
+            premises: vec![equality_step],
+            ..Default::default()
+        }));
+
+        Rc::new(ProofNode::Step(StepNode {
+            id: ids.next_id(),
+            depth,
+            clause: vec![term.clone()],
+            rule: "resolution".to_owned(),
+            premises: vec![new_assume, equiv1_step],
+            args: vec![
+                ProofArg::Term(premise),
+                ProofArg::Term(self.pool.bool_true()),
+            ],
+            ..Default::default()
+        }))
+    }
 }
 
 pub fn add_refl_step(

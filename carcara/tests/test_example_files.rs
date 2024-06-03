@@ -48,14 +48,9 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
         resolution_granularity: elaborator::ResolutionGranularity::Reordering,
     };
     let node = ast::ProofNode::from_commands(proof.commands.clone());
-    let elaborated_node = elaborator::elaborate(
-        &mut pool,
-        &proof.premises,
-        &prelude,
-        &node,
-        config.clone(),
-        elaborator::default_pipeline(),
-    );
+    let elaborated_node =
+        elaborator::Elaborator::new(&mut pool, &proof.premises, &prelude, config.clone())
+            .elaborate_with_default_pipeline(&node);
     let elaborated = ast::Proof {
         premises: proof.premises.clone(),
         commands: elaborated_node.into_commands(),
@@ -66,14 +61,9 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
 
     // Finally, we elaborate the already elaborated proof, to make sure the elaboration step is
     // idempotent
-    let elaborated_twice = elaborator::elaborate(
-        &mut pool,
-        &proof.premises,
-        &prelude,
-        &elaborated_node,
-        config,
-        elaborator::default_pipeline(),
-    );
+    let elaborated_twice =
+        elaborator::Elaborator::new(&mut pool, &proof.premises, &prelude, config)
+            .elaborate_with_default_pipeline(&elaborated_node);
     assert!(
         elaborated.commands == elaborated_twice.into_commands(),
         "elaboration was not idempotent!"
