@@ -36,6 +36,14 @@ impl Default for ResolutionGranularity {
     }
 }
 
+pub enum ElaborationStep {
+    Polyeq,
+    LiaGeneric,
+    Local,
+    Uncrowd,
+    Reordering,
+}
+
 /// The options that control how `lia_generic` steps are elaborated using an external solver.
 #[derive(Debug, Clone)]
 pub struct LiaGenericOptions {
@@ -47,54 +55,88 @@ pub struct LiaGenericOptions {
     pub arguments: Vec<Box<str>>,
 }
 
+pub fn default_pipeline() -> Vec<ElaborationStep> {
+    use ElaborationStep::*;
+    vec![Polyeq, LiaGeneric, Local, Uncrowd, Reordering]
+}
+
 pub fn elaborate(
     pool: &mut PrimitivePool,
     premises: &IndexSet<Rc<Term>>,
     prelude: &ProblemPrelude,
     root: &Rc<ProofNode>,
     config: Config,
+    pipeline: Vec<ElaborationStep>,
 ) -> Rc<ProofNode> {
-    let elaborated = mutate(root, |context, node| {
+    let mut current = root.clone();
+    for step in pipeline {
+        current = match step {
+            ElaborationStep::Polyeq => elaborate_polyeq(pool, premises, &current),
+            ElaborationStep::LiaGeneric => mutate(&current, |_, node| match node.as_ref() {
+                ProofNode::Step(s) if s.rule == "lia_generic" => {
+                    lia_generic::lia_generic(pool, s, prelude, config.lia_options.as_ref().unwrap())
+                        .unwrap_or_else(|| node.clone())
+                }
+                _ => node.clone(),
+            }),
+            ElaborationStep::Local => elaborate_local(pool, &current),
+            ElaborationStep::Uncrowd => mutate(&current, |_, node| match node.as_ref() {
+                ProofNode::Step(s)
+                    if (s.rule == "resolution" || s.rule == "th_resolution")
+                        && !s.args.is_empty() =>
+                {
+                    uncrowding::uncrowd_resolution(pool, s)
+                }
+                _ => node.clone(),
+            }),
+            ElaborationStep::Reordering => reordering::remove_reorderings(&current),
+        };
+    }
+    current
+}
+
+fn elaborate_polyeq(
+    pool: &mut PrimitivePool,
+    premises: &IndexSet<Rc<Term>>,
+    root: &Rc<ProofNode>,
+) -> Rc<ProofNode> {
+    mutate(root, |context, node| {
         match node.as_ref() {
             ProofNode::Assume { id, depth, term }
                 if context.is_empty() && !premises.contains(term) =>
             {
-                return elaborate_assume(pool, premises, id, *depth, term)
+                elaborate_assume(pool, premises, id, *depth, term)
             }
+            ProofNode::Step(s) if s.rule == "refl" => {
+                reflexivity::refl(pool, context, s).unwrap() // TODO: add proper error handling
+            }
+            _ => node.clone(),
+        }
+    })
+}
+
+fn elaborate_local(pool: &mut PrimitivePool, root: &Rc<ProofNode>) -> Rc<ProofNode> {
+    fn get_elaboration_function(rule: &str) -> Option<ElaborationFunc> {
+        Some(match rule {
+            "eq_transitive" => transitivity::eq_transitive,
+            "trans" => transitivity::trans,
+            "resolution" | "th_resolution" => resolution::resolution,
+            _ => return None,
+        })
+    }
+
+    mutate(root, |context, node| {
+        match node.as_ref() {
             ProofNode::Step(s) => {
                 if let Some(func) = get_elaboration_function(&s.rule) {
                     return func(pool, context, s).unwrap(); // TODO: add proper error handling
-                }
-                if let Some(lia_options) = &config.lia_options {
-                    if s.rule == "lia_generic" {
-                        return lia_generic::lia_generic(pool, s, prelude, lia_options)
-                            .unwrap_or_else(|| node.clone());
-                    }
                 }
             }
             ProofNode::Subproof(_) => unreachable!(),
             ProofNode::Assume { .. } => (),
         }
         node.clone()
-    });
-
-    if config.resolution_granularity >= ResolutionGranularity::Uncrowd {
-        let uncrowded = mutate(&elaborated, |_, node| {
-            if let Some(s) = node.as_step() {
-                if (s.rule == "resolution" || s.rule == "th_resolution") && !s.args.is_empty() {
-                    return uncrowding::uncrowd_resolution(pool, s);
-                }
-            }
-            node.clone()
-        });
-        if config.resolution_granularity >= ResolutionGranularity::Reordering {
-            reordering::remove_reorderings(&uncrowded)
-        } else {
-            uncrowded
-        }
-    } else {
-        elaborated
-    }
+    })
 }
 
 fn elaborate_assume(
@@ -168,16 +210,6 @@ pub fn add_refl_step(
 
 type ElaborationFunc =
     fn(&mut PrimitivePool, &mut ContextStack, &StepNode) -> Result<Rc<ProofNode>, CheckerError>;
-
-fn get_elaboration_function(rule: &str) -> Option<ElaborationFunc> {
-    Some(match rule {
-        "eq_transitive" => transitivity::eq_transitive,
-        "trans" => transitivity::trans,
-        "refl" => reflexivity::refl,
-        "resolution" | "th_resolution" => resolution::resolution,
-        _ => return None,
-    })
-}
 
 fn mutate<F>(root: &Rc<ProofNode>, mut mutate_func: F) -> Rc<ProofNode>
 where

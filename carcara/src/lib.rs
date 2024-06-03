@@ -250,6 +250,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
         &prelude,
         &node,
         elaborator_config,
+        elaborator::default_pipeline(),
     );
     let elaborated = ast::Proof {
         premises: proof.premises,
