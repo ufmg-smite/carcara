@@ -59,7 +59,7 @@ impl<'e> Elaborator<'e> {
 
     pub fn elaborate_with_default_pipeline(&mut self, root: &Rc<ProofNode>) -> Rc<ProofNode> {
         use ElaborationStep::*;
-        let pipeline = vec![Polyeq, Local, Uncrowd, Reordering];
+        let pipeline = vec![Polyeq, LiaGeneric, Local, Uncrowd, Reordering];
         self.elaborate(root, pipeline)
     }
 
@@ -72,12 +72,17 @@ impl<'e> Elaborator<'e> {
         for step in pipeline {
             current = match step {
                 ElaborationStep::Polyeq => self.elaborate_polyeq(&current),
-                ElaborationStep::LiaGeneric => mutate(&current, |_, node| match node.as_ref() {
-                    ProofNode::Step(s) if s.rule == "lia_generic" => {
-                        lia_generic::lia_generic(self, s).unwrap_or_else(|| node.clone())
+                ElaborationStep::LiaGeneric => {
+                    if self.config.lia_options.is_none() {
+                        return current.clone();
                     }
-                    _ => node.clone(),
-                }),
+                    mutate(&current, |_, node| match node.as_ref() {
+                        ProofNode::Step(s) if s.rule == "lia_generic" => {
+                            lia_generic::lia_generic(self, s).unwrap_or_else(|| node.clone())
+                        }
+                        _ => node.clone(),
+                    })
+                }
                 ElaborationStep::Local => self.elaborate_local(&current),
                 ElaborationStep::Uncrowd => mutate(&current, |_, node| match node.as_ref() {
                     ProofNode::Step(s)

@@ -195,7 +195,7 @@ struct ElaborationOptions {
         arg_enum,
         long,
         multiple = true,
-        default_values = &["polyeq", "local", "uncrowd", "reordering"]
+        default_values = &["polyeq", "lia-generic", "local", "uncrowd", "reordering"]
     )]
     pipeline: Vec<ElaborationStep>,
 }
