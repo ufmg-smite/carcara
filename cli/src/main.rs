@@ -384,12 +384,11 @@ fn main() {
         }
     }
 
-    let print_proof = |commands: Vec<ast::ProofCommand>| -> CliResult<()> {
-        ast::print_proof(&commands, !cli.no_print_with_sharing)?;
-        Ok(())
-    };
     let result = match cli.command {
-        Command::Parse(options) => parse_command(options).and_then(|p| print_proof(p.commands)),
+        Command::Parse(options) => parse_command(options).and_then(|(prelude, p, mut pool)| {
+            ast::print_proof(&mut pool, &prelude, &p.commands, !cli.no_print_with_sharing)?;
+            Ok(())
+        }),
         Command::Check(options) => {
             match check_command(options) {
                 Ok(false) => println!("valid"),
@@ -402,16 +401,22 @@ fn main() {
             }
             return;
         }
-        Command::Elaborate(options) => elaborate_command(options).and_then(|(res, p)| {
-            if res {
-                println!("holey");
-            } else {
-                println!("valid");
-            }
-            print_proof(p.commands)
-        }),
+        Command::Elaborate(options) => {
+            elaborate_command(options).and_then(|(res, prelude, p, mut pool)| {
+                if res {
+                    println!("holey");
+                } else {
+                    println!("valid");
+                }
+                ast::print_proof(&mut pool, &prelude, &p.commands, !cli.no_print_with_sharing)?;
+                Ok(())
+            })
+        }
         Command::Bench(options) => bench_command(options),
-        Command::Slice(options) => slice_command(options).and_then(print_proof),
+        Command::Slice(options) => slice_command(options).and_then(|(prelude, p, mut pool)| {
+            ast::print_proof(&mut pool, &prelude, &p.commands, !cli.no_print_with_sharing)?;
+            Ok(())
+        }),
         Command::GenerateLiaProblems(options) => {
             generate_lia_problems_command(options, !cli.no_print_with_sharing)
         }
@@ -439,9 +444,11 @@ fn get_instance(options: &Input) -> CliResult<(Box<dyn BufRead>, Box<dyn BufRead
     }
 }
 
-fn parse_command(options: ParseCommandOptions) -> CliResult<ast::Proof> {
+fn parse_command(
+    options: ParseCommandOptions,
+) -> CliResult<(ast::ProblemPrelude, ast::Proof, ast::PrimitivePool)> {
     let (problem, proof) = get_instance(&options.input)?;
-    let (_, proof, _) = parser::parse_instance(
+    let result = parser::parse_instance(
         problem,
         proof,
         parser::Config {
@@ -452,7 +459,7 @@ fn parse_command(options: ParseCommandOptions) -> CliResult<ast::Proof> {
         },
     )
     .map_err(carcara::Error::from)?;
-    Ok(proof)
+    Ok(result)
 }
 
 fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
@@ -476,11 +483,13 @@ fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
     .map_err(Into::into)
 }
 
-fn elaborate_command(options: ElaborateCommandOptions) -> CliResult<(bool, ast::Proof)> {
+fn elaborate_command(
+    options: ElaborateCommandOptions,
+) -> CliResult<(bool, ast::ProblemPrelude, ast::Proof, ast::PrimitivePool)> {
     let (problem, proof) = get_instance(&options.input)?;
 
     let (elab_config, pipeline) = options.elaboration.into();
-    let (res, elaborated) = check_and_elaborate(
+    check_and_elaborate(
         problem,
         proof,
         options.parsing.into(),
@@ -488,8 +497,8 @@ fn elaborate_command(options: ElaborateCommandOptions) -> CliResult<(bool, ast::
         elab_config,
         pipeline,
         options.stats.stats,
-    )?;
-    Ok((res, elaborated))
+    )
+    .map_err(CliError::CarcaraError)
 }
 
 fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
@@ -543,7 +552,9 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
     Ok(())
 }
 
-fn slice_command(options: SliceCommandOptions) -> CliResult<Vec<ast::ProofCommand>> {
+fn slice_command(
+    options: SliceCommandOptions,
+) -> CliResult<(ast::ProblemPrelude, ast::Proof, ast::PrimitivePool)> {
     let (problem, proof) = get_instance(&options.input)?;
     let config = parser::Config {
         apply_function_defs: options.parsing.apply_function_defs,
@@ -551,13 +562,17 @@ fn slice_command(options: SliceCommandOptions) -> CliResult<Vec<ast::ProofComman
         allow_int_real_subtyping: options.parsing.allow_int_real_subtyping,
         allow_unary_logical_ops: !options.parsing.strict,
     };
-    let (_, proof, _) =
+    let (prelude, proof, pool) =
         parser::parse_instance(problem, proof, config).map_err(carcara::Error::from)?;
 
     let node = ast::ProofNode::from_commands_with_root_id(proof.commands, &options.from)
         .ok_or_else(|| CliError::InvalidSliceId(options.from))?;
+    let sliced = ast::Proof {
+        premises: proof.premises,
+        commands: node.into_commands(),
+    };
 
-    Ok(node.into_commands())
+    Ok((prelude, sliced, pool))
 }
 
 fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool) -> CliResult<()> {

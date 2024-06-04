@@ -207,7 +207,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
     elaborator_config: elaborator::Config,
     pipeline: Vec<elaborator::ElaborationStep>,
     collect_stats: bool,
-) -> Result<(bool, ast::Proof), Error> {
+) -> Result<(bool, ast::ProblemPrelude, ast::Proof, ast::PrimitivePool), Error> {
     let mut run: RunMeasurement = RunMeasurement::default();
 
     // Parsing
@@ -262,7 +262,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
         stats.print(false);
     }
 
-    Ok((checking_result, elaborated))
+    Ok((checking_result, prelude, elaborated, pool))
 }
 
 pub fn generate_lia_smt_instances<T: io::BufRead>(
@@ -272,7 +272,7 @@ pub fn generate_lia_smt_instances<T: io::BufRead>(
     use_sharing: bool,
 ) -> Result<Vec<(String, String)>, Error> {
     use std::fmt::Write;
-    let (prelude, proof, _) = parser::parse_instance(problem, proof, config)?;
+    let (prelude, proof, mut pool) = parser::parse_instance(problem, proof, config)?;
 
     let mut iter = proof.iter();
     let mut result = Vec::new();
@@ -290,8 +290,14 @@ pub fn generate_lia_smt_instances<T: io::BufRead>(
                 write!(&mut problem, "{}", prelude).unwrap();
 
                 let mut bytes = Vec::new();
-                ast::printer::write_lia_smt_instance(&mut bytes, &step.clause, use_sharing)
-                    .unwrap();
+                ast::printer::write_lia_smt_instance(
+                    &mut pool,
+                    &prelude,
+                    &mut bytes,
+                    &step.clause,
+                    use_sharing,
+                )
+                .unwrap();
                 write!(&mut problem, "{}", String::from_utf8(bytes).unwrap()).unwrap();
 
                 writeln!(&mut problem, "(check-sat)").unwrap();

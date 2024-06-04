@@ -36,7 +36,11 @@ pub enum LiaGenericError {
     InnerProofError(Box<crate::Error>),
 }
 
-fn get_problem_string(conclusion: &[Rc<Term>], prelude: &ProblemPrelude) -> String {
+fn get_problem_string(
+    pool: &mut PrimitivePool,
+    prelude: &ProblemPrelude,
+    conclusion: &[Rc<Term>],
+) -> String {
     use std::fmt::Write;
 
     let mut problem = String::new();
@@ -44,7 +48,7 @@ fn get_problem_string(conclusion: &[Rc<Term>], prelude: &ProblemPrelude) -> Stri
     write!(&mut problem, "{}", prelude).unwrap();
 
     let mut bytes = Vec::new();
-    printer::write_lia_smt_instance(&mut bytes, conclusion, true).unwrap();
+    printer::write_lia_smt_instance(pool, prelude, &mut bytes, conclusion, true).unwrap();
     write!(&mut problem, "{}", String::from_utf8(bytes).unwrap()).unwrap();
 
     writeln!(&mut problem, "(check-sat)").unwrap();
@@ -55,7 +59,7 @@ fn get_problem_string(conclusion: &[Rc<Term>], prelude: &ProblemPrelude) -> Stri
 }
 
 pub fn lia_generic(elaborator: &mut Elaborator, step: &StepNode) -> Option<Rc<ProofNode>> {
-    let problem = get_problem_string(&step.clause, elaborator.prelude);
+    let problem = get_problem_string(elaborator.pool, elaborator.prelude, &step.clause);
     let options = elaborator.config.lia_options.as_ref().unwrap();
     let commands = match get_solver_proof(elaborator.pool, problem, options) {
         Ok(c) => c,

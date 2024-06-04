@@ -8,6 +8,7 @@ use crate::{
 use indexmap::IndexMap;
 use std::{
     borrow::Cow,
+    collections::HashSet,
     fmt, io,
     sync::atomic::{AtomicBool, Ordering},
 };
@@ -19,28 +20,29 @@ pub static USE_SHARING_IN_TERM_DISPLAY: AtomicBool = AtomicBool::new(false);
 /// If `use_sharing` is `true`, terms that are used multiple times will make use of sharing. The
 /// first time a novel term appears, it receives a unique name using the `:named` attribute. After
 /// that, any occurrence of that term will simply use this name, instead of printing the whole term.
-pub fn print_proof(commands: &[ProofCommand], use_sharing: bool) -> io::Result<()> {
+pub fn print_proof(
+    pool: &mut PrimitivePool,
+    prelude: &ProblemPrelude,
+    commands: &[ProofCommand],
+    use_sharing: bool,
+) -> io::Result<()> {
     let mut stdout = io::stdout();
-    let mut printer = AlethePrinter {
-        inner: &mut stdout,
-        term_indices: use_sharing.then(IndexMap::new),
-        term_sharing_variable_prefix: "@p_",
-    };
-    printer.write_proof(commands)
+    AlethePrinter::new(pool, prelude, use_sharing, &mut stdout).write_proof(commands)
 }
 
 /// Given the conclusion clause of a `lia_generic` step, this method will write to `dest` the
 /// corresponding SMT problem instance.
 pub fn write_lia_smt_instance(
+    pool: &mut PrimitivePool,
+    prelude: &ProblemPrelude,
     dest: &mut dyn io::Write,
     clause: &[Rc<Term>],
     use_sharing: bool,
 ) -> io::Result<()> {
-    let mut printer = AlethePrinter {
-        inner: dest,
-        term_indices: use_sharing.then(IndexMap::new),
-        term_sharing_variable_prefix: "p_",
-    };
+    let mut printer = AlethePrinter::new(pool, prelude, use_sharing, dest);
+    // We have to override the default prefix "@p_" because symbols starting with "@" are reserved
+    // in SMT-LIB.
+    printer.term_sharing_variable_prefix = "p_";
     printer.write_lia_smt_instance(clause)
 }
 
@@ -61,17 +63,26 @@ impl<T: PrintWithSharing> PrintWithSharing for &T {
 impl PrintWithSharing for Rc<Term> {
     fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
         if let Some(indices) = &mut p.term_indices {
-            // There are three cases where we don't use sharing when printing a term:
-            //
-            // - Terminal terms (i.e., constants or variables) could in theory be shared,
-            // but, since they are very small, it's not worth it to give them a name.
-            //
-            // - Sorts are represented as terms, but they are not actually terms in the grammar, so
-            // we can't use the `(! ... :named ...)` syntax to give them a name.
-            //
-            // - If a term is only used once in the proof, there is no reason to give it a name. We
-            // detect this case by checking if the number of references to it's `Rc` is exactly 1.
-            if !self.is_const() && !self.is_var() && !self.is_sort() && Rc::strong_count(self) > 1 {
+            // There are a few cases where we don't use sharing when printing a term:
+            let cannot_use_sharing =
+                // - Terminal terms (i.e., constants or variables) could in theory be shared,
+                // but, since they are very small, it's not worth it to give them a name.
+                self.is_const() || self.is_var()
+                // - Sorts are represented as terms, but they are not actually terms in the grammar,
+                // so we can't use the `(! ... :named ...)` syntax to give them a name.
+                || self.is_sort()
+                // - If a term is only used once in the proof, there is no reason to give it a
+                // name. We detect this case by checking if the number of references to it's `Rc` is
+                // no more than 3: one in the pool storage, one in the pool sorts cache, and one in
+                // the proof itself.
+                // TODO: this is a terrible way of checking if it is only used once in the proof,
+                // as it depends on internal implementation details of the term pool.
+                || Rc::strong_count(self) <= 3
+                // - Terms which are not closed, that is, terms which have free variables besides
+                // the global variables, cannot be shared
+                || !self.is_closed(p.pool, &p.global_vars);
+
+            if !cannot_use_sharing {
                 return if let Some(i) = indices.get(self) {
                     write!(p.inner, "{}{}", p.term_sharing_variable_prefix, i)
                 } else {
@@ -124,9 +135,11 @@ impl PrintWithSharing for ParamOperator {
 }
 
 struct AlethePrinter<'a> {
+    pool: &'a mut PrimitivePool,
     inner: &'a mut dyn io::Write,
     term_indices: Option<IndexMap<Rc<Term>, usize>>,
     term_sharing_variable_prefix: &'static str,
+    global_vars: HashSet<Rc<Term>>,
 }
 
 impl<'a> PrintProof for AlethePrinter<'a> {
@@ -181,6 +194,30 @@ impl<'a> PrintProof for AlethePrinter<'a> {
 }
 
 impl<'a> AlethePrinter<'a> {
+    pub fn new(
+        pool: &'a mut PrimitivePool,
+        prelude: &ProblemPrelude,
+        use_sharing: bool,
+        dest: &'a mut dyn io::Write,
+    ) -> Self {
+        let global_variables = if use_sharing {
+            prelude
+                .function_declarations
+                .iter()
+                .map(|var| pool.add(var.clone().into()))
+                .collect()
+        } else {
+            HashSet::new()
+        };
+        Self {
+            pool,
+            inner: dest,
+            term_indices: use_sharing.then(IndexMap::new),
+            term_sharing_variable_prefix: "@p_",
+            global_vars: global_variables,
+        }
+    }
+
     fn write_s_expr<H, T>(&mut self, head: &H, tail: &[T]) -> io::Result<()>
     where
         H: PrintWithSharing + ?Sized,
@@ -355,10 +392,14 @@ impl fmt::Display for Term {
         // false, we disable printing with sharing
         let use_sharing = USE_SHARING_IN_TERM_DISPLAY.load(Ordering::Relaxed) && !f.alternate();
         let mut buf = Vec::new();
+        // This pool is only used for the free variables cache, so it's fine to use a fresh pool
+        let mut pool = PrimitivePool::new();
         let mut printer = AlethePrinter {
+            pool: &mut pool,
             inner: &mut buf,
             term_indices: use_sharing.then(IndexMap::new),
             term_sharing_variable_prefix: "@p_",
+            global_vars: HashSet::new(),
         };
         printer.write_raw_term(self).unwrap();
         let result = std::str::from_utf8(&buf).unwrap();
@@ -477,5 +518,54 @@ impl fmt::Display for ProblemPrelude {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sharing() {
+        use crate::parser;
+
+        let definitions: &[u8] = b"
+            (declare-const a Bool)
+            (declare-const b Bool)
+            (declare-const y Bool)
+            (declare-const z Bool)
+        ";
+        let proof: &[u8] = b"
+            (step t1 (cl (and (= 1 2) (= 1 2))) :rule hole)
+            (step t2 (cl (and (or a b) (not (or a b)))) :rule hole)
+            (step t3 (cl (and (forall ((x Int)) (or (= x 2) (= 2 3))) (= 2 3))) :rule hole)
+            (step t4 (cl (forall ((x Int)) (= (+ x 2) (+ x 2)))) :rule hole)
+            (step t5 (cl (and (forall ((p Bool)) p) (forall ((p Bool)) p))) :rule hole)
+            (anchor :step t6 :args ((x Int)))
+            (step t6.t1 (cl (= (+ x 2) (+ x 2))) :rule hole)
+            (step t6 (cl) :rule hole)
+        ";
+        let expected = "\
+            (step t1 (cl (and (! (= 1 2) :named @p_0) @p_0)) :rule hole)\n\
+            (step t2 (cl (and (! (or a b) :named @p_1) (not @p_1))) :rule hole)\n\
+            (step t3 (cl (and (forall ((x Int)) (or (= x 2) (! (= 2 3) :named @p_2))) @p_2)) :rule hole)\n\
+            (step t4 (cl (forall ((x Int)) (= (+ x 2) (+ x 2)))) :rule hole)\n\
+            (step t5 (cl (and (! (forall ((p Bool)) p) :named @p_3) @p_3)) :rule hole)\n\
+            (anchor :step t6 :args ((x Int)))\n\
+            (step t6.t1 (cl (= (+ x 2) (+ x 2))) :rule hole)\n\
+            (step t6 (cl) :rule hole)\n\
+        ";
+        let (prelude, proof, mut pool) =
+            parser::parse_instance(definitions, proof, parser::Config::new()).unwrap();
+
+        let mut buf = Vec::new();
+        AlethePrinter::new(&mut pool, &prelude, true, &mut buf)
+            .write_proof(&proof.commands)
+            .unwrap();
+
+        println!("{}", std::str::from_utf8(&buf).unwrap());
+        println!("{}", expected);
+
+        assert_eq!(expected, std::str::from_utf8(&buf).unwrap());
     }
 }
