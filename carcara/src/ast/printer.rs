@@ -8,7 +8,7 @@ use crate::{
 use indexmap::IndexMap;
 use std::{
     borrow::Cow,
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fmt, io,
     sync::atomic::{AtomicBool, Ordering},
 };
@@ -23,11 +23,11 @@ pub static USE_SHARING_IN_TERM_DISPLAY: AtomicBool = AtomicBool::new(false);
 pub fn print_proof(
     pool: &mut PrimitivePool,
     prelude: &ProblemPrelude,
-    commands: &[ProofCommand],
+    proof: &Proof,
     use_sharing: bool,
 ) -> io::Result<()> {
     let mut stdout = io::stdout();
-    AlethePrinter::new(pool, prelude, use_sharing, &mut stdout).write_proof(commands)
+    AlethePrinter::new(pool, prelude, use_sharing, &mut stdout).write_proof(proof)
 }
 
 /// Given the conclusion clause of a `lia_generic` step, this method will write to `dest` the
@@ -47,7 +47,7 @@ pub fn write_lia_smt_instance(
 }
 
 trait PrintProof {
-    fn write_proof(&mut self, commands: &[ProofCommand]) -> io::Result<()>;
+    fn write_proof(&mut self, proof: &Proof) -> io::Result<()>;
 }
 
 trait PrintWithSharing {
@@ -62,6 +62,9 @@ impl<T: PrintWithSharing> PrintWithSharing for &T {
 
 impl PrintWithSharing for Rc<Term> {
     fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
+        if let Some(name) = p.defined_constants.get(self) {
+            return write!(p.inner, "{}", quote_symbol(name));
+        }
         if let Some(indices) = &mut p.term_indices {
             // There are a few cases where we don't use sharing when printing a term:
             let cannot_use_sharing =
@@ -140,11 +143,25 @@ struct AlethePrinter<'a> {
     term_indices: Option<IndexMap<Rc<Term>, usize>>,
     term_sharing_variable_prefix: &'static str,
     global_vars: HashSet<Rc<Term>>,
+    defined_constants: HashMap<Rc<Term>, String>,
 }
 
 impl<'a> PrintProof for AlethePrinter<'a> {
-    fn write_proof(&mut self, commands: &[ProofCommand]) -> io::Result<()> {
-        let mut iter = ProofIter::new(commands);
+    fn write_proof(&mut self, proof: &Proof) -> io::Result<()> {
+        for (name, value) in &proof.constant_definitions {
+            write!(self.inner, "(define-fun {} () ", quote_symbol(name))?;
+            self.pool.sort(value).print_with_sharing(self)?;
+            write!(self.inner, " ")?;
+            value.print_with_sharing(self)?;
+            writeln!(self.inner, ")")?;
+        }
+        self.defined_constants = proof
+            .constant_definitions
+            .iter()
+            .cloned()
+            .map(|(name, term)| (term, name))
+            .collect();
+        let mut iter = proof.iter();
         while let Some(command) = iter.next() {
             match command {
                 ProofCommand::Assume { id, term } => {
@@ -188,7 +205,7 @@ impl<'a> PrintProof for AlethePrinter<'a> {
             }
             writeln!(self.inner)?;
         }
-
+        self.defined_constants.clear();
         Ok(())
     }
 }
@@ -215,6 +232,7 @@ impl<'a> AlethePrinter<'a> {
             term_indices: use_sharing.then(IndexMap::new),
             term_sharing_variable_prefix: "@p_",
             global_vars: global_variables,
+            defined_constants: HashMap::new(),
         }
     }
 
@@ -400,6 +418,7 @@ impl fmt::Display for Term {
             term_indices: use_sharing.then(IndexMap::new),
             term_sharing_variable_prefix: "@p_",
             global_vars: HashSet::new(),
+            defined_constants: HashMap::new(),
         };
         printer.write_raw_term(self).unwrap();
         let result = std::str::from_utf8(&buf).unwrap();
@@ -560,7 +579,7 @@ mod tests {
 
         let mut buf = Vec::new();
         AlethePrinter::new(&mut pool, &prelude, true, &mut buf)
-            .write_proof(&proof.commands)
+            .write_proof(&proof)
             .unwrap();
 
         println!("{}", std::str::from_utf8(&buf).unwrap());

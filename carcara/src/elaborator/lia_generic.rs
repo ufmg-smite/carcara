@@ -140,8 +140,8 @@ fn parse_and_check_solver_proof(
     let mut parser = parser::Parser::new(pool, config, problem)?;
     let (_, premises) = parser.parse_problem()?;
     parser.reset(proof)?;
-    let commands = parser.parse_proof()?;
-    let proof = Proof { premises, commands };
+    let mut proof = parser.parse_proof()?;
+    proof.premises = premises;
 
     let config = checker::Config::new().ignore_unknown_rules(true);
     checker::ProofChecker::new(pool, config).check(&proof)?;

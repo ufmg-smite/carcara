@@ -50,6 +50,7 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
             .elaborate_with_default_pipeline(&node);
     let elaborated = ast::Proof {
         premises: proof.premises.clone(),
+        constant_definitions: proof.constant_definitions.clone(),
         commands: elaborated_node.into_commands(),
     };
 

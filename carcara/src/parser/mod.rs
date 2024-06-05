@@ -85,9 +85,8 @@ pub fn parse_instance_with_pool<T: BufRead>(
     let mut parser = Parser::new(pool, config, problem)?;
     let (prelude, premises) = parser.parse_problem()?;
     parser.reset(proof)?;
-    let commands = parser.parse_proof()?;
-
-    let proof = Proof { premises, commands };
+    let mut proof = parser.parse_proof()?;
+    proof.premises = premises;
     Ok((prelude, proof))
 }
 
@@ -764,8 +763,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     /// Parses a proof in the Alethe format. All function, constant and sort declarations needed
-    /// should already be in the parser state.
-    pub fn parse_proof(&mut self) -> CarcaraResult<Vec<ProofCommand>> {
+    /// should already be in the parser state. Note that the `premises` field in the proof will not
+    /// be set.
+    pub fn parse_proof(&mut self) -> CarcaraResult<Proof> {
         // To avoid stack overflows in proofs with many nested subproofs, we parse the subproofs
         // iteratively, instead of recursively. Therefore, we need to manually keep a stack.
         //
@@ -777,6 +777,8 @@ impl<'a, R: BufRead> Parser<'a, R> {
         let mut next_subproof_context_id = 0;
 
         let mut finished_assumes = false;
+
+        let mut constant_definitions = Vec::new();
 
         // Some solvers print the satisfiability result (unsat) together with the proof. To save the
         // user from having to remove this, we consume this first "unsat" token if it exists
@@ -802,6 +804,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 }
                 Token::ReservedWord(Reserved::DefineFun) => {
                     let (name, func_def) = self.parse_define_fun()?;
+                    if func_def.params.is_empty() {
+                        constant_definitions.push((name.clone(), func_def.body.clone()));
+                    }
                     self.state.function_defs.insert(name, func_def);
                     continue;
                 }
@@ -868,17 +873,24 @@ impl<'a, R: BufRead> Parser<'a, R> {
             let index = stack.last().unwrap().0.commands.len() - 1;
             self.state.step_ids.insert(id, index);
         }
-        match stack.len() {
+        let commands = match stack.len() {
             0 => unreachable!(),
-            1 => Ok(stack.pop().unwrap().0.commands),
+            1 => stack.pop().unwrap().0.commands,
 
-            // If there is more than one vector in the commands stack, we are inside a subproof
-            // that should be closed before the outer proof is finished
-            _ => Err(Error::Parser(
-                ParserError::UnclosedSubproof(stack.pop().unwrap().1),
-                self.current_position,
-            )),
-        }
+            // If there is more than one layer in the stack, we are inside a subproof that should be
+            // closed before the outer proof is finished
+            _ => {
+                return Err(Error::Parser(
+                    ParserError::UnclosedSubproof(stack.pop().unwrap().1),
+                    self.current_position,
+                ))
+            }
+        };
+        Ok(Proof {
+            premises: IndexSet::new(), // TODO: this should not really be stored in the proof
+            constant_definitions,
+            commands,
+        })
     }
 
     /// Parses an `assume` proof command. This method assumes that the `(` and `assume` tokens were

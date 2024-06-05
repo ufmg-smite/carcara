@@ -385,8 +385,8 @@ fn main() {
     }
 
     let result = match cli.command {
-        Command::Parse(options) => parse_command(options).and_then(|(prelude, p, mut pool)| {
-            ast::print_proof(&mut pool, &prelude, &p.commands, !cli.no_print_with_sharing)?;
+        Command::Parse(options) => parse_command(options).and_then(|(prelude, proof, mut pool)| {
+            ast::print_proof(&mut pool, &prelude, &proof, !cli.no_print_with_sharing)?;
             Ok(())
         }),
         Command::Check(options) => {
@@ -402,19 +402,19 @@ fn main() {
             return;
         }
         Command::Elaborate(options) => {
-            elaborate_command(options).and_then(|(res, prelude, p, mut pool)| {
+            elaborate_command(options).and_then(|(res, prelude, proof, mut pool)| {
                 if res {
                     println!("holey");
                 } else {
                     println!("valid");
                 }
-                ast::print_proof(&mut pool, &prelude, &p.commands, !cli.no_print_with_sharing)?;
+                ast::print_proof(&mut pool, &prelude, &proof, !cli.no_print_with_sharing)?;
                 Ok(())
             })
         }
         Command::Bench(options) => bench_command(options),
-        Command::Slice(options) => slice_command(options).and_then(|(prelude, p, mut pool)| {
-            ast::print_proof(&mut pool, &prelude, &p.commands, !cli.no_print_with_sharing)?;
+        Command::Slice(options) => slice_command(options).and_then(|(prelude, proof, mut pool)| {
+            ast::print_proof(&mut pool, &prelude, &proof, !cli.no_print_with_sharing)?;
             Ok(())
         }),
         Command::GenerateLiaProblems(options) => {
@@ -568,8 +568,8 @@ fn slice_command(
     let node = ast::ProofNode::from_commands_with_root_id(proof.commands, &options.from)
         .ok_or_else(|| CliError::InvalidSliceId(options.from))?;
     let sliced = ast::Proof {
-        premises: proof.premises,
         commands: node.into_commands(),
+        ..proof
     };
 
     Ok((prelude, sliced, pool))

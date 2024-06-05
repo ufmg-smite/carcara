@@ -249,8 +249,8 @@ pub fn check_and_elaborate<T: io::BufRead>(
         elaborator::Elaborator::new(&mut pool, &proof.premises, &prelude, elaborator_config)
             .elaborate(&node, pipeline);
     let elaborated = ast::Proof {
-        premises: proof.premises,
         commands: elaborated.into_commands(),
+        ..proof
     };
 
     if collect_stats {
