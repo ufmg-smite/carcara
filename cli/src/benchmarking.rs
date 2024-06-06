@@ -95,7 +95,7 @@ fn worker_thread<T: CollectResults + Default + Send>(
             &mut results,
             job,
             parser_config,
-            checker_config,
+            checker_config.clone(),
             elaborator_config.clone(),
         );
         match result {
@@ -141,6 +141,7 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
         #[allow(clippy::needless_collect)]
         let workers: Vec<_> = (0..num_jobs)
             .map(|_| {
+                let checker_config = checker_config.clone();
                 let elaborator_config = elaborator_config.clone();
                 thread::Builder::new()
                     .stack_size(STACK_SIZE)

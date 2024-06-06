@@ -53,7 +53,7 @@ impl<'c> ParallelProofChecker<'c> {
     pub fn share(&self) -> Self {
         ParallelProofChecker {
             pool: self.pool.clone(),
-            config: self.config,
+            config: self.config.clone(),
             prelude: self.prelude,
             context: ContextStack::from_previous(&self.context),
             reached_empty_clause: false,

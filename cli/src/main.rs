@@ -152,6 +152,10 @@ struct CheckingOptions {
     #[clap(long, conflicts_with("ignore-unknown-rules"), hide = true)]
     skip_unknown_rules: bool,
 
+    /// A set of extra rules to be allowed by the checker, and considered as holes.
+    #[clap(long, multiple = true, conflicts_with = "ignore-unknown-rules")]
+    allowed_rules: Option<Vec<String>>,
+
     #[clap(long, hide = true)] // TODO
     strict_checking: bool,
 }
@@ -161,6 +165,7 @@ impl From<CheckingOptions> for checker::Config {
         Self {
             strict: val.strict_checking,
             ignore_unknown_rules: val.ignore_unknown_rules,
+            allowed_rules: val.allowed_rules.unwrap_or_default().into_iter().collect(),
         }
     }
 }

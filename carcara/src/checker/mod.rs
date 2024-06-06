@@ -12,6 +12,7 @@ use indexmap::IndexSet;
 pub use parallel::{scheduler::Scheduler, ParallelProofChecker};
 use rules::{Premise, Rule, RuleArgs, RuleResult};
 use std::{
+    collections::HashSet,
     fmt,
     time::{Duration, Instant},
 };
@@ -41,7 +42,7 @@ impl<CR: CollectResults + Send + Default> fmt::Debug for CheckerStatistics<'_, C
     }
 }
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone)]
 pub struct Config {
     /// Enables "strict" checking of some rules.
     ///
@@ -57,6 +58,9 @@ pub struct Config {
     /// If `true`, the checker will skip any steps with rules that it does not recognize, and will
     /// consider them as holes. Normally, using an unknown rule is considered an error.
     pub ignore_unknown_rules: bool,
+
+    /// A set of rule names that the checker will allow, considering them holes in the proof.
+    pub allowed_rules: HashSet<String>,
 }
 
 impl Config {
@@ -270,7 +274,9 @@ impl<'c> ProofChecker<'c> {
 
         let rule = match Self::get_rule(&step.rule, self.config.strict) {
             Some(r) => r,
-            None if self.config.ignore_unknown_rules => {
+            None if self.config.ignore_unknown_rules
+                || self.config.allowed_rules.contains(&step.rule) =>
+            {
                 self.is_holey = true;
                 return Ok(());
             }
