@@ -135,7 +135,7 @@ fn parse_and_check_solver_proof(
         apply_function_defs: false,
         expand_lets: true,
         allow_int_real_subtyping: true,
-        allow_unary_logical_ops: true,
+        strict: false,
     };
     let mut parser = parser::Parser::new(pool, config, problem)?;
     let (_, premises) = parser.parse_problem()?;

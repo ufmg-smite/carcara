@@ -21,7 +21,7 @@ use std::{io::BufRead, str::FromStr};
 
 use self::error::assert_indexed_op_args_value;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Config {
     /// If `true`, the parser will automatically expand function definitions introduced by
     /// `define-fun` commands in the SMT problem. If `false`, those `define-fun`s are instead
@@ -41,23 +41,15 @@ pub struct Config {
     /// to a function that expects a `Real` will still be an error.
     pub allow_int_real_subtyping: bool,
 
-    pub allow_unary_logical_ops: bool,
+    /// Enables "strict" parsing. If `true`:
+    /// - Unary `and`, `or` and `xor` terms are not allowed
+    /// - Anchor arguments using the old syntax (i.e., `(:= <symbol> <term>)`) are not allowed
+    pub strict: bool,
 }
 
 impl Config {
     pub fn new() -> Self {
-        Config {
-            apply_function_defs: false,
-            expand_lets: false,
-            allow_int_real_subtyping: false,
-            allow_unary_logical_ops: true,
-        }
-    }
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self::new()
+        Self::default()
     }
 }
 
@@ -248,12 +240,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
             Operator::Or | Operator::And | Operator::Xor => {
                 // If we are not in "strict" parsing mode, we allow these operators to be called
                 // with just one argument
-                let range = if self.config.allow_unary_logical_ops {
-                    1..
-                } else {
-                    2..
-                };
-                assert_num_args(&args, range)?;
+                assert_num_args(&args, if self.config.strict { 2.. } else { 1.. })?;
                 for s in sorts {
                     SortError::assert_eq(&Sort::Bool, s)?;
                 }
@@ -1032,16 +1019,18 @@ impl<'a, R: BufRead> Parser<'a, R> {
             // parsing the two versions of assign-style anchor arguments:
             // - the old version, without the sort hint: `(:= <symbol> <term>)`
             // - and the new version, with the sort hint: `(:= (<symbol> <sort>) <term>)`
-            let (var, value, sort) = if matches!(self.current_token, Token::Symbol(_)) {
-                let var = self.expect_symbol()?;
-                let value = self.parse_term()?;
-                let sort = self.pool.sort(&value);
-                (var, value, sort)
-            } else {
-                let (var, sort) = self.parse_sorted_var()?;
-                let value = self.parse_term_expecting_sort(sort.as_sort().unwrap())?;
-                (var, value, sort)
-            };
+            // However, if "strict" parsing is enabled, we only allow the new version
+            let (var, value, sort) =
+                if !self.config.strict && matches!(self.current_token, Token::Symbol(_)) {
+                    let var = self.expect_symbol()?;
+                    let value = self.parse_term()?;
+                    let sort = self.pool.sort(&value);
+                    (var, value, sort)
+                } else {
+                    let (var, sort) = self.parse_sorted_var()?;
+                    let value = self.parse_term_expecting_sort(sort.as_sort().unwrap())?;
+                    (var, value, sort)
+                };
             self.insert_sorted_var((var.clone(), sort.clone()));
             self.expect_token(Token::CloseParen)?;
             AnchorArg::Assign((var, sort), value)

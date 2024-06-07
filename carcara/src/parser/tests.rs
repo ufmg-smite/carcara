@@ -12,7 +12,7 @@ const TEST_CONFIG: Config = Config {
     apply_function_defs: true,
     expand_lets: false,
     allow_int_real_subtyping: false,
-    allow_unary_logical_ops: true,
+    strict: false,
 };
 
 pub fn parse_terms<const N: usize>(

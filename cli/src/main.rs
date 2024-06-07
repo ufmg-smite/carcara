@@ -137,7 +137,7 @@ impl From<ParsingOptions> for parser::Config {
             apply_function_defs: val.apply_function_defs,
             expand_lets: val.expand_let_bindings,
             allow_int_real_subtyping: val.allow_int_real_subtyping,
-            allow_unary_logical_ops: !val.strict,
+            strict: val.strict,
         }
     }
 }
@@ -466,17 +466,8 @@ fn parse_command(
     options: ParseCommandOptions,
 ) -> CliResult<(ast::ProblemPrelude, ast::Proof, ast::PrimitivePool)> {
     let (problem, proof) = get_instance(&options.input)?;
-    let result = parser::parse_instance(
-        problem,
-        proof,
-        parser::Config {
-            apply_function_defs: options.parsing.apply_function_defs,
-            expand_lets: options.parsing.expand_let_bindings,
-            allow_int_real_subtyping: options.parsing.allow_int_real_subtyping,
-            allow_unary_logical_ops: !options.parsing.strict,
-        },
-    )
-    .map_err(carcara::Error::from)?;
+    let result = parser::parse_instance(problem, proof, options.parsing.into())
+        .map_err(carcara::Error::from)?;
     Ok(result)
 }
 
@@ -574,14 +565,8 @@ fn slice_command(
     options: SliceCommandOptions,
 ) -> CliResult<(ast::ProblemPrelude, ast::Proof, ast::PrimitivePool)> {
     let (problem, proof) = get_instance(&options.input)?;
-    let config = parser::Config {
-        apply_function_defs: options.parsing.apply_function_defs,
-        expand_lets: options.parsing.expand_let_bindings,
-        allow_int_real_subtyping: options.parsing.allow_int_real_subtyping,
-        allow_unary_logical_ops: !options.parsing.strict,
-    };
-    let (prelude, proof, pool) =
-        parser::parse_instance(problem, proof, config).map_err(carcara::Error::from)?;
+    let (prelude, proof, pool) = parser::parse_instance(problem, proof, options.parsing.into())
+        .map_err(carcara::Error::from)?;
 
     let node = ast::ProofNode::from_commands_with_root_id(proof.commands, &options.from)
         .ok_or_else(|| CliError::InvalidSliceId(options.from))?;
@@ -599,17 +584,8 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
     let root_file_name = options.input.proof_file.clone();
     let (problem, proof) = get_instance(&options.input)?;
 
-    let instances = generate_lia_smt_instances(
-        problem,
-        proof,
-        parser::Config {
-            apply_function_defs: options.parsing.apply_function_defs,
-            expand_lets: options.parsing.expand_let_bindings,
-            allow_int_real_subtyping: options.parsing.allow_int_real_subtyping,
-            allow_unary_logical_ops: !options.parsing.strict,
-        },
-        use_sharing,
-    )?;
+    let instances =
+        generate_lia_smt_instances(problem, proof, options.parsing.into(), use_sharing)?;
     for (id, content) in instances {
         let file_name = format!("{}.{}.lia_smt2", root_file_name, id);
         let mut f = File::create(file_name)?;
