@@ -266,7 +266,7 @@ fn flip_eq_transitive_premises(
         id: ids.next_id(),
         depth,
         clause,
-        rule: "strict_resolution".to_owned(),
+        rule: "resolution".to_owned(),
         premises,
         args,
         discharge: Vec::new(),

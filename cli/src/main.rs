@@ -142,6 +142,12 @@ impl From<ParsingOptions> for parser::Config {
     }
 }
 
+#[derive(ArgEnum, Clone, Copy, PartialEq, Eq)]
+enum CheckGranularity {
+    Normal,
+    Elaborated,
+}
+
 #[derive(Args, Clone)]
 struct CheckingOptions {
     /// Allow steps with rules that are not known by the checker, and consider them as holes.
@@ -156,14 +162,21 @@ struct CheckingOptions {
     #[clap(long, multiple = true, conflicts_with = "ignore-unknown-rules")]
     allowed_rules: Option<Vec<String>>,
 
-    #[clap(long, hide = true)] // TODO
-    strict_checking: bool,
+    /// Enforce restrictions on the granularity of the proof.
+    ///
+    /// If this is "normal", the proof is checked normally, with no extra restrictions. If this
+    /// is "elaborated", the checker will expect the proof to have previously been elaborated by
+    /// Carcara, and will enforce extra restrictions. In particular:
+    /// - the implicit reordering of equalities is not allowed
+    /// - the pivots for `resolution` steps must be given as arguments
+    #[clap(arg_enum, long, default_value = "normal", verbatim_doc_comment)]
+    check_granularity: CheckGranularity,
 }
 
 impl From<CheckingOptions> for checker::Config {
     fn from(val: CheckingOptions) -> Self {
         Self {
-            strict: val.strict_checking,
+            elaborated: val.check_granularity == CheckGranularity::Elaborated,
             ignore_unknown_rules: val.ignore_unknown_rules,
             allowed_rules: val.allowed_rules.unwrap_or_default().into_iter().collect(),
         }

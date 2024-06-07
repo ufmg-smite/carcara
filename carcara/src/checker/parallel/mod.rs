@@ -354,7 +354,7 @@ impl<'c> ParallelProofChecker<'c> {
             return true;
         }
 
-        if self.config.strict {
+        if self.config.elaborated {
             return false;
         }
 
@@ -407,7 +407,7 @@ impl<'c> ParallelProofChecker<'c> {
             return Err(CheckerError::Subproof(SubproofError::DischargeInWrongRule));
         }
 
-        let rule = match ProofChecker::get_rule(&step.rule, self.config.strict) {
+        let rule = match ProofChecker::get_rule(&step.rule, self.config.elaborated) {
             Some(r) => r,
             None if self.config.ignore_unknown_rules => {
                 self.is_holey = true;

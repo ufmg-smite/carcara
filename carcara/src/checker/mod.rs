@@ -44,16 +44,13 @@ impl<CR: CollectResults + Send + Default> fmt::Debug for CheckerStatistics<'_, C
 
 #[derive(Debug, Default, Clone)]
 pub struct Config {
-    /// Enables "strict" checking of some rules.
+    /// If `true`, the checker will assume that the proof is elaborated, and enforce extra
+    /// restrictions when checking it.
     ///
     /// Currently, if enabled, the following rules are affected:
     /// - `assume` and `refl`: implicit reordering of equalities is not allowed
     /// - `resolution` and `th_resolution`: the pivots must be provided as arguments
-    ///
-    /// In general, the invariant we aim for is that, if you are checking a proof that was
-    /// elaborated by Carcara, you can safely enable this option (and possibly get a performance
-    /// benefit).
-    pub strict: bool,
+    pub elaborated: bool,
 
     /// If `true`, the checker will skip any steps with rules that it does not recognize, and will
     /// consider them as holes. Normally, using an unknown rule is considered an error.
@@ -68,8 +65,8 @@ impl Config {
         Self::default()
     }
 
-    pub fn strict(mut self, value: bool) -> Self {
-        self.strict = value;
+    pub fn elaborated(mut self, value: bool) -> Self {
+        self.elaborated = value;
         self
     }
 
@@ -220,7 +217,7 @@ impl<'c> ProofChecker<'c> {
             return true;
         }
 
-        if self.config.strict {
+        if self.config.elaborated {
             return false;
         }
 
@@ -272,7 +269,7 @@ impl<'c> ProofChecker<'c> {
             return Err(CheckerError::Subproof(SubproofError::DischargeInWrongRule));
         }
 
-        let rule = match Self::get_rule(&step.rule, self.config.strict) {
+        let rule = match Self::get_rule(&step.rule, self.config.elaborated) {
             Some(r) => r,
             None if self.config.ignore_unknown_rules
                 || self.config.allowed_rules.contains(&step.rule) =>
@@ -348,7 +345,7 @@ impl<'c> ProofChecker<'c> {
         }
     }
 
-    pub fn get_rule(rule_name: &str, strict: bool) -> Option<Rule> {
+    pub fn get_rule(rule_name: &str, elaborated: bool) -> Option<Rule> {
         use rules::*;
 
         Some(match rule_name {
@@ -387,9 +384,9 @@ impl<'c> ProofChecker<'c> {
             "forall_inst" => quantifier::forall_inst,
             "qnt_join" => quantifier::qnt_join,
             "qnt_rm_unused" => quantifier::qnt_rm_unused,
-            "resolution" | "th_resolution" if strict => resolution::resolution_with_args,
+            "resolution" | "th_resolution" if elaborated => resolution::resolution_with_args,
             "resolution" | "th_resolution" => resolution::resolution,
-            "refl" if strict => reflexivity::strict_refl,
+            "refl" if elaborated => reflexivity::strict_refl,
             "refl" => reflexivity::refl,
             "trans" => transitivity::trans,
             "cong" => congruence::cong,
