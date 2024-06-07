@@ -216,20 +216,28 @@ fn flip_eq_transitive_premises(
         .iter()
         .map(|&i| {
             let (a, b) = match_term!((not (= a b)) = new_clause[i]).unwrap();
-            let pivot = build_term!(pool, (= {a.clone()} {b.clone()}));
-            let to_introduce = build_term!(pool, (not (= {b.clone()} {a.clone()})));
-            let clause = vec![to_introduce.clone(), pivot.clone()];
-            let new_step = Rc::new(ProofNode::Step(StepNode {
+
+            let a_eq_b = build_term!(pool, (= {a.clone()} {b.clone()}));
+            let b_eq_a = build_term!(pool, (= {b.clone()} {a.clone()}));
+            let eq_symm_step = Rc::new(ProofNode::Step(StepNode {
                 id: ids.next_id(),
                 depth,
-                clause,
+                clause: vec![build_term!(pool, (= {a_eq_b.clone()} {b_eq_a.clone()}))],
                 rule: "eq_symmetric".to_owned(),
-                premises: Vec::new(),
-                args: Vec::new(),
-                discharge: Vec::new(),
-                previous_step: None,
+                ..StepNode::default()
             }));
-            (new_step, pivot, to_introduce)
+
+            let not_b_eq_a = build_term!(pool, (not {(b_eq_a)}));
+            let equiv2_step = Rc::new(ProofNode::Step(StepNode {
+                id: ids.next_id(),
+                depth,
+                clause: vec![a_eq_b.clone(), not_b_eq_a.clone()],
+                rule: "equiv2".to_owned(),
+                premises: vec![eq_symm_step],
+                ..StepNode::default()
+            }));
+
+            (equiv2_step, a_eq_b, not_b_eq_a)
         })
         .collect();
 

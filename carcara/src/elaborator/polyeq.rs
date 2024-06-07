@@ -245,7 +245,7 @@ impl<'a> PolyeqElaborator<'a> {
         //     b := (= y' x')
         // The simpler case that we have to consider is when x equals x' and y equals y'
         // (syntactically), that is, if we just flip the b equality, the terms will be
-        // syntactically equal. In this case, we can simply introduce an `equiv_simplify` step that
+        // syntactically equal. In this case, we can simply introduce an `eq_symmetric` step that
         // derives `(= (= x y) (= y x))`.
         //
         // The more complex case happens when x is equal to x', but they are not syntactically
@@ -256,7 +256,7 @@ impl<'a> PolyeqElaborator<'a> {
         // In this case, we need to elaborate the polyequality between x and x' (or y and y'), and
         // from that, prove that `(= (= x y) (= y' x'))`. We do that by first proving that
         // `(= x x')` (1) and `(= y y')` (2). Then, we introduce a `cong` step that uses (1) and (2)
-        // to show that `(= (= x y) (= x' y'))` (3). After that, we add an `equiv_simplify` step
+        // to show that `(= (= x y) (= x' y'))` (3). After that, we add an `eq_symmetric` step
         // that derives `(= (= x' y') (= y' x'))` (4). Finally, we introduce a `trans` step with
         // premises (3) and (4) that proves `(= (= x y) (= y' x'))`. The general format looks like
         // this:
@@ -266,13 +266,13 @@ impl<'a> PolyeqElaborator<'a> {
         //     ...
         //     (step t2 (cl (= y y')) ...)
         //     (step t3 (cl (= (= x y) (= x' y'))) :rule cong :premises (t1 t2))
-        //     (step t4 (cl (= (= x' y') (= y' x'))) :rule equiv_simplify)
+        //     (step t4 (cl (= (= x' y') (= y' x'))) :rule eq_symmetric)
         //     (step t5 (cl (= (= x y) (= y' x'))) :rule trans :premises (t3 t4))
         //
         // If x equals x' syntactically, we can omit the derivation of step `t1`, and remove that
         // premise from step `t3`. We can do the same with step `t2` if y equals y' syntactically.
         // Of course, if both x == x' and y == y', we fallback to the simpler case, where we only
-        // need to introduce an `equiv_simplify` step.
+        // need to introduce an `eq_symmetric` step.
 
         // Simpler case
         if a_left == b_right && a_right == b_left {
@@ -280,7 +280,7 @@ impl<'a> PolyeqElaborator<'a> {
                 id: self.ids.next_id(),
                 depth: self.depth(),
                 clause: vec![build_term!(pool, (= {a} {b}))],
-                rule: "equiv_simplify".to_owned(),
+                rule: "eq_symmetric".to_owned(),
                 ..Default::default()
             }));
         }
@@ -295,20 +295,11 @@ impl<'a> PolyeqElaborator<'a> {
             (&[a_left, a_right], &[b_right, b_left]),
         );
 
-        // It might be the case that `x'` is syntactically equal to `y'`, which would mean that we
-        // are adding an `equiv_simplify` step to prove a reflexivity step. This is not valid
-        // according to the `equiv_simplify` specification, so we must change the rule to `refl` in
-        // this case.
-        let rule = if b == flipped_b {
-            "refl".to_owned()
-        } else {
-            "equiv_simplify".to_owned()
-        };
         let equiv_step = Rc::new(ProofNode::Step(StepNode {
             id: self.ids.next_id(),
             depth: self.depth(),
             clause: vec![build_term!(pool, (= {flipped_b} {b.clone()}))],
-            rule,
+            rule: "eq_symmetric".to_owned(),
             ..Default::default()
         }));
 
