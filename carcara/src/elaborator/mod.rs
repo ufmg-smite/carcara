@@ -1,3 +1,4 @@
+mod hole;
 mod lia_generic;
 mod polyeq;
 mod reflexivity;
@@ -5,7 +6,6 @@ mod reordering;
 mod resolution;
 mod transitivity;
 mod uncrowding;
-mod hole;
 
 use crate::{ast::*, CheckerError};
 use indexmap::IndexSet;
@@ -37,7 +37,7 @@ pub enum ElaborationStep {
     Local,
     Uncrowd,
     Reordering,
-    Hole
+    Hole,
 }
 
 /// The options that control how `lia_generic` steps are elaborated using an external solver.

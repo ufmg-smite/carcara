@@ -148,41 +148,6 @@ fn parse_and_check_solver_proof(
     Ok(proof.commands)
 }
 
-fn get_subproof_assumptions(
-    pool: &mut PrimitivePool,
-    conclusion: &[Rc<Term>],
-    proof: &Rc<ProofNode>,
-    root_id: &str,
-    root_depth: usize,
-) -> Vec<Rc<ProofNode>> {
-    let assumptions = proof.get_assumptions();
-    let assume_term_to_node: HashMap<&Rc<Term>, Rc<ProofNode>> = assumptions
-        .iter()
-        .map(|node| {
-            let (_, _, term) = node.as_assume().unwrap();
-            (term, node.clone())
-        })
-        .collect();
-
-    // This is a bit ugly, but we have to add the ".added" to avoid colliding with the first few
-    // steps in the solver proof
-    let mut ids = IdHelper::new(&format!("{}.added", root_id));
-    conclusion
-        .iter()
-        .map(|term| {
-            let term = build_term!(pool, (not {term.clone()}));
-            match assume_term_to_node.get(&term) {
-                Some(assume) => assume.clone(),
-                None => Rc::new(ProofNode::Assume {
-                    id: ids.next_id(),
-                    depth: root_depth + 1,
-                    term,
-                }),
-            }
-        })
-        .collect()
-}
-
 fn increase_subproof_depth(proof: &Rc<ProofNode>, delta: usize, prefix: &str) -> Rc<ProofNode> {
     mutate(proof, |_, node| {
         let node = match node.as_ref().clone() {
@@ -214,17 +179,15 @@ fn insert_solver_proof(
     let mut ids = IdHelper::new(root_id);
     let subproof_id = ids.next_id();
 
-    let subproof_assumptions =
-        get_subproof_assumptions(pool, conclusion, &proof, &subproof_id, depth);
-
-    let mut clause: Vec<_> = subproof_assumptions
+    let mut clause: Vec<_> = conclusion
         .iter()
-        .map(|node| build_term!(pool, (not {node.clause()[0].clone()})))
+        .map(|l| build_term!(pool, (not (not {l.clone()}))))
         .collect();
 
     clause.push(pool.bool_false());
 
     let proof = increase_subproof_depth(&proof, depth + 1, root_id);
+    let subproof_assumptions = proof.get_assumptions_of_depth(depth + 1);
 
     let last_step = Rc::new(ProofNode::Step(StepNode {
         id: subproof_id,
