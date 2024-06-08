@@ -62,7 +62,11 @@ pub fn hole(elaborator: &mut Elaborator, step: &StepNode) -> Option<Rc<ProofNode
     let problem = get_problem_string(elaborator.pool, elaborator.prelude, &step.clause);
     let options = elaborator.config.hole_options.as_ref().unwrap();
     let commands = match get_solver_proof(elaborator.pool, problem, options) {
-        Ok(c) => c,
+        Ok((c, false)) => c,
+        Ok((_, true)) => {
+            log::warn!("failed to elaborate `all_simplify` step: solver proof contains holes");
+            return None;
+        },
         Err(e) => {
             log::warn!("failed to elaborate `all_simplify` step: {}", e);
             return None;
@@ -82,7 +86,7 @@ fn get_solver_proof(
     pool: &mut PrimitivePool,
     problem: String,
     options: &HoleOptions,
-) -> Result<Vec<ProofCommand>, HoleError> {
+) -> Result<(Vec<ProofCommand>, bool), HoleError> {
     let mut process = Command::new(options.solver.as_ref())
         .args(options.arguments.iter().map(AsRef::as_ref))
         .stdin(Stdio::piped())
@@ -130,7 +134,7 @@ fn parse_and_check_solver_proof(
     pool: &mut PrimitivePool,
     problem: &[u8],
     proof: &[u8],
-) -> CarcaraResult<Vec<ProofCommand>> {
+) -> CarcaraResult<(Vec<ProofCommand>, bool)> {
     let config = parser::Config {
         apply_function_defs: false,
         expand_lets: true,
@@ -143,9 +147,9 @@ fn parse_and_check_solver_proof(
     let mut proof = parser.parse_proof()?;
     proof.premises = premises;
 
-    let config = checker::Config::new().ignore_unknown_rules(true);
-    checker::ProofChecker::new(pool, config).check(&proof)?;
-    Ok(proof.commands)
+    let config = checker::Config::new();
+    let res = checker::ProofChecker::new(pool, config).check(&proof)?;
+    Ok((proof.commands, res))
 }
 
 fn increase_subproof_depth(proof: &Rc<ProofNode>, delta: usize, prefix: &str) -> Rc<ProofNode> {
