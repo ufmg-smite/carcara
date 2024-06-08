@@ -66,7 +66,7 @@ pub fn hole(elaborator: &mut Elaborator, step: &StepNode) -> Option<Rc<ProofNode
         Ok((_, true)) => {
             log::warn!("failed to elaborate `all_simplify` step: solver proof contains holes");
             return None;
-        },
+        }
         Err(e) => {
             log::warn!("failed to elaborate `all_simplify` step: {}", e);
             return None;

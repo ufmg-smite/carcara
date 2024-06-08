@@ -199,20 +199,16 @@ fn insert_solver_proof(
     //     solver_proof_assumptions
     // );
 
-    // every element of conclusion must be an assumption in the
-    // proof. No other assumptions must exist in the proof. If there
-    // are less assumptions than elements of conclusion, then there
-    // are missing repetitions, which must be added as repeated
-    // assumption proof nodes when increasing the subproof depth. This
-    // process must always succeed since the proof has already been
-    // parsed and checked.
-
     let proof = increase_subproof_depth(&proof, depth + 1, &subproof_id);
     let mut subproof_assumptions = proof.get_assumptions_of_depth(depth + 1);
 
+    // every element of conclusion must be an assumption in the
+    // proof. No other assumptions must exist in the proof. If there
+    // are less assumptions than elements of conclusion, then some of
+    // the literals were not needed for the proof. In this case we
+    // create new assumptinos to account for them.
     if conclusion.len() > solver_proof_assumptions.len() {
         // println!("\tnot enough assumptions");
-        let mut covered = IndexSet::new();
         let assume_term_to_node: HashMap<&Rc<Term>, Rc<ProofNode>> = subproof_assumptions
             .iter()
             .map(|node| {
@@ -221,23 +217,28 @@ fn insert_solver_proof(
             })
             .collect();
 
+        // we use a new kind of id to avoid clashes
         let mut ids = IdHelper::new(&format!("{}.added", subproof_id));
+        // since there may be repeated literals, which would only have
+        // a single assumption for, we take care to only retrieve an
+        // existing assumption once
+        let mut covered = IndexSet::new();
         subproof_assumptions = conclusion
             .iter()
             .map(|term| {
                 let term = build_term!(pool, (not {term.clone()}));
                 if !covered.contains(&term) {
                     covered.insert(term.clone());
-                    assume_term_to_node.get(&term).unwrap().clone()
+                    if assume_term_to_node.contains_key(&term) {
+                        return assume_term_to_node.get(&term).unwrap().clone();
+                    }
                 }
-                else {
-                    // build new assumption proof node
-                    Rc::new(ProofNode::Assume {
-                        id: ids.next_id(),
-                        depth: depth + 1,
-                        term,
-                    })
-                }
+                // build new assumption proof node
+                return Rc::new(ProofNode::Assume {
+                    id: ids.next_id(),
+                    depth: depth + 1,
+                    term,
+                });
             })
             .collect();
         // println!("\tNew assumptions: {:?}", subproof_assumptions);
