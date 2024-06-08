@@ -5,6 +5,7 @@ mod reordering;
 mod resolution;
 mod transitivity;
 mod uncrowding;
+mod hole;
 
 use crate::{ast::*, CheckerError};
 use indexmap::IndexSet;
@@ -25,6 +26,8 @@ pub struct Config {
     /// Enables an optimization that reorders premises when uncrowding resolution steps, in order to
     /// further minimize the number of `contraction` steps added.
     pub uncrowd_rotation: bool,
+
+    pub hole_options: Option<HoleOptions>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -34,11 +37,23 @@ pub enum ElaborationStep {
     Local,
     Uncrowd,
     Reordering,
+    Hole
 }
 
 /// The options that control how `lia_generic` steps are elaborated using an external solver.
 #[derive(Debug, Clone)]
 pub struct LiaGenericOptions {
+    /// The external solver path. The solver should be a binary that can read SMT-LIB from stdin and
+    /// output an Alethe proof to stdout.
+    pub solver: Box<str>,
+
+    /// The arguments to pass to the solver.
+    pub arguments: Vec<Box<str>>,
+}
+
+/// The options that control how `hole` steps are elaborated using an external solver.
+#[derive(Debug, Clone)]
+pub struct HoleOptions {
     /// The external solver path. The solver should be a binary that can read SMT-LIB from stdin and
     /// output an Alethe proof to stdout.
     pub solver: Box<str>,
@@ -109,6 +124,17 @@ impl<'e> Elaborator<'e> {
                     _ => node.clone(),
                 }),
                 ElaborationStep::Reordering => reordering::remove_reorderings(&current),
+                ElaborationStep::Hole => {
+                    if self.config.hole_options.is_none() {
+                        return current.clone();
+                    }
+                    mutate(&current, |_, node| match node.as_ref() {
+                        ProofNode::Step(s) if s.rule == "all_simplify" => {
+                            hole::hole(self, s).unwrap_or_else(|| node.clone())
+                        }
+                        _ => node.clone(),
+                    })
+                }
             };
             durations.push(time.elapsed());
         }
