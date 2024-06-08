@@ -44,7 +44,7 @@ fn get_problem_string(
     use std::fmt::Write;
 
     let mut problem = String::new();
-    write!(&mut problem, "(set-option :produce-proofs true)").unwrap();
+    writeln!(&mut problem, "(set-option :produce-proofs true)").unwrap();
     write!(&mut problem, "{}", prelude).unwrap();
 
     let mut bytes = Vec::new();
@@ -174,10 +174,16 @@ fn insert_solver_proof(
     root_id: &str,
     depth: usize,
 ) -> Rc<ProofNode> {
-    let proof = ProofNode::from_commands(commands);
+    let proof = ProofNode::from_commands(commands.clone());
+
+    // println!("Solver proof: {:?}", commands);
+    // println!("Solver proof node: {:?}", proof);
 
     let mut ids = IdHelper::new(root_id);
     let subproof_id = ids.next_id();
+
+    // println!("rood_id: {}", root_id);
+    // println!("sibproof_id: {}", subproof_id);
 
     let mut clause: Vec<_> = conclusion
         .iter()
@@ -186,8 +192,56 @@ fn insert_solver_proof(
 
     clause.push(pool.bool_false());
 
-    let proof = increase_subproof_depth(&proof, depth + 1, root_id);
-    let subproof_assumptions = proof.get_assumptions_of_depth(depth + 1);
+    // println!("clause to be concluded from subproof: {:?}", clause);
+    let solver_proof_assumptions = proof.get_assumptions();
+    // println!(
+    //     "assumptions in solver proof: {:?}",
+    //     solver_proof_assumptions
+    // );
+
+    // every element of conclusion must be an assumption in the
+    // proof. No other assumptions must exist in the proof. If there
+    // are less assumptions than elements of conclusion, then there
+    // are missing repetitions, which must be added as repeated
+    // assumption proof nodes when increasing the subproof depth. This
+    // process must always succeed since the proof has already been
+    // parsed and checked.
+
+    let proof = increase_subproof_depth(&proof, depth + 1, &subproof_id);
+    let mut subproof_assumptions = proof.get_assumptions_of_depth(depth + 1);
+
+    if conclusion.len() > solver_proof_assumptions.len() {
+        // println!("\tnot enough assumptions");
+        let mut covered = IndexSet::new();
+        let assume_term_to_node: HashMap<&Rc<Term>, Rc<ProofNode>> = subproof_assumptions
+            .iter()
+            .map(|node| {
+                let (_, _, term) = node.as_assume().unwrap();
+                (term, node.clone())
+            })
+            .collect();
+
+        let mut ids = IdHelper::new(&format!("{}.added", subproof_id));
+        subproof_assumptions = conclusion
+            .iter()
+            .map(|term| {
+                let term = build_term!(pool, (not {term.clone()}));
+                if !covered.contains(&term) {
+                    covered.insert(term.clone());
+                    assume_term_to_node.get(&term).unwrap().clone()
+                }
+                else {
+                    // build new assumption proof node
+                    Rc::new(ProofNode::Assume {
+                        id: ids.next_id(),
+                        depth: depth + 1,
+                        term,
+                    })
+                }
+            })
+            .collect();
+        // println!("\tNew assumptions: {:?}", subproof_assumptions);
+    }
 
     let last_step = Rc::new(ProofNode::Step(StepNode {
         id: subproof_id,
