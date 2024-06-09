@@ -176,14 +176,8 @@ fn insert_solver_proof(
 ) -> Rc<ProofNode> {
     let proof = ProofNode::from_commands(commands.clone());
 
-    // println!("Solver proof: {:?}", commands);
-    // println!("Solver proof node: {:?}", proof);
-
     let mut ids = IdHelper::new(root_id);
     let subproof_id = ids.next_id();
-
-    // println!("rood_id: {}", root_id);
-    // println!("sibproof_id: {}", subproof_id);
 
     let mut clause: Vec<_> = conclusion
         .iter()
@@ -192,13 +186,7 @@ fn insert_solver_proof(
 
     clause.push(pool.bool_false());
 
-    // println!("clause to be concluded from subproof: {:?}", clause);
     let solver_proof_assumptions = proof.get_assumptions();
-    // println!(
-    //     "assumptions in solver proof: {:?}",
-    //     solver_proof_assumptions
-    // );
-
     let proof = increase_subproof_depth(&proof, depth + 1, &subproof_id);
     let mut subproof_assumptions = proof.get_assumptions_of_depth(depth + 1);
 
@@ -208,7 +196,6 @@ fn insert_solver_proof(
     // the literals were not needed for the proof. In this case we
     // create new assumptinos to account for them.
     if conclusion.len() > solver_proof_assumptions.len() {
-        // println!("\tnot enough assumptions");
         let assume_term_to_node: HashMap<&Rc<Term>, Rc<ProofNode>> = subproof_assumptions
             .iter()
             .map(|node| {
@@ -241,7 +228,6 @@ fn insert_solver_proof(
                 });
             })
             .collect();
-        // println!("\tNew assumptions: {:?}", subproof_assumptions);
     }
 
     let last_step = Rc::new(ProofNode::Step(StepNode {
