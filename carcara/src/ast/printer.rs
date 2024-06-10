@@ -426,11 +426,11 @@ impl fmt::Display for Term {
     }
 }
 
-// impl fmt::Debug for Term {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         fmt::Display::fmt(self, f)
-//     }
-// }
+impl fmt::Debug for Term {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
 
 impl fmt::Display for Constant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -574,7 +574,7 @@ mod tests {
             (step t6.t1 (cl (= (+ x 2) (+ x 2))) :rule hole)\n\
             (step t6 (cl) :rule hole)\n\
         ";
-        let (prelude, proof, mut pool) =
+        let (prelude, proof, mut pool, _) =
             parser::parse_instance(definitions, proof, parser::Config::new()).unwrap();
 
         let mut buf = Vec::new();

@@ -7,6 +7,8 @@ use carcara::{
     ast, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate, check_parallel, checker,
     elaborator, generate_lia_smt_instances, parser,
     produce_lambdapi_proof,
+    lambdapi::output::*,
+    lambdapi,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -380,11 +382,14 @@ struct TranslationOption {
     #[clap(flatten)]
     checking: CheckingOptions,
 
+    #[clap(flatten)]
+    elaboration: ElaborationOptions,
+
     #[clap(long, short = 'o')]
     output: Option<std::path::PathBuf>,
 
     /// split the proof into multiple files that will contain `n` symbols
-    #[clap(long, short = 'n')]
+    #[clap(long, short = 'n', requires = "output")]
     segment_size: Option<usize>,
 }
 
@@ -493,6 +498,7 @@ fn parse_command(
 ) -> CliResult<(ast::ProblemPrelude, ast::Proof, ast::PrimitivePool)> {
     let (problem, proof) = get_instance(&options.input)?;
     let result = parser::parse_instance(problem, proof, options.parsing.into())
+        .map(|(prelude, proof, pool, ..)| (prelude, proof, pool))
         .map_err(carcara::Error::from)?;
     Ok(result)
 }
@@ -616,14 +622,14 @@ fn translate_to_lambdapi(options: TranslationOption) -> CliResult<()> {
 
     let package_name = path_file.file_name().unwrap().to_str().unwrap();
 
+    let (elab_config, _) = options.elaboration.into();
+
     let pf = produce_lambdapi_proof(
         problem,
         proof,
-        build_carcara_options(
-            options.parsing,
-            options.checking,
-            StatsOptions { stats: false },
-        ),
+        options.parsing.into(),
+        options.checking.into(),
+        elab_config,
     )
     .map_err(|e| CliError::TranslationError(e))?;
 
@@ -745,7 +751,7 @@ fn slice_command(
     options: SliceCommandOptions,
 ) -> CliResult<(ast::ProblemPrelude, ast::Proof, ast::PrimitivePool)> {
     let (problem, proof) = get_instance(&options.input)?;
-    let (prelude, proof, pool) = parser::parse_instance(problem, proof, options.parsing.into())
+    let (prelude, proof, pool, _) = parser::parse_instance(problem, proof, options.parsing.into())
         .map_err(carcara::Error::from)?;
 
     let node = ast::ProofNode::from_commands_with_root_id(proof.commands, &options.from)

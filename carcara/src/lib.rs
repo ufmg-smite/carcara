@@ -314,25 +314,26 @@ pub fn generate_lia_smt_instances<T: io::BufRead>(
 pub fn produce_lambdapi_proof<'a, T: io::BufRead>(
     problem: T,
     proof: T,
-    options: CarcaraOptions,
+    parser_config: parser::Config,
+    checker_config: checker::Config,
+    elaborator_config: elaborator::Config,
 ) -> Result<lambdapi::output::ProofFile, Box<dyn std::error::Error>> {
-    let config: parser::Config = parser::Config {
-        apply_function_defs: options.apply_function_defs,
-        expand_lets: options.expand_lets,
-        allow_int_real_subtyping: options.allow_int_real_subtyping,
-        allow_unary_logical_ops: !options.strict,
-    };
 
-    let (prelude, proof, mut pool, named_map) = parser::parse_instance(problem, proof, config)?;
 
-    let config = checker::Config::new()
-        .strict(options.strict)
-        .ignore_unknown_rules(options.ignore_unknown_rules);
+    let (prelude, proof, mut pool, named_map) = parser::parse_instance(problem, proof, parser_config)?;
 
-    let (_, proof_elaborated) = checker::ProofChecker::new(&mut pool, config, &prelude)
-        .check_and_elaborate(proof)
-        .map_err::<Error, _>(From::from)?;
+    let mut checker = checker::ProofChecker::new(&mut pool, checker_config);
+    checker.check(&proof)?;
 
+     let node = ast::ProofNode::from_commands(proof.commands);
+     let elaborated =
+         elaborator::Elaborator::new(&mut pool, &proof.premises, &prelude, elaborator_config)
+             .elaborate_with_default_pipeline(&node);
+     let proof_elaborated = ast::Proof {
+         commands: elaborated.into_commands(),
+         ..proof
+     };
+ 
     Ok(lambdapi::produce_lambdapi_proof(
         prelude,
         proof_elaborated,
