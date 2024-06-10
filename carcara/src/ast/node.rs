@@ -186,11 +186,13 @@ impl Rc<ProofNode> {
         result
     }
     /// Returns a vector containing this proof's assumptions of the desired level
-    pub fn get_assumptions_of_depth(&self, _of_depth: usize) -> Vec<Rc<ProofNode>> {
+    pub fn get_assumptions_of_depth(&self, of_depth: usize) -> Vec<Rc<ProofNode>> {
         let mut result = Vec::new();
         self.traverse(|node| {
-            if let ProofNode::Assume { depth: _of_depth, .. } = node.as_ref() {
-                result.push(node.clone());
+            if let ProofNode::Assume { depth, .. } = node.as_ref() {
+                if *depth == of_depth {
+                    result.push(node.clone());
+                }
             }
         });
         result
