@@ -72,10 +72,7 @@ impl<'e> Elaborator<'e> {
         for step in pipeline {
             current = match step {
                 ElaborationStep::Polyeq => self.elaborate_polyeq(&current),
-                ElaborationStep::LiaGeneric => {
-                    if self.config.lia_options.is_none() {
-                        return current.clone();
-                    }
+                ElaborationStep::LiaGeneric if self.config.lia_options.is_some() => {
                     mutate(&current, |_, node| match node.as_ref() {
                         ProofNode::Step(s) if s.rule == "lia_generic" => {
                             lia_generic::lia_generic(self, s).unwrap_or_else(|| node.clone())
@@ -83,6 +80,7 @@ impl<'e> Elaborator<'e> {
                         _ => node.clone(),
                     })
                 }
+                ElaborationStep::LiaGeneric => current.clone(),
                 ElaborationStep::Local => self.elaborate_local(&current),
                 ElaborationStep::Uncrowd => mutate(&current, |_, node| match node.as_ref() {
                     ProofNode::Step(s)
