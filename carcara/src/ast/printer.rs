@@ -464,11 +464,11 @@ impl fmt::Display for ProblemPrelude {
         writeln!(f, "(set-logic {})", self.logic.as_deref().unwrap_or("ALL"))?;
 
         for (name, arity) in &self.sort_declarations {
-            writeln!(f, "(declare-sort {} {})", name, arity)?;
+            writeln!(f, "(declare-sort {} {})", quote_symbol(name), arity)?;
         }
 
         for (name, sort) in &self.function_declarations {
-            write!(f, "(declare-fun {} ", name)?;
+            write!(f, "(declare-fun {} ", quote_symbol(name))?;
             if let Sort::Function(sorts) = sort.as_sort().unwrap() {
                 write_s_expr(f, &sorts[0], &sorts[1..sorts.len() - 1])?;
                 writeln!(f, " {})", sorts.last().unwrap())?;
