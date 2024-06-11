@@ -2,10 +2,10 @@
 
 function usage() {
     cat <<-EOF
-Generates benchmarks for testing Carcara, using veriT.
+Generates benchmarks for testing Carcara, using veriT and cvc5.
 
-By default, this script looks for veriT in your \$PATH, but you can override
-this by setting the \$VERIT environment variable.
+By default, this script looks for veriT and cvc5 in your \$PATH, but you can
+override this by setting the \$VERIT and \$CVC5 environment variables.
 
 USAGE:
     generate-benchmarks.sh [OPTIONS]
@@ -71,6 +71,15 @@ if [ -z "$VERIT" ]; then
     export VERIT="veriT"
 fi
 
+if [ -z "$CVC5" ]; then
+    if ! command -v cvc5 &> /dev/null; then
+        echo "cvc5 not found"
+        echo "make sure that it is in your \$PATH, or that the \$CVC5 environment variable is set"
+        exit 1
+    fi
+    export CVC5="cvc5"
+fi
+
 if [ ! -d "benchmarks/small" ]; then
     echo "creating small benchmarks set..."
     unzip -q benchmarks.zip || exit 1
@@ -88,7 +97,7 @@ find $benchmark_dir -name '*.smt2' | xargs -P $num_jobs -n 1 bash -c 'scripts/so
 if [ -n "clean_flag" ]; then
     echo "cleaning up..."
     for f in $(find $benchmark_dir -name '*.smt2'); do
-        if [ ! -f $f.alethe ]; then
+        if [ ! -f $f.verit.alethe ] && [ ! -f $f.cvc5.alethe ]; then
             rm -f $f
         fi
     done
