@@ -54,6 +54,7 @@ pub struct RunMeasurement {
     pub polyeq: Duration,
     pub assume: Duration,
     pub assume_core: Duration,
+    pub elaboration_pipeline: Vec<Duration>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -323,17 +324,25 @@ impl CsvBenchmarkResults {
         data: IndexMap<InternedRunId, RunMeasurement>,
         dest: &mut dyn io::Write,
     ) -> io::Result<()> {
-        writeln!(
+        let pipeline_length = data
+            .iter()
+            .next()
+            .map_or(0, |(_, m)| m.elaboration_pipeline.len());
+        write!(
             dest,
             "proof_file,run_id,parsing,checking,elaboration,total_accounted_for,\
             total,polyeq,polyeq_ratio,assume,assume_ratio"
         )?;
+        for i in 0..pipeline_length {
+            write!(dest, ",pipeline_step_{}", i)?;
+        }
+        writeln!(dest)?;
 
         for (id, m) in data {
             let total_accounted_for = m.parsing + m.checking + m.elaboration;
             let polyeq_ratio = m.polyeq.as_secs_f64() / m.checking.as_secs_f64();
             let assume_ratio = m.assume.as_secs_f64() / m.checking.as_secs_f64();
-            writeln!(
+            write!(
                 dest,
                 "{},{},{},{},{},{},{},{},{},{},{}",
                 id.0,
@@ -348,6 +357,11 @@ impl CsvBenchmarkResults {
                 m.assume.as_nanos(),
                 assume_ratio,
             )?;
+            assert_eq!(m.elaboration_pipeline.len(), pipeline_length);
+            for d in m.elaboration_pipeline {
+                write!(dest, ",{}", d.as_nanos())?;
+            }
+            writeln!(dest)?;
         }
 
         Ok(())
@@ -418,6 +432,7 @@ impl CollectResults for OnlineBenchmarkResults {
             polyeq,
             assume,
             assume_core,
+            elaboration_pipeline: _, // TODO: store elaboration pipeline durations
         } = measurement;
 
         self.parsing.add_sample(id, parsing);

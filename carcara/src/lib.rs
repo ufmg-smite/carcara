@@ -123,6 +123,7 @@ pub fn check<T: io::BufRead>(
                 polyeq: checker_stats.polyeq_time,
                 assume: checker_stats.assume_time,
                 assume_core: checker_stats.assume_core_time,
+                elaboration_pipeline: Vec::new(),
             },
         );
         // Print the statistics
@@ -188,6 +189,7 @@ pub fn check_parallel<T: io::BufRead>(
                 polyeq: checker_stats.polyeq_time,
                 assume: checker_stats.assume_time,
                 assume_core: checker_stats.assume_core_time,
+                elaboration_pipeline: Vec::new(),
             },
         );
         // Print the statistics
@@ -245,9 +247,9 @@ pub fn check_and_elaborate<T: io::BufRead>(
     let elaboration = Instant::now();
 
     let node = ast::ProofNode::from_commands(proof.commands);
-    let elaborated =
+    let (elaborated, pipeline_durations) =
         elaborator::Elaborator::new(&mut pool, &proof.premises, &prelude, elaborator_config)
-            .elaborate(&node, pipeline);
+            .elaborate_with_stats(&node, pipeline);
     let elaborated = ast::Proof {
         commands: elaborated.into_commands(),
         ..proof
@@ -256,6 +258,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
     if collect_stats {
         run.elaboration = elaboration.elapsed();
         run.total = total.elapsed();
+        run.elaboration_pipeline = pipeline_durations;
 
         stats.add_run_measurement(&("this".to_owned(), 0), run);
 

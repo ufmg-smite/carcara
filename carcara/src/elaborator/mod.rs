@@ -9,7 +9,10 @@ mod uncrowding;
 use crate::{ast::*, CheckerError};
 use indexmap::IndexSet;
 use polyeq::PolyeqElaborator;
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    time::{Duration, Instant},
+};
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -72,8 +75,18 @@ impl<'e> Elaborator<'e> {
         root: &Rc<ProofNode>,
         pipeline: Vec<ElaborationStep>,
     ) -> Rc<ProofNode> {
+        self.elaborate_with_stats(root, pipeline).0
+    }
+
+    pub fn elaborate_with_stats(
+        &mut self,
+        root: &Rc<ProofNode>,
+        pipeline: Vec<ElaborationStep>,
+    ) -> (Rc<ProofNode>, Vec<Duration>) {
+        let mut durations = Vec::new();
         let mut current = root.clone();
         for step in pipeline {
+            let time = Instant::now();
             current = match step {
                 ElaborationStep::Polyeq => self.elaborate_polyeq(&current),
                 ElaborationStep::LiaGeneric if self.config.lia_options.is_some() => {
@@ -97,8 +110,9 @@ impl<'e> Elaborator<'e> {
                 }),
                 ElaborationStep::Reordering => reordering::remove_reorderings(&current),
             };
+            durations.push(time.elapsed());
         }
-        current
+        (current, durations)
     }
 
     fn elaborate_polyeq(&mut self, root: &Rc<ProofNode>) -> Rc<ProofNode> {

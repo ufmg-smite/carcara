@@ -52,15 +52,16 @@ fn run_job<T: CollectResults + Default + Send>(
     let checking_result = checker.check_with_stats(&proof, &mut checker_stats);
     let checking = checking.elapsed();
 
-    let elaboration = if let Some((config, pipeline)) = elaborator_config {
+    let (elaboration, pipeline_durations) = if let Some((config, pipeline)) = elaborator_config {
         let elaboration = Instant::now();
         let node = ast::ProofNode::from_commands(proof.commands);
-        let elaborated = elaborator::Elaborator::new(&mut pool, &proof.premises, &prelude, config)
-            .elaborate(&node, pipeline);
+        let (elaborated, pipeline_durations) =
+            elaborator::Elaborator::new(&mut pool, &proof.premises, &prelude, config)
+                .elaborate_with_stats(&node, pipeline);
         elaborated.into_commands();
-        elaboration.elapsed()
+        (elaboration.elapsed(), pipeline_durations)
     } else {
-        Duration::ZERO
+        (Duration::ZERO, Vec::new())
     };
 
     let total = total.elapsed();
@@ -76,6 +77,7 @@ fn run_job<T: CollectResults + Default + Send>(
             polyeq: checker_stats.polyeq_time,
             assume: checker_stats.assume_time,
             assume_core: checker_stats.assume_core_time,
+            elaboration_pipeline: pipeline_durations,
         },
     );
     *results = checker_stats.results;
