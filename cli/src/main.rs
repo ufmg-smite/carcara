@@ -208,6 +208,11 @@ struct ElaborationOptions {
     )]
     lia_solver_args: String,
 
+    /// When uncrowding resolutions steps, also reorder premises to further minimize the number of
+    /// `contraction` steps added.
+    #[clap(long)]
+    uncrowd_rotate: bool,
+
     /// The pipeline of elaboration steps to use.
     #[clap(
         arg_enum,
@@ -239,7 +244,11 @@ impl From<ElaborationOptions> for (elaborator::Config, Vec<elaborator::Elaborati
                 .map(Into::into)
                 .collect(),
         });
-        (elaborator::Config { lia_options }, pipeline)
+        let config = elaborator::Config {
+            lia_options,
+            uncrowd_rotation: val.uncrowd_rotate,
+        };
+        (config, pipeline)
     }
 }
 

@@ -18,6 +18,10 @@ pub struct Config {
     /// problem, checking the proof, and discarding it. When elaborating, the proof will instead be
     /// inserted in the place of the `lia_generic` step. See [`LiaGenericOptions`] for more details.
     pub lia_options: Option<LiaGenericOptions>,
+
+    /// Enables an optimization that reorders premises when uncrowding resolution steps, in order to
+    /// further minimize the number of `contraction` steps added.
+    pub uncrowd_rotation: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -87,7 +91,7 @@ impl<'e> Elaborator<'e> {
                         if (s.rule == "resolution" || s.rule == "th_resolution")
                             && !s.args.is_empty() =>
                     {
-                        uncrowding::uncrowd_resolution(self.pool, s)
+                        uncrowding::uncrowd_resolution(self.pool, s, self.config.uncrowd_rotation)
                     }
                     _ => node.clone(),
                 }),

@@ -62,16 +62,26 @@ fn apply_naive_resolution<'a>(premises: &[ResolutionPremise<'a>]) -> Vec<Literal
     current
 }
 
-pub fn uncrowd_resolution(pool: &mut PrimitivePool, step: &StepNode) -> Rc<ProofNode> {
+pub fn uncrowd_resolution(
+    pool: &mut PrimitivePool,
+    step: &StepNode,
+    rotate_premises: bool,
+) -> Rc<ProofNode> {
     let target_conclusion: HashSet<_> = step.clause.iter().map(Rc::remove_all_negations).collect();
 
     let mut premises = ResolutionPremise::from_step(step);
 
     let naive_conclusion = apply_naive_resolution(&premises);
 
-    let literals_info = find_crowding_literals(&naive_conclusion, &target_conclusion, &premises);
+    let mut literals_info =
+        find_crowding_literals(&naive_conclusion, &target_conclusion, &premises);
 
-    // TODO: reorder premises
+    if rotate_premises {
+        premises = reorder_premises(&literals_info, premises);
+        // Since the premises changed, we recompute the literals info. In theory it might be more
+        // efficient to do this as we reorder the premises, but it's very tricky and bug-prone.
+        literals_info = find_crowding_literals(&naive_conclusion, &target_conclusion, &premises);
+    }
 
     let mut contractions = find_needed_contractions(literals_info);
     if contractions.last() != Some(&premises.len()) {
@@ -299,6 +309,66 @@ fn find_needed_contractions(literals_info: HashMap<Literal, LiteralInfo>) -> Vec
     contractions
 }
 
+fn reorder_premises<'a>(
+    literals_info: &HashMap<Literal, LiteralInfo>,
+    mut premises: Vec<ResolutionPremise<'a>>,
+) -> Vec<ResolutionPremise<'a>> {
+    let mut new_order: Vec<usize> = (0..premises.len()).collect();
+    let ordered: Vec<(&Literal, &LiteralInfo)> = {
+        let mut v: Vec<_> = literals_info.iter().collect();
+        v.sort_unstable_by_key(|(_, info)| info.eliminator);
+        v
+    };
+    for (lit, info) in ordered {
+        if !info.is_crowding {
+            continue;
+        }
+
+        let eliminator_lit = (if info.polarity { lit.0 + 1 } else { lit.0 - 1 }, lit.1);
+        let eliminator_premise = &premises[new_order[info.eliminator]];
+
+        let min_elimination_of_non_pivot_literal = eliminator_premise
+            .clause
+            .iter()
+            .filter(|&l| *l != eliminator_lit)
+            .map(|l| new_order[literals_info[l].eliminator])
+            .min();
+
+        let min_last_inclusion_of_crowding_literal = eliminator_premise
+            .clause
+            .iter()
+            .filter(|&l| *l != eliminator_lit && literals_info[l].is_crowding)
+            .map(|l| new_order[literals_info[l].last_inclusion])
+            .min();
+
+        let max_safe_move = match (
+            min_elimination_of_non_pivot_literal,
+            min_last_inclusion_of_crowding_literal,
+        ) {
+            (None, None) => continue,
+            (None, Some(a)) | (Some(a), None) => a,
+            (Some(a), Some(b)) => std::cmp::min(a, b),
+        };
+
+        let elim = new_order[info.eliminator];
+        if max_safe_move > elim {
+            new_order[elim..max_safe_move].rotate_left(1);
+        }
+    }
+
+    new_order
+        .iter()
+        .map(|&i| {
+            let p = &mut premises[i];
+            ResolutionPremise {
+                node: p.node.clone(),
+                clause: std::mem::take(&mut p.clause),
+                pivot: p.pivot,
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -336,7 +406,7 @@ mod tests {
             unreachable!();
         };
 
-        let got = uncrowd_resolution(&mut pool, step);
+        let got = uncrowd_resolution(&mut pool, step, true);
 
         let expected = b"
             (step t1 (cl x a b) :rule hole)

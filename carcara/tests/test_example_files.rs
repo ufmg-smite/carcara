@@ -47,7 +47,10 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
     checker::ProofChecker::new(&mut pool, checker_config.clone()).check(&proof)?;
 
     // Then we elaborate it
-    let config = elaborator::Config { lia_options: None };
+    let config = elaborator::Config {
+        lia_options: None,
+        uncrowd_rotation: true,
+    };
     let node = ast::ProofNode::from_commands(proof.commands.clone());
     let elaborated_node =
         elaborator::Elaborator::new(&mut pool, &proof.premises, &prelude, config.clone())
