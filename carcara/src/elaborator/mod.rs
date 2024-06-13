@@ -126,14 +126,17 @@ impl<'e> Elaborator<'e> {
                 ElaborationStep::Reordering => reordering::remove_reorderings(&current),
                 ElaborationStep::Hole => {
                     if self.config.hole_options.is_none() {
-                        return current.clone();
+                        current.clone()
+                    } else {
+                        mutate(&current, |_, node| match node.as_ref() {
+                            ProofNode::Step(s)
+                                if (s.rule == "all_simplify" || s.rule == "rare_rewrite") =>
+                            {
+                                hole::hole(self, s).unwrap_or_else(|| node.clone())
+                            }
+                            _ => node.clone(),
+                        })
                     }
-                    mutate(&current, |_, node| match node.as_ref() {
-                        ProofNode::Step(s) if s.rule == "all_simplify" => {
-                            hole::hole(self, s).unwrap_or_else(|| node.clone())
-                        }
-                        _ => node.clone(),
-                    })
                 }
             };
             durations.push(time.elapsed());

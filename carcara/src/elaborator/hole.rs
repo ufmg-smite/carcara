@@ -59,9 +59,18 @@ fn get_problem_string(
 }
 
 pub fn hole(elaborator: &mut Elaborator, step: &StepNode) -> Option<Rc<ProofNode>> {
-    let problem = get_problem_string(elaborator.pool, elaborator.prelude, &step.clause);
+    let prelude = if elaborator.prelude.logic.clone().unwrap() == "QF_LIA" {
+        ProblemPrelude {
+            sort_declarations: elaborator.prelude.sort_declarations.clone(),
+            function_declarations: elaborator.prelude.function_declarations.clone(),
+            logic: Some("QF_LIRA".into()),
+        }
+    } else {
+        elaborator.prelude.clone()
+    };
+    let problem = get_problem_string(elaborator.pool, &prelude, &step.clause);
     let options = elaborator.config.hole_options.as_ref().unwrap();
-    let commands = match get_solver_proof(elaborator.pool, problem, options) {
+    let commands = match get_solver_proof(elaborator.pool, problem.clone(), options) {
         Ok((c, false)) => c,
         Ok((_, true)) => {
             log::warn!("failed to elaborate `all_simplify` step: solver proof contains holes");

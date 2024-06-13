@@ -44,7 +44,7 @@ pub fn subproof(
         }
     };
 
-    assert_eq(conclusion.last().unwrap(), &phi)
+    assert_polyeq(conclusion.last().unwrap(), &phi, polyeq_time)
 }
 
 pub fn bind(

@@ -43,6 +43,10 @@ pub fn write_lia_smt_instance(
     // We have to override the default prefix "@p_" because symbols starting with "@" are reserved
     // in SMT-LIB.
     printer.term_sharing_variable_prefix = "p_";
+    // Since we are printing an SMT-LIB problem, we have to be
+    // compliant. For Carcara, this means that arithmetic constants
+    // cannot use the GMP notation
+    printer.smt_lib_strict = true;
     printer.write_lia_smt_instance(clause)
 }
 
@@ -144,6 +148,7 @@ struct AlethePrinter<'a> {
     term_sharing_variable_prefix: &'static str,
     global_vars: HashSet<Rc<Term>>,
     defined_constants: HashMap<Rc<Term>, String>,
+    smt_lib_strict: bool,
 }
 
 impl<'a> PrintProof for AlethePrinter<'a> {
@@ -233,6 +238,7 @@ impl<'a> AlethePrinter<'a> {
             term_sharing_variable_prefix: "@p_",
             global_vars: global_variables,
             defined_constants: HashMap::new(),
+            smt_lib_strict: false,
         }
     }
 
@@ -256,7 +262,39 @@ impl<'a> AlethePrinter<'a> {
 
     fn write_raw_term(&mut self, term: &Term) -> io::Result<()> {
         match term {
-            Term::Const(c) => write!(self.inner, "{}", c),
+            Term::Const(c) => {
+                if self.smt_lib_strict {
+                    if let Constant::Integer(i) = c {
+                        if i.is_negative() {
+                            write!(self.inner, "(- {})", i.clone().abs())
+                        } else {
+                            write!(self.inner, "{}", i)
+                        }
+                    } else if let Constant::Real(r) = c {
+                        if r.is_negative() {
+                            write!(self.inner, "(- ")?;
+                        }
+                        if r.is_integer() {
+                            write!(self.inner, "{}.0", r.clone().abs())?;
+                        } else {
+                            write!(
+                                self.inner,
+                                "(/ {}.0 {}.0)",
+                                r.numer().clone().abs(),
+                                r.denom()
+                            )?;
+                        }
+                        if r.is_negative() {
+                            write!(self.inner, ")")?;
+                        }
+                        Ok(())
+                    } else {
+                        write!(self.inner, "{}", c)
+                    }
+                } else {
+                    write!(self.inner, "{}", c)
+                }
+            }
             Term::Var(name, _) => write!(self.inner, "{}", quote_symbol(name)),
             Term::App(func, args) => self.write_s_expr(func, args),
             Term::Op(op, args) => {
@@ -419,6 +457,7 @@ impl fmt::Display for Term {
             term_sharing_variable_prefix: "@p_",
             global_vars: HashSet::new(),
             defined_constants: HashMap::new(),
+            smt_lib_strict: false,
         };
         printer.write_raw_term(self).unwrap();
         let result = std::str::from_utf8(&buf).unwrap();
