@@ -558,7 +558,7 @@ impl<'c> ProofChecker<'c> {
             "concat_lprop_suffix" => strings::concat_lprop_suffix,
 
             // Drat formar rules
-            "drat" => drat::resolution,
+            "drat" => drat::drat,
 
 
             // Special rules that always check as valid, and are used to indicate holes in the
