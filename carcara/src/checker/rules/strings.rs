@@ -317,7 +317,7 @@ fn extract_arguments(t: &Rc<Term>) -> Result<Vec<Rc<Term>>, CheckerError> {
             ))
         }
     };
-    return Ok(args_t.clone());
+    Ok(args_t.clone())
 }
 
 pub fn concat_eq(
@@ -810,7 +810,7 @@ pub fn concat_cprop_prefix(RuleArgs { premises, conclusion, pool, .. }: RuleArgs
 
     let t_2_flat = flatten(pool, args_t[1].clone());
 
-    let v = 1 + overlap(sc_tail.to_vec(), t_2_flat.clone());
+    let v = 1 + overlap(sc_tail.clone(), t_2_flat.clone());
     let v = pool.add(Term::new_int(v));
     let oc = build_skolem_prefix(pool, ss[0].clone(), v);
     let oc_len = build_term!(pool, (strlen {oc.clone()}));
