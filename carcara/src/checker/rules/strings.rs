@@ -51,7 +51,7 @@ fn is_compatible(s: Vec<Rc<Term>>, t: Vec<Rc<Term>>) -> bool {
 
 fn overlap(s: Vec<Rc<Term>>, t: Vec<Rc<Term>>) -> usize {
     match &s[..] {
-        [_] => 0,
+        [] | [_] => 0,
         [_, tail @ ..] => {
             if is_compatible(s.clone(), t.clone()) {
                 0
@@ -59,7 +59,6 @@ fn overlap(s: Vec<Rc<Term>>, t: Vec<Rc<Term>>) -> usize {
                 1 + overlap(tail.to_vec(), t.clone())
             }
         }
-        _ => unreachable!(),
     }
 }
 
@@ -298,6 +297,27 @@ fn build_skolem_unify_split_suffix(pool: &mut dyn TermPool, t: Rc<Term>, s: Rc<T
 
 fn build_str_suffix_len(pool: &mut dyn TermPool, s: Rc<Term>, n: Rc<Term>) -> Rc<Term> {
     build_term!(pool, (strsubstr {s.clone()} (- (strlen {s.clone()}) {n.clone()}) {n.clone()}))
+}
+
+fn extract_arguments(t: &Rc<Term>) -> Result<Vec<Rc<Term>>, CheckerError> {
+    let args_t = match t.as_ref() {
+        Term::Op(Operator::StrConcat, args) => {
+            if args.len() != 3 {
+                return Err(CheckerError::TermOfWrongForm(
+                    "(str.++ t1 t2 t3)",
+                    t.clone(),
+                ));
+            }
+            args
+        }
+        _ => {
+            return Err(CheckerError::TermOfWrongForm(
+                "(str.++ t1 t2 t3)",
+                t.clone(),
+            ))
+        }
+    };
+    return Ok(args_t.clone());
 }
 
 pub fn concat_eq(
@@ -769,23 +789,7 @@ pub fn concat_cprop_prefix(RuleArgs { premises, conclusion, pool, .. }: RuleArgs
     let (t, s) = match_term_err!((= t s) = terms)?;
     let (t_1, _) = match_term_err!((not (= (strlen t_1) 0)) = length)?;
 
-    let args_t = match t.as_ref() {
-        Term::Op(Operator::StrConcat, args) => {
-            if args.len() != 3 {
-                return Err(CheckerError::TermOfWrongForm(
-                    "(str.++ t1 t2 t3)",
-                    t.clone(),
-                ));
-            }
-            args
-        }
-        _ => {
-            return Err(CheckerError::TermOfWrongForm(
-                "(str.++ t1 t2 t3)",
-                t.clone(),
-            ))
-        }
-    };
+    let args_t = extract_arguments(t)?;
 
     assert_eq(&args_t[0], t_1)?;
 
@@ -802,12 +806,13 @@ pub fn concat_cprop_prefix(RuleArgs { premises, conclusion, pool, .. }: RuleArgs
     };
 
     let sc = flatten(pool, ss[0].clone());
-    let sc_tail = &sc[1..];
+    let sc_tail = sc[1..].to_vec();
+
     let t_2_flat = flatten(pool, args_t[1].clone());
-    let overlap = overlap(sc_tail.to_vec(), t_2_flat.clone());
-    let v = 1 + overlap;
-    let n = pool.add(Term::new_int(v));
-    let oc = build_skolem_prefix(pool, ss[0].clone(), n);
+
+    let v = 1 + overlap(sc_tail.to_vec(), t_2_flat.clone());
+    let v = pool.add(Term::new_int(v));
+    let oc = build_skolem_prefix(pool, ss[0].clone(), v);
     let oc_len = build_term!(pool, (strlen {oc.clone()}));
 
     let r = build_skolem_suffix_rem(pool, t_1.clone(), oc_len);
@@ -830,23 +835,7 @@ pub fn concat_cprop_suffix(RuleArgs { premises, conclusion, pool, .. }: RuleArgs
     let (t, s) = match_term_err!((= t s) = terms)?;
     let (t_2, _) = match_term_err!((not (= (strlen t_2) 0)) = length)?;
 
-    let args_t = match t.as_ref() {
-        Term::Op(Operator::StrConcat, args) => {
-            if args.len() != 3 {
-                return Err(CheckerError::TermOfWrongForm(
-                    "(str.++ t1 t2 t3)",
-                    t.clone(),
-                ));
-            }
-            args
-        }
-        _ => {
-            return Err(CheckerError::TermOfWrongForm(
-                "(str.++ t1 t2 t3)",
-                t.clone(),
-            ))
-        }
-    };
+    let args_t = extract_arguments(t)?;
 
     assert_eq(&args_t[2], t_2)?;
 
@@ -868,10 +857,10 @@ pub fn concat_cprop_suffix(RuleArgs { premises, conclusion, pool, .. }: RuleArgs
 
     let mut t_2_flat = flatten(pool, args_t[1].clone());
     t_2_flat.reverse();
-    let overlap = overlap(sc_tail.to_vec(), t_2_flat.clone());
-    let v = 1 + overlap;
-    let n = pool.add(Term::new_int(v));
-    let oc = build_str_suffix_len(pool, ss[1].clone(), n);
+
+    let v = 1 + overlap(sc_tail.to_vec(), t_2_flat.clone());
+    let v = pool.add(Term::new_int(v));
+    let oc = build_str_suffix_len(pool, ss[1].clone(), v);
 
     let rhs = build_term!(pool, (- (strlen {t_2.clone()}) (strlen {oc.clone()})));
     let r = build_skolem_prefix(pool, t_2.clone(), rhs.clone());
