@@ -44,7 +44,7 @@ fn get_problem_string(
     use std::fmt::Write;
 
     let mut problem = String::new();
-    write!(&mut problem, "(set-option :produce-proofs true)\n").unwrap();
+    writeln!(&mut problem, "(set-option :produce-proofs true)").unwrap();
     write!(&mut problem, "{}", prelude).unwrap();
 
     let mut bytes = Vec::new();

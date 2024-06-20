@@ -217,15 +217,15 @@ fn insert_solver_proof(
             if !covered.contains(&term) {
                 covered.insert(term.clone());
                 if assume_term_to_node.contains_key(&term) {
-                    return assume_term_to_node.get(&term).unwrap().clone();
+                    return assume_term_to_node[&term].clone();
                 }
             }
             // build new assumption proof node
-            return Rc::new(ProofNode::Assume {
+            Rc::new(ProofNode::Assume {
                 id: ids.next_id(),
                 depth: depth + 1,
                 term,
-            });
+            })
         })
         .collect();
 
