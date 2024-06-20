@@ -180,6 +180,13 @@ impl<'a> PolyeqElaborator<'a> {
                 };
                 self.close_subproof(args, last_step)
             }
+            // If one of the terms is a constant, but they are still polyequal, we can't break it up
+            // into smaller parts, so we just use a direct refl step. This is hack to deal with the
+            // case where one of the terms was passed as a GMP-style constant.
+            _ if (a.is_const() || b.is_const()) && self.polyeq(pool, &a, &b) => {
+                let id = self.ids.next_id();
+                add_refl_step(pool, a, b, id, self.depth())
+            }
             _ => panic!("terms not equal!"),
         }
     }
