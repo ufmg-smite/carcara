@@ -495,7 +495,7 @@ mod tests {
                 (assume t1.h1 p)
                 (assume t1.h2 q)
                 (step t1.t3 (cl (= r s)) :rule hole)
-                (step t1 (cl (not p) (not q) (= s r))
+                (step t1 (cl (not p) (not q) (not (= r s)))
                     :rule subproof :discharge (t1.h1 t1.h2))": false,
             }
         }
