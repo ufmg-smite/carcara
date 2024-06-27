@@ -557,6 +557,10 @@ impl<'c> ProofChecker<'c> {
             "concat_lprop_prefix" => strings::concat_lprop_prefix,
             "concat_lprop_suffix" => strings::concat_lprop_suffix,
 
+            "string_decompose" => strings::string_decompose,
+            "string_length_pos" => strings::string_length_pos,
+            "string_length_non_empty" => strings::string_length_non_empty,
+
             // Special rules that always check as valid, and are used to indicate holes in the
             // proof.
             "hole" => |_| Ok(()),
