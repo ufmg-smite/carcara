@@ -13,7 +13,8 @@
 (step t7 (cl (not (= a b)) (not (= c d)) (= (f a c) (f b d))) :rule eq_congruent)
 (step t8 (cl (= (f a c) (f b d)) (not (= a b)) (not (= c d))) :rule reordering :premises (t7))
 (step t9 (cl (not p1) (and p2 p3)) :rule or :premises (a3))
-(step t10 (cl) :rule drat :premises (a0 a1 t9 a4 t0 t2 t4 t8)
+(step t10 (cl (not p3) (not (= (f a c) (f b d)))) :rule or :premises (a4))
+(step t11 (cl) :rule drat :premises (a0 a1 t9 t10 t0 t2 t4 t8)
   :args (
           (cl (and p2 p3))
           (@d (cl (not p1) (and p2 p3)))

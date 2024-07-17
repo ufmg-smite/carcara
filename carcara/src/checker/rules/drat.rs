@@ -37,12 +37,11 @@ pub fn drat(RuleArgs { conclusion, premises, args, .. }: RuleArgs) -> RuleResult
         .iter()
         .map(|p| p.clause)
         .collect::<Vec<&[Rc<Term>]>>();
-    let mut conclusion: Vec<Rc<Term>> = Vec::new();
+    let mut conclusion: Vec<Vec<Rc<Term>>> = Vec::new();
 
     for arg in args {
         match arg {
             ProofArg::Term(t) => {
-                let (p, regular_term) = t.remove_all_negations_with_polarity();
                 print!("Checking {0}\n", t);
                 match match_term!((delete (cl ...)) = &t) {
                     Some(terms) => {
@@ -69,7 +68,10 @@ pub fn drat(RuleArgs { conclusion, premises, args, .. }: RuleArgs) -> RuleResult
                 }
 
                 let mut premises = premises.clone();
-                premises.push(conclusion.as_ref());
+                for clause in &conclusion {
+                    premises.push(clause.as_ref());
+                }
+                
                 let mut clauses: Vec<IndexSet<(bool, &Rc<Term>)>> = premises
                     .iter()
                     .map(|p| {
@@ -78,9 +80,19 @@ pub fn drat(RuleArgs { conclusion, premises, args, .. }: RuleArgs) -> RuleResult
                             .collect()
                     })
                     .collect();
-                let mut clause = IndexSet::new();
-                clause.insert((!p, regular_term));
-                clauses.push(clause);
+
+                let terms = match match_term!((cl ...) = &t) {
+                    Some(terms) => terms,
+                    None => panic!("Invalid clause term"),
+                };
+
+                for term in terms {
+                    let mut clause: IndexSet<(bool, &Rc<Term>)> = IndexSet::new();
+                    let (p, regular_term) = term.remove_all_negations_with_polarity();
+                    clause.insert((!p, regular_term));
+                    clauses.push(clause);
+                }
+
                 for clause in &clauses {
                     print!("\n");
                     for c in clause {
@@ -91,7 +103,11 @@ pub fn drat(RuleArgs { conclusion, premises, args, .. }: RuleArgs) -> RuleResult
                 if !rup(&clauses) {
                     return Err(CheckerError::Resolution(ResolutionError::TautologyFailed));
                 }
-                conclusion.push(t.clone());
+
+                for term in terms {
+                    conclusion.push(vec![term.clone()]);
+                }
+        
             }
             ProofArg::Assign(_, _) => panic!("A invalid term was found while solving drat terms"),
         }
