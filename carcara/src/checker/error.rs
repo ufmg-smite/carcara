@@ -141,6 +141,9 @@ pub enum CheckerError {
     #[error("expected term {0} to be a suffix of {1}")]
     ExpectedToBeSuffix(Rc<Term>, Rc<Term>),
 
+    #[error("expected term {0} to not be empty")]
+    ExpectedToNotBeEmpty(Rc<Term>),
+
     #[error("this rule can only be used in the last step of a subproof")]
     MustBeLastStepInSubproof,
 
