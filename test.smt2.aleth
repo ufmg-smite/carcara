@@ -16,10 +16,5 @@
 (step t10 (cl (not p3) (not (= (f a c) (f b d)))) :rule or :premises (a4))
 (step t11 (cl) :rule drat :premises (a0 a1 t9 t10 t0 t2 t4 t8)
   :args (
-          (cl (and p2 p3))
-          (@d (cl (not p1) (and p2 p3)))
-          (cl p2)
-          (cl p3)
-          (cl (not (= (f a c) (f b d))))
           (cl))
   )

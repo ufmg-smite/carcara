@@ -22,6 +22,10 @@ pub enum CheckerError {
     #[error(transparent)]
     Resolution(#[from] ResolutionError),
 
+    // Rule specific errors
+    #[error(transparent)]
+    DratFormatError(#[from] DratFormatError),
+
     #[error(transparent)]
     Cong(#[from] CongruenceError),
 
@@ -187,6 +191,12 @@ pub enum ResolutionError {
 
     #[error("pivot was not found in clause: '{0}'")]
     PivotNotFound(Rc<Term>),
+}
+
+#[derive(Debug, Error)]
+pub enum DratFormatError {
+    #[error("couldn't find conclusion term in the premise clauses")]
+    NoConclusionInPremise,
 }
 
 struct DisplayIndexedOp<'a>(&'a ParamOperator, &'a Vec<Rc<Term>>);
