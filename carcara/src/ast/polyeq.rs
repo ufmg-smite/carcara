@@ -16,12 +16,18 @@ use super::{
 use crate::utils::HashMapStack;
 use std::time::{Duration, Instant};
 
+/// An helper enum that allow a construction of lists with easy differentiation over the nature of the term
+/// (String constant or other). Therefore, is easy to manipulate, attach and detach terms of lists of
+/// this type, making easy the process of comparing equal Strings modulo the String concatenation.
 #[derive(Debug, Clone)]
 enum Concat {
     Constant(String),
     Term(Rc<Term>),
 }
 
+/// A function that receives the list of arguments of an operation term and returns that same list with every
+/// argument encapsulated by the constructors of the Concat enum . This will be helpful to process the terms and
+/// compare if a String constant and a String concatenation are equivalents.
 fn to_concat(args: &[Rc<Term>]) -> Vec<Concat> {
     args.iter()
         .map(|arg| match arg.as_ref() {
@@ -93,9 +99,11 @@ pub fn alpha_equiv(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> bool {
 
 /// Similar to `polyeq`, but also compares modulo the equality of String constants and String concatenations.
 ///
-/// That is, for this function, String concatenations with constant arguments can be
-/// considered equal to the String constant of those arguments collected. For example, the term
-/// `(str.++ "a" "bd" "d")` is considered equal to the String constant `"abcd"`.
+/// That is, for this function, String concatenations with constant arguments can be considered equivalent
+/// to the String constant of those arguments collected. For example, this function will consider the terms
+/// `(str.++ "a" "bd" "d")` and `"abcd"` as equivalent.
+///
+/// This function records how long it takes to run, and adds that duration to the `time` argument.
 pub fn polyeq_mod_string_concat(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> bool {
     let start = Instant::now();
     let result = Polyeq::eq(&mut PolyeqComparator::new(true, false, false, true), a, b);
