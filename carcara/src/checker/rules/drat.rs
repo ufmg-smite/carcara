@@ -1,14 +1,12 @@
 use core::panic;
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::{Borrow};
 use std::hash::{DefaultHasher, Hash, Hasher};
-
 use super::{CheckerError, RuleArgs, RuleResult};
 use crate::checker::error::DratFormatError;
 use crate::checker::ProofArg;
 use crate::{ast::*, checker::error::ResolutionError};
 use indexmap::IndexSet;
 use std::collections::HashMap;
-use std::fmt;
 
 #[derive(Debug)]
 enum Implied<T> {
@@ -32,7 +30,7 @@ fn get_implied_clause<'a>(
     >,
     env: &HashMap<(bool, Rc<Term>), bool>,
 ) -> Implied<(bool, Rc<Term>)> {
-    for (key, schema) in clauses {
+    for (_, schema) in clauses {
         match schema.0 {
             (None, None) => return Implied::Bottom(),
             (Some((b, t)), None) | (None, Some((b, t))) => match (env.get(&(b, t.clone()))) {
@@ -41,35 +39,41 @@ fn get_implied_clause<'a>(
                 None => continue,
             },
             (Some((b, t)), Some((b0, t0))) => {
-                let count_true_clauses = schema
-                    .1
-                    .iter()
-                    .filter(|(b, t)| Some(true) == env.get(&(*b, (*t).clone())).copied())
-                    .count();
+                let mut clause_assign = (vec![], vec![], vec![]);
+
+                for (b1, t1) in schema.1.borrow() {
+                    let assign_state = env.get(&(*b1, (*t1).clone()));
+                    match assign_state {
+                        None => clause_assign.0.push((*b1, *t1)),
+                        Some(true) => clause_assign.1.push((*b1, *t1)),
+                        Some(false) => clause_assign.2.push((*b1, *t1))
+                    }
+                }
+                
                 match (env.get(&(b, t.clone())), env.get(&(b0, t0.clone()))) {
                     (None, _) | (_, None) => continue,
                     (Some(true), Some(true)) => continue,
                     (Some(true), Some(false)) => {
-                        if count_true_clauses == 1 {
+                        if clause_assign.1.len() == 1 && clause_assign.0.len() == 0 {
                             return Implied::Pivot((b, t.clone()));
                         } else {
                             continue;
                         }
                     }
                     (Some(false), Some(true)) => {
-                        if count_true_clauses == 1 {
+                        if clause_assign.1.len() == 1 && clause_assign.0.len() == 0 {
                             return Implied::Pivot((b0, t0.clone()));
                         } else {
                             continue;
                         }
                     }
                     (Some(false), Some(false)) => {
-                        if count_true_clauses == 0 {
+                        if clause_assign.1.len() == 0 && clause_assign.0.len() == 0 {
                             return Implied::Bottom();
-                        } else if count_true_clauses == 1 {
-                            // This case should not exists, since we always pushing the watchers literals to the their schemas
-                            // But for the sake of completness of this function we catch the first value avaliable on the clause
-                            let (b1, t1) = schema.1.iter().next().unwrap();
+                        } else if clause_assign.1.len() == 1 && clause_assign.0.len() == 0 {
+                            // [1] This case happens whenever we are in a temporary "broken state"
+                            // when two false are inside the watchers literals and there is a unique true literal in the clause
+                            let (b1, t1) = clause_assign.1.iter().next().unwrap();
                             return Implied::Pivot((*b1, (*t1).clone()));
                         } else {
                             continue;
@@ -91,26 +95,30 @@ fn fix_watchers_vars<'a>(
         ),
     >,
     pivot: &(bool, Rc<Term>),
-    pivot_clauses: &[u64],
+    pivot_clauses: &IndexSet<u64>,
     env: &mut HashMap<(bool, Rc<Term>), bool>,
 ) {
     for pivot_clause in pivot_clauses {
         let clause: &mut (
             (Option<(bool, &Rc<Term>)>, Option<(bool, &Rc<Term>)>),
             IndexSet<(bool, &Rc<Term>)>,
-        ) = clauses.get_mut(&pivot_clause).unwrap();
-        print!("lançou {:?}\n", *pivot);
+        ) = clauses.get_mut(pivot_clause).unwrap();
         match clause.0 {
             (Some((b, t)), Some((b0, t0))) => {
                 if (b, t.clone()) == *pivot {
-                    let other_pivot = clause
-                        .1
-                        .iter()
-                        .filter(|(b1, t1)| env.get(&(*b1, (*t1).clone())) == None);
-                    print!("eita {:?}\n", *pivot);
+                    let mut clause_assign = (vec![], vec![], vec![]);
+
+                    for (b1, t1) in clause.1.borrow() {
+                        let assign_state = env.get(&(*b1, (*t1).clone()));
+                        match assign_state {
+                            None => clause_assign.0.push((*b1, *t1)),
+                            Some(true) => clause_assign.1.push((*b1, *t1)),
+                            Some(false) => clause_assign.2.push((*b1, *t1))
+                        }
+                    }
 
                     let mut new_watched_literal =
-                        other_pivot.clone().filter(|(b1, t1)| (*b1, *t1) != (b0, t0));
+                        clause_assign.1.iter().filter(|(b1, t1)| (*b1, *t1) != (b0, t0));
             
                     match new_watched_literal.next() {
                         Some(p) => {
@@ -120,30 +128,25 @@ fn fix_watchers_vars<'a>(
                     }
 
                     // If there only one unassigned literal and the other ones are false, so this pivot must be true
-                    let positive_literals = clause
-                        .1
-                        .iter()
-                        .filter(|(b1, t1)| env.get(&(*b1, (*t1).clone())) == Some(&true));
-
-                    let mut pivots = other_pivot.take(2);
-                    let unit = pivots.next();
-
-                    print!("UNIT {:?}", unit);
-
-                    if pivots.count() == 0 && positive_literals.count() == 0 && unit != None {
-                       let unit = unit.unwrap();
+                    if clause_assign.0.len() == 1 && clause_assign.1.len() == 0 {
+                       let unit = clause_assign.0[0];
                        env.insert((unit.0, unit.1.clone()), true);
                     }
                     
                 } else if (b0, t0.clone()) == *pivot {
-                    let other_pivot = clause
-                        .1
-                        .iter()
-                        .filter(|(b1, t1)| env.get(&(*b1, (*t1).clone())) == None);
-                    print!("eita {:?}\n", *pivot);
+                    let mut clause_assign = (vec![], vec![], vec![]);
+
+                    for (b1, t1) in clause.1.borrow() {
+                        let assign_state = env.get(&(*b1, (*t1).clone()));
+                        match assign_state {
+                            None => clause_assign.0.push((*b1, *t1)),
+                            Some(true) => clause_assign.1.push((*b1, *t1)),
+                            Some(false) => clause_assign.2.push((*b1, *t1))
+                        }
+                    }
 
                     let mut new_watched_literal =
-                        other_pivot.clone().filter(|(b1, t1)| (*b1, *t1) != (b, t));
+                    clause_assign.1.iter().filter(|(b1, t1)| (*b1, *t1) != (b, t));
             
                     match new_watched_literal.next() {
                         Some(p) => {
@@ -153,19 +156,13 @@ fn fix_watchers_vars<'a>(
                     }
         
                     // If there only one unassigned literal and the other ones are false, so this pivot must be true
-                    let positive_literals = clause
-                        .1
-                        .iter()
-                        .filter(|(b1, t1)| env.get(&(*b1, (*t1).clone())) == Some(&true));
+                    if clause_assign.0.len() == 1 && clause_assign.1.len() == 0 {
+                        let unit = clause_assign.0[0];
+                        // This may temporaly broken the watched literals [1] restrition of being (False, False)
+                        // while there is a True inside the clause
+                        env.insert((unit.0, unit.1.clone()), true);
 
-                    let mut pivots = other_pivot.take(2);
-                    let unit = pivots.next();
-
-                    if pivots.count() == 0 && positive_literals.count() == 0 && unit != None {
-                       let unit = unit.unwrap();
-                       env.insert((unit.0, unit.1.clone()), true);
-                    }
-
+                     }
                 }
             }
             _ => continue,
@@ -184,6 +181,9 @@ fn rup(
     // SELECT A UNIT LITERAL BY LOOKING FOR EACH WATCHED LITERAL ITS WATCHED LIST, IF WATCHED LIST LITERAL SIZE IS 1
     // IF SO, USE BCP AND CONTINUE, UPDATE THE SIZE OF WATCHED LIST
     // IF THERE IS NOT UNIT CLAUSE, RETURN FALSE
+
+    let mut drat_clauses: HashMap<u64, IndexSet<(bool, &Rc<Term>)>> = drat_clauses.clone();
+
     let mut clauses: HashMap<
         u64,
         (
@@ -192,14 +192,14 @@ fn rup(
         ),
     > = HashMap::new();
 
-    let mut literals: HashMap<(bool, Rc<Term>), Vec<u64>> = HashMap::new();
+    let mut literals: HashMap<(bool, Rc<Term>), IndexSet<u64>> = HashMap::new();
     let mut env: HashMap<(bool, Rc<Term>), bool> = HashMap::new();
 
     for term in goal {
         let mut clause: IndexSet<(bool, &Rc<Term>)> = IndexSet::new();
         let (p, regular_term) = term.remove_all_negations_with_polarity();
         clause.insert((!p, regular_term));
-        clauses.insert(goal_hash, ((Some((!p, regular_term)), None), clause));
+        drat_clauses.insert(goal_hash, clause);
     }
 
     for (key, clause) in drat_clauses {
@@ -211,17 +211,19 @@ fn rup(
         for literal in clause.iter() {
             match literals.get_mut(&(literal.0, literal.1.clone())) {
                 Some(lits) => {
-                    lits.push(*key);
+                    lits.insert(key);
                 }
                 None => {
-                    literals.insert((literal.0, literal.1.clone()), vec![*key]);
+                    let mut new_lits = IndexSet::new();
+                    new_lits.insert(key);
+                    literals.insert((literal.0, literal.1.clone()), new_lits);
                 }
             }
         }
 
         let mut watched_literals = clause.iter().take(2);
         clauses.insert(
-            *key,
+            key,
             (
                 (
                     watched_literals.next().copied(),
@@ -237,21 +239,21 @@ fn rup(
             return false;
         }
 
+        // for c in &env {
+        //     print!("{:?} ", c);
+        // }
+        // print!("\n");
+        // for (_, (p, v)) in clauses.borrow() {
+        //     print!("Watched literals {:?}\n", p);
+        //     for c in v {
+        //         print!("{:?}\n", c);
+        //     }
+        //     println!("")
+        // }
+    
         let unit = get_implied_clause(&clauses, env.borrow());
+        // print!("UNIT {:?}\n", unit);
 
-        print!("{:?}\n", unit);
-
-        for c in &env {
-            print!("{:?} ", c);
-        }
-        print!("\n");
-        for (_, (p, v)) in clauses.borrow() {
-            print!("Watched literals {:?}\n", p);
-            for c in v {
-                print!("{:?}\n", c);
-            }
-            println!("")
-        }
         match unit {
             Implied::Bottom() => return true,
             Implied::Pivot(literal) => {
@@ -261,9 +263,13 @@ fn rup(
                 // We do not needs this
                 env.insert(literal.clone(), true);
 
-                let true_clauses = literals.get(literal.borrow()).unwrap();
+                let true_clauses = literals.get(literal.borrow()).unwrap().clone();
                 for true_clause_key in true_clauses {
-                    clauses.remove(true_clause_key);
+                    for (b, l) in clauses.get(&true_clause_key).unwrap().1.borrow().iter() {
+                        let clauses_from_literals_removed = literals.get_mut(&(*b, (*l).clone())).unwrap();
+                        clauses_from_literals_removed.remove(&true_clause_key);
+                    }
+                    clauses.remove(&true_clause_key);
                 }
 
                 literals.remove(literal.borrow());
@@ -276,7 +282,7 @@ fn rup(
                 fix_watchers_vars(
                     &mut clauses,
                     negated_literal.borrow(),
-                    literals.get(&negated_literal).unwrap_or(&vec![]),
+                    literals.get(&negated_literal).unwrap_or(&IndexSet::new()),
                     &mut env,
                 );
             }
