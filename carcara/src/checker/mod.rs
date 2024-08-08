@@ -538,7 +538,7 @@ impl<'c> ProofChecker<'c> {
             "symm" => extras::symm,
             "not_symm" => extras::not_symm,
             "eq_symmetric" => extras::eq_symmetric,
-            "or_intro" => extras::or_intro,
+            "weakening" => extras::weakening,
             "bind_let" => extras::bind_let,
             "la_mult_pos" => extras::la_mult_pos,
             "la_mult_neg" => extras::la_mult_neg,

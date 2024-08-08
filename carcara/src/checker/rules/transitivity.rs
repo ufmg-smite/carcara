@@ -181,15 +181,15 @@ pub fn elaborate_eq_transitive(
     if !not_needed.is_empty() {
         let mut clause = latest_clause;
         clause.extend(not_needed);
-        let or_intro_step = ProofStep {
+        let weakening_step = ProofStep {
             id: elaborator.get_new_id(&command_id),
             clause,
-            rule: "or_intro".to_owned(),
+            rule: "weakening".to_owned(),
             premises: vec![latest_step_index],
             args: Vec::new(),
             discharge: Vec::new(),
         };
-        latest_step_index = elaborator.add_new_step(or_intro_step);
+        latest_step_index = elaborator.add_new_step(weakening_step);
     }
 
     elaborator.push_elaborated_step(ProofStep {
