@@ -559,6 +559,12 @@ impl<'c> ProofChecker<'c> {
             "concat_cprop_prefix" => strings::concat_cprop_prefix,
             "concat_cprop_suffix" => strings::concat_cprop_suffix,
 
+            // cutting planes rules
+            "cp_addition" => cutting_planes::cp_addition,
+            "cp_multiplication" => cutting_planes::cp_multiplication,
+            "cp_division" => cutting_planes::cp_division,
+            "cp_saturation" => cutting_planes::cp_saturation,
+
             // Special rules that always check as valid, and are used to indicate holes in the
             // proof.
             "hole" => |_| Ok(()),
