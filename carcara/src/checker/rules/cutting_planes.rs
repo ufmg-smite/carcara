@@ -44,30 +44,15 @@ use rug::Integer;
 )
 */
 
-pub fn cp_addition(
-    RuleArgs {
-        premises,
-        args,
-        conclusion,
-        pool,
-        polyeq_time,
-        ..
-    }: RuleArgs,
-) -> RuleResult {
+pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
     println!("Addition");
+    assert_num_premises(premises, 2)?;
+    assert_num_args(args, 0)?;
+    assert_clause_len(conclusion, 1)?;
     Ok(())
 }
 
-pub fn cp_multiplication(
-    RuleArgs {
-        premises,
-        args,
-        conclusion,
-        pool,
-        polyeq_time,
-        ..
-    }: RuleArgs,
-) -> RuleResult {
+pub fn cp_multiplication(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
     // Check there is exactly one premise
     assert_num_premises(premises, 1)?;
 
@@ -109,31 +94,19 @@ pub fn cp_multiplication(
     Ok(())
 }
 
-pub fn cp_division(
-    RuleArgs {
-        premises,
-        args,
-        conclusion,
-        pool,
-        polyeq_time,
-        ..
-    }: RuleArgs,
-) -> RuleResult {
+pub fn cp_division(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
     println!("Division");
+    assert_num_premises(premises, 1)?;
+    assert_num_args(args, 1)?;
+    assert_clause_len(conclusion, 1)?;
     Ok(())
 }
 
-pub fn cp_saturation(
-    RuleArgs {
-        premises,
-        args,
-        conclusion,
-        pool,
-        polyeq_time,
-        ..
-    }: RuleArgs,
-) -> RuleResult {
+pub fn cp_saturation(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
     println!("Saturation");
+    assert_num_premises(premises, 1)?;
+    assert_num_args(args, 0)?;
+    assert_clause_len(conclusion, 1)?;
     Ok(())
 }
 
@@ -158,7 +131,7 @@ mod tests {
                 (declare-fun x1 () Int)
                 ",
             "Simple working examples" {
-                r#"(assume c1 (>= x1 1))
+                r#"(assume c1 (>= (* 1 x1) 1))
                    (step t1 (cl (>= (* 2 x1) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
             }
             "Wrong number of premises" {
@@ -173,10 +146,7 @@ mod tests {
                 r#"(assume c1 (>= x1 1))
                    (step t1 (cl (>= (* 2 x1) 2)) :rule cp_multiplication :premises (c1) :args (2 3))"#: false,
             }
-            // "Wrong number of clauses in the conclusion" {
-            //     r#"(assume c1 (>= x1 1))
-            //        (step t1 (cl ()) :rule cp_multiplication :premises (c1) :args (2))"#: false,
-            // }
+            // TODO: "Wrong number of clauses in the conclusion"
         }
     }
     #[test]
