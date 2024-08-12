@@ -102,18 +102,51 @@ pub fn cp_saturation(
 mod tests {
     #[test]
     fn cp_addition() {
-        test_cases! { definitions="", }
+        test_cases! {
+           definitions = "
+                (declare-fun x1 () Int)
+                ",
+            "Simple working examples" {
+                r#"(assume c1 (>= x1 1))
+                   (step t1 (cl (>= (* 2 x1) 2)) :rule cp_addition :premises (c1 c1))"#: true,
+            }
+
+        }
     }
     #[test]
     fn cp_multiplication() {
-        test_cases! { definitions="", }
+        test_cases! {
+            definitions = "
+                (declare-fun x1 () Int)
+                ",
+            "Simple working examples" {
+                r#"(assume c1 (>= x1 1))
+                   (step t1 (cl (>= (* 2 x1) 2)) :rule cp_multiplication :premises (c1))"#: true,
+            }
+        }
     }
     #[test]
     fn cp_division() {
-        test_cases! { definitions="", }
+        test_cases! {
+            definitions = "
+                (declare-fun x1 () Int)
+                ",
+            "Simple working examples" {
+                r#"(assume c1 (>= (* 2 x1) 2))
+                   (step t1 (cl (>= x1 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
+            }
+        }
     }
     #[test]
     fn cp_saturation() {
-        test_cases! { definitions="", }
+        test_cases! {
+            definitions = "
+                (declare-fun x1 () Int)
+                ",
+            "Simple working examples" {
+                r#"(assume c1 (>= (* 2 x1) 1))
+                   (step t1 (cl (>= x1 1)) :rule cp_division :premises (c1))"#: true,
+            }
+        }
     }
 }
