@@ -1,4 +1,8 @@
-use super::{assert_clause_len, assert_num_args, assert_num_premises, RuleArgs, RuleResult};
+use crate::checker::error::CheckerError;
+
+use super::{
+    assert_clause_len, assert_eq, assert_num_args, assert_num_premises, RuleArgs, RuleResult,
+};
 use rug::Integer;
 
 /*
@@ -53,22 +57,9 @@ pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
 }
 
 pub fn cp_multiplication(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
-    // Unbiased debug
-    // println!("premises[{}]:", premises.len());
-    // for premise in premises {
-    //     println!("{}", premise.id);
-    //     for clause in premise.clause {
-    //         println!("{}", clause);
-    //     }
-    // }
-    // println!("args[{}]:", args.len());
-    // println!("conclusion[{}]:", conclusion.len());
-    // for conclusion in conclusion {
-    //     println!("{}", conclusion);
-    // }
-
     // Check there is exactly one premise
     assert_num_premises(premises, 1)?;
+    // TODO: change assert fn
     assert_eq!(premises[0].clause.len(), 1);
     let clause = &premises[0].clause[0];
 
@@ -80,28 +71,33 @@ pub fn cp_multiplication(RuleArgs { premises, args, conclusion, .. }: RuleArgs) 
     assert_clause_len(conclusion, 1)?;
     let conclusion = &conclusion[0];
 
-    println!("Multiplication");
+    // Unwrap the premise inequality
     let (pbsum_p, constant_p) = match_term_err!((>= (+ ...) constant) = clause)?;
     let constant_p = constant_p.as_integer_err()?;
 
-    println!("scalar: {}", scalar);
-
+    // Unwarp the conclusion inequality
     let (pbsum_c, constant_c) = match_term_err!((>= (+ ...) constant_c) = conclusion)?;
+    let constant_c = constant_c.as_integer_err()?;
 
     // Verify constants match
-    let constant_c = constant_c.as_integer_err()?;
+    // TODO: change assert fn
     assert_eq!(&scalar * constant_p, constant_c);
 
-    // Verify pseudo-boolean sums match:
-    // For every term of the conclusion,
-    // check it's equal to the corresponding term
-    // in the premise times the scalar
-
+    // Verify pseudo-boolean sums match
     for i in 0..(pbsum_c.len() - 1) {
-        println!("{}: {} * {} == {}", i, scalar, pbsum_p[i], pbsum_c[i]);
+        // println!("{}: {} * {} == {}", i, &scalar, pbsum_p[i], pbsum_c[i]);
+        let (a_p, l_p) = match_term_err!((* a_p l_p) = &pbsum_p[i])?;
+        let (a_c, l_c) = match_term_err!((* a_c l_c) = &pbsum_c[i])?;
+        assert_eq(l_p, l_c)?;
+        let a_p = a_p.as_integer_err()?;
+        let a_c = a_c.as_integer_err()?;
+        // TODO: change assert fn
+        rassert!(
+            scalar * a_p == a_c,
+            CheckerError::ExpectedInteger(scalar * a_p, pbsum_c[i].clone())
+        );
     }
 
-    println!();
     Ok(())
 }
 
@@ -168,6 +164,14 @@ mod tests {
                    (step t1 (cl (>= (* 2 x1) 2)) :rule cp_multiplication :premises (c1) :args (2 3))"#: false,
             }
             // TODO: "Wrong number of clauses in the conclusion"
+            "Wrong product" {
+                r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
+                   (step t1 (cl (>= (+ (* 3 x1) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) 0) 1))
+                   (step t1 (cl (>= (+ (* 1 x1) (* 4 x2) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) (* 3 x3) 0) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 4 x2) (* 3 x3) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
+            }
         }
     }
     #[test]
