@@ -53,44 +53,55 @@ pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
 }
 
 pub fn cp_multiplication(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
+    // Unbiased debug
+    // println!("premises[{}]:", premises.len());
+    // for premise in premises {
+    //     println!("{}", premise.id);
+    //     for clause in premise.clause {
+    //         println!("{}", clause);
+    //     }
+    // }
+    // println!("args[{}]:", args.len());
+    // println!("conclusion[{}]:", conclusion.len());
+    // for conclusion in conclusion {
+    //     println!("{}", conclusion);
+    // }
+
     // Check there is exactly one premise
     assert_num_premises(premises, 1)?;
+    assert_eq!(premises[0].clause.len(), 1);
+    let clause = &premises[0].clause[0];
 
     // Check there is exactly one arg
     assert_num_args(args, 1)?;
     let scalar: Integer = args[0].as_term()?.as_integer_err()?;
-    println!("scalar = {}", scalar);
 
     // Check there is exactly one conclusion
     assert_clause_len(conclusion, 1)?;
-    let conclusion = conclusion[0].clone();
+    let conclusion = &conclusion[0];
 
+    println!("Multiplication");
+    let (pbsum_p, constant_p) = match_term_err!((>= (+ ...) constant) = clause)?;
+    let constant_p = constant_p.as_integer_err()?;
+
+    println!("scalar: {}", scalar);
+
+    let (pbsum_c, constant_c) = match_term_err!((>= (+ ...) constant_c) = conclusion)?;
+
+    // Verify constants match
+    let constant_c = constant_c.as_integer_err()?;
+    assert_eq!(&scalar * constant_p, constant_c);
+
+    // Verify pseudo-boolean sums match:
     // For every term of the conclusion,
     // check it's equal to the corresponding term
     // in the premise times the scalar
 
-    // let final_stuff = conclusion.iter().zip(premises).map(|(c, p)| {
-    //     println!("{} {}"c, p);
-    // });
-
-    println!("Multiplication");
-    // println!("{} args:", args.len());
-    // for arg in args {
-    //     let k = arg.as_term()?.as_integer_err()?;
-    //     println!("{}", k);
-    // }
-    println!("Got {} premises:", premises.len());
-    for premise in premises {
-        println!("{}", premise.id);
-        println!("{} clauses", premise.clause.len());
-        for clause in premise.clause {
-            println!("{}", clause);
-        }
+    for i in 0..(pbsum_c.len() - 1) {
+        println!("{}: {} * {} == {}", i, scalar, pbsum_p[i], pbsum_c[i]);
     }
-    assert_num_premises(premises, 1)?;
 
-    println!("{}", conclusion);
-
+    println!();
     Ok(())
 }
 
@@ -129,10 +140,20 @@ mod tests {
         test_cases! {
             definitions = "
                 (declare-fun x1 () Int)
+                (declare-fun x2 () Int)
+                (declare-fun x3 () Int)
                 ",
             "Simple working examples" {
-                r#"(assume c1 (>= (* 1 x1) 1))
-                   (step t1 (cl (>= (* 2 x1) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
+                r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
+                // ? other alternative, without trailing zero
+                // r#"(assume c1 (>= (* 1 x1) 1))
+                //    (step t1 (cl (>= (* 2 x1) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) 0) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 4 x2) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) (* 3 x3) 0) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 4 x2) (* 6 x3) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
+
             }
             "Wrong number of premises" {
                 r#"(assume c1 (>= x1 1))
