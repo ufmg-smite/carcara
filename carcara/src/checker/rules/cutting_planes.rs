@@ -59,8 +59,7 @@ pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
 pub fn cp_multiplication(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
     // Check there is exactly one premise
     assert_num_premises(premises, 1)?;
-    // TODO: change assert fn
-    assert_eq!(premises[0].clause.len(), 1);
+    assert_clause_len(premises[0].clause, 1)?;
     let clause = &premises[0].clause[0];
 
     // Check there is exactly one arg
@@ -80,21 +79,21 @@ pub fn cp_multiplication(RuleArgs { premises, args, conclusion, .. }: RuleArgs) 
     let constant_c = constant_c.as_integer_err()?;
 
     // Verify constants match
-    // TODO: change assert fn
-    assert_eq!(&scalar * constant_p, constant_c);
+    rassert!(
+        scalar.clone() * constant_p.clone() == constant_c,
+        CheckerError::ExpectedInteger(scalar.clone() * constant_p, conclusion.clone())
+    );
 
     // Verify pseudo-boolean sums match
     for i in 0..(pbsum_c.len() - 1) {
-        // println!("{}: {} * {} == {}", i, &scalar, pbsum_p[i], pbsum_c[i]);
         let (a_p, l_p) = match_term_err!((* a_p l_p) = &pbsum_p[i])?;
         let (a_c, l_c) = match_term_err!((* a_c l_c) = &pbsum_c[i])?;
         assert_eq(l_p, l_c)?;
         let a_p = a_p.as_integer_err()?;
         let a_c = a_c.as_integer_err()?;
-        // TODO: change assert fn
         rassert!(
-            scalar * a_p == a_c,
-            CheckerError::ExpectedInteger(scalar * a_p, pbsum_c[i].clone())
+            scalar.clone() * a_p.clone() == a_c,
+            CheckerError::ExpectedInteger(scalar.clone() * a_p.clone(), pbsum_c[i].clone())
         );
     }
 
