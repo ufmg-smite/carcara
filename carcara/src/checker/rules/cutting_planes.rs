@@ -1,4 +1,5 @@
-use super::{RuleArgs, RuleResult};
+use super::{assert_clause_len, assert_num_args, assert_num_premises, RuleArgs, RuleResult};
+use rug::Integer;
 
 /*
 (step t1 (cl
@@ -67,7 +68,44 @@ pub fn cp_multiplication(
         ..
     }: RuleArgs,
 ) -> RuleResult {
+    // Check there is exactly one premise
+    assert_num_premises(premises, 1)?;
+
+    // Check there is exactly one arg
+    assert_num_args(args, 1)?;
+    let scalar: Integer = args[0].as_term()?.as_integer_err()?;
+    println!("scalar = {}", scalar);
+
+    // Check there is exactly one conclusion
+    assert_clause_len(conclusion, 1)?;
+    let conclusion = conclusion[0].clone();
+
+    // For every term of the conclusion,
+    // check it's equal to the corresponding term
+    // in the premise times the scalar
+
+    // let final_stuff = conclusion.iter().zip(premises).map(|(c, p)| {
+    //     println!("{} {}"c, p);
+    // });
+
     println!("Multiplication");
+    // println!("{} args:", args.len());
+    // for arg in args {
+    //     let k = arg.as_term()?.as_integer_err()?;
+    //     println!("{}", k);
+    // }
+    println!("Got {} premises:", premises.len());
+    for premise in premises {
+        println!("{}", premise.id);
+        println!("{} clauses", premise.clause.len());
+        for clause in premise.clause {
+            println!("{}", clause);
+        }
+    }
+    assert_num_premises(premises, 1)?;
+
+    println!("{}", conclusion);
+
     Ok(())
 }
 
@@ -121,8 +159,24 @@ mod tests {
                 ",
             "Simple working examples" {
                 r#"(assume c1 (>= x1 1))
-                   (step t1 (cl (>= (* 2 x1) 2)) :rule cp_multiplication :premises (c1))"#: true,
+                   (step t1 (cl (>= (* 2 x1) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
             }
+            "Wrong number of premises" {
+                r#"(assume c1 (>= x1 1))
+                   (step t1 (cl (>= (* 2 x1) 2)) :rule cp_multiplication :args (2))"#: false,
+                r#"(assume c1 (>= x1 1))
+                   (step t1 (cl (>= (* 2 x1) 2)) :rule cp_multiplication :premises (c1 c1) :args (2))"#: false,
+            }
+            "Wrong number of args" {
+                r#"(assume c1 (>= x1 1))
+                   (step t1 (cl (>= (* 2 x1) 2)) :rule cp_multiplication :premises (c1))"#: false,
+                r#"(assume c1 (>= x1 1))
+                   (step t1 (cl (>= (* 2 x1) 2)) :rule cp_multiplication :premises (c1) :args (2 3))"#: false,
+            }
+            // "Wrong number of clauses in the conclusion" {
+            //     r#"(assume c1 (>= x1 1))
+            //        (step t1 (cl ()) :rule cp_multiplication :premises (c1) :args (2))"#: false,
+            // }
         }
     }
     #[test]
