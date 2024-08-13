@@ -91,9 +91,10 @@ pub fn cp_multiplication(RuleArgs { premises, args, conclusion, .. }: RuleArgs) 
         assert_eq(l_p, l_c)?;
         let a_p = a_p.as_integer_err()?;
         let a_c = a_c.as_integer_err()?;
+        let expected = &scalar * a_p;
         rassert!(
-            scalar.clone() * a_p.clone() == a_c,
-            CheckerError::ExpectedInteger(scalar.clone() * a_p.clone(), pbsum_c[i].clone())
+            expected == a_c,
+            CheckerError::ExpectedInteger(expected, pbsum_c[i].clone())
         );
     }
 
