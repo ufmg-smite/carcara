@@ -213,7 +213,7 @@ struct ElaborationOptions {
     /// `contraction` steps added.
     #[clap(long)]
     uncrowd_rotate: bool,
-    
+
     /// Elaborate `hole` steps using the provided solver.
     #[clap(long)]
     hole_solver: Option<String>,
@@ -273,7 +273,7 @@ impl From<ElaborationOptions> for (elaborator::Config, Vec<elaborator::Elaborati
         let config = elaborator::Config {
             lia_options,
             uncrowd_rotation: val.uncrowd_rotate,
-            hole_options
+            hole_options,
         };
         (config, pipeline)
     }
