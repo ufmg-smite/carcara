@@ -101,8 +101,8 @@ fn test_polyeq() {
                 "(choice ((a Int)) (forall ((b Int)) (exists ((c Int)) (= a b c))))",
             ),
             (
-                "(let ((x 0) (y (+ x 2)) (z (< x y))) (and z (= x y)))",
-                "(let ((z 0) (x (+ z 2)) (y (< z x))) (and y (= z x)))",
+                "(let ((x 0)) (let ((y (+ x 2))) (let ((z (< x y))) (and z (= x y)))))",
+                "(let ((z 0)) (let ((x (+ z 2))) (let ((y (< z x))) (and y (= z x)))))",
             ),
         ],
         TestType::AlphaEquiv,

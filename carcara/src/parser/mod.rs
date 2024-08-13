@@ -1334,21 +1334,29 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// consumed.
     fn parse_let_term(&mut self) -> CarcaraResult<Rc<Term>> {
         self.expect_token(Token::OpenParen)?;
-        self.state.symbol_table.push_scope();
+
+        // Since the let binding semantics is *simultaneous*, we first parse all bindings, and only
+        // then add them to the symbol table.
         let bindings = self.parse_sequence(
             |p| {
                 p.expect_token(Token::OpenParen)?;
                 let name = p.expect_symbol()?;
                 let value = p.parse_term()?;
-                let sort = p.pool.sort(&value);
-                p.insert_sorted_var((name.clone(), sort));
                 p.expect_token(Token::CloseParen)?;
                 Ok((name, value))
             },
             true,
         )?;
+
+        self.state.symbol_table.push_scope();
+        for (name, value) in &bindings {
+            let sort = self.pool.sort(value);
+            self.insert_sorted_var((name.clone(), sort));
+        }
+
         let inner = self.parse_term()?;
         self.expect_token(Token::CloseParen)?;
+
         self.state.symbol_table.pop_scope();
 
         if self.config.expand_lets {

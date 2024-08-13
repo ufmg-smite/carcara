@@ -149,8 +149,6 @@ impl<'a> PolyeqElaborator<'a> {
                     .map(|(name, value)| AnchorArg::Variable((name.clone(), pool.sort(value))))
                     .collect();
 
-                self.open_subproof();
-
                 // The values of the binding lists in the `let` terms may not be syntactically
                 // identical, in which case we need to prove their equality so the `bind_let` step
                 // is valid.
@@ -167,6 +165,7 @@ impl<'a> PolyeqElaborator<'a> {
                     })
                     .collect();
 
+                self.open_subproof();
                 let previous = self.create_bind_subproof(pool, (a_inner.clone(), b_inner.clone()));
                 let last_step = StepNode {
                     id: String::new(), // this will be overwritten later
