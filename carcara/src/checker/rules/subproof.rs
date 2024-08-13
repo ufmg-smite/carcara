@@ -1,6 +1,6 @@
 use super::{
-    assert_clause_len, assert_eq, assert_polyeq, assert_is_expected, assert_num_premises, get_premise_term,
-    CheckerError, EqualityError, RuleArgs, RuleResult,
+    assert_clause_len, assert_eq, assert_is_expected, assert_num_premises, assert_polyeq,
+    get_premise_term, CheckerError, EqualityError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::SubproofError};
 use indexmap::{IndexMap, IndexSet};
