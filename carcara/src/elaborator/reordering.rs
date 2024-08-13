@@ -37,14 +37,14 @@ type RecomputationFunc = fn(&StepNode) -> Vec<Rc<Term>>;
 
 fn get_recomputation_func(rule: &str) -> Option<RecomputationFunc> {
     Some(match rule {
-        "or_intro" => recompute_or_intro,
+        "weakening" => recompute_weakening,
         "contraction" => recompute_contraction,
         "resolution" | "th_resolution" | "strict_resolution" => recompute_resolution,
         _ => return None,
     })
 }
 
-fn recompute_or_intro(step: &StepNode) -> Vec<Rc<Term>> {
+fn recompute_weakening(step: &StepNode) -> Vec<Rc<Term>> {
     let mut new = step.clause.clone();
     let premise = step.premises[0].clause();
     new[..premise.len()].clone_from_slice(premise);

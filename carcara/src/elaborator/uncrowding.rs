@@ -106,12 +106,12 @@ pub fn uncrowd_resolution(
     let mut final_step = premises[previous_cut].node.as_step().unwrap().clone();
 
     if final_step.clause.len() != step.clause.len() {
-        let clause = get_or_intro_clause(&final_step.clause, &step.clause);
+        let clause = get_weakening_clause(&final_step.clause, &step.clause);
         final_step = StepNode {
             id: ids.next_id(),
             depth: step.depth,
             clause,
-            rule: "or_intro".to_owned(),
+            rule: "weakening".to_owned(),
             premises: vec![Rc::new(ProofNode::Step(final_step))],
             ..Default::default()
         }
@@ -190,7 +190,7 @@ fn add_partial_resolution_step<'a>(
     }
 }
 
-fn get_or_intro_clause(current: &[Rc<Term>], target: &[Rc<Term>]) -> Vec<Rc<Term>> {
+fn get_weakening_clause(current: &[Rc<Term>], target: &[Rc<Term>]) -> Vec<Rc<Term>> {
     let mut missing: HashMap<&Rc<Term>, usize> = HashMap::new();
     for term in target {
         *missing.entry(term).or_default() += 1;

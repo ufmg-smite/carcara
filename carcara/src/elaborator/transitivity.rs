@@ -184,7 +184,7 @@ pub fn eq_transitive(
             id: ids.next_id(),
             depth: step.depth,
             clause,
-            rule: "or_intro".to_owned(),
+            rule: "weakening".to_owned(),
             premises: vec![latest_step],
             args: Vec::new(),
             discharge: Vec::new(),
