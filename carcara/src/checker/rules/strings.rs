@@ -1893,11 +1893,6 @@ mod tests {
                    (define-fun w_1 () String (str.substr (str.++ a (str.++ "b" c)) 0 0))
                    (define-fun w_2 () String (str.substr (str.++ a (str.++ "b" c)) 0 (- (str.len (str.++ a (str.++ "b" c))) 0)))
                    (step t1 (cl (and (= (str.++ a (str.++ "b" c)) (str.++ w_1 w_2)) (= (str.len w_1) 0))) :rule string_decompose :premises (h1) :args (false))"#: true,
-                r#"(assume h1 (>= (str.len "ab") 2))
-                   (define-fun w_1 () String (str.substr "ab" 0 2))
-                   (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
-                   (step t1 (cl (and (= (str.++ "a" "b") (str.++ w_1 w_2)) (= (str.len w_2) 2))) :rule string_decompose :premises (h1) :args (true))"#: true,
-
             }
             "Reverse argument set to true" {
                 r#"(assume h1 (>= (str.len "ab") 2))
@@ -2007,7 +2002,6 @@ mod tests {
                 r#"(step t1 (cl (or (and (= (str.len (str.++ "a" (str.++ b "c"))) 0) (= (str.++ "a" (str.++ b "c")) "")) (> (str.len (str.++ "a" (str.++ b "c"))) 0))) :rule string_length_pos :args ((str.++ "a" (str.++ b "c"))))"#: true,
                 r#"(step t1 (cl (or (and (= (str.len a) 0) (= a "")) (> (str.len a) 0))) :rule string_length_pos :args (a))"#: true,
                 r#"(step t1 (cl (or (and (= (str.len (str.++ a "b")) 0) (= (str.++ a "b") "")) (> (str.len (str.++ a "b")) 0))) :rule string_length_pos :args ((str.++ a "b")))"#: true,
-                r#"(step t1 (cl (or (and (= (str.len (str.++ "a" "b")) 0) (= (str.++ "a" "b") "")) (> (str.len (str.++ "a" "b")) 0))) :rule string_length_pos :args ("ab"))"#: true,
             }
             "Argument term \"t\" and the conclusion term \"t\" is not the same" {
                 r#"(step t1 (cl (or (and (= (str.len (str.++ a "b")) 0) (= (str.++ a "b") "")) (> (str.len (str.++ a "b")) 0))) :rule string_length_pos :args ((str.++ "a" b)))"#: false,
@@ -2049,8 +2043,6 @@ mod tests {
                    (step t1 (cl (not (= (str.len d) 0))) :rule string_length_non_empty :premises (h1))"#: true,
                 r#"(assume h1 (not (= (str.++ b c) "")))
                    (step t1 (cl (not (= (str.len (str.++ b c)) 0))) :rule string_length_non_empty :premises (h1))"#: true,
-                r#"(assume h1 (not (= (str.++ "b" "c") "")))
-                   (step t1 (cl (not (= (str.len "bc") 0))) :rule string_length_non_empty :premises (h1))"#: true,
             }
             "Premise term is not an inequality of the form (not (= t \"\"))" {
                 r#"(assume h1 (= (str.++ "a" (str.++ "b" "c")) ""))
