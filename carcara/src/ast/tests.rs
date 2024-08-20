@@ -49,9 +49,9 @@ fn test_polyeq() {
         for (i, (a, b)) in cases.iter().enumerate() {
             let [a, b] = parse_terms(&mut pool, definitions, [a, b]);
             let mut comp = match test_type {
-                TestType::ModReordering => PolyeqComparator::new(true, false, false),
-                TestType::AlphaEquiv => PolyeqComparator::new(true, true, false),
-                TestType::ModNary => PolyeqComparator::new(false, false, true),
+                TestType::ModReordering => PolyeqComparator::new(true, false, false, false),
+                TestType::AlphaEquiv => PolyeqComparator::new(true, true, false, false),
+                TestType::ModNary => PolyeqComparator::new(false, false, true, false),
             };
             assert!(
                 Polyeq::eq(&mut comp, &a, &b),
