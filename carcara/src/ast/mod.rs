@@ -20,9 +20,7 @@ mod tests;
 pub use context::{Context, ContextStack};
 pub use iter::ProofIter;
 pub use node::{ProofNode, StepNode, SubproofNode};
-pub use polyeq::{
-    alpha_equiv, polyeq, polyeq_mod_nary, polyeq_mod_string_concat, tracing_polyeq_mod_nary,
-};
+pub use polyeq::{alpha_equiv, polyeq, Polyeq, PolyeqComparable, PolyeqConfig};
 pub use pool::{PrimitivePool, TermPool};
 pub use printer::{print_proof, USE_SHARING_IN_TERM_DISPLAY};
 pub use proof::*;
@@ -32,8 +30,6 @@ pub use term::{Binder, BindingList, Constant, Operator, ParamOperator, Sort, Sor
 
 #[cfg(test)]
 pub(crate) use node::compare_nodes;
-
-pub(crate) use polyeq::{Polyeq, PolyeqComparator};
 
 /// The prelude of an SMT-LIB problem instance.
 ///

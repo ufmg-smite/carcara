@@ -364,8 +364,13 @@ impl<'c> ParallelProofChecker<'c> {
 
         for p in premises {
             let mut this_polyeq_time = Duration::ZERO;
-            let (result, depth) = tracing_polyeq_mod_nary(term, p, &mut this_polyeq_time);
+
+            let mut comp = Polyeq::new().mod_reordering(true).mod_nary(true);
+            let result = comp.eq_with_time(term, p, &mut this_polyeq_time);
+            let depth = comp.max_depth();
+
             polyeq_time += this_polyeq_time;
+
             if let Some(s) = &mut stats {
                 s.results.add_polyeq_depth(depth);
             }

@@ -8,7 +8,7 @@ pub(super) struct PolyeqElaborator<'a> {
     ids: &'a mut IdHelper,
     root_depth: usize,
     cache: HashMapStack<(Rc<Term>, Rc<Term>), Rc<ProofNode>>,
-    checker: PolyeqComparator,
+    checker: Polyeq,
     context: Option<ContextStack>,
 }
 
@@ -18,7 +18,9 @@ impl<'a> PolyeqElaborator<'a> {
             ids: id_helper,
             root_depth,
             cache: HashMapStack::new(),
-            checker: PolyeqComparator::new(true, is_alpha_equivalence, false, false),
+            checker: Polyeq::new()
+                .mod_reordering(true)
+                .alpha_equiv(is_alpha_equivalence),
             context: is_alpha_equivalence.then(ContextStack::new),
         }
     }
@@ -206,8 +208,8 @@ impl<'a> PolyeqElaborator<'a> {
     /// application of the current context.
     fn polyeq(&mut self, pool: &mut dyn TermPool, a: &Rc<Term>, b: &Rc<Term>) -> bool {
         match &mut self.context {
-            Some(c) => Polyeq::eq(&mut self.checker, &c.apply(pool, a), b),
-            None => Polyeq::eq(&mut self.checker, a, b),
+            Some(c) => self.checker.eq(&c.apply(pool, a), b),
+            None => self.checker.eq(a, b),
         }
     }
 

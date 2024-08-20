@@ -1,15 +1,25 @@
 use super::*;
 use crate::{ast::*, checker::error::CheckerError};
 
+fn polyeq(a: &Rc<Term>, b: &Rc<Term>) -> bool {
+    Polyeq::new().mod_reordering(true).eq(a, b)
+}
+
+fn alpha_equiv(a: &Rc<Term>, b: &Rc<Term>) -> bool {
+    Polyeq::new()
+        .mod_reordering(true)
+        .alpha_equiv(true)
+        .eq(a, b)
+}
+
 fn elaborate_equality(
     pool: &mut dyn TermPool,
     l: &Rc<Term>,
     r: &Rc<Term>,
     ids: &mut IdHelper,
     depth: usize,
-    polyeq_time: &mut std::time::Duration,
 ) -> Rc<ProofNode> {
-    let is_alpha_equivalence = !polyeq(l, r, polyeq_time);
+    let is_alpha_equivalence = !polyeq(l, r);
     PolyeqElaborator::new(ids, depth, is_alpha_equivalence).elaborate(pool, l.clone(), r.clone())
 }
 
@@ -36,9 +46,6 @@ pub fn refl(
         return Ok(Rc::new(ProofNode::Step(step.clone())));
     }
 
-    #[allow(const_item_mutation)]
-    let polyeq_time = &mut std::time::Duration::ZERO; // TODO
-
     let mut ids = IdHelper::new(&step.id);
     let depth = step.depth;
 
@@ -47,15 +54,14 @@ pub fn refl(
     // directly. In the second case, we need to first apply the context to the left term, using a
     // `refl` step, and then prove the equivalence of the new left term with the right term. In the
     // third case, we also need to apply the context to the right term, using another `refl` step.
-    if alpha_equiv(left, right, polyeq_time) {
-        let equality_step = elaborate_equality(pool, left, right, &mut ids, depth, polyeq_time);
+    if alpha_equiv(left, right) {
+        let equality_step = elaborate_equality(pool, left, right, &mut ids, depth);
         Ok(equality_step)
     } else {
         let first_step = add_refl_step(pool, left.clone(), new_left.clone(), ids.next_id(), depth);
 
-        if alpha_equiv(&new_left, right, polyeq_time) {
-            let second_step =
-                elaborate_equality(pool, &new_left, right, &mut ids, depth, polyeq_time);
+        if alpha_equiv(&new_left, right) {
+            let second_step = elaborate_equality(pool, &new_left, right, &mut ids, depth);
 
             Ok(Rc::new(ProofNode::Step(StepNode {
                 id: ids.next_id(),
@@ -65,9 +71,8 @@ pub fn refl(
                 premises: vec![first_step, second_step],
                 ..Default::default()
             })))
-        } else if alpha_equiv(&new_left, &new_right, polyeq_time) {
-            let second_step =
-                elaborate_equality(pool, &new_left, right, &mut ids, depth, polyeq_time);
+        } else if alpha_equiv(&new_left, &new_right) {
+            let second_step = elaborate_equality(pool, &new_left, right, &mut ids, depth);
 
             let third_step =
                 add_refl_step(pool, new_right.clone(), right.clone(), ids.next_id(), depth);

@@ -186,9 +186,12 @@ impl<'e> Elaborator<'e> {
 
     fn elaborate_assume(&mut self, id: &str, depth: usize, term: &Rc<Term>) -> Rc<ProofNode> {
         let mut found = None;
-        let mut polyeq_time = std::time::Duration::ZERO;
         for p in self.premises {
-            if polyeq_mod_nary(term, p, &mut polyeq_time) {
+            if Polyeq::new()
+                .mod_reordering(true)
+                .mod_nary(true)
+                .eq(term, p)
+            {
                 found = Some(p.clone());
                 break;
             }
