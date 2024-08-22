@@ -533,7 +533,8 @@ impl fmt::Display for Token {
         match self {
             Token::OpenParen => write!(f, "("),
             Token::CloseParen => write!(f, ")"),
-            Token::Symbol(s) => write!(f, "{}", quote_symbol(s)),
+            Token::Symbol(s, true) => write!(f, "|{}|", s),
+            Token::Symbol(s, false) => write!(f, "{}", s),
             Token::Keyword(k) => write!(f, ":{}", k),
             Token::Numeral(n) => write!(f, "{}", n),
             Token::Decimal(r) => write!(f, "{}", r),

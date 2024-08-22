@@ -540,7 +540,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// error otherwise.
     fn expect_symbol(&mut self) -> CarcaraResult<String> {
         match self.next_token()? {
-            (Token::Symbol(s), _) => Ok(s),
+            (Token::Symbol(_, true), pos) if self.config.isabelle_mode => {
+                Err(Error::Parser(ParserError::QuotedSymbolNotAllowed, pos))
+            }
+            (Token::Symbol(s, _), _) => Ok(s),
             (other, pos) => Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),
         }
     }
@@ -624,7 +627,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 Token::Keyword(_) => (),
 
                 // If there is a single token as a value we consume it
-                Token::Symbol(_)
+                Token::Symbol(_, _)
                 | Token::Numeral(_)
                 | Token::Decimal(_)
                 | Token::Bitvector { .. }
@@ -773,7 +776,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
         // Some solvers print the satisfiability result (unsat) together with the proof. To save the
         // user from having to remove this, we consume this first "unsat" token if it exists
-        if self.current_token == Token::Symbol("unsat".into()) {
+        if self.current_token == Token::Symbol("unsat".into(), false) {
             self.next_token()?;
         }
 
@@ -899,7 +902,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
         let clause = self.parse_clause()?;
         self.expect_token(Token::Keyword("rule".into()))?;
         let rule = match self.next_token()? {
-            (Token::Symbol(s), _) => s,
+            (Token::Symbol(_, true), pos) if self.config.isabelle_mode => {
+                return Err(Error::Parser(ParserError::QuotedSymbolNotAllowed, pos))
+            }
+            (Token::Symbol(s, _), _) => s,
             (Token::ReservedWord(r), _) => format!("{}", r),
             (other, pos) => {
                 return Err(Error::Parser(ParserError::UnexpectedToken(other), pos));
@@ -1027,7 +1033,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
             // - and the new version, with the sort hint: `(:= (<symbol> <sort>) <term>)`
             // However, if "strict" parsing is enabled, we only allow the new version
             let (var, value, sort) =
-                if !self.config.strict && matches!(self.current_token, Token::Symbol(_)) {
+                if !self.config.strict && matches!(self.current_token, Token::Symbol(..)) {
                     let var = self.expect_symbol()?;
                     let value = self.parse_term()?;
                     let sort = self.pool.sort(&value);
@@ -1238,7 +1244,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
             (Token::Numeral(n), _) => Term::new_int(n),
             (Token::Decimal(r), _) => Term::new_real(r),
             (Token::String(s), _) => Term::new_string(s),
-            (Token::Symbol(s), pos) => {
+            (Token::Symbol(_, true), pos) if self.config.isabelle_mode => {
+                return Err(Error::Parser(ParserError::QuotedSymbolNotAllowed, pos))
+            }
+            (Token::Symbol(s, _), pos) => {
                 // Check to see if there is a nullary function defined with this name
                 return if let Some(func) = self.state.function_defs.get(&s) {
                     func.apply(self.pool, Vec::new())
@@ -1609,14 +1618,14 @@ impl<'a, R: BufRead> Parser<'a, R> {
             //
             // However, `if let` guards are still nightly only. For more info, see:
             // https://github.com/rust-lang/rust/issues/51114
-            Token::Symbol(s) if Operator::from_str(s).is_ok() => {
+            Token::Symbol(s, _) if Operator::from_str(s).is_ok() => {
                 let operator = Operator::from_str(s).unwrap();
                 self.next_token()?;
                 let args = self.parse_sequence(Self::parse_term, true)?;
                 self.make_op(operator, args)
                     .map_err(|err| Error::Parser(err, head_pos))
             }
-            Token::Symbol(s) if self.state.function_defs.get(s).is_some() => {
+            Token::Symbol(s, _) if self.state.function_defs.get(s).is_some() => {
                 let head_pos = self.current_position;
                 let func_name = self.expect_symbol()?;
                 let args = self.parse_sequence(Self::parse_term, true)?;
@@ -1730,7 +1739,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
     fn parse_sort(&mut self) -> CarcaraResult<Rc<Term>> {
         let pos = self.current_position;
         let (name, args) = match self.next_token()?.0 {
-            Token::Symbol(s) => (s, Vec::new()),
+            Token::Symbol(_, true) if self.config.isabelle_mode => {
+                return Err(Error::Parser(ParserError::QuotedSymbolNotAllowed, pos))
+            }
+            Token::Symbol(s, _) => (s, Vec::new()),
             Token::OpenParen if self.current_token == Token::ReservedWord(Reserved::Underscore) => {
                 self.next_token()?;
                 let name = self.expect_symbol()?;

@@ -19,8 +19,9 @@ pub enum Token {
     /// A symbol, that can be either simple or quoted. A simple symbol is a non-empty sequence of
     /// letters, digits, or any of these characters: `+`, `-`, `/`, `*`, `=`, `%`, `?`, `!`, `.`,
     /// `$`, `_`, `~`, `&`, `^`, `<`, `>`, or `@`. A quoted symbol is any sequence of characters
-    /// that starts and ends with `|`, and does not contain `|` or `\`.
-    Symbol(String),
+    /// that starts and ends with `|`, and does not contain `|` or `\`. The associated boolean
+    /// indicates whether the symbol was quoted.
+    Symbol(String, bool),
 
     /// A keyword, which is a simple symbol preceded by `:`. This has the leading `:` character
     /// removed.
@@ -284,7 +285,7 @@ impl<R: BufRead> Lexer<R> {
                     // This assumes that the symbol is never a reserved a word.
                     let mut symbol = self.read_chars_while(is_symbol_character)?;
                     symbol.insert(0, '-');
-                    Ok(Token::Symbol(symbol))
+                    Ok(Token::Symbol(symbol, false))
                 }
             }
             Some(c) if c.is_ascii_digit() => self.read_number(false),
@@ -304,7 +305,7 @@ impl<R: BufRead> Lexer<R> {
         if let Ok(reserved) = Reserved::from_str(&symbol) {
             Ok(Token::ReservedWord(reserved))
         } else {
-            Ok(Token::Symbol(symbol))
+            Ok(Token::Symbol(symbol, false))
         }
     }
 
@@ -320,7 +321,7 @@ impl<R: BufRead> Lexer<R> {
             None => Err(Error::Parser(ParserError::EofInQuotedSymbol, self.position)),
             Some('|') => {
                 self.next_char()?;
-                Ok(Token::Symbol(symbol))
+                Ok(Token::Symbol(symbol, true))
             }
             _ => unreachable!(),
         }
@@ -527,13 +528,13 @@ mod tests {
     fn test_comments() {
         assert_eq!(
             lex_all("; comment\n symbol\n ; comment"),
-            vec![Token::Symbol("symbol".into())]
+            vec![Token::Symbol("symbol".into(), false)]
         );
         assert_eq!(
             lex_all(";\n;\nsymbol ;\n symbol"),
             vec![
-                Token::Symbol("symbol".into()),
-                Token::Symbol("symbol".into())
+                Token::Symbol("symbol".into(), false),
+                Token::Symbol("symbol".into(), false)
             ]
         );
     }
@@ -542,13 +543,13 @@ mod tests {
     fn test_simple_symbols_and_keywords() {
         let input = "foo123 :foo123 :a:b +-/*=%?!.$_~&^<>@ -starts-with-dash --double-dash";
         let expected = vec![
-            Token::Symbol("foo123".into()),
+            Token::Symbol("foo123".into(), false),
             Token::Keyword("foo123".into()),
             Token::Keyword("a".into()),
             Token::Keyword("b".into()),
-            Token::Symbol("+-/*=%?!.$_~&^<>@".into()),
-            Token::Symbol("-starts-with-dash".into()),
-            Token::Symbol("--double-dash".into()),
+            Token::Symbol("+-/*=%?!.$_~&^<>@".into(), false),
+            Token::Symbol("-starts-with-dash".into(), false),
+            Token::Symbol("--double-dash".into(), false),
         ];
         assert_eq!(expected, lex_all(input));
     }
@@ -557,11 +558,11 @@ mod tests {
     fn test_quoted_symbols() {
         let input = "|abc| abc |:abc| || |\n\t |";
         let expected = vec![
-            Token::Symbol("abc".into()),
-            Token::Symbol("abc".into()),
-            Token::Symbol(":abc".into()),
-            Token::Symbol("".into()),
-            Token::Symbol("\n\t ".into()),
+            Token::Symbol("abc".into(), true),
+            Token::Symbol("abc".into(), false),
+            Token::Symbol(":abc".into(), true),
+            Token::Symbol("".into(), true),
+            Token::Symbol("\n\t ".into(), true),
         ];
         assert_eq!(expected, lex_all(input));
 
@@ -693,11 +694,11 @@ mod tests {
             Token::ReservedWord(Reserved::As),
             Token::ReservedWord(Reserved::Let),
             Token::ReservedWord(Reserved::Exists),
-            Token::Symbol("_".into()),
-            Token::Symbol("!".into()),
-            Token::Symbol("as".into()),
-            Token::Symbol("let".into()),
-            Token::Symbol("exists".into()),
+            Token::Symbol("_".into(), true),
+            Token::Symbol("!".into(), true),
+            Token::Symbol("as".into(), true),
+            Token::Symbol("let".into(), true),
+            Token::Symbol("exists".into(), true),
         ];
         assert_eq!(expected, lex_all(input));
     }
