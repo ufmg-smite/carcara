@@ -129,6 +129,10 @@ struct ParsingOptions {
     /// When this flag is enabled: unary `and`, `or` and `xor` terms are not allowed;
     #[clap(short, long = "strict-parsing")]
     strict: bool,
+
+    /// Enables "Isabelle mode" (experimental).
+    #[clap(long = "isabelle")]
+    isabelle_mode: bool,
 }
 
 impl From<ParsingOptions> for parser::Config {
@@ -138,6 +142,7 @@ impl From<ParsingOptions> for parser::Config {
             expand_lets: val.expand_let_bindings,
             allow_int_real_subtyping: val.allow_int_real_subtyping,
             strict: val.strict,
+            isabelle_mode: val.isabelle_mode,
         }
     }
 }

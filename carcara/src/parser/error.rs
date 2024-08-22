@@ -124,6 +124,10 @@ pub enum ParserError {
     /// The parser encountered an unknown qualified operator.
     #[error("not a valid qualified operator: '{0}'")]
     InvalidQualifiedOp(String),
+
+    /// Isabelle mode was enabled, and the parser found a `choice` term outside a `define-fun`.
+    #[error("'choice' terms are not allowed outside 'define-fun' when Isabelle mode is on")]
+    ChoiceOutsideDefineFun,
 }
 
 /// Returns an error if the length of `sequence` is not in the `expected` range.
