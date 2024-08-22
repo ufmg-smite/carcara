@@ -13,6 +13,7 @@ const TEST_CONFIG: Config = Config {
     expand_lets: false,
     allow_int_real_subtyping: false,
     strict: false,
+    isabelle_mode: false,
 };
 
 pub fn parse_terms<const N: usize>(

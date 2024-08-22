@@ -45,6 +45,9 @@ pub struct Config {
     /// - Unary `and`, `or` and `xor` terms are not allowed
     /// - Anchor arguments using the old syntax (i.e., `(:= <symbol> <term>)`) are not allowed
     pub strict: bool,
+
+    /// Enables "Isabelle mode" (experimental).
+    pub isabelle_mode: bool,
 }
 
 impl Config {
@@ -144,6 +147,7 @@ pub struct Parser<'a, R> {
     current_position: Position,
     state: ParserState,
     is_real_only_logic: bool,
+    is_in_define_fun: bool,
     problem: Option<Problem>,
 }
 
@@ -162,6 +166,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
             current_position,
             state: ParserState::default(),
             is_real_only_logic: false,
+            is_in_define_fun: false,
             problem: None,
         })
     }
@@ -1100,7 +1105,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
         for var in &params {
             self.insert_sorted_var(var.clone());
         }
+        self.is_in_define_fun = true;
         let body = self.parse_term_expecting_sort(return_sort.as_sort().unwrap())?;
+        self.is_in_define_fun = false;
         self.state.symbol_table.pop_scope();
 
         self.expect_token(Token::CloseParen)?;
@@ -1577,6 +1584,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     }
                     Reserved::Exists => self.parse_binder(Binder::Exists),
                     Reserved::Forall => self.parse_binder(Binder::Forall),
+                    Reserved::Choice if self.config.isabelle_mode && !self.is_in_define_fun => {
+                        Err(Error::Parser(ParserError::ChoiceOutsideDefineFun, head_pos))
+                    }
                     Reserved::Choice => self.parse_binder(Binder::Choice),
                     Reserved::Lambda => self.parse_binder(Binder::Lambda),
                     Reserved::Bang => self.parse_annotated_term(),
