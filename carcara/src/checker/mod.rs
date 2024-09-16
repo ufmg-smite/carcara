@@ -582,6 +582,7 @@ impl<'c> ProofChecker<'c> {
             "resolution" | "th_resolution" => resolution::elaborate_resolution,
             "refl" => reflexivity::elaborate_refl,
             "trans" => transitivity::elaborate_trans,
+            "drat" => drat::elaborate_drat,
             _ => return None,
         })
     }
