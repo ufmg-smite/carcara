@@ -58,6 +58,9 @@ pub struct Config {
 
     /// A set of rule names that the checker will allow, considering them holes in the proof.
     pub allowed_rules: HashSet<String>,
+
+    /// Enables "Isabelle mode" (experimental).
+    pub isabelle_mode: bool,
 }
 
 impl Config {
