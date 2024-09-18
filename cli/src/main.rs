@@ -184,6 +184,7 @@ impl From<CheckingOptions> for checker::Config {
             elaborated: val.check_granularity == CheckGranularity::Elaborated,
             ignore_unknown_rules: val.ignore_unknown_rules,
             allowed_rules: val.allowed_rules.unwrap_or_default().into_iter().collect(),
+            isabelle_mode: false,
         }
     }
 }
@@ -518,8 +519,11 @@ fn parse_command(
 
 fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
     let (problem, proof) = get_instance(&options.input)?;
-    let parser_config = options.parsing.into();
-    let checker_config = options.checking.into();
+
+    let parser_config: parser::Config = options.parsing.into();
+    let mut checker_config: checker::Config = options.checking.into();
+    checker_config.isabelle_mode = parser_config.isabelle_mode;
+
     let collect_stats = options.stats.stats;
     if options.num_threads == 1 {
         check(problem, proof, parser_config, checker_config, collect_stats)
@@ -542,12 +546,16 @@ fn elaborate_command(
 ) -> CliResult<(bool, ast::Problem, ast::Proof, ast::PrimitivePool)> {
     let (problem, proof) = get_instance(&options.input)?;
 
+    let parser_config: parser::Config = options.parsing.into();
+    let mut checker_config: checker::Config = options.checking.into();
+    checker_config.isabelle_mode = parser_config.isabelle_mode;
+
     let (elab_config, pipeline) = options.elaboration.into();
     check_and_elaborate(
         problem,
         proof,
-        options.parsing.into(),
-        options.checking.into(),
+        parser_config,
+        checker_config,
         elab_config,
         pipeline,
         options.stats.stats,
@@ -562,6 +570,10 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         return Ok(());
     }
 
+    let parser_config: parser::Config = options.parsing.into();
+    let mut checker_config: checker::Config = options.checking.into();
+    checker_config.isabelle_mode = parser_config.isabelle_mode;
+
     log::info!(
         "running benchmark on {} files, doing {} runs each",
         instances.len(),
@@ -573,8 +585,8 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
             &instances,
             options.num_runs,
             options.num_jobs,
-            options.parsing.into(),
-            options.checking.into(),
+            parser_config,
+            checker_config,
             options.elaborate.then(|| options.elaboration.into()),
             &mut File::create("runs.csv")?,
             &mut File::create("steps.csv")?,
@@ -586,8 +598,8 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         &instances,
         options.num_runs,
         options.num_jobs,
-        options.parsing.into(),
-        options.checking.into(),
+        parser_config,
+        checker_config,
         options.elaborate.then(|| options.elaboration.into()),
     );
     if results.is_empty() {

@@ -41,6 +41,7 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
         elaborated: false,
         ignore_unknown_rules: false,
         allowed_rules: ["all_simplify".to_owned(), "rare_rewrite".to_owned()].into(),
+        isabelle_mode: false,
     };
 
     // First, we check the proof normally
