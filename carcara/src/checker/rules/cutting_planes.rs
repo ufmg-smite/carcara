@@ -1,10 +1,8 @@
-use crate::checker::Rc;
-use std::collections::HashMap;
-
-use crate::checker::error::CheckerError;
-
 use super::{assert_clause_len, assert_num_args, assert_num_premises, RuleArgs, RuleResult, Term};
+use crate::checker::error::CheckerError;
+use crate::checker::Rc;
 use rug::Integer;
+use std::collections::HashMap;
 
 /*
 (step t1 (cl
@@ -88,7 +86,7 @@ pub fn cp_multiplication(RuleArgs { premises, args, conclusion, .. }: RuleArgs) 
     let constant_p = constant_p.as_integer_err()?;
     let pbsum_p = get_pb_hashmap(pbsum_p)?;
 
-    // Unwarp the conclusion inequality
+    // Unwrap the conclusion inequality
     let (pbsum_c, constant_c) = match_term_err!((>= (+ ...) constant_c) = conclusion)?;
     let constant_c = constant_c.as_integer_err()?;
     let pbsum_c = get_pb_hashmap(pbsum_c)?;
@@ -122,10 +120,41 @@ pub fn cp_division(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
 }
 
 pub fn cp_saturation(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
-    println!("Saturation");
     assert_num_premises(premises, 1)?;
     assert_num_args(args, 0)?;
+    let clause = &premises[0].clause[0];
+
+    // Check there is exacly one clonclusion
     assert_clause_len(conclusion, 1)?;
+    let conclusion = &conclusion[0];
+
+    // Unwrap the premise inequality
+    let (pbsum_p, constant_p) = match_term_err!((>= (+ ...) constant) = clause)?;
+    let constant_p = constant_p.as_integer_err()?;
+    let pbsum_p = get_pb_hashmap(pbsum_p)?;
+
+    // Unwrap the conclusion inequality
+    let (pbsum_c, constant_c) = match_term_err!((>= (+ ...) constant_c) = conclusion)?;
+    let constant_c = constant_c.as_integer_err()?;
+    let pbsum_c = get_pb_hashmap(pbsum_c)?;
+
+    // Verify constants match
+    rassert!(
+        constant_p == constant_c,
+        CheckerError::ExpectedInteger(constant_p.clone(), conclusion.clone())
+    );
+
+    // Verify saturation of variables match
+    for (literal, coeff_p) in pbsum_p {
+        if let Some(coeff_c) = pbsum_c.get(&literal) {
+            let expected = Ord::min(&constant_p, &coeff_p);
+            rassert!(
+                expected == coeff_c,
+                CheckerError::ExpectedInteger(expected.clone(), conclusion.clone())
+            );
+        }
+    }
+
     Ok(())
 }
 
@@ -206,8 +235,8 @@ mod tests {
                 (declare-fun x1 () Int)
                 ",
             "Simple working examples" {
-                r#"(assume c1 (>= (* 2 x1) 1))
-                   (step t1 (cl (>= x1 1)) :rule cp_division :premises (c1))"#: true,
+                r#"(assume c1 (>= (+ (* 2 x1) 0) 1))
+                   (step t1 (cl (>= (+ (* 1 x1) 0) 1)) :rule cp_saturation :premises (c1))"#: true,
             }
         }
     }
