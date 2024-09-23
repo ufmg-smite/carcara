@@ -1,8 +1,9 @@
+use crate::checker::Rc;
+use std::collections::HashMap;
+
 use crate::checker::error::CheckerError;
 
-use super::{
-    assert_clause_len, assert_eq, assert_num_args, assert_num_premises, RuleArgs, RuleResult,
-};
+use super::{assert_clause_len, assert_num_args, assert_num_premises, RuleArgs, RuleResult, Term};
 use rug::Integer;
 
 /*
@@ -48,6 +49,18 @@ use rug::Integer;
 )
 */
 
+fn get_pb_hashmap(pbsum: &[Rc<Term>]) -> Result<HashMap<String, Integer>, CheckerError> {
+    let mut hm = HashMap::new();
+    let n = pbsum.len() - 1;
+    for term in pbsum.iter().take(n) {
+        let (coeff, literal) = match_term_err!((* coeff literal) = term)?;
+        let coeff = coeff.as_integer_err()?;
+        let literal = literal.to_string();
+        hm.insert(literal, coeff);
+    }
+    Ok(hm)
+}
+
 pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
     println!("Addition");
     assert_num_premises(premises, 2)?;
@@ -73,10 +86,12 @@ pub fn cp_multiplication(RuleArgs { premises, args, conclusion, .. }: RuleArgs) 
     // Unwrap the premise inequality
     let (pbsum_p, constant_p) = match_term_err!((>= (+ ...) constant) = clause)?;
     let constant_p = constant_p.as_integer_err()?;
+    let pbsum_p = get_pb_hashmap(pbsum_p)?;
 
     // Unwarp the conclusion inequality
     let (pbsum_c, constant_c) = match_term_err!((>= (+ ...) constant_c) = conclusion)?;
     let constant_c = constant_c.as_integer_err()?;
+    let pbsum_c = get_pb_hashmap(pbsum_c)?;
 
     // Verify constants match
     rassert!(
@@ -85,17 +100,14 @@ pub fn cp_multiplication(RuleArgs { premises, args, conclusion, .. }: RuleArgs) 
     );
 
     // Verify pseudo-boolean sums match
-    for i in 0..(pbsum_c.len() - 1) {
-        let (a_p, l_p) = match_term_err!((* a_p l_p) = &pbsum_p[i])?;
-        let (a_c, l_c) = match_term_err!((* a_c l_c) = &pbsum_c[i])?;
-        assert_eq(l_p, l_c)?;
-        let a_p = a_p.as_integer_err()?;
-        let a_c = a_c.as_integer_err()?;
-        let expected = &scalar * a_p;
-        rassert!(
-            expected == a_c,
-            CheckerError::ExpectedInteger(expected, pbsum_c[i].clone())
-        );
+    for (literal, coeff_p) in pbsum_p {
+        if let Some(coeff_c) = pbsum_c.get(&literal) {
+            let expected = &scalar * coeff_p;
+            rassert!(
+                &expected == coeff_c,
+                CheckerError::ExpectedInteger(expected, conclusion.clone())
+            );
+        }
     }
 
     Ok(())
@@ -172,6 +184,7 @@ mod tests {
                 r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) (* 3 x3) 0) 1))
                    (step t1 (cl (>= (+ (* 2 x1) (* 4 x2) (* 3 x3) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
             }
+
         }
     }
     #[test]
