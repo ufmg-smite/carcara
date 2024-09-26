@@ -200,10 +200,35 @@ mod tests {
         test_cases! {
            definitions = "
                 (declare-fun x1 () Int)
+                (declare-fun x2 () Int)
+                (declare-fun x3 () Int)
                 ",
             "Simple working examples" {
-                r#"(assume c1 (>= x1 1))
+                r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
                    (step t1 (cl (>= (* 2 x1) 2)) :rule cp_addition :premises (c1 c1))"#: true,
+
+                r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
+                   (assume c2 (>= (+ (* 1 x2) 0) 1))
+                   (step t1 (cl (>= (+ (* 1 x1) (* 1 x2) 0) 2)) :rule cp_addition :premises (c1 c2))"#: true,
+
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) 0) 1))
+                   (assume c2 (>= (+ (* 1 x2) (* 1 x1) 0) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 3 x2) 0) 2)) :rule cp_addition :premises (c1 c2))"#: true,
+
+            }
+            "Missing Terms" {
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) (* 1 x3) 0) 1))
+                   (assume c2 (>= (+ (* 1 x2) (* 1 x1) 0) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 3 x2) 0) 2)) :rule cp_addition :premises (c1 c2))"#: false,
+            }
+            "Wrong Addition" {
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) 0) 1))
+                   (assume c2 (>= (+ (* 1 x2) (* 1 x1) 0) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 2 x2) 0) 2)) :rule cp_addition :premises (c1 c2))"#: false,
+
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) 0) 1))
+                   (assume c2 (>= (+ (* 1 x2) (* 1 x1) 0) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 3 x2) 0) 3)) :rule cp_addition :premises (c1 c2))"#: false,
             }
 
         }
@@ -275,10 +300,16 @@ mod tests {
         test_cases! {
             definitions = "
                 (declare-fun x1 () Int)
+                (declare-fun x2 () Int)
+                (declare-fun x3 () Int)
                 ",
             "Simple working examples" {
                 r#"(assume c1 (>= (+ (* 2 x1) 0) 1))
                    (step t1 (cl (>= (+ (* 1 x1) 0) 1)) :rule cp_saturation :premises (c1))"#: true,
+
+                r#"(assume c1 (>= (+ (* 2 x1) (* 5 x2) (* 3 x3) 0) 3))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 3 x2) (* 3 x3) 0) 3)) :rule cp_saturation :premises (c1))"#: true,
+
             }
         }
     }
