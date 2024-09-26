@@ -60,10 +60,95 @@ fn get_pb_hashmap(pbsum: &[Rc<Term>]) -> Result<HashMap<String, Integer>, Checke
 }
 
 pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
-    println!("Addition");
+    // Check there is exactly two premises
     assert_num_premises(premises, 2)?;
+
+    assert_clause_len(premises[0].clause, 1)?;
+    let left_clause = &premises[0].clause[0];
+
+    assert_clause_len(premises[1].clause, 1)?;
+    let right_clause = &premises[1].clause[0];
+
+    // Check there are no args
     assert_num_args(args, 0)?;
+
+    // Check there is exactly one conclusion
     assert_clause_len(conclusion, 1)?;
+    let conclusion = &conclusion[0];
+
+    // Unwrap the premise inequality
+    let (pbsum_l, constant_l) = match_term_err!((>= (+ ...) constant) = left_clause)?;
+    let constant_l = constant_l.as_integer_err()?;
+    let pbsum_l = get_pb_hashmap(pbsum_l)?;
+
+    let (pbsum_r, constant_r) = match_term_err!((>= (+ ...) constant) = right_clause)?;
+    let constant_r = constant_r.as_integer_err()?;
+    let pbsum_r = get_pb_hashmap(pbsum_r)?;
+
+    // Unwrap the conclusion inequality
+    let (pbsum_c, constant_c) = match_term_err!((>= (+ ...) constant_c) = conclusion)?;
+    let constant_c = constant_c.as_integer_err()?;
+    let pbsum_c = get_pb_hashmap(pbsum_c)?;
+
+    // Verify constants match
+    rassert!(
+        constant_l.clone() + constant_r.clone() == constant_c,
+        CheckerError::ExpectedInteger(constant_l.clone() + constant_r.clone(), conclusion.clone())
+    );
+
+    // Verify pbsum_c.keys = pbsum_l.keys UNION pbsum_r.keys
+    // ==> All keys of pbsum_l are in pubsum_c
+    for literal in pbsum_l.keys() {
+        match pbsum_c.get(literal) {
+            Some(_) => continue,
+            None => {
+                // TODO: appropriate error type
+                println!("Some x in pbsum_l not in pbsum_c");
+                return Err(CheckerError::ExpectedToNotBeEmpty(conclusion.clone()));
+            }
+        }
+    }
+    //      && All keys of pbsum_r are in pbsum_c
+    for literal in pbsum_r.keys() {
+        match pbsum_c.get(literal) {
+            Some(_) => continue,
+            None => {
+                // TODO: appropriate error type
+                println!("Some x in pbsum_r not in pbsum_c");
+                return Err(CheckerError::ExpectedToNotBeEmpty(conclusion.clone()));
+            }
+        }
+    }
+
+    // Verify pseudo-boolean sums match
+    for (literal, coeff_c) in &pbsum_c {
+        match (pbsum_l.get(literal), pbsum_r.get(literal)) {
+            (Some(coeff_l), Some(coeff_r)) => {
+                let expected = coeff_l.clone() + coeff_r.clone();
+                rassert!(
+                    &expected == coeff_c,
+                    CheckerError::ExpectedInteger(expected, conclusion.clone())
+                );
+            }
+            (Some(coeff_l), _) => {
+                rassert!(
+                    coeff_l == coeff_c,
+                    CheckerError::ExpectedInteger(coeff_l.clone(), conclusion.clone())
+                );
+            }
+            (_, Some(coeff_r)) => {
+                rassert!(
+                    coeff_r == coeff_c,
+                    CheckerError::ExpectedInteger(coeff_r.clone(), conclusion.clone())
+                );
+            }
+            _ => {
+                // TODO: appropriate error type
+                return Err(CheckerError::ExpectedToNotBeEmpty(left_clause.clone()));
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -205,7 +290,7 @@ mod tests {
                 ",
             "Simple working examples" {
                 r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
-                   (step t1 (cl (>= (* 2 x1) 2)) :rule cp_addition :premises (c1 c1))"#: true,
+                   (step t1 (cl (>= (+ (* 2 x1) 0) 2)) :rule cp_addition :premises (c1 c1))"#: true,
 
                 r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
                    (assume c2 (>= (+ (* 1 x2) 0) 1))
