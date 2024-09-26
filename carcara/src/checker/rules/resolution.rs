@@ -2,56 +2,8 @@ use super::{
     assert_clause_len, assert_eq, assert_is_bool_constant, assert_num_args, assert_num_premises,
     CheckerError, Premise, RuleArgs, RuleResult,
 };
-use crate::{
-    ast::*,
-    checker::{error::ResolutionError, Elaborator},
-    utils::DedupIterator,
-};
-use indexmap::{map::Entry, IndexMap, IndexSet};
-use std::iter::FromIterator;
-
-type ResolutionTerm<'a> = (u32, &'a Rc<Term>);
-
-/// A collection that can be used as a clause during resolution.
-trait ClauseCollection<'a>: FromIterator<ResolutionTerm<'a>> {
-    fn insert_term(&mut self, item: ResolutionTerm<'a>);
-
-    fn remove_term(&mut self, item: &ResolutionTerm<'a>) -> bool;
-}
-
-impl<'a> ClauseCollection<'a> for Vec<ResolutionTerm<'a>> {
-    fn insert_term(&mut self, item: ResolutionTerm<'a>) {
-        self.push(item);
-    }
-
-    fn remove_term(&mut self, item: &ResolutionTerm<'a>) -> bool {
-        if let Some(pos) = self.iter().position(|x| x == item) {
-            self.remove(pos);
-            true
-        } else {
-            false
-        }
-    }
-}
-
-impl<'a> ClauseCollection<'a> for IndexSet<ResolutionTerm<'a>> {
-    fn insert_term(&mut self, item: ResolutionTerm<'a>) {
-        self.insert(item);
-    }
-
-    fn remove_term(&mut self, item: &ResolutionTerm<'a>) -> bool {
-        self.remove(item)
-    }
-}
-
-/// Undoes the transformation done by `Rc<Term>::remove_all_negations`.
-fn unremove_all_negations(pool: &mut dyn TermPool, (n, term): ResolutionTerm) -> Rc<Term> {
-    let mut term = term.clone();
-    for _ in 0..n {
-        term = build_term!(pool, (not { term }));
-    }
-    term
-}
+use crate::{ast::*, resolution::*};
+use indexmap::IndexSet;
 
 pub fn resolution(rule_args: RuleArgs) -> RuleResult {
     if !rule_args.args.is_empty() {
@@ -73,7 +25,9 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
     // Aside from this special case, all resolution steps must be between at least two clauses
     assert_num_premises(premises, 2..)?;
 
-    greedy_resolution(conclusion, premises, pool, false)
+    let premise_clauses: Vec<_> = premises.iter().map(|p| p.clause).collect();
+
+    greedy_resolution(conclusion, &premise_clauses, pool, false)
         .map(|_| ())
         .or_else(|greedy_error| {
             if rup_resolution(conclusion, premises) {
@@ -81,171 +35,9 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
             } else {
                 // If RUP resolution also fails, we return the error originally returned by the greedy
                 // algorithm
-                Err(greedy_error)
+                Err(greedy_error.into())
             }
         })
-}
-
-struct ResolutionTrace {
-    not_not_added: bool,
-    pivot_trace: Vec<(Rc<Term>, bool)>,
-}
-
-fn greedy_resolution(
-    conclusion: &[Rc<Term>],
-    premises: &[Premise],
-    pool: &mut dyn TermPool,
-    tracing: bool,
-) -> Result<ResolutionTrace, CheckerError> {
-    // If we are elaborating, we record which pivot was found for each binary resolution step, so we
-    // can add them all as arguments later
-    let mut pivot_trace = Vec::new();
-
-    // When checking this rule, we must look at what the conclusion clause looks like in order to
-    // determine the pivots. The reason for that is because there is no other way to know which
-    // terms should be removed in a given binary resolution step. Consider the following example,
-    // adapted from an actual generated proof:
-    //
-    //     (step t1 (cl (not q) (not (not p)) (not p)) :rule irrelevant)
-    //     (step t2 (cl (not (not (not p))) p) :rule irrelevant)
-    //     (step t3 (cl (not q) p (not p)) :rule resolution :premises (t1 t2))
-    //
-    // Without looking at the conclusion, it is unclear if the (not p) term should be removed by the
-    // p term, or if the (not (not p)) should be removed by the (not (not (not p))). We can only
-    // determine this by looking at the conclusion and using it to derive the pivots.
-    let conclusion: IndexSet<_> = conclusion
-        .iter()
-        .map(Rc::remove_all_negations)
-        .map(|(n, t)| (n as i32, t))
-        .collect();
-
-    // The working clause contains the terms from the conclusion clause that we already encountered
-    let mut working_clause = IndexSet::new();
-
-    // The pivots are the encountered terms that are not present in the conclusion clause, and so
-    // should be removed. After being used to eliminate a term, a pivot can still be used to
-    // eliminate other terms. Because of that, we represent the pivots as a hash map to a boolean,
-    // which represents if the pivot was already eliminated or not. At the end, this boolean should
-    // be true for all pivots
-    let mut pivots = IndexMap::new();
-
-    for premise in premises {
-        // Only one pivot may be eliminated per clause. This restriction is required so logically
-        // unsound proofs like this one are not considered valid:
-        //
-        //     (step t1 (cl (= false true) (not false) (not true)) :rule equiv_neg1)
-        //     (step t2 (cl (= false true) false true) :rule equiv_neg2)
-        //     (step t3 (cl (= false true)) :rule resolution :premises (t1 t2))
-        let mut eliminated_clause_pivot = false;
-        for term in premise.clause {
-            let (n, inner) = term.remove_all_negations();
-            let n = n as i32;
-
-            // There are two possible negations of a term, with one leading negation added, or with
-            // one leading negation removed (if the term had any in the first place)
-            let below = (n - 1, inner);
-            let above = (n + 1, inner);
-
-            // First, if the encountered term should be in the conclusion, but is not yet in the
-            // working clause, we insert it and don't try to remove it with a pivot
-            if conclusion.contains(&(n, inner)) && !working_clause.contains(&(n, inner)) {
-                working_clause.insert((n, inner));
-                continue;
-            }
-
-            // If the negation of the encountered term is present in the pivots set, we simply
-            // eliminate it. Otherwise, we insert the encountered term in the working clause or the
-            // pivots set, depending on whether it is present in the conclusion clause or not
-            let mut try_eliminate = |pivot| match pivots.entry(pivot) {
-                Entry::Occupied(mut e) => {
-                    e.insert(true);
-                    true
-                }
-                Entry::Vacant(_) => false,
-            };
-
-            // Only one pivot may be eliminated per clause, so if we already found this clauses'
-            // pivot, we don't try to eliminate the term. If we are elaborating, we add the pivot
-            // found to the pivot trace.
-            let eliminated = if eliminated_clause_pivot {
-                false
-            } else if try_eliminate(below) {
-                if tracing {
-                    pivot_trace.push((unremove_all_negations(pool, (n as u32 - 1, inner)), true));
-                }
-                true
-            } else if try_eliminate(above) {
-                if tracing {
-                    pivot_trace.push((term.clone(), false));
-                }
-                true
-            } else {
-                false
-            };
-
-            if eliminated {
-                eliminated_clause_pivot = true;
-            } else if conclusion.contains(&(n, inner)) {
-                working_clause.insert((n, inner));
-            } else {
-                // If the term is not in the conclusion clause, it must be a pivot. If it was
-                // not already in the pivots set, we insert `false`, to indicate that it was
-                // not yet eliminated
-                pivots.entry((n, inner)).or_insert(false);
-            }
-        }
-    }
-
-    // There are some special cases in the resolution rules that are valid, but leave a pivot
-    // remaining
-    let mut remaining_pivots = pivots.iter().filter(|&(_, eliminated)| !eliminated);
-
-    if let Some(((i, pivot), _)) = remaining_pivots.next() {
-        if remaining_pivots.next().is_none() {
-            // There is a special case in the resolution rules that is valid, but leaves a pivot
-            // remaining: when the result of the resolution is just the boolean constant `false`, it
-            // may be implicitly eliminated. For example:
-            //     (step t1 (cl p q false) :rule hole)
-            //     (step t2 (cl (not p)) :rule hole)
-            //     (step t3 (cl (not q)) :rule hole)
-            //     (step t4 (cl) :rule resolution :premises (t1 t2 t3))
-            if conclusion.is_empty() && *i == 0 && pivot.is_bool_false() {
-                return Ok(ResolutionTrace { not_not_added: false, pivot_trace });
-            }
-
-            // There is another, similar, special case: when the result of the resolution is just
-            // one term, it may appear in the conclusion clause with an even number of leading
-            // negations added to it. The following is an example of this, adapted from a generated
-            // proof:
-            //     (step t1 (cl (not e)) :rule hole)
-            //     (step t2 (cl (= (not e) (not (not f)))) :rule hole)
-            //     (step t3 (cl (not (= (not e) (not (not f)))) e f) :rule hole)
-            //     (step t4 (cl (not (not f))) :rule resolution :premises (t1 t2 t3))
-            // Usually, we would expect the clause in the t4 step to be (cl f). This behavior may
-            // be a bug in veriT, but it is still logically sound and happens often enough that it
-            // is useful to support it here.
-            if conclusion.len() == 1 {
-                let (j, conclusion) = conclusion.into_iter().next().unwrap();
-                if conclusion == *pivot && (i % 2) == (j % 2) {
-                    return Ok(ResolutionTrace { not_not_added: true, pivot_trace });
-                }
-            }
-        }
-        let pivot = unremove_all_negations(pool, (*i as u32, pivot));
-        Err(ResolutionError::RemainingPivot(pivot).into())
-    } else {
-        // This is the general case, where all pivots have been eliminated. In this case, the
-        // working clause should be equal to the conclusion clause
-        for (i, t) in conclusion {
-            // By construction, the working clause is a subset of the conclusion. Therefore, we
-            // only need to check that all terms in the conclusion are also in the working clause
-            if !working_clause.contains(&(i, t)) {
-                let t = unremove_all_negations(pool, (i as u32, t));
-                return Err(ResolutionError::ExtraTermInConclusion(t).into());
-            }
-        }
-        Ok(ResolutionTrace { not_not_added: false, pivot_trace })
-    }
 }
 
 fn rup_resolution(conclusion: &[Rc<Term>], premises: &[Premise]) -> bool {
@@ -299,11 +91,11 @@ pub fn resolution_with_args(
     let conclusion: IndexSet<_> = conclusion.iter().map(Rc::remove_all_negations).collect();
 
     if let Some(extra) = conclusion.difference(&resolution_result).next() {
-        let extra = unremove_all_negations(pool, *extra);
+        let extra = literal_to_term(pool, *extra);
         return Err(ResolutionError::ExtraTermInConclusion(extra).into());
     }
     if let Some(missing) = resolution_result.difference(&conclusion).next() {
-        let missing = unremove_all_negations(pool, *missing);
+        let missing = literal_to_term(pool, *missing);
         return Err(ResolutionError::MissingTermInConclusion(missing).into());
     }
     Ok(())
@@ -320,7 +112,7 @@ pub fn strict_resolution(
 
     match conclusion.len().cmp(&resolution_result.len()) {
         Ordering::Less => {
-            let missing = unremove_all_negations(pool, resolution_result[conclusion.len()]);
+            let missing = literal_to_term(pool, resolution_result[conclusion.len()]);
             Err(ResolutionError::MissingTermInConclusion(missing).into())
         }
         Ordering::Greater => {
@@ -330,7 +122,7 @@ pub fn strict_resolution(
         Ordering::Equal => {
             for (t, u) in resolution_result.into_iter().zip(conclusion) {
                 if t != u.remove_all_negations() {
-                    assert_eq(&unremove_all_negations(pool, t), u)?;
+                    assert_eq(&literal_to_term(pool, t), u)?;
                 }
             }
             Ok(())
@@ -380,7 +172,7 @@ fn binary_resolution<'a, C: ClauseCollection<'a>>(
     pool: &mut dyn TermPool,
     current: &mut C,
     next: &'a [Rc<Term>],
-    pivot: ResolutionTerm<'a>,
+    pivot: Literal<'a>,
     is_pivot_in_current: bool,
 ) -> Result<(), ResolutionError> {
     let negated_pivot = (pivot.0 + 1, pivot.1);
@@ -390,7 +182,7 @@ fn binary_resolution<'a, C: ClauseCollection<'a>>(
         (negated_pivot, pivot)
     };
     if !current.remove_term(&pivot_in_current) {
-        let p = unremove_all_negations(pool, pivot_in_current);
+        let p = literal_to_term(pool, pivot_in_current);
         return Err(ResolutionError::PivotNotFound(p));
     }
 
@@ -404,157 +196,8 @@ fn binary_resolution<'a, C: ClauseCollection<'a>>(
         }
     }
     if !found {
-        let p = unremove_all_negations(pool, pivot_in_next);
+        let p = literal_to_term(pool, pivot_in_next);
         return Err(ResolutionError::PivotNotFound(p));
-    }
-    Ok(())
-}
-
-pub fn elaborate_resolution(
-    RuleArgs { conclusion, premises, pool, .. }: RuleArgs,
-    command_id: String,
-    elaborator: &mut Elaborator,
-) -> RuleResult {
-    // In the cases where the rule is used to get an empty clause from `(not true)`, we add a `true`
-    // step to get an actual resolution step
-    if conclusion.is_empty() && premises.len() == 1 {
-        if let [t] = premises[0].clause {
-            if match_term!((not true) = t).is_some() {
-                let id = elaborator.get_new_id(&command_id);
-                let true_step = elaborator.add_new_step(ProofStep {
-                    id,
-                    clause: vec![pool.bool_true()],
-                    rule: "true".to_owned(),
-                    premises: Vec::new(),
-                    args: Vec::new(),
-                    discharge: Vec::new(),
-                });
-                let premises = vec![elaborator.map_index(premises[0].index), true_step];
-                elaborator.push_elaborated_step(ProofStep {
-                    id: command_id,
-                    clause: Vec::new(),
-                    rule: "resolution".to_owned(),
-                    premises,
-                    args: [true, false]
-                        .map(|a| ProofArg::Term(pool.bool_constant(a)))
-                        .to_vec(),
-                    discharge: Vec::new(),
-                });
-                return Ok(());
-            }
-        }
-    }
-
-    // In some cases, due to a bug in veriT, a resolution step will conclude the empty clause, and
-    // will have multiple premises, of which one has an empty clause as its conclusion. The checker
-    // can already deal with this case safely, but not the elaborator, so if we detect it we skip
-    // elaborating this step. Either way, since this step has a premise which concludes the empty
-    // clause, it is not actually necessary, and will be pruned during post-processing.
-    if conclusion.is_empty() {
-        for p in premises {
-            if p.clause.is_empty() {
-                elaborator.unchanged(conclusion);
-                return Ok(());
-            }
-        }
-    }
-
-    let mut premises: Vec<_> = premises.iter().dedup().copied().collect();
-    let ResolutionTrace { not_not_added, pivot_trace } =
-        greedy_resolution(conclusion, &premises, pool, true).or_else(|_| {
-            premises.reverse();
-            greedy_resolution(conclusion, &premises, pool, true)
-        })?;
-
-    let pivots = pivot_trace
-        .into_iter()
-        .flat_map(|(pivot, polarity)| [pivot, pool.bool_constant(polarity)])
-        .map(ProofArg::Term)
-        .collect();
-
-    let premises: Vec<_> = premises
-        .iter()
-        .map(|p| elaborator.map_index(p.index))
-        .collect();
-
-    let mut resolution_step = ProofStep {
-        id: command_id.clone(),
-        clause: conclusion.to_vec(),
-        rule: "resolution".to_owned(),
-        premises,
-        args: pivots,
-        discharge: Vec::new(),
-    };
-
-    if not_not_added {
-        // In this case, where the solver added a double negation implicitly to the concluded term,
-        // we remove it from the resolution conclusion, and then add a series of steps to
-        // reconstruct it again. More precisely, if the conclusion of the resolution step should
-        // have been `c`, but was instead `(not (not c))`, we will have:
-        //
-        // ```
-        // (step t1 (cl (not (not c))) :rule resolution :premises ...)
-        // ```
-        //
-        // which will become:
-        //
-        // ```
-        // (step t1 (cl c) :rule resolution :premises ...)
-        // (step t1.t2 (cl (not (not (not (not c)))) (not c)) :rule not_not)
-        // (step t1.t3 (cl (not (not (not (not (not c))))) (not (not c))) :rule not_not)
-        // (step t1.t4 (cl (not (not c))) :rule resolution :premises (t1 t1.t2 t1.t3)
-        //     :args (c true (not (not (not (not c)))) true))
-        // ```
-
-        assert!(resolution_step.clause.len() == 1);
-        let original_conclusion = resolution_step.clause;
-        let double_not_c = original_conclusion[0].clone();
-        let single_not_c = double_not_c.remove_negation().unwrap().clone();
-        let c = single_not_c.remove_negation().unwrap().clone();
-        let quadruple_not_c = build_term!(pool, (not (not {double_not_c.clone()})));
-        let quintuple_not_c = build_term!(pool, (not {quadruple_not_c.clone()}));
-
-        // First, we change the conclusion of the resolution step
-        resolution_step.clause = vec![c.clone()];
-        let resolution_step = elaborator.add_new_step(resolution_step);
-
-        // Then we add the two `not_not` steps
-        let id = elaborator.get_new_id(&command_id);
-        let first_not_not_step = elaborator.add_new_step(ProofStep {
-            id,
-            clause: vec![quadruple_not_c.clone(), single_not_c],
-            rule: "not_not".to_owned(),
-            premises: Vec::new(),
-            args: Vec::new(),
-            discharge: Vec::new(),
-        });
-        let id = elaborator.get_new_id(&command_id);
-        let second_not_not_step = elaborator.add_new_step(ProofStep {
-            id,
-            clause: vec![quintuple_not_c, double_not_c.clone()],
-            rule: "not_not".to_owned(),
-            premises: Vec::new(),
-            args: Vec::new(),
-            discharge: Vec::new(),
-        });
-
-        // Finally, we add a new resolution step, refering to the preivous three, and concluding the
-        // original resolution step's conclusion
-        let args = [c, pool.bool_true(), quadruple_not_c, pool.bool_true()]
-            .into_iter()
-            .map(ProofArg::Term)
-            .collect();
-        let id = elaborator.get_new_id(&command_id);
-        elaborator.push_elaborated_step(ProofStep {
-            id,
-            clause: vec![double_not_c],
-            rule: "resolution".to_owned(),
-            premises: vec![resolution_step, first_not_not_step, second_not_not_step],
-            args,
-            discharge: Vec::new(),
-        });
-    } else {
-        elaborator.push_elaborated_step(resolution_step);
     }
     Ok(())
 }

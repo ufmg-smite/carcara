@@ -1,6 +1,6 @@
 use super::{
-    assert_clause_len, assert_eq, assert_is_expected, assert_num_premises, get_premise_term,
-    CheckerError, EqualityError, RuleArgs, RuleResult,
+    assert_clause_len, assert_eq, assert_is_expected, assert_num_premises, assert_polyeq,
+    get_premise_term, CheckerError, EqualityError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::SubproofError};
 use indexmap::{IndexMap, IndexSet};
@@ -12,6 +12,7 @@ pub fn subproof(
         pool,
         previous_command,
         discharge,
+        polyeq_time,
         ..
     }: RuleArgs,
 ) -> RuleResult {
@@ -23,7 +24,7 @@ pub fn subproof(
         match assumption {
             ProofCommand::Assume { id: _, term } => {
                 let t = t.remove_negation_err()?;
-                assert_eq(term, t)?;
+                assert_polyeq(term, t, polyeq_time)?;
             }
             other => return Err(SubproofError::DischargeMustBeAssume(other.id().to_owned()).into()),
         }
@@ -43,7 +44,7 @@ pub fn subproof(
         }
     };
 
-    assert_eq(conclusion.last().unwrap(), &phi)
+    assert_polyeq(conclusion.last().unwrap(), &phi, polyeq_time)
 }
 
 pub fn bind(
@@ -494,7 +495,7 @@ mod tests {
                 (assume t1.h1 p)
                 (assume t1.h2 q)
                 (step t1.t3 (cl (= r s)) :rule hole)
-                (step t1 (cl (not p) (not q) (= s r))
+                (step t1 (cl (not p) (not q) (not (= r s)))
                     :rule subproof :discharge (t1.h1 t1.h2))": false,
             }
         }

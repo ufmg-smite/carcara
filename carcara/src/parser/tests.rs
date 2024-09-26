@@ -12,7 +12,7 @@ const TEST_CONFIG: Config = Config {
     apply_function_defs: true,
     expand_lets: false,
     allow_int_real_subtyping: false,
-    allow_unary_logical_ops: true,
+    strict: false,
 };
 
 pub fn parse_terms<const N: usize>(
@@ -46,11 +46,10 @@ pub fn parse_term_err(input: &str) -> Error {
 
 /// Parses a proof from a `&str`. Panics if any error is encountered.
 pub fn parse_proof(pool: &mut PrimitivePool, input: &str) -> Proof {
-    let commands = Parser::new(pool, TEST_CONFIG, input.as_bytes())
+    Parser::new(pool, TEST_CONFIG, input.as_bytes())
         .expect(ERROR_MESSAGE)
         .parse_proof()
-        .expect(ERROR_MESSAGE);
-    Proof { premises: IndexSet::new(), commands }
+        .expect(ERROR_MESSAGE)
 }
 
 fn run_parser_tests(pool: &mut PrimitivePool, cases: &[(&str, Term)]) {

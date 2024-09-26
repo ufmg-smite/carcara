@@ -1,4 +1,4 @@
-use super::{assert_clause_len, assert_eq, CheckerError, Elaborator, RuleArgs, RuleResult};
+use super::{assert_clause_len, assert_eq, CheckerError, RuleArgs, RuleResult};
 use crate::ast::*;
 
 pub fn eq_reflexive(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
@@ -70,110 +70,6 @@ pub fn strict_refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> Rule
         result,
         CheckerError::ReflexivityFailed(left.clone(), right.clone()),
     );
-    Ok(())
-}
-
-fn elaborate_equality(
-    elaborator: &mut Elaborator,
-    pool: &mut dyn TermPool,
-    left: &Rc<Term>,
-    right: &Rc<Term>,
-    id: &str,
-    polyeq_time: &mut std::time::Duration,
-) -> (usize, usize) {
-    let is_alpha_equivalence = !polyeq(left, right, polyeq_time);
-    elaborator.elaborate_polyeq(pool, id, left.clone(), right.clone(), is_alpha_equivalence)
-}
-
-pub fn elaborate_refl(
-    RuleArgs {
-        conclusion,
-        pool,
-        context,
-        polyeq_time,
-        ..
-    }: RuleArgs,
-    command_id: String,
-    elaborator: &mut Elaborator,
-) -> RuleResult {
-    assert_clause_len(conclusion, 1)?;
-
-    let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
-
-    if left == right {
-        elaborator.unchanged(conclusion);
-        return Ok(());
-    }
-
-    // We don't compute the new left and right terms until they are needed
-    let new_left = context.apply(pool, left);
-    if new_left == *right {
-        elaborator.unchanged(conclusion);
-        return Ok(());
-    }
-    let new_right = context.apply(pool, right);
-    if *left == new_right || new_left == new_right {
-        elaborator.unchanged(conclusion);
-        return Ok(());
-    }
-
-    // There are three cases to consider when elaborating a `refl` step. In the simpler case, no
-    // context application is needed, and we can prove the equivalence of the left and right terms
-    // directly. In the second case, we need to first apply the context to the left term, using a
-    // `refl` step, and then prove the equivalence of the new left term with the right term. In the
-    // third case, we also need to apply the context to the right term, using another `refl` step.
-    if alpha_equiv(left, right, polyeq_time) {
-        let equality_step =
-            elaborate_equality(elaborator, pool, left, right, &command_id, polyeq_time);
-        let id = elaborator.get_new_id(&command_id);
-
-        // TODO: Elaborating the polyequality will add new commands to the accumulator, but
-        // currently we can't push them as the elaborated step directly, so we need to add this
-        // dummy `reordering` step.
-        elaborator.push_elaborated_step(ProofStep {
-            id,
-            clause: conclusion.to_vec(),
-            rule: "reordering".to_owned(),
-            premises: vec![equality_step],
-            args: Vec::new(),
-            discharge: Vec::new(),
-        });
-    } else {
-        let id = elaborator.get_new_id(&command_id);
-        let first_step = elaborator.add_refl_step(pool, left.clone(), new_left.clone(), id);
-
-        if alpha_equiv(&new_left, right, polyeq_time) {
-            let second_step =
-                elaborate_equality(elaborator, pool, &new_left, right, &command_id, polyeq_time);
-            let id = elaborator.get_new_id(&command_id);
-            elaborator.push_elaborated_step(ProofStep {
-                id,
-                clause: conclusion.to_vec(),
-                rule: "trans".to_owned(),
-                premises: vec![first_step, second_step],
-                args: Vec::new(),
-                discharge: Vec::new(),
-            });
-        } else if alpha_equiv(&new_left, &new_right, polyeq_time) {
-            let second_step =
-                elaborate_equality(elaborator, pool, &new_left, right, &command_id, polyeq_time);
-            let id = elaborator.get_new_id(&command_id);
-            let third_step = elaborator.add_refl_step(pool, new_right.clone(), right.clone(), id);
-
-            let id = elaborator.get_new_id(&command_id);
-            elaborator.push_elaborated_step(ProofStep {
-                id,
-                clause: conclusion.to_vec(),
-                rule: "trans".to_owned(),
-                premises: vec![first_step, second_step, third_step],
-                args: Vec::new(),
-                discharge: Vec::new(),
-            });
-        } else {
-            return Err(CheckerError::ReflexivityFailed(left.clone(), right.clone()));
-        }
-    }
-
     Ok(())
 }
 

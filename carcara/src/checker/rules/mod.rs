@@ -1,6 +1,6 @@
 use super::{
     error::{CheckerError, EqualityError},
-    ContextStack, Elaborator,
+    ContextStack,
 };
 use crate::{
     ast::*,
@@ -11,8 +11,6 @@ use std::time::Duration;
 pub type RuleResult = Result<(), CheckerError>;
 
 pub type Rule = fn(RuleArgs) -> RuleResult;
-
-pub type ElaborationRule = fn(RuleArgs, String, &mut Elaborator) -> Result<(), CheckerError>;
 
 pub struct RuleArgs<'a> {
     pub(super) conclusion: &'a [Rc<Term>],
@@ -164,7 +162,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
 
     for (i, (proof, expected)) in cases.iter().enumerate() {
         // This parses the definitions again for every case, which is not ideal
-        let (prelude, mut proof, mut pool) = parser::parse_instance(
+        let (_, mut proof, mut pool) = parser::parse_instance(
             Cursor::new(definitions),
             Cursor::new(proof),
             parser::Config::new(),
@@ -194,7 +192,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
             discharge: Vec::new(),
         }));
 
-        let mut checker = checker::ProofChecker::new(&mut pool, checker::Config::new(), &prelude);
+        let mut checker = checker::ProofChecker::new(&mut pool, checker::Config::new());
         let got = checker.check(&proof).is_ok();
         assert_eq!(
             *expected, got,

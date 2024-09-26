@@ -21,28 +21,35 @@ use std::{io::BufRead, str::FromStr};
 
 use self::error::assert_indexed_op_args_value;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Config {
+    /// If `true`, the parser will automatically expand function definitions introduced by
+    /// `define-fun` commands in the SMT problem. If `false`, those `define-fun`s are instead
+    /// interpreted as a function declaration and an `assert` command that defines the function
+    /// as equal to its body (or to a lambda term, if it contains arguments). Note that function
+    /// definitions in the proof are always expanded.
     pub apply_function_defs: bool,
+
+    /// If `true`, the parser will eliminate `let` bindings from terms during parsing. This is done
+    /// by replacing any occurence of a variable bound in the `let` binding with its corresponding
+    /// value.
     pub expand_lets: bool,
+
+    /// If `true`, this relaxes the type checking rules in Carcara to allow `Int`-`Real` subtyping.
+    /// That is, terms of sort `Int` will be allowed in arithmetic operations where a `Real` term
+    /// was expected. Note that this only applies to predefined operators --- passing an `Int` term
+    /// to a function that expects a `Real` will still be an error.
     pub allow_int_real_subtyping: bool,
-    pub allow_unary_logical_ops: bool,
+
+    /// Enables "strict" parsing. If `true`:
+    /// - Unary `and`, `or` and `xor` terms are not allowed
+    /// - Anchor arguments using the old syntax (i.e., `(:= <symbol> <term>)`) are not allowed
+    pub strict: bool,
 }
 
 impl Config {
     pub fn new() -> Self {
-        Config {
-            apply_function_defs: false,
-            expand_lets: false,
-            allow_int_real_subtyping: false,
-            allow_unary_logical_ops: true,
-        }
-    }
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self::new()
+        Self::default()
     }
 }
 
@@ -57,13 +64,22 @@ pub fn parse_instance<T: BufRead>(
     config: Config,
 ) -> CarcaraResult<(ProblemPrelude, Proof, PrimitivePool)> {
     let mut pool = PrimitivePool::new();
-    let mut parser = Parser::new(&mut pool, config, problem)?;
+    parse_instance_with_pool(problem, proof, config, &mut pool)
+        .map(|(prelude, proof)| (prelude, proof, pool))
+}
+
+pub fn parse_instance_with_pool<T: BufRead>(
+    problem: T,
+    proof: T,
+    config: Config,
+    pool: &mut PrimitivePool,
+) -> CarcaraResult<(ProblemPrelude, Proof)> {
+    let mut parser = Parser::new(pool, config, problem)?;
     let (prelude, premises) = parser.parse_problem()?;
     parser.reset(proof)?;
-    let commands = parser.parse_proof()?;
-
-    let proof = Proof { premises, commands };
-    Ok((prelude, proof, pool))
+    let mut proof = parser.parse_proof()?;
+    proof.premises = premises;
+    Ok((prelude, proof))
 }
 
 /// A function definition, from a `define-fun` command.
@@ -128,7 +144,7 @@ pub struct Parser<'a, R> {
     current_token: Token,
     current_position: Position,
     state: ParserState,
-    interpret_integers_as_reals: bool,
+    is_real_only_logic: bool,
     problem: Option<(ProblemPrelude, IndexSet<Rc<Term>>)>,
 }
 
@@ -146,7 +162,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
             current_token,
             current_position,
             state: ParserState::default(),
-            interpret_integers_as_reals: false,
+            is_real_only_logic: false,
             problem: None,
         })
     }
@@ -197,6 +213,14 @@ impl<'a, R: BufRead> Parser<'a, R> {
         Ok(self.pool.add(Term::Var(cached.unwrap(), sort)))
     }
 
+    /// Return whether we should interpret integer constants as `Real`s.
+    ///
+    /// If we are working with a logic that contains reals but does not contain integers, and if we
+    /// are parsing the problem and not the poof, this will be true.
+    fn interpret_ints_as_reals(&self) -> bool {
+        self.is_real_only_logic && self.problem.is_some()
+    }
+
     /// Constructs and sort checks an operation term.
     fn make_op(&mut self, op: Operator, args: Vec<Rc<Term>>) -> Result<Rc<Term>, ParserError> {
         let sorts: Vec<_> = args.iter().map(|t| self.pool.sort(t)).collect();
@@ -216,12 +240,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
             Operator::Or | Operator::And | Operator::Xor => {
                 // If we are not in "strict" parsing mode, we allow these operators to be called
                 // with just one argument
-                let range = if self.config.allow_unary_logical_ops {
-                    1..
-                } else {
-                    2..
-                };
-                assert_num_args(&args, range)?;
+                assert_num_args(&args, if self.config.strict { 2.. } else { 1.. })?;
                 for s in sorts {
                     SortError::assert_eq(&Sort::Bool, s)?;
                 }
@@ -463,9 +482,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
         let [a, b] = [a, b].map(|t| match t.as_ref() {
             Term::Const(Constant::Integer(i)) => Some(i),
-            Term::Const(Constant::Real(r))
-                if self.interpret_integers_as_reals && r.is_integer() =>
-            {
+            Term::Const(Constant::Real(r)) if self.interpret_ints_as_reals() && r.is_integer() => {
                 Some(r.numer())
             }
             _ => None,
@@ -718,7 +735,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     // literals should be parsed as reals. For instance, `1` should be interpreted
                     // as `1.0`. We must be careful to avoid false positives with non-standard
                     // logics like "HORN".
-                    self.interpret_integers_as_reals =
+                    self.is_real_only_logic =
                         (logic.contains("LRA") || logic.contains("NRA") || logic.contains("RDL"))
                             && !logic.contains('I');
                 }
@@ -733,8 +750,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     /// Parses a proof in the Alethe format. All function, constant and sort declarations needed
-    /// should already be in the parser state.
-    pub fn parse_proof(&mut self) -> CarcaraResult<Vec<ProofCommand>> {
+    /// should already be in the parser state. Note that the `premises` field in the proof will not
+    /// be set.
+    pub fn parse_proof(&mut self) -> CarcaraResult<Proof> {
         // To avoid stack overflows in proofs with many nested subproofs, we parse the subproofs
         // iteratively, instead of recursively. Therefore, we need to manually keep a stack.
         //
@@ -746,6 +764,8 @@ impl<'a, R: BufRead> Parser<'a, R> {
         let mut next_subproof_context_id = 0;
 
         let mut finished_assumes = false;
+
+        let mut constant_definitions = Vec::new();
 
         // Some solvers print the satisfiability result (unsat) together with the proof. To save the
         // user from having to remove this, we consume this first "unsat" token if it exists
@@ -771,6 +791,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 }
                 Token::ReservedWord(Reserved::DefineFun) => {
                     let (name, func_def) = self.parse_define_fun()?;
+                    if func_def.params.is_empty() {
+                        constant_definitions.push((name.clone(), func_def.body.clone()));
+                    }
                     self.state.function_defs.insert(name, func_def);
                     continue;
                 }
@@ -837,17 +860,24 @@ impl<'a, R: BufRead> Parser<'a, R> {
             let index = stack.last().unwrap().0.commands.len() - 1;
             self.state.step_ids.insert(id, index);
         }
-        match stack.len() {
+        let commands = match stack.len() {
             0 => unreachable!(),
-            1 => Ok(stack.pop().unwrap().0.commands),
+            1 => stack.pop().unwrap().0.commands,
 
-            // If there is more than one vector in the commands stack, we are inside a subproof
-            // that should be closed before the outer proof is finished
-            _ => Err(Error::Parser(
-                ParserError::UnclosedSubproof(stack.pop().unwrap().1),
-                self.current_position,
-            )),
-        }
+            // If there is more than one layer in the stack, we are inside a subproof that should be
+            // closed before the outer proof is finished
+            _ => {
+                return Err(Error::Parser(
+                    ParserError::UnclosedSubproof(stack.pop().unwrap().1),
+                    self.current_position,
+                ))
+            }
+        };
+        Ok(Proof {
+            premises: IndexSet::new(), // TODO: this should not really be stored in the proof
+            constant_definitions,
+            commands,
+        })
     }
 
     /// Parses an `assume` proof command. This method assumes that the `(` and `assume` tokens were
@@ -989,16 +1019,18 @@ impl<'a, R: BufRead> Parser<'a, R> {
             // parsing the two versions of assign-style anchor arguments:
             // - the old version, without the sort hint: `(:= <symbol> <term>)`
             // - and the new version, with the sort hint: `(:= (<symbol> <sort>) <term>)`
-            let (var, value, sort) = if matches!(self.current_token, Token::Symbol(_)) {
-                let var = self.expect_symbol()?;
-                let value = self.parse_term()?;
-                let sort = self.pool.sort(&value);
-                (var, value, sort)
-            } else {
-                let (var, sort) = self.parse_sorted_var()?;
-                let value = self.parse_term_expecting_sort(sort.as_sort().unwrap())?;
-                (var, value, sort)
-            };
+            // However, if "strict" parsing is enabled, we only allow the new version
+            let (var, value, sort) =
+                if !self.config.strict && matches!(self.current_token, Token::Symbol(_)) {
+                    let var = self.expect_symbol()?;
+                    let value = self.parse_term()?;
+                    let sort = self.pool.sort(&value);
+                    (var, value, sort)
+                } else {
+                    let (var, sort) = self.parse_sorted_var()?;
+                    let value = self.parse_term_expecting_sort(sort.as_sort().unwrap())?;
+                    (var, value, sort)
+                };
             self.insert_sorted_var((var.clone(), sort.clone()));
             self.expect_token(Token::CloseParen)?;
             AnchorArg::Assign((var, sort), value)
@@ -1221,7 +1253,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     pub fn parse_term(&mut self) -> CarcaraResult<Rc<Term>> {
         let term = match self.next_token()? {
             (Token::Bitvector { value, width }, _) => Term::new_bv(value, width),
-            (Token::Numeral(n), _) if self.interpret_integers_as_reals => Term::new_real(n),
+            (Token::Numeral(n), _) if self.interpret_ints_as_reals() => Term::new_real(n),
             (Token::Numeral(n), _) => Term::new_int(n),
             (Token::Decimal(r), _) => Term::new_real(r),
             (Token::String(s), _) => Term::new_string(s),
@@ -1250,7 +1282,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     pub fn parse_constant(&mut self) -> CarcaraResult<Constant> {
         let constant = match self.next_token()? {
             (Token::Bitvector { value, width }, _) => Constant::BitVec(value, width.into()),
-            (Token::Numeral(n), _) if self.interpret_integers_as_reals => Constant::Real(n.into()),
+            (Token::Numeral(n), _) if self.interpret_ints_as_reals() => Constant::Real(n.into()),
             (Token::Numeral(n), _) => Constant::Integer(n),
             (Token::Decimal(r), _) => Constant::Real(r),
             (Token::String(s), _) => Constant::String(s),
@@ -1302,21 +1334,29 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// consumed.
     fn parse_let_term(&mut self) -> CarcaraResult<Rc<Term>> {
         self.expect_token(Token::OpenParen)?;
-        self.state.symbol_table.push_scope();
+
+        // Since the let binding semantics is *simultaneous*, we first parse all bindings, and only
+        // then add them to the symbol table.
         let bindings = self.parse_sequence(
             |p| {
                 p.expect_token(Token::OpenParen)?;
                 let name = p.expect_symbol()?;
                 let value = p.parse_term()?;
-                let sort = p.pool.sort(&value);
-                p.insert_sorted_var((name.clone(), sort));
                 p.expect_token(Token::CloseParen)?;
                 Ok((name, value))
             },
             true,
         )?;
+
+        self.state.symbol_table.push_scope();
+        for (name, value) in &bindings {
+            let sort = self.pool.sort(value);
+            self.insert_sorted_var((name.clone(), sort));
+        }
+
         let inner = self.parse_term()?;
         self.expect_token(Token::CloseParen)?;
+
         self.state.symbol_table.pop_scope();
 
         if self.config.expand_lets {
