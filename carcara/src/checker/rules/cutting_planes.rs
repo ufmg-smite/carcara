@@ -47,6 +47,8 @@ use std::collections::HashMap;
 )
 */
 
+// TODO: How to represent NEGATED literals
+
 type PbHash = HashMap<String, Integer>;
 
 fn get_pb_hashmap(pbsum: &[Rc<Term>]) -> Result<PbHash, CheckerError> {
@@ -253,14 +255,31 @@ pub fn cp_saturation(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> R
         CheckerError::ExpectedInteger(constant_p.clone(), conclusion.clone())
     );
 
+    // Verify all keys in pbsum_c are present in pbsum_p
+    for literal in pbsum_c.keys() {
+        match pbsum_p.get(literal) {
+            Some(_) => continue,
+            None => {
+                // TODO: appropriate error type
+                return Err(CheckerError::ExpectedToNotBeEmpty(conclusion.clone()));
+            }
+        }
+    }
+
     // Verify saturation of variables match
     for (literal, coeff_p) in pbsum_p {
-        if let Some(coeff_c) = pbsum_c.get(&literal) {
-            let expected = Ord::min(&constant_p, &coeff_p);
-            rassert!(
-                expected == coeff_c,
-                CheckerError::ExpectedInteger(expected.clone(), conclusion.clone())
-            );
+        match pbsum_c.get(&literal) {
+            Some(coeff_c) => {
+                let expected = Ord::min(&constant_p, &coeff_p);
+                rassert!(
+                    expected == coeff_c,
+                    CheckerError::ExpectedInteger(expected.clone(), conclusion.clone())
+                );
+            }
+            None => {
+                // TODO: appropriate error type
+                return Err(CheckerError::ExpectedToNotBeEmpty(clause.clone()));
+            }
         }
     }
 
@@ -405,7 +424,29 @@ mod tests {
                 r#"(assume c1 (>= (+ (* 2 x1) (* 5 x2) (* 3 x3) 0) 3))
                    (step t1 (cl (>= (+ (* 2 x1) (* 3 x2) (* 3 x3) 0) 3)) :rule cp_saturation :premises (c1))"#: true,
 
+                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 x3) 0) 3))
+                   (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) (* 3 x3) 0) 3)) :rule cp_saturation :premises (c1))"#: true,
+
             }
+            "Wrong saturation" {
+                r#"(assume c1 (>= (+ (* 2 x1) 0) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) 0) 1)) :rule cp_saturation :premises (c1))"#: false,
+
+                r#"(assume c1 (>= (+ (* 2 x1) 0) 1))
+                   (step t1 (cl (>= (+ (* 0 x1) 0) 1)) :rule cp_saturation :premises (c1))"#: false,
+
+                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 x3) 0) 3))
+                   (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) (* 2 x3) 0) 3)) :rule cp_saturation :premises (c1))"#: false,
+
+            }
+            "Missing terms" {
+                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 x3) 0) 3))
+                   (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) 0) 3)) :rule cp_saturation :premises (c1))"#: false,
+
+                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) 0) 3))
+                   (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) (* 3 x3) 0) 3)) :rule cp_saturation :premises (c1))"#: false,
+            }
+
         }
     }
 }
