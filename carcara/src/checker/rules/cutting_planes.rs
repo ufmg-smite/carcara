@@ -70,6 +70,27 @@ fn unwrap_pseudoboolean_inequality(clause: &Rc<Term>) -> Result<(PbHash, Integer
     Ok((pbsum, constant))
 }
 
+/// Checks that every key in ``pbsum_a`` is present in ``pbsum_b``
+/// ha ⊆ hb
+fn assert_pbsum_subset_keys(pbsum_a: &PbHash, pbsum_b: &PbHash) -> Result<(), CheckerError> {
+    for key in pbsum_a.keys() {
+        if pbsum_b.get(key).is_none() {
+            return Err(CheckerError::Unspecified);
+        }
+    }
+    Ok(())
+}
+
+fn assert_pbsum_same_keys(pbsum_a: &PbHash, pbsum_b: &PbHash) -> Result<(), CheckerError> {
+    // All keys in A are in B
+    assert_pbsum_subset_keys(pbsum_a, pbsum_b)?;
+
+    // All keys in B are in A
+    assert_pbsum_subset_keys(pbsum_b, pbsum_a)?;
+
+    Ok(())
+}
+
 pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
     // Check there is exactly two premises
     assert_num_premises(premises, 2)?;
@@ -100,29 +121,18 @@ pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
         CheckerError::ExpectedInteger(constant_l.clone() + constant_r.clone(), conclusion.clone())
     );
 
-    // Verify pbsum_c.keys = pbsum_l.keys UNION pbsum_r.keys
-    // ==> All keys of pbsum_l are in pubsum_c
-    for literal in pbsum_l.keys() {
-        match pbsum_c.get(literal) {
-            Some(_) => continue,
-            None => {
-                // TODO: appropriate error type
-                println!("Some x in pbsum_l not in pbsum_c");
-                return Err(CheckerError::ExpectedToNotBeEmpty(conclusion.clone()));
-            }
-        }
-    }
-    //      && All keys of pbsum_r are in pbsum_c
-    for literal in pbsum_r.keys() {
-        match pbsum_c.get(literal) {
-            Some(_) => continue,
-            None => {
-                // TODO: appropriate error type
-                println!("Some x in pbsum_r not in pbsum_c");
-                return Err(CheckerError::ExpectedToNotBeEmpty(conclusion.clone()));
-            }
-        }
-    }
+    // Verify keys in pbsum_c = pbsum_l ∪ pbsum_r
+    // C = L ∪ R
+    // ==> (L ⊆ C) ∧ (R ⊆ C) ∧ ¬∃ x, (x ∈ C) ∧ ¬(x ∈ L) ∧ ¬(x ∈ R)
+    // All keys of pbsum_l are in pubsum_c
+    // L ⊆ C
+    assert_pbsum_subset_keys(&pbsum_l, &pbsum_c)?;
+
+    // All keys of pbsum_r are in pbsum_c
+    // R ⊆ C
+    assert_pbsum_subset_keys(&pbsum_r, &pbsum_c)?;
+
+    //
 
     // Verify pseudo-boolean sums match
     for (literal, coeff_c) in &pbsum_c {
@@ -146,9 +156,10 @@ pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
                     CheckerError::ExpectedInteger(coeff_r.clone(), conclusion.clone())
                 );
             }
+            // ¬∃ x, (x ∈ C) ∧ ¬(x ∈ L) ∧ ¬(x ∈ R)
             _ => {
                 // TODO: appropriate error type
-                return Err(CheckerError::ExpectedToNotBeEmpty(left_clause.clone()));
+                return Err(CheckerError::Unspecified);
             }
         }
     }
@@ -182,31 +193,17 @@ pub fn cp_multiplication(RuleArgs { premises, args, conclusion, .. }: RuleArgs) 
         CheckerError::ExpectedInteger(scalar.clone() * constant_p, conclusion.clone())
     );
 
-    // Verify all literals in pbsum_c are in pbsum_p
-    for literal in pbsum_c.keys() {
-        match pbsum_p.get(literal) {
-            Some(_) => continue,
-            None => {
-                // TODO: appropriate error type
-                return Err(CheckerError::ExpectedToNotBeEmpty(conclusion.clone()));
-            }
-        }
-    }
+    // Verify premise and conclusion share same keys
+    assert_pbsum_same_keys(&pbsum_p, &pbsum_c)?;
 
     // Verify pseudo-boolean sums match
     for (literal, coeff_p) in pbsum_p {
-        match pbsum_c.get(&literal) {
-            Some(coeff_c) => {
-                let expected = &scalar * coeff_p;
-                rassert!(
-                    &expected == coeff_c,
-                    CheckerError::ExpectedInteger(expected.clone(), conclusion.clone())
-                );
-            }
-            None => {
-                // TODO: appropriate error type
-                return Err(CheckerError::ExpectedToNotBeEmpty(clause.clone()));
-            }
+        if let Some(coeff_c) = pbsum_c.get(&literal) {
+            let expected = &scalar * coeff_p;
+            rassert!(
+                &expected == coeff_c,
+                CheckerError::ExpectedInteger(expected.clone(), conclusion.clone())
+            );
         }
     }
 
@@ -237,31 +234,17 @@ pub fn cp_division(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
         CheckerError::ExpectedInteger(constant_p / divisor.clone(), conclusion.clone())
     );
 
-    // Verify all keys in pbsum_c are present in pbsum_p
-    for literal in pbsum_c.keys() {
-        match pbsum_p.get(literal) {
-            Some(_) => continue,
-            None => {
-                // TODO: appropriate error type
-                return Err(CheckerError::ExpectedToNotBeEmpty(conclusion.clone()));
-            }
-        }
-    }
+    // Verify premise and conclusion share same keys
+    assert_pbsum_same_keys(&pbsum_p, &pbsum_c)?;
 
     // Verify pseudo-boolean sums match
     for (literal, coeff_p) in pbsum_p {
-        match pbsum_c.get(&literal) {
-            Some(coeff_c) => {
-                let expected: Integer = (coeff_p + &divisor - 1) / &divisor;
-                rassert!(
-                    &expected == coeff_c,
-                    CheckerError::ExpectedInteger(expected.clone(), conclusion.clone())
-                );
-            }
-            None => {
-                // TODO: appropriate error type
-                return Err(CheckerError::ExpectedToNotBeEmpty(clause.clone()));
-            }
+        if let Some(coeff_c) = pbsum_c.get(&literal) {
+            let expected: Integer = (coeff_p + &divisor - 1) / &divisor;
+            rassert!(
+                &expected == coeff_c,
+                CheckerError::ExpectedInteger(expected.clone(), conclusion.clone())
+            );
         }
     }
 
@@ -289,31 +272,17 @@ pub fn cp_saturation(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> R
         CheckerError::ExpectedInteger(constant_p.clone(), conclusion.clone())
     );
 
-    // Verify all keys in pbsum_c are present in pbsum_p
-    for literal in pbsum_c.keys() {
-        match pbsum_p.get(literal) {
-            Some(_) => continue,
-            None => {
-                // TODO: appropriate error type
-                return Err(CheckerError::ExpectedToNotBeEmpty(conclusion.clone()));
-            }
-        }
-    }
+    // Verify premise and conclusion share same keys
+    assert_pbsum_same_keys(&pbsum_p, &pbsum_c)?;
 
     // Verify saturation of variables match
     for (literal, coeff_p) in pbsum_p {
-        match pbsum_c.get(&literal) {
-            Some(coeff_c) => {
-                let expected = Ord::min(&constant_p, &coeff_p);
-                rassert!(
-                    expected == coeff_c,
-                    CheckerError::ExpectedInteger(expected.clone(), conclusion.clone())
-                );
-            }
-            None => {
-                // TODO: appropriate error type
-                return Err(CheckerError::ExpectedToNotBeEmpty(clause.clone()));
-            }
+        if let Some(coeff_c) = pbsum_c.get(&literal) {
+            let expected = Ord::min(&constant_p, &coeff_p);
+            rassert!(
+                expected == coeff_c,
+                CheckerError::ExpectedInteger(expected.clone(), conclusion.clone())
+            );
         }
     }
 
@@ -343,9 +312,22 @@ mod tests {
 
             }
             "Missing Terms" {
+                r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
+                   (assume c2 (>= (+ (* 1 x2) 0) 1))
+                   (step t1 (cl (>= (+ (* 1 x1) 0) 2)) :rule cp_addition :premises (c1 c2))"#: false,
+
+                r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
+                   (assume c2 (>= (+ (* 1 x2) 0) 1))
+                   (step t1 (cl (>= (+ (* 1 x2) 0) 2)) :rule cp_addition :premises (c1 c2))"#: false,
+
+                r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
+                   (assume c2 (>= (+ (* 1 x2) 0) 1))
+                   (step t1 (cl (>= (+ (* 1 x1) (* 1 x2) (* 1 x3) 0) 2)) :rule cp_addition :premises (c1 c2))"#: false,
+
                 r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) (* 1 x3) 0) 1))
                    (assume c2 (>= (+ (* 1 x2) (* 1 x1) 0) 1))
                    (step t1 (cl (>= (+ (* 2 x1) (* 3 x2) 0) 2)) :rule cp_addition :premises (c1 c2))"#: false,
+
             }
             "Wrong Addition" {
                 r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) 0) 1))
