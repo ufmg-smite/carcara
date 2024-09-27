@@ -212,18 +212,16 @@ pub fn cp_division(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
     // Unwrap the conclusion inequality
     let (pbsum_c, constant_c) = unwrap_pseudoboolean_inequality(conclusion)?;
 
-    // Verify constants match
-    // TODO: CeilDiv
+    // Verify constants match ceil(c/d) == (c+d-1)/d
     rassert!(
-        constant_p.clone() / divisor.clone() == constant_c,
+        (constant_p.clone() + divisor.clone() - 1) / divisor.clone() == constant_c,
         CheckerError::ExpectedInteger(constant_p / divisor.clone(), conclusion.clone())
     );
 
     // Verify pseudo-boolean sums match
     for (literal, coeff_p) in pbsum_p {
         if let Some(coeff_c) = pbsum_c.get(&literal) {
-            // TODO: CeilDiv
-            let expected = coeff_p / &divisor;
+            let expected = (coeff_p + &divisor - 1) / &divisor;
             rassert!(
                 &expected == coeff_c,
                 CheckerError::ExpectedInteger(expected, conclusion.clone())
@@ -368,6 +366,28 @@ mod tests {
                 r#"(assume c1 (>= (+ (* 2 x1) 0) 2))
                    (step t1 (cl (>= (+ (* 1 x1) 0) 2)) :rule cp_division :premises (c1) :args (2) )"#: false,
             }
+            "Ceiling of Division" {
+                r#"(assume c1 (>= (+ (* 3 x1) 0) 2))
+                   (step t1 (cl (>= (+ (* 2 x1) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
+                r#"(assume c1 (>= (+ (* 3 x1) 0) 2))
+                   (step t1 (cl (>= (+ (* 1 x1) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+
+                r#"(assume c1 (>= (+ (* 7 x1) 0) 2))
+                   (step t1 (cl (>= (+ (* 4 x1) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
+                r#"(assume c1 (>= (+ (* 7 x1) 0) 2))
+                   (step t1 (cl (>= (+ (* 3 x1) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+
+                r#"(assume c1 (>= (+ (* 9 x1) 0) 2))
+                   (step t1 (cl (>= (+ (* 5 x1) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
+                r#"(assume c1 (>= (+ (* 9 x1) 0) 2))
+                   (step t1 (cl (>= (+ (* 4 x1) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+
+                r#"(assume c1 (>= (+ (* 10 x1) 0) 3))
+                   (step t1 (cl (>= (+ (* 4 x1) 0) 1)) :rule cp_division :premises (c1) :args (3) )"#: true,
+                r#"(assume c1 (>= (+ (* 10 x1) 0) 3))
+                   (step t1 (cl (>= (+ (* 3 x1) 0) 1)) :rule cp_division :premises (c1) :args (3) )"#: false,
+
+           }
         }
     }
     #[test]
