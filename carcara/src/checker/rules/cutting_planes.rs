@@ -182,14 +182,31 @@ pub fn cp_multiplication(RuleArgs { premises, args, conclusion, .. }: RuleArgs) 
         CheckerError::ExpectedInteger(scalar.clone() * constant_p, conclusion.clone())
     );
 
+    // Verify all literals in pbsum_c are in pbsum_p
+    for literal in pbsum_c.keys() {
+        match pbsum_p.get(literal) {
+            Some(_) => continue,
+            None => {
+                // TODO: appropriate error type
+                return Err(CheckerError::ExpectedToNotBeEmpty(conclusion.clone()));
+            }
+        }
+    }
+
     // Verify pseudo-boolean sums match
     for (literal, coeff_p) in pbsum_p {
-        if let Some(coeff_c) = pbsum_c.get(&literal) {
-            let expected = &scalar * coeff_p;
-            rassert!(
-                &expected == coeff_c,
-                CheckerError::ExpectedInteger(expected, conclusion.clone())
-            );
+        match pbsum_c.get(&literal) {
+            Some(coeff_c) => {
+                let expected = &scalar * coeff_p;
+                rassert!(
+                    &expected == coeff_c,
+                    CheckerError::ExpectedInteger(expected.clone(), conclusion.clone())
+                );
+            }
+            None => {
+                // TODO: appropriate error type
+                return Err(CheckerError::ExpectedToNotBeEmpty(clause.clone()));
+            }
         }
     }
 
@@ -336,9 +353,6 @@ mod tests {
             "Simple working examples" {
                 r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
                    (step t1 (cl (>= (+ (* 2 x1) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
-                // ? other alternative, without trailing zero
-                // r#"(assume c1 (>= (* 1 x1) 1))
-                //    (step t1 (cl (>= (* 2 x1) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
                 r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) 0) 1))
                    (step t1 (cl (>= (+ (* 2 x1) (* 4 x2) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
                 r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) (* 3 x3) 0) 1))
@@ -357,7 +371,13 @@ mod tests {
                 r#"(assume c1 (>= x1 1))
                    (step t1 (cl (>= (* 2 x1) 2)) :rule cp_multiplication :premises (c1) :args (2 3))"#: false,
             }
-            // TODO: "Wrong number of clauses in the conclusion"
+            "Wrong number of clauses in the conclusion" {
+                r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 2 x2) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
+
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) 0) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
+            }
             "Wrong product" {
                 r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
                    (step t1 (cl (>= (+ (* 3 x1) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
