@@ -47,7 +47,9 @@ use std::collections::HashMap;
 )
 */
 
-fn get_pb_hashmap(pbsum: &[Rc<Term>]) -> Result<HashMap<String, Integer>, CheckerError> {
+type PbHash = HashMap<String, Integer>;
+
+fn get_pb_hashmap(pbsum: &[Rc<Term>]) -> Result<PbHash, CheckerError> {
     let mut hm = HashMap::new();
     let n = pbsum.len() - 1;
     for term in pbsum.iter().take(n) {
@@ -57,6 +59,13 @@ fn get_pb_hashmap(pbsum: &[Rc<Term>]) -> Result<HashMap<String, Integer>, Checke
         hm.insert(literal, coeff);
     }
     Ok(hm)
+}
+
+fn unwrap_pseudoboolean_inequality(clause: &Rc<Term>) -> Result<(PbHash, Integer), CheckerError> {
+    let (pbsum, constant) = match_term_err!((>= (+ ...) constant) = clause)?;
+    let constant = constant.as_integer_err()?;
+    let pbsum = get_pb_hashmap(pbsum)?;
+    Ok((pbsum, constant))
 }
 
 pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
@@ -77,18 +86,11 @@ pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
     let conclusion = &conclusion[0];
 
     // Unwrap the premise inequality
-    let (pbsum_l, constant_l) = match_term_err!((>= (+ ...) constant) = left_clause)?;
-    let constant_l = constant_l.as_integer_err()?;
-    let pbsum_l = get_pb_hashmap(pbsum_l)?;
-
-    let (pbsum_r, constant_r) = match_term_err!((>= (+ ...) constant) = right_clause)?;
-    let constant_r = constant_r.as_integer_err()?;
-    let pbsum_r = get_pb_hashmap(pbsum_r)?;
+    let (pbsum_l, constant_l) = unwrap_pseudoboolean_inequality(left_clause)?;
+    let (pbsum_r, constant_r) = unwrap_pseudoboolean_inequality(right_clause)?;
 
     // Unwrap the conclusion inequality
-    let (pbsum_c, constant_c) = match_term_err!((>= (+ ...) constant_c) = conclusion)?;
-    let constant_c = constant_c.as_integer_err()?;
-    let pbsum_c = get_pb_hashmap(pbsum_c)?;
+    let (pbsum_c, constant_c) = unwrap_pseudoboolean_inequality(conclusion)?;
 
     // Verify constants match
     rassert!(
@@ -167,14 +169,10 @@ pub fn cp_multiplication(RuleArgs { premises, args, conclusion, .. }: RuleArgs) 
     let conclusion = &conclusion[0];
 
     // Unwrap the premise inequality
-    let (pbsum_p, constant_p) = match_term_err!((>= (+ ...) constant) = clause)?;
-    let constant_p = constant_p.as_integer_err()?;
-    let pbsum_p = get_pb_hashmap(pbsum_p)?;
+    let (pbsum_p, constant_p) = unwrap_pseudoboolean_inequality(clause)?;
 
     // Unwrap the conclusion inequality
-    let (pbsum_c, constant_c) = match_term_err!((>= (+ ...) constant_c) = conclusion)?;
-    let constant_c = constant_c.as_integer_err()?;
-    let pbsum_c = get_pb_hashmap(pbsum_c)?;
+    let (pbsum_c, constant_c) = unwrap_pseudoboolean_inequality(conclusion)?;
 
     // Verify constants match
     rassert!(
@@ -209,14 +207,10 @@ pub fn cp_division(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
     let conclusion = &conclusion[0];
 
     // Unwrap the premise inequality
-    let (pbsum_p, constant_p) = match_term_err!((>= (+ ...) constant) = clause)?;
-    let constant_p = constant_p.as_integer_err()?;
-    let pbsum_p = get_pb_hashmap(pbsum_p)?;
+    let (pbsum_p, constant_p) = unwrap_pseudoboolean_inequality(clause)?;
 
     // Unwrap the conclusion inequality
-    let (pbsum_c, constant_c) = match_term_err!((>= (+ ...) constant_c) = conclusion)?;
-    let constant_c = constant_c.as_integer_err()?;
-    let pbsum_c = get_pb_hashmap(pbsum_c)?;
+    let (pbsum_c, constant_c) = unwrap_pseudoboolean_inequality(conclusion)?;
 
     // Verify constants match
     // TODO: CeilDiv
@@ -250,14 +244,10 @@ pub fn cp_saturation(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> R
     let conclusion = &conclusion[0];
 
     // Unwrap the premise inequality
-    let (pbsum_p, constant_p) = match_term_err!((>= (+ ...) constant) = clause)?;
-    let constant_p = constant_p.as_integer_err()?;
-    let pbsum_p = get_pb_hashmap(pbsum_p)?;
+    let (pbsum_p, constant_p) = unwrap_pseudoboolean_inequality(clause)?;
 
     // Unwrap the conclusion inequality
-    let (pbsum_c, constant_c) = match_term_err!((>= (+ ...) constant_c) = conclusion)?;
-    let constant_c = constant_c.as_integer_err()?;
-    let pbsum_c = get_pb_hashmap(pbsum_c)?;
+    let (pbsum_c, constant_c) = unwrap_pseudoboolean_inequality(conclusion)?;
 
     // Verify constants match
     rassert!(
