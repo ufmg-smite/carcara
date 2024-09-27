@@ -237,14 +237,31 @@ pub fn cp_division(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
         CheckerError::ExpectedInteger(constant_p / divisor.clone(), conclusion.clone())
     );
 
+    // Verify all keys in pbsum_c are present in pbsum_p
+    for literal in pbsum_c.keys() {
+        match pbsum_p.get(literal) {
+            Some(_) => continue,
+            None => {
+                // TODO: appropriate error type
+                return Err(CheckerError::ExpectedToNotBeEmpty(conclusion.clone()));
+            }
+        }
+    }
+
     // Verify pseudo-boolean sums match
     for (literal, coeff_p) in pbsum_p {
-        if let Some(coeff_c) = pbsum_c.get(&literal) {
-            let expected = (coeff_p + &divisor - 1) / &divisor;
-            rassert!(
-                &expected == coeff_c,
-                CheckerError::ExpectedInteger(expected, conclusion.clone())
-            );
+        match pbsum_c.get(&literal) {
+            Some(coeff_c) => {
+                let expected: Integer = (coeff_p + &divisor - 1) / &divisor;
+                rassert!(
+                    &expected == coeff_c,
+                    CheckerError::ExpectedInteger(expected.clone(), conclusion.clone())
+                );
+            }
+            None => {
+                // TODO: appropriate error type
+                return Err(CheckerError::ExpectedToNotBeEmpty(clause.clone()));
+            }
         }
     }
 
@@ -394,6 +411,7 @@ mod tests {
         test_cases! {
             definitions = "
                 (declare-fun x1 () Int)
+                (declare-fun x2 () Int)
                 ",
             "Simple working examples" {
                 r#"(assume c1 (>= (+ (* 2 x1) 0) 2))
@@ -425,6 +443,13 @@ mod tests {
                    (step t1 (cl (>= (+ (* 4 x1) 0) 1)) :rule cp_division :premises (c1) :args (3) )"#: true,
                 r#"(assume c1 (>= (+ (* 10 x1) 0) 3))
                    (step t1 (cl (>= (+ (* 3 x1) 0) 1)) :rule cp_division :premises (c1) :args (3) )"#: false,
+           }
+           "Missing terms" {
+                r#"(assume c1 (>= (+ (* 2 x1) (* 1 x2) 0) 2))
+                   (step t1 (cl (>= (+ (* 1 x1) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+
+                 r#"(assume c1 (>= (+ (* 2 x1) 0) 2))
+                   (step t1 (cl (>= (+ (* 1 x1) (* 1 x2) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
 
            }
         }
