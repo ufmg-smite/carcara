@@ -1,6 +1,6 @@
 use super::{
-    assert_clause_len, assert_eq, assert_num_premises, assert_polyeq, get_premise_term,
-    CheckerError, RuleArgs, RuleResult,
+    assert_clause_len, assert_eq, assert_num_premises, get_premise_term, CheckerError, RuleArgs,
+    RuleResult,
 };
 use crate::{ast::*, checker::rules::assert_operation_len};
 
@@ -258,7 +258,22 @@ pub fn not_ite2(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_eq(phi_2, conclusion[1].remove_negation_err()?)
 }
 
-pub fn ite_intro(RuleArgs { conclusion, polyeq_time, .. }: RuleArgs) -> RuleResult {
+pub fn ite_intro(
+    RuleArgs {
+        conclusion,
+        polyeq_time,
+        allow_polyeq,
+        ..
+    }: RuleArgs,
+) -> RuleResult {
+    let mut compare = |a, b| -> bool {
+        if allow_polyeq {
+            polyeq(a, b, polyeq_time)
+        } else {
+            a == b
+        }
+    };
+
     assert_clause_len(conclusion, 1)?;
 
     let (root_term, right_side) = match_term_err!((= t u) = &conclusion[0])?;
@@ -278,13 +293,15 @@ pub fn ite_intro(RuleArgs { conclusion, polyeq_time, .. }: RuleArgs) -> RuleResu
     // ```
     // For cases like this, we first check if `t` equals the right side term modulo reordering of
     // equalities. If not, we unwrap the conjunction and continue checking the rule normally.
-    if polyeq(root_term, right_side, polyeq_time) {
+    if compare(root_term, right_side) {
         return Ok(());
     }
     let us = match_term_err!((and ...) = right_side)?;
 
     // `us` must be a conjunction where the first term is the root term
-    assert_polyeq(&us[0], root_term, polyeq_time)?;
+    if !allow_polyeq || !compare(&us[0], root_term) {
+        assert_eq(&us[0], root_term)?;
+    }
 
     // The remaining terms in `us` should be of the correct form
     for u_i in &us[1..] {
@@ -292,11 +309,9 @@ pub fn ite_intro(RuleArgs { conclusion, polyeq_time, .. }: RuleArgs) -> RuleResu
 
         let mut is_valid = |r_1, s_1, r_2, s_2| {
             // s_1 == s_2 == (ite cond r_1 r_2)
-            if polyeq(s_1, s_2, polyeq_time) {
+            if compare(s_1, s_2) {
                 if let Some((a, b, c)) = match_term!((ite a b c) = s_1) {
-                    return polyeq(a, cond, polyeq_time)
-                        && polyeq(b, r_1, polyeq_time)
-                        && polyeq(c, r_2, polyeq_time);
+                    return compare(a, cond) && compare(b, r_1) && compare(c, r_2);
                 }
             }
             false

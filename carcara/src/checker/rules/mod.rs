@@ -26,6 +26,8 @@ pub struct RuleArgs<'a> {
     pub(super) discharge: &'a [&'a ProofCommand],
 
     pub(super) polyeq_time: &'a mut Duration,
+
+    pub(super) allow_polyeq: bool,
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
