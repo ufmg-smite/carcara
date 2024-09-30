@@ -395,6 +395,7 @@ impl<'c> ParallelProofChecker<'c> {
             previous_command,
             discharge: &discharge,
             polyeq_time: &mut polyeq_time,
+            allow_polyeq: !self.config.isabelle_mode,
         };
 
         rule(rule_args)?;

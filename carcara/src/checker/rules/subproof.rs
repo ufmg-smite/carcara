@@ -13,6 +13,7 @@ pub fn subproof(
         previous_command,
         discharge,
         polyeq_time,
+        allow_polyeq,
         ..
     }: RuleArgs,
 ) -> RuleResult {
@@ -44,7 +45,11 @@ pub fn subproof(
         }
     };
 
-    assert_polyeq(conclusion.last().unwrap(), &phi, polyeq_time)
+    if allow_polyeq {
+        assert_polyeq(conclusion.last().unwrap(), &phi, polyeq_time)
+    } else {
+        assert_eq(conclusion.last().unwrap(), &phi)
+    }
 }
 
 pub fn bind(

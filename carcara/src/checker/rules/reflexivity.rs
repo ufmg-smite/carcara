@@ -13,9 +13,18 @@ pub fn refl(
         pool,
         context,
         polyeq_time,
+        allow_polyeq,
         ..
     }: RuleArgs,
 ) -> RuleResult {
+    let mut compare = |a, b| -> bool {
+        if allow_polyeq {
+            alpha_equiv(a, b, polyeq_time)
+        } else {
+            a == b
+        }
+    };
+
     assert_clause_len(conclusion, 1)?;
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
@@ -23,7 +32,7 @@ pub fn refl(
     // If the two terms are directly identical, we don't need to do any more work. We make sure to
     // do this check before we try to get the context substitution, because `refl` can be used
     // outside of any subproof
-    if alpha_equiv(left, right, polyeq_time) {
+    if compare(left, right) {
         return Ok(());
     }
 
@@ -36,10 +45,9 @@ pub fn refl(
     // don't compute the new left and right terms until they are needed, to avoid doing unnecessary
     // work
     let new_left = context.apply(pool, left);
-    let result = alpha_equiv(&new_left, right, polyeq_time) || {
+    let result = compare(&new_left, right) || {
         let new_right = context.apply(pool, right);
-        alpha_equiv(left, &new_right, polyeq_time)
-            || alpha_equiv(&new_left, &new_right, polyeq_time)
+        compare(left, &new_right) || compare(&new_left, &new_right)
     };
     rassert!(
         result,
