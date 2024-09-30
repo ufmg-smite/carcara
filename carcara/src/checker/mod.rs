@@ -177,8 +177,23 @@ impl<'c> ProofChecker<'c> {
                         );
                     }
                 }
+
+                // Some subproofs contain `assume` commands inside them. These don't refer to the
+                // original problem premises, but are instead local assumptions that are discharged
+                // by the subproof's final step, so we ignore the `assume` command if it is inside
+                // a subproof.
+                ProofCommand::Assume { .. } if iter.is_in_subproof() => (),
+
                 ProofCommand::Assume { id, term } => {
-                    if !self.check_assume(id, term, &problem.premises, &iter, &mut stats) {
+                    let res = Self::check_assume(
+                        id,
+                        term,
+                        problem,
+                        !self.config.elaborated,
+                        self.config.isabelle_mode,
+                        &mut stats,
+                    );
+                    if !res {
                         return Err(Error::Checker {
                             inner: CheckerError::Assume(term.clone()),
                             rule: "assume".into(),
@@ -195,43 +210,22 @@ impl<'c> ProofChecker<'c> {
         }
     }
 
-    fn check_assume<'i, CR: CollectResults + Send + Default>(
-        &mut self,
-        id: &str,
+    fn find_assume_premise<'p, CR: CollectResults + Send + Default>(
         term: &Rc<Term>,
-        premises: &IndexSet<Rc<Term>>,
-        iter: &'i ProofIter<'i>,
+        problem: &'p Problem,
+        allow_hard_case: bool,
         mut stats: &mut Option<&mut CheckerStatistics<CR>>,
-    ) -> bool {
-        let time = Instant::now();
-
-        // Some subproofs contain `assume` commands inside them. These don't refer to the original
-        // problem premises, but are instead local assumptions that are discharged by the subproof's
-        // final step, so we ignore the `assume` command if it is inside a subproof.
-        if iter.is_in_subproof() {
-            return true;
+    ) -> Option<&'p Rc<Term>> {
+        if let Some(p) = problem.premises.get(term) {
+            return Some(p);
+        }
+        if !allow_hard_case {
+            return None;
         }
 
-        if premises.contains(term) {
-            if let Some(s) = stats {
-                let time = time.elapsed();
-
-                s.assume_time += time;
-                s.results
-                    .add_assume_measurement(s.file_name, id, true, time);
-            }
-            return true;
-        }
-
-        if self.config.elaborated {
-            return false;
-        }
-
-        let mut found = false;
         let mut polyeq_time = Duration::ZERO;
-        let mut core_time = Duration::ZERO;
 
-        for p in premises {
+        for p in &problem.premises {
             let mut this_polyeq_time = Duration::ZERO;
 
             let mut comp = Polyeq::new().mod_reordering(true).mod_nary(true);
@@ -243,26 +237,48 @@ impl<'c> ProofChecker<'c> {
             if let Some(s) = &mut stats {
                 s.results.add_polyeq_depth(depth);
             }
+
             if result {
-                core_time = this_polyeq_time;
-                found = true;
-                break;
+                if let Some(s) = &mut stats {
+                    s.assume_core_time += this_polyeq_time;
+                    s.polyeq_time += polyeq_time;
+                }
+                return Some(p);
             }
         }
-        if !found {
+        None
+    }
+
+    fn check_assume<CR: CollectResults + Send + Default>(
+        id: &str,
+        term: &Rc<Term>,
+        problem: &Problem,
+        allow_hard_case: bool,
+        isabelle_mode: bool,
+        mut stats: &mut Option<&mut CheckerStatistics<CR>>,
+    ) -> bool {
+        let time = Instant::now();
+
+        let Some(found) = Self::find_assume_premise(term, problem, allow_hard_case, stats) else {
             return false;
         };
+        if isabelle_mode
+            && problem
+                .premise_names
+                .get(found)
+                .is_some_and(|name| name != id)
+        {
+            return false;
+        }
 
         if let Some(s) = &mut stats {
             let time = time.elapsed();
+            let was_easy = found == term;
 
             s.assume_time += time;
-            s.assume_core_time += core_time;
-            s.polyeq_time += polyeq_time;
             s.results
-                .add_assume_measurement(s.file_name, id, false, time);
+                .add_assume_measurement(s.file_name, id, was_easy, time);
         }
-
         true
     }
 

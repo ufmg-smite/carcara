@@ -4,8 +4,6 @@ mod error;
 mod lexer;
 pub(crate) mod tests;
 
-use std::iter::Iterator;
-
 pub use error::{ParserError, SortError};
 pub use lexer::{Lexer, Position, Reserved, Token};
 
@@ -17,7 +15,7 @@ use crate::{
 use error::assert_num_args;
 use indexmap::{IndexMap, IndexSet};
 use rug::{Integer, Rational};
-use std::{io::BufRead, str::FromStr};
+use std::{collections::HashMap, io::BufRead, iter::Iterator, str::FromStr};
 
 use self::error::assert_indexed_op_args_value;
 
@@ -133,6 +131,7 @@ struct SortDef {
 struct ParserState {
     symbol_table: HashMapStack<HashCache<String>, Rc<Term>>,
     function_defs: IndexMap<String, FunctionDef>,
+    named_terms: HashMap<Rc<Term>, String>,
     sort_declarations: HashMapStack<String, usize>,
     sort_defs: IndexMap<String, SortDef>,
     step_ids: HashMapStack<HashCache<String>, usize>,
@@ -205,6 +204,17 @@ impl<'a, R: BufRead> Parser<'a, R> {
     /// Shortcut for `self.problem.as_mut().unwrap().premises`
     fn premises(&mut self) -> &mut IndexSet<Rc<Term>> {
         &mut self.problem.as_mut().unwrap().premises
+    }
+
+    fn add_premise(&mut self, term: Rc<Term>) {
+        if let Some(name) = self.state.named_terms.get(&term) {
+            self.problem
+                .as_mut()
+                .unwrap()
+                .premise_names
+                .insert(term.clone(), name.clone());
+        }
+        self.premises().insert(term);
     }
 
     /// Constructs and sort checks a variable term.
@@ -725,13 +735,15 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 Token::ReservedWord(Reserved::Assert) => {
                     let term = self.parse_term()?;
                     self.expect_token(Token::CloseParen)?;
-                    self.premises().insert(term);
+                    self.add_premise(term);
                 }
                 Token::ReservedWord(Reserved::CheckSatAssuming) => {
                     self.expect_token(Token::OpenParen)?;
                     let terms = self.parse_sequence(Self::parse_term, true)?;
                     self.expect_token(Token::CloseParen)?;
-                    self.premises().extend(terms);
+                    for t in terms {
+                        self.add_premise(t);
+                    }
                 }
                 Token::ReservedWord(Reserved::SetLogic) => {
                     let logic = self.expect_symbol()?;
@@ -1387,6 +1399,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                             params: Vec::new(),
                             body: inner.clone(),
                         };
+                        p.state.named_terms.insert(inner.clone(), name.clone());
                         p.state.function_defs.insert(name, func_def);
                         Ok(())
                     }
