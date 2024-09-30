@@ -48,14 +48,51 @@ use std::collections::HashMap;
 */
 
 // TODO: How to represent NEGATED literals
+/*
+    (>= (+ (* 1 (- 1 x3)) 0) 1) == ~x3 >= 1
+
+    PbHash: (literal:String) -> (pos:Integer,neg:Integer)
+    * Confusion when accessing a single literal
+    * Easy to bind positive and negated variables, needed by cp_addition
+
+    PbHash: (literal:String) -> (coeff:Integer)
+    * Easy access to single literal
+    * Must implement a relation between positive and negated variables, needed by cp_addtion
+
+*/
 
 type PbHash = HashMap<String, Integer>;
+
+trait NegatedLiterals {
+    fn get_negated(&self, lit: &str) -> Option<&Integer>;
+}
+
+impl NegatedLiterals for PbHash {
+    fn get_negated(&self, lit: &str) -> Option<&Integer> {
+        if let Some(plain_lit) = lit.strip_prefix('~') {
+            self.get(plain_lit)
+        } else {
+            self.get(&format!("~{}", lit))
+        }
+    }
+}
 
 fn get_pb_hashmap(pbsum: &[Rc<Term>]) -> Result<PbHash, CheckerError> {
     let mut hm = HashMap::new();
     let n = pbsum.len() - 1;
+
     for term in pbsum.iter().take(n) {
-        let (coeff, literal) = match_term_err!((* coeff literal) = term)?;
+        let (coeff, literal) =
+            // Negated literal  (* c x1)
+            if let Some((coeff, (_, literal))) = match_term!((* coeff (- one literal)) = term) {
+                (coeff, literal)
+            // Plain literal    (* c (- 1 x1))
+            } else if let Some((coeff, literal)) = match_term!((* coeff literal) = term) {
+                (coeff, literal)
+            } else {
+                return Err(CheckerError::Unspecified);
+            };
+
         let coeff = coeff.as_integer_err()?;
         let literal = literal.to_string();
         hm.insert(literal, coeff);
@@ -298,6 +335,11 @@ mod tests {
                 (declare-fun x2 () Int)
                 (declare-fun x3 () Int)
                 ",
+            // "Addition with Reduction" {
+            //     r#"(assume c1 (>= (+ (* 2 x1) 0) 1))
+            //        (assume c2 (>= (+ (* 1 (- 1 x1)) 0) 1))
+            //        (step t1 (cl (>= (+ (* 1 x1) 0) 2)) :rule cp_addition :premises (c1 c2))"#: true,
+            // }
             "Simple working examples" {
                 r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
                    (step t1 (cl (>= (+ (* 2 x1) 0) 2)) :rule cp_addition :premises (c1 c1))"#: true,
@@ -356,7 +398,8 @@ mod tests {
                    (step t1 (cl (>= (+ (* 2 x1) (* 4 x2) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
                 r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) (* 3 x3) 0) 1))
                    (step t1 (cl (>= (+ (* 2 x1) (* 4 x2) (* 6 x3) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
-
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 (- 1 x2)) (* 3 x3) 0) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 4 (- 1 x2)) (* 6 x3) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
             }
             "Wrong number of premises" {
                 r#"(assume c1 (>= x1 1))
@@ -398,6 +441,8 @@ mod tests {
             "Simple working examples" {
                 r#"(assume c1 (>= (+ (* 2 x1) 0) 2))
                    (step t1 (cl (>= (+ (* 1 x1) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
+                r#"(assume c1 (>= (+ (* 2 (- 1 x1)) 0) 2))
+                   (step t1 (cl (>= (+ (* 1 (- 1 x1)) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
             }
             "Wrong division" {
                 r#"(assume c1 (>= (+ (* 2 x1) 0) 2))
@@ -453,6 +498,9 @@ mod tests {
 
                 r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 x3) 0) 3))
                    (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) (* 3 x3) 0) 3)) :rule cp_saturation :premises (c1))"#: true,
+
+                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 (- 1 x3)) 0) 3))
+                   (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) (* 3 (- 1 x3)) 0) 3)) :rule cp_saturation :premises (c1))"#: true,
 
             }
             "Wrong saturation" {
