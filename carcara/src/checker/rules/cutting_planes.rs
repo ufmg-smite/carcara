@@ -87,18 +87,17 @@ fn get_pb_hashmap(pbsum: &[Rc<Term>]) -> Result<PbHash, CheckerError> {
 
     for term in pbsum.iter().take(n) {
         let (coeff, literal) =
-            // Negated literal  (* c x1)
+            // Negated literal  (* c (- 1 x1))
             if let Some((coeff, (_, literal))) = match_term!((* coeff (- one literal)) = term) {
-                (coeff, literal)
-            // Plain literal    (* c (- 1 x1))
+                (coeff, format!("~{}",literal))
+            // Plain literal    (* c x1)
             } else if let Some((coeff, literal)) = match_term!((* coeff literal) = term) {
-                (coeff, literal)
+                (coeff, format!("{}",literal))
             } else {
                 return Err(CheckerError::Unspecified);
             };
 
         let coeff = coeff.as_integer_err()?;
-        let literal = literal.to_string();
         hm.insert(literal, coeff);
     }
     Ok(hm)
@@ -115,6 +114,13 @@ fn unwrap_pseudoboolean_inequality(clause: &Rc<Term>) -> Result<(PbHash, Integer
 /// ha ⊆ hb
 fn assert_pbsum_subset_keys(pbsum_a: &PbHash, pbsum_b: &PbHash) -> Result<(), CheckerError> {
     for key in pbsum_a.keys() {
+        let val = pbsum_a.get(key).unwrap();
+
+        // Zero coefficient is ignored.
+        if val == &Integer::from(0) {
+            continue;
+        }
+
         if pbsum_b.get(key).is_none() {
             return Err(CheckerError::Unspecified);
         }
@@ -130,6 +136,58 @@ fn assert_pbsum_same_keys(pbsum_a: &PbHash, pbsum_b: &PbHash) -> Result<(), Chec
     assert_pbsum_subset_keys(pbsum_b, pbsum_a)?;
 
     Ok(())
+}
+
+fn add_pbsums(pbsum_a: &PbHash, pbsum_b: &PbHash) -> PbHash {
+    let mut res = pbsum_a.clone();
+
+    for (lit, cb) in pbsum_b {
+        res.entry(lit.clone())
+            .and_modify(|ca| *ca += cb)
+            .or_insert(cb.clone());
+    }
+
+    res
+}
+
+/// Cancel out opposite coefficients
+fn reduce_pbsum(pbsum: &PbHash) -> (PbHash, Integer) {
+    let mut slack = Integer::from(0);
+    let mut res = pbsum.clone();
+    let mut changes: Vec<(String, Integer)> = Vec::new();
+
+    for lit in res.keys() {
+        if is_negated_literal(lit) {
+            continue;
+        }
+        let pos = res.get(lit);
+        let neg = res.get_opposite(lit);
+        if neg.is_none() {
+            continue;
+        }
+
+        let pos = pos.unwrap();
+        let neg = neg.unwrap();
+
+        slack += Ord::min(pos, neg);
+
+        if pos > neg {
+            let diff = pos.clone() - neg;
+            changes.push((lit.clone(), diff)); // Update lit to diff
+            changes.push((format!("~{lit}"), Integer::from(0))); // Set ~lit to 0
+        } else {
+            let diff = neg.clone() - pos;
+            changes.push((lit.clone(), Integer::from(0))); // Set lit to 0
+            changes.push((format!("~{lit}"), diff)); // Update ~lit to neg - pos
+        }
+    }
+
+    // Apply all changes after the loop
+    for (lit, value) in changes {
+        res.insert(lit, value);
+    }
+
+    (res, slack)
 }
 
 pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
@@ -156,48 +214,28 @@ pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
     // Unwrap the conclusion inequality
     let (pbsum_c, constant_c) = unwrap_pseudoboolean_inequality(conclusion)?;
 
-    // Verify constants match
+    // Add both sides regardless of negation
+    let pbsum_lr = add_pbsums(&pbsum_l, &pbsum_r);
+
+    // Apply reduction to cancel out opposite coefficients
+    let (pbsum_lr_reduced, slack) = reduce_pbsum(&pbsum_lr);
+
+    // Verify constants match (with slack)
     rassert!(
-        constant_l.clone() + constant_r.clone() == constant_c,
+        constant_l.clone() + constant_r.clone() == constant_c + slack.clone(),
         CheckerError::ExpectedInteger(constant_l.clone() + constant_r.clone(), conclusion.clone())
     );
 
-    // Verify keys in pbsum_c = pbsum_l ∪ pbsum_r
-    // C = L ∪ R
-    // ==> (L ⊆ C) ∧ (R ⊆ C) ∧ ¬∃ x, (x ∈ C) ∧ ¬(x ∈ L) ∧ ¬(x ∈ R)
-    // All keys of pbsum_l are in pubsum_c
-    // L ⊆ C
-    assert_pbsum_subset_keys(&pbsum_l, &pbsum_c)?;
-
-    // All keys of pbsum_r are in pbsum_c
-    // R ⊆ C
-    assert_pbsum_subset_keys(&pbsum_r, &pbsum_c)?;
-
-    // TODO:
-    // lr := l + r
-    // (lr',slack) := reduction(lr)
-    // assert lr' == c && constant_c == slack + constant_l + constant_r
+    // Verify premise and conclusion share same keys
+    assert_pbsum_same_keys(&pbsum_lr_reduced, &pbsum_c)?;
 
     // Verify pseudo-boolean sums match
     for (literal, coeff_c) in &pbsum_c {
-        match (pbsum_l.get(literal), pbsum_r.get(literal)) {
-            (Some(coeff_l), Some(coeff_r)) => {
-                let expected = coeff_l.clone() + coeff_r.clone();
+        match pbsum_lr_reduced.get(literal) {
+            Some(coeff_lr_reduced) => {
                 rassert!(
-                    &expected == coeff_c,
-                    CheckerError::ExpectedInteger(expected, conclusion.clone())
-                );
-            }
-            (Some(coeff_l), _) => {
-                rassert!(
-                    coeff_l == coeff_c,
-                    CheckerError::ExpectedInteger(coeff_l.clone(), conclusion.clone())
-                );
-            }
-            (_, Some(coeff_r)) => {
-                rassert!(
-                    coeff_r == coeff_c,
-                    CheckerError::ExpectedInteger(coeff_r.clone(), conclusion.clone())
+                    coeff_lr_reduced == coeff_c,
+                    CheckerError::ExpectedInteger(coeff_lr_reduced.clone(), conclusion.clone())
                 );
             }
             // ¬∃ x, (x ∈ C) ∧ ¬(x ∈ L) ∧ ¬(x ∈ R)
@@ -342,11 +380,15 @@ mod tests {
                 (declare-fun x2 () Int)
                 (declare-fun x3 () Int)
                 ",
-            // "Addition with Reduction" {
-            //     r#"(assume c1 (>= (+ (* 2 x1) 0) 1))
-            //        (assume c2 (>= (+ (* 1 (- 1 x1)) 0) 1))
-            //        (step t1 (cl (>= (+ (* 1 x1) 0) 2)) :rule cp_addition :premises (c1 c2))"#: true,
-            // }
+            "Addition with Reduction" {
+                r#"(assume c1 (>= (+ (* 2 x1) 0) 1))
+                   (assume c2 (>= (+ (* 1 (- 1 x1)) 0) 1))
+                   (step t1 (cl (>= (+ (* 1 x1) 0) 1)) :rule cp_addition :premises (c1 c2))"#: true,
+
+                // r#"(assume c1 (>= (+ (* 2 x1) (* 3 x2) 0) 1))
+                //    (assume c2 (>= (+ (* 1 (- 1 x1)) (* 3 (- 1 x2)) 0) 1))
+                //    (step t1 (cl (>= (+ (* 1 x1) 0) 2)) :rule cp_addition :premises (c1 c2))"#: true,
+            }
             "Simple working examples" {
                 r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
                    (step t1 (cl (>= (+ (* 2 x1) 0) 2)) :rule cp_addition :premises (c1 c1))"#: true,
