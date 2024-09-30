@@ -1,5 +1,6 @@
 use super::{Rc, Term};
 use indexmap::IndexSet;
+use std::collections::HashMap;
 
 /// An SMT problem in the SMT-LIB format.
 #[derive(Debug, Clone, Default)]
@@ -11,6 +12,9 @@ pub struct Problem {
     ///
     /// Those are the terms introduced in the original problem's `assert` commands.
     pub premises: IndexSet<Rc<Term>>,
+
+    /// The names given to each premise, if any.
+    pub premise_names: HashMap<Rc<Term>, String>,
 }
 
 impl Problem {

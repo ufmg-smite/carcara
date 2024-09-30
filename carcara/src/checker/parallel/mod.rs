@@ -11,7 +11,6 @@ use crate::{
     ast::{pool::advanced::*, *},
     CarcaraResult, Error,
 };
-use indexmap::IndexSet;
 pub use scheduler::{Schedule, ScheduleIter, Scheduler};
 use std::{
     ops::ControlFlow,
@@ -312,7 +311,15 @@ impl<'c> ParallelProofChecker<'c> {
                     }
                 }
                 ProofCommand::Assume { id, term } => {
-                    if !self.check_assume(id, term, &problem.premises, &iter, &mut stats) {
+                    let res = ProofChecker::check_assume(
+                        id,
+                        term,
+                        problem,
+                        !self.config.elaborated,
+                        self.config.isabelle_mode,
+                        &mut stats,
+                    );
+                    if !res {
                         // Signalize to other threads to stop the proof checking
                         should_abort.store(true, Ordering::Release);
                         return Err(Error::Checker {
@@ -335,75 +342,6 @@ impl<'c> ParallelProofChecker<'c> {
         } else {
             Ok((false, self.is_holey))
         }
-    }
-
-    fn check_assume<CR: CollectResults + Send + Default>(
-        &mut self,
-        id: &str,
-        term: &Rc<Term>,
-        premises: &IndexSet<Rc<Term>>,
-        iter: &ScheduleIter,
-        mut stats: &mut Option<&mut CheckerStatistics<CR>>,
-    ) -> bool {
-        let time = Instant::now();
-
-        // Similarly to the single-threaded checker, we ignore `assume` commands that are inside
-        // subproofs
-        if iter.is_in_subproof() {
-            return true;
-        }
-
-        if premises.contains(term) {
-            if let Some(s) = stats {
-                let time = time.elapsed();
-                s.assume_time += time;
-                s.results
-                    .add_assume_measurement(s.file_name, id, true, time);
-            }
-            return true;
-        }
-
-        if self.config.elaborated {
-            return false;
-        }
-
-        let mut found = false;
-        let mut polyeq_time = Duration::ZERO;
-        let mut core_time = Duration::ZERO;
-
-        for p in premises {
-            let mut this_polyeq_time = Duration::ZERO;
-
-            let mut comp = Polyeq::new().mod_reordering(true).mod_nary(true);
-            let result = comp.eq_with_time(term, p, &mut this_polyeq_time);
-            let depth = comp.max_depth();
-
-            polyeq_time += this_polyeq_time;
-
-            if let Some(s) = &mut stats {
-                s.results.add_polyeq_depth(depth);
-            }
-            if result {
-                core_time = this_polyeq_time;
-                found = true;
-                break;
-            }
-        }
-
-        if !found {
-            return false;
-        }
-
-        if let Some(s) = stats {
-            let time = time.elapsed();
-            s.assume_time += time;
-            s.assume_core_time += core_time;
-            s.polyeq_time += polyeq_time;
-            s.results
-                .add_assume_measurement(s.file_name, id, false, time);
-        }
-
-        true
     }
 
     fn check_step<CR: CollectResults + Send + Default>(
