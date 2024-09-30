@@ -63,12 +63,16 @@ use std::collections::HashMap;
 
 type PbHash = HashMap<String, Integer>;
 
+fn is_negated_literal(lit: &str) -> bool {
+    lit.starts_with('~')
+}
+
 trait NegatedLiterals {
-    fn get_negated(&self, lit: &str) -> Option<&Integer>;
+    fn get_opposite(&self, lit: &str) -> Option<&Integer>;
 }
 
 impl NegatedLiterals for PbHash {
-    fn get_negated(&self, lit: &str) -> Option<&Integer> {
+    fn get_opposite(&self, lit: &str) -> Option<&Integer> {
         if let Some(plain_lit) = lit.strip_prefix('~') {
             self.get(plain_lit)
         } else {
