@@ -169,7 +169,10 @@ pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
     // R ⊆ C
     assert_pbsum_subset_keys(&pbsum_r, &pbsum_c)?;
 
-    //
+    // TODO:
+    // lr := l + r
+    // (lr',slack) := reduction(lr)
+    // assert lr' == c && constant_c == slack + constant_l + constant_r
 
     // Verify pseudo-boolean sums match
     for (literal, coeff_c) in &pbsum_c {
