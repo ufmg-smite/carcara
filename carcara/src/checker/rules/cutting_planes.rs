@@ -231,6 +231,9 @@ pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
 
     // Verify pseudo-boolean sums match
     for (literal, coeff_c) in &pbsum_c {
+        if *coeff_c == 0 {
+            continue;
+        }
         match pbsum_lr_reduced.get(literal) {
             Some(coeff_lr_reduced) => {
                 rassert!(
@@ -381,13 +384,17 @@ mod tests {
                 (declare-fun x3 () Int)
                 ",
             "Addition with Reduction" {
+                r#"(assume c1 (>= (+ (* 1 (- 1 x1)) 0) 1))
+                   (assume c2 (>= (+ (* 2 x1) 0) 1))
+                   (step t1 (cl (>= (+ (* 1 x1) (* 0 x2) 0) 1)) :rule cp_addition :premises (c1 c2))"#: true,
+
                 r#"(assume c1 (>= (+ (* 2 x1) 0) 1))
                    (assume c2 (>= (+ (* 1 (- 1 x1)) 0) 1))
                    (step t1 (cl (>= (+ (* 1 x1) 0) 1)) :rule cp_addition :premises (c1 c2))"#: true,
 
-                // r#"(assume c1 (>= (+ (* 2 x1) (* 3 x2) 0) 1))
-                //    (assume c2 (>= (+ (* 1 (- 1 x1)) (* 3 (- 1 x2)) 0) 1))
-                //    (step t1 (cl (>= (+ (* 1 x1) 0) 2)) :rule cp_addition :premises (c1 c2))"#: true,
+                r#"(assume c1 (>= (+ (* 2 x1) (* 3 x2) 0) 2))
+                   (assume c2 (>= (+ (* 1 (- 1 x1)) (* 3 (- 1 x2)) 0) 4))
+                   (step t1 (cl (>= (+ (* 1 x1) 0) 2)) :rule cp_addition :premises (c1 c2))"#: true,
             }
             "Simple working examples" {
                 r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
