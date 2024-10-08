@@ -93,7 +93,7 @@ pub fn check<T: io::BufRead>(
 
     // Parsing
     let total = Instant::now();
-    let (_, proof, mut pool) = parser::parse_instance(problem, proof, parser_config)?;
+    let (problem, proof, mut pool) = parser::parse_instance(problem, proof, parser_config)?;
     run_measures.parsing = total.elapsed();
 
     // Checking
@@ -107,7 +107,7 @@ pub fn check<T: io::BufRead>(
             assume_core_time: Duration::ZERO,
             results: OnlineBenchmarkResults::new(),
         };
-        let res = checker.check_with_stats(&proof, &mut checker_stats);
+        let res = checker.check_with_stats(&problem, &proof, &mut checker_stats);
 
         run_measures.checking = checking.elapsed();
         run_measures.total = total.elapsed();
@@ -131,7 +131,7 @@ pub fn check<T: io::BufRead>(
 
         res
     } else {
-        checker.check(&proof)
+        checker.check(&problem, &proof)
     }
 }
 
@@ -150,7 +150,7 @@ pub fn check_parallel<T: io::BufRead>(
 
     // Parsing
     let total = Instant::now();
-    let (prelude, proof, pool) = parser::parse_instance(problem, proof, parser_config)?;
+    let (problem, proof, pool) = parser::parse_instance(problem, proof, parser_config)?;
     run_measures.parsing = total.elapsed();
 
     // Checking
@@ -160,7 +160,7 @@ pub fn check_parallel<T: io::BufRead>(
     let mut checker = checker::ParallelProofChecker::new(
         Arc::new(pool),
         checker_config,
-        &prelude,
+        &problem.prelude,
         &schedule_context_usage,
         stack_size,
     );
@@ -173,7 +173,7 @@ pub fn check_parallel<T: io::BufRead>(
             assume_core_time: Duration::ZERO,
             results: OnlineBenchmarkResults::new(),
         };
-        let res = checker.check_with_stats(&proof, &scheduler, &mut checker_stats);
+        let res = checker.check_with_stats(&problem, &proof, &scheduler, &mut checker_stats);
 
         run_measures.checking = checking.elapsed();
         run_measures.total = total.elapsed();
@@ -197,7 +197,7 @@ pub fn check_parallel<T: io::BufRead>(
 
         res
     } else {
-        checker.check(&proof, &scheduler)
+        checker.check(&problem, &proof, &scheduler)
     }
 }
 
@@ -209,12 +209,12 @@ pub fn check_and_elaborate<T: io::BufRead>(
     elaborator_config: elaborator::Config,
     pipeline: Vec<elaborator::ElaborationStep>,
     collect_stats: bool,
-) -> Result<(bool, ast::ProblemPrelude, ast::Proof, ast::PrimitivePool), Error> {
+) -> Result<(bool, ast::Problem, ast::Proof, ast::PrimitivePool), Error> {
     let mut run: RunMeasurement = RunMeasurement::default();
 
     // Parsing
     let total = Instant::now();
-    let (prelude, proof, mut pool) = parser::parse_instance(problem, proof, parser_config)?;
+    let (problem, proof, mut pool) = parser::parse_instance(problem, proof, parser_config)?;
     run.parsing = total.elapsed();
 
     let mut stats = OnlineBenchmarkResults::new();
@@ -231,7 +231,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
             results: std::mem::take(&mut stats),
         };
 
-        let res = checker.check_with_stats(&proof, &mut checker_stats);
+        let res = checker.check_with_stats(&problem, &proof, &mut checker_stats);
         run.checking = checking.elapsed();
         run.polyeq = checker_stats.polyeq_time;
         run.assume = checker_stats.assume_time;
@@ -240,7 +240,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
         stats = checker_stats.results;
         res
     } else {
-        checker.check(&proof)
+        checker.check(&problem, &proof)
     }?;
 
     // Elaborating
@@ -248,7 +248,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
 
     let node = ast::ProofNode::from_commands(proof.commands);
     let (elaborated, pipeline_durations) =
-        elaborator::Elaborator::new(&mut pool, &proof.premises, &prelude, elaborator_config)
+        elaborator::Elaborator::new(&mut pool, &problem, elaborator_config)
             .elaborate_with_stats(&node, pipeline);
     let elaborated = ast::Proof {
         commands: elaborated.into_commands(),
@@ -265,7 +265,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
         stats.print(false);
     }
 
-    Ok((checking_result, prelude, elaborated, pool))
+    Ok((checking_result, problem, elaborated, pool))
 }
 
 pub fn generate_lia_smt_instances<T: io::BufRead>(
@@ -275,7 +275,7 @@ pub fn generate_lia_smt_instances<T: io::BufRead>(
     use_sharing: bool,
 ) -> Result<Vec<(String, String)>, Error> {
     use std::fmt::Write;
-    let (prelude, proof, mut pool) = parser::parse_instance(problem, proof, config)?;
+    let (problem, proof, mut pool) = parser::parse_instance(problem, proof, config)?;
 
     let mut iter = proof.iter();
     let mut result = Vec::new();
@@ -289,24 +289,24 @@ pub fn generate_lia_smt_instances<T: io::BufRead>(
                     continue;
                 }
 
-                let mut problem = String::new();
-                write!(&mut problem, "{}", prelude).unwrap();
+                let mut problem_string = String::new();
+                write!(&mut problem_string, "{}", problem.prelude).unwrap();
 
                 let mut bytes = Vec::new();
                 ast::printer::write_lia_smt_instance(
                     &mut pool,
-                    &prelude,
+                    &problem.prelude,
                     &mut bytes,
                     &step.clause,
                     use_sharing,
                 )
                 .unwrap();
-                write!(&mut problem, "{}", String::from_utf8(bytes).unwrap()).unwrap();
+                write!(&mut problem_string, "{}", String::from_utf8(bytes).unwrap()).unwrap();
 
-                writeln!(&mut problem, "(check-sat)").unwrap();
-                writeln!(&mut problem, "(exit)").unwrap();
+                writeln!(&mut problem_string, "(check-sat)").unwrap();
+                writeln!(&mut problem_string, "(exit)").unwrap();
 
-                result.push((step.id.clone(), problem));
+                result.push((step.id.clone(), problem_string));
             }
         }
     }

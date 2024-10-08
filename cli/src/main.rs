@@ -443,8 +443,8 @@ fn main() {
     }
 
     let result = match cli.command {
-        Command::Parse(options) => parse_command(options).and_then(|(prelude, proof, mut pool)| {
-            ast::print_proof(&mut pool, &prelude, &proof, !cli.no_print_with_sharing)?;
+        Command::Parse(options) => parse_command(options).and_then(|(pb, pf, mut pool)| {
+            ast::print_proof(&mut pool, &pb.prelude, &pf, !cli.no_print_with_sharing)?;
             Ok(())
         }),
         Command::Check(options) => {
@@ -460,19 +460,19 @@ fn main() {
             return;
         }
         Command::Elaborate(options) => {
-            elaborate_command(options).and_then(|(res, prelude, proof, mut pool)| {
+            elaborate_command(options).and_then(|(res, pb, pf, mut pool)| {
                 if res {
                     println!("holey");
                 } else {
                     println!("valid");
                 }
-                ast::print_proof(&mut pool, &prelude, &proof, !cli.no_print_with_sharing)?;
+                ast::print_proof(&mut pool, &pb.prelude, &pf, !cli.no_print_with_sharing)?;
                 Ok(())
             })
         }
         Command::Bench(options) => bench_command(options),
-        Command::Slice(options) => slice_command(options).and_then(|(prelude, proof, mut pool)| {
-            ast::print_proof(&mut pool, &prelude, &proof, !cli.no_print_with_sharing)?;
+        Command::Slice(options) => slice_command(options).and_then(|(pb, pf, mut pool)| {
+            ast::print_proof(&mut pool, &pb.prelude, &pf, !cli.no_print_with_sharing)?;
             Ok(())
         }),
         Command::GenerateLiaProblems(options) => {
@@ -504,7 +504,7 @@ fn get_instance(options: &Input) -> CliResult<(Box<dyn BufRead>, Box<dyn BufRead
 
 fn parse_command(
     options: ParseCommandOptions,
-) -> CliResult<(ast::ProblemPrelude, ast::Proof, ast::PrimitivePool)> {
+) -> CliResult<(ast::Problem, ast::Proof, ast::PrimitivePool)> {
     let (problem, proof) = get_instance(&options.input)?;
     let result = parser::parse_instance(problem, proof, options.parsing.into())
         .map_err(carcara::Error::from)?;
@@ -534,7 +534,7 @@ fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
 
 fn elaborate_command(
     options: ElaborateCommandOptions,
-) -> CliResult<(bool, ast::ProblemPrelude, ast::Proof, ast::PrimitivePool)> {
+) -> CliResult<(bool, ast::Problem, ast::Proof, ast::PrimitivePool)> {
     let (problem, proof) = get_instance(&options.input)?;
 
     let (elab_config, pipeline) = options.elaboration.into();
@@ -603,9 +603,9 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
 
 fn slice_command(
     options: SliceCommandOptions,
-) -> CliResult<(ast::ProblemPrelude, ast::Proof, ast::PrimitivePool)> {
+) -> CliResult<(ast::Problem, ast::Proof, ast::PrimitivePool)> {
     let (problem, proof) = get_instance(&options.input)?;
-    let (prelude, proof, pool) = parser::parse_instance(problem, proof, options.parsing.into())
+    let (problem, proof, pool) = parser::parse_instance(problem, proof, options.parsing.into())
         .map_err(carcara::Error::from)?;
 
     let node = ast::ProofNode::from_commands_with_root_id(proof.commands, &options.from)
@@ -615,7 +615,7 @@ fn slice_command(
         ..proof
     };
 
-    Ok((prelude, sliced, pool))
+    Ok((problem, sliced, pool))
 }
 
 fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool) -> CliResult<()> {
