@@ -4,63 +4,6 @@ use crate::checker::Rc;
 use rug::Integer;
 use std::collections::HashMap;
 
-/*
-(step t1 (cl
-            (>=
-                (+ (* 2 x1) (* 4 x2) (* 2 x3))
-                4)
-            )
-    :rule cp_multiplication
-    :premises (c1)
-)
-(step t2 (cl
-            (>=
-                (+ (* 3 x1) (* 6 x2) (* 6 x3) (* 2 x4))
-                9)
-            )
-    :rule cp_addition
-    :premises (t1 c2)
-)
-(step t3 (cl
-            (>=
-                (* 2 (- 1 x4))
-                0)
-            )
-    :rule cp_multiplication
-    :premises (c3)
-)
-(step t4 (cl
-             (>=
-                (+ (* 3 x1) (* 6 x2) (* 6 x3))
-                7)
-            )
-    :rule cp_addition
-    :premises (t2 t3)
-)
-(step t5 (cl
-             (>=
-                (+ x1 (* 2 x2) (* 2 x3))
-                3)
-            )
-    :rule cp_division
-    :premises (t4)
-)
-*/
-
-// TODO: How to represent NEGATED literals
-/*
-    (>= (+ (* 1 (- 1 x3)) 0) 1) == ~x3 >= 1
-
-    PbHash: (literal:String) -> (pos:Integer,neg:Integer)
-    * Confusion when accessing a single literal
-    * Easy to bind positive and negated variables, needed by cp_addition
-
-    PbHash: (literal:String) -> (coeff:Integer)
-    * Easy access to single literal
-    * Must implement a relation between positive and negated variables, needed by cp_addtion
-
-*/
-
 type PbHash = HashMap<String, Integer>;
 
 fn is_negated_literal(lit: &str) -> bool {
