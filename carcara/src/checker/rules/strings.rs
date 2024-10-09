@@ -341,11 +341,7 @@ fn str_fixed_len_re(pool: &mut dyn TermPool, r: Rc<Term>) -> Result<usize, Check
                 let r_2_concat = concat(pool, r_2.to_vec());
                 Ok(str_fixed_len_re(pool, r_1.clone())? + str_fixed_len_re(pool, r_2_concat)?)
             } else {
-                Err(CheckerError::WrongNumberOfTermsInOp(
-                    Operator::ReConcat,
-                    (2..).into(),
-                    args.len(),
-                ))
+                unreachable!()
             }
         }
         Term::Op(Operator::ReAllChar, _) => Ok(1),
@@ -357,11 +353,7 @@ fn str_fixed_len_re(pool: &mut dyn TermPool, r: Rc<Term>) -> Result<usize, Check
                     _ => Err(CheckerError::LengthCannotBeEvaluated(r.clone())),
                 }
             } else {
-                Err(CheckerError::WrongNumberOfTermsInOp(
-                    Operator::StrToRe,
-                    (1).into(),
-                    args.len(),
-                ))
+                unreachable!()
             }
         }
         Term::Op(Operator::ReUnion, args) => {
@@ -381,11 +373,7 @@ fn str_fixed_len_re(pool: &mut dyn TermPool, r: Rc<Term>) -> Result<usize, Check
                     }
                 }
             } else {
-                Err(CheckerError::WrongNumberOfTermsInOp(
-                    Operator::ReUnion,
-                    (2..).into(),
-                    args.len(),
-                ))
+                unreachable!()
             }
         }
         Term::Op(Operator::ReIntersection, args) => {
@@ -405,11 +393,7 @@ fn str_fixed_len_re(pool: &mut dyn TermPool, r: Rc<Term>) -> Result<usize, Check
                     }
                 }
             } else {
-                Err(CheckerError::WrongNumberOfTermsInOp(
-                    Operator::ReIntersection,
-                    (2..).into(),
-                    args.len(),
-                ))
+                unreachable!()
             }
         }
         _ => Err(CheckerError::LengthCannotBeEvaluated(r.clone())),
@@ -1126,11 +1110,7 @@ pub fn re_unfold_neg(RuleArgs { premises, conclusion, pool, .. }: RuleArgs) -> R
                     )
                 ))
             } else {
-                Err(CheckerError::WrongNumberOfTermsInOp(
-                    Operator::ReKleeneClosure,
-                    1.into(),
-                    args.len(),
-                ))
+                unreachable!()
             }
         }
         Term::Op(Operator::ReConcat, args) => {
@@ -1161,11 +1141,7 @@ pub fn re_unfold_neg(RuleArgs { premises, conclusion, pool, .. }: RuleArgs) -> R
                 ));
                 Ok(quantifier)
             } else {
-                Err(CheckerError::WrongNumberOfTermsInOp(
-                    Operator::ReConcat,
-                    (2..).into(),
-                    args.len(),
-                ))
+                unreachable!()
             }
         }
         _ => Err(CheckerError::TermOfWrongForm(
@@ -1206,11 +1182,7 @@ pub fn re_unfold_neg_concat_fixed_prefix(
                 )
             ))
         } else {
-            Err(CheckerError::WrongNumberOfTermsInOp(
-                Operator::ReConcat,
-                (2..).into(),
-                args.len(),
-            ))
+            unreachable!()
         }
     } else {
         Err(CheckerError::TermOfWrongForm("(re.++ ...)", r.clone()))
@@ -1254,11 +1226,7 @@ pub fn re_unfold_neg_concat_fixed_suffix(
                 )
             ))
         } else {
-            Err(CheckerError::WrongNumberOfTermsInOp(
-                Operator::ReConcat,
-                (2..).into(),
-                args.len(),
-            ))
+            unreachable!()
         }
     } else {
         Err(CheckerError::TermOfWrongForm("(re.++ ...)", r.clone()))
