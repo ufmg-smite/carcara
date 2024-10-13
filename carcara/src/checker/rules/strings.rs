@@ -334,47 +334,70 @@ fn singleton_elim(pool: &mut dyn TermPool, r_list: Vec<Rc<Term>>) -> Rc<Term> {
     }
 }
 
+/// A function to calculate the fixed length (size of strings that match that RegEx) of a regular
+/// expression `r` if it can be inferred.
+///
+/// It takes an `Rc<Term>` and match over the RegEx operators whose length can be inferred. It
+/// throws an error if the RegEx term size cannot be evaluated.
 fn str_fixed_len_re(pool: &mut dyn TermPool, r: Rc<Term>) -> Result<usize, CheckerError> {
+    // fn has_same_length() -> bool {}
+
     match r.as_ref() {
         Term::Op(Operator::ReConcat, args) => {
-            if let [r_1, r_2 @ ..] = &args[..] {
-                let r_2_concat = concat(pool, r_2.to_vec());
-                Ok(str_fixed_len_re(pool, r_1.clone())? + str_fixed_len_re(pool, r_2_concat)?)
-            } else {
-                unreachable!()
-            }
+            let mut lengths = args.iter().map(|a| str_fixed_len_re(pool, a.clone()));
+            lengths.try_fold(0, |acc, x| Ok(acc + x?))
         }
         Term::Op(Operator::ReAllChar, _) => Ok(1),
         Term::Op(Operator::ReRange, _) => Ok(1),
         Term::Op(Operator::StrToRe, args) => {
-            if let Some(s_1) = args.first() {
-                match s_1.as_ref() {
-                    Term::Const(Constant::String(s)) => Ok(s.len()),
-                    _ => Err(CheckerError::LengthCannotBeEvaluated(r.clone())),
-                }
-            } else {
-                unreachable!()
+            let s_1 = args.first().unwrap();
+            match s_1.as_ref() {
+                Term::Const(Constant::String(s)) => Ok(s.len()),
+                _ => Err(CheckerError::LengthCannotBeEvaluated(r.clone())),
             }
         }
         Term::Op(Operator::ReUnion, args) => {
-            if let [r_1, r_2 @ ..] = &args[..] {
-                let n = str_fixed_len_re(pool, r_1.clone())?;
-                if r_2.len() == 1 {
-                    match r_2.first().unwrap().as_ref() {
-                        Term::Op(Operator::ReNone, _) => Ok(n),
-                        _ => Err(CheckerError::LengthCannotBeEvaluated(r.clone())),
-                    }
-                } else {
-                    let new_r_2 = pool.add(Term::Op(Operator::ReUnion, r_2.to_vec()));
-                    if str_fixed_len_re(pool, new_r_2)? == n {
-                        Ok(n)
-                    } else {
-                        Err(CheckerError::LengthCannotBeEvaluated(r.clone()))
-                    }
-                }
-            } else {
-                unreachable!()
-            }
+            let mut lengths = args.iter().map(|a| str_fixed_len_re(pool, a.clone()));
+            println!("oiii {:?}", lengths);
+            // let first = lengths.next();
+            // let test = lengths.try_fold(first, |first, x| {});
+            // println!("ans {:?}", test);
+
+            // if lengths.try_fold(0, |acc, x| Ok(acc + x?)) {
+            //     Ok(lengths.first())
+            // }
+            // let first = lengths.next();
+            // let test = lengths.fold(first, |acc, item| {
+            //     println!("{:?} {:?}", acc, item);
+            //     acc.and_then(|stored| {
+            //         println!("stored: {:?}", stored);
+            //         if stored? == item? {
+            //             Some(stored)
+            //         } else {
+            //             None
+            //         }
+            //     })
+            // });
+            // println!("oiii {:?}", test);
+            Ok(1)
+            // if let [r_1, r_2 @ ..] = &args[..] {
+            //     let n = str_fixed_len_re(pool, r_1.clone())?;
+            //     if r_2.len() == 1 {
+            //         match r_2.first().unwrap().as_ref() {
+            //             Term::Op(Operator::ReNone, _) => Ok(n),
+            //             _ => Err(CheckerError::LengthCannotBeEvaluated(r.clone())),
+            //         }
+            //     } else {
+            //         let new_r_2 = pool.add(Term::Op(Operator::ReUnion, r_2.to_vec()));
+            //         if str_fixed_len_re(pool, new_r_2)? == n {
+            //             Ok(n)
+            //         } else {
+            //             Err(CheckerError::LengthCannotBeEvaluated(r.clone()))
+            //         }
+            //     }
+            // } else {
+            //     unreachable!()
+            // }
         }
         Term::Op(Operator::ReIntersection, args) => {
             if let [r_1, r_2 @ ..] = &args[..] {
