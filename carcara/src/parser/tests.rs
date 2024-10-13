@@ -643,9 +643,12 @@ fn test_step() {
             premises: Vec::new(),
             args: {
                 vec![
-                    p.add(Term::new_var("a", int_sort.clone())), p.add(Term::new_int(12)),
-                    p.add(Term::new_var("b", real_sort)), p.add(Term::new_real((314, 100))),
-                    p.add(Term::new_var("c", int_sort)), parse_term(&mut p, "(* 6 7)"),
+                    p.add(Term::new_var("a", int_sort.clone())),
+                    p.add(Term::new_int(12)),
+                    p.add(Term::new_var("b", real_sort)),
+                    p.add(Term::new_real((314, 100))),
+                    p.add(Term::new_var("c", int_sort)),
+                    parse_term(&mut p, "(* 6 7)"),
                 ]
             },
             discharge: Vec::new(),

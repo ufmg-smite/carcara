@@ -27,9 +27,7 @@ pub fn resolution(
                     clause: Vec::new(),
                     rule: "resolution".to_owned(),
                     premises: vec![step.premises[0].clone(), true_step],
-                    args: [true, false]
-                        .map(|a| pool.bool_constant(a))
-                        .to_vec(),
+                    args: [true, false].map(|a| pool.bool_constant(a)).to_vec(),
                     ..Default::default()
                 })));
             }

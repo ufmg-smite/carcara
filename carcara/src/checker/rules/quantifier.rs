@@ -31,8 +31,7 @@ pub fn forall_inst(
                     QuantifierError::NoBindingMatchesArg(var_name.clone())
                 );
                 Ok((var.clone(), value.clone()))
-            }
-            else {
+            } else {
                 Err(QuantifierError::ArgNotVar(var.clone()).into())
             }
         })

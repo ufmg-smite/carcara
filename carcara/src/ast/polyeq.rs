@@ -10,8 +10,7 @@
 use rug::Rational;
 
 use super::{
-    AnchorArg, BindingList, Constant, Operator, ProofCommand, ProofStep, Rc, Sort,
-    Subproof, Term,
+    AnchorArg, BindingList, Constant, Operator, ProofCommand, ProofStep, Rc, Sort, Subproof, Term,
 };
 use crate::utils::HashMapStack;
 use std::time::{Duration, Instant};
