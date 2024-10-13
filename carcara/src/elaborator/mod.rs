@@ -224,8 +224,8 @@ impl<'e> Elaborator<'e> {
             rule: "resolution".to_owned(),
             premises: vec![new_assume, equiv1_step],
             args: vec![
-                ProofArg::Term(premise),
-                ProofArg::Term(self.pool.bool_true()),
+                premise,
+                self.pool.bool_true(),
             ],
             ..Default::default()
         }))

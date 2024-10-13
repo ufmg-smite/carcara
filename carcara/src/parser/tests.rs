@@ -624,12 +624,15 @@ fn test_step() {
                     Term::new_string("three"),
                 ]
                 .into_iter()
-                .map(|term| ProofArg::Term(p.add(term)))
+                .map(|term| p.add(term))
                 .collect()
             },
             discharge: Vec::new(),
         })
     );
+
+    let int_sort = p.add(Term::Sort(Sort::Int));
+    let real_sort = p.add(Term::Sort(Sort::Int));
 
     assert_eq!(
         &proof.commands[3],
@@ -640,9 +643,9 @@ fn test_step() {
             premises: Vec::new(),
             args: {
                 vec![
-                    ProofArg::Assign("a".into(), p.add(Term::new_int(12))),
-                    ProofArg::Assign("b".into(), p.add(Term::new_real((314, 100)))),
-                    ProofArg::Assign("c".into(), parse_term(&mut p, "(* 6 7)")),
+                    p.add(Term::new_var("a", int_sort.clone())), p.add(Term::new_int(12)),
+                    p.add(Term::new_var("b", real_sort)), p.add(Term::new_real((314, 100))),
+                    p.add(Term::new_var("c", int_sort)), parse_term(&mut p, "(* 6 7)"),
                 ]
             },
             discharge: Vec::new(),
@@ -656,7 +659,7 @@ fn test_step() {
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: vec![(0, 0), (0, 1), (0, 2)],
-            args: vec![ProofArg::Term(p.add(Term::new_int(42)))],
+            args: vec![p.add(Term::new_int(42))],
             discharge: Vec::new(),
         })
     );

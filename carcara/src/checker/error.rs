@@ -126,12 +126,6 @@ pub enum CheckerError {
     #[error("expected 'let' term, got '{0}'")]
     ExpectedLetTerm(Rc<Term>),
 
-    #[error("expected term style argument, got assign style argument: '(:= {0} {1})'")]
-    ExpectedTermStyleArg(String, Rc<Term>),
-
-    #[error("expected assign style '(:= ...)' argument, got term style argument: '{0}'")]
-    ExpectedAssignStyleArg(Rc<Term>),
-
     #[error("expected term {0} to be a prefix of {1}")]
     ExpectedToBePrefix(Rc<Term>, Rc<Term>),
 
@@ -225,6 +219,9 @@ pub enum CongruenceError {
 /// Errors relevant to the rules dealing with quantifiers.
 #[derive(Debug, Error)]
 pub enum QuantifierError {
+    #[error("lhs of argument equality is not a variable: '{0}'")]
+    ArgNotVar(Rc<Term>),
+
     #[error("argument doesn't match any binding: '{0}'")]
     NoBindingMatchesArg(String),
 
