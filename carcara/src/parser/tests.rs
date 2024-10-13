@@ -579,12 +579,11 @@ fn test_step() {
         (step t1 (cl (= (+ 2 3) (- 1 2))) :rule rule-name)
         (step t2 (cl) :rule rule-name :premises (t1))
         (step t3 (cl) :rule rule-name :args (1 2.0 \"three\"))
-        (step t4 (cl) :rule rule-name :args ((:= a 12) (:= b 3.14) (:= c (* 6 7))))
-        (step t5 (cl) :rule rule-name :premises (t1 t2 t3) :args (42)
+        (step t4 (cl) :rule rule-name :premises (t1 t2 t3) :args (42)
             :ignore_this :and_this (blah blah 0 1))
     ";
     let proof = parse_proof(&mut p, input);
-    assert_eq!(proof.commands.len(), 5);
+    assert_eq!(proof.commands.len(), 4);
 
     assert_eq!(
         &proof.commands[0],
@@ -631,34 +630,10 @@ fn test_step() {
         })
     );
 
-    let int_sort = p.add(Term::Sort(Sort::Int));
-    let real_sort = p.add(Term::Sort(Sort::Int));
-
     assert_eq!(
         &proof.commands[3],
         &ProofCommand::Step(ProofStep {
             id: "t4".into(),
-            clause: Vec::new(),
-            rule: "rule-name".into(),
-            premises: Vec::new(),
-            args: {
-                vec![
-                    p.add(Term::new_var("a", int_sort.clone())),
-                    p.add(Term::new_int(12)),
-                    p.add(Term::new_var("b", real_sort)),
-                    p.add(Term::new_real((314, 100))),
-                    p.add(Term::new_var("c", int_sort)),
-                    parse_term(&mut p, "(* 6 7)"),
-                ]
-            },
-            discharge: Vec::new(),
-        })
-    );
-
-    assert_eq!(
-        &proof.commands[4],
-        &ProofCommand::Step(ProofStep {
-            id: "t5".into(),
             clause: Vec::new(),
             rule: "rule-name".into(),
             premises: vec![(0, 0), (0, 1), (0, 2)],
