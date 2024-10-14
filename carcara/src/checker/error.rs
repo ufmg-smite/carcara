@@ -219,9 +219,6 @@ pub enum CongruenceError {
 /// Errors relevant to the rules dealing with quantifiers.
 #[derive(Debug, Error)]
 pub enum QuantifierError {
-    #[error("lhs of argument equality is not a variable: '{0}'")]
-    ArgNotVar(Rc<Term>),
-
     #[error("argument doesn't match any binding: '{0}'")]
     NoBindingMatchesArg(String),
 
