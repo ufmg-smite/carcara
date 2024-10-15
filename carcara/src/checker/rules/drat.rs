@@ -15,6 +15,15 @@ enum Implied<T> {
     NotUnsat(),
 }
 
+type UnitProgationStory = Vec<(bool, Rc<Term>)>;
+
+enum DRupProofAction<'a> {
+    RupStory(&'a [Rc<Term>], UnitProgationStory),
+    Delete,
+}
+
+type DRupStory<'a> = Vec<DRupProofAction<'a>>;
+
 // PRECONDITION : For each schema in clauses,
 // If schema.0 is None, |clause| = 0
 // If schema.1 is not None, so schema.0 is not None
@@ -113,8 +122,8 @@ fn get_implied_clause(
 fn rup(
     drat_clauses: &HashMap<u64, IndexSet<(bool, &Rc<Term>)>>,
     goal_hash: u64,
-    goal: &[Rc<Term>],
-) -> bool {
+    goal: &[Rc<Term>]
+) -> Option<UnitProgationStory> {
     // PREPARE THE ENV BY SELECTING FOR EACH CLAUSE TWO LITERALS
     // EACH LITERAL HAS A WATCHED LIST
     // USE A RANK TO SELECT THE WATCHED LITERALS, USE THE MOST FTEN LITERALS IN ALL CLAUSES
@@ -123,6 +132,7 @@ fn rup(
     // IF THERE IS NOT UNIT CLAUSE, RETURN FALSE
 
     let mut drat_clauses: HashMap<u64, IndexSet<(bool, &Rc<Term>)>> = drat_clauses.clone();
+    let mut unit_story : UnitProgationStory;
 
     let mut clauses: Vec<(
         (Option<(bool, Rc<Term>)>, Option<(bool, Rc<Term>)>),
@@ -150,6 +160,7 @@ fn rup(
     }
 
     loop {
+
         // for (p, v) in clauses.clone() {
         //     print!("Watched literals {:?}\n", p);
         //     for c in v {
@@ -161,17 +172,19 @@ fn rup(
         let unit = get_implied_clause(clauses.borrow_mut(), env.borrow());
         // print!("UNIT {:?}\n", unit);
 
+        
         match unit {
-            Implied::Bottom() => return true,
+            Implied::Bottom() => return Some(unit_story),
             Implied::Pivot(literal) => {
                 env.insert(literal.clone(), true);
-
                 // Remove the negated literal from all clauses that contain it
                 // TODO : THIS can not exist becuase it is O(n), we only have to save &literal is false somewhere
                 let negated_literal = (!literal.0, literal.1.clone());
                 env.insert(negated_literal.clone(), false);
+                unit_story.push(literal);
+                
             }
-            Implied::NotUnsat() => return false,
+            Implied::NotUnsat() => return None,
         }
     }
 }
@@ -192,6 +205,7 @@ pub fn drat(RuleArgs { conclusion, premises, args, .. }: RuleArgs) -> RuleResult
         })
         .collect();
 
+    let mut drup_history: DRupStory = vec![];
     for arg in args {
         match arg {
             ProofArg::Term(t) => {
@@ -213,10 +227,14 @@ pub fn drat(RuleArgs { conclusion, premises, args, .. }: RuleArgs) -> RuleResult
                 let mut s = DefaultHasher::new();
                 terms.hash(&mut s);
                 let hash_term = s.finish();
+                
+                let unit_history = rup(premises.borrow(), hash_term, terms);
 
-                if !rup(premises.borrow(), hash_term, terms) {
+                if unit_history == None {
                     return Err(CheckerError::Resolution(ResolutionError::TautologyFailed));
                 }
+
+                drup_history.push(DRupProofAction::RupStory(terms, unit_history.unwrap()));
 
                 premises.insert(
                     hash_term,
