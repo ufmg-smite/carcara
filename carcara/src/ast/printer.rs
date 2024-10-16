@@ -542,6 +542,7 @@ impl fmt::Display for Token {
             }
             Token::String(s) => write!(f, "\"{}\"", escape_string(s)),
             Token::ReservedWord(r) => write!(f, "{}", r),
+            Token::Command(c) => write!(f, "{}", c),
             Token::Eof => write!(f, "EOF"),
         }
     }

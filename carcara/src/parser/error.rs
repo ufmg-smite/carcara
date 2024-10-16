@@ -53,6 +53,10 @@ pub enum ParserError {
     #[error("unexpected token: '{0}'")]
     UnexpectedToken(Token),
 
+    /// The parser expected a command token, and encountered a different token.
+    #[error("expected valid command, got: '{0}'")]
+    ExpectedCommand(Token),
+
     /// The parser parsed an empty sequence where only non-empty sequences are allowed.
     #[error("expected non-empty sequence")]
     EmptySequence,

@@ -7,7 +7,7 @@ pub(crate) mod tests;
 use std::iter::Iterator;
 
 pub use error::{ParserError, SortError};
-pub use lexer::{Lexer, Position, Reserved, Token};
+pub use lexer::{Command, Lexer, Position, Reserved, Token};
 
 use crate::{
     ast::*,
@@ -558,6 +558,15 @@ impl<'a, R: BufRead> Parser<'a, R> {
         }
     }
 
+    /// Consumes the current token if it is a command, and returns the inner `Command`. Returns an
+    /// error otherwise.
+    fn expect_command(&mut self) -> CarcaraResult<Command> {
+        match self.next_token()? {
+            (Token::Command(c), _) => Ok(c),
+            (other, pos) => Err(Error::Parser(ParserError::ExpectedCommand(other), pos)),
+        }
+    }
+
     /// Calls `parse_func` repeatedly until a closing parenthesis is reached.
     ///
     /// If `non_empty` is true, empty sequences will result in an error. This method consumes the
@@ -624,7 +633,8 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 | Token::Decimal(_)
                 | Token::Bitvector { .. }
                 | Token::String(_)
-                | Token::ReservedWord(_) => {
+                | Token::ReservedWord(_)
+                | Token::Command(_) => {
                     self.next_token()?;
                 }
 
@@ -659,20 +669,21 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
         while self.current_token != Token::Eof {
             self.expect_token(Token::OpenParen)?;
-            match self.next_token()?.0 {
-                Token::ReservedWord(Reserved::DeclareFun) => {
+            let command = self.expect_command()?;
+            match command {
+                Command::DeclareFun => {
                     let (name, sort) = self.parse_declare_fun()?;
                     self.insert_sorted_var((name.clone(), sort.clone()));
                     self.prelude().function_declarations.push((name, sort));
                 }
-                Token::ReservedWord(Reserved::DeclareConst) => {
+                Command::DeclareConst => {
                     let name = self.expect_symbol()?;
                     let sort = self.parse_sort()?;
                     self.expect_token(Token::CloseParen)?;
                     self.insert_sorted_var((name.clone(), sort.clone()));
                     self.prelude().function_declarations.push((name, sort));
                 }
-                Token::ReservedWord(Reserved::DeclareSort) => {
+                Command::DeclareSort => {
                     let (name, arity) = self.parse_declare_sort()?;
 
                     self.prelude().sort_declarations.push((name.clone(), arity));
@@ -681,7 +692,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     // argument which is a string terminal representing the sort name.
                     self.state.sort_declarations.insert(name, arity);
                 }
-                Token::ReservedWord(Reserved::DefineFun) => {
+                Command::DefineFun => {
                     let (name, func_def) = self.parse_define_fun()?;
 
                     if self.config.apply_function_defs {
@@ -708,24 +719,24 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         self.premises().insert(assertion_term);
                     }
                 }
-                Token::ReservedWord(Reserved::DefineFunRec) => self.parse_define_fun_rec(false)?,
-                Token::ReservedWord(Reserved::DefineFunsRec) => self.parse_define_fun_rec(true)?,
-                Token::ReservedWord(Reserved::DefineSort) => {
+                Command::DefineFunRec => self.parse_define_fun_rec(false)?,
+                Command::DefineFunsRec => self.parse_define_fun_rec(true)?,
+                Command::DefineSort => {
                     let (name, def) = self.parse_define_sort()?;
                     self.state.sort_defs.insert(name, def);
                 }
-                Token::ReservedWord(Reserved::Assert) => {
+                Command::Assert => {
                     let term = self.parse_term()?;
                     self.expect_token(Token::CloseParen)?;
                     self.premises().insert(term);
                 }
-                Token::ReservedWord(Reserved::CheckSatAssuming) => {
+                Command::CheckSatAssuming => {
                     self.expect_token(Token::OpenParen)?;
                     let terms = self.parse_sequence(Self::parse_term, true)?;
                     self.expect_token(Token::CloseParen)?;
                     self.premises().extend(terms);
                 }
-                Token::ReservedWord(Reserved::SetLogic) => {
+                Command::SetLogic => {
                     let logic = self.expect_symbol()?;
                     self.expect_token(Token::CloseParen)?;
                     self.prelude().logic = Some(logic.clone());
@@ -738,6 +749,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         (logic.contains("LRA") || logic.contains("NRA") || logic.contains("RDL"))
                             && !logic.contains('I');
                 }
+                // TODO: properly handle all commands
                 _ => {
                     // If the command is not one of the commands we care about, we just ignore it.
                     // We do that by reading tokens until the command parenthesis is closed
@@ -774,21 +786,22 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
         while self.current_token != Token::Eof {
             self.expect_token(Token::OpenParen)?;
-            let (token, position) = self.next_token()?;
-            let (id, command) = match token {
-                Token::ReservedWord(Reserved::Assume) => {
+            let position = self.current_position;
+            let command = self.expect_command()?;
+            let (id, command) = match command {
+                Command::Assume => {
                     let (id, term) = self.parse_assume_command()?;
                     if stack.len() == 1 && finished_assumes {
                         log::warn!("`assume` command '{}' appears after `step` commands", &id);
                     }
                     (id.clone(), ProofCommand::Assume { id, term })
                 }
-                Token::ReservedWord(Reserved::Step) => {
+                Command::Step => {
                     finished_assumes = true;
                     let step = self.parse_step_command()?;
                     (step.id.clone(), ProofCommand::Step(step))
                 }
-                Token::ReservedWord(Reserved::DefineFun) => {
+                Command::DefineFun => {
                     let (name, func_def) = self.parse_define_fun()?;
                     if func_def.params.is_empty() {
                         constant_definitions.push((name.clone(), func_def.body.clone()));
@@ -796,7 +809,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     self.state.function_defs.insert(name, func_def);
                     continue;
                 }
-                Token::ReservedWord(Reserved::Anchor) => {
+                Command::Anchor => {
                     let (end_step_id, args) = self.parse_anchor_command()?;
 
                     // When we encounter an `anchor` command, we push a new scope into the step ids
@@ -815,8 +828,12 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     next_subproof_context_id += 1;
                     continue;
                 }
+                // TODO: properly handle all commands
                 _ => {
-                    return Err(Error::Parser(ParserError::UnexpectedToken(token), position));
+                    return Err(Error::Parser(
+                        ParserError::UnexpectedToken(Token::Command(command)),
+                        position,
+                    ));
                 }
             };
             let id = HashCache::new(id);

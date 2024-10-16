@@ -41,6 +41,9 @@ pub enum Token {
     /// A reserved word.
     ReservedWord(Reserved),
 
+    /// An SMT-LIB or Alethe command.
+    Command(Command),
+
     /// A signal token to indicate the end of the input.
     Eof,
 }
@@ -77,45 +80,113 @@ pub enum Reserved {
 
     /// The `cl` reserved word.
     Cl,
+}
 
-    /// The `assume` reserved word.
-    Assume,
-
-    /// The `step` reserved word.
-    Step,
-
-    /// The `anchor` reserved word.
-    Anchor,
-
-    /// The `declare-fun` reserved word.
-    DeclareFun,
-
-    /// The `declare-const` reserved word.
-    DeclareConst,
-
-    /// The `declare-sort` reserved word.
-    DeclareSort,
-
-    /// The `define-fun` reserved word.
-    DefineFun,
-
-    /// The `define-fun-rec` reserved word.
-    DefineFunRec,
-
-    /// The `define-funs-rec` reserved word.
-    DefineFunsRec,
-
-    /// The `define-sort` reserved word.
-    DefineSort,
-
-    /// The `assert` reserved word.
+/// An SMT-LIB or Alethe command.
+///
+/// In the SMT-LIB standard lexicon, these are considered reserved words.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Command {
+    // SMT-LIB commands
+    /// The `assert` command.
     Assert,
 
-    /// The `check-sat-assuming` reserved word.
+    /// The `check-sat` command.
+    CheckSat,
+
+    /// The `check-sat-assuming` command.
     CheckSatAssuming,
 
-    /// The `set-logic` reserved word.
+    /// The `declare-const` command.
+    DeclareConst,
+
+    /// The `declare-datatype` command.
+    DeclareDatatype,
+
+    /// The `declare-datatypes` command.
+    DeclareDatatypes,
+
+    /// The `declare-fun` command.
+    DeclareFun,
+
+    /// The `declare-sort` command.
+    DeclareSort,
+
+    /// The `define-fun` command.
+    DefineFun,
+
+    /// The `define-fun-rec` command.
+    DefineFunRec,
+
+    /// The `define-funs-rec` command.
+    DefineFunsRec,
+
+    /// The `define-sort` command.
+    DefineSort,
+
+    /// The `echo` command.
+    Echo,
+
+    /// The `exit` command.
+    Exit,
+
+    /// The `get-assertions` command.
+    GetAssertions,
+
+    /// The `get-assignment` command.
+    GetAssignment,
+
+    /// The `get-info` command.
+    GetInfo,
+
+    /// The `get-model` command.
+    GetModel,
+
+    /// The `get-option` command.
+    GetOption,
+
+    /// The `get-proof` command.
+    GetProof,
+
+    /// The `get-unsat-assumptions` command.
+    GetUnsatAssumptions,
+
+    /// The `get-unsat-core` command.
+    GetUnsatCore,
+
+    /// The `get-value` command.
+    GetValue,
+
+    /// The `pop` command.
+    Pop,
+
+    /// The `push` command.
+    Push,
+
+    /// The `reset` command.
+    Reset,
+
+    /// The `reset-assertions` command.
+    ResetAssertions,
+
+    /// The `set-info` command.
+    SetInfo,
+
+    /// The `set-logic` command.
     SetLogic,
+
+    /// The `set-option` command.
+    SetOption,
+
+    // Alethe commands
+    /// The `assume` command.
+    Assume,
+
+    /// The `step` command.
+    Step,
+
+    /// The `anchor` command.
+    Anchor,
 }
 
 impl_str_conversion_traits!(Reserved {
@@ -129,19 +200,43 @@ impl_str_conversion_traits!(Reserved {
     Choice: "choice",
     Lambda: "lambda",
     Cl: "cl",
-    Assume: "assume",
-    Step: "step",
-    Anchor: "anchor",
-    DeclareFun: "declare-fun",
+});
+
+impl_str_conversion_traits!(Command {
+    Assert: "assert",
+    CheckSat: "check-sat",
+    CheckSatAssuming: "check-sat-assuming",
     DeclareConst: "declare-const",
+    DeclareDatatype: "declare-datatype",
+    DeclareDatatypes: "declare-datatypes",
+    DeclareFun: "declare-fun",
     DeclareSort: "declare-sort",
     DefineFun: "define-fun",
     DefineFunRec: "define-fun-rec",
     DefineFunsRec: "define-funs-rec",
     DefineSort: "define-sort",
-    Assert: "assert",
-    CheckSatAssuming: "check-sat-assuming",
+    Echo: "echo",
+    Exit: "exit",
+    GetAssertions: "get-assertions",
+    GetAssignment: "get-assignment",
+    GetInfo: "get-info",
+    GetModel: "get-model",
+    GetOption: "get-option",
+    GetProof: "get-proof",
+    GetUnsatAssumptions: "get-unsat-assumptions",
+    GetUnsatCore: "get-unsat-core",
+    GetValue: "get-value",
+    Pop: "pop",
+    Push: "push",
+    Reset: "reset",
+    ResetAssertions: "reset-assertions",
+    SetInfo: "set-info",
     SetLogic: "set-logic",
+    SetOption: "set-option",
+
+    Assume: "assume",
+    Step: "step",
+    Anchor: "anchor",
 });
 
 /// Represents a position (line and column numbers) in the source input.
@@ -303,6 +398,8 @@ impl<R: BufRead> Lexer<R> {
         let symbol = self.read_chars_while(is_symbol_character)?;
         if let Ok(reserved) = Reserved::from_str(&symbol) {
             Ok(Token::ReservedWord(reserved))
+        } else if let Ok(command) = Command::from_str(&symbol) {
+            Ok(Token::Command(command))
         } else {
             Ok(Token::Symbol(symbol))
         }
