@@ -334,11 +334,12 @@ fn singleton_elim(pool: &mut dyn TermPool, r_list: Vec<Rc<Term>>) -> Rc<Term> {
     }
 }
 
-/// A function to calculate the fixed length (size of strings that match that RegEx) of a regular
-/// expression `r` if it can be inferred.
+/// A function to calculate the fixed length of a regular expression `r` (size of strings that
+/// match that RE) if it can be inferred.
 ///
-/// It takes an `Rc<Term>` and recursively match over the RegEx operators whose length can be
-/// inferred. It throws an error if the RegEx term length cannot be evaluated.
+/// It takes an `Rc<Term>` and recursively match over the regular expression operators whose length
+/// can be inferred. It throws an error if the term length cannot be evaluated, i.e., if the length
+/// of the term itself or one of its arguments cannot be inferred.
 fn str_fixed_len_re(pool: &mut dyn TermPool, r: Rc<Term>) -> Result<usize, CheckerError> {
     fn has_same_length(
         pool: &mut dyn TermPool,
