@@ -670,8 +670,13 @@ impl<'a, R: BufRead> Parser<'a, R> {
     pub fn parse_problem(&mut self) -> CarcaraResult<Problem> {
         self.problem = Some(Problem::new());
 
+        // Some commands can only appear once in an SMT problem
+        let [mut seen_check_sat, mut seen_exit, mut seen_get_proof, mut seen_set_logic] =
+            [false; 4];
+
         while self.current_token != Token::Eof {
             self.expect_token(Token::OpenParen)?;
+            let pos = self.current_position;
             let command = self.expect_command()?;
             match command {
                 Command::DeclareFun => {
@@ -733,13 +738,17 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     self.expect_token(Token::CloseParen)?;
                     self.premises().insert(term);
                 }
-                Command::CheckSatAssuming => {
+                Command::CheckSatAssuming if !seen_check_sat => {
+                    seen_check_sat = true;
+
                     self.expect_token(Token::OpenParen)?;
                     let terms = self.parse_sequence(Self::parse_term, true)?;
                     self.expect_token(Token::CloseParen)?;
                     self.premises().extend(terms);
                 }
-                Command::SetLogic => {
+                Command::SetLogic if !seen_set_logic => {
+                    seen_set_logic = true;
+
                     let logic = self.expect_symbol()?;
                     self.expect_token(Token::CloseParen)?;
                     self.prelude().logic = Some(logic.clone());
@@ -752,11 +761,64 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         (logic.contains("LRA") || logic.contains("NRA") || logic.contains("RDL"))
                             && !logic.contains('I');
                 }
-                // TODO: properly handle all commands
-                _ => {
-                    // If the command is not one of the commands we care about, we just ignore it.
-                    // We do that by reading tokens until the command parenthesis is closed
+                Command::CheckSat if !seen_check_sat => {
+                    seen_check_sat = true;
+                    self.expect_token(Token::CloseParen)?;
+                }
+                Command::Exit if !seen_exit => {
+                    seen_exit = true;
+                    self.expect_token(Token::CloseParen)?;
+                }
+                Command::GetProof if !seen_get_proof => {
+                    seen_get_proof = true;
+                    self.expect_token(Token::CloseParen)?;
+                }
+
+                // We only have support for problems that include at most one of these commands. If
+                // they appear again, we must return an error
+                Command::CheckSat
+                | Command::CheckSatAssuming
+                | Command::Exit
+                | Command::GetProof
+                | Command::SetLogic => {
+                    return Err(Error::Parser(
+                        ParserError::CommandAppearsMoreThanOnce(command),
+                        pos,
+                    ));
+                }
+
+                // We can safely ignore these commands, since they do not change the problem state
+                Command::Echo
+                | Command::GetAssertions
+                | Command::GetAssignment
+                | Command::GetInfo
+                | Command::GetModel
+                | Command::GetOption
+                | Command::GetUnsatAssumptions
+                | Command::GetUnsatCore
+                | Command::GetValue
+                | Command::SetInfo
+                | Command::SetOption => {
                     self.ignore_until_close_parens()?;
+                }
+
+                // These commands are not supported by Carcara, and we must reject any problem that
+                // contains them
+                Command::DeclareDatatype
+                | Command::DeclareDatatypes
+                | Command::Pop
+                | Command::Push
+                | Command::Reset
+                | Command::ResetAssertions => {
+                    return Err(Error::Parser(ParserError::UnsupportedCommand(command), pos));
+                }
+
+                // These commands are only allowed when parsing the proof, not the problem
+                Command::Assume | Command::Step | Command::Anchor => {
+                    return Err(Error::Parser(
+                        ParserError::ProofCommandInProblem(command),
+                        pos,
+                    ));
                 }
             }
         }
@@ -831,10 +893,11 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     next_subproof_context_id += 1;
                     continue;
                 }
-                // TODO: properly handle all commands
+
+                // All other commands can only appear in the problem, not the proof
                 _ => {
                     return Err(Error::Parser(
-                        ParserError::UnexpectedToken(Token::Command(command)),
+                        ParserError::ProblemCommandInProof(command),
                         position,
                     ));
                 }

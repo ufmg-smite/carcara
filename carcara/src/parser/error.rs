@@ -2,7 +2,7 @@
 
 use crate::{
     ast::{Constant, PrimitivePool, Rc, Sort, Term, TermPool},
-    parser::Token,
+    parser::{Command, Token},
     utils::Range,
 };
 use rug::Integer;
@@ -144,6 +144,22 @@ pub enum ParserError {
     /// The parser encountered an unknown qualified operator.
     #[error("not a valid qualified operator: '{0}'")]
     InvalidQualifiedOp(String),
+
+    /// The parser encountered a command that is not supported by Carcara.
+    #[error("unsupported command: '{0}'")]
+    UnsupportedCommand(Command),
+
+    /// There is more than one instance of a command that can only appear once.
+    #[error("the '{0}' command cannot appear more than once")]
+    CommandAppearsMoreThanOnce(Command),
+
+    /// The parser encountered a proof-only command when parsing the problem.
+    #[error("found proof-only command '{0}' when parsing problem")]
+    ProofCommandInProblem(Command),
+
+    /// The parser encountered a problem-only command when parsing the proof.
+    #[error("found problem-only command '{0}' when parsing proof")]
+    ProblemCommandInProof(Command),
 }
 
 /// Returns an error if the length of `sequence` is not in the `expected` range.
