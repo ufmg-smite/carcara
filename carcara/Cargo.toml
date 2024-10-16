@@ -20,6 +20,9 @@ rug = { version = "1.21.0", default-features = false, features = [
     "rational",
 ] }
 thiserror = "1.0.47"
+itertools = "0.11"
+try_match = "0.4.1"
+pretty = "0.12.3"
 
 [dev-dependencies]
 test-generator = { path = "../test-generator" }

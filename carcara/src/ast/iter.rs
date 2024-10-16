@@ -2,6 +2,7 @@
 //! commands in a proof.
 
 use super::*;
+use std::borrow::Borrow;
 
 /// An iterator over the proof commands in a proof.
 ///
@@ -76,6 +77,18 @@ impl<'a> ProofIter<'a> {
     /// This method may panic if the premise index does not refer to a valid command.
     pub fn get_premise(&self, (depth, index): (usize, usize)) -> &ProofCommand {
         &self.stack[depth].1[index]
+    }
+
+    /// Returns the id of the command
+    /// This method may panic if the premise index does not refer to a valid command.
+    pub fn get_premise_id(&self, (depth, index): (usize, usize)) -> String {
+        match self.stack[depth].1[index].borrow() {
+            ProofCommand::Assume { id, .. } => id.to_string(),
+            ProofCommand::Step(ProofStep { id, .. }) => id.to_string(),
+            ProofCommand::Subproof(Subproof { commands, .. }) => {
+                commands.last().unwrap().id().to_string()
+            }
+        }
     }
 }
 
