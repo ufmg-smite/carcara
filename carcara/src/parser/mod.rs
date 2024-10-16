@@ -527,7 +527,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
         if got == expected {
             Ok(())
         } else {
-            Err(Error::Parser(ParserError::UnexpectedToken(got), pos))
+            Err(Error::Parser(
+                ParserError::ExpectedSpecificToken { expected, got },
+                pos,
+            ))
         }
     }
 
@@ -536,7 +539,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     fn expect_symbol(&mut self) -> CarcaraResult<String> {
         match self.next_token()? {
             (Token::Symbol(s), _) => Ok(s),
-            (other, pos) => Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),
+            (other, pos) => Err(Error::Parser(ParserError::ExpectedSymbol(other), pos)),
         }
     }
 
@@ -545,7 +548,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     fn expect_keyword(&mut self) -> CarcaraResult<String> {
         match self.next_token()? {
             (Token::Keyword(s), _) => Ok(s),
-            (other, pos) => Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),
+            (other, pos) => Err(Error::Parser(ParserError::ExpectedKeyword(other), pos)),
         }
     }
 
@@ -554,7 +557,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     fn expect_numeral(&mut self) -> CarcaraResult<Integer> {
         match self.next_token()? {
             (Token::Numeral(n), _) => Ok(n),
-            (other, pos) => Err(Error::Parser(ParserError::UnexpectedToken(other), pos)),
+            (other, pos) => Err(Error::Parser(ParserError::ExpectedNumeral(other), pos)),
         }
     }
 

@@ -53,6 +53,22 @@ pub enum ParserError {
     #[error("unexpected token: '{0}'")]
     UnexpectedToken(Token),
 
+    /// The parser expected a specific token, and encountered a different token.
+    #[error("expected '{expected}' token, got: '{got}'")]
+    ExpectedSpecificToken { expected: Token, got: Token },
+
+    /// The parser expected a symbol token, and encountered a different token.
+    #[error("expected symbol token, got: '{0}'")]
+    ExpectedSymbol(Token),
+
+    /// The parser expected a keyword token, and encountered a different token.
+    #[error("expected keyword token, got: '{0}'")]
+    ExpectedKeyword(Token),
+
+    /// The parser expected a numeral token, and encountered a different token.
+    #[error("expected numeral token, got: '{0}'")]
+    ExpectedNumeral(Token),
+
     /// The parser expected a command token, and encountered a different token.
     #[error("expected valid command, got: '{0}'")]
     ExpectedCommand(Token),

@@ -308,11 +308,17 @@ fn test_choice_terms() {
     run_parser_tests(&mut p, &cases);
     assert!(matches!(
         parse_term_err("(choice () false)"),
-        Error::Parser(ParserError::UnexpectedToken(_), _),
+        Error::Parser(
+            ParserError::ExpectedSpecificToken { expected: Token::OpenParen, .. },
+            _
+        ),
     ));
     assert!(matches!(
         parse_term_err("(choice ((x Int) (y Int)) (= x y))"),
-        Error::Parser(ParserError::UnexpectedToken(_), _),
+        Error::Parser(
+            ParserError::ExpectedSpecificToken { expected: Token::CloseParen, .. },
+            _
+        ),
     ));
 }
 
@@ -396,11 +402,11 @@ fn test_annotated_terms() {
     ));
     assert!(matches!(
         parse_term_err("(! true not_a_keyword)"),
-        Error::Parser(ParserError::UnexpectedToken(_), _),
+        Error::Parser(ParserError::ExpectedKeyword(_), _),
     ));
     assert!(matches!(
         parse_term_err("(! true :named 1 2 3)"),
-        Error::Parser(ParserError::UnexpectedToken(_), _),
+        Error::Parser(ParserError::ExpectedSymbol(_), _),
     ));
 }
 
