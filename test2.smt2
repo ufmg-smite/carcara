@@ -1,0 +1,15 @@
+(set-logic ALL)
+
+(declare-const a Bool)
+(declare-const b Bool)
+(declare-const c Bool)
+(declare-const d Bool)
+(declare-const e Bool)
+
+(assert (or a c))
+(assert (or a (not c) d))
+(assert (or (not d) e))
+(assert (or (not d) (not e)))
+(assert (not a))
+(assert (not b))
+(check-sat)

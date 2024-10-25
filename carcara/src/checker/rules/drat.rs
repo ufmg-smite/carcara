@@ -9,17 +9,17 @@ use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 #[derive(Debug)]
-enum Implied<T> {
-    Pivot(T),
-    Bottom(),
+enum Implied<T, X> {
+    Pivot(T, X),
+    Bottom(X),
     NotUnsat(),
 }
 
-type UnitProgationStory = Vec<(bool, Rc<Term>)>;
+type RupAdition<'a> = Vec<(IndexSet<(bool, &'a Rc<Term>)>, Option<(bool, Rc<Term>)>, u64)>;
 
 enum DRupProofAction<'a> {
-    RupStory(&'a [Rc<Term>], UnitProgationStory),
-    Delete,
+    RupStory(&'a [Rc<Term>], RupAdition<'a>),
+    Delete(&'a [Rc<Term>]),
 }
 
 type DRupStory<'a> = Vec<DRupProofAction<'a>>;
@@ -29,30 +29,30 @@ type DRupStory<'a> = Vec<DRupProofAction<'a>>;
 // If schema.1 is not None, so schema.0 is not None
 // If schema.1 is None, |clause| = 1
 // If schema.0 and schema.1 is not None, so |clause| >= 2
-fn get_implied_clause(
+fn get_implied_clause<'a>(
     clauses: &mut Vec<(
         (Option<(bool, Rc<Term>)>, Option<(bool, Rc<Term>)>),
-        IndexSet<(bool, &Rc<Term>)>,
+        (IndexSet<(bool, &'a Rc<Term>)>, u64),
     )>,
     env: &HashMap<(bool, Rc<Term>), bool>,
-) -> Implied<(bool, Rc<Term>)> {
+) -> Implied<(bool, Rc<Term>), (IndexSet<(bool, &'a Rc<Term>)>, u64)> {
     if clauses.is_empty() {
         return Implied::NotUnsat();
     }
 
-    for (schema, lits) in clauses {
+    for (schema, (lits, key)) in clauses {
         match schema {
-            (None, None) => return Implied::Bottom(),
+            (None, None) => return Implied::Bottom(((*lits).clone(), *key)),
 
             (Some((b, t)), None) | (None, Some((b, t))) => match (env.get(&(*b, (*t).clone()))) {
                 Some(false) => {
                     assert_eq!(lits.len(), 1);
-                    return Implied::Bottom();
+                    return Implied::Bottom(((*lits).clone(), *key));
                 }
                 Some(true) => continue,
                 None => {
                     assert_eq!(lits.len(), 1);
-                    return Implied::Pivot((*b, (*t).clone()));
+                    return Implied::Pivot((*b, (*t).clone()), ((*lits).clone(), *key));
                 }
             },
 
@@ -63,7 +63,7 @@ fn get_implied_clause(
                     (None, None) => continue,
                     (_, _) => {
                         let mut unset_literal = None;
-                        let mut true_clause_found = false;
+                        let mut not_unit = false;
 
                         for (b1, t1) in lits.iter() {
                             let assign_state = env.get(&(*b1, (*t1).clone()));
@@ -80,6 +80,7 @@ fn get_implied_clause(
                                     }
 
                                     if unset_literal.is_some() {
+                                        not_unit = true;
                                         continue;
                                     }
 
@@ -96,20 +97,22 @@ fn get_implied_clause(
                                         }
                                     }
 
-                                    true_clause_found = true;
+                                    not_unit = true;
                                     continue;
                                 }
                                 Some(false) => (),
                             }
                         }
 
-                        if true_clause_found {
+                        if not_unit {
                             continue;
                         }
 
                         return match unset_literal {
-                            Some((p, polarity)) => Implied::Pivot((*p, polarity.clone())),
-                            _ => Implied::Bottom(),
+                            Some((p, polarity)) => {
+                                Implied::Pivot((*p, polarity.clone()), ((*lits).clone(), *key))
+                            }
+                            _ => Implied::Bottom(((*lits).clone(), *key)),
                         };
                     }
                 }
@@ -119,11 +122,10 @@ fn get_implied_clause(
     Implied::NotUnsat()
 }
 
-fn rup(
-    drat_clauses: &HashMap<u64, IndexSet<(bool, &Rc<Term>)>>,
-    goal_hash: u64,
-    goal: &[Rc<Term>]
-) -> Option<UnitProgationStory> {
+fn rup<'a>(
+    drat_clauses: &HashMap<u64, IndexSet<(bool, &'a Rc<Term>)>>,
+    goal: &'a [Rc<Term>],
+) -> Option<RupAdition<'a>> {
     // PREPARE THE ENV BY SELECTING FOR EACH CLAUSE TWO LITERALS
     // EACH LITERAL HAS A WATCHED LIST
     // USE A RANK TO SELECT THE WATCHED LITERALS, USE THE MOST FTEN LITERALS IN ALL CLAUSES
@@ -131,36 +133,37 @@ fn rup(
     // IF SO, USE BCP AND CONTINUE, UPDATE THE SIZE OF WATCHED LIST
     // IF THERE IS NOT UNIT CLAUSE, RETURN FALSE
 
-    let mut drat_clauses: HashMap<u64, IndexSet<(bool, &Rc<Term>)>> = drat_clauses.clone();
-    let mut unit_story : UnitProgationStory;
+    let mut drat_clauses: HashMap<u64, IndexSet<(bool, &'a Rc<Term>)>> = drat_clauses.clone();
+    let mut unit_story: RupAdition<'a> = vec![];
 
     let mut clauses: Vec<(
         (Option<(bool, Rc<Term>)>, Option<(bool, Rc<Term>)>),
-        IndexSet<(bool, &Rc<Term>)>,
+        (IndexSet<(bool, &'a Rc<Term>)>, u64),
     )> = vec![];
 
     let mut env: HashMap<(bool, Rc<Term>), bool> = HashMap::new();
 
     for term in goal {
         let mut clause: IndexSet<(bool, &Rc<Term>)> = IndexSet::new();
+        let mut s = DefaultHasher::new();
+        term.hash(&mut s);
         let (p, regular_term) = term.remove_all_negations_with_polarity();
         clause.insert((!p, regular_term));
-        drat_clauses.insert(goal_hash, clause);
+        drat_clauses.insert(s.finish(), clause);
     }
 
-    for (_, clause) in drat_clauses {
+    for (key, clause) in drat_clauses {
         let mut watched_literals = clause.iter().take(2);
         clauses.push((
             (
                 watched_literals.next().map(|v| (v.0, (*v.1).clone())),
                 watched_literals.next().map(|v| (v.0, (*v.1).clone())),
             ),
-            clause.clone(),
+            (clause.clone(), key),
         ));
     }
 
     loop {
-
         // for (p, v) in clauses.clone() {
         //     print!("Watched literals {:?}\n", p);
         //     for c in v {
@@ -170,26 +173,28 @@ fn rup(
         // }
 
         let unit = get_implied_clause(clauses.borrow_mut(), env.borrow());
-        // print!("UNIT {:?}\n", unit);
-
-        
+        print!("{:?}\n", unit);
         match unit {
-            Implied::Bottom() => return Some(unit_story),
-            Implied::Pivot(literal) => {
+            Implied::Bottom(clause) => {
+                unit_story.push((clause.0, None, clause.1));
+                return Some(unit_story);
+            }
+            Implied::Pivot(literal, clause) => {
                 env.insert(literal.clone(), true);
                 // Remove the negated literal from all clauses that contain it
                 // TODO : THIS can not exist becuase it is O(n), we only have to save &literal is false somewhere
                 let negated_literal = (!literal.0, literal.1.clone());
                 env.insert(negated_literal.clone(), false);
-                unit_story.push(literal);
-                
+                unit_story.push((clause.0, Some((literal.0, literal.1)), clause.1));
             }
             Implied::NotUnsat() => return None,
         }
     }
 }
 
-pub fn drat(RuleArgs { conclusion, premises, args, .. }: RuleArgs) -> RuleResult {
+fn check_drup(
+    RuleArgs { conclusion, premises, args, .. }: RuleArgs,
+) -> Result<DRupStory, CheckerError> {
     let mut premises: HashMap<u64, _> = premises
         .iter()
         .map(|p| p.clause)
@@ -214,6 +219,7 @@ pub fn drat(RuleArgs { conclusion, premises, args, .. }: RuleArgs) -> RuleResult
                         let mut s = DefaultHasher::new();
                         terms.hash(&mut s);
                         premises.remove(&s.finish());
+                        drup_history.push(DRupProofAction::Delete(terms));
                         continue;
                     }
                     None => (),
@@ -227,8 +233,8 @@ pub fn drat(RuleArgs { conclusion, premises, args, .. }: RuleArgs) -> RuleResult
                 let mut s = DefaultHasher::new();
                 terms.hash(&mut s);
                 let hash_term = s.finish();
-                
-                let unit_history = rup(premises.borrow(), hash_term, terms);
+
+                let unit_history = rup(premises.borrow(), terms);
 
                 if unit_history == None {
                     return Err(CheckerError::Resolution(ResolutionError::TautologyFailed));
@@ -257,64 +263,153 @@ pub fn drat(RuleArgs { conclusion, premises, args, .. }: RuleArgs) -> RuleResult
         ));
     }
 
-    Ok(())
+    Ok(drup_history)
+}
+
+pub fn drup(args: RuleArgs) -> RuleResult {
+    check_drup(args).map(|_| ())
 }
 
 pub fn elaborate_drat(
-    RuleArgs { premises, args, .. }: RuleArgs,
+    rule_args: RuleArgs,
     command_id: String,
     elaborator: &mut Elaborator,
 ) -> RuleResult {
+    #[derive(Debug)]
+    enum ResolutionStep<'a> {
+        Resolvent(
+            (&'a IndexSet<(bool, &'a Rc<Term>)>, Option<u64>),
+            (&'a IndexSet<(bool, &'a Rc<Term>)>, Option<u64>),
+            IndexSet<(bool, &'a Rc<Term>)>,
+        ),
+        UnChanged((&'a IndexSet<(bool, &'a Rc<Term>)>, Option<u64>)),
+    }
 
-    let premises: &mut HashMap<u64, _> = &mut premises
-    .iter()
-    .map(|p| {
-        let mut s = DefaultHasher::new();
-        p.clause.hash(&mut s);
-        (s.finish(), elaborator.map_index(p.index))
-    })
-    .collect();
-
-    let mut current_id: Box<String> = Box::new(command_id);
-
-    for (i, arg) in args.iter().enumerate() {
-        let clause = match arg {
-            ProofArg::Term(t) => t,
-            ProofArg::Assign(_, _) => panic!("A invalid term was found while solving drat terms"),
-        };
-
-        let mut action = |x| {
-            if i != args.len() - 1 {
-                elaborator.add_new_step(x)
-            } else {
-                elaborator.push_elaborated_step(x)
+    fn resolve<'a>(
+        clause1: &IndexSet<(bool, &'a Rc<Term>)>,
+        clause2: &IndexSet<(bool, &'a Rc<Term>)>,
+        pivot: (bool, &Rc<Term>),
+    ) -> IndexSet<(bool, &'a Rc<Term>)> {
+        let mut resolvent = IndexSet::new();
+        for literal in clause1.union(clause2) {
+            if literal.1 == pivot.1 {
+                continue;
             }
-        };
 
-        if let Some(terms) = match_term!((cl ...) = &clause) {
-            let mut s = DefaultHasher::new();
-            terms.hash(&mut s);
-            premises.insert(s.finish(), action(ProofStep {
-                id: (*current_id).clone(),
-                clause: terms.to_vec(),
-                rule: "resolution".to_owned(),
-                premises: premises.values().map(|x| *x).collect(),
-                args: Vec::new(),
-                discharge: Vec::new(),
-            }));
+            resolvent.insert(*literal);
         }
 
-        if let Some(terms) = match_term!((delete (cl ...)) = &clause) {
-            let mut s = DefaultHasher::new();
-            terms.hash(&mut s);
-            let hash = s.finish();
-            premises.remove(&hash);
-        }
+        return resolvent;
+    }
 
-        if i != args.len() - 1 {
-            current_id = Box::new(elaborator.get_new_id(current_id.as_ref()));
+    let RuleArgs { premises, args, .. } = rule_args;
+
+    let trace = check_drup(rule_args);
+
+    if let Err(err) = trace {
+        return Err(err);
+    }
+
+    for rup_story in trace.unwrap() {
+        match rup_story {
+            DRupProofAction::RupStory(rup_clause, rup_history) => {
+                let mut rup: Vec<(&IndexSet<(bool, &'a Rc<Term>)>, Option<u64>)> = rup_history.iter().map(|(vec, _, key)| (vec, Some(*key))).collect();
+                let pivots: Vec<_> = rup_history.iter().map(|(_, term, _)| term).collect();
+
+               let mut resolutions = vec![];
+                for i in (0..rup_history.len() - 1).rev() {
+                    let pivot = pivots[i].as_ref().unwrap();
+                    print!("Ci+1{:?}\n", rup[i + 1]);
+                    print!("Ci{:?}\n", rup[i]);
+
+                    if rup[i + 1].0.contains(&(!pivot.0, &pivot.1)) {
+                        let resolvent: &'a IndexSet<(bool, &Rc<Term>)> = resolve(&rup[i].0, &rup[i + 1].0, (pivot.0, &pivot.1));
+                        resolutions.push(ResolutionStep::Resolvent(
+                            rup[i],
+                            rup[i + 1],
+                            resolvent.clone(),
+                        ));
+                        rup[i] = (&resolvent, None);
+                    } else {
+                        rup[i] = (rup[i + 1].0, rup[i + 1].1);
+                        resolutions.push(ResolutionStep::UnChanged(rup[i]));
+                    }
+                }
+
+                let r = match resolutions.last().unwrap() {
+                    ResolutionStep::Resolvent(_, _, r) => r,
+                    ResolutionStep::UnChanged(r) => r.0
+                };
+
+                if r.len() != 0 {
+                    panic!("An drat resultion didn't derive a bottom as last clause resolution")
+                }
+
+                for resolution_step in resolutions {
+                    match resolution_step {
+                        ResolutionStep::Resolvent(c, d, r) => {
+
+                        }
+
+                        ResolutionStep::UnChanged(r) => {
+
+                        }
+                    }
+                }
+
+            }
+            DRupProofAction::Delete(_) => (),
         }
     }
+
+    // let premises: &mut HashMap<u64, _> = &mut premises
+    // .iter()
+    // .map(|p| {
+    //     let mut s = DefaultHasher::new();
+    //     p.clause.hash(&mut s);
+    //     (s.finish(), elaborator.map_index(p.index))
+    // })
+    // .collect();
+
+    // let mut current_id: Box<String> = Box::new(command_id);
+    // for (i, arg) in args.iter().enumerate() {
+    //     let clause = match arg {
+    //         ProofArg::Term(t) => t,
+    //         ProofArg::Assign(_, _) => panic!("A invalid term was found while solving drat terms"),
+    //     };
+
+    //     let mut action = |x| {
+    //         if i != args.len() - 1 {
+    //             elaborator.add_new_step(x)
+    //         } else {
+    //             elaborator.push_elaborated_step(x)
+    //         }
+    //     };
+
+    //     if let Some(terms) = match_term!((cl ...) = &clause) {
+    //         let mut s = DefaultHasher::new();
+    //         terms.hash(&mut s);
+    //         premises.insert(s.finish(), action(ProofStep {
+    //             id: (*current_id).clone(),
+    //             clause: terms.to_vec(),
+    //             rule: "resolution".to_owned(),
+    //             premises: premises.values().map(|x| *x).collect(),
+    //             args: Vec::new(),
+    //             discharge: Vec::new(),
+    //         }));
+    //     }
+
+    //     if let Some(terms) = match_term!((delete (cl ...)) = &clause) {
+    //         let mut s = DefaultHasher::new();
+    //         terms.hash(&mut s);
+    //         let hash = s.finish();
+    //         premises.remove(&hash);
+    //     }
+
+    //     if i != args.len() - 1 {
+    //         current_id = Box::new(elaborator.get_new_id(current_id.as_ref()));
+    //     }
+    // }
 
     return Ok(());
 }
