@@ -1,25 +1,45 @@
-use std::iter;
-use std::ops::Deref;
 use super::*;
 use crate::ast::{Operator, Rc, Term as AletheTerm};
+use std::ops::Deref;
 
-pub fn translate_trans(premises: &[(String, &[Rc<AletheTerm>])]) -> TradResult<Proof> {
-    let mut rewrites = premises
-        .into_iter()
-        .map(|(id, _)| {
-            inline_lambdapi! {
-                rewrite [unary_clause_to_prf(id.as_str())];
-            }
-        })
-        .collect_vec();
+/// Generate the proof term for the rule `trans` e.g.
+/// ```text
+///  (assume h1 (= a b))
+///  (assume h2 (= b c))
+///  (assume h3 (= c d))
+/// (step ti (cl (= a d)) :rule trans :premises (h1 h2 h3))
+/// ```
+///
+/// sConstruct a proof term that compose n-1 application of the lemma `trans`
+/// where n is the cardinality of the premises set. Given our example, we will
+/// translate this proof step `ti` into `apply trans (h1 trans (h2 h3))`.
+///
+pub fn translate_trans(premises: &mut Vec<(String, &[Rc<AletheTerm>])>) -> TradResult<Proof> {
+    let tn_t_succ_n = premises.drain(premises.len() - 2..).take(2).collect_vec();
 
-    Ok(Proof(lambdapi! {
-        apply "∨ᶜᵢ₁";
-        inject(rewrites);
-        reflexivity;
-    }))
+    let first_trans = Term::Terms(vec![
+        Term::from("trans"),
+        Term::from(tn_t_succ_n[0].0.as_str()),
+        Term::from(tn_t_succ_n[1].0.as_str()),
+    ]);
+
+    let proofterm = premises.into_iter().rev().fold(first_trans, |mut acc, p| {
+        acc = Term::Terms(vec![Term::from("trans"), Term::from(p.0.as_str()), acc]);
+        acc
+    });
+
+    let proofstep = vec![ProofStep::Apply(proofterm, vec![], SubProofs(None))];
+
+    Ok(Proof(proofstep))
 }
 
+/// Construct the proof term for the rule `false`
+/// ```text
+/// (step ti (cl (not false)) :rule false)
+/// ```
+/// we directly apply the lemma `neg_⊥`.
+///
+///
 pub fn translate_false() -> TradResult<Proof> {
     Ok(Proof(lambdapi! {
         apply "∨ᶜᵢ₁";
@@ -27,18 +47,46 @@ pub fn translate_false() -> TradResult<Proof> {
     }))
 }
 
+/// Construct the proof term for the rule `implies`.
+///
+/// ```text
+/// (assume h1 (=> a b))
+/// (step t2 (cl (not a) b) :rule implies :premises (h1))
+/// ```
+///
+/// We generate a proof term that use the lemma `implies` with the premise as parameter.
+/// Following our example we should obtain: `apply (implies h1)`.
+///
 pub fn translate_implies(premise: &str) -> TradResult<Proof> {
     Ok(Proof(lambdapi! {
         apply "implies" (@unary_clause_to_prf(premise));
     }))
 }
 
+/// Construct the proof term for the rule `implies`.
+///
+/// ```text
+/// (assume h1 (not (=> a b)))
+/// (step t1 (cl a) :rule not_implies1 :premises (h1))
+/// ```
+///
+/// We apply the direct corresponding lemma
+///
 pub fn translate_not_implies1(premise: &str) -> TradResult<Proof> {
     Ok(Proof(lambdapi! {
         apply "not_implies1" (@unary_clause_to_prf(premise));
     }))
 }
 
+/// Construct the proof term for the rule `implies`.
+///
+/// ```text
+/// (assume h1 (not (=> a b)))
+/// (step t1 (cl (not b)) :rule not_implies2 :premises (h1))
+/// ```
+///
+/// We apply the direct corresponding lemma `not_implies2`
+///
 pub fn translate_not_implies2(premise: &str) -> TradResult<Proof> {
     Ok(Proof(lambdapi! {
         apply "not_implies2" (@unary_clause_to_prf(premise));
@@ -134,76 +182,58 @@ pub fn translate_auto_rewrite(rule: &str) -> TradResult<Proof> {
     ]))
 }
 
-fn propositional_disjunction_cong(premises: &[(String, &[Rc<AletheTerm>])]) -> TradResult<Proof> {
-    let premises_len = premises.len();
+fn propositional_or_cong(premises: &[(String, &[Rc<AletheTerm>])]) -> TradResult<Proof> {
+    fn cong_tree(premises: &[(String, &[Rc<AletheTerm>])]) -> Proof {
+        match premises.split_first() {
+            Some((p, rest)) if !rest.is_empty() => {
+                let p_proof = Proof(vec![ProofStep::Apply(
+                    Term::from(p.0.as_str()),
+                    vec![],
+                    SubProofs(None),
+                )]);
+                Proof(vec![ProofStep::Apply(
+                    Term::from("cong_or"),
+                    vec![],
+                    SubProofs(Some(vec![p_proof, cong_tree(rest)])),
+                )])
+            }
+            Some((p, [])) => Proof(vec![ProofStep::Apply(
+                Term::from(p.0.as_str()),
+                vec![],
+                SubProofs(None),
+            )]),
+            _ => unreachable!("we should stop when rest is empty"),
+        }
+    }
 
-    let premises = premises
-        .into_iter()
-        .map(|p| unary_clause_to_prf(p.0.as_str()))
-        .collect_vec();
-
-    // generate the rewrites
-    let mut rewrites: Vec<ProofStep> = premises
-        .into_iter()
-        .enumerate()
-        .map(|(index, premise)| {
-            let mut subexpr_pattern = iter::repeat(Term::Underscore)
-                .take(premises_len)
-                .collect_vec();
-            subexpr_pattern
-                .get_mut(index)
-                .map(|t| *t = Term::from("x"))
-                .unwrap();
-
-            let pattern_disjunction = Term::Alethe(LTerm::NOr(subexpr_pattern));
-
-            let pattern = format!("[ x in {} ]", pattern_disjunction);
-
-            ProofStep::Rewrite(Some(pattern), premise, vec![])
-        })
-        .collect_vec();
-
-    Ok(Proof(lambdapi! {
-        apply "∨ᶜᵢ₁";
-        inject(rewrites);
-        reflexivity;
-    }))
+    Ok(cong_tree(premises))
 }
 
-fn propositional_conjunction_cong(premises: &[(String, &[Rc<AletheTerm>])]) -> TradResult<Proof> {
-    let premises_len = premises.len();
+fn propositional_and_cong(premises: &[(String, &[Rc<AletheTerm>])]) -> TradResult<Proof> {
+    fn cong_tree(premises: &[(String, &[Rc<AletheTerm>])]) -> Proof {
+        match premises.split_first() {
+            Some((p, rest)) if !rest.is_empty() => {
+                let p_proof = Proof(vec![ProofStep::Apply(
+                    Term::from(p.0.as_str()),
+                    vec![],
+                    SubProofs(None),
+                )]);
+                Proof(vec![ProofStep::Apply(
+                    Term::from("cong_and"),
+                    vec![],
+                    SubProofs(Some(vec![p_proof, cong_tree(rest)])),
+                )])
+            }
+            Some((p, [])) => Proof(vec![ProofStep::Apply(
+                Term::from(p.0.as_str()),
+                vec![],
+                SubProofs(None),
+            )]),
+            _ => unreachable!("we should stop when rest is empty"),
+        }
+    }
 
-    let premises = premises
-        .into_iter()
-        .map(|p| unary_clause_to_prf(p.0.as_str()))
-        .collect_vec();
-
-    // generate the rewrites
-    let mut rewrites: Vec<ProofStep> = premises
-        .into_iter()
-        .enumerate()
-        .map(|(index, premise)| {
-            let mut subexpr_pattern = iter::repeat(Term::Underscore)
-                .take(premises_len)
-                .collect_vec();
-            subexpr_pattern
-                .get_mut(index)
-                .map(|t| *t = Term::from("x"))
-                .unwrap();
-
-            let pattern_disjunction = Term::Alethe(LTerm::NAnd(subexpr_pattern));
-
-            let pattern = format!("[ x in {} ]", pattern_disjunction);
-
-            ProofStep::Rewrite(Some(pattern), premise, vec![])
-        })
-        .collect_vec();
-
-    Ok(Proof(lambdapi! {
-        apply "∨ᶜᵢ₁";
-        inject(rewrites);
-        reflexivity;
-    }))
+    Ok(cong_tree(premises))
 }
 
 fn propositional_cong(
@@ -223,9 +253,10 @@ fn propositional_cong(
         }))
     } else {
         match symbol {
-            Term::TermId(s) if s == "(∨ᶜ)" => propositional_disjunction_cong(premises),
-            Term::TermId(s) if s == "(∧ᶜ)" => propositional_conjunction_cong(premises),
+            Term::TermId(s) if s == "(∨ᶜ)" => propositional_or_cong(premises),
+            Term::TermId(s) if s == "(∧ᶜ)" => propositional_and_cong(premises),
             _ => {
+                // Case `iff`, `=>` ...
                 let premises_rev = premises.iter().rev().collect_vec();
                 let (left, right) = premises_rev.split_at(2);
 
@@ -282,6 +313,12 @@ fn application_cong(
     }))
 }
 
+/// Construct the proof term for the rule `cong`
+/// The cong rule is applied on any n-ary function symbol `f` of appropriate sort.
+/// Therefore, first we collect information about the sort of `f`, its arguments and its arity by looking at the clause and number of premises.
+/// The application of cong on f: A₁ ... Aₙ → Set` are translated with the lemma feqₙᶜ where `n` is the arity of `f`.
+/// The application of cong on `or` and `and` operator are translated by composing the lemma `cong_or` (`cong_and` respectively).
+/// For the operators `(imp a b)` and `(not a)` we apply the lemma feq₂ᶜ and (`feqᶜ` respectively) since we can quantify over propositions with `ο`.
 pub fn translate_cong(
     clause: &[Rc<AletheTerm>],
     premises: &[(String, &[Rc<AletheTerm>])],
@@ -316,7 +353,7 @@ pub fn translate_simple_tautology(
 }
 
 pub fn translate_forall_inst(_args: &Vec<Rc<AletheTerm>>) -> TradResult<Proof> {
-    todo!()
+    Ok(Proof(admit()))
     // let hyp = Term::from("H");
 
     // // The term Term::from("H") is related to assume [H];
@@ -351,4 +388,270 @@ pub fn translate_sko_forall() -> TradResult<Proof> {
         rewrite "H";
         reflexivity;
     }))
+}
+
+#[cfg(test)]
+mod tests_tautolog {
+    use super::*;
+    use crate::parser::{self, parse_instance};
+
+    #[test]
+    fn test_transitivity_translation() {
+        let problem: &[u8] = b"
+            (declare-sort T 0)
+            (declare-fun a () T)
+            (declare-fun b () T)
+            (declare-fun c () T)
+            (declare-fun d () T)
+            (declare-fun e () T)
+        ";
+        let proof = b"
+            (assume h1 (= a b))
+            (assume h2 (= b c))
+            (assume h3 (= c d))
+            (step t1 (cl (= a d)) :rule trans :premises (h1 h2 h3))
+        ";
+        let (_, proof, _) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+
+        assert_eq!(4, proof.commands.len());
+
+        let res = translate_commands(
+            &mut Context::default(),
+            &mut proof.iter(),
+            0,
+            |id, t, ps| Command::Symbol(None, normalize_name(id), vec![], t, Some(Proof(ps))),
+        )
+        .expect("translate trans");
+
+        assert_eq!(4, res.len());
+
+        let t1 = res.last().unwrap().clone();
+
+        assert_eq!(
+            t1,
+            Command::Symbol(
+                None,
+                "t1".into(),
+                vec![],
+                cl!(eq!(bid!("a"), bid!("d"))),
+                Some(proof!(apply!(terms!(
+                    id!("trans"),
+                    id!("h1"),
+                    terms!(id!("trans"), id!("h2"), id!("h3"))
+                ))))
+            )
+        );
+    }
+
+    #[test]
+    fn test_cong_or_translation() {
+        let problem: &[u8] = b"
+            (declare-fun a () Bool)
+            (declare-fun b () Bool)
+            (declare-fun c () Bool)
+            (declare-fun d () Bool)
+            (declare-fun e () Bool)
+            (declare-fun f () Bool)
+            (declare-fun g () Bool)
+            (declare-fun h () Bool)
+        ";
+        let proof = b"
+            (assume h1 (= a e))
+            (assume h2 (= b f))
+            (assume h3 (= c g))
+            (assume h4 (= d h))
+            (step t3 (cl (= (or a b c d) (or e f g h))) :rule cong :premises (h1 h2 h3 h4))
+        ";
+        let (_, proof, _) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+
+        assert_eq!(5, proof.commands.len());
+
+        let res = translate_commands(
+            &mut Context::default(),
+            &mut proof.iter(),
+            0,
+            |id, t, ps| Command::Symbol(None, normalize_name(id), vec![], t, Some(Proof(ps))),
+        )
+        .expect("translate cong");
+
+        assert_eq!(5, res.len());
+
+        let t3 = res.last().unwrap().clone();
+
+        let cmd = Command::Symbol(
+            None,
+            "t3".into(),
+            vec![],
+            cl!(eq!(
+                or![id!("a"), id!("b"), id!("c"), id!("d"),],
+                or![id!("e"), id!("f"), id!("g"), id!("h"),]
+            )),
+            Some(proof!(apply!(
+                cong_or,
+                [
+                    apply!(h1),
+                    apply!(
+                        cong_or,
+                        [apply!(h2), apply!(cong_or, [apply!(h3), apply!(h4)]),]
+                    )
+                ]
+            ))),
+        );
+
+        assert_eq!(t3, cmd);
+    }
+
+    #[test]
+    fn test_cong_and_translation() {
+        let problem: &[u8] = b"
+            (declare-fun a () Bool)
+            (declare-fun b () Bool)
+            (declare-fun c () Bool)
+            (declare-fun d () Bool)
+            (declare-fun e () Bool)
+            (declare-fun f () Bool)
+            (declare-fun g () Bool)
+            (declare-fun h () Bool)
+        ";
+        let proof = b"
+            (assume h1 (= a e))
+            (assume h2 (= b f))
+            (assume h3 (= c g))
+            (assume h4 (= d h))
+            (step t3 (cl (= (and a b c d) (and e f g h))) :rule cong :premises (h1 h2 h3 h4))
+        ";
+        let (_, proof, _) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+
+        assert_eq!(5, proof.commands.len());
+
+        let res = translate_commands(
+            &mut Context::default(),
+            &mut proof.iter(),
+            0,
+            |id, t, ps| Command::Symbol(None, normalize_name(id), vec![], t, Some(Proof(ps))),
+        )
+        .expect("translate cong");
+
+        assert_eq!(5, res.len());
+
+        let t3 = res.last().unwrap().clone();
+
+        let cmd = Command::Symbol(
+            None,
+            "t3".into(),
+            vec![],
+            cl!(eq!(
+                and![id!("a"), id!("b"), id!("c"), id!("d"),],
+                and![id!("e"), id!("f"), id!("g"), id!("h"),]
+            )),
+            Some(proof!(apply!(
+                cong_and,
+                [
+                    apply!(h1),
+                    apply!(
+                        cong_and,
+                        [apply!(h2), apply!(cong_and, [apply!(h3), apply!(h4)]),]
+                    )
+                ]
+            ))),
+        );
+
+        assert_eq!(t3, cmd);
+    }
+
+    #[test]
+    fn test_cong_not_translation() {
+        let problem: &[u8] = b"
+            (declare-fun a () Bool)
+            (declare-fun b () Bool)
+        ";
+        let proof = b"
+            (assume h1 (= a b))
+            (step t3 (cl (= (not a) (not b))) :rule cong :premises (h1))
+        ";
+        let (_, proof, _) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+
+        assert_eq!(2, proof.commands.len());
+
+        let res = translate_commands(
+            &mut Context::default(),
+            &mut proof.iter(),
+            0,
+            |id, t, ps| Command::Symbol(None, normalize_name(id), vec![], t, Some(Proof(ps))),
+        )
+        .expect("translate cong");
+
+        assert_eq!(2, res.len());
+
+        let t3 = res.last().unwrap().clone();
+
+        let cmd = Command::Symbol(
+            None,
+            "t3".into(),
+            vec![],
+            cl!(eq!(Box::new(not!(id!("a"))), Box::new(not!(id!("b"))))),
+            Some(proof!(
+                apply!(id!("∨ᶜᵢ₁")),
+                ProofStep::Apply(
+                    id!("feqᶜ"),
+                    vec![id!("(¬)"), unary_clause_to_prf("h1")],
+                    SubProofs(None)
+                )
+            )),
+        );
+
+        assert_eq!(t3, cmd);
+    }
+
+    #[test]
+    fn test_cong_imp_translation() {
+        let problem: &[u8] = b"
+            (declare-fun a () Bool)
+            (declare-fun b () Bool)
+            (declare-fun c () Bool)
+            (declare-fun d () Bool)
+        ";
+        let proof = b"
+            (assume h1 (= a c))
+            (assume h2 (= b d))
+            (step t3 (cl (= (=> a b) (=> c d))) :rule cong :premises (h1 h2))
+        ";
+        let (_, proof, _) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+
+        assert_eq!(3, proof.commands.len());
+
+        let res = translate_commands(
+            &mut Context::default(),
+            &mut proof.iter(),
+            0,
+            |id, t, ps| Command::Symbol(None, normalize_name(id), vec![], t, Some(Proof(ps))),
+        )
+        .expect("translate cong");
+
+        assert_eq!(3, res.len());
+
+        let t3 = res.last().unwrap().clone();
+
+        let cmd = Command::Symbol(
+            None,
+            "t3".into(),
+            vec![],
+            cl!(eq!(
+                Box::new(imp!(id!("a"), id!("b"))),
+                Box::new(imp!(id!("c"), id!("d")))
+            )),
+            Some(proof!(
+                apply!(id!("∨ᶜᵢ₁")),
+                apply!(terms![
+                    id!("feq2ᶜ"),
+                    id!("(⇒ᶜ)"),
+                    unary_clause_to_prf("h1"),
+                    unary_clause_to_prf("h2")
+                ])
+            )),
+        );
+
+        assert_eq!(t3, cmd);
+    }
+    
 }

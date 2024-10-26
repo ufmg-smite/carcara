@@ -7,11 +7,12 @@ use super::*;
 pub fn translate_rare_simp(args: &Vec<Rc<AletheTerm>>) -> Proof {
     let (rare_rule, args) = args.split_first().unwrap();
 
-    let rule: String = unwrap_match!(**rare_rule, crate::ast::Term::Const(Constant::String(ref s)) => s.clone());
+    let rule: String =
+        unwrap_match!(**rare_rule, crate::ast::Term::Const(Constant::String(ref s)) => s.clone());
 
     //FIXME: bugging rule
     if rule == "bool-and-flatten" || rule == "bool-or-flatten" {
-        return Proof(vec![ProofStep::Admit])
+        return Proof(vec![ProofStep::Admit]);
     }
 
     let mut rewrites = match rule.as_str() {
@@ -22,18 +23,14 @@ pub fn translate_rare_simp(args: &Vec<Rc<AletheTerm>>) -> Proof {
         "bool-impl-elim" => translate_bool_impl_elim(args),
         "evaluate" => return Proof(vec![ProofStep::Admit]), //FIXME: Need external prover setup
         r => {
-            let args = args
-                .into_iter()
-                .map(|term| term.into())
-                .collect_vec();
-            vec![ProofStep::Rewrite(None, Term::from(r), args)]
+            let args = args.into_iter().map(|term| term.into()).collect_vec();
+            vec![ProofStep::Apply(Term::from(r), args, SubProofs(None))]
         }
     };
 
     Proof(lambdapi! {
         apply "∨ᶜᵢ₁";
         inject(rewrites);
-        reflexivity;
     })
 }
 
@@ -41,9 +38,7 @@ pub fn translate_rare_simp(args: &Vec<Rc<AletheTerm>>) -> Proof {
 fn translate_bool_or_false(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
     let args = args
         .into_iter()
-        .map(
-            |term| unwrap_match!(**term, AletheTerm::Op(Operator::RareList, ref l) => l),
-        )
+        .map(|term| unwrap_match!(**term, AletheTerm::Op(Operator::RareList, ref l) => l))
         .collect_vec();
 
     // If `xs` or `ys` rare-list are empty then we can not use the lemma bool-or-false because it expect 2 arguments.
@@ -70,9 +65,7 @@ fn translate_bool_or_false(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
 fn translate_bool_and_true(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
     let args = args
         .into_iter()
-        .map(
-            |term| unwrap_match!(**term, AletheTerm::Op(Operator::RareList, ref l) => l),
-        )
+        .map(|term| unwrap_match!(**term, AletheTerm::Op(Operator::RareList, ref l) => l))
         .collect_vec();
 
     // If `xs` or `ys` rare-list are empty then we can not use the lemma bool-and-true because it expect 2 arguments.
@@ -89,16 +82,19 @@ fn translate_bool_and_true(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
             .into_iter()
             .map(|terms| Term::from(AletheTerm::Op(Operator::RareList, terms.to_vec())))
             .collect_vec();
-        vec![ProofStep::Rewrite(None, Term::from("bool-and-true"), args)]
+        vec![
+            ProofStep::Rewrite(None, Term::from("bool-and-true"), args),
+            ProofStep::Reflexivity,
+        ]
     }
 }
 
 fn translate_bool_impl_elim(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
-    let args = args
-        .into_iter()
-        .map(|t| t.into())
-        .collect_vec();
-    vec![ProofStep::Rewrite(None, Term::from("bool-impl-elim"), args)]
+    let args = args.into_iter().map(|t| t.into()).collect_vec();
+    vec![
+        ProofStep::Rewrite(None, Term::from("bool-impl-elim"), args),
+        ProofStep::Reflexivity,
+    ]
 }
 
 // /// Translate the RARE rule:
@@ -121,15 +117,11 @@ fn translate_bool_or_flatten(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
     } else if args_len[zs] == 0 {
         vec![]
     } else {
-        let args: Vec<Term> = args
-            .into_iter()
-            .map(|term| term.into())
-            .collect_vec();
-        vec![ProofStep::Rewrite(
-            None,
-            Term::from("bool-or-flatten"),
-            args,
-        )]
+        let args: Vec<Term> = args.into_iter().map(|term| term.into()).collect_vec();
+        vec![
+            ProofStep::Rewrite(None, Term::from("bool-or-flatten"), args),
+            ProofStep::Reflexivity,
+        ]
     }
 }
 
@@ -152,15 +144,11 @@ fn translate_bool_and_flatten(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
     } else if args_len[zs] == 0 {
         vec![]
     } else {
-        let args: Vec<Term> = args
-            .into_iter()
-            .map(|term| term.into())
-            .collect_vec();
-        vec![ProofStep::Rewrite(
-            None,
-            Term::from("bool-and-flatten"),
-            args,
-        )]
+        let args: Vec<Term> = args.into_iter().map(|term| term.into()).collect_vec();
+        vec![
+            ProofStep::Rewrite(None, Term::from("bool-and-flatten"), args),
+            ProofStep::Reflexivity,
+        ]
     }
 }
 

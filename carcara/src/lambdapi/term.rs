@@ -1,13 +1,12 @@
 use crate::ast::{
-    pool, Binder as AletheBinder, BindingList, Constant, Operator, Rc, Sort, SortedVar,
+    Binder as AletheBinder, BindingList, Constant, Operator, Rc, Sort, SortedVar,
     Term as AletheTerm, TermPool,
 };
-use indexmap::IndexMap;
 use itertools::Itertools;
 use std::borrow::Borrow;
 use std::collections::VecDeque;
 use std::ops::Deref;
-use std::{fmt, usize, vec};
+use std::{fmt, vec};
 
 const WHITE_SPACE: &'static str = " ";
 
@@ -77,7 +76,7 @@ impl fmt::Display for Modifier {
 }
 
 /// The Grammar <command> token
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Command {
     RequireOpen(String),
     /// Symbol declaration with a proof script (theorem or interactive definition)
@@ -149,6 +148,14 @@ pub enum Term {
     Nat(u32),
     Underscore,
 }
+
+macro_rules! terms {
+    ($($t:expr),+ $(,)?) => {
+        Term::Terms(vec![ $( $t),+ ])
+    };
+}
+
+pub(crate) use terms;
 
 pub trait VisitorArgs {
     fn visit(&mut self, mapping: &Vec<(&(String, Rc<AletheTerm>), &Rc<AletheTerm>)>);
@@ -554,6 +561,74 @@ pub enum LTerm {
     Choice(Bindings, Box<Term>),
 }
 
+macro_rules! id {
+    ($x1:expr) => {
+        Term::TermId($x1.into())
+    };
+}
+
+pub(crate) use id;
+
+macro_rules! bid {
+    ($x1:expr) => {
+        Box::new(Term::TermId($x1.into()))
+    };
+}
+
+pub(crate) use bid;
+
+macro_rules! not {
+    ($x1:expr) => {
+        Term::Alethe(LTerm::Neg(Some(Box::new($x1))))
+    };
+}
+
+pub(crate) use not;
+
+macro_rules! eq {
+    ($x1:expr, $x2:expr) => {
+        Term::Alethe(LTerm::Eq($x1, $x2))
+    };
+}
+
+pub(crate) use eq;
+
+macro_rules! imp {
+    ($x1:expr, $x2:expr) => {
+        Term::Alethe(LTerm::Implies(Box::new($x1), Box::new($x2)))
+    };
+}
+
+pub(crate) use imp;
+
+macro_rules! iff {
+    ($x1:expr, $x2:expr) => {
+        Term::Alethe(LTerm::Iff($x1, $x2))
+    };
+}
+
+pub(crate) use iff;
+
+macro_rules! or {
+    ($($x:expr),+ $(,)?) => {
+        Box::new(Term::Alethe(LTerm::NOr(vec![
+            $($x),+
+        ])))
+    };
+}
+
+pub(crate) use or;
+
+macro_rules! and {
+    ($($x:expr),+ $(,)?) => {
+        Box::new(Term::Alethe(LTerm::NAnd(vec![
+            $($x),+
+        ])))
+    };
+}
+
+pub(crate) use and;
+
 impl fmt::Display for LTerm {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -629,6 +704,14 @@ pub fn clauses(terms: Vec<Term>) -> Term {
     Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(terms)))))
 }
 
+macro_rules! cl {
+    ($($x:expr),+ $(,)?) => {
+        Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses( vec![ $($x),+ ] )))))
+    };
+}
+
+pub(crate) use cl;
+
 pub trait Visitor {
     fn visit(&self, ctx: &mut Context);
 }
@@ -679,19 +762,19 @@ impl Visitor for Rc<AletheTerm> {
                 ops.into_iter().for_each(|op| op.visit(ctx));
             }
             AletheTerm::Binder(_, bs, t) => {
-                let bs_bindinds = bs.into_iter().map(|(name, _)| name).collect_vec();
-                let free_vars = ctx
+                let bounded_variables = bs.into_iter().map(|(name, _)| name).collect_vec();
+                let free_vars_remaining = ctx
                     .pool
                     .free_vars(self)
                     .into_iter()
                     .filter(|var| !ctx.global_variables.contains(var))
                     .filter(|var| match var.deref() {
-                        AletheTerm::Var(var, _) => bs_bindinds.contains(&var) == false,
+                        AletheTerm::Var(var, _) => bounded_variables.contains(&var) == false,
                         _ => false,
                     })
                     .collect_vec();
 
-                if free_vars.is_empty() {
+                if free_vars_remaining.is_empty() {
                     if let Some((count, t)) = ctx.term_indices.get_mut(self) {
                         *count = *count + 1;
                         if *count >= 1 {
@@ -710,3 +793,110 @@ impl Visitor for Rc<AletheTerm> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests_term {
+    use super::*;
+    use crate::parser::{parse_instance, Config};
+    use std::collections::HashSet;
+
+    #[test]
+    fn test_free_var_collection() {
+        let problem: &[u8] = b"
+            (declare-sort Idv 0)
+            (declare-fun clt () Idv)
+            (declare-fun cap (Idv Idv) Idv)
+            (declare-fun FunApp (Idv Idv) Idv)
+            (declare-fun FunExcept (Idv Idv Idv) Idv)
+            (declare-fun Mem (Idv Idv) Bool)
+            (declare-fun SetEnum () Idv)
+            (declare-fun TrigEq (Idv Idv) Bool)
+            (declare-fun TrigEqDollar (Idv
+            Idv) Bool)
+            (declare-fun Client () Idv)
+            (declare-fun Res () Idv)
+            (declare-fun VarUnsat () Idv)
+            (declare-fun UnsatPrim () Idv)
+            (declare-fun Alloc () Idv)
+            (declare-fun AllocPrim () Idv)
+            (declare-fun S () Idv)
+        ";
+        let proof = b"
+            (assume Goal (! (not (=> (! (and (forall ((c1 Idv) (c2 Idv)) (=> (and (Mem c1 Client) (Mem c2 Client)) (forall ((r Idv)) (=> (Mem r Res) (=> (Mem r (cap (FunApp Alloc c1) (FunApp Alloc c2))) (TrigEq c1 c2)))))) (and (and (! (TrigEqDollar (FunApp VarUnsat clt) SetEnum) :named @p_5) (! (TrigEqDollar (FunApp Alloc clt) SetEnum) :named @p_4)) (and (! (not (TrigEqDollar S SetEnum)) :named @p_3) (! (TrigEq UnsatPrim (FunExcept VarUnsat clt S)) :named @p_2)) (! (TrigEq AllocPrim Alloc) :named @p_1))) :named @p_6) (forall ((c1 Idv) (c2 Idv)) (=> (and (Mem c1 Client) (Mem c2 Client)) (forall ((r Idv)) (=> (Mem r Res) (=> (Mem r (cap (FunApp AllocPrim c1) (FunApp AllocPrim c2))) (TrigEq c1 c2)))))))) :named @p_7))
+            (step t1 (cl (and (Mem S S) (not (=> (! (and (forall ((c1 Idv) (c2 Idv)) (=> (and (Mem c1 Client) (Mem c2 Client)) (forall ((r Idv)) (=> (Mem r Res) (=> (Mem r (cap (FunApp Alloc c1) (FunApp Alloc c2))) (TrigEq c1 c2)))))) (and (and (! (TrigEqDollar (FunApp VarUnsat clt) SetEnum) :named @p_5) (! (TrigEqDollar (FunApp Alloc clt) SetEnum) :named @p_4)) (and (! (not (TrigEqDollar S SetEnum)) :named @p_3) (! (TrigEq UnsatPrim (FunExcept VarUnsat clt S)) :named @p_2)) (! (TrigEq AllocPrim Alloc) :named @p_1))) :named @p_6) (forall ((c1 Idv) (c2 Idv)) (=> (and (Mem c1 Client) (Mem c2 Client)) (forall ((r Idv)) (=> (Mem r Res) (=> (Mem r (cap (FunApp AllocPrim c1) (FunApp AllocPrim c2))) (TrigEq c1 c2))))))))))  :rule hole)
+        ";
+        let (problem, proof, mut pool) = parse_instance(problem, proof, Config::new()).unwrap();
+
+        let mut ctx = Context::default();
+
+        let global_variables: HashSet<_> = problem
+            .prelude
+            .function_declarations
+            .iter()
+            .map(|var| pool.add(var.clone().into()))
+            .collect();
+
+        ctx.global_variables = global_variables;
+
+        let res = crate::lambdapi::translate_commands(
+            &mut ctx,
+            &mut proof.iter(),
+            0,
+            |id, t, ps| Command::Symbol(None, crate::lambdapi::normalize_name(id), vec![], t, Some(Proof(ps))),
+        )
+        .expect("translate cong");
+
+        assert_eq!(2, res.len());
+
+        let t1 = res.last().unwrap().clone();
+    }
+
+    #[test]
+    fn test_free_var_quantifier() {
+        let problem: &[u8] = b"
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (declare-fun s () Bool)
+        ";
+        let proof = b"
+            (step t1 (cl (or
+                    (not (forall ((p Bool) (q Bool))
+                        (not (and (=> p q) (or q (not (not p))) (or r false (not q))))
+                    ))
+                    (forall ((p Bool) (q Bool)) (or p (not q) (not s)))
+                )) :rule qnt_cnf)
+        ";
+        let (problem, proof, mut pool) = parse_instance(problem, proof, Config::new()).unwrap();
+
+        let global_variables: HashSet<_> = problem
+            .prelude
+            .function_declarations
+            .iter()
+            .map(|var| pool.add(var.clone().into()))
+            .collect();
+
+        assert_eq!(1, proof.commands.len());
+
+        let node = crate::ast::ProofNode::from_commands(proof.commands.clone());
+
+        let clause = node.clause().first().unwrap();
+
+        let mut ctx = Context::default();
+
+        ctx.global_variables = global_variables;
+
+        clause.visit(&mut ctx);
+
+        println!("global var {:#?}", ctx.global_variables);
+        println!("indices {:#?}", ctx.term_indices);
+        println!("sharing {:#?}", ctx.term_sharing);
+    }
+}
+
+
+// (step t1 (cl 
+//     (and (Mem S S)
+//     (not (=> (! (and (forall ((c1 Idv) (c2 Idv)) (=> (and (Mem c1 Client) (Mem c2 Client)) (forall ((r Idv)) (=> (Mem r Res) (=> (Mem r (cap (FunApp Alloc c1) (FunApp Alloc c2))) (TrigEq c1 c2)))))) (and (and (! (TrigEqDollar (FunApp VarUnsat clt) SetEnum) :named @p_5) (! (TrigEqDollar (FunApp Alloc clt) SetEnum) :named @p_4)) (and (! (not (TrigEqDollar S SetEnum)) :named @p_3) (! (TrigEq UnsatPrim (FunExcept VarUnsat clt S)) :named @p_2)) (! (TrigEq AllocPrim Alloc) :named @p_1))) :named @p_6) (forall ((c1 Idv) (c2 Idv)) (=> (and (Mem c1 Client) (Mem c2 Client)) (forall ((r Idv)) (=> (Mem r Res) (=> (Mem r (cap (FunApp AllocPrim c1) (FunApp AllocPrim c2))) (TrigEq c1 c2))))))))
+//     )
+//     )  :rule hole)

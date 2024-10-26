@@ -2,8 +2,17 @@ use super::*;
 
 const WHITE_SPACE: &'static str = " ";
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Proof(pub Vec<ProofStep>);
+
+#[macro_export]
+macro_rules! proof {
+    ($($sp:expr),+ $(,)? ) => {
+        Proof(vec![ $( $sp),+ ])
+    };
+}
+
+pub(crate) use proof;
 
 impl fmt::Display for Proof {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -16,7 +25,7 @@ impl fmt::Display for Proof {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ProofStep {
     Assume(Vec<String>),
     Apply(Term, Vec<Term>, SubProofs),
@@ -29,7 +38,51 @@ pub enum ProofStep {
     Symmetry,
 }
 
-#[derive(Debug, Clone)]
+macro_rules! apply {
+    ($id:ident) => {
+        ProofStep::Apply(Term::TermId(stringify!($id).into()), vec![], SubProofs(None))
+    };
+    ($t:expr) => {
+        ProofStep::Apply($t, vec![], SubProofs(None))
+    };
+    ($id:expr, [ $($sp:expr),+ $(,)?  ]) => {
+        ProofStep::Apply(Term::TermId(stringify!($id).into()), vec![], SubProofs(Some(
+            vec![
+                $( proof!($sp)),+
+            ]
+        )))
+    };
+}
+
+pub(crate) use apply;
+
+macro_rules! refine {
+    ($id:ident) => {
+        ProofStep::Refine(Term::TermId(stringify!($id).into()), vec![], SubProofs(None))
+    };
+    ($t:expr) => {
+        ProofStep::Apply($t, vec![], SubProofs(None))
+    };
+    ($id:expr, [ $($sp:expr),+ $(,)?  ]) => {
+        ProofStep::Refine(Term::TermId(stringify!($id).into()), vec![], SubProofs(Some(
+            vec![
+                $( proof!($sp)),+
+            ]
+        )))
+    };
+}
+
+pub(crate) use refine;
+
+macro_rules! r#try {
+    ($t:expr) => {
+        ProofStep::Try(Box::new($t))
+    };
+}
+
+pub(crate) use r#try;
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct SubProofs(pub Option<Vec<Proof>>);
 
 impl fmt::Display for SubProofs {

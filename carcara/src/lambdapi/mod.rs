@@ -740,7 +740,7 @@ fn translate_tautology(
     rule: &str,
     args: &Vec<Rc<AletheTerm>>,
 ) -> Option<TradResult<Proof>> {
-    let premises: Vec<_> = get_premises_clause(&proof_iter, &premises);
+    let mut premises: Vec<_> = get_premises_clause(&proof_iter, &premises);
 
     match rule {
         "bind" | "subproof" => None,
@@ -754,7 +754,7 @@ fn translate_tautology(
         "not_implies2" => Some(translate_not_implies2(premises.first()?.0.as_str())),
         "not_and" => Some(translate_not_and(premises.first()?.0.as_str())),
         "not_symm" => Some(translate_not_symm(premises.first()?.0.as_str())),
-        "trans" => Some(translate_trans(premises.as_slice())),
+        "trans" => Some(translate_trans(&mut premises)),
         "symm" => Some(translate_sym(premises.first()?.0.as_str())),
         "refl" => Some(translate_refl()),
         "and" => Some(translate_and(premises.first()?)),
