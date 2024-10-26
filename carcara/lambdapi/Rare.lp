@@ -133,6 +133,80 @@ begin
     admit
 end;
 
+
+// (define-rule bool-eq-true ((t Bool)) (= t true) t)
+opaque symbol bool-eq-true (t: τ o) : πᶜ ((t = ⊤) = t) ≔
+begin
+    assume t;
+    apply prop_ext;
+    apply ∧ᶜᵢ
+    {
+        apply ⇒ᶜᵢ;
+        assume H;
+        rewrite H;
+        apply trivial
+    }
+    {
+        apply ⇒ᶜᵢ;
+        assume Ht;
+        apply prop_ext;
+        apply ∧ᶜᵢ
+        { apply ⇒ᶜᵢ; assume Ht'; apply trivial }
+        { apply ⇒ᶜᵢ; assume Ht';  apply Ht }
+    }
+end;
+
+// (define-rule bool-eq-false ((t Bool)) (= t false) (not t))
+opaque symbol bool-eq-false (t: τ o) : πᶜ ((t = ⊥) = ¬ t) ≔
+begin
+    assume t;
+    apply prop_ext;
+    apply ∧ᶜᵢ
+    {
+        apply ⇒ᶜᵢ;
+        assume H;
+        rewrite H;
+        apply ¬ᶜᵢ;
+        assume Hbot;
+        apply Hbot
+    }
+    {
+        apply ⇒ᶜᵢ;
+        assume Hnt;
+        apply prop_ext;
+        apply ∧ᶜᵢ
+        {  apply ⇒ᶜᵢ; assume Ht; apply (¬ᶜₑ Hnt Ht) }
+        { apply ⇒ᶜᵢ; assume Ht';  apply (⊥ᶜₑ Ht') }
+    }
+end;
+
+// (define-rule* bool-and-de-morgan ((x Bool) (y Bool) (zs Bool :list)) 
+//   (not (and x y zs))
+//   (not (and y zs))
+//   (or (not x) _))
+opaque symbol bool-and-de-morgan (x y zs: τ o): πᶜ ((¬ (x ∧ᶜ y ∧ᶜ zs)) = ((¬ x) ∨ᶜ (¬ y) ∨ᶜ (¬ zs))) ≔
+begin
+    assume x y zs;
+    apply prop_ext;
+    apply ∧ᶜᵢ
+    { rewrite morgan₁; rewrite morgan₁; apply ⇒ᶜᵢ; assume H; refine H }
+    { rewrite morgan₁; rewrite morgan₁; apply ⇒ᶜᵢ; assume H; refine H }
+end;
+
+// (define-rule* bool-or-de-morgan ((x Bool) (y Bool) (zs Bool :list)) 
+//   (not (or x y zs))
+//   (not (or y zs))
+//   (and (not x) _))
+opaque symbol bool-or-de-morgan (x y zs: τ o): πᶜ ((¬ (x ∨ᶜ y ∨ᶜ zs)) = ((¬ x) ∧ᶜ (¬ y) ∧ᶜ (¬ zs))) ≔
+begin
+    assume x y zs;
+    apply prop_ext;
+    apply ∧ᶜᵢ
+    { rewrite morgan₂; rewrite morgan₂; apply ⇒ᶜᵢ; assume H; refine H }
+    { rewrite morgan₂; rewrite morgan₂; apply ⇒ᶜᵢ; assume H; refine H }
+end;
+
+
 // Integer
 require open Stdlib.Z;
 require open Stdlib.Bool;

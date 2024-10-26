@@ -267,7 +267,11 @@ impl PrettyPrint for LTerm {
                 bindings.0.iter().map(|b| {
                     classic("`∃")
                         .append(space())
-                        .append(b.0.to_doc())
+                        .append(
+                            b.0.to_doc()
+                                .append(text(":").spaces().append(b.1.to_doc()))
+                                .parens(),
+                        )
                         .append(COMMA)
                 }), // we ignore the type here
                 space(),
@@ -278,7 +282,11 @@ impl PrettyPrint for LTerm {
                 bindings.0.iter().map(|b| {
                     classic("`∀")
                         .append(space())
-                        .append(b.0.to_doc())
+                        .append(
+                            b.0.to_doc()
+                                .append(text(":").spaces().append(b.1.to_doc()))
+                                .parens(),
+                        )
                         .append(COMMA)
                 }), // we ignore the type here
                 space(),
@@ -404,6 +412,7 @@ impl PrettyPrint for ProofStep {
                 )
                 .append(semicolon()),
             ProofStep::Symmetry => text("symmetry").append(semicolon()),
+            ProofStep::Simplify => text("simplify").append(semicolon()),
         }
     }
 }

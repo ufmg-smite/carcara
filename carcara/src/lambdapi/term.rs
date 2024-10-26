@@ -483,7 +483,7 @@ impl From<&SortedVar> for SortedTerm {
     fn from(var: &SortedVar) -> Self {
         SortedTerm(
             Box::new(Term::TermId(var.0.clone())),
-            Box::new(Term::from(&var.1)),
+            Box::new(tau((Term::from(&var.1)))),
         )
     }
 }
@@ -838,13 +838,17 @@ mod tests_term {
 
         ctx.global_variables = global_variables;
 
-        let res = crate::lambdapi::translate_commands(
-            &mut ctx,
-            &mut proof.iter(),
-            0,
-            |id, t, ps| Command::Symbol(None, crate::lambdapi::normalize_name(id), vec![], t, Some(Proof(ps))),
-        )
-        .expect("translate cong");
+        let res =
+            crate::lambdapi::translate_commands(&mut ctx, &mut proof.iter(), 0, |id, t, ps| {
+                Command::Symbol(
+                    None,
+                    crate::lambdapi::normalize_name(id),
+                    vec![],
+                    t,
+                    ps.map(|ps| Proof(ps)),
+                )
+            })
+            .expect("translate cong");
 
         assert_eq!(2, res.len());
 
@@ -887,16 +891,5 @@ mod tests_term {
         ctx.global_variables = global_variables;
 
         clause.visit(&mut ctx);
-
-        println!("global var {:#?}", ctx.global_variables);
-        println!("indices {:#?}", ctx.term_indices);
-        println!("sharing {:#?}", ctx.term_sharing);
     }
 }
-
-
-// (step t1 (cl 
-//     (and (Mem S S)
-//     (not (=> (! (and (forall ((c1 Idv) (c2 Idv)) (=> (and (Mem c1 Client) (Mem c2 Client)) (forall ((r Idv)) (=> (Mem r Res) (=> (Mem r (cap (FunApp Alloc c1) (FunApp Alloc c2))) (TrigEq c1 c2)))))) (and (and (! (TrigEqDollar (FunApp VarUnsat clt) SetEnum) :named @p_5) (! (TrigEqDollar (FunApp Alloc clt) SetEnum) :named @p_4)) (and (! (not (TrigEqDollar S SetEnum)) :named @p_3) (! (TrigEq UnsatPrim (FunExcept VarUnsat clt S)) :named @p_2)) (! (TrigEq AllocPrim Alloc) :named @p_1))) :named @p_6) (forall ((c1 Idv) (c2 Idv)) (=> (and (Mem c1 Client) (Mem c2 Client)) (forall ((r Idv)) (=> (Mem r Res) (=> (Mem r (cap (FunApp AllocPrim c1) (FunApp AllocPrim c2))) (TrigEq c1 c2))))))))
-//     )
-//     )  :rule hole)

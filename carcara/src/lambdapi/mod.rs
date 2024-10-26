@@ -1,5 +1,8 @@
 use crate::ast::{
-    polyeq, pool::{self, TermPool}, AnchorArg, Binder, Operator, PrimitivePool, ProblemPrelude, Proof as ProofElaborated, ProofCommand, ProofIter, ProofStep as AstProofStep, Rc, Sort, Subproof, Term as AletheTerm
+    polyeq,
+    pool::{self, TermPool},
+    AnchorArg, Binder, Operator, PrimitivePool, ProblemPrelude, Proof as ProofElaborated,
+    ProofCommand, ProofIter, ProofStep as AstProofStep, Rc, Sort, Subproof, Term as AletheTerm,
 };
 use indexmap::IndexMap;
 use itertools::Itertools;
@@ -61,9 +64,6 @@ impl Context {
     /// Convert dagify subexpression into `Term::TermId` otherwise just apply a canonical conversion
     fn get_or_convert(&self, term: &Rc<AletheTerm>) -> Term {
         term::conv(term, self)
-        // self.term_sharing
-        //     .get(term)
-        //     .map_or(Term::from(term), |(name, _def)| Term::from(name))
     }
 }
 
@@ -123,14 +123,15 @@ fn translate_prelude(prelude: ProblemPrelude) -> Vec<Command> {
         .function_declarations
         .into_iter()
         .enumerate()
-        .map(|(counter, (id, term))| {
+        .map(|(_counter, (id, term))| {
             let sort = match *term {
                 AletheTerm::Sort(ref s) => tau(translate_sort_function(s)),
                 _ => unreachable!(),
             };
-            let index = Term::Terms(vec![index(), Term::TermId(format!("{}", counter))]);
+            //TODO: put again the index
+            //let index = Some(Term::Terms(vec![index(), Term::TermId(format!("{}", counter))]));
 
-            Command::Definition(id.to_string(), vec![], Some(sort), Some(index))
+            Command::Definition(id.to_string(), vec![], Some(sort), None)
         })
         .collect::<Vec<Command>>();
 
@@ -172,8 +173,7 @@ pub fn produce_lambdapi_proof<'a>(
 
     proof_file.requires = gen_required_module();
 
-    let global_variables: HashSet<_> = 
-    prelude
+    let global_variables: HashSet<_> = prelude
         .function_declarations
         .iter()
         .map(|var| pool.add(var.clone().into()))
@@ -189,7 +189,7 @@ pub fn produce_lambdapi_proof<'a>(
         &mut context,
         &mut proof_elaborated.iter(),
         0,
-        |id, t, ps| Command::Symbol(None, normalize_name(id), vec![], t, Some(Proof(ps))),
+        |id, t, ps| Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps))),
     )?;
 
     let shared_terms = gen_shared_term(&context);
@@ -347,6 +347,7 @@ fn make_resolution(
     (pivot, flag_position_pivot): &(Rc<AletheTerm>, bool),
     (left_step_name, left_clause): &(&str, &[Rc<AletheTerm>]),
     (right_step_name, right_clause): &(&str, &[Rc<AletheTerm>]),
+    ctx: &mut Context,
 ) -> Vec<ProofStep> {
     let mut steps = vec![];
     let mut hyp_left_arg = Term::TermId(left_step_name.to_string());
@@ -359,6 +360,7 @@ fn make_resolution(
                 format!("{}'", left_step_name).as_str(),
                 pivot,
                 left_clause,
+                ctx,
             ));
             hyp_left_arg = Term::Terms(vec![
                 Term::TermId(format!("{}'", left_step_name)),
@@ -370,6 +372,7 @@ fn make_resolution(
                 format!("{}'", right_step_name).as_str(),
                 &term_negated(pivot),
                 right_clause,
+                ctx,
             ));
             hyp_right_arg = Term::Terms(vec![
                 Term::TermId(format!("{}'", right_step_name)),
@@ -383,6 +386,7 @@ fn make_resolution(
                 format!("{}'", left_step_name).as_str(),
                 &term_negated(pivot),
                 left_clause,
+                ctx,
             ));
             hyp_left_arg = Term::Terms(vec![
                 Term::TermId(format!("{}'", left_step_name)),
@@ -394,6 +398,7 @@ fn make_resolution(
                 format!("{}'", right_step_name).as_str(),
                 pivot,
                 right_clause,
+                ctx,
             ));
             hyp_right_arg = Term::Terms(vec![
                 Term::TermId(format!("{}'", right_step_name)),
@@ -433,19 +438,28 @@ fn term_at_head_of_clause(term: &Rc<AletheTerm>, terms: &[Rc<AletheTerm>]) -> bo
 /// have move_head_notx: Prf((a ⟇ b ⟇ x ⟇ c)  →  (x ⟇ a ⟇ b ⟇ c))  {
 ///     [proof generated here]
 /// }
-fn move_pivot_lemma(name: &str, pivot: &Rc<AletheTerm>, clause: &[Rc<AletheTerm>]) -> ProofStep {
+fn move_pivot_lemma(
+    name: &str,
+    pivot: &Rc<AletheTerm>,
+    clause: &[Rc<AletheTerm>],
+    ctx: &mut Context,
+) -> ProofStep {
     let mut duration = Duration::ZERO;
-    let pivot_tr: Term = Term::from(pivot.clone());
+    let pivot_tr: Term = ctx.get_or_convert(pivot);
+    //println!("pivot {} transform into {}", pivot, pivot_tr);
+    //println!("clause {:?}", clause);
 
     //FIXME: avoid to clone twice the clause
-    let previous_clause: Vec<_> = clause.into_iter().map(|t| Term::from(t.clone())).collect();
+    let previous_clause: Vec<_> = clause.into_iter().map(|t| ctx.get_or_convert(t)).collect();
 
     let mut new_clause: VecDeque<_> = clause
         .into_iter()
-        .map(|t| Term::from(t))
-        .filter(|t| *t != pivot_tr)
+        .filter(|t| polyeq(pivot, t, &mut duration) == false)
+        .map(|t| ctx.get_or_convert(t))
         .collect();
     new_clause.push_front(pivot_tr.clone());
+
+    //println!("new clause {:?}", new_clause);
 
     let mut new_clause2: VecDeque<Rc<AletheTerm>> = clause
         .into_iter()
@@ -565,9 +579,12 @@ fn translate_subproof<'a>(
 
     let mut fresh_ctx = Context::default();
     fresh_ctx.deps = context.deps.clone();
+    fresh_ctx.global_variables = context.global_variables.clone();
+    fresh_ctx.term_indices = context.term_indices.clone();
+    fresh_ctx.term_sharing = context.term_sharing.clone();
 
     let mut proof_cmds = translate_commands(&mut fresh_ctx, iter, depth + 1, |id, t, ps| {
-        ProofStep::Have(normalize_name(id), t, ps)
+        ProofStep::Have(normalize_name(id), t, ps.unwrap_or(admit()))
     })?;
 
     proof_cmds
@@ -662,6 +679,9 @@ fn translate_subproof<'a>(
         proof_cmds
     };
 
+    context.term_indices.extend(fresh_ctx.term_indices);
+    context.term_sharing.extend(fresh_ctx.term_sharing);
+
     Ok((id, clause, subproof_have_wrapper, fresh_ctx.deps))
 }
 
@@ -670,6 +690,7 @@ fn translate_resolution(
     proof_iter: &mut ProofIter<'_>,
     premises: &[(usize, usize)],
     args: &Vec<Rc<AletheTerm>>,
+    context: &mut Context,
 ) -> TradResult<Vec<ProofStep>> {
     let premises = get_premises_clause(&proof_iter, premises);
 
@@ -686,10 +707,10 @@ fn translate_resolution(
                         proof(Term::Alethe(LTerm::Clauses(
                             remove_pivot_in_clause(&pivot, h1.1, h2.1)
                                 .into_iter()
-                                .map(|s| Term::from(s))
+                                .map(|t| context.get_or_convert(&t))
                                 .collect::<Vec<Term>>(),
                         ))),
-                        make_resolution(pivot, &(&h1.0, h1.1), &(&h2.0, h2.1)),
+                        make_resolution(pivot, &(&h1.0, h1.1), &(&h2.0, h2.1), context),
                     )],
                 ),
                 |(previous_goal_name, previous_goal, mut proof_steps), (premise, pivot)| {
@@ -702,6 +723,7 @@ fn translate_resolution(
                         pivot,
                         &(format!("{}", previous_goal_name).as_str(), &previous_goal),
                         &(&premise.0, premise.1),
+                        context,
                     );
 
                     proof_steps.push(ProofStep::Have(
@@ -709,7 +731,7 @@ fn translate_resolution(
                         proof(Term::Alethe(LTerm::Clauses(
                             current_goal
                                 .iter()
-                                .map(|s| Term::from(s.clone()))
+                                .map(|t| context.get_or_convert(&t))
                                 .collect::<Vec<Term>>(),
                         ))),
                         resolution,
@@ -772,15 +794,13 @@ fn translate_commands<'a, F, T>(
     f: F,
 ) -> TradResult<Vec<T>>
 where
-    F: Fn(String, Term, Vec<ProofStep>) -> T,
+    F: Fn(String, Term, Option<Vec<ProofStep>>) -> T,
 {
     let mut proof_steps = Vec::new();
 
     while let Some(command) = proof_iter.next() {
         let clause = command.clause();
-        clause
-            .into_iter()
-            .for_each(|c| c.visit(ctx));
+        clause.into_iter().for_each(|c| c.visit(ctx));
 
         match command {
             ProofCommand::Assume { id, term } => {
@@ -790,7 +810,7 @@ where
                 proof_steps.push(f(
                     id.into(),
                     term::clauses(vec![ctx.get_or_convert(term)]),
-                    admit(),
+                    None,
                 ))
             }
             ProofCommand::Step(AstProofStep {
@@ -814,13 +834,13 @@ where
 
                 ctx.deps.entry(normalize_name(id)).and_modify(|v| v.2 = ps);
 
-                let proof = translate_resolution(proof_iter, premises, args)?;
+                let proof = translate_resolution(proof_iter, premises, args, ctx)?;
 
                 let clauses = Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(
                     clause.into_iter().map(|a| ctx.get_or_convert(a)).collect(),
                 )))));
 
-                proof_steps.push(f(normalize_name(id), clauses, proof));
+                proof_steps.push(f(normalize_name(id), clauses, Some(proof)));
             }
             ProofCommand::Step(AstProofStep {
                 id, clause, premises: _, rule, args, ..
@@ -835,7 +855,7 @@ where
                 let step = f(
                     normalize_name(id),
                     Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(terms))))),
-                    proof_script.0,
+                    Some(proof_script.0),
                 );
 
                 proof_steps.push(step);
@@ -850,7 +870,7 @@ where
                 let step = f(
                     normalize_name(id),
                     Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(terms))))),
-                    proof_script.0,
+                    Some(proof_script.0),
                 );
                 proof_steps.push(step);
             }
@@ -881,7 +901,7 @@ where
                     proof_steps.push(f(
                         normalize_name(id),
                         Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(clause))))),
-                        step?.0,
+                        Some(step?.0),
                     ));
                 }
 
@@ -933,7 +953,7 @@ where
                 proof_steps.push(f(
                     normalize_name(id),
                     Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(clause))))),
-                    subproof,
+                    Some(subproof),
                 ));
             }
         };
@@ -942,3 +962,49 @@ where
 
     Ok(proof_steps)
 }
+
+#[cfg(test)]
+mod tests_translation {
+    use super::*;
+    use crate::parser::{self, parse_instance};
+
+    #[test]
+    fn test_resolution() {
+        let problem: &[u8] = b"
+           (declare-fun a () Bool)
+            (declare-fun b () Bool)
+            (declare-fun c () Bool)
+        ";
+        let proof = b"
+            (assume a4 (not (= a a)))
+            (step t1 (cl (= a a) (= b b)) :rule hole)
+            (step t2 (cl (= c c) (not (= a a))) :rule hole)
+            (step t3 (cl (= b b) (= c c)) :rule resolution :premises (t1 t2) :args ((= a a) true))
+        ";
+        let (problem, proof, mut pool) =
+            parse_instance(problem, proof, parser::Config::new()).unwrap();
+
+        let global_variables: HashSet<_> = problem
+            .prelude
+            .function_declarations
+            .iter()
+            .map(|var| pool.add(var.clone().into()))
+            .collect();
+
+        let mut ctx = Context::default();
+
+        ctx.global_variables = global_variables;
+
+        let res = translate_commands(&mut ctx, &mut proof.iter(), 0, |id, t, ps| {
+            Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
+        })
+        .expect("translate trans");
+
+        let t3 = res.last().unwrap().clone();
+
+        //println!("{}", t3);
+    }
+}
+
+// (step t2 (cl ((not b) c)))
+// (step t3 (cl (a c)) :rule resolution :premises (t1 t2))

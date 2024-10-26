@@ -1141,6 +1141,16 @@ begin
   admit
 end;
 
+symbol trans [U] [a b c: τ U]: π̇ (a = b ⟇ ▩) → π̇ (b = c ⟇ ▩) → π̇ (a = c ⟇ ▩) ≔
+begin
+  assume U a b c H1 H2;
+  apply ∨ᶜᵢ₁;
+  have H2': πᶜ (b = c) { apply π̇ₗ H2 };
+  have H1': πᶜ (a = b) { apply π̇ₗ H1 };
+  rewrite H1';
+  apply H2'
+end;
+
 opaque symbol subproof1 [φ₁ ψ] : πᶜ φ₁ → πᶜ ψ → π̇ ((¬ φ₁) ⟇ ψ ⟇ ▩) ≔
 begin
   assume φ₁ ψ Hφ₁ Hψ;
@@ -1654,4 +1664,46 @@ begin
   rewrite H4;
   rewrite H5;
   reflexivity
+end;
+
+builtin "bot" ≔ ⊥;
+builtin "top" ≔ ⊤;
+builtin "imp" ≔ ⇒ᶜ;
+builtin "and" ≔ ∧ᶜ;
+builtin "or"  ≔ ∨ᶜ;
+builtin "not" ≔ ¬;
+builtin "all" ≔ ∀ᶜ;
+builtin "ex"  ≔ ∃ᶜ;
+
+opaque symbol cong_or [t1 t2 u1 u2: τ o]: π̇ (t1 = u1 ⟇ ▩) → π̇ (t2 = u2 ⟇ ▩) → π̇ (t1 ∨ᶜ t2 = u1 ∨ᶜ u2 ⟇ ▩) ≔
+begin
+  assume t1 t2 u1 u2 H1 H2;
+  have H1': πᶜ (t1 = u1) { apply π̇ₗ H1 };
+  have H2': πᶜ (t2 = u2) { apply π̇ₗ H2 };
+  apply ∨ᶜᵢ₁;
+  rewrite H1';
+  rewrite H2';
+   reflexivity
+end;
+
+opaque symbol cong_and [t1 t2 u1 u2: τ o]: π̇ (t1 = u1 ⟇ ▩) → π̇ (t2 = u2 ⟇ ▩) → π̇ (t1 ∧ᶜ t2 = u1 ∧ᶜ u2 ⟇ ▩) ≔
+begin
+  assume t1 t2 u1 u2 H1 H2;
+  have H1': πᶜ (t1 = u1) { apply π̇ₗ H1 };
+  have H2': πᶜ (t2 = u2) { apply π̇ₗ H2 };
+  apply ∨ᶜᵢ₁;
+  rewrite H1';
+  rewrite H2';
+   reflexivity
+end;
+
+opaque symbol cong_imp [t1 t2 u1 u2: τ o]: π̇ (t1 = u1 ⟇ ▩) → π̇ (t2 = u2 ⟇ ▩) → π̇ ((t1 ⇒ᶜ t2) = u1 ⇒ᶜ u2 ⟇ ▩) ≔
+begin
+  assume t1 t2 u1 u2 H1 H2;
+  have H1': πᶜ (t1 = u1) { apply π̇ₗ H1 };
+  have H2': πᶜ (t2 = u2) { apply π̇ₗ H2 };
+  apply ∨ᶜᵢ₁;
+  rewrite H1';
+  rewrite H2';
+   reflexivity
 end;

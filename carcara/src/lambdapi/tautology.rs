@@ -419,7 +419,9 @@ mod tests_tautolog {
             &mut Context::default(),
             &mut proof.iter(),
             0,
-            |id, t, ps| Command::Symbol(None, normalize_name(id), vec![], t, Some(Proof(ps))),
+            |id, t, ps| {
+                Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
+            },
         )
         .expect("translate trans");
 
@@ -470,7 +472,9 @@ mod tests_tautolog {
             &mut Context::default(),
             &mut proof.iter(),
             0,
-            |id, t, ps| Command::Symbol(None, normalize_name(id), vec![], t, Some(Proof(ps))),
+            |id, t, ps| {
+                Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
+            },
         )
         .expect("translate cong");
 
@@ -528,7 +532,9 @@ mod tests_tautolog {
             &mut Context::default(),
             &mut proof.iter(),
             0,
-            |id, t, ps| Command::Symbol(None, normalize_name(id), vec![], t, Some(Proof(ps))),
+            |id, t, ps| {
+                Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
+            },
         )
         .expect("translate cong");
 
@@ -577,7 +583,9 @@ mod tests_tautolog {
             &mut Context::default(),
             &mut proof.iter(),
             0,
-            |id, t, ps| Command::Symbol(None, normalize_name(id), vec![], t, Some(Proof(ps))),
+            |id, t, ps| {
+                Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
+            },
         )
         .expect("translate cong");
 
@@ -624,7 +632,9 @@ mod tests_tautolog {
             &mut Context::default(),
             &mut proof.iter(),
             0,
-            |id, t, ps| Command::Symbol(None, normalize_name(id), vec![], t, Some(Proof(ps))),
+            |id, t, ps| {
+                Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
+            },
         )
         .expect("translate cong");
 
@@ -653,5 +663,4 @@ mod tests_tautolog {
 
         assert_eq!(t3, cmd);
     }
-    
 }

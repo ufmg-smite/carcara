@@ -21,6 +21,8 @@ pub fn translate_rare_simp(args: &Vec<Rc<AletheTerm>>) -> Proof {
         "bool-or-flatten" => translate_bool_or_flatten(args),
         "bool-and-flatten" => translate_bool_and_flatten(args),
         "bool-impl-elim" => translate_bool_impl_elim(args),
+        "bool-and-de-morgan" => translate_bool_and_de_morgan(args),
+        "bool-or-de-morgan" => translate_bool_or_de_morgan(args),
         "evaluate" => return Proof(vec![ProofStep::Admit]), //FIXME: Need external prover setup
         r => {
             let args = args.into_iter().map(|term| term.into()).collect_vec();
@@ -168,6 +170,7 @@ pub fn translate_simplify_step(rule: &str) -> Proof {
 fn translate_equiv_simplify() -> Proof {
     Proof(lambdapi! {
         apply "∨ᶜᵢ₁";
+        simplify;
         try [ rewrite ."[ x in x = _ ]" "equiv_simplify₁"; ];
         try [ rewrite ."[ x in x = _ ]" "equiv_simplify₂";  ];
         try [ rewrite ."[ x in x = _ ]" "equiv_simplify₃";  ];
@@ -193,6 +196,7 @@ fn translate_not_simplify() -> Proof {
 fn translate_implies_simplify() -> Proof {
     Proof(lambdapi! {
         apply "∨ᶜᵢ₁";
+        simplify;
         try [ rewrite "implies_simplify₁"; ];
         try [ rewrite "implies_simplify₂";  ];
         try [ rewrite "implies_simplify₃";  ];
@@ -231,4 +235,34 @@ fn translate_ac_simplify() -> Proof {
         try [ rewrite "ac_simp_and";  ];
         reflexivity;
     })
+}
+
+fn translate_bool_and_de_morgan(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
+    if matches!(args.last().unwrap().deref(), AletheTerm::Op(Operator::RareList, ref l) if l.len() == 0)
+    {
+        vec![apply!(id!("morgan₁"))]
+    } else {
+        let args_conv: Vec<Term> = args.into_iter().map(|t| Term::from(t)).collect_vec();
+        // vec![ProofStep::Apply(
+        //     id!("bool-and-de-morgan"),
+        //     args_conv,
+        //     SubProofs(None),
+        // )]
+        admit()
+    }
+}
+
+fn translate_bool_or_de_morgan(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
+    if matches!(args.last().unwrap().deref(), AletheTerm::Op(Operator::RareList, ref l) if l.len() == 0)
+    {
+        vec![apply!(id!("morgan₂"))]
+    } else {
+        let args_conv: Vec<Term> = args.into_iter().map(|t| Term::from(t)).collect_vec();
+        // vec![ProofStep::Apply(
+        //     id!("bool-or-de-morgan"),
+        //     args_conv,
+        //     SubProofs(None),
+        // )]
+        admit()
+    }
 }

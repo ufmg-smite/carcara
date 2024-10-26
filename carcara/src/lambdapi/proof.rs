@@ -36,6 +36,7 @@ pub enum ProofStep {
     Try(Box<ProofStep>),
     Rewrite(Option<String>, Term, Vec<Term>),
     Symmetry,
+    Simplify,
 }
 
 macro_rules! apply {
@@ -159,6 +160,7 @@ impl fmt::Display for ProofStep {
                 write!(f, "rewrite {} ({} {});", pattern, hyp, args)
             }
             ProofStep::Symmetry => write!(f, "symmetry;"),
+            ProofStep::Simplify => write!(f, "simplify;"),
         }
     }
 }

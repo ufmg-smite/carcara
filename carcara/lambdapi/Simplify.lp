@@ -465,4 +465,14 @@ end;
 
 // Rule 73: ac_simp
 opaque symbol ac_simp_or p : πᶜ (p ∨ᶜ p = p) ≔ or_idempotent p;
-opaque symbol ac_simp_and p : πᶜ (p ∧ᶜ p = p) ≔ and_idempotent p; 
+opaque symbol ac_simp_and p : πᶜ (p ∧ᶜ p = p) ≔ and_idempotent p;
+
+opaque symbol eq_symm [a] [x y: τ a] : π̇ ((x = y) = ((y = x)) ⟇ ▩) ≔
+begin
+  assume a x y;
+  apply ∨ᶜᵢ₁;
+  apply prop_ext;
+  apply ∧ᶜᵢ
+  { apply ⇒ᶜᵢ; assume H; symmetry; apply H }
+  { apply ⇒ᶜᵢ; assume H; symmetry; apply H }
+end;

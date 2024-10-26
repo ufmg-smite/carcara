@@ -28,6 +28,7 @@ macro_rules! inline_lambdapi {
 pub(crate) use inline_lambdapi;
 
 macro_rules! tactic {
+    ($steps:ident, simplify; $($body:tt)*) => { $steps.push(ProofStep::Simplify) ; tactic![ $steps, $( $body )* ] };
     ($steps:ident, symmetry; $($body:tt)*) => { $steps.push(ProofStep::Symmetry) ; tactic![ $steps, $( $body )* ] };
     ($steps:ident, reflexivity; $($body:tt)*) => { $steps.push(ProofStep::Reflexivity) ; tactic![ $steps, $( $body )* ] };
     ($steps:ident, apply $i:tt; $($body:tt)+) => {
