@@ -68,6 +68,9 @@ pub enum CheckerError {
     #[error("term '{0}' is not a valid n-ary operation")]
     NotValidNaryTerm(Rc<Term>),
 
+    #[error("cannot evaluate the fixed length of the term '{0}'")]
+    LengthCannotBeEvaluated(Rc<Term>),
+
     // General errors
     #[error("expected {0} premises, got {1}")]
     WrongNumberOfPremises(Range, usize),
@@ -125,12 +128,6 @@ pub enum CheckerError {
 
     #[error("expected 'let' term, got '{0}'")]
     ExpectedLetTerm(Rc<Term>),
-
-    #[error("expected term style argument, got assign style argument: '(:= {0} {1})'")]
-    ExpectedTermStyleArg(String, Rc<Term>),
-
-    #[error("expected assign style '(:= ...)' argument, got term style argument: '{0}'")]
-    ExpectedAssignStyleArg(Rc<Term>),
 
     #[error("expected term {0} to be a prefix of {1}")]
     ExpectedToBePrefix(Rc<Term>, Rc<Term>),
