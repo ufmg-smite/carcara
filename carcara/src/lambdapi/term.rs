@@ -571,7 +571,7 @@ pub(crate) use id;
 
 macro_rules! bid {
     ($x1:expr) => {
-        Box::new(Term::TermId($x1.into()))
+        Term::TermId($x1.into())
     };
 }
 
@@ -587,7 +587,7 @@ pub(crate) use not;
 
 macro_rules! eq {
     ($x1:expr, $x2:expr) => {
-        Term::Alethe(LTerm::Eq($x1, $x2))
+        Term::Alethe(LTerm::Eq(Box::new($x1), Box::new($x2)))
     };
 }
 
@@ -611,9 +611,9 @@ pub(crate) use iff;
 
 macro_rules! or {
     ($($x:expr),+ $(,)?) => {
-        Box::new(Term::Alethe(LTerm::NOr(vec![
+        Term::Alethe(LTerm::NOr(vec![
             $($x),+
-        ])))
+        ]))
     };
 }
 
@@ -621,13 +621,21 @@ pub(crate) use or;
 
 macro_rules! and {
     ($($x:expr),+ $(,)?) => {
-        Box::new(Term::Alethe(LTerm::NAnd(vec![
+        Term::Alethe(LTerm::NAnd(vec![
             $($x),+
-        ])))
+        ]))
     };
 }
 
 pub(crate) use and;
+
+macro_rules! forall {
+    ([$( ($x:expr, $ty:expr) ),+ $(,)?], $term:expr) => {
+        Term::Alethe(LTerm::Forall(Bindings(vec![$( SortedTerm( Box::new($x), Box::new($ty)) ),+ ]), Box::new($term)))
+    };
+}
+
+pub(crate) use forall;
 
 impl fmt::Display for LTerm {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

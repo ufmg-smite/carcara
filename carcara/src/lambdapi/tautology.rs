@@ -352,32 +352,51 @@ pub fn translate_simple_tautology(
     )]))
 }
 
-pub fn translate_forall_inst(_args: &Vec<Rc<AletheTerm>>) -> TradResult<Proof> {
-    Ok(Proof(admit()))
-    // let hyp = Term::from("H");
+/// Construct the proof term to validate forall_inst rule.
+/// Considering the example below:
+/// ```text
+/// (step tᵢ (cl (or (not (forall ((x S) (y T)) (P y x )))
+/// (P b (f a))
+/// :rule forall_inst :args ((f a) b)
+/// ```
+///
+/// We will translate `forall_inst` changing the or (not a) b into an implication.
+/// Passing the left handside into the hypothesis and then applying
+/// n-|args| times forall eliminator.
+///
+/// NOTE: The convertion of arguments do not use the context for sharing the symbol for now.
+///
+/// Thus, the example is translated into the proof script:
+/// ```text
+/// have tᵢ: (((¬ (`∀ᶜ ((x: τ S) (y: τ T)) (P y x ))) ∨ᶜ (P b (f a))) ⟇ ▩) {
+///     apply ∨ᶜᵢ₁;
+///     apply imply_to_or;  
+///     apply ⇒ᶜᵢ;
+///     assume H;
+///     apply ∀ᶜₑ b (∀ᶜₑ (f a) H)
+/// }
+/// ```
+pub fn translate_forall_inst(args: &Vec<Rc<AletheTerm>>) -> TradResult<Proof> {
+    //Ok(Proof(admit()))
+    let hyp = Term::from("H");
 
-    // // The term Term::from("H") is related to assume [H];
-    // let init_forall_elim = Term::Terms(vec![
-    //     Term::from("∀ᶜₑ"),
-    //     unwrap_match!(args.first(), Some(ProofArg::Assign(_, t)) => t.into()),
-    //     hyp,
-    // ]);
+    let init_forall_elim = Term::Terms(vec![
+        Term::from("∀ᶜₑ"),
+        args.first().expect("empty args").into(),
+        hyp,
+    ]);
 
-    // let forall_elims = args.into_iter().skip(1).fold(init_forall_elim, |acc, arg| {
-    //     Term::Terms(vec![
-    //         Term::from("∀ᶜₑ"),
-    //         unwrap_match!(arg, ProofArg::Assign(_, t) => t.into()),
-    //         acc,
-    //     ])
-    // });
+    let forall_elims = args.into_iter().skip(1).fold(init_forall_elim, |acc, arg| {
+        Term::Terms(vec![Term::from("∀ᶜₑ"), arg.into(), acc])
+    });
 
-    // Ok(Proof(lambdapi! {
-    //     apply "∨ᶜᵢ₁";
-    //     apply "imply_to_or";
-    //     apply "⇒ᶜᵢ";
-    //     assume [H]; //FIXME: use hyp instead
-    //     apply "" (@forall_elims);
-    // }))
+    Ok(Proof(lambdapi! {
+        apply "∨ᶜᵢ₁";
+        apply "imply_to_or";
+        apply "⇒ᶜᵢ";
+        assume [H]; //FIXME: use hyp instead
+        apply "" (@forall_elims);
+    }))
 }
 
 pub fn translate_sko_forall() -> TradResult<Proof> {
@@ -393,7 +412,10 @@ pub fn translate_sko_forall() -> TradResult<Proof> {
 #[cfg(test)]
 mod tests_tautolog {
     use super::*;
-    use crate::parser::{self, parse_instance};
+    use crate::{
+        ast::BindingList,
+        parser::{self, parse_instance},
+    };
 
     #[test]
     fn test_transitivity_translation() {
@@ -492,11 +514,13 @@ mod tests_tautolog {
             )),
             Some(proof!(apply!(
                 cong_or,
+                {},
                 [
                     apply!(h1),
                     apply!(
                         cong_or,
-                        [apply!(h2), apply!(cong_or, [apply!(h3), apply!(h4)]),]
+                        {},
+                        [apply!(h2), apply!(cong_or, {}, [apply!(h3), apply!(h4)]),]
                     )
                 ]
             ))),
@@ -552,11 +576,13 @@ mod tests_tautolog {
             )),
             Some(proof!(apply!(
                 cong_and,
+                {},
                 [
                     apply!(h1),
                     apply!(
                         cong_and,
-                        [apply!(h2), apply!(cong_and, [apply!(h3), apply!(h4)]),]
+                        {},
+                        [apply!(h2), apply!(cong_and, {}, [apply!(h3), apply!(h4)]),]
                     )
                 ]
             ))),
@@ -597,13 +623,12 @@ mod tests_tautolog {
             None,
             "t3".into(),
             vec![],
-            cl!(eq!(Box::new(not!(id!("a"))), Box::new(not!(id!("b"))))),
+            cl!(eq!(not!(id!("a")), not!(id!("b")))),
             Some(proof!(
                 apply!(id!("∨ᶜᵢ₁")),
-                ProofStep::Apply(
+                apply!(
                     id!("feqᶜ"),
-                    vec![id!("(¬)"), unary_clause_to_prf("h1")],
-                    SubProofs(None)
+                    { id!("(¬)"), unary_clause_to_prf("h1") }
                 )
             )),
         );
@@ -646,10 +671,7 @@ mod tests_tautolog {
             None,
             "t3".into(),
             vec![],
-            cl!(eq!(
-                Box::new(imp!(id!("a"), id!("b"))),
-                Box::new(imp!(id!("c"), id!("d")))
-            )),
+            cl!(eq!(imp!(id!("a"), id!("b")), imp!(id!("c"), id!("d")))),
             Some(proof!(
                 apply!(id!("∨ᶜᵢ₁")),
                 apply!(terms![
@@ -662,5 +684,69 @@ mod tests_tautolog {
         );
 
         assert_eq!(t3, cmd);
+    }
+
+    #[test]
+    fn test_forall_inst_translation() {
+        let problem: &[u8] = b"
+            (declare-sort S 0)
+            (declare-sort T 0)
+            (declare-fun a () S)
+            (declare-fun b () T)
+            (declare-fun f (S) S)
+            (declare-fun P (T S) Bool)
+        ";
+        let proof = b"
+            (step t1 (cl (or (not (forall ((x S) (y T)) (P y x ))) (P b (f a)))) :rule forall_inst :args ((f a) b))
+        ";
+        let (_, proof, _) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+
+        assert_eq!(1, proof.commands.len());
+
+        let res = translate_commands(
+            &mut Context::default(),
+            &mut proof.iter(),
+            0,
+            |id, t, ps| {
+                Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
+            },
+        )
+        .expect("translate forall_inst");
+
+        assert_eq!(1, res.len());
+
+        let t1 = res.last().unwrap().clone();
+
+        let cmd_expected = Command::Symbol(
+            None,
+            "t1".into(),
+            vec![],
+            cl!(or!(
+                not!(forall!(
+                    [(id!("x"), tau("S".into())), (id!("y"), tau("T".into()))],
+                    Term::Terms(vec![id!("P"), id!("y"), id!("x")])
+                )),
+                Term::Terms(vec![
+                    id!("P"),
+                    id!("b"),
+                    Term::Terms(vec![id!("f"), id!("a")])
+                ])
+            )),
+            Some(proof!(
+                apply!(id!("∨ᶜᵢ₁")),
+                apply!(id!("imply_to_or")),
+                apply!(id!("⇒ᶜᵢ")),
+                assume!(H),
+                apply!(id!(""), {
+                    terms!(
+                        id!("∀ᶜₑ"),
+                        id!("b"),
+                        terms!(id!("∀ᶜₑ"), terms!(id!("f"), id!("a")), id!("H")),
+                    )
+                })
+            )),
+        );
+
+        assert_eq!(t1, cmd_expected);
     }
 }

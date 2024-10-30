@@ -652,30 +652,17 @@ fn translate_subproof<'a>(
     } else if rule == "sko_forall" {
         let last_step_id = unwrap_match!(commands.get(commands.len() - 1), Some(ProofCommand::Step(AstProofStep{id, ..})) => normalize_name(id));
 
+        //FIXME: hahah
         // end of the script
-        proof_cmds.append(&mut lambdapi! {
-            apply "∨ᶜᵢ₁";
-            apply "π̇ₗ" (@last_step_id.into());
-        });
+        // proof_cmds.append(&mut lambdapi! {
+        //     apply "∨ᶜᵢ₁";
+        //     apply "π̇ₗ" (@last_step_id.into());
+        // });
+        // proof_cmds.push(ProofStep::Admit);
 
-        proof_cmds
+        // proof_cmds
+        admit()
     } else {
-        let psy_id = unwrap_match!(commands.get(commands.len() - 2), Some(ProofCommand::Step(AstProofStep{id, ..})) => normalize_name(id));
-
-        let discharge = unwrap_match!(commands.last(), Some(ProofCommand::Step(AstProofStep{id: _, clause:_, rule:_, premises:_, args:_, discharge})) => discharge);
-
-        let premises_discharge = get_premises_clause(iter, discharge);
-
-        let subproof_tactic = Term::TermId(format!("subproof{}", premises_discharge.len()));
-
-        let mut args = premises_discharge
-            .into_iter()
-            .map(|(id, _)| unary_clause_to_prf(id.as_str()))
-            .collect_vec();
-        args.push(unary_clause_to_prf(psy_id.as_str()));
-
-        proof_cmds.push(ProofStep::Apply(subproof_tactic, args, SubProofs(None)));
-
         proof_cmds
     };
 
@@ -923,6 +910,14 @@ where
                     depth + 1,
                 )?;
 
+                let sub = commands.last().unwrap();
+
+                //Get the last step of the proof
+                let (_, _, rule) = unwrap_match!(
+                    sub,
+                    ProofCommand::Step(AstProofStep { id, clause, rule,.. }) => (normalize_name(id), clause, rule)
+                );
+
                 ctx.deps
                     .insert(normalize_name(&id), (ctx.index, depth, HashSet::new()));
 
@@ -950,11 +945,38 @@ where
                         .and_modify(|(_, _, ds)| ds.extend(deps_subproof.iter()));
                 }
 
-                proof_steps.push(f(
-                    normalize_name(id),
-                    Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(clause))))),
-                    Some(subproof),
-                ));
+                if rule.contains("subproof") {
+                    let res = subproof.into_iter().map(|s| unwrap_match!(s, ProofStep::Have(id, r#type, proof) =>  f(id, r#type, Some(proof)))).collect_vec();
+                    proof_steps.extend(res);
+                    
+                    let psy_id = unwrap_match!(commands.get(commands.len() - 2), Some(ProofCommand::Step(AstProofStep{id, ..})) => normalize_name(id));
+
+                    let discharge = unwrap_match!(commands.last(), Some(ProofCommand::Step(AstProofStep{id: _, clause:_, rule:_, premises:_, args:_, discharge})) => discharge);
+
+                    let premises_discharge = get_premises_clause(proof_iter, discharge);
+
+                    let subproof_tactic = Term::TermId(format!("subproof{}", premises_discharge.len()));
+
+                    let mut args = premises_discharge
+                        .into_iter()
+                        .map(|(id, _)| unary_clause_to_prf(id.as_str()))
+                        .collect_vec();
+                    args.push(unary_clause_to_prf(psy_id.as_str()));
+
+                    //proof_cmds.push(ProofStep::Apply(subproof_tactic, args, SubProofs(None)));
+
+                    proof_steps.push(f(
+                        normalize_name(id),
+                        Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(clause))))),
+                        Some(vec![ProofStep::Apply(subproof_tactic, args, SubProofs(None))]),
+                    ));
+                } else {
+                    proof_steps.push(f(
+                        normalize_name(id),
+                        Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(clause))))),
+                        Some(subproof),
+                    ));
+                }
             }
         };
         ctx.index += 1;

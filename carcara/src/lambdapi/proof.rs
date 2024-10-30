@@ -39,6 +39,16 @@ pub enum ProofStep {
     Simplify,
 }
 
+
+macro_rules! assume {
+    ($id:ident) => {
+        ProofStep::Assume(vec![ stringify!($id).to_string() ])
+    }
+}
+
+pub(crate) use assume;
+
+
 macro_rules! apply {
     ($id:ident) => {
         ProofStep::Apply(Term::TermId(stringify!($id).into()), vec![], SubProofs(None))
@@ -46,10 +56,13 @@ macro_rules! apply {
     ($t:expr) => {
         ProofStep::Apply($t, vec![], SubProofs(None))
     };
-    ($id:expr, [ $($sp:expr),+ $(,)?  ]) => {
-        ProofStep::Apply(Term::TermId(stringify!($id).into()), vec![], SubProofs(Some(
+    ($t:expr, { $($arg:expr),+ $(,)?  }) => {
+        ProofStep::Apply($t, vec![$($arg),+], SubProofs(None))
+    };
+    ($id:expr, { $($arg:expr),* $(,)?  }, [ $($sp:expr),* $(,)?  ]) => {
+        ProofStep::Apply(Term::TermId(stringify!($id).into()), vec![$($arg),*], SubProofs(Some(
             vec![
-                $( proof!($sp)),+
+                $( proof!($sp) ),*
             ]
         )))
     };

@@ -3,7 +3,6 @@ use carcara::*;
 use std::{
     fs,
     io::{self, Write},
-    os::macos::raw::stat,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -122,7 +121,7 @@ fn run_translation(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> 
     bfile.flush()?;
 
     let status = Command::new("lambdapi")
-        .args(["check", "-v0", "--timeout=120", filename.as_str()])
+        .args(["check", "-v0", "-w", "--timeout=120", filename.as_str()])
         .status()
         .expect("failed to execute process");
 
@@ -174,7 +173,7 @@ fn full(proof_path: &str) {
     test_file(proof_path, run_test)
 }
 
-#[test_generator::from_dir("benchmarks/tlaps")]
+#[test_generator::from_dir("benchmarks/tlapm")]
 #[allow(dead_code)]
 fn tlaps(proof_path: &str) {
     test_file(proof_path, run_translation)
