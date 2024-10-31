@@ -197,6 +197,8 @@ pub enum ResolutionError {
 pub enum DratFormatError {
     #[error("couldn't find conclusion term in the premise clauses")]
     NoConclusionInPremise,
+    #[error("couldn't elaborate drup because bottom wasn't not derived")]
+    NoFinalBottomInDrup,
 }
 
 struct DisplayIndexedOp<'a>(&'a ParamOperator, &'a Vec<Rc<Term>>);

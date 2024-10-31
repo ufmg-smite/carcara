@@ -15,7 +15,11 @@ enum Implied<T, X> {
     NotUnsat(),
 }
 
-type RupAdition<'a> = Vec<(IndexSet<(bool, &'a Rc<Term>)>, Option<(bool, Rc<Term>)>, u64)>;
+type RupAdition<'a> = Vec<(
+    IndexSet<(bool, &'a Rc<Term>)>,
+    Option<(bool, Rc<Term>)>,
+    u64,
+)>;
 
 enum DRupProofAction<'a> {
     RupStory(&'a [Rc<Term>], RupAdition<'a>),
@@ -277,12 +281,8 @@ pub fn elaborate_drat(
 ) -> RuleResult {
     #[derive(Debug)]
     enum ResolutionStep<'a> {
-        Resolvent(
-            (&'a IndexSet<(bool, &'a Rc<Term>)>, Option<u64>),
-            (&'a IndexSet<(bool, &'a Rc<Term>)>, Option<u64>),
-            IndexSet<(bool, &'a Rc<Term>)>,
-        ),
-        UnChanged((&'a IndexSet<(bool, &'a Rc<Term>)>, Option<u64>)),
+        Resolvent(u64, u64, (Vec<Rc<Term>>, u64)),
+        UnChanged(IndexSet<(bool, &'a Rc<Term>)>, u64),
     }
 
     fn resolve<'a>(
@@ -310,54 +310,120 @@ pub fn elaborate_drat(
         return Err(err);
     }
 
-    for rup_story in trace.unwrap() {
+    let premises: &mut HashMap<u64, _> = &mut premises
+        .iter()
+        .map(|p| {
+            let mut s = DefaultHasher::new();
+            p.clause.hash(&mut s);
+            (s.finish(), elaborator.map_index(p.index))
+        })
+        .collect();
+
+    let mut current_id: Box<String> = Box::new(command_id);
+    let trace = trace.unwrap();
+
+    for (arg_index, rup_story) in trace.iter().enumerate() {
         match rup_story {
             DRupProofAction::RupStory(rup_clause, rup_history) => {
-                let mut rup: Vec<(&IndexSet<(bool, &'a Rc<Term>)>, Option<u64>)> = rup_history.iter().map(|(vec, _, key)| (vec, Some(*key))).collect();
+                let mut rup: Vec<(IndexSet<(bool, &Rc<Term>)>, u64)> = rup_history
+                    .iter()
+                    .map(|(vec, _, key)| (vec.clone(), *key))
+                    .collect();
                 let pivots: Vec<_> = rup_history.iter().map(|(_, term, _)| term).collect();
 
-               let mut resolutions = vec![];
+                let mut resolutions = vec![];
                 for i in (0..rup_history.len() - 1).rev() {
                     let pivot = pivots[i].as_ref().unwrap();
-                    print!("Ci+1{:?}\n", rup[i + 1]);
-                    print!("Ci{:?}\n", rup[i]);
 
                     if rup[i + 1].0.contains(&(!pivot.0, &pivot.1)) {
-                        let resolvent: &'a IndexSet<(bool, &Rc<Term>)> = resolve(&rup[i].0, &rup[i + 1].0, (pivot.0, &pivot.1));
+                        let resolvent_indexset: IndexSet<(bool, &Rc<Term>)> =
+                            resolve(&rup[i].0, &rup[i + 1].0, (pivot.0, &pivot.1));
+                        let resolvent: Vec<Rc<Term>> = resolvent_indexset
+                            .iter()
+                            .map(|(polarity, term)| {
+                                if *polarity {
+                                    (*term).clone()
+                                } else {
+                                    Rc::new(Term::Op(Operator::Not, vec![(*term).clone()]))
+                                }
+                            })
+                            .collect();
+                        let mut s = DefaultHasher::new();
+                        resolvent.hash(&mut s);
+                        let resolvent_hash = s.finish();
+                        // print!("{} {:?}\n", rup[i].1, rup[i].0);
+
                         resolutions.push(ResolutionStep::Resolvent(
-                            rup[i],
-                            rup[i + 1],
-                            resolvent.clone(),
+                            rup[i].1,
+                            rup[i + 1].1,
+                            (resolvent, resolvent_hash),
                         ));
-                        rup[i] = (&resolvent, None);
+
+                        rup[i] = (resolvent_indexset, resolvent_hash);
                     } else {
-                        rup[i] = (rup[i + 1].0, rup[i + 1].1);
-                        resolutions.push(ResolutionStep::UnChanged(rup[i]));
+                        rup[i] = (rup[i + 1].0.clone(), rup[i + 1].1);
+                        resolutions.push(ResolutionStep::UnChanged(rup[i + 1].0.clone(), rup[i].1));
                     }
                 }
 
-                let r = match resolutions.last().unwrap() {
-                    ResolutionStep::Resolvent(_, _, r) => r,
-                    ResolutionStep::UnChanged(r) => r.0
-                };
-
-                if r.len() != 0 {
-                    panic!("An drat resultion didn't derive a bottom as last clause resolution")
+                match &resolutions[resolutions.len() - 1] {
+                    ResolutionStep::Resolvent(_, _, (resolvent, _)) =>  {
+                        if resolvent.len() > 0 {
+                            return Err(CheckerError::DratFormatError(DratFormatError::NoFinalBottomInDrup))
+                        }
+                    }
+                    ResolutionStep::UnChanged(resolvent, _) =>  {
+                        if resolvent.len() > 0 {
+                            return Err(CheckerError::DratFormatError(DratFormatError::NoFinalBottomInDrup))
+                        }                    
+                    }
                 }
 
-                for resolution_step in resolutions {
+                resolutions.retain(|step| match step {
+                    ResolutionStep::Resolvent(_, _, (resolvent, _)) => resolvent.len() > 0 || rup_clause.len() == 0,
+                    ResolutionStep::UnChanged(_, _) => false // Since unchanged are trivally avaliable we can ignore them
+                });
+
+                print!("{:?}\n", resolutions);
+
+                for (i, resolution_step) in resolutions.iter().enumerate() {
+                    let mut action = |x| {
+                        if i != resolutions.len() - 1 || arg_index != trace.len() - 1 {
+                            elaborator.add_new_step(x)
+                        } else {
+                            elaborator.push_elaborated_step(x)
+                        }
+                    };
+
                     match resolution_step {
-                        ResolutionStep::Resolvent(c, d, r) => {
+                        ResolutionStep::Resolvent(c, d, (resolvent, resolvent_hash)) => {
 
+
+                            // We check if there is a subsemed clause, in case so, we do the weak
+                            let ids = action(ProofStep {
+                                id: (*current_id).clone(),
+                                clause: resolvent.clone(),
+                                rule: "resolution".to_owned(),
+                                premises: vec![premises.get(c), premises.get(d)]
+                                    .iter()
+                                    .flatten()
+                                    .map(|x| **x)
+                                    .collect(),
+                                args: Vec::new(),
+                                discharge: Vec::new(),
+                            });
+
+                            if i != resolutions.len() - 1 || arg_index != trace.len() - 1 {
+                                current_id = Box::new(elaborator.get_new_id(current_id.as_ref()));
+                            }
+                            premises.insert(*resolvent_hash, ids);
                         }
 
-                        ResolutionStep::UnChanged(r) => {
-
-                        }
+                        ResolutionStep::UnChanged(_, _) => unreachable!()
                     }
                 }
-
             }
+
             DRupProofAction::Delete(_) => (),
         }
     }
