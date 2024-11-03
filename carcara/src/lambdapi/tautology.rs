@@ -440,7 +440,6 @@ mod tests_tautolog {
         let res = translate_commands(
             &mut Context::default(),
             &mut proof.iter(),
-            0,
             |id, t, ps| {
                 Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
             },
@@ -493,7 +492,6 @@ mod tests_tautolog {
         let res = translate_commands(
             &mut Context::default(),
             &mut proof.iter(),
-            0,
             |id, t, ps| {
                 Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
             },
@@ -555,7 +553,6 @@ mod tests_tautolog {
         let res = translate_commands(
             &mut Context::default(),
             &mut proof.iter(),
-            0,
             |id, t, ps| {
                 Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
             },
@@ -608,7 +605,6 @@ mod tests_tautolog {
         let res = translate_commands(
             &mut Context::default(),
             &mut proof.iter(),
-            0,
             |id, t, ps| {
                 Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
             },
@@ -656,7 +652,6 @@ mod tests_tautolog {
         let res = translate_commands(
             &mut Context::default(),
             &mut proof.iter(),
-            0,
             |id, t, ps| {
                 Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
             },
@@ -706,7 +701,6 @@ mod tests_tautolog {
         let res = translate_commands(
             &mut Context::default(),
             &mut proof.iter(),
-            0,
             |id, t, ps| {
                 Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
             },

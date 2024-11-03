@@ -2,7 +2,8 @@ use crate::ast::{
     polyeq,
     pool::{self, TermPool},
     AnchorArg, Binder, Operator, PrimitivePool, ProblemPrelude, Proof as ProofElaborated,
-    ProofCommand, ProofIter, ProofStep as AstProofStep, Rc, Sort, Subproof, Term as AletheTerm,
+    ProofCommand, ProofIter, ProofNode, ProofStep as AstProofStep, Rc, Sort, Subproof,
+    Term as AletheTerm,
 };
 use indexmap::IndexMap;
 use itertools::Itertools;
@@ -52,10 +53,6 @@ pub struct Context {
     pub term_indices: IndexMap<Rc<AletheTerm>, (usize, String)>,
     pub term_sharing: IndexMap<Rc<AletheTerm>, (String, Term)>,
 
-    /// Dependencies of premises as a map Index ↦ location, depth, [Index] where Index represent
-    /// the location of the premise in the proof.
-    deps: HashMap<String, (usize, usize, HashSet<usize>)>,
-    index: usize,
     pub global_variables: HashSet<Rc<AletheTerm>>,
     pub pool: PrimitivePool,
 }
@@ -185,24 +182,15 @@ pub fn produce_lambdapi_proof<'a>(
 
     context.global_variables = global_variables;
 
-    let commands = translate_commands(
-        &mut context,
-        &mut proof_elaborated.iter(),
-        0,
-        |id, t, ps| Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps))),
-    )?;
+    let commands = translate_commands(&mut context, &mut proof_elaborated.iter(), |id, t, ps| {
+        Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
+    })?;
 
     let shared_terms = gen_shared_term(&context);
 
     proof_file.definitions.extend(shared_terms);
 
     proof_file.content.extend(commands);
-
-    proof_file.dependencies = context
-        .deps
-        .into_iter()
-        .map(|(k, (loc, _depth, deps))| (k, (loc, deps)))
-        .collect::<HashMap<_, _>>();
 
     Ok(proof_file)
 }
@@ -557,13 +545,7 @@ fn translate_subproof<'a>(
     iter: &mut ProofIter<'a>,
     commands: &[ProofCommand],
     assignment_args: Vec<(&(String, Rc<AletheTerm>), &Rc<AletheTerm>)>,
-    depth: usize,
-) -> TradResult<(
-    String,
-    Vec<Term>,
-    Vec<ProofStep>,
-    HashMap<String, (usize, usize, HashSet<usize>)>,
-)> {
+) -> TradResult<(String, Vec<Term>, Vec<ProofStep>)> {
     let subproof = commands.last().unwrap();
 
     //Get the last step of the proof
@@ -578,12 +560,11 @@ fn translate_subproof<'a>(
         .collect_vec();
 
     let mut fresh_ctx = Context::default();
-    fresh_ctx.deps = context.deps.clone();
     fresh_ctx.global_variables = context.global_variables.clone();
     fresh_ctx.term_indices = context.term_indices.clone();
     fresh_ctx.term_sharing = context.term_sharing.clone();
 
-    let mut proof_cmds = translate_commands(&mut fresh_ctx, iter, depth + 1, |id, t, ps| {
+    let mut proof_cmds = translate_commands(&mut fresh_ctx, iter, |id, t, ps| {
         ProofStep::Have(normalize_name(id), t, ps.unwrap_or(admit()))
     })?;
 
@@ -669,7 +650,7 @@ fn translate_subproof<'a>(
     context.term_indices.extend(fresh_ctx.term_indices);
     context.term_sharing.extend(fresh_ctx.term_sharing);
 
-    Ok((id, clause, subproof_have_wrapper, fresh_ctx.deps))
+    Ok((id, clause, subproof_have_wrapper))
 }
 
 /// Create a proof step for the resolution
@@ -777,7 +758,6 @@ fn translate_tautology(
 fn translate_commands<'a, F, T>(
     ctx: &mut Context,
     proof_iter: &mut ProofIter<'a>,
-    depth: usize,
     f: F,
 ) -> TradResult<Vec<T>>
 where
@@ -790,16 +770,11 @@ where
         clause.into_iter().for_each(|c| c.visit(ctx));
 
         match command {
-            ProofCommand::Assume { id, term } => {
-                ctx.deps
-                    .insert(normalize_name(&id), (ctx.index, depth, HashSet::new()));
-
-                proof_steps.push(f(
-                    id.into(),
-                    term::clauses(vec![ctx.get_or_convert(term)]),
-                    None,
-                ))
-            }
+            ProofCommand::Assume { id, term } => proof_steps.push(f(
+                id.into(),
+                term::clauses(vec![ctx.get_or_convert(term)]),
+                None,
+            )),
             ProofCommand::Step(AstProofStep {
                 id,
                 clause,
@@ -808,19 +783,6 @@ where
                 args,
                 discharge: _,
             }) if rule == "resolution" || rule == "th_resolution" => {
-                ctx.deps
-                    .insert(normalize_name(&id), (ctx.index, depth, HashSet::new()));
-
-                let ps: HashSet<usize> = premises
-                    .into_iter()
-                    .map(|p| normalize_name(proof_iter.get_premise_id(*p)))
-                    .collect_vec()
-                    .into_iter()
-                    .map(|p| ctx.deps.get(&p).unwrap().0)
-                    .collect::<HashSet<_>>();
-
-                ctx.deps.entry(normalize_name(id)).and_modify(|v| v.2 = ps);
-
                 let proof = translate_resolution(proof_iter, premises, args, ctx)?;
 
                 let clauses = Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(
@@ -832,9 +794,6 @@ where
             ProofCommand::Step(AstProofStep {
                 id, clause, premises: _, rule, args, ..
             }) if rule == "rare_rewrite" => {
-                ctx.deps
-                    .insert(normalize_name(&id), (ctx.index, depth, HashSet::new()));
-
                 let terms: Vec<Term> = clause.into_iter().map(|a| ctx.get_or_convert(a)).collect();
 
                 let proof_script = translate_rare_simp(args);
@@ -848,8 +807,6 @@ where
                 proof_steps.push(step);
             }
             ProofCommand::Step(AstProofStep { id, clause, rule, .. }) if rule.contains("simp") => {
-                ctx.deps
-                    .insert(normalize_name(&id), (ctx.index, depth, HashSet::new()));
                 let terms: Vec<Term> = clause.into_iter().map(|a| ctx.get_or_convert(a)).collect();
 
                 let proof_script = translate_simplify_step(rule);
@@ -864,19 +821,6 @@ where
             ProofCommand::Step(AstProofStep {
                 id, clause, premises, rule, args, ..
             }) => {
-                ctx.deps
-                    .insert(normalize_name(&id), (ctx.index, depth, HashSet::new()));
-
-                let ps = premises
-                    .into_iter()
-                    .map(|p| normalize_name(proof_iter.get_premise_id(*p)))
-                    .collect_vec()
-                    .into_iter()
-                    .map(|p| ctx.deps.get(&p).unwrap().0)
-                    .collect::<HashSet<_>>();
-
-                ctx.deps.entry(normalize_name(&id)).and_modify(|v| v.2 = ps);
-
                 let step = translate_tautology(proof_iter, clause, premises, rule, args);
 
                 let clause = clause
@@ -899,7 +843,7 @@ where
                 }
             }
             ProofCommand::Subproof(Subproof { commands, args, .. }) => {
-                let (id, clause, subproof, deps) = translate_subproof(
+                let (id, clause, subproof) = translate_subproof(
                     ctx,
                     proof_iter,
                     commands.as_slice(),
@@ -907,7 +851,7 @@ where
                         .filter(|a| matches!(a, AnchorArg::Assign(_, _)))
                         .map(|a| unwrap_match!(a, AnchorArg::Assign(s, t) => (s, t)))
                         .collect_vec(),
-                    depth + 1,
+                    //depth + 1,
                 )?;
 
                 let sub = commands.last().unwrap();
@@ -918,44 +862,22 @@ where
                     ProofCommand::Step(AstProofStep { id, clause, rule,.. }) => (normalize_name(id), clause, rule)
                 );
 
-                ctx.deps
-                    .insert(normalize_name(&id), (ctx.index, depth, HashSet::new()));
-
-                let keys = deps.keys().collect::<HashSet<_>>();
-                let keys2 = ctx.deps.keys().collect::<HashSet<_>>();
-                let diff = keys.difference(&keys2);
-
-                let dependencies_in_subproofs = diff
-                    .map(|k| deps.get(k.as_str()).unwrap())
-                    .map(|(_, _, ds)| {
-                        ds.into_iter()
-                            .filter(|index| {
-                                deps.iter()
-                                    .nth(**index)
-                                    .is_some_and(|(_, (_, depth, _))| *depth == 0)
-                            })
-                            .map(|u| *u)
-                            .collect::<HashSet<usize>>()
-                    })
-                    .reduce(|acc, e| acc.union(&e).map(|u| *u).collect::<HashSet<usize>>());
-
-                if let Some(deps_subproof) = dependencies_in_subproofs {
-                    ctx.deps
-                        .entry(normalize_name(&id))
-                        .and_modify(|(_, _, ds)| ds.extend(deps_subproof.iter()));
-                }
-
                 if rule.contains("subproof") {
+                    //HACK: we convert all the Have proof step into symbols to improve lambdapi check performance.
+                    // We only do this for proof that use the `subproof` rule because `bind` and `sko_forall` for example
+                    // creates temporary free variable in their context making the split of steps into `symbol` instead of `have` impossible.
+                    // Lambdapi seems to be very slow on proof that have a large context.
                     let res = subproof.into_iter().map(|s| unwrap_match!(s, ProofStep::Have(id, r#type, proof) =>  f(id, r#type, Some(proof)))).collect_vec();
                     proof_steps.extend(res);
-                    
+
                     let psy_id = unwrap_match!(commands.get(commands.len() - 2), Some(ProofCommand::Step(AstProofStep{id, ..})) => normalize_name(id));
 
                     let discharge = unwrap_match!(commands.last(), Some(ProofCommand::Step(AstProofStep{id: _, clause:_, rule:_, premises:_, args:_, discharge})) => discharge);
 
                     let premises_discharge = get_premises_clause(proof_iter, discharge);
 
-                    let subproof_tactic = Term::TermId(format!("subproof{}", premises_discharge.len()));
+                    let subproof_tactic =
+                        Term::TermId(format!("subproof{}", premises_discharge.len()));
 
                     let mut args = premises_discharge
                         .into_iter()
@@ -963,12 +885,14 @@ where
                         .collect_vec();
                     args.push(unary_clause_to_prf(psy_id.as_str()));
 
-                    //proof_cmds.push(ProofStep::Apply(subproof_tactic, args, SubProofs(None)));
-
                     proof_steps.push(f(
                         normalize_name(id),
                         Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(clause))))),
-                        Some(vec![ProofStep::Apply(subproof_tactic, args, SubProofs(None))]),
+                        Some(vec![ProofStep::Apply(
+                            subproof_tactic,
+                            args,
+                            SubProofs(None),
+                        )]),
                     ));
                 } else {
                     proof_steps.push(f(
@@ -979,7 +903,6 @@ where
                 }
             }
         };
-        ctx.index += 1;
     }
 
     Ok(proof_steps)
@@ -1017,7 +940,7 @@ mod tests_translation {
 
         ctx.global_variables = global_variables;
 
-        let res = translate_commands(&mut ctx, &mut proof.iter(), 0, |id, t, ps| {
+        let res = translate_commands(&mut ctx, &mut proof.iter(), |id, t, ps| {
             Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
         })
         .expect("translate trans");
@@ -1027,6 +950,3 @@ mod tests_translation {
         //println!("{}", t3);
     }
 }
-
-// (step t2 (cl ((not b) c)))
-// (step t3 (cl (a c)) :rule resolution :premises (t1 t2))

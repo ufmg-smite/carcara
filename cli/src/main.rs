@@ -9,24 +9,22 @@ use carcara::{
     check, check_and_elaborate, check_parallel, checker, elaborator, generate_lia_smt_instances,
     parser, slice,
     ast, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate, check_parallel, checker,
-    elaborator, generate_lia_smt_instances, parser,
-    produce_lambdapi_proof, lambdapi::output::*, lambdapi,
+    elaborator, generate_lia_smt_instances, lambdapi, lambdapi::output::*, parser,
+    produce_lambdapi_proof,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
 use error::{CliError, CliResult};
 use git_version::git_version;
-use path_args::{get_instances_from_paths, infer_problem_path};
 use itertools::Itertools;
+use path_args::{get_instances_from_paths, infer_problem_path};
 use std::{
     collections::HashSet,
     fs::File,
-    io::{self, BufRead, IsTerminal, Write},
-    io::{self, BufRead, IsTerminal, Write, BufWriter},
+    io::{self, BufRead, BufWriter, IsTerminal, Write},
     path::Path,
     sync::atomic,
 };
-
 
 // `git describe --all` will try to find any ref (including tags) that describes the current commit.
 // This will include tags like `carcara-0.1.0`, that we create for github releases. To account for
@@ -437,7 +435,6 @@ struct SliceCommandOptions {
     hole_solver_args: Option<String>,
 }
 
-
 #[derive(Args)]
 struct TranslationOption {
     #[clap(flatten)]
@@ -453,10 +450,10 @@ struct TranslationOption {
     elaboration: ElaborationOptions,
 
     #[clap(long, short = 'o')]
-    output: Option<std::path::PathBuf>,
+    output_dir: Option<std::path::PathBuf>,
 
     /// split the proof into multiple files that will contain `n` symbols
-    #[clap(long, short = 'n', requires = "output")]
+    #[clap(long, short = 'n', requires = "output-dir")]
     segment_size: Option<usize>,
 }
 
@@ -536,10 +533,8 @@ fn main() {
         }
         Command::GenerateLiaProblems(options) => {
             generate_lia_problems_command(options, !cli.no_print_with_sharing)
-        },
-        Command::Translate(options) => {
-            translate_to_lambdapi(options)
-        },
+        }
+        Command::Translate(options) => translate_to_lambdapi(options),
     };
     if let Err(e) = result {
         log::error!("{}", e);
@@ -787,68 +782,84 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
     Ok(())
 }
 
-
+/// Lambdapi is limited to handling relatively small proofs (<500 steps) due to performance issues.
+/// The idea is to generate individual files corresponding to disjoint segments of a proof,
+/// compute the dependencies between those segments, check each file in a separate process.
+///
+/// Thus, the method split a proof into chunck of size equal to `segment_size`,
+/// and create an axioms (symbol without definition) and lemma (symbol with a definition) representation  for each chunk.
+/// Symbols from previous chunkc are imported as axioms to the current chunk.
+///
+/// To illustrate, consider a proof
+/// ```text
+/// (step tᵢ (cl Tᵢ))
+/// (step tᵢ₊ₙ (cl Tᵢ₊ₙ))
+/// (step tᵢ₊ₙ₊₁ (cl Tᵢ₊ₙ₊₁))
+/// (step tᵢ₊₂ₙ (cl Ttᵢ₊₂ₙ))
+/// ```
+///
+/// We create the four following files
+/// | Ranges            | axioms files            | Lemmma                                     |
+/// |-------------------|:-----------------------:|:------------------------------------------:|
+/// | Steps ᵢ...ᵢ₊ₙ     | symbol tᵢ: Tᵢ;          | symbol tᵢ: Tᵢ ≔ begin .. end;               |
+/// |                   |   ...                   | ...                                        |
+/// |                   | symbol tᵢ₊ₙ: Tᵢ₊ₙ;      | symbol tᵢ₊ₙ: Tᵢ₊ₙ ≔ begin .. end;            |
+/// |-------------------|:-----------------------:|:------------------------------------------:|
+/// | Steps ᵢ₊ₙ₊₁..ᵢ₊₂ₙ | symbol tᵢ₊ₙ₊₁ : Tᵢ₊ₙ₊₁;  | require open axioms-tᵢ-tᵢ₊ₙ.lp              |
+/// | Steps ᵢ₊ₙ₊₁..ᵢ₊₂ₙ | symbol tᵢ₊ₙ₊₁ : Tᵢ₊ₙ₊₁;  | symbol t ᵢ₊ₙ₊₁  : T ᵢ₊ₙ₊₁ ≔ begin .. end;   |
+/// |                   |   ...                   | ...                                        |
+/// |                   | symbol tᵢ₊₂ₙ: Tᵢ₊₂ₙ;    | symbol tᵢ₊₂ₙ: Tᵢ₊₂ₙ ≔ begin .. end;         |
+///
 pub fn split_proof(
     module_name: String,
     pf: ProofFile,
     segment_size: usize,
 ) -> Vec<(impl Render, impl Render)> {
-    let mut deps: Vec<_> = pf.dependencies.into_values().collect_vec();
-
-    deps.sort_by(|(x, _), (y, _)| x.cmp(y));
-
-    let binding = Vec::from(pf.content);
-
-    let content_chunck = binding.chunks(segment_size).collect_vec();
-
-    let deps_chunck = deps.chunks(segment_size).collect_vec();
-
+    // List of pair of Lemmas and Axioms files.
     let mut pfiles = Vec::new();
 
-    for (chuncknb, (symbols, deps)) in content_chunck.into_iter().zip(deps_chunck.into_iter()).enumerate() {        
-        let interval_dependencies = deps
-            .into_iter()
-            .map(|(_, ds)| ds)
-            .fold(HashSet::new(), |acc, ref e| {
-                acc.union(e).copied().collect::<HashSet<_>>()
-            })
-            .into_iter()
-            .map(|d| {
-                let interval_nb = d / segment_size;
-                let lower_bound = interval_nb * segment_size;
+    for (chunck_index, symbols) in pf.content.chunks(segment_size).enumerate() {
+        let mut p = ProofFile::new();
+
+        //HACK: For now, we import all the previous chunck axioms in the requires of the current chunck.
+        // It would be more efficient to compute the dependencies and select only the axioms chunck necessary.
+        //TODO: Use the method `lambdapi::output::get_dependencies_map` to collect dependencies and compute the required chuncks.
+        let ranges_symbols = (0..chunck_index)
+            .map(|i| {
+                let lower_bound = i * segment_size;
                 let upper_bound = lower_bound + segment_size;
                 (lower_bound, upper_bound)
             })
-            .filter(|(l, r)| (*l..*r).contains(&(chuncknb * segment_size)) == false)
-            .collect::<HashSet<(usize, usize)>>();
-
-        let requires_axioms = interval_dependencies
-            .into_iter()
-            .map(|(lower_b, upper_b)| {
-                lambdapi::term::Command::RequireOpen(format!(
-                    "{}.axioms-{}-{}",
-                    module_name, lower_b, upper_b
-                ))
-            })
             .collect_vec();
 
-        let mut p = ProofFile::new();
-        let mut ax = AxiomsFile::new();
-
-        p.content.push(lambdapi::term::Command::RequireOpen(format!(
-            "{}.definitions",
-            module_name
-        )));
         p.requires = pf.requires.clone();
-        p.content.extend_from_slice(requires_axioms.as_slice());
-        p.content.extend_from_slice(symbols);
 
-        ax.content
+        p.requires
             .push(lambdapi::term::Command::RequireOpen(format!(
                 "{}.definitions",
                 module_name
             )));
+
+        ranges_symbols.into_iter().for_each(|(l, u)| {
+            p.requires
+                .push(lambdapi::term::Command::RequireOpen(format!(
+                    "{}.axioms-{}-{}",
+                    module_name, l, u
+                )))
+        });
+
+        p.content.extend_from_slice(symbols);
+
+        // Create the axioms file
+        let mut ax = AxiomsFile::new();
+
         ax.requires = pf.requires.clone();
+
+        ax.requires
+            .push(lambdapi::term::Command::RequireOpen(format!(
+                "{}.definitions",
+                module_name
+            )));
         ax.content.extend_from_slice(symbols);
 
         pfiles.push((p, ax));
@@ -858,7 +869,6 @@ pub fn split_proof(
 }
 
 fn translate_to_lambdapi(options: TranslationOption) -> CliResult<()> {
-
     let (problem, proof) = get_instance(&options.input)?;
 
     let input_file_name = options.input.problem_file.unwrap().replace(".smt2", "");
@@ -878,7 +888,7 @@ fn translate_to_lambdapi(options: TranslationOption) -> CliResult<()> {
     )
     .map_err(|e| CliError::TranslationError(e))?;
 
-    match (options.output, options.segment_size) {
+    match (options.output_dir, options.segment_size) {
         (Some(path), Some(segment_size)) => {
             std::fs::remove_dir_all(&path).ok();
             std::fs::create_dir(&path)?;

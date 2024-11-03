@@ -39,15 +39,13 @@ pub enum ProofStep {
     Simplify,
 }
 
-
 macro_rules! assume {
     ($id:ident) => {
-        ProofStep::Assume(vec![ stringify!($id).to_string() ])
-    }
+        ProofStep::Assume(vec![stringify!($id).to_string()])
+    };
 }
 
 pub(crate) use assume;
-
 
 macro_rules! apply {
     ($id:ident) => {

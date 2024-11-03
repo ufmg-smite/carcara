@@ -86,6 +86,16 @@ pub enum Command {
     Rule(Term, Term),
 }
 
+impl Command {
+    pub fn id(&self) -> Option<String> {
+        match self {
+            Command::Symbol(_, id, ..) => Some(id.to_string()),
+            Command::Definition(id, ..) => Some(id.to_string()),
+            _ => None,
+        }
+    }
+}
+
 impl fmt::Display for Command {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -846,17 +856,16 @@ mod tests_term {
 
         ctx.global_variables = global_variables;
 
-        let res =
-            crate::lambdapi::translate_commands(&mut ctx, &mut proof.iter(), 0, |id, t, ps| {
-                Command::Symbol(
-                    None,
-                    crate::lambdapi::normalize_name(id),
-                    vec![],
-                    t,
-                    ps.map(|ps| Proof(ps)),
-                )
-            })
-            .expect("translate cong");
+        let res = crate::lambdapi::translate_commands(&mut ctx, &mut proof.iter(), |id, t, ps| {
+            Command::Symbol(
+                None,
+                crate::lambdapi::normalize_name(id),
+                vec![],
+                t,
+                ps.map(|ps| Proof(ps)),
+            )
+        })
+        .expect("translate cong");
 
         assert_eq!(2, res.len());
 
