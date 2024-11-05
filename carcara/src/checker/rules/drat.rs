@@ -168,16 +168,7 @@ fn rup<'a>(
     }
 
     loop {
-        // for (p, v) in clauses.clone() {
-        //     print!("Watched literals {:?}\n", p);
-        //     for c in v {
-        //         print!("{:?} --> {:?}\n", c, env.get(&(c.0, c.1.clone())));
-        //     }
-        //     println!("")
-        // }
-
         let unit = get_implied_clause(clauses.borrow_mut(), env.borrow());
-        print!("{:?}\n", unit);
         match unit {
             Implied::Bottom(clause) => {
                 unit_story.push((clause.0, None, clause.1));
