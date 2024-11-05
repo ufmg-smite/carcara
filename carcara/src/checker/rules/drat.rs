@@ -341,7 +341,7 @@ pub fn elaborate_drat(
                     .collect();
                 let pivots: Vec<_> = rup_history.iter().map(|(_, term, _)| term).collect();
 
-                print!("Solving {:?}\n", rup_clause);
+                // print!("Solving {:?}\n", rup_clause);
                 let mut resolutions = vec![];
                 for i in (0..rup_history.len() - 1).rev() {
                     let pivot = pivots[i].as_ref().unwrap();
@@ -362,13 +362,13 @@ pub fn elaborate_drat(
                         let mut s = DefaultHasher::new();
                         resolvent.hash(&mut s);
                         let resolvent_hash = s.finish();
-                        print!(
-                            "{:?}={:?}\n{:?}={:?}\n",
-                            rup[i].1,
-                            rup[i].0.clone(),
-                            rup[i + 1].1,
-                            rup[i + 1].0.clone()
-                        );
+                        // print!(
+                        //     "{:?}={:?}\n{:?}={:?}\n",
+                        //     rup[i].1,
+                        //     rup[i].0.clone(),
+                        //     rup[i + 1].1,
+                        //     rup[i + 1].0.clone()
+                        // );
                         resolutions.push(ResolutionStep::Resolvent(
                             rup[i].1,
                             rup[i + 1].1,
@@ -399,7 +399,7 @@ pub fn elaborate_drat(
                     }
                 }
 
-                print!("{:?}\n", resolutions);
+                // print!("{:?}\n", resolutions);
 
                 resolutions.retain(|step| match step {
                     ResolutionStep::Resolvent(_, _, (resolvent, _, _)) => {
@@ -423,7 +423,7 @@ pub fn elaborate_drat(
                             d,
                             (resolvent, resolvent_indexset, resolvent_hash),
                         ) => {
-                            print!("{:?}\n", resolvent);
+                            // print!("{:?}\n", resolvent);
                             let mut clause = resolvent.clone();
                             let mut hash = *resolvent_hash;
 
