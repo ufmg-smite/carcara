@@ -192,7 +192,6 @@ impl PrettyPrint for ListLP {
         // Generate the root of the vector: (cons _  term1 □)
         let first_doc = concat! {
             text("cons") // constructor
-            => text("_").spaces() // index is inferred by lambdapi
             => first.to_doc().spaces() // element
             => text(NIL)
         }
@@ -203,7 +202,6 @@ impl PrettyPrint for ListLP {
         elems.into_iter().fold(first_doc, |acc, elem| {
             concat! {
                 text("cons") // constructor
-                => text("_").spaces() // index is inferred by lambdapi
                 => elem.to_doc().spaces() // element
                 => acc // rest of the vector
             }
@@ -310,7 +308,6 @@ impl PrettyPrint for LTerm {
                 )),
             LTerm::Distinct(v) => concat! {
                 text("distinct")
-                => RcDoc::text(v.0.len().to_string()).spaces() // size of the vector
                 => v.to_doc()
             }
             .parens(),

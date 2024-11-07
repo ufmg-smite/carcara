@@ -27,14 +27,14 @@ builtin "eqind" ≔ ind_eqᶜ; // : Π [a] x y, P(x = y) → Π p:T a → Prop, 
 symbol ⤳: Set → Set → Set; notation ⤳ infix right 20;
 rule τ ($a ⤳ $b) ↪ τ $a →  τ $b;
 
-symbol ind_Prop :
-Π p: (Prop → Prop),
-πᶜ (p ⊤) →
-πᶜ (p ⊥) →
-(Π x: Prop, πᶜ (p x) → πᶜ (p (¬ x))) →
-(Π x: Prop, πᶜ (p x) → Π y: Prop, πᶜ (p y) → πᶜ (p (x ∧ᶜ y))) →
-(Π x: Prop, πᶜ (p x) → Π y: Prop, πᶜ (p y) → πᶜ (p (x ∨ᶜ y))) →
-Π x: Prop, πᶜ (p x);
+// symbol ind_Prop :
+// Π p: (Prop → Prop),
+// πᶜ (p ⊤) →
+// πᶜ (p ⊥) →
+// (Π x: Prop, πᶜ (p x) → πᶜ (p (¬ x))) →
+// (Π x: Prop, πᶜ (p x) → Π y: Prop, πᶜ (p y) → πᶜ (p (x ∧ᶜ y))) →
+// (Π x: Prop, πᶜ (p x) → Π y: Prop, πᶜ (p y) → πᶜ (p (x ∨ᶜ y))) →
+// Π x: Prop, πᶜ (p x);
 
 // testing symbols
 private symbol a: Prop;
@@ -612,11 +612,17 @@ begin
   } 
 end;
 
-symbol ite c t e ≔ (c ⇒ᶜ t) ∧ᶜ ((¬ c) ⇒ᶜ e);
-constant symbol iteI : Π c t e p,
-                           (πᶜ c → πᶜ (p t))
-                         → ((πᶜ c → πᶜ ⊥) → πᶜ (p e))
-                         → πᶜ (p (ite c t e));                         
+symbol ite [a] (c: τ o) (t e: τ a): τ a;
+
+constant symbol iteI [a] : Π (c: τ o) (t e: τ a) p,
+  (πᶜ c → πᶜ (p t))
+  → ((πᶜ c → πᶜ ⊥) → πᶜ (p e))
+  → πᶜ (p (ite c t e));
+// symbol ite (c t e: τ o) ≔ (c ⇒ᶜ t) ∧ᶜ ((¬ c) ⇒ᶜ e);
+// constant symbol iteI : Π c t e p,
+//                            (πᶜ c → πᶜ (p t))
+//                          → ((πᶜ c → πᶜ ⊥) → πᶜ (p e))
+//                          → πᶜ (p (ite c t e));                         
 
 opaque symbol ∨ᶜ_to_⟇ a b: πᶜ (a ∨ᶜ b) → π̇ (a ⟇ b ⟇ ▩) ≔
 begin
@@ -644,49 +650,70 @@ begin
   assume a b c d f x x' xx' y y' yy' z z' zz'; rewrite xx'; rewrite yy'; rewrite zz'; reflexivity
 end;
 
-opaque symbol ite1 [c t e] : πᶜ (ite c t e) → π̇ (c ⟇ e ⟇ ▩) ≔
+opaque symbol ite1' [c t e] : πᶜ (ite c t e ⇒ᶜ c ∨ᶜ e) ≔
 begin
-  assume c t e Hite;
-  apply ∨ᶜ_to_⟇;
-  have H: πᶜ (¬ c ⇒ᶜ e) { apply ∧ᶜₑ₂ Hite }; 
-  have tmp: πᶜ (c ∨ᶜ e ⇔ᶜ  (¬ ¬ c) ∨ᶜ e) { 
-    apply ∧ᶜᵢ
-    {
-      apply ⇒ᶜᵢ;
-      assume H1;
-      apply ∨ᶜₑ H1
-      { assume Hc; apply ∨ᶜᵢ₁; simplify; apply meta-arr; assume Hnc; refine (fold_⇒ᶜ Hnc) Hc }
-      { assume He; apply ∨ᶜᵢ₂;  apply He };
-    }
-    {
-      apply ⇒ᶜᵢ;
-      assume H1; 
-      apply ∨ᶜₑ H1
-      { assume Hc; apply ∨ᶜᵢ₁; apply nnpp; refine Hc }
-      { assume He; apply ∨ᶜᵢ₂;  apply He };
-    };
-  };
-  have H2: πᶜ ((¬ (¬ c) ∨ᶜ e) ⇒ᶜ (c ∨ᶜ e)) { refine ∧ᶜₑ₂ tmp };
-  apply ⇒ᶜₑ H2;
-  rewrite imp_eq_or;
-  refine H;
+  assume c t e;
+  apply iteI c t e (λ u, u ⇒ᶜ (c ∨ᶜ e)) 
+  {
+    assume Hc;
+    apply ⇒ᶜᵢ;
+    assume Ht;
+    apply ∨ᶜᵢ₁;
+    apply Hc
+  }
+  {
+    assume Hnc;
+    apply ⇒ᶜᵢ;
+    assume He;
+    apply ∨ᶜᵢ₂;
+    apply He
+  }
 end;
 
-opaque symbol ite2 [c t e] : πᶜ (ite c t e) → π̇ ((¬ c) ⟇ t ⟇ ▩) ≔
+opaque symbol ite1 (c t e: τ o) : πᶜ (ite c t e) → π̇ (c ⟇ e ⟇ ▩) ≔
 begin
-  assume c t e Hite;
-  apply ∨ᶜ_to_⟇;
-  have H: πᶜ (c ⇒ᶜ t) { apply ∧ᶜₑ₁ Hite };
-  rewrite imp_eq_or;
-  apply H
+  assume c t e H;
+  simplify;
+  rewrite or_identity_r;
+  apply (⇒ᶜₑ (@ite1' c t e)) H;
+end;
+
+opaque symbol ite2' [c t e] : πᶜ (ite c t e ⇒ᶜ ((¬ c) ∨ᶜ t)) ≔
+begin
+  assume c t e;
+  apply iteI c t e (λ u, u ⇒ᶜ (¬ c ∨ᶜ t)) 
+  {
+    assume Hc;
+    apply ⇒ᶜᵢ;
+    assume Ht;
+    apply ∨ᶜᵢ₂;
+    apply Ht
+  }
+  {
+    assume Hc;
+    apply ⇒ᶜᵢ;
+    assume He;
+    remove He;
+    apply ∨ᶜᵢ₁;
+    simplify;
+    apply ⇒ᶜᵢ';
+    refine Hc
+  };
+end;
+
+opaque symbol ite2 (c t e: τ o) : πᶜ (ite c t e) → π̇ ((¬ c) ⟇ t ⟇ ▩) ≔
+begin
+  assume c t e H;
+  simplify;
+  rewrite or_identity_r;
+  apply (⇒ᶜₑ (@ite2' c t e)) H;
 end;
 
 // Use it to unfold the definition of `¬`.
 // The tactic simplify is to agressive.
 opaque symbol negdef p : πᶜ ((p ⇒ ⊥) = ¬ p) ≔
 begin
-    simplify;
-    reflexivity
+  simplify; reflexivity
 end;
 
 opaque symbol ite_pos1 [c t e] : π̇ ((¬ (ite c t e)) ⟇ c ⟇ e ⟇ ▩) ≔
@@ -695,18 +722,20 @@ begin
   apply imply_to_or;
   apply ⇒ᶜᵢ;
   assume H;
-  apply ite1 H;
+  simplify;
+  rewrite or_identity_r;
+  apply (⇒ᶜₑ (@ite1' c t e)) H;
 end;
 
 opaque symbol ite_pos2 [c t e] : π̇ (¬ (ite c t e) ⟇ ¬ c ⟇ t ⟇ ▩) ≔
 begin
   assume c t e;
-  simplify;
-  //rewrite negdef;
   apply imply_to_or;
   apply ⇒ᶜᵢ;
   assume H;
-  apply ite2 H;
+  simplify;
+  rewrite or_identity_r;
+  apply (⇒ᶜₑ (@ite2' c t e)) H;
 end;
 
 opaque symbol ite_neg1 [c t e] : π̇ ((ite c t e) ⟇ c ⟇ ¬ e ⟇ ▩) ≔
@@ -714,26 +743,16 @@ begin
   assume c t e;
   simplify;
   rewrite or_identity_r;
-  rewrite .[c ∨ᶜ ((e ⇒ ⊥))] or_com;
-  rewrite left .[c ⇒ᶜ t] imp_eq_or;
-  rewrite left .[(c ⇒ ⊥) ⇒ᶜ e] imp_eq_or;
-  rewrite or_com;
-  rewrite distributive_or;
-  apply ∧ᶜᵢ
+  apply iteI c t e (λ u, u ∨ᶜ (c ∨ᶜ (e ⇒ ⊥)))
   {
-    rewrite ∨ᶜ_assoc_eq;
-    apply ∨ᶜᵢ₁;
-    rewrite left ∨ᶜ_assoc_eq;
-    apply ∨ᶜᵢ₂;
-    apply classic
+    assume Hc; apply ∨ᶜᵢ₂; apply ∨ᶜᵢ₁; refine Hc
   }
   {
-    rewrite or_com;
+    assume Hnc; rewrite or_com;
     rewrite left ∨ᶜ_assoc_eq;
     apply ∨ᶜᵢ₂;
-    rewrite ∨ᶜ_assoc_eq;
-    apply ∨ᶜᵢ₁;
-    apply classic
+    rewrite or_com;
+    apply classic;
   };
 end;
 
@@ -742,74 +761,72 @@ begin
   assume c t e;
   simplify;
   rewrite or_identity_r;
-  rewrite left .[c ⇒ᶜ t] imp_eq_or;
-  rewrite left .[((c ⇒ ⊥)) ⇒ᶜ e] imp_eq_or;
-  rewrite or_com;
-  rewrite distributive_or;
-  apply ∧ᶜᵢ
+  apply iteI c t e (λ u, u ∨ᶜ ((c ⇒ ⊥)∨ᶜ (t ⇒ ⊥)))
   {
+    assume Hnc; rewrite or_com;
     rewrite left ∨ᶜ_assoc_eq;
     apply ∨ᶜᵢ₂;
     rewrite or_com;
-    rewrite left ∨ᶜ_assoc_eq;
-    apply ∨ᶜᵢ₂;
-    apply classic
+    apply classic;
   }
   {
-    rewrite ∨ᶜ_assoc_eq;
-    rewrite .[(c ⇒ ⊥) ∨ᶜ (t ⇒ ⊥)] or_com;
+    assume Hc; apply ∨ᶜᵢ₂; apply ∨ᶜᵢ₁; apply ⇒ᶜᵢ'; refine Hc
+  }
+end;
+
+opaque symbol not_ite1' [c t e] : πᶜ (¬ (ite c t e) ⇒ᶜ c ∨ᶜ ¬ e) ≔
+begin
+  assume c t e;
+  apply iteI c t e (λ u, ¬ u ⇒ᶜ c ∨ᶜ ¬ e)
+  {
+    assume Hc;
+    apply ⇒ᶜᵢ;
+    assume Hnt;
     apply ∨ᶜᵢ₁;
-    rewrite left ∨ᶜ_assoc_eq;
+    refine Hc;
+  }
+  {
+    assume Hcimpbot;
+    apply ⇒ᶜᵢ;
+    assume Hne;
     apply ∨ᶜᵢ₂;
-    apply classic
+    apply Hne
   }
 end;
 
 opaque symbol not_ite1 [c t e] : πᶜ (¬ (ite c t e)) → π̇( c ⟇ ¬ e ⟇ ▩) ≔
 begin
   assume c t e H;
-  have H1: πᶜ ((¬ (c ⇒ᶜ t)) ∨ᶜ (¬ ((¬ c) ⇒ᶜ e))) { apply not_and_or H };
-  apply ∨ᶜₑ H1
-  {
-    assume Hl;
-    have Hl': πᶜ (¬ ((¬ c) ∨ᶜ t)) { rewrite imp_eq_or;  refine Hl };
-    have Hl'': πᶜ ((¬ ¬ c) ∧ᶜ ¬ t) {  apply not_or_and Hl' };
-    apply ∨ᶜᵢ₁;
-    apply nnpp;
-    apply ∧ᶜₑ₁ Hl'';
-  }
-  {
-    assume Hr;
-    have Hr': πᶜ (¬ ((¬ ¬ c) ∨ᶜ e)) { rewrite imp_eq_or;  refine Hr };
-    have Hr'': πᶜ ((¬ ¬ ¬ c) ∧ᶜ ¬ e) {  apply not_or_and Hr' };
-    apply ∨ᶜᵢ₂;
-    apply ∨ᶜᵢ₁;
-    apply ∧ᶜₑ₂ Hr''
-  };
+  simplify;
+  rewrite or_identity_r;
+  apply (⇒ᶜₑ (@not_ite1' c t e) H);
+end;
+
+opaque symbol not_ite2' [c t e] : πᶜ (¬ (ite c t e) ⇒ᶜ ¬ c  ∨ᶜ ¬ t) ≔
+begin
+  assume c t e;
+  apply iteI c t e (λ u, ¬ u ⇒ᶜ ¬ c  ∨ᶜ ¬ t)
+  { assume Hc; apply ⇒ᶜᵢ; assume Hnt; apply ∨ᶜᵢ₂; refine Hnt }
+  { assume Hcimpbot; apply ⇒ᶜᵢ; assume Hne; apply ∨ᶜᵢ₁; simplify; apply ⇒ᶜᵢ'; refine Hcimpbot; }
 end;
 
 opaque symbol not_ite2 [c t e] : πᶜ (¬ (ite c t e)) → π̇(¬ c ⟇ ¬ t ⟇ ▩) ≔
 begin
-  simplify;
   assume c t e H;
-  have H1: πᶜ ((¬ (c ⇒ᶜ t)) ∨ᶜ (¬ ((¬ c) ⇒ᶜ e))) { apply not_and_or H };
-  apply ∨ᶜₑ H1
-  {
-    assume Hl;
-    have Hl': πᶜ (¬ ((¬ c) ∨ᶜ t)) { rewrite imp_eq_or;  refine Hl };
-    have Hl'': πᶜ ((¬ ¬ c) ∧ᶜ ¬ t) {  apply not_or_and Hl' };
-    apply ∨ᶜᵢ₂;
-    apply ∨ᶜᵢ₁;
-    apply ∧ᶜₑ₂ Hl''
-  }
-  {
-    assume Hr;
-    have Hr': πᶜ (¬ ((¬ ¬ c) ∨ᶜ e)) { rewrite imp_eq_or;  refine Hr };
-    have Hr'': πᶜ ((¬ ¬ ¬ c) ∧ᶜ ¬ e) {  apply not_or_and Hr' };
-    apply ∨ᶜᵢ₁;
-    apply nnpp;
-    apply ∧ᶜₑ₁ Hr''
-  }
+  simplify;
+  rewrite or_identity_r;
+  apply (⇒ᶜₑ (@not_ite2' c t e) H);
+end;
+
+opaque symbol ite_cong [a] [c c': τ o] [t t' e e': τ a] : πᶜ (c = c') → πᶜ (t = t') → πᶜ (e = e') → π̇(ite c t e = ite c' t' e' ⟇ ▩) ≔
+begin
+  assume a c c' t t' e e' Hcc' Htt' Hee';
+  simplify;
+  rewrite or_identity_r;
+  rewrite Hcc';
+  rewrite Htt';
+  rewrite Hee';
+  reflexivity
 end;
 
 symbol xor a b ≔ ((¬ a) ∧ᶜ b) ∨ᶜ (a ∧ᶜ (¬ b));
@@ -1575,37 +1592,38 @@ end;
 //   |cons : forall (h:A) (n:nat), t A n -> t A (S n).
 (a: Set) inductive Vec: ℕ → TYPE ≔
 | □ : Vec a 0 // \Box
-| cons (n: ℕ) : τ a →  Vec a n  →  Vec a (n + 1);
+| cons [n: ℕ] : τ a →  Vec a n  →  Vec a (n + 1);
+
+print Vec;
 
 constant symbol vec : Set → ℕ → Set;
 rule τ (vec $a $n) ↪ Vec $a $n;
 
-symbol distinct [a] n : Vec a n → Prop; 
-
-//type (cons 2 a (cons 1 b (cons 0 c □)));
+symbol distinct [a] [n: τ nat]  : Vec a n → Prop; 
 
 // // boolean case
-rule @distinct o _ □ ↪ ⊤
-with @distinct o 2 (cons 1 $x (cons 0 $y □)) ↪ ($x ≠ $y)
-with @distinct o ((($x +1) +1) +1) _ ↪ ⊥;
+rule @distinct _ 1 (cons _ □) ↪ ⊤
+with @distinct _ 2 (cons $x (cons $y □)) ↪ ($x ≠ $y)
+with @distinct _ (((_ +1) +1) +1) _ ↪ ⊥;
 
-compute @distinct o 2 ((cons 1 a (cons 0 b □)));
-compute @distinct o 3 (cons 2 a (cons _ b (cons _ c □)));
+assert ⊢ distinct (cons a □) ≡ ⊤;
+assert ⊢ distinct ((cons a (cons b □))) ≡ (a ≠ b);
+assert ⊢ distinct (cons a (cons b (cons c □))) ≡ ⊥;
+assert ⊢ distinct (cons a (cons b (cons c (cons d □)))) ≡ ⊥;
 
-opaque symbol distinct_elim : πᶜ ((@distinct o 0 □) = ⊤) ≔  eq_reflᶜ (@distinct o 0 □);
 
-opaque symbol distinct_elim₂ x y : πᶜ ((@distinct o 2 ((cons _ x (cons _ y □)))) = (x ≠ y)) ≔ eq_reflᶜ (@distinct o 2 (cons _ x (cons _ y □)));
+assert ⊢ distinct (cons 1 □) ≡ ⊤;
+assert ⊢ distinct ((cons 1 (cons 2 □))) ≡ (1 ≠ 2);
+assert ⊢ distinct (cons 1 (cons 2 (cons 3 □))) ≡ ⊥;
 
-opaque symbol distinct_elim₃ n (v: Vec o (n + 3)) : πᶜ (@distinct o (n + 3) v = ⊥) ≔  eq_reflᶜ (@distinct o (n + 3) v);
+type 1;
 
-// General case for Int and Real
-require open Stdlib.Z;
-require open Stdlib.Pos;
+opaque symbol distinct_elim  [a] [t: τ a] : πᶜ (distinct (cons t □) = ⊤) ≔ eq_reflᶜ (distinct(cons t □));
 
-rule @distinct int _ (cons Stdlib.Nat.0 _ □) ↪ ⊤
-with @distinct int ($s Stdlib.Nat.+1 Stdlib.Nat.+1) (cons ($s Stdlib.Nat.+1) $x (cons $s $y $l)) ↪ ($x ≠ $y) ∧ᶜ (@distinct int ($s Stdlib.Nat.+1) (cons $s $y $l));
+opaque symbol distinct_elim₂ [a] [x y: τ a] : πᶜ ((distinct ((cons x (cons y □)))) = (x ≠ y)) ≔ eq_reflᶜ (distinct (cons x (cons y □)));
 
-assert ⊢ @distinct int _ (cons _ 1 (cons _ 2 (cons _ 3 □))) ≡ ((Zpos Stdlib.Pos.H = Zpos (Stdlib.Pos.O Stdlib.Pos.H)) ⇒ ⊥) ∧ᶜ (((Zpos (Stdlib.Pos.O Stdlib.Pos.H) = Zpos (Stdlib.Pos.I Stdlib.Pos.H)) ⇒ ⊥) ∧ᶜ ⊤);
+opaque symbol distinct_elim₃ [a] [n: τ nat] [v: Vec a (n + 3)] : πᶜ (distinct v = ⊥) ≔  eq_reflᶜ (distinct v);
+
 
 opaque symbol feqᶜ [a b] (f:τ a → τ b) [x x':τ a] : πᶜ(x = x') → πᶜ(f x = f x') ≔
 begin

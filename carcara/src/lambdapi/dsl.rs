@@ -47,12 +47,12 @@ macro_rules! tactic {
         $steps.push(ProofStep::Apply(Term::from($i), vec![ $( make_term![  $( $args )+ ] , )* ], SubProofs(None)));
         tactic![ $steps, $( $body )+ ]
     };
-    ($steps:ident, apply $i:tt  $( ( $($args:tt) + ) ) * $( { $($subproof:tt) + } ) + ; $($body:tt)+) => {
+    ($steps:ident, apply $i:tt  $( ( $($args:tt) + ) ) * $( { $($subproof:tt) * } ) + ; $($body:tt)+) => {
         let mut sub_proofs: Vec<Proof> = Vec::new();
 
         $(
             {
-                let sub_proof = lambdapi_wrapper!{ begin $( $subproof )+ end; };
+                let sub_proof = lambdapi_wrapper!{ begin $( $subproof )* end; };
                 sub_proofs.push(Proof(sub_proof));
             }
         )*;

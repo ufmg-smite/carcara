@@ -159,6 +159,12 @@ pub enum Term {
     Underscore,
 }
 
+macro_rules! underscore {
+    () => { Term::Underscore };
+}
+
+pub(crate) use underscore;
+
 macro_rules! terms {
     ($($t:expr),+ $(,)?) => {
         Term::Terms(vec![ $( $t),+ ])
@@ -272,6 +278,7 @@ impl From<Operator> for Term {
             Operator::GreaterEq => "(≥)".into(),
             Operator::GreaterThan => "(>)".into(),
             Operator::Not => "(¬)".into(),
+            Operator::Ite => "ite".into(),
             o => todo!("Operator {:?}", o),
         }
     }
@@ -344,6 +351,12 @@ pub fn conv(term: &Rc<AletheTerm>, ctx: &crate::lambdapi::Context) -> Term {
                     }
                     Operator::True => Term::Alethe(LTerm::True),
                     Operator::False => Term::Alethe(LTerm::False),
+                    Operator::Ite => Term::Terms(vec![
+                        Term::from("ite".to_string()),
+                        args[0].clone(),
+                        args[1].clone(),
+                        args[2].clone(),
+                    ]),
                     o => todo!("Operator {:?}", o),
                 };
             }
@@ -439,6 +452,12 @@ impl From<&Rc<AletheTerm>> for Term {
                     }
                     Operator::True => Term::Alethe(LTerm::True),
                     Operator::False => Term::Alethe(LTerm::False),
+                    Operator::Ite => Term::Terms(vec![
+                        Term::from("ite".to_string()),
+                        args[0].clone(),
+                        args[1].clone(),
+                        args[2].clone(),
+                    ]),
                     o => todo!("Operator {:?}", o),
                 };
             }

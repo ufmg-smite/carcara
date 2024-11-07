@@ -47,11 +47,8 @@ begin
   { apply ⇒ᶜᵢ; assume Hor; apply or_to_imply Hor }
 end;
 
-//FIXME: (define-rule distinct-binary-elim ((t ?) (s ?)) (distinct t s) (not (= t s)))
-opaque symbol distinct-binary-elim [a] (t s: τ a) : πᶜ (@distinct a 2 (cons 1 t (cons 0 s □)) = ( t ≠ s)) ≔
-begin admit end;
-//begin assume a t s; reflexivity end;
-
+//(define-rule distinct-binary-elim ((t ?) (s ?)) (distinct t s) (not (= t s)))
+opaque symbol distinct-binary-elim [a] (t s: τ a) : πᶜ (distinct (cons t (cons s □)) = ( t ≠ s)) ≔ eq_reflᶜ (distinct (cons t (cons s □)));
 
 // (define-rule bool-impl-true2 ((t Bool)) (=> true t) t)
 opaque symbol bool-impl-true2 t : πᶜ ((⊤ ⇒ᶜ t) = t) ≔

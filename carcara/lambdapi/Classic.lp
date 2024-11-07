@@ -40,6 +40,16 @@ end;
 
 symbol ⇒ᶜ p q ≔ ¬ ¬ p ⇒ ¬ ¬ q; notation ⇒ᶜ infix right 10;
 
+opaque symbol ⇒ᶜᵢ' [p q]: (πᶜ p → πᶜ q) → πᶜ (p ⇒ q) ≔
+begin
+  simplify;
+  assume p q Hpimpq;  
+  assume H;
+  apply  Hpimpq
+  { assume Hnp; apply H; assume Hp; apply ⊥ₑ; apply Hnp Hp  }
+  { assume Hq; apply H; assume Hp; apply Hq };
+end;
+
 opaque symbol ⇒ᶜᵢ [p q]: (πᶜ p → πᶜ q) → πᶜ (p ⇒ᶜ q) ≔
 begin
   assume p q Hpimpq;  

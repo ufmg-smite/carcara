@@ -143,8 +143,7 @@ fn gen_required_module() -> Vec<Command> {
         Command::RequireOpen("Stdlib.Prop".to_string()),
         Command::RequireOpen("Stdlib.Set".to_string()),
         Command::RequireOpen("Stdlib.Eq".to_string()),
-        Command::RequireOpen("Stdlib.Nat".to_string()),
-        //Command::RequireOpen("Stdlib.Z".to_string()), //FIXME: Intersection between builtin Nat and Z
+        Command::RequireOpen("Stdlib.Z".to_string()),
         Command::RequireOpen("lambdapi.Classic".to_string()),
         Command::RequireOpen("lambdapi.Alethe".to_string()),
         Command::RequireOpen("lambdapi.Simplify".to_string()),
@@ -750,6 +749,8 @@ fn translate_tautology(
         "and" => Some(translate_and(premises.first()?)),
         "or" => Some(translate_or(premises.first()?.0.as_str())),
         "sko_forall" => Some(translate_sko_forall()),
+        "ite1" => Some(translate_ite1(premises.first()?)),
+        "ite2" => Some(translate_ite2(premises.first()?)),
         "hole" | "reordering" | "contraction" => Some(Ok(Proof(admit()))), // specific rules of CVC5
         _ => Some(translate_simple_tautology(rule, premises.as_slice())),
     }
