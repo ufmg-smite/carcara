@@ -28,6 +28,39 @@ enum DRupProofAction<'a> {
 
 type DRupStory<'a> = Vec<DRupProofAction<'a>>;
 
+fn hash_term<T: Borrow<Rc<Term>>>(term: &[T]) -> u64 {
+    let mut term = term
+        .iter()
+        .map(
+            |literal| {
+                let (p, regular_term) : (bool, &Rc<Term>) = (literal.borrow()).remove_all_negations_with_polarity();
+                if p {
+                    return regular_term.clone()
+                } else {
+                    return Rc::new(Term::Op(Operator::Not, vec![(*regular_term).clone()]))
+                };
+            },
+        )
+        .collect::<Vec<_>>();
+
+    term.sort_by(|x, y| {
+        let mut s = DefaultHasher::new();
+        let mut s2 = DefaultHasher::new();
+        x.to_string().hash(&mut s);
+        y.to_string().hash(&mut s2);
+
+        return s.finish().cmp(&s2.finish());
+    });
+
+    let mut s = DefaultHasher::new();
+    for literal in term {
+        literal.to_string().hash(&mut s);
+    }
+
+    let hash = s.finish();
+    return hash;
+}
+
 // PRECONDITION : For each schema in clauses,
 // If schema.0 is None, |clause| = 0
 // If schema.1 is not None, so schema.0 is not None
@@ -137,7 +170,6 @@ fn rup<'a>(
     // IF SO, USE BCP AND CONTINUE, UPDATE THE SIZE OF WATCHED LIST
     // IF THERE IS NOT UNIT CLAUSE, RETURN FALSE
 
-    let mut drat_clauses: HashMap<u64, IndexSet<(bool, &'a Rc<Term>)>> = drat_clauses.clone();
     let mut unit_story: RupAdition<'a> = vec![];
 
     let mut clauses: Vec<(
@@ -148,12 +180,10 @@ fn rup<'a>(
     let mut env: HashMap<(bool, Rc<Term>), bool> = HashMap::new();
 
     for term in goal {
-        let mut clause: IndexSet<(bool, &Rc<Term>)> = IndexSet::new();
-        let mut s = DefaultHasher::new();
-        term.hash(&mut s);
         let (p, regular_term) = term.remove_all_negations_with_polarity();
+        let mut clause: IndexSet<(bool, &Rc<Term>)> = IndexSet::new();
         clause.insert((!p, regular_term));
-        drat_clauses.insert(s.finish(), clause);
+        clauses.push(((Some((!p, regular_term.clone())), None), (clause, hash_term(vec![term].as_slice()))));
     }
 
     for (key, clause) in drat_clauses {
@@ -163,7 +193,7 @@ fn rup<'a>(
                 watched_literals.next().map(|v| (v.0, (*v.1).clone())),
                 watched_literals.next().map(|v| (v.0, (*v.1).clone())),
             ),
-            (clause.clone(), key),
+            (clause.clone(), *key),
         ));
     }
 
@@ -194,10 +224,8 @@ fn check_drup(
         .iter()
         .map(|p| p.clause)
         .map(|p| {
-            let mut s = DefaultHasher::new();
-            p.hash(&mut s);
             (
-                s.finish(),
+                hash_term(p),
                 p.iter()
                     .map(Rc::remove_all_negations_with_polarity)
                     .collect::<IndexSet<_>>(),
@@ -211,9 +239,7 @@ fn check_drup(
             ProofArg::Term(t) => {
                 match match_term!((delete (cl ...)) = &t) {
                     Some(terms) => {
-                        let mut s = DefaultHasher::new();
-                        terms.hash(&mut s);
-                        premises.remove(&s.finish());
+                        premises.remove(&hash_term(terms));
                         drup_history.push(DRupProofAction::Delete(terms));
                         continue;
                     }
@@ -224,11 +250,7 @@ fn check_drup(
                     Some(terms) => terms,
                     None => panic!("Invalid clause term"),
                 };
-
-                let mut s = DefaultHasher::new();
-                terms.hash(&mut s);
-                let hash_term = s.finish();
-
+;
                 let unit_history = rup(premises.borrow(), terms);
 
                 if unit_history == None {
@@ -245,16 +267,14 @@ fn check_drup(
                     unit_history.unwrap(),
                 ));
 
-                premises.insert(hash_term, terms_indexed_set);
+                premises.insert(hash_term(terms), terms_indexed_set);
             }
             ProofArg::Assign(_, _) => panic!("A invalid term was found while solving drat terms"),
         }
     }
 
-    let mut s = DefaultHasher::new();
-    conclusion.hash(&mut s);
 
-    if !premises.contains_key(&s.finish()) {
+    if !premises.contains_key(&hash_term(conclusion)) {
         return Err(CheckerError::DratFormatError(
             DratFormatError::NoConclusionInPremise,
         ));
@@ -307,12 +327,19 @@ pub fn elaborate_drat(
         return Err(err);
     }
 
+    let premises2: &mut HashMap<u64, _> = &mut premises
+        .iter()
+        .map(|p| {
+            print!("{:?}={:?}\n", hash_term(p.clause), p.clause);
+            (hash_term(p.clause), elaborator.map_index(p.index))
+        })
+        .collect();
+
     let premises: &mut HashMap<u64, _> = &mut premises
         .iter()
         .map(|p| {
-            let mut s = DefaultHasher::new();
-            p.clause.hash(&mut s);
-            (s.finish(), elaborator.map_index(p.index))
+            print!("{:?}={:?}\n", hash_term(p.clause), p.clause);
+            (hash_term(p.clause), elaborator.map_index(p.index))
         })
         .collect();
 
@@ -350,9 +377,10 @@ pub fn elaborate_drat(
                                 }
                             })
                             .collect();
-                        let mut s = DefaultHasher::new();
-                        resolvent.hash(&mut s);
-                        let resolvent_hash = s.finish();
+
+                        let resolvent_hash = hash_term(resolvent.as_slice());
+                        print!("needs {:?} = {:?}\n", resolvent, resolvent_hash);
+
                         // print!(
                         //     "{:?}={:?}\n{:?}={:?}\n",
                         //     rup[i].1,
@@ -365,6 +393,14 @@ pub fn elaborate_drat(
                             rup[i + 1].1,
                             (resolvent, resolvent_indexset.clone(), resolvent_hash),
                         ));
+
+                        print!(
+                            "{:?} = {:?} \n{:?} = {:?}\n",
+                            rup[i].0,
+                            rup[i].1,
+                            rup[i + 1].0,
+                            rup[i + 1].1
+                        );
 
                         rup[i] = (resolvent_indexset, resolvent_hash);
                     } else {
@@ -390,8 +426,6 @@ pub fn elaborate_drat(
                     }
                 }
 
-                // print!("{:?}\n", resolutions);
-
                 resolutions.retain(|step| match step {
                     ResolutionStep::Resolvent(_, _, (resolvent, _, _)) => {
                         resolvent.len() > 0 || rup_clause.len() == 0
@@ -414,18 +448,26 @@ pub fn elaborate_drat(
                             d,
                             (resolvent, resolvent_indexset, resolvent_hash),
                         ) => {
-                            // print!("{:?}\n", resolvent);
+                            print!(
+                                "{:?} = {:?} {:?} x {:?} {:?}\n",
+                                resolvent,
+                                c,
+                                premises.get(c),
+                                d,
+                                premises.get(d)
+                            );
+                            print!("{:?}\n", premises);
+
                             let mut clause = resolvent.clone();
                             let mut hash = *resolvent_hash;
 
                             // TODO: This is something that I have to ask @Haniel
-                            if !premises.contains_key(c) || !premises.contains_key(d) {
-                                return Err(CheckerError::DratFormatError(
-                                    DratFormatError::PotentialNoDrupFormat,
-                                ));
-                            }
+                            // if !premises.contains_key(c) || !premises.contains_key(d) {
+                            //     return Err(CheckerError::DratFormatError(
+                            //         DratFormatError::PotentialNoDrupFormat,
+                            //     ));
+                            // }
 
-                            // If is the the last clause we check if the clause is a subsumed clause, in case so, we do the weakning
                             if i == resolutions.len() - 1
                                 && resolvent_indexset.is_subset(rup_clause)
                             {
@@ -439,9 +481,7 @@ pub fn elaborate_drat(
                                         }
                                     })
                                     .collect();
-                                let mut s = DefaultHasher::new();
-                                resolvent.hash(&mut s);
-                                hash = s.finish();
+                                hash = hash_term(clause.as_slice());
                             }
 
                             let ids = action(ProofStep {
@@ -461,6 +501,7 @@ pub fn elaborate_drat(
                             }
 
                             premises.insert(hash, ids);
+                            print!("{:?} new {:?}\n", hash, resolvent);
                         }
 
                         ResolutionStep::UnChanged(_, _) => unreachable!(),
