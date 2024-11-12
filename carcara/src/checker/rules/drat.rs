@@ -31,16 +31,15 @@ type DRupStory<'a> = Vec<DRupProofAction<'a>>;
 fn hash_term<T: Borrow<Rc<Term>>>(term: &[T]) -> u64 {
     let mut term = term
         .iter()
-        .map(
-            |literal| {
-                let (p, regular_term) : (bool, &Rc<Term>) = (literal.borrow()).remove_all_negations_with_polarity();
-                if p {
-                    return regular_term.clone()
-                } else {
-                    return Rc::new(Term::Op(Operator::Not, vec![(*regular_term).clone()]))
-                };
-            },
-        )
+        .map(|literal| {
+            let (p, regular_term): (bool, &Rc<Term>) =
+                (literal.borrow()).remove_all_negations_with_polarity();
+            if p {
+                return regular_term.clone();
+            } else {
+                return Rc::new(Term::Op(Operator::Not, vec![(*regular_term).clone()]));
+            };
+        })
         .collect::<Vec<_>>();
 
     term.sort_by(|x, y| {
@@ -183,7 +182,10 @@ fn rup<'a>(
         let (p, regular_term) = term.remove_all_negations_with_polarity();
         let mut clause: IndexSet<(bool, &Rc<Term>)> = IndexSet::new();
         clause.insert((!p, regular_term));
-        clauses.push(((Some((!p, regular_term.clone())), None), (clause, hash_term(vec![term].as_slice()))));
+        clauses.push((
+            (Some((!p, regular_term.clone())), None),
+            (clause, hash_term(vec![term].as_slice())),
+        ));
     }
 
     for (key, clause) in drat_clauses {
@@ -250,7 +252,6 @@ fn check_drup(
                     Some(terms) => terms,
                     None => panic!("Invalid clause term"),
                 };
-;
                 let unit_history = rup(premises.borrow(), terms);
 
                 if unit_history == None {
@@ -272,7 +273,6 @@ fn check_drup(
             ProofArg::Assign(_, _) => panic!("A invalid term was found while solving drat terms"),
         }
     }
-
 
     if !premises.contains_key(&hash_term(conclusion)) {
         return Err(CheckerError::DratFormatError(
@@ -327,20 +327,9 @@ pub fn elaborate_drat(
         return Err(err);
     }
 
-    let premises2: &mut HashMap<u64, _> = &mut premises
-        .iter()
-        .map(|p| {
-            print!("{:?}={:?}\n", hash_term(p.clause), p.clause);
-            (hash_term(p.clause), elaborator.map_index(p.index))
-        })
-        .collect();
-
     let premises: &mut HashMap<u64, _> = &mut premises
         .iter()
-        .map(|p| {
-            print!("{:?}={:?}\n", hash_term(p.clause), p.clause);
-            (hash_term(p.clause), elaborator.map_index(p.index))
-        })
+        .map(|p| (hash_term(p.clause), elaborator.map_index(p.index)))
         .collect();
 
     let mut current_id: String = command_id;
@@ -359,7 +348,6 @@ pub fn elaborate_drat(
                     .collect();
                 let pivots: Vec<_> = rup_history.iter().map(|(_, term, _)| term).collect();
 
-                // print!("Solving {:?}\n", rup_clause);
                 let mut resolutions = vec![];
                 for i in (0..rup_history.len() - 1).rev() {
                     let pivot = pivots[i].as_ref().unwrap();
@@ -379,28 +367,12 @@ pub fn elaborate_drat(
                             .collect();
 
                         let resolvent_hash = hash_term(resolvent.as_slice());
-                        print!("needs {:?} = {:?}\n", resolvent, resolvent_hash);
 
-                        // print!(
-                        //     "{:?}={:?}\n{:?}={:?}\n",
-                        //     rup[i].1,
-                        //     rup[i].0.clone(),
-                        //     rup[i + 1].1,
-                        //     rup[i + 1].0.clone()
-                        // );
                         resolutions.push(ResolutionStep::Resolvent(
                             rup[i].1,
                             rup[i + 1].1,
                             (resolvent, resolvent_indexset.clone(), resolvent_hash),
                         ));
-
-                        print!(
-                            "{:?} = {:?} \n{:?} = {:?}\n",
-                            rup[i].0,
-                            rup[i].1,
-                            rup[i + 1].0,
-                            rup[i + 1].1
-                        );
 
                         rup[i] = (resolvent_indexset, resolvent_hash);
                     } else {
@@ -448,25 +420,8 @@ pub fn elaborate_drat(
                             d,
                             (resolvent, resolvent_indexset, resolvent_hash),
                         ) => {
-                            print!(
-                                "{:?} = {:?} {:?} x {:?} {:?}\n",
-                                resolvent,
-                                c,
-                                premises.get(c),
-                                d,
-                                premises.get(d)
-                            );
-                            print!("{:?}\n", premises);
-
                             let mut clause = resolvent.clone();
                             let mut hash = *resolvent_hash;
-
-                            // TODO: This is something that I have to ask @Haniel
-                            // if !premises.contains_key(c) || !premises.contains_key(d) {
-                            //     return Err(CheckerError::DratFormatError(
-                            //         DratFormatError::PotentialNoDrupFormat,
-                            //     ));
-                            // }
 
                             if i == resolutions.len() - 1
                                 && resolvent_indexset.is_subset(rup_clause)
@@ -501,7 +456,6 @@ pub fn elaborate_drat(
                             }
 
                             premises.insert(hash, ids);
-                            print!("{:?} new {:?}\n", hash, resolvent);
                         }
 
                         ResolutionStep::UnChanged(_, _) => unreachable!(),
