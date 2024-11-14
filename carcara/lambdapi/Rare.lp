@@ -213,7 +213,7 @@ require open Stdlib.Pos;
 notation ≥ infix 10; //FIXME: fix notation in Stdlib
 
 // (define-rule arith-elim-lt ((t ?) (s ?)) (< t s) (not (>= t s)))
-symbol arith-elim-lt t s : πᶜ ((t < s) = ¬ (t ≥ s)) ≔
+opaque symbol arith-elim-lt t s : πᶜ ((t < s) = ¬ (t ≥ s)) ≔
 begin
     assume t s;
     simplify;
@@ -252,7 +252,7 @@ symbol ind_ℙᶜ (p: ℙ → Prop):
     πᶜ (p H) → πᶜ (p x);
 
 // (define-rule arith-geq-norm ((t ?) (s ?)) (>= t s) (>= (- t s) 0))
-symbol arith-geq-norm t s : πᶜ ((t ≥ s) =  ((t - s) ≥ 0)) ≔
+opaque symbol arith-geq-norm t s : πᶜ ((t ≥ s) =  ((t - s) ≥ 0)) ≔
 begin
     assume t s;
     apply ind_ℤᶜ (λ u, (u ≥ s) =  ((u - s) ≥ 0)) t
@@ -285,7 +285,7 @@ begin
 end;
 
 // (define-rule arith-geq-tighten ((t Int) (s Int)) (not (>= t s)) (>= s (+ t 1)))
-symbol arith-geq-tighten t s : πᶜ ((¬ (t ≥ s)) =  (s ≥ (t + 1))) ≔
+opaque symbol arith-geq-tighten t s : πᶜ ((¬ (t ≥ s)) =  (s ≥ (t + 1))) ≔
 begin
     assume t s;
     apply ind_ℤᶜ (λ u, ((¬ (u ≥ s)) =  (s ≥ (u + 1)))) t
@@ -293,3 +293,24 @@ begin
     {admit}
     {admit}
 end;
+
+
+//rule $x + ((Zneg H) × $x) ↪ 0;
+
+// (define-rule arith-geq-norm2 ((t ?) (s ?)) (>= t s) (<= (- t) (- s)))
+opaque symbol arith-geq-norm2 t s : πᶜ ((t ≥ s) =  (~ t ≤ ~ s)) ≔
+begin 
+    assume t s;
+    apply ind_ℤᶜ (λ u, (u ≥ s) =  (~ u ≤ ~ s)) t
+    {admit}
+    {admit}
+    {admit};
+end;
+
+// (define-rule arith-geq-norm1 ((t ?) (s ?)) (>= t s) (>= (- t s) 0))
+opaque symbol arith-geq-norm1 t s : πᶜ ((t ≥ s) = ((t - s) ≥ 0)) ≔
+begin admit end;
+
+// (define-rule arith-leq-norm ((t Int) (s Int)) (<= t s) (not (>= t (+ s 1))))
+opaque symbol arith-leq-norm (t s: τ int) : πᶜ ((t ≤ s) = ¬ (t ≥ s + 1)) ≔
+begin admit end;

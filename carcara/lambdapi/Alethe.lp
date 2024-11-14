@@ -1725,3 +1725,238 @@ begin
   rewrite H2';
    reflexivity
 end;
+
+constant symbol Mexp : TYPE;
+symbol mexp : Set;
+rule τ mexp ↪ Mexp;
+
+
+associative commutative symbol Or : Mexp → Mexp → Mexp;
+constant symbol Epsilon : Mexp;
+symbol Var : 𝔹 → Prop → Mexp;
+
+// rule Or (Var true $t) (Var false $t) ↪ Epsilon
+// with Or (Var false $t) (Var true $t) ↪ Epsilon
+// with Or (Var true $t) (Or (Var false $t) $y) ↪ $y
+// with Or (Var false $t) (Or (Var true $t) $y) ↪ $y
+// with Or Epsilon Epsilon ↪ Epsilon
+// with Or Epsilon (Var false ⊥) ↪ Epsilon
+// with Or Epsilon (Or Epsilon $x) ↪ Or Epsilon $x
+// with Or Epsilon (Or (Var false ⊥) $x) ↪ $x
+// ;
+
+// rule (Var false (¬ $t)) ↪ (Var true $t)
+// with (Var true (¬ $t)) ↪ (Var false $t)
+// with (Var false ($t ⇒ ⊥)) ↪ (Var true $t)
+// with (Var true ($t ⇒ ⊥)) ↪ (Var false $t)
+// ;
+
+// symbol eval : Mexp → τ o;
+// rule eval Epsilon ↪ ⊥
+// with eval (Var true $t) ↪ $t
+// with eval (Var false $t) ↪  ¬ $t
+// with eval (Or $x $y) ↪ (eval $x) ∨ᶜ (eval $y)
+// ;
+
+// sequential symbol reify : Prop → Mexp;
+// rule reify (($x ∨ᶜ $z) ∨ᶜ $y) ↪ Or (Var true (($x ∨ᶜ $z))) (reify $y)
+// with reify ($x ∨ᶜ $y) ↪ Or (reify $x) (reify $y)
+// with reify ⊥ ↪ Epsilon
+// with reify (¬ $t) ↪ (Var false $t)
+// with reify ($t ⇒ ⊥) ↪ (Var false $t)
+// with reify $t ↪ (Var true $t)
+// ;
+
+// // private symbol xx ≔ (a ∨ᶜ b);
+// // private symbol yy ≔ ¬ (a ∨ᶜ b );
+
+// // compute reify ((a ∨ᶜ b) ∨ᶜ a ∨ᶜ ⊤ ∨ᶜ (¬ (a ∨ᶜ b)) ∨ᶜ (a ∨ᶜ b) ∨ᶜ (¬ ⊥) ∨ᶜ ⊥ ∨ᶜ (¬ ⊥) ∨ᶜ (¬ ⊤) ∨ᶜ (¬ (a ∨ᶜ b)) ∨ᶜ ⊥);
+
+
+// symbol ind_Prop :
+//     Π x: τ o,
+//     Π p: (τ o → Prop),
+//     πᶜ (p ⊤) →
+//     πᶜ (p ⊥) 
+//     → (Π x0: τ o, πᶜ (p x0) → πᶜ (p (¬ x0)))
+//     → (Π x0: τ o, πᶜ (p x0) → Π x1: τ o, πᶜ (p x1) → πᶜ (p (x0 ∧ x1)))
+//     → (Π x0: τ o, πᶜ (p x0) → Π x1: τ o, πᶜ (p x1) → πᶜ (p (x0 ∨ x1)))
+//     → πᶜ (p x);
+
+// symbol reify_inj (a b: τ o) : πᶜ ((eval (reify (a ∨ᶜ ⊥)) = (eval (reify (b ∨ᶜ ⊥)))) ⇒ᶜ ((a ∨ᶜ ⊥) = (b ∨ᶜ ⊥))) ≔
+// begin
+//     assume a b;
+//     apply ind_Prop a (λ u, (eval (reify (u ∨ᶜ ⊥)) = (eval (reify (b ∨ᶜ ⊥)))) ⇒ᶜ ((u ∨ᶜ ⊥) = (b ∨ᶜ ⊥)))
+//     {
+//       simplify;
+//       apply ⇒ᶜᵢ; assume H;
+//       rewrite or_com;
+//       rewrite or_com b;
+//       apply H
+//     }
+//     {
+//         simplify;
+//         apply ⇒ᶜᵢ; assume H;
+//         rewrite or_identity_l;
+//         rewrite or_com;
+//         apply H
+//     }
+//     {
+//         assume x IH; simplify;
+//         apply ⇒ᶜᵢ; assume H;
+//         rewrite or_com;
+//         rewrite or_com b;
+//         apply H
+//     }
+//     { 
+//         assume x IH1 y IH2;
+//         simplify;
+//         apply ⇒ᶜᵢ; assume H;
+//         rewrite or_com;
+//         rewrite or_com b;
+//         apply H
+//     }
+//     {
+//         assume x IH1 y IH2;
+//         simplify;
+//         apply ⇒ᶜᵢ; assume H;
+//         rewrite or_com;
+//         rewrite or_com b;
+//         apply H
+//     }
+// end;
+
+// symbol reify_inj2 [a b: τ o] : πᶜ ((eval (reify (a ∨ᶜ ⊥))) = eval (reify (b ∨ᶜ ⊥))) →  πᶜ (a = b) ≔
+// begin
+//   assume a b H;
+//   rewrite left  or_identity_r a;
+//   rewrite left  or_identity_r b;
+//   refine (⇒ᶜₑ (reify_inj a b) H); 
+// end;
+
+// symbol reify_inj3 [a b: τ o] : πᶜ ((reify (a ∨ᶜ ⊥)) = reify (b ∨ᶜ ⊥)) →  πᶜ (a = b) ≔
+// begin
+//   admit
+// end;
+
+// opaque symbol pack [a b] : π̇ a → π̇ b → π̇ (a ++ b) ≔ begin
+//     assume a b Ha Hb; 
+//     simplify;
+//     apply Clause_ind (λ u, ⟇_to_∨ᶜ_rw (u ++ b)) a
+//     { simplify; apply Hb  }
+//     {
+//         assume x l IH;
+//         simplify;
+//         apply ∨ᶜᵢ₂;
+//         apply IH
+//     }
+// end;
+
+rule Or (Var true $t) (Var false $t) ↪ Epsilon
+with Or (Var false $t) (Var true $t) ↪ Epsilon
+with Or (Var true $t) (Or (Var false $t) $y) ↪ $y
+with Or (Var false $t) (Or (Var true $t) $y) ↪ $y
+with Or Epsilon $x ↪ $x
+with Or $x Epsilon ↪ $x
+;
+//because of double negation, term such as  ¬¬ t ∨ ¬ t ↪ Var(false, ¬ t) ⊔ Var(false, t) do not reduce
+// by adding these rules we rewrite it into ¬¬ t ∨ ¬ t ↪ Var(false, ¬ t) ⊔ Var(false, t) ↪ Var(true, t) ⊔ Var(false, t) ↪ Epsilon
+rule (Var false (¬ $t)) ↪ (Var true $t)
+with (Var true (¬ $t)) ↪ (Var false $t)
+with (Var false ($t ⇒ ⊥)) ↪ (Var true $t)
+with (Var true ($t ⇒ ⊥)) ↪ (Var false $t)
+;
+
+symbol eval : Mexp → τ o;
+rule eval (Var true $t) ↪ $t
+with eval (Var false $t) ↪  ¬ $t
+with eval (Or $x $y) ↪ (eval $x) ∨ᶜ (eval $y)
+with eval Epsilon ↪ ⊥
+;
+
+sequential symbol reify : Prop → Mexp;
+rule reify (($x ∨ᶜ $z) ∨ᶜ $y) ↪ Or (Var true (($x ∨ᶜ $z))) (reify $y)
+with reify ($x ∨ᶜ $y) ↪ Or (reify $x) (reify $y)
+with reify (¬ $t) ↪ (Var false $t)
+with reify ($t ⇒ ⊥) ↪ (Var false $t)
+with reify $t ↪ (Var true $t)
+;
+
+private symbol xx ≔ (a ∨ᶜ b);
+private symbol yy ≔ ¬ (a ∨ᶜ b );
+
+compute reify (xx ∨ᶜ (¬ ⊥) ∨ᶜ yy ∨ᶜ ⊥);
+
+symbol ind_Prop :
+    Π x: τ o,
+    Π p: (τ o → Prop),
+    πᶜ (p ⊤) →
+    πᶜ (p ⊥) 
+    → (Π x0: τ o, πᶜ (p x0) → πᶜ (p (¬ x0)))
+    → (Π x0: τ o, πᶜ (p x0) → Π x1: τ o, πᶜ (p x1) → πᶜ (p (x0 ∧ x1)))
+    → (Π x0: τ o, πᶜ (p x0) → Π x1: τ o, πᶜ (p x1) → πᶜ (p (x0 ∨ x1)))
+    → πᶜ (p x);
+
+symbol reify_inj (a b: τ o) : πᶜ ((eval (reify (a ∨ᶜ ⊥)) = (eval (reify (b ∨ᶜ ⊥)))) ⇒ᶜ ((a ∨ᶜ ⊥) = (b ∨ᶜ ⊥))) ≔
+begin
+    assume a b;
+    apply ind_Prop a (λ u, (eval (reify (u ∨ᶜ ⊥)) = (eval (reify (b ∨ᶜ ⊥)))) ⇒ᶜ ((u ∨ᶜ ⊥) = (b ∨ᶜ ⊥)))
+    {
+      simplify;
+      apply ⇒ᶜᵢ; assume H;
+      apply H
+    }
+    {
+        simplify;
+        apply ⇒ᶜᵢ; assume H;
+        apply H
+    }
+    {
+        assume x IH; simplify;
+        apply ⇒ᶜᵢ; assume H;
+        apply H
+    }
+    { 
+        assume x IH1 y IH2;
+        simplify;
+        apply ⇒ᶜᵢ; assume H;
+        rewrite or_com;
+        apply H
+    }
+    {
+        assume x IH1 y IH2;
+        simplify;
+        apply ⇒ᶜᵢ; assume H;
+        rewrite or_com;
+        apply H
+    }
+end;
+
+symbol reify_inj2 [a b: τ o] : πᶜ ((eval (reify (a ∨ᶜ ⊥))) = eval (reify (b ∨ᶜ ⊥))) →  πᶜ (a = b) ≔
+begin
+  assume a b H;
+  rewrite left  or_identity_r a;
+  rewrite left  or_identity_r b;
+  refine (⇒ᶜₑ (reify_inj a b) H); 
+end;
+
+symbol reify_inj3 [a b: τ o] : πᶜ ((reify (a ∨ᶜ ⊥)) = reify (b ∨ᶜ ⊥)) →  πᶜ (a = b) ≔
+begin
+  admit
+end;
+
+opaque symbol pack [a b] : π̇ a → π̇ b → π̇ (a ++ b) ≔ begin
+    assume a b Ha Hb; 
+    simplify;
+    apply Clause_ind (λ u, ⟇_to_∨ᶜ_rw (u ++ b)) a
+    { simplify; apply Hb  }
+    {
+        assume x l IH;
+        simplify;
+        apply ∨ᶜᵢ₂;
+        apply IH
+    }
+end;
+
+
+notation ≥ infix 10;
