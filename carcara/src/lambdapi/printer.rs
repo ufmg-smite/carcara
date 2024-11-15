@@ -1,6 +1,6 @@
 use super::*;
 use pretty::RcDoc;
-use std::io;
+use std::io::{self, empty};
 
 pub const DEFAULT_WIDTH: usize = 120;
 pub const DEFAULT_INDENT: isize = 4;
@@ -165,6 +165,13 @@ impl PrettyPrint for Term {
                 RcDoc::intersperse(terms.iter().map(|term| term.to_doc()), arrow().spaces())
             }
             Term::Nat(n) => RcDoc::text(format!("{}", n)),
+            Term::Int(i) => {
+                if i.is_negative() {
+                    RcDoc::text(format!("~ {}", i.clone().abs()))
+                } else {
+                    RcDoc::text(format!("{}", i))
+                }
+            }
         }
     }
 }
@@ -231,6 +238,7 @@ impl PrettyPrint for LTerm {
                 .parens(),
             LTerm::Neg(None) => text("¬"),
             LTerm::Proof(term) => text("π̇").append(space()).append(term.to_doc()),
+            LTerm::ClassicProof(term) => text("πᶜ").append(space()).append(term.to_doc()),
             LTerm::Clauses(terms) => {
                 if terms.is_empty() {
                     text(CLAUSE_NIL)
@@ -397,7 +405,8 @@ impl PrettyPrint for ProofStep {
                 }))
                 .append(semicolon()),
             ProofStep::Try(t) => text("try").append(space()).append(t.to_doc()),
-            ProofStep::Rewrite(pattern, h, args) => text("rewrite")
+            ProofStep::Rewrite(flag, pattern, h, args) => text("rewrite")
+                .append(flag.then(|| text("left").spaces()).unwrap_or(text("")))
                 .append(space())
                 .append(pattern.as_ref().map_or(text(""), |pattern| {
                     text(".").append(text(pattern.as_str())).append(space())

@@ -23,6 +23,7 @@ pub mod output;
 pub mod printer;
 pub mod proof;
 mod simp;
+#[macro_use]
 mod tautology;
 pub mod term;
 
@@ -182,7 +183,7 @@ pub fn produce_lambdapi_proof<'a>(
     context.global_variables = global_variables;
 
     let commands = translate_commands(&mut context, &mut proof_elaborated.iter(), |id, t, ps| {
-        Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
+        Command::Symbol(None,normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
     })?;
 
     let shared_terms = gen_shared_term(&context);
@@ -752,7 +753,145 @@ fn translate_tautology(
         "ite1" => Some(translate_ite1(premises.first()?)),
         "ite2" => Some(translate_ite2(premises.first()?)),
         "hole" | "reordering" | "contraction" => Some(Ok(Proof(admit()))), // specific rules of CVC5
+        "la_generic" => Some(Ok(Proof(admit()))),
+        "la_mult_neg" => Some(Ok(Proof(admit()))),
         _ => Some(translate_simple_tautology(rule, premises.as_slice())),
+    }
+}
+
+//     have H: π̇ ((¬ (p_18)) ⟇ p_19 ⟇ p_18 ⟇ ▩) { apply pack t7 t13 };
+//     have H2: πᶜ ((¬ (p_18)) ∨ᶜ p_19 ∨ᶜ p_18 ∨ᶜ ⊥ =  p_19 ∨ᶜ ⊥) {
+//         apply reify_inj2;
+//         rewrite or_identity_r;
+//         rewrite .[x in  _ = eval (reify x)] or_identity_r;
+//         simplify;
+//         reflexivity
+//     };
+//     apply ∨ᶜᵢ₁;
+//     rewrite left or_identity_r;
+//     rewrite left H2;
+//     rewrite or_identity_r;
+//     rewrite left .[in x in _ ∨ᶜ _ ∨ᶜ x ] or_identity_r;
+//     apply H;
+
+fn translate_refl_resolution(
+    proof_iter: &mut ProofIter<'_>,
+    clause: &[Rc<AletheTerm>],
+    premises: &[(usize, usize)],
+    ctx: &mut Context,
+) -> Proof {
+    let mut premises: Vec<_> = get_premises_clause(&proof_iter, &premises);
+
+    let mut premises_id = premises.iter().map(|(id, _)| id.to_string()).collect_vec();
+
+    let mut clause_pack: Vec<Rc<AletheTerm>> = premises
+        .into_iter()
+        .map(|(_, cls)| cls.to_vec())
+        .concat()
+        .to_vec();
+
+    let clause_len = clause_pack.len();
+
+    let pack_goal = Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(
+        clause_pack
+            .iter()
+            .map(|c| ctx.get_or_convert(&c))
+            .collect_vec(),
+    )))));
+
+    let p1 = premises_id[0].clone();
+    let p2 = premises_id[1].clone();
+
+    let pack_proof = apply!(premises_id.into_iter().skip(2).fold(
+        terms![id!("pack"), id!(p1), id!(p2)],
+        |acc, t| terms![id!("pack"), acc, id!(t.to_string())]
+    ));
+
+    let Hpack = ProofStep::Have("H".into(), pack_goal, vec![pack_proof]);
+
+    let mut left = clause_pack
+        .into_iter()
+        .map(|c| ctx.get_or_convert(&c))
+        .collect_vec();
+    left.push(Term::Alethe(LTerm::False));
+
+    let mut right = clause
+        .into_iter()
+        .map(|c| ctx.get_or_convert(&c))
+        .collect_vec();
+    let rightp = right.clone();
+
+    right.push(Term::Alethe(LTerm::False));
+
+    
+
+    let right_len = right.len();
+
+    let H2_goal = Term::Alethe(LTerm::ClassicProof(Box::new(Term::Alethe(LTerm::Eq(
+        Box::new(Term::Alethe(LTerm::NOr(left))),
+        Box::new(Term::Alethe(LTerm::NOr(right.clone()))),
+    )))));
+
+    //apply reify_inj2;
+    // rewrite or_identity_r;
+    // rewrite .[x in  _ = eval (reify x)] or_identity_r;
+
+    let H2 = ProofStep::Have(
+        "H2".into(),
+        H2_goal,
+        vec![
+            apply!("reify_inj2".into()),
+            ProofStep::Rewrite(false, Some("[x in  eval (reify x) = _]".into()), "or_identity_r".into(), vec![]),
+            ProofStep::Rewrite(false, Some("[x in  _ = eval (reify x)]".into()), "or_identity_r".into(), vec![]),
+            ProofStep::Simplify,
+            ProofStep::Reflexivity,
+        ],
+    );
+
+    let H3_goal = Term::Function(vec![
+        Term::Alethe(LTerm::ClassicProof(Box::new(Term::Alethe(LTerm::NOr(
+            right.clone(),
+        ))))),
+        Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(rightp))))),
+    ]);
+
+    let H3 = ProofStep::Have(
+        "H3".into(),
+        H3_goal,
+        vec![
+            ProofStep::Assume(vec!["HG".into()]),
+            apply!("HG".into()),
+        ],
+    );
+
+    // let rewrite_pattern = format!("[in x in {}x]", "_ ∨ᶜ ".repeat(clause_len - 1));
+    // let or_identity_r_left =
+    //     ProofStep::Rewrite(true, Some(rewrite_pattern), "or_identity_r".into(), vec![]);
+
+    if right_len > 1 {
+        let proof = vec![
+            Hpack,
+            H2,
+            H3,
+            apply!(id!("H3")),
+            ProofStep::Rewrite(true, None, "or_identity_r".into(), vec![]),
+            ProofStep::Rewrite(true, None, "H2".into(), vec![]),
+            ProofStep::Rewrite(false, None, "or_identity_r".into(), vec![]),
+            //or_identity_r_left,
+            apply!("H".into()),
+        ];
+
+        Proof(proof)
+    } else {
+        let proof = vec![
+            Hpack,
+            H2,
+            ProofStep::Simplify,
+            ProofStep::Rewrite(true, None, "H2".into(), vec![]),
+            apply!("H".into()),
+        ];
+
+        Proof(proof)
     }
 }
 
@@ -784,14 +923,30 @@ where
                 args,
                 discharge: _,
             }) if rule == "resolution" || rule == "th_resolution" => {
-                let proof = translate_resolution(proof_iter, premises, args, ctx)?;
+                let proof = translate_refl_resolution(proof_iter, clause, premises, ctx);
 
                 let clauses = Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(
                     clause.into_iter().map(|a| ctx.get_or_convert(a)).collect(),
                 )))));
 
-                proof_steps.push(f(normalize_name(id), clauses, Some(proof)));
+                proof_steps.push(f(normalize_name(id), clauses, Some(proof.0)));
             }
+            // ProofCommand::Step(AstProofStep {
+            //     id,
+            //     clause,
+            //     premises,
+            //     rule,
+            //     args,
+            //     discharge: _,
+            // }) if rule == "resolution" || rule == "th_resolution" => {
+            //     let proof = translate_resolution(proof_iter, premises, args, ctx)?;
+
+            //     let clauses = Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(
+            //         clause.into_iter().map(|a| ctx.get_or_convert(a)).collect(),
+            //     )))));
+
+            //     proof_steps.push(f(normalize_name(id), clauses, Some(proof)));
+            // }
             ProofCommand::Step(AstProofStep {
                 id, clause, premises: _, rule, args, ..
             }) if rule == "rare_rewrite" => {

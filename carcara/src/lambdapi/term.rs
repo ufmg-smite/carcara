@@ -3,6 +3,7 @@ use crate::ast::{
     Term as AletheTerm, TermPool,
 };
 use itertools::Itertools;
+use rug::Integer;
 use std::borrow::Borrow;
 use std::collections::VecDeque;
 use std::ops::Deref;
@@ -154,13 +155,15 @@ pub enum Term {
     TermId(String),
     Terms(Vec<Term>),
     Function(Vec<Term>),
-    /// Lambdapi can only represent Nat in its AST
     Nat(u32),
+    Int(Integer),
     Underscore,
 }
 
 macro_rules! underscore {
-    () => { Term::Underscore };
+    () => {
+        Term::Underscore
+    };
 }
 
 pub(crate) use underscore;
@@ -224,7 +227,8 @@ impl VisitorArgs for Term {
                 ts.iter_mut().for_each(|t| t.visit(mapping));
             }
             Term::Alethe(t) => t.visit(mapping),
-            t => todo!("{}", t),
+            Term::Nat(_) | Term::Int(_) => {}
+            t => todo!("visitor {:?}", t),
         }
     }
 }
@@ -256,6 +260,7 @@ impl fmt::Display for Term {
                 )
             }
             Term::Nat(n) => write!(f, "{}", n),
+            Term::Int(i) => write!(f, "{}", i),
             Term::Underscore => write!(f, "_"),
         }
     }
@@ -372,9 +377,9 @@ pub fn conv(term: &Rc<AletheTerm>, ctx: &crate::lambdapi::Context) -> Term {
             }
             AletheTerm::Var(id, _term) => Term::TermId(id.to_string()),
             AletheTerm::Const(c) => match c {
-                Constant::Integer(i) => Term::Nat(i.to_u32().unwrap()), //FIXME: better support of number
+                Constant::Integer(i) => Term::Int(i.clone()),
                 Constant::String(s) => Term::from(s),
-                c => unimplemented!("{}", c),
+                c => unimplemented!("Constant {}", c),
             },
             e => todo!("{:#?}", e),
         },
@@ -473,9 +478,9 @@ impl From<&Rc<AletheTerm>> for Term {
             }
             AletheTerm::Var(id, _term) => Term::TermId(id.to_string()),
             AletheTerm::Const(c) => match c {
-                Constant::Integer(i) => Term::Nat(i.to_u32().unwrap()), //FIXME: better support of number
+                Constant::Integer(i) => Term::Int(i.clone()),
                 Constant::String(s) => Term::from(s),
-                c => unimplemented!("{}", c),
+                c => unimplemented!("Constant {}", c),
             },
             e => todo!("{:#?}", e),
         }
@@ -575,6 +580,7 @@ pub enum LTerm {
     Iff(Box<Term>, Box<Term>),
     Eq(Box<Term>, Box<Term>),
     Clauses(Vec<Term>),
+    ClassicProof(Box<Term>),
     Proof(Box<Term>),
     Resolution(
         bool,
@@ -711,6 +717,7 @@ impl fmt::Display for LTerm {
                 write!(f, "({}) = ({})", l, r)
             }
             LTerm::Proof(t) => write!(f, "π ({})", t),
+            LTerm::ClassicProof(t) => write!(f, "πᶜ ({})", t),
             LTerm::Resolution(pivot_position, pivot, a, b, h1, h2) => {
                 if *pivot_position {
                     write!(f, "resolutionₗ ")?;
@@ -928,4 +935,26 @@ mod tests_term {
 
         clause.visit(&mut ctx);
     }
+
+    use crate::parser::tests::parse_terms;
+    use crate::ast::{pool::PrimitivePool, TermPool};
+
+    fn conv_term(definitions: &str, term: &str) -> Rc<AletheTerm> {
+        let mut pool = PrimitivePool::new();
+        let [t] = parse_terms(&mut pool, definitions, [term]);     
+        t
+    }
+
+    #[test]
+    fn test_arith() {
+        let definitions = "
+            (declare-sort Idv 0)
+            (declare-fun CONSTANT_i_ () Idv)
+            (declare-fun TLA_Proj_Int (Idv) Int)
+        ";
+        let t = "(= (>= (+ 1 (* -1 (TLA_Proj_Int CONSTANT_i_))) 1) (<= (- (+ 1 (* -1 (TLA_Proj_Int CONSTANT_i_)))) (- 1))))";
+        let tp: Term = conv_term(definitions, t).into();
+        println!("{}", tp); 
+    }
+
 }

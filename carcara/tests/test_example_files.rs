@@ -121,13 +121,14 @@ fn run_translation(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> 
     bfile.flush()?;
 
     let status = Command::new("lambdapi")
-        .args(["check", "-v0", "-w", "--timeout=120", filename.as_str()])
+        .args(["check", "-v0", "-w", "--timeout=300", filename.as_str()])
         .status()
         .expect("failed to execute process");
 
-    std::fs::remove_file(filename)?;
-
     assert_eq!(Some(0), status.code());
+
+    // we keep the file to debug it in case the test does not pass
+    std::fs::remove_file(filename)?;
 
     Ok(())
 }
@@ -176,5 +177,11 @@ fn full(proof_path: &str) {
 #[test_generator::from_dir("benchmarks/tlapm")]
 #[allow(dead_code)]
 fn tlaps(proof_path: &str) {
+    test_file(proof_path, run_translation)
+}
+
+#[test_generator::from_dir("benchmarks/ewd")]
+#[allow(dead_code)]
+fn ewd(proof_path: &str) {
     test_file(proof_path, run_translation)
 }

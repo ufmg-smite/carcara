@@ -34,7 +34,7 @@ pub enum ProofStep {
     Admit,
     Reflexivity,
     Try(Box<ProofStep>),
-    Rewrite(Option<String>, Term, Vec<Term>),
+    Rewrite(bool, Option<String>, Term, Vec<Term>),
     Symmetry,
     Simplify,
 }
@@ -161,7 +161,7 @@ impl fmt::Display for ProofStep {
             ProofStep::Admit => write!(f, "admit;"),
             ProofStep::Reflexivity => write!(f, "simplify; reflexivity;"),
             ProofStep::Try(t) => write!(f, "try {}", t),
-            ProofStep::Rewrite(pattern, hyp, args) => {
+            ProofStep::Rewrite(_flag, pattern, hyp, args) => {
                 let pattern = pattern.as_ref().map_or("", |p| p.as_str());
                 let args = args
                     .iter()

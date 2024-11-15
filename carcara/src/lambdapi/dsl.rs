@@ -85,11 +85,11 @@ macro_rules! tactic {
         tactic![ $steps, $( $body )+ ]
     };
     ($steps:ident, rewrite .$pattern:tt $i:tt  $( ( $($args:tt) + ) ) * ; $($body:tt)+) => {
-        $steps.push(ProofStep::Rewrite(Some($pattern.to_string()), Term::from($i), vec![ $( make_term![  $( $args )+ ] , )* ]));
+        $steps.push(ProofStep::Rewrite(false, Some($pattern.to_string()), Term::from($i), vec![ $( make_term![  $( $args )+ ] , )* ]));
         tactic![ $steps, $( $body )+ ]
     };
     ($steps:ident, rewrite $i:tt  $( ( $($args:tt) + ) ) * ; $($body:tt)+) => {
-        $steps.push(ProofStep::Rewrite(None, Term::from($i), vec![ $( make_term![  $( $args )+ ] , )* ]));
+        $steps.push(ProofStep::Rewrite(false, None, Term::from($i), vec![ $( make_term![  $( $args )+ ] , )* ]));
         tactic![ $steps, $( $body )+ ]
     };
     ($steps:ident, $code:block ; $($body:tt)*) => {  $steps.append(&mut $code) ; tactic![ $steps, $(  $body )* ]  };

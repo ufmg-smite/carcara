@@ -14,6 +14,7 @@ inductive prop: TYPE ≔
 | pAnd: prop → prop → prop
 | pOr: prop → prop → prop
 | pImpl: prop → prop → prop
+//| pNot: prop → prop
 | pOther: ℕ → prop
 ;
 
@@ -35,6 +36,7 @@ with propD _ pFalse ↪ ⊥
 with propD $ctx (pAnd $x $y) ↪  (propD $ctx $x) ∧ (propD $ctx $y)
 with propD $ctx (pOr $x $y) ↪  (propD $ctx $x) ∨ (propD $ctx $y)
 with propD $ctx (pImpl $x $y) ↪  (propD $ctx $x) ⇒ (propD $ctx $y)
+//with propD $ctx (pNot $x) ↪  ¬ (propD $ctx $x)
 with propD $ctx (pOther $i) ↪ nth not_found $ctx $i;
 
 private symbol a: Prop;
@@ -69,8 +71,8 @@ assert ⊢ prop_eq (pOr (pOther 0) (pOther 1)) (pOr (pOther 1) (pOther 0)) ≡ f
 opaque symbol prop_eq_sound (a b: prop): π (istrue (prop_eq a b)) → π (a = b)  ≔
 begin
     induction
-    { induction { reflexivity } { assume H; apply ⊥ₑ H; } { assume b' H c' H2 H3; apply ⊥ₑ H3 }  { assume b' H c' H2 H3; apply ⊥ₑ H3 } { assume b' H c' H2 H3; apply ⊥ₑ H3 } { assume idx H;  apply ⊥ₑ H } } 
-    { induction { assume H; apply ⊥ₑ H; } { reflexivity }  { assume b' H c' H2 H3; apply ⊥ₑ H3 }  { assume b' H c' H2 H3; apply ⊥ₑ H3 } { assume b' H c' H2 H3; apply ⊥ₑ H3 } { assume idx H;  apply ⊥ₑ H } } 
+    { induction { reflexivity } { assume H; apply ⊥ₑ H; } { assume b' H c' H2 H3; apply ⊥ₑ H3 }  { assume b' H c' H2 H3; apply ⊥ₑ H3 } { assume b' H c' H2 H3; apply ⊥ₑ H3 }  { assume idx H;  apply ⊥ₑ H } } 
+    { induction { assume H; apply ⊥ₑ H; } { reflexivity }  { assume b' H c' H2 H3; apply ⊥ₑ H3 }  { assume b' H c' H2 H3; apply ⊥ₑ H3 } { assume b' H c' H2 H3; apply ⊥ₑ H3 }  { assume idx H;  apply ⊥ₑ H } } 
     {
         assume a' H b' H2;
         //assume c Hc;
@@ -80,6 +82,7 @@ begin
         { assume c' H' d' H2' H3; apply ⊥ₑ H3; }
         { assume c' H' d' H2';  assume H3; apply ⊥ₑ H3; }
         { assume c' H' d' H2';  assume H3; apply ⊥ₑ H3; }
+        //{ assume x H3 H4; apply ⊥ₑ H4 }
         { assume i;  assume H3; apply ⊥ₑ H3; }
     }
     {
@@ -90,6 +93,7 @@ begin
         { assume c' H' d' H2';  assume H3; apply ⊥ₑ H3; }
         { assume c' H' d' H2' H3; apply ⊥ₑ H3 }
         { assume c' H' d' H2';  assume H3; apply ⊥ₑ H3; }
+        //{ assume x H3 H4; apply ⊥ₑ H4 }
         { assume i;  assume H3; apply ⊥ₑ H3; }
     }
     {
@@ -100,8 +104,20 @@ begin
         { assume c' H' d' H2';  assume H3; apply ⊥ₑ H3; }
         { assume c' H' d' H2';  assume H3; apply ⊥ₑ H3; }
         { assume c' H' d' H2' H3; apply ⊥ₑ H3 }
+        //{ assume x H3 H4; apply ⊥ₑ H4 }
         { assume i;  assume H3; apply ⊥ₑ H3; }
     }
+    // {
+    //     assume x H;
+    //     induction
+    //     { assume H2; apply ⊥ₑ H2 }
+    //     { assume H2; apply ⊥ₑ H2 }
+    //     { assume c' H' d' H2';  assume H3; apply ⊥ₑ H3; }
+    //     { assume c' H' d' H2';  assume H3; apply ⊥ₑ H3; }
+    //     { assume c' H' d' H2' H3; apply ⊥ₑ H3 }
+    //     { assume x' H3 H4; apply ⊥ₑ H4  }
+    //     { assume x' H2; apply ⊥ₑ H2 }
+    // }
     {
         assume i;
         induction
@@ -110,6 +126,7 @@ begin
         { assume x; assume H x' H2 Hbot; apply ⊥ₑ Hbot; }
         { assume x; assume H x' H2 Hbot; apply ⊥ₑ Hbot; }
         { assume x; assume H x' H2 Hbot; apply ⊥ₑ Hbot; }
+        //{ assume x H3 H4; apply ⊥ₑ H4 }
         {
             assume j;
             assume H;
@@ -130,6 +147,13 @@ with learn $p $c ↪ $p ⸬ $c; //HACK: for simplicity
 symbol provable (goal: prop) (known: 𝕃 propS) : 𝔹;
 rule provable pTrue _ ↪ true
 with provable pFalse $known ↪ knows pFalse $known
+// with provable (pNot pTrue) $known ↪ false
+// with provable (pNot pFalse) $known ↪ true
+// with provable (pNot (pAnd $l $r)) $known ↪ not ((provable $l $known) and (provable $r $known))
+// with provable (pNot (pOr $l $r)) $known ↪ not (provable $l $known) or (provable $r $known)
+// with provable (pNot (pImpl $l $r)) $known ↪ not (provable $r (learn $l $known))
+// with provable (pNot (pNot $x)) $known ↪ not (not (provable $x $known))
+// with provable (pNot (pOther $x)) $known ↪ not (provable (pOther $x) $known)
 with provable (pAnd $l $r) $known ↪ (provable $l $known) and (provable $r $known)
 with provable (pOr $l $r) $known ↪ (provable $l $known) or (provable $r $known)
 with provable (pImpl $l $r) $known ↪ provable $r (learn $l $known)
@@ -168,6 +192,13 @@ opaque symbol learn_sound (ctx: 𝕃 o) (p: prop) (c: 𝕃 propS): π (propD ctx
         { refine H3 }
         { refine H2 }
     }
+    // {
+    //     simplify;
+    //     assume p H H2 H3 HD;
+    //     apply ∧ᵢ 
+    //     { refine HD }
+    //     { refine H3 }
+    // }
     {
         assume i Γ H1 H2;
         apply ∧ᵢ { refine H2 } { refine H1 }
@@ -194,6 +225,16 @@ begin
     { assume h; apply ⊥ₑ (false≠true  h); }
   }
   {  assume q h;  apply ⊥ₑ (false≠true  h) }
+end;
+
+opaque symbol not_and_true_iff [p q] : π(not (p and q) = true) → π(not p = true ∨ not q = true) ≔
+begin
+    admit
+end;
+
+opaque symbol not_true_iff [p] : π(not p = true) → π(p = false) ≔
+begin
+    admit
 end;
 
 opaque symbol or_true_iff [p q] : π((p or q) = true) → π(p = true ∨ q = true) ≔
@@ -236,6 +277,35 @@ begin
         { apply Ha }
         { apply H2 }
     }
+    //{
+        //admit
+        // induction
+        // { simplify; assume IH hyps Hrefl σ Hσ H1; apply ⊥ₑ (false≠true Hrefl) }
+        // { simplify; assume IH hyps Hrefl σ Hσ H1; refine H1 }
+        // {
+        //     simplify; assume a IHa b IHb H ctx Hrefl σ H3 Haandb;
+        //     have G: π (not (provable a ctx) = true ∨ not (provable b ctx) = true)
+        //     {
+        //         refine (@not_and_true_iff (provable a ctx) (provable b ctx) Hrefl)
+        //     };
+        //     apply ∨ₑ G
+        //     {
+        //         simplify;
+        //         assume Ha;
+        //         have G2: π (provable a ctx = false) {
+        //             apply not_true_iff Ha
+        //         };
+        //         have G3: π ((provable a ctx and provable b ctx) = true) {
+
+        //         };
+        //     }
+        //     { }
+        // }
+        // {admit}
+        // {admit}
+        // {admit}
+        // {admit}       
+    //}
     {
        assume i hyps IH σ H2;
        have G: π ((∈ prop_eq (pOther i) hyps = true)  ∨ (∈ prop_eq pFalse hyps = true) ) {
@@ -261,6 +331,7 @@ with peq $x $y ↪ false;
 sequential symbol allVars : τ (list o) → Prop →  τ (list o);
 rule allVars $σ ⊤ ↪ $σ
 with allVars $σ ⊥ ↪ $σ
+with allVars $σ (¬ $x) ↪ (allVars $σ $x)
 with allVars $σ ($l ∧ $r) ↪
     let σ' ≔ (allVars $σ $l) in 
     (allVars σ' $r)
@@ -273,7 +344,7 @@ with allVars $σ ($l ⇒ $r) ↪
 with allVars $σ $t ↪ if (∈ (peq) $t $σ) $σ ($t ⸬ $σ)
 ;
 
-assert ⊢ (allVars □ (a ∧ b ∧ ⊤ ∧ ⊥ ∧ a ∨ b)) ≡ b ⸬ a ⸬ □;
+assert ⊢ (allVars □ (a ∧ (¬ b ) ∧ ⊤ ∧ ⊥ ∧ a ∨ b)) ≡ b ⸬ a ⸬ □;
 
 sequential symbol reifybis : 𝕃 o  →  Prop → prop;
 rule reifybis $σ ⊤ ↪ pTrue

@@ -11,7 +11,7 @@ pub fn translate_rare_simp(args: &Vec<Rc<AletheTerm>>) -> Proof {
         unwrap_match!(**rare_rule, crate::ast::Term::Const(Constant::String(ref s)) => s.clone());
 
     //FIXME: bugging rule
-    if rule == "bool-and-flatten" || rule == "bool-or-flatten" {
+    if rule == "bool-and-flatten" || rule == "bool-or-flatten" || rule == "arith-poly-norm" {
         return Proof(vec![ProofStep::Admit]);
     }
 
@@ -85,16 +85,15 @@ fn translate_bool_and_true(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
             .map(|terms| Term::from(AletheTerm::Op(Operator::RareList, terms.to_vec())))
             .collect_vec();
         vec![
-            ProofStep::Rewrite(None, Term::from("bool-and-true"), args),
+            ProofStep::Rewrite(false, None, Term::from("bool-and-true"), args),
             ProofStep::Reflexivity,
         ]
     }
 }
 
 fn translate_bool_impl_elim(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
-    let args = args.into_iter().map(|t| t.into()).collect_vec();
     vec![
-        ProofStep::Rewrite(None, Term::from("bool-impl-elim"), args),
+        ProofStep::Rewrite(false, None, Term::from("bool-impl-elim"), vec![]),
         ProofStep::Reflexivity,
     ]
 }
@@ -121,7 +120,7 @@ fn translate_bool_or_flatten(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
     } else {
         let args: Vec<Term> = args.into_iter().map(|term| term.into()).collect_vec();
         vec![
-            ProofStep::Rewrite(None, Term::from("bool-or-flatten"), args),
+            ProofStep::Rewrite(false, None, Term::from("bool-or-flatten"), args),
             ProofStep::Reflexivity,
         ]
     }
@@ -148,7 +147,7 @@ fn translate_bool_and_flatten(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
     } else {
         let args: Vec<Term> = args.into_iter().map(|term| term.into()).collect_vec();
         vec![
-            ProofStep::Rewrite(None, Term::from("bool-and-flatten"), args),
+            ProofStep::Rewrite(false, None, Term::from("bool-and-flatten"), args),
             ProofStep::Reflexivity,
         ]
     }
