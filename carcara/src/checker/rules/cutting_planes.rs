@@ -203,7 +203,7 @@ pub fn cp_multiplication(RuleArgs { premises, args, conclusion, .. }: RuleArgs) 
 
     // Check there is exactly one arg
     assert_num_args(args, 1)?;
-    let scalar: Integer = args[0].as_term()?.as_integer_err()?;
+    let scalar: Integer = args[0].as_integer_err()?;
 
     // Check there is exactly one conclusion
     assert_clause_len(conclusion, 1)?;
@@ -244,7 +244,7 @@ pub fn cp_division(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
 
     // Check there is exactly one arg
     assert_num_args(args, 1)?;
-    let divisor: Integer = args[0].as_term()?.as_integer_err()?;
+    let divisor: Integer = args[0].as_integer_err()?;
 
     // Check there is exacly one conclusion
     assert_clause_len(conclusion, 1)?;
