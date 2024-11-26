@@ -14,6 +14,6 @@ pub fn drup(
 
     match check_drup(pool, conclusion, premises.as_slice(), args) {
         Ok(_) => Ok(()),
-        Err(err) => Err(CheckerError::DratFormatError(err))
+        Err(err) => Err(CheckerError::DrupFormatError(err))
     }
 }

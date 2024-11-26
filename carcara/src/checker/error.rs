@@ -24,7 +24,7 @@ pub enum CheckerError {
 
     // Rule specific errors
     #[error(transparent)]
-    DratFormatError(#[from] crate::drup::DratFormatError),
+    DrupFormatError(#[from] crate::drup::DrupFormatError),
 
     #[error(transparent)]
     Cong(#[from] CongruenceError),

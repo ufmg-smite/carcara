@@ -5,7 +5,7 @@ use crate::drup::*;
 use indexmap::IndexSet;
 use std::collections::HashMap;
 
-pub fn elaborate_drat(
+pub fn elaborate_drup(
     pool: &mut PrimitivePool,
     _: &mut ContextStack,
     step: &StepNode,
@@ -49,7 +49,7 @@ pub fn elaborate_drat(
     );
 
     if let Err(err) = trace {
-        return Err(CheckerError::DratFormatError(err));
+        return Err(CheckerError::DrupFormatError(err));
     }
 
     let premises: &mut HashMap<u64, _> = &mut step
@@ -110,15 +110,15 @@ pub fn elaborate_drat(
                 match &resolutions[resolutions.len() - 1] {
                     ResolutionStep::Resolvent(_, _, (resolvent, _, _)) => {
                         if resolvent.len() > 0 {
-                            return Err(CheckerError::DratFormatError(
-                                DratFormatError::NoFinalBottomInDrup,
+                            return Err(CheckerError::DrupFormatError(
+                                DrupFormatError::NoFinalBottomInDrup,
                             ));
                         }
                     }
                     ResolutionStep::UnChanged(resolvent, _) => {
                         if resolvent.len() > 0 {
-                            return Err(CheckerError::DratFormatError(
-                                DratFormatError::NoFinalBottomInDrup,
+                            return Err(CheckerError::DrupFormatError(
+                                DrupFormatError::NoFinalBottomInDrup,
                             ));
                         }
                     }

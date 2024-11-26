@@ -161,7 +161,7 @@ impl<'e> Elaborator<'e> {
                 "eq_transitive" => transitivity::eq_transitive,
                 "trans" => transitivity::trans,
                 "resolution" | "th_resolution" => resolution::resolution,
-                "drup" => drup::elaborate_drat,
+                "drup" => drup::elaborate_drup,
                 _ => return None,
             })
         }

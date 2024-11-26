@@ -483,7 +483,7 @@ impl<'c> ProofChecker<'c> {
             "re_unfold_neg_concat_fixed_prefix" => strings::re_unfold_neg_concat_fixed_prefix,
             "re_unfold_neg_concat_fixed_suffix" => strings::re_unfold_neg_concat_fixed_suffix,
 
-            // Drat format rules
+            // Drup format rules
             "drup" => drup::drup,
 
             // Special rules that always check as valid, and are used to indicate holes in the

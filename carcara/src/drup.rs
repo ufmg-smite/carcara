@@ -27,7 +27,7 @@ pub enum DRupProofAction<'a> {
 pub type DRupStory<'a> = Vec<DRupProofAction<'a>>;
 
 #[derive(Debug, Error)]
-pub enum DratFormatError {
+pub enum DrupFormatError {
     #[error("couldn't find conclusion term in the premise clauses")]
     NoConclusionInPremise,
     #[error(
@@ -165,7 +165,7 @@ fn get_implied_clause<'a>(
 
 fn rup<'a>(
     pool: &mut dyn TermPool,
-    drat_clauses: &HashMap<u64, IndexSet<(bool, &'a Rc<Term>)>>,
+    drup_clauses: &HashMap<u64, IndexSet<(bool, &'a Rc<Term>)>>,
     goal: &'a [Rc<Term>],
 ) -> Option<RupAdition<'a>> {
     let mut unit_story: RupAdition<'a> = vec![];
@@ -187,7 +187,7 @@ fn rup<'a>(
         ));
     }
 
-    for (key, clause) in drat_clauses {
+    for (key, clause) in drup_clauses {
         let mut watched_literals = clause.iter().take(2);
         clauses.push((
             (
@@ -221,7 +221,7 @@ pub fn check_drup<'a>(
     conclusion: &'a[Rc<Term>],
     premises: &[&'a [Rc<Term>]],
     args: &'a[Rc<Term>],
-) -> Result<DRupStory<'a>, DratFormatError> {
+) -> Result<DRupStory<'a>, DrupFormatError> {
     let mut premises: HashMap<u64, _> = premises
         .iter()
         .map(|p| {
@@ -252,7 +252,7 @@ pub fn check_drup<'a>(
         let unit_history = rup(pool, premises.borrow(), terms);
 
         if unit_history == None {
-            return Err(DratFormatError::NoFinalBottomInDrup);
+            return Err(DrupFormatError::NoFinalBottomInDrup);
         }
 
         let terms_indexed_set = terms
@@ -269,7 +269,7 @@ pub fn check_drup<'a>(
     }
 
     if !premises.contains_key(&hash_term(pool, conclusion)) {
-        return Err(DratFormatError::NoConclusionInPremise);
+        return Err(DrupFormatError::NoConclusionInPremise);
     }
 
     Ok(drup_history)
