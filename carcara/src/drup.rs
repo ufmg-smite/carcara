@@ -70,11 +70,6 @@ pub fn hash_term<T: Borrow<Rc<Term>>>(pool: &mut dyn TermPool, term: &[T]) -> u6
     return hash;
 }
 
-// PRECONDITION : For each schema in clauses,
-// If schema.0 is None, |clause| = 0
-// If schema.1 is not None, so schema.0 is not None
-// If schema.1 is None, |clause| = 1
-// If schema.0 and schema.1 is not None, so |clause| >= 2
 fn get_implied_clause<'a>(
     clauses: &mut Vec<(
         (Option<(bool, Rc<Term>)>, Option<(bool, Rc<Term>)>),
@@ -173,13 +168,6 @@ fn rup<'a>(
     drat_clauses: &HashMap<u64, IndexSet<(bool, &'a Rc<Term>)>>,
     goal: &'a [Rc<Term>],
 ) -> Option<RupAdition<'a>> {
-    // PREPARE THE ENV BY SELECTING FOR EACH CLAUSE TWO LITERALS
-    // EACH LITERAL HAS A WATCHED LIST
-    // USE A RANK TO SELECT THE WATCHED LITERALS, USE THE MOST FTEN LITERALS IN ALL CLAUSES
-    // SELECT A UNIT LITERAL BY LOOKING FOR EACH WATCHED LITERAL ITS WATCHED LIST, IF WATCHED LIST LITERAL SIZE IS 1
-    // IF SO, USE BCP AND CONTINUE, UPDATE THE SIZE OF WATCHED LIST
-    // IF THERE IS NOT UNIT CLAUSE, RETURN FALSE
-
     let mut unit_story: RupAdition<'a> = vec![];
 
     let mut clauses: Vec<(
@@ -219,8 +207,6 @@ fn rup<'a>(
             }
             Implied::Pivot(literal, clause) => {
                 env.insert(literal.clone(), true);
-                // Remove the negated literal from all clauses that contain it
-                // TODO : THIS can not exist becuase it is O(n), we only have to save &literal is false somewhere
                 let negated_literal = (!literal.0, literal.1.clone());
                 env.insert(negated_literal.clone(), false);
                 unit_story.push((clause.0, Some((literal.0, literal.1)), clause.1));
