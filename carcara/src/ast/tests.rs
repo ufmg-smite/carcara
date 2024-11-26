@@ -1,5 +1,5 @@
 use crate::{
-    ast::{pool::PrimitivePool, Polyeq, PolyeqComparator, TermPool},
+    ast::{node::ProofNode, pool::PrimitivePool, Polyeq, TermPool},
     parser::tests::parse_terms,
 };
 use indexmap::IndexSet;
@@ -49,14 +49,11 @@ fn test_polyeq() {
         for (i, (a, b)) in cases.iter().enumerate() {
             let [a, b] = parse_terms(&mut pool, definitions, [a, b]);
             let mut comp = match test_type {
-                TestType::ModReordering => PolyeqComparator::new(true, false, false),
-                TestType::AlphaEquiv => PolyeqComparator::new(true, true, false),
-                TestType::ModNary => PolyeqComparator::new(false, false, true),
+                TestType::ModReordering => Polyeq::new().mod_reordering(true),
+                TestType::AlphaEquiv => Polyeq::new().mod_reordering(true).alpha_equiv(true),
+                TestType::ModNary => Polyeq::new().mod_nary(true),
             };
-            assert!(
-                Polyeq::eq(&mut comp, &a, &b),
-                "test case #{i} failed: `{a}` != `{b}`"
-            );
+            assert!(comp.eq(&a, &b), "test case #{i} failed: `{a}` != `{b}`");
         }
     }
     let definitions = "
@@ -101,8 +98,8 @@ fn test_polyeq() {
                 "(choice ((a Int)) (forall ((b Int)) (exists ((c Int)) (= a b c))))",
             ),
             (
-                "(let ((x 0) (y (+ x 2)) (z (< x y))) (and z (= x y)))",
-                "(let ((z 0) (x (+ z 2)) (y (< z x))) (and y (= z x)))",
+                "(let ((x 0)) (let ((y (+ x 2))) (let ((z (< x y))) (and z (= x y)))))",
+                "(let ((z 0)) (let ((x (+ z 2))) (let ((y (< z x))) (and y (= z x)))))",
             ),
         ],
         TestType::AlphaEquiv,
@@ -124,4 +121,44 @@ fn test_polyeq() {
         ],
         TestType::ModNary,
     );
+}
+
+#[test]
+fn test_node() {
+    use crate::parser::tests::*;
+
+    let original = "
+        (assume h0 (= 0 0))
+        (assume h1 (= 1 1))
+        (assume h2 (= 2 2))
+        (step t3 (cl true) :rule blah :premises (h0 h2))
+        (step t4 (cl true) :rule blah)
+        (anchor :step t5)
+            (assume t5.h1 (= 3 3))
+            (step t5.t2 (cl true) :rule blah :premises (t4))
+            (step t5.t3 (cl true) :rule blah)
+            (step t5.t4 (cl true) :rule blah)
+            (step t5 (cl true) :rule blah :premises (t5.t2) :discharge (t5.h1))
+        (step t6 (cl) :rule blah :premises (t3 t5))
+    ";
+    let expected = "
+        (assume h0 (= 0 0))
+        (assume h2 (= 2 2))
+        (step t3 (cl true) :rule blah :premises (h0 h2))
+        (step t4 (cl true) :rule blah)
+        (anchor :step t5)
+            (step t5.t2 (cl true) :rule blah :premises (t4))
+            (assume t5.h1 (= 3 3))
+            (step t5.t4 (cl true) :rule blah)
+            (step t5 (cl true) :rule blah :premises (t5.t2) :discharge (t5.h1))
+        (step t6 (cl) :rule blah :premises (t3 t5))
+    ";
+    let mut pool = PrimitivePool::new();
+    let original = parse_proof(&mut pool, original);
+
+    let expected = parse_proof(&mut pool, expected);
+
+    let node = ProofNode::from_commands(original.commands);
+    let got = node.into_commands();
+    assert_eq!(expected.commands, got);
 }

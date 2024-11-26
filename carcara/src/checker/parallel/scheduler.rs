@@ -400,7 +400,7 @@ pub fn get_step_weight(step: &ProofCommand) -> u64 {
                 "symm" => 682,
                 "not_symm" => 0, //-1
                 "eq_symmetric" => 673,
-                "or_intro" => 508,
+                "weakening" => 508,
                 "bind_let" => 2324,
                 "la_mult_pos" => 1446,
                 "la_mult_neg" => 1447,

@@ -1,6 +1,7 @@
 use carcara::{
+    ast,
     benchmarking::{CollectResults, CsvBenchmarkResults, RunMeasurement},
-    checker, parser, CarcaraOptions,
+    checker, elaborator, parser,
 };
 use crossbeam_queue::ArrayQueue;
 use std::{
@@ -21,13 +22,13 @@ struct JobDescriptor<'a> {
 fn run_job<T: CollectResults + Default + Send>(
     results: &mut T,
     job: JobDescriptor,
-    options: &CarcaraOptions,
-    elaborate: bool,
+    parser_config: parser::Config,
+    checker_config: checker::Config,
+    elaborator_config: Option<(elaborator::Config, Vec<elaborator::ElaborationStep>)>,
 ) -> Result<bool, carcara::Error> {
     let proof_file_name = job.proof_file.to_str().unwrap();
     let mut checker_stats = checker::CheckerStatistics {
         file_name: proof_file_name,
-        elaboration_time: Duration::ZERO,
         polyeq_time: Duration::ZERO,
         assume_time: Duration::ZERO,
         assume_core_time: Duration::ZERO,
@@ -37,35 +38,31 @@ fn run_job<T: CollectResults + Default + Send>(
     let total = Instant::now();
 
     let parsing = Instant::now();
-    let config = parser::Config {
-        apply_function_defs: options.apply_function_defs,
-        expand_lets: options.expand_lets,
-        allow_int_real_subtyping: options.allow_int_real_subtyping,
-        allow_unary_logical_ops: !options.strict,
-    };
-    let (prelude, proof, mut pool) = parser::parse_instance(
+    let (problem, proof, mut pool) = parser::parse_instance(
         BufReader::new(File::open(job.problem_file)?),
         BufReader::new(File::open(job.proof_file)?),
-        config,
+        parser_config,
     )?;
     let parsing = parsing.elapsed();
 
-    let config = checker::Config::new()
-        .strict(options.strict)
-        .ignore_unknown_rules(options.ignore_unknown_rules)
-        .lia_options(options.lia_options.clone());
-    let mut checker = checker::ProofChecker::new(&mut pool, config, &prelude);
+    let mut checker = checker::ProofChecker::new(&mut pool, checker_config);
 
     let checking = Instant::now();
 
-    let checking_result = if elaborate {
-        checker
-            .check_and_elaborate_with_stats(proof, &mut checker_stats)
-            .map(|(is_holey, _)| is_holey)
-    } else {
-        checker.check_with_stats(&proof, &mut checker_stats)
-    };
+    let checking_result = checker.check_with_stats(&problem, &proof, &mut checker_stats);
     let checking = checking.elapsed();
+
+    let (elaboration, pipeline_durations) = if let Some((config, pipeline)) = elaborator_config {
+        let elaboration = Instant::now();
+        let node = ast::ProofNode::from_commands(proof.commands);
+        let (elaborated, pipeline_durations) =
+            elaborator::Elaborator::new(&mut pool, &problem, config)
+                .elaborate_with_stats(&node, pipeline);
+        elaborated.into_commands();
+        (elaboration.elapsed(), pipeline_durations)
+    } else {
+        (Duration::ZERO, Vec::new())
+    };
 
     let total = total.elapsed();
 
@@ -74,12 +71,13 @@ fn run_job<T: CollectResults + Default + Send>(
         RunMeasurement {
             parsing,
             checking,
-            elaboration: checker_stats.elaboration_time,
+            elaboration,
             scheduling: Duration::ZERO,
             total,
             polyeq: checker_stats.polyeq_time,
             assume: checker_stats.assume_time,
             assume_core: checker_stats.assume_core_time,
+            elaboration_pipeline: pipeline_durations,
         },
     );
     *results = checker_stats.results;
@@ -88,13 +86,21 @@ fn run_job<T: CollectResults + Default + Send>(
 
 fn worker_thread<T: CollectResults + Default + Send>(
     jobs_queue: &ArrayQueue<JobDescriptor>,
-    options: &CarcaraOptions,
-    elaborate: bool,
+    parser_config: parser::Config,
+    checker_config: checker::Config,
+    elaborator_config: Option<(elaborator::Config, Vec<elaborator::ElaborationStep>)>,
 ) -> T {
     let mut results = T::default();
 
     while let Some(job) = jobs_queue.pop() {
-        match run_job(&mut results, job, options, elaborate) {
+        let result = run_job(
+            &mut results,
+            job,
+            parser_config,
+            checker_config.clone(),
+            elaborator_config.clone(),
+        );
+        match result {
             Ok(true) => results.register_holey(),
             Err(e) => {
                 log::error!("encountered error in file '{}'", job.proof_file.display());
@@ -111,8 +117,9 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
     instances: &[(PathBuf, PathBuf)],
     num_runs: usize,
     num_jobs: usize,
-    options: &CarcaraOptions,
-    elaborate: bool,
+    parser_config: parser::Config,
+    checker_config: checker::Config,
+    elaborator_config: Option<(elaborator::Config, Vec<elaborator::ElaborationStep>)>,
 ) -> T {
     const STACK_SIZE: usize = 128 * 1024 * 1024;
 
@@ -136,9 +143,13 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
         #[allow(clippy::needless_collect)]
         let workers: Vec<_> = (0..num_jobs)
             .map(|_| {
+                let checker_config = checker_config.clone();
+                let elaborator_config = elaborator_config.clone();
                 thread::Builder::new()
                     .stack_size(STACK_SIZE)
-                    .spawn_scoped(s, move || worker_thread(jobs_queue, options, elaborate))
+                    .spawn_scoped(s, move || {
+                        worker_thread(jobs_queue, parser_config, checker_config, elaborator_config)
+                    })
                     .unwrap()
             })
             .collect();
@@ -151,17 +162,25 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
     })
 }
 
+#[allow(clippy::too_many_arguments)] // TODO: refactor this
 pub fn run_csv_benchmark(
     instances: &[(PathBuf, PathBuf)],
     num_runs: usize,
     num_jobs: usize,
-    options: &CarcaraOptions,
-    elaborate: bool,
+    parser_config: parser::Config,
+    checker_config: checker::Config,
+    elaborator_config: Option<(elaborator::Config, Vec<elaborator::ElaborationStep>)>,
     runs_dest: &mut dyn io::Write,
-    by_rule_dest: &mut dyn io::Write,
+    steps_dest: &mut dyn io::Write,
 ) -> io::Result<()> {
-    let result: CsvBenchmarkResults =
-        run_benchmark(instances, num_runs, num_jobs, options, elaborate);
+    let result: CsvBenchmarkResults = run_benchmark(
+        instances,
+        num_runs,
+        num_jobs,
+        parser_config,
+        checker_config,
+        elaborator_config,
+    );
     println!(
         "{} errors encountered during benchmark",
         result.num_errors()
@@ -173,5 +192,5 @@ pub fn run_csv_benchmark(
     } else {
         println!("valid");
     }
-    result.write_csv(runs_dest, by_rule_dest)
+    result.write_csv(runs_dest, steps_dest)
 }

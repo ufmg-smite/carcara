@@ -47,14 +47,13 @@ pub fn not_symm(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
 }
 
 pub fn eq_symmetric(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
-    assert_clause_len(conclusion, 2)?;
-    let (t_1, u_1) = match_term_err!((not (= t u)) = &conclusion[0])?;
-    let (u_2, t_2) = match_term_err!((= u t) = &conclusion[1])?;
+    assert_clause_len(conclusion, 1)?;
+    let ((t_1, u_1), (u_2, t_2)) = match_term_err!((= (= t u) (= u t)) = &conclusion[0])?;
     assert_eq(t_1, t_2)?;
     assert_eq(u_1, u_2)
 }
 
-pub fn or_intro(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+pub fn weakening(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_num_premises(premises, 1)?;
     let premise = premises[0].clause;
     assert_clause_len(conclusion, premise.len()..)?;
@@ -278,18 +277,18 @@ mod tests {
                 (declare-fun b () T)
             ",
             "Simple working examples" {
-                "(step t1 (cl (not (= b a)) (= a b)) :rule eq_symmetric)": true,
-                "(step t1 (cl (not (= a a)) (= a a)) :rule eq_symmetric)": true,
+                "(step t1 (cl (= (= b a) (= a b))) :rule eq_symmetric)": true,
+                "(step t1 (cl (= (= a a) (= a a))) :rule eq_symmetric)": true,
             }
             "Failing examples" {
-                "(step t1 (cl (not (= a b)) (= a b)) :rule eq_symmetric)": false,
-                "(step t1 (cl (not (= a b)) (not (= b a))) :rule eq_symmetric)": false,
+                "(step t1 (cl (= (= a b) (= a b))) :rule eq_symmetric)": false,
+                "(step t1 (cl (= (not (= a b)) (not (= b a)))) :rule eq_symmetric)": false,
             }
         }
     }
 
     #[test]
-    fn or_intro() {
+    fn weakening() {
         test_cases! {
             definitions = "
                 (declare-fun a () Bool)
@@ -298,17 +297,17 @@ mod tests {
             ",
             "Simple working examples" {
                 "(step t1 (cl a b) :rule hole)
-                (step t2 (cl a b c) :rule or_intro :premises (t1))": true,
+                (step t2 (cl a b c) :rule weakening :premises (t1))": true,
 
                 "(step t1 (cl) :rule hole)
-                (step t2 (cl a b) :rule or_intro :premises (t1))": true,
+                (step t2 (cl a b) :rule weakening :premises (t1))": true,
             }
             "Failing examples" {
                 "(step t1 (cl a b) :rule hole)
-                (step t2 (cl a c b) :rule or_intro :premises (t1))": false,
+                (step t2 (cl a c b) :rule weakening :premises (t1))": false,
 
                 "(step t1 (cl a b c) :rule hole)
-                (step t2 (cl a b) :rule or_intro :premises (t1))": false,
+                (step t2 (cl a b) :rule weakening :premises (t1))": false,
             }
         }
     }

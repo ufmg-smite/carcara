@@ -2,7 +2,6 @@ pub mod scheduler;
 
 use super::{
     error::{CheckerError, SubproofError},
-    lia_generic,
     rules::{Premise, RuleArgs, RuleResult},
     Config, ProofChecker,
 };
@@ -63,7 +62,12 @@ impl<'c> ParallelProofChecker<'c> {
         }
     }
 
-    pub fn check(&mut self, proof: &Proof, scheduler: &Scheduler) -> CarcaraResult<bool> {
+    pub fn check(
+        &mut self,
+        problem: &Problem,
+        proof: &Proof,
+        scheduler: &Scheduler,
+    ) -> CarcaraResult<bool> {
         // Used to estimulate threads to abort prematurely (only happens when a
         // thread already found out an invalid step)
         let premature_abort = Arc::new(AtomicBool::new(false));
@@ -85,6 +89,7 @@ impl<'c> ParallelProofChecker<'c> {
                         .stack_size(self.stack_size)
                         .spawn_scoped(s, move || -> CarcaraResult<(bool, bool)> {
                             local_self.worker_thread_check(
+                                problem,
                                 proof,
                                 schedule,
                                 local_pool,
@@ -131,6 +136,7 @@ impl<'c> ParallelProofChecker<'c> {
 
     pub fn check_with_stats<CR: CollectResults + Send + Default>(
         &mut self,
+        problem: &Problem,
         proof: &Proof,
         scheduler: &Scheduler,
         stats: &mut CheckerStatistics<CR>,
@@ -148,7 +154,6 @@ impl<'c> ParallelProofChecker<'c> {
                 .map(|(i, schedule)| {
                     let mut local_stats = CheckerStatistics {
                         file_name: "",
-                        elaboration_time: Duration::ZERO,
                         polyeq_time: Duration::ZERO,
                         assume_time: Duration::ZERO,
                         assume_core_time: Duration::ZERO,
@@ -167,6 +172,7 @@ impl<'c> ParallelProofChecker<'c> {
                             move || -> CarcaraResult<(bool, bool, CheckerStatistics<CR>)> {
                                 local_self
                                     .worker_thread_check(
+                                        problem,
                                         proof,
                                         schedule,
                                         local_pool,
@@ -198,7 +204,6 @@ impl<'c> ParallelProofChecker<'c> {
                             stats.results = CR::combine(main, to_merge);
 
                             // Make sure other times are updated
-                            stats.elaboration_time += local_stats.elaboration_time;
                             stats.polyeq_time += local_stats.polyeq_time;
                             stats.assume_time += local_stats.assume_time;
                             stats.assume_core_time += local_stats.assume_core_time;
@@ -229,6 +234,7 @@ impl<'c> ParallelProofChecker<'c> {
 
     fn worker_thread_check<CR: CollectResults + Send + Default>(
         &mut self,
+        problem: &Problem,
         proof: &Proof,
         schedule: &Schedule,
         mut pool: LocalPool,
@@ -306,7 +312,7 @@ impl<'c> ParallelProofChecker<'c> {
                     }
                 }
                 ProofCommand::Assume { id, term } => {
-                    if !self.check_assume(id, term, &proof.premises, &iter, &mut stats) {
+                    if !self.check_assume(id, term, &problem.premises, &iter, &mut stats) {
                         // Signalize to other threads to stop the proof checking
                         should_abort.store(true, Ordering::Release);
                         return Err(Error::Checker {
@@ -357,29 +363,34 @@ impl<'c> ParallelProofChecker<'c> {
             return true;
         }
 
-        if self.config.strict {
+        if self.config.elaborated {
             return false;
         }
 
-        let mut found = None;
+        let mut found = false;
         let mut polyeq_time = Duration::ZERO;
         let mut core_time = Duration::ZERO;
 
         for p in premises {
             let mut this_polyeq_time = Duration::ZERO;
-            let (result, depth) = tracing_polyeq_mod_nary(term, p, &mut this_polyeq_time);
+
+            let mut comp = Polyeq::new().mod_reordering(true).mod_nary(true);
+            let result = comp.eq_with_time(term, p, &mut this_polyeq_time);
+            let depth = comp.max_depth();
+
             polyeq_time += this_polyeq_time;
+
             if let Some(s) = &mut stats {
                 s.results.add_polyeq_depth(depth);
             }
             if result {
                 core_time = this_polyeq_time;
-                found = Some(p.clone());
+                found = true;
                 break;
             }
         }
 
-        if found.is_none() {
+        if !found {
             return false;
         }
 
@@ -410,56 +421,45 @@ impl<'c> ParallelProofChecker<'c> {
             return Err(CheckerError::Subproof(SubproofError::DischargeInWrongRule));
         }
 
-        if step.rule == "lia_generic" {
-            if let Some(options) = &self.config.lia_options {
-                let is_hole =
-                    lia_generic::lia_generic_multi_thread(&step.clause, self.prelude, options);
-                self.is_holey = self.is_holey || is_hole;
-            } else {
-                log::warn!("encountered \"lia_generic\" rule, ignoring");
+        let rule = match ProofChecker::get_rule(&step.rule, self.config.elaborated) {
+            Some(r) => r,
+            None if self.config.ignore_unknown_rules => {
                 self.is_holey = true;
+                return Ok(());
             }
-        } else {
-            let rule = match ProofChecker::get_rule(&step.rule, self.config.strict) {
-                Some(r) => r,
-                None if self.config.ignore_unknown_rules => {
-                    self.is_holey = true;
-                    return Ok(());
-                }
-                None => return Err(CheckerError::UnknownRule),
-            };
+            None => return Err(CheckerError::UnknownRule),
+        };
 
-            if step.rule == "hole" {
-                self.is_holey = true;
-            }
-
-            let premises: Vec<_> = step
-                .premises
-                .iter()
-                .map(|&p| {
-                    let command = iter.get_premise(p);
-                    Premise::new(p, command)
-                })
-                .collect();
-            let discharge: Vec<_> = step
-                .discharge
-                .iter()
-                .map(|&i| iter.get_premise(i))
-                .collect();
-
-            let rule_args = RuleArgs {
-                conclusion: &step.clause,
-                premises: &premises,
-                args: &step.args,
-                pool,
-                context: &mut self.context,
-                previous_command,
-                discharge: &discharge,
-                polyeq_time: &mut polyeq_time,
-            };
-
-            rule(rule_args)?;
+        if step.rule == "hole" || step.rule == "lia_generic" {
+            self.is_holey = true;
         }
+
+        let premises: Vec<_> = step
+            .premises
+            .iter()
+            .map(|&p| {
+                let command = iter.get_premise(p);
+                Premise::new(p, command)
+            })
+            .collect();
+        let discharge: Vec<_> = step
+            .discharge
+            .iter()
+            .map(|&i| iter.get_premise(i))
+            .collect();
+
+        let rule_args = RuleArgs {
+            conclusion: &step.clause,
+            premises: &premises,
+            args: &step.args,
+            pool,
+            context: &mut self.context,
+            previous_command,
+            discharge: &discharge,
+            polyeq_time: &mut polyeq_time,
+        };
+
+        rule(rule_args)?;
 
         if iter.is_end_step() {
             let subproof = iter.current_subproof().unwrap();

@@ -9,5 +9,5 @@
 (step t1 (cl a (not c) d) :rule or :premises (a1))
 (step t2 (cl (not d) e) :rule or :premises (a2))
 (step t3 (cl (not d) (not e)) :rule or :premises (a3))
-(step t4 (cl a b) :rule drat :premises (t0 t1 t2 t3) :args ((cl a b)))
-(step t10 (cl) :rule resolution :premises (t4 a4 a5))
+(step t4 (cl a b) :rule drup :premises (t0 t1 t2 t3) :args ((cl a b)))
+(step t10 (cl) :rule drup :premises (t4 a4 a5) :args ((cl)))
