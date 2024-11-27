@@ -67,11 +67,13 @@ pub fn and(RuleArgs { conclusion, premises, args, .. }: RuleArgs) -> RuleResult 
 
     let and_term = get_premise_term(&premises[0])?;
     let and_contents = match_term_err!((and ...) = and_term)?;
+    let i = args[0].as_usize_err()?;
 
-    assert_eq(
-        &conclusion[0],
-        &and_contents[args[0].as_integer().unwrap().to_usize().unwrap()],
-    )
+    if i >= and_contents.len() {
+        return Err(CheckerError::NoIthChildInTerm(i, and_term.clone()));
+    }
+
+    assert_eq(&conclusion[0], &and_contents[i])
 }
 
 pub fn not_or(RuleArgs { conclusion, premises, args, .. }: RuleArgs) -> RuleResult {
@@ -82,11 +84,13 @@ pub fn not_or(RuleArgs { conclusion, premises, args, .. }: RuleArgs) -> RuleResu
     let or_term = get_premise_term(&premises[0])?;
     let or_contents = match_term_err!((not (or ...)) = or_term)?;
     let conclusion = conclusion[0].remove_negation_err()?;
+    let i = args[0].as_usize_err()?;
 
-    assert_eq(
-        conclusion,
-        &or_contents[args[0].as_integer().unwrap().to_usize().unwrap()],
-    )
+    if i >= or_contents.len() {
+        return Err(CheckerError::NoIthChildInTerm(i, or_term.clone()));
+    }
+
+    assert_eq(conclusion, &or_contents[i])
 }
 
 pub fn or(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {

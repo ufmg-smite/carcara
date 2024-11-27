@@ -36,11 +36,13 @@ pub fn and_pos(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
     assert_num_args(args, 1)?;
 
     let and_contents = match_term_err!((not (and ...)) = &conclusion[0])?;
+    let i = args[0].as_usize_err()?;
 
-    assert_eq(
-        &conclusion[1],
-        &and_contents[args[0].as_integer().unwrap().to_usize().unwrap()],
-    )
+    if i >= and_contents.len() {
+        return Err(CheckerError::NoIthChildInTerm(i, conclusion[0].clone()));
+    }
+
+    assert_eq(&conclusion[1], &and_contents[i])
 }
 
 pub fn and_neg(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
@@ -74,11 +76,13 @@ pub fn or_neg(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
 
     let or_contents = match_term_err!((or ...) = &conclusion[0])?;
     let other = conclusion[1].remove_negation_err()?;
+    let i = args[0].as_usize_err()?;
 
-    assert_eq(
-        other,
-        &or_contents[args[0].as_integer().unwrap().to_usize().unwrap()],
-    )
+    if i >= or_contents.len() {
+        return Err(CheckerError::NoIthChildInTerm(i, conclusion[0].clone()));
+    }
+
+    assert_eq(other, &or_contents[i])
 }
 
 pub fn xor_pos1(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {

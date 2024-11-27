@@ -71,6 +71,9 @@ pub enum CheckerError {
     #[error("cannot evaluate the fixed length of the term '{0}'")]
     LengthCannotBeEvaluated(Rc<Term>),
 
+    #[error("No {0}-th child in term {1}")]
+    NoIthChildInTerm(usize, Rc<Term>),
+
     // General errors
     #[error("expected {0} premises, got {1}")]
     WrongNumberOfPremises(Range, usize),
@@ -116,6 +119,9 @@ pub enum CheckerError {
 
     #[error("expected term '{0}' to be an integer constant")]
     ExpectedAnyInteger(Rc<Term>),
+
+    #[error("expected term '{0}' to be an non-negative integer constant")]
+    ExpectedNonnegInteger(Rc<Term>),
 
     #[error("expected operation term, got '{0}'")]
     ExpectedOperationTerm(Rc<Term>),

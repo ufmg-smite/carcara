@@ -808,6 +808,16 @@ impl Rc<Term> {
             .ok_or_else(|| CheckerError::ExpectedAnyInteger(self.clone()))
     }
 
+    /// Similar to `Term::as_integer_err`, but also checks if non-negative.
+    pub fn as_usize_err(&self) -> Result<usize, CheckerError> {
+        if let Some(i) = self.as_integer() {
+            if i >= 0 {
+                return Ok(i.to_usize().unwrap());
+            }
+        }
+        return Err(CheckerError::ExpectedNonnegInteger(self.clone()));
+    }
+
     /// Similar to `Term::as_signed_number`, but returns a `CheckerError` on failure.
     pub fn as_signed_number_err(&self) -> Result<Rational, CheckerError> {
         self.as_signed_number()
