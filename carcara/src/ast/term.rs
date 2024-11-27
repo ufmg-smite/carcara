@@ -815,7 +815,7 @@ impl Rc<Term> {
                 return Ok(i.to_usize().unwrap());
             }
         }
-        return Err(CheckerError::ExpectedNonnegInteger(self.clone()));
+        Err(CheckerError::ExpectedNonnegInteger(self.clone()))
     }
 
     /// Similar to `Term::as_signed_number`, but returns a `CheckerError` on failure.
