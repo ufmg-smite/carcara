@@ -128,7 +128,7 @@ fn run_translation(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> 
     assert_eq!(Some(0), status.code());
 
     // we keep the file to debug it in case the test does not pass
-    std::fs::remove_file(filename)?;
+    //std::fs::remove_file(filename)?;
 
     Ok(())
 }

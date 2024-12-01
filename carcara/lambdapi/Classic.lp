@@ -330,11 +330,13 @@ end;
 
 symbol ¬ᶜ p : πᶜ (p ⇒ᶜ ⊥); notation ¬ᶜ prefix 20;
 
-// symbol neg_bot : πᶜ (¬ ⊥) ≔
-// begin
-//   simplify;
-
-// end;
+// Intuitionistic truth implies Classical truth
+symbol IL_imp_Cl (p: Prop): π p → πᶜ p ≔
+begin
+assume p Hp Hnp;
+apply Hnp;
+refine Hp
+end;
 
 opaque πᶜ;
 opaque ∧ᶜ;

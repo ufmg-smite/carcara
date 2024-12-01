@@ -27,15 +27,6 @@ builtin "eqind" ≔ ind_eqᶜ; // : Π [a] x y, P(x = y) → Π p:T a → Prop, 
 symbol ⤳: Set → Set → Set; notation ⤳ infix right 20;
 rule τ ($a ⤳ $b) ↪ τ $a →  τ $b;
 
-// symbol ind_Prop :
-// Π p: (Prop → Prop),
-// πᶜ (p ⊤) →
-// πᶜ (p ⊥) →
-// (Π x: Prop, πᶜ (p x) → πᶜ (p (¬ x))) →
-// (Π x: Prop, πᶜ (p x) → Π y: Prop, πᶜ (p y) → πᶜ (p (x ∧ᶜ y))) →
-// (Π x: Prop, πᶜ (p x) → Π y: Prop, πᶜ (p y) → πᶜ (p (x ∨ᶜ y))) →
-// Π x: Prop, πᶜ (p x);
-
 // testing symbols
 private symbol a: Prop;
 private symbol b: Prop;
@@ -1281,8 +1272,9 @@ end;
 
 // symbol 𝑰 [a]: ℕ → τ a; 
 
-symbol eq : Prop → Prop → 𝔹;
-rule eq $x $x ↪ true;
+sequential symbol eq : Prop → Prop → 𝔹;
+rule eq $x $x ↪ true
+with eq $x $y ↪ false;
 
 sequential symbol In_∧ᶜ: Prop → Prop → 𝔹;
 rule In_∧ᶜ $x ($h ∧ᶜ $tl) ↪ (eq $x $h)  Stdlib.Bool.or (In_∧ᶜ $x $tl)
@@ -1692,6 +1684,7 @@ builtin "or"  ≔ ∨ᶜ;
 builtin "not" ≔ ¬;
 builtin "all" ≔ ∀ᶜ;
 builtin "ex"  ≔ ∃ᶜ;
+builtin "iff"  ≔ ⇔ᶜ;
 
 opaque symbol cong_or [t1 t2 u1 u2: τ o]: π̇ (t1 = u1 ⟇ ▩) → π̇ (t2 = u2 ⟇ ▩) → π̇ (t1 ∨ᶜ t2 = u1 ∨ᶜ u2 ⟇ ▩) ≔
 begin
@@ -1735,123 +1728,6 @@ associative commutative symbol Or : Mexp → Mexp → Mexp;
 constant symbol Epsilon : Mexp;
 symbol Var : 𝔹 → Prop → Mexp;
 
-// rule Or (Var true $t) (Var false $t) ↪ Epsilon
-// with Or (Var false $t) (Var true $t) ↪ Epsilon
-// with Or (Var true $t) (Or (Var false $t) $y) ↪ $y
-// with Or (Var false $t) (Or (Var true $t) $y) ↪ $y
-// with Or Epsilon Epsilon ↪ Epsilon
-// with Or Epsilon (Var false ⊥) ↪ Epsilon
-// with Or Epsilon (Or Epsilon $x) ↪ Or Epsilon $x
-// with Or Epsilon (Or (Var false ⊥) $x) ↪ $x
-// ;
-
-// rule (Var false (¬ $t)) ↪ (Var true $t)
-// with (Var true (¬ $t)) ↪ (Var false $t)
-// with (Var false ($t ⇒ ⊥)) ↪ (Var true $t)
-// with (Var true ($t ⇒ ⊥)) ↪ (Var false $t)
-// ;
-
-// symbol eval : Mexp → τ o;
-// rule eval Epsilon ↪ ⊥
-// with eval (Var true $t) ↪ $t
-// with eval (Var false $t) ↪  ¬ $t
-// with eval (Or $x $y) ↪ (eval $x) ∨ᶜ (eval $y)
-// ;
-
-// sequential symbol reify : Prop → Mexp;
-// rule reify (($x ∨ᶜ $z) ∨ᶜ $y) ↪ Or (Var true (($x ∨ᶜ $z))) (reify $y)
-// with reify ($x ∨ᶜ $y) ↪ Or (reify $x) (reify $y)
-// with reify ⊥ ↪ Epsilon
-// with reify (¬ $t) ↪ (Var false $t)
-// with reify ($t ⇒ ⊥) ↪ (Var false $t)
-// with reify $t ↪ (Var true $t)
-// ;
-
-// // private symbol xx ≔ (a ∨ᶜ b);
-// // private symbol yy ≔ ¬ (a ∨ᶜ b );
-
-// // compute reify ((a ∨ᶜ b) ∨ᶜ a ∨ᶜ ⊤ ∨ᶜ (¬ (a ∨ᶜ b)) ∨ᶜ (a ∨ᶜ b) ∨ᶜ (¬ ⊥) ∨ᶜ ⊥ ∨ᶜ (¬ ⊥) ∨ᶜ (¬ ⊤) ∨ᶜ (¬ (a ∨ᶜ b)) ∨ᶜ ⊥);
-
-
-// symbol ind_Prop :
-//     Π x: τ o,
-//     Π p: (τ o → Prop),
-//     πᶜ (p ⊤) →
-//     πᶜ (p ⊥) 
-//     → (Π x0: τ o, πᶜ (p x0) → πᶜ (p (¬ x0)))
-//     → (Π x0: τ o, πᶜ (p x0) → Π x1: τ o, πᶜ (p x1) → πᶜ (p (x0 ∧ x1)))
-//     → (Π x0: τ o, πᶜ (p x0) → Π x1: τ o, πᶜ (p x1) → πᶜ (p (x0 ∨ x1)))
-//     → πᶜ (p x);
-
-// symbol reify_inj (a b: τ o) : πᶜ ((eval (reify (a ∨ᶜ ⊥)) = (eval (reify (b ∨ᶜ ⊥)))) ⇒ᶜ ((a ∨ᶜ ⊥) = (b ∨ᶜ ⊥))) ≔
-// begin
-//     assume a b;
-//     apply ind_Prop a (λ u, (eval (reify (u ∨ᶜ ⊥)) = (eval (reify (b ∨ᶜ ⊥)))) ⇒ᶜ ((u ∨ᶜ ⊥) = (b ∨ᶜ ⊥)))
-//     {
-//       simplify;
-//       apply ⇒ᶜᵢ; assume H;
-//       rewrite or_com;
-//       rewrite or_com b;
-//       apply H
-//     }
-//     {
-//         simplify;
-//         apply ⇒ᶜᵢ; assume H;
-//         rewrite or_identity_l;
-//         rewrite or_com;
-//         apply H
-//     }
-//     {
-//         assume x IH; simplify;
-//         apply ⇒ᶜᵢ; assume H;
-//         rewrite or_com;
-//         rewrite or_com b;
-//         apply H
-//     }
-//     { 
-//         assume x IH1 y IH2;
-//         simplify;
-//         apply ⇒ᶜᵢ; assume H;
-//         rewrite or_com;
-//         rewrite or_com b;
-//         apply H
-//     }
-//     {
-//         assume x IH1 y IH2;
-//         simplify;
-//         apply ⇒ᶜᵢ; assume H;
-//         rewrite or_com;
-//         rewrite or_com b;
-//         apply H
-//     }
-// end;
-
-// symbol reify_inj2 [a b: τ o] : πᶜ ((eval (reify (a ∨ᶜ ⊥))) = eval (reify (b ∨ᶜ ⊥))) →  πᶜ (a = b) ≔
-// begin
-//   assume a b H;
-//   rewrite left  or_identity_r a;
-//   rewrite left  or_identity_r b;
-//   refine (⇒ᶜₑ (reify_inj a b) H); 
-// end;
-
-// symbol reify_inj3 [a b: τ o] : πᶜ ((reify (a ∨ᶜ ⊥)) = reify (b ∨ᶜ ⊥)) →  πᶜ (a = b) ≔
-// begin
-//   admit
-// end;
-
-// opaque symbol pack [a b] : π̇ a → π̇ b → π̇ (a ++ b) ≔ begin
-//     assume a b Ha Hb; 
-//     simplify;
-//     apply Clause_ind (λ u, ⟇_to_∨ᶜ_rw (u ++ b)) a
-//     { simplify; apply Hb  }
-//     {
-//         assume x l IH;
-//         simplify;
-//         apply ∨ᶜᵢ₂;
-//         apply IH
-//     }
-// end;
-
 rule Or (Var true $t) (Var false $t) ↪ Epsilon
 with Or (Var false $t) (Var true $t) ↪ Epsilon
 with Or (Var true $t) (Or (Var false $t) $y) ↪ $y
@@ -1867,13 +1743,6 @@ with (Var false ($t ⇒ ⊥)) ↪ (Var true $t)
 with (Var true ($t ⇒ ⊥)) ↪ (Var false $t)
 ;
 
-symbol eval : Mexp → τ o;
-rule eval (Var true $t) ↪ $t
-with eval (Var false $t) ↪  ¬ $t
-with eval (Or $x $y) ↪ (eval $x) ∨ᶜ (eval $y)
-with eval Epsilon ↪ ⊥
-;
-
 sequential symbol reify : Prop → Mexp;
 rule reify (($x ∨ᶜ $z) ∨ᶜ $y) ↪ Or (Var true (($x ∨ᶜ $z))) (reify $y)
 with reify ($x ∨ᶜ $y) ↪ Or (reify $x) (reify $y)
@@ -1881,11 +1750,6 @@ with reify (¬ $t) ↪ (Var false $t)
 with reify ($t ⇒ ⊥) ↪ (Var false $t)
 with reify $t ↪ (Var true $t)
 ;
-
-private symbol xx ≔ (a ∨ᶜ b);
-private symbol yy ≔ ¬ (a ∨ᶜ b );
-
-compute reify (xx ∨ᶜ (¬ ⊥) ∨ᶜ yy ∨ᶜ ⊥);
 
 symbol ind_Prop :
     Π x: τ o,
@@ -1897,57 +1761,151 @@ symbol ind_Prop :
     → (Π x0: τ o, πᶜ (p x0) → Π x1: τ o, πᶜ (p x1) → πᶜ (p (x0 ∨ x1)))
     → πᶜ (p x);
 
-symbol reify_inj (a b: τ o) : πᶜ ((eval (reify (a ∨ᶜ ⊥)) = (eval (reify (b ∨ᶜ ⊥)))) ⇒ᶜ ((a ∨ᶜ ⊥) = (b ∨ᶜ ⊥))) ≔
+symbol eqb: 𝔹 → 𝔹 → 𝔹;
+rule eqb true true ↪ true
+with eqb true false ↪ false
+with eqb false true ↪ false
+with eqb false false ↪ true
+;
+
+symbol =c: Mexp → Mexp → 𝔹; notation =c infix 10;
+rule (Var $b1 $x) =c (Var $b2 $y) ↪ (eq $x $y) Stdlib.Bool.and (eqb $b1 $b2)
+with Epsilon =c Epsilon ↪ true
+with Epsilon =c (Var _ _) ↪ false
+with Epsilon =c Or _ _ ↪ false
+with (Var _ _) =c Epsilon ↪ false
+with (Or _ _) =c Epsilon ↪ false
+with (Or $a $b)  =c (Or $c $d) ↪ ($a =c $c) Stdlib.Bool.and ($b =c $d)
+;
+
+
+sequential symbol reifyC  : Clause → Mexp;
+rule reifyC (($x ⇒ ⊥) ⟇ $y) ↪ Or (Var false $x) (reifyC $y)
+with reifyC ($x ⟇ $y) ↪ Or (Var true $x) (reifyC $y)
+with reifyC ▩ ↪ Epsilon
+;
+
+opaque symbol eq_correct:  πᶜ (`∀ᶜ x, `∀ᶜ y, istrue (eq x y) ⇒ᶜ x = y) ≔
+begin apply ∀ᶜᵢ; assume x; apply ∀ᶜᵢ; assume y; simplify; apply ⇒ᶜᵢ; assume Heq; apply ⊥ᶜₑ Heq end; //FIXME: stop RW
+
+opaque symbol eq_complete:  πᶜ (`∀ᶜ x, `∀ᶜ y, (x = y) ⇒ᶜ istrue (eq x y)) ≔
 begin
-    assume a b;
-    apply ind_Prop a (λ u, (eval (reify (u ∨ᶜ ⊥)) = (eval (reify (b ∨ᶜ ⊥)))) ⇒ᶜ ((u ∨ᶜ ⊥) = (b ∨ᶜ ⊥)))
-    {
-      simplify;
-      apply ⇒ᶜᵢ; assume H;
-      apply H
-    }
-    {
-        simplify;
-        apply ⇒ᶜᵢ; assume H;
-        apply H
-    }
-    {
-        assume x IH; simplify;
-        apply ⇒ᶜᵢ; assume H;
-        apply H
-    }
-    { 
-        assume x IH1 y IH2;
-        simplify;
-        apply ⇒ᶜᵢ; assume H;
-        rewrite or_com;
-        apply H
-    }
-    {
-        assume x IH1 y IH2;
-        simplify;
-        apply ⇒ᶜᵢ; assume H;
-        rewrite or_com;
-        apply H
-    }
+  apply ∀ᶜᵢ; assume x; apply ∀ᶜᵢ; assume y;
+  apply ⇒ᶜᵢ; assume Hxeqy;
+  rewrite Hxeqy;
+  apply trivial
 end;
 
-symbol reify_inj2 [a b: τ o] : πᶜ ((eval (reify (a ∨ᶜ ⊥))) = eval (reify (b ∨ᶜ ⊥))) →  πᶜ (a = b) ≔
-begin
-  assume a b H;
-  rewrite left  or_identity_r a;
-  rewrite left  or_identity_r b;
-  refine (⇒ᶜₑ (reify_inj a b) H); 
-end;
-
-symbol reify_inj3 [a b: τ o] : πᶜ ((reify (a ∨ᶜ ⊥)) = reify (b ∨ᶜ ⊥)) →  πᶜ (a = b) ≔
+opaque symbol and_elim1 [p q : τ bool] : πᶜ (istrue (p Stdlib.Bool.and q)) → πᶜ (istrue p) ≔
 begin
   admit
 end;
 
+opaque symbol and_elim2 [p q : τ bool] : πᶜ (istrue (p Stdlib.Bool.and q)) → πᶜ (istrue q) ≔
+begin
+  admit
+end;
+
+opaque symbol eq_clause [x y: Clause] : πᶜ (x = y) → π̇ x  → π̇ y ≔
+begin
+    simplify;
+    assume x y H H1;
+    rewrite left H;
+    apply H1
+end;
+
+symbol ind_ℂ : Π p: (Clause → Prop), πᶜ (p ▩) → (Π x0: τ o, Π x1: Clause, πᶜ (p x1) → πᶜ (p (x0 ⟇ x1))) → πᶜ (`∀ᶜ (x: τ clause), p x);
+
+opaque symbol reify_correct :  πᶜ (`∀ᶜ x, `∀ᶜ y, istrue ( eq x y ) ⇒ᶜ x = y) →  πᶜ (`∀ᶜ a: τ clause, `∀ᶜ b: τ clause,  (istrue (reifyC a =c reifyC b)) ⇒ᶜ a = b) ≔
+begin
+  assume eq_correct;
+  refine ind_ℂ (λ u, `∀ᶜ b, (istrue (reifyC u =c reifyC b)) ⇒ᶜ (u = b)) _ _
+  {
+    refine ind_ℂ (λ u, (istrue (reifyC ▩ =c reifyC u)) ⇒ᶜ (▩ = u)) _ _
+    { apply ⇒ᶜᵢ; reflexivity }
+    {  assume x xs H; simplify; apply ⇒ᶜᵢ; assume ▩≠⟇; apply ⊥ᶜₑ ▩≠⟇ }
+  }
+  {
+    assume x xs IH;
+    refine ind_ℂ (λ u, (istrue (reifyC (x ⟇ xs) =c reifyC u)) ⇒ᶜ ((x ⟇ xs) = u)) _ _
+    { simplify; simplify; apply ⇒ᶜᵢ; assume ▩≠⟇; apply ⊥ᶜₑ ▩≠⟇ }
+    {
+      assume y ys _; apply ⇒ᶜᵢ; assume H;
+      refine (@feq2ᶜ o clause clause (⟇) x y _ xs ys _)
+      { 
+        apply ⇒ᶜₑ (∀ᶜₑ y (∀ᶜₑ x eq_correct));
+        apply (@and_elim2 (reifyC xs =c reifyC ys) (eq x y Stdlib.Bool.and eqb true true) H);
+      }
+      {
+        refine ⇒ᶜₑ (∀ᶜₑ ys IH) (@and_elim1 (reifyC xs =c reifyC ys) (eq x y Stdlib.Bool.and eqb true true) H);
+      }
+    }
+  }
+end;
+
+symbol reify_correct2 [a b: Clause]:   πᶜ (((reifyC a) =c (reifyC b)) = true) → πᶜ (a = b) ≔
+begin
+  assume a b H;
+  have G: πᶜ (istrue (reifyC a =c reifyC b)) → πᶜ (a = b) {
+    refine  ⇒ᶜₑ (∀ᶜₑ b (∀ᶜₑ a (reify_correct eq_correct)));
+  };
+  apply G;
+  rewrite H;
+  apply trivial
+end;
+
+// head
+
+symbol head : τ o → Clause → τ o;
+
+rule head $x ▩ ↪ $x
+with head _ ($x ⟇ _) ↪ $x;
+
+symbol behead  : Clause → Clause;
+
+rule behead ▩ ↪ ▩
+with behead (_ ⟇ $l) ↪ $l;
+
+opaque symbol ⟇_inj [x:τ o] [l y m] : πᶜ ((x ⟇ l) = (y ⟇ m)) → πᶜ ((x = y) ∧ᶜ (l = m)) ≔
+begin
+  assume x l y m e; apply ∧ᶜᵢ { apply feqᶜ (head x) e } { apply feqᶜ behead e }
+end;
+
+print istrue_and;
+symbol istrue_andᶜ : Π [p: 𝔹], Π [q: 𝔹], πᶜ (istrue p ∧ᶜ istrue q) → πᶜ (istrue (p Stdlib.Bool.and q));
+
+opaque symbol reify_complete : πᶜ (`∀ᶜ x, `∀ᶜ y, (x = y) ⇒ᶜ istrue (eq x y)) →  πᶜ (`∀ᶜ (a: τ clause), `∀ᶜ (b: τ clause), (a = b) ⇒ᶜ (istrue (reifyC a =c reifyC b))) ≔
+begin
+  assume eq_complete;
+   refine (ind_ℂ (λ u, `∀ᶜ b, (u = b) ⇒ᶜ istrue (reifyC u =c reifyC b)) _ _)
+   {
+      apply ∀ᶜᵢ; assume b;  apply ⇒ᶜᵢ; simplify; assume H▩=b; rewrite left H▩=b; simplify; apply trivial;
+   }
+   {
+      assume x xs h;
+      refine (ind_ℂ (λ u, ((x ⟇ xs) = u) ⇒ᶜ istrue (reifyC (x ⟇ xs) =c reifyC u)) _ _)
+      {
+        apply ⇒ᶜᵢ; assume Hxxs=▩; rewrite Hxxs=▩; apply trivial
+      }
+      {
+        assume y ys H;
+        apply ⇒ᶜᵢ;
+        assume H2;
+        have G: πᶜ ((x = y) ∧ᶜ (xs = ys)) { apply ⟇_inj H2 };
+        have G1: πᶜ (x = y ) { apply ∧ᶜₑ₁  G };
+        have G2: πᶜ (xs = ys) { apply ∧ᶜₑ₂  G };
+        simplify =c;
+        apply @istrue_andᶜ (reifyC xs =c reifyC ys) (Var true x =c Var true y);
+        apply ∧ᶜᵢ
+        { refine ⇒ᶜₑ (∀ᶜₑ ys h) G2 }
+        { simplify =c;   refine ⇒ᶜₑ (∀ᶜₑ y (∀ᶜₑ x eq_complete)) G1;  }
+      }
+   }
+end;
+
 opaque symbol pack [a b] : π̇ a → π̇ b → π̇ (a ++ b) ≔ begin
     assume a b Ha Hb; 
-    simplify;
+    simplify; 
     apply Clause_ind (λ u, ⟇_to_∨ᶜ_rw (u ++ b)) a
     { simplify; apply Hb  }
     {
@@ -1958,5 +1916,64 @@ opaque symbol pack [a b] : π̇ a → π̇ b → π̇ (a ++ b) ≔ begin
     }
 end;
 
-
 notation ≥ infix 10;
+
+symbol ℂ: TYPE;
+symbol P: Prop → ℂ;
+associative commutative symbol ⊔: ℂ → ℂ → ℂ; notation ⊔ infix right 2;
+symbol ⬓: ℂ;
+
+symbol F: Clause → ℂ;
+
+rule F ($x ⟇ $xs) ↪ (P $x) ⊔ (F $xs)
+with F ▩ ↪ ⬓
+;
+
+sequential symbol  ⩦: ℂ → ℂ → 𝔹; notation ⩦ infix 11;
+rule (P $x) ⩦ (P $x) ↪ true
+with (P $x) ⩦ (P $y) ↪ false
+with ($x ⊔ $xs) ⩦ ($y ⊔ $ys) ↪ ($x ⩦ $y) Stdlib.Bool.and ($xs ⩦ $ys)
+with ⬓ ⩦ ⬓ ↪ true
+with ⬓ ⩦ (P _) ↪ false
+with (P _) ⩦ ⬓ ↪ false
+with (_ ⊔ _) ⩦ ⬓ ↪ false
+with ⬓ ⩦ (_ ⊔ _) ↪ false
+with (P _) ⩦ (_ ⊔ _) ↪ false
+with (_ ⊔ _) ⩦ (P _) ↪ false;
+
+constant symbol reify_inj [a b: Clause] : πᶜ ((F a ⩦ F b) = true) → πᶜ (a = b);
+
+symbol x1: Prop;
+symbol x2: Prop;
+symbol x4: Prop;
+symbol x5: Prop;
+
+symbol pivot: Prop;
+
+symbol y1: Prop;
+symbol y2: Prop;
+symbol y4: Prop;
+symbol y5: Prop;
+
+
+symbol a1: π̇ (x1 ⟇ (x2 ⟇ (pivot ⟇ (x4 ⟇ (x5 ⟇ ▩)))));
+symbol a2: π̇ (y1 ⟇ (y2 ⟇ ((¬ pivot) ⟇ (y4 ⟇ (y5 ⟇ ▩)))));
+
+symbol resolution x a b: π̇ (x ⟇ a) → π̇ ((¬ x) ⟇ b) → π̇ (a ++ b);
+
+
+symbol foo: π̇ (x1 ⟇ x2 ⟇ x4 ⟇ x5 ⟇ y1 ⟇ y2 ⟇ y4 ⟇ y5 ⟇ ▩) ≔
+begin
+have mvpivot: πᶜ ((x1 ⟇ x2 ⟇ pivot ⟇ x4 ⟇ x5 ⟇ ▩) = (pivot ⟇ x1 ⟇ x2 ⟇ x4 ⟇ x5 ⟇ ▩)) {
+  apply reify_inj;
+  simplify;
+  reflexivity
+};
+have mvpivot2: πᶜ ((y1 ⟇ y2 ⟇ ¬ pivot ⟇ y4 ⟇ y5 ⟇ ▩) = ((¬ pivot) ⟇ y1 ⟇ y2 ⟇ y4 ⟇ y5 ⟇ ▩)) {
+  apply reify_inj;
+  simplify;
+  reflexivity
+};
+apply (resolution _ _ _ (eq_clause mvpivot a1) (eq_clause mvpivot2 a2));
+end;
+
