@@ -884,7 +884,10 @@ fn nary_case(op: Operator) -> Option<NaryCase> {
         | Operator::BvSLe
         | Operator::BvSGt
         | Operator::BvSGe
-        | Operator::BvBbTerm
-        | Operator::RareList => None,
+        | Operator::BvBbTerm => None,
+
+        // Etc
+        Operator::RareList => None,
+        Operator::Apply => Some(NaryCase::LeftAssoc),
     }
 }

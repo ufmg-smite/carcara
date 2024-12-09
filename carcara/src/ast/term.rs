@@ -357,6 +357,9 @@ pub enum Operator {
     // Misc.
     /// The `rare-list` operator, used to represent RARE lists.
     RareList,
+
+    /// The `_` (apply) operator from SMT-LIB 2.7
+    Apply,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -474,6 +477,7 @@ impl_str_conversion_traits!(Operator {
     BvBbTerm: "bbterm",
 
     RareList: "rare-list",
+    Apply: "_"
 });
 
 impl_str_conversion_traits!(ParamOperator {

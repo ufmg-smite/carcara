@@ -474,6 +474,21 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 SortError::assert_all_eq(&sorts)?;
             }
             Operator::RareList => SortError::assert_all_eq(&sorts)?,
+            Operator::Apply => {
+                assert_num_args(&args, 2..)?;
+                let Sort::Function(func_sort) = sorts[0] else {
+                    unreachable!()
+                };
+                // The maximum number of arguments to the apply operator is the number of arguments
+                // the function can take (func_sort.len() - 1, due to the return sort), plus one
+                // since the function itself is also an argument.
+                let max_args = (func_sort.len() - 1) + 1;
+                assert_num_args(&args, 2..max_args + 1)?;
+
+                for (given, expected) in sorts[1..].iter().zip(func_sort) {
+                    SortError::assert_eq(expected.as_sort().unwrap(), given)?;
+                }
+            }
         }
         Ok(self.pool.add(Term::Op(op, args)))
     }
@@ -1398,46 +1413,61 @@ impl<'a, R: BufRead> Parser<'a, R> {
         Ok(inner)
     }
 
-    fn parse_indexed_operator(&mut self) -> CarcaraResult<(ParamOperator, Vec<Constant>)> {
-        let op_symbol = self.expect_symbol()?;
+    /// Parses a term starting with `(_`.
+    ///
+    /// If the term is also the head of an application, that is, it's part of a term starting with
+    /// `((_`, `is_nested_application` should be `true`, and this method will then also parse the
+    /// arguments for this application.
+    fn parse_underscore_term(&mut self, is_nested_application: bool) -> CarcaraResult<Rc<Term>> {
+        let head_pos = self.current_position;
+        if let Token::Symbol(s) = &self.current_token {
+            // Detect and handle the weird (_ bv...) case
+            if let Some(value) = s.strip_prefix("bv") {
+                if let Ok(bv_value) = value.parse::<Integer>() {
+                    self.next_token().unwrap(); // Consume `bv` token
+                    let mut op_args = self.parse_sequence(Self::parse_constant, true)?;
+                    op_args.insert(0, Constant::Integer(bv_value));
 
-        if let Some(value) = op_symbol.strip_prefix("bv") {
-            let parsed_value = value.parse::<Integer>().unwrap();
-            let args = self.parse_sequence(Self::parse_term, true)?;
-            let mut constant_args = Vec::new();
-            for arg in args {
-                if let Some(i) = arg.as_signed_integer() {
-                    constant_args.push(Constant::Integer(i));
-                } else {
-                    return Err(Error::Parser(
-                        ParserError::ExpectedIntegerConstant(arg.clone()),
-                        self.current_position,
-                    ));
+                    let args = if is_nested_application {
+                        self.parse_sequence(Self::parse_term, true)?
+                    } else {
+                        Vec::new()
+                    };
+
+                    return self
+                        .make_indexed_op(ParamOperator::BvConst, op_args, args)
+                        .map_err(|err| Error::Parser(err, head_pos));
                 }
             }
-            constant_args.insert(0, Constant::Integer(parsed_value));
-            return Ok((ParamOperator::BvConst, constant_args));
-        }
 
-        let op = ParamOperator::from_str(op_symbol.as_str()).map_err(|_| {
-            Error::Parser(
-                ParserError::InvalidIndexedOp(op_symbol),
-                self.current_position,
-            )
-        })?;
-        let args = self.parse_sequence(Self::parse_term, true)?;
-        let mut constant_args = Vec::new();
-        for arg in args {
-            if let Some(i) = arg.as_signed_integer() {
-                constant_args.push(Constant::Integer(i));
-            } else {
-                return Err(Error::Parser(
-                    ParserError::ExpectedIntegerConstant(arg.clone()),
-                    self.current_position,
-                ));
+            // Detect and handle the standard indexed operator case
+            if let Ok(op) = ParamOperator::from_str(s) {
+                self.next_token().unwrap(); // Consume operator token
+                let op_args = self.parse_sequence(Self::parse_constant, true)?;
+                let args = if is_nested_application {
+                    self.parse_sequence(Self::parse_term, true)?
+                } else {
+                    Vec::new()
+                };
+                return self
+                    .make_indexed_op(op, op_args, args)
+                    .map_err(|err| Error::Parser(err, head_pos));
             }
         }
-        Ok((op, constant_args))
+
+        // Otherwise, this is an application of the apply operator
+        let args = self.parse_sequence(Self::parse_term, true)?;
+        let apply_term = self
+            .make_op(Operator::Apply, args)
+            .map_err(|err| Error::Parser(err, head_pos))?;
+
+        if is_nested_application {
+            let args = self.parse_sequence(Self::parse_term, true)?;
+            self.make_app(apply_term, args)
+                .map_err(|err| Error::Parser(err, head_pos))
+        } else {
+            Ok(apply_term)
+        }
     }
 
     fn parse_qualified_operator(&mut self) -> CarcaraResult<(ParamOperator, Rc<Term>)> {
@@ -1570,11 +1600,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
             &Token::ReservedWord(reserved) => {
                 self.next_token()?;
                 match reserved {
-                    Reserved::Underscore => {
-                        let (op, op_args) = self.parse_indexed_operator()?;
-                        self.make_indexed_op(op, op_args, Vec::new())
-                            .map_err(|err| Error::Parser(err, head_pos))
-                    }
+                    Reserved::Underscore => self.parse_underscore_term(false),
                     Reserved::As => {
                         let (op, sort) = self.parse_qualified_operator()?;
                         self.make_qualified_op(op, sort, Vec::new())
@@ -1619,10 +1645,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 match self.current_token {
                     Token::ReservedWord(Reserved::Underscore) => {
                         self.next_token()?;
-                        let (op, op_args) = self.parse_indexed_operator()?;
-                        let args = self.parse_sequence(Self::parse_term, true)?;
-                        self.make_indexed_op(op, op_args, args)
-                            .map_err(|err| Error::Parser(err, head_pos))
+                        self.parse_underscore_term(true)
                     }
                     Token::ReservedWord(Reserved::As) => {
                         self.next_token()?;

@@ -198,6 +198,20 @@ impl PrimitivePool {
                 | Operator::ReOption
                 | Operator::ReRange => Sort::RegLan,
                 Operator::RareList => Sort::RareList,
+                Operator::Apply => {
+                    let func_sort = self.compute_sort(&args[0]);
+                    let Sort::Function(func_sort) = func_sort.as_sort().unwrap() else {
+                        unreachable!()
+                    };
+
+                    let num_given_args = args.len() - 1;
+                    let remaining = &func_sort[num_given_args..];
+                    match remaining {
+                        [] => unreachable!(),
+                        [single] => single.as_sort().unwrap().clone(),
+                        multiple => Sort::Function(multiple.to_vec()),
+                    }
+                }
             },
             Term::App(f, _) => {
                 match self.compute_sort(f).as_sort().unwrap() {

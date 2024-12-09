@@ -762,6 +762,81 @@ fn test_indexed_operators() {
 }
 
 #[test]
+fn test_apply_operator() {
+    let mut p = PrimitivePool::new();
+    let [int_sort, bool_sort, string_sort] =
+        [Sort::Int, Sort::Bool, Sort::String].map(|s| p.add(Term::Sort(s)));
+
+    let f = {
+        let sort = p.add(Term::Sort(Sort::Function(vec![
+            int_sort.clone(),
+            bool_sort.clone(),
+        ])));
+        p.add(Term::Var("f".into(), sort))
+    };
+    let g = {
+        let sort = p.add(Term::Sort(Sort::Function(vec![
+            int_sort.clone(),
+            bool_sort,
+            string_sort,
+        ])));
+        p.add(Term::Var("g".into(), sort))
+    };
+    let g_1 = Term::Op(Operator::Apply, vec![g.clone(), p.add(Term::new_int(1))]);
+    let cases = [
+        (
+            "(_ f 3)",
+            Term::Op(Operator::Apply, vec![f, p.add(Term::new_int(3))]),
+        ),
+        (
+            "(_ g 1 true)",
+            Term::Op(
+                Operator::Apply,
+                vec![g.clone(), p.add(Term::new_int(1)), p.bool_true()],
+            ),
+        ),
+        ("(_ g 1)", g_1.clone()),
+        (
+            "(_ (_ g 1) false)",
+            Term::Op(Operator::Apply, vec![p.add(g_1), p.bool_false()]),
+        ),
+    ];
+    let definitions = "(declare-fun f (Int) Bool) (declare-fun g (Int Bool) String)";
+    for (case, expected) in cases {
+        let [got] = parse_terms(&mut p, definitions, [case]);
+        assert_eq!(expected, *got);
+    }
+
+    let mut parser = Parser::new(&mut p, TEST_CONFIG, definitions.as_bytes()).unwrap();
+    parser.parse_problem().unwrap();
+    let mut expect_err = |s: &'static str| {
+        parser.reset(s.as_bytes()).unwrap();
+        parser.parse_term().expect_err("expected error")
+    };
+
+    assert!(matches!(
+        expect_err("(_ f)"),
+        Error::Parser(ParserError::WrongNumberOfArgs(..), _),
+    ));
+    assert!(matches!(
+        expect_err("(_ f 1 2)"),
+        Error::Parser(ParserError::WrongNumberOfArgs(..), _),
+    ));
+    assert!(matches!(
+        expect_err("(_ f false)"),
+        Error::Parser(ParserError::SortError(_), _),
+    ));
+    assert!(matches!(
+        expect_err("(_ g true 1)"),
+        Error::Parser(ParserError::SortError(_), _),
+    ));
+    assert!(matches!(
+        expect_err("(_ f (_ g 1 true))"),
+        Error::Parser(ParserError::SortError(_), _),
+    ));
+}
+
+#[test]
 fn test_qualified_operators() {
     let mut p = PrimitivePool::new();
     let cases = [("((as const (Array Int Real)) 0.0)", {
