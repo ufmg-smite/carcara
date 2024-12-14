@@ -1,9 +1,11 @@
 {
 	"folders": [
 		{
+			"name": "carcara",
 			"path": "."
 		},
 		{
+			"name": "cvc5",
 			"path": "../cvc5"
 		}
 	],

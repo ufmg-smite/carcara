@@ -31,10 +31,10 @@ pub enum DrupFormatError {
     #[error("couldn't find conclusion term in the premise clauses")]
     NoConclusionInPremise,
     #[error(
-        "couldn't elaborate drup because bottom wasn't derived from the premises and argument"
+        "couldn't elaborate drup because bottom wasn't derived from the premises and the argument"
     )]
     NoFinalBottomInDrup,
-    #[error("couldn't elaborate drup because the argument might not be in RUP or the premises derive bottom alone")]
+    #[error("couldn't elaborate drup because the argument might not be in RUP")]
     PotentialNoDrupFormat,
 }
 

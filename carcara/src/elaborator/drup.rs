@@ -13,6 +13,7 @@ pub fn elaborate_drup(
     #[derive(Debug)]
     enum ResolutionStep<'a> {
         Resolvent(
+            &'a(bool, Rc<Term>),
             u64,
             u64,
             (Vec<Rc<Term>>, IndexSet<(bool, &'a Rc<Term>)>, u64),
@@ -95,6 +96,7 @@ pub fn elaborate_drup(
                         let resolvent_hash = hash_term(pool, resolvent.as_slice());
 
                         resolutions.push(ResolutionStep::Resolvent(
+                            pivot,
                             rup[i].1,
                             rup[i + 1].1,
                             (resolvent, resolvent_indexset.clone(), resolvent_hash),
@@ -108,7 +110,7 @@ pub fn elaborate_drup(
                 }
 
                 match &resolutions[resolutions.len() - 1] {
-                    ResolutionStep::Resolvent(_, _, (resolvent, _, _)) => {
+                    ResolutionStep::Resolvent(_, _, _, (resolvent, _, _)) => {
                         if resolvent.len() > 0 {
                             return Err(CheckerError::DrupFormatError(
                                 DrupFormatError::NoFinalBottomInDrup,
@@ -125,7 +127,7 @@ pub fn elaborate_drup(
                 }
 
                 resolutions.retain(|step| match step {
-                    ResolutionStep::Resolvent(_, _, (resolvent, _, _)) => {
+                    ResolutionStep::Resolvent(_, _, _, (resolvent, _, _)) => {
                         resolvent.len() > 0 || rup_clause.len() == 0
                     }
                     ResolutionStep::UnChanged(_, _) => false, // Since unchanged are trivally avaliable we can ignore them
@@ -134,6 +136,7 @@ pub fn elaborate_drup(
                 for (i, resolution_step) in resolutions.iter().enumerate() {
                     match resolution_step {
                         ResolutionStep::Resolvent(
+                            pivot,
                             c,
                             d,
                             (resolvent, resolvent_indexset, resolvent_hash),
@@ -151,7 +154,7 @@ pub fn elaborate_drup(
                                     (*premises.get(d).unwrap()).clone(),
                                 ],
                                 discharge: Vec::new(),
-                                args: Vec::new(),
+                                args: vec![pivot.1.clone(), pool.bool_constant(pivot.0)],
                                 previous_step: None,
                             }));
 
