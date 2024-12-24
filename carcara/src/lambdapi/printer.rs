@@ -414,11 +414,12 @@ impl PrettyPrint for ProofStep {
                 .append(
                     h.to_doc()
                         .append(args.is_empty().then(|| RcDoc::nil()).unwrap_or(space()))
-                        .append(RcDoc::intersperse(args.iter().map(|a| a.to_doc()), space())), //.spaces(),
+                        .append(RcDoc::intersperse(args.iter().map(|a| a.to_doc().parens()), space())), //.spaces(),
                 )
                 .append(semicolon()),
             ProofStep::Symmetry => text("symmetry").append(semicolon()),
             ProofStep::Simplify => text("simplify").append(semicolon()),
+            ProofStep::Set(name, def) => text("set").append(space()).append(text(name).append(is()).append(def.to_doc()).append(semicolon())),
         }
     }
 }

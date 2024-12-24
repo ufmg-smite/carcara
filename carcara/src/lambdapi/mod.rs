@@ -1,3 +1,5 @@
+#[allow(warnings)]
+
 use crate::ast::{
     polyeq,
     pool::{self, TermPool},
@@ -24,6 +26,7 @@ pub mod proof;
 mod simp;
 #[macro_use]
 mod tautology;
+mod lia;
 pub mod term;
 
 use dsl::*;
@@ -31,6 +34,7 @@ use output::*;
 use proof::*;
 use simp::*;
 use tautology::*;
+use lia::*;
 use term::*;
 
 #[derive(Debug, Error)]
@@ -752,7 +756,7 @@ fn translate_tautology(
         "ite1" => Some(translate_ite1(premises.first()?)),
         "ite2" => Some(translate_ite2(premises.first()?)),
         "hole" | "reordering" | "contraction" => Some(Ok(Proof(admit()))), // specific rules of CVC5
-        "la_generic" => Some(Ok(Proof(admit()))),
+        "la_generic" => Some(la_generic(clause, args)),
         "la_mult_neg" => Some(Ok(Proof(admit()))),
         _ => Some(translate_simple_tautology(rule, premises.as_slice())),
     }

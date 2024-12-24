@@ -260,6 +260,7 @@ impl fmt::Display for Term {
                 )
             }
             Term::Nat(n) => write!(f, "{}", n),
+            Term::Int(i) if i.is_negative() => write!(f, "~ {}", i.clone().abs()),
             Term::Int(i) => write!(f, "{}", i),
             Term::Underscore => write!(f, "_"),
         }
