@@ -328,14 +328,18 @@ pub fn conv(term: &Rc<AletheTerm>, ctx: &crate::lambdapi::Context) -> Term {
                     Operator::Distinct => Term::Alethe(LTerm::Distinct(ListLP(
                         args.into_iter().map(Into::into).collect_vec(),
                     ))),
-                    Operator::Sub if args.len() == 2 => {
-                        Term::Terms(vec![args[0].clone(), "-".into(), args[1].clone()])
-                    }
                     Operator::Sub if args.len() == 1 => {
                         Term::Terms(vec!["~".into(), args[0].clone()])
                     }
+                    Operator::Sub if args.len() > 1 => {
+                        let args = args.into_iter().map(Into::into).collect_vec();
+                        let vs = itertools::intersperse(args.into_iter(), "-".into()).collect_vec();
+                        Term::Terms(vs)
+                    }
                     Operator::Add => {
-                        Term::Terms(vec![args[0].clone(), "+".into(), args[1].clone()])
+                        let args = args.into_iter().map(Into::into).collect_vec();
+                        let vs = itertools::intersperse(args.into_iter(), "+".into()).collect_vec();
+                        Term::Terms(vs)
                     }
                     Operator::GreaterEq => {
                         Term::Terms(vec![args[0].clone(), "≥".into(), args[1].clone()])
@@ -350,7 +354,9 @@ pub fn conv(term: &Rc<AletheTerm>, ctx: &crate::lambdapi::Context) -> Term {
                         Term::Terms(vec![args[0].clone(), "<".into(), args[1].clone()])
                     }
                     Operator::Mult => {
-                        Term::Terms(vec![args[0].clone(), "×".into(), args[1].clone()])
+                        let args = args.into_iter().map(Into::into).collect_vec();
+                        let vs = itertools::intersperse(args.into_iter(), "×".into()).collect_vec();
+                        Term::Terms(vs)
                     }
                     Operator::RareList => {
                         Term::Terms(args.into_iter().map(From::from).collect_vec())
@@ -429,14 +435,18 @@ impl From<&Rc<AletheTerm>> for Term {
                     Operator::Distinct => Term::Alethe(LTerm::Distinct(ListLP(
                         args.into_iter().map(Into::into).collect_vec(),
                     ))),
-                    Operator::Sub if args.len() == 2 => {
-                        Term::Terms(vec![args[0].clone(), "-".into(), args[1].clone()])
-                    }
                     Operator::Sub if args.len() == 1 => {
                         Term::Terms(vec!["~".into(), args[0].clone()])
                     }
+                    Operator::Sub if args.len() > 1 => {
+                        let args = args.into_iter().map(Into::into).collect_vec();
+                        let vs = itertools::intersperse(args.into_iter(), "-".into()).collect_vec();
+                        Term::Terms(vs)
+                    }
                     Operator::Add => {
-                        Term::Terms(vec![args[0].clone(), "+".into(), args[1].clone()])
+                        let args = args.into_iter().map(Into::into).collect_vec();
+                        let vs = itertools::intersperse(args.into_iter(), "+".into()).collect_vec();
+                        Term::Terms(vs)
                     }
                     Operator::GreaterEq => {
                         Term::Terms(vec![args[0].clone(), "≥".into(), args[1].clone()])
@@ -451,7 +461,9 @@ impl From<&Rc<AletheTerm>> for Term {
                         Term::Terms(vec![args[0].clone(), "<".into(), args[1].clone()])
                     }
                     Operator::Mult => {
-                        Term::Terms(vec![args[0].clone(), "×".into(), args[1].clone()])
+                        let args = args.into_iter().map(Into::into).collect_vec();
+                        let vs = itertools::intersperse(args.into_iter(), "×".into()).collect_vec();
+                        Term::Terms(vs)
                     }
                     Operator::RareList => {
                         Term::Terms(args.into_iter().map(From::from).collect_vec())
@@ -937,12 +949,12 @@ mod tests_term {
         clause.visit(&mut ctx);
     }
 
-    use crate::parser::tests::parse_terms;
     use crate::ast::{pool::PrimitivePool, TermPool};
+    use crate::parser::tests::parse_terms;
 
     fn conv_term(definitions: &str, term: &str) -> Rc<AletheTerm> {
         let mut pool = PrimitivePool::new();
-        let [t] = parse_terms(&mut pool, definitions, [term]);     
+        let [t] = parse_terms(&mut pool, definitions, [term]);
         t
     }
 
@@ -955,7 +967,6 @@ mod tests_term {
         ";
         let t = "(= (>= (+ 1 (* -1 (TLA_Proj_Int CONSTANT_i_))) 1) (<= (- (+ 1 (* -1 (TLA_Proj_Int CONSTANT_i_)))) (- 1))))";
         let tp: Term = conv_term(definitions, t).into();
-        println!("{}", tp); 
+        println!("{}", tp);
     }
-
 }
