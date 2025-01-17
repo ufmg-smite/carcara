@@ -480,6 +480,9 @@ impl<'c> ProofChecker<'c> {
             "cp_division" => cutting_planes::cp_division,
             "cp_saturation" => cutting_planes::cp_saturation,
 
+            // pseudo-boolean bitblasting
+            "pbblast_bveq" => pb_blasting::pbblast_bveq,
+
             "string_decompose" => strings::string_decompose,
             "string_length_pos" => strings::string_length_pos,
             "string_length_non_empty" => strings::string_length_non_empty,
