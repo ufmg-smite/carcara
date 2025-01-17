@@ -246,7 +246,7 @@ pub fn cp_division(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
     assert_num_args(args, 1)?;
     let divisor: Integer = args[0].as_integer_err()?;
 
-    // Check there is exacly one conclusion
+    // Check there is exactly one conclusion
     assert_clause_len(conclusion, 1)?;
     let conclusion = &conclusion[0];
 
@@ -284,7 +284,7 @@ pub fn cp_saturation(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> R
     assert_num_args(args, 0)?;
     let clause = &premises[0].clause[0];
 
-    // Check there is exacly one conclusion
+    // Check there is exactly one conclusion
     assert_clause_len(conclusion, 1)?;
     let conclusion = &conclusion[0];
 
