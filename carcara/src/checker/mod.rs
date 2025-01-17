@@ -482,6 +482,18 @@ impl<'c> ProofChecker<'c> {
 
             // pseudo-boolean bitblasting
             "pbblast_bveq" => pb_blasting::pbblast_bveq,
+            "pbblast_bvult" => pb_blasting::pbblast_bvult,
+            "pbblast_bvugt" => pb_blasting::pbblast_bvugt,
+            "pbblast_bvuge" => pb_blasting::pbblast_bvuge,
+            "pbblast_bvule" => pb_blasting::pbblast_bvule,
+            "pbblast_bvslt" => pb_blasting::pbblast_bvslt,
+            "pbblast_bvsgt" => pb_blasting::pbblast_bvsgt,
+            "pbblast_bvsge" => pb_blasting::pbblast_bvsge,
+            "pbblast_bvsle" => pb_blasting::pbblast_bvsle,
+            "pbblast_pbbvar" => pb_blasting::pbblast_pbbvar,
+            "pbblast_pbbconst" => pb_blasting::pbblast_pbbconst,
+            "pbblast_bvxor" => pb_blasting::pbblast_bvxor,
+            "pbblast_bvand" => pb_blasting::pbblast_bvand,
 
             "string_decompose" => strings::string_decompose,
             "string_length_pos" => strings::string_length_pos,
