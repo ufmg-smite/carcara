@@ -76,6 +76,7 @@ mod tests {
                 ",
             "Equality on single bits" {
                 r#"(step t1 (cl (= (= x y) (= (- (+ ((_ int_of 0) x) 0) (+ ((_ int_of 0) y) 0)) 0))) :rule pbblast_bveq :args (x y))"#: true,
+                r#"(step t1 (cl (= (= (pbbterm 1) (pbbterm 1)) (= (- (+ ((_ int_of 0) (pbbterm 1)) 0) (+ ((_ int_of 0) (pbbterm 1)) 0)) 0))) :rule pbblast_bveq :args ((pbbterm 1) (pbbterm 1)))"#: true,
             }
         }
     }

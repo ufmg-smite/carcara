@@ -141,7 +141,7 @@ impl PrimitivePool {
                     Sort::BitVec(width)
                 }
                 Operator::BvComp => Sort::BitVec(Integer::ONE.into()),
-                Operator::BvBbTerm => Sort::BitVec(Integer::from(args.len())),
+                Operator::BvBbTerm | Operator::BvPBbTerm => Sort::BitVec(Integer::from(args.len())),
                 Operator::BvConcat => {
                     let mut total_width = Integer::ZERO;
                     for arg in args {

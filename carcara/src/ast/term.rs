@@ -353,6 +353,7 @@ pub enum Operator {
     BvSGt,
     BvSGe,
     BvBbTerm,
+    BvPBbTerm,
 
     // Misc.
     /// The `rare-list` operator, used to represent RARE lists.
@@ -473,6 +474,7 @@ impl_str_conversion_traits!(Operator {
     BvSGt: "bvsgt",
     BvSGe: "bvsge",
     BvBbTerm: "bbterm",
+    BvPBbTerm: "pbbterm",
 
     RareList: "rare-list",
 });

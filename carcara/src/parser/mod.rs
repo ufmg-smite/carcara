@@ -427,6 +427,11 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 SortError::assert_eq(&Sort::Bool, sorts[0])?;
                 SortError::assert_all_eq(&sorts)?;
             }
+            Operator::BvPBbTerm => {
+                assert_num_args(&args, 1..)?;
+                SortError::assert_eq(&Sort::Int, sorts[0])?;
+                SortError::assert_all_eq(&sorts)?;
+            }
             Operator::BvConcat => {
                 assert_num_args(&args, 2..)?;
                 for s in sorts {
