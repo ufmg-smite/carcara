@@ -1503,7 +1503,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     ));
                 }
             }
-            ParamOperator::BvBitOf | ParamOperator::ZeroExtend | ParamOperator::SignExtend => {
+            ParamOperator::BvBitOf
+            | ParamOperator::BvIntOf
+            | ParamOperator::ZeroExtend
+            | ParamOperator::SignExtend => {
                 assert_num_args(&op_args, 1)?;
                 assert_num_args(&args, 1)?;
                 SortError::assert_eq(&Sort::Int, &op_args[0].sort())?;

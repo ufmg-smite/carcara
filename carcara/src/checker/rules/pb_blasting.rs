@@ -75,7 +75,7 @@ mod tests {
                 (declare-const y (_ BitVec 1))
                 ",
             "Equality on single bits" {
-                r#"(step t1 (cl (= (= x y) (= (- (+ 0 0) (+ 0 0)) 0))) :rule pbblast_bveq :args (x y))"#: true,
+                r#"(step t1 (cl (= (= x y) (= (- (+ ((_ int_of 0) x) 0) (+ ((_ int_of 0) y) 0)) 0))) :rule pbblast_bveq :args (x y))"#: true,
             }
         }
     }
@@ -87,7 +87,7 @@ mod tests {
                 (declare-const y (_ BitVec 1))
                 ",
             "Equality on single bits" {
-                r#"(step t1 (cl (= (= x y) (= (- (+ 0 0) (+ 0 0)) 0))) :rule pbblast_bvult :args (x y))"#: true,
+                r#"(step t1 (cl (= (= x y) (= (- (+ ((_ int_of 0) x) 0) (+ ((_ int_of 0) y) 0)) 0))) :rule pbblast_bvult :args (x y))"#: true,
             }
         }
     }
@@ -99,7 +99,7 @@ mod tests {
                 (declare-const y (_ BitVec 1))
                 ",
             "Equality on single bits" {
-                r#"(step t1 (cl (= (= x y) (= (- (+ 0 0) (+ 0 0)) 0))) :rule pbblast_bvugt :args (x y))"#: true,
+                r#"(step t1 (cl (= (= x y) (= (- (+ ((_ int_of 0) x) 0) (+ ((_ int_of 0) y) 0)) 0))) :rule pbblast_bvugt :args (x y))"#: true,
             }
         }
     }
@@ -111,7 +111,7 @@ mod tests {
                 (declare-const y (_ BitVec 1))
                 ",
             "Equality on single bits" {
-                r#"(step t1 (cl (= (= x y) (= (- (+ 0 0) (+ 0 0)) 0))) :rule pbblast_bvuge :args (x y))"#: true,
+                r#"(step t1 (cl (= (= x y) (= (- (+ ((_ int_of 0) x) 0) (+ ((_ int_of 0) y) 0)) 0))) :rule pbblast_bvuge :args (x y))"#: true,
             }
         }
     }
@@ -123,7 +123,7 @@ mod tests {
                 (declare-const y (_ BitVec 1))
                 ",
             "Equality on single bits" {
-                r#"(step t1 (cl (= (= x y) (= (- (+ 0 0) (+ 0 0)) 0))) :rule pbblast_bvule :args (x y))"#: true,
+                r#"(step t1 (cl (= (= x y) (= (- (+ ((_ int_of 0) x) 0) (+ ((_ int_of 0) y) 0)) 0))) :rule pbblast_bvule :args (x y))"#: true,
             }
         }
     }
@@ -135,7 +135,7 @@ mod tests {
                 (declare-const y (_ BitVec 1))
                 ",
             "Equality on single bits" {
-                r#"(step t1 (cl (= (= x y) (= (- (+ 0 0) (+ 0 0)) 0))) :rule pbblast_bvslt :args (x y))"#: true,
+                r#"(step t1 (cl (= (= x y) (= (- (+ ((_ int_of 0) x) 0) (+ ((_ int_of 0) y) 0)) 0))) :rule pbblast_bvslt :args (x y))"#: true,
             }
         }
     }
@@ -147,7 +147,7 @@ mod tests {
                 (declare-const y (_ BitVec 1))
                 ",
             "Equality on single bits" {
-                r#"(step t1 (cl (= (= x y) (= (- (+ 0 0) (+ 0 0)) 0))) :rule pbblast_bvsgt :args (x y))"#: true,
+                r#"(step t1 (cl (= (= x y) (= (- (+ ((_ int_of 0) x) 0) (+ ((_ int_of 0) y) 0)) 0))) :rule pbblast_bvsgt :args (x y))"#: true,
             }
         }
     }
@@ -159,7 +159,7 @@ mod tests {
                 (declare-const y (_ BitVec 1))
                 ",
             "Equality on single bits" {
-                r#"(step t1 (cl (= (= x y) (= (- (+ 0 0) (+ 0 0)) 0))) :rule pbblast_bvsge :args (x y))"#: true,
+                r#"(step t1 (cl (= (= x y) (= (- (+ ((_ int_of 0) x) 0) (+ ((_ int_of 0) y) 0)) 0))) :rule pbblast_bvsge :args (x y))"#: true,
             }
         }
     }
@@ -171,7 +171,7 @@ mod tests {
                 (declare-const y (_ BitVec 1))
                 ",
             "Equality on single bits" {
-                r#"(step t1 (cl (= (= x y) (= (- (+ 0 0) (+ 0 0)) 0))) :rule pbblast_bvsle :args (x y))"#: true,
+                r#"(step t1 (cl (= (= x y) (= (- (+ ((_ int_of 0) x) 0) (+ ((_ int_of 0) y) 0)) 0))) :rule pbblast_bvsle :args (x y))"#: true,
             }
         }
     }
@@ -183,7 +183,7 @@ mod tests {
                 (declare-const y (_ BitVec 1))
                 ",
             "Equality on single bits" {
-                r#"(step t1 (cl (= (= x y) (= (- (+ 0 0) (+ 0 0)) 0))) :rule pbblast_pbbvar :args (x y))"#: true,
+                r#"(step t1 (cl (= (= x y) (= (- (+ ((_ int_of 0) x) 0) (+ ((_ int_of 0) y) 0)) 0))) :rule pbblast_pbbvar :args (x y))"#: true,
             }
         }
     }
@@ -195,7 +195,7 @@ mod tests {
                 (declare-const y (_ BitVec 1))
                 ",
             "Equality on single bits" {
-                r#"(step t1 (cl (= (= x y) (= (- (+ 0 0) (+ 0 0)) 0))) :rule pbblast_pbbconst :args (x y))"#: true,
+                r#"(step t1 (cl (= (= x y) (= (- (+ ((_ int_of 0) x) 0) (+ ((_ int_of 0) y) 0)) 0))) :rule pbblast_pbbconst :args (x y))"#: true,
             }
         }
     }
@@ -207,7 +207,7 @@ mod tests {
                 (declare-const y (_ BitVec 1))
                 ",
             "Equality on single bits" {
-                r#"(step t1 (cl (= (= x y) (= (- (+ 0 0) (+ 0 0)) 0))) :rule pbblast_bvxor :args (x y))"#: true,
+                r#"(step t1 (cl (= (= x y) (= (- (+ ((_ int_of 0) x) 0) (+ ((_ int_of 0) y) 0)) 0))) :rule pbblast_bvxor :args (x y))"#: true,
             }
         }
     }
@@ -219,7 +219,7 @@ mod tests {
                 (declare-const y (_ BitVec 1))
                 ",
             "Equality on single bits" {
-                r#"(step t1 (cl (= (= x y) (= (- (+ 0 0) (+ 0 0)) 0))) :rule pbblast_bvand :args (x y))"#: true,
+                r#"(step t1 (cl (= (= x y) (= (- (+ ((_ int_of 0) x) 0) (+ ((_ int_of 0) y) 0)) 0))) :rule pbblast_bvand :args (x y))"#: true,
             }
         }
     }

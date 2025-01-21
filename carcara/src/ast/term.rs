@@ -364,6 +364,7 @@ pub enum ParamOperator {
     // Indexed operators
     BvExtract,
     BvBitOf,
+    BvIntOf,
     ZeroExtend,
     SignExtend,
     BvConst,
@@ -479,6 +480,7 @@ impl_str_conversion_traits!(Operator {
 impl_str_conversion_traits!(ParamOperator {
     BvExtract: "extract",
     BvBitOf: "bit_of",
+    BvIntOf: "int_of",
     ZeroExtend: "zero_extend",
     SignExtend: "sign_extend",
     BvConst: "bv",
