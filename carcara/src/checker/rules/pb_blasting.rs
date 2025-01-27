@@ -24,55 +24,71 @@ fn build_term_pb_vec(term: &Rc<Term>, size: usize, pool: &mut dyn TermPool) -> V
     term
 }
 
-pub fn pbblast_bveq(RuleArgs { pool, args, conclusion, .. }: RuleArgs) -> RuleResult {
-    println!("{} {} ", args.len(), conclusion.len());
-
+pub fn pbblast_bveq(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    // Check that conclusion is an equivalence between bitvector equality
+    // and difference of summations equal to zero
     let ((x, y), ((sum_x, sum_y), _)) =
         match_term_err!((= (= x y) (= (- (+ ...) (+ ...)) 0)) = &conclusion[0])?;
 
-    let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
+    // Drops the last element, that is zero
+    let sum_x = &sum_x[..sum_x.len() - 1];
+    let sum_y = &sum_y[..sum_y.len() - 1];
+
+    // Check that `x`'s bitvector width exists in the `pool`
+    let Sort::BitVec(x_width) = pool.sort(x).as_sort().cloned().unwrap() else {
         unreachable!();
     };
 
-    let size = size.to_usize().unwrap();
+    // Transforms the width of x to a usize type
+    let x_width = x_width.to_usize().unwrap();
 
-    // let x_pb: Vec<Rc<Term>> = build_term_pb_vec(x, size, pool);
-    // let y_pb = build_term_pb_vec(y, size, pool);
+    // Check that `sum_x` has the same length as `x`
+    rassert!(x_width == sum_x.len(), CheckerError::Unspecified);
 
-    println!("size:{size}");
-    println!("x: {x:?}");
-    println!("y: {y:?}");
-    println!("sum_x: {sum_x:?}");
-    println!("sum_y: {sum_y:?}");
+    // Check that `y`'s bitvector width exists in the `pool`
+    let Sort::BitVec(y_width) = pool.sort(y).as_sort().cloned().unwrap() else {
+        unreachable!();
+    };
 
-    // Build Term with x that is equivalent to sum_x
-    // sum_x.iter().enumerate().take(size).for_each(|(i, sum)| {
-    for i in 0..size {
-        let (c, (idx, bv)) = match_term_err!((* c ((_ int_of idx) x)) = &sum_x[i])?;
-        // TODO: if i = 0, c can be omitted, so let (idx, bv) = match_term_err!(((_ int_of idx) x) = &sum_x[i])?; is also acceptable
+    // Transforms the width of y to a usize type
+    let y_width = y_width.to_usize().unwrap();
 
-        let c: Integer = c.as_integer_err()?;
-        let idx: Integer = idx.as_integer_err()?;
+    // Check that `sum_y` has the same length as `y`
+    rassert!(y_width == sum_y.len(), CheckerError::Unspecified);
 
-        // TODO: Create appropriate error type
-        rassert!(c == (1 << i), CheckerError::Unspecified);
-        rassert!(idx == size - i - 1, CheckerError::Unspecified);
-        rassert!(bv == x, CheckerError::Unspecified);
-    }
-    // });
+    // Check that both bitvectors x and y have the same length
+    rassert!(x_width == y_width, CheckerError::Unspecified);
 
-    // Build Term with y that is equivalent to sum_y
-    for i in 0..size {
-        let (c, (idx, bv)) = match_term_err!((* c ((_ int_of idx) y)) = &sum_y[i])?;
+    // Define a closure to check the terms for a bitvector and its summation
+    let check_bitvector_sum =
+        |sum: &[Rc<Term>], width: usize, bitvector: &Rc<Term>| -> RuleResult {
+            for (i, element) in sum.iter().enumerate() {
+                // Match `element` with a coefficient times an `int_of` application on bitvector `bv`
+                let (c, (idx, bv)) = match_term_err!((* c ((_ int_of idx) bv)) = element)?;
 
-        let c: Integer = c.as_integer_err()?;
-        let idx: Integer = idx.as_integer_err()?;
+                // TODO: if i == 0, c can be omitted, so:
+                // let (idx, bv) = match_term_err!(((_ int_of idx) bitvector) = element)?;
+                // is also acceptable
 
-        // TODO: Create appropriate error type
-        rassert!(c == (1 << i), CheckerError::Unspecified);
-        rassert!(idx == size - i - 1, CheckerError::Unspecified);
-        rassert!(bv == y, CheckerError::Unspecified);
-    }
+                // Convert `c` and `idx` to integers
+                let c: Integer = c.as_integer_err()?;
+                let idx: Integer = idx.as_integer_err()?;
+
+                // Check that the coefficient is actually 2^i
+                rassert!(c == (1 << i), CheckerError::Unspecified);
+                // Check that the index is actually `width - i - 1`
+                rassert!(idx == width - i - 1, CheckerError::Unspecified);
+                // Check that the bitvector being indexed is actually `bitvector`
+                rassert!(*bv == *bitvector, CheckerError::Unspecified);
+            }
+            Ok(())
+        };
+
+    // Use the closure to check the `sum_x` terms
+    check_bitvector_sum(sum_x, x_width, x)?;
+
+    // Use the closure to check the `sum_y` terms
+    check_bitvector_sum(sum_y, y_width, y)?;
 
     Ok(())
 }
