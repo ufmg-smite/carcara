@@ -11,6 +11,18 @@ When running on large proofs, we recommend compiling with optimizations enabled:
 To build and install Carcara, run `cargo install --profile release-lto --path cli`. This will build
 the project with all optimizations enabled, and install the CLI binary in `$HOME/.cargo/bin`.
 
+Alternatively, you can build Carcara using Docker. Docker provides a consistent environment for building and running the application, eliminating the need for individual dependencies on the host machine. Here are the steps:
+
+Build the Docker image:
+```
+sudo docker build -t carcara .
+```
+
+Run the container:
+```
+sudo docker run -it carcara
+```
+
 ## Using Carcara
 ### Checking a proof file
 
