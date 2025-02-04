@@ -1030,15 +1030,190 @@ mod tests {
             }
         }
     }
+
     #[test]
-    fn pbblast_bvand() {
+    fn pbblast_bvand_1() {
         test_cases! {
-           definitions = "
-                (declare-const x (_ BitVec 1))
-                (declare-const y (_ BitVec 1))
-                ",
-            "Equality on single bits" {
-                r#"(step t1 (cl (= (= x y) (= (- (+ ((_ int_of 0) x) 0) (+ ((_ int_of 0) y) 0)) 0))) :rule pbblast_bvand :args (x y))"#: true,
+            definitions = "
+            (declare-const x1 (_ BitVec 1))
+            (declare-const y1 (_ BitVec 1))
+            (declare-const r1 (_ BitVec 1))
+        ",
+            "Valid 1-bit AND" {
+                r#"(step t1 (cl (and (= (bvand x1 y1) r1)
+                                (and        ; list of constraints for each bit terminating on `true`
+                                    (and    ; i = 0
+                                        (>= (- ((_ int_of 0) x1) ((_ int_of 0) r1)) 0)                          ; xi - ri >= 0
+                                        (>= (- ((_ int_of 0) y1) ((_ int_of 0) r1)) 0)                          ; yi - ri >= 0
+                                        (>= (- ((_ int_of 0) r1) (+ ((_ int_of 0) x1) ((_ int_of 0) y1))) -1)   ; ri - (xi + yi) >= -1
+                                    )
+                                    true    ; end of list
+                                ))
+                        ) :rule pbblast_bvand)"#: true,
+            }
+
+            "Invalid 1-bit AND (missing constraint)" {
+                r#"(step t1 (cl (and (= (bvand x1 y1) r1)
+                                (and
+                                    (and
+                                        (>= (- ((_ int_of 0) x1) ((_ int_of 0) r1)) 0)
+                                        ;; Missing y_i - r_i >= 0
+                                        (>= (- ((_ int_of 0) r1) (+ ((_ int_of 0) x1) ((_ int_of 0) y1))) -1)
+                                    )
+                                    true
+                                ))
+                        ) :rule pbblast_bvand)"#: false,
+            }
+        }
+    }
+
+    #[test]
+    fn pbblast_bvand_2() {
+        test_cases! {
+            definitions = "
+            (declare-const x2 (_ BitVec 2))
+            (declare-const y2 (_ BitVec 2))
+            (declare-const r2 (_ BitVec 2))
+        ",
+            "Valid 2-bit AND" {
+                r#"(step t1 (cl (and (= (bvand x2 y2) r2)
+                                (and
+                                    (and ; i=0
+                                        (>= (- ((_ int_of 0) x2) ((_ int_of 0) r2)) 0)
+                                        (>= (- ((_ int_of 0) y2) ((_ int_of 0) r2)) 0)
+                                        (>= (- ((_ int_of 0) r2) (+ ((_ int_of 0) x2) ((_ int_of 0) y2))) -1)
+                                    )
+                                    (and ; i=1
+                                        (>= (- ((_ int_of 1) x2) ((_ int_of 1) r2)) 0)
+                                        (>= (- ((_ int_of 1) y2) ((_ int_of 1) r2)) 0)
+                                        (>= (- ((_ int_of 1) r2) (+ ((_ int_of 1) x2) ((_ int_of 1) y2))) -1)
+                                    )
+                                    true
+                                ))
+                        ) :rule pbblast_bvand)"#: true,
+            }
+
+            "Invalid 2-bit AND (wrong coefficient)" {
+                r#"(step t1 (cl (and (= (bvand x2 y2) r2)
+                                (and
+                                    (and ; i=0
+                                        (>= (- ((_ int_of 0) x2) ((_ int_of 0) r2)) 0)
+                                        (>= (- ((_ int_of 0) y2) (* 2 ((_ int_of 0) r2))) 0) ;; Invalid coefficient 2
+                                        (>= (- ((_ int_of 0) r2) (+ ((_ int_of 0) x2) ((_ int_of 0) y2))) -1)
+                                    )
+                                    (and ; i=1
+                                        (>= (- ((_ int_of 1) x2) ((_ int_of 1) r2)) 0)
+                                        (>= (- ((_ int_of 1) y2) ((_ int_of 1) r2)) 0)
+                                        (>= (- ((_ int_of 1) r2) (+ ((_ int_of 1) x2) ((_ int_of 1) y2))) -1)
+                                    )
+                                    true
+                                ))
+                        ) :rule pbblast_bvand)"#: false,
+            }
+        }
+    }
+
+    #[test]
+    fn pbblast_bvand_8() {
+        test_cases! {
+            definitions = "
+            (declare-const x8 (_ BitVec 8))
+            (declare-const y8 (_ BitVec 8))
+            (declare-const r8 (_ BitVec 8))
+        ",
+            "Valid 8-bit AND" {
+                r#"(step t1 (cl (and (= (bvand x8 y8) r8)
+                                (and
+                                    (and ; i=0
+                                        (>= (- ((_ int_of 0) x8) ((_ int_of 0) r8)) 0)
+                                        (>= (- ((_ int_of 0) y8) ((_ int_of 0) r8)) 0)
+                                        (>= (- ((_ int_of 0) r8) (+ ((_ int_of 0) x8) ((_ int_of 0) y8))) -1)
+                                    )
+                                    (and ; i=1
+                                        (>= (- ((_ int_of 1) x8) ((_ int_of 1) r8)) 0)
+                                        (>= (- ((_ int_of 1) y8) ((_ int_of 1) r8)) 0)
+                                        (>= (- ((_ int_of 1) r8) (+ ((_ int_of 1) x8) ((_ int_of 1) y8))) -1)
+                                    )
+                                    (and ; i=2
+                                        (>= (- ((_ int_of 2) x8) ((_ int_of 2) r8)) 0)
+                                        (>= (- ((_ int_of 2) y8) ((_ int_of 2) r8)) 0)
+                                        (>= (- ((_ int_of 2) r8) (+ ((_ int_of 2) x8) ((_ int_of 2) y8))) -1)
+                                    )
+                                    (and ; i=3
+                                        (>= (- ((_ int_of 3) x8) ((_ int_of 3) r8)) 0)
+                                        (>= (- ((_ int_of 3) y8) ((_ int_of 3) r8)) 0)
+                                        (>= (- ((_ int_of 3) r8) (+ ((_ int_of 3) x8) ((_ int_of 3) y8))) -1)
+                                    )
+                                    (and ; i=4
+                                        (>= (- ((_ int_of 4) x8) ((_ int_of 4) r8)) 0)
+                                        (>= (- ((_ int_of 4) y8) ((_ int_of 4) r8)) 0)
+                                        (>= (- ((_ int_of 4) r8) (+ ((_ int_of 4) x8) ((_ int_of 4) y8))) -1)
+                                    )
+                                    (and ; i=5
+                                        (>= (- ((_ int_of 5) x8) ((_ int_of 5) r8)) 0)
+                                        (>= (- ((_ int_of 5) y8) ((_ int_of 5) r8)) 0)
+                                        (>= (- ((_ int_of 5) r8) (+ ((_ int_of 5) x8) ((_ int_of 5) y8))) -1)
+                                    )
+                                    (and ; i=6
+                                        (>= (- ((_ int_of 6) x8) ((_ int_of 6) r8)) 0)
+                                        (>= (- ((_ int_of 6) y8) ((_ int_of 6) r8)) 0)
+                                        (>= (- ((_ int_of 6) r8) (+ ((_ int_of 6) x8) ((_ int_of 6) y8))) -1)
+                                    )
+                                    (and ; i=7 (MSB)
+                                        (>= (- ((_ int_of 7) x8) ((_ int_of 7) r8)) 0)
+                                        (>= (- ((_ int_of 7) y8) ((_ int_of 7) r8)) 0)
+                                        (>= (- ((_ int_of 7) r8) (+ ((_ int_of 7) x8) ((_ int_of 7) y8))) -1)
+                                    )
+                                    true
+                                ))
+                        ) :rule pbblast_bvand)"#: true,
+            }
+            "Invalid 8-bit AND (swapped order)" {
+                r#"(step t1 (cl (and (= (bvand x8 y8) r8)
+                                (and
+                                    (and ; i=0
+                                        (>= (- ((_ int_of 0) x8) ((_ int_of 0) r8)) 0)
+                                        (>= (- ((_ int_of 0) y8) ((_ int_of 0) r8)) 0)
+                                        (>= (- ((_ int_of 0) r8) (+ ((_ int_of 0) x8) ((_ int_of 0) y8))) -1)
+                                    )
+                                    (and ; i=1
+                                        (>= (- ((_ int_of 1) x8) ((_ int_of 1) r8)) 0)
+                                        (>= (- ((_ int_of 1) y8) ((_ int_of 1) r8)) 0)
+                                        (>= (- ((_ int_of 1) r8) (+ ((_ int_of 1) x8) ((_ int_of 1) y8))) -1)
+                                    )
+                                    (and ; i=2
+                                        (>= (- ((_ int_of 2) x8) ((_ int_of 2) r8)) 0)
+                                        (>= (- ((_ int_of 2) y8) ((_ int_of 2) r8)) 0)
+                                        (>= (- ((_ int_of 2) r8) (+ ((_ int_of 2) x8) ((_ int_of 2) y8))) -1)
+                                    )
+                                    (and ; i=3
+                                        (>= (- ((_ int_of 3) x8) ((_ int_of 3) r8)) 0)
+                                        (>= (- ((_ int_of 3) y8) ((_ int_of 3) r8)) 0)
+                                        (>= (- ((_ int_of 3) r8) (+ ((_ int_of 3) x8) ((_ int_of 3) y8))) -1)
+                                    )
+                                    (and ; i=4
+                                        (>= (- ((_ int_of 4) r8) ((_ int_of 4) x8)) 0) ; swapped order x8-r8
+                                        (>= (- ((_ int_of 4) y8) ((_ int_of 4) r8)) 0)
+                                        (>= (- ((_ int_of 4) r8) (+ ((_ int_of 4) x8) ((_ int_of 4) y8))) -1)
+                                    )
+                                    (and ; i=5
+                                        (>= (- ((_ int_of 5) x8) ((_ int_of 5) r8)) 0)
+                                        (>= (- ((_ int_of 5) y8) ((_ int_of 5) r8)) 0)
+                                        (>= (- ((_ int_of 5) r8) (+ ((_ int_of 5) x8) ((_ int_of 5) y8))) -1)
+                                    )
+                                    (and ; i=6
+                                        (>= (- ((_ int_of 6) x8) ((_ int_of 6) r8)) 0)
+                                        (>= (- ((_ int_of 6) y8) ((_ int_of 6) r8)) 0)
+                                        (>= (- ((_ int_of 6) r8) (+ ((_ int_of 6) x8) ((_ int_of 6) y8))) -1)
+                                    )
+                                    (and ; i=7 (MSB)
+                                        (>= (- ((_ int_of 7) x8) ((_ int_of 7) r8)) 0)
+                                        (>= (- ((_ int_of 7) y8) ((_ int_of 7) r8)) 0)
+                                        (>= (- ((_ int_of 7) r8) (+ ((_ int_of 7) x8) ((_ int_of 7) y8))) -1)
+                                    )
+                                    true
+                                ))
+                        ) :rule pbblast_bvand)"#: false,
             }
         }
     }
