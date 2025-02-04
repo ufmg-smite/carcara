@@ -64,14 +64,23 @@ pub fn pbblast_bveq(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
         |sum: &[Rc<Term>], width: usize, bitvector: &Rc<Term>| -> RuleResult {
             for (i, element) in sum.iter().enumerate() {
                 // Match `element` with a coefficient times an `int_of` application on bitvector `bv`
-                let (c, (idx, bv)) = match_term_err!((* c ((_ int_of idx) bv)) = element)?;
+                // Attempt to match the term with a coefficient
+                let (c, idx, bv) = match match_term!((* c ((_ int_of idx) bv)) = element) {
+                    Some((c, (idx, bv))) => (c.as_integer_err()?, idx, bv),
+                    None => {
+                        // If there's no coefficient and i == 0, check the pattern without the coefficient
+                        if i == 0 {
+                            match match_term!(((_ int_of idx) bitvector) = element) {
+                                Some((idx, bv)) => (Integer::from(1), idx, bv), // Default coefficient to 1
+                                None => panic!("Element does not match either pattern"),
+                            }
+                        } else {
+                            panic!("Coefficient was not found and i != 0");
+                        }
+                    }
+                };
 
-                // TODO: if i == 0, c can be omitted, so:
-                // let (idx, bv) = match_term_err!(((_ int_of idx) bitvector) = element)?;
-                // is also acceptable
-
-                // Convert `c` and `idx` to integers
-                let c: Integer = c.as_integer_err()?;
+                // Convert `idx` to integer
                 let idx: Integer = idx.as_integer_err()?;
 
                 // Check that the coefficient is actually 2^i
