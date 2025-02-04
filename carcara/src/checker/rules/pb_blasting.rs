@@ -946,18 +946,129 @@ mod tests {
         }
     }
 
+    // TODO: What should happen to a signed operation on BitVec 1 ??
+
     #[test]
-    fn pbblast_bvslt() {
+    fn pbblast_bvslt_2() {
         test_cases! {
-           definitions = "
-                (declare-const x (_ BitVec 1))
-                (declare-const y (_ BitVec 1))
-                ",
-            "Equality on single bits" {
-                r#"(step t1 (cl (= (= x y) (= (- (+ ((_ int_of 0) x) 0) (+ ((_ int_of 0) y) 0)) 0))) :rule pbblast_bvslt :args (x y))"#: true,
+            definitions = "
+            (declare-const x2 (_ BitVec 2))
+            (declare-const y2 (_ BitVec 2))
+        ",
+
+            // Using explicit multiplication everywhere.
+            "bvslt on two bits with explicit multiplication" {
+                r#"(step t1 (cl (= (bvslt x2 y2)
+                                (>= (+
+                                        (-
+                                            (+ (* 1 ((_ int_of 1) y2)) 0)   ; y sum
+                                            (* 2 ((_ int_of 0) y2))         ; y sign
+                                        )
+                                        (-
+                                            (* 2 ((_ int_of 0) x2))         ; x sign
+                                            (+ (* 1 ((_ int_of 1) x2)) 0)   ; x sum
+                                        )
+                                    ) 1))) :rule pbblast_bvslt)"#: true,
+            }
+
+            // Omitting the explicit multiplication by 1 in the sum parts.
+            "bvslt on two bits omitting multiplication by 1 in sum parts" {
+                r#"(step t1 (cl (= (bvslt x2 y2)
+                                (>= (+
+                                        (-
+                                            ((_ int_of 1) y2)               ; y sum omitted "* 1"
+                                            (* 2 ((_ int_of 0) y2))
+                                        )
+                                        (-
+                                            (* 2 ((_ int_of 0) x2))
+                                            ((_ int_of 1) x2)               ; x sum omitted "* 1"
+                                        )
+                                    ) 1))) :rule pbblast_bvslt)"#: true,
+            }
+
+            // Wrong scalar of the sign bit
+            "bvslt on two bits wrong scalar of the sign bit" {
+                r#"(step t1 (cl (= (bvslt x2 y2)
+                                (>= (+
+                                        (-
+                                            ((_ int_of 1) y2)        
+                                            (* 1 ((_ int_of 0) y2))         ; should be * 2
+                                        )
+                                        (-
+                                            (* 2 ((_ int_of 0) x2))
+                                            ((_ int_of 1) x2)             
+                                        )
+                                    ) 1))) :rule pbblast_bvslt)"#: false,
+            }
+
+            // Wrong indexing of the summation term
+            "bvslt on two bits with wrong indexing of the summation term" {
+                r#"(step t1 (cl (= (bvslt x2 y2)
+                                (>= (+
+                                        (-
+                                            (+ (* 1 ((_ int_of 0) y2)) 0)   ; should be int_of 1
+                                            (* 2 ((_ int_of 0) y2))         
+                                        )
+                                        (-
+                                            (* 2 ((_ int_of 0) x2))         
+                                            (+ (* 1 ((_ int_of 1) x2)) 0)   
+                                        )
+                                    ) 1))) :rule pbblast_bvslt)"#: false,
+            }
+
+
+        }
+    }
+
+    #[test]
+    fn pbblast_bvslt_4() {
+        test_cases! {
+            definitions = "
+            (declare-const x4 (_ BitVec 4))
+            (declare-const y4 (_ BitVec 4))
+        ",
+            // Using explicit multiplication everywhere.
+            "bvslt on 4 bits with explicit multiplication" {
+                r#"(step t1 (cl (= (bvslt x4 y4)
+                                (>= (+
+                                        (-
+                                            (+ (* 1 ((_ int_of 3) y4))
+                                               (* 2 ((_ int_of 2) y4))
+                                               (* 4 ((_ int_of 1) y4))
+                                               0)
+                                            (* 8 ((_ int_of 0) y4)))
+                                        (-
+                                            (* 8 ((_ int_of 0) x4))
+                                            (+ (* 1 ((_ int_of 3) x4))
+                                               (* 2 ((_ int_of 2) x4))
+                                               (* 4 ((_ int_of 1) x4))
+                                               0)
+                                        )
+                                    ) 1))) :rule pbblast_bvslt)"#: true,
+            }
+
+            // Omitting explicit multiplication by 1 in the sum parts.
+            "bvslt on 4 bits omitting multiplication by 1 in sum parts" {
+                r#"(step t1 (cl (= (bvslt x4 y4)
+                                (>= (+
+                                        (-
+                                            (+ ((_ int_of 3) y4)
+                                               (* 2 ((_ int_of 2) y4))
+                                               (* 4 ((_ int_of 1) y4))
+                                               0)
+                                            (* 8 ((_ int_of 0) y4)))
+                                        (-
+                                            (* 8 ((_ int_of 0) x4))
+                                            (+ ((_ int_of 3) x4)
+                                               (* 2 ((_ int_of 2) x4))
+                                               (* 4 ((_ int_of 1) x4))
+                                               0)
+                                        )
+                                    ) 1))) :rule pbblast_bvslt)"#: true,
             }
         }
     }
+
     #[test]
     fn pbblast_bvsgt() {
         test_cases! {
