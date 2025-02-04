@@ -1,0 +1,88 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'carcara'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=carcara",
+                    "--",
+                    // "checker::rules::pb_blasting::tests::pbblast_bvslt_2"
+                ],
+                "filter": {
+                    "name": "carcara",
+                    "kind": "lib"
+                }
+            },
+            "args": [
+                "--nocapture",
+                "checker::rules::pb_blasting::tests::pbblast_bvslt_2"
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'test_example_files'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=test_example_files",
+                    "--package=carcara"
+                ],
+                "filter": {
+                    "name": "test_example_files",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'carcara'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=carcara",
+                    "--package=carcara-cli"
+                ],
+                "filter": {
+                    "name": "carcara",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'carcara'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=carcara",
+                    "--package=carcara-cli"
+                ],
+                "filter": {
+                    "name": "carcara",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
