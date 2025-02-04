@@ -227,7 +227,7 @@ macro_rules! match_term_err {
 macro_rules! build_term {
     ($pool:expr, true) => { $pool.bool_true() };
     ($pool:expr, false) => { $pool.bool_false() };
-    ($pool:expr, $int:literal) => { $pool.add(Term::Const(Constant::Integer($int.into()))) };
+    ($pool:expr, $int:literal) => { $pool.add(Term::Const($crate::ast::Constant::Integer($int.into()))) };
     ($pool:expr, {$terminal:expr}) => { $terminal };
     ($pool:expr, ((_ $indexed_op:tt $($op_args:tt)+) $($args:tt)+)) => {{
         let term = $crate::ast::Term::ParamOp {
