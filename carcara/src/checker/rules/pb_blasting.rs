@@ -185,15 +185,11 @@ pub fn pbblast_bvand(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> R
 
 mod tests {
     #[test]
-    fn pbblast_bveq() {
+    fn pbblast_bveq_1() {
         test_cases! {
             definitions = "
             (declare-const x1 (_ BitVec 1))
             (declare-const y1 (_ BitVec 1))
-            (declare-const x2 (_ BitVec 2))
-            (declare-const y2 (_ BitVec 2))
-            (declare-const x8 (_ BitVec 8))
-            (declare-const y8 (_ BitVec 8))
         ",
 
             // Check that equality on single-bit bitvectors is accepted when
@@ -239,6 +235,16 @@ mod tests {
                                     0))) :rule pbblast_bveq)"#: false,
             }
 
+        }
+    }
+
+    #[test]
+    fn pbblast_bveq_2() {
+        test_cases! {
+            definitions = "
+            (declare-const x2 (_ BitVec 2))
+            (declare-const y2 (_ BitVec 2))
+        ",
             // Check equality on two-bit bitvectors, ensuring that:
             // - The most significant bit (index 1) uses a coefficient of 1,
             // - The least significant bit (index 0) uses a coefficient of 2.
@@ -250,7 +256,16 @@ mod tests {
                                           (* 2 ((_ int_of 0) y2)) 0))
                                     0))) :rule pbblast_bveq)"#: true,
             }
+        }
+    }
 
+    #[test]
+    fn pbblast_bveq_8() {
+        test_cases! {
+            definitions = "
+            (declare-const x8 (_ BitVec 8))
+            (declare-const y8 (_ BitVec 8))
+        ",
             // Check equality on eight-bit bitvectors
             "Equality on 8-bit bitvectors" {
                 r#"(step t1 (cl (= (= x8 y8)
@@ -330,15 +345,11 @@ mod tests {
     }
 
     #[test]
-    fn pbblast_bvult() {
+    fn pbblast_bvult_1() {
         test_cases! {
             definitions = "
             (declare-const x1 (_ BitVec 1))
             (declare-const y1 (_ BitVec 1))
-            (declare-const x2 (_ BitVec 2))
-            (declare-const y2 (_ BitVec 2))
-            (declare-const x8 (_ BitVec 8))
-            (declare-const y8 (_ BitVec 8))
         ",
 
             // A simple test on one-bit bitvectors using explicit multiplication.
@@ -375,7 +386,16 @@ mod tests {
                                         (+ (* 0 ((_ int_of 0) x1)) 0))
                                      1))) :rule pbblast_bvult)"#: false,
             }
+        }
+    }
 
+    #[test]
+    fn pbblast_bvult_2() {
+        test_cases! {
+            definitions = "
+            (declare-const x2 (_ BitVec 2))
+            (declare-const y2 (_ BitVec 2))
+        ",
             // Test on two-bit bitvectors.
             "bvult on two bits" {
                 r#"(step t1 (cl (= (bvult x2 y2)
@@ -383,7 +403,16 @@ mod tests {
                                         (+ (* 1 ((_ int_of 1) x2)) (* 2 ((_ int_of 0) x2)) 0))
                                      1))) :rule pbblast_bvult)"#: true,
             }
+        }
+    }
 
+    #[test]
+    fn pbblast_bvult_8() {
+        test_cases! {
+            definitions = "
+            (declare-const x8 (_ BitVec 8))
+            (declare-const y8 (_ BitVec 8))
+        ",
             // Check unsigned-less-than on eight-bit bitvectors
             "bvult on 8-bit bitvectors" {
                 r#"(step t1 (cl (= (bvult x8 y8)
@@ -461,15 +490,11 @@ mod tests {
     }
 
     #[test]
-    fn pbblast_bvugt() {
+    fn pbblast_bvugt_1() {
         test_cases! {
             definitions = "
             (declare-const x1 (_ BitVec 1))
             (declare-const y1 (_ BitVec 1))
-            (declare-const x2 (_ BitVec 2))
-            (declare-const y2 (_ BitVec 2))
-            (declare-const x8 (_ BitVec 8))
-            (declare-const y8 (_ BitVec 8))
         ",
 
             // Correct pseudo–Boolean formulation for unsigned greater-than on single-bit bitvectors.
@@ -513,7 +538,16 @@ mod tests {
                                         (+ (* 0 ((_ int_of 0) y1)) 0))
                                      1))) :rule pbblast_bvugt)"#: false,
             }
+        }
+    }
 
+    #[test]
+    fn pbblast_bvugt_2() {
+        test_cases! {
+            definitions = "
+            (declare-const x2 (_ BitVec 2))
+            (declare-const y2 (_ BitVec 2))
+        ",
             // Correct formulation for two-bit bitvectors.
             // Expected summands for x2: most-significant bit uses coefficient 1, least-significant uses coefficient 2.
             "bvugt on two bits" {
@@ -522,7 +556,16 @@ mod tests {
                                         (+ (* 1 ((_ int_of 1) y2)) (* 2 ((_ int_of 0) y2)) 0))
                                      1))) :rule pbblast_bvugt)"#: true,
             }
+        }
+    }
 
+    #[test]
+    fn pbblast_bvugt_8() {
+        test_cases! {
+            definitions = "
+            (declare-const x8 (_ BitVec 8))
+            (declare-const y8 (_ BitVec 8))
+        ",
             // Check unsigned-greater-than on eight-bit bitvectors
             "bvugt on 8-bit bitvectors" {
                 r#"(step t1 (cl (= (bvugt x8 y8)
@@ -600,15 +643,11 @@ mod tests {
     }
 
     #[test]
-    fn pbblast_bvuge() {
+    fn pbblast_bvuge_1() {
         test_cases! {
             definitions = "
             (declare-const x1 (_ BitVec 1))
             (declare-const y1 (_ BitVec 1))
-            (declare-const x2 (_ BitVec 2))
-            (declare-const y2 (_ BitVec 2))
-            (declare-const x8 (_ BitVec 8))
-            (declare-const y8 (_ BitVec 8))
         ",
 
             // Correct pseudo–Boolean formulation for unsigned greater-or-equal on single-bit bitvectors.
@@ -652,7 +691,16 @@ mod tests {
                                         (+ (* 0 ((_ int_of 0) y1)) 0))
                                      0))) :rule pbblast_bvuge)"#: false,
             }
+        }
+    }
 
+    #[test]
+    fn pbblast_bvuge_2() {
+        test_cases! {
+            definitions = "
+            (declare-const x2 (_ BitVec 2))
+            (declare-const y2 (_ BitVec 2))
+        ",
             // Correct formulation for two-bit bitvectors.
             "bvuge on two bits" {
                 r#"(step t1 (cl (= (bvuge x2 y2)
@@ -660,7 +708,16 @@ mod tests {
                                         (+ (* 1 ((_ int_of 1) y2)) (* 2 ((_ int_of 0) y2)) 0))
                                      0))) :rule pbblast_bvuge)"#: true,
             }
+        }
+    }
 
+    #[test]
+    fn pbblast_bvuge_8() {
+        test_cases! {
+            definitions = "
+            (declare-const x8 (_ BitVec 8))
+            (declare-const y8 (_ BitVec 8))
+        ",
             // Check unsigned-greater-equal on eight-bit bitvectors
             "bvuge on 8-bit bitvectors" {
                 r#"(step t1 (cl (= (bvuge x8 y8)
@@ -738,17 +795,12 @@ mod tests {
     }
 
     #[test]
-    fn pbblast_bvule() {
+    fn pbblast_bvule_1() {
         test_cases! {
             definitions = "
             (declare-const x1 (_ BitVec 1))
             (declare-const y1 (_ BitVec 1))
-            (declare-const x2 (_ BitVec 2))
-            (declare-const y2 (_ BitVec 2))
-            (declare-const x8 (_ BitVec 8))
-            (declare-const y8 (_ BitVec 8))
         ",
-
             // Correct pseudo–Boolean formulation for unsigned less-or-equal on single-bit bitvectors.
             // Note the summation order is reversed compared to bvugt: the summation over y appears first.
             // Expected: (bvule x1 y1) ≈ (>= (- (+ (* 1 ((_ int_of 0) y1)) 0)
@@ -791,7 +843,16 @@ mod tests {
                                         (+ (* 0 ((_ int_of 0) x1)) 0))
                                      0))) :rule pbblast_bvule)"#: false,
             }
+        }
+    }
 
+    #[test]
+    fn pbblast_bvule_2() {
+        test_cases! {
+            definitions = "
+            (declare-const x2 (_ BitVec 2))
+            (declare-const y2 (_ BitVec 2))
+        ",
             // Correct formulation for two-bit bitvectors.
             "bvule on two bits" {
                 r#"(step t1 (cl (= (bvule x2 y2)
@@ -799,7 +860,16 @@ mod tests {
                                         (+ (* 1 ((_ int_of 1) x2)) (* 2 ((_ int_of 0) x2)) 0))
                                      0))) :rule pbblast_bvule)"#: true,
             }
+        }
+    }
 
+    #[test]
+    fn pbblast_bvule_8() {
+        test_cases! {
+            definitions = "
+            (declare-const x8 (_ BitVec 8))
+            (declare-const y8 (_ BitVec 8))
+        ",
             // Check unsigned-less-equal on eight-bit bitvectors
             "bvule on 8-bit bitvectors" {
                 r#"(step t1 (cl (= (bvule x8 y8)
@@ -848,7 +918,7 @@ mod tests {
                                  1))) :rule pbblast_bvule)"#: false,
             }
 
-             // For bvule the correct encoding is:
+            // For bvule the correct encoding is:
             //   (- (sum_y8) (sum_x8)) >= 0
             // Here we deliberately use 63 instead of 64 for one of the summands in y8.
             "bvule wrong coefficient" {
