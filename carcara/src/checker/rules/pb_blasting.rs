@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use super::{RuleArgs, RuleResult};
 use crate::{
     ast::{pool::TermPool, Rc, Sort, Term},
@@ -10,20 +12,26 @@ fn check_pbblast_sum(
     pool: &mut dyn TermPool,
     bitvector: &Rc<Term>,
     sum: &[Rc<Term>],
+    range: &Range<usize>,
 ) -> RuleResult {
     // Obtain the bitvector width from the pool.
     let Sort::BitVec(width) = pool.sort(bitvector).as_sort().cloned().unwrap() else {
         unreachable!();
     };
+
+    // The `range` must be the same length as the `sum`, but may be less than `width`
     let width = width.to_usize().unwrap();
 
     // Drop the last element, which is the constant zero
     let sum = &sum[..sum.len() - 1];
 
-    // The summation must have as many summands as the bitvector has bits.
-    rassert!(width == sum.len(), CheckerError::Unspecified);
+    // The summation must have at most as many summands as the bitvector has bits.
+    rassert!(width >= sum.len(), CheckerError::Unspecified);
 
-    for (i, element) in sum.iter().enumerate() {
+    // The summation must have as many summands as the range has element.
+    rassert!(range.len() == sum.len(), CheckerError::Unspecified);
+
+    for (i, element) in range.clone().zip(sum.iter()) {
         // Try to match (* c ((_ int_of idx) bv))
         let (c, idx, bv) = match match_term!((* c ((_ int_of idx) bv)) = element) {
             Some((c, (idx, bv))) => (c.as_integer_err()?, idx, bv),
@@ -61,9 +69,11 @@ fn check_pbblast_constraint(
     right_bv: &Rc<Term>,
     left_sum: &[Rc<Term>],
     right_sum: &[Rc<Term>],
+    range: Option<Range<usize>>,
 ) -> RuleResult {
-    check_pbblast_sum(pool, left_bv, left_sum)?;
-    check_pbblast_sum(pool, right_bv, right_sum)
+    let range = range.unwrap_or(0..(left_sum.len() - 1));
+    check_pbblast_sum(pool, left_bv, left_sum, &range)?;
+    check_pbblast_sum(pool, right_bv, right_sum, &range)
 }
 
 /// Implements the equality rule
@@ -79,7 +89,7 @@ pub fn pbblast_bveq(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
 
     // Check that the summations have the correct structure.
     // (For equality the order is: sum_x for x and sum_y for y.)
-    check_pbblast_constraint(pool, x, y, sum_x, sum_y)
+    check_pbblast_constraint(pool, x, y, sum_x, sum_y, None)
 }
 
 /// Implements the unsigned-less-than rule.
@@ -94,7 +104,7 @@ pub fn pbblast_bvult(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     rassert!(constant == 1, CheckerError::Unspecified);
 
     // For bvult the summations occur in reverse: the "left" sum comes from y and the "right" from x.
-    check_pbblast_constraint(pool, y, x, sum_y, sum_x)
+    check_pbblast_constraint(pool, y, x, sum_y, sum_x, None)
 }
 
 /// Implements the unsigned-greater-than rule.
@@ -110,7 +120,7 @@ pub fn pbblast_bvugt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     rassert!(constant == 1, CheckerError::Unspecified);
 
     // For bvugt the summations appear in the same order as in equality.
-    check_pbblast_constraint(pool, x, y, sum_x, sum_y)
+    check_pbblast_constraint(pool, x, y, sum_x, sum_y, None)
 }
 
 /// Implements the unsigned-greater-or-equal rule.
@@ -125,7 +135,7 @@ pub fn pbblast_bvuge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     let constant: Integer = constant.as_integer_err()?;
     rassert!(constant == 0, CheckerError::Unspecified);
 
-    check_pbblast_constraint(pool, x, y, sum_x, sum_y)
+    check_pbblast_constraint(pool, x, y, sum_x, sum_y, None)
 }
 
 /// Implements the unsigned-less-or-equal rule.
@@ -140,12 +150,26 @@ pub fn pbblast_bvule(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     let constant: Integer = constant.as_integer_err()?;
     rassert!(constant == 0, CheckerError::Unspecified);
 
-    check_pbblast_constraint(pool, x, y, sum_x, sum_y)
+    check_pbblast_constraint(pool, x, y, sum_x, sum_y, None)
 }
 
-pub fn pbblast_bvslt(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
-    println!("{} {} {}", premises.len(), args.len(), conclusion.len());
-    Err(CheckerError::Unspecified)
+pub fn pbblast_bvslt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    let ((x, y), (((sum_y, sign_y), (sign_x, sum_x)), constant)) = match_term_err!((= (bvslt x y) (>= (+ (- (+ ...) sign_y) (- sign_x (+ ...))) constant)) = &conclusion[0])?;
+
+    // Range from 0 to n-2
+    let the_range = 0..(sum_y.len() - 1);
+
+    // Check that the constant is 1
+    let constant: Integer = constant.as_integer_err()?;
+    rassert!(constant == 1, CheckerError::Unspecified);
+
+    // TODO: Check the signs
+    // sign_y=(* 2 ((_ int_of 0) y2)) sign_x=(* 2 ((_ int_of 0) x2))
+    println!("sign_y={sign_y} sign_x={sign_x}");
+
+    // TODO: Pass `tail y` and `tail x` to the function
+    // For bvult the summations occur in reverse: the "left" sum comes from y and the "right" from x.
+    check_pbblast_constraint(pool, y, x, sum_y, sum_x, Some(the_range))
 }
 
 pub fn pbblast_bvsgt(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
@@ -976,12 +1000,12 @@ mod tests {
                 r#"(step t1 (cl (= (bvslt x2 y2)
                                 (>= (+
                                         (-
-                                            ((_ int_of 1) y2)               ; y sum omitted "* 1"
+                                            (+ ((_ int_of 1) y2) 0)               ; y sum omitted "* 1"
                                             (* 2 ((_ int_of 0) y2))
                                         )
                                         (-
                                             (* 2 ((_ int_of 0) x2))
-                                            ((_ int_of 1) x2)               ; x sum omitted "* 1"
+                                            (+ ((_ int_of 1) x2) 0)               ; x sum omitted "* 1"
                                         )
                                     ) 1))) :rule pbblast_bvslt)"#: true,
             }
@@ -991,12 +1015,12 @@ mod tests {
                 r#"(step t1 (cl (= (bvslt x2 y2)
                                 (>= (+
                                         (-
-                                            ((_ int_of 1) y2)        
+                                            ((_ int_of 1) y2)
                                             (* 1 ((_ int_of 0) y2))         ; should be * 2
                                         )
                                         (-
                                             (* 2 ((_ int_of 0) x2))
-                                            ((_ int_of 1) x2)             
+                                            ((_ int_of 1) x2)
                                         )
                                     ) 1))) :rule pbblast_bvslt)"#: false,
             }
@@ -1007,16 +1031,14 @@ mod tests {
                                 (>= (+
                                         (-
                                             (+ (* 1 ((_ int_of 0) y2)) 0)   ; should be int_of 1
-                                            (* 2 ((_ int_of 0) y2))         
+                                            (* 2 ((_ int_of 0) y2))
                                         )
                                         (-
-                                            (* 2 ((_ int_of 0) x2))         
-                                            (+ (* 1 ((_ int_of 1) x2)) 0)   
+                                            (* 2 ((_ int_of 0) x2))
+                                            (+ (* 1 ((_ int_of 1) x2)) 0)
                                         )
                                     ) 1))) :rule pbblast_bvslt)"#: false,
             }
-
-
         }
     }
 
