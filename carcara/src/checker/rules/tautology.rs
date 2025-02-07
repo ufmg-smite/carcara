@@ -1199,15 +1199,15 @@ mod tests {
                     :rule connective_def)": false,
             }
             "Case #4" {
-                "(step t1 (cl (= (exists ((x Real)) p) (not (forall ((x Real)) (not p)))))
+                "(step t1 (cl (= (forall ((x Real)) p) (not (exists ((x Real)) (not p)))))
                     :rule connective_def)": true,
                 "(step t1 (cl (=
-                    (exists ((x Real) (y Real)) (= x y))
-                    (not (forall ((x Real) (y Real)) (not (= x y))))
+                    (forall ((x Real) (y Real)) (= x y))
+                    (not (exists ((x Real) (y Real)) (not (= x y))))
                 )) :rule connective_def)": true,
-                "(step t1 (cl (= (exists ((x Real)) p) (forall ((x Real)) (not p))))
+                "(step t1 (cl (= (forall ((x Real)) p) (exists ((x Real)) (not p))))
                     :rule connective_def)": false,
-                "(step t1 (cl (= (forall ((x Real)) p) (not (exists ((x Real)) (not p)))))
+                "(step t1 (cl (= (exists ((x Real)) p) (not (forall ((x Real)) (not p)))))
                     :rule connective_def)": false,
             }
         }
