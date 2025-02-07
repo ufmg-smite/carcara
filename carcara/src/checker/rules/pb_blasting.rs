@@ -1127,27 +1127,42 @@ mod tests {
             }
         }
     }
+
     #[test]
-    fn pbblast_pbbvar() {
+    fn pbblast_pbbvar_1() {
         test_cases! {
            definitions = "
                 (declare-const x (_ BitVec 1))
                 (declare-const y (_ BitVec 1))
                 ",
-            "Equality on single bits" {
-                r#"(step t1 (cl (= (= x y) (= (- (+ ((_ int_of 0) x) 0) (+ ((_ int_of 0) y) 0)) 0))) :rule pbblast_pbbvar :args (x y))"#: true,
+            // No restriction, only create a vector of pseudo-boolean variables that are free
+            "pbbvar on single bits" {
+                r#"(step t1 (cl (= x (pbbterm ((_ int_of 0) x)))) :rule pbblast_pbbvar)"#: true,
+                r#"(step t1 (cl (= x (pbbterm ((_ int_of 1) x)))) :rule pbblast_pbbvar)"#: false, // Wrong index
+                r#"(step t1 (cl (= x (pbbterm ((_ int_of 0) y)))) :rule pbblast_pbbvar)"#: false, // Mismatched vectors
+                r#"(step t1 (cl (= y (pbbterm ((_ int_of 0) x)))) :rule pbblast_pbbvar)"#: false, // Mismatched vectors
             }
         }
     }
+
     #[test]
-    fn pbblast_pbbconst() {
+    fn pbblast_pbbconst_4() {
         test_cases! {
            definitions = "
-                (declare-const x (_ BitVec 1))
-                (declare-const y (_ BitVec 1))
+                (declare-const r (_ BitVec 4))
                 ",
-            "Equality on single bits" {
-                r#"(step t1 (cl (= (= x y) (= (- (+ ((_ int_of 0) x) 0) (+ ((_ int_of 0) y) 0)) 0))) :rule pbblast_pbbconst :args (x y))"#: true,
+            // Consider a constant bitvector like #b0111, we blast the restrictions for each bit
+            "pbbconst on single bits" {
+                r#"(step t1 (cl (=
+                                  (= r #b0111)
+                                  (and  ; list of bit restrictions
+                                    (= ((_ int_of 0) r) 1)
+                                    (= ((_ int_of 1) r) 1)
+                                    (= ((_ int_of 2) r) 1)
+                                    (= ((_ int_of 3) r) 0)
+                                    true ; end of list
+                                  )
+                                )) :rule pbblast_pbbconst)"#: true,
             }
         }
     }
