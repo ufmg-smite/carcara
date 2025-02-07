@@ -204,9 +204,29 @@ pub fn pbblast_pbbvar(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     Ok(())
 }
 
-pub fn pbblast_pbbconst(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
-    println!("{} {} {}", premises.len(), args.len(), conclusion.len());
-    Err(CheckerError::Unspecified)
+pub fn pbblast_pbbconst(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    let ((r, bv_const), pbs) = match_term_err!((= (= r bv_const) (and ...)) = &conclusion[0])?;
+
+    // Drop the last element of conjunctions, which is the constant `true`
+    let pbs = &pbs[..pbs.len() - 1];
+
+    // Iterate on bits of bv, check and list
+    // ? let bv = match_term_err!((_ bv1 bv) = bv)?;
+    println!("r={r}");
+    println!("bv_const={bv_const}");
+    println!("pbs:");
+    for (i, pb) in pbs.iter().enumerate() {
+        print!("{i}:{pb} ");
+        let ((idx, bv), bit) = match_term_err!((= ((_ int_of idx) bv) bit) = pb)?;
+        // Convert the index term to an integer.
+        let idx: Integer = idx.as_integer_err()?;
+
+        // TODO get ith bit from bv_const e.g. "(_ bv1 1)"
+        println!("=> {bv}[{idx}] = {bit}, check that {bit} is {bv_const}[{idx}]...");
+    }
+    println!();
+
+    Ok(())
 }
 
 pub fn pbblast_bvxor(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
@@ -1230,7 +1250,7 @@ mod tests {
             }
             "Invalid 1-bit value" {
                 r#"(step t1 (cl (= (= r #b1)
-                              (and (= ((_ int_of 0) r) 0) true))) 
+                              (and (= ((_ int_of 0) r) 0) true)))
                       :rule pbblast_pbbconst)"#: false,
             }
         }
