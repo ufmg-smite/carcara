@@ -435,6 +435,13 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     }
                 }
             }
+            Operator::Cl => {
+                SortError::assert_eq(&Sort::Bool, sorts[0])?;
+            }
+            Operator::Delete => {
+                SortError::assert_eq(&Sort::Bool, sorts[0])?;
+                assert_num_args(&args, 1)?;
+            }
             Operator::BvAdd
             | Operator::BvMul
             | Operator::BvAnd
