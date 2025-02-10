@@ -11,9 +11,10 @@ pub enum Implied<T, X> {
     Bottom(X),
     NotUnsat(),
 }
-
+// A RUP Addition is a vector of the clause plus the unit clause and the hash of the clause
 pub type RupAdition = Vec<(IndexSet<(bool, Rc<Term>)>, Option<(bool, Rc<Term>)>, u64)>;
 
+//This enum is used to bookkeeping the action perfomed by a reverse unit propagation
 pub enum DRupProofAction {
     RupStory(IndexSet<(bool, Rc<Term>)>, RupAdition),
     Delete(Rc<Term>),
@@ -54,6 +55,8 @@ pub fn hash_term<T: Borrow<Rc<Term>>>(pool: &mut dyn TermPool, term: T) -> u64 {
     return hash;
 }
 
+// This function search for a unit clause by using the two literals in the pair associated in each indexset
+// additionally clauses is mutable since this function also fix the two watched literal whenever a new unit clause is propagated
 fn get_implied_clause(
     clauses: &mut Vec<(
         (Option<(bool, Rc<Term>)>, Option<(bool, Rc<Term>)>),
@@ -147,6 +150,8 @@ fn get_implied_clause(
     Implied::NotUnsat()
 }
 
+// Perform *only* rup (reverse unit propagation) in a set of clauses and a "goal", here the goal is the implied clause by
+// F /\ ~ C |- \bottom
 fn rup<'a, 'b>(
     pool: &mut dyn TermPool,
     drup_clauses: &HashMap<u64, IndexSet<(bool, Rc<Term>)>>,
@@ -188,13 +193,6 @@ fn rup<'a, 'b>(
 
     loop {
         let unit = get_implied_clause(clauses.borrow_mut(), env.borrow());
-        for (watched_literals, clauses) in clauses.clone() {
-            print!("{:?}\n", watched_literals);
-            for clause in clauses.0 {
-                print!("{:?} = {:?}\n", clause, env.get(&clause));
-            }
-            print!("\n\n");
-        }
 
         match unit {
             Implied::Bottom(clause) => {
@@ -212,6 +210,8 @@ fn rup<'a, 'b>(
     }
 }
 
+// This implements the rule for drup checking, by using a chain of goals that calls RUP, check_rat is optional in case if you
+// want to check also for RAT format
 pub fn check_drup<'a>(
     pool: &mut dyn TermPool,
     conclusion: Rc<Term>,
@@ -291,6 +291,8 @@ pub fn check_drup<'a>(
     Ok(drup_history)
 }
 
+// Checks RAT, essentially rat is equivalent to RUP plus a blocked clause
+// (eg. given a clause C \/ p, we look for RUP in every D \/ ~ p in the set clause)
 pub fn check_drat<'a>(
     pool: &mut dyn TermPool,
     drup_clauses: &HashMap<u64, IndexSet<(bool, Rc<Term>)>>,
