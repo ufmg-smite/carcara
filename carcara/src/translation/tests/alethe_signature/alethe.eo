@@ -2065,7 +2065,7 @@
 ; program: check_la_rw_eq
 ; args:
 ; - conclusion Bool: >
-;   The conclusion provided to the la_rw_eq rule. Must be build with @cl.
+;   The conclusion provided to the la_rw_eq rule. Must be built with @cl.
 ; return: >
 ;   A boolean indicating if "conclusion" is a clause of the form 
 ;   (= (= t u) (and (<= t u) (<= u t))), for some numbers t and u.
@@ -2125,9 +2125,9 @@
 ;     ○ 𝑡𝑖 ≈ (… ((𝑡1 ∘𝑡2) ∘𝑡3) ∘⋯𝑡𝑛) (for a left assoc. operator ∘)
 ;     ○ 𝑡𝑖 ≈ (𝑡1 ∘⋯∘(𝑡𝑛−2 ∘(𝑡𝑛−1 ∘𝑡𝑛) … ) (for a right assoc. operator ∘)
 ;     ○ 𝑡𝑖 ≈ (𝑡1 ∘𝑡2) ∧(𝑡2 ∘𝑡3) ∧⋯∧ (𝑡𝑛−1 ∘𝑡𝑛) (for a chainable operator ∘)
-;    - ∘ cannot be ∧ or ∨.
+;   - ∘ cannot be ∧ or ∨.
 ; conclusion-given: >
-;  Only the "requires" predicate checks if a proper conclusion is given.
+;   Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule nary_elim ()
   :requires (((check_nary_elim eo::conclusion) true))
   :conclusion-given
@@ -2166,16 +2166,41 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Table 10: Rules used by cvc5, but not by veriT
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;TODO
-(program check_symm ((premise Bool) (conclusion Bool))
+
+;;;;;;;;;;;;;;;;;;;
+; Rule 101: symm
+;;;;;;;;;;;;;;;;;;;
+; program: check_symm
+; args:
+; - premise Bool: >
+;   Premise given to rule symm. It could be  with @cl.
+; - conclusion Bool: >
+;   Conclusion given to rule symm. It must be built with @cl.
+; return:
+(program check_symm ((phi Bool) (psy Bool))
   (Bool Bool) Bool
   (
-   ((check_symm premise conclusion) true)
+   (
+    (check_symm (= phi psy) (@cl (= psy phi))) 
+
+    true
+    )
+
+   (
+    (check_symm (@cl (= phi psy)) (@cl (= psy phi))) 
+
+    true
+    )
   )
 )
-; TODO: should we delegate the whole responsibility to the checker or
-; should we share responsibilities?
-;TRUST
+
+; rule: symm
+; implements: TODO?
+; requires: >
+;   The conclusion should have the form (@cl (= psy phi)), for a given
+;   premise (@cl (= phi psy)) or (= psi psy).
+; conclusion-given: >
+;   Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule symm ((premise Bool))
   :premises (premise)
   :requires (((check_symm premise eo::conclusion) true))
@@ -2193,7 +2218,7 @@
 ;TRUST
 (declare-rule reordering ((premise Bool))
   :premises (premise)
-  :requires (((check_symm premise eo::conclusion) true))
+  :requires (((check_reordering premise eo::conclusion) true))
   :conclusion-given
 )
 
