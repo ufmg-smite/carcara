@@ -118,6 +118,47 @@
     (f elem tail)
 )
 
+; program: f_list_remove_elem
+; args:
+; - list B: An f-list, where f is a variadic operator with some "nil" element.
+; - f_nil A: The "nil" element of variadic operator f.
+; - elem A: An element from "list" that we want to remove.
+; return: >
+;   Removes the first occurrence of "elem" in the given f-list. Returns
+;   the obtained f-list.
+(program f_list_remove_elem ((A Type) (B Type)
+                             (f (-> A A B)) (f_nil A) (hd A) (tl A :list)
+                             (elem A))
+  (B A A) B
+
+  (
+   (
+    (f_list_remove_elem (f elem tl) elem f_nil)
+    
+    tl
+    )
+
+   (; { hd =/= elem }
+    (f_list_remove_elem (f hd tl) elem f_nil)
+    
+    (f hd (f_list_remove_elem tl elem f_nil))
+    )
+
+   (
+    (f_list_remove_elem elem elem f_nil)
+    
+    f_nil
+    )
+
+   ; TODO: this should be, somehow, an error
+   (; { hd =/= elem }
+    (f_list_remove_elem hd elem f_nil)
+    
+    hd
+    )
+   )
+  )
+
 ;;;;;;;;;;;;
 ;; @VarList
 ;;;;;;;;;;;;
