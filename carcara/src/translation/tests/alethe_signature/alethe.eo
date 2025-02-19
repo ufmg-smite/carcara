@@ -22,16 +22,19 @@
   :conclusion (@cl true)
 )
 
-(program check_false ((conclusion Bool))
-    (Bool) Bool
-    (
-    ((check_false (@cl (not false))) true)
-    )
-)
+;;;;;;;;;;;;;;;;;;;;;;;
+; Rule 4: false
+;;;;;;;;;;;;;;;;;;;;;;;
+
+;; (program check_false ((conclusion Bool))
+;;     (Bool) Bool
+;;     (
+;;     ((check_false (@cl (not false))) true)
+;;     )
+;; )
 
 (declare-rule false ()
-  :requires (((check_false eo::conclusion) true))
-  :conclusion-given
+  :conclusion (@cl false)
 )
 
 ;;;;;;;;;;;;;;;;;;;;;;;
@@ -2238,9 +2241,12 @@
 
 ; program: check_reordering
 ; args:
-; - premise Bool:
-; - conclusion Bool:
-; return:
+; - premise Bool: >
+;   Premise given to rule reordering. Must be a clause built with @cl.
+; - conclusion Bool: >
+;   Conclusion given to rule reordering. Must be a clause built with @cl.
+; return: >
+;   A boolean indicating if conclusion is a permutation of the premise.
 (program check_reordering ((hd_premise Bool) (tl_premise Bool :list)
                            (hd_conclusion Bool) (tl_conclusion Bool :list))
   (Bool Bool) Bool
@@ -2270,10 +2276,12 @@
 ; rule: reordering
 ; implements: TODO?
 ; premises:
-; - premise Bool:
-; args:
-; requires:
-; conclusion:
+; - premise Bool: >
+;   Premise given to rule reordering. Must be a clause built with @cl.
+; requires: >
+;   For conclusion to be a permutation of the premise.
+; conclusion-given: >
+;  Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule reordering ((premise Bool))
   :premises (premise)
   :requires (((check_reordering premise eo::conclusion) 
