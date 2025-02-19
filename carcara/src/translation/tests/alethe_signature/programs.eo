@@ -55,6 +55,7 @@
 
     true)
    
+   ; { hd =/= elem}
    ((f_list_contains_elem f elem hd)
 
     false)
@@ -94,7 +95,7 @@
 ; - list_2 A: An f-list.
 ; return: >
 ; A boolean indicating if the operands from list_1 and list_2 are the 
-; same, regardless of the order.
+; same, regardless of the order and possible repetitions.
 (program f_list_equal ((A Type) (f (-> A A A))
                        (f_list_1 A) (f_list_2 A))
   ((-> A A A) A A) Bool
@@ -115,24 +116,6 @@
 (define f_list_cons ((A Type :implicit) (f (-> A A A)) (elem A)
                      (tail A :list))
     (f elem tail)
-)
-
-; TODO: abstract this into a map,
-;       once it becomes possible to pass and reduce programs
-; program: f_list_proj_lhs
-; args:
-; - f_list_proj_lhs nil:
-; return:
-(program f_list_proj_lhs ((A Type) (B Type) 
-                          (f (-> A A B)) (op (-> A A A)) (lhs A) (tl A :list))
-   (B) B
-   (
-    (
-     (f_list_proj_lhs (f (op lhs _) tl))
-     
-     (f lhs (f_list_proj_lhs tl))
-     )
-    )
 )
 
 ;;;;;;;;;;;;
@@ -279,6 +262,82 @@
 
    ((de_morgan_not_and l) (@cl (not l)))
   )
+)
+
+
+; TODO: implement this as a higher-order program, once it becomes feasible
+(program flag_duplicates ((hd Bool) (tl Bool :list))
+         (Bool) @VarList
+
+         (
+          (
+           (flag_duplicates (@cl hd tl))
+           (f_list_cons @varlist 
+                        (f_list_contains_elem @cl hd (@cl tl))
+                        (flag_duplicates tl))
+           )
+
+          ; { hd is a single element }
+          (
+           (flag_duplicates (@cl hd))
+           (f_list_cons @varlist 
+                        false
+                        @varlist.nil)
+           )
+
+          (
+           (flag_duplicates false)
+           @varlist.nil
+           )
+          )
+)
+
+; TODO: implement this as a higher-order program, once it becomes feasible
+(program filter ((hd Bool) (cl_tl Bool :list) (varlist_tl @VarList :list))
+         (Bool @VarList) Bool
+         (
+          (
+           (filter (@cl hd cl_tl) (@varlist true varlist_tl))
+           (filter cl_tl varlist_tl)
+           )
+
+          (
+           (filter (@cl hd cl_tl) (@varlist false varlist_tl))
+           (f_list_cons @cl
+                        hd
+                        (filter cl_tl varlist_tl))
+           )
+
+          (
+           (filter hd (@varlist false @varlist.nil))
+           (@cl hd)
+           )
+
+          (
+           (filter hd (@varlist true @varlist.nil))
+           false
+           )
+
+          (
+           (filter false @varlist.nil)
+           false
+           )
+          )
+         )
+
+; program: cl_remove_duplicates
+; args:
+; - clause Bool: A clause from which we want to delete duplicates.
+; return: A clause that contains every element from "clause", without duplicates.
+(program cl_remove_duplicates ((clause Bool))
+         (Bool) Bool
+         (
+          (
+           (cl_remove_duplicates clause)
+
+           (filter clause (flag_duplicates clause))
+           )
+          )
 )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

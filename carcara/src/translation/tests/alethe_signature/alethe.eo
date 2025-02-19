@@ -108,18 +108,41 @@
   :conclusion (@cl true)
 )
 
-;TODO
-(program check_contraction ((CL1 Bool) (CL Bool))
+;;;;;;;;;;;;;;;;;;;;;;;
+; Rule 9: contraction
+;;;;;;;;;;;;;;;;;;;;;;;
+
+; program: check_contraction
+; args:
+; - premise Bool: Premise given to rule "contraction". Must be a @cl.
+; - conclusion Bool: Conclusion given to rule "contraction". Must be a @cl.
+; return:
+;   A boolean indicating if conclusion is equivalent to premise, without 
+;   duplicated disjuncts.
+(program check_contraction ((premise Bool) (conclusion Bool))
   (Bool Bool) Bool
   (
-   ((check_contraction CL1 CL) true)
-  )
-)
+   (
+    ; Check that both clauses contain the same elements, regardless of order
+    ; and possible repetitions.
+    (check_contraction premise conclusion)
 
-;TRUST
-(declare-rule contraction ((CL1 Bool))
-  :premises (CL1)
-  :requires (((check_contraction CL1 eo::conclusion) true))
+    (f_list_equal @cl (cl_remove_duplicates premise) conclusion)
+    )
+   )
+  )
+
+; rule: contraction
+; implements: TODO?
+; premises:
+; - premise Bool: A clause from which we want to eliminate duplicated literals.
+; requires: >
+;   For the conclusion to be equivalent to premise, without duplicated disjuncts.
+; conclusion-given: >
+;  Only the "requires" predicate checks if a proper conclusion is given.
+(declare-rule contraction ((premise Bool))
+  :premises (premise)
+  :requires (((check_contraction premise eo::conclusion) true))
   :conclusion-given
 )
 
@@ -2176,7 +2199,9 @@
 ;   Premise given to rule symm. It could be  with @cl.
 ; - conclusion Bool: >
 ;   Conclusion given to rule symm. It must be built with @cl.
-; return:
+; return: >
+;   A boolean indicating if conclusion is of the form (@cl (= psy phi)), for a 
+;   given premise (@cl (= phi psy)) or (= psi psy). 
 (program check_symm ((phi Bool) (psy Bool))
   (Bool Bool) Bool
   (
