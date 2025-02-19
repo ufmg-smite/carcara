@@ -2232,18 +2232,52 @@
   :conclusion-given
 )
 
-;TODO
-(program check_reordering ((premise Bool) (conclusion Bool))
+;;;;;;;;;;;;;;;;;;;;;;
+; Rule 34: reordering
+;;;;;;;;;;;;;;;;;;;;;;
+
+; program: check_reordering
+; args:
+; - premise Bool:
+; - conclusion Bool:
+; return:
+(program check_reordering ((hd_premise Bool) (tl_premise Bool :list)
+                           (hd_conclusion Bool) (tl_conclusion Bool :list))
   (Bool Bool) Bool
   (
-   ((check_reordering premise conclusion) true)
+   (
+    (check_reordering (@cl hd_premise tl_premise) (@cl hd_conclusion tl_conclusion))
+
+    (check_reordering tl_premise 
+                      (f_list_remove_elem (@cl hd_conclusion tl_conclusion) hd_premise false))
+    )
+
+   (
+    (check_reordering false false)
+
+    true
+    )
+
+   (
+    (check_reordering hd_premise hd_conclusion)
+
+    false
+    )
   )
 )
 
 ;TRUST
+; rule: reordering
+; implements: TODO?
+; premises:
+; - premise Bool:
+; args:
+; requires:
+; conclusion:
 (declare-rule reordering ((premise Bool))
   :premises (premise)
-  :requires (((check_reordering premise eo::conclusion) true))
+  :requires (((check_reordering premise eo::conclusion) 
+              true))
   :conclusion-given
 )
 
