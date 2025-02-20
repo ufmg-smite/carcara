@@ -4,16 +4,16 @@
 ; Rule: assume is native
 
 ; TODO: what would the checker do in this case?
-(program check_hole ((conclusion Bool))
+(program $check_hole ((conclusion Bool))
     (Bool) Bool
     (
-    ((check_hole conclusion) true)
+    (($check_hole conclusion) true)
     )
 )
 
 ; Note: The hole here does not allow for args or premises.
 (declare-rule hole ()
-  :requires (((check_hole eo::conclusion) true))
+  :requires ((($check_hole eo::conclusion) true))
   :conclusion-given
 )
 
@@ -26,15 +26,10 @@
 ; Rule 4: false
 ;;;;;;;;;;;;;;;;;;;;;;;
 
-;; (program check_false ((conclusion Bool))
-;;     (Bool) Bool
-;;     (
-;;     ((check_false (@cl (not false))) true)
-;;     )
-;; )
-
+; rule: false
+; conclusion: Conclusion must be of the form (@cl (not false)).
 (declare-rule false ()
-  :conclusion (@cl false)
+  :conclusion (@cl (not false))
 )
 
 ;;;;;;;;;;;;;;;;;;;;;;;
@@ -47,11 +42,11 @@
 ; return: >
 ;   A boolean indicating if conclusion is equivalent to the proposition
 ;   ¬(¬¬𝜑), 𝜑, for some proposition 𝜑
-(program check_not_not ((phi Bool))
+(program $check_not_not ((phi Bool))
     (Bool) Bool
     (
-    ((check_not_not (@cl (not (not (not phi))) phi)) true)
-    ((check_not_not (@cl phi (not (not (not phi))))) true)
+    (($check_not_not (@cl (not (not (not phi))) phi)) true)
+    (($check_not_not (@cl phi (not (not (not phi))))) true)
     )
 )
 
@@ -63,7 +58,7 @@
 ; conclusion-given: >
 ;  Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule not_not ()
-  :requires (((check_not_not eo::conclusion) true))
+  :requires ((($check_not_not eo::conclusion) true))
   :conclusion-given
 )
 
@@ -71,16 +66,16 @@
 ; Rule 6: th_resolution
 ;;;;;;;;;;;;;;;;;;;;;;;
 ; TODO
-(program check_resolution ((Cs Bool) (CL Bool))
+(program $check_resolution ((Cs Bool) (CL Bool))
   (Bool Bool) Bool
   (
-   ((check_resolution Cs CL) true)
+   (($check_resolution Cs CL) true)
   )
 )
 
 (declare-rule th_resolution ((Cs Bool))
   :premise-list Cs and
-  :requires (((check_resolution Cs eo::conclusion) true))
+  :requires ((($check_resolution Cs eo::conclusion) true))
   :conclusion-given
 )
 
@@ -91,15 +86,15 @@
 ;TRUST
 (declare-rule resolution ((Cs Bool))
   :premise-list Cs and
-  :requires (((check_resolution Cs eo::conclusion) true))
+  :requires ((($check_resolution Cs eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_tautology ((CL1 Bool))
+(program $check_tautology ((CL1 Bool))
   (Bool) Bool
   (
-   ((check_tautology CL1) true)
+   (($check_tautology CL1) true)
   )
 )
 
@@ -107,7 +102,7 @@
 (declare-rule tautology ((CL1 Bool))
   :premises (CL1)
   :args ((@cl true))
-  :requires (((check_tautology CL1) true))
+  :requires ((($check_tautology CL1) true))
   :conclusion (@cl true)
 )
 
@@ -122,15 +117,15 @@
 ; return:
 ;   A boolean indicating if conclusion is equivalent to premise, without 
 ;   duplicated disjuncts.
-(program check_contraction ((premise Bool) (conclusion Bool))
+(program $check_contraction ((premise Bool) (conclusion Bool))
   (Bool Bool) Bool
   (
    (
     ; Check that both clauses contain the same elements, regardless of order
     ; and possible repetitions.
-    (check_contraction premise conclusion)
+    ($check_contraction premise conclusion)
 
-    (f_list_equal @cl (cl_remove_duplicates premise) conclusion)
+    ($f_list_equal @cl ($cl_remove_duplicates premise) conclusion)
     )
    )
   )
@@ -145,15 +140,15 @@
 ;  Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule contraction ((premise Bool))
   :premises (premise)
-  :requires (((check_contraction premise eo::conclusion) true))
+  :requires ((($check_contraction premise eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_subproof ((Premises Bool) (Conclusion Bool) (Conclusion_given Bool))
+(program $check_subproof ((Premises Bool) (Conclusion Bool) (Conclusion_given Bool))
   (Bool Bool Bool) Bool
   (
-   ((check_subproof Premises Conclusion Conclusion_given) true)
+   (($check_subproof Premises Conclusion Conclusion_given) true)
   )
 )
 
@@ -162,7 +157,7 @@
   ; TODO: why is it an assumption?
   :assumption F ;has no cl!
   :premises (G)
-  :requires (((check_subproof (not F) G eo::conclusion) true))
+  :requires ((($check_subproof (not F) G eo::conclusion) true))
   :conclusion-given
 )
 
@@ -173,10 +168,10 @@
 ; la_generic step contains a coefficient for each (in)equality. The result of 
 ; forming the linear combination of the literals with the coefficients is a trivial 
 ; inequality between constants".
-(program check_la_generic ((coeffs Real) (CL Bool))
+(program $check_la_generic ((coeffs Real) (CL Bool))
   (Real Bool) Bool
   (
-   ((check_la_generic coeffs CL) true)
+   (($check_la_generic coeffs CL) true)
   )
 )
 
@@ -186,22 +181,22 @@
 ;TRUST
 (declare-rule la_generic ((coeffs Real))
   :args (coeffs)
-  :requires (((check_la_generic coeffs eo::conclusion) true))
+  :requires ((($check_la_generic coeffs eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_lia_generic ((CL Bool))
+(program $check_lia_generic ((CL Bool))
   (Bool) Bool
   (
-   ((check_lia_generic CL) true)
+   (($check_lia_generic CL) true)
   )
 )
 
 ;TRUST
 (declare-rule lia_generic ((CL Bool))
   :args (CL)
-  :requires (((check_lia_generic CL) true))
+  :requires ((($check_lia_generic CL) true))
   :conclusion CL
 )
 
@@ -216,31 +211,31 @@
 )
 
 ;TODO
-(program check_la_tautology ((CL Bool))
+(program $check_la_tautology ((CL Bool))
   (Bool) Bool
   (
-   ((check_la_tautology CL) true)
+   (($check_la_tautology CL) true)
   )
 )
 
 ;TRUST
 (declare-rule la_tautology ((CL Bool))
   :args (CL)
-  :requires (((check_la_tautology CL) true))
+  :requires ((($check_la_tautology CL) true))
   :conclusion CL
 )
 
 ;TODO
-(program check_la_mult_neg ((CL Bool))
+(program $check_la_mult_neg ((CL Bool))
   (Bool) Bool
   (
-   ((check_la_mult_neg CL) true)
+   (($check_la_mult_neg CL) true)
   )
 )
 
 ;TRUST
 (declare-rule la_mult_neg ()
-  :requires (((check_la_mult_neg eo::conclusion) true))
+  :requires ((($check_la_mult_neg eo::conclusion) true))
   :conclusion-given
 )
 
@@ -263,10 +258,10 @@
 ; and `onepoint`.
 
 ;TODO
-(program check_bind ((ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T))
+(program $check_bind ((ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T))
   (Bool T T T T) Bool
   (
-   ((check_bind ctx l r l1 r1) true)
+   (($check_bind ctx l r l1 r1) true)
   )
 )
 
@@ -275,9 +270,9 @@
   :assumption ctx
   ;:premises (old_ctx (@cl (= l1 r1))) ; this is never a direct assumption
   ;; :premises (old_ctx) ; TODO: fix this
-  ;; :requires (((context_extended cztx old_ctx) true) ((check_bind ctx l r l1 r1) true))
-  ;; :requires (((context_extended ctx old_ctx) true) 
-  ;;            ;; ((check_bind ctx l r l1 r1) true)
+  ;; :requires ((($context_extended cztx old_ctx) true) (($check_bind ctx l r l1 r1) true))
+  ;; :requires ((($context_extended ctx old_ctx) true) 
+  ;;            ;; (($check_bind ctx l r l1 r1) true)
   ;;            )
   :conclusion-given
 )
@@ -286,10 +281,10 @@
 ; Rule 19: sko_ex
 ;;;;;;;;;;;;;;;;;;;;;;;
 ; TODO: to preserve previous def.
-;; (program check_sko_ex ((ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T))
+;; (program $check_sko_ex ((ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T))
 ;;   (Bool T T T T) Bool
 ;;   (
-;;    ((check_sko_ex ctx l r l1 r1) true)
+;;    (($check_sko_ex ctx l r l1 r1) true)
 ;;   )
 ;; )
 
@@ -298,29 +293,29 @@
 ;;   :assumption ctx
 ;;   :premises (old_ctx (@cl (= l1 r1)))
 ;;   :args ((@cl (= l r)))
-;;   :requires (((context_extended ctx old_ctx) true) ((check_sko_ex ctx l r l1 r1) true))
+;;   :requires ((($context_extended ctx old_ctx) true) (($check_sko_ex ctx l r l1 r1) true))
 ;;   :conclusion (@cl (= l r))
 ;; )
 
-(program check_sko_ex ((conclusion Bool))
+(program $check_sko_ex ((conclusion Bool))
   (Bool) Bool
   (
-   ((check_sko_ex conclusion) true)
+   (($check_sko_ex conclusion) true)
   )
 )
 
 ;TRUST
 (declare-rule sko_ex ((ctx Bool))
   :assumption ctx
-  :requires (((check_sko_ex eo::conclusion) true))
+  :requires ((($check_sko_ex eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_sko_forall ((ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T))
+(program $check_sko_forall ((ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T))
   (Bool T T T T) Bool
   (
-   ((check_sko_forall ctx l r l1 r1) true)
+   (($check_sko_forall ctx l r l1 r1) true)
   )
 )
 
@@ -329,62 +324,62 @@
   :assumption ctx
   :premises (old_ctx (@cl (= l1 r1)))
   :args ((@cl (= l r)))
-  :requires (((context_extended ctx old_ctx) true) ((check_sko_forall ctx l r l1 r1) true))
+  :requires ((($context_extended ctx old_ctx) true) (($check_sko_forall ctx l r l1 r1) true))
   :conclusion (@cl (= l r))
 )
 
 ;TODO: changing this for the tests to pass!
-(program check_forall_inst ((Conclusion Bool))
+(program $check_forall_inst ((Conclusion Bool))
   (Bool) Bool
   (
-   ((check_forall_inst Conclusion) true)
+   (($check_forall_inst Conclusion) true)
   )
 )
 
 ;TRUST
 ;TODO: changing this for the tests to pass!
 (declare-rule forall_inst ()
-  :requires (((check_forall_inst eo::conclusion) true))
+  :requires ((($check_forall_inst eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO: why is type T not mentioned in the body of check_refl?
-(program check_refl ((ctx Bool) (conclusion Bool))
+(program $check_refl ((ctx Bool) (conclusion Bool))
   (Bool Bool) Bool
   (
-   ((check_refl ctx conclusion) true)
+   (($check_refl ctx conclusion) true)
   )
 )
 
 ;TRUST
 (declare-rule refl ((ctx Bool))
   :args (ctx)
-  :requires (((check_refl ctx eo::conclusion) true))
+  :requires ((($check_refl ctx eo::conclusion) true))
   :conclusion-given
 )
 
-(program last_eq_right ((T Type) (t1 T) (t2 T) (eqs Bool))
+(program $last_eq_right ((T Type) (t1 T) (t2 T) (eqs Bool))
   (Bool) Bool
   (; TODO: not clear why we need to consider all of these different scenarios
    ; (with and without and)
-   ((last_eq_right (@cl (= t1 t2))) t2)
+   (($last_eq_right (@cl (= t1 t2))) t2)
 
-   ((last_eq_right (and (@cl (= t1 t2)))) t2)
-    ((last_eq_right (and (@cl (= t1 t2)) eqs)) (last_eq_right eqs))
+   (($last_eq_right (and (@cl (= t1 t2)))) t2)
+    (($last_eq_right (and (@cl (= t1 t2)) eqs)) ($last_eq_right eqs))
    ; TODO: are they always clauses? (seems that it is not the
    ; case if the premises where just "assume"s)
-    ((last_eq_right (and (= t1 t2))) t2)
-    ((last_eq_right (and (= t1 t2) eqs)) (last_eq_right eqs))
+    (($last_eq_right (and (= t1 t2))) t2)
+    (($last_eq_right (and (= t1 t2) eqs)) ($last_eq_right eqs))
   )
 )
 
-(program make_trans ((T Type) (t1 T) (t2 T) (eqs Bool :list))
+(program $make_trans ((T Type) (t1 T) (t2 T) (eqs Bool :list))
   (Bool) Bool
-  (((make_trans (and (@cl (= t1 t2)))) (= t1 t2))
-   ((make_trans (and (@cl (= t1 t2)) eqs)) (= t1 (last_eq_right eqs)))
+  ((($make_trans (and (@cl (= t1 t2)))) (= t1 t2))
+   (($make_trans (and (@cl (= t1 t2)) eqs)) (= t1 ($last_eq_right eqs)))
    ; TODO: if they are 'assume's, they could be term not built with @cl
-   ((make_trans (and (= t1 t2))) (= t1 t2))
-   ((make_trans (and (= t1 t2) eqs)) (= t1 (last_eq_right eqs)))
+   (($make_trans (and (= t1 t2))) (= t1 t2))
+   (($make_trans (and (= t1 t2) eqs)) (= t1 ($last_eq_right eqs)))
   )
 )
 
@@ -393,17 +388,17 @@
 (declare-rule trans ((Eqs Bool))
   :premise-list Eqs and
   ; TODO: is this correct?
-  ;; (((check_cong Eqs eo::conclusion) true))
+  ;; ((($check_cong Eqs eo::conclusion) true))
   ; TODO: add remaining cases in make_trans
-  ;; :requires (((@cl (make_trans Eqs)) eo::conclusion))
+  ;; :requires (((@cl ($make_trans Eqs)) eo::conclusion))
   :conclusion-given
 )
 
 ;TODO
-(program check_cong ((Eqs Bool) (CEq Bool))
+(program $check_cong ((Eqs Bool) (CEq Bool))
   (Bool Bool) Bool
   (
-   ((check_cong Eqs CEq) true)
+   (($check_cong Eqs CEq) true)
   )
 )
 
@@ -412,15 +407,15 @@
 (declare-rule cong ((Eqs Bool))
   :premise-list Eqs and
   ;; :args ((@cl CEq)) ; CEq is an equality
-  :requires (((check_cong Eqs eo::conclusion) true))
+  :requires ((($check_cong Eqs eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_eq_reflexive ((conclusion Bool))
+(program $check_eq_reflexive ((conclusion Bool))
   (Bool) Bool
   (
-   ((check_eq_reflexive conclusion) true)
+   (($check_eq_reflexive conclusion) true)
   )
 )
 ; TODO: to preserve previous attempt
@@ -430,79 +425,79 @@
 ;; )
 
 (declare-rule eq_reflexive ()
-  :requires (((check_eq_reflexive eo::conclusion) true))
+  :requires ((($check_eq_reflexive eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_eq_transitive ((conclusion Bool))
+(program $check_eq_transitive ((conclusion Bool))
   (Bool) Bool
   (
-   ((check_eq_transitive conclusion) true)
+   (($check_eq_transitive conclusion) true)
   )
 )
 
 ;TRUST
 (declare-rule eq_transitive ()
-  :requires (((check_eq_transitive eo::conclusion) true))
+  :requires ((($check_eq_transitive eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_eq_congruent ((conclusion Bool))
+(program $check_eq_congruent ((conclusion Bool))
   (Bool) Bool
   (
-   ((check_eq_congruent conclusion) true)
+   (($check_eq_congruent conclusion) true)
   )
 )
 
 ;TRUST
 (declare-rule eq_congruent ()
-  :requires (((check_eq_congruent eo::conclusion) true))
+  :requires ((($check_eq_congruent eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_eq_congruent_pred ((conclusion Bool))
+(program $check_eq_congruent_pred ((conclusion Bool))
   (Bool) Bool
   (
-   ((check_eq_congruent_pred conclusion) true)
+   (($check_eq_congruent_pred conclusion) true)
   )
 )
 
 ;TRUST
 (declare-rule eq_congruent_pred ()
-  :requires (((check_eq_congruent_pred eo::conclusion) true))
+  :requires ((($check_eq_congruent_pred eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO: to preserve previous def
 ;; 
-;; (program check_qnt_cnf ((phi Bool) (phiP Bool) (xs @VarList) (xsP @VarList))
+;; (program $check_qnt_cnf ((phi Bool) (phiP Bool) (xs @VarList) (xsP @VarList))
 ;;   (@VarList Bool @VarList Bool) Bool
 ;;   (
-;;    ((check_qnt_cnf xs phi xsP phiP) true)
+;;    (($check_qnt_cnf xs phi xsP phiP) true)
 ;;   )
 ;; )
 
 ;; ;TRUST
 ;; (declare-rule qnt_cnf ((phi Bool) (phiP Bool) (xs @VarList) (xsP @VarList))
 ;;   :args ((@cl (or (not (forall xs phi)) (forall xsP phiP))))
-;;   :requires (((check_qnt_cnf xs phi xsP phiP) true))
+;;   :requires ((($check_qnt_cnf xs phi xsP phiP) true))
 ;;   :conclusion (@cl (or (not (forall xs phi)) (forall xsP phiP)))
 ;; )
 
 ;TODO
-(program check_qnt_cnf ((conclusion Bool))
+(program $check_qnt_cnf ((conclusion Bool))
   (Bool) Bool
   (
-   ((check_qnt_cnf conclusion) true)
+   (($check_qnt_cnf conclusion) true)
   )
 )
 
 ;TRUST
 (declare-rule qnt_cnf ()
-  :requires (((check_qnt_cnf eo::conclusion) true))
+  :requires ((($check_qnt_cnf eo::conclusion) true))
   :conclusion-given
 )
 
@@ -527,10 +522,10 @@
 ; return: >
 ;   A boolean indicating if "conclusion" is a conjunct from 
 ;   "premise", with index "index".
-(program check_and ((premise Bool) (premise_non_cl Bool) (index Int) (conclusion Bool))
+(program $check_and ((premise Bool) (premise_non_cl Bool) (index Int) (conclusion Bool))
   (Bool Int Bool) Bool
-  (((check_and premise index conclusion)
-    (cl_equal (to_cl (f_list_index and (from_cl premise) index))
+  ((($check_and premise index conclusion)
+    ($cl_equal ($to_cl ($f_list_index and ($from_cl premise) index))
                conclusion))
   )
 )
@@ -550,7 +545,7 @@
 (declare-rule and ((premise Bool) (index Int))
   :premises (premise)
   :args (index)
-  :requires (((check_and premise index eo::conclusion) true))
+  :requires ((($check_and premise index eo::conclusion) true))
   :conclusion-given
 )
 
@@ -571,15 +566,15 @@
 ; return: >
 ;   A boolean indicating if "conclusion" is a conjunct from "premise" (after
 ;   applying DeMorgan's law), in position "index".
-(program check_not_or ((disjuncts Bool) (premise_non_cl Bool) (index Int) (conclusion Bool))
+(program $check_not_or ((disjuncts Bool) (premise_non_cl Bool) (index Int) (conclusion Bool))
   (Bool Int Bool) Bool
   (;; To facilitate the use of the program, we allow 
    ;; the presence of a @cl constructor
-   ((check_not_or (@cl premise_non_cl) index conclusion)
-    (check_not_or premise_non_cl index conclusion))
+   (($check_not_or (@cl premise_non_cl) index conclusion)
+    ($check_not_or premise_non_cl index conclusion))
 
-   ((check_not_or (not disjuncts) index conclusion)
-    (cl_equal (to_cl (not (f_list_index or disjuncts index)))
+   (($check_not_or (not disjuncts) index conclusion)
+    ($cl_equal ($to_cl (not ($f_list_index or disjuncts index)))
                conclusion))
    )
 )
@@ -600,7 +595,7 @@
 (declare-rule not_or ((premise Bool) (index Int))
   :premises (premise)
   :args (index)
-  :requires (((check_not_or premise index eo::conclusion) true))
+  :requires ((($check_not_or premise index eo::conclusion) true))
   :conclusion-given
 )
 
@@ -618,16 +613,16 @@
 ; return: >
 ;   A boolean indicating if "conclusion" is equivalent to "premise", but built 
 ;   with @cl.
-(program check_or ((premise Bool) (conclusion Bool))
+(program $check_or ((premise Bool) (conclusion Bool))
   (Bool Bool) Bool
-  (((check_or (@cl premise) conclusion)
-    (cl_equal (convert_or_to_cl premise)
+  ((($check_or (@cl premise) conclusion)
+    ($cl_equal ($convert_or_to_cl premise)
                conclusion)
     )
 
    ; { premise is not built with @cl }
-   ((check_or premise conclusion)
-    (cl_equal (convert_or_to_cl premise) conclusion))
+   (($check_or premise conclusion)
+    ($cl_equal ($convert_or_to_cl premise) conclusion))
   )
 )
 
@@ -643,7 +638,7 @@
 ;  Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule or ((premise Bool))
   :premises (premise)
-  :requires (((check_or premise eo::conclusion) true))
+  :requires ((($check_or premise eo::conclusion) true))
   :conclusion-given 
 )
 
@@ -660,10 +655,10 @@
 ;   A boolean indicating if "conclusion" is a clause built with
 ;   @cl, where each disjunct is negated and corresponds to some conjunct from
 ;   "premise".
-(program check_not_and ((conjunction Bool) (conclusion Bool))
+(program $check_not_and ((conjunction Bool) (conclusion Bool))
   (Bool Bool) Bool
-  (((check_not_and (not conjunction) conclusion)
-     (cl_equal (de_morgan_not_and conjunction) conclusion)
+  ((($check_not_and (not conjunction) conclusion)
+     ($cl_equal ($de_morgan_not_and conjunction) conclusion)
      )
   )
 )
@@ -679,36 +674,36 @@
 ;  Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule not_and ((premise Bool))
   :premises (premise)
-  :requires (((check_not_and (from_cl premise) eo::conclusion) true))
+  :requires ((($check_not_and ($from_cl premise) eo::conclusion) true))
   :conclusion-given
 )
 
-(program check_xor1 ((phi1 Bool) (phi2 Bool) (refCL Bool))
+(program $check_xor1 ((phi1 Bool) (phi2 Bool) (refCL Bool))
   (Bool Bool) Bool
   (
-   ((check_xor1 (@cl (xor phi1 phi2)) refCL)
-     (cl_equal (@cl phi1 phi2) refCL)
+   (($check_xor1 (@cl (xor phi1 phi2)) refCL)
+     ($cl_equal (@cl phi1 phi2) refCL)
    )
-   ((check_xor1 (xor phi1 phi2) refCL)
-     (cl_equal (@cl phi1 phi2) refCL)
+   (($check_xor1 (xor phi1 phi2) refCL)
+     ($cl_equal (@cl phi1 phi2) refCL)
    )
   )
 )
 
 (declare-rule xor1 ((CL Bool))
   :premises (CL)
-  :requires (((check_xor1 CL eo::conclusion) true))
+  :requires ((($check_xor1 CL eo::conclusion) true))
   :conclusion-given
 )
 
-(program check_xor2 ((phi1 Bool) (phi2 Bool) (refCL Bool))
+(program $check_xor2 ((phi1 Bool) (phi2 Bool) (refCL Bool))
   (Bool Bool) Bool
   (
-   ((check_xor2 (@cl (xor phi1 phi2)) refCL)
-     (cl_equal (@cl (not phi1) (not phi2)) refCL)
+   (($check_xor2 (@cl (xor phi1 phi2)) refCL)
+     ($cl_equal (@cl (not phi1) (not phi2)) refCL)
    )
-   ((check_xor2 (xor phi1 phi2) refCL)
-     (cl_equal (@cl (not phi1) (not phi2)) refCL)
+   (($check_xor2 (xor phi1 phi2) refCL)
+     ($cl_equal (@cl (not phi1) (not phi2)) refCL)
    )
   )
 )
@@ -716,18 +711,18 @@
 (declare-rule xor2 ((refCL Bool) (CL Bool))
   :premises (CL)
   :args (refCL)
-  :requires (((check_xor2 CL refCL) true))
+  :requires ((($check_xor2 CL refCL) true))
   :conclusion refCL
 )
 
-(program check_not_xor1 ((phi1 Bool) (phi2 Bool) (refCL Bool))
+(program $check_not_xor1 ((phi1 Bool) (phi2 Bool) (refCL Bool))
   (Bool Bool) Bool
   (
-   ((check_not_xor1 (@cl (xor phi1 phi2)) refCL)
-     (cl_equal (@cl phi1 (not phi2)) refCL)
+   (($check_not_xor1 (@cl (xor phi1 phi2)) refCL)
+     ($cl_equal (@cl phi1 (not phi2)) refCL)
    )
-   ((check_not_xor1 (xor phi1 phi2) refCL)
-     (cl_equal (@cl phi1 (not phi2)) refCL)
+   (($check_not_xor1 (xor phi1 phi2) refCL)
+     ($cl_equal (@cl phi1 (not phi2)) refCL)
    )
   )
 )
@@ -735,19 +730,19 @@
 (declare-rule not_xor1 ((refCL Bool) (CL Bool))
   :premises (CL)
   :args (refCL)
-  :requires (((check_not_xor1 CL refCL) true))
+  :requires ((($check_not_xor1 CL refCL) true))
   :conclusion refCL
 )
 
 
-(program check_not_xor2 ((phi1 Bool) (phi2 Bool) (refCL Bool))
+(program $check_not_xor2 ((phi1 Bool) (phi2 Bool) (refCL Bool))
   (Bool Bool) Bool
   (
-   ((check_not_xor2 (@cl (xor phi1 phi2)) refCL)
-     (cl_equal (@cl (not phi1) phi2) refCL)
+   (($check_not_xor2 (@cl (xor phi1 phi2)) refCL)
+     ($cl_equal (@cl (not phi1) phi2) refCL)
    )
-   ((check_not_xor2 (xor phi1 phi2) refCL)
-     (cl_equal (@cl (not phi1) phi2) refCL)
+   (($check_not_xor2 (xor phi1 phi2) refCL)
+     ($cl_equal (@cl (not phi1) phi2) refCL)
    )
   )
 )
@@ -755,7 +750,7 @@
 (declare-rule not_xor2 ((refCL Bool) (CL Bool))
   :premises (CL)
   :args (refCL)
-  :requires (((check_not_xor2 CL refCL) true))
+  :requires ((($check_not_xor2 CL refCL) true))
   :conclusion refCL
 )
 
@@ -774,14 +769,14 @@
 ; return: >
 ;   A boolean indicating if "conclusion" is the characterization
 ;   of the "premise" implication (i.e., "not antecedent or consequent" form).
-(program check_implies ((phi1 Bool) (phi2 Bool) (conclusion Bool))
+(program $check_implies ((phi1 Bool) (phi2 Bool) (conclusion Bool))
   (Bool Bool) Bool
   (
-   ((check_implies (@cl (=> phi1 phi2)) conclusion)
-     (cl_equal (@cl (not phi1) phi2) conclusion)
+   (($check_implies (@cl (=> phi1 phi2)) conclusion)
+     ($cl_equal (@cl (not phi1) phi2) conclusion)
    )
-   ((check_implies (=> phi1 phi2) conclusion)
-     (cl_equal (@cl (not phi1) phi2) conclusion)
+   (($check_implies (=> phi1 phi2) conclusion)
+     ($cl_equal (@cl (not phi1) phi2) conclusion)
    )
   )
 )
@@ -800,18 +795,18 @@
 ;  Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule implies ((premise Bool))
   :premises (premise)
-  :requires (((check_implies premise eo::conclusion) true))
+  :requires ((($check_implies premise eo::conclusion) true))
   :conclusion-given
 )
 
-(program check_not_implies1 ((phi1 Bool) (phi2 Bool) (refCL Bool))
+(program $check_not_implies1 ((phi1 Bool) (phi2 Bool) (refCL Bool))
   (Bool Bool) Bool
   (
-   ((check_not_implies1 (@cl (not (=> phi1 phi2))) refCL)
-     (cl_equal (@cl phi1) refCL)
+   (($check_not_implies1 (@cl (not (=> phi1 phi2))) refCL)
+     ($cl_equal (@cl phi1) refCL)
    )
-   ((check_not_implies1 (not (=> phi1 phi2)) refCL)
-     (cl_equal (@cl phi1) refCL)
+   (($check_not_implies1 (not (=> phi1 phi2)) refCL)
+     ($cl_equal (@cl phi1) refCL)
    )
   )
 )
@@ -819,18 +814,18 @@
 (declare-rule not_implies1 ((refCL Bool) (CL Bool))
   :premises (CL)
   :args (refCL)
-  :requires (((check_not_implies1 CL refCL) true))
+  :requires ((($check_not_implies1 CL refCL) true))
   :conclusion refCL
 )
 
-(program check_not_implies2 ((phi1 Bool) (phi2 Bool) (refCL Bool))
+(program $check_not_implies2 ((phi1 Bool) (phi2 Bool) (refCL Bool))
   (Bool Bool) Bool
   (
-   ((check_not_implies2 (@cl (not (=> phi1 phi2))) refCL)
-     (cl_equal (@cl phi1) refCL)
+   (($check_not_implies2 (@cl (not (=> phi1 phi2))) refCL)
+     ($cl_equal (@cl phi1) refCL)
    )
-   ((check_not_implies2 (not (=> phi1 phi2)) refCL)
-     (cl_equal (@cl phi1) refCL)
+   (($check_not_implies2 (not (=> phi1 phi2)) refCL)
+     ($cl_equal (@cl phi1) refCL)
    )
   )
 )
@@ -838,7 +833,7 @@
 (declare-rule not_implies2 ((refCL Bool) (CL Bool))
   :premises (CL)
   :args (refCL)
-  :requires (((check_not_implies2 CL refCL) true))
+  :requires ((($check_not_implies2 CL refCL) true))
   :conclusion refCL
 )
 
@@ -857,14 +852,14 @@
 ;   A boolean indicating if "conclusion" is the characterization
 ;   (i.e., "not antecedent or consequent" form) of the implication 
 ;   phi1 => phi2.
-(program check_equiv1 ((phi1 Bool) (phi2 Bool) (conclusion Bool))
+(program $check_equiv1 ((phi1 Bool) (phi2 Bool) (conclusion Bool))
   (Bool Bool) Bool
   (
-   ((check_equiv1 (@cl (= phi1 phi2)) conclusion)
-     (cl_equal (@cl (not phi1) phi2) conclusion)
+   (($check_equiv1 (@cl (= phi1 phi2)) conclusion)
+     ($cl_equal (@cl (not phi1) phi2) conclusion)
    )
-   ((check_equiv1 (= phi1 phi2) conclusion)
-     (cl_equal (@cl (not phi1) phi2) conclusion)
+   (($check_equiv1 (= phi1 phi2) conclusion)
+     ($cl_equal (@cl (not phi1) phi2) conclusion)
    )
   )
 )
@@ -883,7 +878,7 @@
 ; conclusion:
 (declare-rule equiv1 ((premise Bool))
   :premises (premise)
-  :requires (((check_equiv1 premise eo::conclusion) true))
+  :requires ((($check_equiv1 premise eo::conclusion) true))
   :conclusion-given
 )
 
@@ -902,14 +897,14 @@
 ;   A boolean indicating if "conclusion" is the characterization
 ;   (i.e., "not antecedent or consequent" form) of the implication 
 ;   phi2 => phi1.
-(program check_equiv2 ((phi1 Bool) (phi2 Bool) (conclusion Bool))
+(program $check_equiv2 ((phi1 Bool) (phi2 Bool) (conclusion Bool))
   (Bool Bool) Bool
   (
-   ((check_equiv2 (@cl (= phi1 phi2)) conclusion)
-     (cl_equal (@cl phi1 (not phi2)) conclusion)
+   (($check_equiv2 (@cl (= phi1 phi2)) conclusion)
+     ($cl_equal (@cl phi1 (not phi2)) conclusion)
    )
-   ((check_equiv2 (= phi1 phi2) conclusion)
-     (cl_equal (@cl phi1 (not phi2)) conclusion)
+   (($check_equiv2 (= phi1 phi2) conclusion)
+     ($cl_equal (@cl phi1 (not phi2)) conclusion)
    )
   )
 )
@@ -928,18 +923,18 @@
 ; conclusion:
 (declare-rule equiv2 ((premise Bool))
   :premises (premise)
-  :requires (((check_equiv2 premise eo::conclusion) true))
+  :requires ((($check_equiv2 premise eo::conclusion) true))
   :conclusion-given
 )
 
-(program check_not_equiv1 ((phi1 Bool) (phi2 Bool) (refCL Bool))
+(program $check_not_equiv1 ((phi1 Bool) (phi2 Bool) (refCL Bool))
   (Bool Bool) Bool
   (
-   ((check_not_equiv1 (@cl (not (= phi1 phi2))) refCL)
-     (cl_equal (@cl phi1 phi2) refCL)
+   (($check_not_equiv1 (@cl (not (= phi1 phi2))) refCL)
+     ($cl_equal (@cl phi1 phi2) refCL)
    )
-   ((check_not_equiv1 (not (= phi1 phi2)) refCL)
-     (cl_equal (@cl phi1 phi2) refCL)
+   (($check_not_equiv1 (not (= phi1 phi2)) refCL)
+     ($cl_equal (@cl phi1 phi2) refCL)
    )
   )
 )
@@ -947,7 +942,7 @@
 (declare-rule not_equiv1 ((refCL Bool) (CL Bool))
   :premises (CL)
   :args (refCL)
-  :requires (((check_not_equiv1 CL refCL) true))
+  :requires ((($check_not_equiv1 CL refCL) true))
   :conclusion refCL
 )
 
@@ -966,15 +961,15 @@
 ;   A boolean indicating if "conclusion" satisfies the property of being
 ;   an instance of the weakening rule for implication, where the antecedent is 
 ;   a conjunction.
-(program check_and_pos ((pos Int) (antecedent Bool) (consequent Bool))
+(program $check_and_pos ((pos Int) (antecedent Bool) (consequent Bool))
   (Int Bool) Bool
   (
-   ((check_and_pos pos (@cl (not antecedent) consequent))
-    (cl_equal (f_list_index and antecedent pos) consequent))
+   (($check_and_pos pos (@cl (not antecedent) consequent))
+    ($cl_equal ($f_list_index and antecedent pos) consequent))
 
    ;; To simplify the use of the checker
-   ((check_and_pos pos (@cl consequent (not antecedent)))
-    (cl_equal (f_list_index and antecedent pos) consequent))
+   (($check_and_pos pos (@cl consequent (not antecedent)))
+    ($cl_equal ($f_list_index and antecedent pos) consequent))
   )
 )
 
@@ -992,7 +987,7 @@
 ;  Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule and_pos ((pos Int))
   :args (pos)
-  :requires (((check_and_pos pos eo::conclusion) true))
+  :requires ((($check_and_pos pos eo::conclusion) true))
   :conclusion-given
 )
 
@@ -1008,11 +1003,11 @@
 ; return: >
 ;   A boolean indicating if "conclusion" is an instance of excluded middle,
 ;   for a proposition of the form phi_1 /\ ... /\ phi_n.
-(program check_and_neg ((left_disjunct Bool) (right_disjunct Bool :list))
+(program $check_and_neg ((left_disjunct Bool) (right_disjunct Bool :list))
   (Bool) Bool
   (
-   ((check_and_neg (@cl left_disjunct right_disjunct))
-    (cl_equal (de_morgan_not_and left_disjunct)
+   (($check_and_neg (@cl left_disjunct right_disjunct))
+    ($cl_equal ($de_morgan_not_and left_disjunct)
               right_disjunct))
   )
 )
@@ -1025,7 +1020,7 @@
 ; conclusion-given: >
 ;   Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule and_neg ()
-  :requires (((check_and_neg eo::conclusion) true))
+  :requires ((($check_and_neg eo::conclusion) true))
   :conclusion-given
 )
 
@@ -1040,11 +1035,11 @@
 ; return: >
 ;   A boolean indicating if conclusion is of the form
 ;   ¬(𝜑1 ∨⋯∨𝜑𝑛), 𝜑1, … , 𝜑𝑛, for some given propositions 𝜑1, ..., 𝜑𝑛.
-(program check_or_pos ((left_disjunct Bool) (right_disjunct Bool :list))
+(program $check_or_pos ((left_disjunct Bool) (right_disjunct Bool :list))
   (Bool) Bool
   (
-   ((check_or_pos (@cl (not left_disjunct) right_disjunct))
-    (cl_equal (convert_or_to_cl left_disjunct)
+   (($check_or_pos (@cl (not left_disjunct) right_disjunct))
+    ($cl_equal ($convert_or_to_cl left_disjunct)
               (@cl right_disjunct))
     )
   )
@@ -1058,7 +1053,7 @@
 ; conclusion-given: >
 ;  Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule or_pos ()
-  :requires (((check_or_pos eo::conclusion) true))
+  :requires ((($check_or_pos eo::conclusion) true))
   :conclusion-given
 )
 
@@ -1077,14 +1072,14 @@
 ;   A boolean indicating if "conclusion" satisfies the property of being
 ;   an instance of the weakening rule for implication, with the form 
 ;   not phi_k, phi_0 \/ ... \/ phi_n, with 0 <= k <= n.
-(program check_or_neg ((index Int) (left_disjunct Bool) (right_disjunct Bool))
+(program $check_or_neg ((index Int) (left_disjunct Bool) (right_disjunct Bool))
   (Int Bool) Bool
   (
-   ((check_or_neg index (@cl left_disjunct (not right_disjunct)))
-    (prop_syntax_eq (f_list_index or left_disjunct index) right_disjunct))
+   (($check_or_neg index (@cl left_disjunct (not right_disjunct)))
+    ($prop_syntax_eq ($f_list_index or left_disjunct index) right_disjunct))
    
-   ((check_or_neg index (@cl (not left_disjunct) right_disjunct))
-    (prop_syntax_eq right_disjunct (f_list_index or left_disjunct index)))
+   (($check_or_neg index (@cl (not left_disjunct) right_disjunct))
+    ($prop_syntax_eq right_disjunct ($f_list_index or left_disjunct index)))
   )
 )
 
@@ -1099,67 +1094,67 @@
 ;  Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule or_neg ((index Int))
   :args (index)
-  :requires (((check_or_neg index eo::conclusion) true))
+  :requires ((($check_or_neg index eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_xor_pos1 ((CL Bool))
+(program $check_xor_pos1 ((CL Bool))
   (Bool) Bool
   (
-   ((check_xor_pos1 CL) true)
+   (($check_xor_pos1 CL) true)
   )
 )
 
 ;TRUST
 (declare-rule xor_pos1 ((CL Bool))
   :args (CL)
-  :requires (((check_xor_pos1 CL) true))
+  :requires ((($check_xor_pos1 CL) true))
   :conclusion CL
 )
 
 ;TODO
-(program check_xor_pos2 ((CL Bool))
+(program $check_xor_pos2 ((CL Bool))
   (Bool) Bool
   (
-   ((check_xor_pos2 CL) true)
+   (($check_xor_pos2 CL) true)
   )
 )
 
 ;TRUST
 (declare-rule xor_pos2 ((CL Bool))
   :args (CL)
-  :requires (((check_xor_pos2 CL) true))
+  :requires ((($check_xor_pos2 CL) true))
   :conclusion CL
 )
 
 ;TODO
-(program check_xor_neg1 ((CL Bool))
+(program $check_xor_neg1 ((CL Bool))
   (Bool) Bool
   (
-   ((check_xor_neg1 CL) true)
+   (($check_xor_neg1 CL) true)
   )
 )
 
 ;TRUST
 (declare-rule xor_neg1 ((CL Bool))
   :args (CL)
-  :requires (((check_xor_neg1 CL) true))
+  :requires ((($check_xor_neg1 CL) true))
   :conclusion CL
 )
 
 ;TODO
-(program check_xor_neg2 ((CL Bool))
+(program $check_xor_neg2 ((CL Bool))
   (Bool) Bool
   (
-   ((check_xor_neg2 CL) true)
+   (($check_xor_neg2 CL) true)
   )
 )
 
 ;TRUST
 (declare-rule xor_neg2 ((CL Bool))
   :args (CL)
-  :requires (((check_xor_neg2 CL) true))
+  :requires ((($check_xor_neg2 CL) true))
   :conclusion CL
 )
 
@@ -1175,17 +1170,17 @@
 ; return: >
 ;   A boolean indicating if "conclusion" is an instance of excluded middle,
 ;   for a proposition of the form phi_1 -> phi_2.
-(program check_implies_pos ((phi_1 Bool) (phi_2 Bool) (phi_3 Bool) (phi_4 Bool))
+(program $check_implies_pos ((phi_1 Bool) (phi_2 Bool) (phi_3 Bool) (phi_4 Bool))
   (Bool) Bool
   (; TODO: simplify this
-   ((check_implies_pos (@cl (not (=> phi_1 phi_2)) phi_3 phi_4))
-    (cl_equal (@cl (not phi_1) phi_2) (@cl phi_3 phi_4)))
+   (($check_implies_pos (@cl (not (=> phi_1 phi_2)) phi_3 phi_4))
+    ($cl_equal (@cl (not phi_1) phi_2) (@cl phi_3 phi_4)))
 
-   ((check_implies_pos (@cl phi_3 (not (=> phi_1 phi_2)) phi_4))
-    (cl_equal (@cl (not phi_1) phi_2) (@cl phi_3 phi_4)))
+   (($check_implies_pos (@cl phi_3 (not (=> phi_1 phi_2)) phi_4))
+    ($cl_equal (@cl (not phi_1) phi_2) (@cl phi_3 phi_4)))
 
-   ((check_implies_pos (@cl phi_3 phi_4 (not (=> phi_1 phi_2))))
-    (cl_equal (@cl (not phi_1) phi_2) (@cl phi_3 phi_4)))
+   (($check_implies_pos (@cl phi_3 phi_4 (not (=> phi_1 phi_2))))
+    ($cl_equal (@cl (not phi_1) phi_2) (@cl phi_3 phi_4)))
   )
 )
 
@@ -1197,7 +1192,7 @@
 ; conclusion-given: >
 ;   Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule implies_pos ()
-  :requires (((check_implies_pos eo::conclusion) true))
+  :requires ((($check_implies_pos eo::conclusion) true))
   :conclusion-given
 )
 
@@ -1213,16 +1208,16 @@
 ; return:
 ;   A boolean indicating if "conclusion" is cl_equal to phi_1 -> phi_2, phi1,
 ;   for some propositions phi_1 and phi_2.
-(program check_implies_neg1 ((phi_1 Bool) (phi_2 Bool))
+(program $check_implies_neg1 ((phi_1 Bool) (phi_2 Bool))
   (Bool) Bool
   (
-   ((check_implies_neg1 (@cl (=> phi_1 phi_2) phi_1))
+   (($check_implies_neg1 (@cl (=> phi_1 phi_2) phi_1))
     true)
 
-   ((check_implies_neg1 (@cl phi_1 (=> phi_1 phi_2)))
+   (($check_implies_neg1 (@cl phi_1 (=> phi_1 phi_2)))
     true)
 
-   ((check_implies_neg1 _)
+   (($check_implies_neg1 _)
     false)
   )
 )
@@ -1235,7 +1230,7 @@
 ; conclusion-given: >
 ;   Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule implies_neg1 ()
-  :requires (((check_implies_neg1 eo::conclusion) true))
+  :requires ((($check_implies_neg1 eo::conclusion) true))
   :conclusion-given
 )
 
@@ -1251,16 +1246,16 @@
 ; return:
 ;   A boolean indicating if "conclusion" is cl_equal to phi_1 -> phi_2, not phi2,
 ;   for some propositions phi_1 and phi_2.
-(program check_implies_neg2 ((phi_1 Bool) (phi_2 Bool))
+(program $check_implies_neg2 ((phi_1 Bool) (phi_2 Bool))
   (Bool) Bool
   (
-   ((check_implies_neg2 (@cl (=> phi_1 phi_2) (not phi_2)))
+   (($check_implies_neg2 (@cl (=> phi_1 phi_2) (not phi_2)))
     true)
 
-   ((check_implies_neg2 (@cl (not phi_2) (=> phi_1 phi_2)))
+   (($check_implies_neg2 (@cl (not phi_2) (=> phi_1 phi_2)))
     true)
 
-   ((check_implies_neg2 _)
+   (($check_implies_neg2 _)
     false)
   )
 )
@@ -1273,7 +1268,7 @@
 ; conclusion-given: >
 ;   Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule implies_neg2 ()
-  :requires (((check_implies_neg2 eo::conclusion) true))
+  :requires ((($check_implies_neg2 eo::conclusion) true))
   :conclusion-given
 )
 
@@ -1289,19 +1284,19 @@
 ; return: >
 ;   A boolean indicating if "conclusion" is cl_equal to the clause 
 ;   not (phi_1 = phi2), phi_1, not phi_2, for some props. phi_1 and phi_2.
-(program check_equiv_pos1 ((phi_1 Bool) (phi_2 Bool) (phi_3 Bool) (phi_4 Bool))
+(program $check_equiv_pos1 ((phi_1 Bool) (phi_2 Bool) (phi_3 Bool) (phi_4 Bool))
   (Bool) Bool
   (; TODO: simplify this
-   ((check_equiv_pos1 (@cl (not (= phi_1 phi_2)) phi_3 phi_4))
-    (cl_equal (@cl phi_1 (not phi_2)) (@cl phi_3 phi_4)))
+   (($check_equiv_pos1 (@cl (not (= phi_1 phi_2)) phi_3 phi_4))
+    ($cl_equal (@cl phi_1 (not phi_2)) (@cl phi_3 phi_4)))
    
-   ((check_equiv_pos1 (@cl phi_3 (not (= phi_1 phi_2)) phi_4))
-    (cl_equal (@cl phi_1 (not phi_2)) (@cl phi_3 phi_4)))
+   (($check_equiv_pos1 (@cl phi_3 (not (= phi_1 phi_2)) phi_4))
+    ($cl_equal (@cl phi_1 (not phi_2)) (@cl phi_3 phi_4)))
    
-   ((check_equiv_pos1 (@cl phi_3 phi_4 (not (= phi_1 phi_2))))
-    (cl_equal (@cl phi_1 (not phi_2)) (@cl phi_3 phi_4)))
+   (($check_equiv_pos1 (@cl phi_3 phi_4 (not (= phi_1 phi_2))))
+    ($cl_equal (@cl phi_1 (not phi_2)) (@cl phi_3 phi_4)))
 
-   ((check_equiv_pos1 _)
+   (($check_equiv_pos1 _)
     false)
   )
 )
@@ -1314,7 +1309,7 @@
 ; conclusion-given: >
 ;   Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule equiv_pos1 ()
-  :requires (((check_equiv_pos1 eo::conclusion) true))
+  :requires ((($check_equiv_pos1 eo::conclusion) true))
   :conclusion-given
 )
 
@@ -1330,19 +1325,19 @@
 ; return: >
 ;   A boolean indicating if "conclusion" is cl_equal to the clause 
 ;   not (phi_1 = phi2), not phi_1, phi_2, for some props. phi_1 and phi_2.
-(program check_equiv_pos2 ((phi_1 Bool) (phi_2 Bool) (phi_3 Bool) (phi_4 Bool))
+(program $check_equiv_pos2 ((phi_1 Bool) (phi_2 Bool) (phi_3 Bool) (phi_4 Bool))
   (Bool) Bool
   (; TODO: simplify this
-   ((check_equiv_pos2 (@cl (not (= phi_1 phi_2)) phi_3 phi_4))
-    (cl_equal (@cl (not phi_1) phi_2) (@cl phi_3 phi_4)))
+   (($check_equiv_pos2 (@cl (not (= phi_1 phi_2)) phi_3 phi_4))
+    ($cl_equal (@cl (not phi_1) phi_2) (@cl phi_3 phi_4)))
    
-   ((check_equiv_pos2 (@cl phi_3 (not (= phi_1 phi_2)) phi_4))
-    (cl_equal (@cl (not phi_1) phi_2) (@cl phi_3 phi_4)))
+   (($check_equiv_pos2 (@cl phi_3 (not (= phi_1 phi_2)) phi_4))
+    ($cl_equal (@cl (not phi_1) phi_2) (@cl phi_3 phi_4)))
    
-   ((check_equiv_pos2 (@cl phi_3 phi_4 (not (= phi_1 phi_2))))
-    (cl_equal (@cl (not phi_1) phi_2) (@cl phi_3 phi_4)))
+   (($check_equiv_pos2 (@cl phi_3 phi_4 (not (= phi_1 phi_2))))
+    ($cl_equal (@cl (not phi_1) phi_2) (@cl phi_3 phi_4)))
 
-   ((check_equiv_pos2 _)
+   (($check_equiv_pos2 _)
     false)
   )
 )
@@ -1355,48 +1350,48 @@
 ; conclusion-given: >
 ;   Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule equiv_pos2 ()
-  :requires (((check_equiv_pos2 eo::conclusion) true))
+  :requires ((($check_equiv_pos2 eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_equiv_neg1 ((CL Bool))
+(program $check_equiv_neg1 ((CL Bool))
   (Bool) Bool
   (
-   ((check_equiv_neg1 CL) true)
+   (($check_equiv_neg1 CL) true)
   )
 )
 
 ;TRUST
 (declare-rule equiv_neg1 ((CL Bool))
   :args (CL)
-  :requires (((check_equiv_neg1 CL) true))
+  :requires ((($check_equiv_neg1 CL) true))
   :conclusion CL
 )
 
 ;TODO
-(program check_equiv_neg2 ((CL Bool))
+(program $check_equiv_neg2 ((CL Bool))
   (Bool) Bool
   (
-   ((check_equiv_neg2 CL) true)
+   (($check_equiv_neg2 CL) true)
   )
 )
 
 ;TRUST
 (declare-rule equiv_neg2 ((CL Bool))
   :args (CL)
-  :requires (((check_equiv_neg2 CL) true))
+  :requires ((($check_equiv_neg2 CL) true))
   :conclusion CL
 )
 
-(program check_ite1 ((phi1 Bool) (phi2 Bool) (phi3 Bool) (refCL Bool))
+(program $check_ite1 ((phi1 Bool) (phi2 Bool) (phi3 Bool) (refCL Bool))
   (Bool Bool) Bool
   (
-   ((check_ite1 (@cl (ite phi1 phi2 phi3)) refCL)
-     (cl_equal (@cl phi1 phi3) refCL)
+   (($check_ite1 (@cl (ite phi1 phi2 phi3)) refCL)
+     ($cl_equal (@cl phi1 phi3) refCL)
    )
-   ((check_ite1 (ite phi1 phi2 phi3) refCL)
-     (cl_equal (@cl phi1 phi3) refCL)
+   (($check_ite1 (ite phi1 phi2 phi3) refCL)
+     ($cl_equal (@cl phi1 phi3) refCL)
    )
   )
 )
@@ -1404,96 +1399,96 @@
 (declare-rule ite1 ((refCL Bool) (CL Bool))
   :premises (CL)
   :args (refCL)
-  :requires (((check_ite1 CL refCL) true))
+  :requires ((($check_ite1 CL refCL) true))
   :conclusion refCL
 )
 
-(program check_ite2 ((phi1 Bool) (phi2 Bool) (phi3 Bool) (refCL Bool))
+(program $check_ite2 ((phi1 Bool) (phi2 Bool) (phi3 Bool) (refCL Bool))
   (Bool Bool) Bool
   (
-   ((check_ite2 (@cl (ite phi1 phi2 phi3)) refCL)
-     (cl_equal (@cl (not phi1) phi2) refCL)
+   (($check_ite2 (@cl (ite phi1 phi2 phi3)) refCL)
+     ($cl_equal (@cl (not phi1) phi2) refCL)
    )
-   ((check_ite2 (ite phi1 phi2 phi3) refCL)
-     (cl_equal (@cl (not phi1) phi2) refCL)
+   (($check_ite2 (ite phi1 phi2 phi3) refCL)
+     ($cl_equal (@cl (not phi1) phi2) refCL)
    )
   )
 )
 
 (declare-rule ite2 ((refCL Bool) (CL Bool))
   :premises (CL)
-  :requires (((check_ite2 CL eo::conclusion) true))
+  :requires ((($check_ite2 CL eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_ite_pos1 ((CL Bool))
+(program $check_ite_pos1 ((CL Bool))
   (Bool) Bool
   (
-   ((check_ite_pos1 CL) true)
+   (($check_ite_pos1 CL) true)
   )
 )
 
 ;TRUST
 (declare-rule ite_pos1 ((CL Bool))
   :args (CL)
-  :requires (((check_ite_pos1 CL) true))
+  :requires ((($check_ite_pos1 CL) true))
   :conclusion CL
 )
 
 ;TODO
-(program check_ite_pos2 ((CL Bool))
+(program $check_ite_pos2 ((CL Bool))
   (Bool) Bool
   (
-   ((check_ite_pos2 CL) true)
+   (($check_ite_pos2 CL) true)
   )
 )
 
 ;TRUST
 (declare-rule ite_pos2 ((CL Bool))
   :args (CL)
-  :requires (((check_ite_pos2 CL) true))
+  :requires ((($check_ite_pos2 CL) true))
   :conclusion CL
 )
 
 ;TODO
-(program check_ite_neg1 ((CL Bool))
+(program $check_ite_neg1 ((CL Bool))
   (Bool) Bool
   (
-   ((check_ite_neg1 CL) true)
+   (($check_ite_neg1 CL) true)
   )
 )
 
 ;TRUST
 (declare-rule ite_neg1 ((CL Bool))
   :args (CL)
-  :requires (((check_ite_neg1 CL) true))
+  :requires ((($check_ite_neg1 CL) true))
   :conclusion CL
 )
 
 ;TODO
-(program check_ite_neg2 ((CL Bool))
+(program $check_ite_neg2 ((CL Bool))
   (Bool) Bool
   (
-   ((check_ite_neg2 CL) true)
+   (($check_ite_neg2 CL) true)
   )
 )
 
 ;TRUST
 (declare-rule ite_neg2 ((CL Bool))
   :args (CL)
-  :requires (((check_ite_neg2 CL) true))
+  :requires ((($check_ite_neg2 CL) true))
   :conclusion CL
 )
 
-(program check_not_ite1 ((phi1 Bool) (phi2 Bool) (phi3 Bool) (refCL Bool))
+(program $check_not_ite1 ((phi1 Bool) (phi2 Bool) (phi3 Bool) (refCL Bool))
   (Bool Bool) Bool
   (
-   ((check_not_ite1 (@cl (not (ite phi1 phi2 phi3))) refCL)
-     (cl_equal (@cl phi1 (not phi3)) refCL)
+   (($check_not_ite1 (@cl (not (ite phi1 phi2 phi3))) refCL)
+     ($cl_equal (@cl phi1 (not phi3)) refCL)
    )
-   ((check_not_ite1 (not (ite phi1 phi2 phi3)) refCL)
-     (cl_equal (@cl phi1 (not phi3)) refCL)
+   (($check_not_ite1 (not (ite phi1 phi2 phi3)) refCL)
+     ($cl_equal (@cl phi1 (not phi3)) refCL)
    )
   )
 )
@@ -1501,76 +1496,76 @@
 (declare-rule not_ite1 ((refCL Bool) (CL Bool))
   :premises (CL)
   :args (refCL)
-  :requires (((check_not_ite1 CL refCL) true))
+  :requires ((($check_not_ite1 CL refCL) true))
   :conclusion refCL
 )
 
-(program check_not_ite2 ((phi1 Bool) (phi2 Bool) (phi3 Bool) (refCL Bool))
+(program $check_not_ite2 ((phi1 Bool) (phi2 Bool) (phi3 Bool) (refCL Bool))
   (Bool Bool) Bool
   (
-   ((check_not_ite2 (@cl (not (ite phi1 phi2 phi3))) refCL)
-     (cl_equal (@cl (not phi1) (not phi2)) refCL)
+   (($check_not_ite2 (@cl (not (ite phi1 phi2 phi3))) refCL)
+     ($cl_equal (@cl (not phi1) (not phi2)) refCL)
    )
-   ((check_not_ite2 (not (ite phi1 phi2 phi3)) refCL)
-     (cl_equal (@cl (not phi1) (not phi2)) refCL)
+   (($check_not_ite2 (not (ite phi1 phi2 phi3)) refCL)
+     ($cl_equal (@cl (not phi1) (not phi2)) refCL)
    )
   )
 )
 
 ;TODO
-(program check_connective_def ((conclusion Bool))
+(program $check_connective_def ((conclusion Bool))
   (Bool) Bool
   (
-   ((check_connective_def conclusion) true)
+   (($check_connective_def conclusion) true)
   )
 )
 
 ;TRUST
 (declare-rule connective_def ((conclusion Bool))
-  :requires (((check_connective_def eo::conclusion) true))
+  :requires ((($check_connective_def eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_and_simplify ((l Bool) (r Bool))
+(program $check_and_simplify ((l Bool) (r Bool))
   (Bool Bool) Bool
   (
-   ((check_and_simplify l r) true)
+   (($check_and_simplify l r) true)
   )
 )
 
 ;TRUST
 (declare-rule and_simplify ((l Bool) (r Bool))
   :args ((@cl (= l r)))
-  :requires (((check_and_simplify l r) true))
+  :requires ((($check_and_simplify l r) true))
   :conclusion (@cl (= l r))
 )
 
 ;TODO
-(program check_or_simplify ((conclusion Bool))
+(program $check_or_simplify ((conclusion Bool))
   (Bool) Bool
   (
-   ((check_or_simplify conclusion) true)
+   (($check_or_simplify conclusion) true)
   )
 )
 
 ;TRUST
 (declare-rule or_simplify ()
-  :requires (((check_or_simplify eo::conclusion) true))
+  :requires ((($check_or_simplify eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_not_simplify ((conclusion Bool))
+(program $check_not_simplify ((conclusion Bool))
   (Bool) Bool
   (
-   ((check_not_simplify conclusion) true)
+   (($check_not_simplify conclusion) true)
   )
 )
 
 ;TRUST
 (declare-rule not_simplify ()
-  :requires (((check_not_simplify eo::conclusion) true))
+  :requires ((($check_not_simplify eo::conclusion) true))
   :conclusion-given
 )
 
@@ -1585,12 +1580,12 @@
 ;   A boolean indicating if conclusion has the form 𝜑1 → 𝜑2 ≈ 𝜓, where 𝜓
 ;   results from the application of equivalence preserving transformations, 
 ;   as specified in "rewrite_implication".
-(program check_implies_simplify ((phi_1 Bool) (phi_2 Bool) (psy Bool))
+(program $check_implies_simplify ((phi_1 Bool) (phi_2 Bool) (psy Bool))
   (Bool) Bool
   (
-   ((check_implies_simplify (@cl (= (=> phi_1 phi_2) psy)))
+   (($check_implies_simplify (@cl (= (=> phi_1 phi_2) psy)))
                             ; TODO: use proper comparison for props
-                            (cl_equal (@cl (rewrite_implication (=> phi_1 phi_2)))
+                            ($cl_equal (@cl ($rewrite_implication (=> phi_1 phi_2)))
                                       (@cl psy)))
   )
 )
@@ -1604,7 +1599,7 @@
 ; conclusion-given: >
 ;   Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule implies_simplify ()
-  :requires (((check_implies_simplify eo::conclusion) true))
+  :requires ((($check_implies_simplify eo::conclusion) true))
   :conclusion-given
 )
 
@@ -1618,12 +1613,12 @@
 ;   A boolean indicating if conclusion has the form (𝜑1 ≈ 𝜑2) ≈ 𝜓, where 𝜓 
 ;   results from the application of equivalence preserving transformations, 
 ;   as specified in "rewrite_equivalence".
-(program check_equiv_simplify ((phi_1 Bool) (phi_2 Bool) (psy Bool))
+(program $check_equiv_simplify ((phi_1 Bool) (phi_2 Bool) (psy Bool))
   (Bool) Bool
   (
-   ((check_equiv_simplify (@cl (= (= phi_1 phi_2) psy)))
+   (($check_equiv_simplify (@cl (= (= phi_1 phi_2) psy)))
                             ; TODO: use proper comparison for props
-                            (cl_equal (@cl (rewrite_equivalence (= phi_1 phi_2)))
+                            ($cl_equal (@cl ($rewrite_equivalence (= phi_1 phi_2)))
                                       (@cl psy)))
   )
 )
@@ -1637,80 +1632,80 @@
 ; conclusion-given: >
 ;   Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule equiv_simplify ()
-  :requires (((check_equiv_simplify eo::conclusion) true))
+  :requires ((($check_equiv_simplify eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_bool_simplify ((conclusion Bool))
+(program $check_bool_simplify ((conclusion Bool))
   (Bool) Bool
   (
-   ((check_bool_simplify conclusion) true)
+   (($check_bool_simplify conclusion) true)
   )
 )
 
 ;TRUST
 (declare-rule bool_simplify ()
-  :requires (((check_bool_simplify eo::conclusion) true))
+  :requires ((($check_bool_simplify eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_ac_simp ((l Bool) (r Bool))
+(program $check_ac_simp ((l Bool) (r Bool))
   (Bool Bool) Bool
   (
-   ((check_ac_simp l r) true)
+   (($check_ac_simp l r) true)
   )
 )
 
 ;TRUST
 (declare-rule ac_simp ((l Bool) (r Bool))
   :args ((@cl (= l r)))
-  :requires (((check_ac_simp l r) true))
+  :requires ((($check_ac_simp l r) true))
   :conclusion (@cl (= l r))
 )
 
 ;TODO
-(program check_ite_simplify ((l Bool) (r Bool))
+(program $check_ite_simplify ((l Bool) (r Bool))
   (Bool Bool) Bool
   (
-   ((check_ite_simplify l r) true)
+   (($check_ite_simplify l r) true)
   )
 )
 
 ;TRUST
 (declare-rule ite_simplify ((l Bool) (r Bool))
   :args ((@cl (= l r)))
-  :requires (((check_ite_simplify l r) true))
+  :requires ((($check_ite_simplify l r) true))
   :conclusion (@cl (= l r))
 )
 
 ;TODO
-(program check_qnt_simplify ((l Bool) (r Bool))
+(program $check_qnt_simplify ((l Bool) (r Bool))
   (Bool Bool) Bool
   (
-   ((check_qnt_simplify l r) true)
+   (($check_qnt_simplify l r) true)
   )
 )
 
 ;TRUST
 (declare-rule qnt_simplify ((l Bool) (r Bool))
   :args ((@cl (= l r)))
-  :requires (((check_qnt_simplify l r) true))
+  :requires ((($check_qnt_simplify l r) true))
   :conclusion (@cl (= l r))
 )
 
 ;TODO
-(program check_onepoint ((conclusion Bool))
+(program $check_onepoint ((conclusion Bool))
   (Bool) Bool
   (
-   ((check_onepoint conclusion) true)
+   (($check_onepoint conclusion) true)
   )
 )
-;; (program check_onepoint ((ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T))
+;; (program $check_onepoint ((ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T))
 ;;   (Bool T T T T) Bool
 ;;   (
-;;    ((check_onepoint ctx l r l1 r1) true)
+;;    (($check_onepoint ctx l r l1 r1) true)
 ;;   )
 ;; )
 
@@ -1719,139 +1714,139 @@
   :assumption ctx
   ;; :premises (old_ctx (@cl (= l1 r1)))
   ;; :args ((@cl (= l r)))
-  ;; :requires (((context_extended ctx old_ctx) true) ((check_onepoint ctx l r l1 r1) true))
-  :requires (((check_onepoint eo::conclusion) true))
+  ;; :requires ((($context_extended ctx old_ctx) true) (($check_onepoint ctx l r l1 r1) true))
+  :requires ((($check_onepoint eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_qnt_join ((conclusion Bool))
+(program $check_qnt_join ((conclusion Bool))
   (Bool) Bool
   (
-   ((check_qnt_join conclusion) true)
+   (($check_qnt_join conclusion) true)
   )
 )
 
 ;TRUST
 (declare-rule qnt_join ()
-  :requires (((check_qnt_join eo::conclusion) true))
+  :requires ((($check_qnt_join eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_qnt_rm_unused ((conclusion Bool))
+(program $check_qnt_rm_unused ((conclusion Bool))
   (Bool) Bool
   (
-   ((check_qnt_rm_unused conclusion) true)
+   (($check_qnt_rm_unused conclusion) true)
   )
 )
 
 ;TRUST
 (declare-rule qnt_rm_unused ()
-  :requires (((check_qnt_rm_unused eo::conclusion) true))
+  :requires ((($check_qnt_rm_unused eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_eq_simplify ((conclusion Bool))
+(program $check_eq_simplify ((conclusion Bool))
   (Bool) Bool
   (
-   ((check_eq_simplify conclusion) true)
+   (($check_eq_simplify conclusion) true)
   )
 )
 
 ;TRUST
 (declare-rule eq_simplify ()
-  :requires (((check_eq_simplify eo::conclusion) true))
+  :requires ((($check_eq_simplify eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_div_simplify ((l Bool) (r Bool))
+(program $check_div_simplify ((l Bool) (r Bool))
   (Bool Bool) Bool
   (
-   ((check_div_simplify l r) true)
+   (($check_div_simplify l r) true)
   )
 )
 
 ;TRUST
 (declare-rule div_simplify ((l Bool) (r Bool))
   :args ((@cl (= l r)))
-  :requires (((check_div_simplify l r) true))
+  :requires ((($check_div_simplify l r) true))
   :conclusion (@cl (= l r))
 )
 
 ;TODO
-(program check_prod_simplify ((conclusion Bool))
+(program $check_prod_simplify ((conclusion Bool))
   (Bool) Bool
   (
-   ((check_prod_simplify conclusion) true)
+   (($check_prod_simplify conclusion) true)
   )
 )
 
 ;TRUST
 (declare-rule prod_simplify ()
-  :requires (((check_prod_simplify eo::conclusion) true))
+  :requires ((($check_prod_simplify eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_unary_minus_simplify ((l Bool) (r Bool))
+(program $check_unary_minus_simplify ((l Bool) (r Bool))
   (Bool Bool) Bool
   (
-   ((check_unary_minus_simplify l r) true)
+   (($check_unary_minus_simplify l r) true)
   )
 )
 
 ;TRUST
 (declare-rule unary_minus_simplify ((l Bool) (r Bool))
   :args ((@cl (= l r)))
-  :requires (((check_unary_minus_simplify l r) true))
+  :requires ((($check_unary_minus_simplify l r) true))
   :conclusion (@cl (= l r))
 )
 
 ;TODO
-(program check_minus_simplify ((l Bool) (r Bool))
+(program $check_minus_simplify ((l Bool) (r Bool))
   (Bool Bool) Bool
   (
-   ((check_minus_simplify l r) true)
+   (($check_minus_simplify l r) true)
   )
 )
 
 ;TRUST
 (declare-rule minus_simplify ((l Bool) (r Bool))
   :args ((@cl (= l r)))
-  :requires (((check_minus_simplify l r) true))
+  :requires ((($check_minus_simplify l r) true))
   :conclusion (@cl (= l r))
 )
 
 ;TODO
-(program check_sum_simplify ((l Bool) (r Bool))
+(program $check_sum_simplify ((l Bool) (r Bool))
   (Bool Bool) Bool
   (
-   ((check_sum_simplify l r) true)
+   (($check_sum_simplify l r) true)
   )
 )
 
 ;TRUST
 (declare-rule sum_simplify ((l Bool) (r Bool))
   :args ((@cl (= l r)))
-  :requires (((check_sum_simplify l r) true))
+  :requires ((($check_sum_simplify l r) true))
   :conclusion (@cl (= l r))
 )
 
 ;TODO
-(program check_comp_simplify ((l Bool) (r Bool))
+(program $check_comp_simplify ((l Bool) (r Bool))
   (Bool Bool) Bool
   (
-   ((check_comp_simplify l r) true)
+   (($check_comp_simplify l r) true)
   )
 )
 
 ;TRUST
 (declare-rule comp_simplify ((l Bool) (r Bool))
   :args ((@cl (= l r)))
-  :requires (((check_comp_simplify l r) true))
+  :requires ((($check_comp_simplify l r) true))
   :conclusion (@cl (= l r))
 )
 
@@ -1859,27 +1854,27 @@
 ; Rule 91: let
 ;;;;;;;;;;;;;;;
 
-(program verify_let_premises ((context Bool) (premises Bool) 
+(program $verify_let_premises ((context Bool) (premises Bool) 
                               (A Type) (var A)
                               (B Type) (value B)
                               (tl @VarList :list))
   (Bool Bool @VarList) Bool
   (
    (
-    (verify_let_premises context premises 
-                         (f_list_cons @varlist 
-                                      (f_list_cons @varlist var value) 
+    ($verify_let_premises context premises 
+                         ($f_list_cons @varlist 
+                                      ($f_list_cons @varlist var value) 
                                       tl))
-    (eo::or (f_list_contains_elem 
+    (eo::or ($f_list_contains_elem 
              and 
-             (@cl (= value (context_get_substitute context var)))
+             (@cl (= value ($context_get_substitute context var)))
              premises)
-            (verify_let_premises context premises tl)
+            ($verify_let_premises context premises tl)
             )
     )
 
    (
-    (verify_let_premises context premises @varlist.nil)
+    ($verify_let_premises context premises @varlist.nil)
     
     true
     )
@@ -1894,7 +1889,7 @@
 ; - Cs Bool:
 ; - conclusion Bool:
 ; return:
-(program check_let_elim ((context Bool) (premises Bool) 
+(program $check_let_elim ((context Bool) (premises Bool) 
                          (let_type Type) (let_def let_type)
                          (var_defs @VarList) 
                          (A Type) (lhs A) (rhs A)
@@ -1903,16 +1898,16 @@
   (Bool Bool let_type) Bool
   (
    (
-    (check_let_elim context premises
+    ($check_let_elim context premises
                     (@cl (= let_def rhs)))
 
     (eo::and 
      ; There should be a conclusion of the form (@cl (= lhs rhs))
      ; TODO: this conclusion must be just of the previous step
-     (f_list_contains_elem and (@cl (= (let_get_body let_def) rhs)) premises)
-     (verify_let_premises context premises 
-                          (let_get_vars_substitutes (let_get_vars let_def)
-                                                    (let_get_values let_def)))
+     ($f_list_contains_elem and (@cl (= ($let_get_body let_def) rhs)) premises)
+     ($verify_let_premises context premises 
+                          ($let_get_vars_substitutes ($let_get_vars let_def)
+                                                    ($let_get_values let_def)))
      )
     )
    )
@@ -1929,7 +1924,7 @@
 (declare-rule let_elim ((ctx Bool) (premises Bool))
   :assumption ctx
   :premise-list premises and
-  :requires (((check_let_elim ctx premises eo::conclusion) true))
+  :requires ((($check_let_elim ctx premises eo::conclusion) true))
   :conclusion-given
 )
 
@@ -1943,26 +1938,26 @@
 ; return:
 ; Returns the reinterpretation of the given and-list of distinct-list elements,
 ; as a conjunction of inequalities.
-(program build_distinct_list ((A Type) (lhs A) (rhs A) (tl Bool :list))
+(program $build_distinct_list ((A Type) (lhs A) (rhs A) (tl Bool :list))
   (Bool) Bool
   (
-   ((build_distinct_list (and (distinct lhs rhs) tl))
+   (($build_distinct_list (and (distinct lhs rhs) tl))
 
-    (f_list_cons and 
+    ($f_list_cons and 
                  (not (= lhs rhs)) 
-                 (build_distinct_list tl)))
+                 ($build_distinct_list tl)))
 
    ; Only one proposition
-   ((build_distinct_list (distinct lhs rhs)) 
+   (($build_distinct_list (distinct lhs rhs)) 
 
     (not (= lhs rhs)))
 
    ; Only one proposition
-   ((build_distinct_list (distinct lhs)) 
+   (($build_distinct_list (distinct lhs)) 
 
     true)
    
-   ((build_distinct_list true) 
+   (($build_distinct_list true) 
 
     true)
   )
@@ -1978,33 +1973,33 @@
 ; - conjunctions Bool: A conjunctions of inequalities of the form (not (= lhs' rhs'))
 ; return:
 ;   A boolean indicating if ineq appears in "conjunctions".
-(program conjunction_contains_ineq ((A Type) (lhs A) (rhs A) (hd Bool) (tl Bool :list))
+(program $conjunction_contains_ineq ((A Type) (lhs A) (rhs A) (hd Bool) (tl Bool :list))
   (Bool Bool) Bool
   (
-   ((conjunction_contains_ineq (not (= lhs rhs)) (and (not (= lhs rhs)) tl))
+   (($conjunction_contains_ineq (not (= lhs rhs)) (and (not (= lhs rhs)) tl))
 
     true)
 
-   ((conjunction_contains_ineq (not (= lhs rhs)) (and (not (= rhs lhs)) tl))
+   (($conjunction_contains_ineq (not (= lhs rhs)) (and (not (= rhs lhs)) tl))
 
     true)
 
    ; { hd =/= not (= rhs lhs))}
-   ((conjunction_contains_ineq (not (= lhs rhs)) (and hd tl))
+   (($conjunction_contains_ineq (not (= lhs rhs)) (and hd tl))
 
-    (conjunction_contains_ineq (not (= lhs rhs)) tl))
+    ($conjunction_contains_ineq (not (= lhs rhs)) tl))
 
    
-   ((conjunction_contains_ineq (not (= lhs rhs)) (not (= lhs rhs)))
+   (($conjunction_contains_ineq (not (= lhs rhs)) (not (= lhs rhs)))
 
     true)
 
-   ((conjunction_contains_ineq (not (= lhs rhs)) (not (= rhs lhs)))
+   (($conjunction_contains_ineq (not (= lhs rhs)) (not (= rhs lhs)))
 
     true)
 
    ; { hd =/= (not (= lhs rhs))}
-   ((conjunction_contains_ineq (not (= lhs rhs)) hd)
+   (($conjunction_contains_ineq (not (= lhs rhs)) hd)
 
     false)
   )
@@ -2016,25 +2011,25 @@
 ; - list_2 A: An and-list, of inequalities of the form (not (= lhs rhs)).
 ; return:
 ; A boolean indicating if the elements from list_1 also appear in list_2.
-(program conjunction_contains_conjunction ((hd Bool) (tl Bool :list)
+(program $conjunction_contains_conjunction ((hd Bool) (tl Bool :list)
                                            (f_list_2 Bool))
   (Bool Bool) Bool
   (
-   ((conjunction_contains_conjunction (and hd tl) f_list_2)
+   (($conjunction_contains_conjunction (and hd tl) f_list_2)
     ;; TODO: I need some way to build boolean values
     ;; combining other boolean values, but I would like
     ;; to avoid built-in operators.
-    (eo::and (conjunction_contains_ineq hd f_list_2)
-             (conjunction_contains_conjunction tl f_list_2)))
+    (eo::and ($conjunction_contains_ineq hd f_list_2)
+             ($conjunction_contains_conjunction tl f_list_2)))
 
  
    ; { f_list_1 is not an and-list}
-   ((conjunction_contains_conjunction true f_list_2)
+   (($conjunction_contains_conjunction true f_list_2)
     true)
    
    ; { hd must be an inequaity }
-   ((conjunction_contains_conjunction hd f_list_2)
-    (conjunction_contains_ineq hd f_list_2))
+   (($conjunction_contains_conjunction hd f_list_2)
+    ($conjunction_contains_ineq hd f_list_2))
   )
 )
 
@@ -2045,12 +2040,12 @@
 ; return: >
 ; A boolean indicating if the conjuncts from list_1 and list_2 are the 
 ; same, regardless of the order.
-(program conjunctions_equal ((list_1 Bool) (list_2 Bool))
+(program $conjunctions_equal ((list_1 Bool) (list_2 Bool))
   (Bool Bool) Bool
   (
-   ((conjunctions_equal list_1 list_2)
-    (eo::and (conjunction_contains_conjunction list_1 list_2)
-             (conjunction_contains_conjunction list_2 list_1)))
+   (($conjunctions_equal list_1 list_2)
+    (eo::and ($conjunction_contains_conjunction list_1 list_2)
+             ($conjunction_contains_conjunction list_2 list_1)))
   )
 )
 
@@ -2060,15 +2055,15 @@
 ; return:
 ; A Boolean indicating if the given "conclusion" has the shape
 ; (distinct 𝑡1 … 𝑡𝑛) ≈ ⋀ 𝑡𝑖 ≈/≈ 𝑡𝑗.
-(program check_distinct_elim ((A Type) (hd A) (inequalities Bool) (conjunctions Bool))
+(program $check_distinct_elim ((A Type) (hd A) (inequalities Bool) (conjunctions Bool))
   (Bool) Bool
   (; TODO: assuming that inequalities come first
-   ((check_distinct_elim (@cl (= inequalities conjunctions)))
-    (conjunctions_equal (build_distinct_list inequalities)
+   (($check_distinct_elim (@cl (= inequalities conjunctions)))
+    ($conjunctions_equal ($build_distinct_list inequalities)
                         conjunctions))
 
    ; Only one proposition
-   ((check_distinct_elim (@cl (= (distinct hd) true))) true)
+   (($check_distinct_elim (@cl (= (distinct hd) true))) true)
   )
 )
 
@@ -2080,7 +2075,7 @@
 ; conclusion-given: >
 ;   Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule distinct_elim ()
-  :requires (((check_distinct_elim eo::conclusion) true))
+  :requires ((($check_distinct_elim eo::conclusion) true))
   :conclusion-given
 )
 
@@ -2095,10 +2090,10 @@
 ; return: >
 ;   A boolean indicating if "conclusion" is a clause of the form 
 ;   (= (= t u) (and (<= t u) (<= u t))), for some numbers t and u.
-(program check_la_rw_eq ((t Real) (u Real))
+(program $check_la_rw_eq ((t Real) (u Real))
   (Bool) Bool
   (
-   ((check_la_rw_eq (@cl (= (= t u) (and (<= t u) (<= u t))))) true)
+   (($check_la_rw_eq (@cl (= (= t u) (and (<= t u) (<= u t))))) true)
   )
 )
 
@@ -2111,7 +2106,7 @@
 ; conclusion-given: >
 ;  Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule la_rw_eq ()
-  :requires (((check_la_rw_eq eo::conclusion) true))
+  :requires ((($check_la_rw_eq eo::conclusion) true))
   :conclusion-given
 )
 
@@ -2129,12 +2124,12 @@
 ;     ○ 𝑡𝑖 ≈ (𝑡1 ∘⋯∘(𝑡𝑛−2 ∘(𝑡𝑛−1 ∘𝑡𝑛) … ) (for a right assoc. operator ∘)
 ;     ○ 𝑡𝑖 ≈ (𝑡1 ∘𝑡2) ∧(𝑡2 ∘𝑡3) ∧⋯∧ (𝑡𝑛−1 ∘𝑡𝑛) (for a chainable operator ∘)
 ;   - ∘ cannot be ∧ or ∨.
-(program check_nary_elim ((A Type) (hd A) (tl A :list))
+(program $check_nary_elim ((A Type) (hd A) (tl A :list))
   (Bool) Bool
   (; TODO: check that op is not /\ nor \/
    ; TODO: do we have reflection mechanisms, useful to inspect properties
    ; of each operator, and define this program in a generic way?
-   ((check_nary_elim (@cl (= (=> hd tl) (=> hd tl))))
+   (($check_nary_elim (@cl (= (=> hd tl) (=> hd tl))))
     ; right-assoc operator
     ; We leverage the desugaring process, that turns both lists
     ; into the folded application of the operator, already
@@ -2155,15 +2150,15 @@
 ; conclusion-given: >
 ;   Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule nary_elim ()
-  :requires (((check_nary_elim eo::conclusion) true))
+  :requires ((($check_nary_elim eo::conclusion) true))
   :conclusion-given
 )
 
 ;TODO
-(program check_bfun_elim ((psi Bool) (phi Bool))
+(program $check_bfun_elim ((psi Bool) (phi Bool))
   (Bool Bool) Bool
   (
-   ((check_bfun_elim (@cl psi) phi) true)
+   (($check_bfun_elim (@cl psi) phi) true)
   )
 )
 
@@ -2171,21 +2166,21 @@
 (declare-rule bfun_elim ((psi Bool) (phi Bool))
   :premises (psi)
   :args ((@cl phi))
-  :requires (((check_bfun_elim (to_cl psi) phi) true))
+  :requires ((($check_bfun_elim ($to_cl psi) phi) true))
   :conclusion (@cl phi)
 )
 
 ;TODO
-(program check_ite_intro ((conclusion Bool))
+(program $check_ite_intro ((conclusion Bool))
   (Bool) Bool
   (
-   ((check_ite_intro conclusion) true)
+   (($check_ite_intro conclusion) true)
   )
 )
 
 ;TRUST
 (declare-rule ite_intro ()
-  :requires (((check_ite_intro eo::conclusion) true))
+  :requires ((($check_ite_intro eo::conclusion) true))
   :conclusion-given
 )
 
@@ -2205,17 +2200,17 @@
 ; return: >
 ;   A boolean indicating if conclusion is of the form (@cl (= psy phi)), for a 
 ;   given premise (@cl (= phi psy)) or (= psi psy). 
-(program check_symm ((phi Bool) (psy Bool))
+(program $check_symm ((phi Bool) (psy Bool))
   (Bool Bool) Bool
   (
    (
-    (check_symm (= phi psy) (@cl (= psy phi))) 
+    ($check_symm (= phi psy) (@cl (= psy phi))) 
 
     true
     )
 
    (
-    (check_symm (@cl (= phi psy)) (@cl (= psy phi))) 
+    ($check_symm (@cl (= phi psy)) (@cl (= psy phi))) 
 
     true
     )
@@ -2231,7 +2226,7 @@
 ;   Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule symm ((premise Bool))
   :premises (premise)
-  :requires (((check_symm premise eo::conclusion) true))
+  :requires ((($check_symm premise eo::conclusion) true))
   :conclusion-given
 )
 
@@ -2247,25 +2242,25 @@
 ;   Conclusion given to rule reordering. Must be a clause built with @cl.
 ; return: >
 ;   A boolean indicating if conclusion is a permutation of the premise.
-(program check_reordering ((hd_premise Bool) (tl_premise Bool :list)
+(program $check_reordering ((hd_premise Bool) (tl_premise Bool :list)
                            (hd_conclusion Bool) (tl_conclusion Bool :list))
   (Bool Bool) Bool
   (
    (
-    (check_reordering (@cl hd_premise tl_premise) (@cl hd_conclusion tl_conclusion))
+    ($check_reordering (@cl hd_premise tl_premise) (@cl hd_conclusion tl_conclusion))
 
-    (check_reordering tl_premise 
-                      (f_list_remove_elem (@cl hd_conclusion tl_conclusion) hd_premise false))
+    ($check_reordering tl_premise 
+                      ($f_list_remove_elem (@cl hd_conclusion tl_conclusion) hd_premise false))
     )
 
    (
-    (check_reordering false false)
+    ($check_reordering false false)
 
     true
     )
 
    (
-    (check_reordering hd_premise hd_conclusion)
+    ($check_reordering hd_premise hd_conclusion)
 
     false
     )
@@ -2284,7 +2279,7 @@
 ;  Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule reordering ((premise Bool))
   :premises (premise)
-  :requires (((check_reordering premise eo::conclusion) 
+  :requires ((($check_reordering premise eo::conclusion) 
               true))
   :conclusion-given
 )
@@ -2294,17 +2289,17 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;TODO
-(program check_rare_rewrite ((Flag Bool) (CL Bool))
+(program $check_rare_rewrite ((Flag Bool) (CL Bool))
   (Bool Bool) Bool
   (
-   ((check_rare_rewrite Flag CL) true)
+   (($check_rare_rewrite Flag CL) true)
   )
 )
 
 ;TRUST
 (declare-rule rare_rewrite ((flag Bool))
   :args (flag)
-  :requires (((check_rare_rewrite flag eo::conclusion) true))
+  :requires ((($check_rare_rewrite flag eo::conclusion) true))
   :conclusion-given
 )
 
@@ -2312,16 +2307,16 @@
 ;; Misc.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(program check_discard_context ((CL Bool))
+(program $check_discard_context ((CL Bool))
   (Bool) Bool
   (
-   ((check_discard_context CL) true)
+   (($check_discard_context CL) true)
   )
 )
 
 ; TODO: dummy step-pop step, to discard contexts
 (declare-rule discard_context ((ctx Bool))
   :assumption ctx
-  ;; :requires (((check_discard_context eo::conclusion) true))
+  ;; :requires ((($check_discard_context eo::conclusion) true))
   :conclusion-given
 )
