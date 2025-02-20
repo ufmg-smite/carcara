@@ -40,80 +40,80 @@
 ;   @param y a Type
 ;   @return the "union" of x and y.
 ; The returned type is the type of the result of mixed arithmetic operators taking arguments x and y.
-(program arith_typeunion ()
+(program $arith_typeunion ()
     (Type Type) Type
     (
-      ((arith_typeunion Int Int) Int)
-      ((arith_typeunion Real Real) Real)
-      ((arith_typeunion Real Int) Real)
-      ((arith_typeunion Int Real) Real)
+      (($arith_typeunion Int Int) Int)
+      (($arith_typeunion Real Real) Real)
+      (($arith_typeunion Real Int) Real)
+      (($arith_typeunion Int Real) Real)
     )
 )
 
 ; is_arith_type
 ;   @param x
 ;   @returns true if x is Int or Real
-(program is_arith_type ()
+(program $is_arith_type ()
     (Type) Bool
     (
-      ((is_arith_type Int) true)
-      ((is_arith_type Real) true)
+      (($is_arith_type Int) true)
+      (($is_arith_type Real) true)
     )
 )
 
 ; Core operators of arithmetic, which are used in mixed Int/Real arithmetic.
 ; Using integer nil terminators ensures typing is accurate.
 (declare-const + (-> (! Type :var T :implicit) (! Type :var U :implicit)
-                     T U (arith_typeunion T U)) :right-assoc-nil 0)
+                     T U ($arith_typeunion T U)) :right-assoc-nil 0)
 (declare-const - (-> (! Type :var T :implicit) (! Type :var U :implicit)
-                     T U (arith_typeunion T U)) :left-assoc)
+                     T U ($arith_typeunion T U)) :left-assoc)
 (declare-const * (-> (! Type :var T :implicit) (! Type :var U :implicit)
-                     T U (arith_typeunion T U)) :right-assoc-nil 1)
+                     T U ($arith_typeunion T U)) :right-assoc-nil 1)
 (declare-const / (-> (! Type :var T :implicit) (! Type :var U :implicit)
                      T U
-                     (! Real :requires ((is_arith_type T) true)
-                             :requires ((is_arith_type U) true))) :left-assoc)
+                     (! Real :requires (($is_arith_type T) true)
+                             :requires (($is_arith_type U) true))) :left-assoc)
 (declare-const div (-> Int Int Int) :left-assoc)
 (declare-const mod (-> Int Int Int))
 
 (declare-const < (-> (! Type :var T :implicit) (! Type :var U :implicit)
-                     (! T :requires ((is_arith_type T) true))
-                     (! U :requires ((is_arith_type U) true))
+                     (! T :requires (($is_arith_type T) true))
+                     (! U :requires (($is_arith_type U) true))
                      Bool)
                      :chainable and)
 (declare-const <= (-> (! Type :var T :implicit) (! Type :var U :implicit)
-                      (! T :requires ((is_arith_type T) true))
-                      (! U :requires ((is_arith_type U) true))
+                      (! T :requires (($is_arith_type T) true))
+                      (! U :requires (($is_arith_type U) true))
                       Bool)
                       :chainable and)
 (declare-const > (-> (! Type :var T :implicit) (! Type :var U :implicit)
-                     (! T :requires ((is_arith_type T) true))
-                     (! U :requires ((is_arith_type U) true))
+                     (! T :requires (($is_arith_type T) true))
+                     (! U :requires (($is_arith_type U) true))
                      Bool)
                      :chainable and)
 (declare-const >= (-> (! Type :var T :implicit) (! Type :var U :implicit)
-                      (! T :requires ((is_arith_type T) true))
-                      (! U :requires ((is_arith_type U) true))
+                      (! T :requires (($is_arith_type T) true))
+                      (! U :requires (($is_arith_type U) true))
                       Bool)
                       :chainable and)
 
 ; Conversion functions.
 (declare-const to_real (-> (! Type :var T :implicit)
-                           (! T :requires ((is_arith_type T) true))
+                           (! T :requires (($is_arith_type T) true))
                            Real))
 (declare-const to_int (-> (! Type :var T :implicit)
-                          (! T :requires ((is_arith_type T) true))
+                          (! T :requires (($is_arith_type T) true))
                           Int))
 (declare-const is_int (-> (! Type :var T :implicit)
-                          (! T :requires ((is_arith_type T) true))
+                          (! T :requires (($is_arith_type T) true))
                           Bool))
 (declare-const abs (-> (! Type :var T :implicit)
-                       (! T :requires ((is_arith_type T) true))
+                       (! T :requires (($is_arith_type T) true))
                        T))
 
 ; Currently unary negation cannot use overload.
 (declare-const - (-> (! Type :var T :implicit)
-                     (! T :requires ((is_arith_type T) true))
+                     (! T :requires (($is_arith_type T) true))
                      T))
 
 ; ---------------
@@ -136,14 +136,14 @@
 ; return: >
 ;   The expected function type, with domain in the product type of 
 ;   and return type B.
-(program get_lambda_type ((x @VarList) (xs @VarList :list) (B Type))
+(program $get_lambda_type ((x @VarList) (xs @VarList :list) (B Type))
   (@VarList Type) Type
   (
-    ((get_lambda_type (@varlist x xs) B) 
+    (($get_lambda_type (@varlist x xs) B) 
      
-     (-> (eo::typeof x) (get_lambda_type xs B)))
+     (-> (eo::typeof x) ($get_lambda_type xs B)))
 
-    ((get_lambda_type @varlist.nil B)
+    (($get_lambda_type @varlist.nil B)
 
      B)
   )
@@ -152,7 +152,7 @@
 (declare-const @let (-> (! Type :var B :implicit)
                        (! @VarList :var L)
                        B
-                       (get_lambda_type L B)
+                       ($get_lambda_type L B)
                        ) :binder @varlist)
 
 
@@ -178,9 +178,9 @@
 
 ; Checks that the context ctx is an extension of old_ctx.
 ;TODO
-(program context_extended ((ctx Bool) (old_ctx Bool))
+(program $context_extended ((ctx Bool) (old_ctx Bool))
     (Bool Bool) Bool
     (
-        ((context_extended ctx old_ctx) true)
+        (($context_extended ctx old_ctx) true)
     )
  )
