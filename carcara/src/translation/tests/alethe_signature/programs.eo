@@ -18,15 +18,15 @@
 ;   An integer, from 0 to the number of parameters - 1 in (f t1 ... tn) 
 ;   (i.e., "list)
 ; return: The parameter number "index", from (f t1 ... tn) (i.e., "list")
-(program f_list_index ((A Type) (f (-> A A A)) (hd A) (tail A :list) (index Int))
+(program $f_list_index ((A Type) (f (-> A A A)) (hd A) (tail A :list) (index Int))
   ((-> A A A) A Int) A
   (
-   ((f_list_index f (f hd tail) 0) hd)
+   (($f_list_index f (f hd tail) 0) hd)
 
    ;; { index > 0 }
-   ((f_list_index f (f hd tail) index)
+   (($f_list_index f (f hd tail) index)
     ;; TODO: using eo::add
-    (f_list_index f tail (eo::add index -1)))
+    ($f_list_index f tail (eo::add index -1)))
   )
 )
 
@@ -37,26 +37,26 @@
 ; - list A: An f-list.
 ; return:
 ; A boolean indicating if "elem" appears in f-list "list".
-(program f_list_contains_elem ((A Type) (f (-> A A A))
+(program $f_list_contains_elem ((A Type) (f (-> A A A))
                                (elem A) (hd A) (tl A :list))
   ((-> A A A) A A) Bool
   (
-   ((f_list_contains_elem f elem (f elem tl))
+   (($f_list_contains_elem f elem (f elem tl))
 
     true)
 
    ; { hd =/= elem}
-   ((f_list_contains_elem f elem (f hd tl))
+   (($f_list_contains_elem f elem (f hd tl))
 
-    (f_list_contains_elem f elem tl))
+    ($f_list_contains_elem f elem tl))
 
    ; { elem is not an f-list}
-   ((f_list_contains_elem f elem elem)
+   (($f_list_contains_elem f elem elem)
 
     true)
    
    ; { hd =/= elem}
-   ((f_list_contains_elem f elem hd)
+   (($f_list_contains_elem f elem hd)
 
     false)
   )
@@ -69,22 +69,22 @@
 ; - list_2 A: An f-list.
 ; return:
 ; A boolean indicating if the elements from list_1 also appear in list_2.
-(program f_list_contains_f_list ((A Type) (f (-> A A A))
+(program $f_list_contains_f_list ((A Type) (f (-> A A A))
                                  (hd A) (tl A :list)
                                  (f_list_2 A))
   ((-> A A A) A A) Bool
   (
-   ((f_list_contains_f_list f (@cl hd tl) f_list_2)
+   (($f_list_contains_f_list f (@cl hd tl) f_list_2)
     ;; TODO: I need some way to build boolean values
     ;; combining other boolean values, but I would like
     ;; to avoid built-in operators.
-    (eo::and (f_list_contains_elem f hd f_list_2)
-             (f_list_contains_f_list f tl f_list_2)))
+    (eo::and ($f_list_contains_elem f hd f_list_2)
+             ($f_list_contains_f_list f tl f_list_2)))
 
  
    ;; { f_list_1 is not a term built with f }
-   ((f_list_contains_f_list f hd f_list_2)
-    (f_list_contains_elem f hd f_list_2))
+   (($f_list_contains_f_list f hd f_list_2)
+    ($f_list_contains_elem f hd f_list_2))
   )
 )
 
@@ -96,13 +96,13 @@
 ; return: >
 ; A boolean indicating if the operands from list_1 and list_2 are the 
 ; same, regardless of the order and possible repetitions.
-(program f_list_equal ((A Type) (f (-> A A A))
+(program $f_list_equal ((A Type) (f (-> A A A))
                        (f_list_1 A) (f_list_2 A))
   ((-> A A A) A A) Bool
   (
-   ((f_list_equal f f_list_1 f_list_2)
-    (eo::and (f_list_contains_f_list f f_list_1 f_list_2)
-             (f_list_contains_f_list f f_list_2 f_list_1)))
+   (($f_list_equal f f_list_1 f_list_2)
+    (eo::and ($f_list_contains_f_list f f_list_1 f_list_2)
+             ($f_list_contains_f_list f f_list_2 f_list_1)))
   )
 )
 
@@ -113,7 +113,7 @@
 ; - flist A: An f-list.
 ; return: >
 ; Returns an f-list, with first operand "elem", followed by operands of flist_2.
-(define f_list_cons ((A Type :implicit) (f (-> A A A)) (elem A)
+(define $f_list_cons ((A Type :implicit) (f (-> A A A)) (elem A)
                      (tail A :list))
     (f elem tail)
 )
@@ -126,33 +126,33 @@
 ; return: >
 ;   Removes the first occurrence of "elem" in the given f-list. Returns
 ;   the obtained f-list.
-(program f_list_remove_elem ((A Type) (B Type)
+(program $f_list_remove_elem ((A Type) (B Type)
                              (f (-> A A B)) (f_nil A) (hd A) (tl A :list)
                              (elem A))
   (B A A) B
 
   (
    (
-    (f_list_remove_elem (f elem tl) elem f_nil)
+    ($f_list_remove_elem (f elem tl) elem f_nil)
     
     tl
     )
 
    (; { hd =/= elem }
-    (f_list_remove_elem (f hd tl) elem f_nil)
+    ($f_list_remove_elem (f hd tl) elem f_nil)
     
-    (f hd (f_list_remove_elem tl elem f_nil))
+    (f hd ($f_list_remove_elem tl elem f_nil))
     )
 
    (
-    (f_list_remove_elem elem elem f_nil)
+    ($f_list_remove_elem elem elem f_nil)
     
     f_nil
     )
 
    ; TODO: this should be, somehow, an error
    (; { hd =/= elem }
-    (f_list_remove_elem hd elem f_nil)
+    ($f_list_remove_elem hd elem f_nil)
     
     hd
     )
@@ -167,21 +167,21 @@
 ; args:
 ; - varlist_concat nil:
 ; return:
-(program varlist_concat ((A Type) (hd A) (tl @VarList :list)
+(program $varlist_concat ((A Type) (hd A) (tl @VarList :list)
                          (varlist_2 @VarList))
   (@VarList @VarList) @VarList
 
   (
    (
-    (varlist_concat (@varlist hd tl) varlist_2)
+    ($varlist_concat (@varlist hd tl) varlist_2)
     
-    (f_list_cons @varlist 
+    ($f_list_cons @varlist 
                  hd
-                 (varlist_concat tl varlist_2))
+                 ($varlist_concat tl varlist_2))
     )
 
    (
-    (varlist_concat @varlist.nil varlist_2)
+    ($varlist_concat @varlist.nil varlist_2)
     
     varlist_2
     )
@@ -194,17 +194,17 @@
 ; - hd A:
 ; - tl @VarList:
 ; return:
-(program varlist_reverse ((A Type) (hd A) (tl @VarList :list))
+(program $varlist_reverse ((A Type) (hd A) (tl @VarList :list))
   (@VarList) @VarList
   (
    (
-    (varlist_reverse (@varlist hd tl))
+    ($varlist_reverse (@varlist hd tl))
 
-    (varlist_concat (varlist_reverse tl) 
-                    (f_list_cons @varlist hd @varlist.nil))
+    ($varlist_concat ($varlist_reverse tl) 
+                    ($f_list_cons @varlist hd @varlist.nil))
     )
    (
-    (varlist_reverse @varlist.nil)
+    ($varlist_reverse @varlist.nil)
 
     @varlist.nil
     )
@@ -221,11 +221,11 @@
 ; return: >
 ;   For a unit clause, built with @cl, removes the top @cl if 
 ;   any, returning the only disjunct. Otherwise, returns T.
-(program from_cl ((T Bool))
+(program $from_cl ((T Bool))
     (Bool) Bool
     (
-        ((from_cl (@cl T)) T)
-        ((from_cl T) T)
+        (($from_cl (@cl T)) T)
+        (($from_cl T) T)
     )
 )
 
@@ -235,11 +235,11 @@
 ; return: >
 ;   Embeds T within a unit clause built with @cl, only
 ;   if T is not a unit clause built with @cl itself. 
-(program to_cl ((T Bool))
+(program $to_cl ((T Bool))
     (Bool) Bool
     (
-        ((to_cl (@cl T)) (@cl T))
-        ((to_cl T) (@cl T))
+        (($to_cl (@cl T)) (@cl T))
+        (($to_cl T) (@cl T))
     )
 )
 
@@ -249,12 +249,12 @@
 ; - phi_1 Bool: A proposition.
 ; - phi_2 Bool: A proposition.
 ; return: A boolean indicating if phi_1 and phi_2 are syntactically equal.
-(program prop_syntax_eq ((phi Bool))
+(program $prop_syntax_eq ((phi Bool))
   (Bool Bool) Bool
   (
-   ((prop_syntax_eq phi phi) true)
+   (($prop_syntax_eq phi phi) true)
 
-   ((prop_syntax_eq _ _) false)
+   (($prop_syntax_eq _ _) false)
    )
 )
 
@@ -264,11 +264,11 @@
 ; - cl_2 Bool: A clause, built with @cl.
 ; return: >
 ;   A boolean indicating if cl_1 and cl_2 are equal modulo permutations.
-(program cl_equal ((cl_1 Bool) (cl_2 Bool))
+(program $cl_equal ((cl_1 Bool) (cl_2 Bool))
   (Bool Bool) Bool
   (
-   ((cl_equal cl_1 cl_2)
-    (f_list_equal @cl cl_1 cl_2))
+   (($cl_equal cl_1 cl_2)
+    ($f_list_equal @cl cl_1 cl_2))
   )
 )
 
@@ -279,12 +279,12 @@
 ; - accum Bool : Partial result accumulator
 ; return: >
 ;   A clause equivalent to "or_clause", built exclusively with @cl.
-(program convert_or_to_cl ((or_clause Bool) (disjunct_1 Bool) (disjunct_2 Bool :list))
+(program $convert_or_to_cl ((or_clause Bool) (disjunct_1 Bool) (disjunct_2 Bool :list))
   (Bool) Bool
-  (((convert_or_to_cl (or disjunct_1 disjunct_2))
-    (f_list_cons @cl disjunct_1 (convert_or_to_cl disjunct_2)))
+  ((($convert_or_to_cl (or disjunct_1 disjunct_2))
+    ($f_list_cons @cl disjunct_1 ($convert_or_to_cl disjunct_2)))
    ; { disjunct_1 is not built with "or" }
-   ((convert_or_to_cl disjunct_1)
+   (($convert_or_to_cl disjunct_1)
     disjunct_1))
 )
 
@@ -294,73 +294,73 @@
 ; return: >
 ;   Applies De Morgan's law over the conjuncts of "ls", returning a new clause
 ;   built with @cl.
-(program de_morgan_not_and ((l Bool) (ls Bool))
+(program $de_morgan_not_and ((l Bool) (ls Bool))
   (Bool) Bool
   (
-   ((de_morgan_not_and (and l ls))
-    (@cl (not l) (from_cl (de_morgan_not_and ls)))
+   (($de_morgan_not_and (and l ls))
+    (@cl (not l) ($from_cl ($de_morgan_not_and ls)))
     )
 
-   ((de_morgan_not_and l) (@cl (not l)))
+   (($de_morgan_not_and l) (@cl (not l)))
   )
 )
 
 
 ; TODO: implement this as a higher-order program, once it becomes feasible
-(program flag_duplicates ((hd Bool) (tl Bool :list))
+(program $flag_duplicates ((hd Bool) (tl Bool :list))
          (Bool) @VarList
 
          (
           (
-           (flag_duplicates (@cl hd tl))
-           (f_list_cons @varlist 
-                        (f_list_contains_elem @cl hd (@cl tl))
-                        (flag_duplicates tl))
+           ($flag_duplicates (@cl hd tl))
+           ($f_list_cons @varlist 
+                        ($f_list_contains_elem @cl hd (@cl tl))
+                        ($flag_duplicates tl))
            )
 
           ; { hd is a single element }
           (
-           (flag_duplicates (@cl hd))
-           (f_list_cons @varlist 
+           ($flag_duplicates (@cl hd))
+           ($f_list_cons @varlist 
                         false
                         @varlist.nil)
            )
 
           (
-           (flag_duplicates false)
+           ($flag_duplicates false)
            @varlist.nil
            )
           )
 )
 
 ; TODO: implement this as a higher-order program, once it becomes feasible
-(program filter ((hd Bool) (cl_tl Bool :list) (varlist_tl @VarList :list))
+(program $filter ((hd Bool) (cl_tl Bool :list) (varlist_tl @VarList :list))
          (Bool @VarList) Bool
          (
           (
-           (filter (@cl hd cl_tl) (@varlist true varlist_tl))
-           (filter cl_tl varlist_tl)
+           ($filter (@cl hd cl_tl) (@varlist true varlist_tl))
+           ($filter cl_tl varlist_tl)
            )
 
           (
-           (filter (@cl hd cl_tl) (@varlist false varlist_tl))
-           (f_list_cons @cl
+           ($filter (@cl hd cl_tl) (@varlist false varlist_tl))
+           ($f_list_cons @cl
                         hd
-                        (filter cl_tl varlist_tl))
+                        ($filter cl_tl varlist_tl))
            )
 
           (
-           (filter hd (@varlist false @varlist.nil))
+           ($filter hd (@varlist false @varlist.nil))
            (@cl hd)
            )
 
           (
-           (filter hd (@varlist true @varlist.nil))
+           ($filter hd (@varlist true @varlist.nil))
            false
            )
 
           (
-           (filter false @varlist.nil)
+           ($filter false @varlist.nil)
            false
            )
           )
@@ -370,13 +370,13 @@
 ; args:
 ; - clause Bool: A clause from which we want to delete duplicates.
 ; return: A clause that contains every element from "clause", without duplicates.
-(program cl_remove_duplicates ((clause Bool))
+(program $cl_remove_duplicates ((clause Bool))
          (Bool) Bool
          (
           (
-           (cl_remove_duplicates clause)
+           ($cl_remove_duplicates clause)
 
-           (filter clause (flag_duplicates clause))
+           ($filter clause ($flag_duplicates clause))
            )
           )
 )
@@ -392,39 +392,39 @@
 ; return:
 ;   A proposition that is equivalent to "implication", but that is
 ;   not built with =>.
-(program rewrite_implication ((phi_1 Bool) (phi_2 Bool))
+(program $rewrite_implication ((phi_1 Bool) (phi_2 Bool))
          (Bool) Bool
          (; We apply semantics preserving rewrites.
-          ((rewrite_implication (=> (not phi_1) (not phi_2)))
+          (($rewrite_implication (=> (not phi_1) (not phi_2)))
           
-          (rewrite_implication (=> phi_2 phi_1)))
+          ($rewrite_implication (=> phi_2 phi_1)))
 
           
-          ((rewrite_implication (=> false phi_1))
+          (($rewrite_implication (=> false phi_1))
           
           true)
 
-          ((rewrite_implication (=> phi_1 true))
+          (($rewrite_implication (=> phi_1 true))
           
           true)
 
-          ((rewrite_implication (=> true phi_1))
+          (($rewrite_implication (=> true phi_1))
           
           phi_1)
 
-          ((rewrite_implication (=> phi_1 false))
+          (($rewrite_implication (=> phi_1 false))
           
           (not phi_1))
 
-          ((rewrite_implication (=> phi_1 phi_1))
+          (($rewrite_implication (=> phi_1 phi_1))
           
           true)
 
-          ((rewrite_implication (=> (not phi_1) phi_1))
+          (($rewrite_implication (=> (not phi_1) phi_1))
           
           phi_1)
 
-          ((rewrite_implication (=> (not phi_1) (not phi_1)))
+          (($rewrite_implication (=> (not phi_1) (not phi_1)))
           
           (not phi_1))
           )
@@ -437,39 +437,39 @@
 ; return:
 ;   A proposition that is equivalent to "equivalence", but that is
 ;   not built with =.
-(program rewrite_equivalence ((phi_1 Bool) (phi_2 Bool))
+(program $rewrite_equivalence ((phi_1 Bool) (phi_2 Bool))
          (Bool) Bool
          (; We apply semantics preserving rewrites.
-          ((rewrite_equivalence (= (not phi_1) (not phi_2)))
+          (($rewrite_equivalence (= (not phi_1) (not phi_2)))
           
-          (rewrite_equivalence (= phi_2 phi_1)))
+          ($rewrite_equivalence (= phi_2 phi_1)))
 
           
-          ((rewrite_equivalence (= phi_1 phi_1))
+          (($rewrite_equivalence (= phi_1 phi_1))
           
           true)
 
-          ((rewrite_equivalence (= phi_1 (not phi_1)))
+          (($rewrite_equivalence (= phi_1 (not phi_1)))
           
           false)
 
-          ((rewrite_equivalence (= (not phi_1) phi_1))
+          (($rewrite_equivalence (= (not phi_1) phi_1))
           
           false)
 
-          ((rewrite_equivalence (= true phi_1))
+          (($rewrite_equivalence (= true phi_1))
           
           phi_1)
 
-          ((rewrite_equivalence (= phi_1 true))
+          (($rewrite_equivalence (= phi_1 true))
           
           phi_1)
 
-          ((rewrite_equivalence (= phi_1 false))
+          (($rewrite_equivalence (= phi_1 false))
           
           (not phi_1))
 
-          ((rewrite_equivalence (= false phi_1))
+          (($rewrite_equivalence (= false phi_1))
           
           (not phi_1))
 
@@ -486,20 +486,20 @@
 ; args:
 ; - get_value nil:
 ; return:
-(program get_value ((A Type) (id A) (B Type)
+(program $get_value ((A Type) (id A) (B Type)
                     (value B) (hd Bool) (tl Bool :list))
          (Bool A) B
          (
-          ((get_value (and (= id value) tl) id)
+          (($get_value (and (= id value) tl) id)
            
            value)
 
           ; { hd =/= (= id value), for some value "value"} 
-          ((get_value (and hd tl) id)
+          (($get_value (and hd tl) id)
            
-           (get_value tl id))
+           ($get_value tl id))
 
-          ((get_value (= id value) id)
+          (($get_value (= id value) id)
            
            value)
           )
@@ -509,14 +509,14 @@
 ; args:
 ; - context_get_substitute nil:
 ; return:
-(program context_get_substitute ((A Type) (id A) (B Type)
+(program $context_get_substitute ((A Type) (id A) (B Type)
                                  (value B) (varlist @VarList) 
                                  (ctx Bool) (and_list Bool))
          (Bool A) B
          (
-          ((context_get_substitute (@ctx varlist and_list) id)
+          (($context_get_substitute (@ctx varlist and_list) id)
            
-           (get_value and_list id))
+           ($get_value and_list id))
           )
 )
 
@@ -524,21 +524,21 @@
 ; args:
 ; - context_get_var_subst_pairs nil:
 ; return:
-(program context_get_var_subst_pairs ((A Type) (id A) (B Type)
+(program $context_get_var_subst_pairs ((A Type) (id A) (B Type)
                                       (value B) (varlist @VarList) 
                                       (context Bool) (and_list Bool)
                                       (ids @VarList :list))
          (Bool @VarList) @VarList
          (
           (
-           (context_get_var_subst_pairs context (@varlist id ids))
+           ($context_get_var_subst_pairs context (@varlist id ids))
            
-           (f_list_cons @varlist 
-                        (f_list_cons @varlist id (context_get_substitute context id))
-                        (context_get_var_subst_pairs context ids))
+           ($f_list_cons @varlist 
+                        ($f_list_cons @varlist id ($context_get_substitute context id))
+                        ($context_get_var_subst_pairs context ids))
            )
           (
-           (context_get_var_subst_pairs context @varlist.nil)
+           ($context_get_var_subst_pairs context @varlist.nil)
            
            @varlist.nil
            )
@@ -551,7 +551,7 @@
 ; args:
 ; - let_get_vars nil:
 ; return:
-(program let_get_vars ((let_type Type) (var_defs @VarList)
+(program $let_get_vars ((let_type Type) (var_defs @VarList)
                        (body_type Type) (body body_type)
                        (A Type) (var_values A)
                        (B Type) (nested_func_app B))
@@ -559,15 +559,15 @@
          (let_type) @VarList
          (
           (
-           (let_get_vars (_ (@let var_defs body) var_values))
+           ($let_get_vars (_ (@let var_defs body) var_values))
 
            var_defs
            )
 
           (; { nested_func_app =/= (@let ...) }
-           (let_get_vars (_ nested_func_app var_values))
+           ($let_get_vars (_ nested_func_app var_values))
 
-           (let_get_vars nested_func_app)
+           ($let_get_vars nested_func_app)
            )
           )
          )
@@ -576,7 +576,7 @@
 ; args:
 ; - let_get_vars nil:
 ; return:
-(program let_get_values ((let_type Type) (varlist @VarList)
+(program $let_get_values ((let_type Type) (varlist @VarList)
                          (body_type Type) (body body_type)
                          (B Type) (nested_func_app B)
                          (A Type) (value A))
@@ -584,18 +584,18 @@
          (let_type) @VarList
          (
           (
-           (let_get_values (_ (@let varlist body) value))
+           ($let_get_values (_ (@let varlist body) value))
 
-           (f_list_cons @varlist value @varlist.nil)
+           ($f_list_cons @varlist value @varlist.nil)
            )
 
           (
            ; { nested_func_app =/= (@let ...) }
-           (let_get_values (_ nested_func_app value))
+           ($let_get_values (_ nested_func_app value))
 
-           (varlist_reverse (f_list_cons @varlist 
+           ($varlist_reverse ($f_list_cons @varlist 
                                          value 
-                                         (let_get_values nested_func_app)))
+                                         ($let_get_values nested_func_app)))
            )
           
           )
@@ -605,7 +605,7 @@
 ; args:
 ; - let_get_body nil:
 ; return:
-(program let_get_body ((let_type Type) (varlist @VarList)
+(program $let_get_body ((let_type Type) (varlist @VarList)
                          (body_type Type) (body body_type)
                          (B Type) (nested_func_app B)
                          (A Type) (value A))
@@ -613,16 +613,16 @@
          (let_type) body_type
          (
           (
-           (let_get_body (_ (@let varlist body) value))
+           ($let_get_body (_ (@let varlist body) value))
 
            body
            )
 
           (
            ; { nested_func_app =/= (@let ...) }
-           (let_get_body (_ nested_func_app value))
+           ($let_get_body (_ nested_func_app value))
 
-           (let_get_body nested_func_app)
+           ($let_get_body nested_func_app)
            )
           
           )
@@ -632,7 +632,7 @@
 ; args:
 ; - let_get_vars_substitutes nil:
 ; return:
-(program let_get_vars_substitutes ((B Type) (x B)
+(program $let_get_vars_substitutes ((B Type) (x B)
                                    (vardefs @VarList :list)
                                    (U Type) (value_x U) 
                                    (parameters @VarList :list))
@@ -640,16 +640,16 @@
          (@VarList @VarList) @VarList
          (
           (
-           (let_get_vars_substitutes (@varlist x vardefs)
+           ($let_get_vars_substitutes (@varlist x vardefs)
                                      (@varlist value_x parameters))
 
-           (f_list_cons @varlist 
-                        (f_list_cons @varlist x value_x)
-                        (let_get_vars_substitutes vardefs parameters))
+           ($f_list_cons @varlist 
+                        ($f_list_cons @varlist x value_x)
+                        ($let_get_vars_substitutes vardefs parameters))
            )
 
           (
-           (let_get_vars_substitutes @varlist.nil @varlist.nil)
+           ($let_get_vars_substitutes @varlist.nil @varlist.nil)
 
            @varlist.nil
            )
