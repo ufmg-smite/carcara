@@ -50,7 +50,6 @@ pub struct EunoiaTranslator {
 
     // /// Maintains references to previous steps from the actual subproof.
     // local_steps: Vec<Vec<usize>>,
-
     /// Rule and id of the last step from the actual subproof, if any.
     last_step_rule: Vec<String>,
 
