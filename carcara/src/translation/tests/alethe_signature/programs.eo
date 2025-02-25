@@ -1,7 +1,7 @@
 (include "./theory.eo")
 
-; Library of auxiliary programs, useful to manipulate propositions and
-; other constructions of the language
+; Library of auxiliary programs, useful to manipulate many different
+; Eunoia constructions.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; f-lists computations
@@ -159,10 +159,51 @@
    )
   )
 
+; TODO: implement this as a higher-order program, once it becomes feasible
+; program: $f_list_filter
+; args:
+; - hd Bool:
+; - cl_tl Bool:
+; - varlist_tl @VarList:
+; return:
+(program $f_list_filter ((A Type) (f (-> A A A)) (nil_elem A)
+                         (hd A) (f_tl A :list) (varlist_tl @VarList :list))
+         ((-> A A A) A A @VarList) A
+         (
+          (
+           ($f_list_filter f nil_elem (f hd f_tl) (@varlist true varlist_tl))
+           ($f_list_filter f nil_elem f_tl varlist_tl)
+           )
+
+          (
+           ($f_list_filter f nil_elem (f hd f_tl) (@varlist false varlist_tl))
+           ($f_list_cons f
+                        hd
+                        ($f_list_filter f nil_elem f_tl varlist_tl))
+           )
+
+          (
+           ($f_list_filter f nil_elem hd (@varlist false @varlist.nil))
+           (f hd nil_elem)
+           )
+
+          (
+           ($f_list_filter f nil_elem hd (@varlist true @varlist.nil))
+           nil_elem 
+           )
+
+          (
+           ($f_list_filter f nil_elem nil_elem @varlist.nil)
+           nil_elem
+           )
+          )
+         )
+
 ;;;;;;;;;;;;
 ;; @VarList
 ;;;;;;;;;;;;
 
+; TODO: this should be implemented using f-list functions
 ; program: varlist_concat
 ; args:
 ; - varlist_concat nil:
@@ -212,7 +253,7 @@
 )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CLAUSES
+;; Clauses
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ; program: from_cl
@@ -307,6 +348,11 @@
 
 
 ; TODO: implement this as a higher-order program, once it becomes feasible
+; program: $flag_duplicates
+; args:
+; - hd Bool:
+; - tl Bool:
+; return:
 (program $flag_duplicates ((hd Bool) (tl Bool :list))
          (Bool) @VarList
 
@@ -333,39 +379,6 @@
           )
 )
 
-; TODO: implement this as a higher-order program, once it becomes feasible
-(program $filter ((hd Bool) (cl_tl Bool :list) (varlist_tl @VarList :list))
-         (Bool @VarList) Bool
-         (
-          (
-           ($filter (@cl hd cl_tl) (@varlist true varlist_tl))
-           ($filter cl_tl varlist_tl)
-           )
-
-          (
-           ($filter (@cl hd cl_tl) (@varlist false varlist_tl))
-           ($f_list_cons @cl
-                        hd
-                        ($filter cl_tl varlist_tl))
-           )
-
-          (
-           ($filter hd (@varlist false @varlist.nil))
-           (@cl hd)
-           )
-
-          (
-           ($filter hd (@varlist true @varlist.nil))
-           false
-           )
-
-          (
-           ($filter false @varlist.nil)
-           false
-           )
-          )
-         )
-
 ; program: cl_remove_duplicates
 ; args:
 ; - clause Bool: A clause from which we want to delete duplicates.
@@ -376,7 +389,7 @@
           (
            ($cl_remove_duplicates clause)
 
-           ($filter clause ($flag_duplicates clause))
+           ($f_list_filter @cl false clause ($flag_duplicates clause))
            )
           )
 )
@@ -545,6 +558,11 @@
           )
 )
 
+
+;;;;;;;;;;;;;
+;; let
+;;;;;;;;;;;;;
+
 ; TODO: once programs can be passed and used, abstract the logic of these
 ;       functions into a single program
 ; program: let_get_vars
@@ -655,3 +673,20 @@
            )
           )
 )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Bounded occurrences of variables
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; (program $get_free_variables ((vars @VarList)
+;;                               (body Bool))
+;;          (Bool) @VarList
+
+;;          (
+;;           (
+;;            ($get_free_variables (forall vars body))
+
+;;            ($f_list_filter ($get_free_variables body)
+;;            )
+;;           )
+;; )
