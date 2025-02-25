@@ -74,7 +74,7 @@
                                  (f_list_2 A))
   ((-> A A A) A A) Bool
   (
-   (($f_list_contains_f_list f (@cl hd tl) f_list_2)
+   (($f_list_contains_f_list f (f hd tl) f_list_2)
     ;; TODO: I need some way to build boolean values
     ;; combining other boolean values, but I would like
     ;; to avoid built-in operators.

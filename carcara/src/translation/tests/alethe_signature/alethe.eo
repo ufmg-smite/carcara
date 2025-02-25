@@ -144,20 +144,56 @@
   :conclusion-given
 )
 
-;TODO
-(program $check_subproof ((Premises Bool) (Conclusion Bool) (Conclusion_given Bool))
+;;;;;;;;;;;;;;;;;;;;;;;
+; Rule 10: subproof
+;;;;;;;;;;;;;;;;;;;;;;;
+
+; program: $check_subproof
+; args:
+; - assumption Bool: Assumption passed to "subproof", not built with @cl.
+; - premise Bool: Last step before the application of "subproof".
+; - conclusion Bool: Conclusion of the "subproof" step.
+; return: >
+;   A boolean indicating if "conclusion" is of the form 
+;   @cl not assumption, premise.
+(program $check_subproof ((assumption Bool) (premise Bool) 
+                          (conclusion Bool))
   (Bool Bool Bool) Bool
   (
-   (($check_subproof Premises Conclusion Conclusion_given) true)
+   (
+    ($check_subproof assumption @empty_cl conclusion)
+
+    (eo::and
+     ($f_list_contains_elem @cl (not assumption) conclusion)
+     ; To deal with the inclusion of @empty_cl within conclusion
+     ($f_list_contains_elem @cl false conclusion))
+    )
+
+   (; { premise =/= @empty_cl }
+    ($check_subproof assumption premise conclusion)
+
+    (eo::and
+     ($f_list_contains_elem @cl (not assumption) conclusion)
+     ($f_list_contains_f_list @cl premise conclusion))
+    )
   )
 )
 
 ;TODO: test if the list here works well
-(declare-rule subproof ((F Int) (G Bool))
-  ; TODO: why is it an assumption?
-  :assumption F ;has no cl!
-  :premises (G)
-  :requires ((($check_subproof (not F) G eo::conclusion) true))
+; rule: subproof
+; implements: TODO?
+; assumption:
+; - assumption Bool: Assumption passed to "subproof", not built with @cl.
+; premises:
+; - premise Bool: Last step before the application of "subproof".
+; requires: >
+;   For conclusion to be of the form @cl not assumption, premise.
+; conclusion-given: >
+;  Only the "requires" predicate checks if a proper conclusion is given.
+(declare-rule subproof ((assumption Bool) (premise Bool))
+  :assumption assumption
+  :premises (premise)
+  :requires ((($check_subproof assumption premise eo::conclusion) true))
   :conclusion-given
 )
 
@@ -357,6 +393,10 @@
   :requires ((($check_refl ctx eo::conclusion) true))
   :conclusion-given
 )
+
+;;;;;;;;;;;;;;;;;;;;;;;
+; Rule 23: trans
+;;;;;;;;;;;;;;;;;;;;;;;
 
 (program $last_eq_right ((T Type) (t1 T) (t2 T) (eqs Bool))
   (Bool) Bool
