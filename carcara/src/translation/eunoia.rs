@@ -48,8 +48,8 @@ pub struct EunoiaTranslator {
     /// about context opening.
     contexts_opened: usize,
 
-    /// Maintains references to previous steps from the actual subproof.
-    local_steps: Vec<Vec<usize>>,
+    // /// Maintains references to previous steps from the actual subproof.
+    // local_steps: Vec<Vec<usize>>,
 
     /// Rule and id of the last step from the actual subproof, if any.
     last_step_rule: Vec<String>,
@@ -68,7 +68,7 @@ impl EunoiaTranslator {
             variables_in_scope: HashMapStack::new(),
             context_introduced: Vec::new(),
             contexts_opened: 0,
-            local_steps: Vec::new(),
+            // local_steps: Vec::new(),
             last_step_rule: Vec::new(),
             last_step_id: Vec::new(),
         }
@@ -84,7 +84,7 @@ impl EunoiaTranslator {
             self.variables_in_scope = HashMapStack::new();
             self.context_introduced = Vec::new();
             self.contexts_opened = 0;
-            self.local_steps = Vec::new();
+            // self.local_steps = Vec::new();
             self.last_step_rule = Vec::new();
             self.last_step_id = Vec::new();
         }
@@ -119,7 +119,7 @@ impl EunoiaTranslator {
         // No new variables introduced in this first "global" context.
         self.context_introduced.push(true);
 
-        self.local_steps.push(Vec::new());
+        // self.local_steps.push(Vec::new());
 
         // NOTE: need to clone ProofNodes to avoid
         // "borrowed data escapes outside of closure" error here.
@@ -269,8 +269,8 @@ impl EunoiaTranslator {
                 ProofNode::Step(StepNode { id, .. }) => {
                     self.translate_step(node);
 
-                    // If within a subproof: save the index for future reference
-                    self.local_steps[self.contexts_opened - 1].push(self.eunoia_proof.len() - 1);
+                    // // If within a subproof: save the index for future reference
+                    // self.local_steps[self.contexts_opened - 1].push(self.eunoia_proof.len() - 1);
 
                     // Is this the closing step of the actual subproof?
                     if !self.last_step_id.is_empty() {
@@ -303,7 +303,7 @@ impl EunoiaTranslator {
 
                             // Closing the context...
                             self.contexts_opened -= 1;
-                            self.local_steps.pop();
+                            // self.local_steps.pop();
                             self.variables_in_scope.pop_scope();
                             self.context_introduced.pop();
                         }
@@ -328,7 +328,7 @@ impl EunoiaTranslator {
                     //     .push(self.variables_in_scope[self.contexts_opened - 1].clone());
                     self.variables_in_scope.push_scope();
                     self.contexts_opened += 1;
-                    self.local_steps.push(Vec::new());
+                    // self.local_steps.push(Vec::new());
 
                     if args.is_empty() {
                         self.context_introduced.push(false);
@@ -813,8 +813,9 @@ impl EunoiaTranslator {
                 term: self.translate_term(term),
             }
         } else {
+            // { not self.last_step_rule.is_empty() }
             match self.last_step_rule[self.last_step_rule.len() - 1].as_str() {
-                // subproof receives every "assume" command as an actual
+                // "subproof" receives every "assume" command as an actual
                 // ethos assumption; we need to push every assumption
                 "subproof" => EunoiaCommand::AssumePush {
                     name: id.to_owned(),
@@ -848,7 +849,7 @@ impl EunoiaTranslator {
                 premises,
                 args,
                 discharge,
-                ..
+                previous_step,
             }) => {
                 // Add premises actually present in the original step command.
                 alethe_premises.extend(
@@ -914,41 +915,41 @@ impl EunoiaTranslator {
                         // eunoia_arguments.push(rhs);
 
                         // Include, as premises, previous step from the actual subproof.
-                        // match previous_step {
-                        //     Some(step) => {
-                        //         match step.deref() {
-                        //             ProofNode::Step(StepNode { id, .. }) => {
-                        //                 alethe_premises.push(EunoiaTerm::Id(id.clone()));
-                        //             }
-
-                        //             _ => {
-                        //                 // It shouldn't be another kind of ProofNode
-                        //                 panic!();
-                        //             }
-                        //         }
-                        //     }
-
-                        //     _ => {
-                        //         // There should be some previous step.
-                        //         panic!();
-                        //     }
-                        // }
-
-                        self.local_steps[self.contexts_opened - 1]
-                            .iter()
-                            .for_each(|index| {
-                                match &self.eunoia_proof[*index] {
-                                    EunoiaCommand::Step { id, .. } => {
+                        match previous_step {
+                            Some(step) => {
+                                match step.deref() {
+                                    ProofNode::Step(StepNode { id, .. }) => {
                                         alethe_premises.push(EunoiaTerm::Id(id.clone()));
                                     }
 
                                     _ => {
-                                        // NOTE: it shouldn't be an index to something different
-                                        // than a step.
+                                        // It shouldn't be another kind of ProofNode
                                         panic!();
                                     }
                                 }
-                            });
+                            }
+
+                            _ => {
+                                // There should be some previous step.
+                                panic!();
+                            }
+                        }
+
+                        // self.local_steps[self.contexts_opened - 1]
+                        //     .iter()
+                        //     .for_each(|index| {
+                        //         match &self.eunoia_proof[*index] {
+                        //             EunoiaCommand::Step { id, .. } => {
+                        //                 alethe_premises.push(EunoiaTerm::Id(id.clone()));
+                        //             }
+
+                        //             _ => {
+                        //                 // NOTE: it shouldn't be an index to something different
+                        //                 // than a step.
+                        //                 panic!();
+                        //             }
+                        //         }
+                        //     });
 
                         self.eunoia_proof.push(EunoiaCommand::StepPop {
                             id: id.clone(),
@@ -1012,7 +1013,11 @@ impl EunoiaTranslator {
                         // Id of the premise step
                         let mut id_premise: Symbol = "".to_owned();
 
-                        discharge.iter().for_each(|assumption| {
+                        // TODO: some more efficient way to deal with
+                        // the fact that we use a "stack" of assumptions?
+                        let mut discharge_copy = discharge.clone();
+                        discharge_copy.reverse();
+                        discharge_copy.iter().for_each(|assumption| {
                             // TODO: we are discarding vector premises
                             match assumption.deref() {
                                 // TODO: ugly?
