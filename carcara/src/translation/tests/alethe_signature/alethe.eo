@@ -275,6 +275,10 @@
   :conclusion-given
 )
 
+;;;;;;;;;;;;;;;;;;;;;;;
+; Rule 18: bind
+;;;;;;;;;;;;;;;;;;;;;;;
+
 ; NOTE: Rules like `bind` can have multiple forms: without and with
 ; @var.  In the first case the bind rule is
 ;                @var xs. φ = @var ys. φ'
@@ -294,22 +298,29 @@
 ; and `onepoint`.
 
 ;TODO
-(program $check_bind ((ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T))
-  (Bool T T T T) Bool
+(program $check_bind ((ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T)
+                      (premise Bool) (conclusion Bool))
+  (Bool Bool) Bool
   (
-   (($check_bind ctx l r l1 r1) true)
+   (
+    ($check_bind premise conclusion)
+
+    ($get_free_variables conclusion)
+    )
   )
 )
 
 ;TRUST
-(declare-rule bind ((ctx Bool) (old_ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T))
-  :assumption ctx
+(declare-rule bind ((context Bool) (old_ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T)
+                    (premise Bool))
+  :assumption context
   ;:premises (old_ctx (@cl (= l1 r1))) ; this is never a direct assumption
   ;; :premises (old_ctx) ; TODO: fix this
   ;; :requires ((($context_extended cztx old_ctx) true) (($check_bind ctx l r l1 r1) true))
   ;; :requires ((($context_extended ctx old_ctx) true) 
   ;;            ;; (($check_bind ctx l r l1 r1) true)
   ;;            )
+  :requires ((($check_bind context eo::conclusion) true))
   :conclusion-given
 )
 
