@@ -2,7 +2,8 @@ use crate::ast::*;
 use indexmap::IndexSet;
 use std::borrow::{Borrow, BorrowMut};
 use std::collections::HashMap;
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use thiserror::Error;
 
 #[derive(Debug)]
