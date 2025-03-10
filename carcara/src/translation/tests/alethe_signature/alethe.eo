@@ -155,7 +155,7 @@
 ; - conclusion Bool: Conclusion of the "subproof" step.
 ; return: >
 ;   A boolean indicating if "conclusion" is of the form 
-;   @cl not assumption, premise.
+;   (@cl (not assumption), premise)
 (program $check_subproof ((assumption Bool) (premise Bool) 
                           (conclusion Bool))
   (Bool Bool Bool) Bool
@@ -187,7 +187,7 @@
 ; premises:
 ; - premise Bool: Last step before the application of "subproof".
 ; requires: >
-;   For conclusion to be of the form @cl not assumption, premise.
+;   For conclusion to be of the form (@cl (not assumption) premise).
 ; conclusion-given: >
 ;  Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule subproof ((assumption Bool) (premise Bool))
@@ -409,39 +409,187 @@
 ; Rule 23: trans
 ;;;;;;;;;;;;;;;;;;;;;;;
 
+; program: $last_eq_right
+; args:
+; - eqs Bool: Premises given to rule trans (equivalences), chained with "and".
+; - lhs T: >
+;   Expression of arbitrary type T, for which we want to determine its
+;   transitively related element, traversing eqs
+; return: >
+;   The last element of type T related with lhs, through transitivity, 
+;   following the equivalences in eqs.
 (program $last_eq_right ((T Type) (t1 T) (t2 T) (eqs Bool))
-  (Bool) Bool
-  (; TODO: not clear why we need to consider all of these different scenarios
-   ; (with and without and)
-   (($last_eq_right (@cl (= t1 t2))) t2)
+  (Bool T) Bool
+  (
+   (; case (@cl (= t1 t2) false)
+    ($last_eq_right (@cl (= t1 t2)) t1)
+    
+    t2
+    )
 
-   (($last_eq_right (and (@cl (= t1 t2)))) t2)
-    (($last_eq_right (and (@cl (= t1 t2)) eqs)) ($last_eq_right eqs))
+   (; case (@cl (= t1 t2) false)
+    ($last_eq_right (@cl (= t1 t2)) t2)
+    
+    t1
+    )
+
+   (; case (and (@cl (= t1 t2) false) true)
+    ($last_eq_right (and (@cl (= t1 t2))) t1) 
+
+    t2
+    )
+
+   (; case (and (@cl (= t1 t2) false) true)
+    ($last_eq_right (and (@cl (= t1 t2))) t2) 
+
+    t1
+    )
+
+    (; { eqs <> true}
+     ; case (and (@cl (= t1 t2) false) eqs)
+     ($last_eq_right (and (@cl (= t1 t2)) eqs) t1) 
+
+     ($last_eq_right eqs t2)
+     )
+
+    (; { eqs <> true}
+     ; case (and (@cl (= t1 t2) false) eqs)
+     ($last_eq_right (and (@cl (= t1 t2)) eqs) t2)
+
+     ($last_eq_right eqs t1)
+     )
+
    ; TODO: are they always clauses? (seems that it is not the
    ; case if the premises where just "assume"s)
-    (($last_eq_right (and (= t1 t2))) t2)
-    (($last_eq_right (and (= t1 t2) eqs)) ($last_eq_right eqs))
+    (; case (and (= t1 t2) true) 
+     ($last_eq_right (and (= t1 t2)) t1)
+
+     t2
+     )
+
+    (; case (and (= t1 t2) true)
+     ($last_eq_right (and (= t1 t2)) t2)
+
+     t1
+     )
+
+    (; { eqs <> true}
+     ; case (and (= t1 t2) eqs)
+     ($last_eq_right (and (= t1 t2) eqs) t1)
+     
+     ($last_eq_right eqs t2)
+     )
+
+    (; { eqs <> true}
+     ; case (and (= t1 t2) eqs)
+     ($last_eq_right (and (= t1 t2) eqs) t2)
+     
+     ($last_eq_right eqs t1)
+     )
   )
 )
 
+; program: $make_trans
+; args:
+; - eqs Bool: Premises given to rule trans (equivalences), chained with "and".
+; - lhs T: >
+;   Expression of arbitrary type T, for which we want to determine its
+;   transitively related element, traversing eqs.
+; return: >
+;   An equivalence of the form (= lhs rhs), where rhs is the last element of 
+;   type T related with lhs, through transitivity, following the equivalences 
+;   in eqs.
 (program $make_trans ((T Type) (t1 T) (t2 T) (eqs Bool :list))
-  (Bool) Bool
-  ((($make_trans (and (@cl (= t1 t2)))) (= t1 t2))
-   (($make_trans (and (@cl (= t1 t2)) eqs)) (= t1 ($last_eq_right eqs)))
+  (Bool T) Bool
+  (
+   (; case (and (= t1 t2) true)
+    ($make_trans (and (@cl (= t1 t2))) t1)
+    
+    (= t1 t2)
+    )
+
+   (; case (and (= t1 t2) true)
+    ($make_trans (and (@cl (= t1 t2))) t2)
+    
+    (= t1 t2)
+    )
+
+   (; { eqs <> true }
+    ($make_trans (and (@cl (= t1 t2)) eqs) t1) 
+    
+    (= t1 ($last_eq_right eqs t2))
+    )
+
+   (; { eqs <> true }
+    ($make_trans (and (@cl (= t1 t2)) eqs) t2) 
+    
+    (= t2 ($last_eq_right eqs t1))
+    )
+
    ; TODO: if they are 'assume's, they could be term not built with @cl
-   (($make_trans (and (= t1 t2))) (= t1 t2))
-   (($make_trans (and (= t1 t2) eqs)) (= t1 ($last_eq_right eqs)))
+   ;; (
+   ;;  ($make_trans (and (= t1 t2))) 
+    
+   ;;  (= t1 t2)
+   ;;  )
+   (; case (and (= t1 t2) true)
+    ($make_trans (and (= t1 t2)) t1) 
+    
+    (= t1 t2)
+    )
+
+   (; case (and (= t1 t2) true)
+    ($make_trans (and (= t1 t2)) t2) 
+    
+    (= t1 t2)
+    )
+
+   (; { eqs <> true }
+    ($make_trans (and (= t1 t2) eqs) t1) 
+    
+    (= t1 ($last_eq_right eqs t2))
+    )
+
+   (; { eqs <> true }
+    ($make_trans (and (= t1 t2) eqs) t2) 
+    
+    (= t2 ($last_eq_right eqs t1))
+    )
+  )
+)
+
+; program: $check_trans
+; args:
+; - premises Bool: Equivalence premises given to rule trans, chained through "and".
+; - conclusion Bool: Conclusion given to rule trans. Must be built with @cl.
+; return: >
+;   A boolean indicating if "conclusion" is the equivalence resulting from
+;   the transitivity of equivalence, identifying the lhs of the first 
+;   premise equivalence with the rhs of the last premise equivalence.
+(program $check_trans ((premises Bool) (A Type) (lhs A) (rhs A))
+  (Bool Bool) Bool
+  (
+   (
+    ($check_trans premises (@cl (= lhs rhs)))
+    ($f_list_equal = ($make_trans premises lhs) (= lhs rhs))
+    )
   )
 )
 
 ;TODO what about scopes here? can a premise come from an outers scope
-;TODO: implement mkTrans
-(declare-rule trans ((Eqs Bool))
-  :premise-list Eqs and
-  ; TODO: is this correct?
-  ;; ((($check_cong Eqs eo::conclusion) true))
-  ; TODO: add remaining cases in make_trans
-  ;; :requires (((@cl ($make_trans Eqs)) eo::conclusion))
+; rule: trans
+; implements: TODO?
+; premises:
+; - premise-list Bool: Premises given to rule "trans", chained with "and"
+; requires: >
+;   For "conclusion" to be the equivalence resulting from
+;   the transitivity of equivalence, identifying the lhs of the first 
+;   premise equivalence with the rhs of the last premise equivalence.
+; conclusion-given: >
+;  Only the "requires" predicate checks if a proper conclusion is given.
+(declare-rule trans ((premises Bool))
+  :premise-list premises and
+  :requires ((($check_trans premises eo::conclusion) true))
   :conclusion-given
 )
 
