@@ -721,220 +721,73 @@
           )
          )
 
-; program: $get_free_variables
+; program: $fv
 ; args:
-; - $get_free_variables nil:
-; return:
-(program $get_free_variables ((A Type)
-                              (vars @VarList)
-                              (bool_body Bool)
-                              (hd Bool) (tl Bool :list)
-                              (prop Bool) (left_prop Bool)
-                              (right_prop Bool :list)
-                              (B Type) (lhs B) (rhs B)
-                              (C Type) (hd_distinct C) (tl_distinct C :list)
-                              (D Type) (left_elem D) (right_elem D)
-                              (E Type) (x E)
-                              (F Type) (G Type) (function (-> F G)) (actual_argument F)
-                              (H Type) (vars_body H))
+; - term A: Term from which we want to extract free occurrences of variables.
+; return: A @VarList with free occurrences of variables in "term".
+(program $fv ((A Type)
+              (vars @VarList)
+              (bool_body Bool)
+              (E Type) (x E)
+              (F Type) (G Type) (function (-> F G)) (actual_argument F))
          (A) @VarList
 
          (
           (
-           ($get_free_variables (forall vars bool_body))
+           ($fv (forall vars bool_body))
 
            ; TODO: repeating stuff...
            ($f_list_filter @varlist @varlist.nil
-                           ($get_free_variables bool_body)
-                           ($flag_members ($get_free_variables bool_body) 
+                           ($fv bool_body)
+                           ($flag_members ($fv bool_body) 
                                           vars)
                            )
            )
 
           (
-           ($get_free_variables (exists vars bool_body))
+           ($fv (exists vars bool_body))
 
            ; TODO: repeating stuff...
            ($f_list_filter @varlist @varlist.nil
-                           ($get_free_variables bool_body)
-                           ($flag_members ($get_free_variables bool_body) 
+                           ($fv bool_body)
+                           ($flag_members ($fv bool_body) 
                                           vars))
            )
 
-          ; @cl
           (
-           ($get_free_variables (@cl hd tl))
+           ($fv (_ function actual_argument))
            
            ; TODO: repeating stuff...
            ($f_list_filter @varlist @varlist.nil 
-                           ($varlist_concat ($get_free_variables hd)
-                                            ($get_free_variables tl))
+                           ($varlist_concat ($fv function)
+                                            ($fv actual_argument))
                            ($flag_duplicates @varlist @varlist.nil
-                            ($varlist_concat ($get_free_variables hd)
-                                             ($get_free_variables tl))))
+                            ($varlist_concat ($fv function)
+                                             ($fv actual_argument))))
            )
 
           (
-           ($get_free_variables @empty_cl)
+           ($fv @empty_cl)
 
            @varlist.nil
            )
 
           ; propositional logic
           (
-           ($get_free_variables true)
+           ($fv true)
 
            @varlist.nil
            )
 
           (
-           ($get_free_variables false)
+           ($fv false)
 
            @varlist.nil
-           )
-
-          (
-           ($get_free_variables (not prop))
-
-           ($get_free_variables prop)
-           )
-
-          (
-           ($get_free_variables (or left_prop right_prop))
-
-           ($f_list_filter @varlist @varlist.nil 
-                           ($varlist_concat ($get_free_variables left_prop)
-                                            ($get_free_variables right_prop)) 
-                           ($flag_duplicates @varlist @varlist.nil
-                                             ($varlist_concat ($get_free_variables left_prop)
-                                                              ($get_free_variables right_prop))))
-           
-           )
-          
-          (
-           ($get_free_variables (and left_prop right_prop))
-           
-           ($f_list_filter @varlist @varlist.nil 
-                           ($varlist_concat ($get_free_variables left_prop)
-                                            ($get_free_variables right_prop)) 
-                           ($flag_duplicates @varlist @varlist.nil
-                                             ($varlist_concat ($get_free_variables left_prop)
-                                                              ($get_free_variables right_prop))))
-           )
-
-          (
-           ($get_free_variables (=> left_prop right_prop))
-
-           ($f_list_filter @varlist @varlist.nil 
-                           ($varlist_concat ($get_free_variables left_prop)
-                                            ($get_free_variables right_prop)) 
-                           ($flag_duplicates @varlist @varlist.nil
-                                             ($varlist_concat ($get_free_variables left_prop)
-                                                              ($get_free_variables right_prop))))
-           )
-
-          (
-           ($get_free_variables (xor left_prop right_prop))
-
-           ($f_list_filter @varlist @varlist.nil 
-                           ($varlist_concat ($get_free_variables left_prop)
-                                            ($get_free_variables right_prop)) 
-                           ($flag_duplicates @varlist @varlist.nil
-                                             ($varlist_concat ($get_free_variables left_prop)
-                                                              ($get_free_variables right_prop))))
-           )
-
-          (
-           ($get_free_variables (= lhs rhs))
-
-           ($f_list_filter @varlist @varlist.nil
-                           ($varlist_concat ($get_free_variables lhs)
-                                            ($get_free_variables rhs))
-                           ($flag_duplicates @varlist @varlist.nil
-                                             ($varlist_concat ($get_free_variables lhs)
-                                                              ($get_free_variables rhs))))
-           )
-          
-          (; TODO
-           ($get_free_variables (distinct hd_distinct tl_distinct))
-
-           ($f_list_filter @varlist @varlist.nil 
-                           ($varlist_concat ($get_free_variables hd_distinct)
-                                            ($get_free_variables tl_distinct)) 
-                           ($flag_duplicates @varlist @varlist.nil
-                                             ($varlist_concat ($get_free_variables hd_distinct)
-                                                              ($get_free_variables tl_distinct))))
-           )
-          
-          ; Ordered relations
-          (
-           ($get_free_variables (< left_elem right_elem))
-
-           ($f_list_filter @varlist @varlist.nil 
-                           ($varlist_concat ($get_free_variables left_elem)
-                                            ($get_free_variables right_elem)) 
-                           ($flag_duplicates @varlist @varlist.nil
-                                             ($varlist_concat ($get_free_variables left_elem)
-                                                              ($get_free_variables right_elem))))
-           )
-
-          (
-           ($get_free_variables (<= left_elem right_elem))
-
-           ($f_list_filter @varlist @varlist.nil 
-                           ($varlist_concat ($get_free_variables left_elem)
-                                            ($get_free_variables right_elem)) 
-                           ($flag_duplicates @varlist @varlist.nil
-                                             ($varlist_concat ($get_free_variables left_elem)
-                                                              ($get_free_variables right_elem))))
-           )
-
-          (
-           ($get_free_variables (> left_elem right_elem))
-
-           ($f_list_filter @varlist @varlist.nil 
-                           ($varlist_concat ($get_free_variables left_elem)
-                                            ($get_free_variables right_elem)) 
-                           ($flag_duplicates @varlist @varlist.nil
-                                             ($varlist_concat ($get_free_variables left_elem)
-                                                              ($get_free_variables right_elem))))
-           )
-
-          (
-           ($get_free_variables (>= left_elem right_elem))
-
-           ($f_list_filter @varlist @varlist.nil 
-                           ($varlist_concat ($get_free_variables left_elem)
-                                            ($get_free_variables right_elem)) 
-                           ($flag_duplicates @varlist @varlist.nil
-                                             ($varlist_concat ($get_free_variables left_elem)
-                                                              ($get_free_variables right_elem))))
-           )
-
-          (
-           ($get_free_variables (@var vars vars_body))
-
-           ($f_list_filter @varlist @varlist.nil
-                           ($get_free_variables vars_body)
-                           ($flag_members ($get_free_variables vars_body) 
-                                          vars)
-                           )
-           )
-
-          (
-           ($get_free_variables (_ function actual_argument))
-
-           ($f_list_filter @varlist @varlist.nil 
-                           ($varlist_concat ($get_free_variables function)
-                                            ($get_free_variables actual_argument)) 
-                           ($flag_duplicates @varlist @varlist.nil
-                                             ($varlist_concat ($get_free_variables function)
-                                                              ($get_free_variables actual_argument))))
            )
 
           ; { x is a var }
           (
-           ($get_free_variables x)
+           ($fv x)
 
            ($f_list_cons @varlist x @varlist.nil)
            )
