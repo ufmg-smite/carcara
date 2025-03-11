@@ -12,6 +12,9 @@ pub enum CheckerError {
     #[error("unspecified error")]
     Unspecified,
 
+    #[error("{0}")]
+    Explanation(String),
+
     #[error(transparent)]
     Substitution(#[from] SubstitutionError),
 

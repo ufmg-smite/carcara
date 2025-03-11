@@ -650,6 +650,15 @@ impl Term {
         }
     }
 
+    /// Tries to extract a `BitVec` from a term. Returns `Some` if the
+    /// term is a bitvector constant.
+    pub fn as_bitvector(&self) -> Option<(Integer, Integer)> {
+        match self {
+            Term::Const(Constant::BitVec(v, w)) => Some((v.clone(), w.clone())),
+            _ => None,
+        }
+    }
+
     /// Tries to extract a `Rational` from a term, allowing fractions. This method will return
     /// `Some` if the term is:
     ///

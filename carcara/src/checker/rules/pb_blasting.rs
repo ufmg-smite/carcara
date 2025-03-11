@@ -205,26 +205,57 @@ pub fn pbblast_pbbvar(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 }
 
 pub fn pbblast_pbbconst(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((r, bv_const), pbs) = match_term_err!((= (= r bv_const) (and ...)) = &conclusion[0])?;
+    let (bv, pbs) = match_term_err!((= bv (pbbterm ...)) = &conclusion[0])
+        .map_err(|_| CheckerError::Explanation("Malformed pbbterm equality".into()))?;
 
-    // Drop the last element of conjunctions, which is the constant `true`
-    let pbs = &pbs[..pbs.len() - 1];
+    let (m, w) = bv.as_bitvector().ok_or(CheckerError::Explanation(
+        "Expected bitvector constant".into(),
+    ))?;
 
-    // Iterate on bits of bv, check and list
-    // ? let bv = match_term_err!((_ bv1 bv) = bv)?;
-    println!("r={r}");
-    println!("bv_const={bv_const}");
-    println!("pbs:");
-    for (i, pb) in pbs.iter().enumerate() {
-        print!("{i}:{pb} ");
-        let ((idx, bv), bit) = match_term_err!((= ((_ int_of idx) bv) bit) = pb)?;
-        // Convert the index term to an integer.
-        let idx: Integer = idx.as_integer_err()?;
+    let size = w
+        .to_usize()
+        .ok_or(CheckerError::Explanation("Invalid bitvector width".into()))?;
 
-        // TODO get ith bit from bv_const e.g. "(_ bv1 1)"
-        println!("=> {bv}[{idx}] = {bit}, check that {bit} is {bv_const}[{idx}]...");
+    if pbs.len() != size {
+        return Err(CheckerError::Explanation(format!(
+            "Expected {} pbbterms, got {}",
+            size,
+            pbs.len()
+        )));
     }
-    println!();
+
+    let computed_value = pbs
+        .iter()
+        .enumerate()
+        .try_fold(Integer::new(), |acc, (i, term)| {
+            let pb = term
+                .as_integer()
+                .ok_or(CheckerError::Explanation(format!(
+                    "Non-integer term at position {}",
+                    i
+                )))?
+                .to_i32_wrapping();
+
+            match pb {
+                0 => Ok(acc),
+                1 => {
+                    let exponent = i.try_into().unwrap();
+                    let increment = Integer::i_pow_u(2, exponent);
+                    Ok(&acc + Integer::from(increment))
+                }
+                _ => Err(CheckerError::Explanation(format!(
+                    "Invalid value {} at position {}",
+                    pb, i
+                ))),
+            }
+        })?;
+
+    if computed_value != m {
+        return Err(CheckerError::Explanation(format!(
+            "Computed value {} != declared value {}",
+            computed_value, m
+        )));
+    }
 
     Ok(())
 }
