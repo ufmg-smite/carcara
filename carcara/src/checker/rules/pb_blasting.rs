@@ -1215,16 +1215,6 @@ mod tests {
                     ((_ int_of 6) x8) ((_ int_of 7) x8)
                 ))) :rule pbblast_pbbvar)"#: true,
             }
-            // ! parser error during test "Invalid 8-bit (extra term)": parser error: sort error: expected '(_ BitVec 8)', got '(_ BitVec 9)'
-            // "Invalid 8-bit (extra term)" {
-            //     r#"(step t1 (cl (= x8 (pbbterm
-            //         ((_ int_of 0) x8) ((_ int_of 1) x8)
-            //         ((_ int_of 2) x8) ((_ int_of 3) x8)
-            //         ((_ int_of 4) x8) ((_ int_of 5) x8)
-            //         ((_ int_of 6) x8) ((_ int_of 7) x8)
-            //         ((_ int_of 8) x8)  ;; Invalid index
-            //     ))) :rule pbblast_pbbvar)"#: false,
-            // }
 
             "Invalid 8-bit (missing term)" {
                 r#"(step t1 (cl (= x8 (pbbterm
