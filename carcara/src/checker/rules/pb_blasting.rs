@@ -1234,14 +1234,12 @@ mod tests {
             (declare-const r (_ BitVec 1))
         ",
             "Valid 1-bit constant" {
-                r#"(step t1 (cl (= (= r #b1)
-                              (and (= ((_ int_of 0) r) 1) true))) 
-                      :rule pbblast_pbbconst)"#: true,
+                r#"(step t1 (cl (= #b1 (pbbterm 1))) :rule pbblast_pbbconst)"#: true,
+                r#"(step t1 (cl (= #b0 (pbbterm 0))) :rule pbblast_pbbconst)"#: true,
             }
             "Invalid 1-bit value" {
-                r#"(step t1 (cl (= (= r #b1)
-                              (and (= ((_ int_of 0) r) 0) true)))
-                      :rule pbblast_pbbconst)"#: false,
+                r#"(step t1 (cl (= #b1 (pbbterm 0))) :rule pbblast_pbbconst)"#: false,
+                r#"(step t1 (cl (= #b0 (pbbterm 1))) :rule pbblast_pbbconst)"#: false,
             }
         }
     }
@@ -1253,20 +1251,18 @@ mod tests {
             (declare-const r (_ BitVec 2))
         ",
             "Valid 2-bit constant" {
-                r#"(step t1 (cl (= (= r #b10)
-                              (and 
-                                (= ((_ int_of 0) r) 0)  ; LSB
-                                (= ((_ int_of 1) r) 1)  ; MSB
-                                true))) 
-                      :rule pbblast_pbbconst)"#: true,
+                r#"(step t1 (cl (= #b00 (pbbterm 0 0))) :rule pbblast_pbbconst)"#: true,
+                r#"(step t1 (cl (= #b10 (pbbterm 0 1))) :rule pbblast_pbbconst)"#: true,
+                r#"(step t1 (cl (= #b01 (pbbterm 1 0))) :rule pbblast_pbbconst)"#: true,
+                r#"(step t1 (cl (= #b11 (pbbterm 1 1))) :rule pbblast_pbbconst)"#: true,
             }
-            "Invalid bit order" {
-                r#"(step t1 (cl (= (= r #b10)
-                              (and 
-                                (= ((_ int_of 1) r) 0)  ; Swapped indices
-                                (= ((_ int_of 0) r) 1)
-                                true))) 
-                      :rule pbblast_pbbconst)"#: false,
+            "Invalid bit pattern" {
+                r#"(step t1 (cl (= #b10 (pbbterm 1 0))) :rule pbblast_pbbconst)"#: false,
+                r#"(step t1 (cl (= #b10 (pbbterm 1 1))) :rule pbblast_pbbconst)"#: false,
+                r#"(step t1 (cl (= #b01 (pbbterm 0 1))) :rule pbblast_pbbconst)"#: false,
+                r#"(step t1 (cl (= #b01 (pbbterm 0 0))) :rule pbblast_pbbconst)"#: false,
+                r#"(step t1 (cl (= #b11 (pbbterm 0 0))) :rule pbblast_pbbconst)"#: false,
+                r#"(step t1 (cl (= #b00 (pbbterm 1 1))) :rule pbblast_pbbconst)"#: false,
             }
         }
     }
@@ -1274,21 +1270,15 @@ mod tests {
     #[test]
     fn pbblast_pbbconst_4() {
         test_cases! {
-           definitions = "
-                (declare-const r (_ BitVec 4))
-                ",
-            // Consider a constant bitvector like #b0111, we blast the restrictions for each bit
-            "pbbconst on single bits" {
-                r#"(step t1 (cl (=
-                                  (= r #b0111)
-                                  (and  ; list of bit restrictions
-                                    (= ((_ int_of 0) r) 1)
-                                    (= ((_ int_of 1) r) 1)
-                                    (= ((_ int_of 2) r) 1)
-                                    (= ((_ int_of 3) r) 0)
-                                    true ; end of list
-                                  )
-                                )) :rule pbblast_pbbconst)"#: true,
+            definitions = "
+            (declare-const r (_ BitVec 4))
+        ",
+            "Valid 4-bit constant" {
+                // #b0111 = LSB-first: [1,1,1,0]
+                r#"(step t1 (cl (= #b0111 (pbbterm 1 1 1 0))) :rule pbblast_pbbconst)"#: true,
+            }
+            "Wrong term" {
+                r#"(step t1 (cl (= #b0111 (pbbterm 1 1 1 1))) :rule pbblast_pbbconst)"#: false,
             }
         }
     }
@@ -1300,31 +1290,11 @@ mod tests {
             (declare-const r (_ BitVec 8))
         ",
             "Valid 8-bit constant" {
-                r#"(step t1 (cl (= (= r #b11110000)
-                              (and
-                                (= ((_ int_of 0) r) 0)  ; Bit 0 (LSB)
-                                (= ((_ int_of 1) r) 0)
-                                (= ((_ int_of 2) r) 0)
-                                (= ((_ int_of 3) r) 0)
-                                (= ((_ int_of 4) r) 1)
-                                (= ((_ int_of 5) r) 1)
-                                (= ((_ int_of 6) r) 1)
-                                (= ((_ int_of 7) r) 1)  ; Bit 7 (MSB)
-                                true))) 
-                      :rule pbblast_pbbconst)"#: true,
+                // #b11110000 = LSB-first: [0,0,0,0,1,1,1,1]
+                r#"(step t1 (cl (= #b11110000 (pbbterm 0 0 0 0 1 1 1 1))) :rule pbblast_pbbconst)"#: true,
             }
-            "Missing bit constraint" {
-                r#"(step t1 (cl (= (= r #b11110000)
-                              (and
-                                (= ((_ int_of 0) r) 0)
-                                (= ((_ int_of 1) r) 0)
-                                (= ((_ int_of 2) r) 0)
-                                (= ((_ int_of 4) r) 1)  ; Missing bit 3
-                                (= ((_ int_of 5) r) 1)
-                                (= ((_ int_of 6) r) 1)
-                                (= ((_ int_of 7) r) 1)
-                                true))) 
-                      :rule pbblast_pbbconst)"#: false,
+            "Wrong bit value" {
+                r#"(step t1 (cl (= #b11110000 (pbbterm 0 0 0 0 1 1 0 1))) :rule pbblast_pbbconst)"#: false,
             }
         }
     }
