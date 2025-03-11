@@ -305,7 +305,7 @@
    (
     ($check_bind premise conclusion)
 
-    ($get_free_variables conclusion)
+    ($fv conclusion)
     )
   )
 )
