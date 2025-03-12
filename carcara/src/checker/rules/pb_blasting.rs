@@ -26,10 +26,24 @@ fn check_pbblast_sum(
     let sum = &sum[..sum.len() - 1];
 
     // The summation must have at most as many summands as the bitvector has bits.
-    rassert!(width >= sum.len(), CheckerError::Unspecified);
+    rassert!(
+        width >= sum.len(),
+        CheckerError::Explanation(format!(
+            "Mismatched number of summands {} and bits {}",
+            width,
+            sum.len()
+        ))
+    );
 
     // The summation must have as many summands as the range has element.
-    rassert!(range.len() == sum.len(), CheckerError::Unspecified);
+    rassert!(
+        range.len() == sum.len(),
+        CheckerError::Explanation(format!(
+            "Mismatched range size {} {}",
+            range.len(),
+            sum.len()
+        ))
+    );
 
     for (i, element) in range.clone().zip(sum.iter()) {
         // Try to match (* c ((_ int_of idx) bv))
@@ -40,10 +54,16 @@ fn check_pbblast_sum(
                     // For i==0, allow the coefficient to be omitted (defaulting to 1)
                     match match_term!(((_ int_of idx) bitvector) = element) {
                         Some((idx, bv)) => (Integer::from(1), idx, bv),
-                        None => panic!("Summand does not match either pattern"),
+                        None => {
+                            return Err(CheckerError::Explanation(format!(
+                                "Summand does not match either pattern"
+                            )));
+                        }
                     }
                 } else {
-                    panic!("Coefficient was not found and i != 0");
+                    return Err(CheckerError::Explanation(format!(
+                        "Coefficient was not found and i != 0"
+                    )));
                 }
             }
         };
@@ -51,11 +71,20 @@ fn check_pbblast_sum(
         // Convert the index term to an integer.
         let idx: Integer = idx.as_integer_err()?;
         // Check that the coefficient is 2^i.
-        rassert!(c == (Integer::from(1) << i), CheckerError::Unspecified);
+        rassert!(
+            c == (Integer::from(1) << i),
+            CheckerError::Explanation(format!("Coefficient {} is not 2^{}", c, i))
+        );
         // Check that the index is width - i - 1.
-        rassert!(idx == width - i - 1, CheckerError::Unspecified);
+        rassert!(
+            idx == width - i - 1,
+            CheckerError::Explanation(format!("Index {} is not {} - {} - 1", idx, width, i))
+        );
         // Finally, the bitvector in the summand must be the one we expect.
-        rassert!(*bv == *bitvector, CheckerError::Unspecified);
+        rassert!(
+            *bv == *bitvector,
+            CheckerError::Explanation(format!("Wrong bitvector in blasting {} {}", bv, bitvector))
+        );
     }
     Ok(())
 }
@@ -85,7 +114,10 @@ pub fn pbblast_bveq(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
 
     // Check that the constant is 0
     let constant: Integer = constant.as_integer_err()?;
-    rassert!(constant == 0, CheckerError::Unspecified);
+    rassert!(
+        constant == 0,
+        CheckerError::Explanation(format!("Non-zero constant {}", constant))
+    );
 
     // Check that the summations have the correct structure.
     // (For equality the order is: sum_x for x and sum_y for y.)
@@ -101,7 +133,10 @@ pub fn pbblast_bvult(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 
     // Check that the constant is 1
     let constant: Integer = constant.as_integer_err()?;
-    rassert!(constant == 1, CheckerError::Unspecified);
+    rassert!(
+        constant == 1,
+        CheckerError::Explanation(format!("Constant not 1: {}", constant))
+    );
 
     // For bvult the summations occur in reverse: the "left" sum comes from y and the "right" from x.
     check_pbblast_constraint(pool, y, x, sum_y, sum_x, None)
@@ -117,7 +152,10 @@ pub fn pbblast_bvugt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 
     // Check that the constant is 1
     let constant: Integer = constant.as_integer_err()?;
-    rassert!(constant == 1, CheckerError::Unspecified);
+    rassert!(
+        constant == 1,
+        CheckerError::Explanation(format!("Constant not 1: {}", constant))
+    );
 
     // For bvugt the summations appear in the same order as in equality.
     check_pbblast_constraint(pool, x, y, sum_x, sum_y, None)
@@ -133,7 +171,10 @@ pub fn pbblast_bvuge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 
     // Check that the constant is 0
     let constant: Integer = constant.as_integer_err()?;
-    rassert!(constant == 0, CheckerError::Unspecified);
+    rassert!(
+        constant == 0,
+        CheckerError::Explanation(format!("Non-zero constant {}", constant))
+    );
 
     check_pbblast_constraint(pool, x, y, sum_x, sum_y, None)
 }
@@ -148,7 +189,10 @@ pub fn pbblast_bvule(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 
     // Check that the constant is 0
     let constant: Integer = constant.as_integer_err()?;
-    rassert!(constant == 0, CheckerError::Unspecified);
+    rassert!(
+        constant == 0,
+        CheckerError::Explanation(format!("Non-zero constant {}", constant))
+    );
 
     check_pbblast_constraint(pool, x, y, sum_x, sum_y, None)
 }
@@ -161,7 +205,7 @@ pub fn pbblast_bvslt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 
     // Check that the constant is 1
     let constant: Integer = constant.as_integer_err()?;
-    rassert!(constant == 1, CheckerError::Unspecified);
+    rassert!(constant == 1, CheckerError::Explanation(format!("TODO")));
 
     // TODO: Check the signs
     // sign_y=(* 2 ((_ int_of 0) y2)) sign_x=(* 2 ((_ int_of 0) x2))
@@ -174,17 +218,17 @@ pub fn pbblast_bvslt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 
 pub fn pbblast_bvsgt(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
     println!("{} {} {}", premises.len(), args.len(), conclusion.len());
-    Err(CheckerError::Unspecified)
+    Err(CheckerError::Explanation(format!("TODO")))
 }
 
 pub fn pbblast_bvsge(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
     println!("{} {} {}", premises.len(), args.len(), conclusion.len());
-    Err(CheckerError::Unspecified)
+    Err(CheckerError::Explanation(format!("TODO")))
 }
 
 pub fn pbblast_bvsle(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
     println!("{} {} {}", premises.len(), args.len(), conclusion.len());
-    Err(CheckerError::Unspecified)
+    Err(CheckerError::Explanation(format!("TODO")))
 }
 
 pub fn pbblast_pbbvar(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
@@ -197,9 +241,15 @@ pub fn pbblast_pbbvar(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         let idx: Integer = idx.as_integer_err()?;
 
         // Check that the index is `i`.
-        rassert!(idx == i, CheckerError::Unspecified);
+        rassert!(
+            idx == i,
+            CheckerError::Explanation(format!("Index {} is not {}", idx, i))
+        );
         // Finally, the bitvector in the summand must be the one we expect.
-        rassert!(*bv == *x, CheckerError::Unspecified);
+        rassert!(
+            *bv == *x,
+            CheckerError::Explanation(format!("Mismatched bitvectors {} {}", bv, x))
+        );
     }
     Ok(())
 }
@@ -262,12 +312,12 @@ pub fn pbblast_pbbconst(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 
 pub fn pbblast_bvxor(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
     println!("{} {} {}", premises.len(), args.len(), conclusion.len());
-    Err(CheckerError::Unspecified)
+    Err(CheckerError::Explanation(format!("TODO")))
 }
 
 pub fn pbblast_bvand(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
     println!("{} {} {}", premises.len(), args.len(), conclusion.len());
-    Err(CheckerError::Unspecified)
+    Err(CheckerError::Explanation(format!("TODO")))
 }
 
 mod tests {
