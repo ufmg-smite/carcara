@@ -37,7 +37,7 @@ fn get_pb_hashmap(pbsum: &[Rc<Term>]) -> Result<PbHash, CheckerError> {
             } else if let Some((coeff, literal)) = match_term!((* coeff literal) = term) {
                 (coeff, format!("{}",literal))
             } else {
-                return Err(CheckerError::Unspecified);
+                return Err(CheckerError::Explanation(format!("Term is neither plain nor negated: {}",term)));
             };
 
         let coeff = coeff.as_integer_err()?;
@@ -65,7 +65,10 @@ fn assert_pbsum_subset_keys(pbsum_a: &PbHash, pbsum_b: &PbHash) -> Result<(), Ch
         }
 
         if pbsum_b.get(key).is_none() {
-            return Err(CheckerError::Unspecified);
+            return Err(CheckerError::Explanation(format!(
+                "Key {} of {:?} not found in {:?}",
+                key, pbsum_b, pbsum_a
+            )));
         }
     }
     Ok(())
@@ -186,8 +189,10 @@ pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
             }
             // ¬∃ x, (x ∈ C) ∧ ¬(x ∈ L) ∧ ¬(x ∈ R)
             _ => {
-                // TODO: appropriate error type
-                return Err(CheckerError::Unspecified);
+                return Err(CheckerError::Explanation(format!(
+                    "Literal of the conclusion not present in either premises: {}",
+                    literal
+                )));
             }
         }
     }
