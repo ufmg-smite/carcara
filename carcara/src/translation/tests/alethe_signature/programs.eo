@@ -1,203 +1,8 @@
 (include "./theory.eo")
+(include "./f_lists.eo")
 
 ; Library of auxiliary programs, useful to manipulate many different
 ; Eunoia constructions.
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; f-lists computations
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-; define: f_list_index
-; args:
-; - f (-> A A A): >
-;   Right/left assoc. operator used to construct the given f-list
-;   (see definition of f-list, for a given operator f, in ethos
-;   manual: https://github.com/cvc5/ethos/blob/main/user_manual.md#list-computations)
-; - list (A): An f-list: a term of the form (f t1 ... tn)
-; - index Int: >
-;   An integer, from 0 to the number of parameters - 1 in (f t1 ... tn) 
-;   (i.e., "list)
-; return: The parameter number "index", from (f t1 ... tn) (i.e., "list")
-(program $f_list_index ((A Type) (f (-> A A A)) (hd A) (tail A :list) (index Int))
-  ((-> A A A) A Int) A
-  (
-   (($f_list_index f (f hd tail) 0) hd)
-
-   ;; { index > 0 }
-   (($f_list_index f (f hd tail) index)
-    ;; TODO: using eo::add
-    ($f_list_index f tail (eo::add index -1)))
-  )
-)
-
-; program: f_list_contains_elem
-; args:
-; - f (-> A A A): Operator used to build the f-list.
-; - elem A: Some element of type A, for which we want to test membership.
-; - list A: An f-list.
-; return:
-; A boolean indicating if "elem" appears in f-list "list".
-(program $f_list_contains_elem ((A Type) (f (-> A A A))
-                               (elem A) (hd A) (tl A :list))
-  ((-> A A A) A A) Bool
-  (
-   (($f_list_contains_elem f elem (f elem tl))
-
-    true)
-
-   ; { hd =/= elem}
-   (($f_list_contains_elem f elem (f hd tl))
-
-    ($f_list_contains_elem f elem tl))
-
-   ; { elem is not an f-list}
-   (($f_list_contains_elem f elem elem)
-
-    true)
-   
-   ; { hd =/= elem}
-   (($f_list_contains_elem f elem hd)
-
-    false)
-  )
-)
-
-; program: f_list_contains_elem
-; args:
-; - f (-> A A A): Operator used to build the f-list.
-; - list_1 A: An f-list.
-; - list_2 A: An f-list.
-; return:
-; A boolean indicating if the elements from list_1 also appear in list_2.
-(program $f_list_contains_f_list ((A Type) (f (-> A A A))
-                                 (hd A) (tl A :list)
-                                 (f_list_2 A))
-  ((-> A A A) A A) Bool
-  (
-   (($f_list_contains_f_list f (f hd tl) f_list_2)
-    ;; TODO: I need some way to build boolean values
-    ;; combining other boolean values, but I would like
-    ;; to avoid built-in operators.
-    (eo::and ($f_list_contains_elem f hd f_list_2)
-             ($f_list_contains_f_list f tl f_list_2)))
-
- 
-   ;; { f_list_1 is not a term built with f }
-   (($f_list_contains_f_list f hd f_list_2)
-    ($f_list_contains_elem f hd f_list_2))
-  )
-)
-
-; program: f_list_equal
-; args:
-; - f (-> A A A): Operator used to build the f-list.
-; - list_1 A: An f-list.
-; - list_2 A: An f-list.
-; return: >
-; A boolean indicating if the operands from list_1 and list_2 are the 
-; same, regardless of the order and possible repetitions.
-(program $f_list_equal ((A Type) (f (-> A A A))
-                       (f_list_1 A) (f_list_2 A))
-  ((-> A A A) A A) Bool
-  (
-   (($f_list_equal f f_list_1 f_list_2)
-    (eo::and ($f_list_contains_f_list f f_list_1 f_list_2)
-             ($f_list_contains_f_list f f_list_2 f_list_1)))
-  )
-)
-
-; program: f_list_concat
-; args:
-; - f (-> A A A): Operator used to build the f-list.
-; - elem A: An element of type A.
-; - flist A: An f-list.
-; return: >
-; Returns an f-list, with first operand "elem", followed by operands of flist_2.
-(define $f_list_cons ((A Type :implicit) (f (-> A A A)) (elem A)
-                     (tail A :list))
-    (f elem tail)
-)
-
-; program: f_list_remove_elem
-; args:
-; - list B: An f-list, where f is a variadic operator with some "nil" element.
-; - f_nil A: The "nil" element of variadic operator f.
-; - elem A: An element from "list" that we want to remove.
-; return: >
-;   Removes the first occurrence of "elem" in the given f-list. Returns
-;   the obtained f-list.
-(program $f_list_remove_elem ((A Type) (B Type)
-                             (f (-> A A B)) (f_nil A) (hd A) (tl A :list)
-                             (elem A))
-  (B A A) B
-
-  (
-   (
-    ($f_list_remove_elem (f elem tl) elem f_nil)
-    
-    tl
-    )
-
-   (; { hd =/= elem }
-    ($f_list_remove_elem (f hd tl) elem f_nil)
-    
-    (f hd ($f_list_remove_elem tl elem f_nil))
-    )
-
-   (
-    ($f_list_remove_elem elem elem f_nil)
-    
-    f_nil
-    )
-
-   ; TODO: this should be, somehow, an error
-   (; { hd =/= elem }
-    ($f_list_remove_elem hd elem f_nil)
-    
-    hd
-    )
-   )
-  )
-
-; TODO: implement this as a higher-order program, once it becomes feasible
-; program: $f_list_filter
-; args:
-; - hd Bool:
-; - cl_tl Bool:
-; - varlist_tl @VarList:
-; return:
-(program $f_list_filter ((A Type) (f (-> A A A)) (nil_elem A)
-                         (hd A) (f_tl A :list) (varlist_tl @VarList :list))
-         ((-> A A A) A A @VarList) A
-         (
-          (
-           ($f_list_filter f nil_elem (f hd f_tl) (@varlist true varlist_tl))
-           ($f_list_filter f nil_elem f_tl varlist_tl)
-           )
-
-          (
-           ($f_list_filter f nil_elem (f hd f_tl) (@varlist false varlist_tl))
-           ($f_list_cons f
-                         hd
-                         ($f_list_filter f nil_elem f_tl varlist_tl))
-           )
-
-          (
-           ($f_list_filter f nil_elem hd (@varlist false @varlist.nil))
-           (f hd nil_elem)
-           )
-
-          (
-           ($f_list_filter f nil_elem hd (@varlist true @varlist.nil))
-           nil_elem 
-           )
-
-          (
-           ($f_list_filter f nil_elem nil_elem @varlist.nil)
-           nil_elem
-           )
-          )
-         )
 
 ;;;;;;;;;;;;
 ;; @VarList
@@ -250,6 +55,32 @@
     @varlist.nil
     )
   )
+)
+
+; program: zip
+; args:
+; - list_1 @VarList: Some @VarList.
+; - list_2 @VarList: Some @VarList.
+; return:
+;  The zip of the received @VarLists, as another @VarList.
+(program $zip ((A Type) (hd_1 A) (tl_1 A :list) (hd_2 A) (tl_2 A :list))
+         (@VarList @VarList) @VarList
+
+         (
+          (
+           ($zip (@varlist hd_1 tl_1) (@varlist hd_2 tl_2))
+
+           ($f_list_cons @varlist
+                         ($f_list_cons @varlist hd_1 hd_2)
+                         ($zip tl_1 tl_2))
+           )
+
+          (
+           ($zip @varlist.nil @varlist.nil)
+
+           @varlist.nil
+           )
+          )
 )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -529,8 +360,9 @@
 
 ; program: context_get_substitute
 ; args:
-; - context_get_substitute nil:
-; return:
+; - context Bool: A context built with @ctx.
+; - id A: A variable name, with which index "context".
+; return: The value associated with variable "id", in context "context".
 (program $context_get_substitute ((A Type) (id A) (B Type)
                                  (value B) (varlist @VarList) 
                                  (ctx Bool) (and_list Bool))
@@ -544,8 +376,13 @@
 
 ; program: context_get_var_subst_pairs
 ; args:
-; - context_get_var_subst_pairs nil:
-; return:
+; - context Bool: A context built with @ctx.
+; - variables @VarList: >
+;   A @VarList with variables' names, with which to index "context".
+; return: >
+;   A @VarList with the values associated with each variable from, and in the 
+;   same order as in, "variables"; in the form of pairs (variable, value),
+;   as @VarLists.
 (program $context_get_var_subst_pairs ((A Type) (id A) (B Type)
                                       (value B) (varlist @VarList) 
                                       (context Bool) (and_list Bool)
@@ -567,6 +404,44 @@
           )
 )
 
+; program: @context_var_is_fixed
+; args:
+; - context Bool: A context, built with @ctx.
+; - var A: Variable for which we want to know if it appears fixed in "context".
+; return: A boolean indicating if "var" appears fixed in "context".
+(program $context_var_is_fixed ((A Type) (var A) (varlist @VarList)
+                                (and_list Bool))
+         (Bool A) Bool
+         
+         (
+          (
+           ($context_var_is_fixed (@ctx varlist and_list) var)
+
+           ($f_list_contains_elem and (= var var) and_list)
+           )
+          )
+)
+
+; TODO: re-implement this as a map once programs are first-class values
+(program $context_vars_are_fixed ((A Type) (var A) (tl @VarList :list)
+                                  (context Bool))
+         (Bool @VarList) Bool
+         
+         (
+          (
+           ($context_vars_are_fixed context (@varlist var tl))
+
+           (eo::and ($context_var_is_fixed context var)
+                    ($context_vars_are_fixed context tl))
+           )
+
+          (
+           ($context_vars_are_fixed context @varlist.nil)
+
+           true
+           )
+          )
+)
 
 ;;;;;;;;;;;;;
 ;; let
