@@ -88,6 +88,7 @@
   :premise-list Cs and
   :requires ((($check_resolution Cs eo::conclusion) true))
   :conclusion-given
+  :sorry
 )
 
 ;TODO
@@ -298,29 +299,44 @@
 ; and `onepoint`.
 
 ;TODO
-(program $check_bind ((ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T)
-                      (premise Bool) (conclusion Bool))
-  (Bool Bool) Bool
+(program $check_bind ((context Bool) 
+                      (T Type) (l T) (r T) (l1 T) (r1 T)
+                      (premise Bool) 
+                      (lhs_vars @VarList) (lhs_body Bool)
+                      (rhs_vars @VarList) (rhs_body Bool))
+  (Bool Bool Bool) Bool
   (
    (
-    ($check_bind premise conclusion)
+    ($check_bind context
+                 (@cl (= lhs_body rhs_body))
+                 (@cl (= (forall lhs_vars lhs_body) (forall rhs_vars rhs_body))))
 
-    ($fv conclusion)
+    (eo::and 
+     ; Every variable in rhs_vars appear fixed in "context".
+     ($context_vars_are_fixed context rhs_vars)
+     
+     ; Vars in lhs_vars are susbtitued by rhs_vars
+     ($f_list_equal @varlist 
+                    ($zip lhs_vars rhs_vars)
+                    ($context_get_var_subst_pairs context lhs_vars))
+
+     ; rhs_vars should not appear free in (forall lhs_vars lhs_body)
+     ($f_list_equal @varlist
+                    ($fv (forall lhs_vars lhs_body))
+                    ; TODO: duplicating calculations
+                    ($f_list_filter @varlist
+                                    @varlist.nil
+                                    ($fv (forall lhs_vars lhs_body))
+                                    ($flag_members ($fv (forall lhs_vars lhs_body))
+                                                   rhs_vars))))
     )
+   )
   )
-)
 
-;TRUST
-(declare-rule bind ((context Bool) (old_ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T)
-                    (premise Bool))
+(declare-rule bind ((context Bool) (premise Bool))
   :assumption context
-  ;:premises (old_ctx (@cl (= l1 r1))) ; this is never a direct assumption
-  ;; :premises (old_ctx) ; TODO: fix this
-  ;; :requires ((($context_extended cztx old_ctx) true) (($check_bind ctx l r l1 r1) true))
-  ;; :requires ((($context_extended ctx old_ctx) true) 
-  ;;            ;; (($check_bind ctx l r l1 r1) true)
-  ;;            )
-  :requires ((($check_bind context eo::conclusion) true))
+  :premises (premise)
+  :requires ((($check_bind context premise eo::conclusion) true))
   :conclusion-given
 )
 
@@ -566,12 +582,59 @@
 ;   A boolean indicating if "conclusion" is the equivalence resulting from
 ;   the transitivity of equivalence, identifying the lhs of the first 
 ;   premise equivalence with the rhs of the last premise equivalence.
-(program $check_trans ((premises Bool) (A Type) (lhs A) (rhs A))
+(program $check_trans ((A Type) (lhs A) (lhs_1 A) (lhs_2 A)
+                       (rhs A) (rhs_1 A) (rhs_2 A)
+                       (eqs Bool :list))
   (Bool Bool) Bool
   (
+   ; We perform the first step of $make_trans here, to be able to select
+   ; which side of the equation to follow.
    (
-    ($check_trans premises (@cl (= lhs rhs)))
-    ($f_list_equal = ($make_trans premises lhs) (= lhs rhs))
+    ($check_trans (and (@cl (= lhs rhs))) (@cl (= lhs rhs)))
+    
+    true
+    )
+
+   (
+    ($check_trans (and (@cl (= lhs rhs))) (@cl (= rhs lhs)))
+    
+    true
+    )
+
+   (
+    ($check_trans (and (@cl (= lhs rhs_2)) eqs) (@cl (= lhs rhs_1)))
+
+    ($f_list_equal = ($make_trans (and (@cl (= lhs rhs_2)) eqs) lhs) (= lhs rhs_1))
+    )
+
+   (
+    ($check_trans (and (@cl (= lhs_1 rhs)) eqs) (@cl (= lhs_2 rhs)))
+
+    ($f_list_equal = ($make_trans (and (@cl (= lhs_1 rhs)) eqs) rhs) (= lhs_2 rhs))
+    )
+
+   (
+    ($check_trans (and (= lhs rhs)) (@cl (= lhs rhs)))
+    
+    true
+    )
+
+   (
+    ($check_trans (and (= lhs rhs)) (@cl (= rhs lhs)))
+    
+    true
+    )
+
+   (
+    ($check_trans (and (= lhs rhs_2) eqs) (@cl (= lhs rhs_1)))
+
+    ($f_list_equal = ($make_trans (and (= lhs rhs_2) eqs) lhs) (= lhs rhs_1))
+    )
+
+   (
+    ($check_trans (and (= lhs_1 rhs) eqs) (@cl (= lhs_2 rhs)))
+
+    ($f_list_equal = ($make_trans (and (= lhs_1 rhs) eqs) rhs) (= lhs_2 rhs))
     )
   )
 )
