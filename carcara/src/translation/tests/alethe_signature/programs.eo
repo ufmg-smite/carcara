@@ -404,6 +404,71 @@
           )
 )
 
+; program: @substitution_var_is_fixed
+; args:
+; - substitutions Bool: A subst. list, built as (and (= var value) ...).
+; - var A: >
+;   Variable for which we want to know if it is fixed, as indicated
+;   in "substitutions".
+; return: >
+;   A boolean indicating if "var" is fixed, as indicated
+;   in "substitutions".
+(program $substitution_var_is_fixed ((A Type) (var A) (var_2 A)
+                                     (B Type) (any B)
+                                     (eqs Bool :list))
+         (Bool A) Bool
+         
+         (; TODO: is it possible to have substitutions
+          ; with shadowed mappings?
+          (
+           ($substitution_var_is_fixed (and (= var var)) var)
+
+           true
+           )
+
+          (; { var <> any}
+           ($substitution_var_is_fixed (and (= var any)) var)
+
+           false
+           )
+
+          (; { var <> var_2}
+           ($substitution_var_is_fixed (and (= var_2 any)) var)
+
+           true
+           )
+
+          (
+           ($substitution_var_is_fixed (and (= var var) eqs) var)
+           
+           ; We look into eqs for another subst. that could
+           ; shadow this one.
+           (eo::and true ($substitution_var_is_fixed eqs var))
+           )
+
+          (; { var <> any}
+           ($substitution_var_is_fixed (and (= var any) eqs) var)
+
+           ; We look into eqs for another subst. that could
+           ; shadow this one.
+           (eo::and false ($substitution_var_is_fixed eqs var))
+           )
+
+          (; { var <> var_2}
+           ($substitution_var_is_fixed (and (= var_2 any) eqs) var)
+           
+           ($substitution_var_is_fixed eqs var)
+           )
+
+          (; This is the last "element" of our representation of 
+           ; substitutions.
+           ($substitution_var_is_fixed (and true) var)
+
+           true
+           )
+          )
+)
+
 ; program: @context_var_is_fixed
 ; args:
 ; - context Bool: A context, built with @ctx.
@@ -417,12 +482,19 @@
           (
            ($context_var_is_fixed (@ctx varlist and_list) var)
 
-           ($f_list_contains_elem and (= var var) and_list)
+           ($substitution_var_is_fixed and_list var)
            )
           )
 )
 
 ; TODO: re-implement this as a map once programs are first-class values
+; program: @context_vars_are_fixed
+; args:
+; - context Bool: A context, built with @ctx.
+; - vars @VarList: >
+;   Variables for which we want to know if they appear fixed in "context".
+; return: >
+;   A boolean indicating if every variable in "vars" appear fixed in "context".
 (program $context_vars_are_fixed ((A Type) (var A) (tl @VarList :list)
                                   (context Bool))
          (Bool @VarList) Bool

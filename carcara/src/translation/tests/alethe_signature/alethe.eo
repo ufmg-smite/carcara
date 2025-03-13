@@ -330,6 +330,31 @@
                                     ($flag_members ($fv (forall lhs_vars lhs_body))
                                                    rhs_vars))))
     )
+
+   (
+    ($check_bind context
+                 (@cl (= lhs_body rhs_body))
+                 (@cl (= (exists lhs_vars lhs_body) (exists rhs_vars rhs_body))))
+
+    (eo::and 
+     ; Every variable in rhs_vars appear fixed in "context".
+     ($context_vars_are_fixed context rhs_vars)
+     
+     ; Vars in lhs_vars are susbtitued by rhs_vars
+     ($f_list_equal @varlist 
+                    ($zip lhs_vars rhs_vars)
+                    ($context_get_var_subst_pairs context lhs_vars))
+
+     ; rhs_vars should not appear free in (forall lhs_vars lhs_body)
+     ($f_list_equal @varlist
+                    ($fv (forall lhs_vars lhs_body))
+                    ; TODO: duplicating calculations
+                    ($f_list_filter @varlist
+                                    @varlist.nil
+                                    ($fv (forall lhs_vars lhs_body))
+                                    ($flag_members ($fv (forall lhs_vars lhs_body))
+                                                   rhs_vars))))
+    )
    )
   )
 
