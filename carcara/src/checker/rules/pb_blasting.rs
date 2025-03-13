@@ -197,6 +197,10 @@ pub fn pbblast_bvule(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     check_pbblast_constraint(pool, x, y, sum_x, sum_y, None)
 }
 
+/// Implements the signed-less-than rule.
+///
+/// The expected shape is:
+///    `(= (bvslt x y) (>= (+ (- y_sum (* 2^(n-1) y_n-1))) (- (* 2^(n-1) x_n-1) x_sum)) 1))`
 pub fn pbblast_bvslt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     let ((x, y), (((sum_y, sign_y), (sign_x, sum_x)), constant)) = match_term_err!((= (bvslt x y) (>= (+ (- (+ ...) sign_y) (- sign_x (+ ...))) constant)) = &conclusion[0])?;
 
@@ -1098,12 +1102,12 @@ mod tests {
                 r#"(step t1 (cl (= (bvslt x2 y2)
                                 (>= (+
                                         (-
-                                            (+ (* 1 ((_ int_of 1) y2)) 0)   ; y sum
-                                            (* 2 ((_ int_of 0) y2))         ; y sign
+                                            (+ (* 1 ((_ int_of 0) y2)) 0)   ; y sum
+                                            (* 2 ((_ int_of 1) y2))         ; y sign
                                         )
                                         (-
-                                            (* 2 ((_ int_of 0) x2))         ; x sign
-                                            (+ (* 1 ((_ int_of 1) x2)) 0)   ; x sum
+                                            (* 2 ((_ int_of 1) x2))         ; x sign
+                                            (+ (* 1 ((_ int_of 0) x2)) 0)   ; x sum
                                         )
                                     ) 1))) :rule pbblast_bvslt)"#: true,
             }
@@ -1113,12 +1117,12 @@ mod tests {
                 r#"(step t1 (cl (= (bvslt x2 y2)
                                 (>= (+
                                         (-
-                                            (+ ((_ int_of 1) y2) 0)               ; y sum omitted "* 1"
-                                            (* 2 ((_ int_of 0) y2))
+                                            (+ ((_ int_of 0) y2) 0)         ; y sum omitted "* 1"
+                                            (* 2 ((_ int_of 1) y2)) 
                                         )
                                         (-
-                                            (* 2 ((_ int_of 0) x2))
-                                            (+ ((_ int_of 1) x2) 0)               ; x sum omitted "* 1"
+                                            (* 2 ((_ int_of 1) x2))         
+                                            (+ ((_ int_of 0) x2) 0)         ; x sum omitted "* 1"
                                         )
                                     ) 1))) :rule pbblast_bvslt)"#: true,
             }
@@ -1128,12 +1132,12 @@ mod tests {
                 r#"(step t1 (cl (= (bvslt x2 y2)
                                 (>= (+
                                         (-
-                                            ((_ int_of 1) y2)
-                                            (* 1 ((_ int_of 0) y2))         ; should be * 2
+                                            (+ (* 1 ((_ int_of 0) y2)) 0)
+                                            (* 1 ((_ int_of 1) y2))         ; should be * 2
                                         )
                                         (-
-                                            (* 2 ((_ int_of 0) x2))
-                                            ((_ int_of 1) x2)
+                                            (* 2 ((_ int_of 1) x2))
+                                            (+ (* 1 ((_ int_of 0) x2)) 0)
                                         )
                                     ) 1))) :rule pbblast_bvslt)"#: false,
             }
@@ -1143,12 +1147,12 @@ mod tests {
                 r#"(step t1 (cl (= (bvslt x2 y2)
                                 (>= (+
                                         (-
-                                            (+ (* 1 ((_ int_of 0) y2)) 0)   ; should be int_of 1
-                                            (* 2 ((_ int_of 0) y2))
+                                            (+ (* 1 ((_ int_of 1) y2)) 0)   ; should be "int_of 0"
+                                            (* 2 ((_ int_of 1) y2))
                                         )
                                         (-
-                                            (* 2 ((_ int_of 0) x2))
-                                            (+ (* 1 ((_ int_of 1) x2)) 0)
+                                            (* 2 ((_ int_of 1) x2))
+                                            (+ (* 1 ((_ int_of 0) x2)) 0)
                                         )
                                     ) 1))) :rule pbblast_bvslt)"#: false,
             }
@@ -1167,16 +1171,16 @@ mod tests {
                 r#"(step t1 (cl (= (bvslt x4 y4)
                                 (>= (+
                                         (-
-                                            (+ (* 1 ((_ int_of 3) y4))
-                                               (* 2 ((_ int_of 2) y4))
-                                               (* 4 ((_ int_of 1) y4))
+                                            (+ (* 1 ((_ int_of 0) y4))
+                                               (* 2 ((_ int_of 1) y4))
+                                               (* 4 ((_ int_of 2) y4))
                                                0)
-                                            (* 8 ((_ int_of 0) y4)))
+                                            (* 8 ((_ int_of 3) y4)))
                                         (-
-                                            (* 8 ((_ int_of 0) x4))
-                                            (+ (* 1 ((_ int_of 3) x4))
-                                               (* 2 ((_ int_of 2) x4))
-                                               (* 4 ((_ int_of 1) x4))
+                                            (* 8 ((_ int_of 3) x4))
+                                            (+ (* 1 ((_ int_of 0) x4))
+                                               (* 2 ((_ int_of 1) x4))
+                                               (* 4 ((_ int_of 2) x4))
                                                0)
                                         )
                                     ) 1))) :rule pbblast_bvslt)"#: true,
@@ -1187,16 +1191,16 @@ mod tests {
                 r#"(step t1 (cl (= (bvslt x4 y4)
                                 (>= (+
                                         (-
-                                            (+ ((_ int_of 3) y4)
-                                               (* 2 ((_ int_of 2) y4))
-                                               (* 4 ((_ int_of 1) y4))
+                                            (+ ((_ int_of 0) y4)            ; omit "* 1"
+                                               (* 2 ((_ int_of 1) y4))
+                                               (* 4 ((_ int_of 2) y4))
                                                0)
-                                            (* 8 ((_ int_of 0) y4)))
+                                            (* 8 ((_ int_of 3) y4)))
                                         (-
-                                            (* 8 ((_ int_of 0) x4))
-                                            (+ ((_ int_of 3) x4)
-                                               (* 2 ((_ int_of 2) x4))
-                                               (* 4 ((_ int_of 1) x4))
+                                            (* 8 ((_ int_of 3) x4))
+                                            (+ ((_ int_of 0) x4)            ; omit "* 1"
+                                               (* 2 ((_ int_of 1) x4))
+                                               (* 4 ((_ int_of 2) x4))
                                                0)
                                         )
                                     ) 1))) :rule pbblast_bvslt)"#: true,
