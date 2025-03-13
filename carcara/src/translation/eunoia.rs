@@ -259,10 +259,9 @@ impl EunoiaTranslator {
         self.pre_ord_proof.clone().iter().for_each(|node| {
             match node {
                 ProofNode::Assume { id, depth, term } => {
-                    self.eunoia_proof.push(
-                        // TODO: what about :named?
-                        self.translate_assume(id, *depth, term),
-                    );
+                    // TODO: what about :named?
+                    let translated_assume = self.translate_assume(id, *depth, term);
+                    self.eunoia_proof.push(translated_assume);
                 }
 
                 ProofNode::Step(StepNode { id, .. }) => {
@@ -350,6 +349,7 @@ impl EunoiaTranslator {
                                     eunoia_sort.clone(),
                                 ]));
                             }
+
                             AnchorArg::Assign((name, sort), term) => {
                                 // TODO: either use borrows or implement
                                 // Copy trait for EunoiaTerms
@@ -469,7 +469,10 @@ impl EunoiaTranslator {
         });
     }
 
-    fn translate_term(&self, term: &Term) -> EunoiaTerm {
+    /// Translates a given Term into its corresponding `EunoiaTerm`, possibly
+    /// modifying scoping information contained in self, to deal with
+    /// translation of binding constructions.
+    fn translate_term(&mut self, term: &Term) -> EunoiaTerm {
         match term {
             Term::Const(constant) => EunoiaTranslator::translate_constant(constant),
 
@@ -532,25 +535,49 @@ impl EunoiaTranslator {
             }
 
             Term::Binder(binder, binding_list, scope) => {
-                match binder {
+                // New scope.
+                // TODO: reusing variables_in_scope concept
+                // for this new kind of scope (not the one
+                // related with contexts introduced through
+                // "anchor" commands).
+                // TODO: abstract all these steps related with opening and
+                // closing contexts into a single method.
+                self.variables_in_scope.push_scope();
+                self.contexts_opened += 1;
+                self.context_introduced.push(false);
+                let translated_bindings = self.translate_binding_list(binding_list);
+                match translated_bindings {
+                    EunoiaTerm::List(ref bindings) => {
+                        bindings.iter().for_each(|var| match var {
+                            EunoiaTerm::Var(id, sort) => {
+                                self.variables_in_scope.insert(id.clone(), *sort.clone());
+                            }
+
+                            _ => {
+                                // It shouldn't be diff. than EunoiaTerm::Var.
+                                panic!();
+                            }
+                        });
+                    }
+
+                    _ => {
+                        // It shouldn't be diff. than EunoiaTerm::List.
+                        panic!();
+                    }
+                }
+
+                let translated_binder = match binder {
                     Binder::Forall => EunoiaTerm::App(
                         self.alethe_signature.forall_binder.clone(),
-                        vec![
-                            self.translate_binding_list(binding_list),
-                            self.translate_term(scope),
-                        ],
+                        vec![translated_bindings, self.translate_term(scope)],
                     ),
 
                     Binder::Exists => EunoiaTerm::App(
                         self.alethe_signature.exists_binder.clone(),
-                        vec![
-                            self.translate_binding_list(binding_list),
-                            self.translate_term(scope),
-                        ],
+                        vec![translated_bindings, self.translate_term(scope)],
                     ),
 
                     Binder::Choice => {
-                        let translated_bindings = self.translate_binding_list(binding_list);
                         let choice_var: EunoiaTerm;
                         // There should be just one defined variable.
                         match &translated_bindings {
@@ -577,12 +604,17 @@ impl EunoiaTranslator {
                     // TODO: complete
                     Binder::Lambda => EunoiaTerm::App(
                         self.alethe_signature.exists_binder.clone(),
-                        vec![
-                            self.translate_binding_list(binding_list),
-                            self.translate_term(scope),
-                        ],
+                        vec![translated_bindings, self.translate_term(scope)],
                     ),
-                }
+                };
+
+                // Closing the context...
+                self.contexts_opened -= 1;
+                // self.local_steps.pop();
+                self.variables_in_scope.pop_scope();
+                self.context_introduced.pop();
+
+                translated_binder
             }
 
             // TODO: complete
@@ -618,7 +650,7 @@ impl EunoiaTranslator {
     /// Translates `BindingList` constructs, as used for binder terms forall, exists,
     /// choice and lambda. The "let" binder uses the same construction but assigns to
     /// it a different semantics. See `translate_let_binding_list` for its translation.
-    fn translate_binding_list(&self, binding_list: &BindingList) -> EunoiaTerm {
+    fn translate_binding_list(&mut self, binding_list: &BindingList) -> EunoiaTerm {
         let mut ret = Vec::new();
 
         binding_list.iter().for_each(|sorted_var| {
@@ -650,7 +682,7 @@ impl EunoiaTranslator {
     /// of pairs (variable, type) for the binding occurrences, and returns this coupled with
     /// the original list of actual values, as a `@VarList`.
     fn translate_let_binding_list(
-        &self,
+        &mut self,
         binding_list: &BindingList,
     ) -> (EunoiaTerm, Vec<EunoiaTerm>) {
         let mut binding_occ = Vec::new();
@@ -803,7 +835,7 @@ impl EunoiaTranslator {
     /// Implements the translation of an Alethe `Assume`, taking into
     /// account technical differences in the way Alethe rules are
     /// expressed within Eunoia.
-    fn translate_assume(&self, id: &str, _depth: usize, term: &Rc<Term>) -> EunoiaCommand {
+    fn translate_assume(&mut self, id: &str, _depth: usize, term: &Rc<Term>) -> EunoiaCommand {
         // Check last instruction in actual subproof
         let ret = if self.last_step_rule.is_empty() {
             // Regular introduction of assumptions
@@ -980,6 +1012,27 @@ impl EunoiaTranslator {
                     }
 
                     "bind" => {
+                        // Include, as premise, the previous step.
+                        match previous_step {
+                            Some(step) => {
+                                match step.deref() {
+                                    ProofNode::Step(StepNode { id, .. }) => {
+                                        alethe_premises.push(EunoiaTerm::Id(id.clone()));
+                                    }
+
+                                    _ => {
+                                        // It shouldn't be another kind of ProofNode
+                                        panic!();
+                                    }
+                                }
+                            }
+
+                            _ => {
+                                // There should be some previous step.
+                                panic!();
+                            }
+                        }
+
                         // :assumption: ctx
                         self.eunoia_proof.push(EunoiaCommand::StepPop {
                             id: id.clone(),
@@ -1116,7 +1169,7 @@ impl EunoiaTranslator {
 
     // TODO: make eunoia_prelude an attribute of EunoiaTranslator
     /// Translates only an SMT-lib problem prelude.
-    pub fn translate_problem(&self, problem: &Problem) -> EunoiaProof {
+    pub fn translate_problem(&mut self, problem: &Problem) -> EunoiaProof {
         let Problem { prelude, .. } = problem;
 
         let ProblemPrelude {
