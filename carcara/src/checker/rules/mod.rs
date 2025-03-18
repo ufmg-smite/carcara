@@ -193,11 +193,27 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
         }));
 
         let mut checker = checker::ProofChecker::new(&mut pool, checker::Config::new());
-        let got = checker.check(&problem, &proof).is_ok();
+        let check_result = checker.check(&problem, &proof);
+
+        // Extract error message, if any
+        let error_message = match &check_result {
+            Ok(_) => String::new(),
+            Err(crate::Error::Checker { inner, rule, step }) => match inner {
+                CheckerError::Explanation(s) => s.clone(),
+                _ => format!("[{rule} at {step}] {:?}", inner),
+            },
+            Err(crate::Error::DoesNotReachEmptyClause) => {
+                "Proof does not reach empty clause".into()
+            }
+            Err(e @ crate::Error::Parser(_, _)) => format!("Parser error: {}", e),
+            Err(e) => format!("Unexpected error: {:?}", e),
+        };
+
+        let got = check_result.is_ok();
         assert_eq!(
             *expected, got,
-            "test case \"{}\" index {} failed",
-            test_name, i
+            "test case \"{}\" index {} failed. Error: {}",
+            test_name, i, error_message
         );
     }
 }
