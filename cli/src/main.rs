@@ -183,7 +183,7 @@ impl From<CheckingOptions> for checker::Config {
     fn from(val: CheckingOptions) -> Self {
         Self {
             elaborated: val.check_granularity == CheckGranularity::Elaborated,
-            ignore_unknown_rules: val.ignore_unknown_rules,
+            ignore_unknown_rules: val.ignore_unknown_rules || val.skip_unknown_rules,
             allowed_rules: val.allowed_rules.unwrap_or_default().into_iter().collect(),
         }
     }
