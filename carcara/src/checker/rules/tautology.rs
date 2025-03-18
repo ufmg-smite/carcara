@@ -343,8 +343,8 @@ pub fn connective_def(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         assert_eq(b, phi_2)?;
         assert_eq(c, phi_1)?;
         assert_eq(d, phi_3)
-    } else if let Some((first_bindings, first_inner)) = match_term!((exists ... f) = first) {
-        let (second_bindings, second_inner) = match_term_err!((not (forall ... (not s))) = second)?;
+    } else if let Some((first_bindings, first_inner)) = match_term!((forall ... f) = first) {
+        let (second_bindings, second_inner) = match_term_err!((not (exists ... (not s))) = second)?;
         assert_eq(first_inner, second_inner)?;
         assert_eq(first_bindings, second_bindings)
     } else {
@@ -1199,15 +1199,15 @@ mod tests {
                     :rule connective_def)": false,
             }
             "Case #4" {
-                "(step t1 (cl (= (exists ((x Real)) p) (not (forall ((x Real)) (not p)))))
+                "(step t1 (cl (= (forall ((x Real)) p) (not (exists ((x Real)) (not p)))))
                     :rule connective_def)": true,
                 "(step t1 (cl (=
-                    (exists ((x Real) (y Real)) (= x y))
-                    (not (forall ((x Real) (y Real)) (not (= x y))))
+                    (forall ((x Real) (y Real)) (= x y))
+                    (not (exists ((x Real) (y Real)) (not (= x y))))
                 )) :rule connective_def)": true,
-                "(step t1 (cl (= (exists ((x Real)) p) (forall ((x Real)) (not p))))
+                "(step t1 (cl (= (forall ((x Real)) p) (exists ((x Real)) (not p))))
                     :rule connective_def)": false,
-                "(step t1 (cl (= (forall ((x Real)) p) (not (exists ((x Real)) (not p)))))
+                "(step t1 (cl (= (exists ((x Real)) p) (not (forall ((x Real)) (not p)))))
                     :rule connective_def)": false,
             }
         }

@@ -6,6 +6,10 @@ pub fn resolution(
     _: &mut ContextStack,
     step: &StepNode,
 ) -> Result<Rc<ProofNode>, CheckerError> {
+    if !step.args.is_empty() {
+        return Ok(Rc::new(ProofNode::Step(step.clone())));
+    }
+
     let mut ids = IdHelper::new(&step.id);
 
     // In the cases where the rule is used to get an empty clause from `(not true)`, we add a `true`
