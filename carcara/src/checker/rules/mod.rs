@@ -157,6 +157,8 @@ fn assert_is_bool_constant(got: &Rc<Term>, expected: bool) -> RuleResult {
 
 #[cfg(test)]
 fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
+    use colored::{Color, Colorize};
+
     use crate::{checker, parser};
     use std::io::Cursor;
 
@@ -210,11 +212,25 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
         };
 
         let got = check_result.is_ok();
-        assert_eq!(
-            *expected, got,
-            "test case \"{}\" index {} failed. Error: {}",
-            test_name, i, error_message
-        );
+
+        if *expected != got {
+            let (color, expectation) = if *expected {
+                (Color::Red, "expected to PASS but FAILED".red())
+            } else {
+                (Color::Yellow, "expected to FAIL but PASSED".yellow())
+            };
+
+            panic!(
+                "{}\nTest '{}' case {}: {}\nOUTCOME: {}",
+                "TEST FAILURE".bold().color(color),
+                test_name.bold(),
+                i.to_string().bold(),
+                expectation,
+                error_message
+            );
+        } else {
+            println!("{}", "PASSED".bold().color(Color::Green))
+        }
     }
 }
 
