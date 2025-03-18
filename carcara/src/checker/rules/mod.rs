@@ -229,7 +229,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
                 error_message
             );
         } else {
-            println!("{}", "PASSED".bold().color(Color::Green))
+            println!("{} \"{}\"", "PASSED".bold().color(Color::Green), test_name)
         }
     }
 }

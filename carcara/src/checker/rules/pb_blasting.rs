@@ -206,18 +206,51 @@ pub fn pbblast_bvule(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 pub fn pbblast_bvslt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     let ((x, y), (((sum_y, sign_y), (sign_x, sum_x)), constant)) = match_term_err!((= (bvslt x y) (>= (+ (- (+ ...) sign_y) (- sign_x (+ ...))) constant)) = &conclusion[0])?;
 
+    // Get bit width of `x`
+    let Sort::BitVec(n) = pool.sort(x).as_sort().cloned().unwrap() else {
+        return Err(CheckerError::Explanation(
+            "Was not able to get the bitvector sort".into(),
+        ));
+    };
+
+    let n = n.to_usize().ok_or(CheckerError::Explanation(format!(
+        "Failed to convert value {} to usize",
+        n
+    )))?;
+
     // Range from 0 to n-2
     let the_range = 0..(sum_y.len() - 1);
 
     // Check that the constant is 1
     let constant: Integer = constant.as_integer_err()?;
-    rassert!(constant == 1, CheckerError::Explanation(format!("TODO")));
+    rassert!(
+        constant == 1,
+        CheckerError::Explanation(format!("Expected constant 1 got {constant}"))
+    );
 
-    // TODO: Check the signs
-    // sign_y=(* 2 ((_ int_of 0) y2)) sign_x=(* 2 ((_ int_of 0) x2))
-    println!("sign_y={sign_y} sign_x={sign_x}");
+    // Check the signs
+    for (sign, bitvector) in [(sign_x, x), (sign_y, y)] {
+        let (coeff, (idx, bv)) = match_term_err!((* coeff ((_ int_of idx) bv)) = sign)?;
+        let coeff = coeff.as_integer_err()?;
+        let idx = idx.as_integer_err()?;
 
-    // TODO: Pass `tail y` and `tail x` to the function
+        // Check that the coefficient is 2^(n-1)
+        rassert!(
+            coeff == (Integer::from(1) << (n - 1)), // 2^(n-1)
+            CheckerError::Explanation(format!("Expected coefficient 2^{} got {coeff}", (n - 1)))
+        );
+        // Check that the index is n-1.
+        rassert!(
+            idx == n - 1,
+            CheckerError::Explanation(format!("Index {} is not {}", idx, n - 1))
+        );
+        // Finally, the bitvector in the term must be the one we expect.
+        rassert!(
+            *bv == *bitvector,
+            CheckerError::Explanation(format!("Wrong bitvector in sign bit {} {}", bv, bitvector))
+        );
+    }
+
     // For bvult the summations occur in reverse: the "left" sum comes from y and the "right" from x.
     check_pbblast_constraint(pool, y, x, sum_y, sum_x, Some(the_range))
 }
@@ -1156,7 +1189,7 @@ mod tests {
             }
 
             // Wrong scalar of the sign bit
-            "bvslt on two bits wrong scalar of the sign bit" {
+            "bvslt on two bits wrong scalar of the sign bit of y" {
                 r#"(step t1 (cl (= (bvslt x2 y2)
                                 (>= (+
                                         (-
@@ -1169,6 +1202,79 @@ mod tests {
                                         )
                                     ) 1))) :rule pbblast_bvslt)"#: false,
             }
+
+            "bvslt on two bits wrong scalar of the sign bit of x" {
+                r#"(step t1 (cl (= (bvslt x2 y2)
+                                (>= (+
+                                        (-
+                                            (+ (* 1 ((_ int_of 0) y2)) 0)
+                                            (* 2 ((_ int_of 1) y2))    
+                                        )
+                                        (-
+                                            (* 1 ((_ int_of 1) x2))         ; should be * 2
+                                            (+ (* 1 ((_ int_of 0) x2)) 0)
+                                        )
+                                    ) 1))) :rule pbblast_bvslt)"#: false,
+            }
+
+            // Wrong indexing of the sign bit
+            "bvslt on two bits wrong indexing of the sign bit of y" {
+                r#"(step t1 (cl (= (bvslt x2 y2)
+                                (>= (+
+                                        (-
+                                            (+ (* 1 ((_ int_of 0) y2)) 0)
+                                            (* 2 ((_ int_of 0) y2))         ; should be (_ int_of 1)
+                                        )
+                                        (-
+                                            (* 2 ((_ int_of 1) x2))
+                                            (+ (* 1 ((_ int_of 0) x2)) 0)
+                                        )
+                                    ) 1))) :rule pbblast_bvslt)"#: false,
+            }
+
+            "bvslt on two bits wrong indexing of the sign bit of x" {
+                r#"(step t1 (cl (= (bvslt x2 y2)
+                                (>= (+
+                                        (-
+                                            (+ (* 1 ((_ int_of 0) y2)) 0)
+                                            (* 2 ((_ int_of 1) y2))    
+                                        )
+                                        (-
+                                            (* 2 ((_ int_of 0) x2))         ; should be (_ int_of 1)
+                                            (+ (* 1 ((_ int_of 0) x2)) 0)
+                                        )
+                                    ) 1))) :rule pbblast_bvslt)"#: false,
+            }
+
+            "bvslt on two bits wrong bitvector of the sign bit of x" {
+                r#"(step t1 (cl (= (bvslt x2 y2)
+                                (>= (+
+                                        (-
+                                            (+ (* 1 ((_ int_of 0) y2)) 0)
+                                            (* 2 ((_ int_of 1) y2))    
+                                        )
+                                        (-
+                                            (* 2 ((_ int_of 1) y2))         ; should be x2
+                                            (+ (* 1 ((_ int_of 0) x2)) 0)
+                                        )
+                                    ) 1))) :rule pbblast_bvslt)"#: false,
+            }
+
+            "bvslt on two bits wrong bitvector of the sign bit of y" {
+                r#"(step t1 (cl (= (bvslt x2 y2)
+                                (>= (+
+                                        (-
+                                            (+ (* 1 ((_ int_of 0) y2)) 0)
+                                            (* 2 ((_ int_of 1) x2))         ; should be y2
+                                        )
+                                        (-
+                                            (* 2 ((_ int_of 1) x2))         
+                                            (+ (* 1 ((_ int_of 0) x2)) 0)
+                                        )
+                                    ) 1))) :rule pbblast_bvslt)"#: false,
+            }
+
+
 
             // Wrong indexing of the summation term
             "bvslt on two bits with wrong indexing of the summation term" {
@@ -1253,6 +1359,24 @@ mod tests {
                                     ) 1))) :rule pbblast_bvslt)"#: false,
             }
 
+            "bvslt on four bits wrong scalar of the sign bit" {
+                            r#"(step t1 (cl (= (bvslt x4 y4)
+                                (>= (+
+                                        (-
+                                            (+ (* 1 ((_ int_of 0) y4))
+                                               (* 2 ((_ int_of 1) y4))
+                                               (* 4 ((_ int_of 2) y4))
+                                               0)
+                                            (* 4 ((_ int_of 3) y4)))    ; should be * 8
+                                        (-
+                                            (* 8 ((_ int_of 3) x4))
+                                            (+ (* 1 ((_ int_of 0) x4))
+                                               (* 2 ((_ int_of 1) x4))
+                                               (* 4 ((_ int_of 2) x4))
+                                               0)
+                                        )
+                                    ) 1))) :rule pbblast_bvslt)"#: false,
+            }
 
         }
     }
