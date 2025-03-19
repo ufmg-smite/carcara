@@ -334,43 +334,37 @@
 ;; contexts
 ;;;;;;;;;;;;;
 
-; TODO: implement a generalization of this
-; program: get_value
-; args:
-; - get_value nil:
-; return:
-(program $get_value ((A Type) (id A) (B Type)
-                    (value B) (hd Bool) (tl Bool :list))
-         (Bool A) B
-         (
-          (($get_value (and (= id value) tl) id)
-           
-           value)
-
-          ; { hd =/= (= id value), for some value "value"} 
-          (($get_value (and hd tl) id)
-           
-           ($get_value tl id))
-
-          (($get_value (= id value) id)
-           
-           value)
-          )
-)
-
 ; program: context_get_substitute
 ; args:
 ; - context Bool: A context built with @ctx.
 ; - id A: A variable name, with which index "context".
 ; return: The value associated with variable "id", in context "context".
 (program $context_get_substitute ((A Type) (id A) (B Type)
-                                 (value B) (varlist @VarList) 
-                                 (ctx Bool) (and_list Bool))
+                    (value B) (hd Bool) (tl Bool :list)
+                    (varlist @VarList)
+                    (subst Bool))
          (Bool A) B
          (
-          (($context_get_substitute (@ctx varlist and_list) id)
+          (; Just do discard possible leading @ctx constructor
+           ($context_get_substitute (@ctx varlist subst) id)
            
-           ($get_value and_list id))
+           ($context_get_substitute subst id)
+           )
+
+          (
+           ($context_get_substitute (and (= id value) tl) id)
+           
+           value
+           )
+
+          ; { hd =/= (= id value), for some value "value"} 
+          (($context_get_substitute (and hd tl) id)
+           
+           ($context_get_substitute tl id))
+
+          (($context_get_substitute (= id value) id)
+           
+           value)
           )
 )
 
@@ -404,85 +398,80 @@
           )
 )
 
-; program: @substitution_var_is_fixed
+; program: $context_var_is_fixed
 ; args:
-; - substitutions Bool: A subst. list, built as (and (= var value) ...).
+; - context Bool: A context built with @ctx
 ; - var A: >
 ;   Variable for which we want to know if it is fixed, as indicated
-;   in "substitutions".
+;   in "context".
 ; return: >
-;   A boolean indicating if "var" is fixed, as indicated
-;   in "substitutions".
-(program $substitution_var_is_fixed ((A Type) (var A) (var_2 A)
-                                     (B Type) (any B)
-                                     (eqs Bool :list))
+;   A boolean indicating if "var" is fixed in "context".
+(program $context_var_is_fixed ((A Type) (var A) (var_2 A)
+                                (B Type) (any B)
+                                (eqs Bool :list)
+                                (varlist @VarList) (and_list Bool))
          (Bool A) Bool
          
-         (; TODO: is it possible to have substitutions
+         (
+          (; Case: most nested @ctx.
+           ($context_var_is_fixed (and (@ctx varlist and_list)) var)
+
+           ($context_var_is_fixed and_list var)
+           )
+
+          (; Just to discard @ctx constructor
+           ($context_var_is_fixed (@ctx varlist and_list) var)
+
+           ($context_var_is_fixed and_list var)
+           )
+
+          ; TODO: is it possible to have contexts
           ; with shadowed mappings?
           (
-           ($substitution_var_is_fixed (and (= var var)) var)
+           ($context_var_is_fixed (and (= var var)) var)
 
            true
            )
 
           (; { var <> any}
-           ($substitution_var_is_fixed (and (= var any)) var)
+           ($context_var_is_fixed (and (= var any)) var)
 
            false
            )
 
           (; { var <> var_2}
-           ($substitution_var_is_fixed (and (= var_2 any)) var)
+           ($context_var_is_fixed (and (= var_2 any)) var)
 
            true
            )
 
           (
-           ($substitution_var_is_fixed (and (= var var) eqs) var)
+           ($context_var_is_fixed (and (= var var) eqs) var)
            
            ; We look into eqs for another subst. that could
            ; shadow this one.
-           (eo::and true ($substitution_var_is_fixed eqs var))
+           (eo::and true ($context_var_is_fixed eqs var))
            )
 
           (; { var <> any}
-           ($substitution_var_is_fixed (and (= var any) eqs) var)
+           ($context_var_is_fixed (and (= var any) eqs) var)
 
            ; We look into eqs for another subst. that could
            ; shadow this one.
-           (eo::and false ($substitution_var_is_fixed eqs var))
+           (eo::and false ($context_var_is_fixed eqs var))
            )
 
           (; { var <> var_2}
-           ($substitution_var_is_fixed (and (= var_2 any) eqs) var)
+           ($context_var_is_fixed (and (= var_2 any) eqs) var)
            
-           ($substitution_var_is_fixed eqs var)
+           ($context_var_is_fixed eqs var)
            )
 
           (; This is the last "element" of our representation of 
-           ; substitutions.
-           ($substitution_var_is_fixed (and true) var)
+           ; contexts.
+           ($context_var_is_fixed (and true) var)
 
            true
-           )
-          )
-)
-
-; program: @context_var_is_fixed
-; args:
-; - context Bool: A context, built with @ctx.
-; - var A: Variable for which we want to know if it appears fixed in "context".
-; return: A boolean indicating if "var" appears fixed in "context".
-(program $context_var_is_fixed ((A Type) (var A) (varlist @VarList)
-                                (and_list Bool))
-         (Bool A) Bool
-         
-         (
-          (
-           ($context_var_is_fixed (@ctx varlist and_list) var)
-
-           ($substitution_var_is_fixed and_list var)
            )
           )
 )
