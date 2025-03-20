@@ -73,6 +73,32 @@ impl EunoiaTranslator {
         }
     }
 
+    /// Abstracts the operations required for opening a new scope,
+    /// once we need to translate the body of a construction with
+    /// binding occurrences of variables.
+    /// PARAMS:
+    /// - `context_introduced`: boolean flag indicated if the opened
+    ///   scope belongs to a newly introduced "context" (through "anchor").
+    fn open_scope(&mut self, context_introduced: bool) {
+        // TODO: reusing variables_in_scope concept
+        // for this new kind of scope (not the one
+        // related with contexts introduced through
+        // "anchor" commands).
+        // TODO: abstract all these steps related with opening and
+        // closing contexts into a single method.
+        self.variables_in_scope.push_scope();
+        self.contexts_opened += 1;
+        self.context_introduced.push(context_introduced);
+    }
+
+    /// Closes the last open scope.
+    /// PRE : { `self.contexts_opened` >= 1 }
+    fn close_scope(&mut self) {
+        self.contexts_opened -= 1;
+        self.variables_in_scope.pop_scope();
+        self.context_introduced.pop();
+    }
+
     pub fn translate<'a>(&'a mut self, proof: &Rc<ProofNode>) -> &'a EunoiaProof {
         // Clean previously created data.
         if self.contexts_opened > 0 {
@@ -93,9 +119,8 @@ impl EunoiaTranslator {
         // symbol?
         // Some rules query the context (e.g., refl). We need to always have
         // opened at least one context
-        // Counter for contexts opened
-        // { self.contexts_opened == 0 }
-        self.contexts_opened += 1;
+        self.open_scope(true);
+
         let context_name = String::from("ctx") + &self.contexts_opened.to_string();
 
         // (define ctx0 () true)
@@ -112,11 +137,6 @@ impl EunoiaTranslator {
             name: String::from("context"),
             term: EunoiaTerm::Id(context_name.clone()),
         });
-
-        self.variables_in_scope.push_scope();
-
-        // No new variables introduced in this first "global" context.
-        self.context_introduced.push(true);
 
         // self.local_steps.push(Vec::new());
 
@@ -300,10 +320,8 @@ impl EunoiaTranslator {
                             self.last_step_id.pop();
 
                             // Closing the context...
-                            self.contexts_opened -= 1;
+                            self.close_scope();
                             // self.local_steps.pop();
-                            self.variables_in_scope.pop_scope();
-                            self.context_introduced.pop();
                         }
                     }
                 }
@@ -324,17 +342,15 @@ impl EunoiaTranslator {
                     // // Maintain variables from previous scope...
                     // self.variables_in_scope
                     //     .push(self.variables_in_scope[self.contexts_opened - 1].clone());
-                    self.variables_in_scope.push_scope();
-                    self.contexts_opened += 1;
                     // self.local_steps.push(Vec::new());
 
                     if args.is_empty() {
-                        self.context_introduced.push(false);
+                        self.open_scope(false);
                     } else {
                         // { !args.is_empty() }
                         // We actually have an anchor introducing new variables
+                        self.open_scope(true);
 
-                        self.context_introduced.push(true);
                         args.iter().for_each(|arg| match arg {
                             AnchorArg::Variable((name, sort)) => {
                                 // TODO: either use borrows or implement
@@ -522,8 +538,33 @@ impl EunoiaTranslator {
             }
 
             Term::Let(binding_list, scope) => {
+                // New scope.
+                self.open_scope(false);
+
                 let (translated_binding_list, translated_values) =
                     self.translate_let_binding_list(binding_list);
+
+                match translated_binding_list {
+                    EunoiaTerm::List(ref bindings) => {
+                        bindings.iter().for_each(|var| match var {
+                            EunoiaTerm::Var(id, sort) => {
+                                self.variables_in_scope.insert(id.clone(), *sort.clone());
+                            }
+
+                            _ => {
+                                // It shouldn't be diff. than EunoiaTerm::Var.
+                                panic!();
+                            }
+                        });
+                    }
+
+                    _ => {
+                        // It shouldn't be diff. than EunoiaTerm::List.
+                        panic!();
+                    }
+                }
+
+                self.close_scope();
 
                 EunoiaTerm::HOApp(
                     Box::new(EunoiaTerm::App(
@@ -540,11 +581,7 @@ impl EunoiaTranslator {
                 // for this new kind of scope (not the one
                 // related with contexts introduced through
                 // "anchor" commands).
-                // TODO: abstract all these steps related with opening and
-                // closing contexts into a single method.
-                self.variables_in_scope.push_scope();
-                self.contexts_opened += 1;
-                self.context_introduced.push(false);
+                self.open_scope(false);
                 let translated_bindings = self.translate_binding_list(binding_list);
                 match translated_bindings {
                     EunoiaTerm::List(ref bindings) => {
@@ -609,10 +646,8 @@ impl EunoiaTranslator {
                 };
 
                 // Closing the context...
-                self.contexts_opened -= 1;
+                self.close_scope();
                 // self.local_steps.pop();
-                self.variables_in_scope.pop_scope();
-                self.context_introduced.pop();
 
                 translated_binder
             }
@@ -1020,7 +1055,20 @@ impl EunoiaTranslator {
                                         alethe_premises.push(EunoiaTerm::Id(id.clone()));
                                     }
 
-                                    _ => {
+                                    ProofNode::Subproof(SubproofNode { last_step, .. }) => {
+                                        match last_step.deref() {
+                                            ProofNode::Step(StepNode { id, .. }) => {
+                                                alethe_premises.push(EunoiaTerm::Id(id.clone()));
+                                            }
+
+                                            _ => {
+                                                // It shouldn't be another kind of ProofNode
+                                                panic!();
+                                            }
+                                        }
+                                    }
+
+                                    ProofNode::Assume { .. } => {
                                         // It shouldn't be another kind of ProofNode
                                         panic!();
                                     }
