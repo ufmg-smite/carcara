@@ -176,6 +176,7 @@ macro_rules! match_term {
     (@GET_VARIANT bvuge)    => { $crate::ast::Operator::BvUGe };
     (@GET_VARIANT bvule)    => { $crate::ast::Operator::BvULe };
     (@GET_VARIANT bvslt)    => { $crate::ast::Operator::BvSLt };
+    (@GET_VARIANT bvsle)    => { $crate::ast::Operator::BvSLe };
     (@GET_VARIANT bvadd)    => { $crate::ast::Operator::BvAdd };
 
     (@GET_VARIANT extract)     => { $crate::ast::ParamOperator::BvExtract };

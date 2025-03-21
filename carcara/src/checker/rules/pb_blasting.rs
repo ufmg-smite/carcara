@@ -199,6 +199,34 @@ pub fn pbblast_bvule(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     check_pbblast_constraint(pool, x, y, sum_x, sum_y, None)
 }
 
+/// Helper that checks the the `sign` term has the format -(2<sup>n-1</sup>) x<sub>n-1</sub>
+fn check_pbblast_signed_relation(n: usize, sign: &Rc<Term>, bitvector: &Rc<Term>) -> RuleResult {
+    // Check the signs
+    let (coeff, (idx, bv)) = match_term_err!((* coeff ((_ int_of idx) bv)) = sign)?;
+    let coeff = coeff.as_integer_err()?;
+    let idx = idx.as_integer_err()?;
+
+    // Check that the coefficient is 2^(n-1)
+    rassert!(
+        coeff == (Integer::from(1) << (n - 1)), // 2^(n-1)
+        CheckerError::Explanation(format!("Expected coefficient 2^{} got {coeff}", (n - 1)))
+    );
+
+    // Check that the index is n-1.
+    rassert!(
+        idx == n - 1,
+        CheckerError::Explanation(format!("Index {} is not {}", idx, n - 1))
+    );
+
+    // Finally, the bitvector in the term must be the one we expect.
+    rassert!(
+        *bv == *bitvector,
+        CheckerError::Explanation(format!("Wrong bitvector in sign bit {} {}", bv, bitvector))
+    );
+
+    Ok(())
+}
+
 /// Implements the signed-less-than rule.
 ///
 /// The expected shape is:
@@ -214,8 +242,7 @@ pub fn pbblast_bvslt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     };
 
     let n = n.to_usize().ok_or(CheckerError::Explanation(format!(
-        "Failed to convert value {} to usize",
-        n
+        "Failed to convert value {n} to usize"
     )))?;
 
     // Range from 0 to n-2
@@ -228,46 +255,66 @@ pub fn pbblast_bvslt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         CheckerError::Explanation(format!("Expected constant 1 got {constant}"))
     );
 
-    // Check the signs
-    for (sign, bitvector) in [(sign_x, x), (sign_y, y)] {
-        let (coeff, (idx, bv)) = match_term_err!((* coeff ((_ int_of idx) bv)) = sign)?;
-        let coeff = coeff.as_integer_err()?;
-        let idx = idx.as_integer_err()?;
-
-        // Check that the coefficient is 2^(n-1)
-        rassert!(
-            coeff == (Integer::from(1) << (n - 1)), // 2^(n-1)
-            CheckerError::Explanation(format!("Expected coefficient 2^{} got {coeff}", (n - 1)))
-        );
-        // Check that the index is n-1.
-        rassert!(
-            idx == n - 1,
-            CheckerError::Explanation(format!("Index {} is not {}", idx, n - 1))
-        );
-        // Finally, the bitvector in the term must be the one we expect.
-        rassert!(
-            *bv == *bitvector,
-            CheckerError::Explanation(format!("Wrong bitvector in sign bit {} {}", bv, bitvector))
-        );
-    }
+    // Check the sign terms
+    check_pbblast_signed_relation(n, sign_y, y)?;
+    check_pbblast_signed_relation(n, sign_x, x)?;
 
     // For bvult the summations occur in reverse: the "left" sum comes from y and the "right" from x.
     check_pbblast_constraint(pool, y, x, sum_y, sum_x, Some(the_range))
 }
 
+/// Implements the signed-greater-than rule.
+///
+/// The expected shape is:
+///    `(= (bvsgt x y) (>= (+ (- x_sum (* 2^(n-1) x_n-1))) (- (* 2^(n-1) y_n-1) y_sum)) 1))`
 pub fn pbblast_bvsgt(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
     println!("{} {} {}", premises.len(), args.len(), conclusion.len());
     Err(CheckerError::Explanation(format!("TODO")))
 }
 
+/// Implements the signed-greater-equal rule.
+///
+/// The expected shape is:
+///    `(= (bvsge x y) (>= (+ (- x_sum (* 2^(n-1) x_n-1))) (- (* 2^(n-1) y_n-1) y_sum)) 0))`
 pub fn pbblast_bvsge(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
     println!("{} {} {}", premises.len(), args.len(), conclusion.len());
     Err(CheckerError::Explanation(format!("TODO")))
 }
 
-pub fn pbblast_bvsle(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
-    println!("{} {} {}", premises.len(), args.len(), conclusion.len());
-    Err(CheckerError::Explanation(format!("TODO")))
+/// Implements the signed-less-equal rule.
+///
+/// The expected shape is:
+///    `(= (bvsle x y) (>= (+ (- y_sum (* 2^(n-1) y_n-1))) (- (* 2^(n-1) x_n-1) x_sum)) 0))`
+pub fn pbblast_bvsle(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    let ((x, y), (((sum_y, sign_y), (sign_x, sum_x)), constant)) = match_term_err!((= (bvsle x y) (>= (+ (- (+ ...) sign_y) (- sign_x (+ ...))) constant)) = &conclusion[0])?;
+
+    // Get bit width of `x`
+    let Sort::BitVec(n) = pool.sort(x).as_sort().cloned().unwrap() else {
+        return Err(CheckerError::Explanation(
+            "Was not able to get the bitvector sort".into(),
+        ));
+    };
+
+    let n = n.to_usize().ok_or(CheckerError::Explanation(format!(
+        "Failed to convert value {n} to usize"
+    )))?;
+
+    // Range from 0 to n-2
+    let the_range = 0..(sum_y.len() - 1);
+
+    // Check that the constant is 0
+    let constant: Integer = constant.as_integer_err()?;
+    rassert!(
+        constant == 0,
+        CheckerError::Explanation(format!("Expected constant 0 got {constant}"))
+    );
+
+    // Check the sign terms
+    check_pbblast_signed_relation(n, sign_y, y)?;
+    check_pbblast_signed_relation(n, sign_x, x)?;
+
+    // For bvsle the summations occur in reverse: the "left" sum comes from y and the "right" from x.
+    check_pbblast_constraint(pool, y, x, sum_y, sum_x, Some(the_range))
 }
 
 pub fn pbblast_pbbvar(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
