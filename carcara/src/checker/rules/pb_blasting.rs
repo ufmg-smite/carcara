@@ -267,18 +267,70 @@ pub fn pbblast_bvslt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 ///
 /// The expected shape is:
 ///    `(= (bvsgt x y) (>= (+ (- x_sum (* 2^(n-1) x_n-1))) (- (* 2^(n-1) y_n-1) y_sum)) 1))`
-pub fn pbblast_bvsgt(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
-    println!("{} {} {}", premises.len(), args.len(), conclusion.len());
-    Err(CheckerError::Explanation(format!("TODO")))
+pub fn pbblast_bvsgt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    let ((x, y), (((sum_x, sign_x), (sign_y, sum_y)), constant)) = match_term_err!((= (bvsgt x y) (>= (+ (- (+ ...) sign_x) (- sign_y (+ ...))) constant)) = &conclusion[0])?;
+
+    // Get bit width of `x`
+    let Sort::BitVec(n) = pool.sort(x).as_sort().cloned().unwrap() else {
+        return Err(CheckerError::Explanation(
+            "Was not able to get the bitvector sort".into(),
+        ));
+    };
+
+    let n = n.to_usize().ok_or(CheckerError::Explanation(format!(
+        "Failed to convert value {n} to usize"
+    )))?;
+
+    // Range from 0 to n-2
+    let the_range = 0..(sum_y.len() - 1);
+
+    // Check that the constant is 1
+    let constant: Integer = constant.as_integer_err()?;
+    rassert!(
+        constant == 1,
+        CheckerError::Explanation(format!("Expected constant 1 got {constant}"))
+    );
+
+    // Check the sign terms
+    check_pbblast_signed_relation(n, sign_x, x)?;
+    check_pbblast_signed_relation(n, sign_y, y)?;
+
+    check_pbblast_constraint(pool, x, y, sum_x, sum_y, Some(the_range))
 }
 
 /// Implements the signed-greater-equal rule.
 ///
 /// The expected shape is:
 ///    `(= (bvsge x y) (>= (+ (- x_sum (* 2^(n-1) x_n-1))) (- (* 2^(n-1) y_n-1) y_sum)) 0))`
-pub fn pbblast_bvsge(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
-    println!("{} {} {}", premises.len(), args.len(), conclusion.len());
-    Err(CheckerError::Explanation(format!("TODO")))
+pub fn pbblast_bvsge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    let ((x, y), (((sum_x, sign_x), (sign_y, sum_y)), constant)) = match_term_err!((= (bvsge x y) (>= (+ (- (+ ...) sign_x) (- sign_y (+ ...))) constant)) = &conclusion[0])?;
+
+    // Get bit width of `x`
+    let Sort::BitVec(n) = pool.sort(x).as_sort().cloned().unwrap() else {
+        return Err(CheckerError::Explanation(
+            "Was not able to get the bitvector sort".into(),
+        ));
+    };
+
+    let n = n.to_usize().ok_or(CheckerError::Explanation(format!(
+        "Failed to convert value {n} to usize"
+    )))?;
+
+    // Range from 0 to n-2
+    let the_range = 0..(sum_y.len() - 1);
+
+    // Check that the constant is 0
+    let constant: Integer = constant.as_integer_err()?;
+    rassert!(
+        constant == 0,
+        CheckerError::Explanation(format!("Expected constant 0 got {constant}"))
+    );
+
+    // Check the sign terms
+    check_pbblast_signed_relation(n, sign_x, x)?;
+    check_pbblast_signed_relation(n, sign_y, y)?;
+
+    check_pbblast_constraint(pool, x, y, sum_x, sum_y, Some(the_range))
 }
 
 /// Implements the signed-less-equal rule.
