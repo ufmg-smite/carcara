@@ -7,6 +7,19 @@ use crate::{
 };
 use rug::Integer;
 
+/// Helper to get the bit width of a bitvector looking into the pool
+fn get_bit_width(x: &Rc<Term>, pool: &mut dyn TermPool) -> Result<usize, CheckerError> {
+    // Get bit width of `x`
+    let Sort::BitVec(n) = pool.sort(x).as_sort().cloned().unwrap() else {
+        return Err(CheckerError::Explanation(
+            "Was not able to get the bitvector sort".into(),
+        ));
+    };
+    n.to_usize().ok_or(CheckerError::Explanation(format!(
+        "Failed to convert value {n} to usize"
+    )))
+}
+
 // Helper to check that a summation has the expected shape
 fn check_pbblast_sum(
     pool: &mut dyn TermPool,
@@ -15,14 +28,9 @@ fn check_pbblast_sum(
     range: &Range<usize>,
 ) -> RuleResult {
     // Obtain the bitvector width from the pool.
-    let Sort::BitVec(width) = pool.sort(bitvector).as_sort().cloned().unwrap() else {
-        return Err(CheckerError::Explanation(
-            "Could not obtain the bitvector with from the pool".into(),
-        ));
-    };
+    let width = get_bit_width(bitvector, pool)?;
 
     // The `range` must be the same length as the `sum`, but may be less than `width`
-    let width = width.to_usize().unwrap();
 
     // Drop the last element, which is the constant zero
     let sum = &sum[..sum.len() - 1];
@@ -234,16 +242,7 @@ fn check_pbblast_signed_relation(n: usize, sign: &Rc<Term>, bitvector: &Rc<Term>
 pub fn pbblast_bvslt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     let ((x, y), (((sum_y, sign_y), (sign_x, sum_x)), constant)) = match_term_err!((= (bvslt x y) (>= (+ (- (+ ...) sign_y) (- sign_x (+ ...))) constant)) = &conclusion[0])?;
 
-    // Get bit width of `x`
-    let Sort::BitVec(n) = pool.sort(x).as_sort().cloned().unwrap() else {
-        return Err(CheckerError::Explanation(
-            "Was not able to get the bitvector sort".into(),
-        ));
-    };
-
-    let n = n.to_usize().ok_or(CheckerError::Explanation(format!(
-        "Failed to convert value {n} to usize"
-    )))?;
+    let n = get_bit_width(x, pool)?;
 
     // Range from 0 to n-2
     let the_range = 0..(sum_y.len() - 1);
@@ -271,15 +270,7 @@ pub fn pbblast_bvsgt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     let ((x, y), (((sum_x, sign_x), (sign_y, sum_y)), constant)) = match_term_err!((= (bvsgt x y) (>= (+ (- (+ ...) sign_x) (- sign_y (+ ...))) constant)) = &conclusion[0])?;
 
     // Get bit width of `x`
-    let Sort::BitVec(n) = pool.sort(x).as_sort().cloned().unwrap() else {
-        return Err(CheckerError::Explanation(
-            "Was not able to get the bitvector sort".into(),
-        ));
-    };
-
-    let n = n.to_usize().ok_or(CheckerError::Explanation(format!(
-        "Failed to convert value {n} to usize"
-    )))?;
+    let n = get_bit_width(x, pool)?;
 
     // Range from 0 to n-2
     let the_range = 0..(sum_y.len() - 1);
@@ -306,15 +297,7 @@ pub fn pbblast_bvsge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     let ((x, y), (((sum_x, sign_x), (sign_y, sum_y)), constant)) = match_term_err!((= (bvsge x y) (>= (+ (- (+ ...) sign_x) (- sign_y (+ ...))) constant)) = &conclusion[0])?;
 
     // Get bit width of `x`
-    let Sort::BitVec(n) = pool.sort(x).as_sort().cloned().unwrap() else {
-        return Err(CheckerError::Explanation(
-            "Was not able to get the bitvector sort".into(),
-        ));
-    };
-
-    let n = n.to_usize().ok_or(CheckerError::Explanation(format!(
-        "Failed to convert value {n} to usize"
-    )))?;
+    let n = get_bit_width(x, pool)?;
 
     // Range from 0 to n-2
     let the_range = 0..(sum_y.len() - 1);
@@ -341,15 +324,7 @@ pub fn pbblast_bvsle(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     let ((x, y), (((sum_y, sign_y), (sign_x, sum_x)), constant)) = match_term_err!((= (bvsle x y) (>= (+ (- (+ ...) sign_y) (- sign_x (+ ...))) constant)) = &conclusion[0])?;
 
     // Get bit width of `x`
-    let Sort::BitVec(n) = pool.sort(x).as_sort().cloned().unwrap() else {
-        return Err(CheckerError::Explanation(
-            "Was not able to get the bitvector sort".into(),
-        ));
-    };
-
-    let n = n.to_usize().ok_or(CheckerError::Explanation(format!(
-        "Failed to convert value {n} to usize"
-    )))?;
+    let n = get_bit_width(x, pool)?;
 
     // Range from 0 to n-2
     let the_range = 0..(sum_y.len() - 1);
@@ -448,9 +423,80 @@ pub fn pbblast_pbbconst(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     Ok(())
 }
 
-pub fn pbblast_bvxor(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
-    println!("{} {} {}", premises.len(), args.len(), conclusion.len());
-    Err(CheckerError::Explanation(format!("TODO")))
+/// Helper to check if the term `xi` has the shape `((_ int_of i) x)`
+fn assert_bitvector_indexing(xi: &Rc<Term>, i: usize, x: &Rc<Term>) -> RuleResult {
+    let (idx, bv) = match_term_err!(((_ int_of idx) bv) = xi)?;
+    let idx: Integer = idx.as_integer_err()?;
+    rassert!(
+        idx == i,
+        CheckerError::Explanation(format!("Index {} is not {}", idx, i))
+    );
+    rassert!(
+        *bv == *x,
+        CheckerError::Explanation(format!("Wrong bitvector, expected {} got {}", x, bv))
+    );
+    Ok(())
+}
+
+/// Implements the bitwise exclusive or operation.
+///
+/// The expected shape is:
+/// ```
+///     (and
+///         (= (bvxor x y) r)
+///         ; FOR EACH 0=i<n:
+///         (and
+///             (>= (- (+ xi yi) ri) 0)
+///             (>= (- 0 (+ ri xi yi)) -2)
+///             (>= (- (+ ri xi) yi) 0)
+///             (>= (- (+ ri yi) xi) 0)
+///         )
+///     )
+/// ```
+pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    let and_list = match_term_err!((and  ...) = &conclusion[0])?;
+    // First element is bvxor
+    let (xor_term, bits_constraints) = and_list
+        .split_first_chunk::<1>()
+        .ok_or(CheckerError::Explanation("Failed to split and_list".into()))?;
+    let ((x, y), r) = match_term_err!((= (bvxor x y) r) = &xor_term[0])?;
+
+    // Get bit width of `x`
+    let n = get_bit_width(x, pool)?;
+
+    for i in 0..n {
+        let (c1, c2, c3, c4) = match_term_err!((and c1 c2 c3 c4) = &bits_constraints[i])?;
+        // c1 : (>= (- (+ xi yi) ri) 0)
+        let (((xi, yi), ri), _) = match_term_err!((>= (- (+ xi yi) ri) 0) = c1)?;
+        assert_bitvector_indexing(xi, i, x)?;
+        assert_bitvector_indexing(yi, i, y)?;
+        assert_bitvector_indexing(ri, i, r)?;
+
+        // c2 : (>= (- 0 (+ ri xi yi)) -2)
+        let ((_, (ri, xi, yi)), k) = match_term_err!((>= (- 0 (+ ri xi yi)) k) = c2)?;
+        assert_bitvector_indexing(xi, i, x)?;
+        assert_bitvector_indexing(yi, i, y)?;
+        assert_bitvector_indexing(ri, i, r)?;
+        let k: Integer = k.as_integer_err()?;
+        rassert!(
+            k == -2,
+            CheckerError::Explanation(format!("Expected >= -2, got {}", k))
+        );
+
+        // c3 : (>= (- (+ ri xi) yi) 0)
+        let (((ri, xi), yi), _) = match_term_err!((>= (- (+ ri xi) yi) 0) = c3)?;
+        assert_bitvector_indexing(xi, i, x)?;
+        assert_bitvector_indexing(yi, i, y)?;
+        assert_bitvector_indexing(ri, i, r)?;
+
+        // c4 : (>= (- (+ ri yi) xi) 0)
+        let (((ri, yi), xi), _) = match_term_err!((>= (- (+ ri yi) xi) 0) = c4)?;
+        assert_bitvector_indexing(xi, i, x)?;
+        assert_bitvector_indexing(yi, i, y)?;
+        assert_bitvector_indexing(ri, i, r)?;
+    }
+
+    Ok(())
 }
 
 pub fn pbblast_bvand(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
@@ -2415,6 +2461,61 @@ mod tests {
                                         (>= (- (+ ((_ int_of 1) r8) ((_ int_of 1) y8)) ((_ int_of 1) x8)) 0)    
                                     )
                                     (and    ; i = 2 
+                                        (>= (- (+ ((_ int_of 2) x8) ((_ int_of 2) y8)) ((_ int_of 2) r8)) 0)    
+                                        (>= (- 0 (+ ((_ int_of 2) r8) ((_ int_of 2) x8) ((_ int_of 2) y8))) -2) 
+                                        (>= (- (+ ((_ int_of 2) r8) ((_ int_of 2) x8)) ((_ int_of 2) y8)) 0)    
+                                        (>= (- (+ ((_ int_of 2) r8) ((_ int_of 2) y8)) ((_ int_of 2) x8)) 0)    
+                                    )
+                                    (and    ; i = 3 
+                                        (>= (- (+ ((_ int_of 3) x8) ((_ int_of 3) y8)) ((_ int_of 3) r8)) 0)    
+                                        (>= (- 0 (+ ((_ int_of 3) r8) ((_ int_of 3) x8) ((_ int_of 3) y8))) -2) 
+                                        (>= (- (+ ((_ int_of 3) r8) ((_ int_of 3) x8)) ((_ int_of 3) y8)) 0)    
+                                        (>= (- (+ ((_ int_of 3) r8) ((_ int_of 3) y8)) ((_ int_of 3) x8)) 0)    
+                                    )
+                                    (and    ; i = 4 
+                                        (>= (- (+ ((_ int_of 4) x8) ((_ int_of 4) y8)) ((_ int_of 4) r8)) 0)    
+                                        (>= (- 0 (+ ((_ int_of 4) r8) ((_ int_of 4) x8) ((_ int_of 4) y8))) -2) 
+                                        (>= (- (+ ((_ int_of 4) r8) ((_ int_of 4) x8)) ((_ int_of 4) y8)) 0)    
+                                        (>= (- (+ ((_ int_of 4) r8) ((_ int_of 4) y8)) ((_ int_of 4) x8)) 0)    
+                                    )
+                                    (and    ; i = 5 
+                                        (>= (- (+ ((_ int_of 5) x8) ((_ int_of 5) y8)) ((_ int_of 5) r8)) 0)    
+                                        (>= (- 0 (+ ((_ int_of 5) r8) ((_ int_of 5) x8) ((_ int_of 5) y8))) -2) 
+                                        (>= (- (+ ((_ int_of 5) r8) ((_ int_of 5) x8)) ((_ int_of 5) y8)) 0)    
+                                        (>= (- (+ ((_ int_of 5) r8) ((_ int_of 5) y8)) ((_ int_of 5) x8)) 0)    
+                                    )
+                                    (and    ; i = 6 
+                                        (>= (- (+ ((_ int_of 6) x8) ((_ int_of 6) y8)) ((_ int_of 6) r8)) 0)    
+                                        (>= (- 0 (+ ((_ int_of 6) r8) ((_ int_of 6) x8) ((_ int_of 6) y8))) -2) 
+                                        (>= (- (+ ((_ int_of 6) r8) ((_ int_of 6) x8)) ((_ int_of 6) y8)) 0)    
+                                        (>= (- (+ ((_ int_of 6) r8) ((_ int_of 6) y8)) ((_ int_of 6) x8)) 0)    
+                                    )
+                                    (and    ; i = 7 (MSB)
+                                        (>= (- (+ ((_ int_of 7) x8) ((_ int_of 7) y8)) ((_ int_of 7) r8)) 0)    
+                                        (>= (- 0 (+ ((_ int_of 7) r8) ((_ int_of 7) x8) ((_ int_of 7) y8))) -2) 
+                                        (>= (- (+ ((_ int_of 7) r8) ((_ int_of 7) x8)) ((_ int_of 7) y8)) 0)    
+                                        (>= (- (+ ((_ int_of 7) r8) ((_ int_of 7) y8)) ((_ int_of 7) x8)) 0)    
+                                    )
+                                ))
+                        :rule pbblast_bvxor)"#: true,
+            }
+            "Invalid 8-bit XOR (wrong indexing)" {
+                r#"(step t1 (cl (and
+                                    (= (bvxor x8 y8) r8)
+                                    ; list of constraints for each bit
+                                    (and    ; i = 0 (LSB)
+                                        (>= (- (+ ((_ int_of 0) x8) ((_ int_of 0) y8)) ((_ int_of 0) r8)) 0)    
+                                        (>= (- 0 (+ ((_ int_of 0) r8) ((_ int_of 0) x8) ((_ int_of 0) y8))) -2) 
+                                        (>= (- (+ ((_ int_of 0) r8) ((_ int_of 0) x8)) ((_ int_of 0) y8)) 0)    
+                                        (>= (- (+ ((_ int_of 0) r8) ((_ int_of 0) y8)) ((_ int_of 0) x8)) 0)    
+                                    )
+                                    (and    ; i = 1 
+                                        (>= (- (+ ((_ int_of 1) x8) ((_ int_of 1) y8)) ((_ int_of 1) r8)) 0)    
+                                        (>= (- 0 (+ ((_ int_of 1) r8) ((_ int_of 1) x8) ((_ int_of 1) y8))) -2) 
+                                        (>= (- (+ ((_ int_of 1) r8) ((_ int_of 1) x8)) ((_ int_of 1) y8)) 0)    
+                                        (>= (- (+ ((_ int_of 1) r8) ((_ int_of 1) y8)) ((_ int_of 1) x8)) 0)    
+                                    )
+                                    (and    ; i = 2 
                                         (>= (- (+ ((_ int_of 2) x8) ((_ int_of 1) y8)) ((_ int_of 1) r8)) 0)    
                                         (>= (- 0 (+ ((_ int_of 1) r8) ((_ int_of 1) x8) ((_ int_of 1) y8))) -2) 
                                         (>= (- (+ ((_ int_of 1) r8) ((_ int_of 1) x8)) ((_ int_of 1) y8)) 0)    
@@ -2451,7 +2552,7 @@ mod tests {
                                         (>= (- (+ ((_ int_of 7) r8) ((_ int_of 7) y8)) ((_ int_of 7) x8)) 0)    
                                     )
                                 ))
-                        :rule pbblast_bvxor)"#: true,
+                        :rule pbblast_bvxor)"#: false,
             }
             "Invalid 8-bit XOR (missing i=3)" {
                 r#"(step t1 (cl (and
@@ -2470,10 +2571,10 @@ mod tests {
                                         (>= (- (+ ((_ int_of 1) r8) ((_ int_of 1) y8)) ((_ int_of 1) x8)) 0)    
                                     )
                                     (and    ; i = 2 
-                                        (>= (- (+ ((_ int_of 2) x8) ((_ int_of 1) y8)) ((_ int_of 1) r8)) 0)    
-                                        (>= (- 0 (+ ((_ int_of 1) r8) ((_ int_of 1) x8) ((_ int_of 1) y8))) -2) 
-                                        (>= (- (+ ((_ int_of 1) r8) ((_ int_of 1) x8)) ((_ int_of 1) y8)) 0)    
-                                        (>= (- (+ ((_ int_of 1) r8) ((_ int_of 1) y8)) ((_ int_of 1) x8)) 0)    
+                                        (>= (- (+ ((_ int_of 2) x8) ((_ int_of 2) y8)) ((_ int_of 2) r8)) 0)    
+                                        (>= (- 0 (+ ((_ int_of 2) r8) ((_ int_of 2) x8) ((_ int_of 2) y8))) -2) 
+                                        (>= (- (+ ((_ int_of 2) r8) ((_ int_of 2) x8)) ((_ int_of 2) y8)) 0)    
+                                        (>= (- (+ ((_ int_of 2) r8) ((_ int_of 2) y8)) ((_ int_of 2) x8)) 0)    
                                     )
 
                                     ; Missing i = 3 
