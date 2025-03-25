@@ -499,9 +499,56 @@ pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     Ok(())
 }
 
-pub fn pbblast_bvand(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
-    println!("{} {} {}", premises.len(), args.len(), conclusion.len());
-    Err(CheckerError::Explanation(format!("TODO")))
+/// Implements the bitwise and operation.
+///
+/// The expected shape is:
+/// ```
+///     (and
+///         (= (bvand x y) r)
+///         ; FOR EACH 0=i<n:
+///         (and
+///             (>= (- xi ri) 0)
+///             (>= (- yi ri) 0)
+///             (>= (- ri (+ xi yi)) -1)
+///         )
+///     )
+/// ```
+pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    let and_list = match_term_err!((and  ...) = &conclusion[0])?;
+    // First element is bvxor
+    let (xor_term, bits_constraints) = and_list
+        .split_first_chunk::<1>()
+        .ok_or(CheckerError::Explanation("Failed to split and_list".into()))?;
+    let ((x, y), r) = match_term_err!((= (bvand x y) r) = &xor_term[0])?;
+
+    // Get bit width of `x`
+    let n = get_bit_width(x, pool)?;
+
+    for i in 0..n {
+        let (c1, c2, c3) = match_term_err!((and c1 c2 c3) = &bits_constraints[i])?;
+        // c1 : (>= (- xi ri) 0)
+        let ((xi, ri), _) = match_term_err!((>= (- xi ri) 0) = c1)?;
+        assert_bitvector_indexing(xi, i, x)?;
+        assert_bitvector_indexing(ri, i, r)?;
+
+        // c2 : (>= (- yi ri) 0)
+        let ((yi, ri), _) = match_term_err!((>= (- yi ri) 0) = c2)?;
+        assert_bitvector_indexing(yi, i, y)?;
+        assert_bitvector_indexing(ri, i, r)?;
+
+        // c3 : (>= (- ri (+ xi yi)) -1)
+        let ((ri, (xi, yi)), k) = match_term_err!((>= (- ri (+ xi yi)) k) = c3)?;
+        assert_bitvector_indexing(xi, i, x)?;
+        assert_bitvector_indexing(yi, i, y)?;
+        assert_bitvector_indexing(ri, i, r)?;
+        let k: Integer = k.as_integer_err()?;
+        rassert!(
+            k == -1,
+            CheckerError::Explanation(format!("Expected >= -1, got {}", k))
+        );
+    }
+
+    Ok(())
 }
 
 mod tests {
@@ -2737,13 +2784,12 @@ mod tests {
                                         (>= (- ((_ int_of 7) y8) ((_ int_of 7) r8)) 0)
                                         (>= (- ((_ int_of 7) r8) (+ ((_ int_of 7) x8) ((_ int_of 7) y8))) -1)
                                     )
-                                    true
                                 ))
                         :rule pbblast_bvand)"#: true,
             }
             "Invalid 8-bit AND (swapped order)" {
-                r#"(step t1 (cl (and (= (bvand x8 y8) r8)
-                                (and
+                r#"(step t1 (cl (and
+                                    (= (bvand x8 y8) r8)
                                     (and ; i=0
                                         (>= (- ((_ int_of 0) x8) ((_ int_of 0) r8)) 0)
                                         (>= (- ((_ int_of 0) y8) ((_ int_of 0) r8)) 0)
