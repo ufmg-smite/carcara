@@ -454,9 +454,7 @@ fn assert_bitvector_indexing(xi: &Rc<Term>, i: usize, x: &Rc<Term>) -> RuleResul
 pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     let and_list = match_term_err!((and  ...) = &conclusion[0])?;
     // First element is bvxor
-    let (xor_term, bits_constraints) = and_list
-        .split_first_chunk::<1>()
-        .ok_or(CheckerError::Explanation("Failed to split and_list".into()))?;
+    let (xor_term, bits_constraints) = and_list.split_at(1);
     let ((x, y), r) = match_term_err!((= (bvxor x y) r) = &xor_term[0])?;
 
     // Get bit width of `x`
@@ -512,9 +510,7 @@ pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     let and_list = match_term_err!((and  ...) = &conclusion[0])?;
     // First element is bvxor
-    let (xor_term, bits_constraints) = and_list
-        .split_first_chunk::<1>()
-        .ok_or(CheckerError::Explanation("Failed to split and_list".into()))?;
+    let (xor_term, bits_constraints) = and_list.split_at(1);
     let ((x, y), r) = match_term_err!((= (bvand x y) r) = &xor_term[0])?;
 
     // Get bit width of `x`
