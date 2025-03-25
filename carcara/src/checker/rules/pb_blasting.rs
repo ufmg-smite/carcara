@@ -2613,34 +2613,32 @@ mod tests {
     fn pbblast_bvand_1() {
         test_cases! {
             definitions = "
-            (declare-const x1 (_ BitVec 1))
-            (declare-const y1 (_ BitVec 1))
-            (declare-const r1 (_ BitVec 1))
-        ",
+                (declare-const x1 (_ BitVec 1))
+                (declare-const y1 (_ BitVec 1))
+                (declare-const r1 (_ BitVec 1))
+                ",
             "Valid 1-bit AND" {
-                r#"(step t1 (cl (and (= (bvand x1 y1) r1)
-                                (and        ; list of constraints for each bit terminating on `true`
+                r#"(step t1 (cl (and
+                                    (= (bvand x1 y1) r1)
+                                    ; list of constraints for each bit
                                     (and    ; i = 0
                                         (>= (- ((_ int_of 0) x1) ((_ int_of 0) r1)) 0)                          ; xi - ri >= 0
                                         (>= (- ((_ int_of 0) y1) ((_ int_of 0) r1)) 0)                          ; yi - ri >= 0
                                         (>= (- ((_ int_of 0) r1) (+ ((_ int_of 0) x1) ((_ int_of 0) y1))) -1)   ; ri - (xi + yi) >= -1
                                     )
-                                    true    ; end of list
                                 ))
-                        ) :rule pbblast_bvand)"#: true,
+                        :rule pbblast_bvand)"#: true,
             }
-
             "Invalid 1-bit AND (missing constraint)" {
-                r#"(step t1 (cl (and (= (bvand x1 y1) r1)
-                                (and
-                                    (and
+                r#"(step t1 (cl (and
+                                    (= (bvand x1 y1) r1)
+                                    (and   
                                         (>= (- ((_ int_of 0) x1) ((_ int_of 0) r1)) 0)
                                         ;; Missing y_i - r_i >= 0
                                         (>= (- ((_ int_of 0) r1) (+ ((_ int_of 0) x1) ((_ int_of 0) y1))) -1)
                                     )
-                                    true
                                 ))
-                        ) :rule pbblast_bvand)"#: false,
+                        :rule pbblast_bvand)"#: false,
             }
         }
     }
@@ -2654,39 +2652,36 @@ mod tests {
             (declare-const r2 (_ BitVec 2))
         ",
             "Valid 2-bit AND" {
-                r#"(step t1 (cl (and (= (bvand x2 y2) r2)
-                                (and
-                                    (and ; i=0
+                r#"(step t1 (cl (and
+                                    (= (bvand x2 y2) r2)
+                                    (and    ; i=0
                                         (>= (- ((_ int_of 0) x2) ((_ int_of 0) r2)) 0)
                                         (>= (- ((_ int_of 0) y2) ((_ int_of 0) r2)) 0)
                                         (>= (- ((_ int_of 0) r2) (+ ((_ int_of 0) x2) ((_ int_of 0) y2))) -1)
                                     )
-                                    (and ; i=1
+                                    (and    ; i=1
                                         (>= (- ((_ int_of 1) x2) ((_ int_of 1) r2)) 0)
                                         (>= (- ((_ int_of 1) y2) ((_ int_of 1) r2)) 0)
                                         (>= (- ((_ int_of 1) r2) (+ ((_ int_of 1) x2) ((_ int_of 1) y2))) -1)
                                     )
-                                    true
                                 ))
-                        ) :rule pbblast_bvand)"#: true,
+                        :rule pbblast_bvand)"#: true,
             }
-
             "Invalid 2-bit AND (wrong coefficient)" {
-                r#"(step t1 (cl (and (= (bvand x2 y2) r2)
-                                (and
-                                    (and ; i=0
+                r#"(step t1 (cl (and
+                                    (= (bvand x2 y2) r2)
+                                    (and    ; i=0
                                         (>= (- ((_ int_of 0) x2) ((_ int_of 0) r2)) 0)
-                                        (>= (- ((_ int_of 0) y2) (* 2 ((_ int_of 0) r2))) 0) ;; Invalid coefficient 2
+                                        (>= (- ((_ int_of 0) y2) (* 2 ((_ int_of 0) r2))) 0) ; invalid coefficient * 2
                                         (>= (- ((_ int_of 0) r2) (+ ((_ int_of 0) x2) ((_ int_of 0) y2))) -1)
                                     )
-                                    (and ; i=1
+                                    (and    ; i=1
                                         (>= (- ((_ int_of 1) x2) ((_ int_of 1) r2)) 0)
                                         (>= (- ((_ int_of 1) y2) ((_ int_of 1) r2)) 0)
                                         (>= (- ((_ int_of 1) r2) (+ ((_ int_of 1) x2) ((_ int_of 1) y2))) -1)
                                     )
-                                    true
                                 ))
-                        ) :rule pbblast_bvand)"#: false,
+                        :rule pbblast_bvand)"#: false,
             }
         }
     }
@@ -2700,8 +2695,8 @@ mod tests {
             (declare-const r8 (_ BitVec 8))
         ",
             "Valid 8-bit AND" {
-                r#"(step t1 (cl (and (= (bvand x8 y8) r8)
-                                (and
+                r#"(step t1 (cl (and
+                                    (= (bvand x8 y8) r8)
                                     (and ; i=0
                                         (>= (- ((_ int_of 0) x8) ((_ int_of 0) r8)) 0)
                                         (>= (- ((_ int_of 0) y8) ((_ int_of 0) r8)) 0)
@@ -2744,7 +2739,7 @@ mod tests {
                                     )
                                     true
                                 ))
-                        ) :rule pbblast_bvand)"#: true,
+                        :rule pbblast_bvand)"#: true,
             }
             "Invalid 8-bit AND (swapped order)" {
                 r#"(step t1 (cl (and (= (bvand x8 y8) r8)
@@ -2789,9 +2784,8 @@ mod tests {
                                         (>= (- ((_ int_of 7) y8) ((_ int_of 7) r8)) 0)
                                         (>= (- ((_ int_of 7) r8) (+ ((_ int_of 7) x8) ((_ int_of 7) y8))) -1)
                                     )
-                                    true
                                 ))
-                        ) :rule pbblast_bvand)"#: false,
+                        :rule pbblast_bvand)"#: false,
             }
         }
     }
