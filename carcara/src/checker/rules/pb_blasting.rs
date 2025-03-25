@@ -441,7 +441,6 @@ fn assert_bitvector_indexing(xi: &Rc<Term>, i: usize, x: &Rc<Term>) -> RuleResul
 /// Implements the bitwise exclusive or operation.
 ///
 /// The expected shape is:
-/// ```
 ///     (and
 ///         (= (bvxor x y) r)
 ///         ; FOR EACH 0=i<n:
@@ -452,7 +451,6 @@ fn assert_bitvector_indexing(xi: &Rc<Term>, i: usize, x: &Rc<Term>) -> RuleResul
 ///             (>= (- (+ ri yi) xi) 0)
 ///         )
 ///     )
-/// ```
 pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     let and_list = match_term_err!((and  ...) = &conclusion[0])?;
     // First element is bvxor
@@ -502,7 +500,6 @@ pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// Implements the bitwise and operation.
 ///
 /// The expected shape is:
-/// ```
 ///     (and
 ///         (= (bvand x y) r)
 ///         ; FOR EACH 0=i<n:
@@ -512,7 +509,6 @@ pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 ///             (>= (- ri (+ xi yi)) -1)
 ///         )
 ///     )
-/// ```
 pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     let and_list = match_term_err!((and  ...) = &conclusion[0])?;
     // First element is bvxor
