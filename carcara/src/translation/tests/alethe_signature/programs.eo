@@ -504,6 +504,93 @@
           )
 )
 
+
+; program: $compare_context_bound_terms
+; args:
+; - term_bound A:
+; - term_unbound A:
+; return:
+;   A boolean indicating if the context-bound term "term_bound" is
+;   equivalent to "term_unbound", following syntactic equality modulo
+;   an equivalence relation that considers bound variables of the form
+;   "@var x..." (i.e., variables bound by a context) to be equivalent
+;   to just "x" (i.e., variables not bound by a context).
+;   It is useful to implement comparison in rules that introduce some binder.
+(program $compare_context_bound_terms ((A Type)
+                                       (vars @VarList)
+                                       (bool_body_bound Bool) (bool_body_unbound Bool)
+                                       (E Type) (x E)
+                                       (F Type) (G Type) (function_bound (-> F G)) (function_unbound (-> F G))
+                                       (actual_argument_bound F) (actual_argument_unbound F)
+                                       (U Type))
+         (A A) Bool
+
+         (
+          (; Quantified vars should be equal.
+           ($compare_context_bound_terms 
+                                         (forall vars bool_body_bound) 
+                                         (forall vars bool_body_unbound))
+           
+           ($compare_context_bound_terms 
+                                         bool_body_bound
+                                         bool_body_unbound)
+           )
+
+          (; Quantified vars should be equal.
+           ($compare_context_bound_terms 
+                                         (exists vars bool_body_bound) 
+                                         (exists vars bool_body_unbound))
+           
+           ($compare_context_bound_terms 
+                                         bool_body_bound
+                                         bool_body_unbound)
+           )
+
+          (
+           ($compare_context_bound_terms 
+                                          (_ function_bound actual_argument_bound)
+                                          (_ function_unbound actual_argument_unbound))
+           
+           (eo::and ($compare_context_bound_terms 
+                                          function_bound
+                                          function_unbound)
+                    ($compare_context_bound_terms 
+                                          actual_argument_bound
+                                          actual_argument_unbound))
+           )
+
+          (
+           ($compare_context_bound_terms @empty_cl @empty_cl)
+
+           true
+           )
+
+          (
+           ($compare_context_bound_terms true true)
+
+           true
+           )
+
+          (
+           ($compare_context_bound_terms false false)
+
+           true
+           )
+
+          (
+           ($compare_context_bound_terms (@var (@varlist x) x) x)
+
+           true
+           )
+
+          (
+           ($compare_context_bound_terms x x)
+
+           true
+           )
+          )
+)
+
 ;;;;;;;;;;;;;
 ;; let
 ;;;;;;;;;;;;;
