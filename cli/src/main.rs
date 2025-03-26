@@ -512,8 +512,7 @@ fn parse_command(
     options: ParseCommandOptions,
 ) -> CliResult<(ast::Problem, ast::Proof, ast::PrimitivePool)> {
     let (problem, proof) = get_instance(&options.input)?;
-    let result = parser::parse_instance(problem, proof, options.parsing.into())
-        .map_err(carcara::Error::from)?;
+    let result = parser::parse_instance(problem, proof, options.parsing.into())?;
     Ok(result)
 }
 
@@ -611,8 +610,7 @@ fn slice_command(
     options: SliceCommandOptions,
 ) -> CliResult<(ast::Problem, ast::Proof, ast::PrimitivePool)> {
     let (problem, proof) = get_instance(&options.input)?;
-    let (problem, proof, pool) = parser::parse_instance(problem, proof, options.parsing.into())
-        .map_err(carcara::Error::from)?;
+    let (problem, proof, pool) = parser::parse_instance(problem, proof, options.parsing.into())?;
 
     let node = ast::ProofNode::from_commands_with_root_id(proof.commands, &options.from)
         .ok_or_else(|| CliError::InvalidSliceId(options.from))?;

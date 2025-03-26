@@ -213,7 +213,9 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
 
         let got = check_result.is_ok();
 
-        if *expected != got {
+        if *expected == got {
+            println!("{} \"{}\"", "PASSED".bold().color(Color::Green), test_name);
+        } else {
             let (color, expectation) = if *expected {
                 (Color::Red, "expected to PASS but FAILED".red())
             } else {
@@ -228,8 +230,6 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
                 expectation,
                 error_message
             );
-        } else {
-            println!("{} \"{}\"", "PASSED".bold().color(Color::Green), test_name)
         }
     }
 }

@@ -65,15 +65,15 @@ fn check_pbblast_sum(
                     match match_term!(((_ int_of idx) bitvector) = element) {
                         Some((idx, bv)) => (Integer::from(1), idx, bv),
                         None => {
-                            return Err(CheckerError::Explanation(format!(
-                                "Summand does not match either pattern"
-                            )));
+                            return Err(CheckerError::Explanation(
+                                "Summand does not match either pattern".into(),
+                            ));
                         }
                     }
                 } else {
-                    return Err(CheckerError::Explanation(format!(
-                        "Coefficient was not found and i != 0"
-                    )));
+                    return Err(CheckerError::Explanation(
+                        "Coefficient was not found and i != 0".into(),
+                    ));
                 }
             }
         };
@@ -100,7 +100,7 @@ fn check_pbblast_sum(
 }
 
 /// A helper that checks the two summations that occur in a pseudo–Boolean constraint.
-/// Here, left_sum and right_sum come from two bitvectors left_bv and right_bv respectively.
+/// Here, `left_sum` and `right_sum` come from two bitvectors `left_bv` and `right_bv` respectively.
 /// (The overall constraint is something like `(>= (- (+ left_sum) (+ right_sum)) constant)`.)
 fn check_pbblast_constraint(
     pool: &mut dyn TermPool,
@@ -460,8 +460,8 @@ pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     // Get bit width of `x`
     let n = get_bit_width(x, pool)?;
 
-    for i in 0..n {
-        let (c1, c2, c3, c4) = match_term_err!((and c1 c2 c3 c4) = &bits_constraints[i])?;
+    for (i, item) in bits_constraints.iter().enumerate().take(n) {
+        let (c1, c2, c3, c4) = match_term_err!((and c1 c2 c3 c4) = item)?;
         // c1 : (>= (- (+ xi yi) ri) 0)
         let (((xi, yi), ri), _) = match_term_err!((>= (- (+ xi yi) ri) 0) = c1)?;
         assert_bitvector_indexing(xi, i, x)?;
@@ -516,8 +516,8 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     // Get bit width of `x`
     let n = get_bit_width(x, pool)?;
 
-    for i in 0..n {
-        let (c1, c2, c3) = match_term_err!((and c1 c2 c3) = &bits_constraints[i])?;
+    for (i, item) in bits_constraints.iter().enumerate().take(n) {
+        let (c1, c2, c3) = match_term_err!((and c1 c2 c3) = item)?;
         // c1 : (>= (- xi ri) 0)
         let ((xi, ri), _) = match_term_err!((>= (- xi ri) 0) = c1)?;
         assert_bitvector_indexing(xi, i, x)?;
