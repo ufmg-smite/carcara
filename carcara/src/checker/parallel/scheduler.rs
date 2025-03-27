@@ -36,7 +36,7 @@ impl Schedule {
     }
 
     /// Returns an iterator over the proof commands. See [`ScheduleIter`].
-    pub fn iter<'a>(&'a self, proof: &'a [ProofCommand]) -> ScheduleIter {
+    pub fn iter<'a>(&'a self, proof: &'a [ProofCommand]) -> ScheduleIter<'a> {
         ScheduleIter::new(proof, &self.steps)
     }
 }

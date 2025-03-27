@@ -151,7 +151,7 @@ struct AlethePrinter<'a> {
     smt_lib_strict: bool,
 }
 
-impl<'a> PrintProof for AlethePrinter<'a> {
+impl PrintProof for AlethePrinter<'_> {
     fn write_proof(&mut self, proof: &Proof) -> io::Result<()> {
         for (name, value) in &proof.constant_definitions {
             write!(self.inner, "(define-fun {} () ", quote_symbol(name))?;

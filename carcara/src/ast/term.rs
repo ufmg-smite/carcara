@@ -353,6 +353,7 @@ pub enum Operator {
     BvSGt,
     BvSGe,
     BvBbTerm,
+    BvPBbTerm,
 
     // Misc.
     /// The `rare-list` operator, used to represent RARE lists.
@@ -364,6 +365,7 @@ pub enum ParamOperator {
     // Indexed operators
     BvExtract,
     BvBitOf,
+    BvIntOf,
     ZeroExtend,
     SignExtend,
     BvConst,
@@ -472,6 +474,7 @@ impl_str_conversion_traits!(Operator {
     BvSGt: "bvsgt",
     BvSGe: "bvsge",
     BvBbTerm: "bbterm",
+    BvPBbTerm: "pbbterm",
 
     RareList: "rare-list",
 });
@@ -479,6 +482,7 @@ impl_str_conversion_traits!(Operator {
 impl_str_conversion_traits!(ParamOperator {
     BvExtract: "extract",
     BvBitOf: "bit_of",
+    BvIntOf: "int_of",
     ZeroExtend: "zero_extend",
     SignExtend: "sign_extend",
     BvConst: "bv",
@@ -560,8 +564,8 @@ impl Term {
     }
 
     /// Constructs a new bv term.
-    pub fn new_bv(value: impl Into<Integer>, widht: impl Into<Integer>) -> Self {
-        Term::Const(Constant::BitVec(value.into(), widht.into()))
+    pub fn new_bv(value: impl Into<Integer>, width: impl Into<Integer>) -> Self {
+        Term::Const(Constant::BitVec(value.into(), width.into()))
     }
 
     /// Constructs a new variable term.
@@ -643,6 +647,15 @@ impl Term {
         match match_term!((-x) = self) {
             Some(x) => x.as_integer().map(|r| -r),
             None => self.as_integer(),
+        }
+    }
+
+    /// Tries to extract a `BitVec` from a term. Returns `Some` if the
+    /// term is a bitvector constant.
+    pub fn as_bitvector(&self) -> Option<(Integer, Integer)> {
+        match self {
+            Term::Const(Constant::BitVec(v, w)) => Some((v.clone(), w.clone())),
+            _ => None,
         }
     }
 

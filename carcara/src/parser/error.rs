@@ -21,7 +21,7 @@ pub enum ParserError {
     LeadingZero(String),
 
     /// The lexer encountered a numerical literal that contained a division by zero, e.g. '1/0'.
-    #[error("divison by zero in numerical literal: '{0}'")]
+    #[error("division by zero in numerical literal: '{0}'")]
     DivisionByZeroInLiteral(String),
 
     /// The lexer encountered a `\` character while reading a quoted symbol.
@@ -36,8 +36,8 @@ pub enum ParserError {
     #[error("unexpected EOF in string literal")]
     EofInString,
 
-    /// The lexer encountered an invalid unicode value in an escape sequence.
-    #[error("invalid unicode value: 0x'{0}'")]
+    /// The lexer encountered an invalid Unicode value in an escape sequence.
+    #[error("invalid Unicode value: 0x'{0}'")]
     InvalidUnicode(String),
 
     /// The lexer encountered a bitvector literal with no actual digits. This
