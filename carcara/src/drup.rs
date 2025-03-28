@@ -1,10 +1,12 @@
 use crate::ast::*;
 use indexmap::IndexSet;
 use std::borrow::{Borrow, BorrowMut};
-use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use thiserror::Error;
+
+type Literal = (bool, Rc<Term>);
 
 #[derive(Debug)]
 pub enum Implied<T, X> {
@@ -13,11 +15,11 @@ pub enum Implied<T, X> {
     NotUnsat(),
 }
 // A RUP Addition is a vector of the clause plus the unit clause and the hash of the clause
-pub type RupAdition = Vec<(IndexSet<(bool, Rc<Term>)>, Option<(bool, Rc<Term>)>, u64)>;
+pub type RupAdition = Vec<(IndexSet<Literal>, Option<Literal>, u64)>;
 
 //This enum is used to bookkeeping the action perfomed by a reverse unit propagation
 pub enum DRupProofAction {
-    RupStory(IndexSet<(bool, Rc<Term>)>, RupAdition),
+    RupStory(IndexSet<Literal>, RupAdition),
     Delete(Rc<Term>),
 }
 
@@ -52,19 +54,15 @@ pub fn hash_term<T: Borrow<Rc<Term>>>(pool: &mut dyn TermPool, term: T) -> u64 {
 
     let mut s = DefaultHasher::new();
     term.hash(&mut s);
-    let hash = s.finish();
-    return hash;
+    s.finish()
 }
 
 // This function search for a unit clause by using the two literals in the pair associated in each indexset
 // additionally clauses is mutable since this function also fix the two watched literal whenever a new unit clause is propagated
 fn get_implied_clause(
-    clauses: &mut Vec<(
-        (Option<(bool, Rc<Term>)>, Option<(bool, Rc<Term>)>),
-        (IndexSet<(bool, Rc<Term>)>, u64),
-    )>,
-    env: &HashMap<(bool, Rc<Term>), bool>,
-) -> Implied<(bool, Rc<Term>), (IndexSet<(bool, Rc<Term>)>, u64)> {
+    clauses: &mut Vec<((Option<Literal>, Option<Literal>), (IndexSet<Literal>, u64))>,
+    env: &HashMap<Literal, bool>,
+) -> Implied<Literal, (IndexSet<Literal>, u64)> {
     if clauses.is_empty() {
         return Implied::NotUnsat();
     }
@@ -94,16 +92,16 @@ fn get_implied_clause(
                         let mut unset_literal = None;
                         let mut not_unit = false;
 
-                        for (b1, t1) in lits.iter() {
+                        for (b1, t1) in &*lits {
                             let assign_state = env.get(&(*b1, (*t1).clone()));
 
                             match assign_state {
                                 None => {
                                     let literal = Some((*b1, (*t1).clone()));
                                     if schema.0 != literal && schema.1 != literal {
-                                        if schema.0 != None {
+                                        if schema.0.is_some() {
                                             schema.0 = literal;
-                                        } else if schema.1 != None {
+                                        } else if schema.1.is_some() {
                                             schema.1 = literal;
                                         }
                                     }
@@ -119,9 +117,9 @@ fn get_implied_clause(
                                     // Set the true clause as a watched literal to avoid searching O(n) in this "deleted" clause
                                     let literal = Some((*b1, (*t1).clone()));
                                     if schema.0 != literal && schema.1 != literal {
-                                        if schema.0 != None {
+                                        if schema.0.is_some() {
                                             schema.0 = literal;
-                                        } else if schema.1 != None {
+                                        } else if schema.1.is_some() {
                                             schema.1 = literal;
                                         }
                                     }
@@ -153,23 +151,20 @@ fn get_implied_clause(
 
 // Perform *only* rup (reverse unit propagation) in a set of clauses and a "goal", here the goal is the implied clause by
 // F /\ ~ C |- \bottom
-fn rup<'a, 'b>(
+fn rup(
     pool: &mut dyn TermPool,
-    drup_clauses: &HashMap<u64, IndexSet<(bool, Rc<Term>)>>,
-    goal: &'a [Rc<Term>],
+    drup_clauses: &HashMap<u64, IndexSet<Literal>>,
+    goal: &[Rc<Term>],
 ) -> Option<RupAdition> {
     let mut unit_story: RupAdition = vec![];
 
-    let mut clauses: Vec<(
-        (Option<(bool, Rc<Term>)>, Option<(bool, Rc<Term>)>),
-        (IndexSet<(bool, Rc<Term>)>, u64),
-    )> = vec![];
+    let mut clauses = vec![];
 
-    let mut env: HashMap<(bool, Rc<Term>), bool> = HashMap::new();
+    let mut env: HashMap<Literal, bool> = HashMap::new();
 
     for term in goal {
         let (p, regular_term) = term.remove_all_negations_with_polarity();
-        let mut clause: IndexSet<(bool, Rc<Term>)> = IndexSet::new();
+        let mut clause: IndexSet<Literal> = IndexSet::new();
         clause.insert((!p, regular_term.clone()));
         clauses.push((
             (Some((!p, regular_term.clone())), None),
@@ -213,11 +208,11 @@ fn rup<'a, 'b>(
 
 // This implements the rule for drup checking, by using a chain of goals that calls RUP, check_rat is optional in case if you
 // want to check also for RAT format
-pub fn check_drup<'a>(
+pub fn check_drup(
     pool: &mut dyn TermPool,
     conclusion: Rc<Term>,
     premises: &[Rc<Term>],
-    args: &'a [Rc<Term>],
+    args: &[Rc<Term>],
     check_rat: bool,
 ) -> Result<DRupStory, DrupFormatError> {
     let mut premises: HashMap<u64, _> = premises
@@ -239,29 +234,24 @@ pub fn check_drup<'a>(
 
     let mut drup_history: DRupStory = vec![];
     for t in args {
-        match match_term!((delete (cl ...)) = &t) {
-            Some(terms) => {
-                let clause_term = if terms.len() > 0 {
-                    build_term!(pool, (cl[terms.to_vec()]))
-                } else {
-                    terms[0].clone()
-                };
-                premises.remove(&hash_term(pool, &clause_term));
-                drup_history.push(DRupProofAction::Delete(clause_term));
-                continue;
-            }
-            None => (),
+        if let Some(terms) = match_term!((delete (cl ...)) = &t) {
+            let clause_term = if terms.is_empty() {
+                terms[0].clone()
+            } else {
+                build_term!(pool, (cl[terms.to_vec()]))
+            };
+            premises.remove(&hash_term(pool, &clause_term));
+            drup_history.push(DRupProofAction::Delete(clause_term));
+            continue;
         }
 
         let terms = match_term!((cl ...) = &t).unwrap();
-        let mut unit_history: Option<
-            Vec<(IndexSet<(bool, Rc<Term>)>, Option<(bool, Rc<Term>)>, u64)>,
-        > = rup(pool, premises.borrow(), terms);
-        if unit_history == None && terms.len() > 0 && check_rat {
+        let mut unit_history = rup(pool, premises.borrow(), terms);
+        if unit_history.is_none() && !terms.is_empty() && check_rat {
             unit_history = check_drat(pool, premises.borrow(), terms);
         }
 
-        if unit_history == None {
+        if unit_history.is_none() {
             return if check_rat {
                 Err(DrupFormatError::NotInRatFormat)
             } else {
@@ -294,14 +284,14 @@ pub fn check_drup<'a>(
 
 // Checks RAT, essentially rat is equivalent to RUP plus a blocked clause
 // (eg. given a clause C \/ p, we look for RUP in every D \/ ~ p in the set clause)
-pub fn check_drat<'a>(
+pub fn check_drat(
     pool: &mut dyn TermPool,
-    drup_clauses: &HashMap<u64, IndexSet<(bool, Rc<Term>)>>,
-    goal: &'a [Rc<Term>],
+    drup_clauses: &HashMap<u64, IndexSet<Literal>>,
+    goal: &[Rc<Term>],
 ) -> Option<RupAdition> {
     let pivot = &goal[0];
     let mut unit_history = vec![];
-    for (_, clause) in drup_clauses {
+    for clause in drup_clauses.values() {
         let (p, regular_term) = pivot.remove_all_negations_with_polarity();
         let negated_pivot = (!p, regular_term.clone());
 
@@ -312,10 +302,10 @@ pub fn check_drat<'a>(
                 .iter()
                 .map(|(p, literal)| {
                     if *p {
-                        return (*literal).clone();
+                        literal.clone()
                     } else {
-                        return build_term!(pool, (not { (*literal).clone() }));
-                    };
+                        build_term!(pool, (not { (*literal).clone() }))
+                    }
                 })
                 .collect::<Vec<_>>();
 
@@ -328,5 +318,5 @@ pub fn check_drat<'a>(
         }
     }
 
-    return Some(unit_history);
+    Some(unit_history)
 }
