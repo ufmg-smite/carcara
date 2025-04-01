@@ -2,10 +2,10 @@
 //! contains two definitions of equality that differ from `PartialEq`:
 //!
 //! - `polyeq` considers `=` terms that are reflections of each other as equal, meaning the terms
-//! `(= a b)` and `(= b a)` are considered equal by this method.
+//!     `(= a b)` and `(= b a)` are considered equal by this method.
 //!
 //! - `alpha_equiv` compares terms by alpha-equivalence, meaning it implements equality of terms
-//! modulo renaming of bound variables.
+//!     modulo renaming of bound variables.
 
 use rug::Rational;
 
@@ -70,12 +70,13 @@ pub fn alpha_equiv(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> bool {
 /// Configuration for a `Polyeq`.
 ///
 /// - If `is_mod_reordering` is `true`, the comparator will compare terms modulo reordering of
-/// equalities.
+///     equalities.
 //  - If `is_alpha_equivalence` is `true`, the comparator will compare terms for alpha
-/// equivalence.
+///     equivalence.
 /// - If `is_mod_nary` is `true`, the comparator will compare terms modulo the expansion of
-/// n-ary operators.
+///     n-ary operators.
 /// - If `is_mod_string_concat` is `true`, the comparator will compare terms modulo the collection of
+///
 /// String constants arguments in the String concatenation.
 #[derive(Default)]
 pub struct PolyeqConfig {
@@ -885,6 +886,7 @@ fn nary_case(op: Operator) -> Option<NaryCase> {
         | Operator::BvSGt
         | Operator::BvSGe
         | Operator::BvBbTerm
+        | Operator::BvPBbTerm
         | Operator::RareList => None,
     }
 }

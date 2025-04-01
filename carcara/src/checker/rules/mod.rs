@@ -157,6 +157,8 @@ fn assert_is_bool_constant(got: &Rc<Term>, expected: bool) -> RuleResult {
 
 #[cfg(test)]
 fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
+    use colored::{Color, Colorize};
+
     use crate::{checker, parser};
     use std::io::Cursor;
 
@@ -193,12 +195,34 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
         }));
 
         let mut checker = checker::ProofChecker::new(&mut pool, checker::Config::new());
-        let got = checker.check(&problem, &proof).is_ok();
-        assert_eq!(
-            *expected, got,
-            "test case \"{}\" index {} failed",
-            test_name, i
-        );
+        let check_result = checker.check(&problem, &proof);
+
+        // Extract error message, if any
+        let error_message = match &check_result {
+            Ok(_) => String::new(),
+            Err(e) => format!("{}", e),
+        };
+
+        let got = check_result.is_ok();
+
+        if *expected == got {
+            println!("{} \"{}\"", "PASSED".bold().color(Color::Green), test_name);
+        } else {
+            let (color, expectation) = if *expected {
+                (Color::Red, "expected to PASS but FAILED".red())
+            } else {
+                (Color::Yellow, "expected to FAIL but PASSED".yellow())
+            };
+
+            panic!(
+                "{}\nTest '{}' case {}: {}\nOUTCOME: {}",
+                "TEST FAILURE".bold().color(color),
+                test_name.bold(),
+                i.to_string().bold(),
+                expectation,
+                error_message
+            );
+        }
     }
 }
 

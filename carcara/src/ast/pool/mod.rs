@@ -141,7 +141,7 @@ impl PrimitivePool {
                     Sort::BitVec(width)
                 }
                 Operator::BvComp => Sort::BitVec(Integer::ONE.into()),
-                Operator::BvBbTerm => Sort::BitVec(Integer::from(args.len())),
+                Operator::BvBbTerm | Operator::BvPBbTerm => Sort::BitVec(Integer::from(args.len())),
                 Operator::BvConcat => {
                     let mut total_width = Integer::ZERO;
                     for arg in args {
@@ -232,9 +232,10 @@ impl PrimitivePool {
                         Sort::BitVec(extension_width + bv_width)
                     }
                     ParamOperator::BvConst => unreachable!(
-                        "bv const should be handled by the parser and transfromed into a constant"
+                        "bv const should be handled by the parser and transformed into a constant"
                     ),
                     ParamOperator::BvBitOf => Sort::Bool,
+                    ParamOperator::BvIntOf => Sort::Int,
                     ParamOperator::RePower | ParamOperator::ReLoop => Sort::RegLan,
                     ParamOperator::ArrayConst => op_args[0].as_sort().unwrap().clone(),
                 };

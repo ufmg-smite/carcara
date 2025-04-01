@@ -12,6 +12,9 @@ pub enum CheckerError {
     #[error("unspecified error")]
     Unspecified,
 
+    #[error("{0}")]
+    Explanation(String),
+
     #[error(transparent)]
     Substitution(#[from] SubstitutionError),
 
@@ -176,7 +179,7 @@ pub enum EqualityError<T: TypeName> {
 
 struct DisplayIndexedOp<'a>(&'a ParamOperator, &'a Vec<Rc<Term>>);
 
-impl<'a> fmt::Display for DisplayIndexedOp<'a> {
+impl fmt::Display for DisplayIndexedOp<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "(_ {}", self.0)?;
         for a in self.1 {
@@ -325,7 +328,7 @@ pub enum SubproofError {
 /// A wrapper struct that implements `fmt::Display` for linear combinations.
 struct DisplayLinearComb<'a>(&'a Operator, &'a LinearComb);
 
-impl<'a> fmt::Display for DisplayLinearComb<'a> {
+impl fmt::Display for DisplayLinearComb<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fn write_var(f: &mut fmt::Formatter, (var, coeff): (&Rc<Term>, &Rational)) -> fmt::Result {
             if *coeff == 1i32 {
