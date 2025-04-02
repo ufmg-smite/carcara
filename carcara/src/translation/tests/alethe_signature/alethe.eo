@@ -302,25 +302,18 @@
 (program $check_bind ((context Bool) 
                       (T Type) (l T) (r T) (l1 T) (r1 T)
                       (premise Bool) 
-                      (lhs_vars @VarList) (lhs_body_bound Bool) 
-                      (lhs_body_unbound Bool)
-                      (rhs_vars @VarList) (rhs_body_bound Bool) 
+                      (lhs_vars @VarList) (lhs_body Bool) 
+                      (rhs_vars @VarList) (rhs_body Bool) 
                       (rhs_body_unbound Bool))
   (Bool Bool Bool) Bool
   (
    (
     ($check_bind context
-                 (@cl (= lhs_body_bound rhs_body_bound))
-                 (@cl (= (forall lhs_vars lhs_body_unbound) 
-                         (forall rhs_vars rhs_body_unbound))))
+                 (@cl (= lhs_body rhs_body))
+                 (@cl (= (forall lhs_vars lhs_body) 
+                         (forall rhs_vars rhs_body))))
 
     (eo::and
-     ; lhs_body_bound and lhs_body_unbound should be equal syntactically, modulo
-     ; an equivalence between context-bound variables "@var x" and their 
-     ; quantifier-bound version "x"
-     ($compare_context_bound_terms lhs_body_bound lhs_body_unbound)
-     ($compare_context_bound_terms rhs_body_bound rhs_body_unbound)
-
      ; Every variable in rhs_vars appear fixed in "context".
      ($context_vars_are_fixed context rhs_vars)
      
@@ -331,27 +324,21 @@
 
      ; rhs_vars should not appear free in (forall lhs_vars lhs_body_unbound)
      ($f_list_equal @varlist
-                    ($fv (forall lhs_vars lhs_body_unbound))
+                    ($fv (forall lhs_vars lhs_body))
                     ; TODO: duplicating calculations
                     ($f_list_filter @varlist
                                     @varlist.nil
-                                    ($fv (forall lhs_vars lhs_body_unbound))
-                                    ($flag_members ($fv (forall lhs_vars lhs_body_unbound))
+                                    ($fv (forall lhs_vars lhs_body))
+                                    ($flag_members ($fv (forall lhs_vars lhs_body))
                                                    rhs_vars))))
     )
 
    (
     ($check_bind context
-                 (@cl (= lhs_body_bound rhs_body_bound))
-                 (@cl (= (exists lhs_vars lhs_body_unbound) (exists rhs_vars rhs_body_unbound))))
+                 (@cl (= lhs_body rhs_body))
+                 (@cl (= (exists lhs_vars lhs_body) (exists rhs_vars rhs_body))))
 
     (eo::and
-     ; lhs_body_bound and lhs_body_unbound should be equal syntactically, modulo
-     ; an equivalence between context-bound variables "@var x" and their 
-     ; quantifier-bound version "x"
-     ($compare_context_bound_terms lhs_body_bound lhs_body_unbound)
-     ($compare_context_bound_terms rhs_body_bound rhs_body_unbound)
-
      ; Every variable in rhs_vars appear fixed in "context".
      ($context_vars_are_fixed context rhs_vars)
      
@@ -362,12 +349,12 @@
 
      ; rhs_vars should not appear free in (forall lhs_vars lhs_body)
      ($f_list_equal @varlist
-                    ($fv (forall lhs_vars lhs_body_unbound))
+                    ($fv (forall lhs_vars lhs_body))
                     ; TODO: duplicating calculations
                     ($f_list_filter @varlist
                                     @varlist.nil
-                                    ($fv (forall lhs_vars lhs_body_unbound))
-                                    ($flag_members ($fv (forall lhs_vars lhs_body_unbound))
+                                    ($fv (forall lhs_vars lhs_body))
+                                    ($flag_members ($fv (forall lhs_vars lhs_body))
                                                    rhs_vars))))
     )
    )
