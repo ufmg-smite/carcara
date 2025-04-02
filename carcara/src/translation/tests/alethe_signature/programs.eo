@@ -777,6 +777,13 @@
                                           vars))
            )
 
+          (; We consider (@var varlist x) as our representation of variables 
+           ; introduced by some binder. 
+           ($fv (@var (@varlist x) x))
+
+           ($f_list_cons @varlist (@var (@varlist x) x) @varlist.nil)
+           )
+
           (
            ($fv (_ function actual_argument))
            
@@ -809,7 +816,7 @@
            )
 
           ; { x is a var }
-          (
+          (; This should represent a definition introduced in the smt problem.
            ($fv x)
 
            ($f_list_cons @varlist x @varlist.nil)
