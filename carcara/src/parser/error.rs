@@ -61,7 +61,7 @@ pub enum ParserError {
     #[error("sort error: {0}")]
     SortError(#[from] SortError),
 
-    /// Expected BvSort
+    /// Expected `BvSort`
     #[error("expected bitvector sort, got '{0}'")]
     ExpectedBvSort(Sort),
 
