@@ -170,11 +170,10 @@
 ;           B
 ;           B)
 ; note: >
-;    Used to bind variables in a context.
-(declare-const @var (-> (! Type :var B :implicit)
-                       (! @VarList :var L)
-                       B
-                       B) :binder @varlist)
+;    Represents an undefined inhabitant of a given type. 
+;    Used to represent variables bound by some binder.
+(declare-const @var (-> (! Type :var B :implicit) (! @VarList :var L) B B) 
+               :binder @varlist)
 
 ; Checks that the context ctx is an extension of old_ctx.
 ;TODO
