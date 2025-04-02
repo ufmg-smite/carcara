@@ -80,23 +80,38 @@ impl EunoiaTranslator {
     /// - `context_introduced`: boolean flag indicated if the opened
     ///   scope belongs to a newly introduced "context" (through "anchor").
     fn open_scope(&mut self, context_introduced: bool) {
-        // TODO: reusing variables_in_scope concept
-        // for this new kind of scope (not the one
-        // related with contexts introduced through
-        // "anchor" commands).
-        // TODO: abstract all these steps related with opening and
-        // closing contexts into a single method.
-        self.variables_in_scope.push_scope();
-        self.contexts_opened += 1;
+        if context_introduced {
+            self.contexts_opened += 1;
+        }
+
+        // NOTE: HashMapStack::new() adds a scope. We only push another
+        // scope if this is not the first time open_scope was called, in order
+        // to maintain invariant
+        // self.context_introduced.len() == self.variables_in_scope.height()
+        if !self.context_introduced.is_empty() {
+            // NOTE: reusing variables_in_scope concept
+            // for this new kind of scope (not the one
+            // related with contexts introduced through
+            // "anchor" commands).
+            self.variables_in_scope.push_scope();
+        }
+
         self.context_introduced.push(context_introduced);
     }
 
     /// Closes the last open scope.
-    /// PRE : { `self.contexts_opened` >= 1 }
+    /// PRE : { `self.context_introduced.len()` >= 1 }
     fn close_scope(&mut self) {
-        self.contexts_opened -= 1;
         self.variables_in_scope.pop_scope();
-        self.context_introduced.pop();
+
+        // TODO: let Some(true)?
+        let context_introduced = self.context_introduced.pop();
+
+        if context_introduced == Some(true) {
+            // We are closing a context (instead of closing the scope of some other
+            // binder).
+            self.contexts_opened -= 1;
+        }
     }
 
     pub fn translate<'a>(&'a mut self, proof: &Rc<ProofNode>) -> &'a EunoiaProof {
@@ -255,7 +270,10 @@ impl EunoiaTranslator {
 
     /// For a given "nesting" level (some number <= `self.contexts_opened`),
     /// returns the index of the last surrounding context actually introduced
-    /// within the proof certificate.
+    /// within the proof certificate. This is so since scopes are used to
+    /// represent variables bound in contexts and by other binding constructions,
+    /// like quantifiers. This method helps to recover the index of the last
+    /// scope actually referring to a context.
     /// PRE: { 0 < `nesting_level` < `self.contexts_opened`}
     fn get_last_introduced_context(&self, nesting_level: usize) -> usize {
         let mut last_scope: usize = 0;
@@ -268,6 +286,101 @@ impl EunoiaTranslator {
         }
 
         last_scope
+    }
+
+    /// Abstracts the process of traversing a given context, identifying the fixed
+    /// variables and the substitutions. Returns the corresponding list of
+    /// variables and substitutions to be used when building a @ctx.
+    fn process_anchor_context(&mut self, context: &[AnchorArg]) -> Vec<EunoiaTerm> {
+        let mut ctx_params = Vec::new();
+        // Variables bound by the context
+        let mut context_domain = Vec::new();
+        // Actual substitution induced by the context
+        let mut subst: Vec<EunoiaTerm> = Vec::new();
+        // Dummy initial value
+        let mut eunoia_sort: EunoiaTerm = EunoiaTerm::True;
+
+        context.iter().for_each(|arg| match arg {
+            AnchorArg::Variable((name, sort)) => {
+                // TODO: either use borrows or implement
+                // Copy trait for EunoiaTerms
+                eunoia_sort = self.translate_term(sort);
+
+                self.variables_in_scope
+                    .insert(name.clone(), eunoia_sort.clone());
+
+                context_domain.push(EunoiaTerm::List(vec![
+                    EunoiaTerm::Id(name.clone()),
+                    eunoia_sort.clone(),
+                ]));
+            }
+
+            AnchorArg::Assign((name, sort), term) => {
+                // TODO: either use borrows or implement
+                // Copy trait for EunoiaTerms
+                eunoia_sort = self.translate_term(sort);
+
+                // TODO: ugly patch...
+                let rhs: EunoiaTerm = match term.deref() {
+                    Term::Var(string, _) => EunoiaTerm::Id(string.clone()),
+
+                    _ => self.translate_term(term),
+                };
+
+                context_domain.push(EunoiaTerm::List(vec![
+                    EunoiaTerm::Id(name.clone()),
+                    eunoia_sort.clone(),
+                ]));
+
+                self.variables_in_scope
+                    .insert(name.clone(), eunoia_sort.clone());
+
+                // match self.variables_in_scope.get_with_depth(name) {
+                //     Some((depth, _)) => {
+                //         if depth < self.variables_in_scope.height() - 1 {
+                //             // This variable is bound somewhere else.  We
+                //             // shadow any previous def.
+                //             self.variables_in_scope
+                //                 .insert(name.clone(), eunoia_sort.clone());
+                //         }
+                //     }
+
+                //     None => {
+                //         // This variable is not bound somewhere else.
+                //         self.variables_in_scope
+                //             .insert(name.clone(), eunoia_sort.clone());
+                //     }
+                // }
+
+                // Substitution map of the form name -> rhs: we
+                // reify it as a term (= name rhs)
+                subst.push(EunoiaTerm::App(
+                    self.alethe_signature.eq.clone(),
+                    vec![EunoiaTerm::Id(name.clone()), rhs],
+                ));
+            }
+        });
+
+        // TODO: do not hard-code this string
+        // TODO: ugly!
+        subst.push(EunoiaTerm::Id(
+            String::from("ctx")
+                + &(self.get_last_introduced_context(self.contexts_opened - 1) + 1).to_string(),
+        ));
+
+        // Add typed params.
+        if context_domain.is_empty() {
+            // Empty VarList
+            ctx_params.push(EunoiaTerm::Id(self.alethe_signature.varlist_nil.clone()));
+        } else {
+            // TODO: shouldn' we build it with @varlist?
+            ctx_params.push(EunoiaTerm::List(context_domain));
+        }
+
+        // Concat (and...)
+        ctx_params.push(EunoiaTerm::App(self.alethe_signature.and.clone(), subst));
+
+        ctx_params
     }
 
     /// Implements the actual translation logic, after the original `ProofNode` graph
@@ -329,20 +442,7 @@ impl EunoiaTranslator {
                 // A subproof introduced by the 'anchor' command.
                 ProofNode::Subproof(SubproofNode { last_step, args, .. }) => {
                     // To store @VarList parameters to @ctx
-                    let mut ctx_params = Vec::new();
-                    let mut ctx_typed_params = Vec::new();
-                    // To store actual parameters of 'and'
-                    let mut and_params: Vec<EunoiaTerm> = Vec::new();
-                    // Dummy initial value
-                    let mut eunoia_sort: EunoiaTerm = EunoiaTerm::True;
-
-                    // New context opened. For scope reasoning purpose, we do this even
-                    // if the anchor command does not introduce new variables (
-                    // TODO: poor performance
-                    // // Maintain variables from previous scope...
-                    // self.variables_in_scope
-                    //     .push(self.variables_in_scope[self.contexts_opened - 1].clone());
-                    // self.local_steps.push(Vec::new());
+                    let ctx_params;
 
                     if args.is_empty() {
                         self.open_scope(false);
@@ -350,92 +450,8 @@ impl EunoiaTranslator {
                         // { !args.is_empty() }
                         // We actually have an anchor introducing new variables
                         self.open_scope(true);
-
-                        args.iter().for_each(|arg| match arg {
-                            AnchorArg::Variable((name, sort)) => {
-                                // TODO: either use borrows or implement
-                                // Copy trait for EunoiaTerms
-                                eunoia_sort = self.translate_term(sort);
-
-                                self.variables_in_scope
-                                    .insert(name.clone(), eunoia_sort.clone());
-
-                                ctx_typed_params.push(EunoiaTerm::List(vec![
-                                    EunoiaTerm::Id(name.clone()),
-                                    eunoia_sort.clone(),
-                                ]));
-                            }
-
-                            AnchorArg::Assign((name, sort), term) => {
-                                // TODO: either use borrows or implement
-                                // Copy trait for EunoiaTerms
-                                eunoia_sort = self.translate_term(sort);
-
-                                // TODO: ugly patch...
-                                let rhs: EunoiaTerm = match term.deref() {
-                                    Term::Var(string, _) => EunoiaTerm::Id(string.clone()),
-
-                                    _ => self.translate_term(term),
-                                };
-
-                                match self.variables_in_scope.get_with_depth(name) {
-                                    Some((depth, _)) => {
-                                        if depth < self.variables_in_scope.height() - 1 {
-                                            // This variable is bound somewhere else
-                                            ctx_typed_params.push(EunoiaTerm::List(vec![
-                                                EunoiaTerm::Id(name.clone()),
-                                                eunoia_sort.clone(),
-                                            ]));
-
-                                            self.variables_in_scope
-                                                .insert(name.clone(), eunoia_sort.clone());
-                                        }
-                                    }
-
-                                    None => {
-                                        // This variable is bound somewhere else. We
-                                        // shadow any previous def.
-                                        ctx_typed_params.push(EunoiaTerm::List(vec![
-                                            EunoiaTerm::Id(name.clone()),
-                                            eunoia_sort.clone(),
-                                        ]));
-
-                                        self.variables_in_scope
-                                            .insert(name.clone(), eunoia_sort.clone());
-                                    }
-                                }
-
-                                // self.variables_in_scope
-                                //     .insert(name.clone(), eunoia_sort.clone());
-                                and_params.push(EunoiaTerm::App(
-                                    self.alethe_signature.eq.clone(),
-                                    vec![EunoiaTerm::Id(name.clone()), rhs],
-                                ));
-                            }
-                        });
-                        // TODO: do not hard-code this string
-                        // TODO: ugly!
-                        and_params.push(EunoiaTerm::Id(
-                            String::from("ctx")
-                                + &(self.get_last_introduced_context(self.contexts_opened - 1) + 1)
-                                    .to_string(),
-                        ));
-
-                        // Add typed params.
-                        if ctx_typed_params.is_empty() {
-                            // Empty VarList
-                            ctx_params
-                                .push(EunoiaTerm::Id(self.alethe_signature.varlist_nil.clone()));
-                        } else {
-                            // TODO: shouldn' we build it with @varlist?
-                            ctx_params.push(EunoiaTerm::List(ctx_typed_params));
-                        }
-
-                        // Concat (and...)
-                        ctx_params.push(EunoiaTerm::App(
-                            self.alethe_signature.and.clone(),
-                            and_params,
-                        ));
+                        assert!(self.context_introduced[self.context_introduced.len() - 1]);
+                        ctx_params = self.process_anchor_context(args);
 
                         // Define and open a new context
                         // (define ctxn () (@ctx ...))
@@ -446,7 +462,6 @@ impl EunoiaTranslator {
                         self.eunoia_proof.push(EunoiaCommand::Define {
                             name: context_name.clone(),
                             typed_params: EunoiaList { list: Vec::new() },
-                            // TODO: define @ctx in theory.rs
                             term: EunoiaTerm::App(String::from("@ctx"), ctx_params),
                             attrs: Vec::new(),
                         });
@@ -478,8 +493,6 @@ impl EunoiaTranslator {
                             panic!();
                         }
                     }
-
-                    // TODO: clean contextual assumptions and var. defs.
                 }
             }
         });
@@ -512,19 +525,12 @@ impl EunoiaTranslator {
 
             // TODO: not considering the sort of the variable.
             Term::Var(string, _) => {
-                // Check if it is a context variable.
+                // Check if it is variable introduced by some binder
                 match self.variables_in_scope.get(string) {
                     Some(_) => self.build_var_binding(string),
 
                     None => EunoiaTerm::Id(string.clone()),
                 }
-
-                // if !self.variables_in_scope.is_empty()
-                //     && self.variables_in_scope.contains_key(string) {
-                //         self.build_var_binding(string)
-                // } else {
-                //         EunoiaTerm::Id(string.clone())
-                // }
             }
 
             Term::App(fun, params) => {
@@ -564,19 +570,22 @@ impl EunoiaTranslator {
                     }
                 }
 
-                self.close_scope();
-
-                EunoiaTerm::HOApp(
+                let final_let_trans = EunoiaTerm::HOApp(
                     Box::new(EunoiaTerm::App(
                         self.alethe_signature.let_binder.clone(),
                         vec![translated_binding_list, self.translate_term(scope)],
                     )),
                     translated_values,
-                )
+                );
+
+                self.close_scope();
+
+                final_let_trans
             }
 
             Term::Binder(binder, binding_list, scope) => {
-                // New scope.
+                // New scope to shadow those context variables that
+                // now bound by this binder.
                 // TODO: reusing variables_in_scope concept
                 // for this new kind of scope (not the one
                 // related with contexts introduced through
@@ -657,8 +666,10 @@ impl EunoiaTranslator {
         }
     }
 
-    /// For a given bound variable name "id", it builds and returns
-    /// its representation in Eunoia, using @var.
+    /// For a given variable name "id", that is bound by some
+    /// context, it builds and returns @var representation.
+    /// That is, its representation as a variable bound by some
+    /// enclosing context.
     fn build_var_binding(&self, id: &String) -> EunoiaTerm {
         // TODO: using clone, ugly...
         let sort = match self.variables_in_scope.get(id) {
@@ -694,20 +705,6 @@ impl EunoiaTranslator {
                 name.clone(),
                 Box::new(self.translate_term(sort)),
             ));
-            // if !self.variables_in_scope.is_empty()
-            //     && self.variables_in_scope[self.contexts_opened - 1].contains_key(name)
-            // {
-            //     // TODO: abstract this into a procedure
-            //     ret.push(EunoiaTerm::Var(
-            //         name.clone(),
-            //         Box::new(self.variables_in_scope[self.contexts_opened - 1][name].clone()),
-            //     ));
-            // } else {
-            //     ret.push(EunoiaTerm::Var(
-            //         name.clone(),
-            //         Box::new(self.translate_term(sort)),
-            //     ));
-            // }
         });
 
         EunoiaTerm::List(ret)
