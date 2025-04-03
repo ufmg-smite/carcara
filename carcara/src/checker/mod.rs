@@ -474,6 +474,12 @@ impl<'c> ProofChecker<'c> {
             "concat_cprop_prefix" => strings::concat_cprop_prefix,
             "concat_cprop_suffix" => strings::concat_cprop_suffix,
 
+            // cutting planes rules
+            "cp_addition" => cutting_planes::cp_addition,
+            "cp_multiplication" => cutting_planes::cp_multiplication,
+            "cp_division" => cutting_planes::cp_division,
+            "cp_saturation" => cutting_planes::cp_saturation,
+
             "string_decompose" => strings::string_decompose,
             "string_length_pos" => strings::string_length_pos,
             "string_length_non_empty" => strings::string_length_non_empty,
