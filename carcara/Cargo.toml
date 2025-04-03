@@ -3,8 +3,10 @@ name = "carcara"
 version = "1.1.0"
 authors = [
     "Bruno Andreotti <bandreotti@proton.me>",
-    "Vinícius Braga Freire <vinicius.braga.freire@gmail.com>",
+    "Haniel Barbosa <hanielbbarbosa@gmail.com>",
+    "Vinicius Gomes <vinicius.svgomes@gmail.com>",
     "Bernardo Borges <bernborgess@outlook.com>",
+    "Tiago Campos <tiagocampos@mixrank.com>",
 ]
 edition = "2021"
 rust-version = "1.72"
