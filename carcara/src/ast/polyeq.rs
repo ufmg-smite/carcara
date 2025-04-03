@@ -888,5 +888,8 @@ fn nary_case(op: Operator) -> Option<NaryCase> {
         | Operator::BvBbTerm
         | Operator::BvPBbTerm
         | Operator::RareList => None,
+
+        // Clausal
+        Operator::Cl | Operator::Delete => Some(NaryCase::LeftAssoc),
     }
 }
