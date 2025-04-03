@@ -358,6 +358,10 @@ pub enum Operator {
     // Misc.
     /// The `rare-list` operator, used to represent RARE lists.
     RareList,
+
+    // The clausal operators
+    Cl,
+    Delete,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -477,6 +481,9 @@ impl_str_conversion_traits!(Operator {
     BvPBbTerm: "pbbterm",
 
     RareList: "rare-list",
+
+    Cl: "cl",
+    Delete: "@d"
 });
 
 impl_str_conversion_traits!(ParamOperator {
