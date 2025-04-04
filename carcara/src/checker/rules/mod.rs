@@ -250,6 +250,7 @@ pub(super) mod cutting_planes;
 pub(super) mod drup;
 pub(super) mod extras;
 pub(super) mod linear_arithmetic;
+pub(super) mod pb_blasting;
 pub(super) mod quantifier;
 pub(super) mod reflexivity;
 pub(super) mod resolution;
