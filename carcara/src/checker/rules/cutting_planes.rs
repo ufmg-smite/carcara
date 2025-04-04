@@ -9,6 +9,15 @@ use super::{RuleArgs, RuleResult};
 
 type PbHash = HashMap<String, Integer>;
 
+fn equals_integer_err(term: &Rc<Term>, expected: &Integer) -> Result<(), CheckerError> {
+    let n = term.as_integer_err()?;
+    rassert!(
+        &n == expected,
+        CheckerError::ExpectedInteger(n.clone(), term.clone())
+    );
+    Ok(())
+}
+
 fn get_pb_hashmap(pbsum: &[Rc<Term>]) -> Result<PbHash, CheckerError> {
     let mut hm = HashMap::new();
     let n = pbsum.len() - 1;
@@ -16,7 +25,8 @@ fn get_pb_hashmap(pbsum: &[Rc<Term>]) -> Result<PbHash, CheckerError> {
     for term in pbsum.iter().take(n) {
         let (coeff, literal) =
             // Negated literal  (* c (- 1 x1))
-            if let Some((coeff, (_, literal))) = match_term!((* coeff (- one literal)) = term) {
+            if let Some((coeff, (one, literal))) = match_term!((* coeff (- one literal)) = term) {
+                equals_integer_err(one,&Integer::from(1))?;
                 (coeff, format!("~{}",literal))
             // Plain literal    (* c x1)
             } else if let Some((coeff, literal)) = match_term!((* coeff literal) = term) {
