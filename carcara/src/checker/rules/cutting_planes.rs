@@ -221,8 +221,42 @@ pub fn cp_division(RuleArgs { .. }: RuleArgs) -> RuleResult {
     Err(CheckerError::Unspecified)
 }
 
-pub fn cp_saturation(RuleArgs { .. }: RuleArgs) -> RuleResult {
-    Err(CheckerError::Unspecified)
+pub fn cp_saturation(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(premises, 1)?;
+    assert_num_args(args, 0)?;
+    let clause = &premises[0].clause[0];
+
+    // Check there is exactly one conclusion
+    assert_clause_len(conclusion, 1)?;
+    let conclusion = &conclusion[0];
+
+    // Unwrap the premise inequality
+    let (pbsum_p, constant_p) = unwrap_pseudoboolean_inequality(clause)?;
+
+    // Unwrap the conclusion inequality
+    let (pbsum_c, constant_c) = unwrap_pseudoboolean_inequality(conclusion)?;
+
+    // Verify constants match
+    rassert!(
+        constant_p == constant_c,
+        CheckerError::ExpectedInteger(constant_p.clone(), conclusion.clone())
+    );
+
+    // Verify premise and conclusion share same keys
+    assert_pbsum_same_keys(&pbsum_p, &pbsum_c)?;
+
+    // Verify saturation of variables match
+    for (literal, coeff_p) in pbsum_p {
+        if let Some(coeff_c) = pbsum_c.get(&literal) {
+            let expected = Ord::min(&constant_p, &coeff_p);
+            rassert!(
+                expected == coeff_c,
+                CheckerError::ExpectedInteger(expected.clone(), conclusion.clone())
+            );
+        }
+    }
+
+    Ok(())
 }
 
 mod tests {
@@ -297,5 +331,46 @@ mod tests {
     fn cp_division() {}
 
     #[test]
-    fn cp_saturation() {}
+    fn cp_saturation() {
+        test_cases! {
+            definitions = "
+                (declare-fun x1 () Int)
+                (declare-fun x2 () Int)
+                (declare-fun x3 () Int)
+                ",
+            "Simple working examples" {
+                r#"(assume c1 (>= (+ (* 2 x1) 0) 1))
+                   (step t1 (cl (>= (+ (* 1 x1) 0) 1)) :rule cp_saturation :premises (c1))"#: true,
+
+                r#"(assume c1 (>= (+ (* 2 x1) (* 5 x2) (* 3 x3) 0) 3))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 3 x2) (* 3 x3) 0) 3)) :rule cp_saturation :premises (c1))"#: true,
+
+                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 x3) 0) 3))
+                   (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) (* 3 x3) 0) 3)) :rule cp_saturation :premises (c1))"#: true,
+
+                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 (- 1 x3)) 0) 3))
+                   (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) (* 3 (- 1 x3)) 0) 3)) :rule cp_saturation :premises (c1))"#: true,
+
+            }
+            "Wrong saturation" {
+                r#"(assume c1 (>= (+ (* 2 x1) 0) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) 0) 1)) :rule cp_saturation :premises (c1))"#: false,
+
+                r#"(assume c1 (>= (+ (* 2 x1) 0) 1))
+                   (step t1 (cl (>= (+ (* 0 x1) 0) 1)) :rule cp_saturation :premises (c1))"#: false,
+
+                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 x3) 0) 3))
+                   (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) (* 2 x3) 0) 3)) :rule cp_saturation :premises (c1))"#: false,
+
+            }
+            "Missing terms" {
+                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 x3) 0) 3))
+                   (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) 0) 3)) :rule cp_saturation :premises (c1))"#: false,
+
+                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) 0) 3))
+                   (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) (* 3 x3) 0) 3)) :rule cp_saturation :premises (c1))"#: false,
+            }
+
+        }
+    }
 }
