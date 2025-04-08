@@ -258,7 +258,7 @@ impl EunoiaTranslator {
     /// like quantifiers. This method helps to recover the index of the last
     /// scope actually referring to a context.
     /// PRE: { 0 < `nesting_level` < `self.contexts_opened`}
-    fn get_last_introduced_context(&self, nesting_level: usize) -> usize {
+    fn get_last_introduced_context_index(&self, nesting_level: usize) -> usize {
         let mut last_scope: usize = 0;
 
         for i in 0..nesting_level {
@@ -271,9 +271,42 @@ impl EunoiaTranslator {
         last_scope
     }
 
-    fn define_push_new_context(&mut self, option_ctx_params: Option<Vec<EunoiaTerm>>) {
+    /// Returns the identifier (as an `EunoiaTerm`) of the last context
+    /// actually introduced within the proof certificate.
+    /// PRE: { 0 < `self.contexts_opened`}
+    fn get_last_introduced_context_id(&self) -> EunoiaTerm {
         // TODO: do not hard-code this string
-        let context_name = String::from("ctx") + &self.contexts_opened.to_string();
+        EunoiaTerm::Id(
+            String::from("ctx")
+                + &(self.get_last_introduced_context_index(self.contexts_opened - 1) + 1)
+                    .to_string(),
+        )
+    }
+
+    /// Returns the identifier (as an `EunoiaTerm`) of the context surrounding
+    /// the actual context. This is useful to define rules that needs to verify
+    /// that the actual context is defined just as some specific extension
+    /// of a previous context.
+    /// PRE: { 0 < `self.contexts_opened`}
+    fn get_external_surrounding_context_id(&self) -> EunoiaTerm {
+        // TODO: do not hard-code this string
+        EunoiaTerm::Id(
+            String::from("ctx")
+                + &(self.get_last_introduced_context_index(self.contexts_opened - 2) + 1)
+                    .to_string(),
+        )
+    }
+
+    fn generate_new_context_id(&self) -> String {
+        // TODO: do not hard-code this string
+        String::from("ctx") + &self.contexts_opened.to_string()
+    }
+
+    /// Abstracts the steps required to define and push a new context.
+    /// PARAMS:
+    /// `option_ctx_params`: a vector with the variables introduced by the context (optionally)
+    fn define_push_new_context(&mut self, option_ctx_params: Option<Vec<EunoiaTerm>>) {
+        let new_context_id = self.generate_new_context_id();
 
         match option_ctx_params {
             // First call to the method. We create a dummy context with no actual
@@ -281,7 +314,7 @@ impl EunoiaTranslator {
             // TODO: do we really need to introduce this dummy context?
             None => {
                 self.eunoia_proof.push(EunoiaCommand::Define {
-                    name: context_name.clone(), // TODO: performance?
+                    name: new_context_id.clone(), // TODO: performance?
                     typed_params: EunoiaList { list: vec![] },
                     term: EunoiaTerm::True,
                     attrs: Vec::new(),
@@ -290,17 +323,17 @@ impl EunoiaTranslator {
                 self.eunoia_proof.push(EunoiaCommand::Assume {
                     // TODO: do not hard-code this string
                     name: String::from("context"),
-                    term: EunoiaTerm::Id(context_name.clone()),
+                    term: EunoiaTerm::Id(new_context_id.clone()),
                 });
             }
 
             Some(ctx_params) => {
                 // { not ctx_params.is_empty() }
                 self.eunoia_proof.push(EunoiaCommand::Define {
-                    name: context_name.clone(),
+                    name: new_context_id.clone(),
                     // TODO: do not hard-code this string
                     typed_params: EunoiaList { list: Vec::new() },
-                    term: EunoiaTerm::App(String::from("@ctx"), ctx_params),
+                    term: EunoiaTerm::App(self.alethe_signature.ctx.clone(), ctx_params),
                     attrs: Vec::new(),
                 });
 
@@ -309,7 +342,7 @@ impl EunoiaTranslator {
                 // (assume-push context ctxn)
                 self.eunoia_proof.push(EunoiaCommand::AssumePush {
                     name: String::from("context"),
-                    term: EunoiaTerm::Id(context_name.clone()),
+                    term: EunoiaTerm::Id(new_context_id.clone()),
                 });
             }
         }
@@ -388,12 +421,7 @@ impl EunoiaTranslator {
             }
         });
 
-        // TODO: do not hard-code this string
-        // TODO: ugly!
-        subst.push(EunoiaTerm::Id(
-            String::from("ctx")
-                + &(self.get_last_introduced_context(self.contexts_opened - 1) + 1).to_string(),
-        ));
+        subst.push(self.get_last_introduced_context_id());
 
         // Add typed params.
         if context_domain.is_empty() {
@@ -957,14 +985,6 @@ impl EunoiaTranslator {
                     }
 
                     "let" => {
-                        // TODO: do not hard-code this string
-                        // eunoia_arguments.push(EunoiaTerm::Id("context".to_owned()));
-
-                        // // Extract lhs and rhs
-                        // let (lhs, rhs) = self.alethe_signature.extract_eq_lhs_rhs(&conclusion);
-                        // eunoia_arguments.push(lhs);
-                        // eunoia_arguments.push(rhs);
-
                         // TODO: abstract this into a procedure
                         // Include, as premises, previous step from the actual subproof.
                         match previous_step {
@@ -987,22 +1007,6 @@ impl EunoiaTranslator {
                             }
                         }
 
-                        // self.local_steps[self.contexts_opened - 1]
-                        //     .iter()
-                        //     .for_each(|index| {
-                        //         match &self.eunoia_proof[*index] {
-                        //             EunoiaCommand::Step { id, .. } => {
-                        //                 alethe_premises.push(EunoiaTerm::Id(id.clone()));
-                        //             }
-
-                        //             _ => {
-                        //                 // NOTE: it shouldn't be an index to something different
-                        //                 // than a step.
-                        //                 panic!();
-                        //             }
-                        //         }
-                        //     });
-
                         self.eunoia_proof.push(EunoiaCommand::StepPop {
                             id: id.clone(),
                             conclusion_clause: Some(conclusion),
@@ -1015,13 +1019,6 @@ impl EunoiaTranslator {
                     "refl" => {
                         // TODO: do not hard-code this string
                         eunoia_arguments.push(EunoiaTerm::Id("context".to_owned()));
-
-                        // // Extract lhs and rhs
-                        // let (lhs, rhs) = self.alethe_signature.extract_eq_lhs_rhs(&conclusion);
-
-                        // eunoia_arguments.push(lhs);
-
-                        // eunoia_arguments.push(rhs);
 
                         self.eunoia_proof.push(EunoiaCommand::Step {
                             id: id.clone(),
@@ -1068,8 +1065,9 @@ impl EunoiaTranslator {
                             }
                         }
 
-                        // TODO: Include as argument the context surrounding this
+                        // We include, as argument, the context surrounding this
                         // subproof's context.
+                        eunoia_arguments.push(self.get_external_surrounding_context_id());
 
                         // :assumption: ctx
                         self.eunoia_proof.push(EunoiaCommand::StepPop {

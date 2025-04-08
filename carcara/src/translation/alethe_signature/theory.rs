@@ -45,6 +45,7 @@ pub struct AletheTheory {
     pub sko_ex: Symbol,
 
     // Context representation and manipulation.
+    pub ctx: Symbol,
     // To bind variables in a context.
     pub var: Symbol,
 
@@ -98,6 +99,7 @@ impl AletheTheory {
             sko_ex: String::from("sko_ex"),
 
             // Context representation and manipulation.
+            ctx: String::from("@ctx"),
             var: String::from("@var"),
 
             // Binders.
