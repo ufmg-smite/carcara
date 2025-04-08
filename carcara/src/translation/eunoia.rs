@@ -283,20 +283,6 @@ impl EunoiaTranslator {
         )
     }
 
-    /// Returns the identifier (as an `EunoiaTerm`) of the context surrounding
-    /// the actual context. This is useful to define rules that needs to verify
-    /// that the actual context is defined just as some specific extension
-    /// of a previous context.
-    /// PRE: { 0 < `self.contexts_opened`}
-    fn get_external_surrounding_context_id(&self) -> EunoiaTerm {
-        // TODO: do not hard-code this string
-        EunoiaTerm::Id(
-            String::from("ctx")
-                + &(self.get_last_introduced_context_index(self.contexts_opened - 2) + 1)
-                    .to_string(),
-        )
-    }
-
     fn generate_new_context_id(&self) -> String {
         // TODO: do not hard-code this string
         String::from("ctx") + &self.contexts_opened.to_string()
@@ -1067,7 +1053,7 @@ impl EunoiaTranslator {
 
                         // We include, as argument, the context surrounding this
                         // subproof's context.
-                        eunoia_arguments.push(self.get_external_surrounding_context_id());
+                        eunoia_arguments.push(self.get_last_introduced_context_id());
 
                         // :assumption: ctx
                         self.eunoia_proof.push(EunoiaCommand::StepPop {
