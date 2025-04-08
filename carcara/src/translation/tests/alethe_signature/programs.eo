@@ -57,31 +57,65 @@
   )
 )
 
-; program: zip
+; program: $varlist_zip
 ; args:
 ; - list_1 @VarList: Some @VarList.
 ; - list_2 @VarList: Some @VarList.
 ; return:
 ;  The zip of the received @VarLists, as another @VarList.
-(program $zip ((A Type) (hd_1 A) (tl_1 A :list) (hd_2 A) (tl_2 A :list))
+(program $varlist_zip ((A Type) (hd_1 A) (tl_1 A :list) (hd_2 A) (tl_2 A :list))
          (@VarList @VarList) @VarList
 
          (
           (
-           ($zip (@varlist hd_1 tl_1) (@varlist hd_2 tl_2))
+           ($varlist_zip (@varlist hd_1 tl_1) (@varlist hd_2 tl_2))
 
            ($f_list_cons @varlist
                          ($f_list_cons @varlist hd_1 hd_2)
-                         ($zip tl_1 tl_2))
+                         ($varlist_zip tl_1 tl_2))
            )
 
           (
-           ($zip @varlist.nil @varlist.nil)
+           ($varlist_zip @varlist.nil @varlist.nil)
 
            @varlist.nil
            )
           )
 )
+
+; TODO: implement this as a higher-order program, once it becomes feasible
+; program: $varlist_flag_members
+; args:
+; - varlist_1 @VarList: >
+;   A list for whose elements we want to determine membership with respect to
+;   varlist_2.
+; - varlist_2 @VarList: >
+;   A list against which determine membership of each element from varlist_1.
+; return:
+;   A @VarList of booleans such that its i-th element indicates if the 
+;   i-th element from varlist_1 also occurs in varlist_2.
+(program $varlist_flag_members ((A Type) 
+                        (hd_1 A) (tl_1 A :list)
+                        (varlist_2 @VarList))
+
+         (@VarList @VarList) @VarList
+
+         (
+          (
+           ($varlist_flag_members (@varlist hd_1 tl_1) varlist_2)
+           
+           ($f_list_cons @varlist 
+                         ($f_list_contains_elem @varlist hd_1 varlist_2)
+                         ($varlist_flag_members tl_1 varlist_2))
+           )
+
+          (
+           ($varlist_flag_members @varlist.nil varlist_2)
+
+           @varlist.nil
+           )
+          )
+ )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Clauses
@@ -121,12 +155,20 @@
 ; - phi_1 Bool: A proposition.
 ; - phi_2 Bool: A proposition.
 ; return: A boolean indicating if phi_1 and phi_2 are syntactically equal.
-(program $prop_syntax_eq ((phi Bool))
+(program $prop_syntax_eq ((phi Bool) (psi Bool))
   (Bool Bool) Bool
   (
-   (($prop_syntax_eq phi phi) true)
+   (
+    ($prop_syntax_eq phi phi) 
 
-   (($prop_syntax_eq _ _) false)
+    true
+    )
+
+   (; { phi <> psi }
+    ($prop_syntax_eq phi psi) 
+    
+    false
+    )
    )
 )
 
@@ -358,13 +400,17 @@
            )
 
           ; { hd =/= (= id value), for some value "value"} 
-          (($context_get_substitute (and hd tl) id)
+          (
+           ($context_get_substitute (and hd tl) id)
            
-           ($context_get_substitute tl id))
+           ($context_get_substitute tl id)
+           )
 
-          (($context_get_substitute (= id value) id)
+          (
+           ($context_get_substitute (= id value) id)
            
-           value)
+           value
+           )
           )
 )
 
@@ -390,6 +436,7 @@
                         ($f_list_cons @varlist id ($context_get_substitute context id))
                         ($context_get_var_subst_pairs context ids))
            )
+
           (
            ($context_get_var_subst_pairs context @varlist.nil)
            
@@ -477,7 +524,7 @@
 )
 
 ; TODO: re-implement this as a map once programs are first-class values
-; program: @context_vars_are_fixed
+; program: $context_vars_are_fixed
 ; args:
 ; - context Bool: A context, built with @ctx.
 ; - vars @VarList: >
@@ -505,91 +552,125 @@
 )
 
 
-; program: $compare_context_bound_terms
+; program: $context_var_is_defined
 ; args:
-; - term_bound A:
-; - term_unbound A:
-; return:
-;   A boolean indicating if the context-bound term "term_bound" is
-;   equivalent to "term_unbound", following syntactic equality modulo
-;   an equivalence relation that considers bound variables of the form
-;   "@var x..." (i.e., variables bound by a context) to be equivalent
-;   to just "x" (i.e., variables not bound by a context).
-;   It is useful to implement comparison in rules that introduce some binder.
-(program $compare_context_bound_terms ((A Type)
-                                       (vars @VarList)
-                                       (bool_body_bound Bool) (bool_body_unbound Bool)
-                                       (E Type) (x E)
-                                       (F Type) (G Type) (function_bound (-> F G)) (function_unbound (-> F G))
-                                       (actual_argument_bound F) (actual_argument_unbound F)
-                                       (U Type))
-         (A A) Bool
-
+; - context Bool: A context, built with @ctx.
+; - var A: A given variable.
+; return: >
+;    A boolean indicating if "var" is defined in "context".
+(program $context_var_is_defined ((A Type) (var A) (eq Bool)
+                                  (varlist @VarList :list) (and_list Bool :list))
+         (Bool A) Bool
+         
          (
-          (; Quantified vars should be equal.
-           ($compare_context_bound_terms 
-                                         (forall vars bool_body_bound) 
-                                         (forall vars bool_body_unbound))
-           
-           ($compare_context_bound_terms 
-                                         bool_body_bound
-                                         bool_body_unbound)
+          (
+           ($context_var_is_defined (@ctx varlist and_list) var)
+
+           (eo::or 
+            ($f_list_contains_elem @varlist var varlist)
+            ($context_var_is_defined and_list var))
            )
 
-          (; Quantified vars should be equal.
-           ($compare_context_bound_terms 
-                                         (exists vars bool_body_bound) 
-                                         (exists vars bool_body_unbound))
-           
-           ($compare_context_bound_terms 
-                                         bool_body_bound
-                                         bool_body_unbound)
+          (; Case: nested @ctx.
+           ($context_var_is_defined (and (@ctx varlist and_list)) var)
+
+           (eo::or 
+            ($f_list_contains_elem @varlist var varlist)
+            ($context_var_is_defined and_list var))
+           )
+
+          (; { eq <> @ctx }
+           ($context_var_is_defined (and eq and_list) var)
+
+           ($context_var_is_defined and_list var)
            )
 
           (
-           ($compare_context_bound_terms 
-                                          (_ function_bound actual_argument_bound)
-                                          (_ function_unbound actual_argument_unbound))
-           
-           (eo::and ($compare_context_bound_terms 
-                                          function_bound
-                                          function_unbound)
-                    ($compare_context_bound_terms 
-                                          actual_argument_bound
-                                          actual_argument_unbound))
-           )
+           ($context_var_is_defined true var)
 
-          (
-           ($compare_context_bound_terms @empty_cl @empty_cl)
-
-           true
-           )
-
-          (
-           ($compare_context_bound_terms true true)
-
-           true
-           )
-
-          (
-           ($compare_context_bound_terms false false)
-
-           true
-           )
-
-          (
-           ($compare_context_bound_terms (@var (@varlist x) x) x)
-
-           true
-           )
-
-          (
-           ($compare_context_bound_terms x x)
-
-           true
+           false
            )
           )
 )
+
+; TODO: 
+; program: $context_vars_are_defined
+; args:
+; - context Bool: A context, built with @ctx.
+; - vars @VarList: A @VarList containing variables.
+; return: >
+;    A boolean indicating if at least some variable in "vars" is defined in "context".
+(program $context_vars_are_defined ((A Type) (var A)
+                                  (vars @VarList :list) (context Bool))
+         (Bool @VarList) Bool
+         
+         (
+          (
+           ($context_vars_are_defined context (@varlist var vars))
+
+           (eo::or
+            ($context_var_is_defined context var)
+            ($context_vars_are_defined context vars))
+           )
+
+          (
+           ($context_vars_are_defined context @varlist.nil)
+
+           false
+           )
+          )
+)
+
+;TODO
+; program: $context_is_extended
+; args:
+; - new_ctx Bool: A context built with @ctx.
+; - old_ctx Bool: A context built with @ctx.
+; return: >
+;    Returns a boolean that indicates if new_ctx is defined just as
+;    an extension of old_ctx. We allow for new_ctx to be equal to
+;    old_ctx.
+(program $context_is_extended ((old_ctx Bool) (new_ctx Bool)
+                               (varlist @VarList) (eq Bool) (and_list Bool :list))
+    (Bool Bool) Bool
+    (
+        (; We admit for the contexts to be equal
+         ($context_is_extended new_ctx new_ctx) 
+
+         true
+         )
+
+        (; { old_ctx <> new_ctx }
+         ($context_is_extended (@ctx varlist and_list) old_ctx)
+
+         ($context_is_extended and_list old_ctx)
+         )
+        
+        (
+         ($context_is_extended (and old_ctx) old_ctx)
+
+         true
+         )
+
+        (; { (@ctx varlist and_list) <> new_ctx }
+         ($context_is_extended (and (@ctx varlist and_list)) old_ctx)
+
+         ($context_is_extended and_list old_ctx)
+         )
+
+        (; { eq <> @ctx }
+         ($context_is_extended (and eq and_list) old_ctx)
+
+         ($context_is_extended and_list old_ctx)
+         )
+
+        (
+         ($context_is_extended true old_ctx)
+
+           false
+           )
+        )
+    )
 
 ;;;;;;;;;;;;;
 ;; let
@@ -710,40 +791,6 @@
 ;; Bounded occurrences of variables
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-; TODO: implement this as a higher-order program, once it becomes feasible
-; program: $flag_members
-; args:
-; - varlist_1 @VarList: >
-;   A list for whose elements we want to determine membership with respect to
-;   varlist_2.
-; - varlist_2 @VarList: >
-;   A list against which determine membership of each element from varlist_1.
-; return:
-;   A @VarList of booleans such that its i-th element indicates if the 
-;   i-th element from varlist_1 also occurs in varlist_2.
-(program $flag_members ((A Type) 
-                        (hd_1 A) (tl_1 A :list)
-                        (varlist_2 @VarList))
-
-         (@VarList @VarList) @VarList
-
-         (
-          (
-           ($flag_members (@varlist hd_1 tl_1) varlist_2)
-           
-           ($f_list_cons @varlist 
-                         ($f_list_contains_elem @varlist hd_1 varlist_2)
-                         ($flag_members tl_1 varlist_2))
-           )
-
-          (
-           ($flag_members @varlist.nil varlist_2)
-
-           @varlist.nil
-           )
-          )
-         )
-
 ; program: $fv
 ; args:
 ; - term A: Term from which we want to extract free occurrences of variables.
@@ -762,7 +809,7 @@
            ; TODO: repeating stuff...
            ($f_list_filter @varlist @varlist.nil
                            ($fv bool_body)
-                           ($flag_members ($fv bool_body) 
+                           ($varlist_flag_members ($fv bool_body) 
                                           vars)
                            )
            )
@@ -773,15 +820,19 @@
            ; TODO: repeating stuff...
            ($f_list_filter @varlist @varlist.nil
                            ($fv bool_body)
-                           ($flag_members ($fv bool_body) 
+                           ($varlist_flag_members ($fv bool_body) 
                                           vars))
            )
 
           (; We consider (@var varlist x) as our representation of variables 
-           ; introduced by some binder. 
+           ; introduced by some binder. For reasoning purposes within $fv, 
+           ; we just use 'x' as the representation of the variable.
            ($fv (@var (@varlist x) x))
 
-           ($f_list_cons @varlist (@var (@varlist x) x) @varlist.nil)
+           ($f_list_cons @varlist 
+                         ;; (@var (@varlist x) x) 
+                         x
+                         @varlist.nil)
            )
 
           (
