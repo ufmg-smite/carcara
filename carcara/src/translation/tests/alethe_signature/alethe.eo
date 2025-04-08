@@ -297,30 +297,27 @@
 ; the binders are invisible here.
 ; This affects the rules `bind`, `sko_ex`, `sko_forall`, `let`,
 ; and `onepoint`.
-
-;TODO
-(program $check_bind ((context Bool) 
+(program $check_bind ((old_context Bool) (new_context Bool)
                       (T Type) (l T) (r T) (l1 T) (r1 T)
                       (premise Bool) 
                       (lhs_vars @VarList) (lhs_body Bool) 
-                      (rhs_vars @VarList) (rhs_body Bool) 
-                      (rhs_body_unbound Bool))
-  (Bool Bool Bool) Bool
+                      (rhs_vars @VarList) (rhs_body Bool))
+  (Bool Bool Bool Bool) Bool
   (
    (
-    ($check_bind context
+    ($check_bind old_context new_context
                  (@cl (= lhs_body rhs_body))
                  (@cl (= (forall lhs_vars lhs_body) 
                          (forall rhs_vars rhs_body))))
 
     (eo::and
-     ; Every variable in rhs_vars appear fixed in "context".
-     ($context_vars_are_fixed context rhs_vars)
+     ; Every variable in rhs_vars appear fixed in "new_context".
+     ($context_vars_are_fixed new_context rhs_vars)
      
      ; Vars in lhs_vars are susbtitued by rhs_vars
      ($f_list_equal @varlist 
-                    ($zip lhs_vars rhs_vars)
-                    ($context_get_var_subst_pairs context lhs_vars))
+                    ($varlist_zip lhs_vars rhs_vars)
+                    ($context_get_var_subst_pairs new_context lhs_vars))
 
      ; rhs_vars should not appear free in (forall lhs_vars lhs_body_unbound)
      ($f_list_equal @varlist
@@ -329,23 +326,30 @@
                     ($f_list_filter @varlist
                                     @varlist.nil
                                     ($fv (forall lhs_vars lhs_body))
-                                    ($flag_members ($fv (forall lhs_vars lhs_body))
-                                                   rhs_vars))))
+                                    ($varlist_flag_members ($fv (forall lhs_vars lhs_body))
+                                                   rhs_vars)))
+
+     ; rhs_vars should not appear in the first part of the new_context (old_context)
+     (eo::not ($context_vars_are_defined old_context rhs_vars))
+
+     ; new_context must be just an extension of old_context
+     ($context_is_extended new_context old_context)
+     )
     )
 
    (
-    ($check_bind context
+    ($check_bind old_context new_context
                  (@cl (= lhs_body rhs_body))
                  (@cl (= (exists lhs_vars lhs_body) (exists rhs_vars rhs_body))))
 
     (eo::and
      ; Every variable in rhs_vars appear fixed in "context".
-     ($context_vars_are_fixed context rhs_vars)
+     ($context_vars_are_fixed new_context rhs_vars)
      
      ; Vars in lhs_vars are susbtitued by rhs_vars
      ($f_list_equal @varlist 
-                    ($zip lhs_vars rhs_vars)
-                    ($context_get_var_subst_pairs context lhs_vars))
+                    ($varlist_zip lhs_vars rhs_vars)
+                    ($context_get_var_subst_pairs new_context lhs_vars))
 
      ; rhs_vars should not appear free in (forall lhs_vars lhs_body)
      ($f_list_equal @varlist
@@ -354,16 +358,24 @@
                     ($f_list_filter @varlist
                                     @varlist.nil
                                     ($fv (forall lhs_vars lhs_body))
-                                    ($flag_members ($fv (forall lhs_vars lhs_body))
-                                                   rhs_vars))))
+                                    ($varlist_flag_members ($fv (forall lhs_vars lhs_body))
+                                                   rhs_vars)))
+    
+     ; rhs_vars should not appear in the first part of the new_context (old_context)
+     (eo::not ($context_vars_are_defined old_context rhs_vars))
+
+      ; new_context must be just an extension of old_context
+      ($context_is_extended new_context old_context)
+     )
     )
    )
   )
 
-(declare-rule bind ((context Bool) (premise Bool))
-  :assumption context
+(declare-rule bind ((old_context Bool) (new_context Bool) (premise Bool))
+  :assumption new_context
   :premises (premise)
-  :requires ((($check_bind context premise eo::conclusion) true))
+  :args (old_context)
+  :requires ((($check_bind old_context new_context premise eo::conclusion) true))
   :conclusion-given
 )
 
@@ -383,7 +395,7 @@
 ;;   :assumption ctx
 ;;   :premises (old_ctx (@cl (= l1 r1)))
 ;;   :args ((@cl (= l r)))
-;;   :requires ((($context_extended ctx old_ctx) true) (($check_sko_ex ctx l r l1 r1) true))
+;;   :requires ((($context_is_extended ctx old_ctx) true) (($check_sko_ex ctx l r l1 r1) true))
 ;;   :conclusion (@cl (= l r))
 ;; )
 
@@ -414,7 +426,7 @@
   :assumption ctx
   :premises (old_ctx (@cl (= l1 r1)))
   :args ((@cl (= l r)))
-  :requires ((($context_extended ctx old_ctx) true) (($check_sko_forall ctx l r l1 r1) true))
+  :requires ((($context_is_extended ctx old_ctx) true) (($check_sko_forall ctx l r l1 r1) true))
   :conclusion (@cl (= l r))
 )
 
@@ -1500,7 +1512,7 @@
    (($check_implies_neg1 (@cl phi_1 (=> phi_1 phi_2)))
     true)
 
-   (($check_implies_neg1 _)
+   (($check_implies_neg1 phi_1)
     false)
   )
 )
@@ -1538,7 +1550,7 @@
    (($check_implies_neg2 (@cl (not phi_2) (=> phi_1 phi_2)))
     true)
 
-   (($check_implies_neg2 _)
+   (($check_implies_neg2 phi_1)
     false)
   )
 )
@@ -1579,7 +1591,7 @@
    (($check_equiv_pos1 (@cl phi_3 phi_4 (not (= phi_1 phi_2))))
     ($cl_equal (@cl phi_1 (not phi_2)) (@cl phi_3 phi_4)))
 
-   (($check_equiv_pos1 _)
+   (($check_equiv_pos1 phi_1)
     false)
   )
 )
@@ -1620,7 +1632,7 @@
    (($check_equiv_pos2 (@cl phi_3 phi_4 (not (= phi_1 phi_2))))
     ($cl_equal (@cl (not phi_1) phi_2) (@cl phi_3 phi_4)))
 
-   (($check_equiv_pos2 _)
+   (($check_equiv_pos2 phi_1)
     false)
   )
 )
@@ -1997,7 +2009,7 @@
   :assumption ctx
   ;; :premises (old_ctx (@cl (= l1 r1)))
   ;; :args ((@cl (= l r)))
-  ;; :requires ((($context_extended ctx old_ctx) true) (($check_onepoint ctx l r l1 r1) true))
+  ;; :requires ((($context_is_extended ctx old_ctx) true) (($check_onepoint ctx l r l1 r1) true))
   :requires ((($check_onepoint eo::conclusion) true))
   :conclusion-given
 )

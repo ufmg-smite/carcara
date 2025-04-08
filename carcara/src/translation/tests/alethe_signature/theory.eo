@@ -174,12 +174,3 @@
 ;    Used to represent variables bound by some binder.
 (declare-const @var (-> (! Type :var B :implicit) (! @VarList :var L) B B) 
                :binder @varlist)
-
-; Checks that the context ctx is an extension of old_ctx.
-;TODO
-(program $context_extended ((ctx Bool) (old_ctx Bool))
-    (Bool Bool) Bool
-    (
-        (($context_extended ctx old_ctx) true)
-    )
- )
