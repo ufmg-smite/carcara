@@ -136,24 +136,7 @@ impl EunoiaTranslator {
         // opened at least one context
         self.open_scope(true);
 
-        let context_name = String::from("ctx") + &self.contexts_opened.to_string();
-
-        // (define ctx0 () true)
-        self.eunoia_proof.push(EunoiaCommand::Define {
-            name: context_name.clone(), // TODO: performance?
-            typed_params: EunoiaList { list: vec![] },
-            term: EunoiaTerm::True,
-            attrs: Vec::new(),
-        });
-
-        // (assume context ctx0)
-        self.eunoia_proof.push(EunoiaCommand::Assume {
-            // TODO: do not hard-code this string
-            name: String::from("context"),
-            term: EunoiaTerm::Id(context_name.clone()),
-        });
-
-        // self.local_steps.push(Vec::new());
+        self.define_push_new_context(None);
 
         // NOTE: need to clone ProofNodes to avoid
         // "borrowed data escapes outside of closure" error here.
@@ -288,6 +271,50 @@ impl EunoiaTranslator {
         last_scope
     }
 
+    fn define_push_new_context(&mut self, option_ctx_params: Option<Vec<EunoiaTerm>>) {
+        // TODO: do not hard-code this string
+        let context_name = String::from("ctx") + &self.contexts_opened.to_string();
+
+        match option_ctx_params {
+            // First call to the method. We create a dummy context with no actual
+            // information.
+            // TODO: do we really need to introduce this dummy context?
+            None => {
+                self.eunoia_proof.push(EunoiaCommand::Define {
+                    name: context_name.clone(), // TODO: performance?
+                    typed_params: EunoiaList { list: vec![] },
+                    term: EunoiaTerm::True,
+                    attrs: Vec::new(),
+                });
+
+                self.eunoia_proof.push(EunoiaCommand::Assume {
+                    // TODO: do not hard-code this string
+                    name: String::from("context"),
+                    term: EunoiaTerm::Id(context_name.clone()),
+                });
+            }
+
+            Some(ctx_params) => {
+                // { not ctx_params.is_empty() }
+                self.eunoia_proof.push(EunoiaCommand::Define {
+                    name: context_name.clone(),
+                    // TODO: do not hard-code this string
+                    typed_params: EunoiaList { list: Vec::new() },
+                    term: EunoiaTerm::App(String::from("@ctx"), ctx_params),
+                    attrs: Vec::new(),
+                });
+
+                // TODO: should we step-pop this context, when closing the
+                // scope?
+                // (assume-push context ctxn)
+                self.eunoia_proof.push(EunoiaCommand::AssumePush {
+                    name: String::from("context"),
+                    term: EunoiaTerm::Id(context_name.clone()),
+                });
+            }
+        }
+    }
+
     /// Abstracts the process of traversing a given context, identifying the fixed
     /// variables and the substitutions. Returns the corresponding list of
     /// variables and substitutions to be used when building a @ctx.
@@ -385,7 +412,6 @@ impl EunoiaTranslator {
 
     /// Implements the actual translation logic, after the original `ProofNode` graph
     /// has been translated into a list of `ProofNodes`.
-    /// PRE : {!`self.local_steps.is_empty()`}
     fn translate_pre_ord_proof_node(&mut self) {
         // NOTE: cloning to avoid error
         // "closure requires unique access to `*self` but it is already borrowed//
@@ -400,9 +426,6 @@ impl EunoiaTranslator {
                 ProofNode::Step(StepNode { id, .. }) => {
                     self.translate_step(node);
 
-                    // // If within a subproof: save the index for future reference
-                    // self.local_steps[self.contexts_opened - 1].push(self.eunoia_proof.len() - 1);
-
                     // Is this the closing step of the actual subproof?
                     if !self.last_step_id.is_empty() {
                         let last_step_id = &self.last_step_id.last();
@@ -411,23 +434,6 @@ impl EunoiaTranslator {
                             // "bind" rule already doing a step-pop of the pushed
                             // context
                             assert!(self.last_step_rule.len() == self.last_step_id.len());
-
-                            // TODO: check this
-                            // if self.context_introduced[self.contexts_opened - 1]
-                            //     && self.last_step_rule.last()
-                            //         != Some(&self.alethe_signature.bind.clone())
-                            // {
-                            //     self.eunoia_proof.push(EunoiaCommand::StepPop {
-                            //         // TODO: change id
-                            //         id: id.clone(),
-                            //         conclusion_clause: Some(EunoiaTerm::Id(
-                            //             self.alethe_signature.empty_cl.clone(),
-                            //         )),
-                            //         rule: self.alethe_signature.discard_context.clone(),
-                            //         premises: EunoiaList { list: vec![] },
-                            //         arguments: EunoiaList { list: vec![] },
-                            //     });
-                            // }
 
                             self.last_step_rule.pop();
                             self.last_step_id.pop();
@@ -454,25 +460,7 @@ impl EunoiaTranslator {
                         ctx_params = self.process_anchor_context(args);
 
                         // Define and open a new context
-                        // (define ctxn () (@ctx ...))
-                        // TODO: do not hard-code this string
-                        let context_name = String::from("ctx") + &self.contexts_opened.to_string();
-
-                        // Close the opened subproof
-                        self.eunoia_proof.push(EunoiaCommand::Define {
-                            name: context_name.clone(),
-                            typed_params: EunoiaList { list: Vec::new() },
-                            term: EunoiaTerm::App(String::from("@ctx"), ctx_params),
-                            attrs: Vec::new(),
-                        });
-
-                        // TODO: should we step-pop this context, when closing the
-                        // scope?
-                        // (assume-push context ctxn)
-                        self.eunoia_proof.push(EunoiaCommand::AssumePush {
-                            name: String::from("context"),
-                            term: EunoiaTerm::Id(context_name.clone()),
-                        });
+                        self.define_push_new_context(Some(ctx_params));
                     }
 
                     // Save information about the last step of the subproof
@@ -525,7 +513,7 @@ impl EunoiaTranslator {
 
             // TODO: not considering the sort of the variable.
             Term::Var(string, _) => {
-                // Check if it is variable introduced by some binder
+                // Check if it is a variable introduced by some binder
                 match self.variables_in_scope.get(string) {
                     Some(_) => self.build_var_binding(string),
 
@@ -667,7 +655,7 @@ impl EunoiaTranslator {
     }
 
     /// For a given variable name "id", that is bound by some
-    /// context, it builds and returns @var representation.
+    /// context, it builds and returns its @var representation.
     /// That is, its representation as a variable bound by some
     /// enclosing context.
     fn build_var_binding(&self, id: &String) -> EunoiaTerm {
@@ -977,6 +965,7 @@ impl EunoiaTranslator {
                         // eunoia_arguments.push(lhs);
                         // eunoia_arguments.push(rhs);
 
+                        // TODO: abstract this into a procedure
                         // Include, as premises, previous step from the actual subproof.
                         match previous_step {
                             Some(step) => {
@@ -1044,6 +1033,7 @@ impl EunoiaTranslator {
                     }
 
                     "bind" => {
+                        // TODO: abstract this into a procedure
                         // Include, as premise, the previous step.
                         match previous_step {
                             Some(step) => {
@@ -1077,6 +1067,9 @@ impl EunoiaTranslator {
                                 panic!();
                             }
                         }
+
+                        // TODO: Include as argument the context surrounding this
+                        // subproof's context.
 
                         // :assumption: ctx
                         self.eunoia_proof.push(EunoiaCommand::StepPop {
