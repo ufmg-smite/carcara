@@ -251,6 +251,45 @@ impl EunoiaTranslator {
         }
     }
 
+    /// Inspects a given Alethe step from which we want to extract its id,
+    /// also verifying that it is a proper "previous step" from another subproof's
+    /// last step.
+    fn get_previous_step_id(previous_step: &Option<Rc<ProofNode>>) -> EunoiaTerm {
+        // TODO: abstract this into a procedure
+        // Include, as premise, the previous step.
+        match previous_step {
+            Some(step) => {
+                match step.deref() {
+                    ProofNode::Step(StepNode { id, .. }) => EunoiaTerm::Id(id.clone()),
+
+                    ProofNode::Subproof(SubproofNode { last_step, .. }) => {
+                        // The previous step is the closing step of a subproof.
+                        // It is represented as a single SubproofNode. We look
+                        // for the actual last step of this subproof.
+                        match last_step.deref() {
+                            ProofNode::Step(StepNode { id, .. }) => EunoiaTerm::Id(id.clone()),
+
+                            _ => {
+                                // It shouldn't be another kind of ProofNode
+                                panic!();
+                            }
+                        }
+                    }
+
+                    ProofNode::Assume { .. } => {
+                        // It shouldn't be another kind of ProofNode
+                        panic!();
+                    }
+                }
+            }
+
+            _ => {
+                // There should be some previous step.
+                panic!();
+            }
+        }
+    }
+
     /// For a given "nesting" level (some number <= `self.contexts_opened`),
     /// returns the index of the last surrounding context actually introduced
     /// within the proof certificate. This is so since scopes are used to
@@ -283,6 +322,7 @@ impl EunoiaTranslator {
         )
     }
 
+    /// Encapsulates the mechanism used to generate fresh identifiers of contexts.
     fn generate_new_context_id(&self) -> String {
         // TODO: do not hard-code this string
         String::from("ctx") + &self.contexts_opened.to_string()
@@ -971,27 +1011,8 @@ impl EunoiaTranslator {
                     }
 
                     "let" => {
-                        // TODO: abstract this into a procedure
                         // Include, as premises, previous step from the actual subproof.
-                        match previous_step {
-                            Some(step) => {
-                                match step.deref() {
-                                    ProofNode::Step(StepNode { id, .. }) => {
-                                        alethe_premises.push(EunoiaTerm::Id(id.clone()));
-                                    }
-
-                                    _ => {
-                                        // It shouldn't be another kind of ProofNode
-                                        panic!();
-                                    }
-                                }
-                            }
-
-                            _ => {
-                                // There should be some previous step.
-                                panic!();
-                            }
-                        }
+                        alethe_premises.push(Self::get_previous_step_id(previous_step));
 
                         self.eunoia_proof.push(EunoiaCommand::StepPop {
                             id: id.clone(),
@@ -1016,40 +1037,8 @@ impl EunoiaTranslator {
                     }
 
                     "bind" => {
-                        // TODO: abstract this into a procedure
                         // Include, as premise, the previous step.
-                        match previous_step {
-                            Some(step) => {
-                                match step.deref() {
-                                    ProofNode::Step(StepNode { id, .. }) => {
-                                        alethe_premises.push(EunoiaTerm::Id(id.clone()));
-                                    }
-
-                                    ProofNode::Subproof(SubproofNode { last_step, .. }) => {
-                                        match last_step.deref() {
-                                            ProofNode::Step(StepNode { id, .. }) => {
-                                                alethe_premises.push(EunoiaTerm::Id(id.clone()));
-                                            }
-
-                                            _ => {
-                                                // It shouldn't be another kind of ProofNode
-                                                panic!();
-                                            }
-                                        }
-                                    }
-
-                                    ProofNode::Assume { .. } => {
-                                        // It shouldn't be another kind of ProofNode
-                                        panic!();
-                                    }
-                                }
-                            }
-
-                            _ => {
-                                // There should be some previous step.
-                                panic!();
-                            }
-                        }
+                        alethe_premises.push(Self::get_previous_step_id(previous_step));
 
                         // We include, as argument, the context surrounding this
                         // subproof's context.
@@ -1161,6 +1150,13 @@ impl EunoiaTranslator {
                     }
 
                     "sko_ex" => {
+                        // Include, as premise, the previous step.
+                        alethe_premises.push(Self::get_previous_step_id(previous_step));
+
+                        // We include, as argument, the context surrounding this
+                        // subproof's context.
+                        eunoia_arguments.push(self.get_last_introduced_context_id());
+
                         self.eunoia_proof.push(EunoiaCommand::StepPop {
                             id: id.clone(),
                             conclusion_clause: Some(conclusion),
