@@ -71,7 +71,7 @@
            ($varlist_zip (@varlist hd_1 tl_1) (@varlist hd_2 tl_2))
 
            ($f_list_cons @varlist
-                         ($f_list_cons @varlist hd_1 hd_2)
+                         ($f_list_cons @varlist hd_1 (@varlist hd_2 @varlist.nil))
                          ($varlist_zip tl_1 tl_2))
            )
 
@@ -113,6 +113,50 @@
            ($varlist_flag_members @varlist.nil varlist_2)
 
            @varlist.nil
+           )
+          )
+ )
+
+; program: $varlist_hd
+; args:
+; - varlist @VarList: A @VarList.
+; return:
+;    The first element of the given @VarList.
+; note:
+;    PRE : { len(varlist) > 0 }
+(program $varlist_hd ((A Type) (hd A) (tail @VarList))
+
+         (@VarList) A
+
+         (
+          (
+           ($varlist_hd (@varlist hd tail))
+           
+           hd
+           )
+          )
+ )
+
+; program: $varlist_hd
+; args:
+; - varlist @VarList: A @VarList.
+; return:
+;    The tail of the given @VarList; "varlist" could be nil.
+(program $varlist_tl ((A Type) (hd A) (tail @VarList))
+
+         (@VarList) @VarList
+
+         (
+          (
+           ($varlist_tl @varlist.nil)
+           
+           @varlist.nil
+           )
+
+          (
+           ($varlist_tl (@varlist hd tail))
+           
+           tail
            )
           )
  )
@@ -433,7 +477,8 @@
            ($context_get_var_subst_pairs context (@varlist id ids))
            
            ($f_list_cons @varlist 
-                        ($f_list_cons @varlist id ($context_get_substitute context id))
+                        ($f_list_cons @varlist id 
+                                      (@varlist ($context_get_substitute context id) @varlist.nil))
                         ($context_get_var_subst_pairs context ids))
            )
 
@@ -787,9 +832,9 @@
           )
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Bounded occurrences of variables
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ; program: $fv
 ; args:
@@ -872,5 +917,32 @@
 
            ($f_list_cons @varlist x @varlist.nil)
            )
+          )
+)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Eunoia built-in
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; program: $eo_ite
+; args:
+; - guard Bool: The guard of the conditional.
+; - if_branch A: "If" branch of the conditional.
+; - else_branch A: "Else" branch of the conditional.
+; return: If guard holds, returns if_branch. Otherwise, it returns else_branch.
+(program $eo_ite ((A Type) (if_branch A) (else_branch A))
+         (Bool A A) A
+         (
+          (
+           ($eo_ite true if_branch else_branch)
+
+           if_branch
+            )
+
+          (
+           ($eo_ite false if_branch else_branch)
+
+           else_branch
+            )
           )
 )
