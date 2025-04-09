@@ -139,13 +139,17 @@
 (program $get_lambda_type ((x @VarList) (xs @VarList :list) (B Type))
   (@VarList Type) Type
   (
-    (($get_lambda_type (@varlist x xs) B) 
+    (
+     ($get_lambda_type (@varlist x xs) B) 
      
-     (-> (eo::typeof x) ($get_lambda_type xs B)))
+     (-> (eo::typeof x) ($get_lambda_type xs B))
+     )
 
-    (($get_lambda_type @varlist.nil B)
+    (
+     ($get_lambda_type @varlist.nil B)
 
-     B)
+     B
+     )
   )
 )
 

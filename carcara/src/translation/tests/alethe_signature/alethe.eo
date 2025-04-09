@@ -313,7 +313,7 @@
     (eo::and
      ; Every variable in rhs_vars appear fixed in "new_context".
      ($context_vars_are_fixed new_context rhs_vars)
-     
+
      ; Vars in lhs_vars are susbtitued by rhs_vars
      ($f_list_equal @varlist 
                     ($varlist_zip lhs_vars rhs_vars)
@@ -345,7 +345,7 @@
     (eo::and
      ; Every variable in rhs_vars appear fixed in "context".
      ($context_vars_are_fixed new_context rhs_vars)
-     
+
      ; Vars in lhs_vars are susbtitued by rhs_vars
      ($f_list_equal @varlist 
                     ($varlist_zip lhs_vars rhs_vars)
@@ -399,17 +399,92 @@
 ;;   :conclusion (@cl (= l r))
 ;; )
 
-(program $check_sko_ex ((conclusion Bool))
-  (Bool) Bool
+; program: $check_sko_build_skolem_vars
+; args:
+; - choice_body Bool: Body of the choice operator to be built.
+; - exist_vars @VarList: @VarList containing the existentially quantified variables.
+; return: >
+;    A @VarList containing pairs (also as @VarList) of the form (𝑥𝑖, 𝜀𝑥𝑖.(∃𝑥𝑖+1, … , 𝑥𝑛.𝜑).)
+(program $check_sko_ex_build_skolem_vars ((choice_body Bool) (A Type) (x A) 
+                                       (tail @VarList :list))
+         (Bool @VarList) @VarList
+         (
+          (
+           ($check_sko_ex_build_skolem_vars choice_body (@varlist x))
+
+           ($f_list_cons @varlist 
+                         ($f_list_cons @varlist 
+                                       x
+                                       (@varlist (choice (@varlist x) x choice_body)
+                                                 @varlist.nil))
+                         @varlist.nil)
+           )
+
+          (; { tail <> @varlist.nil }
+           ($check_sko_ex_build_skolem_vars choice_body (@varlist x tail))
+
+           ($f_list_cons @varlist 
+                         ($f_list_cons @varlist 
+                                       x
+                                       (@varlist (choice (@varlist x) x (exists tail choice_body)) 
+                                                 @varlist.nil))
+                         ($check_sko_ex_build_skolem_vars choice_body tail))
+           )
+
+          (; { tail <> @varlist.nil }
+           ($check_sko_ex_build_skolem_vars choice_body @varlist.nil)
+
+           @varlist.nil
+           )
+          )
+)
+
+; program: $check_sko_ex_new_context
+; args:
+; - ex_body Bool: Body of the existential quantification.
+; - new_context Bool: Context of sko_ex premise.
+; - ex_vars @VarList: List of existentially quantified variables.
+; return: >
+;    Checks that "new_context" contains the expected mapping between each variable in
+;    "ex_vars" and its corresponding skolem term.
+(program $check_sko_ex_new_context ((ex_body Bool) (new_context Bool) (ex_vars @VarList))
+         (Bool Bool @VarList) Bool
+         (
+          (
+           ($check_sko_ex_new_context ex_body new_context ex_vars)
+
+           ($f_list_equal @varlist 
+                          ($check_sko_ex_build_skolem_vars ex_body ex_vars)
+                          ($context_get_var_subst_pairs new_context ex_vars))
+           )
+          )
+)
+
+(program $check_sko_ex ((old_context Bool) (new_context Bool) (lhs Bool) (rhs Bool) 
+                                                 (conclusion Bool) (ex_vars @VarList))
+  (Bool Bool Bool Bool) Bool
   (
-   (($check_sko_ex conclusion) true)
+   (
+    ($check_sko_ex old_context new_context (@cl (= lhs rhs)) (@cl (= (exists ex_vars lhs) rhs)))
+
+    (eo::and
+     ; new_context should be just an extension of old_context.
+     ($context_is_extended new_context old_context)
+
+     ; new_context should contain the expected mapping between each variable in
+     ; "ex_vars" and its corresponding skolem term.
+     ($check_sko_ex_new_context lhs new_context ex_vars)
+     )
+    )
   )
 )
 
 ;TRUST
-(declare-rule sko_ex ((ctx Bool))
-  :assumption ctx
-  :requires ((($check_sko_ex eo::conclusion) true))
+(declare-rule sko_ex ((old_context Bool) (new_context Bool) (premise Bool))
+  :assumption new_context
+  :premises (premise)
+  :args (old_context)
+  :requires ((($check_sko_ex old_context new_context premise eo::conclusion) true))
   :conclusion-given
 )
 
