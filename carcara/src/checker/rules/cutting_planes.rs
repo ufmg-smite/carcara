@@ -285,57 +285,82 @@ mod tests {
                 (declare-fun x3 () Int)
                 ",
             "Addition with Reduction" {
-                r#"(assume c1 (>= (+ (* 1 (- 1 x1)) 0) 1))
-                   (assume c2 (>= (+ (* 2 x1) 0) 1))
-                   (step t1 (cl (>= (+ (* 1 x1) (* 0 x2) 0) 1)) :rule cp_addition :premises (c1 c2))"#: true,
+                r#"(assume c1 (>= (* 1 (- 1 x1)) 1))
+                   (assume c2 (>= (* 2 x1) 1))
+                   (step t1 (cl (>= (+ (* 1 x1) (* 0 x2)) 1)) :rule cp_addition :premises (c1 c2))"#: true,
 
-                r#"(assume c1 (>= (+ (* 2 x1) 0) 1))
-                   (assume c2 (>= (+ (* 1 (- 1 x1)) 0) 1))
-                   (step t1 (cl (>= (+ (* 1 x1) 0) 1)) :rule cp_addition :premises (c1 c2))"#: true,
+                r#"(assume c1 (>= (* 2 x1) 1))
+                   (assume c2 (>= (* 1 (- 1 x1)) 1))
+                   (step t1 (cl (>= (* 1 x1) 1)) :rule cp_addition :premises (c1 c2))"#: true,
 
-                r#"(assume c1 (>= (+ (* 2 x1) (* 3 x2) 0) 2))
-                   (assume c2 (>= (+ (* 1 (- 1 x1)) (* 3 (- 1 x2)) 0) 4))
-                   (step t1 (cl (>= (+ (* 1 x1) 0) 2)) :rule cp_addition :premises (c1 c2))"#: true,
+                r#"(assume c1 (>= (+ (* 2 x1) (* 3 x2)) 2))
+                   (assume c2 (>= (+ (* 1 (- 1 x1)) (* 3 (- 1 x2))) 4))
+                   (step t1 (cl (>= (* 1 x1) 2)) :rule cp_addition :premises (c1 c2))"#: true,
             }
             "Simple working examples" {
-                r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
-                   (step t1 (cl (>= (+ (* 2 x1) 0) 2)) :rule cp_addition :premises (c1 c1))"#: true,
+                r#"(assume c1 (>= (* 1 x1) 1))
+                   (step t1 (cl (>= (* 2 x1) 2)) :rule cp_addition :premises (c1 c1))"#: true,
 
-                r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
-                   (assume c2 (>= (+ (* 1 x2) 0) 1))
-                   (step t1 (cl (>= (+ (* 1 x1) (* 1 x2) 0) 2)) :rule cp_addition :premises (c1 c2))"#: true,
+                r#"(assume c1 (>= (* 1 x1) 1))
+                   (assume c2 (>= (* 1 x2) 1))
+                   (step t1 (cl (>= (+ (* 1 x1) (* 1 x2)) 2)) :rule cp_addition :premises (c1 c2))"#: true,
 
-                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) 0) 1))
-                   (assume c2 (>= (+ (* 1 x2) (* 1 x1) 0) 1))
-                   (step t1 (cl (>= (+ (* 2 x1) (* 3 x2) 0) 2)) :rule cp_addition :premises (c1 c2))"#: true,
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2)) 1))
+                   (assume c2 (>= (+ (* 1 x2) (* 1 x1)) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 3 x2)) 2)) :rule cp_addition :premises (c1 c2))"#: true,
 
             }
             "Missing Terms" {
-                r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
-                   (assume c2 (>= (+ (* 1 x2) 0) 1))
-                   (step t1 (cl (>= (+ (* 1 x1) 0) 2)) :rule cp_addition :premises (c1 c2))"#: false,
+                r#"(assume c1 (>= (* 1 x1) 1))
+                   (assume c2 (>= (* 1 x2) 1))
+                   (step t1 (cl (>= (* 1 x1) 2)) :rule cp_addition :premises (c1 c2))"#: false,
 
-                r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
-                   (assume c2 (>= (+ (* 1 x2) 0) 1))
-                   (step t1 (cl (>= (+ (* 1 x2) 0) 2)) :rule cp_addition :premises (c1 c2))"#: false,
+                r#"(assume c1 (>= (* 1 x1) 1))
+                   (assume c2 (>= (* 1 x2) 1))
+                   (step t1 (cl (>= (* 1 x2) 2)) :rule cp_addition :premises (c1 c2))"#: false,
 
-                r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
-                   (assume c2 (>= (+ (* 1 x2) 0) 1))
-                   (step t1 (cl (>= (+ (* 1 x1) (* 1 x2) (* 1 x3) 0) 2)) :rule cp_addition :premises (c1 c2))"#: false,
+                r#"(assume c1 (>= (* 1 x1) 1))
+                   (assume c2 (>= (* 1 x2) 1))
+                   (step t1 (cl (>= (+ (* 1 x1) (* 1 x2) (* 1 x3)) 2)) :rule cp_addition :premises (c1 c2))"#: false,
 
-                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) (* 1 x3) 0) 1))
-                   (assume c2 (>= (+ (* 1 x2) (* 1 x1) 0) 1))
-                   (step t1 (cl (>= (+ (* 2 x1) (* 3 x2) 0) 2)) :rule cp_addition :premises (c1 c2))"#: false,
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) (* 1 x3)) 1))
+                   (assume c2 (>= (+ (* 1 x2) (* 1 x1)) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 3 x2)) 2)) :rule cp_addition :premises (c1 c2))"#: false,
 
             }
             "Wrong Addition" {
-                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) 0) 1))
-                   (assume c2 (>= (+ (* 1 x2) (* 1 x1) 0) 1))
-                   (step t1 (cl (>= (+ (* 2 x1) (* 2 x2) 0) 2)) :rule cp_addition :premises (c1 c2))"#: false,
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2)) 1))
+                   (assume c2 (>= (+ (* 1 x2) (* 1 x1)) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 2 x2)) 2)) :rule cp_addition :premises (c1 c2))"#: false,
+
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2)) 1))
+                   (assume c2 (>= (+ (* 1 x2) (* 1 x1)) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 3 x2)) 3)) :rule cp_addition :premises (c1 c2))"#: false,
+            }
+            "Trailing Zero" {
+                r#"(assume c1 (>= (+ (* 1 (- 1 x1)) 0) 1))
+                   (assume c2 (>= (+ (* 2 x1) 0) 1))
+                   (step t1 (cl (>= (+ (* 1 x1) (* 0 x2) 0) 1)) :rule cp_addition :premises (c1 c2))"#: false,
+
+                r#"(assume c1 (>= (+ (* 2 x1) 0) 1))
+                   (assume c2 (>= (+ (* 1 (- 1 x1)) 0) 1))
+                   (step t1 (cl (>= (+ (* 1 x1) 0) 1)) :rule cp_addition :premises (c1 c2))"#: false,
+
+                r#"(assume c1 (>= (+ (* 2 x1) (* 3 x2) 0) 2))
+                   (assume c2 (>= (+ (* 1 (- 1 x1)) (* 3 (- 1 x2)) 0) 4))
+                   (step t1 (cl (>= (+ (* 1 x1) 0) 2)) :rule cp_addition :premises (c1 c2))"#: false,
+
+                r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) 0) 2)) :rule cp_addition :premises (c1 c1))"#: false,
+
+                r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
+                   (assume c2 (>= (+ (* 1 x2) 0) 1))
+                   (step t1 (cl (>= (+ (* 1 x1) (* 1 x2) 0) 2)) :rule cp_addition :premises (c1 c2))"#: false,
 
                 r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) 0) 1))
                    (assume c2 (>= (+ (* 1 x2) (* 1 x1) 0) 1))
-                   (step t1 (cl (>= (+ (* 2 x1) (* 3 x2) 0) 3)) :rule cp_addition :premises (c1 c2))"#: false,
+                   (step t1 (cl (>= (+ (* 2 x1) (* 3 x2) 0) 2)) :rule cp_addition :premises (c1 c2))"#: false,
+
             }
         }
     }
