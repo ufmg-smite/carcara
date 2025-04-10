@@ -337,14 +337,14 @@ mod tests {
                 (declare-fun x3 () Int)
                 ",
             "Simple working examples" {
-                r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
-                   (step t1 (cl (>= (+ (* 2 x1) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
-                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) 0) 1))
-                   (step t1 (cl (>= (+ (* 2 x1) (* 4 x2) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
-                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) (* 3 x3) 0) 1))
-                   (step t1 (cl (>= (+ (* 2 x1) (* 4 x2) (* 6 x3) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
-                r#"(assume c1 (>= (+ (* 1 x1) (* 2 (- 1 x2)) (* 3 x3) 0) 1))
-                   (step t1 (cl (>= (+ (* 2 x1) (* 4 (- 1 x2)) (* 6 x3) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
+                r#"(assume c1 (>= (* 1 x1) 1))
+                   (step t1 (cl (>= (* 2 x1) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2)) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 4 x2)) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) (* 3 x3)) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 4 x2) (* 6 x3)) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 (- 1 x2)) (* 3 x3)) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 4 (- 1 x2)) (* 6 x3)) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: true,
             }
             "Wrong number of premises" {
                 r#"(assume c1 (>= x1 1))
@@ -359,19 +359,29 @@ mod tests {
                    (step t1 (cl (>= (* 2 x1) 2)) :rule cp_multiplication :premises (c1) :args (2 3))"#: false,
             }
             "Wrong number of clauses in the conclusion" {
-                r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
-                   (step t1 (cl (>= (+ (* 2 x1) (* 2 x2) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
+                r#"(assume c1 (>= (* 1 x1) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 2 x2)) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
 
-                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) 0) 1))
-                   (step t1 (cl (>= (+ (* 2 x1) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2)) 1))
+                   (step t1 (cl (>= (* 2 x1) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
             }
             "Wrong product" {
+                r#"(assume c1 (>= (* 1 x1) 1))
+                   (step t1 (cl (>= (* 3 x1) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2)) 1))
+                   (step t1 (cl (>= (+ (* 1 x1) (* 4 x2)) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) (* 3 x3)) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 4 x2) (* 3 x3)) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
+            }
+            "Trailing Zero" {
                 r#"(assume c1 (>= (+ (* 1 x1) 0) 1))
-                   (step t1 (cl (>= (+ (* 3 x1) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
+                   (step t1 (cl (>= (+ (* 2 x1) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
                 r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) 0) 1))
-                   (step t1 (cl (>= (+ (* 1 x1) (* 4 x2) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
+                   (step t1 (cl (>= (+ (* 2 x1) (* 4 x2) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
                 r#"(assume c1 (>= (+ (* 1 x1) (* 2 x2) (* 3 x3) 0) 1))
-                   (step t1 (cl (>= (+ (* 2 x1) (* 4 x2) (* 3 x3) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
+                   (step t1 (cl (>= (+ (* 2 x1) (* 4 x2) (* 6 x3) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
+                r#"(assume c1 (>= (+ (* 1 x1) (* 2 (- 1 x2)) (* 3 x3) 0) 1))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 4 (- 1 x2)) (* 6 x3) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
             }
 
         }
