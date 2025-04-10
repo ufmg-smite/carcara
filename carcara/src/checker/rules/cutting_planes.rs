@@ -22,7 +22,7 @@ fn get_pb_hashmap(pbsum: &[Rc<Term>]) -> Result<PbHash, CheckerError> {
     let mut hm = HashMap::new();
     // let n = pbsum.len() - 1;
 
-    for term in pbsum.iter() {
+    for term in pbsum {
         let (coeff, literal) =
             // Negated literal  (* c (- 1 x1))
             if let Some((coeff, (one, literal))) = match_term!((* coeff (- one literal)) = term) {
