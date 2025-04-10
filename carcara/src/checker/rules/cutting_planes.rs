@@ -20,9 +20,9 @@ fn equals_integer_err(term: &Rc<Term>, expected: &Integer) -> Result<(), Checker
 
 fn get_pb_hashmap(pbsum: &[Rc<Term>]) -> Result<PbHash, CheckerError> {
     let mut hm = HashMap::new();
-    let n = pbsum.len() - 1;
+    // let n = pbsum.len() - 1;
 
-    for term in pbsum.iter().take(n) {
+    for term in pbsum.iter() {
         let (coeff, literal) =
             // Negated literal  (* c (- 1 x1))
             if let Some((coeff, (one, literal))) = match_term!((* coeff (- one literal)) = term) {
@@ -42,7 +42,23 @@ fn get_pb_hashmap(pbsum: &[Rc<Term>]) -> Result<PbHash, CheckerError> {
 }
 
 fn unwrap_pseudoboolean_inequality(clause: &Rc<Term>) -> Result<(PbHash, Integer), CheckerError> {
-    let (pbsum, constant) = match_term_err!((>= (+ ...) constant) = clause)?;
+    // List of terms
+    let (pbsum, constant) = if let Some((pbsum, constant)) =
+        match_term!((>= (+ ...) constant) = clause)
+    {
+        // 2 or more terms in summation
+        (pbsum, constant)
+    } else if let Some((single_term, constant)) = match_term!((>= single_term constant) = clause) {
+        // Single term, no summation used
+        (std::slice::from_ref(single_term), constant)
+    } else {
+        return Err(CheckerError::Explanation(format!(
+            "Clause is neither summation nor single term: {}",
+            clause
+        )));
+    };
+
+    // let (pbsum, constant) = match_term_err!((>= (+ ...) constant) = clause)?;
     let constant = constant.as_integer_err()?;
     let pbsum = get_pb_hashmap(pbsum)?;
     Ok((pbsum, constant))
@@ -339,36 +355,49 @@ mod tests {
                 (declare-fun x3 () Int)
                 ",
             "Simple working examples" {
-                r#"(assume c1 (>= (+ (* 2 x1) 0) 1))
-                   (step t1 (cl (>= (+ (* 1 x1) 0) 1)) :rule cp_saturation :premises (c1))"#: true,
+                r#"(assume c1 (>= (* 2 x1) 1))
+                   (step t1 (cl (>= (* 1 x1) 1)) :rule cp_saturation :premises (c1))"#: true,
 
-                r#"(assume c1 (>= (+ (* 2 x1) (* 5 x2) (* 3 x3) 0) 3))
-                   (step t1 (cl (>= (+ (* 2 x1) (* 3 x2) (* 3 x3) 0) 3)) :rule cp_saturation :premises (c1))"#: true,
+                r#"(assume c1 (>= (+ (* 2 x1) (* 5 x2) (* 3 x3)) 3))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 3 x2) (* 3 x3)) 3)) :rule cp_saturation :premises (c1))"#: true,
 
-                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 x3) 0) 3))
-                   (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) (* 3 x3) 0) 3)) :rule cp_saturation :premises (c1))"#: true,
+                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 x3)) 3))
+                   (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) (* 3 x3)) 3)) :rule cp_saturation :premises (c1))"#: true,
 
-                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 (- 1 x3)) 0) 3))
-                   (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) (* 3 (- 1 x3)) 0) 3)) :rule cp_saturation :premises (c1))"#: true,
+                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 (- 1 x3))) 3))
+                   (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) (* 3 (- 1 x3))) 3)) :rule cp_saturation :premises (c1))"#: true,
 
             }
             "Wrong saturation" {
-                r#"(assume c1 (>= (+ (* 2 x1) 0) 1))
-                   (step t1 (cl (>= (+ (* 2 x1) 0) 1)) :rule cp_saturation :premises (c1))"#: false,
+                r#"(assume c1 (>= (* 2 x1) 1))
+                   (step t1 (cl (>= (* 2 x1) 1)) :rule cp_saturation :premises (c1))"#: false,
 
-                r#"(assume c1 (>= (+ (* 2 x1) 0) 1))
-                   (step t1 (cl (>= (+ (* 0 x1) 0) 1)) :rule cp_saturation :premises (c1))"#: false,
+                r#"(assume c1 (>= (* 2 x1) 1))
+                   (step t1 (cl (>= (* 0 x1) 1)) :rule cp_saturation :premises (c1))"#: false,
 
-                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 x3) 0) 3))
-                   (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) (* 2 x3) 0) 3)) :rule cp_saturation :premises (c1))"#: false,
+                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 x3)) 3))
+                   (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) (* 2 x3)) 3)) :rule cp_saturation :premises (c1))"#: false,
 
             }
             "Missing terms" {
-                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 x3) 0) 3))
-                   (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) 0) 3)) :rule cp_saturation :premises (c1))"#: false,
+                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 x3)) 3))
+                   (step t1 (cl (>= (+ (* 3 x1) (* 3 x2)) 3)) :rule cp_saturation :premises (c1))"#: false,
 
-                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) 0) 3))
+                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2)) 3))
+                   (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) (* 3 x3)) 3)) :rule cp_saturation :premises (c1))"#: false,
+            }
+            "Trailing Zero" {
+                r#"(assume c1 (>= (+ (* 2 x1) 0) 1))
+                   (step t1 (cl (>= (+ (* 1 x1) 0) 1)) :rule cp_saturation :premises (c1))"#: false,
+
+                r#"(assume c1 (>= (+ (* 2 x1) (* 5 x2) (* 3 x3) 0) 3))
+                   (step t1 (cl (>= (+ (* 2 x1) (* 3 x2) (* 3 x3) 0) 3)) :rule cp_saturation :premises (c1))"#: false,
+
+                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 x3) 0) 3))
                    (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) (* 3 x3) 0) 3)) :rule cp_saturation :premises (c1))"#: false,
+
+                r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 (- 1 x3)) 0) 3))
+                   (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) (* 3 (- 1 x3)) 0) 3)) :rule cp_saturation :premises (c1))"#: false,
             }
 
         }
