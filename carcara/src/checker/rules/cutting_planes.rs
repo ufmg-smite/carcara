@@ -338,46 +338,52 @@ mod tests {
                 (declare-fun x2 () Int)
                 ",
             "Simple working examples" {
-                r#"(assume c1 (>= (+ (* 2 x1) 0) 2))
-                   (step t1 (cl (>= (+ (* 1 x1) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
-                r#"(assume c1 (>= (+ (* 2 (- 1 x1)) 0) 2))
-                   (step t1 (cl (>= (+ (* 1 (- 1 x1)) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
+                r#"(assume c1 (>= (* 2 x1) 2))
+                   (step t1 (cl (>= (* 1 x1) 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
+                r#"(assume c1 (>= (* 2 (- 1 x1)) 2))
+                   (step t1 (cl (>= (* 1 (- 1 x1)) 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
             }
             "Wrong division" {
-                r#"(assume c1 (>= (+ (* 2 x1) 0) 2))
-                   (step t1 (cl (>= (+ (* 2 x1) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
-                r#"(assume c1 (>= (+ (* 2 x1) 0) 2))
-                   (step t1 (cl (>= (+ (* 1 x1) 0) 2)) :rule cp_division :premises (c1) :args (2) )"#: false,
+                r#"(assume c1 (>= (* 2 x1) 2))
+                   (step t1 (cl (>= (* 2 x1) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+                r#"(assume c1 (>= (* 2 x1) 2))
+                   (step t1 (cl (>= (* 1 x1) 2)) :rule cp_division :premises (c1) :args (2) )"#: false,
             }
             "Ceiling of Division" {
-                r#"(assume c1 (>= (+ (* 3 x1) 0) 2))
-                   (step t1 (cl (>= (+ (* 2 x1) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
-                r#"(assume c1 (>= (+ (* 3 x1) 0) 2))
-                   (step t1 (cl (>= (+ (* 1 x1) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+                r#"(assume c1 (>= (* 3 x1) 2))
+                   (step t1 (cl (>= (* 2 x1) 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
+                r#"(assume c1 (>= (* 3 x1) 2))
+                   (step t1 (cl (>= (* 1 x1) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
 
-                r#"(assume c1 (>= (+ (* 7 x1) 0) 2))
-                   (step t1 (cl (>= (+ (* 4 x1) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
-                r#"(assume c1 (>= (+ (* 7 x1) 0) 2))
-                   (step t1 (cl (>= (+ (* 3 x1) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+                r#"(assume c1 (>= (* 7 x1) 2))
+                   (step t1 (cl (>= (* 4 x1) 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
+                r#"(assume c1 (>= (* 7 x1) 2))
+                   (step t1 (cl (>= (* 3 x1) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
 
-                r#"(assume c1 (>= (+ (* 9 x1) 0) 2))
-                   (step t1 (cl (>= (+ (* 5 x1) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
-                r#"(assume c1 (>= (+ (* 9 x1) 0) 2))
-                   (step t1 (cl (>= (+ (* 4 x1) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+                r#"(assume c1 (>= (* 9 x1) 2))
+                   (step t1 (cl (>= (* 5 x1) 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
+                r#"(assume c1 (>= (* 9 x1) 2))
+                   (step t1 (cl (>= (* 4 x1) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
 
-                r#"(assume c1 (>= (+ (* 10 x1) 0) 3))
-                   (step t1 (cl (>= (+ (* 4 x1) 0) 1)) :rule cp_division :premises (c1) :args (3) )"#: true,
-                r#"(assume c1 (>= (+ (* 10 x1) 0) 3))
-                   (step t1 (cl (>= (+ (* 3 x1) 0) 1)) :rule cp_division :premises (c1) :args (3) )"#: false,
+                r#"(assume c1 (>= (* 10 x1) 3))
+                   (step t1 (cl (>= (* 4 x1) 1)) :rule cp_division :premises (c1) :args (3) )"#: true,
+                r#"(assume c1 (>= (* 10 x1) 3))
+                   (step t1 (cl (>= (* 3 x1) 1)) :rule cp_division :premises (c1) :args (3) )"#: false,
            }
            "Missing terms" {
-                r#"(assume c1 (>= (+ (* 2 x1) (* 1 x2) 0) 2))
-                   (step t1 (cl (>= (+ (* 1 x1) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+                r#"(assume c1 (>= (+ (* 2 x1) (* 1 x2)) 2))
+                   (step t1 (cl (>= (* 1 x1) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
 
-                 r#"(assume c1 (>= (+ (* 2 x1) 0) 2))
-                   (step t1 (cl (>= (+ (* 1 x1) (* 1 x2) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
-
+                 r#"(assume c1 (>= (* 2 x1) 2))
+                   (step t1 (cl (>= (+ (* 1 x1) (* 1 x2)) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
            }
+           "Trailing Zero" {
+                r#"(assume c1 (>= (+ (* 2 x1) 0) 2))
+                   (step t1 (cl (>= (+ (* 1 x1) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+                r#"(assume c1 (>= (+ (* 2 (- 1 x1)) 0) 2))
+                   (step t1 (cl (>= (+ (* 1 (- 1 x1)) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+            }
+
         }
     }
 
