@@ -20,7 +20,6 @@ fn equals_integer_err(term: &Rc<Term>, expected: &Integer) -> Result<(), Checker
 
 fn get_pb_hashmap(pbsum: &[Rc<Term>]) -> Result<PbHash, CheckerError> {
     let mut hm = HashMap::new();
-    // let n = pbsum.len() - 1;
 
     for term in pbsum {
         let (coeff, literal) =
@@ -58,7 +57,6 @@ fn unwrap_pseudoboolean_inequality(clause: &Rc<Term>) -> Result<(PbHash, Integer
         )));
     };
 
-    // let (pbsum, constant) = match_term_err!((>= (+ ...) constant) = clause)?;
     let constant = constant.as_integer_err()?;
     let pbsum = get_pb_hashmap(pbsum)?;
     Ok((pbsum, constant))
@@ -66,13 +64,11 @@ fn unwrap_pseudoboolean_inequality(clause: &Rc<Term>) -> Result<(PbHash, Integer
 
 fn add_pbsums(pbsum_a: &PbHash, pbsum_b: &PbHash) -> PbHash {
     let mut res = pbsum_a.clone();
-
     for (lit, cb) in pbsum_b {
         res.entry(lit.clone())
             .and_modify(|ca| *ca += cb)
             .or_insert(cb.clone());
     }
-
     res
 }
 
