@@ -172,7 +172,11 @@ pub fn pbblast_bvult(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 ///    `(= (bvugt x y) (>= (- (+ sum_x) (+ sum_y)) 1))`
 pub fn pbblast_bvugt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     let ((x, y), ((sum_x, sum_y), constant)) =
-        match_term_err!((= (bvugt x y) (>= (- (+ ...) (+ ...)) constant)) = &conclusion[0])?;
+        match_term_err!((= (bvugt x y) (>= (- sum_x sum_y) constant)) = &conclusion[0])?;
+
+    // Get the summation lists
+    let sum_x = get_pbsum(sum_x);
+    let sum_y = get_pbsum(sum_y);
 
     // Check that the constant is 1
     let constant: Integer = constant.as_integer_err()?;
@@ -1116,7 +1120,7 @@ mod tests {
             // For bvugt the correct encoding is:
             //   (- (sum_x8) (sum_y8)) >= 1
             // Here we deliberately use 63 instead of 64 for the summand corresponding to index 1 in x8.
-            "bvugt wrong coefficient" {
+            "bvugt on 8-bit bitvectors wrong coefficient" {
                 r#"(step t1 (cl (= (bvugt x8 y8)
                                  (>= (- (+ (* 1   ((_ int_of 0) x8))
                                            (* 2   ((_ int_of 1) x8))
@@ -1124,7 +1128,7 @@ mod tests {
                                            (* 8   ((_ int_of 3) x8))
                                            (* 16  ((_ int_of 4) x8))
                                            (* 32  ((_ int_of 5) x8))
-                                           (* 64  ((_ int_of 6) x8))    ; WRONG: should be (* 64 ((_ int_of 1) x8))
+                                           (* 63  ((_ int_of 6) x8))    ; WRONG: should be (* 64 ((_ int_of 1) x8))
                                            (* 128 ((_ int_of 7) x8)))
                                         (+ (* 1   ((_ int_of 0) y8))
                                            (* 2   ((_ int_of 1) y8))
