@@ -229,8 +229,8 @@ mod tests {
             // the summation for each side explicitly multiplies by 1.
             "Equality on single bits" {
                 r#"(step t1 (cl (= (= x1 y1)
-                                 (= (- (+ (* 1 ((_ int_of 0) x1)) 0)
-                                       (+ (* 1 ((_ int_of 0) y1)) 0))
+                                 (= (- (* 1 ((_ int_of 0) x1))
+                                       (* 1 ((_ int_of 0) y1)))
                                     0))) :rule pbblast_bveq)"#: true,
             }
 
@@ -238,15 +238,15 @@ mod tests {
             // the multiplication by 1 is omitted (i.e. defaulting to 1).
             "Omit multiplication by 1" {
                 r#"(step t1 (cl (= (= x1 y1)
-                                 (= (- (+ ((_ int_of 0) x1) 0)
-                                       (+ ((_ int_of 0) y1) 0))
+                                 (= (- ((_ int_of 0) x1)
+                                       ((_ int_of 0) y1))
                                     0))) :rule pbblast_bveq)"#: true,
             }
 
             // Check that a term which is not a subtraction of sums is rejected.
             "Not a subtraction of sums" {
                 r#"(step t1 (cl (= (= x1 y1)
-                                 (= (+ (* 1 ((_ int_of 0) x1)) 0)
+                                 (= (* 1 ((_ int_of 0) x1))
                                     0))) :rule pbblast_bveq)"#: false,
             }
 
@@ -254,8 +254,8 @@ mod tests {
             // Case 1: the first summand uses a zero coefficient.
             "Malformed products: coefficient 0 in first summand" {
                 r#"(step t1 (cl (= (= x1 y1)
-                                 (= (- (+ (* 0 ((_ int_of 0) x1)) 0)
-                                       (+ (* 1 ((_ int_of 0) y1)) 0))
+                                 (= (- (* 0 ((_ int_of 0) x1))
+                                       (* 1 ((_ int_of 0) y1)))
                                     0))) :rule pbblast_bveq)"#: false,
             }
 
@@ -263,11 +263,26 @@ mod tests {
             // Case 2: the second summand uses a zero coefficient.
             "Malformed products: coefficient 0 in second summand" {
                 r#"(step t1 (cl (= (= x1 y1)
-                                 (= (- (+ (* 1 ((_ int_of 0) x1)) 0)
-                                       (+ (* 0 ((_ int_of 0) y1)) 0))
+                                 (= (- (* 1 ((_ int_of 0) x1))
+                                       (* 0 ((_ int_of 0) y1)))
                                     0))) :rule pbblast_bveq)"#: false,
             }
 
+            // In the past a trailing zero was used. This checks that
+            // only the current format is allowed by the checker
+            "Trailing Zero" {
+                r#"(step t1 (cl (= (= x1 y1)
+                                 (= (- (+ (* 1 ((_ int_of 0) x1)) 0)
+                                       (+ (* 1 ((_ int_of 0) y1)) 0))
+                                    0))) :rule pbblast_bveq)"#: false,
+
+                r#"(step t1 (cl (= (= x1 y1)
+                                 (= (- (+ ((_ int_of 0) x1) 0)
+                                       (+ ((_ int_of 0) y1) 0))
+                                    0))) :rule pbblast_bveq)"#: false,
+            }
+
+ 
         }
     }
 
@@ -284,11 +299,20 @@ mod tests {
             "Equality on two bits" {
                 r#"(step t1 (cl (= (= x2 y2)
                                  (= (- (+ (* 1 ((_ int_of 0) x2))
-                                         (* 2 ((_ int_of 1) x2)) 0)
+                                          (* 2 ((_ int_of 1) x2)))
                                        (+ (* 1 ((_ int_of 0) y2))
-                                          (* 2 ((_ int_of 1) y2)) 0))
+                                          (* 2 ((_ int_of 1) y2))))
                                     0))) :rule pbblast_bveq)"#: true,
             }
+            "Trailing Zero" {
+                r#"(step t1 (cl (= (= x2 y2)
+                                 (= (- (+ (* 1 ((_ int_of 0) x2))
+                                          (* 2 ((_ int_of 1) x2)) 0)
+                                       (+ (* 1 ((_ int_of 0) y2))
+                                          (* 2 ((_ int_of 1) y2)) 0))
+                                    0))) :rule pbblast_bveq)"#: false,
+            }
+ 
         }
     }
 
@@ -302,24 +326,24 @@ mod tests {
             // Check equality on eight-bit bitvectors
             "Equality on 8-bit bitvectors" {
                 r#"(step t1 (cl (= (= x8 y8)
-                                 (= (- (+ (* 1  ((_ int_of 0) x8))
-                                         (* 2   ((_ int_of 1) x8))
-                                         (* 4   ((_ int_of 2) x8))
-                                         (* 8   ((_ int_of 3) x8))
-                                         (* 16  ((_ int_of 4) x8))
-                                         (* 32  ((_ int_of 5) x8))
-                                         (* 64  ((_ int_of 6) x8))
-                                         (* 128 ((_ int_of 7) x8))
-                                         0)
-                                     (+ (* 1   ((_ int_of 0) y8))
-                                        (* 2   ((_ int_of 1) y8))
-                                        (* 4   ((_ int_of 2) y8))
-                                        (* 8   ((_ int_of 3) y8))
-                                        (* 16  ((_ int_of 4) y8))
-                                        (* 32  ((_ int_of 5) y8))
-                                        (* 64  ((_ int_of 6) y8))
-                                        (* 128 ((_ int_of 7) y8))
-                                        0))
+                                 (= (- (+ (* 1   ((_ int_of 0) x8))
+                                          (* 2   ((_ int_of 1) x8))
+                                          (* 4   ((_ int_of 2) x8))
+                                          (* 8   ((_ int_of 3) x8))
+                                          (* 16  ((_ int_of 4) x8))
+                                          (* 32  ((_ int_of 5) x8))
+                                          (* 64  ((_ int_of 6) x8))
+                                          (* 128 ((_ int_of 7) x8))
+                                       )
+                                       (+ (* 1   ((_ int_of 0) y8))
+                                          (* 2   ((_ int_of 1) y8))
+                                          (* 4   ((_ int_of 2) y8))
+                                          (* 8   ((_ int_of 3) y8))
+                                          (* 16  ((_ int_of 4) y8))
+                                          (* 32  ((_ int_of 5) y8))
+                                          (* 64  ((_ int_of 6) y8))
+                                          (* 128 ((_ int_of 7) y8))
+                                       ))
                                 0))) :rule pbblast_bveq)"#: true,
             }
 
@@ -328,24 +352,24 @@ mod tests {
             // We introduce a wrong coefficient (63 instead of 64).
             "bveq wrong coefficient in x8" {
                 r#"(step t1 (cl (= (= x8 y8)
-                                 (= (- (+ (* 1  ((_ int_of 0) x8))
-                                         (* 2   ((_ int_of 1) x8))
-                                         (* 4   ((_ int_of 2) x8))
-                                         (* 8   ((_ int_of 3) x8))
-                                         (* 16  ((_ int_of 4) x8))
-                                         (* 32  ((_ int_of 5) x8))
-                                         (* 63  ((_ int_of 6) x8))  ; WRONG: should be (* 64 ((_ int_of 1) x8))
-                                         (* 128 ((_ int_of 7) x8))
-                                         0)
-                                      (+ (* 1   ((_ int_of 0) y8))
-                                         (* 2   ((_ int_of 1) y8))
-                                         (* 4   ((_ int_of 2) y8))
-                                         (* 8   ((_ int_of 3) y8))
-                                         (* 16  ((_ int_of 4) y8))
-                                         (* 32  ((_ int_of 5) y8))
-                                         (* 64  ((_ int_of 6) y8))
-                                         (* 128 ((_ int_of 7) y8))
-                                         0))
+                                 (= (- (+ (* 1   ((_ int_of 0) x8))
+                                          (* 2   ((_ int_of 1) x8))
+                                          (* 4   ((_ int_of 2) x8))
+                                          (* 8   ((_ int_of 3) x8))
+                                          (* 16  ((_ int_of 4) x8))
+                                          (* 32  ((_ int_of 5) x8))
+                                          (* 63  ((_ int_of 6) x8))  ; WRONG: should be (* 64 ((_ int_of 1) x8))
+                                          (* 128 ((_ int_of 7) x8))
+                                       )
+                                       (+ (* 1   ((_ int_of 0) y8))
+                                          (* 2   ((_ int_of 1) y8))
+                                          (* 4   ((_ int_of 2) y8))
+                                          (* 8   ((_ int_of 3) y8))
+                                          (* 16  ((_ int_of 4) y8))
+                                          (* 32  ((_ int_of 5) y8))
+                                          (* 64  ((_ int_of 6) y8))
+                                          (* 128 ((_ int_of 7) y8))
+                                       ))
                                  0))) :rule pbblast_bveq)"#: false,
             }
 
@@ -354,25 +378,50 @@ mod tests {
             // We introduce a wrong constant (1 instead of 0).
             "bveq wrong constant in equality" {
                 r#"(step t1 (cl (= (= x8 y8)
-                                 (= (- (+ (* 1  ((_ int_of 0) x8))
-                                         (* 2   ((_ int_of 1) x8))
-                                         (* 4   ((_ int_of 2) x8))
-                                         (* 8   ((_ int_of 3) x8))
-                                         (* 16  ((_ int_of 4) x8))
-                                         (* 32  ((_ int_of 5) x8))
-                                         (* 64  ((_ int_of 6) x8))
-                                         (* 128 ((_ int_of 7) x8))
-                                         0)
-                                      (+ (* 1   ((_ int_of 0) y8))
-                                         (* 2   ((_ int_of 1) y8))
-                                         (* 4   ((_ int_of 2) y8))
-                                         (* 8   ((_ int_of 3) y8))
-                                         (* 16  ((_ int_of 4) y8))
-                                         (* 32  ((_ int_of 5) y8))
-                                         (* 64  ((_ int_of 6) y8))
-                                         (* 128 ((_ int_of 7) y8))
-                                         0))
-                                 1))) :rule pbblast_bveq)"#: false,
+                                 (= (- (+ (* 1   ((_ int_of 0) x8))
+                                          (* 2   ((_ int_of 1) x8))
+                                          (* 4   ((_ int_of 2) x8))
+                                          (* 8   ((_ int_of 3) x8))
+                                          (* 16  ((_ int_of 4) x8))
+                                          (* 32  ((_ int_of 5) x8))
+                                          (* 64  ((_ int_of 6) x8))
+                                          (* 128 ((_ int_of 7) x8))
+                                       )
+                                       (+ (* 1   ((_ int_of 0) y8))
+                                          (* 2   ((_ int_of 1) y8))
+                                          (* 4   ((_ int_of 2) y8))
+                                          (* 8   ((_ int_of 3) y8))
+                                          (* 16  ((_ int_of 4) y8))
+                                          (* 32  ((_ int_of 5) y8))
+                                          (* 64  ((_ int_of 6) y8))
+                                          (* 128 ((_ int_of 7) y8))
+                                       ))
+                                 1) ; WRONG: should be 0
+                                 )) :rule pbblast_bveq)"#: false,
+            }
+            "Trailing Zero" {
+                r#"(step t1 (cl (= (= x8 y8)
+                                 (= (- (+ (* 1   ((_ int_of 0) x8))
+                                          (* 2   ((_ int_of 1) x8))
+                                          (* 4   ((_ int_of 2) x8))
+                                          (* 8   ((_ int_of 3) x8))
+                                          (* 16  ((_ int_of 4) x8))
+                                          (* 32  ((_ int_of 5) x8))
+                                          (* 64  ((_ int_of 6) x8))
+                                          (* 128 ((_ int_of 7) x8))
+                                          0
+                                       )
+                                       (+ (* 1   ((_ int_of 0) y8))
+                                          (* 2   ((_ int_of 1) y8))
+                                          (* 4   ((_ int_of 2) y8))
+                                          (* 8   ((_ int_of 3) y8))
+                                          (* 16  ((_ int_of 4) y8))
+                                          (* 32  ((_ int_of 5) y8))
+                                          (* 64  ((_ int_of 6) y8))
+                                          (* 128 ((_ int_of 7) y8))
+                                          0
+                                       ))
+                                0))) :rule pbblast_bveq)"#: false,
             }
         }
     }
