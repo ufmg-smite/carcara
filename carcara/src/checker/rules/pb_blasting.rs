@@ -328,13 +328,17 @@ pub fn pbblast_bvsgt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// The expected shape is:
 ///    `(= (bvsge x y) (>= (+ (- x_sum (* 2^(n-1) x_n-1))) (- (* 2^(n-1) y_n-1) y_sum)) 0))`
 pub fn pbblast_bvsge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), (((sum_x, sign_x), (sign_y, sum_y)), constant)) = match_term_err!((= (bvsge x y) (>= (+ (- (+ ...) sign_x) (- sign_y (+ ...))) constant)) = &conclusion[0])?;
+    let ((x, y), (((sum_x, sign_x), (sign_y, sum_y)), constant)) = match_term_err!((= (bvsge x y) (>= (+ (- sum_x sign_x) (- sign_y sum_y)) constant)) = &conclusion[0])?;
+
+    // Get the summation lists
+    let sum_x = get_pbsum(sum_x);
+    let sum_y = get_pbsum(sum_y);
 
     // Get bit width of `x`
     let n = get_bit_width(x, pool)?;
 
     // Range from 0 to n-2
-    let the_range = 0..(sum_y.len() - 1);
+    let the_range = 0..sum_y.len();
 
     // Check that the constant is 0
     let constant: Integer = constant.as_integer_err()?;
@@ -2155,12 +2159,12 @@ mod tests {
                 r#"(step t1 (cl (= (bvsge x2 y2)
                                 (>= (+
                                         (-
-                                            (+ (* 1 ((_ int_of 0) x2)) 0)   ; x sum
-                                            (* 2 ((_ int_of 1) x2))         ; x sign
+                                            (* 1 ((_ int_of 0) x2))   ; x sum
+                                            (* 2 ((_ int_of 1) x2))   ; x sign
                                         )
                                         (-
-                                            (* 2 ((_ int_of 1) y2))         ; y sign
-                                            (+ (* 1 ((_ int_of 0) y2)) 0)   ; y sum
+                                            (* 2 ((_ int_of 1) y2))   ; y sign
+                                            (* 1 ((_ int_of 0) y2))   ; y sum
                                         )
                                     ) 0))) :rule pbblast_bvsge)"#: true,
             }
@@ -2170,12 +2174,12 @@ mod tests {
                 r#"(step t1 (cl (= (bvsge x2 y2)
                                 (>= (+
                                         (-
-                                            (+ ((_ int_of 0) x2) 0)         ; x sum omitted "* 1"
+                                            ((_ int_of 0) x2)         ; x sum omitted "* 1"
                                             (* 2 ((_ int_of 1) x2)) 
                                         )
                                         (-
                                             (* 2 ((_ int_of 1) y2))         
-                                            (+ ((_ int_of 0) y2) 0)         ; y sum omitted "* 1"
+                                            ((_ int_of 0) y2)         ; y sum omitted "* 1"
                                         )
                                     ) 0))) :rule pbblast_bvsge)"#: true,
             }
@@ -2185,12 +2189,12 @@ mod tests {
                 r#"(step t1 (cl (= (bvsge x2 y2)
                                 (>= (+
                                         (-
-                                            (+ (* 1 ((_ int_of 0) x2)) 0)
-                                            (* 1 ((_ int_of 1) x2))         ; should be * 2
+                                            (* 1 ((_ int_of 0) x2))
+                                            (* 1 ((_ int_of 1) x2))   ; should be * 2
                                         )
                                         (-
                                             (* 2 ((_ int_of 1) y2))
-                                            (+ (* 1 ((_ int_of 0) y2)) 0)
+                                            (* 1 ((_ int_of 0) y2))
                                         )
                                     ) 0))) :rule pbblast_bvsge)"#: false,
             }
@@ -2199,12 +2203,12 @@ mod tests {
                 r#"(step t1 (cl (= (bvsge x2 y2)
                                 (>= (+
                                         (-
-                                            (+ (* 1 ((_ int_of 0) x2)) 0)
+                                            (* 1 ((_ int_of 0) x2))
                                             (* 2 ((_ int_of 1) x2))    
                                         )
                                         (-
-                                            (* 1 ((_ int_of 1) y2))         ; should be * 2
-                                            (+ (* 1 ((_ int_of 0) y2)) 0)
+                                            (* 1 ((_ int_of 1) y2))   ; should be * 2
+                                            (* 1 ((_ int_of 0) y2))
                                         )
                                     ) 0))) :rule pbblast_bvsge)"#: false,
             }
@@ -2214,12 +2218,12 @@ mod tests {
                 r#"(step t1 (cl (= (bvsge x2 y2)
                                 (>= (+
                                         (-
-                                            (+ (* 1 ((_ int_of 0) x2)) 0)
-                                            (* 2 ((_ int_of 0) x2))         ; should be (_ int_of 1)
+                                            (* 1 ((_ int_of 0) x2))
+                                            (* 2 ((_ int_of 0) x2))   ; should be (_ int_of 1)
                                         )
                                         (-
                                             (* 2 ((_ int_of 1) y2))
-                                            (+ (* 1 ((_ int_of 0) y2)) 0)
+                                            (* 1 ((_ int_of 0) y2))
                                         )
                                     ) 0))) :rule pbblast_bvsge)"#: false,
             }
@@ -2228,12 +2232,12 @@ mod tests {
                 r#"(step t1 (cl (= (bvsge x2 y2)
                                 (>= (+
                                         (-
-                                            (+ (* 1 ((_ int_of 0) x2)) 0)
+                                            (* 1 ((_ int_of 0) x2))
                                             (* 2 ((_ int_of 1) x2))    
                                         )
                                         (-
-                                            (* 2 ((_ int_of 0) y2))         ; should be (_ int_of 1)
-                                            (+ (* 1 ((_ int_of 0) y2)) 0)
+                                            (* 2 ((_ int_of 0) y2))   ; should be (_ int_of 1)
+                                            (* 1 ((_ int_of 0) y2))
                                         )
                                     ) 0))) :rule pbblast_bvsge)"#: false,
             }
@@ -2242,12 +2246,12 @@ mod tests {
                 r#"(step t1 (cl (= (bvsge x2 y2)
                                 (>= (+
                                         (-
-                                            (+ (* 1 ((_ int_of 0) x2)) 0)
+                                            (* 1 ((_ int_of 0) x2))
                                             (* 2 ((_ int_of 1) x2))    
                                         )
                                         (-
-                                            (* 2 ((_ int_of 1) x2))         ; should be y2
-                                            (+ (* 1 ((_ int_of 0) y2)) 0)
+                                            (* 2 ((_ int_of 1) x2))   ; should be y2
+                                            (* 1 ((_ int_of 0) y2))
                                         )
                                     ) 0))) :rule pbblast_bvsge)"#: false,
             }
@@ -2256,29 +2260,53 @@ mod tests {
                 r#"(step t1 (cl (= (bvsge x2 y2)
                                 (>= (+
                                         (-
-                                            (+ (* 1 ((_ int_of 0) x2)) 0)
-                                            (* 2 ((_ int_of 1) y2))         ; should be x2
+                                            (* 1 ((_ int_of 0) x2))
+                                            (* 2 ((_ int_of 1) y2))   ; should be x2
                                         )
                                         (-
                                             (* 2 ((_ int_of 1) y2))         
-                                            (+ (* 1 ((_ int_of 0) y2)) 0)
+                                            (* 1 ((_ int_of 0) y2))
                                         )
                                     ) 0))) :rule pbblast_bvsge)"#: false,
             }
-
-
 
             // Wrong indexing of the summation term
             "bvsge on two bits with wrong indexing of the summation term" {
                 r#"(step t1 (cl (= (bvsge x2 y2)
                                 (>= (+
                                         (-
-                                            (+ (* 1 ((_ int_of 1) x2)) 0)   ; should be "int_of 0"
+                                            (* 1 ((_ int_of 1) x2))   ; should be "int_of 0"
                                             (* 2 ((_ int_of 1) x2))
                                         )
                                         (-
                                             (* 2 ((_ int_of 1) y2))
-                                            (+ (* 1 ((_ int_of 0) y2)) 0)
+                                            (* 1 ((_ int_of 0) y2))
+                                        )
+                                    ) 0))) :rule pbblast_bvsge)"#: false,
+            }
+
+            "Trailing Zero" {
+                r#"(step t1 (cl (= (bvsge x2 y2)
+                                (>= (+
+                                        (-
+                                            (+ (* 1 ((_ int_of 0) x2)) 0)   ; x sum
+                                            (* 2 ((_ int_of 1) x2))         ; x sign
+                                        )
+                                        (-
+                                            (* 2 ((_ int_of 1) y2))         ; y sign
+                                            (+ (* 1 ((_ int_of 0) y2)) 0)   ; y sum
+                                        )
+                                    ) 0))) :rule pbblast_bvsge)"#: false,
+
+                r#"(step t1 (cl (= (bvsge x2 y2)
+                                (>= (+
+                                        (-
+                                            (+ ((_ int_of 0) x2) 0)         ; x sum omitted "* 1"
+                                            (* 2 ((_ int_of 1) x2)) 
+                                        )
+                                        (-
+                                            (* 2 ((_ int_of 1) y2))         
+                                            (+ ((_ int_of 0) y2) 0)         ; y sum omitted "* 1"
                                         )
                                     ) 0))) :rule pbblast_bvsge)"#: false,
             }
@@ -2299,6 +2327,75 @@ mod tests {
                                         (-
                                             (+ (* 1 ((_ int_of 0) x4))
                                                (* 2 ((_ int_of 1) x4))
+                                               (* 4 ((_ int_of 2) x4)))
+                                            (* 8 ((_ int_of 3) x4)))
+                                        (-
+                                            (* 8 ((_ int_of 3) y4))
+                                            (+ (* 1 ((_ int_of 0) y4))
+                                               (* 2 ((_ int_of 1) y4))
+                                               (* 4 ((_ int_of 2) y4)))
+                                        )
+                                    ) 0))) :rule pbblast_bvsge)"#: true,
+            }
+
+            // Omitting explicit multiplication by 1 in the sum parts.
+            "bvsge on 4 bits omitting multiplication by 1 in sum parts" {
+                r#"(step t1 (cl (= (bvsge x4 y4)
+                                (>= (+
+                                        (-
+                                            (+ ((_ int_of 0) x4)            ; omit "* 1"
+                                               (* 2 ((_ int_of 1) x4))
+                                               (* 4 ((_ int_of 2) x4)))
+                                            (* 8 ((_ int_of 3) x4)))
+                                        (-
+                                            (* 8 ((_ int_of 3) y4))
+                                            (+ ((_ int_of 0) y4)            ; omit "* 1"
+                                               (* 2 ((_ int_of 1) y4))
+                                               (* 4 ((_ int_of 2) y4)))
+                                        )
+                                    ) 0))) :rule pbblast_bvsge)"#: true,
+            }
+
+            "wrong indexed bvsge on 4 bits with explicit multiplication" {
+                r#"(step t1 (cl (= (bvsge x4 y4)
+                                (>= (+
+                                        (-
+                                            (+ (* 8 ((_ int_of 0) x4)) ; wrong coefficients
+                                               (* 4 ((_ int_of 1) x4))
+                                               (* 2 ((_ int_of 2) x4)))
+                                            (* 1 ((_ int_of 3) x4)))
+                                        (-
+                                            (* 8 ((_ int_of 3) y4))
+                                            (+ (* 1 ((_ int_of 0) y4))
+                                               (* 2 ((_ int_of 1) y4))
+                                               (* 4 ((_ int_of 2) y4)))
+                                        )
+                                    ) 0))) :rule pbblast_bvsge)"#: false,
+            }
+
+            "bvsge on four bits wrong scalar of the sign bit" {
+                            r#"(step t1 (cl (= (bvsge x4 y4)
+                                (>= (+
+                                        (-
+                                            (+ (* 1 ((_ int_of 0) x4))
+                                               (* 2 ((_ int_of 1) x4))
+                                               (* 4 ((_ int_of 2) x4)))
+                                            (* 4 ((_ int_of 3) x4)))    ; should be * 8
+                                        (-
+                                            (* 8 ((_ int_of 3) y4))
+                                            (+ (* 1 ((_ int_of 0) y4))
+                                               (* 2 ((_ int_of 1) y4))
+                                               (* 4 ((_ int_of 2) y4)))
+                                        )
+                                    ) 0))) :rule pbblast_bvsge)"#: false,
+            }
+
+            "Trailing Zero" {
+                r#"(step t1 (cl (= (bvsge x4 y4)
+                                (>= (+
+                                        (-
+                                            (+ (* 1 ((_ int_of 0) x4))
+                                               (* 2 ((_ int_of 1) x4))
                                                (* 4 ((_ int_of 2) x4))
                                                0)
                                             (* 8 ((_ int_of 3) x4)))
@@ -2309,11 +2406,8 @@ mod tests {
                                                (* 4 ((_ int_of 2) y4))
                                                0)
                                         )
-                                    ) 0))) :rule pbblast_bvsge)"#: true,
-            }
+                                    ) 0))) :rule pbblast_bvsge)"#: false,
 
-            // Omitting explicit multiplication by 1 in the sum parts.
-            "bvsge on 4 bits omitting multiplication by 1 in sum parts" {
                 r#"(step t1 (cl (= (bvsge x4 y4)
                                 (>= (+
                                         (-
@@ -2329,47 +2423,8 @@ mod tests {
                                                (* 4 ((_ int_of 2) y4))
                                                0)
                                         )
-                                    ) 0))) :rule pbblast_bvsge)"#: true,
-            }
-
-            "wrong indexed bvsge on 4 bits with explicit multiplication" {
-                r#"(step t1 (cl (= (bvsge x4 y4)
-                                (>= (+
-                                        (-
-                                            (+ (* 8 ((_ int_of 0) x4)) ; wrong coefficients
-                                               (* 4 ((_ int_of 1) x4))
-                                               (* 2 ((_ int_of 2) x4))
-                                               0)
-                                            (* 1 ((_ int_of 3) x4)))
-                                        (-
-                                            (* 8 ((_ int_of 3) y4))
-                                            (+ (* 1 ((_ int_of 0) y4))
-                                               (* 2 ((_ int_of 1) y4))
-                                               (* 4 ((_ int_of 2) y4))
-                                               0)
-                                        )
                                     ) 0))) :rule pbblast_bvsge)"#: false,
             }
-
-            "bvsge on four bits wrong scalar of the sign bit" {
-                            r#"(step t1 (cl (= (bvsge x4 y4)
-                                (>= (+
-                                        (-
-                                            (+ (* 1 ((_ int_of 0) x4))
-                                               (* 2 ((_ int_of 1) x4))
-                                               (* 4 ((_ int_of 2) x4))
-                                               0)
-                                            (* 4 ((_ int_of 3) x4)))    ; should be * 8
-                                        (-
-                                            (* 8 ((_ int_of 3) y4))
-                                            (+ (* 1 ((_ int_of 0) y4))
-                                               (* 2 ((_ int_of 1) y4))
-                                               (* 4 ((_ int_of 2) y4))
-                                               0)
-                                        )
-                                    ) 0))) :rule pbblast_bvsge)"#: false,
-            }
-
         }
     }
 
