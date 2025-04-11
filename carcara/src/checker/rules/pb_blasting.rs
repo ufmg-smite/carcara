@@ -19,6 +19,15 @@ fn get_bit_width(x: &Rc<Term>, pool: &mut dyn TermPool) -> Result<usize, Checker
     )))
 }
 
+// Helper to unwrap a summation list
+fn get_pbsum(pbsum: &Rc<Term>) -> &[Rc<Term>] {
+    if let Some(pbsum) = match_term!((+ ...) = pbsum) {
+        pbsum
+    } else {
+        std::slice::from_ref(pbsum)
+    }
+}
+
 /// Helper to check that a summation has the expected shape
 fn check_pbblast_sum(
     pool: &mut dyn TermPool,
@@ -30,9 +39,6 @@ fn check_pbblast_sum(
     let width = get_bit_width(bitvector, pool)?;
 
     // The `range` must be the same length as the `sum`, but may be less than `width`
-
-    // Drop the last element, which is the constant zero
-    let sum = &sum[..sum.len() - 1];
 
     // The summation must have at most as many summands as the bitvector has bits.
     rassert!(
@@ -109,7 +115,7 @@ fn check_pbblast_constraint(
     right_sum: &[Rc<Term>],
     range: Option<Range<usize>>,
 ) -> RuleResult {
-    let range = range.unwrap_or(0..(left_sum.len() - 1));
+    let range = range.unwrap_or(0..(left_sum.len()));
     check_pbblast_sum(pool, left_bv, left_sum, &range)?;
     check_pbblast_sum(pool, right_bv, right_sum, &range)
 }
@@ -119,7 +125,11 @@ fn check_pbblast_constraint(
 ///    `(= (= x y) (= (- (+ sum_x) (+ sum_y)) 0))`
 pub fn pbblast_bveq(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     let ((x, y), ((sum_x, sum_y), constant)) =
-        match_term_err!((= (= x y) (= (- (+ ...) (+ ...)) constant)) = &conclusion[0])?;
+        match_term_err!((= (= x y) (= (- sum_x sum_y) constant)) = &conclusion[0])?;
+
+    // Get the summation lists
+    let sum_x = get_pbsum(sum_x);
+    let sum_y = get_pbsum(sum_y);
 
     // Check that the constant is 0
     let constant = constant.as_integer_err()?;
@@ -282,7 +292,7 @@ mod tests {
                                     0))) :rule pbblast_bveq)"#: false,
             }
 
- 
+
         }
     }
 
@@ -312,7 +322,7 @@ mod tests {
                                           (* 2 ((_ int_of 1) y2)) 0))
                                     0))) :rule pbblast_bveq)"#: false,
             }
- 
+
         }
     }
 
