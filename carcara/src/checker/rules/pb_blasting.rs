@@ -1,5 +1,3 @@
-use std::ops::Range;
-
 use super::{RuleArgs, RuleResult};
 use crate::{
     ast::{pool::TermPool, Rc, Sort, Term},
@@ -34,12 +32,9 @@ fn check_pbblast_sum(
     pool: &mut dyn TermPool,
     bitvector: &Rc<Term>,
     sum: &[Rc<Term>],
-    range: &Range<usize>,
 ) -> RuleResult {
     // Obtain the bitvector width from the pool.
     let width = get_bit_width(bitvector, pool)?;
-
-    // The `range` must be the same length as the `sum`, but may be less than `width`
 
     // The summation must have at most as many summands as the bitvector has bits.
     rassert!(
@@ -51,17 +46,7 @@ fn check_pbblast_sum(
         ))
     );
 
-    // The summation must have as many summands as the range has element.
-    rassert!(
-        range.len() == sum.len(),
-        CheckerError::Explanation(format!(
-            "Mismatched range size {} {}",
-            range.len(),
-            sum.len()
-        ))
-    );
-
-    for (i, element) in range.clone().zip(sum.iter()) {
+    for (i, element) in sum.iter().enumerate() {
         // Try to match (* c ((_ int_of idx) bv))
         let (c, idx, bv) = match match_term!((* c ((_ int_of idx) bv)) = element) {
             Some((c, (idx, bv))) => (c.as_integer_err()?, idx, bv),
@@ -114,11 +99,9 @@ fn check_pbblast_constraint(
     right_bv: &Rc<Term>,
     left_sum: &[Rc<Term>],
     right_sum: &[Rc<Term>],
-    range: Option<Range<usize>>,
 ) -> RuleResult {
-    let range = range.unwrap_or(0..(left_sum.len()));
-    check_pbblast_sum(pool, left_bv, left_sum, &range)?;
-    check_pbblast_sum(pool, right_bv, right_sum, &range)
+    check_pbblast_sum(pool, left_bv, left_sum)?;
+    check_pbblast_sum(pool, right_bv, right_sum)
 }
 
 /// Implements the equality rule
@@ -141,7 +124,7 @@ pub fn pbblast_bveq(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
 
     // Check that the summations have the correct structure.
     // (For equality the order is: sum_x for x and sum_y for y.)
-    check_pbblast_constraint(pool, x, y, sum_x, sum_y, None)
+    check_pbblast_constraint(pool, x, y, sum_x, sum_y)
 }
 
 /// Implements the unsigned-less-than rule.
@@ -163,7 +146,7 @@ pub fn pbblast_bvult(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     );
 
     // For bvult the summations occur in reverse: the "left" sum comes from y and the "right" from x.
-    check_pbblast_constraint(pool, y, x, sum_y, sum_x, None)
+    check_pbblast_constraint(pool, y, x, sum_y, sum_x)
 }
 
 /// Implements the unsigned-greater-than rule.
@@ -186,7 +169,7 @@ pub fn pbblast_bvugt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     );
 
     // For bvugt the summations appear in the same order as in equality.
-    check_pbblast_constraint(pool, x, y, sum_x, sum_y, None)
+    check_pbblast_constraint(pool, x, y, sum_x, sum_y)
 }
 
 /// Implements the unsigned-greater-or-equal rule.
@@ -208,7 +191,7 @@ pub fn pbblast_bvuge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         CheckerError::Explanation(format!("Non-zero constant {}", constant))
     );
 
-    check_pbblast_constraint(pool, x, y, sum_x, sum_y, None)
+    check_pbblast_constraint(pool, x, y, sum_x, sum_y)
 }
 
 /// Implements the unsigned-less-or-equal rule.
@@ -230,7 +213,7 @@ pub fn pbblast_bvule(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         CheckerError::Explanation(format!("Non-zero constant {}", constant))
     );
 
-    check_pbblast_constraint(pool, x, y, sum_x, sum_y, None)
+    check_pbblast_constraint(pool, x, y, sum_x, sum_y)
 }
 
 /// Helper that checks the the `sign` term has the format -(2<sup>n-1</sup>) x<sub>n-1</sub>
@@ -274,9 +257,6 @@ pub fn pbblast_bvslt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 
     let n = get_bit_width(x, pool)?;
 
-    // Range from 0 to n-2
-    let the_range = 0..sum_y.len();
-
     // Check that the constant is 1
     let constant: Integer = constant.as_integer_err()?;
     rassert!(
@@ -289,7 +269,7 @@ pub fn pbblast_bvslt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     check_pbblast_signed_relation(n, sign_x, x)?;
 
     // For bvult the summations occur in reverse: the "left" sum comes from y and the "right" from x.
-    check_pbblast_constraint(pool, y, x, sum_y, sum_x, Some(the_range))
+    check_pbblast_constraint(pool, y, x, sum_y, sum_x)
 }
 
 /// Implements the signed-greater-than rule.
@@ -306,9 +286,6 @@ pub fn pbblast_bvsgt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     // Get bit width of `x`
     let n = get_bit_width(x, pool)?;
 
-    // Range from 0 to n-2
-    let the_range = 0..sum_y.len();
-
     // Check that the constant is 1
     let constant: Integer = constant.as_integer_err()?;
     rassert!(
@@ -320,7 +297,7 @@ pub fn pbblast_bvsgt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     check_pbblast_signed_relation(n, sign_x, x)?;
     check_pbblast_signed_relation(n, sign_y, y)?;
 
-    check_pbblast_constraint(pool, x, y, sum_x, sum_y, Some(the_range))
+    check_pbblast_constraint(pool, x, y, sum_x, sum_y)
 }
 
 /// Implements the signed-greater-equal rule.
@@ -337,9 +314,6 @@ pub fn pbblast_bvsge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     // Get bit width of `x`
     let n = get_bit_width(x, pool)?;
 
-    // Range from 0 to n-2
-    let the_range = 0..sum_y.len();
-
     // Check that the constant is 0
     let constant: Integer = constant.as_integer_err()?;
     rassert!(
@@ -351,7 +325,7 @@ pub fn pbblast_bvsge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     check_pbblast_signed_relation(n, sign_x, x)?;
     check_pbblast_signed_relation(n, sign_y, y)?;
 
-    check_pbblast_constraint(pool, x, y, sum_x, sum_y, Some(the_range))
+    check_pbblast_constraint(pool, x, y, sum_x, sum_y)
 }
 
 /// Implements the signed-less-equal rule.
@@ -368,9 +342,6 @@ pub fn pbblast_bvsle(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     // Get bit width of `x`
     let n = get_bit_width(x, pool)?;
 
-    // Range from 0 to n-2
-    let the_range = 0..sum_y.len();
-
     // Check that the constant is 0
     let constant: Integer = constant.as_integer_err()?;
     rassert!(
@@ -383,7 +354,7 @@ pub fn pbblast_bvsle(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     check_pbblast_signed_relation(n, sign_x, x)?;
 
     // For bvsle the summations occur in reverse: the "left" sum comes from y and the "right" from x.
-    check_pbblast_constraint(pool, y, x, sum_y, sum_x, Some(the_range))
+    check_pbblast_constraint(pool, y, x, sum_y, sum_x)
 }
 
 pub fn pbblast_pbbvar(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
