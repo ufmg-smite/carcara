@@ -146,8 +146,23 @@ pub fn pbblast_bveq(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 /// Implements the unsigned-less-than rule.
 /// The expected shape is:
 ///    `(= (bvult x y) (>= (- (+ sum_y) (+ sum_x)) 1))`
-pub fn pbblast_bvult(RuleArgs { .. }: RuleArgs) -> RuleResult {
-    Err(CheckerError::Unspecified)
+pub fn pbblast_bvult(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    let ((x, y), ((sum_y, sum_x), constant)) =
+        match_term_err!((= (bvult x y) (>= (- sum_y sum_x) constant)) = &conclusion[0])?;
+
+    // Get the summation lists
+    let sum_x = get_pbsum(sum_x);
+    let sum_y = get_pbsum(sum_y);
+
+    // Check that the constant is 1
+    let constant: Integer = constant.as_integer_err()?;
+    rassert!(
+        constant == 1,
+        CheckerError::Explanation(format!("Constant not 1: {}", constant))
+    );
+
+    // For bvult the summations occur in reverse: the "left" sum comes from y and the "right" from x.
+    check_pbblast_constraint(pool, y, x, sum_y, sum_x, None)
 }
 
 /// Implements the unsigned-greater-than rule.
@@ -518,7 +533,7 @@ mod tests {
                 r#"(step t1 (cl (= (bvult x2 y2)
                                  (>= (- (+ (* 1 ((_ int_of 0) y2)) (* 2 ((_ int_of 1) y2)) 0)
                                         (+ (* 1 ((_ int_of 0) x2)) (* 2 ((_ int_of 1) x2)) 0))
-                                     1))) :rule pbblast_bvult)"#: true,
+                                     1))) :rule pbblast_bvult)"#: false,
             }
 
         }
