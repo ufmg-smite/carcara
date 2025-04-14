@@ -90,6 +90,49 @@ fn check_pbblast_sum(
     Ok(())
 }
 
+// Helper to check that a summation has the expected shape
+// when the bitvector is a pbbterm application "short-circuiting"
+fn check_pbblast_sum_short_circuit(pbbterm: &[Rc<Term>], sum: &[Rc<Term>]) -> RuleResult {
+    // The summation must have at most as many summands as the bitvector has bits.
+    rassert!(
+        pbbterm.len() >= sum.len(),
+        CheckerError::Explanation(format!(
+            "Mismatched number of summands {} and bits {}",
+            pbbterm.len(),
+            sum.len()
+        ))
+    );
+
+    for (i, element) in sum.iter().enumerate() {
+        // Try to match (* c bv))
+        let (c, bv) = match match_term!((* c bv) = element) {
+            Some((c, bv)) => (c.as_integer_err()?, bv),
+            None => {
+                if i == 0 {
+                    (Integer::from(1), element)
+                } else {
+                    return Err(CheckerError::Explanation(
+                        "Coefficient was not found and i != 0".into(),
+                    ));
+                }
+            }
+        };
+
+        // Check that the coefficient is 2^i.
+        rassert!(
+            c == (Integer::from(1) << i),
+            CheckerError::Explanation(format!("Coefficient {} is not 2^{}", c, i))
+        );
+
+        // The bitvector term in the summand must be the one we expect.
+        rassert!(
+            *bv == pbbterm[i],
+            CheckerError::Explanation(format!("Wrong bitvector in blasting {} {}", bv, pbbterm[i]))
+        );
+    }
+    Ok(())
+}
+
 /// A helper that checks the two summations that occur in a pseudo–Boolean constraint.
 /// Here, `left_sum` and `right_sum` come from two bitvectors `left_bv` and `right_bv` respectively.
 /// (The overall constraint is something like `(>= (- (+ left_sum) (+ right_sum)) constant)`.)
@@ -124,7 +167,15 @@ pub fn pbblast_bveq(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
 
     // Check that the summations have the correct structure.
     // (For equality the order is: sum_x for x and sum_y for y.)
-    check_pbblast_constraint(pool, x, y, sum_x, sum_y)
+    if let Some(pbb_x) = match_term!((pbbterm ...) = x) {
+        // Case when x is application of `pbbterm` so we must short-circuit the indexing
+        let pbb_y = match_term_err!((pbbterm ...) = y)?;
+        check_pbblast_sum_short_circuit(pbb_x, sum_x)?;
+        check_pbblast_sum_short_circuit(pbb_y, sum_y)
+    } else {
+        check_pbblast_sum(pool, x, sum_x)?;
+        check_pbblast_sum(pool, y, sum_y)
+    }
 }
 
 /// Implements the unsigned-less-than rule.
@@ -622,8 +673,82 @@ mod tests {
                                        (+ ((_ int_of 0) y1) 0))
                                     0))) :rule pbblast_bveq)"#: false,
             }
+        }
+    }
 
+    // Test that uses the pbbterm application to exercise short-circuiting
+    #[test]
+    fn pbblast_bveq_1_short_circuit() {
+        test_cases! {
+            definitions = "
+            (declare-const x0 Int)
+            (declare-const y0 Int)
+            (declare-const x1 (_ BitVec 1))
+            (declare-const y1 (_ BitVec 1))
+        ",
+            // Check that equality on single-bit bitvectors is accepted when
+            // the summation for each side explicitly multiplies by 1.
+            "Equality on single bits with short-circuit" {
+                r#"(step t1 (cl (= (= (pbbterm x0) (pbbterm y0))
+                                 (= (- (* 1 x0)
+                                       (* 1 y0))
+                                    0))) :rule pbblast_bveq)"#: true,
+            }
 
+            // Check that equality on single-bit bitvectors is accepted even when
+            // the multiplication by 1 is omitted (i.e. defaulting to 1).
+            "Omit multiplication by 1" {
+                r#"(step t1 (cl (= (= (pbbterm x0) (pbbterm y0))
+                                 (= (- x0 y0)
+                                    0))) :rule pbblast_bveq)"#: true,
+            }
+
+            // TODO: What's the expected behavior? Should this pass?
+            "Misaligned bitvector and pbbterm" {
+                r#"(step t1 (cl (= (= x1 (pbbterm y0))
+                                 (= (- (* 1 ((_ int_of 0) x1))
+                                       (* 1 y0))
+                                    0))) :rule pbblast_bveq)"#: false,
+            }
+
+            // Check that a term which is not a subtraction of sums is rejected.
+            "Not a subtraction of sums" {
+                r#"(step t1 (cl (= (= (pbbterm x0) (pbbterm y0))
+                                 (= (* 1 x0)
+                                    0))) :rule pbblast_bveq)"#: false,
+            }
+
+            // Check that malformed products are rejected:
+            // Case 1: the first summand uses a zero coefficient.
+            "Malformed products: coefficient 0 in first summand" {
+                r#"(step t1 (cl (= (= (pbbterm x0) (pbbterm y0))
+                                 (= (- (* 0 x0)
+                                       (* 1 y0))
+                                    0))) :rule pbblast_bveq)"#: false,
+            }
+
+            // Check that malformed products are rejected:
+            // Case 2: the second summand uses a zero coefficient.
+            "Malformed products: coefficient 0 in second summand" {
+                r#"(step t1 (cl (= (= (pbbterm x0) (pbbterm y0))
+                                 (= (- (* 1 x0)
+                                       (* 0 y0))
+                                    0))) :rule pbblast_bveq)"#: false,
+            }
+
+            // In the past a trailing zero was used. This checks that
+            // only the current format is allowed by the checker
+            "Trailing Zero" {
+                r#"(step t1 (cl (= (= (pbbterm x0) (pbbterm y0))
+                                 (= (- (+ (* 1 x0) 0)
+                                       (+ (* 1 y0) 0))
+                                    0))) :rule pbblast_bveq)"#: false,
+
+                r#"(step t1 (cl (= (= (pbbterm x0) (pbbterm y0))
+                                 (= (- (+ x0 0)
+                                       (+ y0 0))
+                                    0))) :rule pbblast_bveq)"#: false,
+            }
         }
     }
 
@@ -651,6 +776,38 @@ mod tests {
                                           (* 2 ((_ int_of 1) x2)) 0)
                                        (+ (* 1 ((_ int_of 0) y2))
                                           (* 2 ((_ int_of 1) y2)) 0))
+                                    0))) :rule pbblast_bveq)"#: false,
+            }
+
+        }
+    }
+
+    #[test]
+    fn pbblast_bveq_2_short_circuit() {
+        test_cases! {
+            definitions = "
+            (declare-const x0 Int)
+            (declare-const x1 Int)
+            (declare-const y0 Int)
+            (declare-const y1 Int)
+        ",
+            // Check equality on two-bit bitvectors, ensuring that:
+            // - The most significant bit (index 1) uses a coefficient of 1,
+            // - The least significant bit (index 0) uses a coefficient of 2.
+            "Equality on two bits" {
+                r#"(step t1 (cl (= (= (pbbterm x0 x1) (pbbterm y0 y1))
+                                 (= (- (+ (* 1 x0)
+                                          (* 2 x1))
+                                       (+ (* 1 y0)
+                                          (* 2 y1)))
+                                    0))) :rule pbblast_bveq)"#: true,
+            }
+            "Trailing Zero" {
+                r#"(step t1 (cl (= (= (pbbterm x0 x1) (pbbterm y0 y1))
+                                 (= (- (+ (* 1 x0)
+                                          (* 2 x1) 0)
+                                       (+ (* 1 y0)
+                                          (* 2 y1) 0))
                                     0))) :rule pbblast_bveq)"#: false,
             }
 
@@ -767,6 +924,61 @@ mod tests {
         }
     }
 
+    #[test]
+    fn pbblast_bveq_8_short_circuit() {
+        test_cases! {
+            definitions = "
+            (declare-const x0 Int)
+            (declare-const x1 Int)
+            (declare-const x2 Int)
+            (declare-const x3 Int)
+            (declare-const x4 Int)
+            (declare-const x5 Int)
+            (declare-const x6 Int)
+            (declare-const x7 Int)
+            (declare-const y0 Int)
+            (declare-const y1 Int)
+            (declare-const y2 Int)
+            (declare-const y3 Int)
+            (declare-const y4 Int)
+            (declare-const y5 Int)
+            (declare-const y6 Int)
+            (declare-const y7 Int)
+            
+        ",
+            // Check equality on eight-bit bitvectors
+            "Equality on 8-bit bitvectors" {
+                r#"(step t1 (cl (= (= (pbbterm x0 x1 x2 x3 x4 x5 x6 x7) (pbbterm y0 y1 y2 y3 y4 y5 y6 y7))
+                                 (= (- (+ (* 1 x0) (* 2 x1) (* 4 x2) (* 8 x3) (* 16 x4) (* 32 x5) (* 64 x6) (* 128 x7))
+                                       (+ (* 1 y0) (* 2 y1) (* 4 y2) (* 8 y3) (* 16 y4) (* 32 y5) (* 64 y6) (* 128 y7)))
+                                0))) :rule pbblast_bveq)"#: true,
+            }
+
+            // We introduce a wrong coefficient (63 instead of 64).
+            "bveq wrong coefficient in (pbbterm x0 x1 x2 x3 x4 x5 x6 x7)" {
+                r#"(step t1 (cl (= (= (pbbterm x0 x1 x2 x3 x4 x5 x6 x7) (pbbterm y0 y1 y2 y3 y4 y5 y6 y7))
+                                 (= (- (+ (* 1   x0) (* 2 x1) (* 4 x2) (* 8 x3) (* 16 x4) (* 32 x5) (* 63 x6)   ; WRONG: should be (* 64 x1)
+                                          (* 128 x7))
+                                       (+ (* 1   y0) (* 2 y1) (* 4 y2) (* 8 y3) (* 16 y4) (* 32 y5) (* 64 y6) (* 128 y7)))
+                                 0))) :rule pbblast_bveq)"#: false,
+            }
+
+            // We introduce a wrong constant (1 instead of 0).
+            "bveq wrong constant in equality" {
+                r#"(step t1 (cl (= (= (pbbterm x0 x1 x2 x3 x4 x5 x6 x7) (pbbterm y0 y1 y2 y3 y4 y5 y6 y7))
+                                 (= (- (+ (* 1   x0) (* 2 x1) (* 4 x2) (* 8 x3) (* 16 x4) (* 32 x5) (* 64 x6) (* 128 x7))
+                                       (+ (* 1   y0) (* 2 y1) (* 4 y2) (* 8 y3) (* 16 y4) (* 32 y5) (* 64 y6) (* 128 y7)))
+                                 1) ; WRONG: should be 0
+                                 )) :rule pbblast_bveq)"#: false,
+            }
+            "Trailing Zero" {
+                r#"(step t1 (cl (= (= (pbbterm x0 x1 x2 x3 x4 x5 x6 x7) (pbbterm y0 y1 y2 y3 y4 y5 y6 y7))
+                                 (= (- (+ (* 1   x0) (* 2 x1) (* 4 x2) (* 8 x3) (* 16 x4) (* 32 x5) (* 64 x6) (* 128 x7) 0)
+                                       (+ (* 1   y0) (* 2 y1) (* 4 y2) (* 8 y3) (* 16 y4) (* 32 y5) (* 64 y6) (* 128 y7) 0))
+                                0))) :rule pbblast_bveq)"#: false,
+            }
+        }
+    }
     #[test]
     fn pbblast_bvult_1() {
         test_cases! {
