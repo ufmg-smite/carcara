@@ -267,8 +267,54 @@ pub fn cp_multiplication(RuleArgs { premises, args, conclusion, .. }: RuleArgs) 
     Ok(())
 }
 
-pub fn cp_division(RuleArgs { .. }: RuleArgs) -> RuleResult {
-    Err(CheckerError::Unspecified)
+pub fn cp_division(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(premises, 1)?;
+    let clause = &premises[0].clause[0];
+
+    // Check there is exactly one arg
+    assert_num_args(args, 1)?;
+    let divisor: Integer = args[0].as_integer_err()?;
+
+    // Rule only allows for positive integer arguments
+    if divisor <= 0 {
+        return Err(if divisor == 0 {
+            CheckerError::DivOrModByZero
+        } else {
+            CheckerError::ExpectedNonnegInteger(args[0].clone())
+        });
+    }
+
+    // Check there is exactly one conclusion
+    assert_clause_len(conclusion, 1)?;
+    let conclusion = &conclusion[0];
+
+    // Unwrap the premise inequality
+    let (pbsum_p, constant_p) = unwrap_pseudoboolean_inequality(clause)?;
+
+    // Unwrap the conclusion inequality
+    let (pbsum_c, constant_c) = unwrap_pseudoboolean_inequality(conclusion)?;
+
+    // Verify constants match ceil(c/d) == (c+d-1)/d
+    rassert!(
+        (constant_p.clone() + divisor.clone() - 1) / divisor.clone() == constant_c,
+        CheckerError::ExpectedInteger(constant_p / divisor.clone(), conclusion.clone())
+    );
+
+    // Verify premise and conclusion share same keys
+    assert_pbsum_same_keys(&pbsum_p, &pbsum_c)?;
+
+    // Verify pseudo-boolean sums match
+    for (literal, coeff_p) in pbsum_p {
+        if let Some(coeff_c) = pbsum_c.get(&literal) {
+            let expected: Integer = (coeff_p + &divisor - 1) / &divisor;
+            rassert!(
+                &expected == coeff_c,
+                CheckerError::ExpectedInteger(expected.clone(), conclusion.clone())
+            );
+        }
+    }
+
+    Ok(())
 }
 
 pub fn cp_saturation(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
@@ -459,7 +505,73 @@ mod tests {
     }
 
     #[test]
-    fn cp_division() {}
+    fn cp_division() {
+        test_cases! {
+            definitions = "
+                (declare-fun x1 () Int)
+                (declare-fun x2 () Int)
+                ",
+            "Simple working examples" {
+                r#"(assume c1 (>= (* 2 x1) 2))
+                   (step t1 (cl (>= (* 1 x1) 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
+                r#"(assume c1 (>= (* 2 (- 1 x1)) 2))
+                   (step t1 (cl (>= (* 1 (- 1 x1)) 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
+            }
+            "Wrong division" {
+                r#"(assume c1 (>= (* 2 x1) 2))
+                   (step t1 (cl (>= (* 2 x1) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+                r#"(assume c1 (>= (* 2 x1) 2))
+                   (step t1 (cl (>= (* 1 x1) 2)) :rule cp_division :premises (c1) :args (2) )"#: false,
+            }
+            "Division by Zero" {
+                r#"(assume c1 (>= (* 2 x1) 2))
+                   (step t1 (cl (>= (* 1 x1) 1)) :rule cp_division :premises (c1) :args (0) )"#: false,
+                r#"(assume c1 (>= (* 2 (- 1 x1)) 2))
+                   (step t1 (cl (>= (* 1 (- 1 x1)) 1)) :rule cp_division :premises (c1) :args (0) )"#: false,
+            }
+            "Division by Negative" {
+                r#"(assume c1 (>= (* 2 x1) 2))
+                   (step t1 (cl (>= (* 1 x1) 1)) :rule cp_division :premises (c1) :args (-2) )"#: false,
+                r#"(assume c1 (>= (* 2 (- 1 x1)) 2))
+                   (step t1 (cl (>= (* 1 (- 1 x1)) 1)) :rule cp_division :premises (c1) :args (-2) )"#: false,
+            }
+            "Ceiling of Division" {
+                r#"(assume c1 (>= (* 3 x1) 2))
+                   (step t1 (cl (>= (* 2 x1) 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
+                r#"(assume c1 (>= (* 3 x1) 2))
+                   (step t1 (cl (>= (* 1 x1) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+
+                r#"(assume c1 (>= (* 7 x1) 2))
+                   (step t1 (cl (>= (* 4 x1) 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
+                r#"(assume c1 (>= (* 7 x1) 2))
+                   (step t1 (cl (>= (* 3 x1) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+
+                r#"(assume c1 (>= (* 9 x1) 2))
+                   (step t1 (cl (>= (* 5 x1) 1)) :rule cp_division :premises (c1) :args (2) )"#: true,
+                r#"(assume c1 (>= (* 9 x1) 2))
+                   (step t1 (cl (>= (* 4 x1) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+
+                r#"(assume c1 (>= (* 10 x1) 3))
+                   (step t1 (cl (>= (* 4 x1) 1)) :rule cp_division :premises (c1) :args (3) )"#: true,
+                r#"(assume c1 (>= (* 10 x1) 3))
+                   (step t1 (cl (>= (* 3 x1) 1)) :rule cp_division :premises (c1) :args (3) )"#: false,
+           }
+           "Missing terms" {
+                r#"(assume c1 (>= (+ (* 2 x1) (* 1 x2)) 2))
+                   (step t1 (cl (>= (* 1 x1) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+
+                 r#"(assume c1 (>= (* 2 x1) 2))
+                   (step t1 (cl (>= (+ (* 1 x1) (* 1 x2)) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+           }
+           "Trailing Zero" {
+                r#"(assume c1 (>= (+ (* 2 x1) 0) 2))
+                   (step t1 (cl (>= (+ (* 1 x1) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+                r#"(assume c1 (>= (+ (* 2 (- 1 x1)) 0) 2))
+                   (step t1 (cl (>= (+ (* 1 (- 1 x1)) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+            }
+
+        }
+    }
 
     #[test]
     fn cp_saturation() {
