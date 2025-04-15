@@ -500,6 +500,8 @@ impl<'c> ProofChecker<'c> {
             "string_length_non_empty" => strings::string_length_non_empty,
 
             "re_inter" => strings::re_inter,
+            "re_kleene_star_unfold_pos" => strings::re_kleene_star_unfold_pos,
+            "re_concat_unfold_pos" => strings::re_concat_unfold_pos,
             "re_unfold_neg" => strings::re_unfold_neg,
             "re_unfold_neg_concat_fixed_prefix" => strings::re_unfold_neg_concat_fixed_prefix,
             "re_unfold_neg_concat_fixed_suffix" => strings::re_unfold_neg_concat_fixed_suffix,
