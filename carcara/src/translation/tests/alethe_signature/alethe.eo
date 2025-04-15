@@ -311,6 +311,7 @@
                          (forall rhs_vars rhs_body))))
 
     (eo::and
+
      ; Every variable in rhs_vars appear fixed in "new_context".
      ($context_vars_are_fixed new_context rhs_vars)
 
@@ -332,6 +333,9 @@
      ; rhs_vars should not appear in the first part of the new_context (old_context)
      (eo::not ($context_vars_are_defined old_context rhs_vars))
 
+     ; lhs_vars should not appear in the first part of the new_context (old_context)
+     (eo::not ($context_vars_are_defined old_context lhs_vars))
+
      ; new_context must be just an extension of old_context
      ($context_is_extended new_context old_context)
      )
@@ -343,6 +347,7 @@
                  (@cl (= (exists lhs_vars lhs_body) (exists rhs_vars rhs_body))))
 
     (eo::and
+
      ; Every variable in rhs_vars appear fixed in "context".
      ($context_vars_are_fixed new_context rhs_vars)
 
@@ -364,6 +369,9 @@
      ; rhs_vars should not appear in the first part of the new_context (old_context)
      (eo::not ($context_vars_are_defined old_context rhs_vars))
 
+     ; lhs_vars should not appear in the first part of the new_context (old_context)
+     (eo::not ($context_vars_are_defined old_context lhs_vars))
+
       ; new_context must be just an extension of old_context
       ($context_is_extended new_context old_context)
      )
@@ -382,22 +390,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;
 ; Rule 19: sko_ex
 ;;;;;;;;;;;;;;;;;;;;;;;
-; TODO: to preserve previous def.
-;; (program $check_sko_ex ((ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T))
-;;   (Bool T T T T) Bool
-;;   (
-;;    (($check_sko_ex ctx l r l1 r1) true)
-;;   )
-;; )
-
-;; ;TRUST
-;; (declare-rule sko_ex ((ctx Bool) (old_ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T))
-;;   :assumption ctx
-;;   :premises (old_ctx (@cl (= l1 r1)))
-;;   :args ((@cl (= l r)))
-;;   :requires ((($context_is_extended ctx old_ctx) true) (($check_sko_ex ctx l r l1 r1) true))
-;;   :conclusion (@cl (= l r))
-;; )
 
 ; program: $check_sko_build_skolem_vars
 ; args:
@@ -460,12 +452,25 @@
           )
 )
 
+; program: $check_sko_ex
+; args:
+; - old_context Bool: Context used outside of the current subproof.
+; - new_context Bool: Context within the subproof.
+; - premise Bool: Premise passed to sko_ex rule.
+; - conclusion Bool: Conclusion passed to sko_ex rule.
+; return:
+;    A boolean indicating if conclusion has the form
+;    𝑄𝑥1, … , 𝑥𝑛.𝜑 ≈ 𝑄𝑦1, … , 𝑦𝑛.𝜑′, for a premise 𝜑 ≈ 𝜑′. It also indicates
+;    if the context within the subproof has the form 
+;    Γ, 𝑦1, … , 𝑦𝑛, 𝑥1 ↦ 𝑦1, … , 𝑥𝑛 ↦ 𝑦𝑛, where Γ should be the context
+;    outside of the subproof being closed by sko_ex.
 (program $check_sko_ex ((old_context Bool) (new_context Bool) (lhs Bool) (rhs Bool) 
                                                  (conclusion Bool) (ex_vars @VarList))
   (Bool Bool Bool Bool) Bool
   (
    (
-    ($check_sko_ex old_context new_context (@cl (= lhs rhs)) (@cl (= (exists ex_vars lhs) rhs)))
+    ($check_sko_ex old_context new_context 
+                   (@cl (= lhs rhs)) (@cl (= (exists ex_vars lhs) rhs)))
 
     (eo::and
      ; new_context should be just an extension of old_context.
@@ -474,12 +479,30 @@
      ; new_context should contain the expected mapping between each variable in
      ; "ex_vars" and its corresponding skolem term.
      ($check_sko_ex_new_context lhs new_context ex_vars)
+
+     ; ex_vars should not appear in the first part of the new_context (old_context)
+     (eo::not ($context_vars_are_defined old_context ex_vars))
      )
     )
   )
 )
 
-;TRUST
+; rule: sko_ex
+; implements: TODO?
+; assumption:
+; - new_context Bool: The subproof context, built with @ctx.
+; premises:
+; - premise Bool: Premise passed to rule sko_ex.
+; args:
+; - old_context Bool: >
+;    Context from the outside of current subproof, built with @ctx.
+; requires: >
+;    Conclusion should have the form 𝑄𝑥1, … , 𝑥𝑛.𝜑 ≈ 𝑄𝑦1, … , 𝑦𝑛.𝜑′, for a 
+;    premise 𝜑 ≈ 𝜑′. Also, if the context within the subproof has the form 
+;    Γ, 𝑦1, … , 𝑦𝑛, 𝑥1 ↦ 𝑦1, … , 𝑥𝑛 ↦ 𝑦𝑛, Γ should be the context
+;    outside of the subproof being closed by sko_ex.
+; conclusion-given: >
+;    Only the "requires" predicate checks if a proper conclusion is given.
 (declare-rule sko_ex ((old_context Bool) (new_context Bool) (premise Bool))
   :assumption new_context
   :premises (premise)
