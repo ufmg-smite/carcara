@@ -275,6 +275,15 @@ pub fn cp_division(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
     assert_num_args(args, 1)?;
     let divisor: Integer = args[0].as_integer_err()?;
 
+    // Rule only allows for positive integer arguments
+    if divisor <= 0 {
+        return Err(if divisor == 0 {
+            CheckerError::DivOrModByZero
+        } else {
+            CheckerError::ExpectedNonnegInteger(args[0].clone())
+        });
+    }
+
     // Check there is exactly one conclusion
     assert_clause_len(conclusion, 1)?;
     let conclusion = &conclusion[0];
@@ -513,6 +522,18 @@ mod tests {
                    (step t1 (cl (>= (* 2 x1) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
                 r#"(assume c1 (>= (* 2 x1) 2))
                    (step t1 (cl (>= (* 1 x1) 2)) :rule cp_division :premises (c1) :args (2) )"#: false,
+            }
+            "Division by Zero" {
+                r#"(assume c1 (>= (* 2 x1) 2))
+                   (step t1 (cl (>= (* 1 x1) 1)) :rule cp_division :premises (c1) :args (0) )"#: false,
+                r#"(assume c1 (>= (* 2 (- 1 x1)) 2))
+                   (step t1 (cl (>= (* 1 (- 1 x1)) 1)) :rule cp_division :premises (c1) :args (0) )"#: false,
+            }
+            "Division by Negative" {
+                r#"(assume c1 (>= (* 2 x1) 2))
+                   (step t1 (cl (>= (* 1 x1) 1)) :rule cp_division :premises (c1) :args (-2) )"#: false,
+                r#"(assume c1 (>= (* 2 (- 1 x1)) 2))
+                   (step t1 (cl (>= (* 1 (- 1 x1)) 1)) :rule cp_division :premises (c1) :args (-2) )"#: false,
             }
             "Ceiling of Division" {
                 r#"(assume c1 (>= (* 3 x1) 2))
