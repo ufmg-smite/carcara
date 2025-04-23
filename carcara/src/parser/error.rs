@@ -140,13 +140,13 @@ where
 }
 
 /// Returns an error if the value of `sequence` is not in the `expected` range.
-pub fn assert_indexed_op_args_value<R>(sequence: &[Constant], range: R) -> Result<(), ParserError>
+pub fn assert_indexed_op_args_value<R>(sequence: &[Rc<Term>], range: R) -> Result<(), ParserError>
 where
     R: Into<Range<Integer>>,
 {
     let range = range.into();
     for x in sequence {
-        if let Constant::Integer(i) = x {
+        if let Term::Const(Constant::Integer(i)) = x.as_ref() {
             if !range.contains(i.clone()) {
                 return Err(ParserError::WrongValueOfArgs(range, i.clone()));
             }
