@@ -394,7 +394,7 @@ mod tests {
         assert_eq!(2, i.as_integer().unwrap());
         assert_eq!(Term::new_bv(0, 5), *b[0]);
 
-        let term = parse_term(&mut p, "((_ int_of 2) (_ bv0 5))");
+        let term = parse_term(&mut p, "((_ @int_of 2) (_ bv0 5))");
         let (i, b): (&Rc<Term>, &[Rc<Term>]) = match_term!(((_ int_of i) ...) = term).unwrap();
         assert_eq!(2, i.as_integer().unwrap());
         assert_eq!(Term::new_bv(0, 5), *b[0]);
@@ -459,7 +459,7 @@ mod tests {
                 ),
             ),
             (
-                "((_ int_of 1) ((_ extract 3 2) #b000000))",
+                "((_ @int_of 1) ((_ extract 3 2) #b000000))",
                 build_term!(pool,
                     ((_ int_of 1) ((_ extract 3 2) {zeros.clone()}))
                 ),

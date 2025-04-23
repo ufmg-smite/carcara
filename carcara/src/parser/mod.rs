@@ -437,6 +437,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 assert_num_args(&args, 1..)?;
                 SortError::assert_eq(&Sort::Int, sorts[0])?;
                 SortError::assert_all_eq(&sorts)?;
+            }
             Operator::BvConst => {
                 assert_num_args(&args, 2)?;
                 SortError::assert_eq(&Sort::Int, sorts[0])?;

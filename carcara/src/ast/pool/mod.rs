@@ -114,8 +114,6 @@ impl PrimitivePool {
                 | Operator::BvSLe
                 | Operator::BvSGt
                 | Operator::BvSGe
-                | Operator::BvShl
-                | Operator::BvLShr
                 | Operator::Cl
                 | Operator::Delete => Sort::Bool,
 
@@ -127,7 +125,6 @@ impl PrimitivePool {
                 | Operator::BvNeg
                 | Operator::BvAnd
                 | Operator::BvOr
-                | Operator::BvAdd
                 | Operator::BvMul
                 | Operator::BvUDiv
                 | Operator::BvURem
@@ -137,7 +134,6 @@ impl PrimitivePool {
                 | Operator::BvNOr
                 | Operator::BvXor
                 | Operator::BvXNor
-                | Operator::BvSub
                 | Operator::BvSDiv
                 | Operator::BvSRem
                 | Operator::BvSMod
