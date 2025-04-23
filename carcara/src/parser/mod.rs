@@ -1528,7 +1528,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 assert_num_args(&op_args, 1)?;
                 assert_num_args(&args, 1)?;
                 SortError::assert_eq(&Sort::Int, &op_args[0].sort())?;
-                SortError::assert_eq(&Sort::Int, &sorts[0])?;
+                SortError::assert_eq(&Sort::Int, sorts[0])?;
             }
             ParamOperator::BvBitOf
             | ParamOperator::BvIntOf
