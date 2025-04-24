@@ -1534,7 +1534,11 @@ impl<'a, R: BufRead> Parser<'a, R> {
             ParamOperator::IntToBv => {
                 assert_num_args(&op_args, 1)?;
                 assert_num_args(&args, 1)?;
-                SortError::assert_eq(&Sort::Int, &op_args[0].sort())?;
+                if let Term::Const(c) = op_args[0].as_ref() {
+                    SortError::assert_eq(&Sort::Int, &c.sort())?;
+                } else {
+                    return Err(ParserError::ExpectedIntegerConstant(op_args[0].clone()));
+                }
                 SortError::assert_eq(&Sort::Int, sorts[0])?;
             }
             ParamOperator::BvBitOf
