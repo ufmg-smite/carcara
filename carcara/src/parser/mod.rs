@@ -422,6 +422,12 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     }
                 }
             }
+            Operator::BvSize | Operator::UBvToInt | Operator::SBvToInt => {
+                assert_num_args(&args, 1)?;
+                if !matches!(sorts[0], Sort::BitVec(_)) {
+                    return Err(ParserError::ExpectedBvSort(sorts[0].clone()));
+                }
+            }
             Operator::BvBbTerm => {
                 assert_num_args(&args, 1..)?;
                 SortError::assert_eq(&Sort::Bool, sorts[0])?;
@@ -431,6 +437,11 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 assert_num_args(&args, 1..)?;
                 SortError::assert_eq(&Sort::Int, sorts[0])?;
                 SortError::assert_all_eq(&sorts)?;
+            }
+            Operator::BvConst => {
+                assert_num_args(&args, 2)?;
+                SortError::assert_eq(&Sort::Int, sorts[0])?;
+                SortError::assert_eq(&Sort::Int, sorts[1])?;
             }
             Operator::BvConcat => {
                 assert_num_args(&args, 2..)?;
@@ -1520,10 +1531,19 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     ));
                 }
             }
+            ParamOperator::IntToBv => {
+                assert_num_args(&op_args, 1)?;
+                assert_num_args(&args, 1)?;
+                SortError::assert_eq(&Sort::Int, &op_args[0].sort())?;
+                SortError::assert_eq(&Sort::Int, sorts[0])?;
+            }
             ParamOperator::BvBitOf
             | ParamOperator::BvIntOf
             | ParamOperator::ZeroExtend
-            | ParamOperator::SignExtend => {
+            | ParamOperator::SignExtend
+            | ParamOperator::RotateLeft
+            | ParamOperator::RotateRight
+            | ParamOperator::Repeat => {
                 assert_num_args(&op_args, 1)?;
                 assert_num_args(&args, 1)?;
                 if let Term::Const(c) = op_args[0].as_ref() {
