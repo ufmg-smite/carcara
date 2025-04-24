@@ -713,10 +713,10 @@ mod tests {
                 ",
             // No restriction, only create a vector of pseudo-boolean variables that are free
             "pbbvar on single bits" {
-                r#"(step t1 (cl (= x (pbbterm ((_ int_of 0) x)))) :rule pbblast_pbbvar)"#: true,
-                r#"(step t1 (cl (= x (pbbterm ((_ int_of 1) x)))) :rule pbblast_pbbvar)"#: false, // Wrong index
-                r#"(step t1 (cl (= x (pbbterm ((_ int_of 0) y)))) :rule pbblast_pbbvar)"#: false, // Mismatched vectors
-                r#"(step t1 (cl (= y (pbbterm ((_ int_of 0) x)))) :rule pbblast_pbbvar)"#: false, // Mismatched vectors
+                r#"(step t1 (cl (= x (@pbbterm ((_ @int_of 0) x)))) :rule pbblast_pbbvar)"#: true,
+                r#"(step t1 (cl (= x (@pbbterm ((_ @int_of 1) x)))) :rule pbblast_pbbvar)"#: false, // Wrong index
+                r#"(step t1 (cl (= x (@pbbterm ((_ @int_of 0) y)))) :rule pbblast_pbbvar)"#: false, // Mismatched vectors
+                r#"(step t1 (cl (= y (@pbbterm ((_ @int_of 0) x)))) :rule pbblast_pbbvar)"#: false, // Mismatched vectors
             }
         }
     }
@@ -729,10 +729,10 @@ mod tests {
             (declare-const y2 (_ BitVec 2))
         ",
             "Valid 2-bit pbbvar" {
-                r#"(step t1 (cl (= x2 (pbbterm ((_ int_of 0) x2) ((_ int_of 1) x2)))) :rule pbblast_pbbvar)"#: true,
+                r#"(step t1 (cl (= x2 (@pbbterm ((_ @int_of 0) x2) ((_ @int_of 1) x2)))) :rule pbblast_pbbvar)"#: true,
             }
             "Mixed variables" {
-                r#"(step t1 (cl (= x2 (pbbterm ((_ int_of 0) x2) ((_ int_of 1) y2)))) :rule pbblast_pbbvar)"#: false,
+                r#"(step t1 (cl (= x2 (@pbbterm ((_ @int_of 0) x2) ((_ @int_of 1) y2)))) :rule pbblast_pbbvar)"#: false,
             }
         }
     }
@@ -744,20 +744,20 @@ mod tests {
             (declare-const x8 (_ BitVec 8))
         ",
             "Valid 8-bit pbbvar" {
-                r#"(step t1 (cl (= x8 (pbbterm
-                    ((_ int_of 0) x8) ((_ int_of 1) x8)
-                    ((_ int_of 2) x8) ((_ int_of 3) x8)
-                    ((_ int_of 4) x8) ((_ int_of 5) x8)
-                    ((_ int_of 6) x8) ((_ int_of 7) x8)
+                r#"(step t1 (cl (= x8 (@pbbterm
+                    ((_ @int_of 0) x8) ((_ @int_of 1) x8)
+                    ((_ @int_of 2) x8) ((_ @int_of 3) x8)
+                    ((_ @int_of 4) x8) ((_ @int_of 5) x8)
+                    ((_ @int_of 6) x8) ((_ @int_of 7) x8)
                 ))) :rule pbblast_pbbvar)"#: true,
             }
 
             "Invalid 8-bit (missing term)" {
-                r#"(step t1 (cl (= x8 (pbbterm
-                    ((_ int_of 0) x8) ((_ int_of 1) x8)
-                    ((_ int_of 2) x8) ((_ int_of 3) x8)
-                    ((_ int_of 4) x8) ((_ int_of 5) x8)
-                    ((_ int_of 6) x8) ((_ int_of 6) x8) ;; index 6 twice
+                r#"(step t1 (cl (= x8 (@pbbterm
+                    ((_ @int_of 0) x8) ((_ @int_of 1) x8)
+                    ((_ @int_of 2) x8) ((_ @int_of 3) x8)
+                    ((_ @int_of 4) x8) ((_ @int_of 5) x8)
+                    ((_ @int_of 6) x8) ((_ @int_of 6) x8) ;; index 6 twice
                 ))) :rule pbblast_pbbvar)"#: false,
             }
         }
