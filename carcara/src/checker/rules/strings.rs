@@ -359,28 +359,6 @@ fn singleton_elim(pool: &mut dyn TermPool, r_list: Vec<Rc<Term>>) -> Rc<Term> {
     }
 }
 
-/// A function that simplifies the application of the and operator between a term and the boolean
-/// constant true or another logical operator (and, or).
-///
-/// Implementation based on the behavior described in the [Ethos user manual.](https://github.com/cvc5/ethos/blob/main/user_manual.md#list-computation-examples)
-fn and_simplification(pool: &mut dyn TermPool, t: Rc<Term>, m: Rc<Term>) -> Rc<Term> {
-    if t.is_bool_true() {
-        return m;
-    }
-    if m.is_bool_true() {
-        return pool.add(Term::Op(Operator::And, vec![t]));
-    }
-    match m.as_ref() {
-        Term::Op(Operator::And, args) => {
-            let mut new_args: Vec<Rc<Term>> = Vec::new();
-            new_args.push(t);
-            new_args.extend(args.clone());
-            pool.add(Term::Op(Operator::And, new_args))
-        }
-        _ => t,
-    }
-}
-
 /// Helper function for implementing the `re_kleene_unfold_pos` and `re_concat_unfold_pos` rules.
 ///
 /// Internally handles the generation of the Skolem term resulting from `re_unfold_pos_component`,
@@ -390,6 +368,22 @@ fn re_unfold_pos_concat(
     t: Rc<Term>,
     r: Rc<Term>,
 ) -> Result<(Rc<Term>, Rc<Term>), CheckerError> {
+    /// Generates a Skolem term used for the positive unfolding in the general case.
+    ///
+    /// The generated Skolem has the following structure:
+    /// ```text
+    /// ε x. ∃ k_0, ..., k_n, R_0, ..., R_n.
+    ///   (and (= t (str.++ k_0 k_1 ... k_i-1 x k_i+1 ... k_n))
+    ///        (str.in_re k_0 R_0)
+    ///        (str.in_re k_1 R_1)
+    ///        ...
+    ///        (str.in_re x R_i)
+    ///        ...
+    ///        (str.in_re k_n R_n))
+    /// ```
+    ///
+    /// where `t` is the target string reconstructed by concatenating all `k_i`, and `i` is the
+    /// index of the current string k being processed in the concatenation.
     fn re_unfold_pos_component(
         pool: &mut dyn TermPool,
         t: Rc<Term>,
@@ -1256,7 +1250,19 @@ pub fn re_kleene_star_unfold_pos(
                     [k_0, k_1, k_2] => {
                         let eq = build_term!(pool, (= {t.clone()} (strconcat {k_0.clone()} {k_1.clone()} {k_2.clone()})));
                         let empty = pool.add(Term::new_string(""));
-                        let simplified = and_simplification(pool, eq.clone(), m.clone());
+                        let simplified = if m.is_bool_true() {
+                            pool.add(Term::Op(Operator::And, vec![eq.clone()]))
+                        } else {
+                            match m.as_ref() {
+                                Term::Op(Operator::And, args) => {
+                                    let mut new_args: Vec<Rc<Term>> = Vec::new();
+                                    new_args.push(eq.clone());
+                                    new_args.extend(args.clone());
+                                    pool.add(Term::Op(Operator::And, new_args))
+                                }
+                                _ => unreachable!(),
+                            }
+                        };
                         Ok(build_term!(
                             pool,
                             (or
