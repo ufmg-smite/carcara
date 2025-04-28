@@ -170,19 +170,12 @@ pub fn pbblast_bvuge(RuleArgs { .. }: RuleArgs) -> RuleResult {
 /// The expected shape is:
 ///    `(= (bvule x y) (>= (- (+ sum_y) (+ sum_x)) 0))`
 pub fn pbblast_bvule(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), ((sum_y, sum_x), constant)) =
-        match_term_err!((= (bvule x y) (>= (- sum_y sum_x) constant)) = &conclusion[0])?;
+    let ((x, y), ((sum_y, sum_x), ())) =
+        match_term_err!((= (bvule x y) (>= (- sum_y sum_x) 0)) = &conclusion[0])?;
 
     // Get the summation lists
     let sum_x = get_pbsum(sum_x);
     let sum_y = get_pbsum(sum_y);
-
-    // Check that the constant is 0
-    let constant: Integer = constant.as_integer_err()?;
-    rassert!(
-        constant == 0,
-        CheckerError::Explanation(format!("Non-zero constant {}", constant))
-    );
 
     check_pbblast_constraint(pool, x, y, sum_x, sum_y)
 }
