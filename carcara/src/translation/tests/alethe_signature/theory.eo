@@ -175,6 +175,24 @@
 ;           B)
 ; note: >
 ;    Represents an undefined inhabitant of a given type. 
-;    Used to represent variables bound by some binder.
-(declare-const @var (-> (! Type :var B :implicit) (! @VarList :var L) B B) 
+;    Used to represent variables bound by some binder (including @ctx, forall, etc.)
+(declare-const @var (-> (! Type :var B :implicit) (! @VarList :var L) B B)
                :binder @varlist)
+
+; ---------------
+;   Substitutions
+; ---------------
+
+; Since some rules are defined directly in terms of a given substitution.
+; Single substitute variable -> value
+(declare-type @Substitute ())
+(declare-const @substitute (-> (! Type  :var Var :implicit) (! Type  :var Value :implicit) 
+                              Var Value @Substitute))
+
+(declare-type @Substitution ())
+
+(declare-const @substitution.nil @Substitution)
+
+; TODO: I don't want for people to directly use this constructor
+(declare-const @substitution (-> @Substitute @Substitution @Substitution)
+               :right-assoc-nil @substitution.nil)
