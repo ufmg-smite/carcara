@@ -22,9 +22,9 @@
   :conclusion (@cl true)
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 4: false
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; rule: false
 ; conclusion: Conclusion must be of the form (@cl (not false)).
@@ -32,9 +32,9 @@
   :conclusion (@cl (not false))
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 5: not_not
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_not_not
 ; args:
@@ -62,9 +62,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 6: th_resolution
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 ; TODO
 (program $check_resolution ((Cs Bool) (CL Bool))
   (Bool Bool) Bool
@@ -79,9 +79,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 7: resolution
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 
 ;TRUST
 (declare-rule resolution ((Cs Bool))
@@ -107,9 +107,9 @@
   :conclusion (@cl true)
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 9: contraction
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_contraction
 ; args:
@@ -145,9 +145,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 10: subproof
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: $check_subproof
 ; args:
@@ -276,9 +276,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 18: bind
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; NOTE: Rules like `bind` can have multiple forms: without and with
 ; @var.  In the first case the bind rule is
@@ -387,9 +387,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 19: sko_ex
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: $check_sko_build_skolem_vars
 ; args:
@@ -528,18 +528,42 @@
   :conclusion (@cl (= l r))
 )
 
-;TODO: changing this for the tests to pass!
-(program $check_forall_inst ((Conclusion Bool))
-  (Bool) Bool
+;--------------------
+; Rule 21: forall_inst
+;--------------------
+
+; program: $check_forall_inst
+; args:
+; - Conclusion Bool:
+; return:
+(program $check_forall_inst ((forall_vars @VarList) 
+                                                       (body Bool) 
+                                                       (instantiated_body Bool) 
+                                                       (variables_substitutions @VarList))
+  (Bool @VarList) Bool
   (
-   (($check_forall_inst Conclusion) true)
-  )
+   (;  TODO: 𝑥𝑖 and 𝑡𝑖 have the same sort
+    ($check_forall_inst (@cl (or (not (forall forall_vars body)) instantiated_body))
+                        variables_substitutions)
+
+    ($eo_is_eq instantiated_body ($substitution_apply body 
+                                                            ($substitution_build 
+                                                             forall_vars
+                                                             variables_substitutions)))
+    )
+   )
 )
 
-;TRUST
-;TODO: changing this for the tests to pass!
-(declare-rule forall_inst ()
-  :requires ((($check_forall_inst eo::conclusion) true))
+; rule: forall_inst
+; implements: TODO?
+; premises:
+; - variables_substitutions @VarList:
+; args:
+; requires:
+; conclusion:
+(declare-rule forall_inst ((variables_substitutions @VarList))
+  :args (variables_substitutions)
+  :requires ((($check_forall_inst eo::conclusion variables_substitutions) true))
   :conclusion-given
 )
 
@@ -558,9 +582,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 23: trans
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: $last_eq_right
 ; args:
@@ -796,10 +820,10 @@
 )
 
 ;TRUST
-;; (declare-rule cong ((Eqs Bool) (CEq Bool))
+; (declare-rule cong ((Eqs Bool) (CEq Bool))
 (declare-rule cong ((Eqs Bool))
   :premise-list Eqs and
-  ;; :args ((@cl CEq)) ; CEq is an equality
+  ; :args ((@cl CEq)) ; CEq is an equality
   :requires ((($check_cong Eqs eo::conclusion) true))
   :conclusion-given
 )
@@ -812,10 +836,10 @@
   )
 )
 ; TODO: to preserve previous attempt
-;; (declare-rule eq_reflexive ((T Type) (t T))
-;;   :args ((@cl (= t t)))
-;;   :conclusion (@cl (= t t))
-;; )
+; (declare-rule eq_reflexive ((T Type) (t T))
+;   :args ((@cl (= t t)))
+;   :conclusion (@cl (= t t))
+; )
 
 (declare-rule eq_reflexive ()
   :requires ((($check_eq_reflexive eo::conclusion) true))
@@ -865,20 +889,20 @@
 )
 
 ;TODO: to preserve previous def
-;; 
-;; (program $check_qnt_cnf ((phi Bool) (phiP Bool) (xs @VarList) (xsP @VarList))
-;;   (@VarList Bool @VarList Bool) Bool
-;;   (
-;;    (($check_qnt_cnf xs phi xsP phiP) true)
-;;   )
-;; )
+; 
+; (program $check_qnt_cnf ((phi Bool) (phiP Bool) (xs @VarList) (xsP @VarList))
+;   (@VarList Bool @VarList Bool) Bool
+;   (
+;    (($check_qnt_cnf xs phi xsP phiP) true)
+;   )
+; )
 
-;; ;TRUST
-;; (declare-rule qnt_cnf ((phi Bool) (phiP Bool) (xs @VarList) (xsP @VarList))
-;;   :args ((@cl (or (not (forall xs phi)) (forall xsP phiP))))
-;;   :requires ((($check_qnt_cnf xs phi xsP phiP) true))
-;;   :conclusion (@cl (or (not (forall xs phi)) (forall xsP phiP)))
-;; )
+; ;TRUST
+; (declare-rule qnt_cnf ((phi Bool) (phiP Bool) (xs @VarList) (xsP @VarList))
+;   :args ((@cl (or (not (forall xs phi)) (forall xsP phiP))))
+;   :requires ((($check_qnt_cnf xs phi xsP phiP) true))
+;   :conclusion (@cl (or (not (forall xs phi)) (forall xsP phiP)))
+; )
 
 ;TODO
 (program $check_qnt_cnf ((conclusion Bool))
@@ -894,13 +918,13 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Table 7: Clausification rules
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
+; Table 7: Clausification rules
+;-------------
 
-;;;;;;;;;;;;;;;;;;
-;; Rule 30: and
-;;;;;;;;;;;;;;;;;;
+;-------------
+; Rule 30: and
+;-------------
 
 ; program: check_and
 ; args:
@@ -942,9 +966,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 31: not_or
-;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_not_or
 ; args:
@@ -961,8 +985,8 @@
 ;   applying DeMorgan's law), in position "index".
 (program $check_not_or ((disjuncts Bool) (premise_non_cl Bool) (index Int) (conclusion Bool))
   (Bool Int Bool) Bool
-  (;; To facilitate the use of the program, we allow 
-   ;; the presence of a @cl constructor
+  (; To facilitate the use of the program, we allow 
+   ; the presence of a @cl constructor
    (($check_not_or (@cl premise_non_cl) index conclusion)
     ($check_not_or premise_non_cl index conclusion))
 
@@ -992,9 +1016,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 32: or
-;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_or
 ; args:
@@ -1035,9 +1059,9 @@
   :conclusion-given 
 )
 
-;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 37: not_and
-;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_not_and
 ; args:
@@ -1147,9 +1171,9 @@
   :conclusion refCL
 )
 
-;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 41: implies
-;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_implies
 ; args:
@@ -1230,9 +1254,9 @@
   :conclusion refCL
 )
 
-;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 44: equiv1
-;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_equiv1
 ; args:
@@ -1275,9 +1299,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 45: equiv2
-;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_equiv2
 ; args:
@@ -1339,9 +1363,9 @@
   :conclusion refCL
 )
 
-;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 48: and_pos
-;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_and_pos
 ; args:
@@ -1360,7 +1384,7 @@
    (($check_and_pos pos (@cl (not antecedent) consequent))
     ($cl_equal ($f_list_index and antecedent pos) consequent))
 
-   ;; To simplify the use of the checker
+   ; To simplify the use of the checker
    (($check_and_pos pos (@cl consequent (not antecedent)))
     ($cl_equal ($f_list_index and antecedent pos) consequent))
   )
@@ -1384,9 +1408,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 49: and_neg
-;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_and_neg
 ; args:
@@ -1417,9 +1441,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 50: or_pos
-;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_or_pos
 ; args:
@@ -1450,9 +1474,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 51: or_neg
-;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_or_neg
 ; args:
@@ -1551,9 +1575,9 @@
   :conclusion CL
 )
 
-;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 56: implies_pos
-;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_implies_pos; 
 ; args:
@@ -1589,9 +1613,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 57: implies_neg1
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_implies_neg1
 ; args:
@@ -1627,9 +1651,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 58: implies_neg2
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_implies_neg2
 ; args:
@@ -1665,9 +1689,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 59: equiv_pos1
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_equiv_pos1
 ; args:
@@ -1706,9 +1730,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 60: equiv_pos2
-;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_equiv_pos2
 ; args:
@@ -1962,9 +1986,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 75: implies_simplify
-;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_implies_simplify
 ; args:
@@ -1996,9 +2020,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 76: equiv_simplify
-;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 ; program: check_equiv_simplify
 ; args:
 ; - conclusion Bool: Conclusion provided to rule equiv_simplify.
@@ -2095,19 +2119,19 @@
    (($check_onepoint conclusion) true)
   )
 )
-;; (program $check_onepoint ((ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T))
-;;   (Bool T T T T) Bool
-;;   (
-;;    (($check_onepoint ctx l r l1 r1) true)
-;;   )
-;; )
+; (program $check_onepoint ((ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T))
+;   (Bool T T T T) Bool
+;   (
+;    (($check_onepoint ctx l r l1 r1) true)
+;   )
+; )
 
 ;TRUST
 (declare-rule onepoint ((ctx Bool) (old_ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T))
   :assumption ctx
-  ;; :premises (old_ctx (@cl (= l1 r1)))
-  ;; :args ((@cl (= l r)))
-  ;; :requires ((($context_is_extended ctx old_ctx) true) (($check_onepoint ctx l r l1 r1) true))
+  ; :premises (old_ctx (@cl (= l1 r1)))
+  ; :args ((@cl (= l r)))
+  ; :requires ((($context_is_extended ctx old_ctx) true) (($check_onepoint ctx l r l1 r1) true))
   :requires ((($check_onepoint eo::conclusion) true))
   :conclusion-given
 )
@@ -2243,9 +2267,9 @@
   :conclusion (@cl (= l r))
 )
 
-;;;;;;;;;;;;;;;
+;-------------
 ; Rule 91: let
-;;;;;;;;;;;;;;;
+;-------------
 
 (program $verify_let_premises ((context Bool) (premises Bool) 
                               (A Type) (var A)
@@ -2321,9 +2345,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 93: distinct_elim
-;;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: build_distinct_list
 ; args:
@@ -2409,9 +2433,9 @@
   (Bool Bool) Bool
   (
    (($conjunction_contains_conjunction (and hd tl) f_list_2)
-    ;; TODO: I need some way to build boolean values
-    ;; combining other boolean values, but I would like
-    ;; to avoid built-in operators.
+    ; TODO: I need some way to build boolean values
+    ; combining other boolean values, but I would like
+    ; to avoid built-in operators.
     (eo::and ($conjunction_contains_ineq hd f_list_2)
              ($conjunction_contains_conjunction tl f_list_2)))
 
@@ -2472,9 +2496,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 94: la_rw_eq
-;;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_la_rw_eq
 ; args:
@@ -2503,9 +2527,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 95: nary_elim
-;;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_nary_elim
 ; args:
@@ -2577,13 +2601,13 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Table 10: Rules used by cvc5, but not by veriT
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
+; Table 10: Rules used by cvc5, but not by veriT
+;-------------
 
-;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 101: symm
-;;;;;;;;;;;;;;;;;;;
+;-------------
 ; program: check_symm
 ; args:
 ; - premise Bool: >
@@ -2623,9 +2647,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 ; Rule 34: reordering
-;;;;;;;;;;;;;;;;;;;;;;
+;-------------
 
 ; program: check_reordering
 ; args:
@@ -2677,9 +2701,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Rare
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
+; Rare
+;-------------
 
 ;TODO
 (program $check_rare_rewrite ((Flag Bool) (CL Bool))
@@ -2696,9 +2720,9 @@
   :conclusion-given
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Misc.
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
+; Misc.
+;-------------
 
 (program $check_discard_context ((CL Bool))
   (Bool) Bool
@@ -2710,6 +2734,6 @@
 ; TODO: dummy step-pop step, to discard contexts
 (declare-rule discard_context ((ctx Bool))
   :assumption ctx
-  ;; :requires ((($check_discard_context eo::conclusion) true))
+  ; :requires ((($check_discard_context eo::conclusion) true))
   :conclusion-given
 )

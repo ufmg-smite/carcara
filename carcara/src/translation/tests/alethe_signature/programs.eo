@@ -4,9 +4,59 @@
 ; Library of auxiliary programs, useful to manipulate many different
 ; Eunoia constructions.
 
-;;;;;;;;;;;;
-;; @VarList
-;;;;;;;;;;;;
+;------------------------------------
+; Eunoia built-in and misc. services
+;------------------------------------
+
+; program: $eo_ite
+; args:
+; - guard Bool: The guard of the conditional.
+; - if_branch A: "If" branch of the conditional.
+; - else_branch A: "Else" branch of the conditional.
+; return: If guard holds, returns if_branch. Otherwise, it returns else_branch.
+(program $eo_ite ((A Type) (if_branch A) (else_branch A))
+         (Bool A A) A
+         (
+          (
+           ($eo_ite true if_branch else_branch)
+
+           if_branch
+            )
+
+          (
+           ($eo_ite false if_branch else_branch)
+
+           else_branch
+            )
+          )
+)
+
+; program: $eo_is_eq
+; implements: eo::is_eq
+; args:
+; - t1 Terms: Term to be compared.
+; - t2 Terms: Term to be compared.
+; return: Simulates the behavior of eo::is_eq.
+(program $eo_is_eq ((Terms Type) (t1 Terms) (t2 Terms))
+         (Terms Terms) Bool
+         (
+          (
+           ($eo_is_eq t1 t1)
+
+           true
+           )
+
+          (; { t1 <> t2 }
+           ($eo_is_eq t1 t2)
+
+           false
+           )
+          )
+)
+
+;-------------
+; @VarList
+;-------------
 
 ; TODO: this should be implemented using f-list functions
 ; program: varlist_concat
@@ -161,9 +211,69 @@
           )
  )
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Clauses
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; program: $varlist_contains_elem
+; args:
+; - varlist @VarList: A @VarList of elements of some type A.
+; - elem A: An element for which we want to test membership
+; return: A boolean indicating if "elem" appears in "varlist".
+(program $varlist_contains_elem ((A Type) (elem A) (head A) (tail @VarList :list))
+         (@VarList A) Bool
+         (
+          (
+           ($varlist_contains_elem @varlist.nil elem)
+
+           false
+           )
+          
+          (
+           ($varlist_contains_elem (@varlist elem tail) elem)
+
+           true
+           )
+
+          (; { head <> elem }
+           ($varlist_contains_elem (@varlist head tail) elem)
+
+           ($varlist_contains_elem tail elem)
+           )
+          )
+)
+
+; program: $varlist_remove_elem
+; args:
+; - varlist @VarList: A @VarList of elements of some type A.
+; - elem A: An element which we want to remove from "varlist".
+; return: >
+;    A new @VarList that is equal to "varlist" except that it does not
+;    contain the first occurrence of "elem".
+(program $varlist_remove_elem ((A Type) (elem A) (head A) (tail @VarList :list))
+         (@VarList A) @VarList
+         (
+          (
+           ($varlist_remove_elem @varlist.nil elem)
+
+           @varlist.nil
+           )
+          
+          (
+           ($varlist_remove_elem (@varlist elem tail) elem)
+
+           tail
+           )
+
+          (; { head <> elem }
+           ($varlist_remove_elem (@varlist head tail) elem)
+
+           ($f_list_cons @varlist head
+                         ($varlist_remove_elem tail elem))
+           )
+          )
+)
+
+
+;-------------
+; Clauses
+;-------------
 
 ; program: from_cl
 ; args:
@@ -320,9 +430,9 @@
           )
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; implication
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
+; implication
+;-------------
 
 ; program: rewrite_implication
 ; args:
@@ -416,9 +526,9 @@
 )
 
 
-;;;;;;;;;;;;;
-;; contexts
-;;;;;;;;;;;;;
+;-------------
+; contexts
+;-------------
 
 ; program: context_get_substitute
 ; args:
@@ -717,9 +827,9 @@
         )
     )
 
-;;;;;;;;;;;;;
-;; let
-;;;;;;;;;;;;;
+;-------------
+; let
+;-------------
 
 ; TODO: once programs can be passed and used, abstract the logic of these
 ;       functions into a single program
@@ -832,9 +942,9 @@
           )
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Bounded occurrences of variables
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
+; Unbounded occurrences of variables
+;-------------
 
 ; program: $fv
 ; args:
@@ -875,7 +985,7 @@
            ($fv (@var (@varlist x) x))
 
            ($f_list_cons @varlist 
-                         ;; (@var (@varlist x) x) 
+                         ; (@var (@varlist x) x) 
                          x
                          @varlist.nil)
            )
@@ -920,29 +1030,207 @@
           )
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Eunoia built-in
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;-------------
+; Substitution
+;-------------
 
-; program: $eo_ite
-; args:
-; - guard Bool: The guard of the conditional.
-; - if_branch A: "If" branch of the conditional.
-; - else_branch A: "Else" branch of the conditional.
-; return: If guard holds, returns if_branch. Otherwise, it returns else_branch.
-(program $eo_ite ((A Type) (if_branch A) (else_branch A))
-         (Bool A A) A
+; Manipulation/application of substitutions.
+
+(program $substitution_contains_substitute ((Vars Type) (Values Type)
+                                            (var Vars) (var2 Vars) (value Values) 
+                                            (substitutions @Substitution :list))
+         (@Substitution Vars) Bool
          (
           (
-           ($eo_ite true if_branch else_branch)
+           ($substitution_contains_substitute 
+            (@substitution (@substitute var value) substitutions)
+            var)
 
-           if_branch
-            )
+           true
+           )
+
+          (; {var' <> var}
+           ; Assuming that var is actually mentioned in the substitution.
+           ($substitution_contains_substitute 
+            (@substitution (@substitute var2 value) substitutions)
+            var)
+
+           ($substitution_contains_substitute substitutions var)
+           )
+
+          (; {var' <> var}
+           ; Assuming that var is actually mentioned in the substitution.
+           ($substitution_contains_substitute @substitution.nil var)
+
+           false
+           )
+          )
+)
+
+(define $substitution_constructor ((Variables Type :implicit) (Values Type :implicit)
+                       (var Variables) (value Values) (substitutions @Substitution :list))
+
+        ($eo_ite ($substitution_contains_substitute substitutions var)
+                 
+                 substitutions
+                 
+                 ($f_list_cons @substitution
+                               (@substitute var value) substitutions)
+                 )
+        ; TODO: cannot pass this type-check
+        ;; :type @Substitution
+)
+
+(program $substitution_build ( (Vars Type) (Values Type) (var Vars) (value Values)
+                               (vars_tail @VarList :list) (values_tail @VarList :list))
+         (@VarList @VarList) @Substitution
+         (
+          (
+           ($substitution_build @varlist.nil @varlist.nil)
+
+           @substitution.nil
+           )
 
           (
-           ($eo_ite false if_branch else_branch)
+           ($substitution_build (@varlist var vars_tail) (@varlist value values_tail))
 
-           else_branch
-            )
+           ($substitution_constructor var value ($substitution_build vars_tail values_tail))
+           )
+          )
+)
+
+; program: $substitution_remove_substitutes
+; args:
+; - $substitution_remove_substitutes nil:
+; return:
+(program $substitution_remove_substitutes ((Vars Type) (Values Type) (var Vars) (value Values)
+                                                                                    (vars @VarList) (substitutions @Substitution :list))
+         (@Substitution @VarList) @Substitution
+
+         (
+          (
+           ($substitution_remove_substitutes 
+            (@substitution (@substitute var value) substitutions) vars)
+           ; If var is present in vars, we remove var's substitute from
+           ; the whole set of substitutions
+           ($eo_ite ($varlist_contains_elem vars var)
+                    
+                    ($substitution_remove_substitutes 
+                     substitutions
+                     ($varlist_remove_elem vars var))
+
+                    ($substitution_constructor var value
+                                               ($substitution_remove_substitutes substitutions vars)))
+           )
+          )
+)
+
+; program: $substitution_get_value
+; args:
+; - Var Type:
+; - Value Type:
+; return:
+(program $substitution_get_value ((Vars Type) (Values Type) (var Vars) (var2 Vars)
+                                  (value Values)
+                                  (substitutions @Substitution :list))
+         (@Substitution Vars) Values
+         (
+          (
+           ($substitution_get_value 
+            (@substitution (@substitute var value) substitutions)
+            var)
+
+           value
+           )
+
+          (; {var2 <> var}
+           ; Assuming that var is actually mentioned in the substitution.
+           ($substitution_get_value 
+            (@substitution (@substitute var2 value) substitutions)
+            var)
+
+           ($substitution_get_value substitutions var)
+           )
+          )
+)
+
+; program: $substitution_apply
+; args:
+; - $substitution_apply nil:
+; return:
+(program $substitution_apply ((Terms Type) (x Terms)
+                      (vars @VarList)
+                      (bool_body Bool)
+                      (substitution @Substitution)
+                      (A Type) (B Type) (function (-> A B))
+                      (actual_argument A))
+         (Terms @Substitution) Terms
+
+         (
+          (
+           ($substitution_apply (forall vars bool_body) substitution)
+                                  
+           (forall vars
+                   ($substitution_apply bool_body ($substitution_remove_substitutes substitution vars)))
+           )
+
+          (
+           ($substitution_apply (exists vars bool_body) substitution)
+                                  
+           (exists vars 
+              ($substitution_apply bool_body ($substitution_remove_substitutes 
+                                              substitution vars)))
+           )
+
+          (; We consider (@var varlist x) as our representation of variables 
+           ; introduced by some binder. For reasoning purposes within $substitution_apply, 
+           ; we just use 'x' as the representation of the variable.
+           ($substitution_apply (@var (@varlist x) x) substitution)
+           
+           ($eo_ite ($substitution_contains_substitute substitution x)
+
+                    ($substitution_apply x substitution)
+
+                    (@var (@varlist x) x))
+           )
+
+          (
+           ($substitution_apply (_ function actual_argument) substitution)
+           
+           ; TODO: at some point, could we do some higher-order reasoning,
+           ; requiring to be able to substitute function constants?
+           (_ ($substitution_apply function substitution)
+              ($substitution_apply actual_argument substitution))
+           )
+
+          (
+           ($substitution_apply @empty_cl substitution)
+
+           @empty_cl
+           )
+
+          ; propositional logic
+          (
+           ($substitution_apply true substitution)
+
+           true
+           )
+
+          (
+           ($substitution_apply false substitution)
+
+           false
+           )
+
+          ; { x is a var }
+          (
+           ($substitution_apply x substitution)
+
+           (eo::ite ($substitution_contains_substitute substitution x)
+
+                    ($substitution_get_value substitution x)
+
+                    x)
+           )
           )
 )
