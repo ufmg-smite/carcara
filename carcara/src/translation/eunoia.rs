@@ -1129,13 +1129,18 @@ impl EunoiaTranslator {
                     }
 
                     "forall_inst" => {
-                        // TODO: we are discarding vector and premises arguments
+                        // TODO: we are discarding premises arguments
                         self.eunoia_proof.push(EunoiaCommand::Step {
                             id: id.clone(),
                             conclusion_clause: Some(conclusion),
                             rule: self.alethe_signature.forall_inst.clone(),
                             premises: EunoiaList { list: Vec::new() },
-                            arguments: EunoiaList { list: Vec::new() },
+                            arguments: EunoiaList {
+                                list: vec![EunoiaTerm::App(
+                                    self.alethe_signature.varlist_cons.clone(),
+                                    eunoia_arguments,
+                                )],
+                            },
                         });
                     }
 
