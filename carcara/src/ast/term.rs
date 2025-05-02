@@ -818,10 +818,7 @@ impl Term {
 
     /// Returns `true` if the term is a user defined parametric sort
     pub fn is_sort_parametric(&self) -> bool {
-        match self {
-            Term::Sort(Sort::ParamSort(_, _)) => true,
-            _ => false,
-        }
+        matches!(self, Term::Sort(Sort::ParamSort(_, _)))
     }
     /// Tries to unwrap an operation term, returning the `Operator` and the arguments. Returns
     /// `None` if the term is not an operation term.
