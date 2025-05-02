@@ -1,6 +1,6 @@
 //! Test suite for Eunoia AST's pretty printer.
 #[cfg(test)]
-use crate::translation::{eunoia_ast::*, printer::PrintProof, printer::*};
+use crate::translation::eunoia::{eunoia_ast::*, printer::PrintProof, printer::*};
 
 #[cfg(test)]
 use rug::Integer;

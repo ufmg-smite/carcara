@@ -1,8 +1,8 @@
 //! Translator for `EunoiaProof`.
 use super::Translator;
 use crate::ast::*;
-use crate::translation::alethe_signature::theory::*;
-use crate::translation::eunoia_ast::*;
+use crate::translation::eunoia::alethe_signature::theory::*;
+use crate::translation::eunoia::eunoia_ast::*;
 // scopes
 use crate::utils::HashMapStack;
 

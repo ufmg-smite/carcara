@@ -1,5 +1,5 @@
 //! A pretty printer for Eunoia proofs.
-use crate::translation::eunoia_ast::*;
+use crate::translation::eunoia::eunoia_ast::*;
 use std::io;
 
 // TODO: struct for future actual formatting concerns

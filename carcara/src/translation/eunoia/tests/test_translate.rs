@@ -3,7 +3,7 @@
 #[cfg(test)]
 use crate::ast::*;
 #[cfg(test)]
-use crate::translation::{eunoia::*, printer::PrintProof, printer::*};
+use crate::translation::eunoia::{alethe_2_eunoia::*, printer::PrintProof, printer::*};
 
 // TODO: ugly, copying this from parser/tests.rs
 #[cfg(test)]

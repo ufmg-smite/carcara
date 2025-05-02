@@ -5,7 +5,7 @@ mod path_args;
 
 use carcara::{
     ast, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate, check_parallel, checker,
-    elaborator, generate_lia_smt_instances, parser, translation::printer::PrintProof,
+    elaborator, generate_lia_smt_instances, parser, translation::eunoia::printer::PrintProof,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -690,22 +690,23 @@ fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
     .map_err(carcara::Error::from)?;
 
     let node = ast::ProofNode::from_commands(alethe_proof.commands);
-    let mut translator = carcara::translation::eunoia::EunoiaTranslator::new();
+    let mut translator = carcara::translation::eunoia::alethe_2_eunoia::EunoiaTranslator::new();
     let eunoia_prelude = translator.translate_problem(&alethe_problem);
     let eunoia_proof = translator.translate(&node);
 
     let mut buf_proof = Vec::new();
-    let s_exp_formatter_proof = carcara::translation::printer::SExpFormatter::new(&mut buf_proof);
+    let s_exp_formatter_proof =
+        carcara::translation::eunoia::printer::SExpFormatter::new(&mut buf_proof);
     let mut printer_proof =
-        carcara::translation::printer::EunoiaPrinter::new(s_exp_formatter_proof);
+        carcara::translation::eunoia::printer::EunoiaPrinter::new(s_exp_formatter_proof);
 
     printer_proof.write_proof(eunoia_proof).unwrap();
 
     let mut buf_prelude = Vec::new();
     let s_exp_formatter_prelude =
-        carcara::translation::printer::SExpFormatter::new(&mut buf_prelude);
+        carcara::translation::eunoia::printer::SExpFormatter::new(&mut buf_prelude);
     let mut printer_prelude =
-        carcara::translation::printer::EunoiaPrinter::new(s_exp_formatter_prelude);
+        carcara::translation::eunoia::printer::EunoiaPrinter::new(s_exp_formatter_prelude);
 
     printer_prelude.write_proof(&eunoia_prelude).unwrap();
 
