@@ -88,7 +88,6 @@ pub enum Sort {
     /// The associated term is the BV width of this sort.
     BitVec(Integer),
 
-    // TODO delete this and incorporate it to function sort?
     /// A parametric sort, with a set of sort variables that can appear in the second argument.
     ParamSort(Vec<Rc<Term>>, Rc<Term>),
 
@@ -583,7 +582,6 @@ impl Sort {
     pub fn match_with(&self, target: &Sort, map: &mut IndexMap<String, Sort>) -> bool {
         match (self, target) {
             (Sort::Var(a), _) => {
-                // TODO check that target is compatible with value associated to a, if any
                 match map.entry(a.to_string()) {
                     Entry::Vacant(e) => {
                         e.insert(target.clone());
