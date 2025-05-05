@@ -604,14 +604,11 @@ impl Sort {
                 }
             }
             (Sort::Function(sorts_a), Sort::Function(sorts_b)) => {
-                for (a_t, b_t) in sorts_a.iter().zip(sorts_b.iter()) {
+                sorts_a.iter().zip(sorts_b.iter()).all(|(a_t, b_t)| {
                     let a_s = a_t.as_sort().unwrap();
                     let b_s = b_t.as_sort().unwrap();
-                    if !a_s.match_with(b_s, map) {
-                        return false;
-                    }
-                }
-                true
+                    a_s.match_with(b_s, map)
+                })
             }
             (Sort::Bool, Sort::Bool)
             | (Sort::Int, Sort::Int)
