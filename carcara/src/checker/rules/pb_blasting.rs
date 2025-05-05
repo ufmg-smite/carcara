@@ -592,6 +592,30 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     for (i, item) in bit_constraints.iter().enumerate() {
         // let k = match_term_err!((choice ((z Int)) (and c1 c2 c3)) = item)?;
 
+        // Works
+        // let ((bindings, original), substituted) =
+        //     match_term_err!((not (choice ... original) result) = item)?;
+
+        // Breaks
+        // let k = match_term_err!(((choice ... original)) = item)?;
+        let (bindings, (c1, c2, c3)) = match_term_err!((choice ... (and c1 c2 c3)) = item)?;
+
+        // Single binding
+        assert!(bindings.len() == 1);
+        // Check z -> Int
+        let (z_name, z_type) = &bindings[0];
+        assert!(z_name == "z");
+        // assert!(z_type == )
+
+        for binding in bindings {
+            //
+        }
+
+        println!(
+            "Matched! choice ({:?}) {:?} & {:?} & {:?}",
+            bindings, c1, c2, c3
+        );
+
         // let k = match_term_err!((exists ((x Int)) (= x 0)) = item);
         // let (c1, c2, c3) = match_term_err!((and c1 c2 c3) = item)?;
 
@@ -3395,6 +3419,7 @@ mod tests {
                                      (! (choice ((z Int)) (and (>= @x1 z) (>= @y1 z) (>= z (+ @x1 @y1 -1)))) :named @r1))
                         )) :rule pbblast_bvand)"#: true,
             }
+            // Too many binders, too few binders in choice...
             "Invalid 2-bit AND (wrong bit)" {
                 r#"(step t1 (cl (=
                             (bvand (pbbterm @x0 @x1) (pbbterm @y0 @y1))
