@@ -17,7 +17,7 @@ pub enum Term {
     /// An application of a function to one or more terms.
     App(Rc<Term>, Vec<Rc<Term>>),
 
-    /// An application of a bulit-in operator to one or more terms.
+    /// An application of a built-in operator to one or more terms.
     Op(Operator, Vec<Rc<Term>>),
 
     /// A sort.
@@ -106,6 +106,7 @@ pub enum Constant {
     /// A string literal term.
     String(String),
 
+    /// A bitvector literal term.
     BitVec(Integer, Integer),
 }
 
@@ -352,12 +353,22 @@ pub enum Operator {
     BvSLe,
     BvSGt,
     BvSGe,
-    BvBbTerm,
+
+    UBvToInt,
+    SBvToInt,
+
     BvPBbTerm,
+    BvBbTerm,
+    BvConst,
+    BvSize,
 
     // Misc.
     /// The `rare-list` operator, used to represent RARE lists.
     RareList,
+
+    // The clausal operators
+    Cl,
+    Delete,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -368,7 +379,12 @@ pub enum ParamOperator {
     BvIntOf,
     ZeroExtend,
     SignExtend,
+    RotateLeft,
+    RotateRight,
+    Repeat,
     BvConst,
+
+    IntToBv,
 
     RePower,
     ReLoop,
@@ -473,19 +489,33 @@ impl_str_conversion_traits!(Operator {
     BvSLe: "bvsle",
     BvSGt: "bvsgt",
     BvSGe: "bvsge",
-    BvBbTerm: "bbterm",
-    BvPBbTerm: "pbbterm",
+
+    UBvToInt: "ubv_to_int",
+    SBvToInt: "sbv_to_int",
+
+    BvPBbTerm: "@pbbterm",
+    BvBbTerm: "@bbterm",
+    BvConst: "@bv",
+    BvSize: "@bvsize",
 
     RareList: "rare-list",
+
+    Cl: "cl",
+    Delete: "@d"
 });
 
 impl_str_conversion_traits!(ParamOperator {
     BvExtract: "extract",
-    BvBitOf: "bit_of",
-    BvIntOf: "int_of",
+    BvBitOf: "@bit_of",
+    BvIntOf: "@int_of",
     ZeroExtend: "zero_extend",
     SignExtend: "sign_extend",
+    RotateLeft: "rotate_left",
+    RotateRight: "rotate_right",
+    Repeat: "repeat",
     BvConst: "bv",
+
+    IntToBv: "int_to_bv",
 
     RePower: "re.^",
     ReLoop: "re.loop",

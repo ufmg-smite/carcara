@@ -200,15 +200,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
         // Extract error message, if any
         let error_message = match &check_result {
             Ok(_) => String::new(),
-            Err(crate::Error::Checker { inner, rule, step }) => match inner {
-                CheckerError::Explanation(s) => s.clone(),
-                _ => format!("[{rule} at {step}] {:?}", inner),
-            },
-            Err(crate::Error::DoesNotReachEmptyClause) => {
-                "Proof does not reach empty clause".into()
-            }
-            Err(e @ crate::Error::Parser(_, _)) => format!("Parser error: {}", e),
-            Err(e) => format!("Unexpected error: {:?}", e),
+            Err(e) => format!("{}", e),
         };
 
         let got = check_result.is_ok();
@@ -255,6 +247,7 @@ pub(super) mod bitvectors;
 pub(super) mod clausification;
 pub(super) mod congruence;
 pub(super) mod cutting_planes;
+pub(super) mod drup;
 pub(super) mod extras;
 pub(super) mod linear_arithmetic;
 pub(super) mod pb_blasting;

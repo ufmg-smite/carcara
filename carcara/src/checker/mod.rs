@@ -474,12 +474,6 @@ impl<'c> ProofChecker<'c> {
             "concat_cprop_prefix" => strings::concat_cprop_prefix,
             "concat_cprop_suffix" => strings::concat_cprop_suffix,
 
-            // cutting planes rules
-            "cp_addition" => cutting_planes::cp_addition,
-            "cp_multiplication" => cutting_planes::cp_multiplication,
-            "cp_division" => cutting_planes::cp_division,
-            "cp_saturation" => cutting_planes::cp_saturation,
-
             // pseudo-boolean bitblasting
             "pbblast_bveq" => pb_blasting::pbblast_bveq,
             "pbblast_bvult" => pb_blasting::pbblast_bvult,
@@ -495,6 +489,12 @@ impl<'c> ProofChecker<'c> {
             "pbblast_bvxor" => pb_blasting::pbblast_bvxor,
             "pbblast_bvand" => pb_blasting::pbblast_bvand,
 
+            // cutting planes rules
+            "cp_addition" => cutting_planes::cp_addition,
+            "cp_multiplication" => cutting_planes::cp_multiplication,
+            "cp_division" => cutting_planes::cp_division,
+            "cp_saturation" => cutting_planes::cp_saturation,
+
             "string_decompose" => strings::string_decompose,
             "string_length_pos" => strings::string_length_pos,
             "string_length_non_empty" => strings::string_length_non_empty,
@@ -503,6 +503,10 @@ impl<'c> ProofChecker<'c> {
             "re_unfold_neg" => strings::re_unfold_neg,
             "re_unfold_neg_concat_fixed_prefix" => strings::re_unfold_neg_concat_fixed_prefix,
             "re_unfold_neg_concat_fixed_suffix" => strings::re_unfold_neg_concat_fixed_suffix,
+            // Drup format rules
+            "drup" => |x| drup::drup(false, x),
+            // Drup format rules
+            "drat" => |x| drup::drup(true, x),
 
             // Special rules that always check as valid, and are used to indicate holes in the
             // proof.

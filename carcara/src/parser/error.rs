@@ -21,7 +21,7 @@ pub enum ParserError {
     LeadingZero(String),
 
     /// The lexer encountered a numerical literal that contained a division by zero, e.g. '1/0'.
-    #[error("divison by zero in numerical literal: '{0}'")]
+    #[error("division by zero in numerical literal: '{0}'")]
     DivisionByZeroInLiteral(String),
 
     /// The lexer encountered a `\` character while reading a quoted symbol.
@@ -36,8 +36,8 @@ pub enum ParserError {
     #[error("unexpected EOF in string literal")]
     EofInString,
 
-    /// The lexer encountered an invalid unicode value in an escape sequence.
-    #[error("invalid unicode value: 0x'{0}'")]
+    /// The lexer encountered an invalid Unicode value in an escape sequence.
+    #[error("invalid Unicode value: 0x'{0}'")]
     InvalidUnicode(String),
 
     /// The lexer encountered a bitvector literal with no actual digits. This
@@ -140,13 +140,13 @@ where
 }
 
 /// Returns an error if the value of `sequence` is not in the `expected` range.
-pub fn assert_indexed_op_args_value<R>(sequence: &[Constant], range: R) -> Result<(), ParserError>
+pub fn assert_indexed_op_args_value<R>(sequence: &[Rc<Term>], range: R) -> Result<(), ParserError>
 where
     R: Into<Range<Integer>>,
 {
     let range = range.into();
     for x in sequence {
-        if let Constant::Integer(i) = x {
+        if let Term::Const(Constant::Integer(i)) = x.as_ref() {
             if !range.contains(i.clone()) {
                 return Err(ParserError::WrongValueOfArgs(range, i.clone()));
             }
