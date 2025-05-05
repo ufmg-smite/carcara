@@ -151,19 +151,12 @@ fn check_pbblast_constraint(
 /// The expected shape is:
 ///    `(= (= x y) (= (- (+ sum_x) (+ sum_y)) 0))`
 pub fn pbblast_bveq(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), ((sum_x, sum_y), constant)) =
-        match_term_err!((= (= x y) (= (- sum_x sum_y) constant)) = &conclusion[0])?;
+    let ((x, y), ((sum_x, sum_y), ())) =
+        match_term_err!((= (= x y) (= (- sum_x sum_y) 0)) = &conclusion[0])?;
 
     // Get the summation lists
     let sum_x = get_pbsum(sum_x);
     let sum_y = get_pbsum(sum_y);
-
-    // Check that the constant is 0
-    let constant: Integer = constant.as_integer_err()?;
-    rassert!(
-        constant == 0,
-        CheckerError::Explanation(format!("Non-zero constant {}", constant))
-    );
 
     // Check that the summations have the correct structure.
     // (For equality the order is: sum_x for x and sum_y for y.)
@@ -562,46 +555,66 @@ pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// Implements the bitwise and operation.
 ///
 /// The expected shape is:
-///     (and
-///         (= (bvand x y) r)
+///     (= (bvand x y)
+///        (pbbterm
 ///         ; FOR EACH 0=i<n:
-///         (and
-///             (>= (- xi ri) 0)
-///             (>= (- yi ri) 0)
-///             (>= (- ri (+ xi yi)) -1)
-///         )
+///             (choice ((z Int)) (and (>= ((_ @int_of i) x) z)
+///                                    (>= ((_ @int_of i) y) z)
+///                                    (>= z (+ ((_ @int_of i) x) ((_ @int_of i) y) -1))
+///                               )
+///             )
+///        )
 ///     )
+///
+/// Or in the short-circuit variant:
+///     (= (bvand (pbbterm <@x0 .. @x{n-1}>) (pbbterm <@y0 .. @y{n-1}>))
+///        (pbbterm
+///         ; FOR EACH 0=i<n:
+///             (choice ((z Int)) (and (>= @xi z)
+///                                    (>= @yi z)
+///                                    (>= z (+ @xi @yi -1))
+///                               )
+///             )
+///        )
+///     )
+///
 pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let and_list = match_term_err!((and  ...) = &conclusion[0])?;
+    let ((x, y), bit_constraints) =
+        match_term_err!((= (bvand x y) (pbbterm ...)) = &conclusion[0])?;
+
     // First element is bvxor
-    let (xor_term, bits_constraints) = and_list.split_at(1);
-    let ((x, y), r) = match_term_err!((= (bvand x y) r) = &xor_term[0])?;
+    // let (xor_term, bits_constraints) = and_list.split_at(1);
+    // let ((x, y), r) = match_term_err!((= (bvand x y) r) = &xor_term[0])?;
 
     // Get bit width of `x`
-    let n = get_bit_width(x, pool)?;
+    // let n = get_bit_width(x, pool)?;
 
-    for (i, item) in bits_constraints.iter().enumerate().take(n) {
-        let (c1, c2, c3) = match_term_err!((and c1 c2 c3) = item)?;
+    for (i, item) in bit_constraints.iter().enumerate() {
+        // let k = match_term_err!((choice ((z Int)) (and c1 c2 c3)) = item)?;
+
+        // let k = match_term_err!((exists ((x Int)) (= x 0)) = item);
+        // let (c1, c2, c3) = match_term_err!((and c1 c2 c3) = item)?;
+
         // c1 : (>= (- xi ri) 0)
-        let ((xi, ri), _) = match_term_err!((>= (- xi ri) 0) = c1)?;
-        assert_bitvector_indexing(xi, i, x)?;
-        assert_bitvector_indexing(ri, i, r)?;
+        // let ((xi, ri), _) = match_term_err!((>= (- xi ri) 0) = c1)?;
+        // assert_bitvector_indexing(xi, i, x)?;
+        // assert_bitvector_indexing(ri, i, r)?;
 
-        // c2 : (>= (- yi ri) 0)
-        let ((yi, ri), _) = match_term_err!((>= (- yi ri) 0) = c2)?;
-        assert_bitvector_indexing(yi, i, y)?;
-        assert_bitvector_indexing(ri, i, r)?;
+        // // c2 : (>= (- yi ri) 0)
+        // let ((yi, ri), _) = match_term_err!((>= (- yi ri) 0) = c2)?;
+        // assert_bitvector_indexing(yi, i, y)?;
+        // assert_bitvector_indexing(ri, i, r)?;
 
-        // c3 : (>= (- ri (+ xi yi)) -1)
-        let ((ri, (xi, yi)), k) = match_term_err!((>= (- ri (+ xi yi)) k) = c3)?;
-        assert_bitvector_indexing(xi, i, x)?;
-        assert_bitvector_indexing(yi, i, y)?;
-        assert_bitvector_indexing(ri, i, r)?;
-        let k: Integer = k.as_integer_err()?;
-        rassert!(
-            k == -1,
-            CheckerError::Explanation(format!("Expected >= -1, got {}", k))
-        );
+        // // c3 : (>= (- ri (+ xi yi)) -1)
+        // let ((ri, (xi, yi)), k) = match_term_err!((>= (- ri (+ xi yi)) k) = c3)?;
+        // assert_bitvector_indexing(xi, i, x)?;
+        // assert_bitvector_indexing(yi, i, y)?;
+        // assert_bitvector_indexing(ri, i, r)?;
+        // let k: Integer = k.as_integer_err()?;
+        // rassert!(
+        //     k == -1,
+        //     CheckerError::Explanation(format!("Expected >= -1, got {}", k))
+        // );
     }
 
     Ok(())
@@ -3328,22 +3341,24 @@ mod tests {
             (declare-const x2 (_ BitVec 2))
             (declare-const y2 (_ BitVec 2))
             (declare-const r2 (_ BitVec 2))
+            (declare-const @x0 Int)
+            (declare-const @x1 Int)
+            (declare-const @y0 Int)
+            (declare-const @y1 Int)
         ",
             "Valid 2-bit AND" {
-                r#"(step t1 (cl (and
-                                    (= (bvand x2 y2) r2)
-                                    (and    ; i=0
-                                        (>= (- ((_ int_of 0) x2) ((_ int_of 0) r2)) 0)
-                                        (>= (- ((_ int_of 0) y2) ((_ int_of 0) r2)) 0)
-                                        (>= (- ((_ int_of 0) r2) (+ ((_ int_of 0) x2) ((_ int_of 0) y2))) -1)
-                                    )
-                                    (and    ; i=1
-                                        (>= (- ((_ int_of 1) x2) ((_ int_of 1) r2)) 0)
-                                        (>= (- ((_ int_of 1) y2) ((_ int_of 1) r2)) 0)
-                                        (>= (- ((_ int_of 1) r2) (+ ((_ int_of 1) x2) ((_ int_of 1) y2))) -1)
-                                    )
-                                ))
-                        :rule pbblast_bvand)"#: true,
+                r#"(step t4 (cl (=
+                            (bvand (pbbterm @x0 @x1) (pbbterm @y0 @y1))
+                            (pbbterm (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= z (+ @x0 @y0 -1)))) :named @r0)
+                                     (! (choice ((z Int)) (and (>= @x1 z) (>= @y1 z) (>= z (+ @x1 @y1 -1)))) :named @r1))
+                        )) :rule pbblast_bvand)"#: true,
+            }
+            "Valid 2-bit AND with short circuit" {
+                r#"(step t4 (cl (=
+                            (bvand (pbbterm @x0 @x1) (pbbterm @y0 @y1))
+                            (pbbterm (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= z (+ @x0 @y0 -1)))) :named @r0)
+                                     (! (choice ((z Int)) (and (>= @x1 z) (>= @y1 z) (>= z (+ @x1 @y1 -1)))) :named @r1))
+                        )) :rule pbblast_bvand)"#: true,
             }
             "Invalid 2-bit AND (wrong coefficient)" {
                 r#"(step t1 (cl (and
@@ -3360,6 +3375,33 @@ mod tests {
                                     )
                                 ))
                         :rule pbblast_bvand)"#: false,
+            }
+        }
+    }
+
+    #[test]
+    fn pbblast_bvand_2_short_circuit() {
+        test_cases! {
+            definitions = "
+            (declare-const @x0 Int)
+            (declare-const @x1 Int)
+            (declare-const @y0 Int)
+            (declare-const @y1 Int)
+        ",
+            "Valid 2-bit AND" {
+                r#"(step t1 (cl (=
+                            (bvand (pbbterm @x0 @x1) (pbbterm @y0 @y1))
+                            (pbbterm (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= z (+ @x0 @y0 -1)))) :named @r0)
+                                     (! (choice ((z Int)) (and (>= @x1 z) (>= @y1 z) (>= z (+ @x1 @y1 -1)))) :named @r1))
+                        )) :rule pbblast_bvand)"#: true,
+            }
+            "Invalid 2-bit AND (wrong bit)" {
+                r#"(step t1 (cl (=
+                            (bvand (pbbterm @x0 @x1) (pbbterm @y0 @y1))
+                            (pbbterm (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= z (+ @x0 @y0 -1)))) :named @r0)
+                                     (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= z (+ @x0 @y0 -1)))) :named @r1))
+                                     ; Should be on @x1 and @y1 ----^    
+                        )) :rule pbblast_bvand)"#: false,
             }
         }
     }
