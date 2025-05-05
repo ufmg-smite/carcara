@@ -493,7 +493,7 @@ impl_str_conversion_traits!(Operator {
     UBvToInt: "ubv_to_int",
     SBvToInt: "sbv_to_int",
 
-    BvPBbTerm: "pbbterm",
+    BvPBbTerm: "@pbbterm",
     BvBbTerm: "@bbterm",
     BvConst: "@bv",
     BvSize: "@bvsize",
@@ -507,7 +507,7 @@ impl_str_conversion_traits!(Operator {
 impl_str_conversion_traits!(ParamOperator {
     BvExtract: "extract",
     BvBitOf: "@bit_of",
-    BvIntOf: "int_of",
+    BvIntOf: "@int_of",
     ZeroExtend: "zero_extend",
     SignExtend: "sign_extend",
     RotateLeft: "rotate_left",
