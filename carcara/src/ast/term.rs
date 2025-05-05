@@ -596,16 +596,11 @@ impl Sort {
                 if a != b {
                     false
                 } else {
-                    let matching = sorts_a
-                        .iter()
-                        .zip(sorts_b.iter())
-                        .filter(|&(t_a, t_b)| {
-                            let s_a = t_a.as_sort().unwrap();
-                            let s_b = t_b.as_sort().unwrap();
-                            s_a.match_with(s_b, map)
-                        })
-                        .count();
-                    matching == sorts_a.len() && matching == sorts_b.len()
+                    sorts_a.iter().zip(sorts_b.iter()).all(|(t_a, t_b)| {
+                        let s_a = t_a.as_sort().unwrap();
+                        let s_b = t_b.as_sort().unwrap();
+                        s_a.match_with(s_b, map)
+                    })
                 }
             }
             (Sort::Function(sorts_a), Sort::Function(sorts_b)) => {
