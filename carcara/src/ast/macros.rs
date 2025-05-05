@@ -191,9 +191,16 @@ macro_rules! match_term {
     (@GET_VARIANT bvurem)   => { $crate::ast::Operator::BvURem };
     (@GET_VARIANT bvshl)    => { $crate::ast::Operator::BvShl };
     (@GET_VARIANT bvlshr)   => { $crate::ast::Operator::BvLShr };
-    (@GET_VARIANT bvslt)    => { $crate::ast::Operator::BvSLt };
-    (@GET_VARIANT bvult)    => { $crate::ast::Operator::BvULt };
     (@GET_VARIANT concat)   => { $crate::ast::Operator::BvConcat };
+
+    (@GET_VARIANT bvuge)    => { $crate::ast::Operator::BvUGe };
+    (@GET_VARIANT bvugt)    => { $crate::ast::Operator::BvUGt };
+    (@GET_VARIANT bvule)    => { $crate::ast::Operator::BvULe };
+    (@GET_VARIANT bvult)    => { $crate::ast::Operator::BvULt };
+    (@GET_VARIANT bvsge)    => { $crate::ast::Operator::BvSGe };
+    (@GET_VARIANT bvsgt)    => { $crate::ast::Operator::BvSGt };
+    (@GET_VARIANT bvsle)    => { $crate::ast::Operator::BvSLe };
+    (@GET_VARIANT bvslt)    => { $crate::ast::Operator::BvSLt };
 
     (@GET_VARIANT ubv_to_int)   => { $crate::ast::Operator::UBvToInt };
     (@GET_VARIANT sbv_to_int)   => { $crate::ast::Operator::SBvToInt };
