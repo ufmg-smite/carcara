@@ -47,7 +47,7 @@ fn check_pbblast_sum(
     );
 
     for (i, element) in sum.iter().enumerate() {
-        // Try to match (* c ((_ int_of idx) bv))
+        // Try to match (* c ((_ @int_of idx) bv))
         let (c, idx, bv) = match match_term!((* c ((_ int_of idx) bv)) = element) {
             Some((c, (idx, bv))) => (c.as_integer_err()?, idx, bv),
             None => {
@@ -220,8 +220,27 @@ pub fn pbblast_bvsle(RuleArgs { .. }: RuleArgs) -> RuleResult {
 }
 
 /// Implements the blasting of a bitvector variable
-pub fn pbblast_pbbvar(RuleArgs { .. }: RuleArgs) -> RuleResult {
-    Err(CheckerError::Unspecified)
+pub fn pbblast_pbbvar(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    let (x, pbs) = match_term_err!((= x (pbbterm ...)) = &conclusion[0])?;
+
+    for (i, pb) in pbs.iter().enumerate() {
+        let (idx, bv) = match_term_err!(((_ int_of idx) bv) = pb)?;
+
+        // Convert the index term to an integer.
+        let idx: Integer = idx.as_integer_err()?;
+
+        // Check that the index is `i`.
+        rassert!(
+            idx == i,
+            CheckerError::Explanation(format!("Index {} is not {}", idx, i))
+        );
+        // Finally, the bitvector in the summand must be the one we expect.
+        rassert!(
+            *bv == *x,
+            CheckerError::Explanation(format!("Mismatched bitvectors {} {}", bv, x))
+        );
+    }
+    Ok(())
 }
 
 /// Implements the blasting of a constant
@@ -252,8 +271,8 @@ mod tests {
             // the summation for each side explicitly multiplies by 1.
             "Equality on single bits" {
                 r#"(step t1 (cl (= (= x1 y1)
-                                 (= (- (* 1 ((_ int_of 0) x1))
-                                       (* 1 ((_ int_of 0) y1)))
+                                 (= (- (* 1 ((_ @int_of 0) x1))
+                                       (* 1 ((_ @int_of 0) y1)))
                                     0))) :rule pbblast_bveq)"#: true,
             }
 
@@ -261,15 +280,15 @@ mod tests {
             // the multiplication by 1 is omitted (i.e. defaulting to 1).
             "Omit multiplication by 1" {
                 r#"(step t1 (cl (= (= x1 y1)
-                                 (= (- ((_ int_of 0) x1)
-                                       ((_ int_of 0) y1))
+                                 (= (- ((_ @int_of 0) x1)
+                                       ((_ @int_of 0) y1))
                                     0))) :rule pbblast_bveq)"#: true,
             }
 
             // Check that a term which is not a subtraction of sums is rejected.
             "Not a subtraction of sums" {
                 r#"(step t1 (cl (= (= x1 y1)
-                                 (= (* 1 ((_ int_of 0) x1))
+                                 (= (* 1 ((_ @int_of 0) x1))
                                     0))) :rule pbblast_bveq)"#: false,
             }
 
@@ -277,8 +296,8 @@ mod tests {
             // Case 1: the first summand uses a zero coefficient.
             "Malformed products: coefficient 0 in first summand" {
                 r#"(step t1 (cl (= (= x1 y1)
-                                 (= (- (* 0 ((_ int_of 0) x1))
-                                       (* 1 ((_ int_of 0) y1)))
+                                 (= (- (* 0 ((_ @int_of 0) x1))
+                                       (* 1 ((_ @int_of 0) y1)))
                                     0))) :rule pbblast_bveq)"#: false,
             }
 
@@ -286,8 +305,8 @@ mod tests {
             // Case 2: the second summand uses a zero coefficient.
             "Malformed products: coefficient 0 in second summand" {
                 r#"(step t1 (cl (= (= x1 y1)
-                                 (= (- (* 1 ((_ int_of 0) x1))
-                                       (* 0 ((_ int_of 0) y1)))
+                                 (= (- (* 1 ((_ @int_of 0) x1))
+                                       (* 0 ((_ @int_of 0) y1)))
                                     0))) :rule pbblast_bveq)"#: false,
             }
 
@@ -295,13 +314,13 @@ mod tests {
             // only the current format is allowed by the checker
             "Trailing Zero" {
                 r#"(step t1 (cl (= (= x1 y1)
-                                 (= (- (+ (* 1 ((_ int_of 0) x1)) 0)
-                                       (+ (* 1 ((_ int_of 0) y1)) 0))
+                                 (= (- (+ (* 1 ((_ @int_of 0) x1)) 0)
+                                       (+ (* 1 ((_ @int_of 0) y1)) 0))
                                     0))) :rule pbblast_bveq)"#: false,
 
                 r#"(step t1 (cl (= (= x1 y1)
-                                 (= (- (+ ((_ int_of 0) x1) 0)
-                                       (+ ((_ int_of 0) y1) 0))
+                                 (= (- (+ ((_ @int_of 0) x1) 0)
+                                       (+ ((_ @int_of 0) y1) 0))
                                     0))) :rule pbblast_bveq)"#: false,
             }
 
@@ -321,18 +340,18 @@ mod tests {
             // - The least significant bit (index 0) uses a coefficient of 2.
             "Equality on two bits" {
                 r#"(step t1 (cl (= (= x2 y2)
-                                 (= (- (+ (* 1 ((_ int_of 0) x2))
-                                          (* 2 ((_ int_of 1) x2)))
-                                       (+ (* 1 ((_ int_of 0) y2))
-                                          (* 2 ((_ int_of 1) y2))))
+                                 (= (- (+ (* 1 ((_ @int_of 0) x2))
+                                          (* 2 ((_ @int_of 1) x2)))
+                                       (+ (* 1 ((_ @int_of 0) y2))
+                                          (* 2 ((_ @int_of 1) y2))))
                                     0))) :rule pbblast_bveq)"#: true,
             }
             "Trailing Zero" {
                 r#"(step t1 (cl (= (= x2 y2)
-                                 (= (- (+ (* 1 ((_ int_of 0) x2))
-                                          (* 2 ((_ int_of 1) x2)) 0)
-                                       (+ (* 1 ((_ int_of 0) y2))
-                                          (* 2 ((_ int_of 1) y2)) 0))
+                                 (= (- (+ (* 1 ((_ @int_of 0) x2))
+                                          (* 2 ((_ @int_of 1) x2)) 0)
+                                       (+ (* 1 ((_ @int_of 0) y2))
+                                          (* 2 ((_ @int_of 1) y2)) 0))
                                     0))) :rule pbblast_bveq)"#: false,
             }
 
@@ -349,23 +368,23 @@ mod tests {
             // Check equality on eight-bit bitvectors
             "Equality on 8-bit bitvectors" {
                 r#"(step t1 (cl (= (= x8 y8)
-                                 (= (- (+ (* 1   ((_ int_of 0) x8))
-                                          (* 2   ((_ int_of 1) x8))
-                                          (* 4   ((_ int_of 2) x8))
-                                          (* 8   ((_ int_of 3) x8))
-                                          (* 16  ((_ int_of 4) x8))
-                                          (* 32  ((_ int_of 5) x8))
-                                          (* 64  ((_ int_of 6) x8))
-                                          (* 128 ((_ int_of 7) x8))
+                                 (= (- (+ (* 1   ((_ @int_of 0) x8))
+                                          (* 2   ((_ @int_of 1) x8))
+                                          (* 4   ((_ @int_of 2) x8))
+                                          (* 8   ((_ @int_of 3) x8))
+                                          (* 16  ((_ @int_of 4) x8))
+                                          (* 32  ((_ @int_of 5) x8))
+                                          (* 64  ((_ @int_of 6) x8))
+                                          (* 128 ((_ @int_of 7) x8))
                                        )
-                                       (+ (* 1   ((_ int_of 0) y8))
-                                          (* 2   ((_ int_of 1) y8))
-                                          (* 4   ((_ int_of 2) y8))
-                                          (* 8   ((_ int_of 3) y8))
-                                          (* 16  ((_ int_of 4) y8))
-                                          (* 32  ((_ int_of 5) y8))
-                                          (* 64  ((_ int_of 6) y8))
-                                          (* 128 ((_ int_of 7) y8))
+                                       (+ (* 1   ((_ @int_of 0) y8))
+                                          (* 2   ((_ @int_of 1) y8))
+                                          (* 4   ((_ @int_of 2) y8))
+                                          (* 8   ((_ @int_of 3) y8))
+                                          (* 16  ((_ @int_of 4) y8))
+                                          (* 32  ((_ @int_of 5) y8))
+                                          (* 64  ((_ @int_of 6) y8))
+                                          (* 128 ((_ @int_of 7) y8))
                                        ))
                                 0))) :rule pbblast_bveq)"#: true,
             }
@@ -375,23 +394,23 @@ mod tests {
             // We introduce a wrong coefficient (63 instead of 64).
             "bveq wrong coefficient in x8" {
                 r#"(step t1 (cl (= (= x8 y8)
-                                 (= (- (+ (* 1   ((_ int_of 0) x8))
-                                          (* 2   ((_ int_of 1) x8))
-                                          (* 4   ((_ int_of 2) x8))
-                                          (* 8   ((_ int_of 3) x8))
-                                          (* 16  ((_ int_of 4) x8))
-                                          (* 32  ((_ int_of 5) x8))
-                                          (* 63  ((_ int_of 6) x8))  ; WRONG: should be (* 64 ((_ int_of 1) x8))
-                                          (* 128 ((_ int_of 7) x8))
+                                 (= (- (+ (* 1   ((_ @int_of 0) x8))
+                                          (* 2   ((_ @int_of 1) x8))
+                                          (* 4   ((_ @int_of 2) x8))
+                                          (* 8   ((_ @int_of 3) x8))
+                                          (* 16  ((_ @int_of 4) x8))
+                                          (* 32  ((_ @int_of 5) x8))
+                                          (* 63  ((_ @int_of 6) x8))  ; WRONG: should be (* 64 ((_ @int_of 1) x8))
+                                          (* 128 ((_ @int_of 7) x8))
                                        )
-                                       (+ (* 1   ((_ int_of 0) y8))
-                                          (* 2   ((_ int_of 1) y8))
-                                          (* 4   ((_ int_of 2) y8))
-                                          (* 8   ((_ int_of 3) y8))
-                                          (* 16  ((_ int_of 4) y8))
-                                          (* 32  ((_ int_of 5) y8))
-                                          (* 64  ((_ int_of 6) y8))
-                                          (* 128 ((_ int_of 7) y8))
+                                       (+ (* 1   ((_ @int_of 0) y8))
+                                          (* 2   ((_ @int_of 1) y8))
+                                          (* 4   ((_ @int_of 2) y8))
+                                          (* 8   ((_ @int_of 3) y8))
+                                          (* 16  ((_ @int_of 4) y8))
+                                          (* 32  ((_ @int_of 5) y8))
+                                          (* 64  ((_ @int_of 6) y8))
+                                          (* 128 ((_ @int_of 7) y8))
                                        ))
                                  0))) :rule pbblast_bveq)"#: false,
             }
@@ -401,47 +420,47 @@ mod tests {
             // We introduce a wrong constant (1 instead of 0).
             "bveq wrong constant in equality" {
                 r#"(step t1 (cl (= (= x8 y8)
-                                 (= (- (+ (* 1   ((_ int_of 0) x8))
-                                          (* 2   ((_ int_of 1) x8))
-                                          (* 4   ((_ int_of 2) x8))
-                                          (* 8   ((_ int_of 3) x8))
-                                          (* 16  ((_ int_of 4) x8))
-                                          (* 32  ((_ int_of 5) x8))
-                                          (* 64  ((_ int_of 6) x8))
-                                          (* 128 ((_ int_of 7) x8))
+                                 (= (- (+ (* 1   ((_ @int_of 0) x8))
+                                          (* 2   ((_ @int_of 1) x8))
+                                          (* 4   ((_ @int_of 2) x8))
+                                          (* 8   ((_ @int_of 3) x8))
+                                          (* 16  ((_ @int_of 4) x8))
+                                          (* 32  ((_ @int_of 5) x8))
+                                          (* 64  ((_ @int_of 6) x8))
+                                          (* 128 ((_ @int_of 7) x8))
                                        )
-                                       (+ (* 1   ((_ int_of 0) y8))
-                                          (* 2   ((_ int_of 1) y8))
-                                          (* 4   ((_ int_of 2) y8))
-                                          (* 8   ((_ int_of 3) y8))
-                                          (* 16  ((_ int_of 4) y8))
-                                          (* 32  ((_ int_of 5) y8))
-                                          (* 64  ((_ int_of 6) y8))
-                                          (* 128 ((_ int_of 7) y8))
+                                       (+ (* 1   ((_ @int_of 0) y8))
+                                          (* 2   ((_ @int_of 1) y8))
+                                          (* 4   ((_ @int_of 2) y8))
+                                          (* 8   ((_ @int_of 3) y8))
+                                          (* 16  ((_ @int_of 4) y8))
+                                          (* 32  ((_ @int_of 5) y8))
+                                          (* 64  ((_ @int_of 6) y8))
+                                          (* 128 ((_ @int_of 7) y8))
                                        ))
                                  1) ; WRONG: should be 0
                                  )) :rule pbblast_bveq)"#: false,
             }
             "Trailing Zero" {
                 r#"(step t1 (cl (= (= x8 y8)
-                                 (= (- (+ (* 1   ((_ int_of 0) x8))
-                                          (* 2   ((_ int_of 1) x8))
-                                          (* 4   ((_ int_of 2) x8))
-                                          (* 8   ((_ int_of 3) x8))
-                                          (* 16  ((_ int_of 4) x8))
-                                          (* 32  ((_ int_of 5) x8))
-                                          (* 64  ((_ int_of 6) x8))
-                                          (* 128 ((_ int_of 7) x8))
+                                 (= (- (+ (* 1   ((_ @int_of 0) x8))
+                                          (* 2   ((_ @int_of 1) x8))
+                                          (* 4   ((_ @int_of 2) x8))
+                                          (* 8   ((_ @int_of 3) x8))
+                                          (* 16  ((_ @int_of 4) x8))
+                                          (* 32  ((_ @int_of 5) x8))
+                                          (* 64  ((_ @int_of 6) x8))
+                                          (* 128 ((_ @int_of 7) x8))
                                           0
                                        )
-                                       (+ (* 1   ((_ int_of 0) y8))
-                                          (* 2   ((_ int_of 1) y8))
-                                          (* 4   ((_ int_of 2) y8))
-                                          (* 8   ((_ int_of 3) y8))
-                                          (* 16  ((_ int_of 4) y8))
-                                          (* 32  ((_ int_of 5) y8))
-                                          (* 64  ((_ int_of 6) y8))
-                                          (* 128 ((_ int_of 7) y8))
+                                       (+ (* 1   ((_ @int_of 0) y8))
+                                          (* 2   ((_ @int_of 1) y8))
+                                          (* 4   ((_ @int_of 2) y8))
+                                          (* 8   ((_ @int_of 3) y8))
+                                          (* 16  ((_ @int_of 4) y8))
+                                          (* 32  ((_ @int_of 5) y8))
+                                          (* 64  ((_ @int_of 6) y8))
+                                          (* 128 ((_ @int_of 7) y8))
                                           0
                                        ))
                                 0))) :rule pbblast_bveq)"#: false,
@@ -459,47 +478,47 @@ mod tests {
             // A simple test on one-bit bitvectors using explicit multiplication.
             "bvult on single bits" {
                 r#"(step t1 (cl (= (bvult x1 y1)
-                                 (>= (- (* 1 ((_ int_of 0) y1))
-                                        (* 1 ((_ int_of 0) x1)))
+                                 (>= (- (* 1 ((_ @int_of 0) y1))
+                                        (* 1 ((_ @int_of 0) x1)))
                                      1))) :rule pbblast_bvult)"#: true,
             }
 
             // Test where the multiplication by 1 is omitted for the only summand.
             "Omit multiplication by 1" {
                 r#"(step t1 (cl (= (bvult x1 y1)
-                                 (>= (- ((_ int_of 0) y1)
-                                        ((_ int_of 0) x1))
+                                 (>= (- ((_ @int_of 0) y1)
+                                        ((_ @int_of 0) x1))
                                      1))) :rule pbblast_bvult)"#: true,
             }
 
             // Test a malformed pseudo-Boolean constraint (e.g. not a subtraction of two sums).
             "Not a subtraction of sums" {
                 r#"(step t1 (cl (= (bvult x1 y1)
-                                 (>= (* 1 ((_ int_of 0) y1))
+                                 (>= (* 1 ((_ @int_of 0) y1))
                                      1))) :rule pbblast_bvult)"#: false,
             }
 
             // Test with malformed products: coefficient 0 is not allowed.
             "Malformed products" {
                 r#"(step t1 (cl (= (bvult x1 y1)
-                                 (>= (- (* 0 ((_ int_of 0) y1))
-                                        (* 1 ((_ int_of 0) x1)))
+                                 (>= (- (* 0 ((_ @int_of 0) y1))
+                                        (* 1 ((_ @int_of 0) x1)))
                                      1))) :rule pbblast_bvult)"#: false,
                 r#"(step t1 (cl (= (bvult x1 y1)
-                                 (>= (- (* 1 ((_ int_of 0) y1))
-                                        (* 0 ((_ int_of 0) x1)))
+                                 (>= (- (* 1 ((_ @int_of 0) y1))
+                                        (* 0 ((_ @int_of 0) x1)))
                                      1))) :rule pbblast_bvult)"#: false,
             }
 
             "Trailing Zero" {
                 r#"(step t1 (cl (= (bvult x1 y1)
-                                 (>= (- (+ (* 1 ((_ int_of 0) y1)) 0)
-                                        (+ (* 1 ((_ int_of 0) x1)) 0))
+                                 (>= (- (+ (* 1 ((_ @int_of 0) y1)) 0)
+                                        (+ (* 1 ((_ @int_of 0) x1)) 0))
                                      1))) :rule pbblast_bvult)"#: false,
 
                 r#"(step t1 (cl (= (bvult x1 y1)
-                                 (>= (- (+ ((_ int_of 0) y1) 0)
-                                        (+ ((_ int_of 0) x1) 0))
+                                 (>= (- (+ ((_ @int_of 0) y1) 0)
+                                        (+ ((_ @int_of 0) x1) 0))
                                      1))) :rule pbblast_bvult)"#: false,
             }
 
@@ -517,20 +536,20 @@ mod tests {
             // Test on two-bit bitvectors.
             "bvult on two bits" {
                 r#"(step t1 (cl (= (bvult x2 y2)
-                                 (>= (- (+ (* 1 ((_ int_of 0) y2)) (* 2 ((_ int_of 1) y2)))
-                                        (+ (* 1 ((_ int_of 0) x2)) (* 2 ((_ int_of 1) x2))))
+                                 (>= (- (+ (* 1 ((_ @int_of 0) y2)) (* 2 ((_ @int_of 1) y2)))
+                                        (+ (* 1 ((_ @int_of 0) x2)) (* 2 ((_ @int_of 1) x2))))
                                      1))) :rule pbblast_bvult)"#: true,
             }
             "bvult mismatched index on two bits" {
                 r#"(step t1 (cl (= (bvult x2 y2)
-                                 (>= (- (+ (* 1 ((_ int_of 1) y2)) (* 2 ((_ int_of 0) y2)))
-                                        (+ (* 1 ((_ int_of 1) x2)) (* 2 ((_ int_of 0) x2))))
+                                 (>= (- (+ (* 1 ((_ @int_of 1) y2)) (* 2 ((_ @int_of 0) y2)))
+                                        (+ (* 1 ((_ @int_of 1) x2)) (* 2 ((_ @int_of 0) x2))))
                                      1))) :rule pbblast_bvult)"#: false,
             }
             "Trailing Zero" {
                 r#"(step t1 (cl (= (bvult x2 y2)
-                                 (>= (- (+ (* 1 ((_ int_of 0) y2)) (* 2 ((_ int_of 1) y2)) 0)
-                                        (+ (* 1 ((_ int_of 0) x2)) (* 2 ((_ int_of 1) x2)) 0))
+                                 (>= (- (+ (* 1 ((_ @int_of 0) y2)) (* 2 ((_ @int_of 1) y2)) 0)
+                                        (+ (* 1 ((_ @int_of 0) x2)) (* 2 ((_ @int_of 1) x2)) 0))
                                      1))) :rule pbblast_bvult)"#: false,
             }
 
@@ -547,23 +566,23 @@ mod tests {
             // Check unsigned-less-than on eight-bit bitvectors
             "bvult on 8-bit bitvectors" {
                 r#"(step t1 (cl (= (bvult x8 y8)
-                                 (>= (- (+ (* 1 ((_ int_of 0) y8))
-                                           (* 2   ((_ int_of 1) y8))
-                                           (* 4   ((_ int_of 2) y8))
-                                           (* 8   ((_ int_of 3) y8))
-                                           (* 16  ((_ int_of 4) y8))
-                                           (* 32  ((_ int_of 5) y8))
-                                           (* 64  ((_ int_of 6) y8))
-                                           (* 128 ((_ int_of 7) y8))
+                                 (>= (- (+ (* 1 ((_ @int_of 0) y8))
+                                           (* 2   ((_ @int_of 1) y8))
+                                           (* 4   ((_ @int_of 2) y8))
+                                           (* 8   ((_ @int_of 3) y8))
+                                           (* 16  ((_ @int_of 4) y8))
+                                           (* 32  ((_ @int_of 5) y8))
+                                           (* 64  ((_ @int_of 6) y8))
+                                           (* 128 ((_ @int_of 7) y8))
                                         )
-                                        (+ (* 1   ((_ int_of 0) x8))
-                                           (* 2   ((_ int_of 1) x8))
-                                           (* 4   ((_ int_of 2) x8))
-                                           (* 8   ((_ int_of 3) x8))
-                                           (* 16  ((_ int_of 4) x8))
-                                           (* 32  ((_ int_of 5) x8))
-                                           (* 64  ((_ int_of 6) x8))
-                                           (* 128 ((_ int_of 7) x8))
+                                        (+ (* 1   ((_ @int_of 0) x8))
+                                           (* 2   ((_ @int_of 1) x8))
+                                           (* 4   ((_ @int_of 2) x8))
+                                           (* 8   ((_ @int_of 3) x8))
+                                           (* 16  ((_ @int_of 4) x8))
+                                           (* 32  ((_ @int_of 5) x8))
+                                           (* 64  ((_ @int_of 6) x8))
+                                           (* 128 ((_ @int_of 7) x8))
                                         ))
                                  1))) :rule pbblast_bvult)"#: true,
             }
@@ -571,23 +590,23 @@ mod tests {
             // Incorrect constant: should be 1, but here 0 is used.
             "bvult on 8-bit bitvectors (incorrect constant)" {
                 r#"(step t1 (cl (= (bvult x8 y8)
-                                 (>= (- (+ (* 1 ((_ int_of 0) y8))
-                                           (* 2   ((_ int_of 1) y8))
-                                           (* 4   ((_ int_of 2) y8))
-                                           (* 8   ((_ int_of 3) y8))
-                                           (* 16  ((_ int_of 4) y8))
-                                           (* 32  ((_ int_of 5) y8))
-                                           (* 64  ((_ int_of 6) y8))
-                                           (* 128 ((_ int_of 7) y8))
+                                 (>= (- (+ (* 1 ((_ @int_of 0) y8))
+                                           (* 2   ((_ @int_of 1) y8))
+                                           (* 4   ((_ @int_of 2) y8))
+                                           (* 8   ((_ @int_of 3) y8))
+                                           (* 16  ((_ @int_of 4) y8))
+                                           (* 32  ((_ @int_of 5) y8))
+                                           (* 64  ((_ @int_of 6) y8))
+                                           (* 128 ((_ @int_of 7) y8))
                                         )
-                                        (+ (* 1   ((_ int_of 0) x8))
-                                           (* 2   ((_ int_of 1) x8))
-                                           (* 4   ((_ int_of 2) x8))
-                                           (* 8   ((_ int_of 3) x8))
-                                           (* 16  ((_ int_of 4) x8))
-                                           (* 32  ((_ int_of 5) x8))
-                                           (* 64  ((_ int_of 6) x8))
-                                           (* 128 ((_ int_of 7) x8))
+                                        (+ (* 1   ((_ @int_of 0) x8))
+                                           (* 2   ((_ @int_of 1) x8))
+                                           (* 4   ((_ @int_of 2) x8))
+                                           (* 8   ((_ @int_of 3) x8))
+                                           (* 16  ((_ @int_of 4) x8))
+                                           (* 32  ((_ @int_of 5) x8))
+                                           (* 64  ((_ @int_of 6) x8))
+                                           (* 128 ((_ @int_of 7) x8))
                                         ))
                                  0) ; WRONG: Should be 1
                                  )) :rule pbblast_bvult)"#: false,
@@ -598,46 +617,46 @@ mod tests {
             // Here we deliberately use 63 instead of 64 for the summand corresponding to index 1 (bit position 6).
             "bvult wrong coefficient" {
                 r#"(step t1 (cl (= (bvult x8 y8)
-                                 (>= (- (+ (* 1 ((_ int_of 0) y8))
-                                           (* 2   ((_ int_of 1) y8))
-                                           (* 4   ((_ int_of 2) y8))
-                                           (* 8   ((_ int_of 3) y8))
-                                           (* 16  ((_ int_of 4) y8))
-                                           (* 32  ((_ int_of 5) y8))
-                                           (* 63  ((_ int_of 6) y8)); WRONG: should be (* 64 ((_ int_of 1) y8))
-                                           (* 128 ((_ int_of 7) y8))
+                                 (>= (- (+ (* 1 ((_ @int_of 0) y8))
+                                           (* 2   ((_ @int_of 1) y8))
+                                           (* 4   ((_ @int_of 2) y8))
+                                           (* 8   ((_ @int_of 3) y8))
+                                           (* 16  ((_ @int_of 4) y8))
+                                           (* 32  ((_ @int_of 5) y8))
+                                           (* 63  ((_ @int_of 6) y8)); WRONG: should be (* 64 ((_ @int_of 1) y8))
+                                           (* 128 ((_ @int_of 7) y8))
                                         )
-                                        (+ (* 1   ((_ int_of 0) x8))
-                                           (* 2   ((_ int_of 1) x8))
-                                           (* 4   ((_ int_of 2) x8))
-                                           (* 8   ((_ int_of 3) x8))
-                                           (* 16  ((_ int_of 4) x8))
-                                           (* 32  ((_ int_of 5) x8))
-                                           (* 64  ((_ int_of 6) x8))
-                                           (* 128 ((_ int_of 7) x8))
+                                        (+ (* 1   ((_ @int_of 0) x8))
+                                           (* 2   ((_ @int_of 1) x8))
+                                           (* 4   ((_ @int_of 2) x8))
+                                           (* 8   ((_ @int_of 3) x8))
+                                           (* 16  ((_ @int_of 4) x8))
+                                           (* 32  ((_ @int_of 5) x8))
+                                           (* 64  ((_ @int_of 6) x8))
+                                           (* 128 ((_ @int_of 7) x8))
                                         ))
                                  1))) :rule pbblast_bvult)"#: false,
             }
 
             "Trailing Zero" {
                 r#"(step t1 (cl (= (bvult x8 y8)
-                                 (>= (- (+ (* 1 ((_ int_of 0) y8))
-                                           (* 2   ((_ int_of 1) y8))
-                                           (* 4   ((_ int_of 2) y8))
-                                           (* 8   ((_ int_of 3) y8))
-                                           (* 16  ((_ int_of 4) y8))
-                                           (* 32  ((_ int_of 5) y8))
-                                           (* 64  ((_ int_of 6) y8))
-                                           (* 128 ((_ int_of 7) y8))
+                                 (>= (- (+ (* 1 ((_ @int_of 0) y8))
+                                           (* 2   ((_ @int_of 1) y8))
+                                           (* 4   ((_ @int_of 2) y8))
+                                           (* 8   ((_ @int_of 3) y8))
+                                           (* 16  ((_ @int_of 4) y8))
+                                           (* 32  ((_ @int_of 5) y8))
+                                           (* 64  ((_ @int_of 6) y8))
+                                           (* 128 ((_ @int_of 7) y8))
                                          0)
-                                        (+ (* 1   ((_ int_of 0) x8))
-                                           (* 2   ((_ int_of 1) x8))
-                                           (* 4   ((_ int_of 2) x8))
-                                           (* 8   ((_ int_of 3) x8))
-                                           (* 16  ((_ int_of 4) x8))
-                                           (* 32  ((_ int_of 5) x8))
-                                           (* 64  ((_ int_of 6) x8))
-                                           (* 128 ((_ int_of 7) x8))
+                                        (+ (* 1   ((_ @int_of 0) x8))
+                                           (* 2   ((_ @int_of 1) x8))
+                                           (* 4   ((_ @int_of 2) x8))
+                                           (* 8   ((_ @int_of 3) x8))
+                                           (* 16  ((_ @int_of 4) x8))
+                                           (* 32  ((_ @int_of 5) x8))
+                                           (* 64  ((_ @int_of 6) x8))
+                                           (* 128 ((_ @int_of 7) x8))
                                          0))
                                  1))) :rule pbblast_bvult)"#: false,
             }
@@ -887,13 +906,63 @@ mod tests {
     fn pbblast_bvsle_4() {}
 
     #[test]
-    fn pbblast_pbbvar_1() {}
+    fn pbblast_pbbvar_1() {
+        test_cases! {
+           definitions = "
+                (declare-const x (_ BitVec 1))
+                (declare-const y (_ BitVec 1))
+                ",
+            // No restriction, only create a vector of pseudo-boolean variables that are free
+            "pbbvar on single bits" {
+                r#"(step t1 (cl (= x (@pbbterm ((_ @int_of 0) x)))) :rule pbblast_pbbvar)"#: true,
+                r#"(step t1 (cl (= x (@pbbterm ((_ @int_of 1) x)))) :rule pbblast_pbbvar)"#: false, // Wrong index
+                r#"(step t1 (cl (= x (@pbbterm ((_ @int_of 0) y)))) :rule pbblast_pbbvar)"#: false, // Mismatched vectors
+                r#"(step t1 (cl (= y (@pbbterm ((_ @int_of 0) x)))) :rule pbblast_pbbvar)"#: false, // Mismatched vectors
+            }
+        }
+    }
 
     #[test]
-    fn pbblast_pbbvar_2() {}
+    fn pbblast_pbbvar_2() {
+        test_cases! {
+            definitions = "
+            (declare-const x2 (_ BitVec 2))
+            (declare-const y2 (_ BitVec 2))
+        ",
+            "Valid 2-bit pbbvar" {
+                r#"(step t1 (cl (= x2 (@pbbterm ((_ @int_of 0) x2) ((_ @int_of 1) x2)))) :rule pbblast_pbbvar)"#: true,
+            }
+            "Mixed variables" {
+                r#"(step t1 (cl (= x2 (@pbbterm ((_ @int_of 0) x2) ((_ @int_of 1) y2)))) :rule pbblast_pbbvar)"#: false,
+            }
+        }
+    }
 
     #[test]
-    fn pbblast_pbbvar_8() {}
+    fn pbblast_pbbvar_8() {
+        test_cases! {
+            definitions = "
+            (declare-const x8 (_ BitVec 8))
+        ",
+            "Valid 8-bit pbbvar" {
+                r#"(step t1 (cl (= x8 (@pbbterm
+                    ((_ @int_of 0) x8) ((_ @int_of 1) x8)
+                    ((_ @int_of 2) x8) ((_ @int_of 3) x8)
+                    ((_ @int_of 4) x8) ((_ @int_of 5) x8)
+                    ((_ @int_of 6) x8) ((_ @int_of 7) x8)
+                ))) :rule pbblast_pbbvar)"#: true,
+            }
+
+            "Invalid 8-bit (missing term)" {
+                r#"(step t1 (cl (= x8 (@pbbterm
+                    ((_ @int_of 0) x8) ((_ @int_of 1) x8)
+                    ((_ @int_of 2) x8) ((_ @int_of 3) x8)
+                    ((_ @int_of 4) x8) ((_ @int_of 5) x8)
+                    ((_ @int_of 6) x8) ((_ @int_of 6) x8) ;; index 6 twice
+                ))) :rule pbblast_pbbvar)"#: false,
+            }
+        }
+    }
 
     #[test]
     fn pbblast_pbbconst_1() {}
