@@ -21,7 +21,7 @@ use std::{cmp, time::Duration};
 /// So, applying `flatten` to them would lead to `[term]`. Furthermore,
 /// the empty String isn't mapped to any entry in the vector, so `flatten`
 /// applied to `""` leads to an empty vector.
-fn flatten(pool: &mut dyn TermPool, term: Rc<Term>) -> Vec<Rc<Term>> {
+fn string_concat_flatten(pool: &mut dyn TermPool, term: Rc<Term>) -> Vec<Rc<Term>> {
     let mut flattened = Vec::new();
     if let Term::Const(Constant::String(s)) = term.as_ref() {
         flattened.extend(
@@ -30,7 +30,27 @@ fn flatten(pool: &mut dyn TermPool, term: Rc<Term>) -> Vec<Rc<Term>> {
         );
     } else if let Some(args) = match_term!((strconcat ...) = term) {
         for arg in args {
-            flattened.extend(flatten(pool, arg.clone()));
+            flattened.extend(string_concat_flatten(pool, arg.clone()));
+        }
+    } else {
+        flattened.push(term.clone());
+    }
+    flattened
+}
+
+/// A function that takes an `Rc<Term>` and returns a vector corresponding to
+/// the flat form of that term.
+///
+/// It works almost the same as `string_concat_flatten`, but it does not split string constants.
+fn concat_extract(term: Rc<Term>) -> Vec<Rc<Term>> {
+    let mut flattened = Vec::new();
+    if let Term::Const(Constant::String(s)) = term.as_ref() {
+        if !s.is_empty() {
+            flattened.push(term.clone());
+        }
+    } else if let Some(args) = match_term!((strconcat ...) = term) {
+        for arg in args {
+            flattened.extend(concat_extract(arg.clone()));
         }
     } else {
         flattened.push(term.clone());
@@ -91,7 +111,7 @@ fn expand_string_constants(pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term>
                 let mut new_args = Vec::new();
                 // (str.++ "a" (str.++ "b" "c")) => (str.++ "a" "b" "c")
                 for arg in args {
-                    new_args.extend(flatten(pool, arg.clone()));
+                    new_args.extend(string_concat_flatten(pool, arg.clone()));
                 }
                 pool.add(Term::Op(*op, new_args))
             }
@@ -165,8 +185,8 @@ fn is_prefix_or_suffix(
     rev: bool,
     polyeq_time: &mut Duration,
 ) -> Result<Vec<Rc<Term>>, CheckerError> {
-    let mut t_flat = flatten(pool, term.clone());
-    let mut p_flat = flatten(pool, pref.clone());
+    let mut t_flat = string_concat_flatten(pool, term.clone());
+    let mut p_flat = string_concat_flatten(pool, pref.clone());
     if rev {
         t_flat.reverse();
         p_flat.reverse();
@@ -231,8 +251,8 @@ fn strip_prefix_or_suffix(
     rev: bool,
     polyeq_time: &mut Duration,
 ) -> Result<Suffixes, CheckerError> {
-    let mut s_flat = flatten(pool, s.clone());
-    let mut t_flat = flatten(pool, t.clone());
+    let mut s_flat = string_concat_flatten(pool, s.clone());
+    let mut t_flat = string_concat_flatten(pool, t.clone());
     if rev {
         s_flat.reverse();
         t_flat.reverse();
@@ -306,6 +326,7 @@ fn build_str_suffix_len(pool: &mut dyn TermPool, s: Rc<Term>, n: Rc<Term>) -> Rc
     build_term!(pool, (strsubstr {s.clone()} (- (strlen {s.clone()}) {n.clone()}) {n.clone()}))
 }
 
+/// Helper function to properly extract the arguments of the `concat_cprop` rule.
 fn extract_arguments(t: &Rc<Term>) -> Result<Vec<Rc<Term>>, CheckerError> {
     let args_t = match t.as_ref() {
         Term::Op(Operator::StrConcat, args) => {
@@ -327,11 +348,167 @@ fn extract_arguments(t: &Rc<Term>) -> Result<Vec<Rc<Term>>, CheckerError> {
     Ok(args_t.clone())
 }
 
+/// A function that takes a list of regular expressions and returns the term corresponding to the
+/// application of the concatenation operator to them.
+///
+/// If the list contains only one regular expression, it returns it directly.
 fn singleton_elim(pool: &mut dyn TermPool, r_list: Vec<Rc<Term>>) -> Rc<Term> {
     match r_list.len() {
         1 => r_list[0].clone(),
         _ => pool.add(Term::Op(Operator::ReConcat, r_list)),
     }
+}
+
+/// Helper function for implementing the `re_kleene_unfold_pos` and `re_concat_unfold_pos` rules.
+///
+/// Internally handles the generation of the Skolem term resulting from `re_unfold_pos_component`,
+/// as well as the recursive step `re_unfold_pos_concat_recursive` to produce the resulting term.
+fn re_unfold_pos_concat(
+    pool: &mut dyn TermPool,
+    t: Rc<Term>,
+    r: Rc<Term>,
+) -> Result<(Rc<Term>, Rc<Term>), CheckerError> {
+    /// Generates a Skolem term used for the positive unfolding in the general case.
+    ///
+    /// The generated Skolem has the following structure:
+    /// ```text
+    /// ε x. ∃ k_0, ..., k_n, R_0, ..., R_n.
+    ///   (and (= t (str.++ k_0 k_1 ... k_i-1 x k_i+1 ... k_n))
+    ///        (str.in_re k_0 R_0)
+    ///        (str.in_re k_1 R_1)
+    ///        ...
+    ///        (str.in_re x R_i)
+    ///        ...
+    ///        (str.in_re k_n R_n))
+    /// ```
+    ///
+    /// where `t` is the target string reconstructed by concatenating all `k_i`, and `i` is the
+    /// index of the current string k being processed in the concatenation.
+    fn re_unfold_pos_component(
+        pool: &mut dyn TermPool,
+        t: Rc<Term>,
+        i: usize,
+        previous_ks: &mut Vec<Rc<Term>>,
+        previous_rs: &mut Vec<Rc<Term>>,
+    ) -> Rc<Term> {
+        let str_sort = pool.add(Term::Sort(Sort::String));
+        let reglan_sort = pool.add(Term::Sort(Sort::RegLan));
+        let x = pool.add(Term::new_var("x", str_sort.clone()));
+
+        let mut and_args: Vec<Rc<Term>> = Vec::new();
+        let mut concat_args: Vec<Rc<Term>> = Vec::new();
+        let mut exists_binding_list: Vec<(String, Rc<Term>)> = Vec::new();
+
+        for j in 0..i {
+            let k_j = pool.add(Term::new_var(format!("k_{j}"), str_sort.clone()));
+            let r_j = pool.add(Term::new_var(format!("R_{j}"), reglan_sort.clone()));
+            concat_args.push(k_j.clone());
+            and_args.push(build_term!(pool, (strinre {k_j.clone()} {r_j.clone()})));
+            exists_binding_list.push((format!("k_{j}"), str_sort.clone()));
+            exists_binding_list.push((format!("R_{j}"), reglan_sort.clone()));
+        }
+
+        concat_args.push(x.clone());
+        concat_args.extend(previous_ks.clone());
+        let ks_concat = pool.add(Term::Op(Operator::StrConcat, concat_args));
+
+        let r_i = pool.add(Term::new_var(format!("R_{i}"), reglan_sort.clone()));
+        exists_binding_list.push((format!("R_{i}"), reglan_sort.clone()));
+        and_args.push(build_term!(pool, (strinre {x.clone()} {r_i.clone()})));
+        for (j, _) in previous_rs.iter().enumerate() {
+            and_args.push(
+                build_term!(pool, (strinre {previous_ks[j].clone()} {previous_rs[j].clone()})),
+            );
+            let sum = i + j + 1;
+            exists_binding_list.push((format!("R_{sum}"), reglan_sort.clone()));
+        }
+
+        let equality = build_term!(pool, (= {t.clone()} {ks_concat.clone()}));
+        and_args.insert(0, equality);
+
+        let conjunction = pool.add(Term::Op(Operator::And, and_args));
+        let exists_binder = pool.add(Term::Binder(
+            Binder::Exists,
+            BindingList(exists_binding_list),
+            conjunction,
+        ));
+        let choice_binder = pool.add(Term::Binder(
+            Binder::Choice,
+            BindingList(vec![("x".into(), str_sort.clone())]),
+            exists_binder,
+        ));
+
+        previous_ks.insert(0, choice_binder.clone());
+        previous_rs.insert(0, r_i.clone());
+
+        choice_binder
+    }
+
+    fn re_unfold_pos_concat_recursive(
+        pool: &mut dyn TermPool,
+        t: Rc<Term>,
+        r: Rc<Term>,
+        previous_ks: &mut Vec<Rc<Term>>,
+        previous_rs: &mut Vec<Rc<Term>>,
+        n: usize,
+    ) -> Result<(Rc<Term>, Rc<Term>), CheckerError> {
+        match r.as_ref() {
+            Term::Op(Operator::ReConcat, args) => {
+                if let [r_1, r_2 @ ..] = &args[..] {
+                    let re_conc = pool.add(Term::Op(Operator::ReConcat, r_2.to_vec()));
+                    let (c, m) = re_unfold_pos_concat_recursive(
+                        pool,
+                        t.clone(),
+                        re_conc,
+                        previous_ks,
+                        previous_rs,
+                        n + 1,
+                    )?;
+                    match r_1.as_ref() {
+                        Term::Op(Operator::StrToRe, str_to_re_args) => {
+                            let s = str_to_re_args.first().unwrap();
+                            Ok((build_term!(pool, (strconcat {s.clone()} {c.clone()})), m))
+                        }
+                        _ => {
+                            let k = re_unfold_pos_component(pool, t, n, previous_ks, previous_rs);
+                            if args.len() == 1 {
+                                Ok((
+                                    build_term!(pool, (strconcat {k.clone()} {c.clone()})),
+                                    build_term!(
+                                        pool,
+                                        (and (strinre {k.clone()} {r_1.clone()}) {m.clone()})
+                                    ),
+                                ))
+                            } else {
+                                Ok((
+                                    build_term!(pool, (strconcat {k.clone()} {c.clone()})),
+                                    build_term!(
+                                        pool,
+                                        (and (strinre {k.clone()} {r.clone()}) {m.clone()})
+                                    ),
+                                ))
+                            }
+                        }
+                    }
+                } else {
+                    Ok((
+                        pool.add(Term::new_string("")),
+                        pool.add(Term::new_bool(true)),
+                    ))
+                }
+            }
+            _ => Err(CheckerError::CannotApplyReUnfoldPos(r.clone())),
+        }
+    }
+
+    re_unfold_pos_concat_recursive(
+        pool,
+        t.clone(),
+        r.clone(),
+        &mut Vec::new(),
+        &mut Vec::new(),
+        0,
+    )
 }
 
 /// A function to calculate the fixed length of a regular expression `r` (size of strings that
@@ -524,8 +701,8 @@ pub fn concat_csplit_prefix(
     let (t, s) = match_term_err!((= t s) = terms)?;
     let (t_1, _) = match_term_err!((not (= (strlen t_1) 0)) = length)?;
 
-    let s_flat = flatten(pool, s.clone());
-    if flatten(pool, t.clone()).is_empty() {
+    let s_flat = string_concat_flatten(pool, s.clone());
+    if string_concat_flatten(pool, t.clone()).is_empty() {
         return Err(CheckerError::TermOfWrongForm("(str.++ ...)", t.clone()));
     }
     if s_flat.is_empty() {
@@ -572,8 +749,8 @@ pub fn concat_csplit_suffix(
     let (t, s) = match_term_err!((= t s) = terms)?;
     let (t_2, _) = match_term_err!((not (= (strlen t_2) 0)) = length)?;
 
-    let s_flat = flatten(pool, s.clone());
-    if flatten(pool, t.clone()).is_empty() {
+    let s_flat = string_concat_flatten(pool, s.clone());
+    if string_concat_flatten(pool, t.clone()).is_empty() {
         return Err(CheckerError::TermOfWrongForm("(str.++ ...)", t.clone()));
     }
     if s_flat.is_empty() {
@@ -626,10 +803,10 @@ pub fn concat_split_prefix(
     let (t, s) = match_term_err!((= t s) = terms)?;
     let (t_1, s_1) = match_term_err!((not (= (strlen t_1) (strlen s_1))) = length)?;
 
-    if flatten(pool, t.clone()).is_empty() {
+    if string_concat_flatten(pool, t.clone()).is_empty() {
         return Err(CheckerError::TermOfWrongForm("(str.++ ...)", t.clone()));
     }
-    if flatten(pool, s.clone()).is_empty() {
+    if string_concat_flatten(pool, s.clone()).is_empty() {
         return Err(CheckerError::TermOfWrongForm("(str.++ ...)", s.clone()));
     }
 
@@ -694,10 +871,10 @@ pub fn concat_split_suffix(
     let (t, s) = match_term_err!((= t s) = terms)?;
     let (t_2, s_2) = match_term_err!((not (= (strlen t_2) (strlen s_2))) = length)?;
 
-    if flatten(pool, t.clone()).is_empty() {
+    if string_concat_flatten(pool, t.clone()).is_empty() {
         return Err(CheckerError::TermOfWrongForm("(str.++ ...)", t.clone()));
     }
-    if flatten(pool, s.clone()).is_empty() {
+    if string_concat_flatten(pool, s.clone()).is_empty() {
         return Err(CheckerError::TermOfWrongForm("(str.++ ...)", s.clone()));
     }
 
@@ -762,10 +939,10 @@ pub fn concat_lprop_prefix(
     let (t, s) = match_term_err!((= t s) = terms)?;
     let (t_1, s_1) = match_term_err!((> (strlen t_1) (strlen s_1)) = length)?;
 
-    if flatten(pool, t.clone()).is_empty() {
+    if string_concat_flatten(pool, t.clone()).is_empty() {
         return Err(CheckerError::TermOfWrongForm("(str.++ ...)", t.clone()));
     }
-    if flatten(pool, s.clone()).is_empty() {
+    if string_concat_flatten(pool, s.clone()).is_empty() {
         return Err(CheckerError::TermOfWrongForm("(str.++ ...)", s.clone()));
     }
 
@@ -817,10 +994,10 @@ pub fn concat_lprop_suffix(
     let (t, s) = match_term_err!((= t s) = terms)?;
     let (t_2, s_2) = match_term_err!((> (strlen t_2) (strlen s_2)) = length)?;
 
-    if flatten(pool, t.clone()).is_empty() {
+    if string_concat_flatten(pool, t.clone()).is_empty() {
         return Err(CheckerError::TermOfWrongForm("(str.++ ...)", t.clone()));
     }
-    if flatten(pool, s.clone()).is_empty() {
+    if string_concat_flatten(pool, s.clone()).is_empty() {
         return Err(CheckerError::TermOfWrongForm("(str.++ ...)", s.clone()));
     }
 
@@ -874,10 +1051,10 @@ pub fn concat_cprop_prefix(RuleArgs { premises, conclusion, pool, .. }: RuleArgs
         _ => return Err(CheckerError::TermOfWrongForm("(str.++ s1 s2)", s.clone())),
     };
 
-    let sc = flatten(pool, ss[0].clone());
+    let sc = string_concat_flatten(pool, ss[0].clone());
     let sc_tail = sc[1..].to_vec();
 
-    let t_2_flat = flatten(pool, args_t[1].clone());
+    let t_2_flat = string_concat_flatten(pool, args_t[1].clone());
 
     let v = 1 + overlap(sc_tail.clone(), t_2_flat.clone());
     let v = pool.add(Term::new_int(v));
@@ -920,11 +1097,11 @@ pub fn concat_cprop_suffix(RuleArgs { premises, conclusion, pool, .. }: RuleArgs
         _ => return Err(CheckerError::TermOfWrongForm("(str.++ s1 s2)", s.clone())),
     };
 
-    let mut sc = flatten(pool, ss[1].clone());
+    let mut sc = string_concat_flatten(pool, ss[1].clone());
     sc.reverse();
     let sc_tail = &sc[1..];
 
-    let mut t_2_flat = flatten(pool, args_t[1].clone());
+    let mut t_2_flat = string_concat_flatten(pool, args_t[1].clone());
     t_2_flat.reverse();
 
     let v = 1 + overlap(sc_tail.to_vec(), t_2_flat.clone());
@@ -1047,6 +1224,109 @@ pub fn re_inter(
     assert_eq(t_conc, t)?;
 
     Ok(())
+}
+
+pub fn re_kleene_star_unfold_pos(
+    RuleArgs { premises, conclusion, pool, .. }: RuleArgs,
+) -> RuleResult {
+    assert_num_premises(premises, 1)?;
+    assert_clause_len(conclusion, 1)?;
+
+    let term = get_premise_term(&premises[0])?;
+    let (t, r) = match_term_err!((strinre t r) = term)?;
+
+    match_term_err!((or (= t_1 "") (strinre t_2 t_3) (and t_4 (not (= t_5 "")) (not (= t_6 "")))) = &conclusion[0])?;
+
+    let expanded = match r.as_ref() {
+        Term::Op(Operator::ReKleeneClosure, args) => {
+            if let Some(r_1) = args.first() {
+                let new_t = pool.add(Term::Op(
+                    Operator::ReConcat,
+                    vec![r_1.clone(), r.clone(), r_1.clone()],
+                ));
+                let (k, m) = re_unfold_pos_concat(pool, t.clone(), new_t)?;
+                let concat_args = concat_extract(k.clone());
+                match &concat_args[..] {
+                    [k_0, k_1, k_2] => {
+                        let eq = build_term!(pool, (= {t.clone()} (strconcat {k_0.clone()} {k_1.clone()} {k_2.clone()})));
+                        let empty = pool.add(Term::new_string(""));
+                        let simplified = if m.is_bool_true() {
+                            pool.add(Term::Op(Operator::And, vec![eq.clone()]))
+                        } else {
+                            match m.as_ref() {
+                                Term::Op(Operator::And, args) => {
+                                    let mut new_args: Vec<Rc<Term>> = Vec::new();
+                                    new_args.push(eq.clone());
+                                    new_args.extend(args.clone());
+                                    pool.add(Term::Op(Operator::And, new_args))
+                                }
+                                _ => unreachable!(),
+                            }
+                        };
+                        Ok(build_term!(
+                            pool,
+                            (or
+                                (= {t.clone()} {empty.clone()})
+                                (strinre {t.clone()} {r_1.clone()})
+                                (and
+                                    {simplified}
+                                    (not (= {k_0.clone()} {empty.clone()}))
+                                    (not (= {k_2.clone()} {empty}))
+                                )
+                            )
+                        ))
+                    }
+                    _ => Err(CheckerError::TermOfWrongForm(
+                        "(str.++ k1 k2 k3)",
+                        k.clone(),
+                    )),
+                }
+            } else {
+                unreachable!()
+            }
+        }
+        _ => Err(CheckerError::TermOfWrongForm("(re.* ...)", r.clone())),
+    }?;
+
+    assert_eq(&conclusion[0], &expanded)
+}
+
+pub fn re_concat_unfold_pos(RuleArgs { premises, conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(premises, 1)?;
+    assert_clause_len(conclusion, 1)?;
+
+    let term = get_premise_term(&premises[0])?;
+    let (t, r) = match_term_err!((strinre t r) = term)?;
+
+    // Check conclusion possible formats
+    let first_format = match_term_err!((= t_1 (strconcat ...)) = &conclusion[0]);
+    let second_format = match_term_err!((and (= t_1 (strconcat ...)) (and ...)) = &conclusion[0]);
+    if first_format.is_err() && second_format.is_err() {
+        return Err(CheckerError::TermOfWrongForm(
+            "(= t_1 (str.++ ...)) or (and (= t_1 (str.++ ...)) (and ...))",
+            conclusion[0].clone(),
+        ));
+    }
+
+    let expanded = match r.as_ref() {
+        Term::Op(Operator::ReConcat, _) => {
+            let (tk, m) = re_unfold_pos_concat(pool, t.clone(), r.clone())?;
+            let concat_args = concat_extract(tk.clone());
+            let new_concat = pool.add(Term::Op(Operator::StrConcat, concat_args));
+            let teq = build_term!(pool, (= {t.clone()} {new_concat.clone()}));
+            if m.is_bool_true() {
+                Ok(teq)
+            } else {
+                Ok(build_term!(pool, (and {teq.clone()} {m.clone()})))
+            }
+        }
+        _ => Err(CheckerError::TermOfWrongForm("(re.++ ...)", r.clone())),
+    }?;
+
+    println!("concluded: {}", &conclusion[0]);
+    println!("epxanded: {}", &expanded);
+
+    assert_eq(&conclusion[0], &expanded)
 }
 
 pub fn re_unfold_neg(RuleArgs { premises, conclusion, pool, .. }: RuleArgs) -> RuleResult {
@@ -2689,6 +2969,101 @@ mod tests {
                    (step t1 (cl (or (not (str.in_re (str.substr x (- (str.len x) 2) 2) (re.union (str.to_re "xy") re.none))) (not (str.in_re (str.substr x 0 (- (str.len x) 2)) d)))) :rule re_unfold_neg_concat_fixed_suffix :premises (h1))"#: false,
                 r#"(assume h1 (not (str.in_re x (re.++ d (re.inter re.all (str.to_re "xy") (str.to_re "xyz"))))))
                    (step t1 (cl (or (not (str.in_re (str.substr x (- (str.len x) 2) 2) (re.union (str.to_re "xy") re.none))) (not (str.in_re (str.substr x 0 (- (str.len x) 2)) d)))) :rule re_unfold_neg_concat_fixed_suffix :premises (h1))"#: false,
+            }
+        }
+    }
+
+    #[test]
+    fn re_kleene_star_unfold_pos() {
+        test_cases! {
+            definitions = "
+                (declare-fun x () String)
+                (declare-fun y () String)
+                (declare-fun z () String)
+                (declare-fun a () RegLan)
+                (declare-fun b () RegLan)
+                (declare-fun c () RegLan)
+            ",
+            "Simple working examples" {
+                r#"(define-fun kk_2 () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (k_1 String) (R_1 RegLan) (R_2 RegLan)) (and (= x (str.++ k_0 k_1 x)) (str.in_re k_0 R_0) (str.in_re k_1 R_1) (str.in_re x R_2)))))
+                   (define-fun kk_1 () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan) (R_2 RegLan)) (and (= x (str.++ k_0 x kk_2)) (str.in_re k_0 R_0) (str.in_re x R_1) (str.in_re kk_2 R_2)))))
+                   (define-fun kk_0 () String (choice ((x String)) (exists ((R_0 RegLan) (R_1 RegLan) (R_2 RegLan)) (and (= x (str.++ x kk_1 kk_2)) (str.in_re x R_0) (str.in_re kk_1 R_1) (str.in_re kk_2 R_2)))))
+                   (assume h1 (str.in_re x (re.* a)))
+                   (step t1 (cl (or (= x "") (str.in_re x a) (and (and (= x (str.++ kk_0 kk_1 kk_2)) (str.in_re kk_0 (re.++ a (re.* a) a)) (and (str.in_re kk_1 (re.++ (re.* a) a)) (and (str.in_re kk_2 a) true))) (not (= kk_0 "")) (not (= kk_2 ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: true,
+                r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
+                   (assume h1 (str.in_re y (re.* (str.to_re "abc"))))
+                   (step t1 (cl (or (= y "") (str.in_re y (str.to_re "abc")) (and (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.++ (re.* (str.to_re "abc")) (str.to_re "abc"))) true) (not (= "abc" "")) (not (= "abc" ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: true,
+            }
+            "Premise is not of the form (str.in_re t R)" {
+                r#"(define-fun kk_2 () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (k_1 String) (R_1 RegLan) (R_2 RegLan)) (and (= x (str.++ k_0 k_1 x)) (str.in_re k_0 R_0) (str.in_re k_1 R_1) (str.in_re x R_2)))))
+                   (define-fun kk_1 () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan) (R_2 RegLan)) (and (= x (str.++ k_0 x kk_2)) (str.in_re k_0 R_0) (str.in_re x R_1) (str.in_re kk_2 R_2)))))
+                   (define-fun kk_0 () String (choice ((x String)) (exists ((R_0 RegLan) (R_1 RegLan) (R_2 RegLan)) (and (= x (str.++ x kk_1 kk_2)) (str.in_re x R_0) (str.in_re kk_1 R_1) (str.in_re kk_2 R_2)))))
+                   (assume h1 (not (str.in_re x (re.* a))))
+                   (step t1 (cl (or (= x "") (str.in_re x a) (and (and (= x (str.++ kk_0 kk_1 kk_2)) (str.in_re kk_0 (re.++ a (re.* a) a)) (and (str.in_re kk_1 (re.++ (re.* a) a)) (and (str.in_re kk_2 a) true))) (not (= kk_0 "")) (not (= kk_2 ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
+            }
+            "Conclusion is not of the form (or (= t_1 \"\") (str.in_re t_2 t_3) (and t_4 (not (= t_5 \"\")) (not (= t_6 \"\"))))" {
+                r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
+                   (assume h1 (str.in_re y (re.* (str.to_re "abc"))))
+                   (step t1 (cl (and (= y "") (str.in_re y (str.to_re "abc")) (and (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.++ (re.* (str.to_re "abc")) (str.to_re "abc"))) true) (not (= "abc" "")) (not (= "abc" ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
+                r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
+                   (assume h1 (str.in_re y (re.* (str.to_re "abc"))))
+                   (step t1 (cl (or (not (= y "")) (str.in_re y (str.to_re "abc")) (and (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.++ (re.* (str.to_re "abc")) (str.to_re "abc"))) true) (not (= "abc" "")) (not (= "abc" ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
+                r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
+                   (assume h1 (str.in_re y (re.* (str.to_re "abc"))))
+                   (step t1 (cl (or (= y "") (not (str.in_re y (str.to_re "abc"))) (and (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.++ (re.* (str.to_re "abc")) (str.to_re "abc"))) true) (not (= "abc" "")) (not (= "abc" ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
+                r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
+                   (assume h1 (str.in_re y (re.* (str.to_re "abc"))))
+                   (step t1 (cl (or (= y "") (str.in_re y (str.to_re "abc")) (or (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.++ (re.* (str.to_re "abc")) (str.to_re "abc"))) true) (not (= "abc" "")) (not (= "abc" ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
+                r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
+                   (assume h1 (str.in_re y (re.* (str.to_re "abc"))))
+                   (step t1 (cl (or (= y "") (str.in_re y (str.to_re "abc")) (and (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.++ (re.* (str.to_re "abc")) (str.to_re "abc"))) true) (= "abc" "") (not (= "abc" ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
+                r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
+                   (assume h1 (str.in_re y (re.* (str.to_re "abc"))))
+                   (step t1 (cl (or (= y "") (str.in_re y (str.to_re "abc")) (and (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.++ (re.* (str.to_re "abc")) (str.to_re "abc"))) true) (not (= "abc" "")) (= "abc" "")))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
+            }
+        }
+    }
+
+    #[test]
+    fn re_concat_unfold_pos() {
+        test_cases! {
+            definitions = "
+                (declare-fun x () String)
+                (declare-fun y () String)
+                (declare-fun z () String)
+                (declare-fun a () RegLan)
+                (declare-fun b () RegLan)
+                (declare-fun c () RegLan)
+            ",
+            "Simple working examples" {
+                r#"(assume h1 (str.in_re x (re.++ (str.to_re "a") (str.to_re "b") (str.to_re "c"))))
+                   (step t1 (cl (= x (str.++ "a" "b" "c"))) :rule re_concat_unfold_pos :premises (h1))"#: true,
+                r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
+                   (assume h1 (str.in_re y (re.++ (str.to_re "a") b (str.to_re "c"))))
+                   (step t1 (cl (and (= y (str.++ "a" choice_term "c")) (and (str.in_re choice_term (re.++ b (str.to_re "c"))) true))) :rule re_concat_unfold_pos :premises (h1))"#: true,
+                r#"(define-fun kk_1 () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= z (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
+                   (define-fun kk_0 () String (choice ((x String)) (exists ((R_0 RegLan) (R_1 RegLan)) (and (= z (str.++ x kk_1)) (str.in_re x R_0) (str.in_re kk_1 R_1)))))
+                   (assume h1 (str.in_re z (re.++ a b)))
+                   (step t1 (cl (and (= z (str.++ kk_0 kk_1)) (and (str.in_re kk_0 (re.++ a b)) (and (str.in_re kk_1 b) true)))) :rule re_concat_unfold_pos :premises (h1))"#: true,
+            }
+            "Premise is not of the form (str.in_re t R)" {
+                r#"(assume h1 (not (str.in_re x (re.++ (str.to_re "a") (str.to_re "b") (str.to_re "c")))))
+                   (step t1 (cl (= x (str.++ "a" "b" "c"))) :rule re_concat_unfold_pos :premises (h1))"#: false,
+            }
+            "Conclusion is not of the form " {
+                r#"(assume h1 (str.in_re x (re.++ (str.to_re "a") (str.to_re "b") (str.to_re "c"))))
+                   (step t1 (cl (not (= x (str.++ "a" "b" "c")))) :rule re_concat_unfold_pos :premises (h1))"#: false,
+                r#"(assume h1 (str.in_re x (re.++ (str.to_re "a") (str.to_re "b") (str.to_re "c"))))
+                   (step t1 (cl (= x "a")) :rule re_concat_unfold_pos :premises (h1))"#: false,
+                r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
+                   (assume h1 (str.in_re y (re.++ (str.to_re "a") b (str.to_re "c"))))
+                   (step t1 (cl (or (= y (str.++ "a" choice_term "c")) (and (str.in_re choice_term (re.++ b (str.to_re "c"))) true))) :rule re_concat_unfold_pos :premises (h1))"#: false,
+                r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
+                   (assume h1 (str.in_re y (re.++ (str.to_re "a") b (str.to_re "c"))))
+                   (step t1 (cl (and (not (= y (str.++ "a" choice_term "c"))) (and (str.in_re choice_term (re.++ b (str.to_re "c"))) true))) :rule re_concat_unfold_pos :premises (h1))"#: false,
+                r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
+                   (assume h1 (str.in_re y (re.++ (str.to_re "a") b (str.to_re "c"))))
+                   (step t1 (cl (and (= y (str.++ "a" choice_term "c")) (or (str.in_re choice_term (re.++ b (str.to_re "c"))) true))) :rule re_concat_unfold_pos :premises (h1))"#: false,
             }
         }
     }

@@ -80,6 +80,19 @@ pub enum CheckerError {
     #[error("No {0}-th child in term {1}")]
     NoIthChildInTerm(usize, Rc<Term>),
 
+    #[error("cannot apply the re_unfold_pos rule to the regular expression term '{0}'")]
+    CannotApplyReUnfoldPos(Rc<Term>),
+
+    #[error(
+        "cannot apply the re_unfold_pos_component method with the term '{0}' (not a concatenation)"
+    )]
+    CannotApplyReUnfoldPosComponent(Rc<Term>),
+
+    #[error(
+        "cannot apply the re_unfold_pos_component method with the terms '{0}' and '{1}' because they have a different number or arguments"
+    )]
+    CannotApplyReUnfoldPosComponentDifferentArgNum(Rc<Term>, Rc<Term>),
+
     // General errors
     #[error("expected {0} premises, got {1}")]
     WrongNumberOfPremises(Range, usize),
