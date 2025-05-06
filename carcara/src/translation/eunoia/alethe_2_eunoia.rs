@@ -1,8 +1,9 @@
 //! Translator for `EunoiaProof`.
-use super::Translator;
 use crate::ast::*;
 use crate::translation::eunoia::alethe_signature::theory::*;
 use crate::translation::eunoia::eunoia_ast::*;
+use crate::translation::PreOrderedAletheProof;
+use crate::translation::Translator;
 // scopes
 use crate::utils::HashMapStack;
 
@@ -13,21 +14,8 @@ pub struct EunoiaTranslator {
     /// Actual `EunoiaProof` object containing the translation.
     eunoia_proof: EunoiaProof,
 
-    // TODO: declared as attributes to avoid
-    // "cannot move out... a captured variable in an `FnMut` closure" errors
-    // TODO: declared as Vec<ProofNode> (not using borrows) to avoid
-    // error "borrowed data escapes outside of closure"
-    /// Auxiliary attribute useful to maintain a pre-ordered version
-    /// of the `ProofNode` graph.
-    pre_ord_proof: Vec<ProofNode>,
-
-    // TODO: this should be a variable local to post_order_to_list
-    /// Depth of the previous node visited.
-    previous_depth: usize,
-
-    /// Auxiliary attribute useful to maintain a pre-ordered version
-    /// of every node from a subproof with depth bigger than 1.
-    pre_ord_subproofs: Vec<Vec<ProofNode>>,
+    /// Pre-ordered version of the Alethe proof to be translated.
+    pre_ord_proof: PreOrderedAletheProof,
 
     // TODO: see for a better way of including Alethe's signature
     // We are not including it into the Pool of terms
@@ -60,9 +48,7 @@ impl EunoiaTranslator {
     pub fn new() -> Self {
         Self {
             eunoia_proof: Vec::new(),
-            pre_ord_proof: Vec::new(),
-            previous_depth: 0,
-            pre_ord_subproofs: Vec::new(),
+            pre_ord_proof: PreOrderedAletheProof::default(),
             alethe_signature: AletheTheory::new(),
             variables_in_scope: HashMapStack::new(),
             context_introduced: Vec::new(),
@@ -115,16 +101,15 @@ impl EunoiaTranslator {
     }
 
     pub fn translate<'a>(&'a mut self, proof: &Rc<ProofNode>) -> &'a EunoiaProof {
+        // We only translate pre-ordered proofs.
+        self.pre_ord_proof = PreOrderedAletheProof::new(proof);
+
         // Clean previously created data.
         if self.contexts_opened > 0 {
             self.eunoia_proof = Vec::new();
-            self.pre_ord_proof = Vec::new();
-            self.previous_depth = 0;
-            self.pre_ord_subproofs = Vec::new();
             self.variables_in_scope = HashMapStack::new();
             self.context_introduced = Vec::new();
             self.contexts_opened = 0;
-            // self.local_steps = Vec::new();
             self.last_step_rule = Vec::new();
             self.last_step_id = Vec::new();
         }
@@ -138,117 +123,9 @@ impl EunoiaTranslator {
 
         self.define_push_new_context(None);
 
-        // NOTE: need to clone ProofNodes to avoid
-        // "borrowed data escapes outside of closure" error here.
-        proof.traverse(|node: &Rc<ProofNode>| {
-            self.post_order_to_list(node);
-        });
-
         self.translate_pre_ord_proof_node();
 
         &self.eunoia_proof
-    }
-
-    // TODO: aux method that shouldn't be here
-    // TODO: is there some practical way of doing partial application of
-    // procedures? Quick fix: using attributes (aux_pre_ord_proof_node, etc)
-    fn post_order_to_list(&mut self, node: &Rc<ProofNode>) {
-        match (*node).deref() {
-            ProofNode::Assume { id: _, depth, .. } => {
-                if *depth > self.previous_depth {
-                    // A new subproof
-                    // TODO: ugly
-                    while self.pre_ord_subproofs.len() < *depth {
-                        self.pre_ord_subproofs.push(Vec::new());
-                    }
-
-                    // { self.pre_ord_subproofs.len() == *depth }
-
-                    self.pre_ord_subproofs[*depth - 1].push((*node).deref().clone());
-                } else {
-                    // TODO: abstract this last step into some procedure; it
-                    // is repeated for each ProofNode case.
-
-                    // { *depth <= self.previous_depth }
-                    // We jumped out of a subproof.
-                    if *depth == 0 {
-                        // This is not a node from another subproof, we can
-                        // safely push it into pre_ord_proof_node.
-                        self.pre_ord_proof.push((*node).deref().clone());
-                    } else {
-                        // { *depth > 0 }
-                        // We are still within some subproof
-                        assert!(self.pre_ord_subproofs.len() >= *depth - 1);
-                        // A node of depth "depth", always belong to
-                        // subproof "depth" - 1.
-                        self.pre_ord_subproofs[*depth - 1].push((*node).deref().clone());
-                    }
-                }
-
-                self.previous_depth = *depth;
-            }
-
-            ProofNode::Step(StepNode { id: _, depth, .. }) => {
-                if *depth > self.previous_depth {
-                    // A new subproof
-                    // TODO: ugly
-                    while self.pre_ord_subproofs.len() < *depth {
-                        self.pre_ord_subproofs.push(Vec::new());
-                    }
-
-                    // { self.pre_ord_subproofs.len() >= *depth }
-                    self.pre_ord_subproofs[*depth - 1].push((*node).deref().clone());
-                } else {
-                    // { *depth <= self.previous_depth }
-                    if *depth == 0 {
-                        // This is not a node from a subproof, we can safely push it
-                        // into pre_ord_proof_node.
-                        self.pre_ord_proof.push((*node).deref().clone());
-                    } else {
-                        // { *depth > 0 }
-                        // We are still within a subproof
-                        assert!(self.pre_ord_subproofs.len() >= *depth);
-                        self.pre_ord_subproofs[*depth - 1].push((*node).deref().clone());
-                    }
-                }
-
-                self.previous_depth = *depth;
-            }
-
-            // A subproof introduced by the 'anchor' command.
-            ProofNode::Subproof(SubproofNode { last_step, .. }) => {
-                match (*last_step).deref() {
-                    ProofNode::Step(StepNode { id: _, depth, .. }) => {
-                        assert!(1 <= *depth && *depth == self.previous_depth);
-
-                        if *depth == 1 {
-                            // Outermost subproof: we return to self.pre_ord_proof
-                            self.pre_ord_proof.push((*node).deref().clone());
-                            self.pre_ord_proof
-                                .append(&mut self.pre_ord_subproofs[*depth - 1]);
-                        } else {
-                            // { depth > 1 }
-                            // UNSAFE
-                            let (left_slice, right_slice) =
-                                self.pre_ord_subproofs.split_at_mut(*depth - 1);
-                            left_slice[*depth - 2].push((*node).deref().clone());
-                            left_slice[*depth - 2].append(&mut right_slice[0]);
-                        }
-
-                        // Pop the subproof being closed
-                        self.pre_ord_subproofs.pop();
-
-                        // We jump out of the subproof.
-                        self.previous_depth = *depth - 1;
-                    }
-
-                    _ => {
-                        // It shouldn't be a ProofNode different than a Step
-                        panic!();
-                    }
-                }
-            }
-        }
     }
 
     /// Inspects a given Alethe step from which we want to extract its id,
@@ -469,75 +346,79 @@ impl EunoiaTranslator {
     fn translate_pre_ord_proof_node(&mut self) {
         // NOTE: cloning to avoid error
         // "closure requires unique access to `*self` but it is already borrowed//
-        self.pre_ord_proof.clone().iter().for_each(|node| {
-            match node {
-                ProofNode::Assume { id, depth, term } => {
-                    // TODO: what about :named?
-                    let translated_assume = self.translate_assume(id, *depth, term);
-                    self.eunoia_proof.push(translated_assume);
-                }
+        self.pre_ord_proof
+            .get_pre_ord_proof()
+            .clone()
+            .iter()
+            .for_each(|node| {
+                match node {
+                    ProofNode::Assume { id, depth, term } => {
+                        // TODO: what about :named?
+                        let translated_assume = self.translate_assume(id, *depth, term);
+                        self.eunoia_proof.push(translated_assume);
+                    }
 
-                ProofNode::Step(StepNode { id, .. }) => {
-                    self.translate_step(node);
+                    ProofNode::Step(StepNode { id, .. }) => {
+                        self.translate_step(node);
 
-                    // Is this the closing step of the actual subproof?
-                    if !self.last_step_id.is_empty() {
-                        let last_step_id = &self.last_step_id.last();
-                        if *last_step_id == Some(id) {
-                            // TODO: ugly, hacky way of dealing with
-                            // "bind" rule already doing a step-pop of the pushed
-                            // context
-                            assert!(self.last_step_rule.len() == self.last_step_id.len());
+                        // Is this the closing step of the actual subproof?
+                        if !self.last_step_id.is_empty() {
+                            let last_step_id = &self.last_step_id.last();
+                            if *last_step_id == Some(id) {
+                                // TODO: ugly, hacky way of dealing with
+                                // "bind" rule already doing a step-pop of the pushed
+                                // context
+                                assert!(self.last_step_rule.len() == self.last_step_id.len());
 
-                            self.last_step_rule.pop();
-                            self.last_step_id.pop();
+                                self.last_step_rule.pop();
+                                self.last_step_id.pop();
 
-                            // Closing the context...
-                            self.close_scope();
-                            // self.local_steps.pop();
+                                // Closing the context...
+                                self.close_scope();
+                                // self.local_steps.pop();
+                            }
+                        }
+                    }
+
+                    // A subproof introduced by the 'anchor' command.
+                    ProofNode::Subproof(SubproofNode { last_step, args, .. }) => {
+                        // To store @VarList parameters to @ctx
+                        let ctx_params;
+
+                        if args.is_empty() {
+                            self.open_scope(false);
+                        } else {
+                            // { !args.is_empty() }
+                            // We actually have an anchor introducing new variables
+                            self.open_scope(true);
+                            assert!(self.context_introduced[self.context_introduced.len() - 1]);
+                            ctx_params = self.process_anchor_context(args);
+
+                            // Define and open a new context
+                            self.define_push_new_context(Some(ctx_params));
+                        }
+
+                        // Save information about the last step of the subproof
+                        match (*last_step).deref() {
+                            ProofNode::Step(StepNode {
+                                id: last_step_id,
+                                depth: _,
+                                clause: _,
+                                rule: last_step_rule,
+                                ..
+                            }) => {
+                                self.last_step_rule.push(last_step_rule.clone());
+                                self.last_step_id.push(last_step_id.clone());
+                            }
+
+                            _ => {
+                                // It shouldn't be something different then a step
+                                panic!();
+                            }
                         }
                     }
                 }
-
-                // A subproof introduced by the 'anchor' command.
-                ProofNode::Subproof(SubproofNode { last_step, args, .. }) => {
-                    // To store @VarList parameters to @ctx
-                    let ctx_params;
-
-                    if args.is_empty() {
-                        self.open_scope(false);
-                    } else {
-                        // { !args.is_empty() }
-                        // We actually have an anchor introducing new variables
-                        self.open_scope(true);
-                        assert!(self.context_introduced[self.context_introduced.len() - 1]);
-                        ctx_params = self.process_anchor_context(args);
-
-                        // Define and open a new context
-                        self.define_push_new_context(Some(ctx_params));
-                    }
-
-                    // Save information about the last step of the subproof
-                    match (*last_step).deref() {
-                        ProofNode::Step(StepNode {
-                            id: last_step_id,
-                            depth: _,
-                            clause: _,
-                            rule: last_step_rule,
-                            ..
-                        }) => {
-                            self.last_step_rule.push(last_step_rule.clone());
-                            self.last_step_id.push(last_step_id.clone());
-                        }
-
-                        _ => {
-                            // It shouldn't be something different then a step
-                            panic!();
-                        }
-                    }
-                }
-            }
-        });
+            });
     }
 
     /// Translates a given Term into its corresponding `EunoiaTerm`, possibly
