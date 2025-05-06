@@ -234,8 +234,21 @@ pub fn pbblast_bvslt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 ///
 /// The expected shape is:
 ///    `(= (bvsgt x y) (>= (+ (- x_sum (* 2^(n-1) x_n-1))) (- (* 2^(n-1) y_n-1) y_sum)) 1))`
-pub fn pbblast_bvsgt(RuleArgs { .. }: RuleArgs) -> RuleResult {
-    Err(CheckerError::Unspecified)
+pub fn pbblast_bvsgt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    let ((x, y), (((sum_x, sign_x), (sign_y, sum_y)), _)) = match_term_err!((= (bvsgt x y) (>= (+ (- sum_x sign_x) (- sign_y sum_y)) 1)) = &conclusion[0])?;
+
+    // Get the summation lists
+    let sum_x = get_pbsum(sum_x);
+    let sum_y = get_pbsum(sum_y);
+
+    // Get bit width of `x`
+    let n = get_bit_width(x, pool)?;
+
+    // Check the sign terms
+    check_pbblast_signed_relation(n, sign_x, x)?;
+    check_pbblast_signed_relation(n, sign_y, y)?;
+
+    check_pbblast_constraint(pool, x, y, sum_x, sum_y)
 }
 
 /// Implements the signed-greater-equal rule.
@@ -1630,10 +1643,284 @@ mod tests {
     }
 
     #[test]
-    fn pbblast_bvsgt_2() {}
+    fn pbblast_bvsgt_2() {
+        test_cases! {
+            definitions = "
+            (declare-const x2 (_ BitVec 2))
+            (declare-const y2 (_ BitVec 2))
+        ",
+
+            // Using explicit multiplication everywhere.
+            "bvsgt on two bits with explicit multiplication" {
+                r#"(step t1 (cl (= (bvsgt x2 y2)
+                                (>= (+ (-
+                                            (* 1 ((_ @int_of 0) x2))   ; x sum
+                                            (* 2 ((_ @int_of 1) x2))         ; x sign
+                                        )
+                                        (-
+                                            (* 2 ((_ @int_of 1) y2))         ; y sign
+                                            (* 1 ((_ @int_of 0) y2))   ; y sum
+                                        )
+                                    ) 1))) :rule pbblast_bvsgt)"#: true,
+            }
+
+            // Omitting the explicit multiplication by 1 in the sum parts.
+            "bvsgt on two bits omitting multiplication by 1 in sum parts" {
+                r#"(step t1 (cl (= (bvsgt x2 y2)
+                                (>= (+
+                                        (-
+                                            ((_ @int_of 0) x2)         ; x sum omitted "* 1"
+                                            (* 2 ((_ @int_of 1) x2)) 
+                                        )
+                                        (-
+                                            (* 2 ((_ @int_of 1) y2))         
+                                            ((_ @int_of 0) y2)         ; y sum omitted "* 1"
+                                        )
+                                    ) 1))) :rule pbblast_bvsgt)"#: true,
+            }
+
+            // Wrong scalar of the sign bit
+            "bvsgt on two bits wrong scalar of the sign bit of y" {
+                r#"(step t1 (cl (= (bvsgt x2 y2)
+                                (>= (+
+                                        (-
+                                            (* 1 ((_ @int_of 0) x2))
+                                            (* 1 ((_ @int_of 1) x2))         ; should be * 2
+                                        )
+                                        (-
+                                            (* 2 ((_ @int_of 1) y2))
+                                            (* 1 ((_ @int_of 0) y2))
+                                        )
+                                    ) 1))) :rule pbblast_bvsgt)"#: false,
+            }
+
+            "bvsgt on two bits wrong scalar of the sign bit of y" {
+                r#"(step t1 (cl (= (bvsgt x2 y2)
+                                (>= (+
+                                        (-
+                                            (* 1 ((_ @int_of 0) x2))
+                                            (* 2 ((_ @int_of 1) x2))    
+                                        )
+                                        (-
+                                            (* 1 ((_ @int_of 1) y2))         ; should be * 2
+                                            (* 1 ((_ @int_of 0) y2))
+                                        )
+                                    ) 1))) :rule pbblast_bvsgt)"#: false,
+            }
+
+            // Wrong indexing of the sign bit
+            "bvsgt on two bits wrong indexing of the sign bit of x" {
+                r#"(step t1 (cl (= (bvsgt x2 y2)
+                                (>= (+
+                                        (-
+                                            (* 1 ((_ @int_of 0) x2))
+                                            (* 2 ((_ @int_of 0) x2))         ; should be (_ @int_of 1)
+                                        )
+                                        (-
+                                            (* 2 ((_ @int_of 1) y2))
+                                            (* 1 ((_ @int_of 0) y2))
+                                        )
+                                    ) 1))) :rule pbblast_bvsgt)"#: false,
+            }
+
+            "bvsgt on two bits wrong indexing of the sign bit of y" {
+                r#"(step t1 (cl (= (bvsgt x2 y2)
+                                (>= (+
+                                        (-
+                                            (* 1 ((_ @int_of 0) x2))
+                                            (* 2 ((_ @int_of 1) x2))    
+                                        )
+                                        (-
+                                            (* 2 ((_ @int_of 0) y2))         ; should be (_ @int_of 1)
+                                            (* 1 ((_ @int_of 0) y2))
+                                        )
+                                    ) 1))) :rule pbblast_bvsgt)"#: false,
+            }
+
+            "bvsgt on two bits wrong bitvector of the sign bit of y" {
+                r#"(step t1 (cl (= (bvsgt x2 y2)
+                                (>= (+
+                                        (-
+                                            (* 1 ((_ @int_of 0) x2))
+                                            (* 2 ((_ @int_of 1) x2))    
+                                        )
+                                        (-
+                                            (* 2 ((_ @int_of 1) x2))         ; should be y2
+                                            (* 1 ((_ @int_of 0) y2))
+                                        )
+                                    ) 1))) :rule pbblast_bvsgt)"#: false,
+            }
+
+            "bvsgt on two bits wrong bitvector of the sign bit of x" {
+                r#"(step t1 (cl (= (bvsgt x2 y2)
+                                (>= (+
+                                        (-
+                                            (* 1 ((_ @int_of 0) x2))
+                                            (* 2 ((_ @int_of 1) y2))         ; should be x2
+                                        )
+                                        (-
+                                            (* 2 ((_ @int_of 1) y2))         
+                                            (* 1 ((_ @int_of 0) y2))
+                                        )
+                                    ) 1))) :rule pbblast_bvsgt)"#: false,
+            }
+
+            // Wrong indexing of the summation term
+            "bvsgt on two bits with wrong indexing of the summation term" {
+                r#"(step t1 (cl (= (bvsgt x2 y2)
+                                (>= (+
+                                        (-
+                                            (* 1 ((_ @int_of 1) x2))   ; should be "@int_of 0"
+                                            (* 2 ((_ @int_of 1) x2))
+                                        )
+                                        (-
+                                            (* 2 ((_ @int_of 1) y2))
+                                            (* 1 ((_ @int_of 0) y2))
+                                        )
+                                    ) 1))) :rule pbblast_bvsgt)"#: false,
+            }
+
+            "Trailing Zero" {
+                r#"(step t1 (cl (= (bvsgt x2 y2)
+                                (>= (+ (-
+                                            (+ (* 1 ((_ @int_of 0) x2)) 0)   ; x sum
+                                            (* 2 ((_ @int_of 1) x2))         ; x sign
+                                        )
+                                        (-
+                                            (* 2 ((_ @int_of 1) y2))         ; y sign
+                                            (+ (* 1 ((_ @int_of 0) y2)) 0)   ; y sum
+                                        )
+                                    ) 1))) :rule pbblast_bvsgt)"#: false,
+
+                r#"(step t1 (cl (= (bvsgt x2 y2)
+                                (>= (+
+                                        (-
+                                            (+ ((_ @int_of 0) x2) 0)         ; x sum omitted "* 1"
+                                            (* 2 ((_ @int_of 1) x2)) 
+                                        )
+                                        (-
+                                            (* 2 ((_ @int_of 1) y2))         
+                                            (+ ((_ @int_of 0) y2) 0)         ; y sum omitted "* 1"
+                                        )
+                                    ) 1))) :rule pbblast_bvsgt)"#: false,
+            }
+        }
+    }
 
     #[test]
-    fn pbblast_bvsgt_4() {}
+    fn pbblast_bvsgt_4() {
+        test_cases! {
+            definitions = "
+            (declare-const x4 (_ BitVec 4))
+            (declare-const y4 (_ BitVec 4))
+        ",
+            // Using explicit multiplication everywhere.
+            "bvsgt on 4 bits with explicit multiplication" {
+                r#"(step t1 (cl (= (bvsgt x4 y4)
+                                (>= (+
+                                        (-
+                                            (+ (* 1 ((_ @int_of 0) x4))
+                                               (* 2 ((_ @int_of 1) x4))
+                                               (* 4 ((_ @int_of 2) x4)))
+                                            (* 8 ((_ @int_of 3) x4)))
+                                        (-
+                                            (* 8 ((_ @int_of 3) y4))
+                                            (+ (* 1 ((_ @int_of 0) y4))
+                                               (* 2 ((_ @int_of 1) y4))
+                                               (* 4 ((_ @int_of 2) y4)))
+                                        )
+                                    ) 1))) :rule pbblast_bvsgt)"#: true,
+            }
+
+            // Omitting explicit multiplication by 1 in the sum parts.
+            "bvsgt on 4 bits omitting multiplication by 1 in sum parts" {
+                r#"(step t1 (cl (= (bvsgt x4 y4)
+                                (>= (+
+                                        (-
+                                            (+ ((_ @int_of 0) x4)            ; omit "* 1"
+                                               (* 2 ((_ @int_of 1) x4))
+                                               (* 4 ((_ @int_of 2) x4)))
+                                            (* 8 ((_ @int_of 3) x4)))
+                                        (-
+                                            (* 8 ((_ @int_of 3) y4))
+                                            (+ ((_ @int_of 0) y4)            ; omit "* 1"
+                                               (* 2 ((_ @int_of 1) y4))
+                                               (* 4 ((_ @int_of 2) y4)))
+                                        )
+                                    ) 1))) :rule pbblast_bvsgt)"#: true,
+            }
+
+            "wrong indexed bvsgt on 4 bits with explicit multiplication" {
+                r#"(step t1 (cl (= (bvsgt x4 y4)
+                                (>= (+
+                                        (-
+                                            (+ (* 8 ((_ @int_of 0) x4)) ; wrong coefficients
+                                               (* 4 ((_ @int_of 1) x4))
+                                               (* 2 ((_ @int_of 2) x4)))
+                                            (* 1 ((_ @int_of 3) x4)))
+                                        (-
+                                            (* 8 ((_ @int_of 3) y4))
+                                            (+ (* 1 ((_ @int_of 0) y4))
+                                               (* 2 ((_ @int_of 1) y4))
+                                               (* 4 ((_ @int_of 2) y4)))
+                                        )
+                                    ) 1))) :rule pbblast_bvsgt)"#: false,
+            }
+
+            "bvsgt on four bits wrong scalar of the sign bit" {
+                            r#"(step t1 (cl (= (bvsgt x4 y4)
+                                (>= (+
+                                        (-
+                                            (+ (* 1 ((_ @int_of 0) x4))
+                                               (* 2 ((_ @int_of 1) x4))
+                                               (* 4 ((_ @int_of 2) x4)))
+                                            (* 4 ((_ @int_of 3) x4)))    ; should be * 8
+                                        (-
+                                            (* 8 ((_ @int_of 3) y4))
+                                            (+ (* 1 ((_ @int_of 0) y4))
+                                               (* 2 ((_ @int_of 1) y4))
+                                               (* 4 ((_ @int_of 2) y4)))
+                                        )
+                                    ) 1))) :rule pbblast_bvsgt)"#: false,
+            }
+
+            "Trailing Zero" {
+                r#"(step t1 (cl (= (bvsgt x4 y4)
+                                (>= (+
+                                        (-
+                                            (+ (* 1 ((_ @int_of 0) x4))
+                                               (* 2 ((_ @int_of 1) x4))
+                                               (* 4 ((_ @int_of 2) x4))
+                                               0)
+                                            (* 8 ((_ @int_of 3) x4)))
+                                        (-
+                                            (* 8 ((_ @int_of 3) y4))
+                                            (+ (* 1 ((_ @int_of 0) y4))
+                                               (* 2 ((_ @int_of 1) y4))
+                                               (* 4 ((_ @int_of 2) y4))
+                                               0)
+                                        )
+                                    ) 1))) :rule pbblast_bvsgt)"#: false,
+
+                r#"(step t1 (cl (= (bvsgt x4 y4)
+                                (>= (+
+                                        (-
+                                            (+ ((_ @int_of 0) x4)            ; omit "* 1"
+                                               (* 2 ((_ @int_of 1) x4))
+                                               (* 4 ((_ @int_of 2) x4))
+                                               0)
+                                            (* 8 ((_ @int_of 3) x4)))
+                                        (-
+                                            (* 8 ((_ @int_of 3) y4))
+                                            (+ ((_ @int_of 0) y4)            ; omit "* 1"
+                                               (* 2 ((_ @int_of 1) y4))
+                                               (* 4 ((_ @int_of 2) y4))
+                                               0)
+                                        )
+                                    ) 1))) :rule pbblast_bvsgt)"#: false,
+            }
+        }
+    }
 
     #[test]
     fn pbblast_bvsge_2() {}
