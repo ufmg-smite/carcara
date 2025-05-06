@@ -3,7 +3,7 @@
 pub mod advanced;
 mod storage;
 
-use super::{Binder, Operator, Rc, Sort, Term};
+use super::{Binder, Operator, Rc, Sort, Substitution, Term};
 use crate::ast::{Constant, ParamOperator};
 use indexmap::{IndexMap, IndexSet};
 use rug::Integer;
@@ -208,9 +208,40 @@ impl PrimitivePool {
                 | Operator::ReRange => Sort::RegLan,
                 Operator::RareList => Sort::RareList,
             },
-            Term::App(f, _) => {
+            Term::App(f, args) => {
                 match self.compute_sort(f).as_sort().unwrap() {
                     Sort::Function(sorts) => sorts.last().unwrap().as_sort().unwrap().clone(),
+                    Sort::ParamSort(_, p_sort) => {
+                        let p_function_sort = p_sort.as_sort().unwrap();
+                        if let Sort::Function(sorts) = p_function_sort {
+                            // match with sorts of args, apply the resulting substitution on the return sort
+                            let mut map = IndexMap::new();
+                            for i in 0..args.len() {
+                                let sort_i = sorts[i].as_sort().unwrap();
+                                let arg_sort_i =
+                                    self.compute_sort(&args[i]).as_sort().unwrap().clone();
+                                if !sort_i.match_with(&arg_sort_i, &mut map) {
+                                    unreachable!();
+                                }
+                            }
+                            let substitution: IndexMap<_, _> = map
+                                .into_iter()
+                                .map(|(var_name, sort)| {
+                                    let var = Term::Sort(Sort::Var(var_name));
+                                    let sort_t = Term::Sort(sort);
+                                    (self.add(var), self.add(sort_t))
+                                })
+                                .collect();
+                            Substitution::new(self, substitution)
+                                .unwrap()
+                                .apply(self, sorts.last().unwrap())
+                                .as_sort()
+                                .unwrap()
+                                .clone()
+                        } else {
+                            unreachable!()
+                        }
+                    }
                     _ => unreachable!(), // We assume that the function is correctly sorted
                 }
             }

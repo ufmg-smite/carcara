@@ -236,9 +236,27 @@ impl Substitution {
                 let new_args = apply_to_sequence!(args);
                 pool.add(Term::Sort(Sort::Atom(sort.clone(), new_args)))
             }
+            Term::Sort(Sort::Function(args)) => {
+                let new_args = apply_to_sequence!(args);
+                pool.add(Term::Sort(Sort::Function(new_args)))
+            }
             Term::Sort(Sort::Array(x, y)) => {
                 let [x, y] = [x, y].map(|s| self.apply(pool, s));
                 pool.add(Term::Sort(Sort::Array(x, y)))
+            }
+            Term::Sort(Sort::ParamSort(vars, sort)) => {
+                let new_sort = self.apply(pool, sort);
+                let mut new_vars = Vec::<Rc<Term>>::new();
+                for var in vars {
+                    if !self.map.contains_key(var) {
+                        new_vars.push(var.clone());
+                    }
+                }
+                if new_vars.is_empty() {
+                    new_sort
+                } else {
+                    pool.add(Term::Sort(Sort::ParamSort(new_vars, new_sort)))
+                }
             }
             Term::Sort(_) => term.clone(),
         };

@@ -1,5 +1,6 @@
 use super::{PrimitivePool, Rc, TermPool};
 use crate::CheckerError;
+use indexmap::{map::Entry, IndexMap};
 use rug::{Integer, Rational};
 use std::{collections::HashSet, hash::Hash, ops::Deref};
 
@@ -60,6 +61,9 @@ pub enum Sort {
     /// this sort.
     Atom(String, Vec<Rc<Term>>),
 
+    // A sort variable
+    Var(String),
+
     /// The `Bool` primitive sort.
     Bool,
 
@@ -83,6 +87,9 @@ pub enum Sort {
     ///
     /// The associated term is the BV width of this sort.
     BitVec(Integer),
+
+    /// A parametric sort, with a set of sort variables that can appear in the second argument.
+    ParamSort(Vec<Rc<Term>>, Rc<Term>),
 
     /// The sort of RARE lists.
     RareList,
@@ -569,6 +576,62 @@ impl From<SortedVar> for Term {
     }
 }
 
+impl Sort {
+    // Whether this sort can be matched with another, i.e., whether we
+    // can find a substitution to the sort variables of `self` that
+    // will make it equal to `target`. The map argument will store the
+    // substitution
+    pub fn match_with(&self, target: &Sort, map: &mut IndexMap<String, Sort>) -> bool {
+        match (self, target) {
+            (Sort::Var(a), _) => {
+                match map.entry(a.to_string()) {
+                    Entry::Vacant(e) => {
+                        e.insert(target.clone());
+                    }
+                    Entry::Occupied(e) => {
+                        return e.get() == target;
+                    }
+                }
+                true
+            }
+            (Sort::Atom(a, sorts_a), Sort::Atom(b, sorts_b)) => {
+                if a != b {
+                    false
+                } else {
+                    sorts_a.iter().zip(sorts_b.iter()).all(|(t_a, t_b)| {
+                        let s_a = t_a.as_sort().unwrap();
+                        let s_b = t_b.as_sort().unwrap();
+                        s_a.match_with(s_b, map)
+                    })
+                }
+            }
+            (Sort::Function(sorts_a), Sort::Function(sorts_b)) => {
+                sorts_a.iter().zip(sorts_b.iter()).all(|(a_t, b_t)| {
+                    let a_s = a_t.as_sort().unwrap();
+                    let b_s = b_t.as_sort().unwrap();
+                    a_s.match_with(b_s, map)
+                })
+            }
+            (Sort::Bool, Sort::Bool)
+            | (Sort::Int, Sort::Int)
+            | (Sort::Real, Sort::Real)
+            | (Sort::String, Sort::String)
+            | (Sort::RegLan, Sort::RegLan)
+            | (Sort::RareList, Sort::RareList)
+            | (Sort::Type, Sort::Type) => true,
+            (Sort::Array(x_a, y_a), Sort::Array(x_b, y_b)) => {
+                let s_x_a = x_a.as_sort().unwrap();
+                let s_y_a = y_a.as_sort().unwrap();
+                let s_x_b = x_b.as_sort().unwrap();
+                let s_y_b = y_b.as_sort().unwrap();
+                s_x_a.match_with(s_x_b, map) && s_y_a.match_with(s_y_b, map)
+            }
+            (Sort::BitVec(a), Sort::BitVec(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
 impl Term {
     pub fn new_bool(value: impl Into<bool>) -> Self {
         let op = match value.into() {
@@ -747,6 +810,10 @@ impl Term {
         matches!(self, Term::Sort(Sort::Atom(_, args)) if args.is_empty())
     }
 
+    /// Returns `true` if the term is a user defined parametric sort
+    pub fn is_sort_parametric(&self) -> bool {
+        matches!(self, Term::Sort(Sort::ParamSort(_, _)))
+    }
     /// Tries to unwrap an operation term, returning the `Operator` and the arguments. Returns
     /// `None` if the term is not an operation term.
     pub fn as_op(&self) -> Option<(Operator, &[Rc<Term>])> {
