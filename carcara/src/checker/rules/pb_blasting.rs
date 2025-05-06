@@ -259,8 +259,60 @@ pub fn pbblast_pbbvar(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 }
 
 /// Implements the blasting of a constant
-pub fn pbblast_pbbconst(RuleArgs { .. }: RuleArgs) -> RuleResult {
-    Err(CheckerError::Unspecified)
+pub fn pbblast_pbbconst(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    let (bv, pbs) = match_term_err!((= bv (pbbterm ...)) = &conclusion[0])
+        .map_err(|_| CheckerError::Explanation("Malformed @pbbterm equality".into()))?;
+
+    let (m, w) = bv.as_bitvector().ok_or(CheckerError::Explanation(
+        "Expected bitvector constant".into(),
+    ))?;
+
+    let size = w
+        .to_usize()
+        .ok_or(CheckerError::Explanation("Invalid bitvector width".into()))?;
+
+    if pbs.len() != size {
+        return Err(CheckerError::Explanation(format!(
+            "Expected {} @pbbterms, got {}",
+            size,
+            pbs.len()
+        )));
+    }
+
+    let computed_value = pbs
+        .iter()
+        .enumerate()
+        .try_fold(Integer::new(), |acc, (i, term)| {
+            let pb = term
+                .as_integer()
+                .ok_or(CheckerError::Explanation(format!(
+                    "Non-integer term at position {}",
+                    i
+                )))?
+                .to_i32_wrapping();
+
+            match pb {
+                0 => Ok(acc),
+                1 => {
+                    let exponent = i.try_into().unwrap();
+                    let increment = Integer::i_pow_u(2, exponent);
+                    Ok(&acc + Integer::from(increment))
+                }
+                _ => Err(CheckerError::Explanation(format!(
+                    "Invalid value {} at position {}",
+                    pb, i
+                ))),
+            }
+        })?;
+
+    if computed_value != m {
+        return Err(CheckerError::Explanation(format!(
+            "Computed value {} != declared value {}",
+            computed_value, m
+        )));
+    }
+
+    Ok(())
 }
 
 /// Implements the bitwise exclusive or operation.
@@ -1357,16 +1409,76 @@ mod tests {
     }
 
     #[test]
-    fn pbblast_pbbconst_1() {}
+    fn pbblast_pbbconst_1() {
+        test_cases! {
+            definitions = "
+            (declare-const r (_ BitVec 1))
+        ",
+            "Valid 1-bit constant" {
+                r#"(step t1 (cl (= #b1 (@pbbterm 1))) :rule pbblast_pbbconst)"#: true,
+                r#"(step t1 (cl (= #b0 (@pbbterm 0))) :rule pbblast_pbbconst)"#: true,
+            }
+            "Invalid 1-bit value" {
+                r#"(step t1 (cl (= #b1 (@pbbterm 0))) :rule pbblast_pbbconst)"#: false,
+                r#"(step t1 (cl (= #b0 (@pbbterm 1))) :rule pbblast_pbbconst)"#: false,
+            }
+        }
+    }
 
     #[test]
-    fn pbblast_pbbconst_2() {}
+    fn pbblast_pbbconst_2() {
+        test_cases! {
+            definitions = "
+            (declare-const r (_ BitVec 2))
+        ",
+            "Valid 2-bit constant" {
+                r#"(step t1 (cl (= #b00 (@pbbterm 0 0))) :rule pbblast_pbbconst)"#: true,
+                r#"(step t1 (cl (= #b10 (@pbbterm 0 1))) :rule pbblast_pbbconst)"#: true,
+                r#"(step t1 (cl (= #b01 (@pbbterm 1 0))) :rule pbblast_pbbconst)"#: true,
+                r#"(step t1 (cl (= #b11 (@pbbterm 1 1))) :rule pbblast_pbbconst)"#: true,
+            }
+            "Invalid bit pattern" {
+                r#"(step t1 (cl (= #b10 (@pbbterm 1 0))) :rule pbblast_pbbconst)"#: false,
+                r#"(step t1 (cl (= #b10 (@pbbterm 1 1))) :rule pbblast_pbbconst)"#: false,
+                r#"(step t1 (cl (= #b01 (@pbbterm 0 1))) :rule pbblast_pbbconst)"#: false,
+                r#"(step t1 (cl (= #b01 (@pbbterm 0 0))) :rule pbblast_pbbconst)"#: false,
+                r#"(step t1 (cl (= #b11 (@pbbterm 0 0))) :rule pbblast_pbbconst)"#: false,
+                r#"(step t1 (cl (= #b00 (@pbbterm 1 1))) :rule pbblast_pbbconst)"#: false,
+            }
+        }
+    }
 
     #[test]
-    fn pbblast_pbbconst_4() {}
+    fn pbblast_pbbconst_4() {
+        test_cases! {
+            definitions = "
+            (declare-const r (_ BitVec 4))
+        ",
+            "Valid 4-bit constant" {
+                // #b0111 = LSB-first: [1,1,1,0]
+                r#"(step t1 (cl (= #b0111 (@pbbterm 1 1 1 0))) :rule pbblast_pbbconst)"#: true,
+            }
+            "Wrong term" {
+                r#"(step t1 (cl (= #b0111 (@pbbterm 1 1 1 1))) :rule pbblast_pbbconst)"#: false,
+            }
+        }
+    }
 
     #[test]
-    fn pbblast_pbbconst_8() {}
+    fn pbblast_pbbconst_8() {
+        test_cases! {
+            definitions = "
+            (declare-const r (_ BitVec 8))
+        ",
+            "Valid 8-bit constant" {
+                // #b11110000 = LSB-first: [0,0,0,0,1,1,1,1]
+                r#"(step t1 (cl (= #b11110000 (@pbbterm 0 0 0 0 1 1 1 1))) :rule pbblast_pbbconst)"#: true,
+            }
+            "Wrong bit value" {
+                r#"(step t1 (cl (= #b11110000 (@pbbterm 0 0 0 0 1 1 0 1))) :rule pbblast_pbbconst)"#: false,
+            }
+        }
+    }
 
     #[test]
     fn pbblast_bvxor_1() {}
