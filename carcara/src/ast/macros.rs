@@ -74,11 +74,6 @@ macro_rules! match_term {
     (false = $var:expr $(, $flag:ident)?) => {
         if $var.is_bool_false() { Some(()) } else { None }
     };
-    (0 = $var:expr $(, $flag:ident)?) => {
-        if let Some(i) = $var.as_integer() {
-            if i == 0 { Some(()) } else { None }
-        } else { None }
-    };
     ("" = $var:expr $(, $flag:ident)?) => {
         if $var.is_empty_string() { Some(()) } else { None }
     };
@@ -219,6 +214,19 @@ macro_rules! match_term {
 
     (@GET_VARIANT strinre)    => { $crate::ast::Operator::StrInRe };
     (@GET_VARIANT reinter)    => { $crate::ast::Operator::ReIntersection };
+
+    // In the last case it can match a literal integer
+    ($lit:literal = $var:expr $(, $flag:ident)?) => {
+        if let Some(i) = $var.as_integer() {
+            if i == $lit {
+                Some(())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
 }
 
 /// A variant of `match_term` that returns a `Result<_, CheckerError>` instead of an `Option`.
