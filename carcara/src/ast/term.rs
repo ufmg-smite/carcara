@@ -577,8 +577,10 @@ impl From<SortedVar> for Term {
 }
 
 impl Sort {
-    // Whether this sort can be unified with another. The map argument
-    // will be a substitution of sort variables to sorts
+    // Whether this sort can be matched with another, i.e., whether we
+    // can find a substitution to the sort variables of `self` that
+    // will make it equal to `target`. The map argument will store the
+    // substitution
     pub fn match_with(&self, target: &Sort, map: &mut IndexMap<String, Sort>) -> bool {
         match (self, target) {
             (Sort::Var(a), _) => {
