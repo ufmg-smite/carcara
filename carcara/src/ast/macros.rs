@@ -218,12 +218,8 @@ macro_rules! match_term {
     // In the last case it can match a literal integer
     ($lit:literal = $var:expr $(, $flag:ident)?) => {
         if let Some(i) = $var.as_integer() {
-            if let Ok(matched_lit) = stringify!($lit).parse::<i64>() {
-                if i == matched_lit {
-                    Some(())
-                } else {
-                    None
-                }
+            if i == $lit {
+                Some(())
             } else {
                 None
             }
