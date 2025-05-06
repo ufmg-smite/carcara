@@ -5,6 +5,8 @@ use crate::ast::*;
 
 // Deref for ast::rc::Rc<Term>
 use std::ops::Deref;
+// scopes
+use crate::utils::HashMapStack;
 
 /// Interface with an Alethe proof compiler.
 pub trait Translator {
@@ -160,5 +162,126 @@ impl PreOrderedAletheProof {
 
     pub fn get_pre_ord_proof(&mut self) -> &mut Vec<ProofNode> {
         &mut self.pre_ord_proof
+    }
+}
+
+/// Generic representation of scopes of variables introduced by the several
+/// Alethe constructions with binding occurrences: contexts, quantifications,
+/// lets, etc. It must be instantiated for a given type of values that we want
+/// to associate with each variable in scope.
+struct AletheScopes<T: Clone> {
+    /// Mapping variable -> sort for variables in scope, as introduced by
+    /// Alethe's binders (including contexts).
+    // TODO: would it be useful to use borrows?
+    // TODO: not taking into account fixed variables in context
+    variables_in_scope: HashMapStack<String, T>,
+
+    /// Flags that indicate if the context of a given index has been
+    /// actually introduced in the certificate through an Eunoia definition.
+    context_introduced: Vec<bool>,
+
+    /// Counter for contexts opened: useful for naming context and reasoning
+    /// about context opening.
+    contexts_opened: usize,
+}
+
+impl<T: Clone> AletheScopes<T> {
+    pub fn new() -> Self {
+        Self {
+            variables_in_scope: HashMapStack::new(),
+            context_introduced: Vec::new(),
+            contexts_opened: 0,
+        }
+    }
+
+    /// Abstracts the operations required for opening a new context scope.
+    pub fn open_context_scope(&mut self) {
+        self.open_scope(true);
+    }
+
+    /// Abstracts the operations required for opening a new scope introduced
+    /// by some binder different than a context.
+    pub fn open_non_context_scope(&mut self) {
+        self.open_scope(false);
+    }
+
+    pub fn get_contexts_opened(&self) -> usize {
+        self.contexts_opened
+    }
+
+    pub fn clean_scopes(&mut self) {
+        self.variables_in_scope = HashMapStack::new();
+        self.context_introduced = Vec::new();
+        self.contexts_opened = 0;
+    }
+
+    pub fn insert_variable_in_scope(&mut self, name: &str, value: &T) {
+        self.variables_in_scope
+            .insert(name.to_owned(), value.clone());
+    }
+
+    pub fn get_variable_in_scope(&self, name: &String) -> Option<&T> {
+        self.variables_in_scope.get(name)
+    }
+
+    /// Abstracts the operations required for opening a new scope,
+    /// once we need to translate the body of a construction with
+    /// binding occurrences of variables.
+    /// PARAMS:
+    /// - `context_introduced`: boolean flag indicated if the opened
+    ///   scope belongs to a newly introduced "context" (through "anchor").
+    fn open_scope(&mut self, context_introduced: bool) {
+        if context_introduced {
+            self.contexts_opened += 1;
+        }
+
+        // NOTE: HashMapStack::new() adds a scope. We only push another
+        // scope if this is not the first time open_scope was called, in order
+        // to maintain invariant
+        // self.context_introduced.len() == self.variables_in_scope.height()
+        if !self.context_introduced.is_empty() {
+            // NOTE: reusing variables_in_scope concept
+            // for this new kind of scope (not the one
+            // related with contexts introduced through
+            // "anchor" commands).
+            self.variables_in_scope.push_scope();
+        }
+
+        self.context_introduced.push(context_introduced);
+    }
+
+    /// Closes the last open scope.
+    /// PRE : { `self.context_introduced.len()` >= 1 }
+    pub fn close_scope(&mut self) {
+        self.variables_in_scope.pop_scope();
+
+        // TODO: let Some(true)?
+        let context_introduced = self.context_introduced.pop();
+
+        if context_introduced == Some(true) {
+            // We are closing a context (instead of closing the scope of some other
+            // binder).
+            self.contexts_opened -= 1;
+        }
+    }
+
+    /// For a given "nesting" level (some number <= `self.contexts_opened`),
+    /// returns the index of the last surrounding context actually introduced
+    /// within the proof certificate. This is so since scopes are used to
+    /// represent variables bound in contexts and by other binding constructions,
+    /// like quantifiers. This method helps to recover the index of the last
+    /// scope actually referring to a context.
+    /// PRE: { 0 < `nesting_level` < `self.contexts_opened`}
+    pub fn get_last_introduced_context_index(&self, nesting_level: usize) -> usize {
+        let mut last_scope: usize = 0;
+
+        for i in 0..nesting_level {
+            if self.context_introduced[nesting_level - 1 - i] {
+                last_scope = nesting_level - 1 - i;
+                break;
+            }
+        }
+
+        last_scope
     }
 }

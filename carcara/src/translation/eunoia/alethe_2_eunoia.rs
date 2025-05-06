@@ -2,10 +2,9 @@
 use crate::ast::*;
 use crate::translation::eunoia::alethe_signature::theory::*;
 use crate::translation::eunoia::eunoia_ast::*;
+use crate::translation::AletheScopes;
 use crate::translation::PreOrderedAletheProof;
 use crate::translation::Translator;
-// scopes
-use crate::utils::HashMapStack;
 
 // Deref for ast::rc::Rc<Term>
 use std::ops::Deref;
@@ -22,19 +21,9 @@ pub struct EunoiaTranslator {
     /// "Alethe in Eunoia" signature considered during translation.
     alethe_signature: AletheTheory,
 
-    /// Mapping variable -> sort for variables in scope, as introduced by
-    /// Alethe's 'anchor' command.
-    // TODO: would it be useful to use borrows?
-    // TODO: not taking into account fixed variables in context
-    variables_in_scope: HashMapStack<String, EunoiaTerm>,
-
-    /// Flags that indicate if the context of a given index has been
-    /// actually introduced in the certificate through an Eunoia definition.
-    context_introduced: Vec<bool>,
-
-    /// Counter for contexts opened: useful for naming context and reasoning
-    /// about context opening.
-    contexts_opened: usize,
+    /// Information about scopes of variables introduced by contexts,
+    /// quantifications and other binders.
+    alethe_scopes: AletheScopes<EunoiaTerm>,
 
     // /// Maintains references to previous steps from the actual subproof.
     // local_steps: Vec<Vec<usize>>,
@@ -50,53 +39,10 @@ impl EunoiaTranslator {
             eunoia_proof: Vec::new(),
             pre_ord_proof: PreOrderedAletheProof::default(),
             alethe_signature: AletheTheory::new(),
-            variables_in_scope: HashMapStack::new(),
-            context_introduced: Vec::new(),
-            contexts_opened: 0,
+            alethe_scopes: AletheScopes::new(),
             // local_steps: Vec::new(),
             last_step_rule: Vec::new(),
             last_step_id: Vec::new(),
-        }
-    }
-
-    /// Abstracts the operations required for opening a new scope,
-    /// once we need to translate the body of a construction with
-    /// binding occurrences of variables.
-    /// PARAMS:
-    /// - `context_introduced`: boolean flag indicated if the opened
-    ///   scope belongs to a newly introduced "context" (through "anchor").
-    fn open_scope(&mut self, context_introduced: bool) {
-        if context_introduced {
-            self.contexts_opened += 1;
-        }
-
-        // NOTE: HashMapStack::new() adds a scope. We only push another
-        // scope if this is not the first time open_scope was called, in order
-        // to maintain invariant
-        // self.context_introduced.len() == self.variables_in_scope.height()
-        if !self.context_introduced.is_empty() {
-            // NOTE: reusing variables_in_scope concept
-            // for this new kind of scope (not the one
-            // related with contexts introduced through
-            // "anchor" commands).
-            self.variables_in_scope.push_scope();
-        }
-
-        self.context_introduced.push(context_introduced);
-    }
-
-    /// Closes the last open scope.
-    /// PRE : { `self.context_introduced.len()` >= 1 }
-    fn close_scope(&mut self) {
-        self.variables_in_scope.pop_scope();
-
-        // TODO: let Some(true)?
-        let context_introduced = self.context_introduced.pop();
-
-        if context_introduced == Some(true) {
-            // We are closing a context (instead of closing the scope of some other
-            // binder).
-            self.contexts_opened -= 1;
         }
     }
 
@@ -105,11 +51,9 @@ impl EunoiaTranslator {
         self.pre_ord_proof = PreOrderedAletheProof::new(proof);
 
         // Clean previously created data.
-        if self.contexts_opened > 0 {
+        if self.alethe_scopes.get_contexts_opened() > 0 {
             self.eunoia_proof = Vec::new();
-            self.variables_in_scope = HashMapStack::new();
-            self.context_introduced = Vec::new();
-            self.contexts_opened = 0;
+            self.alethe_scopes.clean_scopes();
             self.last_step_rule = Vec::new();
             self.last_step_id = Vec::new();
         }
@@ -119,7 +63,7 @@ impl EunoiaTranslator {
         // symbol?
         // Some rules query the context (e.g., refl). We need to always have
         // opened at least one context
-        self.open_scope(true);
+        self.alethe_scopes.open_context_scope();
 
         self.define_push_new_context(None);
 
@@ -167,26 +111,6 @@ impl EunoiaTranslator {
         }
     }
 
-    /// For a given "nesting" level (some number <= `self.contexts_opened`),
-    /// returns the index of the last surrounding context actually introduced
-    /// within the proof certificate. This is so since scopes are used to
-    /// represent variables bound in contexts and by other binding constructions,
-    /// like quantifiers. This method helps to recover the index of the last
-    /// scope actually referring to a context.
-    /// PRE: { 0 < `nesting_level` < `self.contexts_opened`}
-    fn get_last_introduced_context_index(&self, nesting_level: usize) -> usize {
-        let mut last_scope: usize = 0;
-
-        for i in 0..nesting_level {
-            if self.context_introduced[nesting_level - 1 - i] {
-                last_scope = nesting_level - 1 - i;
-                break;
-            }
-        }
-
-        last_scope
-    }
-
     /// Returns the identifier (as an `EunoiaTerm`) of the last context
     /// actually introduced within the proof certificate.
     /// PRE: { 0 < `self.contexts_opened`}
@@ -194,7 +118,9 @@ impl EunoiaTranslator {
         // TODO: do not hard-code this string
         EunoiaTerm::Id(
             String::from("ctx")
-                + &(self.get_last_introduced_context_index(self.contexts_opened - 1) + 1)
+                + &(self.alethe_scopes.get_last_introduced_context_index(
+                    self.alethe_scopes.get_contexts_opened() - 1,
+                ) + 1)
                     .to_string(),
         )
     }
@@ -202,7 +128,7 @@ impl EunoiaTranslator {
     /// Encapsulates the mechanism used to generate fresh identifiers of contexts.
     fn generate_new_context_id(&self) -> String {
         // TODO: do not hard-code this string
-        String::from("ctx") + &self.contexts_opened.to_string()
+        String::from("ctx") + &self.alethe_scopes.get_contexts_opened().to_string()
     }
 
     /// Abstracts the steps required to define and push a new context.
@@ -269,8 +195,8 @@ impl EunoiaTranslator {
                 // Copy trait for EunoiaTerms
                 eunoia_sort = self.translate_term(sort);
 
-                self.variables_in_scope
-                    .insert(name.clone(), eunoia_sort.clone());
+                self.alethe_scopes
+                    .insert_variable_in_scope(name, &eunoia_sort);
 
                 context_domain.push(EunoiaTerm::List(vec![
                     EunoiaTerm::Id(name.clone()),
@@ -295,8 +221,8 @@ impl EunoiaTranslator {
                     eunoia_sort.clone(),
                 ]));
 
-                self.variables_in_scope
-                    .insert(name.clone(), eunoia_sort.clone());
+                self.alethe_scopes
+                    .insert_variable_in_scope(name, &eunoia_sort);
 
                 // match self.variables_in_scope.get_with_depth(name) {
                 //     Some((depth, _)) => {
@@ -343,6 +269,8 @@ impl EunoiaTranslator {
 
     /// Implements the actual translation logic, after the original `ProofNode` graph
     /// has been translated into a list of `ProofNodes`.
+    /// PRE : { `self.pre_ord_proof` is set with a pre-ordered version of the corresponding
+    ///               Alethe proof }
     fn translate_pre_ord_proof_node(&mut self) {
         // NOTE: cloning to avoid error
         // "closure requires unique access to `*self` but it is already borrowed//
@@ -374,7 +302,7 @@ impl EunoiaTranslator {
                                 self.last_step_id.pop();
 
                                 // Closing the context...
-                                self.close_scope();
+                                self.alethe_scopes.close_scope();
                                 // self.local_steps.pop();
                             }
                         }
@@ -386,12 +314,11 @@ impl EunoiaTranslator {
                         let ctx_params;
 
                         if args.is_empty() {
-                            self.open_scope(false);
+                            self.alethe_scopes.open_non_context_scope();
                         } else {
                             // { !args.is_empty() }
                             // We actually have an anchor introducing new variables
-                            self.open_scope(true);
-                            assert!(self.context_introduced[self.context_introduced.len() - 1]);
+                            self.alethe_scopes.open_context_scope();
                             ctx_params = self.process_anchor_context(args);
 
                             // Define and open a new context
@@ -449,7 +376,7 @@ impl EunoiaTranslator {
             // TODO: not considering the sort of the variable.
             Term::Var(string, _) => {
                 // Check if it is a variable introduced by some binder
-                match self.variables_in_scope.get(string) {
+                match self.alethe_scopes.get_variable_in_scope(string) {
                     Some(_) => self.build_var_binding(string),
 
                     None => EunoiaTerm::Id(string.clone()),
@@ -468,7 +395,7 @@ impl EunoiaTranslator {
 
             Term::Let(binding_list, scope) => {
                 // New scope.
-                self.open_scope(false);
+                self.alethe_scopes.open_non_context_scope();
 
                 let (translated_binding_list, translated_values) =
                     self.translate_let_binding_list(binding_list);
@@ -477,7 +404,7 @@ impl EunoiaTranslator {
                     EunoiaTerm::List(ref bindings) => {
                         bindings.iter().for_each(|var| match var {
                             EunoiaTerm::Var(id, sort) => {
-                                self.variables_in_scope.insert(id.clone(), *sort.clone());
+                                self.alethe_scopes.insert_variable_in_scope(id, sort);
                             }
 
                             _ => {
@@ -501,7 +428,7 @@ impl EunoiaTranslator {
                     translated_values,
                 );
 
-                self.close_scope();
+                self.alethe_scopes.close_scope();
 
                 final_let_trans
             }
@@ -513,13 +440,13 @@ impl EunoiaTranslator {
                 // for this new kind of scope (not the one
                 // related with contexts introduced through
                 // "anchor" commands).
-                self.open_scope(false);
+                self.alethe_scopes.open_non_context_scope();
                 let translated_bindings = self.translate_binding_list(binding_list);
                 match translated_bindings {
                     EunoiaTerm::List(ref bindings) => {
                         bindings.iter().for_each(|var| match var {
                             EunoiaTerm::Var(id, sort) => {
-                                self.variables_in_scope.insert(id.clone(), *sort.clone());
+                                self.alethe_scopes.insert_variable_in_scope(id, sort);
                             }
 
                             _ => {
@@ -578,7 +505,7 @@ impl EunoiaTranslator {
                 };
 
                 // Closing the context...
-                self.close_scope();
+                self.alethe_scopes.close_scope();
                 // self.local_steps.pop();
 
                 translated_binder
@@ -595,7 +522,7 @@ impl EunoiaTranslator {
     /// enclosing context.
     fn build_var_binding(&self, id: &String) -> EunoiaTerm {
         // TODO: using clone, ugly...
-        let sort = match self.variables_in_scope.get(id) {
+        let sort = match self.alethe_scopes.get_variable_in_scope(id) {
             Some(value) => value.clone(),
 
             None => {
