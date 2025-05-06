@@ -108,19 +108,12 @@ fn check_pbblast_constraint(
 /// The expected shape is:
 ///    `(= (= x y) (= (- (+ sum_x) (+ sum_y)) 0))`
 pub fn pbblast_bveq(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), ((sum_x, sum_y), constant)) =
-        match_term_err!((= (= x y) (= (- sum_x sum_y) constant)) = &conclusion[0])?;
+    let ((x, y), ((sum_x, sum_y), _)) =
+        match_term_err!((= (= x y) (= (- sum_x sum_y) 0)) = &conclusion[0])?;
 
     // Get the summation lists
     let sum_x = get_pbsum(sum_x);
     let sum_y = get_pbsum(sum_y);
-
-    // Check that the constant is 0
-    let constant: Integer = constant.as_integer_err()?;
-    rassert!(
-        constant == 0,
-        CheckerError::Explanation(format!("Non-zero constant {}", constant))
-    );
 
     // Check that the summations have the correct structure.
     // (For equality the order is: sum_x for x and sum_y for y.)
@@ -131,19 +124,12 @@ pub fn pbblast_bveq(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
 /// The expected shape is:
 ///    `(= (bvult x y) (>= (- (+ sum_y) (+ sum_x)) 1))`
 pub fn pbblast_bvult(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), ((sum_y, sum_x), constant)) =
-        match_term_err!((= (bvult x y) (>= (- sum_y sum_x) constant)) = &conclusion[0])?;
+    let ((x, y), ((sum_y, sum_x), _)) =
+        match_term_err!((= (bvult x y) (>= (- sum_y sum_x) 1)) = &conclusion[0])?;
 
     // Get the summation lists
     let sum_x = get_pbsum(sum_x);
     let sum_y = get_pbsum(sum_y);
-
-    // Check that the constant is 1
-    let constant: Integer = constant.as_integer_err()?;
-    rassert!(
-        constant == 1,
-        CheckerError::Explanation(format!("Constant not 1: {}", constant))
-    );
 
     // For bvult the summations occur in reverse: the "left" sum comes from y and the "right" from x.
     check_pbblast_constraint(pool, y, x, sum_y, sum_x)
@@ -154,19 +140,12 @@ pub fn pbblast_bvult(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// The expected shape is:
 ///    `(= (bvugt x y) (>= (- (+ sum_x) (+ sum_y)) 1))`
 pub fn pbblast_bvugt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), ((sum_x, sum_y), constant)) =
-        match_term_err!((= (bvugt x y) (>= (- sum_x sum_y) constant)) = &conclusion[0])?;
+    let ((x, y), ((sum_x, sum_y), _)) =
+        match_term_err!((= (bvugt x y) (>= (- sum_x sum_y) 1)) = &conclusion[0])?;
 
     // Get the summation lists
     let sum_x = get_pbsum(sum_x);
     let sum_y = get_pbsum(sum_y);
-
-    // Check that the constant is 1
-    let constant: Integer = constant.as_integer_err()?;
-    rassert!(
-        constant == 1,
-        CheckerError::Explanation(format!("Constant not 1: {}", constant))
-    );
 
     // For bvugt the summations appear in the same order as in equality.
     check_pbblast_constraint(pool, x, y, sum_x, sum_y)
