@@ -11,7 +11,6 @@
 #![warn(clippy::explicit_iter_loop)]
 #![warn(clippy::from_iter_instead_of_collect)]
 #![warn(clippy::get_unwrap)]
-#![warn(clippy::if_not_else)]
 #![warn(clippy::implicit_clone)]
 #![warn(clippy::inconsistent_struct_constructor)]
 #![warn(clippy::index_refutable_slice)]

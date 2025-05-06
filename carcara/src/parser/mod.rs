@@ -307,7 +307,12 @@ impl<'a, R: BufRead> Parser<'a, R> {
             }
             Operator::Abs => {
                 assert_num_args(&args, 1)?;
-                SortError::assert_eq(&Sort::Int, sorts[0])?;
+                // The argument must be Int unless we are allowing Int/Real subtyping
+                if self.config.allow_int_real_subtyping {
+                    SortError::assert_one_of(&[Sort::Int, Sort::Real], sorts[0])?;
+                } else {
+                    SortError::assert_eq(&Sort::Int, sorts[0])?;
+                }
             }
             Operator::LessThan | Operator::GreaterThan | Operator::LessEq | Operator::GreaterEq => {
                 assert_num_args(&args, 2..)?;
@@ -527,17 +532,39 @@ impl<'a, R: BufRead> Parser<'a, R> {
         args: Vec<Rc<Term>>,
     ) -> Result<Rc<Term>, ParserError> {
         let sort = self.pool.sort(&function);
+        let mut param_function = false;
         let sorts = {
             let function_sort = sort.as_sort().unwrap();
             if let Sort::Function(sorts) = function_sort {
                 sorts
+            } else if let Sort::ParamSort(_, p_sort) = function_sort {
+                let p_function_sort = p_sort.as_sort().unwrap();
+                if let Sort::Function(sorts) = p_function_sort {
+                    param_function = true;
+                    sorts
+                } else {
+                    // Parametric function does not have function sort
+                    return Err(ParserError::NotAFunction(p_function_sort.clone()));
+                }
             } else {
                 // Function does not have function sort
                 return Err(ParserError::NotAFunction(function_sort.clone()));
             }
         };
         assert_num_args(&args, sorts.len() - 1)?;
+        let mut map = IndexMap::new();
         for i in 0..args.len() {
+            if param_function {
+                let sort_i = sorts[i].as_sort().unwrap();
+                let arg_sort_i = self.pool.sort(&args[i]).as_sort().unwrap().clone();
+                if !sort_i.match_with(&arg_sort_i, &mut map) {
+                    return Err(ParserError::IncompatibleSorts(
+                        sort_i.clone(),
+                        arg_sort_i.clone(),
+                    ));
+                }
+                continue;
+            };
             SortError::assert_eq(
                 sorts[i].as_sort().unwrap(),
                 self.pool.sort(&args[i]).as_sort().unwrap(),
