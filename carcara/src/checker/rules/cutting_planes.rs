@@ -24,8 +24,14 @@ impl NegatedLiterals for PbHash {
     }
 }
 
-fn get_pb_hashmap(pbsum: &[Rc<Term>]) -> Result<PbHash, CheckerError> {
+fn get_pb_hashmap(pbsum: &Rc<Term>) -> Result<PbHash, CheckerError> {
     let mut hm = HashMap::new();
+    let pbsum = if let Some(pbsum) = match_term!((+ ...) = pbsum) {
+        pbsum
+    } else {
+        std::slice::from_ref(pbsum)
+    };
+
     let n = pbsum.len() - 1;
 
     for term in pbsum.iter().take(n) {
@@ -47,7 +53,7 @@ fn get_pb_hashmap(pbsum: &[Rc<Term>]) -> Result<PbHash, CheckerError> {
 }
 
 fn unwrap_pseudoboolean_inequality(clause: &Rc<Term>) -> Result<(PbHash, Integer), CheckerError> {
-    let (pbsum, constant) = match_term_err!((>= (+ ...) constant) = clause)?;
+    let (pbsum, constant) = match_term_err!((>= pbsum constant) = clause)?;
     let constant = constant.as_integer_err()?;
     let pbsum = get_pb_hashmap(pbsum)?;
     Ok((pbsum, constant))

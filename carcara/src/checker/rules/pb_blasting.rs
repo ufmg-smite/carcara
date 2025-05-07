@@ -3418,7 +3418,7 @@ mod tests {
                 r#"(step t1 (cl (=
                             (bvand (@pbbterm @x0 @x1) (@pbbterm @y0 @y1))
                             (@pbbterm (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= z (+ @x0 @y0 -1)))) :named @r0)
-                                     (! (choice ((z Int)) (and (>= @x1 z) (>= @y1 z) (>= z (+ @x1 @y1 -1)))) :named @r1))
+                                      (! (choice ((z Int)) (and (>= @x1 z) (>= @y1 z) (>= z (+ @x1 @y1 -1)))) :named @r1))
                         )) :rule pbblast_bvand)"#: true,
             }
             // Too many binders, too few binders in choice...
