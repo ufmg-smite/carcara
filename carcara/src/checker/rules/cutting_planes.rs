@@ -6,15 +6,6 @@ use std::collections::HashMap;
 
 type PbHash = HashMap<String, Integer>;
 
-fn equals_integer_err(term: &Rc<Term>, expected: &Integer) -> Result<(), CheckerError> {
-    let n = term.as_integer_err()?;
-    rassert!(
-        &n == expected,
-        CheckerError::ExpectedInteger(n.clone(), term.clone())
-    );
-    Ok(())
-}
-
 fn get_pb_hashmap(pbsum: &Rc<Term>) -> Result<PbHash, CheckerError> {
     let mut hm = HashMap::new();
     let pbsum = if let Some(pbsum) = match_term!((+ ...) = pbsum) {
@@ -36,7 +27,7 @@ fn get_pb_hashmap(pbsum: &Rc<Term>) -> Result<PbHash, CheckerError> {
         }
     }
 
-    for term in pbsum.iter() {
+    for term in pbsum {
         let (coeff, literal) =
             // Negated literal  (* c (- 1 x1))
             if let Some((coeff, (_, literal))) = match_term!((* coeff (- 1 literal)) = term) {

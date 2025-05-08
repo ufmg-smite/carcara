@@ -553,10 +553,10 @@ pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 }
 
 /// Helper to transform a bitvector to a list of terms, both when short-circuited or not
-/// Ex: get_bitvector_terms(x, 2)
+/// Ex: `get_bitvector_terms(x, 2)`
 /// >>> [((int_of 0) x),((int_of 1) x)]
 ///
-/// Ex: get_bitvector_terms((pbbterm @x0 @x1), 2)
+/// Ex: `get_bitvector_terms((pbbterm @x0 @x1), 2)`
 /// >>> [@x0, @x1]
 fn get_bitvector_terms(bv: &Rc<Term>, pool: &mut dyn TermPool) -> Vec<Rc<Term>> {
     if let Some(xs) = match_term!((pbbterm ...) = bv) {
@@ -581,9 +581,9 @@ fn get_bitvector_terms(bv: &Rc<Term>, pool: &mut dyn TermPool) -> Vec<Rc<Term>> 
 ///     (= (bvand x y)
 ///        (@pbbterm
 ///         ; FOR EACH 0=i<n:
-///             (choice ((z Int)) (and (>= ((_ @int_of i) x) z)
-///                                    (>= ((_ @int_of i) y) z)
-///                                    (>= z (+ ((_ @int_of i) x) ((_ @int_of i) y) -1))
+///             (choice ((z Int)) (and (>= ((_ `@int_of` i) x) z)
+///                                    (>= ((_ `@int_of` i) y) z)
+///                                    (>= z (+ ((_ `@int_of` i) x) ((_ `@int_of` i) y) -1))
 ///                               )
 ///             )
 ///        )
@@ -620,7 +620,7 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         assert!(*z_type.as_sort().unwrap() == Sort::Int);
 
         // c1 : (>= @x0 z)
-        let (xic, zc) = match_term_err!((>= xi z) = c1)?;
+        let (xic, _zc) = match_term_err!((>= xi z) = c1)?;
         rassert!(
             xic == xi,
             CheckerError::TermEquality(EqualityError::ExpectedEqual(xic.clone(), xi.clone()))
@@ -628,7 +628,7 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         // ! How to compare zc with the binding (z_name,z_type)?
 
         // c2 : (>= @y0 z)
-        let (yic, zc) = match_term_err!((>= yi z) = c2)?;
+        let (yic, _zc) = match_term_err!((>= yi z) = c2)?;
         rassert!(
             yic == yi,
             CheckerError::TermEquality(EqualityError::ExpectedEqual(yic.clone(), yi.clone()))
@@ -636,7 +636,7 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         // ! How to compare zc with the binding (z_name,z_type)?
 
         // c3 : (>= z (+ @x0 @y0 -1))
-        let (zc, (xic, yic, k)) = match_term_err!((>= z (+ xi yi k)) = c3)?;
+        let (_zc, (xic, yic, k)) = match_term_err!((>= z (+ xi yi k)) = c3)?;
         rassert!(
             xic == xi,
             CheckerError::TermEquality(EqualityError::ExpectedEqual(xic.clone(), xi.clone()))
