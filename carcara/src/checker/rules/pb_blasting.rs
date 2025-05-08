@@ -445,7 +445,7 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         );
 
         // c3 : (>= z (+ @x0 @y0 -1))
-        let (zc, (xic, yic, k)) = match_term_err!((>= z (+ xi yi k)) = c3)?;
+        let ((zc, _), (xic, yic)) = match_term_err!((>= (+ z 1) (+ xi yi)) = c3)?;
         rassert!(
             zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
             CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
@@ -457,12 +457,6 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         rassert!(
             yic == yi,
             CheckerError::TermEquality(EqualityError::ExpectedEqual(yic.clone(), yi.clone()))
-        );
-
-        let k: Integer = k.as_integer_err()?;
-        rassert!(
-            k == -1,
-            CheckerError::Explanation(format!("Expected -1, got {}", k))
         );
     }
 
@@ -2750,7 +2744,7 @@ mod tests {
                             (@pbbterm (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 0) x1) z)
                                                     (>= ((_ @int_of 0) y1) z)
-                                                    (>= z (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1)))
                                                 )) :named @r0))
                     )) :rule pbblast_bvand)"#: true,
             }
@@ -2760,7 +2754,7 @@ mod tests {
                             (@pbbterm (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 0) x1) z)
                                                     ;; Missing >= yi z
-                                                    (>= z (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1)))
                                                 )) :named @r0))
                     )) :rule pbblast_bvand)"#: false,
             }
@@ -2770,7 +2764,7 @@ mod tests {
                             (@pbbterm (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 0) x1) 0)   ; should be z
                                                     (>= ((_ @int_of 0) y1) z)
-                                                    (>= z (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1)))
                                                 )) :named @r0))
                     )) :rule pbblast_bvand)"#: false,
 
@@ -2779,7 +2773,7 @@ mod tests {
                             (@pbbterm (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 0) x1) z)
                                                     (>= ((_ @int_of 0) y1) 0)   ; should be z
-                                                    (>= z (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1)))
                                                 )) :named @r0))
                     )) :rule pbblast_bvand)"#: false,
 
@@ -2788,7 +2782,8 @@ mod tests {
                             (@pbbterm (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 0) x1) z)   
                                                     (>= ((_ @int_of 0) y1) z)
-                                                    (>= 0 (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1) -1)) ; should be z
+                                                    ;      v--- should be z instead of 0
+                                                    (>= (+ 0 1) (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1)))
                                                 )) :named @r0))
                     )) :rule pbblast_bvand)"#: false,
             }
@@ -2808,12 +2803,12 @@ mod tests {
                             (@pbbterm (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 0) x2) z)
                                                     (>= ((_ @int_of 0) y2) z)
-                                                    (>= z (+ ((_ @int_of 0) x2) ((_ @int_of 0) y2) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x2) ((_ @int_of 0) y2)))
                                                 )) :named @r0)
                                       (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 1) x2) z)
                                                     (>= ((_ @int_of 1) y2) z)
-                                                    (>= z (+ ((_ @int_of 1) x2) ((_ @int_of 1) y2) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 1) x2) ((_ @int_of 1) y2)))
                                                 )) :named @r1))
                         )) :rule pbblast_bvand)"#: true,
             }
@@ -2823,12 +2818,12 @@ mod tests {
                             (@pbbterm (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 0) x2) z)
                                                     (>= (* 2 ((_ @int_of 0) y2)) z) ; invalid coefficient (* 2 ..)
-                                                    (>= z (+ ((_ @int_of 0) x2) ((_ @int_of 0) y2) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x2) ((_ @int_of 0) y2)))
                                                 )) :named @r0)
                                       (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 1) x2) z)
                                                     (>= ((_ @int_of 1) y2) z)
-                                                    (>= z (+ ((_ @int_of 1) x2) ((_ @int_of 1) y2) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 1) x2) ((_ @int_of 1) y2)))
                                                 )) :named @r1))
                         )) :rule pbblast_bvand)"#: false,
             }
@@ -2847,16 +2842,16 @@ mod tests {
             "Valid 2-bit AND (short-circuit)" {
                 r#"(step t1 (cl (=
                             (bvand (@pbbterm @x0 @x1) (@pbbterm @y0 @y1))
-                            (@pbbterm (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= z (+ @x0 @y0 -1)))) :named @r0)
-                                      (! (choice ((z Int)) (and (>= @x1 z) (>= @y1 z) (>= z (+ @x1 @y1 -1)))) :named @r1))
+                            (@pbbterm (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= (+ z 1) (+ @x0 @y0)))) :named @r0)
+                                      (! (choice ((z Int)) (and (>= @x1 z) (>= @y1 z) (>= (+ z 1) (+ @x1 @y1)))) :named @r1))
                         )) :rule pbblast_bvand)"#: true,
             }
             // Too many binders, too few binders in choice...
             "Invalid 2-bit AND (wrong bit, short_circuit)" {
                 r#"(step t1 (cl (=
                             (bvand (@pbbterm @x0 @x1) (@pbbterm @y0 @y1))
-                            (@pbbterm (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= z (+ @x0 @y0 -1)))) :named @r0)
-                                     (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= z (+ @x0 @y0 -1)))) :named @r1))
+                            (@pbbterm (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= (+ z 1) (+ @x0 @y0)))) :named @r0)
+                                     (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= (+ z 1) (+ @x0 @y0)))) :named @r1))
                                      ; Should be on @x1 and @y1 ----^    
                         )) :rule pbblast_bvand)"#: false,
             }
@@ -2876,42 +2871,42 @@ mod tests {
                             (@pbbterm (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 0) x8) z)
                                                     (>= ((_ @int_of 0) y8) z)
-                                                    (>= z (+ ((_ @int_of 0) x8) ((_ @int_of 0) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x8) ((_ @int_of 0) y8)))
                                                 )) :named @r0)
                                       (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 1) x8) z)
                                                     (>= ((_ @int_of 1) y8) z)
-                                                    (>= z (+ ((_ @int_of 1) x8) ((_ @int_of 1) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 1) x8) ((_ @int_of 1) y8)))
                                                 )) :named @r1)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 2) x8) z)
                                                     (>= ((_ @int_of 2) y8) z)
-                                                    (>= z (+ ((_ @int_of 2) x8) ((_ @int_of 2) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 2) x8) ((_ @int_of 2) y8)))
                                                 )) :named @r2)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 3) x8) z)
                                                     (>= ((_ @int_of 3) y8) z)
-                                                    (>= z (+ ((_ @int_of 3) x8) ((_ @int_of 3) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 3) x8) ((_ @int_of 3) y8)))
                                                 )) :named @r3)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 4) x8) z)
                                                     (>= ((_ @int_of 4) y8) z)
-                                                    (>= z (+ ((_ @int_of 4) x8) ((_ @int_of 4) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 4) x8) ((_ @int_of 4) y8)))
                                                 )) :named @r4)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 5) x8) z)
                                                     (>= ((_ @int_of 5) y8) z)
-                                                    (>= z (+ ((_ @int_of 5) x8) ((_ @int_of 5) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 5) x8) ((_ @int_of 5) y8)))
                                                 )) :named @r5)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 6) x8) z)
                                                     (>= ((_ @int_of 6) y8) z)
-                                                    (>= z (+ ((_ @int_of 6) x8) ((_ @int_of 6) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 6) x8) ((_ @int_of 6) y8)))
                                                 )) :named @r6)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 7) x8) z)
                                                     (>= ((_ @int_of 7) y8) z)
-                                                    (>= z (+ ((_ @int_of 7) x8) ((_ @int_of 7) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 7) x8) ((_ @int_of 7) y8)))
                                                 )) :named @r7))
                         )) :rule pbblast_bvand)"#: true,
             }
@@ -2921,42 +2916,42 @@ mod tests {
                             (@pbbterm (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 0) x8) z)
                                                     (>= ((_ @int_of 0) y8) z)
-                                                    (>= z (+ ((_ @int_of 0) x8) ((_ @int_of 0) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x8) ((_ @int_of 0) y8)))
                                                 )) :named @r0)
                                       (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 1) x8) z)
                                                     (>= ((_ @int_of 1) y8) z)
-                                                    (>= z (+ ((_ @int_of 1) x8) ((_ @int_of 1) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 1) x8) ((_ @int_of 1) y8)))
                                                 )) :named @r1)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 2) x8) z)
                                                     (>= ((_ @int_of 2) y8) z)
-                                                    (>= z (+ ((_ @int_of 2) x8) ((_ @int_of 2) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 2) x8) ((_ @int_of 2) y8)))
                                                 )) :named @r2)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 3) x8) z)
                                                     (>= ((_ @int_of 3) y8) z)
-                                                    (>= z (+ ((_ @int_of 3) x8) ((_ @int_of 3) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 3) x8) ((_ @int_of 3) y8)))
                                                 )) :named @r3)
                                        (! (choice ((z Int)) (and
                                                     (>= z ((_ @int_of 4) x8))   ; swapped order, should be (>= ((_ @int_of 4) x8) z)
                                                     (>= ((_ @int_of 4) y8) z)
-                                                    (>= z (+ ((_ @int_of 4) x8) ((_ @int_of 4) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 4) x8) ((_ @int_of 4) y8)))
                                                 )) :named @r4)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 5) x8) z)
                                                     (>= ((_ @int_of 5) y8) z)
-                                                    (>= z (+ ((_ @int_of 5) x8) ((_ @int_of 5) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 5) x8) ((_ @int_of 5) y8)))
                                                 )) :named @r5)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 6) x8) z)
                                                     (>= ((_ @int_of 6) y8) z)
-                                                    (>= z (+ ((_ @int_of 6) x8) ((_ @int_of 6) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 6) x8) ((_ @int_of 6) y8)))
                                                 )) :named @r6)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 7) x8) z)
                                                     (>= ((_ @int_of 7) y8) z)
-                                                    (>= z (+ ((_ @int_of 7) x8) ((_ @int_of 7) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 7) x8) ((_ @int_of 7) y8)))
                                                 )) :named @r7))
                         )) :rule pbblast_bvand)"#: false,
             }
