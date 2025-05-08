@@ -151,7 +151,7 @@ fn check_pbblast_constraint(
 /// The expected shape is:
 ///    `(= (= x y) (= (- (+ sum_x) (+ sum_y)) 0))`
 pub fn pbblast_bveq(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), ((sum_x, sum_y), ())) =
+    let ((x, y), ((sum_x, sum_y), _)) =
         match_term_err!((= (= x y) (= (- sum_x sum_y) 0)) = &conclusion[0])?;
 
     // Get the summation lists
@@ -175,19 +175,12 @@ pub fn pbblast_bveq(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
 /// The expected shape is:
 ///    `(= (bvult x y) (>= (- (+ sum_y) (+ sum_x)) 1))`
 pub fn pbblast_bvult(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), ((sum_y, sum_x), constant)) =
-        match_term_err!((= (bvult x y) (>= (- sum_y sum_x) constant)) = &conclusion[0])?;
+    let ((x, y), ((sum_y, sum_x), _)) =
+        match_term_err!((= (bvult x y) (>= (- sum_y sum_x) 1)) = &conclusion[0])?;
 
     // Get the summation lists
     let sum_x = get_pbsum(sum_x);
     let sum_y = get_pbsum(sum_y);
-
-    // Check that the constant is 1
-    let constant: Integer = constant.as_integer_err()?;
-    rassert!(
-        constant == 1,
-        CheckerError::Explanation(format!("Constant not 1: {}", constant))
-    );
 
     // For bvult the summations occur in reverse: the "left" sum comes from y and the "right" from x.
     check_pbblast_constraint(pool, y, x, sum_y, sum_x)
@@ -198,19 +191,12 @@ pub fn pbblast_bvult(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// The expected shape is:
 ///    `(= (bvugt x y) (>= (- (+ sum_x) (+ sum_y)) 1))`
 pub fn pbblast_bvugt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), ((sum_x, sum_y), constant)) =
-        match_term_err!((= (bvugt x y) (>= (- sum_x sum_y) constant)) = &conclusion[0])?;
+    let ((x, y), ((sum_x, sum_y), _)) =
+        match_term_err!((= (bvugt x y) (>= (- sum_x sum_y) 1)) = &conclusion[0])?;
 
     // Get the summation lists
     let sum_x = get_pbsum(sum_x);
     let sum_y = get_pbsum(sum_y);
-
-    // Check that the constant is 1
-    let constant: Integer = constant.as_integer_err()?;
-    rassert!(
-        constant == 1,
-        CheckerError::Explanation(format!("Constant not 1: {}", constant))
-    );
 
     // For bvugt the summations appear in the same order as in equality.
     check_pbblast_constraint(pool, x, y, sum_x, sum_y)
@@ -221,19 +207,12 @@ pub fn pbblast_bvugt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// The expected shape is:
 ///    `(= (bvuge x y) (>= (- (+ sum_x) (+ sum_y)) 0))`
 pub fn pbblast_bvuge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), ((sum_x, sum_y), constant)) =
-        match_term_err!((= (bvuge x y) (>= (- sum_x sum_y) constant)) = &conclusion[0])?;
+    let ((x, y), ((sum_x, sum_y), ())) =
+        match_term_err!((= (bvuge x y) (>= (- sum_x sum_y) 0)) = &conclusion[0])?;
 
     // Get the summation lists
     let sum_x = get_pbsum(sum_x);
     let sum_y = get_pbsum(sum_y);
-
-    // Check that the constant is 0
-    let constant: Integer = constant.as_integer_err()?;
-    rassert!(
-        constant == 0,
-        CheckerError::Explanation(format!("Non-zero constant {}", constant))
-    );
 
     check_pbblast_constraint(pool, x, y, sum_x, sum_y)
 }
@@ -243,19 +222,12 @@ pub fn pbblast_bvuge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// The expected shape is:
 ///    `(= (bvule x y) (>= (- (+ sum_y) (+ sum_x)) 0))`
 pub fn pbblast_bvule(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), ((sum_y, sum_x), constant)) =
-        match_term_err!((= (bvule x y) (>= (- sum_y sum_x) constant)) = &conclusion[0])?;
+    let ((x, y), ((sum_y, sum_x), ())) =
+        match_term_err!((= (bvule x y) (>= (- sum_y sum_x) 0)) = &conclusion[0])?;
 
     // Get the summation lists
     let sum_x = get_pbsum(sum_x);
     let sum_y = get_pbsum(sum_y);
-
-    // Check that the constant is 0
-    let constant: Integer = constant.as_integer_err()?;
-    rassert!(
-        constant == 0,
-        CheckerError::Explanation(format!("Non-zero constant {}", constant))
-    );
 
     check_pbblast_constraint(pool, x, y, sum_x, sum_y)
 }
@@ -293,20 +265,13 @@ fn check_pbblast_signed_relation(n: usize, sign: &Rc<Term>, bitvector: &Rc<Term>
 /// The expected shape is:
 ///    `(= (bvslt x y) (>= (+ (- y_sum (* 2^(n-1) y_n-1))) (- (* 2^(n-1) x_n-1) x_sum)) 1))`
 pub fn pbblast_bvslt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), (((sum_y, sign_y), (sign_x, sum_x)), constant)) = match_term_err!((= (bvslt x y) (>= (+ (- sum_y sign_y) (- sign_x sum_x)) constant)) = &conclusion[0])?;
+    let ((x, y), (((sum_y, sign_y), (sign_x, sum_x)), _)) = match_term_err!((= (bvslt x y) (>= (+ (- sum_y sign_y) (- sign_x sum_x)) 1)) = &conclusion[0])?;
 
     // Get the summation lists
     let sum_x = get_pbsum(sum_x);
     let sum_y = get_pbsum(sum_y);
 
     let n = get_bit_width(x, pool)?;
-
-    // Check that the constant is 1
-    let constant: Integer = constant.as_integer_err()?;
-    rassert!(
-        constant == 1,
-        CheckerError::Explanation(format!("Expected constant 1 got {constant}"))
-    );
 
     // Check the sign terms
     check_pbblast_signed_relation(n, sign_y, y)?;
@@ -321,7 +286,7 @@ pub fn pbblast_bvslt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// The expected shape is:
 ///    `(= (bvsgt x y) (>= (+ (- x_sum (* 2^(n-1) x_n-1))) (- (* 2^(n-1) y_n-1) y_sum)) 1))`
 pub fn pbblast_bvsgt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), (((sum_x, sign_x), (sign_y, sum_y)), constant)) = match_term_err!((= (bvsgt x y) (>= (+ (- sum_x sign_x) (- sign_y sum_y)) constant)) = &conclusion[0])?;
+    let ((x, y), (((sum_x, sign_x), (sign_y, sum_y)), _)) = match_term_err!((= (bvsgt x y) (>= (+ (- sum_x sign_x) (- sign_y sum_y)) 1)) = &conclusion[0])?;
 
     // Get the summation lists
     let sum_x = get_pbsum(sum_x);
@@ -329,13 +294,6 @@ pub fn pbblast_bvsgt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 
     // Get bit width of `x`
     let n = get_bit_width(x, pool)?;
-
-    // Check that the constant is 1
-    let constant: Integer = constant.as_integer_err()?;
-    rassert!(
-        constant == 1,
-        CheckerError::Explanation(format!("Expected constant 1 got {constant}"))
-    );
 
     // Check the sign terms
     check_pbblast_signed_relation(n, sign_x, x)?;
@@ -349,7 +307,7 @@ pub fn pbblast_bvsgt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// The expected shape is:
 ///    `(= (bvsge x y) (>= (+ (- x_sum (* 2^(n-1) x_n-1))) (- (* 2^(n-1) y_n-1) y_sum)) 0))`
 pub fn pbblast_bvsge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), (((sum_x, sign_x), (sign_y, sum_y)), constant)) = match_term_err!((= (bvsge x y) (>= (+ (- sum_x sign_x) (- sign_y sum_y)) constant)) = &conclusion[0])?;
+    let ((x, y), (((sum_x, sign_x), (sign_y, sum_y)), _)) = match_term_err!((= (bvsge x y) (>= (+ (- sum_x sign_x) (- sign_y sum_y)) 0)) = &conclusion[0])?;
 
     // Get the summation lists
     let sum_x = get_pbsum(sum_x);
@@ -357,13 +315,6 @@ pub fn pbblast_bvsge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 
     // Get bit width of `x`
     let n = get_bit_width(x, pool)?;
-
-    // Check that the constant is 0
-    let constant: Integer = constant.as_integer_err()?;
-    rassert!(
-        constant == 0,
-        CheckerError::Explanation(format!("Expected constant 0 got {constant}"))
-    );
 
     // Check the sign terms
     check_pbblast_signed_relation(n, sign_x, x)?;
@@ -377,7 +328,7 @@ pub fn pbblast_bvsge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// The expected shape is:
 ///    `(= (bvsle x y) (>= (+ (- y_sum (* 2^(n-1) y_n-1))) (- (* 2^(n-1) x_n-1) x_sum)) 0))`
 pub fn pbblast_bvsle(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), (((sum_y, sign_y), (sign_x, sum_x)), constant)) = match_term_err!((= (bvsle x y) (>= (+ (- sum_y sign_y) (- sign_x sum_x)) constant)) = &conclusion[0])?;
+    let ((x, y), (((sum_y, sign_y), (sign_x, sum_x)), _)) = match_term_err!((= (bvsle x y) (>= (+ (- sum_y sign_y) (- sign_x sum_x)) 0)) = &conclusion[0])?;
 
     // Get the summation lists
     let sum_x = get_pbsum(sum_x);
@@ -385,13 +336,6 @@ pub fn pbblast_bvsle(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 
     // Get bit width of `x`
     let n = get_bit_width(x, pool)?;
-
-    // Check that the constant is 0
-    let constant: Integer = constant.as_integer_err()?;
-    rassert!(
-        constant == 0,
-        CheckerError::Explanation(format!("Expected constant 0 got {constant}"))
-    );
 
     // Check the sign terms
     check_pbblast_signed_relation(n, sign_y, y)?;
@@ -401,6 +345,7 @@ pub fn pbblast_bvsle(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     check_pbblast_constraint(pool, y, x, sum_y, sum_x)
 }
 
+/// Implements the blasting of a bitvector variable
 pub fn pbblast_pbbvar(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     let (x, pbs) = match_term_err!((= x (pbbterm ...)) = &conclusion[0])?;
 
@@ -424,6 +369,7 @@ pub fn pbblast_pbbvar(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     Ok(())
 }
 
+/// Implements the blasting of a constant
 pub fn pbblast_pbbconst(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     let (bv, pbs) = match_term_err!((= bv (pbbterm ...)) = &conclusion[0])
         .map_err(|_| CheckerError::Explanation("Malformed @pbbterm equality".into()))?;
@@ -576,31 +522,6 @@ fn get_bitvector_terms(bv: &Rc<Term>, pool: &mut dyn TermPool) -> Vec<Rc<Term>> 
 }
 
 /// Implements the bitwise and operation.
-///
-/// The expected shape is:
-///     (= (bvand x y)
-///        (@pbbterm
-///         ; FOR EACH 0=i<n:
-///             (choice ((z Int)) (and (>= ((_ `@int_of` i) x) z)
-///                                    (>= ((_ `@int_of` i) y) z)
-///                                    (>= z (+ ((_ `@int_of` i) x) ((_ `@int_of` i) y) -1))
-///                               )
-///             )
-///        )
-///     )
-///
-/// Or in the short-circuit variant:
-///     (= (bvand (@pbbterm <@x0 .. @x{n-1}>) (@pbbterm <@y0 .. @y{n-1}>))
-///        (@pbbterm
-///         ; FOR EACH 0=i<n:
-///             (choice ((z Int)) (and (>= @xi z)
-///                                    (>= @yi z)
-///                                    (>= z (+ @xi @yi -1))
-///                               )
-///             )
-///        )
-///     )
-///
 pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     let ((x, y), bit_constraints) =
         match_term_err!((= (bvand x y) (pbbterm ...)) = &conclusion[0])?;
@@ -620,23 +541,33 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         assert!(*z_type.as_sort().unwrap() == Sort::Int);
 
         // c1 : (>= @x0 z)
-        let (xic, _zc) = match_term_err!((>= xi z) = c1)?;
+        let (xic, zc) = match_term_err!((>= xi z) = c1)?;
         rassert!(
             xic == xi,
             CheckerError::TermEquality(EqualityError::ExpectedEqual(xic.clone(), xi.clone()))
         );
-        // ! How to compare zc with the binding (z_name,z_type)?
+        rassert!(
+            zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
+            CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+        );
 
         // c2 : (>= @y0 z)
-        let (yic, _zc) = match_term_err!((>= yi z) = c2)?;
+        let (yic, zc) = match_term_err!((>= yi z) = c2)?;
         rassert!(
             yic == yi,
             CheckerError::TermEquality(EqualityError::ExpectedEqual(yic.clone(), yi.clone()))
         );
-        // ! How to compare zc with the binding (z_name,z_type)?
+        rassert!(
+            zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
+            CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+        );
 
         // c3 : (>= z (+ @x0 @y0 -1))
-        let (_zc, (xic, yic, k)) = match_term_err!((>= z (+ xi yi k)) = c3)?;
+        let ((zc, _), (xic, yic)) = match_term_err!((>= (+ z 1) (+ xi yi)) = c3)?;
+        rassert!(
+            zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
+            CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+        );
         rassert!(
             xic == xi,
             CheckerError::TermEquality(EqualityError::ExpectedEqual(xic.clone(), xi.clone()))
@@ -644,11 +575,6 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         rassert!(
             yic == yi,
             CheckerError::TermEquality(EqualityError::ExpectedEqual(yic.clone(), yi.clone()))
-        );
-        let k: Integer = k.as_integer_err()?;
-        rassert!(
-            k == -1,
-            CheckerError::Explanation(format!("Expected -1, got {}", k))
         );
     }
 
@@ -3348,7 +3274,7 @@ mod tests {
                             (@pbbterm (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 0) x1) z)
                                                     (>= ((_ @int_of 0) y1) z)
-                                                    (>= z (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1)))
                                                 )) :named @r0))
                     )) :rule pbblast_bvand)"#: true,
             }
@@ -3358,7 +3284,36 @@ mod tests {
                             (@pbbterm (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 0) x1) z)
                                                     ;; Missing >= yi z
-                                                    (>= z (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1)))
+                                                )) :named @r0))
+                    )) :rule pbblast_bvand)"#: false,
+            }
+            "Invalid 1-bit AND (wrong choice binder)" {
+                r#"(step t1 (cl (=
+                            (bvand x1 y1)
+                            (@pbbterm (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 0) x1) 0)   ; should be z
+                                                    (>= ((_ @int_of 0) y1) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1)))
+                                                )) :named @r0))
+                    )) :rule pbblast_bvand)"#: false,
+
+                r#"(step t1 (cl (=
+                            (bvand x1 y1)
+                            (@pbbterm (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 0) x1) z)
+                                                    (>= ((_ @int_of 0) y1) 0)   ; should be z
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1)))
+                                                )) :named @r0))
+                    )) :rule pbblast_bvand)"#: false,
+
+                r#"(step t1 (cl (=
+                            (bvand x1 y1)
+                            (@pbbterm (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 0) x1) z)   
+                                                    (>= ((_ @int_of 0) y1) z)
+                                                    ;      v--- should be z instead of 0
+                                                    (>= (+ 0 1) (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1)))
                                                 )) :named @r0))
                     )) :rule pbblast_bvand)"#: false,
             }
@@ -3378,12 +3333,12 @@ mod tests {
                             (@pbbterm (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 0) x2) z)
                                                     (>= ((_ @int_of 0) y2) z)
-                                                    (>= z (+ ((_ @int_of 0) x2) ((_ @int_of 0) y2) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x2) ((_ @int_of 0) y2)))
                                                 )) :named @r0)
                                       (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 1) x2) z)
                                                     (>= ((_ @int_of 1) y2) z)
-                                                    (>= z (+ ((_ @int_of 1) x2) ((_ @int_of 1) y2) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 1) x2) ((_ @int_of 1) y2)))
                                                 )) :named @r1))
                         )) :rule pbblast_bvand)"#: true,
             }
@@ -3393,12 +3348,12 @@ mod tests {
                             (@pbbterm (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 0) x2) z)
                                                     (>= (* 2 ((_ @int_of 0) y2)) z) ; invalid coefficient (* 2 ..)
-                                                    (>= z (+ ((_ @int_of 0) x2) ((_ @int_of 0) y2) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x2) ((_ @int_of 0) y2)))
                                                 )) :named @r0)
                                       (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 1) x2) z)
                                                     (>= ((_ @int_of 1) y2) z)
-                                                    (>= z (+ ((_ @int_of 1) x2) ((_ @int_of 1) y2) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 1) x2) ((_ @int_of 1) y2)))
                                                 )) :named @r1))
                         )) :rule pbblast_bvand)"#: false,
             }
@@ -3417,16 +3372,16 @@ mod tests {
             "Valid 2-bit AND (short-circuit)" {
                 r#"(step t1 (cl (=
                             (bvand (@pbbterm @x0 @x1) (@pbbterm @y0 @y1))
-                            (@pbbterm (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= z (+ @x0 @y0 -1)))) :named @r0)
-                                      (! (choice ((z Int)) (and (>= @x1 z) (>= @y1 z) (>= z (+ @x1 @y1 -1)))) :named @r1))
+                            (@pbbterm (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= (+ z 1) (+ @x0 @y0)))) :named @r0)
+                                      (! (choice ((z Int)) (and (>= @x1 z) (>= @y1 z) (>= (+ z 1) (+ @x1 @y1)))) :named @r1))
                         )) :rule pbblast_bvand)"#: true,
             }
             // Too many binders, too few binders in choice...
             "Invalid 2-bit AND (wrong bit, short_circuit)" {
                 r#"(step t1 (cl (=
                             (bvand (@pbbterm @x0 @x1) (@pbbterm @y0 @y1))
-                            (@pbbterm (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= z (+ @x0 @y0 -1)))) :named @r0)
-                                     (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= z (+ @x0 @y0 -1)))) :named @r1))
+                            (@pbbterm (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= (+ z 1) (+ @x0 @y0)))) :named @r0)
+                                     (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= (+ z 1) (+ @x0 @y0)))) :named @r1))
                                      ; Should be on @x1 and @y1 ----^    
                         )) :rule pbblast_bvand)"#: false,
             }
@@ -3446,42 +3401,42 @@ mod tests {
                             (@pbbterm (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 0) x8) z)
                                                     (>= ((_ @int_of 0) y8) z)
-                                                    (>= z (+ ((_ @int_of 0) x8) ((_ @int_of 0) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x8) ((_ @int_of 0) y8)))
                                                 )) :named @r0)
                                       (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 1) x8) z)
                                                     (>= ((_ @int_of 1) y8) z)
-                                                    (>= z (+ ((_ @int_of 1) x8) ((_ @int_of 1) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 1) x8) ((_ @int_of 1) y8)))
                                                 )) :named @r1)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 2) x8) z)
                                                     (>= ((_ @int_of 2) y8) z)
-                                                    (>= z (+ ((_ @int_of 2) x8) ((_ @int_of 2) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 2) x8) ((_ @int_of 2) y8)))
                                                 )) :named @r2)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 3) x8) z)
                                                     (>= ((_ @int_of 3) y8) z)
-                                                    (>= z (+ ((_ @int_of 3) x8) ((_ @int_of 3) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 3) x8) ((_ @int_of 3) y8)))
                                                 )) :named @r3)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 4) x8) z)
                                                     (>= ((_ @int_of 4) y8) z)
-                                                    (>= z (+ ((_ @int_of 4) x8) ((_ @int_of 4) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 4) x8) ((_ @int_of 4) y8)))
                                                 )) :named @r4)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 5) x8) z)
                                                     (>= ((_ @int_of 5) y8) z)
-                                                    (>= z (+ ((_ @int_of 5) x8) ((_ @int_of 5) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 5) x8) ((_ @int_of 5) y8)))
                                                 )) :named @r5)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 6) x8) z)
                                                     (>= ((_ @int_of 6) y8) z)
-                                                    (>= z (+ ((_ @int_of 6) x8) ((_ @int_of 6) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 6) x8) ((_ @int_of 6) y8)))
                                                 )) :named @r6)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 7) x8) z)
                                                     (>= ((_ @int_of 7) y8) z)
-                                                    (>= z (+ ((_ @int_of 7) x8) ((_ @int_of 7) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 7) x8) ((_ @int_of 7) y8)))
                                                 )) :named @r7))
                         )) :rule pbblast_bvand)"#: true,
             }
@@ -3491,42 +3446,42 @@ mod tests {
                             (@pbbterm (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 0) x8) z)
                                                     (>= ((_ @int_of 0) y8) z)
-                                                    (>= z (+ ((_ @int_of 0) x8) ((_ @int_of 0) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x8) ((_ @int_of 0) y8)))
                                                 )) :named @r0)
                                       (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 1) x8) z)
                                                     (>= ((_ @int_of 1) y8) z)
-                                                    (>= z (+ ((_ @int_of 1) x8) ((_ @int_of 1) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 1) x8) ((_ @int_of 1) y8)))
                                                 )) :named @r1)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 2) x8) z)
                                                     (>= ((_ @int_of 2) y8) z)
-                                                    (>= z (+ ((_ @int_of 2) x8) ((_ @int_of 2) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 2) x8) ((_ @int_of 2) y8)))
                                                 )) :named @r2)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 3) x8) z)
                                                     (>= ((_ @int_of 3) y8) z)
-                                                    (>= z (+ ((_ @int_of 3) x8) ((_ @int_of 3) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 3) x8) ((_ @int_of 3) y8)))
                                                 )) :named @r3)
                                        (! (choice ((z Int)) (and
                                                     (>= z ((_ @int_of 4) x8))   ; swapped order, should be (>= ((_ @int_of 4) x8) z)
                                                     (>= ((_ @int_of 4) y8) z)
-                                                    (>= z (+ ((_ @int_of 4) x8) ((_ @int_of 4) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 4) x8) ((_ @int_of 4) y8)))
                                                 )) :named @r4)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 5) x8) z)
                                                     (>= ((_ @int_of 5) y8) z)
-                                                    (>= z (+ ((_ @int_of 5) x8) ((_ @int_of 5) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 5) x8) ((_ @int_of 5) y8)))
                                                 )) :named @r5)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 6) x8) z)
                                                     (>= ((_ @int_of 6) y8) z)
-                                                    (>= z (+ ((_ @int_of 6) x8) ((_ @int_of 6) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 6) x8) ((_ @int_of 6) y8)))
                                                 )) :named @r6)
                                        (! (choice ((z Int)) (and
                                                     (>= ((_ @int_of 7) x8) z)
                                                     (>= ((_ @int_of 7) y8) z)
-                                                    (>= z (+ ((_ @int_of 7) x8) ((_ @int_of 7) y8) -1))
+                                                    (>= (+ z 1) (+ ((_ @int_of 7) x8) ((_ @int_of 7) y8)))
                                                 )) :named @r7))
                         )) :rule pbblast_bvand)"#: false,
             }
