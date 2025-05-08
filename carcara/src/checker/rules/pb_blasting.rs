@@ -441,63 +441,6 @@ fn assert_bitvector_indexing(xi: &Rc<Term>, i: usize, x: &Rc<Term>) -> RuleResul
     Ok(())
 }
 
-/// Implements the bitwise exclusive or operation.
-///
-/// The expected shape is:
-///     (and
-///         (= (bvxor x y) r)
-///         ; FOR EACH 0=i<n:
-///         (and
-///             (>= (- (+ xi yi) ri) 0)
-///             (>= (- 0 (+ ri xi yi)) -2)
-///             (>= (- (+ ri xi) yi) 0)
-///             (>= (- (+ ri yi) xi) 0)
-///         )
-///     )
-pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let and_list = match_term_err!((and  ...) = &conclusion[0])?;
-    // First element is bvxor
-    let (xor_term, bits_constraints) = and_list.split_at(1);
-    let ((x, y), r) = match_term_err!((= (bvxor x y) r) = &xor_term[0])?;
-
-    // Get bit width of `x`
-    let n = get_bit_width(x, pool)?;
-
-    for (i, item) in bits_constraints.iter().enumerate().take(n) {
-        let (c1, c2, c3, c4) = match_term_err!((and c1 c2 c3 c4) = item)?;
-        // c1 : (>= (- (+ xi yi) ri) 0)
-        let (((xi, yi), ri), _) = match_term_err!((>= (- (+ xi yi) ri) 0) = c1)?;
-        assert_bitvector_indexing(xi, i, x)?;
-        assert_bitvector_indexing(yi, i, y)?;
-        assert_bitvector_indexing(ri, i, r)?;
-
-        // c2 : (>= (- 0 (+ ri xi yi)) -2)
-        let ((_, (ri, xi, yi)), k) = match_term_err!((>= (- 0 (+ ri xi yi)) k) = c2)?;
-        assert_bitvector_indexing(xi, i, x)?;
-        assert_bitvector_indexing(yi, i, y)?;
-        assert_bitvector_indexing(ri, i, r)?;
-        let k: Integer = k.as_integer_err()?;
-        rassert!(
-            k == -2,
-            CheckerError::Explanation(format!("Expected >= -2, got {}", k))
-        );
-
-        // c3 : (>= (- (+ ri xi) yi) 0)
-        let (((ri, xi), yi), _) = match_term_err!((>= (- (+ ri xi) yi) 0) = c3)?;
-        assert_bitvector_indexing(xi, i, x)?;
-        assert_bitvector_indexing(yi, i, y)?;
-        assert_bitvector_indexing(ri, i, r)?;
-
-        // c4 : (>= (- (+ ri yi) xi) 0)
-        let (((ri, yi), xi), _) = match_term_err!((>= (- (+ ri yi) xi) 0) = c4)?;
-        assert_bitvector_indexing(xi, i, x)?;
-        assert_bitvector_indexing(yi, i, y)?;
-        assert_bitvector_indexing(ri, i, r)?;
-    }
-
-    Ok(())
-}
-
 /// Helper to transform a bitvector to a list of terms, both when short-circuited or not
 /// Ex: `get_bitvector_terms(x, 2)`
 /// >>> [((int_of 0) x),((int_of 1) x)]
@@ -519,6 +462,89 @@ fn get_bitvector_terms(bv: &Rc<Term>, pool: &mut dyn TermPool) -> Vec<Rc<Term>> 
             })
             .collect()
     }
+}
+
+/// Implements the bitwise exclusive or operation.
+pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    let ((x, y), bit_constraints) =
+        match_term_err!((= (bvxor x y) (pbbterm ...)) = &conclusion[0])?;
+
+    let xs = get_bitvector_terms(x, pool);
+    let ys = get_bitvector_terms(y, pool);
+
+    // Zip three lists into tuples
+    for ((bc, xi), yi) in bit_constraints.iter().zip(xs.iter()).zip(ys.iter()) {
+        let (bindings, (c1, c2, c3, c4)) = match_term_err!((choice ... (and c1 c2 c3 c4)) = bc)?;
+
+        // Single binding
+        assert!(bindings.len() == 1);
+        // Check z -> Int
+        let (z_name, z_type) = &bindings[0];
+        assert!(z_name == "z");
+        assert!(*z_type.as_sort().unwrap() == Sort::Int);
+
+        // c1 : (>= (+ xi yi) z)
+        let ((xic, yic), zc) = match_term_err!((>= (+ xi yi) z) = c1)?;
+        rassert!(
+            xic == xi,
+            CheckerError::TermEquality(EqualityError::ExpectedEqual(xic.clone(), xi.clone()))
+        );
+        rassert!(
+            yic == yi,
+            CheckerError::TermEquality(EqualityError::ExpectedEqual(yic.clone(), yi.clone()))
+        );
+        rassert!(
+            zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
+            CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+        );
+
+        // c2 : (>= 2 (+ z xi yi)
+        let (_, (zc, xic, yic)) = match_term_err!((>= 2 (+ z xi yi)) = c2)?;
+        rassert!(
+            xic == xi,
+            CheckerError::TermEquality(EqualityError::ExpectedEqual(xic.clone(), xi.clone()))
+        );
+        rassert!(
+            yic == yi,
+            CheckerError::TermEquality(EqualityError::ExpectedEqual(yic.clone(), yi.clone()))
+        );
+        rassert!(
+            zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
+            CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+        );
+
+        // c3 : (>= (+ z xi) yi)
+        let ((zc, xic), yic) = match_term_err!((>= (+ z xi) yi) = c3)?;
+        rassert!(
+            xic == xi,
+            CheckerError::TermEquality(EqualityError::ExpectedEqual(xic.clone(), xi.clone()))
+        );
+        rassert!(
+            yic == yi,
+            CheckerError::TermEquality(EqualityError::ExpectedEqual(yic.clone(), yi.clone()))
+        );
+        rassert!(
+            zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
+            CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+        );
+
+        // c4 : (>= (+ z yi) xi)
+        let ((zc, yic), xic) = match_term_err!((>= (+ z yi) xi) = c3)?;
+        rassert!(
+            xic == xi,
+            CheckerError::TermEquality(EqualityError::ExpectedEqual(xic.clone(), xi.clone()))
+        );
+        rassert!(
+            yic == yi,
+            CheckerError::TermEquality(EqualityError::ExpectedEqual(yic.clone(), yi.clone()))
+        );
+        rassert!(
+            zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
+            CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+        );
+    }
+
+    Ok(())
 }
 
 /// Implements the bitwise and operation.
@@ -3002,27 +3028,30 @@ mod tests {
         }
     }
 
+    // c1 : (>= (+ xi yi) z)
+    // c2 : (>= 2 (+ z xi yi)
+    // c3 : (>= (+ z xi) yi)
+    // c4 : (>= (+ z yi) xi)
+
     #[test]
     fn pbblast_bvxor_1() {
         test_cases! {
            definitions = "
                 (declare-const x1 (_ BitVec 1))
                 (declare-const y1 (_ BitVec 1))
-                (declare-const r1 (_ BitVec 1))
                 ",
             "Valid 1-bit XOR" {
-                r#"(step t1 (cl (and
-                                    (= (bvxor x1 y1) r1)
-                                    ; list of constraints for each bit
-                                    (and    ; i = 0
-                                        (>= (- (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1)) ((_ @int_of 0) r1)) 0)    ; (xi + yi) - ri >= 0
-                                        (>= (- 0 (+ ((_ @int_of 0) r1) ((_ @int_of 0) x1) ((_ @int_of 0) y1))) -2) ; 0 - (ri + xi + yi) >= -2
-                                        (>= (- (+ ((_ @int_of 0) r1) ((_ @int_of 0) x1)) ((_ @int_of 0) y1)) 0)    ; (ri + xi) - yi >= 0
-                                        (>= (- (+ ((_ @int_of 0) r1) ((_ @int_of 0) y1)) ((_ @int_of 0) x1)) 0)    ; (ri + yi) - xi >= 0
-                                    )
-                                ))
-                        :rule pbblast_bvxor)"#: true,
+                r#"(step t1 (cl (=
+                            (bvxor x1 y1)
+                            (@pbbterm (! (choice ((z Int)) (and
+                                                                (>= (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1)) z)    ; (>= (+ xi yi) z)
+                                                                (>= (+ z ((_ @int_of 0) x1)) ((_ @int_of 0) y1))    ; (>= (+ z xi) yi)
+                                                                (>= (+ z ((_ @int_of 0) y1)) ((_ @int_of 0) x1))    ; (>= (+ z yi) xi)
+                                                                (>= 2 (+ z ((_ @int_of 0) x1) ((_ @int_of 0) y1))   ; (>= 2 (+ z xi yi)
+                                                )) :named @r0))
+                    )) :rule pbblast_bvxor)"#: true,
             }
+            // TODO: adapt other tests
             "Invalid 1-bit XOR (missing constraint)" {
                 r#"(step t1 (cl (and
                                     (= (bvxor x1 y1) r1)
