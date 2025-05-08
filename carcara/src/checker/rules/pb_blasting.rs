@@ -423,23 +423,33 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         assert!(*z_type.as_sort().unwrap() == Sort::Int);
 
         // c1 : (>= @x0 z)
-        let (xic, _zc) = match_term_err!((>= xi z) = c1)?;
+        let (xic, zc) = match_term_err!((>= xi z) = c1)?;
         rassert!(
             xic == xi,
             CheckerError::TermEquality(EqualityError::ExpectedEqual(xic.clone(), xi.clone()))
         );
-        // ! How to compare zc with the binding (z_name,z_type)?
+        rassert!(
+            zc.as_var() == Some(&z_name) && pool.sort(zc) == *z_type,
+            CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+        );
 
         // c2 : (>= @y0 z)
-        let (yic, _zc) = match_term_err!((>= yi z) = c2)?;
+        let (yic, zc) = match_term_err!((>= yi z) = c2)?;
         rassert!(
             yic == yi,
             CheckerError::TermEquality(EqualityError::ExpectedEqual(yic.clone(), yi.clone()))
         );
-        // ! How to compare zc with the binding (z_name,z_type)?
+        rassert!(
+            zc.as_var() == Some(&z_name) && pool.sort(zc) == *z_type,
+            CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+        );
 
         // c3 : (>= z (+ @x0 @y0 -1))
-        let (_zc, (xic, yic, k)) = match_term_err!((>= z (+ xi yi k)) = c3)?;
+        let (zc, (xic, yic, k)) = match_term_err!((>= z (+ xi yi k)) = c3)?;
+        rassert!(
+            zc.as_var() == Some(&z_name) && pool.sort(zc) == *z_type,
+            CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+        );
         rassert!(
             xic == xi,
             CheckerError::TermEquality(EqualityError::ExpectedEqual(xic.clone(), xi.clone()))
@@ -448,6 +458,7 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
             yic == yi,
             CheckerError::TermEquality(EqualityError::ExpectedEqual(yic.clone(), yi.clone()))
         );
+
         let k: Integer = k.as_integer_err()?;
         rassert!(
             k == -1,
@@ -2750,6 +2761,34 @@ mod tests {
                                                     (>= ((_ @int_of 0) x1) z)
                                                     ;; Missing >= yi z
                                                     (>= z (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1) -1))
+                                                )) :named @r0))
+                    )) :rule pbblast_bvand)"#: false,
+            }
+            "Invalid 1-bit AND (wrong choice binder)" {
+                r#"(step t1 (cl (=
+                            (bvand x1 y1)
+                            (@pbbterm (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 0) x1) 0)   ; should be z
+                                                    (>= ((_ @int_of 0) y1) z)
+                                                    (>= z (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1) -1))
+                                                )) :named @r0))
+                    )) :rule pbblast_bvand)"#: false,
+
+                r#"(step t1 (cl (=
+                            (bvand x1 y1)
+                            (@pbbterm (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 0) x1) z)
+                                                    (>= ((_ @int_of 0) y1) 0)   ; should be z
+                                                    (>= z (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1) -1))
+                                                )) :named @r0))
+                    )) :rule pbblast_bvand)"#: false,
+
+                r#"(step t1 (cl (=
+                            (bvand x1 y1)
+                            (@pbbterm (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 0) x1) z)   
+                                                    (>= ((_ @int_of 0) y1) z)
+                                                    (>= 0 (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1) -1)) ; should be z
                                                 )) :named @r0))
                     )) :rule pbblast_bvand)"#: false,
             }
