@@ -380,6 +380,9 @@ mod tests {
                    (assume c2 (>= (* 1 (- 1 x1)) 1))
                    (step t1 (cl (>= 0 1)) :rule cp_addition :premises (c1 c2))"#: true,
 
+                r#"(assume c1 (>= (* 1 x1) 2))
+                   (assume c2 (>= (* 1 (- 1 x1)) 0))
+                   (step t1 (cl (>= 0 1)) :rule cp_addition :premises (c1 c2))"#: true,
             }
             "Simple working examples" {
                 r#"(assume c1 (>= (* 1 x1) 1))
