@@ -32,6 +32,19 @@ fn get_pb_hashmap(pbsum: &Rc<Term>) -> Result<PbHash, CheckerError> {
         std::slice::from_ref(pbsum)
     };
 
+    //  Special case: single 0
+    if pbsum.len() == 1 {
+        if let Some(constant) = pbsum[0].as_integer() {
+            if constant == 0 {
+                return Ok(hm);
+            }
+            return Err(CheckerError::ExpectedInteger(
+                Integer::from(0),
+                pbsum[0].clone(),
+            ));
+        }
+    }
+
     for term in pbsum.iter() {
         let (coeff, literal) =
             // Negated literal  (* c (- 1 x1))
@@ -352,6 +365,11 @@ mod tests {
                 r#"(assume c1 (>= (+ (* 2 x1) (* 3 x2)) 2))
                    (assume c2 (>= (+ (* 1 (- 1 x1)) (* 3 (- 1 x2))) 4))
                    (step t1 (cl (>= (* 1 x1) 2)) :rule cp_addition :premises (c1 c2))"#: true,
+
+                r#"(assume c1 (>= (* 1 x1) 1))
+                   (assume c2 (>= (* 1 (- 1 x1)) 1))
+                   (step t1 (cl (>= 0 1)) :rule cp_addition :premises (c1 c2))"#: true,
+
             }
             "Simple working examples" {
                 r#"(assume c1 (>= (* 1 x1) 1))
