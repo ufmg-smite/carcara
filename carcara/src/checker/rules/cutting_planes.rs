@@ -6,22 +6,13 @@ use std::collections::HashMap;
 
 type PbHash = HashMap<String, Integer>;
 
-fn is_negated_literal(lit: &str) -> bool {
-    lit.starts_with('~')
-}
-
-trait NegatedLiterals {
-    fn get_opposite(&self, lit: &str) -> Option<&Integer>;
-}
-
-impl NegatedLiterals for PbHash {
-    fn get_opposite(&self, lit: &str) -> Option<&Integer> {
-        if let Some(plain_lit) = lit.strip_prefix('~') {
-            self.get(plain_lit)
-        } else {
-            self.get(&format!("~{}", lit))
-        }
-    }
+fn equals_integer_err(term: &Rc<Term>, expected: &Integer) -> Result<(), CheckerError> {
+    let n = term.as_integer_err()?;
+    rassert!(
+        &n == expected,
+        CheckerError::ExpectedInteger(n.clone(), term.clone())
+    );
+    Ok(())
 }
 
 fn get_pb_hashmap(pbsum: &Rc<Term>) -> Result<PbHash, CheckerError> {
@@ -48,7 +39,7 @@ fn get_pb_hashmap(pbsum: &Rc<Term>) -> Result<PbHash, CheckerError> {
     for term in pbsum.iter() {
         let (coeff, literal) =
             // Negated literal  (* c (- 1 x1))
-            if let Some((coeff, (_, literal))) = match_term!((* coeff (- one literal)) = term) {
+            if let Some((coeff, (_, literal))) = match_term!((* coeff (- 1 literal)) = term) {
                 (coeff, format!("~{}",literal))
             // Plain literal    (* c x1)
             } else if let Some((coeff, literal)) = match_term!((* coeff literal) = term) {
@@ -70,47 +61,32 @@ fn unwrap_pseudoboolean_inequality(clause: &Rc<Term>) -> Result<(PbHash, Integer
     Ok((pbsum, constant))
 }
 
-/// Checks that every key in ``pbsum_a`` is present in ``pbsum_b``
-/// ha ⊆ hb
-fn assert_pbsum_subset_keys(pbsum_a: &PbHash, pbsum_b: &PbHash) -> Result<(), CheckerError> {
-    for key in pbsum_a.keys() {
-        let val = pbsum_a.get(key).unwrap();
-
-        // Zero coefficient is ignored.
-        if val == &Integer::from(0) {
-            continue;
-        }
-
-        if pbsum_b.get(key).is_none() {
-            return Err(CheckerError::Explanation(format!(
-                "Key {} of {:?} not found in {:?}",
-                key, pbsum_b, pbsum_a
-            )));
-        }
-    }
-    Ok(())
-}
-
-fn assert_pbsum_same_keys(pbsum_a: &PbHash, pbsum_b: &PbHash) -> Result<(), CheckerError> {
-    // All keys in A are in B
-    assert_pbsum_subset_keys(pbsum_a, pbsum_b)?;
-
-    // All keys in B are in A
-    assert_pbsum_subset_keys(pbsum_b, pbsum_a)?;
-
-    Ok(())
-}
-
 fn add_pbsums(pbsum_a: &PbHash, pbsum_b: &PbHash) -> PbHash {
     let mut res = pbsum_a.clone();
-
     for (lit, cb) in pbsum_b {
         res.entry(lit.clone())
             .and_modify(|ca| *ca += cb)
             .or_insert(cb.clone());
     }
-
     res
+}
+
+fn is_negated_literal(lit: &str) -> bool {
+    lit.starts_with('~')
+}
+
+trait NegatedLiterals {
+    fn get_opposite(&self, lit: &str) -> Option<&Integer>;
+}
+
+impl NegatedLiterals for PbHash {
+    fn get_opposite(&self, lit: &str) -> Option<&Integer> {
+        if let Some(plain_lit) = lit.strip_prefix('~') {
+            self.get(plain_lit)
+        } else {
+            self.get(&format!("~{}", lit))
+        }
+    }
 }
 
 /// Cancel out opposite coefficients
@@ -151,6 +127,37 @@ fn reduce_pbsum(pbsum: &PbHash) -> (PbHash, Integer) {
     }
 
     (res, slack)
+}
+
+/// Checks that every key in ``pbsum_a`` is present in ``pbsum_b``
+/// ha ⊆ hb
+fn assert_pbsum_subset_keys(pbsum_a: &PbHash, pbsum_b: &PbHash) -> Result<(), CheckerError> {
+    for key in pbsum_a.keys() {
+        let val = pbsum_a.get(key).unwrap();
+
+        // Zero coefficient is ignored.
+        if val == &Integer::from(0) {
+            continue;
+        }
+
+        if pbsum_b.get(key).is_none() {
+            return Err(CheckerError::Explanation(format!(
+                "Key {} of {:?} not found in {:?}",
+                key, pbsum_b, pbsum_a
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn assert_pbsum_same_keys(pbsum_a: &PbHash, pbsum_b: &PbHash) -> Result<(), CheckerError> {
+    // All keys in A are in B
+    assert_pbsum_subset_keys(pbsum_a, pbsum_b)?;
+
+    // All keys in B are in A
+    assert_pbsum_subset_keys(pbsum_b, pbsum_a)?;
+
+    Ok(())
 }
 
 pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
@@ -256,7 +263,6 @@ pub fn cp_multiplication(RuleArgs { premises, args, conclusion, .. }: RuleArgs) 
             );
         }
     }
-
     Ok(())
 }
 
@@ -268,9 +274,13 @@ pub fn cp_division(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
     assert_num_args(args, 1)?;
     let divisor: Integer = args[0].as_integer_err()?;
 
-    // Avoid division by zero
-    if divisor == 0 {
-        return Err(CheckerError::DivOrModByZero);
+    // Rule only allows for positive integer arguments
+    if divisor <= 0 {
+        return Err(if divisor == 0 {
+            CheckerError::DivOrModByZero
+        } else {
+            CheckerError::ExpectedNonnegInteger(args[0].clone())
+        });
     }
 
     // Check there is exactly one conclusion
