@@ -429,7 +429,7 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
             CheckerError::TermEquality(EqualityError::ExpectedEqual(xic.clone(), xi.clone()))
         );
         rassert!(
-            zc.as_var() == Some(&z_name) && pool.sort(zc) == *z_type,
+            zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
             CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
         );
 
@@ -440,14 +440,14 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
             CheckerError::TermEquality(EqualityError::ExpectedEqual(yic.clone(), yi.clone()))
         );
         rassert!(
-            zc.as_var() == Some(&z_name) && pool.sort(zc) == *z_type,
+            zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
             CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
         );
 
         // c3 : (>= z (+ @x0 @y0 -1))
         let (zc, (xic, yic, k)) = match_term_err!((>= z (+ xi yi k)) = c3)?;
         rassert!(
-            zc.as_var() == Some(&z_name) && pool.sort(zc) == *z_type,
+            zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
             CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
         );
         rassert!(
