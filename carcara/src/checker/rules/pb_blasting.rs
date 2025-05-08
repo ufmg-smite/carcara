@@ -377,10 +377,10 @@ pub fn pbblast_pbbconst(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 
 /// Helper to transform a bitvector to a list of terms, both when short-circuited or not
 /// Ex: `get_bitvector_terms(x, 2)`
-/// >>> [((int_of 0) x),((int_of 1) x)]
+/// >>> `[((int_of 0) x),((int_of 1) x)]`
 ///
 /// Ex: `get_bitvector_terms((pbbterm @x0 @x1), 2)`
-/// >>> [@x0, @x1]
+/// >>> `[@x0, @x1]`
 fn get_bitvector_terms(bv: &Rc<Term>, pool: &mut dyn TermPool) -> Vec<Rc<Term>> {
     if let Some(xs) = match_term!((pbbterm ...) = bv) {
         xs.to_vec()
