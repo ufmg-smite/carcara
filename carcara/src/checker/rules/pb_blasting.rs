@@ -1,7 +1,7 @@
 use super::{assert_eq, RuleArgs, RuleResult};
 use crate::{
     ast::{Rc, Sort, Term, TermPool},
-    checker::error::{CheckerError, EqualityError},
+    checker::error::CheckerError,
 };
 use rug::Integer;
 
