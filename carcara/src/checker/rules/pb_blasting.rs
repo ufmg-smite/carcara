@@ -1,4 +1,4 @@
-use super::{RuleArgs, RuleResult};
+use super::{assert_eq, RuleArgs, RuleResult};
 use crate::{
     ast::{Rc, Sort, Term, TermPool},
     checker::error::{CheckerError, EqualityError},
@@ -424,10 +424,7 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 
         // c1 : (>= @x0 z)
         let (xic, zc) = match_term_err!((>= xi z) = c1)?;
-        rassert!(
-            xic == xi,
-            CheckerError::TermEquality(EqualityError::ExpectedEqual(xic.clone(), xi.clone()))
-        );
+        assert_eq(xic, xi)?;
         rassert!(
             zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
             CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
@@ -435,10 +432,7 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 
         // c2 : (>= @y0 z)
         let (yic, zc) = match_term_err!((>= yi z) = c2)?;
-        rassert!(
-            yic == yi,
-            CheckerError::TermEquality(EqualityError::ExpectedEqual(yic.clone(), yi.clone()))
-        );
+        assert_eq(yic, yi)?;
         rassert!(
             zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
             CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
@@ -450,14 +444,8 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
             zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
             CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
         );
-        rassert!(
-            xic == xi,
-            CheckerError::TermEquality(EqualityError::ExpectedEqual(xic.clone(), xi.clone()))
-        );
-        rassert!(
-            yic == yi,
-            CheckerError::TermEquality(EqualityError::ExpectedEqual(yic.clone(), yi.clone()))
-        );
+        assert_eq(xic, xi)?;
+        assert_eq(yic, yi)?;
     }
 
     Ok(())
