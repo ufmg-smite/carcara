@@ -1,4 +1,4 @@
 /target
 /benchmarks
-.vscode/
+# I want .vscode files in this branch...
 .devcontainer/

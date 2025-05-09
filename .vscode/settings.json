@@ -1,0 +1,7 @@
+{
+    // rustup component add rust-analyzer --toolchain 1.72.0
+    "rust-analyzer.server.path": "~/.rustup/toolchains/1.72.0-x86_64-unknown-linux-gnu/bin/rust-analyzer",
+    "rust-analyzer.server.extraEnv": {
+        "RUSTUP_TOOLCHAIN": "1.72.0"
+    }
+}
