@@ -95,6 +95,15 @@ macro_rules! match_term {
             None
         }
     };
+    ((choice ... $args:tt) = $var:expr) => {
+        if let $crate::ast::Term::Binder($crate::ast::Binder::Choice, bindings, inner) =
+            &$var as &$crate::ast::Term
+        {
+            match_term!($args = inner).and_then(|inner| Some((bindings, inner)))
+        } else {
+            None
+        }
+    };
     ($bind:ident = $var:expr) => { Some($var) };
     (((_ $indexed_op:tt $($op_args:tt)+) $($args:tt)+) = $var:expr) => {{
         if let $crate::ast::Term::ParamOp {
