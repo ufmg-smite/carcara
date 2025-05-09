@@ -3,6 +3,7 @@ use crate::ast::*;
 use crate::translation::eunoia::alethe_signature::theory::*;
 use crate::translation::eunoia::eunoia_ast::*;
 use crate::translation::AletheScopes;
+use crate::translation::LastSteps;
 use crate::translation::PreOrderedAletheProof;
 use crate::translation::Translator;
 
@@ -28,9 +29,7 @@ pub struct EunoiaTranslator {
     // /// Maintains references to previous steps from the actual subproof.
     // local_steps: Vec<Vec<usize>>,
     /// Rule and id of the last step from the actual subproof, if any.
-    last_step_rule: Vec<String>,
-
-    last_step_id: Vec<String>,
+    last_steps: LastSteps,
 }
 
 impl EunoiaTranslator {
@@ -41,8 +40,7 @@ impl EunoiaTranslator {
             alethe_signature: AletheTheory::new(),
             alethe_scopes: AletheScopes::new(),
             // local_steps: Vec::new(),
-            last_step_rule: Vec::new(),
-            last_step_id: Vec::new(),
+            last_steps: LastSteps::new(),
         }
     }
 
@@ -54,8 +52,7 @@ impl EunoiaTranslator {
         if self.alethe_scopes.get_contexts_opened() > 0 {
             self.eunoia_proof = Vec::new();
             self.alethe_scopes.clean_scopes();
-            self.last_step_rule = Vec::new();
-            self.last_step_id = Vec::new();
+            self.last_steps = LastSteps::new();
         }
 
         // TODO: Subproof has a context_id that could be used instead of contexts_opened
@@ -118,10 +115,7 @@ impl EunoiaTranslator {
         // TODO: do not hard-code this string
         EunoiaTerm::Id(
             String::from("ctx")
-                + &(self.alethe_scopes.get_last_introduced_context_index(
-                    self.alethe_scopes.get_contexts_opened() - 1,
-                ) + 1)
-                    .to_string(),
+                + &(self.alethe_scopes.get_last_introduced_context_index() + 1).to_string(),
         )
     }
 
@@ -290,16 +284,14 @@ impl EunoiaTranslator {
                         self.translate_step(node);
 
                         // Is this the closing step of the actual subproof?
-                        if !self.last_step_id.is_empty() {
-                            let last_step_id = &self.last_step_id.last();
-                            if *last_step_id == Some(id) {
+                        if !self.last_steps.last_steps_empty() {
+                            let last_step_id = &self.last_steps.get_last_step_id();
+                            if *last_step_id == id {
                                 // TODO: ugly, hacky way of dealing with
                                 // "bind" rule already doing a step-pop of the pushed
                                 // context
-                                assert!(self.last_step_rule.len() == self.last_step_id.len());
 
-                                self.last_step_rule.pop();
-                                self.last_step_id.pop();
+                                self.last_steps.last_steps_pop();
 
                                 // Closing the context...
                                 self.alethe_scopes.close_scope();
@@ -334,8 +326,10 @@ impl EunoiaTranslator {
                                 rule: last_step_rule,
                                 ..
                             }) => {
-                                self.last_step_rule.push(last_step_rule.clone());
-                                self.last_step_id.push(last_step_id.clone());
+                                self.last_steps.last_steps_push(
+                                    last_step_rule.as_str(),
+                                    last_step_id.as_str(),
+                                );
                             }
 
                             _ => {
@@ -719,15 +713,15 @@ impl EunoiaTranslator {
     /// expressed within Eunoia.
     fn translate_assume(&mut self, id: &str, _depth: usize, term: &Rc<Term>) -> EunoiaCommand {
         // Check last instruction in actual subproof
-        let ret = if self.last_step_rule.is_empty() {
+        let ret = if self.last_steps.last_steps_empty() {
             // Regular introduction of assumptions
             EunoiaCommand::Assume {
                 name: id.to_owned(),
                 term: self.translate_term(term),
             }
         } else {
-            // { not self.last_step_rule.is_empty() }
-            match self.last_step_rule[self.last_step_rule.len() - 1].as_str() {
+            // { not self.last_steps.last_steps_empty() }
+            match self.last_steps.get_last_step_rule() {
                 // "subproof" receives every "assume" command as an actual
                 // ethos assumption; we need to push every assumption
                 "subproof" => EunoiaCommand::AssumePush {

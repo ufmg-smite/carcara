@@ -1,4 +1,4 @@
-/// Translation of Alethe proofs services.
+/// Services for the translation of Alethe proofs.
 pub mod eunoia;
 
 use crate::ast::*;
@@ -23,8 +23,7 @@ struct PreOrderedAletheProof {
     // "cannot move out... a captured variable in an `FnMut` closure" errors
     // TODO: declared as Vec<ProofNode> (not using borrows) to avoid
     // error "borrowed data escapes outside of closure"
-    /// Auxiliary attribute useful to maintain a pre-ordered version
-    /// of the `ProofNode` graph.
+    /// Pre-ordered version of a given `ProofNode` graph.
     pre_ord_proof: Vec<ProofNode>,
 
     // TODO: this should be a variable local to post_order_to_list
@@ -265,15 +264,13 @@ impl<T: Clone> AletheScopes<T> {
         }
     }
 
-    /// For a given "nesting" level (some number <= `self.contexts_opened`),
-    /// returns the index of the last surrounding context actually introduced
+    /// Returns the index of the last surrounding context actually introduced
     /// within the proof certificate. This is so since scopes are used to
-    /// represent variables bound in contexts and by other binding constructions,
-    /// like quantifiers. This method helps to recover the index of the last
-    /// scope actually referring to a context.
-    /// PRE: { 0 < `nesting_level` < `self.contexts_opened`}
-    pub fn get_last_introduced_context_index(&self, nesting_level: usize) -> usize {
+    /// represent scopes from contexts and other constructions with binding occurences
+    /// of variables.
+    pub fn get_last_introduced_context_index(&self) -> usize {
         let mut last_scope: usize = 0;
+        let nesting_level: usize = self.get_contexts_opened() - 1;
 
         for i in 0..nesting_level {
             if self.context_introduced[nesting_level - 1 - i] {
@@ -283,5 +280,65 @@ impl<T: Clone> AletheScopes<T> {
         }
 
         last_scope
+    }
+}
+
+/// Information from the last step of the actual subproof. Useful to retrieve
+/// information required to decide about how to proceed with the translation
+/// of subproofs ending with some specific rule.
+struct LastSteps {
+    /// Rule name and id of the last step from the actual subproof, if any.
+    last_steps_rules: Vec<String>,
+
+    last_steps_ids: Vec<String>,
+}
+
+impl LastSteps {
+    fn new() -> Self {
+        Self {
+            last_steps_rules: Vec::new(),
+            last_steps_ids: Vec::new(),
+        }
+    }
+
+    /// Pre : { !`self.last_steps_rule.is_empty()` }
+    pub fn last_steps_pop(&mut self) {
+        assert!(self.last_steps_rules.len() == self.last_steps_ids.len());
+        self.last_steps_rules.pop();
+        self.last_steps_ids.pop();
+    }
+
+    pub fn last_steps_push(&mut self, last_step_rule: &str, last_step_id: &str) {
+        assert!(self.last_steps_rules.len() == self.last_steps_ids.len());
+        self.last_steps_rules.push(last_step_rule.to_owned());
+        self.last_steps_ids.push(last_step_id.to_owned());
+    }
+
+    /// Pre : { !`self.last_steps_rule.is_empty()` }
+    pub fn get_last_step_rule(&self) -> &str {
+        match self.last_steps_rules.last() {
+            Some(rule_name) => rule_name,
+
+            None => {
+                // Pre not satisfied
+                panic!()
+            }
+        }
+    }
+
+    /// Pre : { !`self.last_steps_id.is_empty()` }
+    pub fn get_last_step_id(&self) -> &str {
+        match self.last_steps_ids.last() {
+            Some(id) => id,
+
+            None => {
+                // Pre not satisfied
+                panic!()
+            }
+        }
+    }
+
+    pub fn last_steps_empty(&self) -> bool {
+        self.last_steps_rules.is_empty()
     }
 }
