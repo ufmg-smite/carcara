@@ -2796,11 +2796,6 @@ mod tests {
         }
     }
 
-    // c1 : (>= (+ xi yi) z)
-    // c2 : (>= (+ z xi) yi)
-    // c3 : (>= (+ z yi) xi)
-    // c4 : (>= 2 (+ z xi yi)
-
     #[test]
     fn pbblast_bvxor_2() {
         test_cases! {
