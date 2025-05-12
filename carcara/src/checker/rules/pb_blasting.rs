@@ -410,12 +410,16 @@ pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     for ((bc, xi), yi) in bit_constraints.iter().zip(xs.iter()).zip(ys.iter()) {
         let (bindings, (c1, c2, c3, c4)) = match_term_err!((choice ... (and c1 c2 c3 c4)) = bc)?;
 
-        // Single binding
-        assert!(bindings.len() == 1);
         // Check z -> Int
         let (z_name, z_type) = &bindings[0];
-        assert!(z_name == "z");
-        assert!(*z_type.as_sort().unwrap() == Sort::Int);
+        rassert!(
+            z_name == "z",
+            CheckerError::Explanation(format!("Expected {z_name} to be \"z\""))
+        );
+        rassert!(
+            *z_type.as_sort().unwrap() == Sort::Int,
+            CheckerError::Explanation(format!("Expected {z_type} to be Sort::Int"))
+        );
 
         // c1 : (>= (+ xi yi) z)
         let ((xic, yic), zc) = match_term_err!((>= (+ xi yi) z) = c1)?;
@@ -469,12 +473,16 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     for ((bc, xi), yi) in bit_constraints.iter().zip(xs.iter()).zip(ys.iter()) {
         let (bindings, (c1, c2, c3)) = match_term_err!((choice ... (and c1 c2 c3)) = bc)?;
 
-        // Single binding
-        assert!(bindings.len() == 1);
         // Check z -> Int
         let (z_name, z_type) = &bindings[0];
-        assert!(z_name == "z");
-        assert!(*z_type.as_sort().unwrap() == Sort::Int);
+        rassert!(
+            z_name == "z",
+            CheckerError::Explanation(format!("Expected {z_name} to be \"z\""))
+        );
+        rassert!(
+            *z_type.as_sort().unwrap() == Sort::Int,
+            CheckerError::Explanation(format!("Expected {z_type} to be Sort::Int"))
+        );
 
         // c1 : (>= @x0 z)
         let (xic, zc) = match_term_err!((>= xi z) = c1)?;
