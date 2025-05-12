@@ -1,4 +1,4 @@
-use super::{RuleArgs, RuleResult};
+use super::{assert_eq, RuleArgs, RuleResult};
 use crate::{
     ast::{Rc, Sort, Term, TermPool},
     checker::error::CheckerError,
@@ -375,14 +375,80 @@ pub fn pbblast_pbbconst(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     Ok(())
 }
 
+/// Helper to transform a bitvector to a list of terms, both when short-circuited or not
+/// Ex: `get_bitvector_terms(x, 2)`
+/// >>> `[((int_of 0) x),((int_of 1) x)]`
+///
+/// Ex: `get_bitvector_terms((pbbterm @x0 @x1), 2)`
+/// >>> `[@x0, @x1]`
+fn get_bitvector_terms(bv: &Rc<Term>, pool: &mut dyn TermPool) -> Vec<Rc<Term>> {
+    if let Some(xs) = match_term!((pbbterm ...) = bv) {
+        xs.to_vec()
+    } else {
+        // Get bit width of `x`
+        let n = get_bit_width(bv, pool).unwrap();
+        (0..n)
+            .map(|i| {
+                build_term!(
+                    pool,
+                    ((_ int_of { pool.add(Term::new_int(i)) }) { bv.clone() })
+                )
+            })
+            .collect()
+    }
+}
+
 /// Implements the bitwise exclusive or operation.
 pub fn pbblast_bvxor(RuleArgs { .. }: RuleArgs) -> RuleResult {
     Err(CheckerError::Unspecified)
 }
 
 /// Implements the bitwise and operation.
-pub fn pbblast_bvand(RuleArgs { .. }: RuleArgs) -> RuleResult {
-    Err(CheckerError::Unspecified)
+pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    let ((x, y), bit_constraints) =
+        match_term_err!((= (bvand x y) (pbbterm ...)) = &conclusion[0])?;
+
+    let xs = get_bitvector_terms(x, pool);
+    let ys = get_bitvector_terms(y, pool);
+
+    // Zip three lists into tuples
+    for ((bc, xi), yi) in bit_constraints.iter().zip(xs.iter()).zip(ys.iter()) {
+        let (bindings, (c1, c2, c3)) = match_term_err!((choice ... (and c1 c2 c3)) = bc)?;
+
+        // Single binding
+        assert!(bindings.len() == 1);
+        // Check z -> Int
+        let (z_name, z_type) = &bindings[0];
+        assert!(z_name == "z");
+        assert!(*z_type.as_sort().unwrap() == Sort::Int);
+
+        // c1 : (>= @x0 z)
+        let (xic, zc) = match_term_err!((>= xi z) = c1)?;
+        assert_eq(xic, xi)?;
+        rassert!(
+            zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
+            CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+        );
+
+        // c2 : (>= @y0 z)
+        let (yic, zc) = match_term_err!((>= yi z) = c2)?;
+        assert_eq(yic, yi)?;
+        rassert!(
+            zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
+            CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+        );
+
+        // c3 : (>= z (+ @x0 @y0 -1))
+        let ((zc, _), (xic, yic)) = match_term_err!((>= (+ z 1) (+ xi yi)) = c3)?;
+        rassert!(
+            zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
+            CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+        );
+        assert_eq(xic, xi)?;
+        assert_eq(yic, yi)?;
+    }
+
+    Ok(())
 }
 
 mod tests {
@@ -2654,11 +2720,229 @@ mod tests {
     fn pbblast_bvxor_8() {}
 
     #[test]
-    fn pbblast_bvand_1() {}
+    fn pbblast_bvand_1() {
+        test_cases! {
+            definitions = "
+                (declare-const x1 (_ BitVec 1))
+                (declare-const y1 (_ BitVec 1))
+                ",
+            "Valid 1-bit AND" {
+                r#"(step t1 (cl (=
+                            (bvand x1 y1)
+                            (@pbbterm (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 0) x1) z)
+                                                    (>= ((_ @int_of 0) y1) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1)))
+                                                )) :named @r0))
+                    )) :rule pbblast_bvand)"#: true,
+            }
+            "Invalid 1-bit AND (missing constraint)" {
+                r#"(step t1 (cl (=
+                            (bvand x1 y1)
+                            (@pbbterm (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 0) x1) z)
+                                                    ;; Missing >= yi z
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1)))
+                                                )) :named @r0))
+                    )) :rule pbblast_bvand)"#: false,
+            }
+            "Invalid 1-bit AND (wrong choice binder)" {
+                r#"(step t1 (cl (=
+                            (bvand x1 y1)
+                            (@pbbterm (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 0) x1) 0)   ; should be z
+                                                    (>= ((_ @int_of 0) y1) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1)))
+                                                )) :named @r0))
+                    )) :rule pbblast_bvand)"#: false,
+
+                r#"(step t1 (cl (=
+                            (bvand x1 y1)
+                            (@pbbterm (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 0) x1) z)
+                                                    (>= ((_ @int_of 0) y1) 0)   ; should be z
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1)))
+                                                )) :named @r0))
+                    )) :rule pbblast_bvand)"#: false,
+
+                r#"(step t1 (cl (=
+                            (bvand x1 y1)
+                            (@pbbterm (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 0) x1) z)   
+                                                    (>= ((_ @int_of 0) y1) z)
+                                                    ;      v--- should be z instead of 0
+                                                    (>= (+ 0 1) (+ ((_ @int_of 0) x1) ((_ @int_of 0) y1)))
+                                                )) :named @r0))
+                    )) :rule pbblast_bvand)"#: false,
+            }
+        }
+    }
 
     #[test]
-    fn pbblast_bvand_2() {}
+    fn pbblast_bvand_2() {
+        test_cases! {
+            definitions = "
+            (declare-const x2 (_ BitVec 2))
+            (declare-const y2 (_ BitVec 2))
+        ",
+            "Valid 2-bit AND" {
+                r#"(step t1 (cl (=
+                            (bvand x2 y2)
+                            (@pbbterm (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 0) x2) z)
+                                                    (>= ((_ @int_of 0) y2) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x2) ((_ @int_of 0) y2)))
+                                                )) :named @r0)
+                                      (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 1) x2) z)
+                                                    (>= ((_ @int_of 1) y2) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 1) x2) ((_ @int_of 1) y2)))
+                                                )) :named @r1))
+                        )) :rule pbblast_bvand)"#: true,
+            }
+           "Invalid 2-bit AND (wrong coefficient)" {
+                r#"(step t1 (cl (=
+                            (bvand x2 y2)
+                            (@pbbterm (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 0) x2) z)
+                                                    (>= (* 2 ((_ @int_of 0) y2)) z) ; invalid coefficient (* 2 ..)
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x2) ((_ @int_of 0) y2)))
+                                                )) :named @r0)
+                                      (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 1) x2) z)
+                                                    (>= ((_ @int_of 1) y2) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 1) x2) ((_ @int_of 1) y2)))
+                                                )) :named @r1))
+                        )) :rule pbblast_bvand)"#: false,
+            }
+        }
+    }
 
     #[test]
-    fn pbblast_bvand_8() {}
+    fn pbblast_bvand_2_short_circuit() {
+        test_cases! {
+            definitions = "
+            (declare-const @x0 Int)
+            (declare-const @x1 Int)
+            (declare-const @y0 Int)
+            (declare-const @y1 Int)
+        ",
+            "Valid 2-bit AND (short-circuit)" {
+                r#"(step t1 (cl (=
+                            (bvand (@pbbterm @x0 @x1) (@pbbterm @y0 @y1))
+                            (@pbbterm (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= (+ z 1) (+ @x0 @y0)))) :named @r0)
+                                      (! (choice ((z Int)) (and (>= @x1 z) (>= @y1 z) (>= (+ z 1) (+ @x1 @y1)))) :named @r1))
+                        )) :rule pbblast_bvand)"#: true,
+            }
+            // Too many binders, too few binders in choice...
+            "Invalid 2-bit AND (wrong bit, short_circuit)" {
+                r#"(step t1 (cl (=
+                            (bvand (@pbbterm @x0 @x1) (@pbbterm @y0 @y1))
+                            (@pbbterm (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= (+ z 1) (+ @x0 @y0)))) :named @r0)
+                                     (! (choice ((z Int)) (and (>= @x0 z) (>= @y0 z) (>= (+ z 1) (+ @x0 @y0)))) :named @r1))
+                                     ; Should be on @x1 and @y1 ----^    
+                        )) :rule pbblast_bvand)"#: false,
+            }
+        }
+    }
+
+    #[test]
+    fn pbblast_bvand_8() {
+        test_cases! {
+            definitions = "
+            (declare-const x8 (_ BitVec 8))
+            (declare-const y8 (_ BitVec 8))
+        ",
+            "Valid 8-bit AND" {
+                r#"(step t1 (cl (=
+                            (bvand x8 y8)
+                            (@pbbterm (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 0) x8) z)
+                                                    (>= ((_ @int_of 0) y8) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x8) ((_ @int_of 0) y8)))
+                                                )) :named @r0)
+                                      (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 1) x8) z)
+                                                    (>= ((_ @int_of 1) y8) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 1) x8) ((_ @int_of 1) y8)))
+                                                )) :named @r1)
+                                       (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 2) x8) z)
+                                                    (>= ((_ @int_of 2) y8) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 2) x8) ((_ @int_of 2) y8)))
+                                                )) :named @r2)
+                                       (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 3) x8) z)
+                                                    (>= ((_ @int_of 3) y8) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 3) x8) ((_ @int_of 3) y8)))
+                                                )) :named @r3)
+                                       (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 4) x8) z)
+                                                    (>= ((_ @int_of 4) y8) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 4) x8) ((_ @int_of 4) y8)))
+                                                )) :named @r4)
+                                       (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 5) x8) z)
+                                                    (>= ((_ @int_of 5) y8) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 5) x8) ((_ @int_of 5) y8)))
+                                                )) :named @r5)
+                                       (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 6) x8) z)
+                                                    (>= ((_ @int_of 6) y8) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 6) x8) ((_ @int_of 6) y8)))
+                                                )) :named @r6)
+                                       (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 7) x8) z)
+                                                    (>= ((_ @int_of 7) y8) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 7) x8) ((_ @int_of 7) y8)))
+                                                )) :named @r7))
+                        )) :rule pbblast_bvand)"#: true,
+            }
+            "Invalid 8-bit AND (swapped order)" {
+                r#"(step t1 (cl (=
+                            (bvand x8 y8)
+                            (@pbbterm (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 0) x8) z)
+                                                    (>= ((_ @int_of 0) y8) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 0) x8) ((_ @int_of 0) y8)))
+                                                )) :named @r0)
+                                      (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 1) x8) z)
+                                                    (>= ((_ @int_of 1) y8) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 1) x8) ((_ @int_of 1) y8)))
+                                                )) :named @r1)
+                                       (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 2) x8) z)
+                                                    (>= ((_ @int_of 2) y8) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 2) x8) ((_ @int_of 2) y8)))
+                                                )) :named @r2)
+                                       (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 3) x8) z)
+                                                    (>= ((_ @int_of 3) y8) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 3) x8) ((_ @int_of 3) y8)))
+                                                )) :named @r3)
+                                       (! (choice ((z Int)) (and
+                                                    (>= z ((_ @int_of 4) x8))   ; swapped order, should be (>= ((_ @int_of 4) x8) z)
+                                                    (>= ((_ @int_of 4) y8) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 4) x8) ((_ @int_of 4) y8)))
+                                                )) :named @r4)
+                                       (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 5) x8) z)
+                                                    (>= ((_ @int_of 5) y8) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 5) x8) ((_ @int_of 5) y8)))
+                                                )) :named @r5)
+                                       (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 6) x8) z)
+                                                    (>= ((_ @int_of 6) y8) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 6) x8) ((_ @int_of 6) y8)))
+                                                )) :named @r6)
+                                       (! (choice ((z Int)) (and
+                                                    (>= ((_ @int_of 7) x8) z)
+                                                    (>= ((_ @int_of 7) y8) z)
+                                                    (>= (+ z 1) (+ ((_ @int_of 7) x8) ((_ @int_of 7) y8)))
+                                                )) :named @r7))
+                        )) :rule pbblast_bvand)"#: false,
+            }
+        }
+    }
 }
