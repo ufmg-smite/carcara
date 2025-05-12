@@ -2849,6 +2849,55 @@ mod tests {
     }
 
     #[test]
+    fn pbblast_bvxor_2_short_circuit() {
+        test_cases! {
+            definitions = "
+            (declare-const @x0 Int)
+            (declare-const @x1 Int)
+            (declare-const @y0 Int)
+            (declare-const @y1 Int)
+        ",
+            "Valid 2-bit XOR (short-circuit)" {
+                r#"(step t1 (cl (=
+                            (bvxor (@pbbterm @x0 @x1) (@pbbterm @y0 @y1))
+                            (@pbbterm
+                                (! (choice ((z Int)) (and
+                                        (>= (+ @x0 @y0) z)    ; (>= (+ xi yi) z)
+                                        (>= (+ z @x0) @y0)    ; (>= (+ z xi) yi)
+                                        (>= (+ z @y0) @x0)    ; (>= (+ z yi) xi)
+                                        (>= 2 (+ z @x0 @y0))  ; (>= 2 (+ z xi yi))
+                                    )) :named @r0)
+                                (! (choice ((z Int)) (and
+                                        (>= (+ @x1 @y1) z)    ; (>= (+ xi yi) z)
+                                        (>= (+ z @x1) @y1)    ; (>= (+ z xi) yi)
+                                        (>= (+ z @y1) @x1)    ; (>= (+ z yi) xi)
+                                        (>= 2 (+ z @x1 @y1))  ; (>= 2 (+ z xi yi))
+                                    )) :named @r1))
+                    )) :rule pbblast_bvxor)"#: true,
+            }
+
+            "Invalid 2-bit XOR (wrong inequality bound)" {
+                r#"(step t1 (cl (=
+                            (bvxor (@pbbterm @x0 @x1) (@pbbterm @y0 @y1))
+                            (@pbbterm
+                                (! (choice ((z Int)) (and
+                                        (>= (+ @x0 @y0) z)    
+                                        (>= (+ z @x0) @y0)    
+                                        (>= (+ z @y0) @x0)    
+                                        (>= 1 (+ z @x0 @y0))  ; SHOULD BE (>= 2 (+ z xi yi))
+                                    )) :named @r0)
+                                (! (choice ((z Int)) (and
+                                        (>= (+ @x1 @y1) z)    
+                                        (>= (+ z @x1) @y1)    
+                                        (>= (+ z @y1) @x1)    
+                                        (>= 2 (+ z @x1 @y1))  
+                                    )) :named @r1))
+                    )) :rule pbblast_bvxor)"#: false,
+            }
+        }
+    }
+
+    #[test]
     fn pbblast_bvxor_8() {
         test_cases! {
             definitions = "
