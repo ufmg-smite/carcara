@@ -107,7 +107,7 @@ pub enum CheckerError {
     WrongNumberOfTermsInOp(Operator, Range, usize),
 
     #[error("expected term '{1}' to appear in '{0}' term")]
-    TermDoesntApperInOp(Operator, Rc<Term>),
+    TermDoesntAppearInOp(Operator, Rc<Term>),
 
     #[error("expected {1} terms in clause of step '{0}', got {2}")]
     WrongLengthOfPremiseClause(String, Range, usize),
