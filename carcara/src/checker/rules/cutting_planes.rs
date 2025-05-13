@@ -183,8 +183,14 @@ pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
 
     // Verify constants match (with slack)
     rassert!(
-        constant_l.clone() + constant_r.clone() == constant_c + slack.clone(),
-        CheckerError::ExpectedInteger(constant_l.clone() + constant_r.clone(), conclusion.clone())
+        constant_l.clone() + constant_r.clone() == constant_c.clone() + slack.clone(),
+        CheckerError::Explanation(format!(
+            "Expected {} + {} == {} + {} ",
+            constant_l.clone(),
+            constant_r.clone(),
+            constant_c.clone(),
+            slack.clone()
+        ))
     );
 
     // Verify premise and conclusion share same keys
