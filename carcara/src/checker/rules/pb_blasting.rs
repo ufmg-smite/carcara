@@ -1,6 +1,6 @@
 use super::{assert_eq, RuleArgs, RuleResult};
 use crate::{
-    ast::{pool::TermPool, Rc, Sort, Term},
+    ast::{Rc, Sort, Term, TermPool},
     checker::error::CheckerError,
 };
 use rug::Integer;
@@ -163,15 +163,7 @@ pub fn pbblast_bveq(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
 
     // Check that the summations have the correct structure.
     // (For equality the order is: sum_x for x and sum_y for y.)
-    if let Some(pbb_x) = match_term!((pbbterm ...) = x) {
-        // Case when x is application of `@pbbterm` so we must short-circuit the indexing
-        let pbb_y = match_term_err!((pbbterm ...) = y)?;
-        check_pbblast_sum_short_circuit(pbb_x, sum_x)?;
-        check_pbblast_sum_short_circuit(pbb_y, sum_y)
-    } else {
-        check_pbblast_sum(pool, x, sum_x)?;
-        check_pbblast_sum(pool, y, sum_y)
-    }
+    check_pbblast_constraint(pool, x, y, sum_x, sum_y)
 }
 
 /// Implements the unsigned-less-than rule.
