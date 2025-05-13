@@ -73,6 +73,10 @@ pub enum ParserError {
     #[error("'{0}' is not a function sort")]
     NotAFunction(Sort), // TODO: This should also carry the actual function term
 
+    /// A term that is not a function was used as a function.
+    #[error("'{0}' cannot be matched to '{1}'")]
+    IncompatibleSorts(Sort, Sort),
+
     /// The parser encountered an identifier that was not defined.
     #[error("identifier '{0}' is not defined")]
     UndefinedIden(String),
