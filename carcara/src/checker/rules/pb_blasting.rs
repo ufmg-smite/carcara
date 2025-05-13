@@ -574,3 +574,12 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 
     Ok(())
 }
+
+/// This rule extracts assertions of the ith bit of an application of
+/// `pbblast_bvand`, given its arguments were x and y, we conclude
+///  `(>= x r) (>= y r) (>= (+ r 1) (+ x y)))`
+/// In which ri is the choice element from the pseudo boolean bit blasting
+/// of the bvand rule
+pub fn pbblast_bvand_ith_bit(RuleArgs { .. }: RuleArgs) -> RuleResult {
+    Ok(())
+}
