@@ -3732,17 +3732,17 @@ fn pbblast_bvand_8() {
 #[test]
 fn pbblast_bvand_ith_bit() {
     test_cases! {
+        // (choice ((z Int)) (and (>= x z) (>= y z) (>= (+ z 1) (+ x y))))
         definitions = "
             (declare-const x Int)
-            (declare-const x Int) 
-            ;;                  v--- Choice failing the parser
-            (declare-const r (choice ((z Int)) (and (>= x z) (>= y z) (>= (+ z 1) (+ x y)))))
-       ",
+            (declare-const y Int) 
+            (declare-fun r () Int)
+        ",
         "Valid ith bit" {
             r#"(step t1 (cl (and (>= x r)
                                  (>= y r)
                                  (>= (+ r 1) (+ x y)))
-            ) :rule pbblast_bvand_ith_bit :args (x y)"#: true,
+            ) :rule pbblast_bvand_ith_bit :args (x y))"#: true,
         }
     }
 }
