@@ -1,31 +1,36 @@
-use super::Term;
+use super::{assert_clause_len, assert_num_args, assert_num_premises, RuleArgs, RuleResult, Term};
 use crate::checker::error::CheckerError;
-use crate::checker::rules::{assert_clause_len, assert_num_args, assert_num_premises};
 use crate::checker::Rc;
 use rug::Integer;
 use std::collections::HashMap;
 
-use super::{RuleArgs, RuleResult};
-
 type PbHash = HashMap<String, Integer>;
 
-fn equals_integer_err(term: &Rc<Term>, expected: &Integer) -> Result<(), CheckerError> {
-    let n = term.as_integer_err()?;
-    rassert!(
-        &n == expected,
-        CheckerError::ExpectedInteger(n.clone(), term.clone())
-    );
-    Ok(())
-}
-
-fn get_pb_hashmap(pbsum: &[Rc<Term>]) -> Result<PbHash, CheckerError> {
+fn get_pb_hashmap(pbsum: &Rc<Term>) -> Result<PbHash, CheckerError> {
     let mut hm = HashMap::new();
+    let pbsum = if let Some(pbsum) = match_term!((+ ...) = pbsum) {
+        pbsum
+    } else {
+        std::slice::from_ref(pbsum)
+    };
+
+    //  Special case: single 0
+    if pbsum.len() == 1 {
+        if let Some(constant) = pbsum[0].as_integer() {
+            if constant == 0 {
+                return Ok(hm);
+            }
+            return Err(CheckerError::ExpectedInteger(
+                Integer::from(0),
+                pbsum[0].clone(),
+            ));
+        }
+    }
 
     for term in pbsum {
         let (coeff, literal) =
             // Negated literal  (* c (- 1 x1))
-            if let Some((coeff, (one, literal))) = match_term!((* coeff (- one literal)) = term) {
-                equals_integer_err(one,&Integer::from(1))?;
+            if let Some((coeff, (_, literal))) = match_term!((* coeff (- 1 literal)) = term) {
                 (coeff, format!("~{}",literal))
             // Plain literal    (* c x1)
             } else if let Some((coeff, literal)) = match_term!((* coeff literal) = term) {
@@ -41,22 +46,7 @@ fn get_pb_hashmap(pbsum: &[Rc<Term>]) -> Result<PbHash, CheckerError> {
 }
 
 fn unwrap_pseudoboolean_inequality(clause: &Rc<Term>) -> Result<(PbHash, Integer), CheckerError> {
-    // List of terms
-    let (pbsum, constant) = if let Some((pbsum, constant)) =
-        match_term!((>= (+ ...) constant) = clause)
-    {
-        // 2 or more terms in summation
-        (pbsum, constant)
-    } else if let Some((single_term, constant)) = match_term!((>= single_term constant) = clause) {
-        // Single term, no summation used
-        (std::slice::from_ref(single_term), constant)
-    } else {
-        return Err(CheckerError::Explanation(format!(
-            "Clause is neither summation nor single term: {}",
-            clause
-        )));
-    };
-
+    let (pbsum, constant) = match_term_err!((>= pbsum constant) = clause)?;
     let constant = constant.as_integer_err()?;
     let pbsum = get_pb_hashmap(pbsum)?;
     Ok((pbsum, constant))
@@ -193,8 +183,14 @@ pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
 
     // Verify constants match (with slack)
     rassert!(
-        constant_l.clone() + constant_r.clone() == constant_c + slack.clone(),
-        CheckerError::ExpectedInteger(constant_l.clone() + constant_r.clone(), conclusion.clone())
+        constant_l.clone() + constant_r.clone() == constant_c.clone() + slack.clone(),
+        CheckerError::Explanation(format!(
+            "Expected {} + {} == {} + {} ",
+            constant_l.clone(),
+            constant_r.clone(),
+            constant_c.clone(),
+            slack.clone()
+        ))
     );
 
     // Verify premise and conclusion share same keys
