@@ -18,7 +18,7 @@ pub enum Term {
     /// An application of a function to one or more terms.
     App(Rc<Term>, Vec<Rc<Term>>),
 
-    /// An application of a bulit-in operator to one or more terms.
+    /// An application of a built-in operator to one or more terms.
     Op(Operator, Vec<Rc<Term>>),
 
     /// A sort.
