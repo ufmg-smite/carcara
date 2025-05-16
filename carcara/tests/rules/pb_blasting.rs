@@ -3732,17 +3732,45 @@ fn pbblast_bvand_8() {
 #[test]
 fn pbblast_bvand_ith_bit() {
     test_cases! {
-        // (choice ((z Int)) (and (>= x z) (>= y z) (>= (+ z 1) (+ x y))))
         definitions = "
             (declare-const x Int)
             (declare-const y Int) 
-            (declare-fun r () Int)
+            (define-fun r () Int (choice ((z Int)) (and (>= x z) (>= y z) (>= (+ z 1) (+ x y)))))
+            (define-fun r_bad () Int (choice ((z Int)) (and (>= y z) (>= x z) (>= (+ z 1) (+ y x)))))
         ",
-        "Valid ith bit" {
+        "Valid bvand ith bit" {
             r#"(step t1 (cl (and (>= x r)
                                  (>= y r)
                                  (>= (+ r 1) (+ x y)))
             ) :rule pbblast_bvand_ith_bit :args (x y))"#: true,
         }
+        "Bvand ith bit - Swapped terms" {
+            r#"(step t1 (cl (and (>= y r)
+                                 (>= x r)
+                                 (>= (+ r 1) (+ x y)))
+            ) :rule pbblast_bvand_ith_bit :args (x y))"#: false,
+
+            r#"(step t1 (cl (and (>= x r)
+                                 (>= x r)
+                                 (>= (+ r 1) (+ x y)))
+            ) :rule pbblast_bvand_ith_bit :args (x y))"#: false,
+
+            r#"(step t1 (cl (and (>= y r)
+                                 (>= y r)
+                                 (>= (+ r 1) (+ x y)))
+            ) :rule pbblast_bvand_ith_bit :args (x y))"#: false,
+
+            r#"(step t1 (cl (and (>= x r)
+                                 (>= y r)
+                                 (>= (+ r 1) (+ y x)))
+            ) :rule pbblast_bvand_ith_bit :args (x y))"#: false,
+        }
+        "Bvand ith bit malformed choice" {
+            r#"(step t1 (cl (and (>= x r_bad)
+                                 (>= y r_bad)
+                                 (>= (+ r_bad 1) (+ x y)))
+            ) :rule pbblast_bvand_ith_bit :args (x y))"#: false,
+        }
+
     }
 }

@@ -562,7 +562,7 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
             CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
         );
 
-        // c3 : (>= z (+ @x0 @y0 -1))
+        // c3 : (>= (+ z 1) (+ @x0 @y0))
         let ((zc, _), (xic, yic)) = match_term_err!((>= (+ z 1) (+ xi yi)) = c3)?;
         rassert!(
             zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
@@ -580,6 +580,31 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 ///  `(>= x r) (>= y r) (>= (+ r 1) (+ x y)))`
 /// In which ri is the choice element from the pseudo boolean bit blasting
 /// of the bvand rule
-pub fn pbblast_bvand_ith_bit(RuleArgs { .. }: RuleArgs) -> RuleResult {
+pub fn pbblast_bvand_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    let x = &args[0];
+    let y = &args[1];
+    let (c1, c2, c3) = match_term_err!((and c1 c2 c3) = &conclusion[0])?;
+
+    // Build the expected choice term
+    // `(choice ((z Int)) (and (>= x z) (>= y z) (>= (+ z 1) (+ x y))))`
+    let r = build_term!(pool, (choice {Term::new_int(0)}));
+
+    // c1 : (>= x r)
+    let (xc, rc) = match_term_err!((>= x r) = c1)?;
+    assert_eq(xc, x)?;
+    // rassert!(
+    //     zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
+    //     CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+    // );
+
+    // c2 : (>= y r)
+    let (yc, rc) = match_term_err!((>= y r) = c2)?;
+    assert_eq(yc, y)?;
+
+    // c3 : (>= (+ r 1) (+ x y))
+    let ((r, _), (x, y)) = match_term_err!((>= (+ r 1) (+ x y)) = c3)?;
+    assert_eq(xc, x)?;
+    assert_eq(yc, y)?;
+
     Ok(())
 }
