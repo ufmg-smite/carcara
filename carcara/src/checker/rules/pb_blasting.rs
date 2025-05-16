@@ -593,7 +593,8 @@ pub fn pbblast_bvand_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) 
     // let ter = crate::ast::Term::Binder(crate::ast::Binder::Choice, (), ());
 
     // TODO 2. Extend the macro to build choice terms
-    // let r = build_term!(pool, (choice {Term::new_int(0)}));
+    // let r = build_term!(pool, (choice ((z Int)) (0)) );
+    // let r = build_term!(pool, (choice ((z Int)) (and (>= x z) (>= y z) (>= (+ z 1) (+ x y)))) );
 
     // c1 : (>= x r)
     let (xc, rc) = match_term_err!((>= x r) = c1)?;

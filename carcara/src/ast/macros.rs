@@ -281,13 +281,18 @@ macro_rules! build_term {
     }};
     ($pool:expr, false) => { $pool.bool_false() };
     // TODO: Match on proper choice terms
-    ($pool:expr, (choice $args:tt )) => {{
-        // let term = $crate::ast::Term::Op(
-        //     match_term!(@GET_VARIANT $op),
-        //     vec![ $(build_term!($pool, $args)),+ ],
-        // );
-        // $pool.add(term)
-        println!("build choice!");
+    ($pool:expr, (choice (($z:ident $type:ty)) $($args:tt)+ )) => {{
+    //     // let term = $crate::ast::Term::Op(
+    //     //     match_term!(@GET_VARIANT $op),
+    //     //     vec![ $(build_term!($pool, $args)),+ ],
+    //     // );
+    //     // $pool.add(term)
+        println!("build choice with:");
+        println!("$z={:?}",$z);
+        $(
+        println!("$args={:?}",$args);
+        )+
+
         $pool.bool_true();
     }};
     ($pool:expr, $int:literal) => { $pool.add(Term::Const($crate::ast::Constant::Integer($int.into()))) };
