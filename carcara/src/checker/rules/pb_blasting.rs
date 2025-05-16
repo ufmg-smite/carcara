@@ -587,7 +587,9 @@ pub fn pbblast_bvand_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) 
 
     // Build the expected choice term
     // `(choice ((z Int)) (and (>= x z) (>= y z) (>= (+ z 1) (+ x y))))`
-    let r = build_term!(pool, (choice {Term::new_int(0)}));
+    // TODO 1. Build without the macro
+    // TODO 2. Extend the macro to build choice terms
+    // let r = build_term!(pool, (choice {Term::new_int(0)}));
 
     // c1 : (>= x r)
     let (xc, rc) = match_term_err!((>= x r) = c1)?;

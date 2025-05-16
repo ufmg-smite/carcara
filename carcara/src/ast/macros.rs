@@ -275,8 +275,21 @@ macro_rules! match_term_err {
 /// ```
 #[macro_export]
 macro_rules! build_term {
-    ($pool:expr, true) => { $pool.bool_true() };
+    ($pool:expr, true) => {{
+        println!("build true");
+        $pool.bool_true()
+    }};
     ($pool:expr, false) => { $pool.bool_false() };
+    // TODO: Match on proper choice terms
+    ($pool:expr, (choice $args:tt )) => {{
+        // let term = $crate::ast::Term::Op(
+        //     match_term!(@GET_VARIANT $op),
+        //     vec![ $(build_term!($pool, $args)),+ ],
+        // );
+        // $pool.add(term)
+        println!("build choice!");
+        $pool.bool_true();
+    }};
     ($pool:expr, $int:literal) => { $pool.add(Term::Const($crate::ast::Constant::Integer($int.into()))) };
     ($pool:expr, {$terminal:expr}) => { $terminal };
     ($pool:expr, ((_ $indexed_op:tt $($op_args:tt)+) $($args:tt)+)) => {{
@@ -301,6 +314,7 @@ macro_rules! build_term {
         );
         $pool.add(term)
     }};
+
 }
 
 /// Implements `FromStr` and `Display` for an enum, given a mapping from each variant to a string
