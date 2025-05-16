@@ -665,6 +665,11 @@ fn comp_simplify() {
             "(step t1 (cl (= (>= a a) true)) :rule comp_simplify)": true,
             "(step t1 (cl (= (>= 5.0 8.0) false)) :rule comp_simplify)": true,
         }
+        "Numerical constants using the `/` operator" {
+            // See: https://github.com/ufmg-smite/carcara/issues/85
+            "(step t1 (cl (= (<= (/ 1.0 20.0) (/ 1.0 10.0)) true)) :rule comp_simplify)": true,
+            "(step t1 (cl (= (<= (/ (- 1.0) 2.0) (/ (- 1.0) 4.0)) true)) :rule comp_simplify)": true,
+        }
     }
 }
 

@@ -641,7 +641,7 @@ pub fn comp_simplify(args: RuleArgs) -> RuleResult {
         simplify!(term {
             (< t_1 t_2): (t_1, t_2) => {
                 if let (Some(t_1), Some(t_2)) =
-                    (t_1.as_signed_number(), t_2.as_signed_number())
+                    (t_1.as_fraction(), t_2.as_fraction())
                 {
                     // t_1 < t_2 => phi, where t_1 and t_2 are numerical constants
                     pool.bool_constant(t_1 < t_2)
@@ -655,7 +655,7 @@ pub fn comp_simplify(args: RuleArgs) -> RuleResult {
             },
             (<= t_1 t_2): (t_1, t_2) => {
                 if let (Some(t_1), Some(t_2)) =
-                    (t_1.as_signed_number(), t_2.as_signed_number())
+                    (t_1.as_fraction(), t_2.as_fraction())
                 {
                     // t_1 <= t_2 => phi, where t_1 and t_2 are numerical constants
                     pool.bool_constant(t_1 <= t_2)
