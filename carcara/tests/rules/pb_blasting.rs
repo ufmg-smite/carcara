@@ -3734,9 +3734,9 @@ fn pbblast_bvand_ith_bit() {
     test_cases! {
         definitions = "
             (declare-const x Int)
-            (declare-const y Int) 
-            (define-fun r () Int (choice ((z Int)) (and (>= x z) (>= y z) (>= (+ z 1) (+ x y)))))
-            (define-fun r_bad () Int (choice ((z Int)) (and (>= y z) (>= x z) (>= (+ z 1) (+ y x)))))
+            (declare-const y Int)
+            (define-fun id ((x Int)) Int x)
+            (define-fun r () Int (choice ((z Int)) (and (>= x z) (>= y z) (>= (+ z 1) (+ x y))))) (define-fun r_bad () Int (choice ((z Int)) (and (>= y z) (>= x z) (>= (+ z 1) (+ y x)))))
         ",
         "Valid bvand ith bit" {
             r#"(step t1 (cl (and (>= x r)
