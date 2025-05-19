@@ -1,6 +1,6 @@
 use super::*;
 use pretty::RcDoc;
-use std::io::{self, empty};
+use std::io::{self};
 
 pub const DEFAULT_WIDTH: usize = 120;
 pub const DEFAULT_INDENT: isize = 4;
@@ -167,7 +167,7 @@ impl PrettyPrint for Term {
             Term::Nat(n) => RcDoc::text(format!("{}", n)),
             Term::Int(i) => {
                 if i.is_negative() {
-                    RcDoc::text(format!("~ {}", i.clone().abs()))
+                    RcDoc::text(format!("(— {})", i.clone().abs())) //FIXME: Carcara should use Operator::Minus insteand of Int with a negative value
                 } else {
                     RcDoc::text(format!("{}", i))
                 }
@@ -420,6 +420,13 @@ impl PrettyPrint for ProofStep {
             ProofStep::Symmetry => text("symmetry").append(semicolon()),
             ProofStep::Simplify => text("simplify").append(semicolon()),
             ProofStep::Set(name, def) => text("set").append(space()).append(text(name).append(is()).append(def.to_doc()).append(semicolon())),
+            ProofStep::Varmap(name, list) => text("set").append(space()).append(text(name).append(is()).append(
+                RcDoc::intersperse(
+                    list.into_iter().map(|term| term.to_doc()),
+                    text("⸬").spaces(),
+                ).append(text("⸬").spaces()).append(NIL)
+            ).append(semicolon())),
+            ProofStep::Why3 => text("why3").append(semicolon()),
         }
     }
 }

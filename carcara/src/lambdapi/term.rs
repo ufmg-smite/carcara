@@ -260,7 +260,7 @@ impl fmt::Display for Term {
                 )
             }
             Term::Nat(n) => write!(f, "{}", n),
-            Term::Int(i) if i.is_negative() => write!(f, "~ {}", i.clone().abs()),
+            Term::Int(i) if i.is_negative() => write!(f, "(— {})", i.clone().abs()),
             Term::Int(i) => write!(f, "{}", i),
             Term::Underscore => write!(f, "_"),
         }
@@ -279,7 +279,7 @@ impl From<Operator> for Term {
             Operator::Implies => "(⇒ᶜ)".into(),
             Operator::Distinct => "distinct".into(),
             Operator::Add => "(+)".into(),
-            Operator::Mult => "(×)".into(),
+            Operator::Mult => "(*)".into(),
             Operator::Sub => "(-)".into(),
             Operator::GreaterEq => "(≥)".into(),
             Operator::GreaterThan => "(>)".into(),
@@ -329,7 +329,7 @@ pub fn conv(term: &Rc<AletheTerm>, ctx: &crate::lambdapi::Context) -> Term {
                         args.into_iter().map(Into::into).collect_vec(),
                     ))),
                     Operator::Sub if args.len() == 1 => {
-                        Term::Terms(vec!["~".into(), args[0].clone()])
+                        Term::Terms(vec!["—".into(), args[0].clone()])
                     }
                     Operator::Sub if args.len() > 1 => {
                         let args = args.into_iter().map(Into::into).collect_vec();
@@ -355,7 +355,7 @@ pub fn conv(term: &Rc<AletheTerm>, ctx: &crate::lambdapi::Context) -> Term {
                     }
                     Operator::Mult => {
                         let args = args.into_iter().map(Into::into).collect_vec();
-                        let vs = itertools::intersperse(args.into_iter(), "×".into()).collect_vec();
+                        let vs = itertools::intersperse(args.into_iter(), "*".into()).collect_vec();
                         Term::Terms(vs)
                     }
                     Operator::RareList => {
@@ -436,7 +436,7 @@ impl From<&Rc<AletheTerm>> for Term {
                         args.into_iter().map(Into::into).collect_vec(),
                     ))),
                     Operator::Sub if args.len() == 1 => {
-                        Term::Terms(vec!["~".into(), args[0].clone()])
+                        Term::Terms(vec!["—".into(), args[0].clone()])
                     }
                     Operator::Sub if args.len() > 1 => {
                         let args = args.into_iter().map(Into::into).collect_vec();
@@ -462,7 +462,7 @@ impl From<&Rc<AletheTerm>> for Term {
                     }
                     Operator::Mult => {
                         let args = args.into_iter().map(Into::into).collect_vec();
-                        let vs = itertools::intersperse(args.into_iter(), "×".into()).collect_vec();
+                        let vs = itertools::intersperse(args.into_iter(), "*".into()).collect_vec();
                         Term::Terms(vs)
                     }
                     Operator::RareList => {
@@ -677,6 +677,7 @@ macro_rules! and {
 
 pub(crate) use and;
 
+
 macro_rules! forall {
     ([$( ($x:expr, $ty:expr) ),+ $(,)?], $term:expr) => {
         Term::Alethe(LTerm::Forall(Bindings(vec![$( SortedTerm( Box::new($x), Box::new($ty)) ),+ ]), Box::new($term)))
@@ -684,6 +685,7 @@ macro_rules! forall {
 }
 
 pub(crate) use forall;
+
 
 impl fmt::Display for LTerm {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

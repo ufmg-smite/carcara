@@ -4,14 +4,14 @@ use crate::ast::Constant;
 
 use super::*;
 
-pub fn translate_rare_simp(args: &Vec<Rc<AletheTerm>>) -> Proof {
+pub fn translate_rare_simp(clause: &Vec<Rc<AletheTerm>>, args: &Vec<Rc<AletheTerm>>) -> Proof {
     let (rare_rule, args) = args.split_first().unwrap();
 
     let rule: String =
         unwrap_match!(**rare_rule, crate::ast::Term::Const(Constant::String(ref s)) => s.clone());
 
     //FIXME: bugging rule
-    if rule == "bool-and-flatten" || rule == "bool-or-flatten" || rule == "arith-poly-norm" {
+    if rule == "bool-and-flatten" || rule == "bool-or-flatten" {
         return Proof(vec![ProofStep::Admit]);
     }
 
@@ -23,7 +23,29 @@ pub fn translate_rare_simp(args: &Vec<Rc<AletheTerm>>) -> Proof {
         "bool-impl-elim" => translate_bool_impl_elim(args),
         "bool-and-de-morgan" => translate_bool_and_de_morgan(args),
         "bool-or-de-morgan" => translate_bool_or_de_morgan(args),
-        "evaluate" => return Proof(vec![ProofStep::Admit]), //FIXME: Need external prover setup
+        "arith-poly-norm" => translate_arith_poly_norm(),
+        "evaluate" => {
+            let cl_first = clause.first().expect("evaluate can not be empty");
+            match  match_term!((= l r) = cl_first) {
+                Some((l, r)) if (r.is_bool_false() || r.is_bool_true())
+                    && (
+                    matches!(l.deref(), AletheTerm::Op(Operator::GreaterEq, _))
+                    || matches!(l.deref(), AletheTerm::Op(Operator::LessEq, _))
+                    || matches!(l.deref(), AletheTerm::Op(Operator::GreaterThan, _))
+                    || matches!(l.deref(), AletheTerm::Op(Operator::LessThan, _))
+                )
+                => {
+                    translate_evaluate_linear_arith()
+                },
+                Some((_l, r)) if (r.is_bool_false() || r.is_bool_true()) => {
+                    translate_evaluate_bool()
+                },
+                Some(_) => {
+                    translate_evaluate_eq_arith()
+                }
+                None => panic!("not well formed evaluate, expected t1 = t2"),
+            }
+        },
         r => {
             let args = args.into_iter().map(|term| term.into()).collect_vec();
             vec![ProofStep::Apply(Term::from(r), args, SubProofs(None))]
@@ -34,6 +56,50 @@ pub fn translate_rare_simp(args: &Vec<Rc<AletheTerm>>) -> Proof {
         apply "∨ᶜᵢ₁";
         inject(rewrites);
     })
+}
+
+/// Provide a proof term for `evaluate` rule that fold numeric constant.
+/// For example:
+/// ```
+/// (step ti (cl (= (* -16 1) -16)) :rule rare_rewrite :args ("evaluate"))
+/// ```
+fn translate_evaluate_eq_arith() -> Vec<ProofStep> {
+    lambdapi! {
+        simplify;
+        reflexivity;
+    }
+}
+
+/// Provide a proof term for `evaluate` rule that fold numeric constant.
+/// For example:
+/// ```
+/// (step tj (cl (= (>= 0 0) true)) :rule rare_rewrite :args ("evaluate"))
+/// ```
+fn translate_evaluate_linear_arith() -> Vec<ProofStep> {
+    vec![ProofStep::Admit]
+}
+
+/// Provide a proof term for the `evaluate` rule that fold boolean constant.
+/// For example:
+/// ```
+/// (step ti (cl (= (not true) false)) :rule rare_rewrite :args ("evaluate"))
+/// ```
+fn translate_evaluate_bool() -> Vec<ProofStep> {
+    lambdapi! {
+        simplify;
+        apply "prop_ext";
+        why3;
+    }
+}
+
+/// Use the RING solver to prove arith-poly-norm 
+fn translate_arith_poly_norm() -> Vec<ProofStep> {
+    vec![
+        ProofStep::Simplify,
+        ProofStep::Rewrite(true, Some("[x in _ = x]".into()), Term::from("inj"), vec![]),
+        ProofStep::Rewrite(true, Some("[x in x = _]".into()), Term::from("inj"), vec![]),
+        ProofStep::Reflexivity
+    ]
 }
 
 // /// Translate (define-rule* bool-or-false ((xs Bool :list) (ys Bool :list)) (or xs false ys) (or xs ys))
@@ -162,6 +228,7 @@ pub fn translate_simplify_step(rule: &str) -> Proof {
         "ac_simp" => translate_ac_simplify(),
         "all_simplify" => Proof(vec![ProofStep::Admit]),
         "bool_simplify" => Proof(vec![ProofStep::Admit]),
+        "comp_simplify" => Proof(vec![ProofStep::Admit]),
         r => unimplemented!("{}", r),
     }
 }

@@ -16,7 +16,6 @@ constant symbol ind_eqᶜ [a] [x y:τ a] : πᶜ (x = y) → Π p, πᶜ (p y) �
 // builtin "refl"  ≔ eq_reflᶜ; // : Π [a] (x:T a), P(x = x)
 // builtin "eqind" ≔ ind_eqᶜ; // : Π [a] x y, P(x = y) → Π p:T a → Prop, P(p y) → P(p x)
 
-
 notation ¬ prefix 35;
 
 // Use it to unfold the definition of `¬`.

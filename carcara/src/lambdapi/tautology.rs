@@ -1,5 +1,5 @@
 use super::*;
-use crate::ast::{Operator, Rc, Term as AletheTerm};
+use crate::ast::{Constant, Operator, Rc, Term as AletheTerm};
 use std::ops::Deref;
 
 /// Generate the proof term for the rule `trans` e.g.
@@ -131,24 +131,32 @@ pub fn translate_not_symm(premise: &str) -> TradResult<Proof> {
 }
 
 /// FIXME: admitted for now
-pub fn translate_and(_premise: &(String, &[Rc<AletheTerm>])) -> TradResult<Proof> {
-    // let mut conjonctions_vec = unwrap_match!(premise.1.first().unwrap().deref(), AletheTerm::Op(Operator::And, args) => args)
-    //     .into_iter()
-    //     .map(From::from)
-    //     .collect_vec();
+pub fn translate_and(
+    premise: &(String, &[Rc<AletheTerm>]),
+    args: &Vec<Rc<AletheTerm>>,
+) -> TradResult<Proof> {
+    let first_arg = args.first().expect("expected the position in :rule and");
+    assert!(first_arg.is_const());
 
-    // conjonctions_vec.push(Term::Alethe(LTerm::True));
+    let position = unwrap_match!(first_arg.as_ref() , AletheTerm::Const(Constant::Integer(d)) => d)
+        .to_u32()
+        .expect("Position is not a u32 in :rule and");
 
-    // let conjonctions = Term::Alethe(LTerm::NAnd(conjonctions_vec));
+    let premise_project = unary_clause_to_prf(premise.0.as_ref());
 
-    // let t_i = premise.0.clone();
+    let project_right = (0..position).fold(premise_project, |acc, _| terms!(id!("∧ᶜₑ₂"), acc));
 
-    // Ok(Proof(lambdapi! {
-    //     apply "and" (@conjonctions)
-    //     {  reflexivity; }
-    //     { apply t_i; };
-    // }))
-    Ok(Proof(vec![ProofStep::Admit]))
+    let conjonction_length = match_term!((and ...) = premise.1.first().unwrap())
+        .unwrap()
+        .len();
+
+    let projections = if conjonction_length == (position + 1) as usize {
+        ProofStep::Apply(project_right, vec![], SubProofs(None))
+    } else {
+        apply!(id!("∧ᶜₑ₁"), { project_right })
+    };
+
+    Ok(Proof(vec![apply!(id!("∨ᶜᵢ₁")), projections]))
 }
 
 pub fn translate_not_or(premise: &(String, &[Rc<AletheTerm>])) -> TradResult<Proof> {
@@ -875,5 +883,129 @@ mod tests_tautolog {
         );
 
         assert_eq!(t2, cmd_expected);
+    }
+
+    #[test]
+    fn test_and_translation1() {
+        let problem: &[u8] = b"
+            (declare-sort U 0)
+            (declare-fun a() U)
+            (declare-fun b() U)
+            (declare-fun c() U)
+            (declare-fun p(U) Bool)
+        ";
+        let proof = b"
+            (step t1 (cl (and (p a) (p b) (p c))) :rule hole)
+            (step t2 (cl (p b)) :rule and :premises (t1) :args (1))
+        ";
+        let (_, proof, _) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+
+        assert_eq!(2, proof.commands.len());
+
+        let res = translate_commands(&mut Context::default(), &mut proof.iter(), |id, t, ps| {
+            Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
+        })
+        .expect("translate and");
+
+        assert_eq!(2, res.len());
+
+        let t2 = res.last().unwrap().clone();
+
+        let t1 = unary_clause_to_prf("t1");
+
+        let cmd_expected = Command::Symbol(
+            None,
+            "t2".into(),
+            vec![],
+            cl!(terms!(id!("p"), id!("b"))),
+            Some(proof!(
+                apply!(id!("∨ᶜᵢ₁")),
+                apply!(id!("∧ᶜₑ₁"), { terms!(id!("∧ᶜₑ₂"), t1) })
+            )),
+        );
+
+        assert_eq!(t2, cmd_expected)
+    }
+
+    #[test]
+    fn test_and_translation2() {
+        let problem: &[u8] = b"
+            (declare-sort U 0)
+            (declare-fun a() U)
+            (declare-fun b() U)
+            (declare-fun c() U)
+            (declare-fun p(U) Bool)
+        ";
+        let proof = b"
+            (step t1 (cl (and (p a) (p b) (p c))) :rule hole)
+            (step t2 (cl (p a)) :rule and :premises (t1) :args (0))
+        ";
+        let (_, proof, _) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+
+        assert_eq!(2, proof.commands.len());
+
+        let res = translate_commands(&mut Context::default(), &mut proof.iter(), |id, t, ps| {
+            Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
+        })
+        .expect("translate and");
+
+        assert_eq!(2, res.len());
+
+        let t2 = res.last().unwrap().clone();
+
+        let t1 = unary_clause_to_prf("t1");
+
+        let cmd_expected = Command::Symbol(
+            None,
+            "t2".into(),
+            vec![],
+            cl!(terms!(id!("p"), id!("a"))),
+            Some(proof!(apply!(id!("∨ᶜᵢ₁")), apply!(id!("∧ᶜₑ₁"), { t1 }))),
+        );
+
+        assert_eq!(t2, cmd_expected)
+    }
+
+    #[test]
+    fn test_and_translation3() {
+        let problem: &[u8] = b"
+            (declare-sort U 0)
+            (declare-fun a() U)
+            (declare-fun b() U)
+            (declare-fun c() U)
+            (declare-fun d() U)
+            (declare-fun p(U) Bool)
+        ";
+        let proof = b"
+            (step t1 (cl (and (p a) (p b) (p c) (p d))) :rule hole)
+            (step t2 (cl (p d)) :rule and :premises (t1) :args (3))
+        ";
+        let (_, proof, _) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+
+        assert_eq!(2, proof.commands.len());
+
+        let res = translate_commands(&mut Context::default(), &mut proof.iter(), |id, t, ps| {
+            Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
+        })
+        .expect("translate and");
+
+        assert_eq!(2, res.len());
+
+        let t2 = res.last().unwrap().clone();
+
+        let t1 = unary_clause_to_prf("t1");
+
+        let cmd_expected = Command::Symbol(
+            None,
+            "t2".into(),
+            vec![],
+            cl!(terms!(id!("p"), id!("d"))),
+            Some(proof!(
+                apply!(id!("∨ᶜᵢ₁")),
+                ProofStep::Apply(terms!(id!("∧ᶜₑ₂"), terms!(id!("∧ᶜₑ₂"), terms!(id!("∧ᶜₑ₂"), t1.clone()))), vec![], SubProofs(None)),
+            )),
+        );
+
+        assert_eq!(t2, cmd_expected)
     }
 }

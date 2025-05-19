@@ -40,6 +40,7 @@ end;
 
 symbol ⇒ᶜ p q ≔ ¬ ¬ p ⇒ ¬ ¬ q; notation ⇒ᶜ infix right 10;
 
+// Intuitionist implication introduction in classical proof
 opaque symbol ⇒ᶜᵢ' [p q]: (πᶜ p → πᶜ q) → πᶜ (p ⇒ q) ≔
 begin
   simplify;
@@ -66,6 +67,27 @@ begin
   assume H;
   refine (H Hnnp Hq) 
 end;
+
+// Intuitionist implication elimination in classical proof
+opaque symbol ⇒ᶜₑ' [p q]: πᶜ (p ⇒ q) → πᶜ p → πᶜ q ≔
+begin
+  simplify;
+  assume p q Hpimpq Hnnp Hq;  
+  apply Hpimpq;
+  assume H;
+  apply Hnnp;
+  assume Hp;
+  refine  Hq (H Hp);
+end;
+
+opaque symbol ⇒ᶜ_in_IL [p q]: (π p → π q) → π (p ⇒ᶜ q)  ≔
+begin
+  simplify;
+  assume p q H1 H2 H3;
+  apply H2;
+  assume Hp; apply H3 (H1 Hp)
+end;
+
 
 symbol ∀ᶜ [a] p ≔ `∀ x : τ a, ¬ ¬ (p x); notation ∀ᶜ quantifier;
 
@@ -103,13 +125,17 @@ end;
 
 opaque symbol ∃ᶜₑ [a] p : πᶜ (∃ᶜ p) → Π q, (Π x:τ a, πᶜ (p x) → πᶜ q) → πᶜ q ≔
 begin
+  simplify;
   assume a p Hexp q H;
   assume Hnq;
   apply Hexp;
-  admit
-  // apply ∃ₑ _ H2;
-  // assume x Hnnp;
-  // apply (H x Hnnp Hnq);
+  assume H2;
+  apply Hnq;
+  apply @∃ₑ a (λ x, (p x ⇒ ⊥) ⇒ ⊥) H2;
+  assume x;
+  assume Hnnp;
+  apply ⊥ₑ;
+  refine (H x Hnnp) Hnq;
 end;
 
 symbol ∨ᶜ p q ≔ ¬ ¬ p ∨ ¬ ¬ q; notation ∨ᶜ infix right 20;
@@ -338,6 +364,32 @@ apply Hnp;
 refine Hp
 end;
 
+symbol ∀ᶜ_Π [a] (p: τ a → Prop) : πᶜ (∀ᶜ p) →  Π x, πᶜ (p x)  ≔
+begin
+simplify; assume a p; assume H x; 
+assume np;
+refine (H) _;
+assume H2;
+refine H2 x np;
+end;
+
+symbol IL_imp_Cl2 [a] (p: τ a → Prop) : π (∀ p) → πᶜ (∀ᶜ p)  ≔
+begin
+assume a p; simplify;
+assume H H1;
+apply H1;
+assume x;
+assume H2;
+refine (H2 (H x)); 
+end;
+
+symbol IL_imp_Cl3 [a] (p: τ a → Prop) : π (∀ p) → π (∀ᶜ p)  ≔
+begin
+  assume a p; simplify;
+  assume H x H2;
+  refine (H2 (H x)); 
+end;
+
 opaque πᶜ;
 opaque ∧ᶜ;
 opaque ∨ᶜ;
@@ -419,6 +471,11 @@ begin
       { refine ∧ᶜₑ₂ Hxyz }
     }
   };
+end;
+
+opaque symbol ∧ᶜ_⇒ᶜ [x y z] : πᶜ (((x ∧ᶜ y) ⇒ᶜ z) ⇔ᶜ (x ⇒ᶜ y ⇒ᶜ z)) ≔
+begin
+  admit
 end;
 
 opaque symbol ⇔ᶜ_refl [p] : πᶜ (p ⇔ᶜ p) ≔

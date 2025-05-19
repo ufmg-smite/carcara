@@ -1,3 +1,4 @@
+
 use rug::Integer;
 
 use super::*;
@@ -12,47 +13,138 @@ enum Op {
     Le,
 }
 
+const VARMAP_ID: &'static str = "varmap";
+
+fn eval_reify(t: Term) -> Term {
+    Term::Terms(vec![
+        Term::TermId("denote".into()),
+        Term::Terms(vec![
+            Term::TermId("reify".into()),
+            Term::Terms(vec![t]),
+        ]),
+    ])
+}
+
+fn op_into_operator(op: &Op) -> Operator {
+    match op {
+        Op::Eq => Operator::Equals,
+        Op::Ge => Operator::GreaterEq,
+        Op::Gt => Operator::GreaterThan,
+        Op::Lt => Operator::LessThan,
+        Op::Le => Operator::LessEq,
+    }
+}
+
 #[derive(Debug)]
 struct ReifiedInequality {
     lhs: Rc<AletheTerm>,
     rhs: Rc<AletheTerm>,
     op: Op,
     neg: bool,
+    name: String,
 }
 
-pub fn la_generic(clause: &[Rc<AletheTerm>], args: &Vec<Rc<AletheTerm>>) -> TradResult<Proof> {
-    let mut inequalities = clause
+fn inequalitie_with_alias_name(i: &ReifiedInequality) -> AletheTerm {
+    let op: Operator = op_into_operator(&i.op);
+    let lhs = Rc::new(AletheTerm::Const(Constant::String(format!("{}l", i.name))));
+    let rhs = Rc::new(AletheTerm::Const(Constant::String(format!("{}r", i.name))));
+
+    let ine = AletheTerm::Op(op, vec![lhs, rhs]);
+
+    if i.neg {
+        AletheTerm::Op(Operator::Not, vec![Rc::new(ine)])
+    } else {
+        ine
+    }
+}
+
+pub fn gen_proof_la_generic(
+    clause: &[Rc<AletheTerm>],
+    args: &Vec<Rc<AletheTerm>>,
+) -> Vec<ProofStep> {
+    let inequalities: Vec<ReifiedInequality> = get_inequalities_from_clause(clause);
+
+    let la_clause = clause
+        .iter()
+        //.map(|i| inequalitie_with_alias_name(i))
+        .map(Term::from)
+        .collect_vec();
+
+    // let sets = inequalities.iter().fold(vec![], |mut sets, i| {
+    //     sets.push(ProofStep::Set(format!("{}l", i.name), i.lhs.clone().into()));
+    //     sets.push(ProofStep::Set(format!("{}r", i.name), i.rhs.clone().into()));
+    //     sets
+    // });
+
+    let mut proof_la = vec![ProofStep::Apply(
+        Term::from("∨ᶜᵢ₁"),
+        vec![],
+        SubProofs(None),
+    )];
+
+    proof_la.append(&mut la_generic(inequalities, args).unwrap().0);
+
+    let id_temp_proof = String::from("Hla");
+
+    let ring_computation_proof = ProofStep::Have(
+        id_temp_proof.clone(),
+        Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(vec![
+            Term::Alethe(LTerm::NOr(la_clause)),
+        ]))))),
+        proof_la,
+    );
+
+    let mut proof: Vec<ProofStep> = vec![];
+
+    proof.append(&mut vec![
+        ring_computation_proof,
+        ProofStep::Simplify,
+        ProofStep::Rewrite(false, None, id!("or_identity_r"), vec![]),
+        ProofStep::Apply(unary_clause_to_prf(&id_temp_proof), vec![], SubProofs(None)),
+    ]);
+
+    proof
+}
+
+fn get_inequalities_from_clause(clause: &[Rc<AletheTerm>]) -> Vec<ReifiedInequality> {
+    clause
         .into_iter()
-        .map(|t| match t.deref() {
+        .enumerate()
+        .map(|(i, t)| match t.deref() {
             AletheTerm::Op(Operator::Equals, xs) => ReifiedInequality {
                 lhs: xs[0].clone(),
                 rhs: xs[1].clone(),
                 op: Op::Eq,
                 neg: false,
+                name: format!("H{}", i),
             },
             AletheTerm::Op(Operator::LessEq, xs) => ReifiedInequality {
                 lhs: xs[0].clone(),
                 rhs: xs[1].clone(),
                 op: Op::Le,
                 neg: false,
+                name: format!("H{}", i),
             },
             AletheTerm::Op(Operator::LessThan, xs) => ReifiedInequality {
                 lhs: xs[0].clone(),
                 rhs: xs[1].clone(),
                 op: Op::Lt,
                 neg: false,
+                name: format!("H{}", i),
             },
             AletheTerm::Op(Operator::GreaterThan, xs) => ReifiedInequality {
                 lhs: xs[0].clone(),
                 rhs: xs[1].clone(),
                 op: Op::Gt,
                 neg: false,
+                name: format!("H{}", i),
             },
             AletheTerm::Op(Operator::GreaterEq, xs) => ReifiedInequality {
                 lhs: xs[0].clone(),
                 rhs: xs[1].clone(),
                 op: Op::Ge,
                 neg: false,
+                name: format!("H{}", i),
             },
             AletheTerm::Op(Operator::Not, t) => match t.first().unwrap().deref() {
                 AletheTerm::Op(Operator::Equals, xs) => ReifiedInequality {
@@ -60,36 +152,90 @@ pub fn la_generic(clause: &[Rc<AletheTerm>], args: &Vec<Rc<AletheTerm>>) -> Trad
                     rhs: xs[1].clone(),
                     op: Op::Eq,
                     neg: true,
+                    name: format!("H{}", i),
                 },
                 AletheTerm::Op(Operator::LessEq, xs) => ReifiedInequality {
                     lhs: xs[0].clone(),
                     rhs: xs[1].clone(),
                     op: Op::Le,
                     neg: true,
+                    name: format!("H{}", i),
                 },
                 AletheTerm::Op(Operator::LessThan, xs) => ReifiedInequality {
                     lhs: xs[0].clone(),
                     rhs: xs[1].clone(),
                     op: Op::Lt,
                     neg: true,
+                    name: format!("H{}", i),
                 },
                 AletheTerm::Op(Operator::GreaterThan, xs) => ReifiedInequality {
                     lhs: xs[0].clone(),
                     rhs: xs[1].clone(),
                     op: Op::Gt,
                     neg: true,
+                    name: format!("H{}", i),
                 },
                 AletheTerm::Op(Operator::GreaterEq, xs) => ReifiedInequality {
                     lhs: xs[0].clone(),
                     rhs: xs[1].clone(),
                     op: Op::Ge,
                     neg: true,
+                    name: format!("H{}", i),
                 },
                 _ => unreachable!(),
             },
             _ => unreachable!(),
         })
+        .collect_vec()
+}
+
+fn sum_hyps(prefix: &str, suffix: &str, start: usize, end: usize) -> String {
+    let s = (start..end)
+        .into_iter()
+        .map(|i| format!("{}{}{}", prefix, i, suffix))
         .collect_vec();
+    s.join(" + ")
+}
+
+// TODO: Maybe optmise this function to reduce allocation?
+fn visit_arith_term(term: &AletheTerm) -> HashSet<AletheTerm> {
+    match term {
+        func @ AletheTerm::App(f, args) => HashSet::from([func.clone()]),
+        AletheTerm::Op(_f, args) => args
+            .into_iter()
+            .map(|a| visit_arith_term(&a))
+            .reduce(|acc, e| acc.union(&e).cloned().collect())
+            .unwrap_or(HashSet::new()),
+        var @ AletheTerm::Var(_, _) => HashSet::from([var.clone()]),
+        _ => HashSet::new(),
+    }
+}
+
+fn la_generic(
+    inequalities: Vec<ReifiedInequality>,
+    args: &Vec<Rc<AletheTerm>>,
+) -> TradResult<Proof> {
+    let mut inequalities = inequalities;
+
+    // let env_map_aletheterm: HashSet<AletheTerm> = inequalities
+    //     .iter()
+    //     .map(|i| {
+    //         visit_arith_term(&i.lhs)
+    //             .union(&visit_arith_term(&i.rhs))
+    //             .cloned()
+    //             .collect()
+    //     })
+    //     .reduce(|acc: HashSet<_>, e| acc.union(&e).cloned().collect())
+    //     .unwrap_or(HashSet::new());
+
+    //let env_map_as_vec: Vec<_> = env_map_aletheterm.iter().cloned().collect();
+    //let env_map = env_map_as_vec.into_iter().map(Term::from).collect_vec(); 
+
+    // We create alias to make generation of the proof easily
+    // inequalities.iter_mut().for_each(|i| {
+    //     i.lhs = Rc::new(AletheTerm::Const(Constant::String(format!("{}l", i.name))));
+    //     i.rhs = Rc::new(AletheTerm::Const(Constant::String(format!("{}r", i.name))));
+    // });
 
     let args = args
         .into_iter()
@@ -107,7 +253,7 @@ pub fn la_generic(clause: &[Rc<AletheTerm>], args: &Vec<Rc<AletheTerm>>) -> Trad
     //FIXME: only done for Eq for now
     // let mut step1 = vec![];
 
-    let step1 = inequalities
+    let mut step1 = inequalities
         .iter()
         .enumerate()
         .filter(|(i, l)| l.neg == false && l.op != Op::Eq)
@@ -159,40 +305,39 @@ pub fn la_generic(clause: &[Rc<AletheTerm>], args: &Vec<Rc<AletheTerm>>) -> Trad
         }
     }
 
-    println!("Step 1 {:?}", inequalities);
+    //println!("Step 1 {:?}", inequalities);
 
     // Step normalize < and ≤. The algorithm expect to work only with ⋈ = { >, = , ≥ }
     // If 𝜑 = a < b then 𝜑 = ~ a > ~ b
     // If 𝜑 = a ≤ b then 𝜑 = ~ a ≥ ~ b
-    let mut normalize_step = vec![
-        ProofStep::Try(Box::new(ProofStep::Rewrite(
-            false,
-            None,
-            id!("Zinv_lt_eq"),
-            vec![],
-        ))),
-        ProofStep::Try(Box::new(ProofStep::Rewrite(
-            false,
-            None,
-            id!("Zinv_le_eq"),
-            vec![],
-        ))),
-    ];
+    let mut normalize_step = vec![];
 
     for i in inequalities.iter_mut() {
         if i.op == Op::Lt {
             i.lhs = Rc::new(AletheTerm::Op(Operator::Sub, vec![i.lhs.clone()]));
             i.rhs = Rc::new(AletheTerm::Op(Operator::Sub, vec![i.rhs.clone()]));
             i.op = Op::Gt;
+            normalize_step.push(ProofStep::Try(Box::new(ProofStep::Rewrite(
+                false,
+                None,
+                id!("Zinv_lt_eq"),
+                vec![],
+            ))));
         }
         if i.op == Op::Le {
             i.lhs = Rc::new(AletheTerm::Op(Operator::Sub, vec![i.lhs.clone()]));
             i.rhs = Rc::new(AletheTerm::Op(Operator::Sub, vec![i.rhs.clone()]));
             i.op = Op::Ge;
+            normalize_step.push(ProofStep::Try(Box::new(ProofStep::Rewrite(
+                false,
+                None,
+                id!("Zinv_le_eq"),
+                vec![],
+            ))));
         }
     }
 
-    println!("Step Normalize {:?}", inequalities);
+    //println!("Step Normalize {:?}", inequalities);
 
     // step 3:
     let mut step3 = inequalities
@@ -228,16 +373,21 @@ pub fn la_generic(clause: &[Rc<AletheTerm>], args: &Vec<Rc<AletheTerm>>) -> Trad
         i.rhs = Rc::new(AletheTerm::Const(Constant::Integer(Integer::from(0))));
     }
 
-    println!("Step 3 {:?}", inequalities);
+    //println!("Step 3 {:?}", inequalities);
 
     // Now 𝜑 has the form s1 ⋈ d. If all variables in s1 are integer sorted: replace ⋈ d according to the table below.
     let mut step4 = inequalities
-    .iter()
-    .filter(|i| matches!(i.op, Op::Gt))
-    .map(|i| 
-        ProofStep::Rewrite(false, None, id!("Zgt_le_succ_r_eq"), vec![i.lhs.clone().into(), i.rhs.clone().into()])
-    ).collect_vec();
-
+        .iter()
+        .filter(|i| matches!(i.op, Op::Gt))
+        .map(|i| {
+            ProofStep::Rewrite(
+                false,
+                None,
+                id!("Zgt_le_succ_r_eq"),
+                vec![i.lhs.clone().into(), i.rhs.clone().into()],
+            )
+        })
+        .collect_vec();
 
     for i in inequalities.iter_mut() {
         if i.op == Op::Gt {
@@ -252,7 +402,7 @@ pub fn la_generic(clause: &[Rc<AletheTerm>], args: &Vec<Rc<AletheTerm>>) -> Trad
         }
     }
 
-    println!("Step 4 {:?}", inequalities);
+    //println!("Step 4 {:?}", inequalities);
 
     // step 5
     // If ⋈ is ≈ replace l with i ∈ 0..m by
@@ -348,65 +498,106 @@ pub fn la_generic(clause: &[Rc<AletheTerm>], args: &Vec<Rc<AletheTerm>>) -> Trad
     // Finally, the sum of the resulting literals is trivially contradictory.
     // The sum on the left-hand side is 0 and the right-hand side is > 0 (or ≥ 0 if ⋈ is >).
     //let sum =  inequalities.iter().(|acc, c.| acc = AletheTerm::Op(Operator::Add, );
-    let sets = inequalities
+    let mut sets = inequalities
         .iter()
         .enumerate()
         .map(|(counter, i)| {
             vec![
-                ProofStep::Set(format!("H{}lhs", counter), i.lhs.clone().into()),
-                ProofStep::Set(format!("H{}rhs", counter), i.rhs.clone().into()),
+                ProofStep::Set(format!("H{}l'", counter), i.lhs.clone().into()),
+                ProofStep::Set(format!("H{}r'", counter), i.rhs.clone().into()),
             ]
         })
-        .collect_vec();
+        .collect_vec()
+        .concat();
+
+    let ine_len = inequalities.len();
 
     //HACK: to be faster we generate the goal has a constant string
-    let left_sum = inequalities
-        .iter()
-        .enumerate()
-        .map(|(c, _)| format!("H{}lhs", c))
-        .collect_vec();
-    let left_sum = left_sum.join(" + ");
-    let right_sum = inequalities
-        .iter()
-        .enumerate()
-        .map(|(c, _)| format!("H{}rhs", c))
-        .collect_vec();
-    let right_sum = right_sum.join(" + ");
-
-    let final_sum = Term::from(AletheTerm::Op(
-        Operator::GreaterEq,
-        vec![
-            Rc::new(AletheTerm::Const(Constant::String(left_sum))),
-            Rc::new(AletheTerm::Const(Constant::String(right_sum))),
-        ],
-    ));
-
-    let mut pack: Term = Term::Terms(vec![id!("Zsum_geq_s"), id!("H0"), id!("H1")]);
-    inequalities.iter().enumerate().skip(2).for_each(|(i, _)| {
-        pack = Term::Terms(vec![
-            id!("Zsum_geq_s"),
-            pack.clone(),
-            format!("H{}", i).into(),
-        ])
-    });
-
-    let final_sum_have = ProofStep::Have(
-        "Hsum".to_string(),
-        Term::Alethe(LTerm::ClassicProof(Box::new(final_sum))),
-        vec![ProofStep::Apply(pack, vec![], SubProofs(None))],
+    let left_sum = Term::from(
+        sum_hyps("H", "l'", 0, ine_len), // inequalities
+                                         //     .iter()
+                                         //     .enumerate()
+                                         //     .map(|(i, _)| format!("H{}l'", i))
+                                         //     .join(" + "),
     );
 
-    let mut proof = step1;
+    let right_sum = Term::from(
+        // inequalities
+        //     .iter()
+        //     .enumerate()
+        //     .map(|(i, _)| format!("H{}r'", i))
+        //    .join(" + "),
+        sum_hyps("H", "r'", 0, ine_len),
+    );
+
+    // sets.push(ProofStep::Varmap(
+    //     VARMAP_ID.into(),
+    //     env_map,
+    // ));
+
+    //FIXME: support also Gt and Eq
+    let final_sum = Term::Terms(vec![
+        eval_reify(left_sum),
+        Term::from("≥"),
+        eval_reify(right_sum),
+    ]);
+
+    // We want to generate (Zsum_geq_s H0l' H0r' (H1l' + H2l') (H1r' + H2r') H0 (Zsum_geq_s H1l' H1r' H2l' H2r' H1 H2));
+    let mut pack: Term = Term::Terms(vec![
+        id!("Zsum_geq_s"),
+        id!(format!("H{}l'", ine_len - 2)),
+        id!(format!("H{}r'", ine_len - 2)),
+        id!(format!("H{}l'", ine_len - 1)),
+        id!(format!("H{}r'", ine_len - 1)),
+        id!(format!("H{}", ine_len - 2)),
+        id!(format!("H{}", ine_len - 1)),
+    ]);
+    inequalities
+        .iter()
+        .enumerate()
+        .rev()
+        .skip(2)
+        .for_each(|(i, _)| {
+            pack = Term::Terms(vec![
+                id!("Zsum_geq_s"),
+                id!(format!("H{}l'", i)),
+                id!(format!("H{}r'", i)),
+                Term::Terms(vec![Term::from(sum_hyps("H", "l'", i + 1, ine_len))]),
+                Term::Terms(vec![Term::from(sum_hyps("H", "r'", i + 1, ine_len))]),
+                format!("H{}", i).into(),
+                pack.clone(),
+            ])
+        });
+
+    let contradiction_hyp_name = "contra";
+
+    let contradiction = ProofStep::Have(
+        contradiction_hyp_name.to_string(),
+        Term::Alethe(LTerm::ClassicProof(Box::new(final_sum))),
+        vec![
+            ProofStep::Rewrite(false, None, Term::from("inj"), vec![]),
+            ProofStep::Rewrite(false, None, Term::from("inj"), vec![]),
+            ProofStep::Apply(pack, vec![], SubProofs(None)),
+        ],
+    );
+
+    let mut proof = vec![];
+    proof.append(&mut step1);
     proof.append(&mut normalize_step);
     proof.append(&mut step3);
     proof.append(&mut step4);
     proof.append(&mut step5);
     proof.append(&mut step2.concat());
-    proof.append(&mut sets.concat());
-    proof.push(final_sum_have);
+    proof.append(&mut sets);
+    proof.push(contradiction);
     proof.push(ProofStep::Apply(
-        "completude_lia".into(),
-        vec![underscore!(), underscore!(), id!("Hsum")],
+        Term::Terms(vec![Term::from("⇒ᶜₑ'"), Term::from(contradiction_hyp_name)]),
+        vec![],
+        SubProofs(None),
+    ));
+    proof.push(ProofStep::Apply(
+        Term::from("trivial"),
+        vec![],
         SubProofs(None),
     ));
 

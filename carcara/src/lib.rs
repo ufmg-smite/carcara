@@ -39,8 +39,8 @@ pub mod benchmarking;
 pub mod checker;
 mod drup;
 pub mod elaborator;
-pub mod parser;
 pub mod lambdapi;
+pub mod parser;
 mod resolution;
 pub mod slice;
 mod utils;
@@ -323,31 +323,33 @@ pub fn generate_lia_smt_instances<T: io::BufRead>(
     Ok(result)
 }
 
-
 pub fn produce_lambdapi_proof<'a, T: io::BufRead>(
     problem: T,
     proof: T,
     parser_config: parser::Config,
     checker_config: checker::Config,
     elaborator_config: elaborator::Config,
+    translate_config: lambdapi::Config,
 ) -> Result<lambdapi::output::ProofFile, Box<dyn std::error::Error>> {
-    let (problem, proof, mut pool) = parser::parse_instance(problem, proof, parser_config)?;
+    let (problem, mut proof, mut pool) = parser::parse_instance(problem, proof, parser_config)?;
 
-    let mut checker = checker::ProofChecker::new(&mut pool, checker_config);
-    checker.check(&problem, &proof)?;
+    if translate_config.no_elab == false {
+        let mut checker = checker::ProofChecker::new(&mut pool, checker_config);
+        checker.check(&problem, &proof)?;
 
-    let node = ast::ProofNode::from_commands(proof.commands);
-    let elaborated =
-        elaborator::Elaborator::new(&mut pool, &problem, elaborator_config)
+        let node = ast::ProofNode::from_commands(proof.commands);
+        let elaborated = elaborator::Elaborator::new(&mut pool, &problem, elaborator_config)
             .elaborate_with_default_pipeline(&node);
-    let elaborated = ast::Proof {
-        commands: elaborated.into_commands(),
-        ..proof
-    };
- 
+        proof = ast::Proof {
+            commands: elaborated.into_commands(),
+            ..proof
+        };
+    }
+
     Ok(lambdapi::produce_lambdapi_proof(
         problem.prelude,
-        elaborated,
+        proof,
         pool,
+        translate_config,
     )?)
 }

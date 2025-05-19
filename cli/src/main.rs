@@ -19,7 +19,6 @@ use git_version::git_version;
 use itertools::Itertools;
 use path_args::{get_instances_from_paths, infer_problem_path};
 use std::{
-    collections::HashSet,
     fs::File,
     io::{self, BufRead, BufWriter, IsTerminal, Write},
     path::Path,
@@ -452,9 +451,30 @@ struct TranslationOption {
     #[clap(long, short = 'o')]
     output_dir: Option<std::path::PathBuf>,
 
-    /// split the proof into multiple files that will contain `n` symbols
+    /// Split the proof into multiple files that will contain `n` symbols
     #[clap(long, short = 'n', requires = "output-dir")]
     segment_size: Option<usize>,
+
+    /// Try to prove hole step with the lambdapi tactic `why3`
+    #[clap(long, short = 'w')]
+    why3: bool,
+
+    /// Do not `check` and `elaborate` the proof before translating
+    #[clap(long)]
+    no_elab: bool,
+
+    /// Escape identifier with `{| x |}`.  
+    #[clap(long)]
+    escaped_id: bool,
+}
+
+impl From<TranslationOption> for lambdapi::Config {
+    fn from(val: TranslationOption) -> Self {
+        Self {
+            no_elab: val.no_elab,
+            why3: val.why3,
+        }
+    }
 }
 
 #[derive(ArgEnum, Clone)]
@@ -516,9 +536,9 @@ fn main() {
         Command::Elaborate(options) => {
             elaborate_command(options).and_then(|(res, pb, pf, mut pool)| {
                 if res {
-                    println!("holey");
+                    //println!("holey");
                 } else {
-                    println!("valid");
+                    //println!("valid");
                 }
                 ast::print_proof(&mut pool, &pb.prelude, &pf, !cli.no_print_with_sharing)?;
                 Ok(())
@@ -879,12 +899,18 @@ fn translate_to_lambdapi(options: TranslationOption) -> CliResult<()> {
 
     let (elab_config, _) = options.elaboration.into();
 
+    let config = lambdapi::Config {
+        why3: options.why3,
+        no_elab: options.no_elab,
+    };
+
     let pf = produce_lambdapi_proof(
         problem,
         proof,
         options.parsing.into(),
         options.checking.into(),
         elab_config,
+        config,
     )
     .map_err(|e| CliError::TranslationError(e))?;
 
