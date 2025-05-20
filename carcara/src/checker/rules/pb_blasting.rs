@@ -581,6 +581,46 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// In which ri is the choice element from the pseudo boolean bit blasting
 /// of the bvand rule
 pub fn pbblast_bvand_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    if let Some((_, id_fun)) = match_term!((= 3 id) = &conclusion[0]) {
+        println!("@@@@@@@@@@@@@@@Got here. id_fun = {id_fun}");
+        match id_fun.as_ref() {
+            Term::App(id, args) => {
+                println!("! {id} {args:?}");
+                let arg = &args[0];
+                let arg = arg.as_integer_err()?;
+                // assert_eq(arg, Integer::from(3));
+                rassert!(arg == Integer::from(3), CheckerError::UnknownRule);
+                // arg;
+
+                match id.as_ref() {
+                    Term::Var(name, var_type) => {
+                        rassert!(
+                            name == "x",
+                            CheckerError::Explanation(format!(
+                                "Should be name x but it's {}",
+                                name
+                            ))
+                        );
+                    }
+                    _ => println!("WRONGED"),
+                }
+
+                // Match the function body now
+                // let the_int = pool.add(crate::ast::Term::Sort(Sort::Int));
+                // let term = crate::ast::Term::Binder(
+                //     crate::ast::Binder::Lambda,
+                //     crate::ast::BindingList(vec![("x".into(), the_int.clone())]),
+                //     pool.add(crate::ast::Term::Var("x".into(), the_int)),
+                // );
+                // let term_in_the_pool = pool.add(term);
+                // // pool.add(id);
+                // assert_eq!(id, &term_in_the_pool);
+            }
+            _ => return Err(CheckerError::Unspecified),
+        }
+        return Ok(());
+    }
+
     let x = &args[0];
     let y = &args[1];
     let (c1, c2, c3) = match_term_err!((and c1 c2 c3) = &conclusion[0])?;
@@ -599,6 +639,10 @@ pub fn pbblast_bvand_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) 
     // c1 : (>= x r)
     let (xc, rc) = match_term_err!((>= x r) = c1)?;
     assert_eq(xc, x)?;
+
+    println!("What is rc?");
+    println!("{rc:?}");
+
     // rassert!(
     //     zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
     //     CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
