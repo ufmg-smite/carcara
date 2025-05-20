@@ -580,52 +580,21 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 fn build_bvand_ith_bit_choice_term(pool: &mut dyn TermPool) -> Rc<Term> {
     let the_int = pool.add(crate::ast::Term::Sort(Sort::Int));
     let var_z = Term::Var("z".into(), the_int.clone());
-    let z_in_the_pool = pool.add(var_z);
+    let z = pool.add(var_z);
     let var_x = Term::Var("x".into(), the_int.clone());
-    let x_in_the_pool = pool.add(var_x);
+    let x = pool.add(var_x);
     let var_y = Term::Var("y".into(), the_int.clone());
-    let y_in_the_pool = pool.add(var_y);
+    let y = pool.add(var_y);
 
-    let c1 = Term::Op(
-        Operator::GreaterEq,
-        vec![x_in_the_pool.clone(), z_in_the_pool.clone()],
-    );
-    let c1_in_the_pool = pool.add(c1);
+    let c1 = build_term!(pool,(>= {x.clone()} {z.clone()}));
 
-    let c2 = Term::Op(
-        Operator::GreaterEq,
-        vec![y_in_the_pool.clone(), z_in_the_pool.clone()],
-    );
-    let c2_in_the_pool = pool.add(c2);
+    let c2 = build_term!(pool,(>= {y.clone()} {z.clone()}));
 
-    let the_one = Term::Const(Constant::Integer(Integer::from(1)));
-    let one_in_the_pool = pool.add(the_one);
+    let c3 = build_term!(pool,(>= (+ {z.clone()} 1) (+ {x.clone()} {y.clone()})));
 
-    let z_plus_one = Term::Op(
-        Operator::Add,
-        vec![z_in_the_pool.clone(), one_in_the_pool.clone()],
-    );
-    let z_plus_one_in_the_pool = pool.add(z_plus_one);
-
-    let x_plus_y = Term::Op(
-        Operator::Add,
-        vec![x_in_the_pool.clone(), y_in_the_pool.clone()],
-    );
-    let x_plus_y_in_the_pool = pool.add(x_plus_y);
-
-    let c3 = Term::Op(
-        Operator::GreaterEq,
-        vec![z_plus_one_in_the_pool, x_plus_y_in_the_pool],
-    );
-    let c3_in_the_pool = pool.add(c3);
-
-    let body = Term::Op(
-        Operator::And,
-        vec![c1_in_the_pool, c2_in_the_pool, c3_in_the_pool],
-    );
-    let body_in_the_pool = pool.add(body);
+    let body = build_term!(pool,(and {c1} {c2} {c3}));
     let bindings = BindingList(vec![("z".into(), the_int.clone())]);
-    pool.add(Term::Binder(Binder::Choice, bindings, body_in_the_pool))
+    pool.add(Term::Binder(Binder::Choice, bindings, body))
 }
 
 /// This rule extracts assertions of the ith bit of an application of
