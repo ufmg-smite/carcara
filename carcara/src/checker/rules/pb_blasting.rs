@@ -1,6 +1,6 @@
 use super::{assert_eq, RuleArgs, RuleResult};
 use crate::{
-    ast::{Binder, BindingList, Constant, Operator, Rc, Sort, Term, TermPool},
+    ast::{Binder, Rc, Sort, Term, TermPool},
     checker::error::CheckerError,
 };
 use rug::Integer;
@@ -578,13 +578,10 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// Helper function to create the `pbblast_bvand_ith_bit` choice term
 /// `(choice ((z Int)) (and (>= x z) (>= y z) (>= (+ z 1) (+ x y))))`
 fn build_bvand_ith_bit_choice_term(pool: &mut dyn TermPool) -> Rc<Term> {
-    let the_int = pool.add(crate::ast::Term::Sort(Sort::Int));
-    let var_z = Term::Var("z".into(), the_int.clone());
-    let z = pool.add(var_z);
-    let var_x = Term::Var("x".into(), the_int.clone());
-    let x = pool.add(var_x);
-    let var_y = Term::Var("y".into(), the_int.clone());
-    let y = pool.add(var_y);
+    let int_sort = pool.add(crate::ast::Term::Sort(Sort::Int));
+    let z = pool.add(Term::Var("z".into(), int_sort.clone()));
+    let x = pool.add(Term::Var("x".into(), int_sort.clone()));
+    let y = pool.add(Term::Var("y".into(), int_sort.clone()));
 
     let c1 = build_term!(pool,(>= {x.clone()} {z.clone()}));
 
@@ -592,9 +589,7 @@ fn build_bvand_ith_bit_choice_term(pool: &mut dyn TermPool) -> Rc<Term> {
 
     let c3 = build_term!(pool,(>= (+ {z.clone()} 1) (+ {x.clone()} {y.clone()})));
 
-    let body = build_term!(pool,(and {c1} {c2} {c3}));
-    let bindings = BindingList(vec![("z".into(), the_int.clone())]);
-    pool.add(Term::Binder(Binder::Choice, bindings, body))
+    build_term!(pool,(choice (("z" Int)) (and {c1} {c2} {c3})))
 }
 
 /// This rule extracts assertions of the ith bit of an application of
@@ -608,14 +603,7 @@ pub fn pbblast_bvand_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) 
     let (c1, c2, c3) = match_term_err!((and c1 c2 c3) = &conclusion[0])?;
 
     // Build the expected choice term
-    // `(choice ((z Int)) (and (>= x z) (>= y z) (>= (+ z 1) (+ x y))))`
-
-    // TODO 1. Build without the macro (done in build_)
     let the_r = build_bvand_ith_bit_choice_term(pool);
-
-    // TODO 2. Extend the macro to build choice terms
-    // let r = build_term!(pool, (choice ((z Int)) (0)) );
-    // let r = build_term!(pool, (choice ((z Int)) (and (>= x z) (>= y z) (>= (+ z 1) (+ x y)))) );
 
     // c1 : (>= x r)
     let (xc, rc) = match_term_err!((>= x r) = c1)?;

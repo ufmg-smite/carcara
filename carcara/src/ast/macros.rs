@@ -280,20 +280,13 @@ macro_rules! build_term {
         $pool.bool_true()
     }};
     ($pool:expr, false) => { $pool.bool_false() };
-    // TODO: Match on proper choice terms
-    ($pool:expr, (choice (($z:ident $type:ty)) $($args:tt)+ )) => {{
-    //     // let term = $crate::ast::Term::Op(
-    //     //     match_term!(@GET_VARIANT $op),
-    //     //     vec![ $(build_term!($pool, $args)),+ ],
-    //     // );
-    //     // $pool.add(term)
-        println!("build choice with:");
-        println!("$z={:?}",$z);
-        $(
-        println!("$args={:?}",$args);
-        )+
-
-        $pool.bool_true();
+    // How to separate the (and c1 c2 c3) into another call to build_term
+    // so that an arbitrary term can sit there?
+    ($pool:expr, (choice (($z:literal $type:ty)) (and {$c1:expr} {$c2:expr} {$c3:expr}))) => {{
+        let int_sort = $pool.add($crate::ast::Term::Sort(Sort::Int));
+        let bindings = $crate::ast::BindingList(vec![($z.into(), int_sort.clone())]);
+        let body = build_term!($pool, (and {$c1} {$c2} {$c3}));
+        $pool.add(Term::Binder(Binder::Choice, bindings, body))
     }};
     ($pool:expr, $int:literal) => { $pool.add(Term::Const($crate::ast::Constant::Integer($int.into()))) };
     ($pool:expr, {$terminal:expr}) => { $terminal };
