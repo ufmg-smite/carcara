@@ -1,6 +1,6 @@
 use super::{assert_eq, RuleArgs, RuleResult};
 use crate::{
-    ast::{Rc, Sort, Term, TermPool},
+    ast::{Binder, BindingList, Constant, Operator, Rc, Sort, Term, TermPool},
     checker::error::CheckerError,
 };
 use rug::Integer;
@@ -575,51 +575,103 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     Ok(())
 }
 
+/// Helper function to create the `pbblast_bvand_ith_bit` choice term
+fn build_bvand_ith_bit_choice_term(pool: &mut dyn TermPool) -> Rc<Term> {
+    let the_int = pool.add(crate::ast::Term::Sort(Sort::Int));
+    let var_z = Term::Var("z".into(), the_int.clone());
+    let z_in_the_pool = pool.add(var_z);
+    let var_x = Term::Var("x".into(), the_int.clone());
+    let x_in_the_pool = pool.add(var_x);
+    let var_y = Term::Var("y".into(), the_int.clone());
+    let y_in_the_pool = pool.add(var_y);
+
+    let c1 = Term::Op(
+        Operator::GreaterEq,
+        vec![x_in_the_pool.clone(), z_in_the_pool.clone()],
+    );
+    let c1_in_the_pool = pool.add(c1);
+
+    let c2 = Term::Op(
+        Operator::GreaterEq,
+        vec![y_in_the_pool.clone(), z_in_the_pool.clone()],
+    );
+    let c2_in_the_pool = pool.add(c2);
+
+    let the_one = Term::Const(Constant::Integer(Integer::from(1)));
+    let one_in_the_pool = pool.add(the_one);
+
+    let z_plus_one = Term::Op(
+        Operator::Add,
+        vec![z_in_the_pool.clone(), one_in_the_pool.clone()],
+    );
+    let z_plus_one_in_the_pool = pool.add(z_plus_one);
+
+    let x_plus_y = Term::Op(
+        Operator::Add,
+        vec![x_in_the_pool.clone(), y_in_the_pool.clone()],
+    );
+    let x_plus_y_in_the_pool = pool.add(x_plus_y);
+
+    let c3 = Term::Op(
+        Operator::GreaterEq,
+        vec![z_plus_one_in_the_pool, x_plus_y_in_the_pool],
+    );
+    let c3_in_the_pool = pool.add(c3);
+
+    let body = Term::Op(
+        Operator::And,
+        vec![c1_in_the_pool, c2_in_the_pool, c3_in_the_pool],
+    );
+    let body_in_the_pool = pool.add(body);
+    let bindings = BindingList(vec![("z".into(), the_int.clone())]);
+    pool.add(Term::Binder(Binder::Choice, bindings, body_in_the_pool))
+}
+
 /// This rule extracts assertions of the ith bit of an application of
 /// `pbblast_bvand`, given its arguments were x and y, we conclude
 ///  `(>= x r) (>= y r) (>= (+ r 1) (+ x y)))`
 /// In which ri is the choice element from the pseudo boolean bit blasting
 /// of the bvand rule
 pub fn pbblast_bvand_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    if let Some((_, id_fun)) = match_term!((= 3 id) = &conclusion[0]) {
-        println!("@@@@@@@@@@@@@@@Got here. id_fun = {id_fun}");
-        match id_fun.as_ref() {
-            Term::App(id, args) => {
-                println!("! {id} {args:?}");
-                let arg = &args[0];
-                let arg = arg.as_integer_err()?;
-                // assert_eq(arg, Integer::from(3));
-                rassert!(arg == Integer::from(3), CheckerError::UnknownRule);
-                // arg;
+    // if let Some((r, id_fun)) = match_term!((= r id) = &conclusion[0]) {
+    //     println!("#! GOT HERE: r = {r}");
+    // println!("@@@@@@@@@@@@@@@Got here. id_fun = {id_fun}");
+    // match id_fun.as_ref() {
+    //     Term::App(id, args) => {
+    //         println!("! {id} {args:?}");
+    //         let arg = &args[0];
+    //         let arg = arg.as_integer_err()?;
+    //         // assert_eq(arg, Integer::from(3));
+    //         rassert!(arg == Integer::from(3), CheckerError::UnknownRule);
+    //         // arg;
 
-                match id.as_ref() {
-                    Term::Var(name, var_type) => {
-                        rassert!(
-                            name == "x",
-                            CheckerError::Explanation(format!(
-                                "Should be name x but it's {}",
-                                name
-                            ))
-                        );
-                    }
-                    _ => println!("WRONGED"),
-                }
+    //         // match id.as_ref() {
+    //         //     Term::Var(name, var_type) => {
+    //         //         rassert!(
+    //         //             name == "x",
+    //         //             CheckerError::Explanation(format!(
+    //         //                 "Should be name x but it's {}",
+    //         //                 name
+    //         //             ))
+    //         //         );
+    //         //     }
+    //         //     _ => println!("WRONGED"),
+    //         // }
 
-                // Match the function body now
-                // let the_int = pool.add(crate::ast::Term::Sort(Sort::Int));
-                // let term = crate::ast::Term::Binder(
-                //     crate::ast::Binder::Lambda,
-                //     crate::ast::BindingList(vec![("x".into(), the_int.clone())]),
-                //     pool.add(crate::ast::Term::Var("x".into(), the_int)),
-                // );
-                // let term_in_the_pool = pool.add(term);
-                // // pool.add(id);
-                // assert_eq!(id, &term_in_the_pool);
-            }
-            _ => return Err(CheckerError::Unspecified),
-        }
-        return Ok(());
-    }
+    //         // Match the function body now
+    //         let term_in_the_pool = pool.add(crate::ast::Term::Var("id".into(), the_int));
+    //         // // pool.add(id);
+    //         // assert_eq!(id, &term_in_the_pool);
+    //     }
+    //     Term::Const(c) => {
+    //         println!("COnst {c}");
+    //     }
+    //     _ => {
+    //         return Err(CheckerError::Unspecified);
+    //     }
+    // }
+    //     return Ok(());
+    // }
 
     let x = &args[0];
     let y = &args[1];
@@ -631,6 +683,13 @@ pub fn pbblast_bvand_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) 
     // TODO 1. Build without the macro
     // let bl: crate::checker::BindingList = ();
     // let ter = crate::ast::Term::Binder(crate::ast::Binder::Choice, (), ());
+    // let the_int = pool.add(crate::ast::Term::Sort(Sort::Int));
+    // let term = crate::ast::Term::Binder(
+    //     crate::ast::Binder::Lambda,
+    //     crate::ast::BindingList(vec![("x".into(), the_int.clone())]),
+    //     pool.add(crate::ast::Term::Var("x".into(), the_int)),
+    // );
+    // let term_in_the_pool = pool.add(term);
 
     // TODO 2. Extend the macro to build choice terms
     // let r = build_term!(pool, (choice ((z Int)) (0)) );
@@ -642,6 +701,61 @@ pub fn pbblast_bvand_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) 
 
     println!("What is rc?");
     println!("{rc:?}");
+    let the_r = build_bvand_ith_bit_choice_term(pool);
+    assert_eq(rc, &the_r)?;
+    // ! LETS GO INTO R!!
+    match rc.as_ref() {
+        Term::Binder(crate::ast::Binder::Choice, bindings, body) => {
+            println!("RIGHT ON! A CHOICE BINDER!");
+            // TODO: assert bindings is [("z",Sort::Int)]
+            match body.as_ref() {
+                Term::Op(crate::ast::Operator::And, ands) => {
+                    println!("RIGHT ON, A AND APPLICATION!");
+                    // TODO: assert ands.length == 3
+                    // match ands[0].as_ref() {
+                    //     Term::Op(crate::ast::Operator::GreaterEq, x_gt_z) => {
+                    //         println!("RIGHT ON, A >= APP!");
+                    //         // TODO: assert x_gt_z.length == 2
+                    //         match x_gt_z[0].as_ref() {
+                    //             Term::Var(x, type_int) => {
+                    //                 println!("RIGHT ON! Its a VAR({x},{type_int})!");
+                    //                 // TODO: assert x is "x", type_int is Sort::Int
+                    //             }
+                    //             _ => println!("HELL NAH"),
+                    //         }
+                    //         match x_gt_z[1].as_ref() {
+                    //             Term::Var(z, type_int) => {
+                    //                 println!("RIGHT ON! Its a VAR({z},{type_int})!");
+                    //                 // TODO: assert z is "z", type_int is Sort::Int
+                    //             }
+                    //             _ => println!("HELL NAH"),
+                    //         }
+                    //     }
+                    //     _ => println!("WTF BRO?? NOT >= ???"),
+                    // }
+
+                    match ands[2].as_ref() {
+                        Term::Op(Operator::GreaterEq, zone_ge_xy) => {
+                            println!("ITS A {zone_ge_xy:?}");
+                            match zone_ge_xy[0].as_ref() {
+                                Term::Op(Operator::Add, z_plus_one) => {
+                                    println!("ITS A {z_plus_one:?}");
+                                }
+                                _ => println!("NOT A ZIPLUS!"),
+                            }
+                        }
+                        _ => println!("NOT A DOCTOR!"),
+                    }
+                }
+                _ => println!("WTF??? NOT A AND APPS"),
+            }
+        }
+        _ => {
+            println!("WTF! NOT A BINDER ????");
+        }
+    }
+
+    // let () = rc.as_binder().ok_or(CheckerError::Unspecified)?;
 
     // rassert!(
     //     zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
