@@ -275,10 +275,7 @@ macro_rules! match_term_err {
 /// ```
 #[macro_export]
 macro_rules! build_term {
-    ($pool:expr, true) => {{
-        println!("build true");
-        $pool.bool_true()
-    }};
+    ($pool:expr, true) => { $pool.bool_true() };
     ($pool:expr, false) => { $pool.bool_false() };
     // How to separate the (and c1 c2 c3) into another call to build_term
     // so that an arbitrary term can sit there?
@@ -312,7 +309,6 @@ macro_rules! build_term {
         );
         $pool.add(term)
     }};
-
 }
 
 /// Implements `FromStr` and `Display` for an enum, given a mapping from each variant to a string
