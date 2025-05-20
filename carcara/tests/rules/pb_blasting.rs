@@ -3767,7 +3767,27 @@ fn pbblast_bvand_ith_bit() {
                                  (>= y r_bad)
                                  (>= (+ r_bad 1) (+ x y)))
                 ) :rule pbblast_bvand_ith_bit :args (x y))"#: false,
-        }
 
+            r#"(define-fun r () Int (choice ((z Int)) (and (>= x z) (>= y z) (>= (+ z 1) (+ x y)))))
+               (define-fun r_bad () Int (choice ((z Int)) (and (>= y z) (>= x z) (>= (+ z 1) (+ y x)))))
+               (step t1 (cl (and (>= x r)
+                                 (>= y r)
+                                 (>= (+ r_bad 1) (+ x y)))
+                ) :rule pbblast_bvand_ith_bit :args (x y))"#: false,
+
+            r#"(define-fun r () Int (choice ((z Int)) (and (>= x z) (>= y z) (>= (+ z 1) (+ x y)))))
+               (define-fun r_bad () Int (choice ((z Int)) (and (>= y z) (>= x z) (>= (+ z 1) (+ y x)))))
+               (step t1 (cl (and (>= x r)
+                                 (>= y r_bad)
+                                 (>= (+ r 1) (+ x y)))
+                ) :rule pbblast_bvand_ith_bit :args (x y))"#: false,
+
+            r#"(define-fun r () Int (choice ((z Int)) (and (>= x z) (>= y z) (>= (+ z 1) (+ x y)))))
+               (define-fun r_bad () Int (choice ((z Int)) (and (>= y z) (>= x z) (>= (+ z 1) (+ y x)))))
+               (step t1 (cl (and (>= x r_bad)
+                                 (>= y r)
+                                 (>= (+ r 1) (+ x y)))
+                ) :rule pbblast_bvand_ith_bit :args (x y))"#: false,
+        }
     }
 }

@@ -576,6 +576,7 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 }
 
 /// Helper function to create the `pbblast_bvand_ith_bit` choice term
+/// `(choice ((z Int)) (and (>= x z) (>= y z) (>= (+ z 1) (+ x y))))`
 fn build_bvand_ith_bit_choice_term(pool: &mut dyn TermPool) -> Rc<Term> {
     let the_int = pool.add(crate::ast::Term::Sort(Sort::Int));
     let var_z = Term::Var("z".into(), the_int.clone());
@@ -633,46 +634,6 @@ fn build_bvand_ith_bit_choice_term(pool: &mut dyn TermPool) -> Rc<Term> {
 /// In which ri is the choice element from the pseudo boolean bit blasting
 /// of the bvand rule
 pub fn pbblast_bvand_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    // if let Some((r, id_fun)) = match_term!((= r id) = &conclusion[0]) {
-    //     println!("#! GOT HERE: r = {r}");
-    // println!("@@@@@@@@@@@@@@@Got here. id_fun = {id_fun}");
-    // match id_fun.as_ref() {
-    //     Term::App(id, args) => {
-    //         println!("! {id} {args:?}");
-    //         let arg = &args[0];
-    //         let arg = arg.as_integer_err()?;
-    //         // assert_eq(arg, Integer::from(3));
-    //         rassert!(arg == Integer::from(3), CheckerError::UnknownRule);
-    //         // arg;
-
-    //         // match id.as_ref() {
-    //         //     Term::Var(name, var_type) => {
-    //         //         rassert!(
-    //         //             name == "x",
-    //         //             CheckerError::Explanation(format!(
-    //         //                 "Should be name x but it's {}",
-    //         //                 name
-    //         //             ))
-    //         //         );
-    //         //     }
-    //         //     _ => println!("WRONGED"),
-    //         // }
-
-    //         // Match the function body now
-    //         let term_in_the_pool = pool.add(crate::ast::Term::Var("id".into(), the_int));
-    //         // // pool.add(id);
-    //         // assert_eq!(id, &term_in_the_pool);
-    //     }
-    //     Term::Const(c) => {
-    //         println!("COnst {c}");
-    //     }
-    //     _ => {
-    //         return Err(CheckerError::Unspecified);
-    //     }
-    // }
-    //     return Ok(());
-    // }
-
     let x = &args[0];
     let y = &args[1];
     let (c1, c2, c3) = match_term_err!((and c1 c2 c3) = &conclusion[0])?;
@@ -680,16 +641,8 @@ pub fn pbblast_bvand_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) 
     // Build the expected choice term
     // `(choice ((z Int)) (and (>= x z) (>= y z) (>= (+ z 1) (+ x y))))`
 
-    // TODO 1. Build without the macro
-    // let bl: crate::checker::BindingList = ();
-    // let ter = crate::ast::Term::Binder(crate::ast::Binder::Choice, (), ());
-    // let the_int = pool.add(crate::ast::Term::Sort(Sort::Int));
-    // let term = crate::ast::Term::Binder(
-    //     crate::ast::Binder::Lambda,
-    //     crate::ast::BindingList(vec![("x".into(), the_int.clone())]),
-    //     pool.add(crate::ast::Term::Var("x".into(), the_int)),
-    // );
-    // let term_in_the_pool = pool.add(term);
+    // TODO 1. Build without the macro (done in build_)
+    let the_r = build_bvand_ith_bit_choice_term(pool);
 
     // TODO 2. Extend the macro to build choice terms
     // let r = build_term!(pool, (choice ((z Int)) (0)) );
@@ -698,78 +651,18 @@ pub fn pbblast_bvand_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) 
     // c1 : (>= x r)
     let (xc, rc) = match_term_err!((>= x r) = c1)?;
     assert_eq(xc, x)?;
-
-    println!("What is rc?");
-    println!("{rc:?}");
-    let the_r = build_bvand_ith_bit_choice_term(pool);
     assert_eq(rc, &the_r)?;
-    // ! LETS GO INTO R!!
-    match rc.as_ref() {
-        Term::Binder(crate::ast::Binder::Choice, bindings, body) => {
-            println!("RIGHT ON! A CHOICE BINDER!");
-            // TODO: assert bindings is [("z",Sort::Int)]
-            match body.as_ref() {
-                Term::Op(crate::ast::Operator::And, ands) => {
-                    println!("RIGHT ON, A AND APPLICATION!");
-                    // TODO: assert ands.length == 3
-                    // match ands[0].as_ref() {
-                    //     Term::Op(crate::ast::Operator::GreaterEq, x_gt_z) => {
-                    //         println!("RIGHT ON, A >= APP!");
-                    //         // TODO: assert x_gt_z.length == 2
-                    //         match x_gt_z[0].as_ref() {
-                    //             Term::Var(x, type_int) => {
-                    //                 println!("RIGHT ON! Its a VAR({x},{type_int})!");
-                    //                 // TODO: assert x is "x", type_int is Sort::Int
-                    //             }
-                    //             _ => println!("HELL NAH"),
-                    //         }
-                    //         match x_gt_z[1].as_ref() {
-                    //             Term::Var(z, type_int) => {
-                    //                 println!("RIGHT ON! Its a VAR({z},{type_int})!");
-                    //                 // TODO: assert z is "z", type_int is Sort::Int
-                    //             }
-                    //             _ => println!("HELL NAH"),
-                    //         }
-                    //     }
-                    //     _ => println!("WTF BRO?? NOT >= ???"),
-                    // }
-
-                    match ands[2].as_ref() {
-                        Term::Op(Operator::GreaterEq, zone_ge_xy) => {
-                            println!("ITS A {zone_ge_xy:?}");
-                            match zone_ge_xy[0].as_ref() {
-                                Term::Op(Operator::Add, z_plus_one) => {
-                                    println!("ITS A {z_plus_one:?}");
-                                }
-                                _ => println!("NOT A ZIPLUS!"),
-                            }
-                        }
-                        _ => println!("NOT A DOCTOR!"),
-                    }
-                }
-                _ => println!("WTF??? NOT A AND APPS"),
-            }
-        }
-        _ => {
-            println!("WTF! NOT A BINDER ????");
-        }
-    }
-
-    // let () = rc.as_binder().ok_or(CheckerError::Unspecified)?;
-
-    // rassert!(
-    //     zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
-    //     CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
-    // );
 
     // c2 : (>= y r)
     let (yc, rc) = match_term_err!((>= y r) = c2)?;
     assert_eq(yc, y)?;
+    assert_eq(rc, &the_r)?;
 
     // c3 : (>= (+ r 1) (+ x y))
-    let ((r, _), (x, y)) = match_term_err!((>= (+ r 1) (+ x y)) = c3)?;
+    let ((rc, _), (x, y)) = match_term_err!((>= (+ r 1) (+ x y)) = c3)?;
     assert_eq(xc, x)?;
     assert_eq(yc, y)?;
+    assert_eq(rc, &the_r)?;
 
     Ok(())
 }
