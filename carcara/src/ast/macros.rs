@@ -277,12 +277,10 @@ macro_rules! match_term_err {
 macro_rules! build_term {
     ($pool:expr, true) => { $pool.bool_true() };
     ($pool:expr, false) => { $pool.bool_false() };
-    // How to separate the (and c1 c2 c3) into another call to build_term
-    // so that an arbitrary term can sit there?
-    ($pool:expr, (choice (($z:literal $type:ty)) (and {$c1:expr} {$c2:expr} {$c3:expr}))) => {{
-        let int_sort = $pool.add($crate::ast::Term::Sort(Sort::Int));
-        let bindings = $crate::ast::BindingList(vec![($z.into(), int_sort.clone())]);
-        let body = build_term!($pool, (and {$c1} {$c2} {$c3}));
+    ($pool:expr, (choice (($z:literal $sort:ident)) $arg:tt)) => {{
+        let sort = $pool.add($crate::ast::Term::Sort(Sort::$sort));
+        let bindings = $crate::ast::BindingList(vec![($z.into(), sort)]);
+        let body = build_term!($pool, $arg);
         $pool.add(Term::Binder(Binder::Choice, bindings, body))
     }};
     ($pool:expr, $int:literal) => { $pool.add(Term::Const($crate::ast::Constant::Integer($int.into()))) };

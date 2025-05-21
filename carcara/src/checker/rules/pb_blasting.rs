@@ -577,19 +577,19 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 
 /// Helper function to create the `pbblast_bvand_ith_bit` choice term
 /// `(choice ((z Int)) (and (>= x z) (>= y z) (>= (+ z 1) (+ x y))))`
-fn build_bvand_ith_bit_choice_term(pool: &mut dyn TermPool) -> Rc<Term> {
+fn build_bvand_ith_bit_choice_term(
+    pool: &mut dyn TermPool,
+    x: &Rc<Term>,
+    y: &Rc<Term>,
+) -> Rc<Term> {
     let int_sort = pool.add(crate::ast::Term::Sort(Sort::Int));
     let z = pool.add(Term::Var("z".into(), int_sort.clone()));
-    let x = pool.add(Term::Var("x".into(), int_sort.clone()));
-    let y = pool.add(Term::Var("y".into(), int_sort.clone()));
 
-    let c1 = build_term!(pool,(>= {x.clone()} {z.clone()}));
-
-    let c2 = build_term!(pool,(>= {y.clone()} {z.clone()}));
-
-    let c3 = build_term!(pool,(>= (+ {z.clone()} 1) (+ {x.clone()} {y.clone()})));
-
-    build_term!(pool,(choice (("z" Int)) (and {c1} {c2} {c3})))
+    build_term!(pool,(choice (("z" Int)) (and
+         (>= {x.clone()} {z.clone()})
+         (>= {y.clone()} {z.clone()})
+         (>= (+ {z.clone()} 1) (+ {x.clone()} {y.clone()}))
+    )))
 }
 
 /// This rule extracts assertions of the ith bit of an application of
@@ -603,7 +603,7 @@ pub fn pbblast_bvand_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) 
     let (c1, c2, c3) = match_term_err!((and c1 c2 c3) = &conclusion[0])?;
 
     // Build the expected choice term
-    let the_r = build_bvand_ith_bit_choice_term(pool);
+    let the_r = build_bvand_ith_bit_choice_term(pool, x, y);
 
     // c1 : (>= x r)
     let (xc, rc) = match_term_err!((>= x r) = c1)?;
