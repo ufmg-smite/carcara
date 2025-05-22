@@ -1,6 +1,6 @@
-use super::{assert_eq, RuleArgs, RuleResult};
+use super::{assert_eq, assert_num_args, RuleArgs, RuleResult};
 use crate::{
-    ast::{Rc, Sort, Term, TermPool},
+    ast::{Binder, Rc, Sort, Term, TermPool},
     checker::error::CheckerError,
 };
 use rug::Integer;
@@ -562,7 +562,7 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
             CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
         );
 
-        // c3 : (>= z (+ @x0 @y0 -1))
+        // c3 : (>= (+ z 1) (+ @x0 @y0))
         let ((zc, _), (xic, yic)) = match_term_err!((>= (+ z 1) (+ xi yi)) = c3)?;
         rassert!(
             zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
@@ -571,6 +571,43 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         assert_eq(xic, xi)?;
         assert_eq(yic, yi)?;
     }
+
+    Ok(())
+}
+
+/// This rule extracts assertions of the ith bit of an application of
+/// `pbblast_bvand`, given its arguments were x and y, we conclude
+///  `(>= x r) (>= y r) (>= (+ r 1) (+ x y)))`
+/// In which ri is the choice element from the pseudo boolean bit blasting
+/// of the bvand rule
+pub fn pbblast_bvand_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_num_args(args, 2)?;
+    let x = &args[0];
+    let y = &args[1];
+    let (c1, c2, c3) = match_term_err!((and c1 c2 c3) = &conclusion[0])?;
+
+    // Build the expected choice term
+    let the_r = build_term!(pool,(choice (("z" Int)) (and
+         (>= {x.clone()} (let z Int))
+         (>= {y.clone()} (let z Int))
+         (>= (+ (let z Int) 1) (+ {x.clone()} {y.clone()}))
+    )));
+
+    // c1 : (>= x r)
+    let (xc, rc) = match_term_err!((>= x r) = c1)?;
+    assert_eq(xc, x)?;
+    assert_eq(rc, &the_r)?;
+
+    // c2 : (>= y r)
+    let (yc, rc) = match_term_err!((>= y r) = c2)?;
+    assert_eq(yc, y)?;
+    assert_eq(rc, &the_r)?;
+
+    // c3 : (>= (+ r 1) (+ x y))
+    let ((rc, _), (x, y)) = match_term_err!((>= (+ r 1) (+ x y)) = c3)?;
+    assert_eq(xc, x)?;
+    assert_eq(yc, y)?;
+    assert_eq(rc, &the_r)?;
 
     Ok(())
 }

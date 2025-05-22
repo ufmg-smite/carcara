@@ -11,7 +11,10 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
         let (mut problem, mut proof, mut pool) = parser::parse_instance(
             Cursor::new(definitions),
             Cursor::new(proof),
-            parser::Config::new(),
+            parser::Config {
+                apply_function_defs: true,
+                ..Default::default()
+            },
         )
         .unwrap_or_else(|e| panic!("parser error during test \"{}\": {}", test_name, e));
 

@@ -3728,3 +3728,74 @@ fn pbblast_bvand_8() {
         }
     }
 }
+
+#[test]
+fn pbblast_bvand_ith_bit() {
+    test_cases! {
+        definitions = "
+            (declare-const x Int)
+            (declare-const y Int)
+            (define-fun r ()      Int (choice ((z Int)) (and (>= x z) (>= y z) (>= (+ z 1) (+ x y)))))
+            (define-fun r_swap () Int (choice ((z Int)) (and (>= y z) (>= x z) (>= (+ z 1) (+ y x)))))
+        ",
+        "Valid bvand ith bit" {
+            r#"(step t1 (cl (and (>= x r) (>= y r) (>= (+ r 1) (+ x y)))
+                    ) :rule pbblast_bvand_ith_bit :args (x y))"#: true,
+
+            // Swapped params should also work
+            r#"(step t1 (cl (and (>= y r_swap) (>= x r_swap) (>= (+ r_swap 1) (+ y x)))
+                    ) :rule pbblast_bvand_ith_bit :args (y x))"#: true,
+        }
+        "Invalid args passed" {
+            r#"(step t1 (cl (and (>= x r) (>= y r) (>= (+ r 1) (+ x y)))
+                                            ;    v-- no args at all
+                    ) :rule pbblast_bvand_ith_bit )"#: false,
+
+            r#"(step t1 (cl (and (>= x r) (>= y r) (>= (+ r 1) (+ x y)))
+                                            ;            v-- missing y
+                    ) :rule pbblast_bvand_ith_bit :args (x))"#: false,
+
+            r#"(step t1 (cl (and (>= x r) (>= y r) (>= (+ r 1) (+ x y)))
+                                            ;            v-- missing x
+                    ) :rule pbblast_bvand_ith_bit :args (y))"#: false,
+
+            r#"(step t1 (cl (and (>= x r) (>= y r) (>= (+ r 1) (+ x y)))
+                                            ;                v-- r is left over
+                    ) :rule pbblast_bvand_ith_bit :args (x y r))"#: false,
+        }
+        "Bvand ith bit - Swapped terms" {
+            r#"(step t1 (cl (and (>= y r) (>= x r) (>= (+ r 1) (+ x y)))
+                    ) :rule pbblast_bvand_ith_bit :args (x y))"#: false,
+
+            r#"(step t1 (cl (and (>= x r) (>= x r) (>= (+ r 1) (+ x y)))
+                    ) :rule pbblast_bvand_ith_bit :args (x y))"#: false,
+
+            r#"(step t1 (cl (and (>= y r) (>= y r) (>= (+ r 1) (+ x y)))
+                    ) :rule pbblast_bvand_ith_bit :args (x y))"#: false,
+
+            r#"(step t1 (cl (and (>= x r) (>= y r) (>= (+ r 1) (+ y x)))
+                    ) :rule pbblast_bvand_ith_bit :args (x y))"#: false,
+        }
+        "Bvand ith bit malformed choice" {
+            r#"(step t1 (cl (and (>= x r_swap)
+                                 (>= y r_swap)
+                                 (>= (+ r_swap 1) (+ x y)))
+                    ) :rule pbblast_bvand_ith_bit :args (x y))"#: false,
+
+            r#"(step t1 (cl (and (>= x r)
+                                 (>= y r)
+                                 (>= (+ r_swap 1) (+ x y)))
+                    ) :rule pbblast_bvand_ith_bit :args (x y))"#: false,
+
+            r#"(step t1 (cl (and (>= x r)
+                                 (>= y r_swap)
+                                 (>= (+ r 1) (+ x y)))
+                    ) :rule pbblast_bvand_ith_bit :args (x y))"#: false,
+
+            r#"(step t1 (cl (and (>= x r_swap)
+                                 (>= y r)
+                                 (>= (+ r 1) (+ x y)))
+                    ) :rule pbblast_bvand_ith_bit :args (x y))"#: false,
+        }
+    }
+}

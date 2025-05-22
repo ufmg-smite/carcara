@@ -277,6 +277,16 @@ macro_rules! match_term_err {
 macro_rules! build_term {
     ($pool:expr, true) => { $pool.bool_true() };
     ($pool:expr, false) => { $pool.bool_false() };
+    ($pool:expr, (let $name:ident $sort:ident)) => {{
+        let sort = $pool.add($crate::ast::Term::Sort(Sort::$sort));
+        $pool.add($crate::ast::Term::new_var(stringify!($name), sort))
+    }};
+    ($pool:expr, (choice (($z:literal $sort:ident)) $arg:tt)) => {{
+        let sort = $pool.add($crate::ast::Term::Sort(Sort::$sort));
+        let bindings = $crate::ast::BindingList(vec![($z.into(), sort)]);
+        let body = build_term!($pool, $arg);
+        $pool.add(Term::Binder(Binder::Choice, bindings, body))
+    }};
     ($pool:expr, $int:literal) => { $pool.add(Term::Const($crate::ast::Constant::Integer($int.into()))) };
     ($pool:expr, {$terminal:expr}) => { $terminal };
     ($pool:expr, ((_ $indexed_op:tt $($op_args:tt)+) $($args:tt)+)) => {{

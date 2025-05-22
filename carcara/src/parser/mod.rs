@@ -31,7 +31,7 @@ pub struct Config {
     pub apply_function_defs: bool,
 
     /// If `true`, the parser will eliminate `let` bindings from terms during parsing. This is done
-    /// by replacing any occurence of a variable bound in the `let` binding with its corresponding
+    /// by replacing any occurrence of a variable bound in the `let` binding with its corresponding
     /// value.
     pub expand_lets: bool,
 
@@ -507,7 +507,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     fn interpret_div_as_real_lit(&mut self, a: &Rc<Term>, b: &Rc<Term>) -> Option<Rc<Term>> {
         // If the term is a division between two positive integer constants, and their GCD is 1,
         // then it should be interpreted as a rational literal. The only exception to this is the
-        // term '(/ 1 1)', which is still interpreted as a divison term.
+        // term '(/ 1 1)', which is still interpreted as a division term.
 
         let [a, b] = [a, b].map(|t| match t.as_ref() {
             Term::Const(Constant::Integer(i)) => Some(i),

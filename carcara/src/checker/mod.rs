@@ -488,6 +488,7 @@ impl<'c> ProofChecker<'c> {
             "pbblast_pbbconst" => pb_blasting::pbblast_pbbconst,
             "pbblast_bvxor" => pb_blasting::pbblast_bvxor,
             "pbblast_bvand" => pb_blasting::pbblast_bvand,
+            "pbblast_bvand_ith_bit" => pb_blasting::pbblast_bvand_ith_bit,
 
             // cutting planes rules
             "cp_addition" => cutting_planes::cp_addition,
