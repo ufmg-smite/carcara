@@ -3746,6 +3746,23 @@ fn pbblast_bvand_ith_bit() {
             r#"(step t1 (cl (and (>= y r_swap) (>= x r_swap) (>= (+ r_swap 1) (+ y x)))
                     ) :rule pbblast_bvand_ith_bit :args (y x))"#: true,
         }
+        "Invalid args passed" {
+            r#"(step t1 (cl (and (>= x r) (>= y r) (>= (+ r 1) (+ x y)))
+                                            ;    v-- no args at all
+                    ) :rule pbblast_bvand_ith_bit )"#: false,
+
+            r#"(step t1 (cl (and (>= x r) (>= y r) (>= (+ r 1) (+ x y)))
+                                            ;            v-- missing y
+                    ) :rule pbblast_bvand_ith_bit :args (x))"#: false,
+
+            r#"(step t1 (cl (and (>= x r) (>= y r) (>= (+ r 1) (+ x y)))
+                                            ;            v-- missing x
+                    ) :rule pbblast_bvand_ith_bit :args (y))"#: false,
+
+            r#"(step t1 (cl (and (>= x r) (>= y r) (>= (+ r 1) (+ x y)))
+                                            ;                v-- r is left over
+                    ) :rule pbblast_bvand_ith_bit :args (x y r))"#: false,
+        }
         "Bvand ith bit - Swapped terms" {
             r#"(step t1 (cl (and (>= y r) (>= x r) (>= (+ r 1) (+ x y)))
                     ) :rule pbblast_bvand_ith_bit :args (x y))"#: false,

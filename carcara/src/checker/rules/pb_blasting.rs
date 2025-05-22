@@ -1,4 +1,4 @@
-use super::{assert_eq, RuleArgs, RuleResult};
+use super::{assert_eq, assert_num_args, RuleArgs, RuleResult};
 use crate::{
     ast::{Binder, Rc, Sort, Term, TermPool},
     checker::error::CheckerError,
@@ -581,6 +581,7 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// In which ri is the choice element from the pseudo boolean bit blasting
 /// of the bvand rule
 pub fn pbblast_bvand_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_num_args(args, 2)?;
     let x = &args[0];
     let y = &args[1];
     let (c1, c2, c3) = match_term_err!((and c1 c2 c3) = &conclusion[0])?;
