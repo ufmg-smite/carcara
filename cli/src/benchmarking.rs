@@ -38,14 +38,15 @@ fn run_job<T: CollectResults + Default + Send>(
     let total = Instant::now();
 
     let parsing = Instant::now();
-    let (problem, proof, mut pool) = parser::parse_instance(
+    let (problem, proof, rules, mut pool) = parser::parse_instance(
         BufReader::new(File::open(job.problem_file)?),
         BufReader::new(File::open(job.proof_file)?),
+        None,
         parser_config,
     )?;
     let parsing = parsing.elapsed();
 
-    let mut checker = checker::ProofChecker::new(&mut pool, checker_config);
+    let mut checker = checker::ProofChecker::new(&mut pool, &rules, checker_config);
 
     let checking = Instant::now();
 

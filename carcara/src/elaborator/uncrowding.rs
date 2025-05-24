@@ -399,7 +399,8 @@ mod tests {
                 :premises (t1 t2 t3 t4 t5 t6 t7 t8)
                 :args (x true y true a true z true b true c true d true))
         ";
-        let (_, proof, mut pool) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+        let (_, proof, _, mut pool) =
+            parse_instance(problem, proof, None, parser::Config::new()).unwrap();
         let proof = ProofNode::from_commands(proof.commands);
         let ProofNode::Step(step) = proof.as_ref() else {
             unreachable!();
@@ -426,8 +427,9 @@ mod tests {
             (step t9.t6 (cl d w) :rule contraction :premises (t9.t5))
             (step t9 (cl w) :rule resolution :premises (t9.t6 t8) :args (d true))
         ";
-        let (_, expected) =
-            parse_instance_with_pool(problem, expected, parser::Config::new(), &mut pool).unwrap();
+        let (_, expected, _) =
+            parse_instance_with_pool(problem, expected, None, parser::Config::new(), &mut pool)
+                .unwrap();
         let expected = ProofNode::from_commands(expected.commands);
         assert!(compare_nodes(&expected, &got));
     }

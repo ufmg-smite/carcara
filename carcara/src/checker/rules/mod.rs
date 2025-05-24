@@ -3,7 +3,7 @@ use super::{
     ContextStack,
 };
 use crate::{
-    ast::*,
+    ast::{rules::Rules, *},
     utils::{Range, TypeName},
 };
 use std::time::Duration;
@@ -18,6 +18,7 @@ pub struct RuleArgs<'a> {
     pub(super) args: &'a [Rc<Term>],
     pub(super) pool: &'a mut dyn TermPool,
     pub(super) context: &'a mut ContextStack,
+    pub(super) rare_rules: &'a Rules,
 
     // For rules that end a subproof, we need to pass the previous command in the subproof that it
     // is closing, because it may be implicitly referenced, and it is not given as premises. If a
@@ -155,6 +156,70 @@ fn assert_is_bool_constant(got: &Rc<Term>, expected: bool) -> RuleResult {
     Ok(())
 }
 
+#[cfg(test)]
+fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
+    use crate::{checker, parser};
+    use std::io::Cursor;
+
+    for (i, (proof, expected)) in cases.iter().enumerate() {
+        // This parses the definitions again for every case, which is not ideal
+        let (mut problem, mut proof, rules, mut pool) = parser::parse_instance(
+            Cursor::new(definitions),
+            Cursor::new(proof),
+            None,
+            parser::Config::new(),
+        )
+        .unwrap_or_else(|e| panic!("parser error during test \"{}\": {}", test_name, e));
+
+        // Since rule tests often use `assume` commands to introduce premises, we search the proof
+        // for all `assume`d terms and retroactively add them as the problem premises, to avoid
+        // checker errors on the `assume`s
+        problem.premises = proof
+            .commands
+            .iter()
+            .filter_map(|c| match c {
+                ProofCommand::Assume { term, .. } => Some(term.clone()),
+                _ => None,
+            })
+            .collect();
+
+        // All proofs must eventually reach the empty clause, so to avoid having to add a dummy
+        // `(step end (cl) :rule hole)` to every rule test, we add this dummy step here
+        proof.commands.push(ProofCommand::Step(ProofStep {
+            id: "end".into(),
+            clause: Vec::new(),
+            rule: "hole".into(),
+            premises: Vec::new(),
+            args: Vec::new(),
+            discharge: Vec::new(),
+        }));
+
+        let mut checker = checker::ProofChecker::new(&mut pool, &rules, checker::Config::new());
+        let got = checker.check(&problem, &proof).is_ok();
+        assert_eq!(
+            *expected, got,
+            "test case \"{}\" index {} failed",
+            test_name, i
+        );
+    }
+}
+
+#[cfg(test)]
+macro_rules! test_cases {
+    (
+        definitions = $defs:expr,
+        $($name:literal { $($proof:literal: $exp:literal,)* } )*
+    ) => {{
+        let definitions: &str = $defs;
+        $({
+            let name: &str = $name;
+            let cases = [ $(($proof, $exp),)* ];
+            $crate::checker::rules::run_tests(name, definitions, &cases);
+        })*
+    }};
+}
+
+// Since the rule submodules use the `test_cases` macro, we have to declare them here, after the
 // Since the rule submodules use the `rassert!` macro, we have to declare them here, after the
 // macro is declared
 pub(super) mod bitvectors;
@@ -166,6 +231,7 @@ pub(super) mod extras;
 pub(super) mod linear_arithmetic;
 pub(super) mod pb_blasting;
 pub(super) mod quantifier;
+pub(super) mod rare;
 pub(super) mod reflexivity;
 pub(super) mod resolution;
 pub(super) mod simplification;

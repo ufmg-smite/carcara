@@ -8,7 +8,7 @@ use std::{
 };
 
 /// A token in the SMT-LIB and Alethe formats.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Token {
     /// The `(` token.
     OpenParen,
@@ -116,6 +116,9 @@ pub enum Reserved {
 
     /// The `set-logic` reserved word.
     SetLogic,
+
+    // From rare Rules
+    DeclareRareRule,
 }
 
 impl_str_conversion_traits!(Reserved {
@@ -142,6 +145,7 @@ impl_str_conversion_traits!(Reserved {
     Assert: "assert",
     CheckSatAssuming: "check-sat-assuming",
     SetLogic: "set-logic",
+    DeclareRareRule: "declare-rare-rule"
 });
 
 /// Represents a position (line and column numbers) in the source input.
