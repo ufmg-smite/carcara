@@ -1,4 +1,6 @@
-use super::{assert_clause_len, assert_num_args, assert_num_premises, RuleArgs, RuleResult, Term};
+use super::{
+    assert_clause_len, assert_eq, assert_num_args, assert_num_premises, RuleArgs, RuleResult, Term,
+};
 use crate::checker::error::CheckerError;
 use crate::checker::Rc;
 use rug::Integer;
@@ -347,6 +349,36 @@ pub fn cp_saturation(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> R
             );
         }
     }
+
+    Ok(())
+}
+
+pub fn cp_normalize(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    let (lhs, rhs) = match_term_err!((= a b) = &conclusion[0])?;
+
+    // TODO: check rhs is normalized
+    let (pb_sum, constant) = match_term_err!((>= pb_sum constant) = rhs)?;
+    rassert!(
+        constant.is_const(),
+        CheckerError::ExpectedAnyIntegerConstant(constant.clone())
+    );
+
+    // Push negations from lhs to find rhs
+
+    // What relation is involved?
+    let relation = if let Some(k) = match_term!((>= a b) = lhs) {
+        ">="
+    } else if let Some(k) = match_term!((= a b ) = lhs) {
+        "="
+    } else if let Some(k) = match_term!((<= a b ) = lhs) {
+        "<="
+    } else if let Some(k) = match_term!((< a b ) = lhs) {
+        "<"
+    } else if let Some(k) = match_term!((> a b ) = lhs) {
+        ">"
+    } else {
+        "b"
+    };
 
     Ok(())
 }

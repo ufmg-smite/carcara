@@ -121,6 +121,9 @@ pub enum CheckerError {
     #[error("expected term '{0}' to be a boolean constant")]
     ExpectedAnyBoolConstant(Rc<Term>),
 
+    #[error("expected term '{0}' to be an integer constant")]
+    ExpectedAnyIntegerConstant(Rc<Term>),
+
     #[error("expected term '{0}' to be a string constant of length one")]
     ExpectedStringConstantOfLengthOne(Rc<Term>),
 

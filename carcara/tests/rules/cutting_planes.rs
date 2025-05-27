@@ -279,3 +279,45 @@ fn cp_saturation() {
 
     }
 }
+
+#[test]
+fn cp_normalize() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () Int)
+            (declare-fun b () Int)
+            (declare-fun c () Int)
+        ",
+        "Term is already normalized" {
+            r#"(step t1 (cl (= (>= a 0) (>= a 0))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (- 1 a) 0) (>= (- 1 a) 0))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (* 2 a) 0) (>= (* 2 a) 0))) :rule cp_normalize)"#: true,
+
+            r#"(step t1 (cl (= (>= (+ a b) 0) (>= (+ a b) 0))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ (- 1 a) b) 0) (>= (+ (- 1 a) b) 0))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ (* 2 a) (* 3 b)) 0) (>= (+ (* 2 a) (* 3 b)) 0))) :rule cp_normalize)"#: true,
+        }
+        "Negative coefficient is pushed" {
+            r#"(step t1 (cl (= (>= (* -1 a) 0) (>= (- 1 a) 1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (* -5 a) 0) (>= (* 5 (- 1 a)) 5))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ (* -1 a) (* -3 b)) 0) (>= (+ (- 1 a) (* 3 (- 1 b))) 4))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ (* -5 a) b) 0) (>= (+ (* 5 (- 1 a)) b) 5))) :rule cp_normalize)"#: true,
+        }
+        "Other relations are eliminated" {
+            r#"(step t1 (cl (= (<= a 0) (>= (- 1 a) 1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (> a 0) (>= a 1) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (< a 0) (>= (* -1 a) 2) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (= a 0) (and (>= a 0) (>= (* -1 a) 1)) :rule cp_normalize)"#: true,
+        }
+        "Constants are moved to the right" {
+            r#"(step t1 (cl (= (>= (+ a 1) 0) (>= a -1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ a b 1) 0) (>= (+ a b) -1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ a 3 b 1) 0) (>= (+ a b) -4))) :rule cp_normalize)"#: true,
+        }
+        "Variables are moved to the left" {
+            r#"(step t1 (cl (= (>= a b) (>= (+ a (- 1 b)) 1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= a (+ b c)) (>= (+ a (- 1 b) (- 1 c)) 2))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ a 2) (+ b c)) (>= (+ a (- 1 b) (- 1 c)) 0))) :rule cp_normalize)"#: true,
+        }
+    }
+}
