@@ -1,4 +1,6 @@
-use super::{assert_clause_len, assert_num_args, assert_num_premises, RuleArgs, RuleResult, Term};
+use super::{
+    assert_clause_len, assert_eq, assert_num_args, assert_num_premises, RuleArgs, RuleResult, Term,
+};
 use crate::checker::error::CheckerError;
 use crate::checker::Rc;
 use rug::Integer;
@@ -349,4 +351,13 @@ pub fn cp_saturation(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> R
     }
 
     Ok(())
+}
+
+pub fn cp_literal(RuleArgs { args, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_num_args(args, 1)?;
+    let ((_, l), _) = match_term_err!((>= (* 1 l) 0) = &conclusion[0])?;
+    // ? Either we assert Int l is 0 or 1
+    // ? or we need to fix it to be a variable?
+    // TODO: Prevent concluding (>= (* 1 -1) 0)
+    assert_eq(l, &args[0])
 }

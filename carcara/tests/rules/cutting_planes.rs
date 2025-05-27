@@ -279,3 +279,33 @@ fn cp_saturation() {
 
     }
 }
+
+#[test]
+fn cp_literal() {
+    test_cases! {
+        definitions = "
+            (declare-fun l () Int)
+            (define-fun neg_l () Int (- 1 l))
+        ",
+        "cp_literal correctly applied" {
+            r#"(step t1 (cl (>= (* 1 l) 0)) :rule cp_literal :args (l))"#: true,
+            r#"(step t1 (cl (>= (* 1 neg_l) 0)) :rule cp_literal :args (neg_l))"#: true,
+        }
+        "cp_literal invalid (coefficients)" {
+            r#"(step t1 (cl (>= (* 1 l) 0)) :rule cp_literal :args ((* 2 l)))"#: false,
+            r#"(step t1 (cl (>= (* 2 l) 0)) :rule cp_literal :args ((* 2 l)))"#: false,
+
+            r#"(step t1 (cl (>= (* 1 neg_l) 0)) :rule cp_literal :args ((* 2 neg_l)))"#: false,
+            r#"(step t1 (cl (>= (* 2 neg_l) 0)) :rule cp_literal :args ((* 2 neg_l)))"#: false,
+
+            // Should this be wrong?    v- this can be achieved using cp_multiplication later
+            r#"(step t1 (cl (>= (* 1 (* 2 l)) 0)) :rule cp_literal :args ((* 2 l)))"#: false,
+            r#"(step t1 (cl (>= (* 1 (* 2 neg_l)) 0)) :rule cp_literal :args ((* 2 neg_l)))"#: false,
+        }
+        "cp_literal invalid (number of args)" {
+            r#"(step t1 (cl (>= (* 1 l) 0)) :rule cp_literal)"#: false,
+            r#"(step t1 (cl (>= (* 1 l) 0)) :rule cp_literal :args (l neg_l))"#: false,
+            r#"(step t1 (cl (>= (* 1 neg_l) 0)) :rule cp_literal :args (neg_l l))"#: false,
+        }
+    }
+}
