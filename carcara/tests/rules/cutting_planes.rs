@@ -305,9 +305,9 @@ fn cp_normalize() {
         }
         "Other relations are eliminated" {
             r#"(step t1 (cl (= (<= a 0) (>= (- 1 a) 1))) :rule cp_normalize)"#: true,
-            r#"(step t1 (cl (= (> a 0) (>= a 1) :rule cp_normalize)"#: true,
-            r#"(step t1 (cl (= (< a 0) (>= (* -1 a) 2) :rule cp_normalize)"#: true,
-            r#"(step t1 (cl (= (= a 0) (and (>= a 0) (>= (* -1 a) 1)) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (> a 0) (>= a 1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (< a 0) (>= (* -1 a) 2))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (= a 0) (and (>= a 0) (>= (* -1 a) 1)))) :rule cp_normalize)"#: true,
         }
         "Constants are moved to the right" {
             r#"(step t1 (cl (= (>= (+ a 1) 0) (>= a -1))) :rule cp_normalize)"#: true,

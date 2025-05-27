@@ -356,12 +356,12 @@ pub fn cp_saturation(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> R
 pub fn cp_normalize(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     let (lhs, rhs) = match_term_err!((= a b) = &conclusion[0])?;
 
-    // TODO: check rhs is normalized
-    let (pb_sum, constant) = match_term_err!((>= pb_sum constant) = rhs)?;
-    rassert!(
-        constant.is_const(),
-        CheckerError::ExpectedAnyIntegerConstant(constant.clone())
-    );
+    // TODO: check rhs is normalized (or and A B) where A and B are normalized
+    // let (pb_sum, constant) = match_term_err!((>= pb_sum constant) = rhs)?;
+    // rassert!(
+    //     constant.is_const(),
+    //     CheckerError::ExpectedAnyIntegerConstant(constant.clone())
+    // );
 
     // Push negations from lhs to find rhs
 
