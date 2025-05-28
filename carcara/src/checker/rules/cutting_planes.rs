@@ -1,6 +1,4 @@
-use super::{
-    assert_clause_len, assert_eq, assert_num_args, assert_num_premises, RuleArgs, RuleResult, Term,
-};
+use super::{assert_clause_len, assert_num_args, assert_num_premises, RuleArgs, RuleResult, Term};
 use crate::checker::error::CheckerError;
 use crate::checker::Rc;
 use rug::Integer;
@@ -357,7 +355,16 @@ pub fn cp_normalize(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     let (lhs, rhs) = match_term_err!((= a b) = &conclusion[0])?;
 
     // TODO: check rhs is normalized (or and A B) where A and B are normalized
-    // let (pb_sum, constant) = match_term_err!((>= pb_sum constant) = rhs)?;
+    if let Some((pb_sum, constant)) = match_term!((>= pb_sum constant) = rhs) {
+        // Println single summation
+        println!("SINGLE SUMMATION: {pb_sum:?} >= {constant}");
+    } else if let Some(((pb_sum_l, constant_l), (pb_sum_r, constant_r))) =
+        match_term!((and (>= pb_sum_l constant_l) (>= pb_sum_r constant_r)) = rhs)
+    {
+        println!("DOUBLE SUMMATION: {pb_sum_l:?} >= {constant_l} /\\ {pb_sum_r:?} >= {constant_r}");
+    } else {
+        return Err(CheckerError::Explanation("Invalid conclusion".into()));
+    }
     // rassert!(
     //     constant.is_const(),
     //     CheckerError::ExpectedAnyIntegerConstant(constant.clone())
@@ -366,19 +373,23 @@ pub fn cp_normalize(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     // Push negations from lhs to find rhs
 
     // What relation is involved?
-    let relation = if let Some(k) = match_term!((>= a b) = lhs) {
+    let relation = if match_term!((>= a b) = lhs).is_some() {
         ">="
-    } else if let Some(k) = match_term!((= a b ) = lhs) {
+    } else if match_term!((= a b ) = lhs).is_some() {
         "="
-    } else if let Some(k) = match_term!((<= a b ) = lhs) {
+    } else if match_term!((<= a b ) = lhs).is_some() {
         "<="
-    } else if let Some(k) = match_term!((< a b ) = lhs) {
+    } else if match_term!((< a b ) = lhs).is_some() {
         "<"
-    } else if let Some(k) = match_term!((> a b ) = lhs) {
+    } else if match_term!((> a b ) = lhs).is_some() {
         ">"
     } else {
-        "b"
+        return Err(CheckerError::Explanation(
+            "Invalid relation on left-hand-side!".into(),
+        ));
     };
+
+    println!("RELATION IS {relation}");
 
     Ok(())
 }
