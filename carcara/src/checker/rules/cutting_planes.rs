@@ -353,11 +353,33 @@ pub fn cp_saturation(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> R
     Ok(())
 }
 
-pub fn cp_literal(RuleArgs { args, conclusion, .. }: RuleArgs) -> RuleResult {
+pub fn cp_literal(RuleArgs { pool, args, conclusion, .. }: RuleArgs) -> RuleResult {
     assert_num_args(args, 1)?;
-    let ((_, l), _) = match_term_err!((>= (* 1 l) 0) = &conclusion[0])?;
-    // ? Either we assert Int l is 0 or 1
-    // ? or we need to fix it to be a variable?
-    // TODO: Prevent concluding (>= (* 1 -1) 0)
-    assert_eq(l, &args[0])
+    // TODO: Set args type to FF 2
+
+    if let Some(((c, (_, l)), _)) = match_term!((>= (* c (- 1 l)) 0) = &conclusion[0]) {
+        rassert!(
+            c.as_integer_err()? == 1,
+            CheckerError::ExpectedInteger(1.into(), c.clone()),
+        );
+        let neg_l = build_term!(pool,(- 1 {l.clone()}));
+        return assert_eq(&neg_l, &args[0]);
+    }
+    if let Some(((c, l), _)) = match_term!((>= (* c l) 0) = &conclusion[0]) {
+        rassert!(
+            c.as_integer_err()? == 1,
+            CheckerError::ExpectedInteger(1.into(), c.clone()),
+        );
+        return assert_eq(l, &args[0]);
+    }
+    if let Some(((_, l), _)) = match_term!((>= (- 1 l) 0) = &conclusion[0]) {
+        let neg_l = build_term!(pool,(- 1 {l.clone()}));
+        return assert_eq(&neg_l, &args[0]);
+    }
+    if let Some((l, _)) = match_term!((>= l 0) = &conclusion[0]) {
+        return assert_eq(l, &args[0]);
+    }
+    Err(CheckerError::Explanation(
+        "No valid pattern was found".into(),
+    ))
 }

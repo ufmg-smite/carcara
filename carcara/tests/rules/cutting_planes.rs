@@ -288,7 +288,9 @@ fn cp_literal() {
             (define-fun neg_l () Int (- 1 l))
         ",
         "cp_literal correctly applied" {
+            r#"(step t1 (cl (>= l 0)) :rule cp_literal :args (l))"#: true,
             r#"(step t1 (cl (>= (* 1 l) 0)) :rule cp_literal :args (l))"#: true,
+            r#"(step t1 (cl (>= neg_l 0)) :rule cp_literal :args (neg_l))"#: true,
             r#"(step t1 (cl (>= (* 1 neg_l) 0)) :rule cp_literal :args (neg_l))"#: true,
         }
         "cp_literal invalid (coefficients)" {
@@ -298,9 +300,9 @@ fn cp_literal() {
             r#"(step t1 (cl (>= (* 1 neg_l) 0)) :rule cp_literal :args ((* 2 neg_l)))"#: false,
             r#"(step t1 (cl (>= (* 2 neg_l) 0)) :rule cp_literal :args ((* 2 neg_l)))"#: false,
 
-            // Should this be wrong?    v- this can be achieved using cp_multiplication later
-            r#"(step t1 (cl (>= (* 1 (* 2 l)) 0)) :rule cp_literal :args ((* 2 l)))"#: false,
-            r#"(step t1 (cl (>= (* 1 (* 2 neg_l)) 0)) :rule cp_literal :args ((* 2 neg_l)))"#: false,
+            // ! THIS SHOULD BE AVOIDED WHEN l is a PSEUDO BOOLEAN
+            r#"(step t1 (cl (>= (* 1 (* 2 l)) 0)) :rule cp_literal :args ((* 2 l)))"#: true,
+            r#"(step t1 (cl (>= (* 1 (* 2 neg_l)) 0)) :rule cp_literal :args ((* 2 neg_l)))"#: true,
         }
         "cp_literal invalid (number of args)" {
             r#"(step t1 (cl (>= (* 1 l) 0)) :rule cp_literal)"#: false,
