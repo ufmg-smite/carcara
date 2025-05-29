@@ -495,6 +495,7 @@ impl<'c> ProofChecker<'c> {
             "cp_multiplication" => cutting_planes::cp_multiplication,
             "cp_division" => cutting_planes::cp_division,
             "cp_saturation" => cutting_planes::cp_saturation,
+            "cp_literal" => cutting_planes::cp_literal,
             "cp_normalize" => cutting_planes::cp_normalize,
 
             "string_decompose" => strings::string_decompose,
