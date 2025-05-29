@@ -15,6 +15,7 @@ mod proof;
 mod rc;
 mod substitution;
 mod term;
+pub mod rules;
 #[cfg(test)]
 mod tests;
 

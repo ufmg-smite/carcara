@@ -1,7 +1,7 @@
 use carcara::*;
+use indexmap::IndexMap;
 use std::{
-    fs, io,
-    path::{Path, PathBuf},
+    fs, io, ops::Index, path::{Path, PathBuf}
 };
 
 fn run_parallel_checker_test(
@@ -12,9 +12,10 @@ fn run_parallel_checker_test(
     use checker::Config;
     use std::sync::Arc;
 
-    let (problem, proof, pool) = parser::parse_instance(
+    let (problem, proof, _, pool) = parser::parse_instance(
         io::BufReader::new(fs::File::open(problem_path)?),
         io::BufReader::new(fs::File::open(proof_path)?),
+        None,
         parser::Config::new(),
     )?;
 
@@ -25,15 +26,17 @@ fn run_parallel_checker_test(
         &problem.prelude,
         &schedule_context_usage,
         128 * 1024 * 1024,
+        IndexMap::new()
     );
     checker.check(&problem, &proof, &scheduler)?;
     Ok(())
 }
 
 fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
-    let (problem, proof, mut pool) = parser::parse_instance(
+    let (problem, proof, _, mut pool) = parser::parse_instance(
         io::BufReader::new(fs::File::open(problem_path)?),
         io::BufReader::new(fs::File::open(proof_path)?),
+        None,
         parser::Config::new(),
     )?;
 
@@ -44,7 +47,7 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
     };
 
     // First, we check the proof normally
-    checker::ProofChecker::new(&mut pool, checker_config.clone()).check(&problem, &proof)?;
+    checker::ProofChecker::new(&mut pool,&IndexMap::new(), checker_config.clone()).check(&problem, &proof)?;
 
     // Then we elaborate it
     let config = elaborator::Config {
@@ -61,7 +64,7 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
     };
 
     // After that, we check the elaborated proof to make sure it is valid
-    checker::ProofChecker::new(&mut pool, checker_config).check(&problem, &elaborated)?;
+    checker::ProofChecker::new(&mut pool, &IndexMap::new(), checker_config).check(&problem, &elaborated)?;
 
     // Finally, we elaborate the already elaborated proof, to make sure the elaboration step is
     // idempotent
