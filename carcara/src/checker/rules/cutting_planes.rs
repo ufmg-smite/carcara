@@ -389,6 +389,11 @@ pub fn cp_literal(RuleArgs { pool, args, conclusion, .. }: RuleArgs) -> RuleResu
     ))
 }
 
+fn negate_sum(sum: &Vec<Rc<Term>>) -> Vec<Rc<Term>> {
+    // todo!("This function will negate all coefficients of this term")
+    vec![]
+}
+
 pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     let (lhs, rhs) = match_term_err!((= lhs rhs) = &conclusion[0])?;
 
@@ -455,5 +460,32 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     println!("VARS:\t\t\t\t\t\t\t{vars:?}");
     println!("CONSTANT:\t\t\t\t\t\t{constant:?}");
 
+    // Special variables when "=" uses two constraints
+    let mut vars2: Vec<Rc<Term>> = vec![];
+    let mut constant2: Integer = 0.into();
+
+    // Eliminate other relations
+    match rel.as_str() {
+        ">" => constant += 1,
+        "<" => {
+            vars = negate_sum(&vars);
+            constant = 1 - constant;
+        }
+        "<=" => {
+            vars = negate_sum(&vars);
+            constant = -constant;
+        }
+        "=" => {
+            vars2 = negate_sum(&vars);
+            constant2 = -constant.clone();
+        }
+        _ => (),
+    }
+    println!("VARS AFTER ELIM:\t\t\t\t\t\t\t{vars:?}");
+    println!("CONSTANT AFTER ELIM:\t\t\t\t\t\t{constant:?}");
+    println!("VARS2 AFTER ELIM:\t\t\t\t\t\t\t{vars2:?}");
+    println!("CONSTANT2 AFTER ELIM:\t\t\t\t\t\t{constant2:?}");
+
+    // TODO: Push Negations
     Ok(())
 }
