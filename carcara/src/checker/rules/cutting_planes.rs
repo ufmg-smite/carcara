@@ -1,7 +1,7 @@
 use super::{
     assert_clause_len, assert_eq, assert_num_args, assert_num_premises, RuleArgs, RuleResult, Term,
 };
-use crate::ast::{Constant, Operator};
+use crate::ast::{Constant, Operator, TermPool};
 use crate::checker::error::CheckerError;
 use crate::checker::Rc;
 use rug::Integer;
@@ -389,9 +389,31 @@ pub fn cp_literal(RuleArgs { pool, args, conclusion, .. }: RuleArgs) -> RuleResu
     ))
 }
 
-fn negate_sum(sum: &Vec<Rc<Term>>) -> Vec<Rc<Term>> {
-    // todo!("This function will negate all coefficients of this term")
-    vec![]
+fn negate_sum(sum: &Vec<Rc<Term>>, pool: &mut dyn TermPool) -> Result<Vec<Rc<Term>>, CheckerError> {
+    let mut ans: Vec<Rc<Term>> = vec![];
+    for t in sum {
+        // Check if already negative
+        match t.as_ref() {
+            Term::Op(Operator::Mult, args) => {
+                if let [c, l] = &args[..] {
+                    let c = c.as_integer_err()?;
+                    if c < 0 {
+                        ans.push(l.clone());
+                    } else {
+                        let c_term = pool.add(Term::Const(Constant::Integer(-c)));
+                        let negated_l = build_term!(pool,(* {c_term} {l.clone()}));
+                        ans.push(negated_l);
+                    }
+                }
+            }
+            _ => {
+                let minus_one_term = pool.add(Term::Const(Constant::Integer((-1).into())));
+                let negated_t = build_term!(pool,(* {minus_one_term} {t.clone()}));
+                ans.push(negated_t);
+            }
+        }
+    }
+    Ok(ans)
 }
 
 pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
@@ -420,6 +442,8 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
         )),
     }?;
 
+    let debug = rel == "<=";
+
     // Split `a` and `b` into list of added terms
     let a = split_sum(a);
     let b = split_sum(b);
@@ -427,8 +451,10 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     let mut vars: Vec<Rc<Term>> = vec![];
     let mut constant: Integer = 0.into();
 
-    println!("\t\t\t\t\t\t\ta:{a:?}");
-    println!("\t\t\t\t\t\t\tb:{b:?}");
+    if debug {
+        println!("\t\t\t\t\t\t\ta:{a:?}");
+        println!("\t\t\t\t\t\t\tb:{b:?}");
+    }
     // Separate the variables from constants
     for t in a {
         match t.as_ref() {
@@ -457,8 +483,10 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
         }
     }
 
-    println!("VARS:\t\t\t\t\t\t\t{vars:?}");
-    println!("CONSTANT:\t\t\t\t\t\t{constant:?}");
+    if debug {
+        println!("VARS:\t\t\t\t\t\t\t{vars:?}");
+        println!("CONSTANT:\t\t\t\t\t\t{constant:?}");
+    }
 
     // Special variables when "=" uses two constraints
     let mut vars2: Vec<Rc<Term>> = vec![];
@@ -468,23 +496,26 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     match rel.as_str() {
         ">" => constant += 1,
         "<" => {
-            vars = negate_sum(&vars);
+            vars = negate_sum(&vars, pool)?;
             constant = 1 - constant;
         }
         "<=" => {
-            vars = negate_sum(&vars);
+            vars = negate_sum(&vars, pool)?;
             constant = -constant;
         }
         "=" => {
-            vars2 = negate_sum(&vars);
+            vars2 = negate_sum(&vars, pool)?;
             constant2 = -constant.clone();
         }
         _ => (),
     }
-    println!("VARS AFTER ELIM:\t\t\t\t\t\t\t{vars:?}");
-    println!("CONSTANT AFTER ELIM:\t\t\t\t\t\t{constant:?}");
-    println!("VARS2 AFTER ELIM:\t\t\t\t\t\t\t{vars2:?}");
-    println!("CONSTANT2 AFTER ELIM:\t\t\t\t\t\t{constant2:?}");
+
+    if debug {
+        println!("VARS AFTER ELIM:\t\t\t\t\t\t\t{vars:?}");
+        println!("CONSTANT AFTER ELIM:\t\t\t\t\t\t{constant:?}");
+        println!("VARS2 AFTER ELIM:\t\t\t\t\t\t\t{vars2:?}");
+        println!("CONSTANT2 AFTER ELIM:\t\t\t\t\t\t{constant2:?}");
+    }
 
     // TODO: Push Negations
     Ok(())
