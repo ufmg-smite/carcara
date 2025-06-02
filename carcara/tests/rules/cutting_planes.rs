@@ -351,5 +351,8 @@ fn cp_normalize() {
             r#"(step t1 (cl (= (>= a (+ b c)) (>= (+ a (- 1 b) (- 1 c)) 2))) :rule cp_normalize)"#: true,
             r#"(step t1 (cl (= (>= (+ a 2) (+ b c)) (>= (+ a (- 1 b) (- 1 c)) 0))) :rule cp_normalize)"#: true,
         }
+        "Invalid relations" {
+            r#"(step t1 (cl (= (and true true) (>= a 0))) :rule cp_normalize)"#: false,
+        }
     }
 }

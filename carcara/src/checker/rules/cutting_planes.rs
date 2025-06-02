@@ -385,44 +385,32 @@ pub fn cp_literal(RuleArgs { pool, args, conclusion, .. }: RuleArgs) -> RuleResu
 }
 
 pub fn cp_normalize(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
-    let (lhs, rhs) = match_term_err!((= a b) = &conclusion[0])?;
+    let (lhs, rhs) = match_term_err!((= lhs rhs) = &conclusion[0])?;
 
-    // TODO: check rhs is normalized (or and A B) where A and B are normalized
-    if let Some((pb_sum, constant)) = match_term!((>= pb_sum constant) = rhs) {
-        // Println single summation
-        println!("SINGLE SUMMATION: {pb_sum:?} >= {constant}");
-    } else if let Some(((pb_sum_l, constant_l), (pb_sum_r, constant_r))) =
-        match_term!((and (>= pb_sum_l constant_l) (>= pb_sum_r constant_r)) = rhs)
-    {
-        println!("DOUBLE SUMMATION: {pb_sum_l:?} >= {constant_l} /\\ {pb_sum_r:?} >= {constant_r}");
-    } else {
-        return Err(CheckerError::Explanation("Invalid conclusion".into()));
-    }
-    // rassert!(
-    //     constant.is_const(),
-    //     CheckerError::ExpectedAnyIntegerConstant(constant.clone())
-    // );
+    // Checking the left-hand-side is a supported relation
+    let (rel, a, b) = match lhs.as_ref() {
+        Term::Op(op, args) => {
+            // It's a valid relation
+            if !["=", ">", "<", ">=", "<="].contains(&op.to_string().as_str()) {
+                return Err(CheckerError::Explanation(format!(
+                    "Operator {op} is not a valid relation"
+                )));
+            }
+            // Over two arguments
+            let (a, b) = match &args[..] {
+                [a, b] => Ok((a, b)),
+                _ => Err(CheckerError::Explanation(format!(
+                    "Expected two arguments of {op}, got {args:?}"
+                ))),
+            }?;
+            Ok((op.to_string(), a, b))
+        }
+        _ => Err(CheckerError::Explanation(
+            "Expected relation operator".into(),
+        )),
+    }?;
 
-    // Push negations from lhs to find rhs
-
-    // What relation is involved?
-    let relation = if match_term!((>= a b) = lhs).is_some() {
-        ">="
-    } else if match_term!((= a b ) = lhs).is_some() {
-        "="
-    } else if match_term!((<= a b ) = lhs).is_some() {
-        "<="
-    } else if match_term!((< a b ) = lhs).is_some() {
-        "<"
-    } else if match_term!((> a b ) = lhs).is_some() {
-        ">"
-    } else {
-        return Err(CheckerError::Explanation(
-            "Invalid relation on left-hand-side!".into(),
-        ));
-    };
-
-    println!("RELATION IS {relation}");
+    println!("RELATION:\n ({rel} {a} {b})");
 
     Ok(())
 }
