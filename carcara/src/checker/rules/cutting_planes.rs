@@ -1,6 +1,7 @@
 use super::{
     assert_clause_len, assert_eq, assert_num_args, assert_num_premises, RuleArgs, RuleResult, Term,
 };
+use crate::ast::{Constant, Operator};
 use crate::checker::error::CheckerError;
 use crate::checker::Rc;
 use rug::Integer;
@@ -8,13 +9,17 @@ use std::collections::HashMap;
 
 type PbHash = HashMap<String, Integer>;
 
+fn split_sum(sum_term: &Rc<Term>) -> &[Rc<Term>] {
+    if let Some(summation) = match_term!((+ ...) = sum_term) {
+        summation
+    } else {
+        std::slice::from_ref(sum_term)
+    }
+}
+
 fn get_pb_hashmap(pbsum: &Rc<Term>) -> Result<PbHash, CheckerError> {
     let mut hm = HashMap::new();
-    let pbsum = if let Some(pbsum) = match_term!((+ ...) = pbsum) {
-        pbsum
-    } else {
-        std::slice::from_ref(pbsum)
-    };
+    let pbsum = split_sum(pbsum);
 
     //  Special case: single 0
     if pbsum.len() == 1 {
@@ -384,7 +389,7 @@ pub fn cp_literal(RuleArgs { pool, args, conclusion, .. }: RuleArgs) -> RuleResu
     ))
 }
 
-pub fn cp_normalize(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     let (lhs, rhs) = match_term_err!((= lhs rhs) = &conclusion[0])?;
 
     // Checking the left-hand-side is a supported relation
@@ -410,7 +415,45 @@ pub fn cp_normalize(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         )),
     }?;
 
-    println!("RELATION:\n ({rel} {a} {b})");
+    // Split `a` and `b` into list of added terms
+    let a = split_sum(a);
+    let b = split_sum(b);
+
+    let mut vars: Vec<Rc<Term>> = vec![];
+    let mut constant: Integer = 0.into();
+
+    println!("\t\t\t\t\t\t\ta:{a:?}");
+    println!("\t\t\t\t\t\t\tb:{b:?}");
+    // Separate the variables from constants
+    for t in a {
+        match t.as_ref() {
+            Term::Const(Constant::Integer(k)) => constant -= k,
+            _ => vars.push(t.clone()),
+        }
+    }
+    for t in b {
+        match t.as_ref() {
+            Term::Const(Constant::Integer(k)) => constant += k,
+            Term::Op(Operator::Mult, args) => {
+                if let [c, l] = &args[..] {
+                    // Negation of the multiplier
+                    let c = -c.as_integer_err()?;
+                    let c_term = pool.add(Term::Const(Constant::Integer(c)));
+                    let negated_t = build_term!(pool,(* {c_term} {l.clone()}));
+                    vars.push(negated_t);
+                }
+            }
+            _ => {
+                // Negation of the generic term
+                let minus_one_term = pool.add(Term::Const(Constant::Integer((-1).into())));
+                let negated_t = build_term!(pool,(* {minus_one_term} {t.clone()}));
+                vars.push(negated_t);
+            }
+        }
+    }
+
+    println!("VARS:\t\t\t\t\t\t\t{vars:?}");
+    println!("CONSTANT:\t\t\t\t\t\t{constant:?}");
 
     Ok(())
 }
