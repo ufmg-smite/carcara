@@ -389,29 +389,40 @@ pub fn cp_literal(RuleArgs { pool, args, conclusion, .. }: RuleArgs) -> RuleResu
     ))
 }
 
-fn negate_sum(sum: &Vec<Rc<Term>>, pool: &mut dyn TermPool) -> Result<Vec<Rc<Term>>, CheckerError> {
-    let mut ans: Vec<Rc<Term>> = vec![];
-    for t in sum {
-        // Check if already negative
-        match t.as_ref() {
-            Term::Op(Operator::Mult, args) => {
-                if let [c, l] = &args[..] {
-                    let c = c.as_integer_err()?;
-                    if c < 0 {
-                        ans.push(l.clone());
-                    } else {
-                        let c_term = pool.add(Term::Const(Constant::Integer(-c)));
-                        let negated_l = build_term!(pool,(* {c_term} {l.clone()}));
-                        ans.push(negated_l);
-                    }
+fn negate_term(t: &Rc<Term>, pool: &mut dyn TermPool) -> Result<Rc<Term>, CheckerError> {
+    match t.as_ref() {
+        Term::Op(Operator::Mult, args) => {
+            if let [c, l] = &args[..] {
+                let c = c.as_integer_err()?;
+                // Check if already negative
+                if c < 0 {
+                    Ok(l.clone())
+                } else {
+                    let c_term = pool.add(Term::Const(Constant::Integer(-c)));
+                    let negated_l = build_term!(pool,(* {c_term} {l.clone()}));
+                    Ok(negated_l)
                 }
-            }
-            _ => {
-                let minus_one_term = pool.add(Term::Const(Constant::Integer((-1).into())));
-                let negated_t = build_term!(pool,(* {minus_one_term} {t.clone()}));
-                ans.push(negated_t);
+            } else {
+                Err(CheckerError::Explanation(
+                    "Expected multiplication on 2 arguments".into(),
+                ))
             }
         }
+        _ => {
+            // Arbitrary term gets negated
+            let minus_one_term = pool.add(Term::Const(Constant::Integer((-1).into())));
+            let negated_t = build_term!(pool,(* {minus_one_term} {t.clone()}));
+            Ok(negated_t)
+        }
+    }
+}
+
+fn negate_sum(sum: &Vec<Rc<Term>>, pool: &mut dyn TermPool) -> Result<Vec<Rc<Term>>, CheckerError> {
+    let mut ans: Vec<Rc<Term>> = vec![];
+    // ? What about using a map...
+    for t in sum {
+        let neg_t = negate_term(t, pool)?;
+        ans.push(neg_t);
     }
     Ok(ans)
 }
@@ -465,20 +476,10 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     for t in b {
         match t.as_ref() {
             Term::Const(Constant::Integer(k)) => constant += k,
-            Term::Op(Operator::Mult, args) => {
-                if let [c, l] = &args[..] {
-                    // Negation of the multiplier
-                    let c = -c.as_integer_err()?;
-                    let c_term = pool.add(Term::Const(Constant::Integer(c)));
-                    let negated_t = build_term!(pool,(* {c_term} {l.clone()}));
-                    vars.push(negated_t);
-                }
-            }
             _ => {
                 // Negation of the generic term
-                let minus_one_term = pool.add(Term::Const(Constant::Integer((-1).into())));
-                let negated_t = build_term!(pool,(* {minus_one_term} {t.clone()}));
-                vars.push(negated_t);
+                let neg_t = negate_term(t, pool)?;
+                vars.push(neg_t);
             }
         }
     }
