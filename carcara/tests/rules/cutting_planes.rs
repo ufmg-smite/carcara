@@ -330,6 +330,7 @@ fn cp_normalize() {
             r#"(step t1 (cl (= (>= (+ (* 2 a) (* 3 b)) 0) (>= (+ (* 2 a) (* 3 b)) 0))) :rule cp_normalize)"#: true,
         }
         "Negative coefficient is pushed" {
+            r#"(step t1 (cl (= (>= (* -1 a) 0) (>= (* 1 (- 1 a)) 1))) :rule cp_normalize)"#: true,
             r#"(step t1 (cl (= (>= (* -1 a) 0) (>= (- 1 a) 1))) :rule cp_normalize)"#: true,
             r#"(step t1 (cl (= (>= (* -5 a) 0) (>= (* 5 (- 1 a)) 5))) :rule cp_normalize)"#: true,
             r#"(step t1 (cl (= (>= (+ (* -1 a) (* -3 b)) 0) (>= (+ (- 1 a) (* 3 (- 1 b))) 4))) :rule cp_normalize)"#: true,

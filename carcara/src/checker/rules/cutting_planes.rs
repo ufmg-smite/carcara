@@ -448,6 +448,14 @@ fn push_negation(
     Ok(())
 }
 
+fn pack_summation(vars: Vec<Rc<Term>>, pool: &mut dyn TermPool) -> Rc<Term> {
+    if vars.len() > 1 {
+        pool.add(Term::Op(Operator::Add, vars))
+    } else {
+        vars[0].clone()
+    }
+}
+
 pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     let (lhs, rhs) = match_term_err!((= lhs rhs) = &conclusion[0])?;
 
@@ -523,18 +531,22 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
 
     // Push Negations
     push_negation(&mut vars, &mut constant, pool)?;
-    // ! Wrong. We actually want a "summation list", not a bitvector...
-    let vars_term = pool.add(Term::Op(Operator::BvPBbTerm, vars));
+    let vars_term = pack_summation(vars, pool);
     let pb_ineq = build_term!(pool,(>= {vars_term} (const constant)));
 
-    if rel == "=" {
+    let expected_lhs = if rel == "=" {
         push_negation(&mut vars2, &mut constant2, pool)?;
-        // ! Wrong. We actually want a "summation list", not a bitvector...
-        let vars2_term = pool.add(Term::Op(Operator::BvPBbTerm, vars2));
-        let both = build_term!(pool,(and {pb_ineq} 
-                                     (>= {vars2_term} (const constant2))));
-        assert_eq(&both, rhs)
+        let vars2_term = pack_summation(vars2, pool);
+        build_term!(pool,(and {pb_ineq} (>= {vars2_term} (const constant2))))
     } else {
-        assert_eq(&pb_ineq, rhs)
-    }
+        pb_ineq
+    };
+
+    // Flatten RHS (multiplications by one)
+    // TODO
+
+    // Flatten LHS (multiplications by one)
+    // TODO
+
+    assert_eq(&expected_lhs, rhs)
 }
