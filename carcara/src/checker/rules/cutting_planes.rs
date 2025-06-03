@@ -421,7 +421,24 @@ fn negate_sum(sum: &[Rc<Term>], pool: &mut dyn TermPool) -> Result<Vec<Rc<Term>>
     sum.iter().map(|t| negate_term(t, pool)).collect()
 }
 
-fn push_negation(vars: &mut Vec<Rc<Term>>, constant: &mut Integer) {}
+// -ci li + ψ >= k ==> ci neg_li + ψ >= k + ci
+fn push_negation(vars: &mut Vec<Rc<Term>>, constant: &mut Integer,pool:&mut dyn TermPool) -> RuleResult {
+    for t in vars {
+        if let Some((c, l)) = match_term!((* c l) = t) {
+            let c = c.as_integer_err()?;
+            if c >= 0 { continue; }
+            let neg_l : Rc<Term> = if let Some((_,x)) = match_term!((- 1 x) = l) {
+                x.clone()
+            } else {
+                build_term!(pool,(- 1 {l.clone()}))
+            };
+            let c = -c; // Now c is strictly positive
+            *constant += c.clone();
+            *t = build_term!(pool, (* (const c) {neg_l.clone()}));
+        };
+    }
+    Ok(())
+}
 
 pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     let (lhs, rhs) = match_term_err!((= lhs rhs) = &conclusion[0])?;
@@ -515,12 +532,12 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     }
 
     // Push Negations
-    push_negation(&mut vars, &mut constant);
+    push_negation(&mut vars, &mut constant,pool)?;
     let vars_term: Rc<Term> = build_term!(pool, 1); // TODO
     let pb_ineq = build_term!(pool,(>= {vars_term} (const constant)));
 
     if rel == "=" {
-        push_negation(&mut vars2, &mut constant2);
+        push_negation(&mut vars2, &mut constant2, pool)?;
         let vars2_term: Rc<Term> = build_term!(pool, 1); // TODO
         let both = build_term!(pool,(and {pb_ineq} 
                                          (>= {vars2_term} (const constant2))));
