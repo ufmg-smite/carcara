@@ -448,14 +448,26 @@ fn push_negation(
     Ok(())
 }
 
-fn pack_summation(vars: Vec<Rc<Term>>, pool: &mut dyn TermPool) -> Rc<Term> {
-    if vars.len() > 1 {
-        pool.add(Term::Op(Operator::Add, vars))
+fn flatten_mul(x: &Rc<Term>) -> Rc<Term> {
+    if let Some((_, x)) = match_term!((* 1 x) = x) {
+        x.clone()
     } else {
-        vars[0].clone()
+        x.clone()
     }
 }
 
+fn pack_summation(vars: Vec<Rc<Term>>, pool: &mut dyn TermPool) -> Rc<Term> {
+    if vars.len() > 1 {
+        pool.add(Term::Op(
+            Operator::Add,
+            vars.iter().map(flatten_mul).collect(),
+        ))
+    } else {
+        flatten_mul(&vars[0])
+    }
+}
+
+// Transform a general summation relation to the normalized form
 pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     let (lhs, rhs) = match_term_err!((= lhs rhs) = &conclusion[0])?;
 
@@ -534,13 +546,37 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     let vars_term = pack_summation(vars, pool);
     let pb_ineq = build_term!(pool,(>= {vars_term} (const constant)));
 
-    let expected_lhs = if rel == "=" {
+    if rel == "=" {
         push_negation(&mut vars2, &mut constant2, pool)?;
         let vars2_term = pack_summation(vars2, pool);
-        build_term!(pool,(and {pb_ineq} (>= {vars2_term} (const constant2))))
+        let both = build_term!(pool,(and {pb_ineq} (>= {vars2_term} (const constant2))));
+        let ((vars_r, constant_r), (vars2_r, constant2_r)) =
+            match_term_err!((and (>= vars_r constant_r) (>= vars2_r constant2_r)) = rhs)?;
+
+        let vars_r = split_summation(vars_r);
+        let vars2_r = split_summation(vars2_r);
+
+        let vars_r = pack_summation(vars_r.to_vec(), pool);
+        let vars2_r = pack_summation(vars2_r.to_vec(), pool);
+
+        let expected_lhs = both;
+        let expected_rhs = build_term!(pool,(and (>= {vars_r} { constant_r.clone() }) (>= { vars2_r } { constant2_r.clone() })));
+
+        assert_eq(&expected_lhs, &expected_rhs)
     } else {
-        pb_ineq
-    };
+        // TODO: Remove all this repetition
+        // TODO: Remove all this repetition
+        let ((vars_r, constant_r)) = match_term_err!((>= vars_r constant_r) = rhs)?;
+
+        let vars_r = split_summation(vars_r);
+
+        let vars_r = pack_summation(vars_r.to_vec(), pool);
+
+        let expected_lhs = pb_ineq;
+        let expected_rhs = build_term!(pool,(>= {vars_r} { constant_r.clone() }) );
+
+        assert_eq(&expected_lhs, &expected_rhs)
+    }
 
     // Flatten RHS (multiplications by one)
     // TODO
@@ -548,5 +584,5 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     // Flatten LHS (multiplications by one)
     // TODO
 
-    assert_eq(&expected_lhs, rhs)
+    // assert_eq(&expected_lhs, rhs)
 }
