@@ -418,10 +418,6 @@ fn negate_term(t: &Rc<Term>, pool: &mut dyn TermPool) -> Result<Rc<Term>, Checke
     }
 }
 
-fn negate_sum(sum: &[Rc<Term>], pool: &mut dyn TermPool) -> Result<Vec<Rc<Term>>, CheckerError> {
-    sum.iter().map(|t| negate_term(t, pool)).collect()
-}
-
 // -ci li + ψ >= k ==> ci neg_li + ψ >= k + ci
 fn push_negation(
     vars: &mut Vec<Rc<Term>>,
@@ -449,15 +445,19 @@ fn push_negation(
 }
 
 fn flatten_mul(x: &Rc<Term>, pool: &mut dyn TermPool) -> Result<Rc<Term>, CheckerError> {
-    if let Some((c, x)) = match_term!((* c x) = x) {
+    let flat_x = if let Some((c, l)) = match_term!((* c l) = x) {
         let c = c.as_integer_err()?;
         if c == 1 {
-            return Ok(x.clone());
+            l.clone()
         } else if c == -1 {
-            return Ok(build_term!(pool,(- 1 {x.clone()})));
+            build_term!(pool,(- 1 {l.clone()}))
+        } else {
+            x.clone()
         }
-    }
-    Ok(x.clone())
+    } else {
+        x.clone()
+    };
+    Ok(flat_x)
 }
 
 fn pack_summation(vars: Vec<Rc<Term>>, pool: &mut dyn TermPool) -> Result<Rc<Term>, CheckerError> {
@@ -470,122 +470,138 @@ fn pack_summation(vars: Vec<Rc<Term>>, pool: &mut dyn TermPool) -> Result<Rc<Ter
     }
 }
 
+fn check_equivalent_inequalities(
+    pool: &mut dyn TermPool,
+    mut general_vars: Vec<Rc<Term>>,
+    mut general_constant: Integer,
+    normalized_vars: Vec<Rc<Term>>,
+    normalized_constant: Integer,
+) -> RuleResult {
+    push_negation(&mut general_vars, &mut general_constant, pool)?;
+    let general_vars = pack_summation(general_vars, pool)?;
+    let normalized_vars = pack_summation(normalized_vars, pool)?;
+    rassert!(
+        general_constant == normalized_constant,
+        CheckerError::Explanation(format!(
+            "Mismatched constants {general_constant} != {normalized_constant}"
+        ))
+    );
+    assert_eq(&general_vars, &normalized_vars)
+}
+
 // Transform a general summation relation to the normalized form
 pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let (lhs, rhs) = match_term_err!((= lhs rhs) = &conclusion[0])?;
+    let (general_relation, normalized_relation) =
+        match_term_err!((= general_relation normalized_relation) = &conclusion[0])?;
 
-    // Checking the left-hand-side is a supported relation
-    let (rel, a, b) = match lhs.as_ref() {
+    // Checking the left-hand-side is a supported relation operator
+    let (relation_operator, general_arg_left, general_arg_right) = match general_relation.as_ref() {
         Term::Op(op, args) => {
             // It's a valid relation
             if !["=", ">", "<", ">=", "<="].contains(&op.to_string().as_str()) {
-                return Err(CheckerError::Explanation(format!(
+                Err(CheckerError::Explanation(format!(
                     "Operator {op} is not a valid relation"
-                )));
+                )))?;
             }
             // Over two arguments
-            let (a, b) = match &args[..] {
-                [a, b] => Ok((a, b)),
+            let (general_arg_left, general_arg_right) = match &args[..] {
+                [general_arg_left, general_arg_right] => Ok((general_arg_left, general_arg_right)),
                 _ => Err(CheckerError::Explanation(format!(
                     "Expected two arguments of {op}, got {args:?}"
                 ))),
             }?;
-            Ok((op.to_string(), a, b))
+            Ok((op.to_string(), general_arg_left, general_arg_right))
         }
         _ => Err(CheckerError::Explanation(
             "Expected relation operator".into(),
         )),
     }?;
 
-    // Split `a` and `b` into list of added terms
-    let a = split_summation(a);
-    let b = split_summation(b);
+    // Split general args into list of added terms
+    let general_arg_left = split_summation(general_arg_left);
+    let general_arg_right = split_summation(general_arg_right);
 
-    let mut vars: Vec<Rc<Term>> = vec![];
-    let mut constant: Integer = 0.into();
+    let mut general_vars: Vec<Rc<Term>> = vec![];
+    let mut general_constant: Integer = 0.into();
 
     // Separate the variables from constants
-    for t in a {
-        match t.as_ref() {
-            Term::Const(Constant::Integer(k)) => constant -= k,
-            _ => vars.push(t.clone()),
+    for left_term in general_arg_left {
+        match left_term.as_ref() {
+            Term::Const(Constant::Integer(k)) => general_constant -= k,
+            _ => general_vars.push(left_term.clone()),
         }
     }
-    for t in b {
-        match t.as_ref() {
-            Term::Const(Constant::Integer(k)) => constant += k,
+    for right_term in general_arg_right {
+        match right_term.as_ref() {
+            Term::Const(Constant::Integer(k)) => general_constant += k,
             _ => {
                 // Negation of the generic term
-                let neg_t = negate_term(t, pool)?;
-                vars.push(neg_t);
+                let neg_t = negate_term(right_term, pool)?;
+                general_vars.push(neg_t);
             }
         }
     }
 
     // Special variables when "=" uses two constraints
-    let mut vars2: Vec<Rc<Term>> = vec![];
-    let mut constant2: Integer = 0.into();
+    let mut general_vars_2: Vec<Rc<Term>> = vec![];
+    let mut general_constant_2: Integer = 0.into();
+
+    let mut negate_sum = |sum: &[Rc<Term>]| -> Result<Vec<Rc<Term>>, CheckerError> {
+        sum.iter().map(|t| negate_term(t, pool)).collect()
+    };
 
     // Eliminate other relations
-    match rel.as_str() {
-        ">" => constant += 1,
+    match relation_operator.as_str() {
+        ">" => general_constant += 1,
         "<" => {
-            vars = negate_sum(&vars, pool)?;
-            constant = 1 - constant;
+            general_vars = negate_sum(&general_vars)?;
+            general_constant = 1 - general_constant;
         }
         "<=" => {
-            vars = negate_sum(&vars, pool)?;
-            constant = -constant;
+            general_vars = negate_sum(&general_vars)?;
+            general_constant = -general_constant;
         }
         "=" => {
-            vars2 = negate_sum(&vars, pool)?;
-            constant2 = -constant.clone();
+            general_vars_2 = negate_sum(&general_vars)?;
+            general_constant_2 = -general_constant.clone();
         }
-        _ => (),
+        ">=" => (), /* Nothing to be done */
+        _ => {
+            // Should be impossible to get here
+            Err(CheckerError::Explanation(format!(
+                "Invalid relation operator: {relation_operator}"
+            )))?;
+        }
     }
 
-    // Push Negations
-    push_negation(&mut vars, &mut constant, pool)?;
-    let vars_term = pack_summation(vars, pool)?;
-    let pb_ineq = build_term!(pool,(>= {vars_term} (const constant)));
+    if relation_operator == "=" {
+        let ((normalized_vars, normalized_constant), (normalized_vars_2, normalized_constant_2)) =
+            match_term_err!((and (>= normalized_vars normalized_constant) (>= normalized_vars_2 normalized_constant_2)) = normalized_relation)?;
 
-    if rel == "=" {
-        push_negation(&mut vars2, &mut constant2, pool)?;
-        let vars2_term = pack_summation(vars2, pool)?;
-        let both = build_term!(pool,(and {pb_ineq} (>= {vars2_term} (const constant2))));
-        let ((vars_r, constant_r), (vars2_r, constant2_r)) =
-            match_term_err!((and (>= vars_r constant_r) (>= vars2_r constant2_r)) = rhs)?;
-
-        let vars_r = split_summation(vars_r);
-        let vars2_r = split_summation(vars2_r);
-
-        let vars_r = pack_summation(vars_r.to_vec(), pool)?;
-        let vars2_r = pack_summation(vars2_r.to_vec(), pool)?;
-
-        let expected_lhs = both;
-        let expected_rhs = build_term!(pool,(and (>= {vars_r} { constant_r.clone() }) (>= { vars2_r } { constant2_r.clone() })));
-
-        assert_eq(&expected_lhs, &expected_rhs)
+        check_equivalent_inequalities(
+            pool,
+            general_vars,
+            general_constant,
+            split_summation(normalized_vars).to_vec(),
+            normalized_constant.as_integer_err()?,
+        )?;
+        check_equivalent_inequalities(
+            pool,
+            general_vars_2,
+            general_constant_2,
+            split_summation(normalized_vars_2).to_vec(),
+            normalized_constant_2.as_integer_err()?,
+        )
     } else {
-        // TODO: Remove all this repetition
-        // TODO: Remove all this repetition
-        let (vars_r, constant_r) = match_term_err!((>= vars_r constant_r) = rhs)?;
+        let (normalized_vars, normalized_constant) =
+            match_term_err!((>= normalized_vars normalized_constant) = normalized_relation)?;
 
-        let vars_r = split_summation(vars_r);
-
-        let vars_r = pack_summation(vars_r.to_vec(), pool)?;
-
-        let expected_lhs = pb_ineq;
-        let expected_rhs = build_term!(pool,(>= {vars_r} { constant_r.clone() }) );
-
-        assert_eq(&expected_lhs, &expected_rhs)
+        check_equivalent_inequalities(
+            pool,
+            general_vars,
+            general_constant,
+            split_summation(normalized_vars).to_vec(),
+            normalized_constant.as_integer_err()?,
+        )
     }
-
-    // Flatten RHS (multiplications by one)
-    // TODO
-
-    // Flatten LHS (multiplications by one)
-    // TODO
-
-    // assert_eq(&expected_lhs, rhs)
 }
