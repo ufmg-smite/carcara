@@ -9,7 +9,8 @@ use std::collections::HashMap;
 
 type PbHash = HashMap<String, Integer>;
 
-fn split_sum(sum_term: &Rc<Term>) -> &[Rc<Term>] {
+// Helper to unwrap a summation list
+pub fn split_summation(sum_term: &Rc<Term>) -> &[Rc<Term>] {
     if let Some(summation) = match_term!((+ ...) = sum_term) {
         summation
     } else {
@@ -19,7 +20,7 @@ fn split_sum(sum_term: &Rc<Term>) -> &[Rc<Term>] {
 
 fn get_pb_hashmap(pbsum: &Rc<Term>) -> Result<PbHash, CheckerError> {
     let mut hm = HashMap::new();
-    let pbsum = split_sum(pbsum);
+    let pbsum = split_summation(pbsum);
 
     //  Special case: single 0
     if pbsum.len() == 1 {
@@ -422,12 +423,19 @@ fn negate_sum(sum: &[Rc<Term>], pool: &mut dyn TermPool) -> Result<Vec<Rc<Term>>
 }
 
 // -ci li + ψ >= k ==> ci neg_li + ψ >= k + ci
-fn push_negation(vars: &mut Vec<Rc<Term>>, constant: &mut Integer,pool:&mut dyn TermPool) -> RuleResult {
+fn push_negation(
+    vars: &mut Vec<Rc<Term>>,
+    constant: &mut Integer,
+    pool: &mut dyn TermPool,
+) -> RuleResult {
     for t in vars {
         if let Some((c, l)) = match_term!((* c l) = t) {
             let c = c.as_integer_err()?;
-            if c >= 0 { continue; }
-            let neg_l : Rc<Term> = if let Some((_,x)) = match_term!((- 1 x) = l) {
+            if c >= 0 {
+                continue;
+            }
+            // Negate the PB `l`
+            let neg_l: Rc<Term> = if let Some((_, x)) = match_term!((- 1 x) = l) {
                 x.clone()
             } else {
                 build_term!(pool,(- 1 {l.clone()}))
@@ -466,19 +474,13 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
         )),
     }?;
 
-    let debug = rel == "<=";
-
     // Split `a` and `b` into list of added terms
-    let a = split_sum(a);
-    let b = split_sum(b);
+    let a = split_summation(a);
+    let b = split_summation(b);
 
     let mut vars: Vec<Rc<Term>> = vec![];
     let mut constant: Integer = 0.into();
 
-    if debug {
-        println!("\t\t\t\t\t\t\ta:{a:?}");
-        println!("\t\t\t\t\t\t\tb:{b:?}");
-    }
     // Separate the variables from constants
     for t in a {
         match t.as_ref() {
@@ -495,11 +497,6 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
                 vars.push(neg_t);
             }
         }
-    }
-
-    if debug {
-        println!("VARS:\t\t\t\t\t\t\t{vars:?}");
-        println!("CONSTANT:\t\t\t\t\t\t{constant:?}");
     }
 
     // Special variables when "=" uses two constraints
@@ -524,23 +521,18 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
         _ => (),
     }
 
-    if debug {
-        println!("VARS AFTER ELIM:\t\t\t\t\t\t\t{vars:?}");
-        println!("CONSTANT AFTER ELIM:\t\t\t\t\t\t{constant:?}");
-        println!("VARS2 AFTER ELIM:\t\t\t\t\t\t\t{vars2:?}");
-        println!("CONSTANT2 AFTER ELIM:\t\t\t\t\t\t{constant2:?}");
-    }
-
     // Push Negations
-    push_negation(&mut vars, &mut constant,pool)?;
-    let vars_term: Rc<Term> = build_term!(pool, 1); // TODO
+    push_negation(&mut vars, &mut constant, pool)?;
+    // ! Wrong. We actually want a "summation list", not a bitvector...
+    let vars_term = pool.add(Term::Op(Operator::BvPBbTerm, vars));
     let pb_ineq = build_term!(pool,(>= {vars_term} (const constant)));
 
     if rel == "=" {
         push_negation(&mut vars2, &mut constant2, pool)?;
-        let vars2_term: Rc<Term> = build_term!(pool, 1); // TODO
+        // ! Wrong. We actually want a "summation list", not a bitvector...
+        let vars2_term = pool.add(Term::Op(Operator::BvPBbTerm, vars2));
         let both = build_term!(pool,(and {pb_ineq} 
-                                         (>= {vars2_term} (const constant2))));
+                                     (>= {vars2_term} (const constant2))));
         assert_eq(&both, rhs)
     } else {
         assert_eq(&pb_ineq, rhs)
