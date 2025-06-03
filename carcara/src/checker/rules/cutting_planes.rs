@@ -417,15 +417,11 @@ fn negate_term(t: &Rc<Term>, pool: &mut dyn TermPool) -> Result<Rc<Term>, Checke
     }
 }
 
-fn negate_sum(sum: &Vec<Rc<Term>>, pool: &mut dyn TermPool) -> Result<Vec<Rc<Term>>, CheckerError> {
-    let mut ans: Vec<Rc<Term>> = vec![];
-    // ? What about using a map...
-    for t in sum {
-        let neg_t = negate_term(t, pool)?;
-        ans.push(neg_t);
-    }
-    Ok(ans)
+fn negate_sum(sum: &[Rc<Term>], pool: &mut dyn TermPool) -> Result<Vec<Rc<Term>>, CheckerError> {
+    sum.iter().map(|t| negate_term(t, pool)).collect()
 }
+
+fn push_negation(vars: &mut Vec<Rc<Term>>, constant: &mut Integer) {}
 
 pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     let (lhs, rhs) = match_term_err!((= lhs rhs) = &conclusion[0])?;
@@ -518,6 +514,18 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
         println!("CONSTANT2 AFTER ELIM:\t\t\t\t\t\t{constant2:?}");
     }
 
-    // TODO: Push Negations
-    Ok(())
+    // Push Negations
+    push_negation(&mut vars, &mut constant);
+    let vars_term: Rc<Term> = build_term!(pool, 1); // TODO
+    let pb_ineq = build_term!(pool,(>= {vars_term} (const constant)));
+
+    if rel == "=" {
+        push_negation(&mut vars2, &mut constant2);
+        let vars2_term: Rc<Term> = build_term!(pool, 1); // TODO
+        let both = build_term!(pool,(and {pb_ineq} 
+                                         (>= {vars2_term} (const constant2))));
+        assert_eq(&both, rhs)
+    } else {
+        assert_eq(&pb_ineq, rhs)
+    }
 }
