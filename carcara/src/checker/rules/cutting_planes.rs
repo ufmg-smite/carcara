@@ -448,22 +448,25 @@ fn push_negation(
     Ok(())
 }
 
-fn flatten_mul(x: &Rc<Term>) -> Rc<Term> {
-    if let Some((_, x)) = match_term!((* 1 x) = x) {
-        x.clone()
-    } else {
-        x.clone()
+fn flatten_mul(x: &Rc<Term>, pool: &mut dyn TermPool) -> Result<Rc<Term>, CheckerError> {
+    if let Some((c, x)) = match_term!((* c x) = x) {
+        let c = c.as_integer_err()?;
+        if c == 1 {
+            return Ok(x.clone());
+        } else if c == -1 {
+            return Ok(build_term!(pool,(- 1 {x.clone()})));
+        }
     }
+    Ok(x.clone())
 }
 
-fn pack_summation(vars: Vec<Rc<Term>>, pool: &mut dyn TermPool) -> Rc<Term> {
+fn pack_summation(vars: Vec<Rc<Term>>, pool: &mut dyn TermPool) -> Result<Rc<Term>, CheckerError> {
     if vars.len() > 1 {
-        pool.add(Term::Op(
-            Operator::Add,
-            vars.iter().map(flatten_mul).collect(),
-        ))
+        let args: Result<Vec<Rc<Term>>, CheckerError> =
+            vars.iter().map(|x| flatten_mul(x, pool)).collect();
+        Ok(pool.add(Term::Op(Operator::Add, args?)))
     } else {
-        flatten_mul(&vars[0])
+        flatten_mul(&vars[0], pool)
     }
 }
 
@@ -543,12 +546,12 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
 
     // Push Negations
     push_negation(&mut vars, &mut constant, pool)?;
-    let vars_term = pack_summation(vars, pool);
+    let vars_term = pack_summation(vars, pool)?;
     let pb_ineq = build_term!(pool,(>= {vars_term} (const constant)));
 
     if rel == "=" {
         push_negation(&mut vars2, &mut constant2, pool)?;
-        let vars2_term = pack_summation(vars2, pool);
+        let vars2_term = pack_summation(vars2, pool)?;
         let both = build_term!(pool,(and {pb_ineq} (>= {vars2_term} (const constant2))));
         let ((vars_r, constant_r), (vars2_r, constant2_r)) =
             match_term_err!((and (>= vars_r constant_r) (>= vars2_r constant2_r)) = rhs)?;
@@ -556,8 +559,8 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
         let vars_r = split_summation(vars_r);
         let vars2_r = split_summation(vars2_r);
 
-        let vars_r = pack_summation(vars_r.to_vec(), pool);
-        let vars2_r = pack_summation(vars2_r.to_vec(), pool);
+        let vars_r = pack_summation(vars_r.to_vec(), pool)?;
+        let vars2_r = pack_summation(vars2_r.to_vec(), pool)?;
 
         let expected_lhs = both;
         let expected_rhs = build_term!(pool,(and (>= {vars_r} { constant_r.clone() }) (>= { vars2_r } { constant2_r.clone() })));
@@ -566,11 +569,11 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     } else {
         // TODO: Remove all this repetition
         // TODO: Remove all this repetition
-        let ((vars_r, constant_r)) = match_term_err!((>= vars_r constant_r) = rhs)?;
+        let (vars_r, constant_r) = match_term_err!((>= vars_r constant_r) = rhs)?;
 
         let vars_r = split_summation(vars_r);
 
-        let vars_r = pack_summation(vars_r.to_vec(), pool);
+        let vars_r = pack_summation(vars_r.to_vec(), pool)?;
 
         let expected_lhs = pb_ineq;
         let expected_rhs = build_term!(pool,(>= {vars_r} { constant_r.clone() }) );
