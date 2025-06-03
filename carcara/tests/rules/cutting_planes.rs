@@ -338,6 +338,8 @@ fn cp_normalize() {
         }
         "Other relations are eliminated" {
             r#"(step t1 (cl (= (<= a 0) (>= (- 1 a) 1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (<= (- 1 a) 0) (>= a 1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (<= (* -1 a) 0) (>= a 0))) :rule cp_normalize)"#: true,
             r#"(step t1 (cl (= (> a 0) (>= a 1))) :rule cp_normalize)"#: true,
             r#"(step t1 (cl (= (< a 0) (>= (* -1 a) 2))) :rule cp_normalize)"#: true,
             r#"(step t1 (cl (= (= a 0) (and (>= a 0) (>= (* -1 a) 1)))) :rule cp_normalize)"#: true,
@@ -355,6 +357,12 @@ fn cp_normalize() {
         }
         "Invalid relations" {
             r#"(step t1 (cl (= (and true true) (>= a 0))) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (not (= (>= a 1) (>= a 0)))) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (not (= (+ a 1) (+ 1 a)))) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (= (<= (* -1 a 1) 0) (>= a 0))) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (= (>= (+ a 1) 0) (>= a 0))) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (= (= a 0 0) (and (>= a 0) (>= (* -1 a) 1)))) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (= true (>= a 0))) :rule cp_normalize)"#: false,
         }
     }
 }
