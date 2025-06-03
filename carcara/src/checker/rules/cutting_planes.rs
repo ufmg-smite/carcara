@@ -525,6 +525,7 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     let mut general_constant: Integer = 0.into();
 
     // Separate the variables from constants
+    // TODO: These lists are not "flat" enough, we still have (- (+ a b) (+ c d)) happening
     for left_term in general_arg_left {
         match left_term.as_ref() {
             Term::Const(Constant::Integer(k)) => general_constant -= k,

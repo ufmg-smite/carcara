@@ -319,6 +319,10 @@ fn cp_normalize() {
             (declare-fun a () Int)
             (declare-fun b () Int)
             (declare-fun c () Int)
+            (declare-fun r0 () Int)
+            (declare-fun r1 () Int)
+            (declare-fun z0 () Int)
+            (declare-fun z1 () Int)
         ",
         "Term is already normalized" {
             r#"(step t1 (cl (= (>= a 0) (>= a 0))) :rule cp_normalize)"#: true,
@@ -363,6 +367,28 @@ fn cp_normalize() {
             r#"(step t1 (cl (= (>= (+ a 1) 0) (>= a 0))) :rule cp_normalize)"#: false,
             r#"(step t1 (cl (= (= a 0 0) (and (>= a 0) (>= (* -1 a) 1)))) :rule cp_normalize)"#: false,
             r#"(step t1 (cl (= true (>= a 0))) :rule cp_normalize)"#: false,
+        }
+        "Instance of bigger example"  {
+            r#"(step t1 (cl (=
+                        (= (-       ;; This syntax is not a flat summation list
+                             (+ (* 1 r0) (* 2 r1))
+                             (+ (* 1 z0) (* 2 z1))
+                           ) 0)
+                        (and
+                            (>= (+
+                                    (* 1 r0)
+                                    (* 2 r1)
+                                    (* 1 (- 1 z0))
+                                    (* 2 (- 1 z1))
+                                ) 0)
+                            (>= (+
+                                    (* 1 (- 1 r0))
+                                    (* 2 (- 1 r1))
+                                    (* 1 z0)
+                                    (* 2 z1)
+                                ) 0)
+                        )
+                    )) :rule cp_normalize)"#: true,
         }
     }
 }
