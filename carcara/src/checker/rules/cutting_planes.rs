@@ -395,18 +395,11 @@ fn negate_term(t: &Rc<Term>, pool: &mut dyn TermPool) -> Result<Rc<Term>, Checke
         Term::Op(Operator::Mult, args) => {
             if let [c, l] = &args[..] {
                 let c = c.as_integer_err()?;
-                // Check if already negative
-                if c < 0 {
-                    Ok(l.clone())
-                } else {
-                    let c_term = pool.add(Term::Const(Constant::Integer(-c)));
-                    let negated_l = build_term!(pool,(* {c_term} {l.clone()}));
-                    Ok(negated_l)
-                }
+                let c_term = pool.add(Term::Const(Constant::Integer(-c)));
+                let negated_l = build_term!(pool,(* {c_term} {l.clone()}));
+                Ok(negated_l)
             } else {
-                Err(CheckerError::Explanation(
-                    "Expected multiplication on 2 arguments".into(),
-                ))
+                Err(CheckerError::WrongNumberOfArgs(2.into(), args.len()))
             }
         }
         _ => {
@@ -470,6 +463,39 @@ fn pack_summation(vars: Vec<Rc<Term>>, pool: &mut dyn TermPool) -> Result<Rc<Ter
     }
 }
 
+fn negate_sum(pool: &mut dyn TermPool, sum: &[Rc<Term>]) -> Result<Vec<Rc<Term>>, CheckerError> {
+    sum.iter().map(|t| negate_term(t, pool)).collect()
+}
+
+fn flatten_linear_operations(
+    pool: &mut dyn TermPool,
+    term: &Rc<Term>,
+) -> Result<(Vec<Rc<Term>>, Integer), CheckerError> {
+    match term.as_ref() {
+        Term::Op(Operator::Add, args) => {
+            let mut ans = vec![];
+            let mut cnt = 0.into();
+            for arg in args {
+                let (va, ca) = flatten_linear_operations(pool, arg)?;
+                ans.extend(va);
+                cnt += ca;
+            }
+            Ok((ans, cnt))
+        }
+        Term::Op(Operator::Sub, args) => {
+            if let [a, b] = &args[..] {
+                let (va, ca) = flatten_linear_operations(pool, a)?;
+                let (vb, cb) = flatten_linear_operations(pool, b)?;
+                Ok(([&va[..], &(negate_sum(pool, &vb)?)[..]].concat(), ca - cb))
+            } else {
+                Err(CheckerError::WrongNumberOfArgs(2.into(), args.len()))
+            }
+        }
+        Term::Const(Constant::Integer(k)) => Ok((vec![], k.clone())),
+        _ => Ok((vec![term.clone()], 0.into())),
+    }
+}
+
 fn check_equivalent_inequalities(
     pool: &mut dyn TermPool,
     mut general_vars: Vec<Rc<Term>>,
@@ -518,52 +544,35 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
     }?;
 
     // Split general args into list of added terms
-    let general_arg_left = split_summation(general_arg_left);
-    let general_arg_right = split_summation(general_arg_right);
+    let (general_arg_left_vars, general_arg_left_constant) =
+        flatten_linear_operations(pool, general_arg_left)?;
+    let (general_arg_right_vars, general_arg_right_constant) =
+        flatten_linear_operations(pool, general_arg_right)?;
 
-    let mut general_vars: Vec<Rc<Term>> = vec![];
-    let mut general_constant: Integer = 0.into();
-
-    // Separate the variables from constants
-    // TODO: These lists are not "flat" enough, we still have (- (+ a b) (+ c d)) happening
-    for left_term in general_arg_left {
-        match left_term.as_ref() {
-            Term::Const(Constant::Integer(k)) => general_constant -= k,
-            _ => general_vars.push(left_term.clone()),
-        }
-    }
-    for right_term in general_arg_right {
-        match right_term.as_ref() {
-            Term::Const(Constant::Integer(k)) => general_constant += k,
-            _ => {
-                // Negation of the generic term
-                let neg_t = negate_term(right_term, pool)?;
-                general_vars.push(neg_t);
-            }
-        }
-    }
+    let mut general_vars: Vec<Rc<Term>> = [
+        &general_arg_left_vars[..],
+        &negate_sum(pool, &general_arg_right_vars)?[..],
+    ]
+    .concat();
+    let mut general_constant: Integer = general_arg_right_constant - general_arg_left_constant;
 
     // Special variables when "=" uses two constraints
     let mut general_vars_2: Vec<Rc<Term>> = vec![];
     let mut general_constant_2: Integer = 0.into();
 
-    let mut negate_sum = |sum: &[Rc<Term>]| -> Result<Vec<Rc<Term>>, CheckerError> {
-        sum.iter().map(|t| negate_term(t, pool)).collect()
-    };
-
     // Eliminate other relations
     match relation_operator.as_str() {
         ">" => general_constant += 1,
         "<" => {
-            general_vars = negate_sum(&general_vars)?;
+            general_vars = negate_sum(pool, &general_vars)?;
             general_constant = 1 - general_constant;
         }
         "<=" => {
-            general_vars = negate_sum(&general_vars)?;
+            general_vars = negate_sum(pool, &general_vars)?;
             general_constant = -general_constant;
         }
         "=" => {
-            general_vars_2 = negate_sum(&general_vars)?;
+            general_vars_2 = negate_sum(pool, &general_vars)?;
             general_constant_2 = -general_constant.clone();
         }
         ">=" => (), /* Nothing to be done */
