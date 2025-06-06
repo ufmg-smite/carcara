@@ -396,13 +396,11 @@ fn match_supported_relation_err(
 ) -> Result<(String, &Rc<Term>, &Rc<Term>), CheckerError> {
     match term.as_ref() {
         Term::Op(op, args) => {
-            // It's a valid relation
             if !["=", ">", "<", ">=", "<="].contains(&op.to_string().as_str()) {
                 Err(CheckerError::Explanation(format!(
                     "Operator {op} is not a valid relation"
                 )))
             } else if let [lhs, rhs] = &args[..] {
-                // Over two arguments
                 Ok((op.to_string(), lhs, rhs))
             } else {
                 Err(CheckerError::WrongNumberOfArgs(2.into(), args.len()))
@@ -415,7 +413,7 @@ fn match_supported_relation_err(
 }
 
 /// Negate an integer term, in general
-/// a => (- 1 a)
+/// a => (* -1 a)
 /// When term has a coefficient, negates the coefficient
 /// (* c l) => (* -c l)
 fn negate_term(t: &Rc<Term>, pool: &mut dyn TermPool) -> Result<Rc<Term>, CheckerError> {
@@ -440,7 +438,7 @@ fn negate_term(t: &Rc<Term>, pool: &mut dyn TermPool) -> Result<Rc<Term>, Checke
 }
 
 /// Maps a sum, as a list of terms, to the negation of each element
-fn negate_sum(pool: &mut dyn TermPool, sum: &[Rc<Term>]) -> Result<Vec<Rc<Term>>, CheckerError> {
+fn negate_sum(sum: &[Rc<Term>], pool: &mut dyn TermPool) -> Result<Vec<Rc<Term>>, CheckerError> {
     sum.iter().map(|t| negate_term(t, pool)).collect()
 }
 
@@ -449,15 +447,15 @@ fn negate_sum(pool: &mut dyn TermPool, sum: &[Rc<Term>]) -> Result<Vec<Rc<Term>>
 /// Accumulate constants into a Integer
 /// (- (+ a 2) (+ 1 d)) ==> [a,(* -1 d)], 1
 fn flatten_addition_tree(
-    pool: &mut dyn TermPool,
     term: &Rc<Term>,
+    pool: &mut dyn TermPool,
 ) -> Result<(Vec<Rc<Term>>, Integer), CheckerError> {
     match term.as_ref() {
         Term::Op(Operator::Add, args) => {
             let mut ans = vec![];
             let mut cnt = 0.into();
             for arg in args {
-                let (va, ca) = flatten_addition_tree(pool, arg)?;
+                let (va, ca) = flatten_addition_tree(arg, pool)?;
                 ans.extend(va);
                 cnt += ca;
             }
@@ -465,9 +463,9 @@ fn flatten_addition_tree(
         }
         Term::Op(Operator::Sub, args) => {
             if let [a, b] = &args[..] {
-                let (va, ca) = flatten_addition_tree(pool, a)?;
-                let (vb, cb) = flatten_addition_tree(pool, b)?;
-                Ok(([&va[..], &(negate_sum(pool, &vb)?)[..]].concat(), ca - cb))
+                let (va, ca) = flatten_addition_tree(a, pool)?;
+                let (vb, cb) = flatten_addition_tree(b, pool)?;
+                Ok(([&va[..], &(negate_sum(&vb, pool)?)[..]].concat(), ca - cb))
             } else {
                 Err(CheckerError::WrongNumberOfArgs(2.into(), args.len()))
             }
@@ -548,13 +546,13 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
         match_supported_relation_err(general_relation)?;
 
     // Split general args into list of added terms
-    let (left_vars, left_constant) = flatten_addition_tree(pool, left_addition_tree)?;
-    let (right_vars, right_constant) = flatten_addition_tree(pool, right_addition_tree)?;
+    let (left_vars, left_constant) = flatten_addition_tree(left_addition_tree, pool)?;
+    let (right_vars, right_constant) = flatten_addition_tree(right_addition_tree, pool)?;
 
     // Create General Vars and Constant
     // TODO: Better concatenation?
     let mut general_vars: Vec<Rc<Term>> =
-        [&left_vars[..], &negate_sum(pool, &right_vars)?[..]].concat();
+        [&left_vars[..], &negate_sum(&right_vars, pool)?[..]].concat();
     let mut general_constant: Integer = right_constant - left_constant;
 
     if relation_operator == "=" {
@@ -571,7 +569,7 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
         check_pb_inequalities(&general_vars, &general_constant, &sum_l, &kl)?;
 
         // Check (¬𝜑 ≥ −𝑘)
-        let mut general_vars_neg = negate_sum(pool, &general_vars)?;
+        let mut general_vars_neg = negate_sum(&general_vars, pool)?;
         let mut general_constant_neg = -general_constant.clone();
         push_negation(&mut general_vars_neg, &mut general_constant_neg, pool)?;
 
@@ -589,12 +587,12 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
             ">" => general_constant += 1,
             // • 𝜑 < 𝑘 ⇒ ¬𝜑 ≥ −𝑘 + 1
             "<" => {
-                general_vars = negate_sum(pool, &general_vars)?;
+                general_vars = negate_sum(&general_vars, pool)?;
                 general_constant = 1 - general_constant;
             }
             // • 𝜑 ≤ 𝑘 ⇒ ¬𝜑 ≥ −𝑘
             "<=" => {
-                general_vars = negate_sum(pool, &general_vars)?;
+                general_vars = negate_sum(&general_vars, pool)?;
                 general_constant = -general_constant;
             }
             ">=" => (), /* Nothing to be done */
