@@ -1,7 +1,7 @@
 use super::{
     assert_clause_len, assert_eq, assert_num_args, assert_num_premises, RuleArgs, RuleResult, Term,
 };
-use crate::ast::{Constant, Operator, TermPool};
+use crate::ast::{Constant, Operator};
 use crate::checker::error::CheckerError;
 use crate::checker::Rc;
 use rug::Integer;
@@ -412,93 +412,152 @@ fn match_supported_relation_err(
     }
 }
 
-/// Negate an integer term, in general
-/// a => (* -1 a)
-/// When term has a coefficient, negates the coefficient
-/// (* c l) => (* -c l)
-fn negate_term(t: &Rc<Term>, pool: &mut dyn TermPool) -> Result<Rc<Term>, CheckerError> {
-    match t.as_ref() {
-        Term::Op(Operator::Mult, args) => {
-            if let [c, l] = &args[..] {
-                let c = -c.as_integer_err()?;
-                let negated_l = build_term!(pool,(* (const c) {l.clone()}));
-                Ok(negated_l)
-            } else {
-                Err(CheckerError::WrongNumberOfArgs(2.into(), args.len()))
-            }
-        }
-        _ => {
-            // Arbitrary term gets negated
-            // TODO: How to fit `-1` into build_term ?
-            let minus_one_term = pool.add(Term::Const(Constant::Integer((-1).into())));
-            let negated_t = build_term!(pool,(* {minus_one_term} {t.clone()}));
-            Ok(negated_t)
+/// Useful representation of `(* coeff var)`
+/// where `coeff` is a known Integer
+#[derive(Clone)]
+struct CoeffTimesVar<'a> {
+    coeff: Integer,
+    var: &'a Rc<Term>,
+    negated: bool,
+}
+
+impl std::fmt::Debug for CoeffTimesVar<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.negated {
+            write!(f, "{} ~{}", self.coeff, self.var)
+        } else {
+            write!(f, "{} {}", self.coeff, self.var)
         }
     }
 }
 
-/// Maps a sum, as a list of terms, to the negation of each element
-fn negate_sum(sum: &[Rc<Term>], pool: &mut dyn TermPool) -> Result<Vec<Rc<Term>>, CheckerError> {
-    sum.iter().map(|t| negate_term(t, pool)).collect()
+impl PartialEq for CoeffTimesVar<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        // Different coefficients can't be same
+        if self.coeff != other.coeff {
+            return false;
+        }
+
+        // Same variables should have same negation
+        if self.var == other.var {
+            return self.negated == other.negated;
+        }
+
+        // Different vars can only be equal if the `!negated` var
+        // has shape `(- 1 l)`  and the negated has shape `l`
+
+        // * 1. self is `negated l`, other is `!negated (- 1 l)`
+        if self.negated {
+            if let Some((_, l)) = match_term!((- 1 l) = other.var) {
+                return l == self.var;
+            } else {
+                return false;
+            }
+        }
+        // 2. self is `!negated (- 1 l)`, other is `negated l`
+        if other.negated {
+            if let Some((_, l)) = match_term!((- 1 l) = self.var) {
+                return l == other.var;
+            } else {
+                return false;
+            }
+        }
+
+        false
+    }
+}
+
+fn term_to_ctv(term: &Rc<Term>) -> Result<CoeffTimesVar, CheckerError> {
+    if let Some((c, l)) = match_term!((* c l) = term) {
+        let c = c.as_integer_err()?;
+        if let Some((_, x)) = match_term!((- 1 x) = l) {
+            Ok(CoeffTimesVar { coeff: c, var: x, negated: true })
+        } else {
+            Ok(CoeffTimesVar { coeff: c, var: l, negated: false })
+        }
+    } else {
+        Ok(CoeffTimesVar {
+            coeff: 1.into(),
+            var: term,
+            negated: false,
+        })
+    }
+}
+
+/// Negate an integer term, in general
+/// a => (* -1 a)
+/// When term has a coefficient, negates the coefficient
+/// (* c l) => (* -c l)
+fn negate_ctv(t: &mut CoeffTimesVar) {
+    let CoeffTimesVar { coeff, .. } = t;
+    *coeff = -coeff.clone();
+}
+
+/// Changes a sum, as a list of terms, to the negation of each element
+fn negate_sum(sum: &mut Vec<CoeffTimesVar>) {
+    // let mut ans = sum;
+    for t in sum.iter_mut() {
+        negate_ctv(t);
+    }
+
+    // for i in 0..ans.len() {
+    //     let mut k = ans[i];
+    //     negate_ctv(k);
+    // }
+
+    // for ctv in sum {
+    //     *ctv = negate_ctv(ctv);
+    // }
+    // ans
 }
 
 /// Collect the added or subtracted terms into a vector
 /// (- (+ a b) (+ c d)) ==> [a,b,(* -1 c),(* -1 d)]
 /// Accumulate constants into a Integer
 /// (- (+ a 2) (+ 1 d)) ==> [a,(* -1 d)], 1
-fn flatten_addition_tree(
-    term: &Rc<Term>,
-    pool: &mut dyn TermPool,
-) -> Result<(Vec<Rc<Term>>, Integer), CheckerError> {
+fn flatten_addition_tree(term: &Rc<Term>) -> (Vec<CoeffTimesVar>, Integer) {
     match term.as_ref() {
         Term::Op(Operator::Add, args) => {
             let mut ans = vec![];
             let mut cnt = 0.into();
             for arg in args {
-                let (va, ca) = flatten_addition_tree(arg, pool)?;
+                let (va, ca) = flatten_addition_tree(arg);
                 ans.extend(va);
                 cnt += ca;
             }
-            Ok((ans, cnt))
+            (ans, cnt)
         }
         Term::Op(Operator::Sub, args) => {
-            if let [a, b] = &args[..] {
-                let (va, ca) = flatten_addition_tree(a, pool)?;
-                let (vb, cb) = flatten_addition_tree(b, pool)?;
-                Ok(([&va[..], &(negate_sum(&vb, pool)?)[..]].concat(), ca - cb))
-            } else {
-                Err(CheckerError::WrongNumberOfArgs(2.into(), args.len()))
-            }
+            let (va, ca) = flatten_addition_tree(&args[0]);
+            let (mut vb, cb) = flatten_addition_tree(&args[1]);
+            negate_sum(&mut vb);
+            // FIXME: Better concatenation
+            ([&va[..], &(vb)[..]].concat(), ca - cb)
         }
-        Term::Const(Constant::Integer(k)) => Ok((vec![], k.clone())),
-        _ => Ok((vec![term.clone()], 0.into())),
+        Term::Const(Constant::Integer(k)) => (vec![], k.clone()),
+        _ => {
+            let ctv = CoeffTimesVar {
+                coeff: 1.into(),
+                var: term,
+                negated: false,
+            };
+            (vec![ctv], 0.into())
+        }
     }
 }
 
 /// Changes the list `vars` and Integer `constant` to avoid negative coefficients
 /// `-ci li + ψ >= k` ==> `ci neg_li + ψ >= k + ci`
 /// where `neg_li` is the opposite pseudo boolean variable, noted as `(- 1 li)`
-fn push_negation(
-    vars: &mut Vec<Rc<Term>>,
-    constant: &mut Integer,
-    pool: &mut dyn TermPool,
-) -> RuleResult {
-    for t in vars {
-        if let Some((c, l)) = match_term!((* c l) = t) {
-            let c = c.as_integer_err()?;
-            if c >= 0 {
-                continue;
-            }
-            // Negate the PB `l`
-            let neg_l: Rc<Term> = if let Some((_, x)) = match_term!((- 1 x) = l) {
-                x.clone()
-            } else {
-                build_term!(pool,(- 1 {l.clone()}))
-            };
-            let c = -c; // Now c is strictly positive
-            *constant += c.clone();
-            *t = build_term!(pool, (* (const c) {neg_l.clone()}));
-        };
+fn push_negation(vars: &mut Vec<CoeffTimesVar>, constant: &mut Integer) -> RuleResult {
+    for CoeffTimesVar { coeff, negated, .. } in vars {
+        if *coeff >= 0 {
+            continue;
+        }
+        *negated = !*negated;
+        // FIXME How to avoid these clones?
+        *constant += coeff.clone();
+        *coeff = -coeff.clone();
     }
     Ok(())
 }
@@ -507,23 +566,16 @@ fn push_negation(
 /// `(>= vars_l kl)`, `(>= vars_r kr)`
 /// Prerequisite: All variables are multiplied by **non-negative** coefficients
 fn check_pb_inequalities(
-    vars_l: &[Rc<Term>],
+    vars_l: &[CoeffTimesVar],
     kl: &Integer,
-    vars_r: &[Rc<Term>],
+    vars_r: &[CoeffTimesVar],
     kr: &Integer,
 ) -> RuleResult {
-    let remove_multiplication_by_1 = |t| {
-        if let Some((_, l)) = match_term!((* 1 l) = t) {
-            l
-        } else {
-            t
-        }
-    };
-
     for (var_l, var_r) in vars_l.iter().zip(vars_r) {
-        let var_l = remove_multiplication_by_1(var_l);
-        let var_r = remove_multiplication_by_1(var_r);
-        assert_eq(var_l, var_r)?;
+        rassert!(
+            var_l == var_r,
+            CheckerError::Explanation(format!("{var_l:?} != {var_r:?}"))
+        );
     }
 
     // TODO: Better error type. Is there a checker error for two Integers ?
@@ -535,7 +587,7 @@ fn check_pb_inequalities(
 }
 
 /// Transform a general summation relation to the normalized form
-pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+pub fn cp_normalize(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     // (⋈ a b) = (>= sum k)
     let (general_relation, normalized_relation) =
         match_term_err!((= general_relation normalized_relation) = &conclusion[0])?;
@@ -546,14 +598,22 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
         match_supported_relation_err(general_relation)?;
 
     // Split general args into list of added terms
-    let (left_vars, left_constant) = flatten_addition_tree(left_addition_tree, pool)?;
-    let (right_vars, right_constant) = flatten_addition_tree(right_addition_tree, pool)?;
+    let (left_vars, left_constant) = flatten_addition_tree(left_addition_tree);
+    let (mut right_vars, right_constant) = flatten_addition_tree(right_addition_tree);
+
+    println!("left_vars: {left_vars:?}");
+    println!("left_constant: {left_constant:?}");
+    println!("right_vars: {right_vars:?}");
+    println!("right_constant: {right_constant:?}");
 
     // Create General Vars and Constant
+    negate_sum(&mut right_vars);
     // TODO: Better concatenation?
-    let mut general_vars: Vec<Rc<Term>> =
-        [&left_vars[..], &negate_sum(&right_vars, pool)?[..]].concat();
-    let mut general_constant: Integer = right_constant - left_constant;
+    let mut general_vars = [&left_vars[..], &right_vars[..]].concat();
+    let mut general_constant = right_constant - left_constant;
+
+    println!("general_vars: {general_vars:?}");
+    println!("general_constant: {general_constant:?}");
 
     if relation_operator == "=" {
         // • 𝜑 = 𝑘 ⇒ (𝜑 ≥ 𝑘) ∧ (¬𝜑 ≥ −𝑘)
@@ -561,22 +621,29 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
             match_term_err!((and (>= sum_l kl) (>= sum_r kr)) = normalized_relation)?;
 
         // Check (𝜑 ≥ 𝑘)
-        push_negation(&mut general_vars, &mut general_constant, pool)?;
+        push_negation(&mut general_vars, &mut general_constant)?;
 
-        let sum_l = split_summation(sum_l).to_vec();
+        let sum_l: Vec<CoeffTimesVar> = split_summation(sum_l)
+            .iter()
+            .map(term_to_ctv)
+            .collect::<Result<Vec<_>, CheckerError>>()?;
         let kl = kl.as_integer_err()?;
 
         check_pb_inequalities(&general_vars, &general_constant, &sum_l, &kl)?;
 
         // Check (¬𝜑 ≥ −𝑘)
-        let mut general_vars_neg = negate_sum(&general_vars, pool)?;
+        negate_sum(&mut general_vars);
         let mut general_constant_neg = -general_constant.clone();
-        push_negation(&mut general_vars_neg, &mut general_constant_neg, pool)?;
+        push_negation(&mut general_vars, &mut general_constant_neg)?;
 
-        let sum_r = split_summation(sum_r).to_vec();
+        let sum_r: Vec<CoeffTimesVar> = split_summation(sum_r)
+            .iter()
+            .map(term_to_ctv)
+            .collect::<Result<Vec<_>, CheckerError>>()?;
+
         let kr = kr.as_integer_err()?;
 
-        check_pb_inequalities(&general_vars_neg, &general_constant_neg, &sum_r, &kr)
+        check_pb_inequalities(&general_vars, &general_constant_neg, &sum_r, &kr)
     } else {
         let (normalized_vars, normalized_constant) =
             match_term_err!((>= normalized_vars normalized_constant) = normalized_relation)?;
@@ -587,12 +654,12 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
             ">" => general_constant += 1,
             // • 𝜑 < 𝑘 ⇒ ¬𝜑 ≥ −𝑘 + 1
             "<" => {
-                general_vars = negate_sum(&general_vars, pool)?;
+                negate_sum(&mut general_vars);
                 general_constant = 1 - general_constant;
             }
             // • 𝜑 ≤ 𝑘 ⇒ ¬𝜑 ≥ −𝑘
             "<=" => {
-                general_vars = negate_sum(&general_vars, pool)?;
+                negate_sum(&mut general_vars);
                 general_constant = -general_constant;
             }
             ">=" => (), /* Nothing to be done */
@@ -604,9 +671,12 @@ pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
             }
         }
 
-        push_negation(&mut general_vars, &mut general_constant, pool)?;
+        push_negation(&mut general_vars, &mut general_constant)?;
 
-        let normalized_vars = split_summation(normalized_vars).to_vec();
+        let normalized_vars: Vec<CoeffTimesVar> = split_summation(normalized_vars)
+            .iter()
+            .map(term_to_ctv)
+            .collect::<Result<Vec<_>, CheckerError>>()?;
 
         let normalized_constant = normalized_constant.as_integer_err()?;
 
