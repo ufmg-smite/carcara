@@ -1,6 +1,7 @@
 use super::{
     assert_clause_len, assert_eq, assert_num_args, assert_num_premises, RuleArgs, RuleResult, Term,
 };
+use crate::ast::{Constant, Operator};
 use crate::checker::error::CheckerError;
 use crate::checker::Rc;
 use rug::Integer;
@@ -8,13 +9,18 @@ use std::collections::HashMap;
 
 type PbHash = HashMap<String, Integer>;
 
+// Helper to unwrap a summation list
+pub fn split_summation(sum_term: &Rc<Term>) -> &[Rc<Term>] {
+    if let Some(summation) = match_term!((+ ...) = sum_term) {
+        summation
+    } else {
+        std::slice::from_ref(sum_term)
+    }
+}
+
 fn get_pb_hashmap(pbsum: &Rc<Term>) -> Result<PbHash, CheckerError> {
     let mut hm = HashMap::new();
-    let pbsum = if let Some(pbsum) = match_term!((+ ...) = pbsum) {
-        pbsum
-    } else {
-        std::slice::from_ref(pbsum)
-    };
+    let pbsum = split_summation(pbsum);
 
     //  Special case: single 0
     if pbsum.len() == 1 {
@@ -382,4 +388,349 @@ pub fn cp_literal(RuleArgs { pool, args, conclusion, .. }: RuleArgs) -> RuleResu
     Err(CheckerError::Explanation(
         "No valid pattern was found".into(),
     ))
+}
+
+/// Matches against a supported boolean relation ⋈ ∈ {≥,≤,=,>,<}.
+fn match_supported_relation_err(
+    term: &Rc<Term>,
+) -> Result<(String, &Rc<Term>, &Rc<Term>), CheckerError> {
+    match term.as_ref() {
+        Term::Op(op, args) => {
+            if !["=", ">", "<", ">=", "<="].contains(&op.to_string().as_str()) {
+                Err(CheckerError::Explanation(format!(
+                    "Operator {op} is not a valid relation"
+                )))
+            } else if let [lhs, rhs] = &args[..] {
+                Ok((op.to_string(), lhs, rhs))
+            } else {
+                Err(CheckerError::WrongNumberOfArgs(2.into(), args.len()))
+            }
+        }
+        _ => Err(CheckerError::Explanation(
+            "Expected relation operator".into(),
+        )),
+    }
+}
+
+/// Useful representation of `(* coeff var)`
+/// where `coeff` is a known Integer
+#[derive(Clone)]
+struct CoeffTimesVar<'a> {
+    coeff: Integer,
+    var: &'a Rc<Term>,
+    negated: bool,
+}
+
+impl std::fmt::Debug for CoeffTimesVar<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.negated {
+            write!(f, "(* {} ~[{}])", self.coeff, self.var)
+        } else {
+            write!(f, "(* {} [{}])", self.coeff, self.var)
+        }
+    }
+}
+
+impl<'a> From<&'a Rc<Term>> for CoeffTimesVar<'a> {
+    fn from(var: &'a Rc<Term>) -> Self {
+        let coeff = Integer::from(1);
+        CoeffTimesVar { coeff, var, negated: false }
+    }
+}
+
+impl<'a> From<(Integer, &'a Rc<Term>)> for CoeffTimesVar<'a> {
+    fn from((coeff, var): (Integer, &'a Rc<Term>)) -> Self {
+        CoeffTimesVar { coeff, var, negated: false }
+    }
+}
+
+impl PartialEq for CoeffTimesVar<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        // Different coefficients can't be same
+        if self.coeff != other.coeff {
+            return false;
+        }
+
+        // Same variables should have same negation
+        if self.var == other.var {
+            return self.negated == other.negated;
+        }
+
+        // Different vars can only be equal if the `!negated` var
+        // has shape `(- 1 l)`  and the negated has shape `l`
+
+        // * 1. self is `negated l`, other is `!negated (- 1 l)`
+        if self.negated {
+            if let Some((_, l)) = match_term!((- 1 l) = other.var) {
+                return l == self.var;
+            } else {
+                return false;
+            }
+        }
+        // 2. self is `!negated (- 1 l)`, other is `negated l`
+        if other.negated {
+            if let Some((_, l)) = match_term!((- 1 l) = self.var) {
+                return l == other.var;
+            } else {
+                return false;
+            }
+        }
+
+        false
+    }
+}
+
+fn term_to_ctv(term: &Rc<Term>) -> Result<CoeffTimesVar, CheckerError> {
+    if let Some((c, l)) = match_term!((* c l) = term) {
+        let coeff = c.as_integer_err()?;
+        if let Some((_, var)) = match_term!((- 1 var) = l) {
+            Ok(CoeffTimesVar { coeff, var, negated: true })
+        } else {
+            Ok(CoeffTimesVar { coeff, var: l, negated: false })
+        }
+    } else {
+        Ok(CoeffTimesVar::from(term))
+    }
+}
+
+/// Collect the n added terms into a vector of n `CoeffTimesVar`
+fn collect_addition_list(term: &Rc<Term>) -> Result<Vec<CoeffTimesVar>, CheckerError> {
+    split_summation(term).iter().map(term_to_ctv).collect()
+}
+
+/// Negate an integer term, in general
+/// a => (* -1 a)
+/// When term has a coefficient, negates the coefficient
+/// (* c l) => (* -c l)
+fn negate_ctv(t: &mut CoeffTimesVar) {
+    let CoeffTimesVar { coeff, .. } = t;
+    *coeff = -coeff.clone();
+}
+
+/// Changes a sum, as a list of terms, to the negation of each element
+fn negate_sum(sum: &mut [CoeffTimesVar]) {
+    sum.iter_mut().for_each(negate_ctv);
+}
+
+/// Collect the added or subtracted terms into a vector
+/// (- (+ a b) (+ c d)) ==> [a,b,(* -1 c),(* -1 d)]
+/// Accumulate constants into a Integer
+/// (- (+ a 2) (+ 1 d)) ==> [a,(* -1 d)], 1
+fn flatten_addition_tree(term: &Rc<Term>) -> Result<(Vec<CoeffTimesVar>, Integer), CheckerError> {
+    match term.as_ref() {
+        Term::Op(Operator::Add, args) => {
+            let mut ans = vec![];
+            let mut cnt = 0.into();
+            for arg in args {
+                let (va, ca) = flatten_addition_tree(arg)?;
+                ans.extend(va);
+                cnt += ca;
+            }
+            Ok((ans, cnt))
+        }
+        Term::Op(Operator::Sub, args) => {
+            let (mut va, ca) = flatten_addition_tree(&args[0])?;
+            let (mut vb, cb) = flatten_addition_tree(&args[1])?;
+            negate_sum(&mut vb);
+            va.append(&mut vb);
+            Ok((va, ca - cb))
+        }
+        Term::Const(Constant::Integer(k)) => Ok((vec![], k.clone())),
+        _ => {
+            let ctv = term_to_ctv(term)?;
+            Ok((vec![ctv], 0.into()))
+        }
+    }
+}
+
+/// Changes the list `vars` and Integer `constant` to avoid negative coefficients
+/// `-ci li + ψ >= k` ==> `ci neg_li + ψ >= k + ci`
+/// where `neg_li` is the opposite pseudo boolean variable, noted as `(- 1 li)`
+fn push_negation(vars: &mut Vec<CoeffTimesVar>, constant: &mut Integer) {
+    for CoeffTimesVar { coeff, negated, .. } in vars {
+        if *coeff >= 0 {
+            continue;
+        }
+        *negated = !*negated;
+        // FIXME How to avoid these clones?
+        *constant -= coeff.clone();
+        *coeff = -coeff.clone();
+    }
+}
+
+/// Check that pseudo boolean inequalities are equivalent
+/// `(>= vars_l kl)`, `(>= vars_r kr)`
+/// Prerequisite: All variables are multiplied by **non-negative** coefficients
+fn check_pb_inequalities(
+    vars_l: &[CoeffTimesVar],
+    kl: &Integer,
+    vars_r: &[CoeffTimesVar],
+    kr: &Integer,
+) -> RuleResult {
+    for (var_l, var_r) in vars_l.iter().zip(vars_r) {
+        rassert!(
+            var_l == var_r,
+            CheckerError::Explanation(format!("{var_l:?} != {var_r:?}"))
+        );
+    }
+
+    // TODO: Better error type. Is there a checker error for two Integers ?
+    rassert!(
+        kl == kr,
+        CheckerError::Explanation(format!("Expected equal constants {kl} != {kr}"))
+    );
+    Ok(())
+}
+
+/// Transform a general summation relation to the normalized form
+pub fn cp_normalize(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    // (⋈ a b) = (>= sum k)
+    let (general_relation, normalized_relation) =
+        match_term_err!((= general_relation normalized_relation) = &conclusion[0])?;
+
+    // Checking the general relation is a supported relation operator
+    // i.e. ⋈ ∈ {≥,≤,=,>,<}. in (⋈ a b)
+    let (relation_operator, left_addition_tree, right_addition_tree) =
+        match_supported_relation_err(general_relation)?;
+
+    // Split general args into list of added terms
+    let (mut left_vars, left_constant) = flatten_addition_tree(left_addition_tree)?;
+    let (mut right_vars, right_constant) = flatten_addition_tree(right_addition_tree)?;
+
+    // Create General Vars and Constant
+    negate_sum(&mut right_vars);
+    left_vars.append(&mut right_vars);
+    let mut general_vars = left_vars;
+    let mut general_constant = right_constant - left_constant;
+
+    if relation_operator == "=" {
+        // • 𝜑 = 𝑘 ⇒ (𝜑 ≥ 𝑘) ∧ (¬𝜑 ≥ −𝑘)
+        let ((sum_l, kl), (sum_r, kr)) =
+            match_term_err!((and (>= sum_l kl) (>= sum_r kr)) = normalized_relation)?;
+
+        // Check (𝜑 ≥ 𝑘)
+        push_negation(&mut general_vars, &mut general_constant);
+
+        let sum_l: Vec<CoeffTimesVar> = collect_addition_list(sum_l)?;
+        let kl = kl.as_integer_err()?;
+
+        check_pb_inequalities(&general_vars, &general_constant, &sum_l, &kl)?;
+
+        // Check (¬𝜑 ≥ −𝑘)
+        negate_sum(&mut general_vars);
+        let mut general_constant_neg = -general_constant.clone();
+        push_negation(&mut general_vars, &mut general_constant_neg);
+
+        let sum_r: Vec<CoeffTimesVar> = collect_addition_list(sum_r)?;
+        let kr = kr.as_integer_err()?;
+
+        check_pb_inequalities(&general_vars, &general_constant_neg, &sum_r, &kr)
+    } else {
+        let (normalized_vars, normalized_constant) =
+            match_term_err!((>= normalized_vars normalized_constant) = normalized_relation)?;
+
+        // Eliminate other relations
+        match relation_operator.as_str() {
+            // • 𝜑 > 𝑘 ⇒ 𝜑 ≥ 𝑘 + 1
+            ">" => general_constant += 1,
+            // • 𝜑 < 𝑘 ⇒ ¬𝜑 ≥ −𝑘 + 1
+            "<" => {
+                negate_sum(&mut general_vars);
+                general_constant = 1 - general_constant;
+            }
+            // • 𝜑 ≤ 𝑘 ⇒ ¬𝜑 ≥ −𝑘
+            "<=" => {
+                negate_sum(&mut general_vars);
+                general_constant = -general_constant;
+            }
+            ">=" => (), /* Nothing to be done */
+            _ => {
+                // Should be impossible to get here
+                Err(CheckerError::Explanation(format!(
+                    "Invalid relation operator: {relation_operator}"
+                )))?;
+            }
+        }
+
+        push_negation(&mut general_vars, &mut general_constant);
+
+        let normalized_vars = collect_addition_list(normalized_vars)?;
+        let normalized_constant = normalized_constant.as_integer_err()?;
+
+        check_pb_inequalities(
+            &general_vars,
+            &general_constant,
+            &normalized_vars,
+            &normalized_constant,
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rug::Integer;
+
+    use crate::{
+        ast::pool::{PrimitivePool, TermPool},
+        checker::rules::{
+            cutting_planes::{flatten_addition_tree, CoeffTimesVar},
+            RuleResult, Term,
+        },
+        checker::Rc,
+    };
+
+    fn flatten_addition_test_gen(
+        term: &Rc<Term>,
+        expected_vars: Vec<CoeffTimesVar>,
+        expected_k: Integer,
+    ) -> RuleResult {
+        let (vars, k) = flatten_addition_tree(term)?;
+        assert_eq!(vars.len(), expected_vars.len());
+        for (v, ev) in vars.iter().zip(expected_vars) {
+            assert_eq!(v, &ev);
+        }
+        assert_eq!(k, expected_k);
+        Ok(())
+    }
+
+    #[test]
+    fn flatten_addition_tree_single_constant() -> RuleResult {
+        let pool = &mut PrimitivePool::new();
+        let term = build_term!(pool, 1);
+        flatten_addition_test_gen(&term, vec![], 1.into())
+    }
+
+    #[test]
+    fn flatten_addition_tree_single_plain_variable() -> RuleResult {
+        let pool = &mut PrimitivePool::new();
+        let term = build_term!(pool, (let x Int));
+        let var = CoeffTimesVar::from(&term);
+        flatten_addition_test_gen(&term, vec![var], 0.into())
+    }
+
+    #[test]
+    fn flatten_addition_tree_single_negated_variable() -> RuleResult {
+        let pool = &mut PrimitivePool::new();
+        let x = build_term!(pool, (let x Int));
+        let term = build_term!(pool, (- 1 {x.clone()}));
+        let var = CoeffTimesVar {
+            coeff: (-1).into(),
+            var: &x,
+            negated: false,
+        };
+        flatten_addition_test_gen(&term, vec![var], 1.into())
+    }
+
+    #[test]
+    fn flatten_addition_tree_single_double_variable() -> RuleResult {
+        let pool = &mut PrimitivePool::new();
+        let x = build_term!(pool, (let x Int));
+        let term = build_term!(pool, (* 2 {x.clone()}));
+        let var = CoeffTimesVar {
+            coeff: 2.into(),
+            var: &x,
+            negated: false,
+        };
+        flatten_addition_test_gen(&term, vec![var], 0.into())
+    }
 }

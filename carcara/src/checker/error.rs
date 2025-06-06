@@ -121,6 +121,9 @@ pub enum CheckerError {
     #[error("expected term '{0}' to be a boolean constant")]
     ExpectedAnyBoolConstant(Rc<Term>),
 
+    #[error("expected term '{0}' to be an integer constant")]
+    ExpectedAnyIntegerConstant(Rc<Term>),
+
     #[error("expected term '{0}' to be a string constant of length one")]
     ExpectedStringConstantOfLengthOne(Rc<Term>),
 
@@ -266,7 +269,7 @@ pub enum QuantifierError {
     #[error("binding is missing in right-hand side: '{0}'")]
     CnfBindingIsMissing(String),
 
-    #[error("result clause doensn't appear in CNF of original term: '{0}'")]
+    #[error("result clause doesn't appear in CNF of original term: '{0}'")]
     ClauseDoesntAppearInCnf(Rc<Term>),
 }
 
