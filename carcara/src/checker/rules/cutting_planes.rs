@@ -390,13 +390,40 @@ pub fn cp_literal(RuleArgs { pool, args, conclusion, .. }: RuleArgs) -> RuleResu
     ))
 }
 
+/// Matches against a supported boolean relation ⋈ ∈ {≥,≤,=,>,<}.
+fn match_supported_relation_err(
+    term: &Rc<Term>,
+) -> Result<(String, &Rc<Term>, &Rc<Term>), CheckerError> {
+    match term.as_ref() {
+        Term::Op(op, args) => {
+            // It's a valid relation
+            if !["=", ">", "<", ">=", "<="].contains(&op.to_string().as_str()) {
+                Err(CheckerError::Explanation(format!(
+                    "Operator {op} is not a valid relation"
+                )))
+            } else if let [lhs, rhs] = &args[..] {
+                // Over two arguments
+                Ok((op.to_string(), lhs, rhs))
+            } else {
+                Err(CheckerError::WrongNumberOfArgs(2.into(), args.len()))
+            }
+        }
+        _ => Err(CheckerError::Explanation(
+            "Expected relation operator".into(),
+        )),
+    }
+}
+
+/// Negate an integer term, in general
+/// a => (- 1 a)
+/// When term has a coefficient, negates the coefficient
+/// (* c l) => (* -c l)
 fn negate_term(t: &Rc<Term>, pool: &mut dyn TermPool) -> Result<Rc<Term>, CheckerError> {
     match t.as_ref() {
         Term::Op(Operator::Mult, args) => {
             if let [c, l] = &args[..] {
-                let c = c.as_integer_err()?;
-                let c_term = pool.add(Term::Const(Constant::Integer(-c)));
-                let negated_l = build_term!(pool,(* {c_term} {l.clone()}));
+                let c = -c.as_integer_err()?;
+                let negated_l = build_term!(pool,(* (const c) {l.clone()}));
                 Ok(negated_l)
             } else {
                 Err(CheckerError::WrongNumberOfArgs(2.into(), args.len()))
@@ -404,6 +431,7 @@ fn negate_term(t: &Rc<Term>, pool: &mut dyn TermPool) -> Result<Rc<Term>, Checke
         }
         _ => {
             // Arbitrary term gets negated
+            // TODO: How to fit `-1` into build_term ?
             let minus_one_term = pool.add(Term::Const(Constant::Integer((-1).into())));
             let negated_t = build_term!(pool,(* {minus_one_term} {t.clone()}));
             Ok(negated_t)
@@ -411,7 +439,47 @@ fn negate_term(t: &Rc<Term>, pool: &mut dyn TermPool) -> Result<Rc<Term>, Checke
     }
 }
 
-// -ci li + ψ >= k ==> ci neg_li + ψ >= k + ci
+/// Maps a sum, as a list of terms, to the negation of each element
+fn negate_sum(pool: &mut dyn TermPool, sum: &[Rc<Term>]) -> Result<Vec<Rc<Term>>, CheckerError> {
+    sum.iter().map(|t| negate_term(t, pool)).collect()
+}
+
+/// Collect the added or subtracted terms into a vector
+/// (- (+ a b) (+ c d)) ==> [a,b,(* -1 c),(* -1 d)]
+/// Accumulate constants into a Integer
+/// (- (+ a 2) (+ 1 d)) ==> [a,(* -1 d)], 1
+fn flatten_addition_tree(
+    pool: &mut dyn TermPool,
+    term: &Rc<Term>,
+) -> Result<(Vec<Rc<Term>>, Integer), CheckerError> {
+    match term.as_ref() {
+        Term::Op(Operator::Add, args) => {
+            let mut ans = vec![];
+            let mut cnt = 0.into();
+            for arg in args {
+                let (va, ca) = flatten_addition_tree(pool, arg)?;
+                ans.extend(va);
+                cnt += ca;
+            }
+            Ok((ans, cnt))
+        }
+        Term::Op(Operator::Sub, args) => {
+            if let [a, b] = &args[..] {
+                let (va, ca) = flatten_addition_tree(pool, a)?;
+                let (vb, cb) = flatten_addition_tree(pool, b)?;
+                Ok(([&va[..], &(negate_sum(pool, &vb)?)[..]].concat(), ca - cb))
+            } else {
+                Err(CheckerError::WrongNumberOfArgs(2.into(), args.len()))
+            }
+        }
+        Term::Const(Constant::Integer(k)) => Ok((vec![], k.clone())),
+        _ => Ok((vec![term.clone()], 0.into())),
+    }
+}
+
+/// Changes the list `vars` and Integer `constant` to avoid negative coefficients
+/// `-ci li + ψ >= k` ==> `ci neg_li + ψ >= k + ci`
+/// where `neg_li` is the opposite pseudo boolean variable, noted as `(- 1 li)`
 fn push_negation(
     vars: &mut Vec<Rc<Term>>,
     constant: &mut Integer,
@@ -437,181 +505,118 @@ fn push_negation(
     Ok(())
 }
 
-fn flatten_mul(x: &Rc<Term>, pool: &mut dyn TermPool) -> Result<Rc<Term>, CheckerError> {
-    let flat_x = if let Some((c, l)) = match_term!((* c l) = x) {
-        let c = c.as_integer_err()?;
-        if c == 1 {
-            l.clone()
-        } else if c == -1 {
-            build_term!(pool,(- 1 {l.clone()}))
-        } else {
-            x.clone()
-        }
-    } else {
-        x.clone()
-    };
-    Ok(flat_x)
-}
-
-fn pack_summation(vars: Vec<Rc<Term>>, pool: &mut dyn TermPool) -> Result<Rc<Term>, CheckerError> {
-    if vars.len() > 1 {
-        let args: Result<Vec<Rc<Term>>, CheckerError> =
-            vars.iter().map(|x| flatten_mul(x, pool)).collect();
-        Ok(pool.add(Term::Op(Operator::Add, args?)))
-    } else {
-        flatten_mul(&vars[0], pool)
-    }
-}
-
-fn negate_sum(pool: &mut dyn TermPool, sum: &[Rc<Term>]) -> Result<Vec<Rc<Term>>, CheckerError> {
-    sum.iter().map(|t| negate_term(t, pool)).collect()
-}
-
-fn flatten_linear_operations(
-    pool: &mut dyn TermPool,
-    term: &Rc<Term>,
-) -> Result<(Vec<Rc<Term>>, Integer), CheckerError> {
-    match term.as_ref() {
-        Term::Op(Operator::Add, args) => {
-            let mut ans = vec![];
-            let mut cnt = 0.into();
-            for arg in args {
-                let (va, ca) = flatten_linear_operations(pool, arg)?;
-                ans.extend(va);
-                cnt += ca;
-            }
-            Ok((ans, cnt))
-        }
-        Term::Op(Operator::Sub, args) => {
-            if let [a, b] = &args[..] {
-                let (va, ca) = flatten_linear_operations(pool, a)?;
-                let (vb, cb) = flatten_linear_operations(pool, b)?;
-                Ok(([&va[..], &(negate_sum(pool, &vb)?)[..]].concat(), ca - cb))
-            } else {
-                Err(CheckerError::WrongNumberOfArgs(2.into(), args.len()))
-            }
-        }
-        Term::Const(Constant::Integer(k)) => Ok((vec![], k.clone())),
-        _ => Ok((vec![term.clone()], 0.into())),
-    }
-}
-
-fn check_equivalent_inequalities(
-    pool: &mut dyn TermPool,
-    mut general_vars: Vec<Rc<Term>>,
-    mut general_constant: Integer,
-    normalized_vars: Vec<Rc<Term>>,
-    normalized_constant: Integer,
+/// Check that pseudo boolean inequalities are equivalent
+/// `(>= vars_l kl)`, `(>= vars_r kr)`
+/// Prerequisite: All variables are multiplied by **non-negative** coefficients
+fn check_pb_inequalities(
+    vars_l: &[Rc<Term>],
+    kl: &Integer,
+    vars_r: &[Rc<Term>],
+    kr: &Integer,
 ) -> RuleResult {
-    push_negation(&mut general_vars, &mut general_constant, pool)?;
-    let general_vars = pack_summation(general_vars, pool)?;
-    let normalized_vars = pack_summation(normalized_vars, pool)?;
+    let remove_multiplication_by_1 = |t| {
+        if let Some((_, l)) = match_term!((* 1 l) = t) {
+            l
+        } else {
+            t
+        }
+    };
+
+    for (var_l, var_r) in vars_l.iter().zip(vars_r) {
+        let var_l = remove_multiplication_by_1(var_l);
+        let var_r = remove_multiplication_by_1(var_r);
+        assert_eq(var_l, var_r)?;
+    }
+
+    // TODO: Better error type. Is there a checker error for two Integers ?
     rassert!(
-        general_constant == normalized_constant,
-        CheckerError::Explanation(format!(
-            "Mismatched constants {general_constant} != {normalized_constant}"
-        ))
+        kl == kr,
+        CheckerError::Explanation(format!("Expected equal constants {kl} != {kr}"))
     );
-    assert_eq(&general_vars, &normalized_vars)
+    Ok(())
 }
 
-// Transform a general summation relation to the normalized form
+/// Transform a general summation relation to the normalized form
 pub fn cp_normalize(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    // (⋈ a b) = (>= sum k)
     let (general_relation, normalized_relation) =
         match_term_err!((= general_relation normalized_relation) = &conclusion[0])?;
 
-    // Checking the left-hand-side is a supported relation operator
-    let (relation_operator, general_arg_left, general_arg_right) = match general_relation.as_ref() {
-        Term::Op(op, args) => {
-            // It's a valid relation
-            if !["=", ">", "<", ">=", "<="].contains(&op.to_string().as_str()) {
-                Err(CheckerError::Explanation(format!(
-                    "Operator {op} is not a valid relation"
-                )))?;
-            }
-            // Over two arguments
-            let (general_arg_left, general_arg_right) = match &args[..] {
-                [general_arg_left, general_arg_right] => Ok((general_arg_left, general_arg_right)),
-                _ => Err(CheckerError::Explanation(format!(
-                    "Expected two arguments of {op}, got {args:?}"
-                ))),
-            }?;
-            Ok((op.to_string(), general_arg_left, general_arg_right))
-        }
-        _ => Err(CheckerError::Explanation(
-            "Expected relation operator".into(),
-        )),
-    }?;
+    // Checking the general relation is a supported relation operator
+    // i.e. ⋈ ∈ {≥,≤,=,>,<}. in (⋈ a b)
+    let (relation_operator, left_addition_tree, right_addition_tree) =
+        match_supported_relation_err(general_relation)?;
 
     // Split general args into list of added terms
-    let (general_arg_left_vars, general_arg_left_constant) =
-        flatten_linear_operations(pool, general_arg_left)?;
-    let (general_arg_right_vars, general_arg_right_constant) =
-        flatten_linear_operations(pool, general_arg_right)?;
+    let (left_vars, left_constant) = flatten_addition_tree(pool, left_addition_tree)?;
+    let (right_vars, right_constant) = flatten_addition_tree(pool, right_addition_tree)?;
 
-    let mut general_vars: Vec<Rc<Term>> = [
-        &general_arg_left_vars[..],
-        &negate_sum(pool, &general_arg_right_vars)?[..],
-    ]
-    .concat();
-    let mut general_constant: Integer = general_arg_right_constant - general_arg_left_constant;
-
-    // Special variables when "=" uses two constraints
-    let mut general_vars_2: Vec<Rc<Term>> = vec![];
-    let mut general_constant_2: Integer = 0.into();
-
-    // Eliminate other relations
-    match relation_operator.as_str() {
-        ">" => general_constant += 1,
-        "<" => {
-            general_vars = negate_sum(pool, &general_vars)?;
-            general_constant = 1 - general_constant;
-        }
-        "<=" => {
-            general_vars = negate_sum(pool, &general_vars)?;
-            general_constant = -general_constant;
-        }
-        "=" => {
-            general_vars_2 = negate_sum(pool, &general_vars)?;
-            general_constant_2 = -general_constant.clone();
-        }
-        ">=" => (), /* Nothing to be done */
-        _ => {
-            // Should be impossible to get here
-            Err(CheckerError::Explanation(format!(
-                "Invalid relation operator: {relation_operator}"
-            )))?;
-        }
-    }
+    // Create General Vars and Constant
+    // TODO: Better concatenation?
+    let mut general_vars: Vec<Rc<Term>> =
+        [&left_vars[..], &negate_sum(pool, &right_vars)?[..]].concat();
+    let mut general_constant: Integer = right_constant - left_constant;
 
     if relation_operator == "=" {
-        let ((normalized_vars, normalized_constant), (normalized_vars_2, normalized_constant_2)) =
-            match_term_err!((and (>= normalized_vars normalized_constant) (>= normalized_vars_2 normalized_constant_2)) = normalized_relation)?;
+        // • 𝜑 = 𝑘 ⇒ (𝜑 ≥ 𝑘) ∧ (¬𝜑 ≥ −𝑘)
+        let ((sum_l, kl), (sum_r, kr)) =
+            match_term_err!((and (>= sum_l kl) (>= sum_r kr)) = normalized_relation)?;
 
-        check_equivalent_inequalities(
-            pool,
-            general_vars,
-            general_constant,
-            split_summation(normalized_vars).to_vec(),
-            normalized_constant.as_integer_err()?,
-        )?;
-        check_equivalent_inequalities(
-            pool,
-            general_vars_2,
-            general_constant_2,
-            split_summation(normalized_vars_2).to_vec(),
-            normalized_constant_2.as_integer_err()?,
-        )
+        // Check (𝜑 ≥ 𝑘)
+        push_negation(&mut general_vars, &mut general_constant, pool)?;
+
+        let sum_l = split_summation(sum_l).to_vec();
+        let kl = kl.as_integer_err()?;
+
+        check_pb_inequalities(&general_vars, &general_constant, &sum_l, &kl)?;
+
+        // Check (¬𝜑 ≥ −𝑘)
+        let mut general_vars_neg = negate_sum(pool, &general_vars)?;
+        let mut general_constant_neg = -general_constant.clone();
+        push_negation(&mut general_vars_neg, &mut general_constant_neg, pool)?;
+
+        let sum_r = split_summation(sum_r).to_vec();
+        let kr = kr.as_integer_err()?;
+
+        check_pb_inequalities(&general_vars_neg, &general_constant_neg, &sum_r, &kr)
     } else {
         let (normalized_vars, normalized_constant) =
             match_term_err!((>= normalized_vars normalized_constant) = normalized_relation)?;
 
-        check_equivalent_inequalities(
-            pool,
-            general_vars,
-            general_constant,
-            split_summation(normalized_vars).to_vec(),
-            normalized_constant.as_integer_err()?,
+        // Eliminate other relations
+        match relation_operator.as_str() {
+            // • 𝜑 > 𝑘 ⇒ 𝜑 ≥ 𝑘 + 1
+            ">" => general_constant += 1,
+            // • 𝜑 < 𝑘 ⇒ ¬𝜑 ≥ −𝑘 + 1
+            "<" => {
+                general_vars = negate_sum(pool, &general_vars)?;
+                general_constant = 1 - general_constant;
+            }
+            // • 𝜑 ≤ 𝑘 ⇒ ¬𝜑 ≥ −𝑘
+            "<=" => {
+                general_vars = negate_sum(pool, &general_vars)?;
+                general_constant = -general_constant;
+            }
+            ">=" => (), /* Nothing to be done */
+            _ => {
+                // Should be impossible to get here
+                Err(CheckerError::Explanation(format!(
+                    "Invalid relation operator: {relation_operator}"
+                )))?;
+            }
+        }
+
+        push_negation(&mut general_vars, &mut general_constant, pool)?;
+
+        let normalized_vars = split_summation(normalized_vars).to_vec();
+
+        let normalized_constant = normalized_constant.as_integer_err()?;
+
+        check_pb_inequalities(
+            &general_vars,
+            &general_constant,
+            &normalized_vars,
+            &normalized_constant,
         )
     }
 }

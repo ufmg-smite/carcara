@@ -269,7 +269,7 @@ pub enum QuantifierError {
     #[error("binding is missing in right-hand side: '{0}'")]
     CnfBindingIsMissing(String),
 
-    #[error("result clause doensn't appear in CNF of original term: '{0}'")]
+    #[error("result clause doesn't appear in CNF of original term: '{0}'")]
     ClauseDoesntAppearInCnf(Rc<Term>),
 }
 
