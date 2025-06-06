@@ -287,8 +287,8 @@ macro_rules! build_term {
         let body = build_term!($pool, $arg);
         $pool.add(Term::Binder(Binder::Choice, bindings, body))
     }};
-    ($pool:expr, $int:literal) => { $pool.add(Term::Const($crate::ast::Constant::Integer($int.into()))) };
-    ($pool:expr, (const $name:ident)) => { $pool.add(Term::Const($crate::ast::Constant::Integer($name.clone()))) };
+    ($pool:expr, $int:literal) => { $pool.add($crate::ast::Term::Const($crate::ast::Constant::Integer($int.into()))) };
+    ($pool:expr, (const $name:ident)) => { $pool.add($crate::ast::Term::Const($crate::ast::Constant::Integer($name.clone()))) };
     ($pool:expr, {$terminal:expr}) => { $terminal };
     ($pool:expr, ((_ $indexed_op:tt $($op_args:tt)+) $($args:tt)+)) => {{
         let term = $crate::ast::Term::ParamOp {
