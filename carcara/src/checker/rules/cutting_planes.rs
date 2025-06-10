@@ -393,7 +393,7 @@ pub fn cp_literal(RuleArgs { pool, args, conclusion, .. }: RuleArgs) -> RuleResu
 /// Matches against a supported boolean relation ⋈ ∈ {≥,≤,=,>,<}.
 fn match_supported_relation_err(
     term: &Rc<Term>,
-) -> Result<(String, &Rc<Term>, &Rc<Term>), CheckerError> {
+) -> Result<(&Operator, &Rc<Term>, &Rc<Term>), CheckerError> {
     match term.as_ref() {
         Term::Op(
             op @ (Operator::Equals
@@ -404,7 +404,7 @@ fn match_supported_relation_err(
             args,
         ) => {
             if let [lhs, rhs] = &args[..] {
-                Ok((op.to_string(), lhs, rhs))
+                Ok((op, lhs, rhs))
             } else {
                 Err(CheckerError::WrongNumberOfArgs(2.into(), args.len()))
             }
@@ -611,7 +611,7 @@ pub fn cp_normalize(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     let mut general_vars = left_vars;
     let mut general_constant = right_constant - left_constant;
 
-    if relation_operator == "=" {
+    if relation_operator == &Operator::Equals {
         // • 𝜑 = 𝑘 ⇒ (𝜑 ≥ 𝑘) ∧ (¬𝜑 ≥ −𝑘)
         let ((sum_l, kl), (sum_r, kr)) =
             match_term_err!((and (>= sum_l kl) (>= sum_r kr)) = normalized_relation)?;
@@ -638,20 +638,20 @@ pub fn cp_normalize(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
             match_term_err!((>= normalized_vars normalized_constant) = normalized_relation)?;
 
         // Eliminate other relations
-        match relation_operator.as_str() {
+        match relation_operator {
             // • 𝜑 > 𝑘 ⇒ 𝜑 ≥ 𝑘 + 1
-            ">" => general_constant += 1,
+            Operator::GreaterThan => general_constant += 1,
             // • 𝜑 < 𝑘 ⇒ ¬𝜑 ≥ −𝑘 + 1
-            "<" => {
+            Operator::LessThan => {
                 negate_sum(&mut general_vars);
                 general_constant = 1 - general_constant;
             }
             // • 𝜑 ≤ 𝑘 ⇒ ¬𝜑 ≥ −𝑘
-            "<=" => {
+            Operator::LessEq => {
                 negate_sum(&mut general_vars);
                 general_constant = -general_constant;
             }
-            ">=" => (), /* Nothing to be done */
+            Operator::GreaterEq => (), /* Nothing to be done */
             _ => {
                 // Should be impossible to get here
                 Err(CheckerError::Explanation(format!(
