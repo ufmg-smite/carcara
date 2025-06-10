@@ -282,7 +282,7 @@ macro_rules! build_term {
         $pool.add($crate::ast::Term::new_var(stringify!($name), sort))
     }};
     ($pool:expr, (choice (($z:literal $sort:ident)) $arg:tt)) => {{
-        let sort = $pool.add($crate::ast::Term::Sort($crate::checker::Sort::$sort));
+        let sort = $pool.add($crate::ast::Term::Sort($crate::ast::Sort::$sort));
         let bindings = $crate::ast::BindingList(vec![($z.into(), sort)]);
         let body = build_term!($pool, $arg);
         $pool.add(Term::Binder(Binder::Choice, bindings, body))
