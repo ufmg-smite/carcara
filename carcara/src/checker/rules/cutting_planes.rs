@@ -518,25 +518,27 @@ fn negate_sum(sum: &mut [CoeffTimesVar]) {
     sum.iter_mut().for_each(negate_ctv);
 }
 
+fn accumulate_sum(args: &[Rc<Term>]) -> Result<(Vec<CoeffTimesVar<'_>>, Integer), CheckerError> {
+    let mut ans = vec![];
+    let mut cnt = 0.into();
+    for arg in args {
+        let (va, ca) = flatten_addition_tree(arg)?;
+        ans.extend(va);
+        cnt += ca;
+    }
+    Ok((ans, cnt))
+}
+
 /// Collect the added or subtracted terms into a vector
 /// (- (+ a b) (+ c d)) ==> [a,b,(* -1 c),(* -1 d)]
 /// Accumulate constants into a Integer
 /// (- (+ a 2) (+ 1 d)) ==> [a,(* -1 d)], 1
 fn flatten_addition_tree(term: &Rc<Term>) -> Result<(Vec<CoeffTimesVar>, Integer), CheckerError> {
     match term.as_ref() {
-        Term::Op(Operator::Add, args) => {
-            let mut ans = vec![];
-            let mut cnt = 0.into();
-            for arg in args {
-                let (va, ca) = flatten_addition_tree(arg)?;
-                ans.extend(va);
-                cnt += ca;
-            }
-            Ok((ans, cnt))
-        }
+        Term::Op(Operator::Add, args) => accumulate_sum(args),
         Term::Op(Operator::Sub, args) => {
             let (mut va, ca) = flatten_addition_tree(&args[0])?;
-            let (mut vb, cb) = flatten_addition_tree(&args[1])?;
+            let (mut vb, cb) = accumulate_sum(&args[1..])?;
             negate_sum(&mut vb);
             va.append(&mut vb);
             Ok((va, ca - cb))
