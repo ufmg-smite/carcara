@@ -558,9 +558,8 @@ fn push_negation(vars: &mut Vec<CoeffTimesVar>, constant: &mut Integer) {
             continue;
         }
         *negated = !*negated;
-        // FIXME How to avoid these clones?
-        *constant -= coeff.clone();
-        *coeff = -coeff.clone();
+        *constant -= &*coeff;
+        *coeff *= -1;
     }
 }
 
