@@ -3,7 +3,6 @@ use carcara::{
     checker, parser,
 };
 use colored::{Color, Colorize};
-use indexmap::IndexMap;
 use std::io::Cursor;
 
 fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {

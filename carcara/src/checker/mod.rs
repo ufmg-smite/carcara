@@ -3,7 +3,7 @@ mod parallel;
 mod rules;
 
 use crate::{
-    ast::{rare_rules::Rules, *},
+    ast::*,
     benchmarking::{CollectResults, OnlineBenchmarkResults},
     CarcaraResult, Error,
 };

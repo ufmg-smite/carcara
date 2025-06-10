@@ -94,7 +94,7 @@ pub fn check<T: io::BufRead>(
 
     // Parsing
     let total = Instant::now();
-    let (problem, proof, rules, mut pool) =
+    let (problem, proof, _rules, mut pool) =
         parser::parse_instance(problem, proof, rules, parser_config)?;
     run_measures.parsing = total.elapsed();
 
@@ -153,7 +153,7 @@ pub fn check_parallel<T: io::BufRead>(
 
     // Parsing (TODO : Complete rare rules)
     let total = Instant::now();
-    let (problem, proof, rules, pool) =
+    let (problem, proof, _rules, pool) =
         parser::parse_instance(problem, proof, rules, parser_config)?;
     run_measures.parsing = total.elapsed();
 
@@ -219,7 +219,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
 
     // Parsing (Complete rare rules)
     let total = Instant::now();
-    let (problem, proof, rules, mut pool) =
+    let (problem, proof, _rules, mut pool) =
         parser::parse_instance(problem, proof, rules, parser_config)?;
     run.parsing = total.elapsed();
 

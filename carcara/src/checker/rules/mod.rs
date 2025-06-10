@@ -3,7 +3,7 @@ use super::{
     ContextStack,
 };
 use crate::{
-    ast::{rare_rules::Rules, *},
+    ast::*,
     utils::{Range, TypeName},
 };
 use std::time::Duration;
@@ -162,7 +162,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
 
     for (i, (proof, expected)) in cases.iter().enumerate() {
         // This parses the definitions again for every case, which is not ideal
-        let (mut problem, mut proof, rules, mut pool) = parser::parse_instance(
+        let (mut problem, mut proof, _rules, mut pool) = parser::parse_instance(
             Cursor::new(definitions),
             Cursor::new(proof),
             None,

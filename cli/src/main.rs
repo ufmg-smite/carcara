@@ -496,9 +496,11 @@ fn main() {
     }
 }
 
+type CliInstance =  CliResult<(Box<dyn BufRead>, Box<dyn BufRead>, Option<Box<dyn BufRead>>)>;
+
 fn get_instance(
     options: &Input,
-) -> CliResult<(Box<dyn BufRead>, Box<dyn BufRead>, Option<Box<dyn BufRead>>)> {
+) -> CliInstance{
     fn reader_from_path<P: AsRef<Path>>(path: P) -> CliResult<Box<dyn BufRead>> {
         Ok(Box::new(io::BufReader::new(File::open(path)?)))
     }

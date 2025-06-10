@@ -6,12 +6,12 @@ use super::{
     Config, ProofChecker,
 };
 use crate::benchmarking::{CollectResults, OnlineBenchmarkResults};
-use crate::{ast::rare_rules::Rules, checker::CheckerStatistics};
+use crate::checker::CheckerStatistics;
 use crate::{
     ast::{pool::advanced::*, *},
     CarcaraResult, Error,
 };
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexSet;
 pub use scheduler::{Schedule, ScheduleIter, Scheduler};
 use std::{
     ops::ControlFlow,

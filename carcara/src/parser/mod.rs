@@ -63,7 +63,7 @@ impl Config {
 ///
 /// This returns the parsed proof, as well as the `TermPool` used in parsing. Can take any type that
 /// implements `BufRead`.
-pub fn parse_instance<'a, T: BufRead>(
+pub fn parse_instance<T: BufRead>(
     problem: T,
     proof: T,
     rules: Option<T>,
@@ -74,7 +74,7 @@ pub fn parse_instance<'a, T: BufRead>(
         .map(|(prelude, proof, rules)| (prelude, proof, rules, pool))
 }
 
-pub fn parse_instance_with_pool<'a, T: BufRead>(
+pub fn parse_instance_with_pool<T: BufRead>(
     problem: T,
     proof: T,
     rules: Option<T>,
@@ -944,7 +944,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     fn parse_rare(&mut self) -> CarcaraResult<Rules> {
-        return rare::parse_rare(self);
+        rare::parse_rare(self)
     }
     /// Parses an `assume` proof command. This method assumes that the `(` and `assume` tokens were
     /// already consumed.
@@ -1710,9 +1710,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
             }
             Token::Symbol(s) if s == "eo" => {
                 // "Let" constructions unfold
-                self.expect_token(Token::Symbol("eo".to_string()))?;
+                self.expect_token(Token::Symbol("eo".to_owned()))?;
                 self.expect_keyword()?;
-                self.expect_token(Token::Keyword("define".to_string()))?;
+                self.expect_token(Token::Keyword("define".to_owned()))?;
                 self.expect_token(Token::OpenParen)?;
                 let args = self.parse_sequence(
                     |parser| {
@@ -1720,7 +1720,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         let let_arg = parser.expect_symbol()?;
                         let body = parser.parse_term()?;
                         parser.expect_token(Token::CloseParen)?;
-                        return Ok((let_arg, body));
+                        Ok((let_arg, body))
                     },
                     true,
                 )?;
@@ -1747,7 +1747,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     .unwrap()
                     .apply(self.pool, &inner);
 
-                return Ok(result);
+                Ok(result)
             }
             Token::Symbol(s) if self.state.function_defs.get(s).is_some() => {
                 let head_pos = self.current_position;
@@ -1760,9 +1760,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
             }
             Token::Symbol(s) if s == "eo" => {
                 // "Let" constructions unfold
-                self.expect_token(Token::Symbol("eo".to_string()))?;
+                self.expect_token(Token::Symbol("eo".to_owned()))?;
                 self.expect_keyword()?;
-                self.expect_token(Token::Keyword("define".to_string()))?;
+                self.expect_token(Token::Keyword("define".to_owned()))?;
                 self.expect_token(Token::OpenParen)?;
                 let substitution = self.parse_sequence(
                     |parser| {
@@ -1770,14 +1770,14 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         let let_arg = parser.expect_symbol()?;
                         let body = parser.parse_term()?;
                         parser.expect_token(Token::CloseParen)?;
-                        return Ok((let_arg, body));
+                        Ok((let_arg, body))
                     },
                     true,
                 )?;
 
                 self.state.symbol_table.push_scope();
                 for (name, value) in &substitution {
-                    let sort = self.pool.sort(&value);
+                    let sort = self.pool.sort(value);
                     self.insert_sorted_var((name.clone(), sort));
                 }
 
@@ -1788,7 +1788,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     .iter()
                     .map(|(ident, term)| {
                         let ident = Term::Var(ident.clone(), self.pool.sort(term));
-                        return (self.pool.add(ident), term.clone());
+                        (self.pool.add(ident), term.clone())
                     })
                     .collect::<IndexMap<_, _>>();
 
@@ -1796,7 +1796,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     .unwrap()
                     .apply(self.pool, &innerterm);
 
-                return Ok(innerterm);
+                Ok(innerterm)
             }
             Token::OpenParen => {
                 self.next_token()?;
@@ -1857,7 +1857,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     && other.starts_with('@')
                     && self.state.sort_defs.get(other).is_some() =>
             {
-                Ok(Sort::Var(other.to_string()))
+                Ok(Sort::Var(other.to_owned()))
             }
             other if self.state.sort_defs.get(other).is_some() => {
                 let def = self.state.sort_defs.get(other).unwrap();
@@ -1927,7 +1927,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
             }
             Token::OpenParen if polymorphic => {
                 let name = self.expect_symbol()?;
-                if !["BitVec".to_string()].contains(&name)
+                if !["BitVec".to_owned()].contains(&name)
                     && !self.state.sort_defs.contains_key(&name)
                 {
                     return Err(Error::Parser(ParserError::UndefinedSort(name), pos));

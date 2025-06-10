@@ -1,7 +1,7 @@
 use carcara::*;
-use indexmap::IndexMap;
 use std::{
-    fs, io, ops::Index, path::{Path, PathBuf}
+    fs, io,
+    path::{Path, PathBuf},
 };
 
 fn run_parallel_checker_test(
