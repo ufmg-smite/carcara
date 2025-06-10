@@ -179,6 +179,9 @@ pub enum CheckerError {
     #[error(transparent)]
     BindingListEquality(#[from] EqualityError<BindingList>),
 
+    #[error(transparent)]
+    IntegerEquality(#[from] EqualityError<Integer>),
+
     #[error("unknown rule")]
     UnknownRule,
 }

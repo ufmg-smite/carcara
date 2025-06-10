@@ -2,7 +2,7 @@ use super::{
     assert_clause_len, assert_eq, assert_num_args, assert_num_premises, RuleArgs, RuleResult, Term,
 };
 use crate::ast::{Constant, Operator};
-use crate::checker::error::CheckerError;
+use crate::checker::error::{CheckerError, EqualityError};
 use crate::checker::Rc;
 use rug::Integer;
 use std::collections::HashMap;
@@ -581,10 +581,9 @@ fn check_pb_inequalities(
         );
     }
 
-    // TODO: Better error type. Is there a checker error for two Integers ?
     rassert!(
         kl == kr,
-        CheckerError::Explanation(format!("Expected equal constants {kl} != {kr}"))
+        EqualityError::ExpectedEqual(kl.clone(), kr.clone())
     );
     Ok(())
 }
