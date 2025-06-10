@@ -311,3 +311,105 @@ fn cp_literal() {
         }
     }
 }
+
+#[test]
+fn cp_normalize() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () Int)
+            (declare-fun b () Int)
+            (declare-fun c () Int)
+            (declare-fun r0 () Int)
+            (declare-fun r1 () Int)
+            (declare-fun z0 () Int)
+            (declare-fun z1 () Int)
+        ",
+        "Term is already normalized" {
+            r#"(step t1 (cl (= (>= a 0) (>= a 0))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (- 1 a) 0) (>= (- 1 a) 0))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (* 2 a) 0) (>= (* 2 a) 0))) :rule cp_normalize)"#: true,
+
+            r#"(step t1 (cl (= (>= (+ a b) 0) (>= (+ a b) 0))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ (- 1 a) b) 0) (>= (+ (- 1 a) b) 0))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ (* 2 a) (* 3 b)) 0) (>= (+ (* 2 a) (* 3 b)) 0))) :rule cp_normalize)"#: true,
+        }
+        "Negative coefficient is pushed" {
+            r#"(step t1 (cl (= (>= (* -1 a) 0) (>= (* 1 (- 1 a)) 1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (* -1 a) 0) (>= (- 1 a) 1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (* -5 a) 0) (>= (* 5 (- 1 a)) 5))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ (* -1 a) (* -3 b)) 0) (>= (+ (- 1 a) (* 3 (- 1 b))) 4))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ (* -5 a) b) 0) (>= (+ (* 5 (- 1 a)) b) 5))) :rule cp_normalize)"#: true,
+        }
+        "Other relations are eliminated" {
+            r#"(step t1 (cl (= (<= a 0) (>= (- 1 a) 1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (<= (- 1 a) 0) (>= a 1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (<= (* -1 a) 0) (>= a 0))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (> a 0) (>= a 1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (< a 0) (>= (- 1 a) 2))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (= a 0) (and (>= a 0) (>= (- 1 a) 1)))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (= (* 1 a) 0) (and (>= a 0) (>= (- 1 a) 1)))) :rule cp_normalize)"#: true,
+        }
+        "Constants are moved to the right" {
+            r#"(step t1 (cl (= (>= (+ a 1) 0) (>= a -1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ a b 1) 0) (>= (+ a b) -1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ a 3 b 1) 0) (>= (+ a b) -4))) :rule cp_normalize)"#: true,
+        }
+        "Variables are moved to the left" {
+            r#"(step t1 (cl (= (>= a b) (>= (+ a (- 1 b)) 1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= a (+ b c)) (>= (+ a (- 1 b) (- 1 c)) 2))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ a 2) (+ b c)) (>= (+ a (- 1 b) (- 1 c)) 0))) :rule cp_normalize)"#: true,
+        }
+        "Invalid relations" {
+            r#"(step t1 (cl (= (and true true) (>= a 0))) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (not (= (>= a 1) (>= a 0)))) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (not (= (+ a 1) (+ 1 a)))) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (= (<= (* -1 a 1) 0) (>= a 0))) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (= (>= (+ a 1) 0) (>= a 0))) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (= (= a 0 0) (and (>= a 0) (>= (* -1 a) 1)))) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (= true (>= a 0))) :rule cp_normalize)"#: false,
+        }
+        "Instance of bigger example"  {
+            r#"(step t1 (cl (=
+                        (= (-       ;; This syntax is not a flat summation list
+                             (+ (* 1 r0) (* 2 r1))
+                             (+ (* 1 z0) (* 2 z1))
+                           ) 0)
+                        (and
+                            (>= (+
+                                    (* 1 r0)
+                                    (* 2 r1)
+                                    (* 1 (- 1 z0))
+                                    (* 2 (- 1 z1))
+                                ) 3)
+                            (>= (+
+                                    (* 1 (- 1 r0))
+                                    (* 2 (- 1 r1))
+                                    (* 1 z0)
+                                    (* 2 z1)
+                                ) 3)
+                        )
+                    )) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (=
+                        (= (-       
+                             (+ (* 1 r0) (* 2 r1))
+                             (+ (* 4 z0) (* 2 z1))
+                           ) 0)
+                        (and
+                            (>= (+
+                                    (* 1 r0)
+                                    (* 2 r1)
+                                    (* 4 (- 1 z0))
+                                    (* 2 (- 1 z1))
+                                ) 6)
+                            (>= (+
+                                    (* 1 (- 1 r0))
+                                    (* 2 (- 1 r1))
+                                    (* 4 z0)
+                                    (* 2 z1)
+                                ) 3)
+                        )
+                    )) :rule cp_normalize)"#: true,
+
+        }
+    }
+}
