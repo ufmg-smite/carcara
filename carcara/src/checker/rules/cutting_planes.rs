@@ -590,6 +590,7 @@ fn check_pb_inequalities(
 
 /// Transform a general summation relation to the normalized form
 pub fn cp_normalize(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
     // (⋈ a b) = (>= sum k)
     let (general_relation, normalized_relation) =
         match_term_err!((= general_relation normalized_relation) = &conclusion[0])?;
