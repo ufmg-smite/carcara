@@ -46,7 +46,7 @@ fn run_job<T: CollectResults + Default + Send>(
     )?;
     let parsing = parsing.elapsed();
 
-    let mut checker = checker::ProofChecker::new(&mut pool, &rules, checker_config);
+    let mut checker = checker::ProofChecker::new(&mut pool, checker_config);
 
     let checking = Instant::now();
 
