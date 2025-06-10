@@ -278,7 +278,7 @@ macro_rules! build_term {
     ($pool:expr, true) => { $pool.bool_true() };
     ($pool:expr, false) => { $pool.bool_false() };
     ($pool:expr, (let $name:ident $sort:ident)) => {{
-        let sort = $pool.add($crate::ast::Term::Sort($crate::checker::Sort::$sort));
+        let sort = $pool.add($crate::ast::Term::Sort($crate::ast::Sort::$sort));
         $pool.add($crate::ast::Term::new_var(stringify!($name), sort))
     }};
     ($pool:expr, (choice (($z:literal $sort:ident)) $arg:tt)) => {{
