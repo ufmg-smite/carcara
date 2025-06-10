@@ -395,17 +395,23 @@ fn match_supported_relation_err(
     term: &Rc<Term>,
 ) -> Result<(String, &Rc<Term>, &Rc<Term>), CheckerError> {
     match term.as_ref() {
-        Term::Op(op, args) => {
-            if !["=", ">", "<", ">=", "<="].contains(&op.to_string().as_str()) {
-                Err(CheckerError::Explanation(format!(
-                    "Operator {op} is not a valid relation"
-                )))
-            } else if let [lhs, rhs] = &args[..] {
+        Term::Op(
+            op @ (Operator::Equals
+            | Operator::GreaterThan
+            | Operator::LessThan
+            | Operator::GreaterEq
+            | Operator::LessEq),
+            args,
+        ) => {
+            if let [lhs, rhs] = &args[..] {
                 Ok((op.to_string(), lhs, rhs))
             } else {
                 Err(CheckerError::WrongNumberOfArgs(2.into(), args.len()))
             }
         }
+        Term::Op(op, _) => Err(CheckerError::Explanation(format!(
+            "Operator {op} is not a valid relation"
+        ))),
         _ => Err(CheckerError::Explanation(
             "Expected relation operator".into(),
         )),
