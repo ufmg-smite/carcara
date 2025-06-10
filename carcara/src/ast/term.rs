@@ -88,7 +88,6 @@ pub enum Sort {
     /// The associated term is the BV width of this sort.
     BitVec(Integer),
 
-    // TODO delete this and incorporate it to function sort?
     /// A parametric sort, with a set of sort variables that can appear in the second argument.
     ParamSort(Vec<Rc<Term>>, Rc<Term>),
 

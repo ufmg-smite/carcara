@@ -1,7 +1,7 @@
 use super::{Parser, ParserError, Reserved, SortDef, Token};
 use crate::ast::*;
 use crate::CarcaraResult;
-use crate::{ast::rules::*, Error};
+use crate::{ast::rare_rules::*, Error};
 use std::io::BufRead;
 
 #[derive(Debug, Clone)]

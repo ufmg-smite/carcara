@@ -11,7 +11,7 @@ pub use error::{ParserError, SortError};
 pub use lexer::{Lexer, Position, Reserved, Token};
 
 use crate::{
-    ast::{rules::Rules, *},
+    ast::{rare_rules::Rules, *},
     utils::{HashCache, HashMapStack},
     CarcaraResult, Error,
 };

@@ -15,7 +15,7 @@ mod proof;
 mod rc;
 mod substitution;
 mod term;
-pub mod rules;
+pub mod rare_rules;
 #[cfg(test)]
 mod tests;
 

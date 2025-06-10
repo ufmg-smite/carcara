@@ -4,7 +4,7 @@ mod logger;
 mod path_args;
 
 use carcara::{
-    ast::{self, rules::Rules},
+    ast::{self, rare_rules::Rules},
     benchmarking::OnlineBenchmarkResults,
     check, check_and_elaborate, check_parallel, checker, elaborator, generate_lia_smt_instances,
     parser,

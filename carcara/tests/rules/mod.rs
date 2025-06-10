@@ -43,8 +43,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
             discharge: Vec::new(),
         }));
 
-        let rules = IndexMap::new();
-        let mut checker = checker::ProofChecker::new(&mut pool, &rules, checker::Config::new());
+        let mut checker = checker::ProofChecker::new(&mut pool, checker::Config::new());
         let check_result = checker.check(&problem, &proof);
 
         // Extract error message, if any

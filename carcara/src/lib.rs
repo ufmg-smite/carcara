@@ -100,7 +100,7 @@ pub fn check<T: io::BufRead>(
 
     // Checking
     let checking = Instant::now();
-    let mut checker = checker::ProofChecker::new(&mut pool, &rules, checker_config);
+    let mut checker = checker::ProofChecker::new(&mut pool, checker_config);
     if collect_stats {
         let mut checker_stats = CheckerStatistics {
             file_name: "this",
@@ -167,7 +167,6 @@ pub fn check_parallel<T: io::BufRead>(
         &problem.prelude,
         &schedule_context_usage,
         stack_size,
-        rules,
     );
 
     if collect_stats {
@@ -228,7 +227,7 @@ pub fn check_and_elaborate<T: io::BufRead>(
 
     // Checking
     let checking = Instant::now();
-    let mut checker = checker::ProofChecker::new(&mut pool, &rules, checker_config);
+    let mut checker = checker::ProofChecker::new(&mut pool, checker_config);
     let checking_result = if collect_stats {
         let mut checker_stats = CheckerStatistics {
             file_name: "this",

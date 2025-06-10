@@ -3,7 +3,7 @@ use super::{
     ContextStack,
 };
 use crate::{
-    ast::{rules::Rules, *},
+    ast::{rare_rules::Rules, *},
     utils::{Range, TypeName},
 };
 use std::time::Duration;
@@ -18,7 +18,6 @@ pub struct RuleArgs<'a> {
     pub(super) args: &'a [Rc<Term>],
     pub(super) pool: &'a mut dyn TermPool,
     pub(super) context: &'a mut ContextStack,
-    pub(super) rare_rules: &'a Rules,
 
     // For rules that end a subproof, we need to pass the previous command in the subproof that it
     // is closing, because it may be implicitly referenced, and it is not given as premises. If a
@@ -194,7 +193,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
             discharge: Vec::new(),
         }));
 
-        let mut checker = checker::ProofChecker::new(&mut pool, &rules, checker::Config::new());
+        let mut checker = checker::ProofChecker::new(&mut pool, checker::Config::new());
         let got = checker.check(&problem, &proof).is_ok();
         assert_eq!(
             *expected, got,
