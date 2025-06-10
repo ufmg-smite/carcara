@@ -1,0 +1,236 @@
+(include "./theory.eo")
+
+; Library of auxiliary programs, useful to manipulate f-lists:
+; associative operators with nil-terminators
+
+; define: f_list_index
+; args:
+; - f (-> A A A): >
+;   Right/left assoc. operator used to construct the given f-list
+;   (see definition of f-list, for a given operator f, in ethos
+;   manual: https://github.com/cvc5/ethos/blob/main/user_manual.md#list-computations)
+; - list (A): An f-list: a term of the form (f t1 ... tn)
+; - index Int: >
+;   An integer, from 0 to the number of parameters - 1 in (f t1 ... tn) 
+;   (i.e., "list)
+; return: The parameter number "index", from (f t1 ... tn).
+(program $f_list_index ((A Type) (f (-> A A A)) (hd A) (tail A :list) (index Int))
+  ((-> A A A) A Int) A
+  (
+   (
+    ($f_list_index f (f hd tail) 0) 
+
+    hd
+    )
+
+   (; { hd is not an f-list }
+    ($f_list_index f hd 0) 
+
+    hd
+    )
+
+   ;; { index > 0 }
+   (($f_list_index f (f hd tail) index)
+    ;; TODO: using eo::add
+    ($f_list_index f tail (eo::add index -1)))
+  )
+)
+
+; program: f_list_contains_elem
+; args:
+; - f (-> A A A): Operator used to build the f-list.
+; - elem A: Some element of type A, for which we want to test membership.
+; - list A: An f-list.
+; return:
+; A boolean indicating if "elem" appears in f-list "list".
+(program $f_list_contains_elem ((A Type) (f (-> A A A))
+                               (elem A) (hd A) (tl A :list))
+  ((-> A A A) A A) Bool
+  (
+   (($f_list_contains_elem f elem (f elem tl))
+
+    true)
+
+   ; { hd =/= elem}
+   (($f_list_contains_elem f elem (f hd tl))
+
+    ($f_list_contains_elem f elem tl))
+
+   ; { elem is not an f-list}
+   (($f_list_contains_elem f elem elem)
+
+    true)
+   
+   ; { hd =/= elem}
+   (($f_list_contains_elem f elem hd)
+
+    false)
+  )
+)
+
+; program: f_list_contains_elem
+; args:
+; - f (-> A A A): Operator used to build the f-list.
+; - list_1 A: An f-list.
+; - list_2 A: An f-list.
+; return:
+; A boolean indicating if the elements from list_1 also appear in list_2.
+(program $f_list_contains_f_list ((A Type) (f (-> A A A))
+                                 (hd A) (tl A :list)
+                                 (f_list_2 A))
+  ((-> A A A) A A) Bool
+  (
+   (($f_list_contains_f_list f (f hd tl) f_list_2)
+    ;; TODO: I need some way to build boolean values
+    ;; combining other boolean values, but I would like
+    ;; to avoid built-in operators.
+    (eo::and ($f_list_contains_elem f hd f_list_2)
+             ($f_list_contains_f_list f tl f_list_2)))
+
+ 
+   ;; { f_list_1 is not a term built with f }
+   (($f_list_contains_f_list f hd f_list_2)
+    ($f_list_contains_elem f hd f_list_2))
+  )
+)
+
+; program: f_list_equal
+; args:
+; - f (-> A A A): Operator used to build the f-list.
+; - list_1 A: An f-list.
+; - list_2 A: An f-list.
+; return: >
+; A boolean indicating if the operands from list_1 and list_2 are the 
+; same, regardless of the order and possible repetitions.
+(program $f_list_equal ((A Type) (f (-> A A A))
+                       (f_list_1 A) (f_list_2 A))
+  ((-> A A A) A A) Bool
+  (
+   (($f_list_equal f f_list_1 f_list_2)
+    (eo::and ($f_list_contains_f_list f f_list_1 f_list_2)
+             ($f_list_contains_f_list f f_list_2 f_list_1)))
+  )
+)
+
+; program: f_list_concat
+; args:
+; - f (-> A A A): Operator used to build the f-list.
+; - elem A: An element of type A.
+; - flist A: An f-list.
+; return: >
+;    Returns an f-list, with first operand "elem", followed by operands of flist_2.
+(define $f_list_cons ((A Type :implicit) (f (-> A A A)) (elem A)
+                     (tail A :list))
+    (f elem tail)
+)
+
+; program: f_list_remove_elem
+; args:
+; - list B: An f-list, where f is a variadic operator with some "nil" element.
+; - f_nil A: The "nil" element of variadic operator f.
+; - elem A: An element from "list" that we want to remove.
+; return: >
+;   Removes the first occurrence of "elem" in the given f-list. Returns
+;   the obtained f-list.
+(program $f_list_remove_elem ((A Type) (B Type)
+                             (f (-> A A B)) (f_nil A) (hd A) (tl A :list)
+                             (elem A))
+  ((-> A A B) B A A) B
+
+  (
+   (
+    ($f_list_remove_elem f (f elem tl) elem f_nil)
+    
+    tl
+    )
+
+   (; { hd =/= elem }
+    ($f_list_remove_elem f (f hd tl) elem f_nil)
+    
+    ($f_list_cons f hd ($f_list_remove_elem f tl elem f_nil))
+    )
+
+   (
+    ($f_list_remove_elem f elem elem f_nil)
+    
+    f_nil
+    )
+   
+   ; TODO: this should be an error
+   (; { hd =/= elem }
+    ($f_list_remove_elem f hd elem f_nil)
+    
+    hd
+    )
+   )
+  )
+
+; TODO: implement this as a higher-order program, once it becomes feasible
+; program: $f_list_filter
+; args:
+; - hd Bool:
+; - cl_tl Bool:
+; - varlist_tl @VarList:
+; return:
+(program $f_list_filter ((A Type) (f (-> A A A)) (nil_elem A)
+                         (hd A) (f_tl A :list) (varlist_tl @VarList :list))
+         ((-> A A A) A A @VarList) A
+         (
+          (
+           ($f_list_filter f nil_elem (f hd f_tl) (@varlist true varlist_tl))
+           ($f_list_filter f nil_elem f_tl varlist_tl)
+           )
+
+          (
+           ($f_list_filter f nil_elem (f hd f_tl) (@varlist false varlist_tl))
+           ($f_list_cons f
+                         hd
+                         ($f_list_filter f nil_elem f_tl varlist_tl))
+           )
+
+          (
+           ($f_list_filter f nil_elem hd (@varlist false @varlist.nil))
+           (f hd nil_elem)
+           )
+
+          (
+           ($f_list_filter f nil_elem hd (@varlist true @varlist.nil))
+           nil_elem 
+           )
+
+          (
+           ($f_list_filter f nil_elem nil_elem @varlist.nil)
+           nil_elem
+           )
+          )
+         )
+
+; program: $f_list_last_element
+; args:
+; - f (-> A A A): Operator used to build the f-list.
+; - f-list A: A non-empty f-list.
+; precondition: f-list is not empty.
+; return: Last element of f-list.
+(program $f_list_last_element ((A Type) (f (-> A A A))
+                               (hd A) (f_tl A :list))
+         ((-> A A A) A) A
+         (
+          ;; (
+          ;;  ($f_list_last_element nil_elem (f hd nil_elem))
+
+          ;;  hd
+          ;;  )
+
+          (
+           ($f_list_last_element f (f hd f_tl))
+
+           ($f_list_last_element f f_tl)
+           )
+
+          (; { hd is not an f-list }
+           ($f_list_last_element f hd)
+
+           hd
+           )
+          )
+         )
