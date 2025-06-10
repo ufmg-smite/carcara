@@ -7,15 +7,16 @@
 ; TODO: some better way to deal with empty clauses?
 (declare-const @empty_cl Bool)
 
-
-(declare-const ite (-> (! Type :var A :implicit) Bool A A A))
+(declare-parameterized-const ite ((A Type :implicit)) (-> Bool A A A))
 (declare-const not (-> Bool Bool))
 (declare-const or (-> Bool Bool Bool) :right-assoc-nil false)
 (declare-const and (-> Bool Bool Bool) :right-assoc-nil true)
 (declare-const => (-> Bool Bool Bool) :right-assoc)
 (declare-const xor (-> Bool Bool Bool) :left-assoc)
-(declare-const = (-> (! Type :var A :implicit) A A Bool) :chainable and)
-(declare-const distinct (-> (! Type :var A :implicit) A A Bool) :pairwise and)
+(declare-parameterized-const = ((A Type :implicit)) (-> A A Bool) 
+                             :chainable and)
+(declare-parameterized-const distinct ((A Type :implicit)) (-> A A Bool) 
+                             :pairwise and)
 
 ; ---------------------------
 ;   Int and Real Arithmetic
@@ -63,58 +64,64 @@
 
 ; Core operators of arithmetic, which are used in mixed Int/Real arithmetic.
 ; Using integer nil terminators ensures typing is accurate.
-(declare-const + (-> (! Type :var T :implicit) (! Type :var U :implicit)
-                     T U ($arith_typeunion T U)) :right-assoc-nil 0)
-(declare-const - (-> (! Type :var T :implicit) (! Type :var U :implicit)
-                     T U ($arith_typeunion T U)) :left-assoc)
-(declare-const * (-> (! Type :var T :implicit) (! Type :var U :implicit)
-                     T U ($arith_typeunion T U)) :right-assoc-nil 1)
-(declare-const / (-> (! Type :var T :implicit) (! Type :var U :implicit)
-                     T U
-                     (! Real :requires (($is_arith_type T) true)
-                             :requires (($is_arith_type U) true))) :left-assoc)
+(declare-parameterized-const + ((T Type :implicit) (U Type :implicit))
+                             (-> T U ($arith_typeunion T U))
+                             :right-assoc-nil 0)
+(declare-parameterized-const - ((T Type :implicit) (U Type :implicit)) 
+                             (-> T U ($arith_typeunion T U)) :left-assoc)
+(declare-parameterized-const * ((T Type :implicit) (U Type :implicit)) 
+                             (-> T U ($arith_typeunion T U)) :right-assoc-nil 1)
+(declare-parameterized-const / ((T Type :implicit) (U Type :implicit))
+                             (-> T U ($arith_typeunion T U)) :left-assoc)
+
 (declare-const div (-> Int Int Int) :left-assoc)
 (declare-const mod (-> Int Int Int))
 
-(declare-const < (-> (! Type :var T :implicit) (! Type :var U :implicit)
-                     (! T :requires (($is_arith_type T) true))
-                     (! U :requires (($is_arith_type U) true))
-                     Bool)
-                     :chainable and)
-(declare-const <= (-> (! Type :var T :implicit) (! Type :var U :implicit)
-                      (! T :requires (($is_arith_type T) true))
-                      (! U :requires (($is_arith_type U) true))
-                      Bool)
-                      :chainable and)
-(declare-const > (-> (! Type :var T :implicit) (! Type :var U :implicit)
-                     (! T :requires (($is_arith_type T) true))
-                     (! U :requires (($is_arith_type U) true))
-                     Bool)
-                     :chainable and)
-(declare-const >= (-> (! Type :var T :implicit) (! Type :var U :implicit)
-                      (! T :requires (($is_arith_type T) true))
-                      (! U :requires (($is_arith_type U) true))
-                      Bool)
-                      :chainable and)
+; Currently unary negation cannot use overload.
+(declare-parameterized-const - ((T Type :implicit))
+                     (-> T (eo::requires ($is_arith_type T) true T)))
+
+; Orders
+(declare-parameterized-const < ((T Type :implicit) (U Type :implicit))
+                             (-> T U
+                                (eo::requires ($is_arith_type T) true
+                                              (eo::requires ($is_arith_type U) true
+                                                            Bool)))
+                             :chainable and)
+
+(declare-parameterized-const <= ((T Type :implicit) (U Type :implicit))
+                             (-> T U
+                                (eo::requires ($is_arith_type T) true
+                                              (eo::requires ($is_arith_type U) true
+                                                            Bool)))
+                             :chainable and)
+
+(declare-parameterized-const > ((T Type :implicit) (U Type :implicit))
+                             (-> T U
+                                (eo::requires ($is_arith_type T) true
+                                              (eo::requires ($is_arith_type U) true
+                                                            Bool)))
+                             :chainable and)
+
+(declare-parameterized-const >= ((T Type :implicit) (U Type :implicit))
+                             (-> T U
+                                (eo::requires ($is_arith_type T) true
+                                              (eo::requires ($is_arith_type U) true
+                                                            Bool)))
+                             :chainable and)
 
 ; Conversion functions.
-(declare-const to_real (-> (! Type :var T :implicit)
-                           (! T :requires (($is_arith_type T) true))
-                           Real))
-(declare-const to_int (-> (! Type :var T :implicit)
-                          (! T :requires (($is_arith_type T) true))
-                          Int))
-(declare-const is_int (-> (! Type :var T :implicit)
-                          (! T :requires (($is_arith_type T) true))
-                          Bool))
-(declare-const abs (-> (! Type :var T :implicit)
-                       (! T :requires (($is_arith_type T) true))
-                       T))
+(declare-parameterized-const to_real ((T Type :implicit))
+                           (-> T (eo::requires ($is_arith_type T) true Real)))
 
-; Currently unary negation cannot use overload.
-(declare-const - (-> (! Type :var T :implicit)
-                     (! T :requires (($is_arith_type T) true))
-                     T))
+(declare-parameterized-const to_int ((T Type :implicit))
+                           (-> T (eo::requires ($is_arith_type T) true Int)))
+
+(declare-parameterized-const is_int ((T Type :implicit))
+                           (-> T (eo::requires ($is_arith_type T) true Bool)))
+
+(declare-parameterized-const abs ((T Type :implicit))
+                           (-> T (eo::requires ($is_arith_type T) true T)))
 
 ; ---------------
 ;   Quantifiers
@@ -122,12 +129,13 @@
 
 (declare-type @VarList ())
 (declare-const @varlist.nil @VarList)
-(declare-const @varlist (-> (! Type :var T :implicit) T @VarList @VarList) :right-assoc-nil @varlist.nil)
+(declare-parameterized-const @varlist ((T Type :implicit)) 
+                             (-> T @VarList @VarList) :right-assoc-nil @varlist.nil)
 
 (declare-const forall (-> @VarList Bool Bool) :binder @varlist)
 (declare-const exists (-> @VarList Bool Bool) :binder @varlist)
-(declare-const choice (-> (! Type :var T :implicit) @VarList T Bool T) :binder @varlist)
-
+(declare-parameterized-const choice ((T Type :implicit))
+                             (-> T @VarList T Bool T) :binder @varlist)
 
 ; program: get_lambda_type
 ; args:
@@ -153,20 +161,15 @@
   )
 )
 
-(declare-const @let (-> (! Type :var B :implicit)
-                       (! @VarList :var L)
-                       B
-                       ($get_lambda_type L B)
-                       ) :binder @varlist)
-
+(declare-parameterized-const @let ((B Type :implicit) (L @VarList))
+                       (-> B ($get_lambda_type L B)) :binder @varlist)
 
 ; ------------
 ;   Contexts
 ; ------------
 
-(declare-const @ctx (-> (! @VarList :var L)
-                        Bool
-                        Bool) :binder @varlist)
+(declare-parameterized-const @ctx ((L @VarList))
+                        (-> Bool Bool) :binder @varlist)
 
 ; constant: @var
 ; type: (-> (! Type :var B :implicit)
@@ -176,9 +179,9 @@
 ; note: >
 ;    Represents an undefined inhabitant of a given type. 
 ;    Used to represent variables bound by some binder (including @ctx, forall, etc.)
-(declare-const @var (-> (! Type :var B :implicit) (! @VarList :var L) B B)
-               :binder @varlist)
-
+(declare-parameterized-const @var ((B Type :implicit) (L @VarList)) 
+                             (-> B B)
+                             :binder @varlist)
 ; ---------------
 ;   Substitutions
 ; ---------------
@@ -186,13 +189,14 @@
 ; Since some rules are defined directly in terms of a given substitution.
 ; Single substitute variable -> value
 (declare-type @Substitute ())
-(declare-const @substitute (-> (! Type  :var Var :implicit) (! Type  :var Value :implicit) 
-                              Var Value @Substitute))
+(declare-parameterized-const @substitute ((Var Type :implicit) 
+                                          (Value Type :implicit))
+                             (-> Var Value @Substitute))
 
 (declare-type @Substitution ())
 
 (declare-const @substitution.nil @Substitution)
 
-; TODO: I don't want for people to directly use this constructor
+; TODO: we don't want for the user to employ directly this constructor
 (declare-const @substitution (-> @Substitute @Substitution @Substitution)
                :right-assoc-nil @substitution.nil)
