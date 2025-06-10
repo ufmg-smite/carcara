@@ -1,21 +1,25 @@
 (include "./theory.eo")
 
-; Library of auxiliary programs, useful to manipulate f-lists:
-; associative operators with nil-terminators
+; Library of auxiliary programs, useful to manipulate f-lists (associative 
+; operators with nil-terminators) and related structures
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; f-lists
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ; define: f_list_index
 ; args:
-; - f (-> A A A): >
+; - f (-> A B B): >
 ;   Right/left assoc. operator used to construct the given f-list
 ;   (see definition of f-list, for a given operator f, in ethos
 ;   manual: https://github.com/cvc5/ethos/blob/main/user_manual.md#list-computations)
-; - list (A): An f-list: a term of the form (f t1 ... tn)
+; - list (B): An f-list: a term of the form (f t1 ... tn)
 ; - index Int: >
 ;   An integer, from 0 to the number of parameters - 1 in (f t1 ... tn) 
 ;   (i.e., "list)
 ; return: The parameter number "index", from (f t1 ... tn).
-(program $f_list_index ((A Type) (f (-> A A A)) (hd A) (tail A :list) (index Int))
-  ((-> A A A) A Int) A
+(program $f_list_index ((A Type) (B Type) (f (-> A B B)) (hd A) (tail B :list) (index Int))
+  ((-> A B B) B Int) A
   (
    (
     ($f_list_index f (f hd tail) 0) 
@@ -38,14 +42,14 @@
 
 ; program: f_list_contains_elem
 ; args:
-; - f (-> A A A): Operator used to build the f-list.
+; - f (-> A B B): Operator used to build the f-list.
 ; - elem A: Some element of type A, for which we want to test membership.
-; - list A: An f-list.
+; - list B: An f-list.
 ; return:
 ; A boolean indicating if "elem" appears in f-list "list".
-(program $f_list_contains_elem ((A Type) (f (-> A A A))
-                               (elem A) (hd A) (tl A :list))
-  ((-> A A A) A A) Bool
+(program $f_list_contains_elem ((A Type) (B Type) (f (-> A B B))
+                               (elem A) (hd A) (tl B :list))
+  ((-> A B B) A B) Bool
   (
    (($f_list_contains_elem f elem (f elem tl))
 
@@ -70,15 +74,15 @@
 
 ; program: f_list_contains_elem
 ; args:
-; - f (-> A A A): Operator used to build the f-list.
-; - list_1 A: An f-list.
-; - list_2 A: An f-list.
+; - f (-> A B B): Operator used to build the f-list.
+; - list_1 B: An f-list.
+; - list_2 B: An f-list.
 ; return:
 ; A boolean indicating if the elements from list_1 also appear in list_2.
-(program $f_list_contains_f_list ((A Type) (f (-> A A A))
-                                 (hd A) (tl A :list)
-                                 (f_list_2 A))
-  ((-> A A A) A A) Bool
+(program $f_list_contains_f_list ((A Type) (B Type) (f (-> A B B))
+                                 (hd A) (tl B :list)
+                                 (f_list_2 B))
+  ((-> A B B) B B) Bool
   (
    (($f_list_contains_f_list f (f hd tl) f_list_2)
     ;; TODO: I need some way to build boolean values
@@ -96,15 +100,15 @@
 
 ; program: f_list_equal
 ; args:
-; - f (-> A A A): Operator used to build the f-list.
-; - list_1 A: An f-list.
-; - list_2 A: An f-list.
+; - f (-> A B B): Operator used to build the f-list.
+; - list_1 B: An f-list.
+; - list_2 B: An f-list.
 ; return: >
 ; A boolean indicating if the operands from list_1 and list_2 are the 
 ; same, regardless of the order and possible repetitions.
-(program $f_list_equal ((A Type) (f (-> A A A))
-                       (f_list_1 A) (f_list_2 A))
-  ((-> A A A) A A) Bool
+(program $f_list_equal ((A Type) (B Type) (f (-> A B B))
+                       (f_list_1 B) (f_list_2 B))
+  ((-> A B B) B B) Bool
   (
    (($f_list_equal f f_list_1 f_list_2)
     (eo::and ($f_list_contains_f_list f f_list_1 f_list_2)
@@ -114,28 +118,29 @@
 
 ; program: f_list_concat
 ; args:
-; - f (-> A A A): Operator used to build the f-list.
+; - f (-> A B B): Operator used to build the f-list.
 ; - elem A: An element of type A.
-; - flist A: An f-list.
+; - flist B: An f-list.
 ; return: >
 ;    Returns an f-list, with first operand "elem", followed by operands of flist_2.
-(define $f_list_cons ((A Type :implicit) (f (-> A A A)) (elem A)
-                     (tail A :list))
+(define $f_list_cons ((A Type :implicit) (B Type :implicit) (f (-> A B B)) (elem A)
+                     (tail B :list))
     (f elem tail)
 )
 
 ; program: f_list_remove_elem
 ; args:
+; - f (-> A B B): Operator used to build the f-list.
 ; - list B: An f-list, where f is a variadic operator with some "nil" element.
-; - f_nil A: The "nil" element of variadic operator f.
+; - f_nil B: The "nil" element of variadic operator f.
 ; - elem A: An element from "list" that we want to remove.
 ; return: >
 ;   Removes the first occurrence of "elem" in the given f-list. Returns
 ;   the obtained f-list.
 (program $f_list_remove_elem ((A Type) (B Type)
-                             (f (-> A A B)) (f_nil A) (hd A) (tl A :list)
+                             (f (-> A B B)) (f_nil B) (hd A) (tl B :list)
                              (elem A))
-  ((-> A A B) B A A) B
+  ((-> A B B) B A B) B
 
   (
    (
@@ -166,18 +171,22 @@
   )
 
 ; TODO: implement this as a higher-order program, once it becomes feasible
-; program: $f_list_filter
+; program: f_list_remove_elem
 ; args:
-; - hd Bool:
-; - cl_tl Bool:
-; - varlist_tl @VarList:
-; return:
-(program $f_list_filter ((A Type) (f (-> A A A)) (nil_elem A)
-                         (hd A) (f_tl A :list) (varlist_tl @VarList :list))
-         ((-> A A A) A A @VarList) A
+; - f (-> A B B): Operator used to build the f-list.
+; - f_nil B: The "nil" element of variadic operator f.
+; - list B: An f-list, where f is a variadic operator with some "nil" element.
+; - flags @VarList: List of flags indicating which element must be removed.
+; return: >
+;   Removes element in index i from "list", if the flag in position i from 
+;   "flags" is true.
+(program $f_list_filter ((A Type) (B Type) (f (-> A B B)) (nil_elem B)
+                         (hd A) (f_tl B :list) (varlist_tl @VarList :list))
+         ((-> A B B) B B @VarList) B
          (
           (
            ($f_list_filter f nil_elem (f hd f_tl) (@varlist true varlist_tl))
+
            ($f_list_filter f nil_elem f_tl varlist_tl)
            )
 
@@ -207,30 +216,99 @@
 
 ; program: $f_list_last_element
 ; args:
-; - f (-> A A A): Operator used to build the f-list.
-; - f-list A: A non-empty f-list.
+; - f (-> A B B): Operator used to build the f-list.
+; - nil B: Nil element of operator f.
+; - f-list B: A non-empty f-list.
 ; precondition: f-list is not empty.
 ; return: Last element of f-list.
-(program $f_list_last_element ((A Type) (f (-> A A A))
-                               (hd A) (f_tl A :list))
-         ((-> A A A) A) A
+(program $f_list_last_element ((A Type) (B Type) (f (-> A B B))
+                               (hd A) (nil_elem A) (f_tl A :list))
+         ((-> A B B) B B) A
          (
-          ;; (
-          ;;  ($f_list_last_element nil_elem (f hd nil_elem))
-
-          ;;  hd
-          ;;  )
-
           (
-           ($f_list_last_element f (f hd f_tl))
+           ($f_list_last_element f nil_elem (f hd nil_elem))
 
-           ($f_list_last_element f f_tl)
+           hd
            )
 
-          (; { hd is not an f-list }
-           ($f_list_last_element f hd)
+          (
+           ($f_list_last_element f nil_elem (f hd f_tl))
+
+           ($f_list_last_element f nil_elem f_tl)
+           )
+          )
+         )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; lists (built with non-variadic operators)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; program: $list_last_element
+; args:
+; - f (-> A B B): An n-ary operator used to build the list.
+; - list B: A non-empty list.
+; precondition: list is not empty.
+; return: Last element of list.
+(program $list_last_element ((A Type) (B Type) (f (-> A B B))
+                               (hd A) (f_tl B :list))
+         ((-> A B B) B) A
+         (
+          (
+           ($list_last_element f (f hd f_tl))
+
+           ($list_last_element f f_tl)
+           )
+
+          (
+           ($list_last_element f (f hd))
+
+           hd
+           )
+
+          (; { hd is not a list }
+           ($list_last_element f hd)
 
            hd
            )
           )
          )
+
+; program: list_remove_elem
+; args:
+; - f (-> A B B): an n-ary operator
+; - list B: An list, built with f.
+; - elem A: An element from "list" that we want to remove.
+; return: >
+;   Removes the first occurrence of "elem" in the given list. Returns
+;   the obtained list.
+(program $list_remove_elem ((A Type) (B Type)
+                             (f (-> A B B)) (hd A) (tl B :list)
+                             (elem A))
+  ((-> A B B) B A) B
+
+  (
+   (
+    ($list_remove_elem f (f hd elem) elem)
+    
+    (f hd)
+    )
+
+   (
+    ($list_remove_elem f (f elem tl) elem)
+    
+    tl
+    )
+
+   (; { hd =/= elem }
+    ($list_remove_elem f (f hd tl) elem)
+    
+    ($f_list_cons f hd ($list_remove_elem f tl elem))
+    )
+
+   (; TODO: this should be an error
+    ($list_remove_elem f (f elem) elem)
+    
+    f
+    )
+   )
+  )

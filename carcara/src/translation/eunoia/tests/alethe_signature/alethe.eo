@@ -537,7 +537,7 @@
 ; - Conclusion Bool:
 ; return:
 (program $check_forall_inst ((forall_vars @VarList) 
-                                                       (body Bool) 
+                                                       (body Bool)
                                                        (instantiated_body Bool) 
                                                        (variables_substitutions @VarList))
   (Bool @VarList) Bool
@@ -545,7 +545,6 @@
    (;  TODO: 𝑥𝑖 and 𝑡𝑖 have the same sort
     ($check_forall_inst (@cl (or (not (forall forall_vars body)) instantiated_body))
                         variables_substitutions)
-
     ($eo_is_eq instantiated_body ($substitution_apply body 
                                                             ($substitution_build 
                                                              forall_vars
@@ -811,20 +810,80 @@
   :conclusion-given
 )
 
-;TODO
-(program $check_cong ((Eqs Bool) (CEq Bool))
+;---------------
+; Rule 24: cong
+;---------------
+(program $mk_variadic_cong_rhs ((U Type) (f (-> U U U)) (s1 U) (s2 U) (t U :list) (tail Bool :list) (nil U))
+    :signature (U Bool) U
+    (
+        (
+         ($mk_variadic_cong_rhs (f s1 t) (and (= s1 s2) tail))  
+
+         (eo::cons f s2 ($mk_variadic_cong_rhs t tail))
+         )
+
+        (
+         ($mk_variadic_cong_rhs nil true)                       
+
+         nil)
+    )
+)
+
+(program $mk_nary_cong_rhs ((T Type) (U Type) (f (-> T U)) (t1 U) (t2 U) (t3 U) (tail Bool :list))
+    :signature (U Bool) U
+    (
+        (
+         ($mk_nary_cong_rhs (f t1) (and (= t1 t2) tail))  
+
+         (_ ($mk_nary_cong_rhs f tail) t2)
+         )
+
+        (; TODO: remove this case
+         ($mk_nary_cong_rhs (f t1) (and (@cl (= t1 t2)) tail))
+
+         (_ ($mk_nary_cong_rhs f tail) t2)
+         )
+
+        (
+         ($mk_nary_cong_rhs f true)                       
+         
+         f
+         )
+    )
+)
+
+(program $check_cong_nary ((premises Bool) (A Type) (lhs A) (rhs A))
   (Bool Bool) Bool
   (
-   (($check_cong Eqs CEq) true)
-  )
+   (
+    ($check_cong_nary premises (@cl (= lhs rhs)))
+
+    ($f_list_equal = ($mk_nary_cong_rhs lhs (eo::list_rev and premises)) rhs)
+    )
+   )
+)
+
+(program $check_cong_variadic ((premises Bool) (A Type) (lhs A) (rhs A))
+  (Bool Bool) Bool
+  (
+   (
+    ($check_cong_variadic premises (@cl (= lhs rhs)))
+
+    ($f_list_equal = ($mk_variadic_cong_rhs lhs premises) rhs)
+    )
+   )
 )
 
 ;TRUST
-; (declare-rule cong ((Eqs Bool) (CEq Bool))
-(declare-rule cong ((Eqs Bool))
-  :premise-list Eqs and
-  ; :args ((@cl CEq)) ; CEq is an equality
-  :requires ((($check_cong Eqs eo::conclusion) true))
+(declare-rule cong_nary ((premises Bool))
+  :premise-list premises and
+  :requires ((($check_cong_nary premises eo::conclusion) true))
+  :conclusion-given
+)
+
+(declare-rule cong_variadic ((premises Bool))
+  :premise-list premises and
+  :requires ((($check_cong_variadic premises eo::conclusion) true))
   :conclusion-given
 )
 
@@ -2667,7 +2726,7 @@
     ($check_reordering (@cl hd_premise tl_premise) (@cl hd_conclusion tl_conclusion))
 
     ($check_reordering tl_premise 
-                      ($f_list_remove_elem (@cl hd_conclusion tl_conclusion) hd_premise false))
+                      ($f_list_remove_elem @cl (@cl hd_conclusion tl_conclusion) hd_premise false))
     )
 
    (
