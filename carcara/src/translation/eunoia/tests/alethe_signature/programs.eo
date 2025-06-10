@@ -1,5 +1,5 @@
 (include "./theory.eo")
-(include "./f_lists.eo")
+(include "./lists.eo")
 
 ; Library of auxiliary programs, useful to manipulate many different
 ; Eunoia constructions.
@@ -7,29 +7,6 @@
 ;------------------------------------
 ; Eunoia built-in and misc. services
 ;------------------------------------
-
-; program: $eo_ite
-; args:
-; - guard Bool: The guard of the conditional.
-; - if_branch A: "If" branch of the conditional.
-; - else_branch A: "Else" branch of the conditional.
-; return: If guard holds, returns if_branch. Otherwise, it returns else_branch.
-(program $eo_ite ((A Type) (if_branch A) (else_branch A))
-         (Bool A A) A
-         (
-          (
-           ($eo_ite true if_branch else_branch)
-
-           if_branch
-            )
-
-          (
-           ($eo_ite false if_branch else_branch)
-
-           else_branch
-            )
-          )
-)
 
 ; program: $eo_is_eq
 ; implements: eo::is_eq
@@ -1036,6 +1013,14 @@
 
 ; Manipulation/application of substitutions.
 
+; program: $substitution_contains_substitute
+; args:
+; - substitutions @Substitution: Substitution that we want to query.
+; - var Vars: >
+;    A variable for which we want to determine if "substitutions" contains
+;    a substitute.
+; return: >
+;    A boolean indicating if "substitutions" contains a substitute for "var".
 (program $substitution_contains_substitute ((Vars Type) (Values Type)
                                             (var Vars) (var2 Vars) (value Values) 
                                             (substitutions @Substitution :list))
@@ -1049,7 +1034,7 @@
            true
            )
 
-          (; {var' <> var}
+          (; {var2 <> var}
            ; Assuming that var is actually mentioned in the substitution.
            ($substitution_contains_substitute 
             (@substitution (@substitute var2 value) substitutions)
@@ -1067,20 +1052,38 @@
           )
 )
 
-(define $substitution_constructor ((Variables Type :implicit) (Values Type :implicit)
-                       (var Variables) (value Values) (substitutions @Substitution :list))
+; define: $substitution_extend
+; args:
+; - substitutions @Substitution: The substitution that we want to extend.
+; - var Variables: >
+;    A variable for which we want to define a substitute, extending "substitutions".
+; - value Values: >
+;    The substitute for "var" with which we want to extend "substitutions".
+; return: >
+;    The corresponding extension to "substitutions", provided "var" is not already
+;    contained in the domain of "substitutions".
+(define $substitution_extend ((substitutions @Substitution)
+                              (Variables Type :implicit) (Values Type :implicit)
+                              (var Variables) (value Values))
 
-        ($eo_ite ($substitution_contains_substitute substitutions var)
-                 
+        (eo::ite ($substitution_contains_substitute substitutions var)
+
                  substitutions
                  
                  ($f_list_cons @substitution
                                (@substitute var value) substitutions)
                  )
-        ; TODO: cannot pass this type-check
-        ;; :type @Substitution
+        ;TODO: cannot pass this type-check
+        ;; :type (-> @Substitution (-> Variables (-> Values @Substitution)))
 )
 
+; program: $substitution_build
+; args:
+; - variables @VarList: Variables that will be included in the substitution.
+; - values @Varlist: >
+;    Substitutes for each variable mentioned in "variables", in the same order 
+;    as in "variables".
+; return: The corresponding @Substitution.
 (program $substitution_build ( (Vars Type) (Values Type) (var Vars) (value Values)
                                (vars_tail @VarList :list) (values_tail @VarList :list))
          (@VarList @VarList) @Substitution
@@ -1094,7 +1097,7 @@
           (
            ($substitution_build (@varlist var vars_tail) (@varlist value values_tail))
 
-           ($substitution_constructor var value ($substitution_build vars_tail values_tail))
+           ($substitution_extend ($substitution_build vars_tail values_tail) var value)
            )
           )
 )
@@ -1113,14 +1116,21 @@
             (@substitution (@substitute var value) substitutions) vars)
            ; If var is present in vars, we remove var's substitute from
            ; the whole set of substitutions
-           ($eo_ite ($varlist_contains_elem vars var)
+           (eo::ite ($varlist_contains_elem vars var)
                     
                     ($substitution_remove_substitutes 
                      substitutions
                      ($varlist_remove_elem vars var))
 
-                    ($substitution_constructor var value
-                                               ($substitution_remove_substitutes substitutions vars)))
+                    ($substitution_extend 
+                     ($substitution_remove_substitutes substitutions vars)
+                     var value))
+           )
+
+          (
+           ($substitution_remove_substitutes @substitution.nil vars)
+
+           @substitution.nil
            )
           )
 )
@@ -1186,8 +1196,8 @@
            ; introduced by some binder. For reasoning purposes within $substitution_apply, 
            ; we just use 'x' as the representation of the variable.
            ($substitution_apply (@var (@varlist x) x) substitution)
-           
-           ($eo_ite ($substitution_contains_substitute substitution x)
+
+           (eo::ite ($substitution_contains_substitute substitution x)
 
                     ($substitution_apply x substitution)
 
@@ -1225,7 +1235,6 @@
           ; { x is a var }
           (
            ($substitution_apply x substitution)
-
            (eo::ite ($substitution_contains_substitute substitution x)
 
                     ($substitution_get_value substitution x)
