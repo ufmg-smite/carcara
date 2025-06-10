@@ -249,3 +249,7 @@ impl TypeName for Binder {
 impl TypeName for BindingList {
     const NAME: &'static str = "binding list";
 }
+
+impl TypeName for Integer {
+    const NAME: &'static str = "integer";
+}
