@@ -973,6 +973,20 @@ impl EunoiaTranslator {
                         });
                     }
 
+                    "cong" => {
+                        // We need to distinguish congruence over a variadic operator,
+                        // from congruence over an n-ary operator
+                        let cong_rule = self.alethe_signature.select_cong_rule(&conclusion);
+
+                        self.eunoia_proof.push(EunoiaCommand::Step {
+                            id: id.clone(),
+                            conclusion_clause: Some(conclusion),
+                            rule: cong_rule,
+                            premises: EunoiaList { list: alethe_premises },
+                            arguments: EunoiaList { list: eunoia_arguments },
+                        });
+                    }
+
                     _ => {
                         self.eunoia_proof.push(EunoiaCommand::Step {
                             id: id.clone(),

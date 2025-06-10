@@ -43,6 +43,8 @@ pub struct AletheTheory {
     pub discard_context: Symbol,
     pub onepoint: Symbol,
     pub sko_ex: Symbol,
+    pub cong_variadic: Symbol,
+    pub cong_nary: Symbol,
 
     // Context representation and manipulation.
     pub ctx: Symbol,
@@ -97,6 +99,8 @@ impl AletheTheory {
             discard_context: String::from("discard_context"),
             onepoint: String::from("onepoint"),
             sko_ex: String::from("sko_ex"),
+            cong_variadic: String::from("cong_variadic"),
+            cong_nary: String::from("cong_nary"),
 
             // Context representation and manipulation.
             ctx: String::from("@ctx"),
@@ -180,6 +184,50 @@ impl AletheTheory {
                 panic!()
             }
         }
+    }
+
+    // Helps in extracting the top-level operator applied in a unit-clause of
+    // the form (@cl ("=", f t1 ..., f t2 ...)).
+    // PRE: {conclusion is an EunoiaTerm of the form (@cl ("=", f t1 ..., f t2 ...)) }
+    fn extract_top_level_op(&self, conclusion: &EunoiaTerm) -> String {
+        let (lhs, rhs) = self.extract_eq_lhs_rhs(conclusion);
+
+        match (lhs, rhs) {
+            // TODO: just assuming that cl and clause are correct
+            (EunoiaTerm::App(f1, ..), EunoiaTerm::App(f2, ..)) => {
+                if *f1 == *f2 {
+                    f1
+                } else {
+                    // { *f1 != *f2 }
+                    panic!();
+                }
+            }
+
+            _ => {
+                // Pre not satisfied
+                panic!();
+            }
+        }
+    }
+
+    // Determines which congruence rule should be applied, considering the
+    // given conclusion.
+    // PRE: {conclusion is an EunoiaTerm of the form (@cl ("=", f t1 ..., f t2 ...)) }
+    pub fn select_cong_rule(&self, conclusion: &EunoiaTerm) -> String {
+        let op = self.extract_top_level_op(conclusion);
+
+        let cong_rule: String = if op == self.cl
+            || op == self.or
+            || op == self.and
+            || op == self.add
+            || op == self.mult
+        {
+            self.cong_variadic.clone()
+        } else {
+            self.cong_nary.clone()
+        };
+
+        cong_rule
     }
 }
 
