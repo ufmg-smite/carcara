@@ -574,6 +574,15 @@ fn check_pb_inequalities(
     vars_r: &[CoeffTimesVar],
     kr: &Integer,
 ) -> RuleResult {
+    rassert!(
+        vars_l.len() == vars_r.len(),
+        CheckerError::Explanation(format!(
+            "List of variables should have same length, got {} and {}",
+            vars_l.len(),
+            vars_r.len()
+        ))
+    );
+
     for (var_l, var_r) in vars_l.iter().zip(vars_r) {
         rassert!(
             var_l == var_r,
