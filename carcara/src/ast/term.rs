@@ -993,3 +993,13 @@ impl Constant {
         }
     }
 }
+
+impl Sort {
+    pub fn is_polymorphic(&self) -> bool {
+        match self {
+            Sort::Var(_) => true,
+            Sort::ParamSort(_, sort) if matches!(&**sort, Term::Sort(Sort::Var(_))) => true,
+            _ => false,
+        }
+    }
+}
