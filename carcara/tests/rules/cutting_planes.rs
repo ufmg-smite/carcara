@@ -411,5 +411,25 @@ fn cp_normalize() {
                     )) :rule cp_normalize)"#: true,
 
         }
+        "Validates variable list length" {
+            r#"(step t1 (cl (=
+                (= (- (+ (* 1 a) (* 2 b)) (+ (* 1 1) (* 2 0))) 0)
+                (and (>= (+ a (* 2 b) (- 1 1) (* 2 (- 1 0))) 3)
+                     (>= (+ (- 1 a) (* 2 (- 1 b)) (* 1 1) (* 2 0)) 3)
+                )
+            )) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (=
+                (= (- (+ (* 1 a) (* 2 b)) (+ (* 1 1) (* 2 0))) 0)
+                (and (>= a 3)
+                     (>= (- 1 a) 3)
+                )
+            )) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (=
+                (= (- (+ (* 1 a) (* 2 b)) (+ (* 1 1) (* 2 0))) 0)
+                (and (>= (+ a (* 2 b)) 3)
+                     (>= (+ (- 1 a) (* 2 (- 1 b))) 3)
+                )
+            )) :rule cp_normalize)"#: false,
+        }
     }
 }
