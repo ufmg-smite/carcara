@@ -813,11 +813,28 @@
 ;---------------
 ; Rule 24: cong
 ;---------------
+; program: $mk_variadic_cong_rhs
+; args:
+; - U Type:
+; - f ->:
+; - s1 U:
+; - s2 U:
+; - t U:
+; - tail Bool:
+; - nil U:
+; return:
 (program $mk_variadic_cong_rhs ((U Type) (f (-> U U U)) (s1 U) (s2 U) (t U :list) (tail Bool :list) (nil U))
     :signature (U Bool) U
     (
-        (
+        (; TODO: remove this once we deal with embedding assumptions into
+         ; @cl
          ($mk_variadic_cong_rhs (f s1 t) (and (= s1 s2) tail))  
+
+         (eo::cons f s2 ($mk_variadic_cong_rhs t tail))
+         )
+
+        (
+         ($mk_variadic_cong_rhs (f s1 t) (and (@cl (= s1 s2)) tail))  
 
          (eo::cons f s2 ($mk_variadic_cong_rhs t tail))
          )
@@ -829,6 +846,16 @@
     )
 )
 
+; program: $mk_nary_cong_rhs
+; args:
+; - T Type:
+; - U Type:
+; - f ->:
+; - t1 U:
+; - t2 U:
+; - t3 U:
+; - tail Bool:
+; return:
 (program $mk_nary_cong_rhs ((T Type) (U Type) (f (-> T U)) (t1 U) (t2 U) (t3 U) (tail Bool :list))
     :signature (U Bool) U
     (
@@ -852,6 +879,13 @@
     )
 )
 
+; program: $check_cong_nary
+; args:
+; - premises Bool:
+; - A Type:
+; - lhs A:
+; - rhs A:
+; return:
 (program $check_cong_nary ((premises Bool) (A Type) (lhs A) (rhs A))
   (Bool Bool) Bool
   (
@@ -863,6 +897,13 @@
    )
 )
 
+; program: $check_cong_variadic
+; args:
+; - premises Bool:
+; - A Type:
+; - lhs A:
+; - rhs A:
+; return:
 (program $check_cong_variadic ((premises Bool) (A Type) (lhs A) (rhs A))
   (Bool Bool) Bool
   (
@@ -874,13 +915,26 @@
    )
 )
 
-;TRUST
+; rule: cong_nary
+; implements: TODO?
+; premises:
+; - premises Bool:
+; args:
+; requires:
+; conclusion:
 (declare-rule cong_nary ((premises Bool))
   :premise-list premises and
   :requires ((($check_cong_nary premises eo::conclusion) true))
   :conclusion-given
 )
 
+; rule: cong_variadic
+; implements: TODO?
+; premises:
+; - premises Bool:
+; args:
+; requires:
+; conclusion:
 (declare-rule cong_variadic ((premises Bool))
   :premise-list premises and
   :requires ((($check_cong_variadic premises eo::conclusion) true))
