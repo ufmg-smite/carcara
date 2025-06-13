@@ -545,8 +545,28 @@ fn flatten_addition_tree(term: &Rc<Term>) -> Result<(Vec<CoeffTimesVar>, Integer
         }
         Term::Const(Constant::Integer(k)) => Ok((vec![], k.clone())),
         _ => {
-            let ctv = term_to_ctv(term)?;
-            Ok((vec![ctv], 0.into()))
+            if let Some((c, l)) = match_term!((* c l) = term) {
+                // It's a coefficient times a term
+                let coeff = c.as_integer_err()?;
+                if let Some((_, var)) = match_term!((- 1 var) = l) {
+                    // Var can be a constant 0 or 1
+                    if var.is_number() {
+                        let k = var.as_integer_err()?;
+                        Ok((vec![], coeff * (1 - k)))
+                    } else {
+                        let ctv = CoeffTimesVar { coeff, var, negated: true };
+                        Ok((vec![ctv], 0.into()))
+                    }
+                } else if l.is_number() {
+                    let k = l.as_integer_err()?;
+                    Ok((vec![], coeff * k))
+                } else {
+                    let ctv = CoeffTimesVar { coeff, var: l, negated: false };
+                    Ok((vec![ctv], 0.into()))
+                }
+            } else {
+                Ok((vec![CoeffTimesVar::from(term)], 0.into()))
+            }
         }
     }
 }
