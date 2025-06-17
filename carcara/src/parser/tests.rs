@@ -53,6 +53,14 @@ pub fn parse_proof(pool: &mut PrimitivePool, input: &str) -> Proof {
         .expect(ERROR_MESSAGE)
 }
 
+/// Tries to parse a proof from a `&str`, expecting it to fail. Returns the error encountered, or
+/// panics if no error is encountered.
+pub fn parse_proof_err(pool: &mut PrimitivePool, input: &str) -> Error {
+    Parser::new(pool, TEST_CONFIG, input.as_bytes())
+        .and_then(|mut p| p.parse_proof())
+        .expect_err("expected error")
+}
+
 fn run_parser_tests(pool: &mut PrimitivePool, cases: &[(&str, Term)]) {
     for (case, expected) in cases {
         let got = parse_term(pool, case);
@@ -782,5 +790,47 @@ fn test_qualified_operators() {
     assert!(matches!(
         parse_term_err("((as undefined (Array Int Int)) 1)"),
         Error::Parser(ParserError::InvalidQualifiedOp(_), _),
+    ));
+}
+
+#[test]
+fn test_proofs_with_extra_parens() {
+    let mut p = PrimitivePool::new();
+    let proof = parse_proof(&mut p, "( (assume h1 true) )");
+    assert_eq!(proof.commands.len(), 1);
+    assert_eq!(
+        &proof.commands[0],
+        &ProofCommand::Assume {
+            id: "h1".into(),
+            term: p.bool_true(),
+        }
+    );
+
+    // Empty proof with extra parens
+    let proof = parse_proof(&mut p, "()");
+    assert_eq!(proof.commands.len(), 0);
+
+    // Extra set of parens
+    assert!(matches!(
+        parse_proof_err(&mut p, "(( (assume h1 true) ))"),
+        Error::Parser(ParserError::UnexpectedToken(Token::OpenParen), _)
+    ));
+
+    // Stuff after final closing parens
+    assert!(matches!(
+        parse_proof_err(&mut p, "( (assume h1 true) ) (assume h2 false)"),
+        Error::Parser(ParserError::UnexpectedToken(Token::OpenParen), _)
+    ));
+
+    // Missing closing parens
+    assert!(matches!(
+        parse_proof_err(&mut p, "( (assume h1 true)"),
+        Error::Parser(ParserError::UnexpectedToken(Token::Eof), _)
+    ));
+
+    // Missing opening parens
+    assert!(matches!(
+        parse_proof_err(&mut p, "(assume h1 true) )"),
+        Error::Parser(ParserError::UnexpectedToken(Token::CloseParen), _)
     ));
 }
