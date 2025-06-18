@@ -32,6 +32,22 @@ macro_rules! tactic {
     ($steps:ident, why3; $($body:tt)*) => { $steps.push(ProofStep::Why3) ; tactic![ $steps, $( $body )* ] };
     ($steps:ident, symmetry; $($body:tt)*) => { $steps.push(ProofStep::Symmetry) ; tactic![ $steps, $( $body )* ] };
     ($steps:ident, reflexivity; $($body:tt)*) => { $steps.push(ProofStep::Reflexivity) ; tactic![ $steps, $( $body )* ] };
+    ($steps:ident, eval $i:tt; $($body:tt)+) => {
+        $steps.push(ProofStep::Eval(Term::from($i)));
+        tactic![ $steps, $( $body )+ ]
+    };
+    ($steps:ident, eval @$e:expr; $($body:tt)+) => {
+        $steps.push(ProofStep::Eval(make_term![$e]));
+        tactic![ $steps, $( $body )+ ]
+    };
+    ($steps:ident, refine $i:tt; $($body:tt)+) => {
+        $steps.push(ProofStep::Refine(Term::from($i), vec![], SubProofs(None)));
+        tactic![ $steps, $( $body )+ ]
+    };
+    ($steps:ident, refine @$e:expr; $($body:tt)+) => {
+        $steps.push(ProofStep::Refine(make_term![$e], vec![], SubProofs(None)));
+        tactic![ $steps, $( $body )+ ]
+    };
     ($steps:ident, apply $i:tt; $($body:tt)+) => {
         $steps.push(ProofStep::Apply(Term::from($i), vec![], SubProofs(None)));
         tactic![ $steps, $( $body )+ ]
@@ -82,15 +98,15 @@ macro_rules! tactic {
         tactic![ $steps, $(  $body )* ]
     };
     ($steps:ident, rewrite [$($i:tt)+] $( ( $($args:tt) + ) ) * ; $($body:tt)+) => {
-        $steps.push(ProofStep::Rewrite(None, $($i)+, vec![ $( make_term![  $( $args )+ ] , )* ]));
+        $steps.push(ProofStep::Rewrite(None, $($i)+, vec![ $( make_term![  $( $args )+ ] , )* ], SubProofs(None)));
         tactic![ $steps, $( $body )+ ]
     };
     ($steps:ident, rewrite .$pattern:tt $i:tt  $( ( $($args:tt) + ) ) * ; $($body:tt)+) => {
-        $steps.push(ProofStep::Rewrite(false, Some($pattern.to_string()), Term::from($i), vec![ $( make_term![  $( $args )+ ] , )* ]));
+        $steps.push(ProofStep::Rewrite(false, Some($pattern.to_string()), Term::from($i), vec![ $( make_term![  $( $args )+ ] , )* ], SubProofs(None)));
         tactic![ $steps, $( $body )+ ]
     };
     ($steps:ident, rewrite $i:tt  $( ( $($args:tt) + ) ) * ; $($body:tt)+) => {
-        $steps.push(ProofStep::Rewrite(false, None, Term::from($i), vec![ $( make_term![  $( $args )+ ] , )* ]));
+        $steps.push(ProofStep::Rewrite(false, None, Term::from($i), vec![ $( make_term![  $( $args )+ ] , )* ], SubProofs(None)));
         tactic![ $steps, $( $body )+ ]
     };
     ($steps:ident, $code:block ; $($body:tt)*) => {  $steps.append(&mut $code) ; tactic![ $steps, $(  $body )* ]  };

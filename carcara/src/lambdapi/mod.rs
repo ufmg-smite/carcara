@@ -133,8 +133,6 @@ fn translate_prelude(prelude: ProblemPrelude) -> Vec<Command> {
                 AletheTerm::Sort(ref s) => tau(translate_sort_function(s)),
                 _ => unreachable!(),
             };
-            //TODO: put again the index
-            //let index = Some(Term::Terms(vec![index(), Term::TermId(format!("{}", counter))]));
 
             Command::Definition(id.to_string(), vec![], Some(sort), None)
         })
@@ -148,15 +146,10 @@ fn translate_prelude(prelude: ProblemPrelude) -> Vec<Command> {
 #[inline]
 fn gen_required_module() -> Vec<Command> {
     vec![
-        Command::RequireOpen("Stdlib.Prop".to_string()),
-        Command::RequireOpen("Stdlib.Set".to_string()),
-        Command::RequireOpen("Stdlib.Eq".to_string()),
-        Command::RequireOpen("Stdlib.Z".to_string()),
-        Command::RequireOpen("lambdapi.Classic".to_string()),
         Command::RequireOpen("lambdapi.Alethe".to_string()),
         Command::RequireOpen("lambdapi.Simplify".to_string()),
         Command::RequireOpen("lambdapi.Rare".to_string()),
-        Command::RequireOpen("lambdapi.LiaAC".to_string()),
+        Command::RequireOpen("lambdapi.Lia".to_string()),
     ]
 }
 
@@ -387,11 +380,11 @@ fn move_pivot_lemma(
 
     let eq = LTerm::Eq(
         Box::new(Term::Terms(vec![
-            Term::from("⟇_to_∨ᶜ_rw"),
+            Term::from("⟇_to_∨_rw"),
             Term::Alethe(LTerm::Clauses(previous_clause.clone())),
         ])),
         Box::new(Term::Terms(vec![
-            Term::from("⟇_to_∨ᶜ_rw"),
+            Term::from("⟇_to_∨_rw"),
             Term::Alethe(LTerm::Clauses(new_clause.clone().into())),
         ])),
     );
@@ -407,7 +400,7 @@ fn move_pivot_lemma(
             vec![],
             SubProofs(None),
         ),
-        ProofStep::Apply(Term::from("trivial"), vec![], SubProofs(None)),
+        ProofStep::Apply(intro_top(), vec![], SubProofs(None)),
     ];
 
     (
@@ -438,9 +431,9 @@ fn normalize_name<S: AsRef<str>>(name: S) -> String {
 /// Map some rule name to their corresponding symbol in the Lambdapi stdlib
 fn translate_rule_name(rule: &str) -> Term {
     match rule {
-        "refl" => Term::TermId("⟺ᶜ_refl".to_string()),
-        "symm" => Term::TermId("⟺ᶜ_sym".to_string()),
-        "trans" => Term::TermId("⟺ᶜ_trans".to_string()),
+        "refl" => Term::TermId("⟺_refl".to_string()),
+        "symm" => Term::TermId("⟺_sym".to_string()),
+        "trans" => Term::TermId("⟺_trans".to_string()),
         r => Term::TermId(r.to_string()),
     }
 }
@@ -516,11 +509,7 @@ fn translate_subproof<'a>(
             _ => unreachable!(),
         };
 
-        proof.push(ProofStep::Apply(
-            Term::from("∨ᶜᵢ₁"),
-            vec![],
-            SubProofs(None),
-        ));
+        proof.push(ProofStep::Apply(Term::from("∨ᵢ₁"), vec![], SubProofs(None)));
         assignment_args.into_iter().for_each(|term| {
             proof.push(ProofStep::Apply(
                 Term::from(bind_lemma),
@@ -544,7 +533,7 @@ fn translate_subproof<'a>(
         //FIXME: hahah
         // end of the script
         // proof_cmds.append(&mut lambdapi! {
-        //     apply "∨ᶜᵢ₁";
+        //     apply "∨ᵢ₁";
         //     apply "π̇ₗ" (@last_step_id.into());
         // });
         // proof_cmds.push(ProofStep::Admit);
@@ -645,12 +634,18 @@ fn translate_tautology(
         "false" => Some(translate_false()),
         "forall_inst" => Some(translate_forall_inst(args)),
         "cong" => Some(translate_cong(clause, premises.as_slice())),
-        "and_neg" | "or_neg" | "and_pos" | "or_pos" => Some(translate_auto_rewrite(rule)),
+
+        // Nary rules
+        "and_neg" => Some(translate_and_neg(clause)),
+        "and_pos" => Some(translate_and_pos(clause, args)),
+        "or_neg" => Some(translate_or_neg(clause, args)),
+        "or_pos" => Some(translate_auto_rewrite(rule)),
+        "not_and" => Some(translate_not_and(clause, premises.first()?.0.as_str())),
         "not_or" => Some(translate_not_or(premises.first()?)),
+
         "implies" => Some(translate_implies(premises.first()?.0.as_str())),
         "not_implies1" => Some(translate_not_implies1(premises.first()?.0.as_str())),
         "not_implies2" => Some(translate_not_implies2(premises.first()?.0.as_str())),
-        "not_and" => Some(translate_not_and(premises.first()?.0.as_str())),
         "not_symm" => Some(translate_not_symm(premises.first()?.0.as_str())),
         "trans" => Some(translate_trans(&mut premises)),
         "symm" => Some(translate_sym(premises.first()?.0.as_str())),
@@ -734,7 +729,7 @@ where
                 id, clause, premises: _, rule, args, ..
             }) if rule == "la_generic" => {
                 // let mut proof_la = vec![ProofStep::Apply(
-                //     Term::from("∨ᶜᵢ₁"),
+                //     Term::from("∨ᵢ₁"),
                 //     vec![],
                 //     SubProofs(None),
                 // )];
@@ -828,7 +823,7 @@ where
                     let premises_discharge = get_premises_clause(proof_iter, discharge);
 
                     let mut script = std::iter::repeat(ProofStep::Apply(
-                        Term::TermId("∨ᶜᵢ₂".to_string()),
+                        Term::TermId("∨ᵢ₂".to_string()),
                         vec![],
                         SubProofs(None),
                     ))
@@ -836,22 +831,38 @@ where
                     .collect_vec();
 
                     let (psy_id, trailing_false_on_last_step) = unwrap_match!(commands.get(commands.len() - 2), Some(ProofCommand::Step(AstProofStep{id, clause, ..})) => {
-                        (normalize_name(id), clause.iter().last().filter(|t| t.is_bool_false()).is_some())
+                        (normalize_name(id), clause.iter().last().map(|t| t.is_bool_false()).unwrap_or(false))
                     });
+
+                    let trailing_false_on_conclusion_clause =
+                        cl.iter().last().map(|t| t.is_bool_false()).unwrap_or(false);
 
                     // Some subproof can add a trailing false in their clause and also for the step just before the clonclusion of the subproof.
                     // We detect if there is a trailing false if the number of the element in the clause and the discharge are different
-                    if discharge.len() != cl.len() && trailing_false_on_last_step {
-                        // Case where there is a trailing a false but the last rule have also a trailing false
+                    if trailing_false_on_conclusion_clause && trailing_false_on_last_step {
                         script.push(ProofStep::Apply(
                             psy_id.as_str().into(),
                             vec![],
                             SubProofs(None),
                         ));
-                    } else if discharge.len() != cl.len() {
+                    } else if trailing_false_on_conclusion_clause
+                    {
                         // Case with a trailing false
                         script.push(ProofStep::Apply(
-                            Term::TermId("∨ᶜᵢ₁".to_string()),
+                            Term::TermId("∨ᵢ₂".to_string()),
+                            vec![],
+                            SubProofs(None),
+                        ));
+                        script.push(ProofStep::Apply(
+                            psy_id.as_str().into(),
+                            vec![],
+                            SubProofs(None),
+                        ));
+                    } else if trailing_false_on_last_step
+                    {
+                        // Case with a trailing false
+                        script.push(ProofStep::Apply(
+                            Term::TermId("∨ᵢ₁".to_string()),
                             vec![],
                             SubProofs(None),
                         ));
@@ -860,9 +871,12 @@ where
                             vec![],
                             SubProofs(None),
                         ));
-                    } else { // Case without a trailing false
+                    }
+                    
+                    else {
+                        // Case without a trailing false
                         script.push(ProofStep::Apply(
-                            Term::TermId("∨ᶜᵢ₁".to_string()),
+                            Term::TermId("∨ᵢ₁".to_string()),
                             vec![],
                             SubProofs(None),
                         ));

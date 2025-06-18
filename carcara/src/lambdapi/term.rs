@@ -28,11 +28,6 @@ pub fn omicron() -> Term {
 }
 
 #[inline]
-pub fn index() -> Term {
-    Term::TermId("𝑰".into())
-}
-
-#[inline]
 pub fn tau(term: Term) -> Term {
     //TODO: Print without parenthesis when there is only 1 sort
     Term::TermId(format!("τ ({})", term))
@@ -272,11 +267,11 @@ impl From<Operator> for Term {
     fn from(op: Operator) -> Self {
         match op {
             Operator::Equals => "(=)".into(),
-            Operator::Or => "(∨ᶜ)".into(),
-            Operator::And => "(∧ᶜ)".into(),
+            Operator::Or => "(∨)".into(),
+            Operator::And => "(∧)".into(),
             Operator::LessEq => "(≤)".into(),
             Operator::LessThan => "(<)".into(),
-            Operator::Implies => "(⇒ᶜ)".into(),
+            Operator::Implies => "(⇒)".into(),
             Operator::Distinct => "distinct".into(),
             Operator::Add => "(+)".into(),
             Operator::Mult => "(*)".into(),
@@ -325,7 +320,7 @@ pub fn conv(term: &Rc<AletheTerm>, ctx: &crate::lambdapi::Context) -> Term {
                         Box::new(args[0].clone()),
                         Box::new(args[1].clone()),
                     )),
-                    Operator::Distinct => Term::Alethe(LTerm::Distinct(ListLP(
+                    Operator::Distinct => Term::Alethe(LTerm::Distinct(VecN(
                         args.into_iter().map(Into::into).collect_vec(),
                     ))),
                     Operator::Sub if args.len() == 1 => {
@@ -432,7 +427,7 @@ impl From<&Rc<AletheTerm>> for Term {
                         Box::new(args[0].clone()),
                         Box::new(args[1].clone()),
                     )),
-                    Operator::Distinct => Term::Alethe(LTerm::Distinct(ListLP(
+                    Operator::Distinct => Term::Alethe(LTerm::Distinct(VecN(
                         args.into_iter().map(Into::into).collect_vec(),
                     ))),
                     Operator::Sub if args.len() == 1 => {
@@ -569,18 +564,34 @@ impl fmt::Display for Bindings {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ListLP(pub Vec<Term>);
+pub struct VecN(pub Vec<Term>);
 
-impl fmt::Display for ListLP {
+impl fmt::Display for VecN {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = self
             .0
             .iter()
             .rev()
-            .fold("□".to_string(), |acc, e| format!("(cons {} {})", e, acc));
+            .fold("⧈".to_string(), |acc, e| format!("(cons {} {})", e, acc));
         write!(f, "{}", s)
     }
 }
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct List(pub Vec<Term>);
+
+impl fmt::Display for List {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s = self
+            .0
+            .iter()
+            .rev()
+            .fold("□".to_string(), |acc, e| format!("{} ⸬ {}", e, acc));
+        write!(f, "{}", s)
+    }
+}
+
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LTerm {
@@ -605,8 +616,10 @@ pub enum LTerm {
     ),
     Forall(Bindings, Box<Term>),
     Exist(Bindings, Box<Term>),
-    Distinct(ListLP),
+    Distinct(VecN),
+    List(List),
     Choice(Bindings, Box<Term>),
+
 }
 
 macro_rules! id {
@@ -692,12 +705,12 @@ impl fmt::Display for LTerm {
         match self {
             LTerm::True => write!(f, "⊤"),
             LTerm::False => write!(f, "⊥"),
-            LTerm::Neg(Some(t)) => write!(f, "(¬ᶜ {})", t),
-            LTerm::Neg(None) => write!(f, "¬ᶜ"),
+            LTerm::Neg(Some(t)) => write!(f, "(¬ {})", t),
+            LTerm::Neg(None) => write!(f, "¬"),
             LTerm::NAnd(ts) => {
                 let s = Itertools::intersperse(
                     ts.into_iter().map(|t| format!("{}", t)),
-                    " ∧ᶜ ".to_string(),
+                    " ∧ ".to_string(),
                 )
                 .collect::<String>();
                 write!(f, "{}", s)
@@ -705,7 +718,7 @@ impl fmt::Display for LTerm {
             LTerm::NOr(ts) => {
                 let s = Itertools::intersperse(
                     ts.into_iter().map(|t| format!("{}", t)),
-                    " ∨ᶜ ".to_string(),
+                    " ∨ ".to_string(),
                 )
                 .collect::<String>();
                 write!(f, "{}", s)
@@ -723,16 +736,16 @@ impl fmt::Display for LTerm {
                 }
             }
             LTerm::Implies(l, r) => {
-                write!(f, "({}) ⇒ᶜ ({})", l, r)
+                write!(f, "({}) ⇒ ({})", l, r)
             }
             LTerm::Iff(l, r) => {
-                write!(f, "({}) ⇔ᶜ ({})", l, r)
+                write!(f, "({}) ⇔ ({})", l, r)
             }
             LTerm::Eq(l, r) => {
                 write!(f, "({}) = ({})", l, r)
             }
             LTerm::Proof(t) => write!(f, "π ({})", t),
-            LTerm::ClassicProof(t) => write!(f, "πᶜ ({})", t),
+            LTerm::ClassicProof(t) => write!(f, "π ({})", t),
             LTerm::Resolution(pivot_position, pivot, a, b, h1, h2) => {
                 if *pivot_position {
                     write!(f, "resolutionₗ ")?;
@@ -750,9 +763,10 @@ impl fmt::Display for LTerm {
                     h2
                 )
             }
-            LTerm::Forall(bs, t) => write!(f, "`∀ᶜ {}, {}", bs, t),
-            LTerm::Exist(bs, t) => write!(f, "`∃ᶜ {}, {}", bs, t),
+            LTerm::Forall(bs, t) => write!(f, "`∀ {}, {}", bs, t),
+            LTerm::Exist(bs, t) => write!(f, "`∃ {}, {}", bs, t),
             LTerm::Distinct(l) => write!(f, "distinct ({})", l),
+            LTerm::List(l) => write!(f, "({})", l),
             LTerm::Choice(x, p) => write!(f, "`ϵ {}, {}", x, p),
         }
     }
@@ -971,4 +985,9 @@ mod tests_term {
         let tp: Term = conv_term(definitions, t).into();
         println!("{}", tp);
     }
+}
+
+#[inline]
+pub fn intro_top() -> Term {
+    Term::from("⊤ᵢ")
 }

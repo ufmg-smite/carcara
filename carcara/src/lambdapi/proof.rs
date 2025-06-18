@@ -34,12 +34,13 @@ pub enum ProofStep {
     Admit,
     Reflexivity,
     Try(Box<ProofStep>),
-    Rewrite(bool, Option<String>, Term, Vec<Term>),
+    Rewrite(bool, Option<String>, Term, Vec<Term>, SubProofs),
     Symmetry,
     Simplify,
     Set(String, Term),
     Varmap(String, Vec<Term>),
     Why3,
+    Eval(Term),
 }
 
 macro_rules! assume {
@@ -164,20 +165,26 @@ impl fmt::Display for ProofStep {
             ProofStep::Admit => write!(f, "admit;"),
             ProofStep::Reflexivity => write!(f, "simplify; reflexivity;"),
             ProofStep::Try(t) => write!(f, "try {}", t),
-            ProofStep::Rewrite(_flag, pattern, hyp, args) => {
+            ProofStep::Rewrite(_flag, pattern, hyp, args, subproofs) => {
                 let pattern = pattern.as_ref().map_or("", |p| p.as_str());
                 let args = args
                     .iter()
                     .map(|i| format!("{}", i))
                     .collect::<Vec<_>>()
                     .join(WHITE_SPACE);
-                write!(f, "rewrite {} ({} {});", pattern, hyp, args)
+
+                write!(f, "rewrite {} ({} {})", pattern, hyp, args)?;
+                if let SubProofs(Some(sp)) = subproofs {
+                    write!(f, " {}", SubProofs(Some(sp.to_vec())))?;
+                };
+                write!(f, ";")
             }
             ProofStep::Symmetry => write!(f, "symmetry;"),
             ProofStep::Simplify => write!(f, "simplify;"),
             ProofStep::Set(name, def) => write!(f, "set {} ≔ {};", name, def),
             ProofStep::Varmap(name, list) => write!(f, "set {} ≔;", name),
             ProofStep::Why3 => write!(f, "why3;"),
+            ProofStep::Eval(t) => write!(f, "eval {};", t),
         }
     }
 }

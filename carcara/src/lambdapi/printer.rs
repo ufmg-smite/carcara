@@ -11,7 +11,7 @@ const RBRACE: &'static str = "}";
 const COMMA: &'static str = ",";
 const CLAUSE_NIL: &'static str = "▩";
 
-const NIL: &'static str = "□";
+const NIL: &'static str = "⧈";
 
 macro_rules! concat {
     ($l:expr => $( $r:expr ) => * ) => { $l$(.append($r))* };
@@ -113,11 +113,6 @@ fn text<'a>(s: &'a str) -> RcDoc<'a, ()> {
 }
 
 #[inline]
-fn classic<'a>(op: &'a str) -> RcDoc<'a, ()> {
-    text(op).append(text("ᶜ"))
-}
-
-#[inline]
 fn colon<'a>() -> RcDoc<'a, ()> {
     text(":")
 }
@@ -164,7 +159,7 @@ impl PrettyPrint for Term {
             Term::Function(terms) => {
                 RcDoc::intersperse(terms.iter().map(|term| term.to_doc()), arrow().spaces())
             }
-            Term::Nat(n) => RcDoc::text(format!("{}", n)),
+            Term::Nat(n) => RcDoc::text(format!("Stdlib.Nat._{}", n)), //NOTE: Lambdapi builtin of Nat conflict with Int
             Term::Int(i) => {
                 if i.is_negative() {
                     RcDoc::text(format!("(— {})", i.clone().abs())) //FIXME: Carcara should use Operator::Minus insteand of Int with a negative value
@@ -191,7 +186,7 @@ impl PrettyPrint for SortedTerm {
     }
 }
 
-impl PrettyPrint for ListLP {
+impl PrettyPrint for VecN {
     fn to_doc(&self) -> RcDoc<()> {
         // Take the last element because we will reverse the list latter so: last l = first (rev l)
         let (first, elems) = self.0.split_last().expect("distinct should not be empty");
@@ -206,13 +201,26 @@ impl PrettyPrint for ListLP {
 
         // Generate a vector (cons _  term_n ... (cons _  term2 (cons _  term1 □))
 
-        elems.into_iter().fold(first_doc, |acc, elem| {
+        elems.iter().fold(first_doc, |acc, elem| {
             concat! {
                 text("cons") // constructor
                 => elem.to_doc().spaces() // element
                 => acc // rest of the vector
             }
             .parens()
+        })
+    }
+}
+
+
+impl PrettyPrint for List {
+    fn to_doc(&self) -> RcDoc<()> {
+        self.0.iter().fold(text("□"), |acc, elem| {
+            concat! {
+                elem.to_doc().clone()
+                => text("⸬").spaces()
+                => acc 
+            }
         })
     }
 }
@@ -224,12 +232,12 @@ impl PrettyPrint for LTerm {
             LTerm::False => text("⊥"),
             LTerm::NAnd(terms) => RcDoc::intersperse(
                 terms.into_iter().map(|term| term.to_doc()),
-                classic("∧").spaces(),
+                text("∧").spaces(),
             )
             .parens(),
             LTerm::NOr(terms) => RcDoc::intersperse(
                 terms.into_iter().map(|term| term.to_doc()),
-                classic("∨").spaces(),
+                text("∨").spaces(),
             )
             .parens(),
             LTerm::Neg(Some(term)) => text("¬")
@@ -238,7 +246,7 @@ impl PrettyPrint for LTerm {
                 .parens(),
             LTerm::Neg(None) => text("¬"),
             LTerm::Proof(term) => text("π̇").append(space()).append(term.to_doc()),
-            LTerm::ClassicProof(term) => text("πᶜ").append(space()).append(term.to_doc()),
+            LTerm::ClassicProof(term) => text("π").append(space()).append(term.to_doc()),
             LTerm::Clauses(terms) => {
                 if terms.is_empty() {
                     text(CLAUSE_NIL)
@@ -260,18 +268,18 @@ impl PrettyPrint for LTerm {
                 .parens(),
             LTerm::Iff(l, r) => l
                 .to_doc()
-                .append(classic("⇔").spaces())
+                .append(text("⇔").spaces())
                 .append(r.to_doc())
                 .parens(),
             LTerm::Implies(l, r) => l
                 .to_doc()
                 .parens()
-                .append(space().append(classic("⇒")).append(space()))
+                .append(space().append(text("⇒")).append(space()))
                 .append(r.to_doc().parens())
                 .parens(),
             LTerm::Exist(bindings, term) => RcDoc::intersperse(
                 bindings.0.iter().map(|b| {
-                    classic("`∃")
+                    text("`∃")
                         .append(space())
                         .append(
                             b.0.to_doc()
@@ -286,7 +294,7 @@ impl PrettyPrint for LTerm {
             .parens(),
             LTerm::Forall(bindings, term) => RcDoc::intersperse(
                 bindings.0.iter().map(|b| {
-                    classic("`∀")
+                    text("`∀")
                         .append(space())
                         .append(
                             b.0.to_doc()
@@ -319,6 +327,7 @@ impl PrettyPrint for LTerm {
                 => v.to_doc()
             }
             .parens(),
+            LTerm::List(l) => l.to_doc().parens(),
             LTerm::Choice(bindings, p) => concat!(
                 RcDoc::intersperse(bindings.0.iter().map(|b| {
                     text("`ϵ")
@@ -405,7 +414,7 @@ impl PrettyPrint for ProofStep {
                 }))
                 .append(semicolon()),
             ProofStep::Try(t) => text("try").append(space()).append(t.to_doc()),
-            ProofStep::Rewrite(flag, pattern, h, args) => text("rewrite")
+            ProofStep::Rewrite(flag, pattern, h, args,subproofs) => text("rewrite")
                 .append(flag.then(|| text("left").spaces()).unwrap_or(text("")))
                 .append(space())
                 .append(pattern.as_ref().map_or(text(""), |pattern| {
@@ -416,6 +425,22 @@ impl PrettyPrint for ProofStep {
                         .append(args.is_empty().then(|| RcDoc::nil()).unwrap_or(space()))
                         .append(RcDoc::intersperse(args.iter().map(|a| a.to_doc().parens()), space())), //.spaces(),
                 )
+                .append(subproofs.0.is_some().then(|| space()))
+                .append(subproofs.0.as_ref().map_or(RcDoc::nil(), |proofs| {
+                    RcDoc::intersperse(
+                        proofs
+                            .into_iter()
+                            .map(|p| {
+                                line()
+                                    .append(text(LBRACE).append(line()))
+                                    .append(tab()) //FIXME: we append a tab because `assume` is not incremented (hack)
+                                    .append(p.to_doc().nest(4))
+                                    .append(line().append(RBRACE))
+                            })
+                            .collect_vec(),
+                        RcDoc::nil(),
+                    )
+                }))
                 .append(semicolon()),
             ProofStep::Symmetry => text("symmetry").append(semicolon()),
             ProofStep::Simplify => text("simplify").append(semicolon()),
@@ -427,6 +452,7 @@ impl PrettyPrint for ProofStep {
                 ).append(text("⸬").spaces()).append(NIL)
             ).append(semicolon())),
             ProofStep::Why3 => text("why3").append(semicolon()),
+            ProofStep::Eval(t) => text("eval").append(t.to_doc().spaces()).append(semicolon()),
         }
     }
 }

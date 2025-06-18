@@ -13,18 +13,6 @@ enum Op {
     Le,
 }
 
-const VARMAP_ID: &'static str = "varmap";
-
-fn eval_reify(t: Term) -> Term {
-    Term::Terms(vec![
-        Term::TermId("denote".into()),
-        Term::Terms(vec![
-            Term::TermId("reify".into()),
-            Term::Terms(vec![t]),
-        ]),
-    ])
-}
-
 fn op_into_operator(op: &Op) -> Operator {
     match op {
         Op::Eq => Operator::Equals,
@@ -77,7 +65,7 @@ pub fn gen_proof_la_generic(
     // });
 
     let mut proof_la = vec![ProofStep::Apply(
-        Term::from("∨ᶜᵢ₁"),
+        Term::from("∨ᵢ₁"),
         vec![],
         SubProofs(None),
     )];
@@ -99,7 +87,7 @@ pub fn gen_proof_la_generic(
     proof.append(&mut vec![
         ring_computation_proof,
         ProofStep::Simplify,
-        ProofStep::Rewrite(false, None, id!("or_identity_r"), vec![]),
+        ProofStep::Rewrite(false, None, id!("or_identity_r"), vec![], SubProofs(None)),
         ProofStep::Apply(unary_clause_to_prf(&id_temp_proof), vec![], SubProofs(None)),
     ]);
 
@@ -261,31 +249,35 @@ fn la_generic(
             let mut pattern: Vec<String> = vec!["_".to_string(); inequalities.len()];
             pattern[i] = "x".to_string();
             let pattern_with_or: String =
-                itertools::intersperse(pattern.into_iter(), " ∨ᶜ ".to_string()).collect();
+                itertools::intersperse(pattern.into_iter(), " ∨ ".to_string()).collect();
             match l.op {
                 Op::Lt => ProofStep::Rewrite(
                     false,
                     Some(format!("[x in {}]", pattern_with_or)),
                     id!("Zlt_not_ge"),
                     vec![],
+                    SubProofs(None)
                 ),
                 Op::Le => ProofStep::Rewrite(
                     false,
                     Some(format!("[x in {}]", pattern_with_or)),
                     id!("Zle_not_gt"),
                     vec![],
+                    SubProofs(None)
                 ),
                 Op::Ge => ProofStep::Rewrite(
                     false,
                     Some(format!("[x in {}]", pattern_with_or)),
                     id!("Zge_not_lt"),
                     vec![],
+                    SubProofs(None)
                 ),
                 Op::Gt => ProofStep::Rewrite(
                     false,
                     Some(format!("[x in {}]", pattern_with_or)),
                     id!("Zgt_not_le"),
                     vec![],
+                    SubProofs(None)
                 ),
                 _ => todo!(),
             }
@@ -322,6 +314,7 @@ fn la_generic(
                 None,
                 id!("Zinv_lt_eq"),
                 vec![],
+                SubProofs(None)
             ))));
         }
         if i.op == Op::Le {
@@ -333,6 +326,7 @@ fn la_generic(
                 None,
                 id!("Zinv_le_eq"),
                 vec![],
+                SubProofs(None)
             ))));
         }
     }
@@ -348,18 +342,21 @@ fn la_generic(
                 None,
                 id!("Z_diff_eq_Z0_eq"),
                 vec![i.lhs.clone().into(), i.rhs.clone().into()],
+                SubProofs(None)
             ),
             Op::Ge => ProofStep::Rewrite(
                 false,
                 None,
                 id!("Z_diff_geq_Z0_eq"),
                 vec![i.lhs.clone().into(), i.rhs.clone().into()],
+                SubProofs(None)
             ),
             Op::Gt => ProofStep::Rewrite(
                 false,
                 None,
                 id!("Z_diff_gt_Z0_eq"),
                 vec![i.lhs.clone().into(), i.rhs.clone().into()],
+                SubProofs(None)
             ),
             _ => unreachable!(),
         })
@@ -385,6 +382,7 @@ fn la_generic(
                 None,
                 id!("Zgt_le_succ_r_eq"),
                 vec![i.lhs.clone().into(), i.rhs.clone().into()],
+                SubProofs(None)
             )
         })
         .collect_vec();
@@ -414,9 +412,9 @@ fn la_generic(
         .zip(args.iter())
         .map(|(i, c)| match i {
             ReifiedInequality { lhs, rhs, op: Op::Eq, .. } => {
-                let c = match c {
-                    Constant::Integer(c) => c,
-                    Constant::Real(c) => &c.clone().into_numer_denom().0,
+                let c: Integer = match c {
+                    Constant::Integer(i) => i.clone(),
+                    Constant::Real(r) => r.clone().into_numer_denom().0,
                     _ => unreachable!(),
                 };
                 let lhs = Term::from(lhs);
@@ -426,12 +424,13 @@ fn la_generic(
                     None,
                     id!("Zmult_eq_compat_eq"),
                     vec![Term::Int(c.clone()), lhs.into(), rhs.into()],
+                    SubProofs(None)
                 )
             }
             ReifiedInequality { lhs, rhs, .. } => {
-                let c = match c {
-                    Constant::Integer(c) => c,
-                    Constant::Real(c) => &c.clone().into_numer_denom().0,
+                let c: Integer = match c {
+                    Constant::Integer(i) => i.clone(),
+                    Constant::Real(r) => r.clone().into_numer_denom().0.clone(),
                     _ => unreachable!(),
                 };
                 let lhs = Term::from(lhs);
@@ -441,6 +440,7 @@ fn la_generic(
                     None,
                     id!("Zmult_ge_compat_eq"),
                     vec![Term::Int(c.clone()), lhs.into(), rhs.into()],
+                    SubProofs(None)
                 )
             }
         })
@@ -474,6 +474,7 @@ fn la_generic(
         None,
         id!("Z_eq_antisym"),
         vec![],
+        SubProofs(None)
     ))));
 
     // Step 2 If 𝜑 = ¬(s1 ⋈ s2), then let 𝜑 ∶= s2 ⋈ s2. We interpret this step as moving literals in the context
@@ -482,16 +483,14 @@ fn la_generic(
         .enumerate()
         .map(|(counter, _)| {
             vec![
-                //rewrite imp_eq_or; apply ⇒ᶜᵢ; assume H1;
-                ProofStep::Rewrite(false, None, id!("imp_eq_or"), vec![]),
-                ProofStep::Apply(Term::from("⇒ᶜᵢ"), vec![], SubProofs(None)),
+                //rewrite imp_eq_or; assume H1;
+                ProofStep::Rewrite(false, None, id!("imp_eq_or"), vec![], SubProofs(None)),
                 ProofStep::Assume(vec![format!("H{}", counter)]),
             ]
         })
         .collect_vec();
     step2.pop();
     step2.append(&mut vec![vec![
-        ProofStep::Apply(Term::from("¬ᶜᵢ"), vec![], SubProofs(None)),
         ProofStep::Assume(vec![format!("H{}", step2.len())]),
     ]]);
 
@@ -530,16 +529,20 @@ fn la_generic(
         sum_hyps("H", "r'", 0, ine_len),
     );
 
-    // sets.push(ProofStep::Varmap(
-    //     VARMAP_ID.into(),
-    //     env_map,
-    // ));
+    let left_prefix = "l";
+    let right_prefix = "r";
+
+    sets.push(ProofStep::Set(left_prefix.to_string(), left_sum));
+    sets.push(ProofStep::Set(right_prefix.to_string(), right_sum));
+
+    let left_prefix_term = Term::from(left_prefix);
+    let right_prefix_term = Term::from(right_prefix);
 
     //FIXME: support also Gt and Eq
     let final_sum = Term::Terms(vec![
-        eval_reify(left_sum),
+        left_prefix_term.clone(),
         Term::from("≥"),
-        eval_reify(right_sum),
+        right_prefix_term.clone(),
     ]);
 
     // We want to generate (Zsum_geq_s H0l' H0r' (H1l' + H2l') (H1r' + H2r') H0 (Zsum_geq_s H1l' H1r' H2l' H2r' H1 H2));
@@ -569,19 +572,18 @@ fn la_generic(
             ])
         });
 
-    let contradiction_hyp_name = "contra";
+    let sum_hyp_name = "sum";
 
     let contradiction = ProofStep::Have(
-        contradiction_hyp_name.to_string(),
+        sum_hyp_name.to_string(),
         Term::Alethe(LTerm::ClassicProof(Box::new(final_sum))),
         vec![
-            ProofStep::Rewrite(false, None, Term::from("inj"), vec![]),
-            ProofStep::Rewrite(false, None, Term::from("inj"), vec![]),
-            ProofStep::Apply(pack, vec![], SubProofs(None)),
+            ProofStep::Refine(pack, vec![], SubProofs(None)),
         ],
     );
 
     let mut proof = vec![];
+
     proof.append(&mut step1);
     proof.append(&mut normalize_step);
     proof.append(&mut step3);
@@ -589,17 +591,36 @@ fn la_generic(
     proof.append(&mut step5);
     proof.append(&mut step2.concat());
     proof.append(&mut sets);
+
+
     proof.push(contradiction);
-    proof.push(ProofStep::Apply(
-        Term::Terms(vec![Term::from("⇒ᶜₑ'"), Term::from(contradiction_hyp_name)]),
-        vec![],
-        SubProofs(None),
-    ));
-    proof.push(ProofStep::Apply(
-        Term::from("trivial"),
-        vec![],
-        SubProofs(None),
-    ));
+
+    proof.push(ProofStep::Refine(Term::from(sum_hyp_name),vec![Term::Underscore], SubProofs(None)));
+    
+    proof.push(ProofStep::Rewrite(true, None, Term::from("reify_correct"), vec![left_prefix_term.clone()], SubProofs(None)));
+    proof.push(ProofStep::Rewrite(true, None, Term::from("reify_correct"), vec![right_prefix_term.clone()], SubProofs(None)));
+
+
+    let left_prefix_p = format!("{}'", left_prefix);
+    let right_prefix_p = format!("{}'", right_prefix);
+
+    proof.push(ProofStep::Set(left_prefix_p.clone(), Term::Terms(vec![Term::from("reify"), left_prefix_term.clone()])));
+    proof.push(ProofStep::Set(right_prefix_p.clone(), Term::Terms(vec![Term::from("reify"), right_prefix_term.clone()])));
+
+    let left_prefix_term = Term::from(left_prefix_p.clone());
+    let right_prefix_term = Term::from(right_prefix_p.clone());
+
+    proof.push(ProofStep::Rewrite(false, None, Term::from("eta_prod"), vec![left_prefix_term.clone()],SubProofs(None)));
+    proof.push(ProofStep::Rewrite(false, None, Term::from("eta_prod"), vec![right_prefix_term.clone()],SubProofs(None)));
+
+    proof.push(ProofStep::Rewrite(true, None, Term::from("norm_correct"), vec![
+        Term::Terms(vec![left_prefix_term.clone(), Term::from("₁")]),
+        Term::Terms(vec![left_prefix_term, Term::from("₂")]),
+        Term::Underscore,
+    ],SubProofs(Some(vec![
+        Proof(vec![ ProofStep::Refine(intro_top(), vec![], SubProofs(None)) ]),
+        Proof(vec![ ProofStep::Refine(intro_top(), vec![], SubProofs(None)) ]),
+    ]))));
 
     Ok(Proof(proof))
 }

@@ -50,8 +50,8 @@ pub fn translate_trans(premises: &mut Vec<(String, &[Rc<AletheTerm>])>) -> TradR
 ///
 pub fn translate_false() -> TradResult<Proof> {
     Ok(Proof(lambdapi! {
-        apply "∨ᶜᵢ₁";
-        apply "neg_⊥";
+        apply "∨ᵢ₁";
+        refine "neg_⊥";
     }))
 }
 
@@ -101,23 +101,16 @@ pub fn translate_not_implies2(premise: &str) -> TradResult<Proof> {
     }))
 }
 
-pub fn translate_not_and(premise: &str) -> TradResult<Proof> {
-    Ok(Proof(lambdapi! {
-        apply "not_and" (@unary_clause_to_prf(premise));
-        reflexivity;
-    }))
-}
-
 pub fn translate_refl() -> TradResult<Proof> {
     Ok(Proof(lambdapi! {
-        apply "∨ᶜᵢ₁";
+        apply "∨ᵢ₁";
         reflexivity;
     }))
 }
 
 pub fn translate_sym(premise: &str) -> TradResult<Proof> {
     Ok(Proof(lambdapi! {
-        apply "∨ᶜᵢ₁";
+        apply "∨ᵢ₁";
         symmetry;
         apply @unary_clause_to_prf(premise);
     }))
@@ -125,7 +118,7 @@ pub fn translate_sym(premise: &str) -> TradResult<Proof> {
 
 pub fn translate_not_symm(premise: &str) -> TradResult<Proof> {
     Ok(Proof(lambdapi! {
-        apply "∨ᶜᵢ₁";
+        apply "∨ᵢ₁";
         apply "not_symm" (@unary_clause_to_prf(premise));
     }))
 }
@@ -144,7 +137,7 @@ pub fn translate_and(
 
     let premise_project = unary_clause_to_prf(premise.0.as_ref());
 
-    let project_right = (0..position).fold(premise_project, |acc, _| terms!(id!("∧ᶜₑ₂"), acc));
+    let project_right = (0..position).fold(premise_project, |acc, _| terms!(id!("∧ₑ₂"), acc));
 
     let conjonction_length = match_term!((and ...) = premise.1.first().unwrap())
         .unwrap()
@@ -153,10 +146,10 @@ pub fn translate_and(
     let projections = if conjonction_length == (position + 1) as usize {
         ProofStep::Apply(project_right, vec![], SubProofs(None))
     } else {
-        apply!(id!("∧ᶜₑ₁"), { project_right })
+        apply!(id!("∧ₑ₁"), { project_right })
     };
 
-    Ok(Proof(vec![apply!(id!("∨ᶜᵢ₁")), projections]))
+    Ok(Proof(vec![apply!(id!("∨ᵢ₁")), projections]))
 }
 
 pub fn translate_not_or(premise: &(String, &[Rc<AletheTerm>])) -> TradResult<Proof> {
@@ -188,6 +181,148 @@ pub fn translate_or(_premise_id: &str) -> TradResult<Proof> {
     //     SubProofs(None),
     // )]))
     Ok(Proof(vec![ProofStep::Admit]))
+}
+
+/// Rule not_and
+/// i. ▷ ¬(𝜑1 ∧ … ∧ 𝜑𝑛)
+/// j. ▷ ¬𝜑1, … , ¬𝜑𝑛
+///
+/// We want to produce the script:
+///
+///```
+/// refine not_and (𝜑1 ⸬ … ⸬ 𝜑𝑛 ⸬ □) (π̇ₗ i);
+///```
+pub fn translate_not_and(clause: &[Rc<AletheTerm>], premise: &str) -> TradResult<Proof> {
+    let mut proof = vec![];
+
+    // collect the list 𝜑1, ... 𝜑𝑛 from the clause ¬𝜑1, … , ¬𝜑𝑛
+    let conj_list = List(
+            clause
+            .iter()
+            .rev()
+            .map(|t| {
+                let phi = match_term_err!((not phi) = t).unwrap();
+                phi.into()
+            })
+            .collect_vec(),
+    );
+
+    proof.push(ProofStep::Refine(
+        Term::from("not_and"),
+        vec![Term::Alethe(LTerm::List(conj_list)), unary_clause_to_prf(premise)],
+        SubProofs(None),
+    ));
+
+    Ok(Proof(proof))
+}
+
+/// Rule (𝜑1 ∧ ⋯ ∧ 𝜑𝑛), ¬𝜑1, … , ¬𝜑𝑛
+/// we want to produce the script:
+/// ```
+/// refine and_neg (𝜑1 ⸬ … ⸬ 𝜑𝑛 ⸬ □) _;
+/// simplify;
+/// eval #repeat_or_id_r;
+/// reflexivity
+/// ```
+pub fn translate_and_neg(clause: &[Rc<AletheTerm>]) -> TradResult<Proof> {
+    let mut proof = vec![];
+
+    // values 𝜑1 ∧ ⋯ ∧ 𝜑𝑛 as List
+    let conj_list = unwrap_match!(clause[0].deref(), AletheTerm::Op(Operator::And, e) => {
+        List(e.iter().rev().map(|t| t.into()).collect_vec())
+    });
+
+    proof.push(ProofStep::Refine(
+        Term::TermId("and_neg".into()),
+        vec![Term::Alethe(LTerm::List(conj_list)), Term::Underscore],
+        SubProofs(None),
+    ));
+    proof.push(ProofStep::Simplify);
+    proof.push(ProofStep::Eval(Term::from("#repeat_or_id_r")));
+    proof.push(ProofStep::Reflexivity);
+    Ok(Proof(proof))
+}
+
+/// Rule and_pos: ¬(𝜑1 ∧ … ∧ 𝜑𝑛), 𝜑𝑘
+/// we want to produce the script:
+/// ```
+/// refine and_pos k (𝜑1 ⸬ … ⸬ 𝜑𝑛 ⸬ □) ⊤ᵢ;
+/// ```
+pub fn translate_and_pos(
+    clause: &[Rc<AletheTerm>],
+    args: &Vec<Rc<AletheTerm>>,
+) -> TradResult<Proof> {
+    let mut proof = vec![];
+
+    let conj_list = List(
+        match_term_err!((not (and ...)) = &clause[0])
+            .unwrap()
+            .iter()
+            .rev()
+            .map(|t| t.into())
+            .collect_vec(),
+    );
+
+    let k = args[0].as_usize_err().unwrap();
+
+    proof.push(ProofStep::Refine(
+        Term::from("and_pos"),
+        vec![
+            Term::Nat(k as u32),
+            Term::Alethe(LTerm::List(conj_list)),
+            intro_top(),
+        ],
+        SubProofs(None),
+    ));
+
+    Ok(Proof(proof))
+}
+
+/// Rule  or_neg (𝜑1 ∨ … ∨ 𝜑𝑛), ¬ 𝜑𝑘
+/// we want to produce the script:
+/// ```
+/// apply sym_clause;
+/// refine or_neg k (𝜑1 ⸬ … ⸬ 𝜑𝑛 ⸬ □) _ ⊤ᵢ;
+/// simplify;
+/// eval #repeat_or_id_r;
+/// reflexivity
+/// ```
+pub fn translate_or_neg(
+    clause: &[Rc<AletheTerm>],
+    args: &Vec<Rc<AletheTerm>>,
+) -> TradResult<Proof> {
+    let mut proof = vec![];
+
+    let disj_list = List(
+        match_term_err!((or ...) = &clause[0])
+            .unwrap()
+            .iter()
+            .rev()
+            .map(|t| t.into())
+            .collect_vec(),
+    );
+
+    let k = args[0].as_usize_err().unwrap();
+
+    proof.push(ProofStep::Apply(Term::from("sym_clause"), vec![], SubProofs(None)));
+
+    proof.push(ProofStep::Refine(
+        Term::from("or_neg"),
+        vec![
+            Term::Nat(k as u32),
+            Term::Alethe(LTerm::List(disj_list)),
+            Term::Underscore,
+            intro_top(),
+        ],
+        SubProofs(None),
+    ));
+
+    proof.push(ProofStep::Simplify);
+    proof.push(ProofStep::Eval(Term::from("#repeat_or_id_r")));
+
+    proof.push(ProofStep::Reflexivity);
+
+    Ok(Proof(proof))
 }
 
 #[inline]
@@ -277,20 +412,20 @@ fn propositional_cong(
             .expect("Missing premise");
 
         Ok(Proof(lambdapi! {
-            apply "∨ᶜᵢ₁";
-            inject(vec![ProofStep::Apply(Term::from("feqᶜ"), vec![ symbol, premise ], SubProofs(None))]);
+            apply "∨ᵢ₁";
+            inject(vec![ProofStep::Apply(Term::from("feq"), vec![ symbol, premise ], SubProofs(None))]);
         }))
     } else {
         match symbol {
-            Term::TermId(s) if s == "(∨ᶜ)" => propositional_or_cong(premises),
-            Term::TermId(s) if s == "(∧ᶜ)" => propositional_and_cong(premises),
+            Term::TermId(s) if s == "(∨)" => propositional_or_cong(premises),
+            Term::TermId(s) if s == "(∧)" => propositional_and_cong(premises),
             _ => {
                 // Case `iff`, `=>` ...
                 let premises_rev = premises.iter().rev().collect_vec();
                 let (left, right) = premises_rev.split_at(2);
 
                 let feq_first = Term::Terms(vec![
-                    Term::from("feq2ᶜ"),
+                    Term::from("feq2"),
                     symbol.clone(),
                     unary_clause_to_prf(left[1].0.as_str()),
                     unary_clause_to_prf(left[0].0.as_str()),
@@ -298,7 +433,7 @@ fn propositional_cong(
 
                 let feq = right.into_iter().fold(feq_first, |acc, (hyp, _)| {
                     Term::Terms(vec![
-                        Term::from("feq2ᶜ"),
+                        Term::from("feq2"),
                         symbol.clone(),
                         unary_clause_to_prf(hyp),
                         acc,
@@ -306,7 +441,7 @@ fn propositional_cong(
                 });
 
                 Ok(Proof(lambdapi! {
-                    apply "∨ᶜᵢ₁";
+                    apply "∨ᵢ₁";
                     inject(vec![ProofStep::Apply(feq, vec![], SubProofs(None))]);
                 }))
             }
@@ -320,9 +455,9 @@ fn application_cong(
     premises: &[(String, &[Rc<AletheTerm>])],
 ) -> TradResult<Proof> {
     let feq_name = if arity > 1 {
-        Term::from(format!("feq{}ᶜ", arity))
+        Term::from(format!("feq{}", arity))
     } else {
-        Term::from("feqᶜ")
+        Term::from("feq")
     };
 
     let mut args = vec![symbol];
@@ -337,7 +472,7 @@ fn application_cong(
     let feq = ProofStep::Apply(feq_name, args, SubProofs(None));
 
     Ok(Proof(lambdapi! {
-        apply "∨ᶜᵢ₁";
+        apply "∨ᵢ₁";
         inject(vec![feq]);
     }))
 }
@@ -345,9 +480,9 @@ fn application_cong(
 /// Construct the proof term for the rule `cong`
 /// The cong rule is applied on any n-ary function symbol `f` of appropriate sort.
 /// Therefore, first we collect information about the sort of `f`, its arguments and its arity by looking at the clause and number of premises.
-/// The application of cong on f: A₁ ... Aₙ → Set` are translated with the lemma feqₙᶜ where `n` is the arity of `f`.
+/// The application of cong on f: A₁ ... Aₙ → Set` are translated with the lemma feqₙ where `n` is the arity of `f`.
 /// The application of cong on `or` and `and` operator are translated by composing the lemma `cong_or` (`cong_and` respectively).
-/// For the operators `(imp a b)` and `(not a)` we apply the lemma feq₂ᶜ and (`feqᶜ` respectively) since we can quantify over propositions with `ο`.
+/// For the operators `(imp a b)` and `(not a)` we apply the lemma feq₂ and (`feq` respectively) since we can quantify over propositions with `ο`.
 pub fn translate_cong(
     clause: &[Rc<AletheTerm>],
     premises: &[(String, &[Rc<AletheTerm>])],
@@ -438,40 +573,31 @@ pub fn translate_simple_tautology(
 ///
 /// Thus, the example is translated into the proof script:
 /// ```text
-/// have tᵢ: (((¬ (`∀ᶜ ((x: τ S) (y: τ T)) (P y x ))) ∨ᶜ (P b (f a))) ⟇ ▩) {
-///     apply ∨ᶜᵢ₁;
+/// have tᵢ: (((¬ (`∀ ((x: τ S) (y: τ T)) (P y x ))) ∨ (P b (f a))) ⟇ ▩) {
+///     apply ∨ᵢ₁;
 ///     apply imply_to_or;  
-///     apply ⇒ᶜᵢ;
 ///     assume H;
-///     apply ∀ᶜₑ b (∀ᶜₑ (f a) H)
+///     apply H b (f a)
 /// }
 /// ```
 pub fn translate_forall_inst(args: &Vec<Rc<AletheTerm>>) -> TradResult<Proof> {
-    //Ok(Proof(admit()))
-    let hyp = Term::from("H");
+    let mut hyp = vec![Term::from("H")];
 
-    let init_forall_elim = Term::Terms(vec![
-        Term::from("∀ᶜₑ"),
-        args.first().expect("empty args").into(),
-        hyp,
-    ]);
+    hyp.append(&mut args.into_iter().map(Term::from).collect_vec());
 
-    let forall_elims = args.into_iter().skip(1).fold(init_forall_elim, |acc, arg| {
-        Term::Terms(vec![Term::from("∀ᶜₑ"), arg.into(), acc])
-    });
+    let mut forall_elims = Term::Terms(hyp);
 
     Ok(Proof(lambdapi! {
-        apply "∨ᶜᵢ₁";
+        apply "∨ᵢ₁";
         apply "imply_to_or";
-        apply "⇒ᶜᵢ";
         assume [H]; //FIXME: use hyp instead
-        apply "" (@forall_elims);
+        refine (forall_elims);
     }))
 }
 
 pub fn translate_sko_forall() -> TradResult<Proof> {
     Ok(Proof(lambdapi! {
-        apply "∨ᶜᵢ₁";
+        apply "∨ᵢ₁";
         apply "sko_forall";
         assume [x H];
         rewrite "H";
@@ -672,9 +798,9 @@ mod tests_tautolog {
             vec![],
             cl!(eq!(not!(id!("a")), not!(id!("b")))),
             Some(proof!(
-                apply!(id!("∨ᶜᵢ₁")),
+                apply!(id!("∨ᵢ₁")),
                 apply!(
-                    id!("feqᶜ"),
+                    id!("feq"),
                     { id!("(¬)"), unary_clause_to_prf("h1") }
                 )
             )),
@@ -715,10 +841,10 @@ mod tests_tautolog {
             vec![],
             cl!(eq!(imp!(id!("a"), id!("b")), imp!(id!("c"), id!("d")))),
             Some(proof!(
-                apply!(id!("∨ᶜᵢ₁")),
+                apply!(id!("∨ᵢ₁")),
                 apply!(terms![
-                    id!("feq2ᶜ"),
-                    id!("(⇒ᶜ)"),
+                    id!("feq2"),
+                    id!("(⇒)"),
                     unary_clause_to_prf("h1"),
                     unary_clause_to_prf("h2")
                 ])
@@ -770,16 +896,11 @@ mod tests_tautolog {
                 ])
             )),
             Some(proof!(
-                apply!(id!("∨ᶜᵢ₁")),
+                apply!(id!("∨ᵢ₁")),
                 apply!(id!("imply_to_or")),
-                apply!(id!("⇒ᶜᵢ")),
                 assume!(H),
                 apply!(id!(""), {
-                    terms!(
-                        id!("∀ᶜₑ"),
-                        id!("b"),
-                        terms!(id!("∀ᶜₑ"), terms!(id!("f"), id!("a")), id!("H")),
-                    )
+                    terms!(id!("H"), terms!(id!("f"), id!("a")), id!("b"),),
                 })
             )),
         );
@@ -919,8 +1040,8 @@ mod tests_tautolog {
             vec![],
             cl!(terms!(id!("p"), id!("b"))),
             Some(proof!(
-                apply!(id!("∨ᶜᵢ₁")),
-                apply!(id!("∧ᶜₑ₁"), { terms!(id!("∧ᶜₑ₂"), t1) })
+                apply!(id!("∨ᵢ₁")),
+                apply!(id!("∧ₑ₁"), { terms!(id!("∧ₑ₂"), t1) })
             )),
         );
 
@@ -960,7 +1081,7 @@ mod tests_tautolog {
             "t2".into(),
             vec![],
             cl!(terms!(id!("p"), id!("a"))),
-            Some(proof!(apply!(id!("∨ᶜᵢ₁")), apply!(id!("∧ᶜₑ₁"), { t1 }))),
+            Some(proof!(apply!(id!("∨ᵢ₁")), apply!(id!("∧ₑ₁"), { t1 }))),
         );
 
         assert_eq!(t2, cmd_expected)
@@ -1001,8 +1122,15 @@ mod tests_tautolog {
             vec![],
             cl!(terms!(id!("p"), id!("d"))),
             Some(proof!(
-                apply!(id!("∨ᶜᵢ₁")),
-                ProofStep::Apply(terms!(id!("∧ᶜₑ₂"), terms!(id!("∧ᶜₑ₂"), terms!(id!("∧ᶜₑ₂"), t1.clone()))), vec![], SubProofs(None)),
+                apply!(id!("∨ᵢ₁")),
+                ProofStep::Apply(
+                    terms!(
+                        id!("∧ₑ₂"),
+                        terms!(id!("∧ₑ₂"), terms!(id!("∧ₑ₂"), t1.clone()))
+                    ),
+                    vec![],
+                    SubProofs(None)
+                ),
             )),
         );
 

@@ -53,7 +53,7 @@ pub fn translate_rare_simp(clause: &Vec<Rc<AletheTerm>>, args: &Vec<Rc<AletheTer
     };
 
     Proof(lambdapi! {
-        apply "∨ᶜᵢ₁";
+        apply "∨ᵢ₁";
         inject(rewrites);
     })
 }
@@ -85,21 +85,24 @@ fn translate_evaluate_linear_arith() -> Vec<ProofStep> {
 /// (step ti (cl (= (not true) false)) :rule rare_rewrite :args ("evaluate"))
 /// ```
 fn translate_evaluate_bool() -> Vec<ProofStep> {
-    lambdapi! {
-        simplify;
-        apply "prop_ext";
-        why3;
-    }
+    // lambdapi! {
+    //     simplify;
+    //     apply "prop_ext";
+    //     why3;
+    // }
+    vec![ProofStep::Admit]
 }
 
 /// Use the RING solver to prove arith-poly-norm 
 fn translate_arith_poly_norm() -> Vec<ProofStep> {
-    vec![
-        ProofStep::Simplify,
-        ProofStep::Rewrite(true, Some("[x in _ = x]".into()), Term::from("inj"), vec![]),
-        ProofStep::Rewrite(true, Some("[x in x = _]".into()), Term::from("inj"), vec![]),
-        ProofStep::Reflexivity
-    ]
+    // vec![
+    //     ProofStep::Simplify,
+    //     ProofStep::Rewrite(true, Some("[x in _ = x]".into()), Term::from("inj"), vec![],SubProofs(None)),
+    //     ProofStep::Rewrite(true, Some("[x in x = _]".into()), Term::from("inj"), vec![],SubProofs(None)),
+    //     ProofStep::Reflexivity
+    // ]
+    //FIXME: Ring has change for another method
+    vec![ProofStep::Admit]
 }
 
 // /// Translate (define-rule* bool-or-false ((xs Bool :list) (ys Bool :list)) (or xs false ys) (or xs ys))
@@ -151,7 +154,7 @@ fn translate_bool_and_true(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
             .map(|terms| Term::from(AletheTerm::Op(Operator::RareList, terms.to_vec())))
             .collect_vec();
         vec![
-            ProofStep::Rewrite(false, None, Term::from("bool-and-true"), args),
+            ProofStep::Rewrite(false, None, Term::from("bool-and-true"), args,SubProofs(None)),
             ProofStep::Reflexivity,
         ]
     }
@@ -159,7 +162,7 @@ fn translate_bool_and_true(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
 
 fn translate_bool_impl_elim(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
     vec![
-        ProofStep::Rewrite(false, None, Term::from("bool-impl-elim"), vec![]),
+        ProofStep::Rewrite(false, None, Term::from("bool-impl-elim"), vec![],SubProofs(None)),
         ProofStep::Reflexivity,
     ]
 }
@@ -180,13 +183,13 @@ fn translate_bool_or_flatten(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
         .collect_vec();
 
     if args_len[xs] == 0 {
-        lambdapi! {  rewrite "left ∨ᶜ_assoc_eq";  }
+        lambdapi! {  rewrite "left ∨_assoc";  }
     } else if args_len[zs] == 0 {
         vec![]
     } else {
         let args: Vec<Term> = args.into_iter().map(|term| term.into()).collect_vec();
         vec![
-            ProofStep::Rewrite(false, None, Term::from("bool-or-flatten"), args),
+            ProofStep::Rewrite(false, None, Term::from("bool-or-flatten"), args,SubProofs(None)),
             ProofStep::Reflexivity,
         ]
     }
@@ -207,13 +210,13 @@ fn translate_bool_and_flatten(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
         .collect_vec();
 
     if args_len[xs] == 0 {
-        lambdapi! {  rewrite "left ∧ᶜ_assoc_eq";  }
+        lambdapi! {  rewrite "left ∧_assoc";  }
     } else if args_len[zs] == 0 {
         vec![]
     } else {
         let args: Vec<Term> = args.into_iter().map(|term| term.into()).collect_vec();
         vec![
-            ProofStep::Rewrite(false, None, Term::from("bool-and-flatten"), args),
+            ProofStep::Rewrite(false, None, Term::from("bool-and-flatten"), args,SubProofs(None)),
             ProofStep::Reflexivity,
         ]
     }
@@ -235,68 +238,39 @@ pub fn translate_simplify_step(rule: &str) -> Proof {
 
 fn translate_equiv_simplify() -> Proof {
     Proof(lambdapi! {
-        apply "∨ᶜᵢ₁";
+        apply "∨ᵢ₁";
         simplify;
-        try [ rewrite ."[ x in x = _ ]" "equiv_simplify₁"; ];
-        try [ rewrite ."[ x in x = _ ]" "equiv_simplify₂";  ];
-        try [ rewrite ."[ x in x = _ ]" "equiv_simplify₃";  ];
-        try [ rewrite ."[ x in x = _ ]" "equiv_simplify₄";  ];
-        try [ rewrite ."[ x in x = _ ]" "equiv_simplify₅";  ];
-        try [ rewrite ."[ x in x = _ ]" "equiv_simplify₆";  ];
-        try [ rewrite ."[ x in x = _ ]" "equiv_simplify₇";  ];
-        try [ rewrite ."[ x in x = _ ]" "equiv_simplify₈";  ];
-        reflexivity;
+        eval "equiv_simplify";
     })
 }
 
 fn translate_not_simplify() -> Proof {
     Proof(lambdapi! {
-        apply "∨ᶜᵢ₁";
-        try [ rewrite ."[ x in x = _ ]" "not_simplify₁"; ];
-        try [ rewrite ."[ x in x = _ ]" "not_simplify₂";  ];
-        try [ rewrite ."[ x in x = _ ]" "not_simplify₃";  ];
-        reflexivity;
+        apply "∨ᵢ₁";
+        simplify;
+        eval "not_simplify";
     })
 }
 
 fn translate_implies_simplify() -> Proof {
     Proof(lambdapi! {
-        apply "∨ᶜᵢ₁";
+        apply "∨ᵢ₁";
         simplify;
-        try [ rewrite "implies_simplify₁"; ];
-        try [ rewrite "implies_simplify₂";  ];
-        try [ rewrite "implies_simplify₃";  ];
-        try [ rewrite "implies_simplify₄";  ];
-        try [ rewrite "implies_simplify₅";  ];
-        try [ rewrite "implies_simplify₆";  ];
-        try [ rewrite "implies_simplify₇";  ];
-        try [ rewrite "implies_simplify₈";  ];
-        reflexivity;
+        eval "implies_simplify";
     })
 }
 
 fn translate_ite_simplify() -> Proof {
     Proof(lambdapi! {
-        apply "∨ᶜᵢ₁";
-        try [ rewrite "ite_simplify₁"; ];
-        try [ rewrite "ite_simplify₂";  ];
-        try [ rewrite "ite_simplify₃";  ];
-        try [ rewrite "ite_simplify₄";  ];
-        try [ rewrite "ite_simplify₅";  ];
-        try [ rewrite "ite_simplify₆";  ];
-        try [ rewrite "ite_simplify₇";  ];
-        try [ rewrite "ite_simplify₈";  ];
-        try [ rewrite "ite_simplify₉";  ];
-        try [ rewrite "ite_simplify₁₀";  ];
-        try [ rewrite "ite_simplify₁₁";  ];
-        try [ rewrite "ite_simplify₁₂";  ];
-        reflexivity;
+        apply "∨ᵢ₁";
+        simplify;
+        eval "ite_simplify";
     })
 }
 
 fn translate_ac_simplify() -> Proof {
     Proof(lambdapi! {
-        apply "∨ᶜᵢ₁";
+        apply "∨ᵢ₁";
         try [ rewrite "ac_simp_or"; ];
         try [ rewrite "ac_simp_and";  ];
         reflexivity;
