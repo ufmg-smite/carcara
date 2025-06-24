@@ -319,6 +319,7 @@ fn cp_normalize() {
             (declare-fun a () Int)
             (declare-fun b () Int)
             (declare-fun c () Int)
+            (declare-fun d () Int)
             (declare-fun r0 () Int)
             (declare-fun r1 () Int)
             (declare-fun z0 () Int)
@@ -413,21 +414,49 @@ fn cp_normalize() {
         }
         "Validates variable list length" {
             r#"(step t1 (cl (=
-                (= (- (+ (* 1 a) (* 2 b)) (+ (* 1 1) (* 2 0))) 0)
-                (and (>= (+ a (* 2 b) (- 1 1) (* 2 (- 1 0))) 3)
-                     (>= (+ (- 1 a) (* 2 (- 1 b)) (* 1 1) (* 2 0)) 3)
+                (= (- (+ (* 1 a) (* 2 b)) (+ (* 1 c) (* 2 d))) 0)
+                (and (>= (+ a (* 2 b) (- 1 c) (* 2 (- 1 d))) 3)
+                     (>= (+ (- 1 a) (* 2 (- 1 b)) (* 1 c) (* 2 d)) 3)
                 )
             )) :rule cp_normalize)"#: true,
             r#"(step t1 (cl (=
-                (= (- (+ (* 1 a) (* 2 b)) (+ (* 1 1) (* 2 0))) 0)
+                ; Constants b, c and d were forgotten on RHS                        
+                (= (- (+ (* 1 a) (* 2 b)) (+ (* 1 c) (* 2 d))) 0)
                 (and (>= a 3)
                      (>= (- 1 a) 3)
                 )
             )) :rule cp_normalize)"#: false,
             r#"(step t1 (cl (=
-                (= (- (+ (* 1 a) (* 2 b)) (+ (* 1 1) (* 2 0))) 0)
+                (= (- (+ (* 1 a) (* 2 b)) (+ (* 1 c) (* 2 d))) 0)
+                ; Constants c and d were forgotten on RHS                        
                 (and (>= (+ a (* 2 b)) 3)
                      (>= (+ (- 1 a) (* 2 (- 1 b))) 3)
+                )
+            )) :rule cp_normalize)"#: false,
+        }
+        "Unfolds enough constants" {
+            r#"(step t1 (cl (=
+                ;; See how 1 and 2*0 collapse into the constant on RHS of >=
+                (= (- (+ a (* 2 b)) (+ 1 (* 2 0))) 0)
+                (and (>= (+ a (* 2 b)) 1)
+                     (>= (+ (- 1 a) (* 2 (- 1 b))) 2)
+                )
+            )) :rule cp_normalize)"#: true,
+
+            r#"(step t1 (cl (=
+                (= (- (+ (* 1 a) (* 2 b)) (+ (* 1 1) (* 2 0))) 0)
+                ;; Consts must be on RHS --v------------v
+                (and (>= (+ a (* 2 b) (- 1 1) (* 2 (- 1 0))) 3)
+                     (>= (+ (- 1 a) (* 2 (- 1 b)) (* 1 1) (* 2 0)) 3)
+                )
+            )) :rule cp_normalize)"#: false,
+        }
+        "Improper normalized term" {
+            r#"(step t1 (cl (=
+                (= a 0)
+                (and
+                    (>= (+ a (* 1 1)) 0)
+                    (>= (- 1 a) 1)
                 )
             )) :rule cp_normalize)"#: false,
         }
