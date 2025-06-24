@@ -584,7 +584,7 @@ impl Sort {
     pub fn match_with(&self, target: &Sort, map: &mut IndexMap<String, Sort>) -> bool {
         match (self, target) {
             (Sort::Var(a), _) => {
-                match map.entry(a.to_string()) {
+                match map.entry(a.clone()) {
                     Entry::Vacant(e) => {
                         e.insert(target.clone());
                     }
