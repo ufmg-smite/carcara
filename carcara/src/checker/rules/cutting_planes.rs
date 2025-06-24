@@ -486,22 +486,45 @@ impl PartialEq for CoeffTimesVar<'_> {
     }
 }
 
-fn term_to_ctv(term: &Rc<Term>) -> Result<CoeffTimesVar, CheckerError> {
-    if let Some((c, l)) = match_term!((* c l) = term) {
-        let coeff = c.as_integer_err()?;
-        if let Some((_, var)) = match_term!((- 1 var) = l) {
-            Ok(CoeffTimesVar { coeff, var, negated: true })
-        } else {
-            Ok(CoeffTimesVar { coeff, var: l, negated: false })
+// Returns either a `CoeffTimesVar` in the normal cases, or an `Integer` in the constant product case
+fn term_to_ctv(term: &Rc<Term>) -> Result<CoeffTimesVar, Integer> {
+    let (coeff, var) = if let Some((l, r)) = match_term!((* l r) = term) {
+        match (l.as_integer(), r.as_integer()) {
+            // Assuming `(* x y)` is treated as a variable
+            (None, None) => (1.into(), term),
+
+            // Using the `Err` variant to return the constant product
+            (Some(l), Some(r)) => return Err(l * r),
+
+            // Assuming `(* x 2)` is equivalent to `(* 2 x)`
+            (None, Some(coeff)) => (coeff, l),
+            (Some(coeff), None) => (coeff, r),
         }
     } else {
-        Ok(CoeffTimesVar::from(term))
+        // If it's not a product, it's just a variable
+        (1.into(), term)
+    };
+
+    // The variable might be negated
+    if let Some((_, inner)) = match_term!((- 1 var) = var) {
+        Ok(CoeffTimesVar { coeff, var: inner, negated: true })
+    } else {
+        Ok(CoeffTimesVar { coeff, var, negated: false })
     }
 }
 
 /// Collect the n added terms into a vector of n `CoeffTimesVar`
 fn collect_addition_list(term: &Rc<Term>) -> Result<Vec<CoeffTimesVar>, CheckerError> {
-    split_summation(term).iter().map(term_to_ctv).collect()
+    let mut add_list = vec![];
+    for t in split_summation(term) {
+        let ctv = term_to_ctv(t).map_err(|i| {
+            CheckerError::Explanation(format!(
+                "Found integer constant {i} in LHS of normalized term"
+            ))
+        })?;
+        add_list.push(ctv);
+    }
+    Ok(add_list)
 }
 
 /// Negate an integer term, in general
@@ -544,10 +567,10 @@ fn flatten_addition_tree(term: &Rc<Term>) -> Result<(Vec<CoeffTimesVar>, Integer
             Ok((va, ca - cb))
         }
         Term::Const(Constant::Integer(k)) => Ok((vec![], k.clone())),
-        _ => {
-            let ctv = term_to_ctv(term)?;
-            Ok((vec![ctv], 0.into()))
-        }
+        _ => match term_to_ctv(term) {
+            Ok(ctv) => Ok((vec![ctv], 0.into())),
+            Err(constant) => Ok((vec![], constant)),
+        },
     }
 }
 
