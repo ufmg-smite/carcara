@@ -195,6 +195,7 @@ fn generic_and_or_simplify(
     // If we encounter this, we remove the outer application
     if phis.len() == 1 {
         match phis[0].as_ref() {
+            #[allow(clippy::assigning_clones)]
             Term::Op(op, args) if *op == rule_kind => phis = args.clone(),
             _ => (),
         }

@@ -62,6 +62,7 @@ fn apply_naive_resolution<'a>(premises: &[ResolutionPremise<'a>]) -> Vec<Literal
     current
 }
 
+#[allow(clippy::assigning_clones)]
 pub fn uncrowd_resolution(
     pool: &mut PrimitivePool,
     step: &StepNode,
