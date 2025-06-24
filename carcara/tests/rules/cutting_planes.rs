@@ -451,5 +451,14 @@ fn cp_normalize() {
                 )
             )) :rule cp_normalize)"#: false,
         }
+        "Improper normalized term" {
+            r#"(step t1 (cl (=
+                (= a 0)
+                (and
+                    (>= (+ a (* 1 1)) 0)
+                    (>= (- 1 a) 1)
+                )
+            )) :rule cp_normalize)"#: false,
+        }
     }
 }

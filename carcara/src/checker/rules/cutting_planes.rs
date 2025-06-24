@@ -514,14 +514,17 @@ fn term_to_ctv(term: &Rc<Term>) -> Result<CoeffTimesVar, Integer> {
 }
 
 /// Collect the n added terms into a vector of n `CoeffTimesVar`
-fn collect_addition_list(term: &Rc<Term>) -> Vec<CoeffTimesVar> {
+fn collect_addition_list(term: &Rc<Term>) -> Result<Vec<CoeffTimesVar>, CheckerError> {
     let mut add_list = vec![];
     for t in split_summation(term) {
-        if let Ok(ctv) = term_to_ctv(t) {
-            add_list.push(ctv);
-        }
+        let ctv = term_to_ctv(t).map_err(|i| {
+            CheckerError::Explanation(format!(
+                "Found integer constant {i} in LHS of normalized term"
+            ))
+        })?;
+        add_list.push(ctv);
     }
-    add_list
+    Ok(add_list)
 }
 
 /// Negate an integer term, in general
@@ -647,7 +650,7 @@ pub fn cp_normalize(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         // Check (𝜑 ≥ 𝑘)
         push_negation(&mut general_vars, &mut general_constant);
 
-        let sum_l: Vec<CoeffTimesVar> = collect_addition_list(sum_l);
+        let sum_l: Vec<CoeffTimesVar> = collect_addition_list(sum_l)?;
         let kl = kl.as_integer_err()?;
 
         check_pb_inequalities(&general_vars, &general_constant, &sum_l, &kl)?;
@@ -657,7 +660,7 @@ pub fn cp_normalize(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         let mut general_constant_neg = -general_constant.clone();
         push_negation(&mut general_vars, &mut general_constant_neg);
 
-        let sum_r: Vec<CoeffTimesVar> = collect_addition_list(sum_r);
+        let sum_r: Vec<CoeffTimesVar> = collect_addition_list(sum_r)?;
         let kr = kr.as_integer_err()?;
 
         check_pb_inequalities(&general_vars, &general_constant_neg, &sum_r, &kr)
@@ -690,7 +693,7 @@ pub fn cp_normalize(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 
         push_negation(&mut general_vars, &mut general_constant);
 
-        let normalized_vars = collect_addition_list(normalized_vars);
+        let normalized_vars = collect_addition_list(normalized_vars)?;
         let normalized_constant = normalized_constant.as_integer_err()?;
 
         check_pb_inequalities(
