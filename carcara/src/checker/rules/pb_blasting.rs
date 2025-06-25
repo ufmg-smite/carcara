@@ -567,8 +567,54 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 }
 
 /// This rule extracts assertions of the ith bit of an application of
+/// `pbblast_bvxor`, given its arguments were x and y, we conclude
+///  `(>= (+ x y) r) (>= (+ r x) y) (>= (+ r y) x) (>= 2 (+ r x y))`
+/// In which ri is the choice element from the pseudo boolean bit blasting
+/// of the bvxor rule
+pub fn pbblast_bvxor_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_num_args(args, 2)?;
+    let x = &args[0];
+    let y = &args[1];
+    let (c1, c2, c3, c4) = match_term_err!((and c1 c2 c3 c4) = &conclusion[0])?;
+
+    // Build the expected choice term
+    let the_r = build_term!(pool,(choice (("z" Int)) (and
+         (>= (+ {x.clone()} {y.clone()}) (let z Int))
+         (>= (+ (let z Int) {x.clone()}) {y.clone()})
+         (>= (+ (let z Int) {y.clone()}) {x.clone()})
+         (>= 2 (+ (let z Int) {x.clone()} {y.clone()}))
+    )));
+
+    // c1 : (>= (+ x y) r)
+    let ((xc, yc), rc) = match_term_err!((>= (+ x y) r) = c1)?;
+    assert_eq(xc, x)?;
+    assert_eq(yc, y)?;
+    assert_eq(rc, &the_r)?;
+
+    // c2 : (>= (+ r x) y)
+    let ((rc, xc), yc) = match_term_err!((>= (+ r x) y) = c2)?;
+    assert_eq(xc, x)?;
+    assert_eq(yc, y)?;
+    assert_eq(rc, &the_r)?;
+
+    // c3 : (>= (+ r y) x)
+    let ((rc, yc), xc) = match_term_err!((>= (+ r y) x) = c3)?;
+    assert_eq(xc, x)?;
+    assert_eq(yc, y)?;
+    assert_eq(rc, &the_r)?;
+
+    // c4 : (>= 2 (+ r x y))
+    let (_, (rc, xc, yc)) = match_term_err!((>= 2 (+ r x y)) = c4)?;
+    assert_eq(xc, x)?;
+    assert_eq(yc, y)?;
+    assert_eq(rc, &the_r)?;
+
+    Ok(())
+}
+
+/// This rule extracts assertions of the ith bit of an application of
 /// `pbblast_bvand`, given its arguments were x and y, we conclude
-///  `(>= x r) (>= y r) (>= (+ r 1) (+ x y)))`
+///  `(>= x r) (>= y r) (>= (+ r 1) (+ x y))`
 /// In which ri is the choice element from the pseudo boolean bit blasting
 /// of the bvand rule
 pub fn pbblast_bvand_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) -> RuleResult {
