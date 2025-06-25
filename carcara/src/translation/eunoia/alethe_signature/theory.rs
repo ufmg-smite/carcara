@@ -1,4 +1,5 @@
 use crate::translation::eunoia::eunoia_ast::*;
+use crate::translation::Symbol;
 
 /// Definition of Alethe in Eunoia, following [AletheInAlf](https://github.com/cvc5/aletheinalf/).
 use std::string::String;
