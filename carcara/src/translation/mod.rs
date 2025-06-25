@@ -1,5 +1,6 @@
 /// Services for the translation of Alethe proofs.
 pub mod eunoia;
+// pub mod tstp;
 
 use crate::ast::*;
 
@@ -8,11 +9,19 @@ use std::ops::Deref;
 // scopes
 use crate::utils::HashMapStack;
 
+// TODO: is this correct? also: pub type alias?
+/// SMT-LIB version 3.0 symbol.
+pub type Symbol = String;
+
 /// Interface with an Alethe proof compiler.
 pub trait Translator {
     type Output;
 
+    /// Translates a proof in its DAG form, into some target language.
     fn translate<'a>(&'a mut self, proof: &Rc<ProofNode>) -> &'a Self::Output;
+
+    /// Translates only an SMT-lib problem.
+    fn translate_problem(&mut self, problem: &Problem) -> Self::Output;
 }
 
 /// For translation purposes, it is useful to have a pre-ordered version of the
@@ -341,4 +350,287 @@ impl LastSteps {
     pub fn last_steps_empty(&self) -> bool {
         self.last_steps_rules.is_empty()
     }
+}
+
+pub struct TranslatorData<StepType, TermType: Clone> {
+    /// Pre-ordered version of the Alethe proof to be translated.
+    pre_ord_proof: PreOrderedAletheProof,
+
+    /// Information about scopes of variables introduced by contexts,
+    /// quantifications and other binders.
+    alethe_scopes: AletheScopes<TermType>,
+
+    // /// Maintains references to previous steps from the actual subproof.
+    // local_steps: Vec<Vec<usize>>,
+    /// Rule and id of the last step from the actual subproof, if any.
+    last_steps: LastSteps,
+
+    // For translation purposes, we are just using this representation.
+    // TODO: would it be useful to use a DAG representation?
+    translated_proof: Vec<StepType>,
+}
+
+impl<StepType, TermType: Clone> TranslatorData<StepType, TermType> {
+    fn new() -> Self {
+        Self {
+            translated_proof: Vec::new(),
+            pre_ord_proof: PreOrderedAletheProof::default(),
+            alethe_scopes: AletheScopes::new(),
+            last_steps: LastSteps::new(),
+        }
+    }
+}
+
+/// Describes the behavior of a translator that converts an Alethe proof in its DAG
+/// representation, into a vector of steps representation, in some given target language.
+/// Parameterized over the types of the target language steps and terms.
+pub trait VecToVecTranslator<'a, StepType, TermType: Clone + 'a, TypeTermType> {
+    /// Mutable access to common fields.
+    fn get_mut_translator_data(&mut self) -> &mut TranslatorData<StepType, TermType>;
+
+    /// Read-only access to common fields.
+    fn get_read_translator_data(&self) -> &TranslatorData<StepType, TermType>;
+
+    /// For a given variable name "id", that is bound by some
+    /// context, it builds and returns its @var representation.
+    /// That is, its representation as a variable bound by some
+    /// enclosing context.
+    fn build_var_binding(&self, id: &str) -> TermType;
+
+    /// Translates `BindingList` constructs, as used for binder terms forall, exists,
+    /// choice and lambda. The "let" binder uses the same construction but assigns to
+    /// it a different semantics. See `translate_let_binding_list` for its translation.
+    fn translate_binding_list(&mut self, binding_list: &BindingList) -> TermType;
+
+    /// Translates a `BindingList`: it builds a list of pairs (variable, type) for the binding
+    /// occurrences, and returns this coupled with the original list of actual values, as a `@VarList`.
+    fn translate_let_binding_list(
+        &mut self,
+        binding_list: &BindingList,
+    ) -> (TermType, Vec<TermType>);
+
+    /// Translates a given Alethe Term into its corresponding representation, possibly
+    /// modifying scoping information contained in self, to deal with
+    /// translation of binding constructions.
+    fn translate_term(&mut self, term: &Term) -> TermType;
+
+    fn translate_operator(&self, operator: Operator) -> Symbol;
+
+    fn translate_constant(constant: &Constant) -> TermType;
+
+    fn translate_sort(sort: &Sort) -> TypeTermType;
+
+    /// Implements the translation of an Alethe `Assume`, taking into
+    /// account technical differences in the way Alethe rules are
+    /// expressed in the target language.
+    fn translate_assume(&mut self, id: &str, _depth: usize, term: &Rc<Term>) -> StepType;
+
+    /// Implements the translation of an Alethe `ProofStep`, taking into
+    /// account technical differences in the way Alethe rules are
+    /// expressed in the target language.
+    /// Updates `self.get_mut_translator_data().translated_proof`.
+    fn translate_step(&mut self, node: &ProofNode);
+
+    /// Abstracts the steps required to define and push a new context.
+    /// PARAMS:
+    /// `option_ctx_params`: a vector with the variables introduced by the context (optionally)
+    fn define_push_new_context(&mut self, option_ctx_params: Option<Vec<TermType>>);
+
+    /// Abstracts the process of traversing a given context, identifying the fixed
+    /// variables and the substitutions. Returns the corresponding list of
+    /// variables and substitutions to be used when building a @ctx.
+    fn process_anchor_context(&mut self, context: &[AnchorArg]) -> Vec<TermType>;
+
+    /// Returns the identifier of the last context actually introduced within the proof certificate.
+    /// PRE: { 0 < `self.contexts_opened`}
+    fn get_last_introduced_context_id(&self) -> String {
+        // TODO: do not hard-code this string
+        String::from("ctx")
+            + &(self
+                .get_read_translator_data()
+                .alethe_scopes
+                .get_last_introduced_context_index()
+                + 1)
+            .to_string()
+    }
+
+    /// Inspects a given Alethe step from which we want to extract its id,
+    /// also verifying that it is a proper "previous step" from another subproof's
+    /// last step.
+    fn get_previous_step_id(previous_step: &Option<Rc<ProofNode>>) -> String {
+        // Include, as premise, the previous step.
+        match previous_step {
+            Some(step) => {
+                match step.deref() {
+                    ProofNode::Step(StepNode { id, .. }) => id.clone(),
+
+                    ProofNode::Subproof(SubproofNode { last_step, .. }) => {
+                        // The previous step is the closing step of a subproof.
+                        // It is represented as a single SubproofNode. We look
+                        // for the actual last step of this subproof.
+                        match last_step.deref() {
+                            ProofNode::Step(StepNode { id, .. }) => id.clone(),
+
+                            _ => {
+                                // It shouldn't be another kind of ProofNode
+                                panic!();
+                            }
+                        }
+                    }
+
+                    ProofNode::Assume { .. } => {
+                        // It shouldn't be another kind of ProofNode
+                        panic!();
+                    }
+                }
+            }
+
+            _ => {
+                // There should be some previous step.
+                panic!();
+            }
+        }
+    }
+
+    /// Encapsulates the mechanism used to generate fresh identifiers of contexts.
+    fn generate_new_context_id(&self) -> String {
+        // TODO: do not hard-code this string
+        String::from("ctx")
+            + &self
+                .get_read_translator_data()
+                .alethe_scopes
+                .get_contexts_opened()
+                .to_string()
+    }
+
+    /// Implements the actual translation logic, but over a list representation of the proof.
+    /// That is, once the original `ProofNode` graph has been translated into a list of single
+    /// `ProofNode` steps.
+    /// PRE : { `self.pre_ord_proof` is set with a pre-ordered version of the corresponding
+    ///               Alethe proof }
+    fn translate_pre_ord_proof_node(&mut self) {
+        let proof;
+
+        // NOTE: cloning to avoid error
+        // "closure requires unique access to `*mut_data` but it is already borrowed//
+        {
+            proof = self
+                .get_mut_translator_data()
+                .pre_ord_proof
+                .get_pre_ord_proof()
+                .clone();
+        }
+
+        proof.iter().for_each(|node| {
+            match node {
+                ProofNode::Assume { id, depth, term } => {
+                    // TODO: what about :named?
+                    let translated_assume = self.translate_assume(id, *depth, term);
+                    self.get_mut_translator_data()
+                        .translated_proof
+                        .push(translated_assume);
+                }
+
+                ProofNode::Step(StepNode { id, .. }) => {
+                    self.translate_step(node);
+
+                    // Is this the closing step of the actual subproof?
+                    if !self.get_mut_translator_data().last_steps.last_steps_empty() {
+                        let last_step_id =
+                            &self.get_mut_translator_data().last_steps.get_last_step_id();
+                        if *last_step_id == id {
+                            // TODO: ugly, hacky way of dealing with
+                            // "bind" rule already doing a step-pop of the pushed
+                            // context
+
+                            self.get_mut_translator_data().last_steps.last_steps_pop();
+
+                            // Closing the context...
+                            self.get_mut_translator_data().alethe_scopes.close_scope();
+
+                            // self.get_mut_translator_data().local_steps.pop();
+                        }
+                    }
+                }
+
+                // A subproof introduced by the 'anchor' command.
+                ProofNode::Subproof(SubproofNode { last_step, args, .. }) => {
+                    // To store @VarList parameters to @ctx
+                    let ctx_params;
+
+                    if args.is_empty() {
+                        self.get_mut_translator_data()
+                            .alethe_scopes
+                            .open_non_context_scope();
+                    } else {
+                        // { !args.is_empty() }
+                        // We actually have an anchor introducing new variables
+                        self.get_mut_translator_data()
+                            .alethe_scopes
+                            .open_context_scope();
+                        ctx_params = self.process_anchor_context(args);
+
+                        // Define and open a new context
+                        self.define_push_new_context(Some(ctx_params));
+                    }
+
+                    // Save information about the last step of the subproof
+                    match (*last_step).deref() {
+                        ProofNode::Step(StepNode {
+                            id: last_step_id,
+                            depth: _,
+                            clause: _,
+                            rule: last_step_rule,
+                            ..
+                        }) => {
+                            self.get_mut_translator_data()
+                                .last_steps
+                                .last_steps_push(last_step_rule.as_str(), last_step_id.as_str());
+                        }
+
+                        _ => {
+                            // It shouldn't be something different then a step
+                            panic!();
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /// Translation of proof certificates, working over a `ProofNode` DAG representation
+    /// of the proof. Reorders the received DAG proof into its list of steps representations, and
+    /// invokes the corresponding translation routine to translate the result.
+    fn translate_2_vect(&'a mut self, proof: &Rc<ProofNode>) -> &'a Vec<StepType> {
+        // Mutable borrow to translator data
+        {
+            // We only translate pre-ordered proofs.
+            let mut_data = self.get_mut_translator_data();
+
+            mut_data.pre_ord_proof = PreOrderedAletheProof::new(proof);
+
+            // Clean previously created data.
+            if mut_data.alethe_scopes.get_contexts_opened() > 0 {
+                mut_data.translated_proof = Vec::new();
+                mut_data.alethe_scopes.clean_scopes();
+                mut_data.last_steps = LastSteps::new();
+            }
+
+            // TODO: Subproof has a context_id that could be used instead of contexts_opened
+            // TODO: is it possible to define a private name-space prefixing some
+            // symbol?
+            // Some rules query the context (e.g., refl). We need to always have
+            // opened at least one context
+            mut_data.alethe_scopes.open_context_scope();
+        }
+
+        self.define_push_new_context(None);
+
+        self.translate_pre_ord_proof_node();
+
+        &self.get_read_translator_data().translated_proof
+    }
+
+    /// Translates only an SMT-lib problem.
+    fn translate_problem_2_vect(&mut self, problem: &Problem) -> Vec<StepType>;
 }

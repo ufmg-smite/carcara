@@ -1,11 +1,8 @@
 //! AST representation of a fragment of Eunoia required to mechanize Alethe proofs.
+use crate::translation::Symbol;
 
 // TODO:
 pub struct EunoiaTheorySignature;
-
-// TODO: is this correct? also: pub type alias?
-/// SMT-LIB version 3.0 symbol.
-pub type Symbol = String;
 
 /// Just a generic wrapper for Vecs, to add structural information to ASTs.
 /// Represents an actual list of stuff, to capture the structure of something
