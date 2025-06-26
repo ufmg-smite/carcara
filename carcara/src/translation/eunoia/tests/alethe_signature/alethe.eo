@@ -822,6 +822,9 @@
 ; - t U:
 ; - tail Bool:
 ; - nil U:
+; note: >
+;   Taken from CPC's Eunoia mechanization: 
+;   https://github.com/cvc5/cvc5/blob/main/proofs/eo/cpc/rules/Uf.eo
 ; return:
 (program $mk_variadic_cong_rhs ((U Type) (f (-> U U U)) (s1 U) (s2 U) (t U :list) (tail Bool :list) (nil U))
     :signature (U Bool) U
@@ -834,7 +837,7 @@
          )
 
         (
-         ($mk_variadic_cong_rhs (f s1 t) (and (@cl (= s1 s2)) tail))  
+         ($mk_variadic_cong_rhs (f s1 t) (and (@cl (= s1 s2)) tail))
 
          (eo::cons f s2 ($mk_variadic_cong_rhs t tail))
          )
