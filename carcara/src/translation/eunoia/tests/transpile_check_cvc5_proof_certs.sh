@@ -4,8 +4,8 @@
 # contained in $DIR. Uses $COMMAND to invoke 'carcara'.
 DIR="./cvc5_problems/"
 # TODO: installation-dependent relative paths
-CARCARA_COMMAND="../../../../target/release/carcara translate"
-ETHOS_COMMAND="../../../../../ethos_fork/ethos/build/src/ethos"
+CARCARA_COMMAND="../../../../../target/release/carcara translate"
+ETHOS_COMMAND="../../../../../../ethos_fork/ethos/build/src/ethos"
 
 # Loop through each file in the directory.
 for FILE in "$DIR"/*; do
