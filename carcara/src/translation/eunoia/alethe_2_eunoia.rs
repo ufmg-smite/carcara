@@ -16,7 +16,7 @@ pub struct EunoiaTranslator {
     /// "Alethe in Eunoia" signature considered during translation.
     alethe_signature: AletheTheory,
 
-    translation: TranslatorData<EunoiaCommand, EunoiaTerm>,
+    translation: TranslatorData<EunoiaTerm, EunoiaProof>,
 }
 
 impl EunoiaTranslator {
@@ -29,11 +29,11 @@ impl EunoiaTranslator {
 }
 
 impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType> for EunoiaTranslator {
-    fn get_mut_translator_data(&mut self) -> &mut TranslatorData<EunoiaCommand, EunoiaTerm> {
+    fn get_mut_translator_data(&mut self) -> &mut TranslatorData<EunoiaTerm, EunoiaProof> {
         &mut self.translation
     }
 
-    fn get_read_translator_data(&self) -> &TranslatorData<EunoiaCommand, EunoiaTerm> {
+    fn get_read_translator_data(&self) -> &TranslatorData<EunoiaTerm, EunoiaProof> {
         &self.translation
     }
 

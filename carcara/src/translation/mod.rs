@@ -352,7 +352,8 @@ impl LastSteps {
     }
 }
 
-pub struct TranslatorData<StepType, TermType: Clone> {
+/// Maintains several related data-structures, useful for translation purposes.
+pub struct TranslatorData<TermType: Clone, ProofType: Default> {
     /// Pre-ordered version of the Alethe proof to be translated.
     pre_ord_proof: PreOrderedAletheProof,
 
@@ -360,20 +361,16 @@ pub struct TranslatorData<StepType, TermType: Clone> {
     /// quantifications and other binders.
     alethe_scopes: AletheScopes<TermType>,
 
-    // /// Maintains references to previous steps from the actual subproof.
-    // local_steps: Vec<Vec<usize>>,
     /// Rule and id of the last step from the actual subproof, if any.
     last_steps: LastSteps,
 
-    // For translation purposes, we are just using this representation.
-    // TODO: would it be useful to use a DAG representation?
-    translated_proof: Vec<StepType>,
+    translated_proof: ProofType,
 }
 
-impl<StepType, TermType: Clone> TranslatorData<StepType, TermType> {
+impl<TermType: Clone, ProofType: Default> TranslatorData<TermType, ProofType> {
     fn new() -> Self {
         Self {
-            translated_proof: Vec::new(),
+            translated_proof: ProofType::default(),
             pre_ord_proof: PreOrderedAletheProof::default(),
             alethe_scopes: AletheScopes::new(),
             last_steps: LastSteps::new(),
@@ -386,10 +383,10 @@ impl<StepType, TermType: Clone> TranslatorData<StepType, TermType> {
 /// Parameterized over the types of the target language steps and terms.
 pub trait VecToVecTranslator<'a, StepType, TermType: Clone + 'a, TypeTermType> {
     /// Mutable access to common fields.
-    fn get_mut_translator_data(&mut self) -> &mut TranslatorData<StepType, TermType>;
+    fn get_mut_translator_data(&mut self) -> &mut TranslatorData<TermType, Vec<StepType>>;
 
     /// Read-only access to common fields.
-    fn get_read_translator_data(&self) -> &TranslatorData<StepType, TermType>;
+    fn get_read_translator_data(&self) -> &TranslatorData<TermType, Vec<StepType>>;
 
     /// For a given variable name "id", that is bound by some
     /// context, it builds and returns its @var representation.
