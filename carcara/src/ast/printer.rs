@@ -30,6 +30,18 @@ pub fn print_proof(
     AlethePrinter::new(pool, prelude, use_sharing, &mut stdout).write_proof(proof)
 }
 
+// Like print_proof, but to write to a string, not stdout
+pub fn proof_to_string(
+    pool: &mut PrimitivePool,
+    prelude: &ProblemPrelude,
+    proof: &Proof,
+    use_sharing: bool,
+) -> String {
+    let mut bytes = Vec::new();
+    let _ = AlethePrinter::new(pool, prelude, use_sharing, &mut bytes).write_proof(proof);
+    String::from_utf8(bytes).unwrap()
+}
+
 /// Given the conclusion clause of a `lia_generic` step, this method will write to `dest` the
 /// corresponding SMT problem instance.
 pub fn write_lia_smt_instance(
@@ -48,6 +60,30 @@ pub fn write_lia_smt_instance(
     // cannot use the GMP notation
     printer.smt_lib_strict = true;
     printer.write_lia_smt_instance(clause)
+}
+
+pub fn write_asserts(
+    pool: &mut PrimitivePool,
+    prelude: &ProblemPrelude,
+    dest: &mut dyn io::Write,
+    asserts: &Vec<Rc<Term>>,
+    use_sharing: bool,
+) -> io::Result<()> {
+    let mut printer = AlethePrinter::new(pool, prelude, use_sharing, dest);
+    // We have to override the default prefix "@p_" because symbols starting with "@" are reserved
+    // in SMT-LIB.
+    printer.term_sharing_variable_prefix = "p_";
+    // Since we are printing an SMT-LIB problem, we have to be
+    // compliant. For Carcara, this means that arithmetic constants
+    // cannot use the GMP notation
+    printer.smt_lib_strict = true;
+
+    for assertion in asserts {
+        write!(printer.inner, "(assert ")?;
+        assertion.print_with_sharing(&mut printer)?;
+        writeln!(printer.inner, ")")?;
+    }
+    Ok(())
 }
 
 trait PrintProof {
