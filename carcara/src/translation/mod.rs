@@ -381,7 +381,7 @@ impl<TermType: Clone, ProofType: Default> TranslatorData<TermType, ProofType> {
 /// Describes the behavior of a translator that converts an Alethe proof in its DAG
 /// representation, into a vector of steps representation, in some given target language.
 /// Parameterized over the types of the target language steps and terms.
-pub trait VecToVecTranslator<'a, StepType, TermType: Clone + 'a, TypeTermType> {
+pub trait VecToVecTranslator<'a, StepType, TermType: Clone + 'a, TypeTermType, OperatorType> {
     /// Mutable access to common fields.
     fn get_mut_translator_data(&mut self) -> &mut TranslatorData<TermType, Vec<StepType>>;
 
@@ -411,7 +411,7 @@ pub trait VecToVecTranslator<'a, StepType, TermType: Clone + 'a, TypeTermType> {
     /// translation of binding constructions.
     fn translate_term(&mut self, term: &Term) -> TermType;
 
-    fn translate_operator(&self, operator: Operator) -> Symbol;
+    fn translate_operator(&self, operator: Operator) -> OperatorType;
 
     fn translate_constant(constant: &Constant) -> TermType;
 
