@@ -11,12 +11,14 @@ pub struct AletheTheory {
     pub cl: Symbol,
     // To represent the empty clause.
     pub empty_cl: Symbol,
-    pub ite: Symbol,
 
     // Logical operators.
     pub and: Symbol,
     pub not: Symbol,
     pub or: Symbol,
+    pub xor: Symbol,
+    pub implies: Symbol,
+    pub ite: Symbol,
 
     // Arithmetic
     pub add: Symbol,
@@ -68,12 +70,14 @@ impl AletheTheory {
         AletheTheory {
             cl: String::from("@cl"),
             empty_cl: String::from("@empty_cl"),
-            ite: String::from("ite"),
 
             // Logical operators.
             and: String::from("and"),
             or: String::from("or"),
             not: String::from("not"),
+            xor: String::from("xor"),
+            implies: String::from("=>"),
+            ite: String::from("ite"),
 
             // Arithemtic
             add: String::from("+"),
