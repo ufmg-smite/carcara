@@ -134,6 +134,12 @@ struct ParsingOptions {
     /// terms. In the future, this will be the default behaviour.
     #[clap(long)]
     parse_hole_args: bool,
+
+    /// Buffer the entire file in memory before parsing instead of reading line-by-line.
+    /// This can improve performance in network file systems or cluster environments
+    /// at the cost of increased memory usage.
+    #[clap(long)]
+    buffer_entire_file: bool,
 }
 
 impl From<ParsingOptions> for parser::Config {
@@ -144,6 +150,7 @@ impl From<ParsingOptions> for parser::Config {
             allow_int_real_subtyping: val.allow_int_real_subtyping,
             strict: val.strict,
             parse_hole_args: val.parse_hole_args,
+            buffer_entire_file: val.buffer_entire_file,
         }
     }
 }
@@ -491,19 +498,40 @@ fn main() {
     }
 }
 
-fn get_instance(options: &Input) -> CliResult<(Box<dyn BufRead>, Box<dyn BufRead>)> {
-    fn reader_from_path<P: AsRef<Path>>(path: P) -> CliResult<Box<dyn BufRead>> {
-        Ok(Box::new(io::BufReader::new(File::open(path)?)))
+fn get_instance(
+    options: &Input,
+    buffer_entire_file: bool,
+) -> CliResult<(Box<dyn BufRead>, Box<dyn BufRead>)> {
+
+    fn reader_from_path<P: AsRef<Path>>(
+        path: P,
+        buffer_file: bool,
+    ) -> CliResult<Box<dyn BufRead>> {
+        if buffer_file {
+            let content = std::fs::read_to_string(&path)?;
+            Ok(Box::new(io::Cursor::new(content.into_bytes())))
+        } else {
+            Ok(Box::new(io::BufReader::new(File::open(path)?)))
+        }
     }
 
     match (options.problem_file.as_deref(), options.proof_file.as_str()) {
         (Some("-"), "-") | (None, "-") => Err(CliError::BothFilesStdin),
-        (Some(problem), "-") => Ok((reader_from_path(problem)?, Box::new(io::stdin().lock()))),
-        (Some("-"), proof) => Ok((Box::new(io::stdin().lock()), reader_from_path(proof)?)),
-        (Some(problem), proof) => Ok((reader_from_path(problem)?, reader_from_path(proof)?)),
+        (Some(problem), "-") => Ok((
+            reader_from_path(problem, buffer_entire_file)?,
+            Box::new(io::stdin().lock()),
+        )),
+        (Some("-"), proof) => Ok((
+            Box::new(io::stdin().lock()),
+            reader_from_path(proof, buffer_entire_file)?,
+        )),
+        (Some(problem), proof) => Ok((
+            reader_from_path(problem, buffer_entire_file)?,
+            reader_from_path(proof, buffer_entire_file)?,
+        )),
         (None, proof) => Ok((
-            reader_from_path(infer_problem_path(proof)?)?,
-            reader_from_path(proof)?,
+            reader_from_path(infer_problem_path(proof)?, buffer_entire_file)?,
+            reader_from_path(proof, buffer_entire_file)?,
         )),
     }
 }
@@ -511,13 +539,13 @@ fn get_instance(options: &Input) -> CliResult<(Box<dyn BufRead>, Box<dyn BufRead
 fn parse_command(
     options: ParseCommandOptions,
 ) -> CliResult<(ast::Problem, ast::Proof, ast::PrimitivePool)> {
-    let (problem, proof) = get_instance(&options.input)?;
+    let (problem, proof) = get_instance(&options.input, options.parsing.buffer_entire_file)?;
     let result = parser::parse_instance(problem, proof, options.parsing.into())?;
     Ok(result)
 }
 
 fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
-    let (problem, proof) = get_instance(&options.input)?;
+    let (problem, proof) = get_instance(&options.input, options.parsing.buffer_entire_file)?;
     let parser_config = options.parsing.into();
     let checker_config = options.checking.into();
     let collect_stats = options.stats.stats;
@@ -540,7 +568,7 @@ fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
 fn elaborate_command(
     options: ElaborateCommandOptions,
 ) -> CliResult<(bool, ast::Problem, ast::Proof, ast::PrimitivePool)> {
-    let (problem, proof) = get_instance(&options.input)?;
+    let (problem, proof) = get_instance(&options.input, options.parsing.buffer_entire_file)?;
 
     let (elab_config, pipeline) = options.elaboration.into();
     check_and_elaborate(
@@ -609,7 +637,7 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
 fn slice_command(
     options: SliceCommandOptions,
 ) -> CliResult<(ast::Problem, ast::Proof, ast::PrimitivePool)> {
-    let (problem, proof) = get_instance(&options.input)?;
+    let (problem, proof) = get_instance(&options.input, false)?;
     let (problem, proof, pool) = parser::parse_instance(problem, proof, options.parsing.into())?;
 
     let node = ast::ProofNode::from_commands_with_root_id(proof.commands, &options.from)
@@ -626,7 +654,7 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
     use std::io::Write;
 
     let root_file_name = options.input.proof_file.clone();
-    let (problem, proof) = get_instance(&options.input)?;
+    let (problem, proof) = get_instance(&options.input, options.parsing.buffer_entire_file)?;
 
     let instances =
         generate_lia_smt_instances(problem, proof, options.parsing.into(), use_sharing)?;
