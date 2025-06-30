@@ -28,7 +28,7 @@ impl EunoiaTranslator {
     }
 }
 
-impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType> for EunoiaTranslator {
+impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for EunoiaTranslator {
     fn get_mut_translator_data(&mut self) -> &mut TranslatorData<EunoiaTerm, EunoiaProof> {
         &mut self.translation
     }
@@ -200,12 +200,15 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType> for EunoiaTra
                     .map(|operand| self.translate_term(operand))
                     .collect();
 
-                // TODO: fix this
                 match operator {
                     Operator::True => EunoiaTerm::True,
 
                     Operator::False => EunoiaTerm::False,
 
+                    // NOTE: the category EunoiaOperator refers to Eunoia's built-ins.
+                    // Here, we are translating an application of an Alethe operator, which
+                    // are not expressed in terms of Eunoia's. We translate this as a regular
+                    // application of some constant defined in the signature used.
                     _ => EunoiaTerm::App(self.translate_operator(*operator), operands_eunoia),
                 }
             }
