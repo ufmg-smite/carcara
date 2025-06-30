@@ -50,7 +50,7 @@ pub struct Config {
     /// terms.
     pub parse_hole_args: bool,
 
-    /// If `true`, the parser will buffer the entire file content in memory before parsing 
+    /// If `true`, the parser will buffer the entire file content in memory before parsing
     /// instead of reading line-by-line. This can improve performance in network file systems
     /// or cluster environments at the cost of increased memory usage.
     pub buffer_entire_file: bool,

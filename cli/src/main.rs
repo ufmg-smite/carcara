@@ -502,11 +502,7 @@ fn get_instance(
     options: &Input,
     buffer_entire_file: bool,
 ) -> CliResult<(Box<dyn BufRead>, Box<dyn BufRead>)> {
-
-    fn reader_from_path<P: AsRef<Path>>(
-        path: P,
-        buffer_file: bool,
-    ) -> CliResult<Box<dyn BufRead>> {
+    fn reader_from_path<P: AsRef<Path>>(path: P, buffer_file: bool) -> CliResult<Box<dyn BufRead>> {
         if buffer_file {
             let content = std::fs::read_to_string(&path)?;
             Ok(Box::new(io::Cursor::new(content.into_bytes())))
