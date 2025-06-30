@@ -447,19 +447,18 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
 
     fn translate_operator(&self, operator: Operator) -> Symbol {
         match operator {
-            // TODO: put this into theory.rs
             // Logic
             Operator::And => self.alethe_signature.and.clone(),
 
             Operator::Or => self.alethe_signature.or.clone(),
 
-            Operator::Xor => String::from("xor"),
+            Operator::Xor => self.alethe_signature.xor.clone(),
 
             Operator::Not => self.alethe_signature.not.clone(),
 
-            Operator::Implies => String::from("=>"),
+            Operator::Implies => self.alethe_signature.implies.clone(),
 
-            Operator::Ite => String::from("ite"),
+            Operator::Ite => self.alethe_signature.ite.clone(),
 
             // Order / Comparison.
             Operator::Equals => self.alethe_signature.eq.clone(),
