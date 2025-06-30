@@ -121,6 +121,10 @@ pub enum ParserError {
     #[error("subproof '{0}' was not closed")]
     UnclosedSubproof(String),
 
+    /// The parser encountered an `assume` after a `step` inside of a subproof.
+    #[error("`assume` command '{0}' appears after step inside subproof")]
+    AssumeAfterStepInSubproof(String),
+
     /// The parser encountered an unknown indexed operator.
     #[error("not a valid indexed operator: '{0}'")]
     InvalidIndexedOp(String),
