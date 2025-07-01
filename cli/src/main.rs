@@ -649,7 +649,7 @@ fn slice_command(
     options: SliceCommandOptions,
 ) -> CliResult<(ast::Problem, ast::Proof, ast::PrimitivePool)> {
     use std::fs;
-    
+
     let (problem, proof) = get_instance(&options.input, false)?;
     let (problem, proof, mut pool) =
         parser::parse_instance(problem, proof, options.parsing.into())?;
