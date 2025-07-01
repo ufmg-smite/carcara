@@ -341,13 +341,16 @@ fn extract_step(command: &ProofCommand) -> &ProofStep {
 
 /// Gets the step to slice as well as everything directly associated with it, i.e., its premises and the subproofs it is in.
 /// Returns a vector containing the step to slice inside a reconstructed subproof stack, preceded by any premises that are not inside a subproof.
-pub fn sliced_step(proof: &Proof, id: &str) -> Option<Vec<ProofCommand>> {
+pub fn sliced_step(proof: &Proof, id: &str, pool: &mut PrimitivePool) -> Option<Vec<ProofCommand>> {
     const ASSUME_FALSE_OFFSET: usize = 1;
 
     let mut commands: Vec<ProofCommand> = Vec::new();
     let mut iter = proof.iter();
     let mut from_step: Option<&ProofCommand> = None;
     let mut subproof_stack = Vec::new();
+
+    // The constant string trust to be used in the args list for every trust step
+    let trust = pool.add(Term::new_string("trust"));
 
     // Search for the proof step we are trying to slice out.
     while let Some(command) = iter.next() {
@@ -400,15 +403,15 @@ pub fn sliced_step(proof: &Proof, id: &str) -> Option<Vec<ProofCommand>> {
                 }
                 let len = sp.commands.len();
 
-                // Create the second-to-last (penultimate) step of the subproof using the special trust rule.
+                // Create the second-to-last (penultimate) step of the subproof using hole with trust args.
                 let penult = &sp.commands[len - 2];
                 let penult_step = extract_step(penult);
                 let new_penult_step = ProofStep {
                     id: penult_step.id.clone(),
                     clause: penult_step.clause.clone(),
-                    rule: "trust".to_owned(),
+                    rule: "hole".to_owned(),
                     premises: Vec::new(),
-                    args: penult_step.args.clone(),
+                    args: vec![trust.clone()],
                     discharge: Vec::new(),
                 };
 
@@ -459,9 +462,9 @@ pub fn sliced_step(proof: &Proof, id: &str) -> Option<Vec<ProofCommand>> {
                                 _ => ProofCommand::Step(ProofStep {
                                     id: premise_command.id().to_owned(),
                                     clause: premise_command.clause().to_vec(),
-                                    rule: "trust".to_owned(),
+                                    rule: "hole".to_owned(),
                                     premises: Vec::new(),
-                                    args: extract_step(premise_command).args.clone(), // I'm not sure if the args are needed, but I'm including them to be safe
+                                    args: vec![trust.clone()],
                                     discharge: Vec::new(), // The trust rule doesn't discharge any assumptions
                                 }),
                             };
@@ -497,9 +500,9 @@ pub fn sliced_step(proof: &Proof, id: &str) -> Option<Vec<ProofCommand>> {
                                 let step = ProofStep {
                                     id: premise_command.id().to_owned(),
                                     clause: premise_command.clause().to_vec(),
-                                    rule: "trust".to_owned(),
+                                    rule: "hole".to_owned(),
                                     premises: Vec::new(),
-                                    args: extract_step(premise_command).args.clone(),
+                                    args: vec![trust.clone()],
                                     discharge: Vec::new(),
                                 };
                                 // Add as trust step
@@ -568,9 +571,9 @@ pub fn sliced_step(proof: &Proof, id: &str) -> Option<Vec<ProofCommand>> {
                             let new_penult = ProofCommand::Step(ProofStep {
                                 id: ps.id.clone(),
                                 clause: ps.clause.clone(),
-                                rule: "trust".to_owned(),
+                                rule: "hole".to_owned(),
                                 premises: Vec::new(),
-                                args: ps.args.clone(),
+                                args: vec![trust.clone()],
                                 discharge: Vec::new(),
                             });
                             // Add all of the assumptions.
@@ -627,7 +630,7 @@ pub fn slice(
 ) -> Option<(Proof, String, String)> {
     use std::fmt::Write;
 
-    if let Some(sliced_step_commands) = sliced_step(proof, id) {
+    if let Some(sliced_step_commands) = sliced_step(proof, id, pool) {
         // The resolution premises are (cl false) and (cl (not false)).
         let mut resolution_premises: Vec<(usize, usize)> = Vec::new();
         let mut new_proof: Proof = Proof {
