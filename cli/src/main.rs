@@ -150,7 +150,6 @@ impl From<ParsingOptions> for parser::Config {
             allow_int_real_subtyping: val.allow_int_real_subtyping,
             strict: val.strict,
             parse_hole_args: val.parse_hole_args,
-            buffer_entire_file: val.buffer_entire_file,
         }
     }
 }

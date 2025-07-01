@@ -150,7 +150,6 @@ fn parse_and_check_solver_proof(
         allow_int_real_subtyping: true,
         strict: false,
         parse_hole_args: false,
-        buffer_entire_file: false,
     };
 
     let (problem, proof) = parser::parse_instance_with_pool(problem, proof, config, pool)?;
