@@ -655,9 +655,14 @@ fn slice_command(
         parser::parse_instance(problem, proof, options.parsing.into())?;
 
     let sliced = {
-        let (sliced_proof, sliced_problem_string, sliced_proof_string) =
-            slice(&problem, &proof, &options.from, &mut pool)
-                .ok_or(CliError::InvalidSliceId(options.from.clone()))?;
+        let (sliced_proof, sliced_problem_string, sliced_proof_string) = slice(
+            &problem,
+            &proof,
+            &options.from,
+            &mut pool,
+            options.max_distance.unwrap_or(0),
+        )
+        .ok_or(CliError::InvalidSliceId(options.from.clone()))?;
 
         let sliced_proof_file_name;
         let sliced_problem_file_name;
