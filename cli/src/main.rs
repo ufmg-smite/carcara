@@ -5,7 +5,7 @@ mod path_args;
 
 use carcara::{
     ast, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate, check_parallel, checker,
-    elaborator, generate_lia_smt_instances, parser,
+    elaborator, generate_lia_smt_instances, parser, slice,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -75,7 +75,7 @@ enum Command {
     /// Checks a series of proof files and records performance statistics.
     Bench(BenchCommandOptions),
 
-    /// Given a step, takes a slice of a proof consisting of all its transitive premises.
+    /// Given a step, takes a slice of a proof consisting of its premises.
     Slice(SliceCommandOptions),
 
     /// Generates the equivalent SMT instance for every `lia_generic` step in a proof.
@@ -90,6 +90,19 @@ struct Input {
     /// The original problem file. If this argument is not present, it will be inferred from the
     /// proof file.
     problem_file: Option<String>,
+}
+
+#[derive(Args)]
+struct SliceOutput {
+    /// The path the output proof should be written to. If this argument is present,
+    /// the problem file argument must be as well. If neither is present, the output
+    /// will be written to the working directory.
+    sliced_proof_file: Option<String>,
+
+    /// The path the output problem should be written to. If this argument is present,
+    /// the proof file argument must be as well. If neither is present, the output
+    /// will be written to the working directory.
+    sliced_problem_file: Option<String>,
 }
 
 #[derive(Args)]
@@ -393,6 +406,9 @@ struct SliceCommandOptions {
     input: Input,
 
     #[clap(flatten)]
+    output: SliceOutput,
+
+    #[clap(flatten)]
     parsing: ParsingOptions,
 
     #[clap(long)]
@@ -632,14 +648,42 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
 fn slice_command(
     options: SliceCommandOptions,
 ) -> CliResult<(ast::Problem, ast::Proof, ast::PrimitivePool)> {
+    use std::fs;
+    
     let (problem, proof) = get_instance(&options.input, false)?;
-    let (problem, proof, pool) = parser::parse_instance(problem, proof, options.parsing.into())?;
+    let (problem, proof, mut pool) =
+        parser::parse_instance(problem, proof, options.parsing.into())?;
 
-    let node = ast::ProofNode::from_commands_with_root_id(proof.commands, &options.from)
-        .ok_or_else(|| CliError::InvalidSliceId(options.from))?;
-    let sliced = ast::Proof {
-        commands: node.into_commands(),
-        ..proof
+    let sliced = {
+        let (sliced_proof, sliced_problem_string, sliced_proof_string) =
+            slice(&problem, &proof, &options.from, &mut pool)
+                .ok_or(CliError::InvalidSliceId(options.from.clone()))?;
+
+        let sliced_proof_file_name;
+        let sliced_problem_file_name;
+
+        if options.output.sliced_proof_file.is_none()
+            || options.output.sliced_problem_file.is_none()
+        {
+            if options.output.sliced_proof_file.is_none()
+                != options.output.sliced_problem_file.is_none()
+            {
+                log::warn!("Only one output filepath was specified, so both the output problem and proof will be written with default names to the directory containing the input proof.")
+            }
+            let path = Path::new(&options.input.proof_file);
+            let path_without_extension = path.with_extension("");
+            let base_name = path_without_extension.file_name().unwrap();
+            sliced_proof_file_name = format!("{}-{}.alethe", base_name.display(), options.from);
+            sliced_problem_file_name = format!("{}-{}.smt2", base_name.display(), options.from);
+        } else {
+            sliced_proof_file_name = options.output.sliced_proof_file.unwrap();
+            sliced_problem_file_name = options.output.sliced_problem_file.unwrap();
+        }
+
+        fs::write(sliced_problem_file_name, sliced_problem_string)?;
+        fs::write(sliced_proof_file_name, sliced_proof_string)?;
+
+        sliced_proof
     };
 
     Ok((problem, sliced, pool))

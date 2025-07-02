@@ -44,8 +44,14 @@ mod resolution;
 mod utils;
 
 use crate::benchmarking::{CollectResults, OnlineBenchmarkResults, RunMeasurement};
+use ast::printer::proof_to_string;
+use ast::{
+    Operator, PrimitivePool, Problem, Proof, ProofCommand, ProofStep, Rc, Subproof, Term, TermPool,
+};
 use checker::{error::CheckerError, CheckerStatistics};
+use core::panic;
 use parser::{ParserError, Position};
+use std::collections::{HashMap, HashSet};
 use std::io;
 use std::time::{Duration, Instant};
 use thiserror::Error;
@@ -311,4 +317,376 @@ pub fn generate_lia_smt_instances<T: io::BufRead>(
         }
     }
     Ok(result)
+}
+
+/// Extracts the step represented by a `ProofCommand`. For a `ProofCommand::Step`, it
+/// is the underlying step. For a `ProofCommand::Subproof`, it is the the conclusion of the subproof.
+fn extract_step(command: &ProofCommand) -> &ProofStep {
+    match command {
+        ProofCommand::Step(step) => step,
+        ProofCommand::Subproof(sp) => {
+            let last_command = sp.commands.last().unwrap();
+            if let ProofCommand::Step(s) = last_command {
+                s
+            } else {
+                panic!("Subproof does not end in step.") // We won't get here because there will already have been a parser error
+            }
+        }
+        // This would only happen if one of the last two commands of a subproof were somehow an assume.
+        // The last can't be because we would have gotten a parser error already.
+        // However, the second to last could be since the parser would not give an error.
+        ProofCommand::Assume { .. } => panic!("Tried to extract step from assume."),
+    }
+}
+
+/// Gets the step to slice as well as everything directly associated with it, i.e., its premises and the subproofs it is in.
+/// Returns a vector containing the step to slice inside a reconstructed subproof stack, preceded by any premises that are not inside a subproof.
+pub fn sliced_step(proof: &Proof, id: &str) -> Option<Vec<ProofCommand>> {
+    const ASSUME_FALSE_OFFSET: usize = 1;
+
+    let mut commands: Vec<ProofCommand> = Vec::new();
+    let mut iter = proof.iter();
+    let mut from_step: Option<&ProofCommand> = None;
+    let mut subproof_stack = Vec::new();
+
+    // Search for the proof step we are trying to slice out.
+    while let Some(command) = iter.next() {
+        /* Maintain a stack of subproofs we've encountered in order to reconstruct
+        nested subproof context if the step we're slicing is in a subproof. */
+        if let ProofCommand::Subproof(sp) = command {
+            subproof_stack.push(sp);
+        }
+        if iter.is_end_step() {
+            subproof_stack.pop();
+        }
+
+        // We have found the step we are trying to slice
+        if command.id() == id {
+            from_step = Some(command);
+            break;
+        }
+    }
+
+    match from_step {
+        None => None,
+        Some(from_step) => {
+            // Construct a stack of subproofs that just contains any added context from its corresponding
+            // subproof in the original proof, any assumes in the subproof, the second-to-last step, and the conclusion.
+            let mut new_subproofs: Vec<Subproof> = Vec::new();
+
+            // The step we're slicing is a "subproof" when it's the last step of a subproof. However,
+            // the last step of a subproof isn't really "inside" that subproof in the same sense
+            // as the other steps. It doesn't rely on the anchor or assumptions,
+            // so we shouldn't copy them.
+            if let ProofCommand::Subproof(_) = from_step {
+                subproof_stack.pop();
+            }
+
+            // Copy all the added context from the stack of open subproofs.
+            for sp in &subproof_stack {
+                new_subproofs.push(Subproof {
+                    commands: Vec::new(),
+                    args: sp.args.clone(),
+                    context_id: sp.context_id,
+                });
+                let current_subproof = new_subproofs.last_mut().unwrap();
+                // Add assumes and second to last step
+                for command in &sp.commands {
+                    if command.is_assume() {
+                        current_subproof.commands.push(command.clone());
+                    } else {
+                        break;
+                    }
+                }
+                let len = sp.commands.len();
+
+                // Create the second-to-last (penultimate) step of the subproof using the special trust rule.
+                let penult = &sp.commands[len - 2];
+                let penult_step = extract_step(penult);
+                let new_penult_step = ProofStep {
+                    id: penult_step.id.clone(),
+                    clause: penult_step.clause.clone(),
+                    rule: "trust".to_owned(),
+                    premises: Vec::new(),
+                    args: penult_step.args.clone(),
+                    discharge: Vec::new(),
+                };
+
+                // Create the last step of the subproof using the same rule that originally closed the subproof.
+                let ult = &sp.commands[len - 1];
+                let ult_step = extract_step(ult);
+                let new_ult_step = ProofStep {
+                    id: ult_step.id.clone(),
+                    clause: ult_step.clause.clone(),
+                    rule: ult_step.rule.clone(),
+                    premises: Vec::new(),
+                    args: ult_step.args.clone(),
+                    discharge: ult_step.discharge.clone(),
+                };
+
+                // Add the new versions of the last two steps to the subproof.
+                current_subproof
+                    .commands
+                    .push(ProofCommand::Step(new_penult_step));
+                current_subproof
+                    .commands
+                    .push(ProofCommand::Step(new_ult_step));
+            }
+
+            // Collect all premises of the step being sliced.
+            let goal_command = match from_step {
+                // In this case, we are slicing a normal step. We must create a new step with the same clause and rule, but with premises that are mapped to the new proof.
+                ProofCommand::Step(step) => {
+                    // In this version, this maps the indices of premises in the original proof to the indices of premises in the sliced proof
+                    let mut premise_map: HashMap<(usize, usize), (usize, usize)> = HashMap::new();
+
+                    // Sort the premise indices for ease of processing
+                    let mut sorted_premises = step.premises.clone();
+                    sorted_premises.sort_unstable();
+
+                    // Processed premises are those that have been mapped to premises in the sliced version of the proof
+                    let mut processed_premises: HashSet<(usize, usize)> = HashSet::new();
+
+                    // First, handle each premise that occurs outside of a subproof
+                    for premise in &sorted_premises {
+                        if premise.0 == 0 && processed_premises.insert(*premise) {
+                            let premise_command = iter.get_premise(*premise);
+                            // Construct the new command based on whether the premise is an assume or an Alethe step
+                            let new_command = match premise_command {
+                                // If it's an assume, just copy it verbatim.
+                                ProofCommand::Assume { id: _, term: _ } => premise_command.clone(),
+                                // If it's an Alethe step (represented by a Step or Subproof, )
+                                _ => ProofCommand::Step(ProofStep {
+                                    id: premise_command.id().to_owned(),
+                                    clause: premise_command.clause().to_vec(),
+                                    rule: "trust".to_owned(),
+                                    premises: Vec::new(),
+                                    args: extract_step(premise_command).args.clone(), // I'm not sure if the args are needed, but I'm including them to be safe
+                                    discharge: Vec::new(), // The trust rule doesn't discharge any assumptions
+                                }),
+                            };
+                            commands.push(new_command);
+                            premise_map
+                                .insert(*premise, (0, ASSUME_FALSE_OFFSET + commands.len() - 1));
+                        // Index calculation
+                        } else if premise.0 != 0 {
+                            // Changed to else if to stop early breaking with repeated premise
+                            break;
+                        }
+                    }
+
+                    // Now we need to handle the premises that are in subproofs. We add them to the corresponding subproofs in the new proof and update the premise map accordingly
+                    for premise in &sorted_premises {
+                        if premise.0 == 0 {
+                            continue;
+                        }
+                        let stack_depth = premise.0 - 1; // If depth 1 then index 0 in subproof stack
+
+                        if processed_premises.insert(*premise) {
+                            // Find premise id in current subproof
+                            // If it is present, make premise index its location
+                            // If it is absent, then add as trust step, and premise index should be wherever we add this
+                            let premise_command = iter.get_premise(*premise);
+                            let premise_pos = new_subproofs[stack_depth]
+                                .commands
+                                .iter()
+                                .position(|c| c.id() == premise_command.id());
+                            if let Some(i) = premise_pos {
+                                premise_map.insert(*premise, (premise.0, i));
+                            } else {
+                                let step = ProofStep {
+                                    id: premise_command.id().to_owned(),
+                                    clause: premise_command.clause().to_vec(),
+                                    rule: "trust".to_owned(),
+                                    premises: Vec::new(),
+                                    args: extract_step(premise_command).args.clone(),
+                                    discharge: Vec::new(),
+                                };
+                                // Add as trust step
+                                let len = new_subproofs[stack_depth].commands.len();
+                                new_subproofs[stack_depth]
+                                    .commands
+                                    .insert(len - 2, ProofCommand::Step(step));
+                                let entry =
+                                    (premise.0, new_subproofs[stack_depth].commands.len() - 3); // -1 then -2 because of last two steps
+                                premise_map.insert(*premise, entry);
+                            }
+                        }
+                    }
+
+                    // Now that we have created all the commands and know where they are, we can make a list of the indices of the premises in the new proof
+                    let mut new_premises: Vec<(usize, usize)> = Vec::new();
+                    for premise in &step.premises {
+                        new_premises.push(premise_map[premise]);
+                    }
+                    /*  The step being sliced out gets a unique identifier. s stands for sliced.
+                    This is to avoid naming conflicts when slicing the second to last step of a subproof.
+                    For simplicity, we still copy the second to last step of a subproof even if the
+                    step being sliced is the same.
+                    */
+                    let goal_step = ProofStep {
+                        id: format!("s{}", step.id),
+                        clause: step.clause.clone(),
+                        rule: step.rule.clone(),
+                        premises: new_premises,
+                        args: step.args.clone(),
+                        discharge: Vec::new(),
+                    };
+
+                    ProofCommand::Step(goal_step)
+                }
+
+                // In this case, we are slicing the last step of a subproof. We must create a new subproof with the same context, but with the second-to-last step using the trust rule and the last step using the same rule as before.
+                ProofCommand::Subproof(sp) => {
+                    // First, get the original last command of the subproof.
+                    let last_command = sp.commands.last().unwrap();
+                    let mut goal_command: Option<ProofCommand> = None;
+
+                    // Collect all the assumes in the subproof.
+                    let mut subproof_assumptions = Vec::new();
+
+                    for command in &sp.commands {
+                        if let ProofCommand::Assume { .. } = command {
+                            subproof_assumptions.push(command.clone());
+                        } else {
+                            break; // Stop when we reach the first non-assume command
+                        }
+                    }
+
+                    // Get the step from the last command.
+                    if let ProofCommand::Step(closing_step) = last_command {
+                        // Create a new subproof with the same context.
+                        let mut new_subproof = Subproof {
+                            args: sp.args.clone(),
+                            commands: Vec::new(),
+                            context_id: sp.context_id,
+                        };
+
+                        // Create the second-to-last step with the trust rule.
+                        let penult = sp.commands[sp.commands.len() - 2].clone();
+                        if let ProofCommand::Step(ps) = penult {
+                            let new_penult = ProofCommand::Step(ProofStep {
+                                id: ps.id.clone(),
+                                clause: ps.clause.clone(),
+                                rule: "trust".to_owned(),
+                                premises: Vec::new(),
+                                args: ps.args.clone(),
+                                discharge: Vec::new(),
+                            });
+                            // Add all of the assumptions.
+                            for a in subproof_assumptions {
+                                new_subproof.commands.push(a);
+                            }
+                            // Add the last two steps.
+                            new_subproof.commands.push(new_penult);
+                            new_subproof
+                                .commands
+                                .push(ProofCommand::Step(closing_step.clone()));
+
+                            goal_command = Some(ProofCommand::Subproof(new_subproof));
+                        }
+                    }
+                    goal_command.expect("Goal command never got set") // This should never happen
+                }
+
+                ProofCommand::Assume { .. } => return None, // Return none if the command being sliced exists but is not a step or a subproof
+            };
+
+            // Build up the subproof structure the sliced step is in, starting with the innermost subproof.
+            if new_subproofs.is_empty() {
+                commands.push(goal_command);
+            } else {
+                let last_commands = &mut new_subproofs.last_mut().unwrap().commands;
+                let len = last_commands.len();
+                last_commands.insert(len - 2, goal_command);
+
+                let mut iter = new_subproofs.into_iter().rev();
+                let mut outer = iter.next();
+                for mut subproof in iter {
+                    let len = subproof.commands.len();
+                    subproof
+                        .commands
+                        .insert(len - 2, ProofCommand::Subproof(outer.unwrap()));
+                    outer = Some(subproof);
+                }
+
+                commands.push(ProofCommand::Subproof(outer.unwrap()));
+            }
+            Some(commands)
+        }
+    }
+}
+
+/// Slices a step with its associated subproof structure and constructs a proof containing that step.
+/// The beginning of the proof is an assumption of false that gets resolved with (not false) in the end.
+pub fn slice(
+    problem: &Problem,
+    proof: &Proof,
+    id: &str,
+    pool: &mut PrimitivePool,
+) -> Option<(Proof, String, String)> {
+    use std::fmt::Write;
+
+    if let Some(sliced_step_commands) = sliced_step(proof, id) {
+        // The resolution premises are (cl false) and (cl (not false)).
+        let mut resolution_premises: Vec<(usize, usize)> = Vec::new();
+        let mut new_proof: Proof = Proof {
+            constant_definitions: proof.constant_definitions.clone(),
+            commands: Vec::new(),
+        };
+        let false_term: Rc<Term> = pool.add(Term::new_bool(false));
+        new_proof.commands.push(ProofCommand::Assume {
+            id: "slice_assume_false".to_owned(),
+            term: false_term.clone(),
+        });
+        for c in &sliced_step_commands {
+            new_proof.commands.push(c.clone());
+        }
+
+        new_proof.commands.push(ProofCommand::Step(ProofStep {
+            id: "slice_not_false".to_owned(),
+            clause: [pool.add(Term::Op(Operator::Not, [false_term.clone()].to_vec()))].to_vec(),
+            rule: "false".to_owned(),
+            premises: Vec::new(),
+            args: Vec::new(),
+            discharge: Vec::new(),
+        }));
+
+        resolution_premises.push((0, 0)); // False
+        resolution_premises.push((0, new_proof.commands.len() - 1)); // Not false
+        let resolution_step = ProofStep {
+            id: "t.end".to_owned(),
+            clause: Vec::new(),
+            rule: "resolution".to_owned(),
+            premises: resolution_premises,
+            args: Vec::new(),
+            discharge: Vec::new(),
+        };
+        new_proof.commands.push(ProofCommand::Step(resolution_step));
+
+        let proof_string = proof_to_string(pool, &problem.prelude, &new_proof, false);
+
+        // Create an assertion in the problem for each assumption in the proof.
+        let mut asserts = Vec::new();
+
+        for command in &new_proof.commands {
+            match command {
+                ProofCommand::Assume { term, .. } => asserts.push(term.clone()),
+                _ => break,
+            }
+        }
+
+        let mut problem_string = String::new();
+        write!(&mut problem_string, "{}", &problem.prelude).unwrap();
+
+        let mut bytes = Vec::new();
+        let _ = ast::printer::write_asserts(pool, &problem.prelude, &mut bytes, &asserts, false);
+        write!(&mut problem_string, "{}", String::from_utf8(bytes).unwrap()).unwrap();
+        writeln!(&mut problem_string, "(check-sat)").unwrap();
+        writeln!(&mut problem_string, "(exit)").unwrap();
+
+        Some((new_proof, problem_string, proof_string))
+    } else {
+        None
+    }
 }
