@@ -43,6 +43,7 @@ pub mod parser;
 mod resolution;
 mod utils;
 
+use crate::ast::ProofIter;
 use crate::benchmarking::{CollectResults, OnlineBenchmarkResults, RunMeasurement};
 use ast::printer::proof_to_string;
 use ast::{
@@ -51,7 +52,7 @@ use ast::{
 use checker::{error::CheckerError, CheckerStatistics};
 use core::panic;
 use parser::{ParserError, Position};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io;
 use std::time::{Duration, Instant};
 use thiserror::Error;
@@ -339,9 +340,116 @@ fn extract_step(command: &ProofCommand) -> &ProofStep {
     }
 }
 
+/// Stores the location of a premise and optionally its links: premises and discharges.
+#[derive(Eq, Hash, PartialEq, PartialOrd, Ord, Debug)]
+struct Premise {
+    /// The index of this premise in the original proof
+    index: (usize, usize),
+    /// The indices of the premieses and discharges of this premise in the original proof
+    links: Option<Vec<(usize, usize)>>,
+}
+
+/// Produces a `ProofIter` to a command with a given id.
+fn get_iter_to_command(proof: &Proof, id: String) -> ProofIter {
+    // Navigate to the command ending the subproof
+    let mut proof_iter = proof.iter();
+    while let Some(command) = proof_iter.next() {
+        if command.id() == id {
+            break;
+        }
+    }
+    proof_iter
+}
+
+fn get_subproof_links(subproof_location: (usize, usize), subproof_iter: ProofIter) -> Vec<(usize, usize)> {
+    // A subproof's "premises" are its second to last step and assumes. \
+    // Get premise's assumes. They're all at the same depth as the premise
+    let mut links = Vec::new();
+    for i in 0.. {
+        if matches!(subproof_iter.get_premise((subproof_location.0, i)), &ProofCommand::Assume { .. }){
+            links.push((subproof_location.0, i));
+        } else {
+            break;
+        }
+    }
+    // Get second to last step of subproof
+    links.push((subproof_location.0, subproof_location.1 - 1)); 
+
+    links
+}
+
+/// Returns the premises of `step` to distance `max_distance` in sorted order.
+fn get_transitive_premises(proof: &Proof, step: &ProofCommand, max_distance: usize) -> Vec<Premise> {
+    // A queue to store proof steps whose links we need to add
+    let mut queue: VecDeque<(&ProofCommand, usize)> = VecDeque::new();
+    let mut transitive_premises: HashSet<Premise> = HashSet::new();
+    let mut proof_iter = proof.iter(); 
+
+    // get_premise only works of the iterator has been moved to the right part of the proof because the 
+    // indices are relative, so we move the iterator to the input step
+    while let Some(command) = proof_iter.next() {
+        if command.id() == step.id() {
+            break;
+        }
+    }
+    
+    queue.push_back((step, max_distance));
+    while let Some((step, d)) = queue.pop_front() {
+        match step {
+            ProofCommand::Step(step) => {
+                for premise in &step.premises {
+            if d == 0 {
+                transitive_premises.insert(Premise { index: *premise, links: None });
+            } else {
+                let premise_command = proof_iter.get_premise(*premise);
+                let mut links :Vec<(usize, usize)> = Vec::new();
+                match premise_command {
+                    ProofCommand::Step(premise_step) => {
+                        links.append(&mut premise_step.premises.clone());
+                     }
+                    ProofCommand::Subproof(premise_subproof) => {
+                        // Navigate to the command ending the subproof
+                        let mut subproof_iter = get_iter_to_command(proof, premise_command.id().to_owned());
+                        links.append(&mut get_subproof_links(*premise, subproof_iter));
+                    }
+                    ProofCommand::Assume { .. } => {}
+                }
+                
+                transitive_premises.insert(Premise {
+                    index: *premise,
+                    links: Some(links),
+                });
+
+                queue.push_back((premise_command, d - 1));
+            }
+        }
+            },
+            ProofCommand::Assume { .. } => {
+                // Intentionally blank. Assumes don't have any premises for us to retrieve.
+            },
+
+            ProofCommand::Subproof(subproof) => {
+                // TODO
+            }
+        }
+        
+    }
+
+    let mut output: Vec<Premise> = transitive_premises.into_iter().collect();
+    output.sort_unstable();
+    output
+    
+    
+}
+
 /// Gets the step to slice as well as everything directly associated with it, i.e., its premises and the subproofs it is in.
 /// Returns a vector containing the step to slice inside a reconstructed subproof stack, preceded by any premises that are not inside a subproof.
-pub fn sliced_step(proof: &Proof, id: &str, pool: &mut PrimitivePool) -> Option<Vec<ProofCommand>> {
+pub fn sliced_step(
+    proof: &Proof,
+    id: &str,
+    pool: &mut PrimitivePool,
+    max_distance: usize,
+) -> Option<Vec<ProofCommand>> {
     const ASSUME_FALSE_OFFSET: usize = 1;
 
     let mut commands: Vec<ProofCommand> = Vec::new();
@@ -443,23 +551,38 @@ pub fn sliced_step(proof: &Proof, id: &str, pool: &mut PrimitivePool) -> Option<
                     // In this version, this maps the indices of premises in the original proof to the indices of premises in the sliced proof
                     let mut premise_map: HashMap<(usize, usize), (usize, usize)> = HashMap::new();
 
-                    // Sort the premise indices for ease of processing
-                    let mut sorted_premises = step.premises.clone();
-                    sorted_premises.sort_unstable();
-
-                    // Processed premises are those that have been mapped to premises in the sliced version of the proof
-                    let mut processed_premises: HashSet<(usize, usize)> = HashSet::new();
+                    let transitive_premises = get_transitive_premises(proof, from_step, max_distance);
 
                     // First, handle each premise that occurs outside of a subproof
-                    for premise in &sorted_premises {
-                        if premise.0 == 0 && processed_premises.insert(*premise) {
-                            let premise_command = iter.get_premise(*premise);
+                    for premise in &transitive_premises {
+                        if premise.index.0 == 0 && !premise_map.contains_key(&premise.index) {
+                            let premise_command = iter.get_premise(premise.index);
                             // Construct the new command based on whether the premise is an assume or an Alethe step
                             let new_command = match premise_command {
                                 // If it's an assume, just copy it verbatim.
                                 ProofCommand::Assume { id: _, term: _ } => premise_command.clone(),
+
+                                ProofCommand::Step(step) => {
+                                    ProofCommand::Step(if let Some(links) = &premise.links {
+                                        let premises = links
+                                            .iter()
+                                            .map(|index| premise_map[index])
+                                            .collect();
+                                        ProofStep { premises, ..step.clone() }
+                                    } else {
+                                        ProofStep {
+                                            id: premise_command.id().to_owned(),
+                                            clause: premise_command.clause().to_vec(),
+                                            rule: "hole".to_owned(),
+                                            premises: Vec::new(),
+                                            args: vec![trust.clone()],
+                                            discharge: Vec::new(), // The trust rule doesn't discharge any assumptions
+                                        }
+                                    })
+                                }
+
                                 // If it's an Alethe step (represented by a Step or Subproof, )
-                                _ => ProofCommand::Step(ProofStep {
+                                ProofCommand::Subproof(_) => ProofCommand::Step(ProofStep {
                                     id: premise_command.id().to_owned(),
                                     clause: premise_command.clause().to_vec(),
                                     rule: "hole".to_owned(),
@@ -469,33 +592,35 @@ pub fn sliced_step(proof: &Proof, id: &str, pool: &mut PrimitivePool) -> Option<
                                 }),
                             };
                             commands.push(new_command);
-                            premise_map
-                                .insert(*premise, (0, ASSUME_FALSE_OFFSET + commands.len() - 1));
+                            premise_map.insert(
+                                premise.index,
+                                (0, ASSUME_FALSE_OFFSET + commands.len() - 1),
+                            );
                         // Index calculation
-                        } else if premise.0 != 0 {
+                        } else if premise.index.0 != 0 {
                             // Changed to else if to stop early breaking with repeated premise
                             break;
                         }
                     }
 
                     // Now we need to handle the premises that are in subproofs. We add them to the corresponding subproofs in the new proof and update the premise map accordingly
-                    for premise in &sorted_premises {
-                        if premise.0 == 0 {
+                    for premise in &transitive_premises {
+                        if premise.index.0 == 0 {
                             continue;
                         }
-                        let stack_depth = premise.0 - 1; // If depth 1 then index 0 in subproof stack
+                        let stack_depth = premise.index.0 - 1; // If depth 1 then index 0 in subproof stack
 
-                        if processed_premises.insert(*premise) {
+                        premise_map.entry(premise.index).or_insert_with(|| {
                             // Find premise id in current subproof
                             // If it is present, make premise index its location
                             // If it is absent, then add as trust step, and premise index should be wherever we add this
-                            let premise_command = iter.get_premise(*premise);
+                            let premise_command = iter.get_premise(premise.index);
                             let premise_pos = new_subproofs[stack_depth]
                                 .commands
                                 .iter()
                                 .position(|c| c.id() == premise_command.id());
                             if let Some(i) = premise_pos {
-                                premise_map.insert(*premise, (premise.0, i));
+                                (premise.index.0, i)
                             } else {
                                 let step = ProofStep {
                                     id: premise_command.id().to_owned(),
@@ -510,11 +635,13 @@ pub fn sliced_step(proof: &Proof, id: &str, pool: &mut PrimitivePool) -> Option<
                                 new_subproofs[stack_depth]
                                     .commands
                                     .insert(len - 2, ProofCommand::Step(step));
-                                let entry =
-                                    (premise.0, new_subproofs[stack_depth].commands.len() - 3); // -1 then -2 because of last two steps
-                                premise_map.insert(*premise, entry);
+                                // -1 then -2 because of last two steps
+                                (
+                                    premise.index.0,
+                                    new_subproofs[stack_depth].commands.len() - 3,
+                                )
                             }
-                        }
+                        });
                     }
 
                     // Now that we have created all the commands and know where they are, we can make a list of the indices of the premises in the new proof
@@ -627,10 +754,11 @@ pub fn slice(
     proof: &Proof,
     id: &str,
     pool: &mut PrimitivePool,
+    max_distance: usize,
 ) -> Option<(Proof, String, String)> {
     use std::fmt::Write;
 
-    if let Some(sliced_step_commands) = sliced_step(proof, id, pool) {
+    if let Some(sliced_step_commands) = sliced_step(proof, id, pool, max_distance) {
         // The resolution premises are (cl false) and (cl (not false)).
         let mut resolution_premises: Vec<(usize, usize)> = Vec::new();
         let mut new_proof: Proof = Proof {
