@@ -4,30 +4,39 @@ use std::io;
 
 // TODO: struct for future actual formatting concerns
 // TODO: change this to a proper formatter for TSTP
-/// A formatter for S-expressions.
-pub struct SExpFormatter<'a> {
+/// A formatter for annotated formulas.
+pub struct AnnotatedFormulaFormatter<'a> {
     sink: &'a mut dyn io::Write,
 }
 
-impl<'a> SExpFormatter<'a> {
+impl<'a> AnnotatedFormulaFormatter<'a> {
     pub fn new(sink: &'a mut dyn io::Write) -> Self {
-        SExpFormatter { sink }
+        AnnotatedFormulaFormatter { sink }
     }
 
-    // Prints an s-expression with properly formatted concrete syntax, and
-    // separating it from surrounding s-expressions.
-    fn write_s_expr(&mut self, tag: &str, args: &[String]) -> io::Result<()> {
+    // Prints an annotated formula with properly formatted concrete syntax, and
+    // separating it from surrounding formulas.
+    fn write_annotated_formula(&mut self, language: &str, args: &[String]) -> io::Result<()> {
         if args.is_empty() {
-            // S-expression is a constant
-            write!(self.sink, "{}", tag)?;
+            panic!();
         } else {
             // {not args.is_empty()}
-            // S-expression has the form (tag arg1 ...)
+            // Formula of the form language(arg1 ...)
+            write!(self.sink, "{}", language)?;
             write!(self.sink, "(")?;
-            write!(self.sink, "{}", tag)?;
-            // TODO: how to propagate errors from within the lambda abstraction?
+            // TODO: some more idiomatic way of dealing with this?
+            let mut first_element = true;
             args.iter().for_each(|arg| {
-                let _ = write!(self.sink, " {}", arg);
+                if first_element {
+                    let _ = write!(self.sink, "{}", arg);
+                    first_element = false;
+                } else {
+                    // {not first_element}
+                    // There might be optional arguments, we filter them.
+                    if !arg.is_empty() {
+                        let _ = write!(self.sink, ", {}", arg);
+                    }
+                }
             });
 
             write!(self.sink, ")")?;
@@ -41,8 +50,8 @@ impl<'a> SExpFormatter<'a> {
 
 pub struct TstpPrinter<'a> {
     // Where to write.
-    // TODO: use something different that an SExpFormatter
-    formatted_sink: SExpFormatter<'a>,
+    // TODO: use something different that an AnnotatedFormulaFormatter
+    formatted_sink: AnnotatedFormulaFormatter<'a>,
 }
 
 pub trait PrintProof {
@@ -52,7 +61,7 @@ pub trait PrintProof {
 impl<'a> PrintProof for TstpPrinter<'a> {
     /// Formatted proof printing.
     fn write_proof(&mut self, proof: &TstpProof) -> io::Result<()> {
-        let mut tag: String;
+        let mut language_as_str: String;
         let mut args: Vec<String>;
 
         // TODO: some generic way of doing this? maybe with macros?
@@ -66,19 +75,17 @@ impl<'a> PrintProof for TstpPrinter<'a> {
                 useful_info: _,
             } = command;
             {
-                // TODO: polish this with a proper formatted sink
-                let _ = self
-                    .formatted_sink
-                    .write_s_expr(&TstpPrinter::language_to_concrete_syntax(language), &[]);
-                tag = name.clone();
+                language_as_str = TstpPrinter::language_to_concrete_syntax(language);
                 args = vec![
+                    name.clone(),
                     TstpPrinter::role_to_concrete_syntax(role),
                     TstpPrinter::formula_to_concrete_syntax(formula),
                     // TODO: discarding source and useful_info
                     "".to_owned(),
                     "".to_owned(),
                 ];
-                self.formatted_sink.write_s_expr(&tag, &args)?;
+                self.formatted_sink
+                    .write_annotated_formula(&language_as_str, &args)?;
             }
         }
 
@@ -87,7 +94,7 @@ impl<'a> PrintProof for TstpPrinter<'a> {
 }
 
 impl<'a> TstpPrinter<'a> {
-    pub fn new(dest: SExpFormatter<'a>) -> Self {
+    pub fn new(dest: AnnotatedFormulaFormatter<'a>) -> Self {
         Self { formatted_sink: dest }
     }
 
