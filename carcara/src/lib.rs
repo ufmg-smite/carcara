@@ -350,6 +350,12 @@ fn get_iter_to_command<'a>(proof: &'a Proof, id: &'a str) -> (ProofIter<'a>, &'a
     panic!("Invalid command to get proof iterator to.");
 }
 
+/// 
+#[derive (Default)]
+struct PremiseIds {
+    premises : Vec<String>,
+    discharge : Vec<String>
+}
 
 /// Produces a map containing the ids of the transitive premises of the input step and 
 /// bools denoting whether we need the premises of those premises.
@@ -357,43 +363,49 @@ fn get_transitive_premises(
     proof: &Proof,
     step_id: String,
     max_distance: usize,
-) -> HashMap<String, bool> {
+) -> (HashMap<String, bool>, HashMap<String, PremiseIds>) {
     let mut queue: VecDeque<(String, usize)> = VecDeque::new();
-    let mut map: HashMap<String, bool> = HashMap::new();
+    let mut id_to_keep_premises: HashMap<String, bool> = HashMap::new();
+    let mut id_to_premise_ids: HashMap<String, PremiseIds> = HashMap::new();
 
     queue.push_back((step_id, max_distance));
     while let Some((step_id, d)) = queue.pop_front() {
         // Get an iterator for each step we are handling to make sure we get the right premises.
         let (proof_iter, step) = get_iter_to_command(proof, &step_id);
-        let need_premises = d != 0;
+        let keep_premises = d != 0;
         match step {
             ProofCommand::Assume { .. } => {
                 // Intentionally blank
             }
             ProofCommand::Step(proof_step) => {
-                // Add the ids of the premises of the step we're processing to the map
+                // Add the ids of the premises of the step we're processing to the maps
+                let mut premise_entries: Vec<String> = Vec::new();
                 for premise in &proof_step.premises {
                     let premise = proof_iter.get_premise(*premise);
-                    map.insert(premise.id().to_owned(), need_premises); // True if we need to retrieve premises, false otherwise
-                    if need_premises {
+                    id_to_keep_premises.insert(premise.id().to_owned(), keep_premises); // True if we need to retrieve premises, false otherwise
+                    if keep_premises {
                         queue.push_back((premise.id().to_owned(), d - 1));
+                        premise_entries.push(premise.id().to_owned());
                     }
                     
                 }
+                let mut discharge_entries: Vec<String> = Vec::new();
                 for premise in &proof_step.discharge {
                     let premise = proof_iter.get_premise(*premise);
-                    map.insert(premise.id().to_owned(), need_premises); // True if we need to retrieve premises, false otherwise
-                    if need_premises {
+                    id_to_keep_premises.insert(premise.id().to_owned(), keep_premises); // True if we need to retrieve premises, false otherwise
+                    if keep_premises {
                         queue.push_back((premise.id().to_owned(), d - 1));
-                    }
-                    
+                        discharge_entries.push(premise.id().to_owned());
+                    } 
                 }
+
+                id_to_premise_ids.insert(step_id, PremiseIds { premises: premise_entries, discharge: discharge_entries });
             }
             ProofCommand::Subproof(subproof) => {
                 // Get assumes
                 for command in &subproof.commands {
                     if command.is_assume() {
-                        map.insert(command.id().to_owned(), false);
+                        id_to_keep_premises.insert(command.id().to_owned(), false);
                     } else {
                         break;
                     }
@@ -401,20 +413,19 @@ fn get_transitive_premises(
 
                 // Get second to last step
                 let penult = &subproof.commands[subproof.commands.len() - 2];
-                map.insert(penult.id().to_owned(), need_premises);
-                if need_premises {
+                id_to_keep_premises.insert(penult.id().to_owned(), keep_premises);
+                if keep_premises {
                     queue.push_back((penult.id().to_owned(), d - 1));
                 }
             }
         }
     }
 
-    return map;
+    (id_to_keep_premises, id_to_premise_ids)
 }
 
+#[derive (Debug)]
 struct Frame {
-    /// A map from the indices in the original subproof to the indices in the new one
-    map: HashMap<(usize, usize), (usize, usize)>,
     /// The position we are at now in this subproof. It's the i of a (d, i) pair.
     current_position: usize,
     /// The commands of this subproof
@@ -434,6 +445,8 @@ pub fn sliced_step(
     let mut iter = proof.iter();
     let mut from_step: Option<&ProofCommand> = None;
     let mut subproof_stack = Vec::new();
+
+    let mut id_to_index: HashMap<String, (usize, usize)> = HashMap::new();
 
     // The constant string trust to be used in the args list for every trust step
     let trust = pool.add(Term::new_string("trust"));
@@ -483,7 +496,8 @@ pub fn sliced_step(
         }
     };
 
-    let mut to_keep = get_transitive_premises(proof, from_step.id().to_owned(), max_distance);
+    let (mut to_keep,  id_to_premise_ids) = get_transitive_premises(proof, from_step.id().to_owned(), max_distance);
+    to_keep.insert(id.to_owned(), true);
     for id in subproof_skeleton_ids {
         if !to_keep.contains_key(&id) {
             to_keep.insert(id, false);
@@ -494,7 +508,6 @@ pub fn sliced_step(
 
     // Maintain maps for each subproof we encounter. Keep track of stacks properly
     let mut stack: Vec<Frame> = vec![Frame {
-        map: HashMap::new(),
         current_position: ASSUME_FALSE_OFFSET,
         commands: Vec::new(),
     }];
@@ -513,18 +526,15 @@ pub fn sliced_step(
                 // If the command is a step, either copy it with its original rule and its premises and discharges determined using
                 // this subproof's map or hole.
                 ProofCommand::Step(proof_step) => {
-                    let top_map = &stack[stack_len - 1].map;
+                    
                     let step = if need_premises {
-                        let premises: Vec<(usize, usize)> = proof_step
-                            .premises
-                            .iter()
-                            .map(|index| top_map[index])
-                            .collect();
-                        let discharge: Vec<(usize, usize)> = proof_step
-                            .discharge
-                            .iter()
-                            .map(|index| top_map[index])
-                            .collect();
+                        let (premises, discharge) = if let Some(premise_ids) = id_to_premise_ids.get(command.id()) {
+                            (premise_ids.premises.iter().map(|s| id_to_index[s]).collect(), 
+                            premise_ids.discharge.iter().map(|s| id_to_index[s]).collect())
+                        } else {
+                            (Vec::new(), Vec::new())
+                        };
+                        
                         ProofStep {
                             premises,
                             discharge,
@@ -543,17 +553,15 @@ pub fn sliced_step(
                     stack[stack_len - 1].commands.push(ProofCommand::Step(step));
                     stack[stack_len - 1].current_position += 1;
 
-                    if copy_iter.is_end_step() {
-                        // Use split_at_mut to get non-overlapping mutable references
-                        let (bottom, top) = stack.split_at_mut(stack_len - 1);
-                        let subproof = bottom[stack_len - 2].commands.last_mut().unwrap();
-                        if let ProofCommand::Subproof(subproof) = subproof {
-                            for sp_command in &top[0].commands {
-                                subproof.commands.push(sp_command.clone());
-                            }
-                        }
-                        stack.pop();
+                    // If this step ends a subproof, we need to put all the commands of that subproof into the subproof struct in the previous stack frame.
+                    if copy_iter.is_end_step() && need_premises {
+                        // Pop the last frame and add its commands to the previous one.
+                        let mut popped_frame = stack.pop().unwrap();
+                        let prev = stack.last_mut().unwrap();
+                        let ProofCommand::Subproof(sp) = prev.commands.last_mut().unwrap() else {panic!("Expected subproof")};
+                        sp.commands.append(&mut popped_frame.commands);
                     }
+                    
                 }
                 ProofCommand::Subproof(subproof) => {
                     // If we need the premises of this subproof step, create a subproof command.
@@ -566,15 +574,17 @@ pub fn sliced_step(
                                 args: subproof.args.clone(),
                                 context_id: subproof.context_id.clone(),
                             }));
-                        stack[stack_len - 1].current_position += 1;
+                        stack[stack_len - 1].current_position += 1; // TODO: Check if I'm updating this consistently with proof iter treatment
+                        println!("Pushing to stack");
                         stack.push(Frame {
-                            map: HashMap::new(),
                             current_position: 0,
                             commands: Vec::new(),
                         });
                     }
                 }
             }
+            let last_placed = (stack.len() - 1, stack[stack.len() - 1].current_position);
+            id_to_index.insert(command.id().to_owned(), last_placed);
         }
     }
 
