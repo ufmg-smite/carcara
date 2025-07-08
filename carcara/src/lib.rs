@@ -318,26 +318,6 @@ pub fn generate_lia_smt_instances<T: io::BufRead>(
     Ok(result)
 }
 
-/// Extracts the step represented by a `ProofCommand`. For a `ProofCommand::Step`, it
-/// is the underlying step. For a `ProofCommand::Subproof`, it is the the conclusion of the subproof.
-fn extract_step(command: &ProofCommand) -> &ProofStep {
-    match command {
-        ProofCommand::Step(step) => step,
-        ProofCommand::Subproof(sp) => {
-            let last_command = sp.commands.last().unwrap();
-            if let ProofCommand::Step(s) = last_command {
-                s
-            } else {
-                panic!("Subproof does not end in step.") // We won't get here because there will already have been a parser error
-            }
-        }
-        // This would only happen if one of the last two commands of a subproof were somehow an assume.
-        // The last can't be because we would have gotten a parser error already.
-        // However, the second to last could be since the parser would not give an error.
-        ProofCommand::Assume { .. } => panic!("Tried to extract step from assume."),
-    }
-}
-
 /// Produces a `ProofIter` to a command with a given id.
 fn get_iter_to_command<'a>(proof: &'a Proof, id: &'a str) -> (ProofIter<'a>, &'a ProofCommand) {
     // Navigate to the command ending the subproof
@@ -351,12 +331,11 @@ fn get_iter_to_command<'a>(proof: &'a Proof, id: &'a str) -> (ProofIter<'a>, &'a
 }
 
 /// 
-#[derive (Default)]
+#[derive (Debug)]
 struct PremiseIds {
     premises : Vec<String>,
     discharge : Vec<String>
 }
-
 /// Produces a map containing the ids of the transitive premises of the input step and 
 /// bools denoting whether we need the premises of those premises.
 fn get_transitive_premises(
@@ -368,44 +347,46 @@ fn get_transitive_premises(
     let mut id_to_keep_premises: HashMap<String, bool> = HashMap::new();
     let mut id_to_premise_ids: HashMap<String, PremiseIds> = HashMap::new();
 
-    queue.push_back((step_id, max_distance));
+    queue.push_back((step_id, max_distance + 1));
     while let Some((step_id, d)) = queue.pop_front() {
         // Get an iterator for each step we are handling to make sure we get the right premises.
         let (proof_iter, step) = get_iter_to_command(proof, &step_id);
         let keep_premises = d != 0;
         match step {
             ProofCommand::Assume { .. } => {
-                // Intentionally blank
-            }
+                id_to_keep_premises.insert(step.id().to_owned(), false);
+                id_to_premise_ids.insert(step.id().to_owned(), PremiseIds { premises: Vec::new(), discharge: Vec::new() });
+            },
             ProofCommand::Step(proof_step) => {
-                // Add the ids of the premises of the step we're processing to the maps
-                let mut premise_entries: Vec<String> = Vec::new();
-                for premise in &proof_step.premises {
-                    let premise = proof_iter.get_premise(*premise);
-                    id_to_keep_premises.insert(premise.id().to_owned(), keep_premises); // True if we need to retrieve premises, false otherwise
-                    if keep_premises {
+                id_to_keep_premises.insert(step.id().to_owned(), keep_premises);
+                if keep_premises {
+                    let mut premise_entries: Vec<String> = Vec::new();
+                    let mut discharge_entries: Vec<String> = Vec::new();
+                    // Add the premises to the queue to be processed
+                    for premise in &proof_step.premises {
+                        let premise = proof_iter.get_premise(*premise);
                         queue.push_back((premise.id().to_owned(), d - 1));
                         premise_entries.push(premise.id().to_owned());
                     }
-                    
-                }
-                let mut discharge_entries: Vec<String> = Vec::new();
-                for premise in &proof_step.discharge {
-                    let premise = proof_iter.get_premise(*premise);
-                    id_to_keep_premises.insert(premise.id().to_owned(), keep_premises); // True if we need to retrieve premises, false otherwise
-                    if keep_premises {
+                    for premise in &proof_step.discharge {
+                        let premise = proof_iter.get_premise(*premise);
                         queue.push_back((premise.id().to_owned(), d - 1));
                         discharge_entries.push(premise.id().to_owned());
-                    } 
-                }
+                    }
+                    id_to_premise_ids.insert(step_id, PremiseIds { premises: premise_entries, discharge: discharge_entries });
 
-                id_to_premise_ids.insert(step_id, PremiseIds { premises: premise_entries, discharge: discharge_entries });
-            }
+                } else {
+                    id_to_premise_ids.insert(step_id, PremiseIds { premises: Vec::new(), discharge: Vec::new() });
+                }
+             }, 
             ProofCommand::Subproof(subproof) => {
-                // Get assumes
-                for command in &subproof.commands {
+            id_to_keep_premises.insert(step.id().to_owned(), keep_premises);
+            let mut discharge: Vec<String> = Vec::new();
+            if keep_premises {
+               for command in &subproof.commands {
                     if command.is_assume() {
-                        id_to_keep_premises.insert(command.id().to_owned(), false);
+                        queue.push_back((command.id().to_owned(), 0));
+                        discharge.push(command.id().to_owned());
                     } else {
                         break;
                     }
@@ -413,16 +394,19 @@ fn get_transitive_premises(
 
                 // Get second to last step
                 let penult = &subproof.commands[subproof.commands.len() - 2];
-                id_to_keep_premises.insert(penult.id().to_owned(), keep_premises);
-                if keep_premises {
-                    queue.push_back((penult.id().to_owned(), d - 1));
-                }
+                queue.push_back((penult.id().to_owned(), d - 1));
+                discharge.push(penult.id().to_owned());
+            id_to_premise_ids.insert(step.id().to_owned(), PremiseIds { premises: Vec::new(), discharge });
+
             }
+        }
+
         }
     }
 
     (id_to_keep_premises, id_to_premise_ids)
 }
+
 
 #[derive (Debug)]
 struct Frame {
@@ -472,37 +456,36 @@ pub fn sliced_step(
     let Some(from_step) = from_step else {
         return None;
     };
-    let subproof_skeleton_ids: Vec<String> = match from_step {
+
+    let (mut to_keep,  id_to_premise_ids) = get_transitive_premises(proof, from_step.id().to_owned(), max_distance);
+
+
+    match from_step {
         ProofCommand::Assume { .. } => return None,
         ProofCommand::Step(_) | ProofCommand::Subproof(_) => {
-            let mut skeletons = Vec::new();
             for sp in subproof_stack {
                 // Get assumes
                 for command in &sp.commands {
                     if command.is_assume() {
-                        skeletons.push(command.id().to_owned());
+                        to_keep.insert(command.id().to_owned(), false);
                     } else {
                         break;
                     }
                 }
                 // Get second to last step
                 let penult = &sp.commands[sp.commands.len() - 2];
-                skeletons.push(penult.id().to_owned());
+                if !to_keep.contains_key(penult.id()) {
+                    to_keep.insert(penult.id().to_owned(), false);
+                }
+
                 // Get last step
                 let ult = &sp.commands[sp.commands.len() - 1];
-                skeletons.push(ult.id().to_owned());
+                to_keep.insert(ult.id().to_owned(), true); // We always need the "premises" of the last step of a subproof
             }
-            skeletons
+            
         }
     };
 
-    let (mut to_keep,  id_to_premise_ids) = get_transitive_premises(proof, from_step.id().to_owned(), max_distance);
-    to_keep.insert(id.to_owned(), true);
-    for id in subproof_skeleton_ids {
-        if !to_keep.contains_key(&id) {
-            to_keep.insert(id, false);
-        }
-    }
 
     let mut copy_iter = proof.iter();
 
@@ -513,24 +496,28 @@ pub fn sliced_step(
     }];
 
     while let Some(command) = copy_iter.next() {
-        println!("{}", command.id());
+
         // Check if we want to copy this command
         if let Some(&need_premises) = to_keep.get(command.id()) {
             let stack_len = stack.len();
             match command {
                 // If the command is an assume, copy it in the most straightforward ay.
                 ProofCommand::Assume { .. } => {
+                    let last_placed = (stack.len() - 1, stack[stack.len() - 1].current_position);
                     stack[stack_len - 1].commands.push(command.clone());
                     stack[stack_len - 1].current_position += 1;
+                    
+                    id_to_index.insert(command.id().to_owned(), last_placed);
                 }
                 // If the command is a step, either copy it with its original rule and its premises and discharges determined using
                 // this subproof's map or hole.
                 ProofCommand::Step(proof_step) => {
-                    
-                    let step = if need_premises {
+                    let step = if need_premises  {
                         let (premises, discharge) = if let Some(premise_ids) = id_to_premise_ids.get(command.id()) {
-                            (premise_ids.premises.iter().map(|s| id_to_index[s]).collect(), 
-                            premise_ids.discharge.iter().map(|s| id_to_index[s]).collect())
+                            (premise_ids.premises.iter().map(|s|  id_to_index[s]).collect(), 
+                            proof_step.discharge.clone())
+                            // The following could work but is unnecessary
+                            // premise_ids.discharge.iter().map(|s| {println!("{}", s); print!("{:#?}", id_to_index[s]); id_to_index[s]}).collect())
                         } else {
                             (Vec::new(), Vec::new())
                         };
@@ -550,6 +537,12 @@ pub fn sliced_step(
                             discharge: Vec::new(), // The trust rule doesn't discharge any assumptions
                         }
                     };
+                    let last_placed = (stack.len() - 1, stack[stack.len() - 1].current_position); 
+                    if !id_to_index.contains_key(command.id()) {
+                        id_to_index.insert(command.id().to_owned(), last_placed);
+                    }
+                    
+
                     stack[stack_len - 1].commands.push(ProofCommand::Step(step));
                     stack[stack_len - 1].current_position += 1;
 
@@ -574,17 +567,20 @@ pub fn sliced_step(
                                 args: subproof.args.clone(),
                                 context_id: subproof.context_id.clone(),
                             }));
+                        let last_placed = (stack.len() - 1, stack[stack.len() - 1].current_position); 
+                        id_to_index.insert(command.id().to_owned(), last_placed);
+                        
                         stack[stack_len - 1].current_position += 1; // TODO: Check if I'm updating this consistently with proof iter treatment
-                        println!("Pushing to stack");
                         stack.push(Frame {
                             current_position: 0,
                             commands: Vec::new(),
                         });
+                        
                     }
                 }
             }
-            let last_placed = (stack.len() - 1, stack[stack.len() - 1].current_position);
-            id_to_index.insert(command.id().to_owned(), last_placed);
+            // let last_placed = (stack.len() - 1, stack[stack.len() - 1].current_position); // Wrong
+            // id_to_index.insert(command.id().to_owned(), last_placed);
         }
     }
 
@@ -639,6 +635,10 @@ pub fn slice(
         };
         new_proof.commands.push(ProofCommand::Step(resolution_step));
 
+        for command in &new_proof.commands {
+            println!("{:?}\n", command);
+        }
+        
         let proof_string = proof_to_string(pool, &problem.prelude, &new_proof, false);
 
         // Create an assertion in the problem for each assumption in the proof.
