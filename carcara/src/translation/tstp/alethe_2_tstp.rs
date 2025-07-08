@@ -932,6 +932,16 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         });
 
         function_declarations.iter().for_each(|pair| {
+            let tstp_type: TstpType = match (pair.1).deref() {
+                Term::Sort(sort) => TstpTranslator::translate_sort(sort),
+
+                _ => {
+                    // It shouldn't be something different than a Sort.
+                    println!("{:?} expected to be a Sort.", &pair.1);
+                    panic!();
+                }
+            };
+
             tstp_prelude.push(TstpAnnotatedFormula {
                 // TODO: some other language?
                 language: TstpLanguage::Tff,
@@ -939,8 +949,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 role: TstpFormulaRole::Type,
                 formula: TstpFormula::Typing(
                     Box::new(TstpFormula::Variable(pair.0.clone())),
-                    // TODO: TstpTranslator::translate_sort(&pair.1)?
-                    TstpType::Universe,
+                    tstp_type,
                 ),
                 source: "".to_owned(),
                 useful_info: "".to_owned(),
