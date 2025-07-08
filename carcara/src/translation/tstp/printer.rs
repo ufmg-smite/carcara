@@ -39,7 +39,7 @@ impl<'a> AnnotatedFormulaFormatter<'a> {
                 }
             });
 
-            write!(self.sink, ")")?;
+            write!(self.sink, ").")?;
         };
 
         writeln!(self.sink)?;
@@ -152,9 +152,17 @@ impl<'a> TstpPrinter<'a> {
             TstpType::Fun(domain, codomain) => {
                 let mut ret = "( ".to_owned();
 
-                domain
-                    .iter()
-                    .for_each(|elem| ret += &TstpPrinter::type_to_concrete_syntax(elem));
+                let mut first_element = true;
+
+                domain.iter().for_each(|elem| {
+                    if first_element {
+                        ret += &TstpPrinter::type_to_concrete_syntax(elem);
+                        first_element = false;
+                    } else {
+                        // { ! first_element }
+                        ret += &(" * ".to_owned() + &TstpPrinter::type_to_concrete_syntax(elem));
+                    }
+                });
 
                 // TODO: hard-coding here the arrow symbol
                 ret += " ) > ";
