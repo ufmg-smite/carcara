@@ -122,10 +122,10 @@ impl<'a> TstpPrinter<'a> {
         }
     }
 
-    fn formula_to_concrete_syntax(term: &TstpFormula) -> String {
-        let mut ret;
+    fn formula_to_concrete_syntax(formula: &TstpFormula) -> String {
+        let mut ret = "".to_owned();
 
-        match term {
+        match formula {
             TstpFormula::Typing(var, type_inhabited) => {
                 ret = TstpPrinter::formula_to_concrete_syntax(var);
                 ret += &(": ".to_owned() + &TstpPrinter::type_to_concrete_syntax(type_inhabited));
@@ -135,7 +135,56 @@ impl<'a> TstpPrinter<'a> {
                 ret = name.clone();
             }
 
+            TstpFormula::OperatorApp(op, operands) => {
+                if TstpPrinter::is_nullary_operator(op) {
+                    assert!(operands.is_empty());
+
+                    ret = TstpPrinter::operator_to_concrete_syntax(op);
+                } else {
+                    // { ! TstpPrinter::is_nullary_operator(op) }
+                    if TstpPrinter::is_unary_operator(op) {
+                        assert!(operands.len() == 1);
+
+                        ret = TstpPrinter::operator_to_concrete_syntax(op)
+                            + " "
+                            + &TstpPrinter::formula_to_concrete_syntax(&operands[0]);
+                    } else {
+                        // { ! TstpPrinter::is_nullary_operator(op) /\
+                        //   ! TstpPrinter::is_unary_operator(op)}
+                        assert!(operands.len() == 2);
+
+                        ret = "( ".to_owned()
+                            + &TstpPrinter::formula_to_concrete_syntax(&operands[0])
+                            + " "
+                            + &TstpPrinter::operator_to_concrete_syntax(op)
+                            + " "
+                            + &TstpPrinter::formula_to_concrete_syntax(&operands[1])
+                            + " )";
+                    }
+                }
+            }
+
+            TstpFormula::FunctorApp(functor, arguments) => {
+                let mut ret = functor.clone() + "(";
+
+                let mut first_element = true;
+
+                arguments.iter().for_each(|argument| {
+                    if first_element {
+                        ret += &TstpPrinter::formula_to_concrete_syntax(argument);
+                        first_element = false;
+                    } else {
+                        // { ! first_element }
+                        ret +=
+                            &(", ".to_owned() + &TstpPrinter::formula_to_concrete_syntax(argument));
+                    }
+                });
+
+                ret += ")";
+            }
+
             _ => {
+                println!("No defined translation for formula {:?}", formula);
                 panic!();
             }
         }
@@ -180,22 +229,51 @@ impl<'a> TstpPrinter<'a> {
         }
     }
 
-    // fn operator_to_concrete_syntax(op: &EunoiaOperator) -> String {
-    //     match op {
-    //         EunoiaOperator::Xor => "xor".to_owned(),
+    fn operator_to_concrete_syntax(op: &TstpOperator) -> String {
+        match op {
+            // Logic
+            TstpOperator::Not => "~".to_owned(),
 
-    //         EunoiaOperator::Not => "not".to_owned(),
+            TstpOperator::And => "&".to_owned(),
 
-    //         // NOTE: these are the symbols used in theory.eo
-    //         EunoiaOperator::Eq => "=".to_owned(),
+            TstpOperator::Or => "|".to_owned(),
 
-    //         EunoiaOperator::GreaterThan => ">".to_owned(),
+            TstpOperator::True => "$true".to_owned(),
 
-    //         EunoiaOperator::GreaterEq => ">=".to_owned(),
+            TstpOperator::False => "$false".to_owned(),
 
-    //         EunoiaOperator::LessThan => "<".to_owned(),
+            // Relations
+            TstpOperator::Equality => "=".to_owned(),
 
-    //         EunoiaOperator::LessEq => "<=".to_owned(),
-    //     }
-    // }
+            TstpOperator::Inequality => "!=".to_owned(),
+
+            TstpOperator::Uminus => "-".to_owned(),
+
+            _ => panic!(),
+        }
+    }
+
+    /// Query functions to help with the lack of expressiveness of the grammar
+    /// being used to represent TPTP/TSTP.
+    fn is_unary_operator(op: &TstpOperator) -> bool {
+        match op {
+            // Unary operators
+            TstpOperator::Not => true,
+
+            TstpOperator::Uminus => true,
+
+            _ => false,
+        }
+    }
+
+    fn is_nullary_operator(op: &TstpOperator) -> bool {
+        match op {
+            // Unary operators
+            TstpOperator::True => true,
+
+            TstpOperator::False => true,
+
+            _ => false,
+        }
+    }
 }
