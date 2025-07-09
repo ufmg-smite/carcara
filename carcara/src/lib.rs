@@ -347,18 +347,21 @@ fn get_transitive_premises(
     let mut id_to_keep_premises: HashMap<String, bool> = HashMap::new();
     let mut id_to_premise_ids: HashMap<String, PremiseIds> = HashMap::new();
 
+    
     queue.push_back((step_id, max_distance + 1));
     while let Some((step_id, d)) = queue.pop_front() {
         // Get an iterator for each step we are handling to make sure we get the right premises.
         let (proof_iter, step) = get_iter_to_command(proof, &step_id);
         let keep_premises = d != 0;
+        // We should always default to needing premises if there's a conflict between what's already in the map and what would be added
+        let keep_premises_no_overwrite = keep_premises || *id_to_keep_premises.get(step.id()).unwrap_or(&false);
         match step {
             ProofCommand::Assume { .. } => {
                 id_to_keep_premises.insert(step.id().to_owned(), false);
                 id_to_premise_ids.insert(step.id().to_owned(), PremiseIds { premises: Vec::new(), discharge: Vec::new() });
             },
             ProofCommand::Step(proof_step) => {
-                id_to_keep_premises.insert(step.id().to_owned(), keep_premises);
+                id_to_keep_premises.insert(step.id().to_owned(), keep_premises_no_overwrite);
                 if keep_premises {
                     let mut premise_entries: Vec<String> = Vec::new();
                     let mut discharge_entries: Vec<String> = Vec::new();
@@ -375,12 +378,10 @@ fn get_transitive_premises(
                     }
                     id_to_premise_ids.insert(step_id, PremiseIds { premises: premise_entries, discharge: discharge_entries });
 
-                } else {
-                    id_to_premise_ids.insert(step_id, PremiseIds { premises: Vec::new(), discharge: Vec::new() });
-                }
+                } 
              }, 
             ProofCommand::Subproof(subproof) => {
-            id_to_keep_premises.insert(step.id().to_owned(), keep_premises);
+            id_to_keep_premises.insert(step.id().to_owned(), keep_premises_no_overwrite);
             let mut discharge: Vec<String> = Vec::new();
             if keep_premises {
                for command in &subproof.commands {
@@ -395,7 +396,6 @@ fn get_transitive_premises(
                 // Get second to last step
                 let penult = &subproof.commands[subproof.commands.len() - 2];
                 queue.push_back((penult.id().to_owned(), d - 1));
-                discharge.push(penult.id().to_owned());
             id_to_premise_ids.insert(step.id().to_owned(), PremiseIds { premises: Vec::new(), discharge });
 
             }
@@ -457,17 +457,20 @@ pub fn sliced_step(
         return None;
     };
 
-    let (mut to_keep,  id_to_premise_ids) = get_transitive_premises(proof, from_step.id().to_owned(), max_distance);
+    let (mut to_keep,  mut id_to_premise_ids) = get_transitive_premises(proof, from_step.id().to_owned(), max_distance);
 
 
     match from_step {
         ProofCommand::Assume { .. } => return None,
         ProofCommand::Step(_) | ProofCommand::Subproof(_) => {
             for sp in subproof_stack {
+                let sp_id = sp.commands.last().unwrap().id();
+                id_to_premise_ids.insert(sp_id.to_owned(), PremiseIds { premises: Vec::new(), discharge: Vec::new() });
                 // Get assumes
                 for command in &sp.commands {
                     if command.is_assume() {
                         to_keep.insert(command.id().to_owned(), false);
+                        id_to_premise_ids.get_mut(sp_id).unwrap().discharge.push(command.id().to_owned());
                     } else {
                         break;
                     }
@@ -516,8 +519,6 @@ pub fn sliced_step(
                         let (premises, discharge) = if let Some(premise_ids) = id_to_premise_ids.get(command.id()) {
                             (premise_ids.premises.iter().map(|s|  id_to_index[s]).collect(), 
                             proof_step.discharge.clone())
-                            // The following could work but is unnecessary
-                            // premise_ids.discharge.iter().map(|s| {println!("{}", s); print!("{:#?}", id_to_index[s]); id_to_index[s]}).collect())
                         } else {
                             (Vec::new(), Vec::new())
                         };
@@ -570,7 +571,7 @@ pub fn sliced_step(
                         let last_placed = (stack.len() - 1, stack[stack.len() - 1].current_position); 
                         id_to_index.insert(command.id().to_owned(), last_placed);
                         
-                        stack[stack_len - 1].current_position += 1; // TODO: Check if I'm updating this consistently with proof iter treatment
+                        stack[stack_len - 1].current_position += 1;
                         stack.push(Frame {
                             current_position: 0,
                             commands: Vec::new(),
@@ -635,10 +636,6 @@ pub fn slice(
         };
         new_proof.commands.push(ProofCommand::Step(resolution_step));
 
-        for command in &new_proof.commands {
-            println!("{:?}\n", command);
-        }
-        
         let proof_string = proof_to_string(pool, &problem.prelude, &new_proof, false);
 
         // Create an assertion in the problem for each assumption in the proof.
