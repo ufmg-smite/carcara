@@ -33,20 +33,21 @@ pub enum TstpFormulaRole {
 
 /// Syntactic category of expressions that denote formulas but, also, values inhabiting
 /// other types: numeric and string literals.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum TstpFormula {
     Variable(Symbol),
 
     // Logic
-    True,
-
-    False,
-
     UniversalQuant(Symbol, Box<TstpFormula>),
 
     ExistentialQuant(Symbol, Box<TstpFormula>),
 
-    TstpOperator(Vec<TstpFormula>),
+    OperatorApp(TstpOperator, Vec<TstpFormula>),
+
+    // TPTP jargon: functor.
+    // TODO: do we need to introduce a special syntactic
+    // category for functors?
+    FunctorApp(Symbol, Vec<TstpFormula>),
 
     //  Typing statements
     Typing(Box<TstpFormula>, TstpType),
@@ -63,8 +64,13 @@ pub enum TstpFormula {
     DistinctObject(String),
 }
 
+#[derive(Clone, Debug)]
 pub enum TstpOperator {
     // Logic
+    // From TPTP docs:
+    // Defined predicates recognized: $true and $false, with the obvious interpretations.
+    True,
+    False,
     Not,
     Or,
     Xor,
@@ -102,7 +108,7 @@ pub enum TstpOperator {
 /// "The defined types are $o - the Boolean type, $i - the type of individuals, $real - the type
 /// of reals, $rat - the type of rational, and $int - the type of integers. New types are introduced
 /// in formulae with the type role, based on $tType - the type of all types."
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum TstpType {
     // TODO: just one universe?
     // $tType

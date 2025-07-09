@@ -141,7 +141,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         // Actual substitution induced by the context
         let mut _subst: Vec<TstpFormula> = Vec::new();
         // Dummy initial value
-        let mut _tstp_sort: TstpFormula = TstpFormula::True;
+        let mut _tstp_sort: TstpFormula = TstpFormula::Variable("dummy".to_owned());
 
         // TODO
         // context.iter().for_each(|arg| match arg {
@@ -232,26 +232,17 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
             // TODO: how do we deal with this?
             Term::Sort(_sort) => {
                 // TstpTranslator::translate_sort(sort),
-                TstpFormula::True
+                println!("No sabemos como traducir sort {:?}", _sort);
+                panic!();
             }
 
             Term::Op(operator, operands) => {
-                let _operands_tstp: Vec<TstpFormula> = operands
+                let operands_tstp: Vec<TstpFormula> = operands
                     .iter()
                     .map(|operand| self.translate_term(operand))
                     .collect();
 
-                // TODO: fix this
-                match operator {
-                    Operator::True => TstpFormula::True,
-
-                    Operator::False => TstpFormula::False,
-
-                    _ => {
-                        TstpFormula::False
-                        // TstpFormula::App(self.translate_operator(*operator), operands_tstp)
-                    }
-                }
+                TstpFormula::OperatorApp(self.translate_operator(*operator), operands_tstp)
             }
 
             // TODO: not considering the sort of the variable.
@@ -268,15 +259,14 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 }
             }
 
-            Term::App(_fun, params) => {
+            Term::App(fun, params) => {
                 let mut fun_params = Vec::new();
 
                 params.iter().for_each(|param| {
                     fun_params.push(self.translate_term(param));
                 });
 
-                // TstpFormula::App((*fun).to_string(), fun_params)
-                TstpFormula::True
+                TstpFormula::FunctorApp((*fun).to_string(), fun_params)
             }
 
             Term::Let(binding_list, _scope) => {
@@ -320,7 +310,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 // self.alethe_scopes.close_scope();
 
                 // final_let_trans
-                TstpFormula::True
+                TstpFormula::Variable("dummy".to_owned())
             }
 
             Term::Binder(_binder, binding_list, _scope) => {
@@ -401,7 +391,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 // self.local_steps.pop();
 
                 // translated_binder
-                TstpFormula::True
+                TstpFormula::Variable("dummy".to_owned())
             }
 
             // TODO: complete
@@ -429,7 +419,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         };
 
         // TODO:
-        TstpFormula::True
+        TstpFormula::Variable("dummy".to_owned())
 
         // TstpFormula::App(
         //     self.alethe_signature.var.clone(),
@@ -458,7 +448,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         });
 
         // TstpFormula::List(ret)
-        TstpFormula::True
+        TstpFormula::Variable("dummy".to_owned())
     }
 
     /// Translates a `BindingList` as required by our definition of @let: it builds a list
@@ -488,7 +478,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         });
 
         // (TstpFormula::List(binding_occ), values)
-        (TstpFormula::True, values)
+        (TstpFormula::Variable("dummy".to_owned()), values)
     }
 
     fn translate_operator(&self, operator: Operator) -> TstpOperator {
@@ -506,6 +496,10 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
             Operator::Implies => TstpOperator::Implies,
 
             Operator::Ite => TstpOperator::Ite,
+
+            Operator::True => TstpOperator::True,
+
+            Operator::False => TstpOperator::False,
 
             // Order / Comparison.
             Operator::Equals => TstpOperator::Equality,
@@ -672,10 +666,10 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 let _conclusion: TstpFormula = if clause.is_empty() {
                     // TODO: ?
                     // TstpFormula::Variable(self.alethe_signature.empty_cl.clone())
-                    TstpFormula::True
+                    TstpFormula::Variable("dummy".to_owned())
                 } else {
                     // {!clause.is_empty()}
-                    TstpFormula::False
+                    TstpFormula::Variable("dummy_else".to_owned())
                     // TstpFormula::App(
                     //     self.alethe_signature.cl.clone(),
                     //     clause
@@ -765,7 +759,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 //         // The discharged assumptions (specified, in Alethe, through the
                 //         // "discharge" formal parameter), will be pushed
                 //         // NOTE: spurious value so the compiler won't comply
-                //         let mut implied_conclusion: TstpFormula = TstpFormula::True;
+                //         let mut implied_conclusion: TstpFormula = TstpFormula::Variable("dummy".to_owned());
 
                 //         // Assuming that the conclusion is of the form
                 //         // not φ1, ..., not φn, ψ
@@ -897,17 +891,18 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
     // TODO: make tstp_prelude an attribute of TstpTranslator
     /// Translates only an SMT-lib problem prelude.
     fn translate_problem_2_vect(&mut self, problem: &Problem) -> TstpProof {
-        let Problem { prelude, .. } = problem;
+        let Problem { prelude, premises } = problem;
 
+        let mut tstp_problem: TstpProof = Vec::new();
+
+        // Translation of the definitions of constants.
         let ProblemPrelude {
             sort_declarations,
             function_declarations,
             ..
         } = prelude;
 
-        let mut tstp_prelude = Vec::new();
-
-        // TODO: ethos does not accept set-logics
+        // TODO: use this to guess the language to be used. Something else?
         // match logic {
         //     Some(logic_name) => {
         //         tstp_prelude.push(TstpCommand::SetLogic { name: logic_name.clone() });
@@ -917,7 +912,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         // }
 
         sort_declarations.iter().for_each(|pair| {
-            tstp_prelude.push(TstpAnnotatedFormula {
+            tstp_problem.push(TstpAnnotatedFormula {
                 // TODO: some other language?
                 language: TstpLanguage::Tff,
                 name: pair.0.clone(),
@@ -942,7 +937,8 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 }
             };
 
-            tstp_prelude.push(TstpAnnotatedFormula {
+            // TODO: abstract this into a method to generate annotated formulas
+            tstp_problem.push(TstpAnnotatedFormula {
                 // TODO: some other language?
                 language: TstpLanguage::Tff,
                 name: pair.0.clone(),
@@ -956,7 +952,22 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
             });
         });
 
-        tstp_prelude
+        // Translation of assertions: we represent them as
+        // axioms.
+        premises.iter().for_each(|assertion| {
+            // TODO: abstract this into a method to generate annotated formulas
+            tstp_problem.push(TstpAnnotatedFormula {
+                // TODO: some other language?
+                language: TstpLanguage::Tff,
+                name: "some_name".to_owned(),
+                role: TstpFormulaRole::Axiom,
+                formula: self.translate_term(assertion),
+                source: "".to_owned(),
+                useful_info: "".to_owned(),
+            });
+        });
+
+        tstp_problem
     }
 }
 
