@@ -171,7 +171,7 @@
   )
 
 ; TODO: implement this as a higher-order program, once it becomes feasible
-; program: f_list_remove_elem
+; program: f_list_filter
 ; args:
 ; - f (-> A B B): Operator used to build the f-list.
 ; - f_nil B: The "nil" element of variadic operator f.
@@ -238,6 +238,59 @@
            )
           )
          )
+
+
+; program: $is_f_list
+; args:
+; - list T : >
+;    A term representing the application of some operator over a sequence of operands.
+; return: A boolean indicating if the given parameter is an actual list or not.
+(program $is_f_list ((U Type) (T Type) (f (-> U T T)) (hd U) (tail T :list))
+         :signature (T) Bool
+         (
+          (
+           ($is_f_list (@cl hd tail))
+
+           true
+           )
+
+          (
+           ($is_f_list (or hd tail))
+
+           true
+           )
+
+          (
+           ($is_f_list (and hd tail))
+
+           true
+           )
+
+          (
+           ($is_f_list (+ hd tail))
+
+           true
+           )
+
+          (
+           ($is_f_list (* hd tail))
+
+           true
+           )
+
+          (
+           ($is_f_list (@varlist hd tail))
+
+           true
+           )
+
+          (
+           ($is_f_list tail)
+
+           false
+           )
+          )
+)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; lists (built with non-variadic operators)

@@ -885,7 +885,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                     "cong" => {
                         // We need to distinguish congruence over a variadic operator,
                         // from congruence over an n-ary operator
-                        let rule_name = self.alethe_signature.select_cong_rule(&conclusion);
+                        let rule_name = self.alethe_signature.cong.clone();
 
                         self.get_mut_translator_data()
                             .translated_proof
