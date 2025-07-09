@@ -39,14 +39,7 @@ impl<'a> SExpFormatter<'a> {
 }
 
 pub struct EunoiaPrinter<'a> {
-    // TODO: why is it `&'a mut dyn io::Write` in ast::printer.rs?
-    // Where to write.
     formatted_sink: SExpFormatter<'a>,
-    // term_indices: Option<IndexMap<Rc<Term>, usize>>,
-    // term_sharing_variable_prefix: &'static str,
-    // global_vars: HashSet<Rc<Term>>,
-    // defined_constants: HashMap<Rc<Term>, String>,
-    // smt_lib_strict: bool,
 }
 
 pub trait PrintProof {

@@ -920,7 +920,13 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
     }
 
     // TODO: make eunoia_prelude an attribute of EunoiaTranslator
-    /// Translates only an SMT-lib problem.
+    // to unify the interfaces: this method is returning the translation,
+    // while the translation of the proof is modifying the internal state
+    // of the translator
+    /// Translates only an SMT-lib problem. Note that it only translates the
+    /// "problem prelude" (as described in the implementation of Carcara's
+    /// `Problem` struct). The assertions introduced in the problem definition
+    /// are not translated.
     fn translate_problem_2_vect(&mut self, problem: &Problem) -> EunoiaProof {
         let Problem { prelude, .. } = problem;
 
