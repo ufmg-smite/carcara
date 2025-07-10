@@ -336,7 +336,7 @@ struct PremiseIds {
     premises: Vec<String>,
 }
 
-/// Produces (1) a map containing the ids of the transitive premises of the input step and
+/// Produces (1) a map containing all the ids of the transitive premises of the input step and
 /// bools denoting whether we need the premises of those premises and (2) a map that the IDs associates IDs of
 /// the transitive premises with the IDs of their premises.
 fn get_transitive_premises(
@@ -344,7 +344,7 @@ fn get_transitive_premises(
     step_id: String,
     max_distance: usize,
 ) -> (HashMap<String, bool>, HashMap<String, PremiseIds>) {
-    // Items
+    // Items to process in BFS
     let mut queue: VecDeque<(String, usize)> = VecDeque::new();
 
     // Output
@@ -355,20 +355,21 @@ fn get_transitive_premises(
     while let Some((step_id, d)) = queue.pop_front() {
         // Get an iterator for each step we are handling to make sure we get the right premises.
         let (proof_iter, step) = get_iter_to_command(proof, &step_id);
-        let keep_premises = d != 0;
+        let not_last = d != 0;
         // We should always default to needing premises if there's a conflict between what's already in the map and what would be added.
-        let keep_premises_no_overwrite =
-            keep_premises || *id_to_keep_premises.get(step.id()).unwrap_or(&false);
+        let keep_premises = not_last || *id_to_keep_premises.get(step.id()).unwrap_or(&false);
         match step {
             ProofCommand::Assume { .. } => {
+                // Assumes have no premises to be kept
                 id_to_keep_premises.insert(step.id().to_owned(), false);
                 id_to_premise_ids.insert(step.id().to_owned(), PremiseIds { premises: Vec::new() });
             }
             ProofCommand::Step(proof_step) => {
-                id_to_keep_premises.insert(step.id().to_owned(), keep_premises_no_overwrite);
-                if keep_premises {
+                // Steps have premises we may or may not need to keep
+                id_to_keep_premises.insert(step.id().to_owned(), keep_premises);
+                if not_last {
                     let mut premise_entries: Vec<String> = Vec::new();
-                    // Add the premises to the queue to be processed
+                    // Add the premises to the queue to be processed and store ids of premises
                     for premise in &proof_step.premises {
                         let premise = proof_iter.get_premise(*premise);
                         queue.push_back((premise.id().to_owned(), d - 1));
@@ -382,9 +383,10 @@ fn get_transitive_premises(
                 }
             }
             ProofCommand::Subproof(subproof) => {
-                id_to_keep_premises.insert(step.id().to_owned(), keep_premises_no_overwrite);
-                if keep_premises {
+                id_to_keep_premises.insert(step.id().to_owned(), keep_premises);
+                if not_last {
                     for command in &subproof.commands {
+                        // Keep all assumptions of the subproof
                         if command.is_assume() {
                             queue.push_back((command.id().to_owned(), 0));
                         } else {
@@ -392,9 +394,12 @@ fn get_transitive_premises(
                         }
                     }
 
-                    // Get second to last step
+                    // Keep second to last step
                     let penult = &subproof.commands[subproof.commands.len() - 2];
                     queue.push_back((penult.id().to_owned(), d - 1));
+
+                    // The last step has the same ID as subproof command, which we've already said we're keeping,
+                    // and no premises, so we don't need to handle it separately.
                 }
             }
         }
@@ -498,16 +503,17 @@ pub fn get_slice_body(
         if let Some(&need_premises) = to_keep.get(command.id()) {
             let stack_len = stack.len();
             match command {
-                // If the command is an assume, copy it in the most straightforward ay.
+                // If the command is an assume, just copy it without change.
                 ProofCommand::Assume { .. } => {
                     let last_placed = (stack.len() - 1, stack[stack.len() - 1].current_position);
                     stack[stack_len - 1].commands.push(command.clone());
                     stack[stack_len - 1].current_position += 1;
 
+                    // Associate the ID of this assume with its new location in the proof.
                     id_to_index.insert(command.id().to_owned(), last_placed);
                 }
-                // If the command is a step, either copy it with its original rule and its premises and discharges determined using
-                // this subproof's map or hole.
+                // If the command is a step and we need its premises, copy it with its original rule and
+                // the new locations of its premises. Otherwise, use a trust hole.
                 ProofCommand::Step(proof_step) => {
                     let step = if need_premises {
                         let (premises, discharge) =
@@ -539,11 +545,14 @@ pub fn get_slice_body(
                             discharge: Vec::new(), // The trust rule doesn't discharge any assumptions
                         }
                     };
+
+                    // Associate the ID of this step with its new location in the proof.
                     let last_placed = (stack.len() - 1, stack[stack.len() - 1].current_position);
                     if !id_to_index.contains_key(command.id()) {
                         id_to_index.insert(command.id().to_owned(), last_placed);
                     }
 
+                    // Add the step
                     stack[stack_len - 1].commands.push(ProofCommand::Step(step));
                     stack[stack_len - 1].current_position += 1;
 
@@ -560,7 +569,7 @@ pub fn get_slice_body(
                 }
                 ProofCommand::Subproof(subproof) => {
                     // If we need the premises of this subproof step, create a subproof command.
-                    // Otherwise skip, we'll come across this id again but as a step, and that's when we'll create a holey step
+                    // Otherwise skip. We'll come across this ID again but as a step, and that's when we'll create a holey step.
                     if need_premises {
                         stack[stack_len - 1]
                             .commands
@@ -569,10 +578,13 @@ pub fn get_slice_body(
                                 args: subproof.args.clone(),
                                 context_id: subproof.context_id,
                             }));
+
+                        // Associate ID with location in new proof.
                         let last_placed =
                             (stack.len() - 1, stack[stack.len() - 1].current_position);
                         id_to_index.insert(command.id().to_owned(), last_placed);
 
+                        // Push fresh frame to stack to keep track of subproof commands.
                         stack[stack_len - 1].current_position += 1;
                         stack.push(Frame {
                             current_position: 0,
