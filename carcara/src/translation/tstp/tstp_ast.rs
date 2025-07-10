@@ -9,7 +9,35 @@ pub struct TstpAnnotatedFormula {
     pub formula: TstpFormula,
     // TODO: not including this, for the moment
     pub source: Symbol,
+    // From the docs:
+    // "The introduction of new non-variable symbols should be recorded in
+    // a <new_symbol_record> in the <useful_info> field of the <inference_record>
+    // of a derived formula, or in the <optional_info> field of the <internal_source>
+    // of an introduced formula."
     pub useful_info: Symbol,
+}
+
+impl TstpAnnotatedFormula {
+    /// Builds a new annotated formula. Implements a mechanism
+    /// for providing names to the formula.
+    /// TODO: should it generate the corresponding `useful_info`?
+    pub fn new(
+        provided_language: TstpLanguage,
+        provided_name: Symbol,
+        provided_role: TstpFormulaRole,
+        provided_formula: TstpFormula,
+        provided_source: Symbol,
+        provided_useful_info: Symbol,
+    ) -> Self {
+        Self {
+            language: provided_language,
+            name: provided_name,
+            role: provided_role,
+            formula: provided_formula,
+            source: provided_source,
+            useful_info: provided_useful_info,
+        }
+    }
 }
 
 /// Possible TPTP languages.

@@ -620,17 +620,15 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         _depth: usize,
         term: &Rc<Term>,
     ) -> TstpAnnotatedFormula {
-        TstpAnnotatedFormula {
+        TstpAnnotatedFormula::new(
+            TstpLanguage::Tff,
+            id.to_owned(),
+            TstpFormulaRole::Axiom,
+            self.translate_term(term),
             // TODO: ?
-            language: TstpLanguage::Tff,
-            name: id.to_owned(),
-            // TODO: or Conjecture?
-            role: TstpFormulaRole::Axiom,
-            formula: self.translate_term(term),
-            // TODO: ?
-            source: "nil".to_owned(),
-            useful_info: "nil".to_owned(),
-        }
+            "nil".to_owned(),
+            "nil".to_owned(),
+        )
     }
 
     /// Implements the translation of an Alethe `ProofStep`, taking into
@@ -912,18 +910,18 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         // }
 
         sort_declarations.iter().for_each(|pair| {
-            tstp_problem.push(TstpAnnotatedFormula {
+            tstp_problem.push(TstpAnnotatedFormula::new(
                 // TODO: some other language?
-                language: TstpLanguage::Tff,
-                name: pair.0.clone(),
-                role: TstpFormulaRole::Type,
-                formula: TstpFormula::Typing(
+                TstpLanguage::Tff,
+                pair.0.clone(),
+                TstpFormulaRole::Type,
+                TstpFormula::Typing(
                     Box::new(TstpFormula::Variable(pair.0.clone())),
                     TstpType::Universe,
                 ),
-                source: "".to_owned(),
-                useful_info: "".to_owned(),
-            });
+                "".to_owned(),
+                "".to_owned(),
+            ));
         });
 
         function_declarations.iter().for_each(|pair| {
@@ -938,33 +936,30 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
             };
 
             // TODO: abstract this into a method to generate annotated formulas
-            tstp_problem.push(TstpAnnotatedFormula {
+            tstp_problem.push(TstpAnnotatedFormula::new(
                 // TODO: some other language?
-                language: TstpLanguage::Tff,
-                name: pair.0.clone(),
-                role: TstpFormulaRole::Type,
-                formula: TstpFormula::Typing(
-                    Box::new(TstpFormula::Variable(pair.0.clone())),
-                    tstp_type,
-                ),
-                source: "".to_owned(),
-                useful_info: "".to_owned(),
-            });
+                TstpLanguage::Tff,
+                pair.0.clone(),
+                TstpFormulaRole::Type,
+                TstpFormula::Typing(Box::new(TstpFormula::Variable(pair.0.clone())), tstp_type),
+                "".to_owned(),
+                "".to_owned(),
+            ));
         });
 
         // Translation of assertions: we represent them as
         // axioms.
         premises.iter().for_each(|assertion| {
             // TODO: abstract this into a method to generate annotated formulas
-            tstp_problem.push(TstpAnnotatedFormula {
+            tstp_problem.push(TstpAnnotatedFormula::new(
                 // TODO: some other language?
-                language: TstpLanguage::Tff,
-                name: "some_name".to_owned(),
-                role: TstpFormulaRole::Axiom,
-                formula: self.translate_term(assertion),
-                source: "".to_owned(),
-                useful_info: "".to_owned(),
-            });
+                TstpLanguage::Tff,
+                "some_name".to_owned(),
+                TstpFormulaRole::Axiom,
+                self.translate_term(assertion),
+                "".to_owned(),
+                "".to_owned(),
+            ));
         });
 
         tstp_problem
