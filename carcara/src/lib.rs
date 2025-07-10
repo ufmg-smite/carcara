@@ -398,6 +398,10 @@ fn get_transitive_premises(
                     let penult = &subproof.commands[subproof.commands.len() - 2];
                     queue.push_back((penult.id().to_owned(), d - 1));
 
+                    // We need to insert the subproof into the map so that we know to copy it when slicing
+                    id_to_premise_ids
+                        .insert(step.id().to_owned(), PremiseIds { premises: Vec::new() });
+
                     // The last step has the same ID as subproof command, which we've already said we're keeping,
                     // and no premises, so we don't need to handle it separately.
                 }
