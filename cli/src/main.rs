@@ -75,7 +75,7 @@ enum Command {
     /// Checks a series of proof files and records performance statistics.
     Bench(BenchCommandOptions),
 
-    /// Given a step, takes a slice of a proof consisting of its premises.
+    /// Given a step, takes a slice of a proof consisting of its transitive premises.
     Slice(SliceCommandOptions),
 
     /// Generates the equivalent SMT instance for every `lia_generic` step in a proof.
@@ -414,6 +414,8 @@ struct SliceCommandOptions {
     #[clap(long)]
     from: String,
 
+    /// How many layers of transitive premises to include beyond the direct premises of the step being sliced.
+    /// If this argument is not present, it will default to zero.
     #[clap(long, short = 'd')]
     max_distance: Option<usize>,
 
