@@ -46,7 +46,7 @@ mod utils;
 use crate::ast::{ProofIter, Subproof};
 use crate::benchmarking::{CollectResults, OnlineBenchmarkResults, RunMeasurement};
 use ast::printer::proof_to_string;
-use ast::{Operator, PrimitivePool, Problem, Proof, ProofCommand, ProofStep, Rc, Term, TermPool};
+use ast::{PrimitivePool, Problem, Proof, ProofCommand, ProofStep, Rc, Term, TermPool};
 use checker::{error::CheckerError, CheckerStatistics};
 use core::panic;
 use parser::{ParserError, Position};
@@ -427,8 +427,6 @@ pub fn get_slice_body(
     pool: &mut PrimitivePool,
     max_distance: usize,
 ) -> Option<Vec<ProofCommand>> {
-    // The first step of the sliced proof will be an assumption of false. We keep track of this offset so that indices in the new proof will be correct.
-    const ASSUME_FALSE_OFFSET: usize = 1;
     // The constant string trust to be used in the args list for every trust step
     let trust: Rc<Term> = pool.add(Term::new_string("trust"));
 
@@ -495,13 +493,16 @@ pub fn get_slice_body(
 
     // Maintain a stack of frames, each representing a subproof context we are currently in.
     let mut stack: Vec<Frame> = vec![Frame {
-        current_position: ASSUME_FALSE_OFFSET,
+        current_position: 0,
         commands: Vec::new(),
     }];
 
     // Go through each command in the proof and copy it if we need to keep it.
     let mut copy_iter = proof.iter();
 
+    let mut have_seen_target: bool = false;
+
+    let mut child: Option<(usize, usize)> = None;
     while let Some(command) = copy_iter.next() {
         // Check if we want to copy this command
         if let Some(&need_premises) = to_keep.get(command.id()) {
@@ -519,6 +520,19 @@ pub fn get_slice_body(
                 // If the command is a step and we need its premises, copy it with its original rule and
                 // the new locations of its premises. Otherwise, use a trust hole.
                 ProofCommand::Step(proof_step) => {
+                    // Make a note once we have encountered the target step so that we know we're no longer on premises
+                    if proof_step.id == id {
+                        have_seen_target = true;
+                    }
+
+                    let is_penult: bool = copy_iter.is_in_subproof() && {
+                        let current_subproof = copy_iter
+                            .current_subproof()
+                            .expect("is_in_subproof is true, but current_subproof() is None");
+                        let penult = &current_subproof[current_subproof.len() - 2];
+                        proof_step.id == penult.id()
+                    };
+
                     let step = if need_premises {
                         let (premises, discharge) =
                             if let Some(premise_ids) = id_to_premise_ids.get(command.id()) {
@@ -540,11 +554,18 @@ pub fn get_slice_body(
                             ..proof_step.clone()
                         }
                     } else {
+                        // If the step we are placing occurs after the target step and is the second to last step of a subproof,
+                        // we should include child as a premise for it with :rule hole :args trust.
+                        // You're not gonna need_premises of that, by the way
                         ProofStep {
                             id: command.id().to_owned(),
                             clause: command.clause().to_vec(),
                             rule: "hole".to_owned(),
-                            premises: Vec::new(),
+                            premises: if have_seen_target && is_penult {
+                                vec![child.expect("child variable should have been initialized")]
+                            } else {
+                                Vec::new()
+                            },
                             args: vec![trust.clone()],
                             discharge: Vec::new(), // The trust rule doesn't discharge any assumptions
                         }
@@ -554,6 +575,10 @@ pub fn get_slice_body(
                     let last_placed = (stack.len() - 1, stack[stack.len() - 1].current_position);
                     if !id_to_index.contains_key(command.id()) {
                         id_to_index.insert(command.id().to_owned(), last_placed);
+                    }
+
+                    if proof_step.id == id {
+                        child = Some(last_placed);
                     }
 
                     // Add the step
@@ -569,6 +594,10 @@ pub fn get_slice_body(
                             panic!("Expected subproof")
                         };
                         sp.commands.append(&mut popped_frame.commands);
+                        if have_seen_target {
+                            child =
+                                Some((stack.len() - 1, stack.last().unwrap().commands.len() - 1));
+                        }
                     }
                 }
                 ProofCommand::Subproof(subproof) => {
@@ -600,6 +629,21 @@ pub fn get_slice_body(
         }
     }
 
+    let end_step: ProofStep = ProofStep {
+        id: "slice_end".to_owned(),
+        clause: Vec::new(),
+        rule: "hole".to_owned(),
+        premises: vec![
+            /* (0, stack.last().unwrap().current_position - 1)*/ child.unwrap(),
+        ],
+        args: vec![trust],
+        discharge: Vec::new(),
+    };
+    stack
+        .last_mut()
+        .unwrap()
+        .commands
+        .push(ProofCommand::Step(end_step));
     Some(stack.last().unwrap().commands.clone())
 }
 
@@ -615,42 +659,15 @@ pub fn slice(
     use std::fmt::Write;
 
     if let Some(sliced_step_commands) = get_slice_body(proof, id, pool, max_distance) {
-        // The resolution premises are (cl false) and (cl (not false)).
-        let mut resolution_premises: Vec<(usize, usize)> = Vec::new();
         let mut new_proof: Proof = Proof {
             constant_definitions: proof.constant_definitions.clone(),
             commands: Vec::new(),
         };
-        let false_term: Rc<Term> = pool.add(Term::new_bool(false));
-        new_proof.commands.push(ProofCommand::Assume {
-            id: "slice_assume_false".to_owned(),
-            term: false_term.clone(),
-        });
         for c in &sliced_step_commands {
             new_proof.commands.push(c.clone());
         }
 
-        new_proof.commands.push(ProofCommand::Step(ProofStep {
-            id: "slice_not_false".to_owned(),
-            clause: [pool.add(Term::Op(Operator::Not, [false_term.clone()].to_vec()))].to_vec(),
-            rule: "false".to_owned(),
-            premises: Vec::new(),
-            args: Vec::new(),
-            discharge: Vec::new(),
-        }));
-
-        resolution_premises.push((0, 0)); // False
-        resolution_premises.push((0, new_proof.commands.len() - 1)); // Not false
-        let resolution_step = ProofStep {
-            id: "t.end".to_owned(),
-            clause: Vec::new(),
-            rule: "resolution".to_owned(),
-            premises: resolution_premises,
-            args: Vec::new(),
-            discharge: Vec::new(),
-        };
-        new_proof.commands.push(ProofCommand::Step(resolution_step));
-
+        // TODO: Insert step deriving (cl) via rule hole
         let proof_string = proof_to_string(pool, &problem.prelude, &new_proof, false);
 
         // Create an assertion in the problem for each assumption in the proof.
