@@ -77,7 +77,7 @@ impl<'a> PrintProof for TstpPrinter<'a> {
             {
                 language_as_str = TstpPrinter::language_to_concrete_syntax(language);
                 args = vec![
-                    name.clone(),
+                    TstpPrinter::formula_name_to_concrete_syntax(name),
                     TstpPrinter::role_to_concrete_syntax(role),
                     TstpPrinter::formula_to_concrete_syntax(formula),
                     // TODO: discarding source and useful_info
@@ -122,8 +122,12 @@ impl<'a> TstpPrinter<'a> {
         }
     }
 
+    /// Concrete syntax rules (from TPTP's docs):
+    /// - "In a formula, terms and atoms follow Prolog conventions - functions and predicates
+    ///      start with a lowercase letter or are 'single quoted', and variables start with an
+    ///      uppercase letter."
     fn formula_to_concrete_syntax(formula: &TstpFormula) -> String {
-        let mut ret = "".to_owned();
+        let mut ret: String;
 
         match formula {
             TstpFormula::Typing(var, type_inhabited) => {
@@ -165,7 +169,8 @@ impl<'a> TstpPrinter<'a> {
             }
 
             TstpFormula::FunctorApp(functor, arguments) => {
-                let mut ret = functor.clone() + "(";
+                println!("FunctorApp {:?}", formula);
+                ret = functor.clone() + "(";
 
                 let mut first_element = true;
 
@@ -251,6 +256,17 @@ impl<'a> TstpPrinter<'a> {
 
             _ => panic!(),
         }
+    }
+
+    /// Prints a formula name. It follows the concrete syntax rules of name atoms, of TPTP.
+    fn formula_name_to_concrete_syntax(name: &Symbol) -> String {
+        // <name>                 ::= <atomic_word> | <integer>
+        // <atomic_word>   ::= <lower_word> | <single_quoted>
+        // <lower_word>     ::- <lower_alpha><alpha_numeric>*
+        // <single_quoted> ::- <single_quote><sq_char><sq_char>*<single_quote>
+        // For the moment, just converting everything to lowercase.
+
+        str::to_lowercase(name)
     }
 
     /// Query functions to help with the lack of expressiveness of the grammar
