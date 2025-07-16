@@ -399,10 +399,10 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         }
     }
 
-    /// For a given variable name "id", that is bound by some
-    /// context, it builds and returns its @var representation.
-    /// That is, its representation as a variable bound by some
-    /// enclosing context.
+    /// TODO: this method was used in the context of Eunoia. Repurpose it
+    /// for TSTP.
+    /// TODO: In the THF, TFF, and FOF languages, every variable in a Formula
+    /// must be bound by a preceding quantification with adequate scope.
     fn build_var_binding(&self, id: &str) -> TstpFormula {
         // TODO: using clone, ugly...
         let _sort = match self
@@ -930,7 +930,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
 
                 _ => {
                     // It shouldn't be something different than a Sort.
-                    println!("{:?} expected to be a Sort.", &pair.1);
+                    println!(" {:?} expected to be a Sort.", &pair.1);
                     panic!();
                 }
             };

@@ -73,7 +73,9 @@ fn test_let_example() {
     let tstp_problem = tstp_translator.translate_problem(&problem_ast);
 
     printer_problem.write_proof(&tstp_problem).unwrap();
-
+    // TODO : "The name identifies the formula within the problem"
+    // Hence, in tff('U',type,'U': $tType )., its named shouldn't be 'U'.
+    // See if we can use the conventions mentioned in the grammar doc.
     assert_eq!(
         "tff('U',type,'U': $tType ).
 tff(p1,type,p1: $o ).
