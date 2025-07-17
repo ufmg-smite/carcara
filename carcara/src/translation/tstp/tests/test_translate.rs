@@ -1,6 +1,8 @@
 //! Small test suite for Tstp ASTs generation, from Alethe proof certificates.
 
 #[cfg(test)]
+use crate::ast::*;
+#[cfg(test)]
 use crate::translation::{
     tstp::{alethe_2_tstp::*, printer::PrintProof, printer::*},
     Translator,
@@ -31,9 +33,9 @@ fn test_let_example() {
     let annotated_formula_formatter_problem = AnnotatedFormulaFormatter::new(&mut buf_problem);
     let mut printer_problem = TstpPrinter::new(annotated_formula_formatter_problem);
 
-    // let mut buf_proof = Vec::new();
-    //let annotated_formula_formatter_proof = AnnotatedFormulaFormatter::new(&mut buf_proof);
-    // let mut printer_proof = TstpPrinter::new(annotated_formula_formatter_proof);
+    let mut buf_proof = Vec::new();
+    let annotated_formula_formatter_proof = AnnotatedFormulaFormatter::new(&mut buf_proof);
+    let mut printer_proof = TstpPrinter::new(annotated_formula_formatter_proof);
 
     let problem = "(set-logic QF_UF)
 (set-option :simplification none)
@@ -58,12 +60,42 @@ fn test_let_example() {
 
 (check-sat)";
 
-    let alethe_certificate = "(assume h1 (= a b))
-                                                (anchor :step t2 :args ((:= x b)))
-                                                (step t1 (cl (= x b)) :rule refl)
-                                                (step t2 (cl (= (let ((x a)) x) b)) :rule let :premises (h1))";
+    let alethe_certificate = "
+(assume a0 (= a b))
+(assume a1 (= c d))
+(assume a2 (and p1 true))
+(assume a3 (or (not p1) (and p2 p3)))
+(assume a4 (or (not p3) (not (= (f a c) (f b d)))))
+(step t0 (cl (and (= a b) (= c d)) (not (= a b)) (not (= c d))) :rule and_neg)
+(step t1 (cl (=> (and (= a b) (= c d)) (= (f a c) (f b d))) (and (= a b) (= c d))) :rule implies_neg1)
+(anchor :step t2)
+(assume t2.a0 (= a b))
+(assume t2.a1 (= c d))
+(step t2.t0 (cl (= (f a c) (f b d))) :rule cong :premises (t2.a0 t2.a1))
+(step t2 (cl (not (= a b)) (not (= c d)) (= (f a c) (f b d))) :rule subproof :discharge (t2.a0 t2.a1))
+(step t3 (cl (not (and (= a b) (= c d))) (= a b)) :rule and_pos :args (0))
+(step t4 (cl (not (and (= a b) (= c d))) (= c d)) :rule and_pos :args (1))
+(step t5 (cl (= (f a c) (f b d)) (not (and (= a b) (= c d))) (not (and (= a b) (= c d)))) :rule resolution :premises (t2 t3 t4))
+(step t6 (cl (not (and (= a b) (= c d))) (not (and (= a b) (= c d))) (= (f a c) (f b d))) :rule reordering :premises (t5))
+(step t7 (cl (not (and (= a b) (= c d))) (= (f a c) (f b d))) :rule contraction :premises (t6))
+(step t8 (cl (=> (and (= a b) (= c d)) (= (f a c) (f b d))) (= (f a c) (f b d))) :rule resolution :premises (t1 t7))
+(step t9 (cl (=> (and (= a b) (= c d)) (= (f a c) (f b d))) (not (= (f a c) (f b d)))) :rule implies_neg2)
+(step t10 (cl (=> (and (= a b) (= c d)) (= (f a c) (f b d))) (=> (and (= a b) (= c d)) (= (f a c) (f b d)))) :rule resolution :premises (t8 t9))
+(step t11 (cl (=> (and (= a b) (= c d)) (= (f a c) (f b d)))) :rule contraction :premises (t10))
+(step t12 (cl (not (and (= a b) (= c d))) (= (f a c) (f b d))) :rule implies :premises (t11))
+(step t13 (cl (not (= a b)) (not (= c d)) (= (f a c) (f b d))) :rule resolution :premises (t0 t12))
+(step t14 (cl (= (f a c) (f b d)) (not (= a b)) (not (= c d))) :rule reordering :premises (t13))
+(step t15 (cl (not p3) (not (= (f a c) (f b d)))) :rule or :premises (a4))
+(step t16 (cl (not (and p2 p3)) p3) :rule and_pos :args (1))
+(step t17 (cl p3 (not (and p2 p3))) :rule reordering :premises (t16))
+(step t18 (cl (not p1) (and p2 p3)) :rule or :premises (a3))
+(step t19 (cl p1) :rule and :premises (a2) :args (0))
+(step t20 (cl (and p2 p3)) :rule resolution :premises (t18 t19))
+(step t21 (cl p3) :rule resolution :premises (t17 t20))
+(step t22 (cl (not (= (f a c) (f b d)))) :rule resolution :premises (t15 t21))
+(step t23 (cl) :rule resolution :premises (t14 t22 a1 a0))";
 
-    let (problem_ast, _, _pool) = parse_instance(
+    let (problem_ast, proof_ast, _pool) = parse_instance(
         problem.as_bytes(),
         alethe_certificate.as_bytes(),
         TEST_CONFIG,
@@ -94,28 +126,27 @@ tff(formula_5,axiom,( ~ p3 | ( f(a,c) != f(b,d) ) ) ).",
         std::str::from_utf8(&buf_problem).unwrap()
     );
 
-    //     let commands = ProofNode::from_commands(proof_ast.commands);
-    //     let tstp_proof = tstp_translator.translate(&commands);
+    let commands = ProofNode::from_commands(proof_ast.commands);
+    let tstp_proof = tstp_translator.translate(&commands);
 
-    //     printer_proof.write_proof(tstp_proof).unwrap();
+    printer_proof.write_proof(tstp_proof).unwrap();
 
-    //     assert_eq!(
-    //         "%---Types:
-    // tff('U',type, 'U': $tType ).
+    assert_eq!(
+        "%---Types:
+    tff('U',type, 'U': $tType ).
 
-    // %---Declarations:
-    // tff(a,type, a: 'U' ).
-    // tff(b,type, b: 'U' ).
-    // tff(c,type, c: 'U' ).
-    // tff(d,type, d: 'U' ).
-    // tff(f,type, f: ( 'U' * 'U' ) > 'U' ).
-    // tff(p1,type, p1: $o ).
-    // tff(p2,type, p2: $o ).
-    // tff(p3,type, p3: $o ).",
-    //         std::str::from_utf8(&buf_proof).unwrap()
-    //     );
+    %---Declarations:
+    tff(a,type, a: 'U' ).
+    tff(b,type, b: 'U' ).
+    tff(c,type, c: 'U' ).
+    tff(d,type, d: 'U' ).
+    tff(f,type, f: ( 'U' * 'U' ) > 'U' ).
+    tff(p1,type, p1: $o ).
+    tff(p2,type, p2: $o ).
+    tff(p3,type, p3: $o ).",
+        std::str::from_utf8(&buf_proof).unwrap()
+    );
 }
-
 // #[test]
 // fn test_let_example() {
 //     let mut tstp_translator = TstpTranslator::new();

@@ -7,8 +7,7 @@ pub struct TstpAnnotatedFormula {
     pub name: Symbol,
     pub role: TstpFormulaRole,
     pub formula: TstpFormula,
-    // TODO: not including this, for the moment
-    pub source: Symbol,
+    pub source: TstpAnnotatedFormulaSource,
     // From the docs:
     // "The introduction of new non-variable symbols should be recorded in
     // a <new_symbol_record> in the <useful_info> field of the <inference_record>
@@ -26,7 +25,7 @@ impl TstpAnnotatedFormula {
         provided_name: Symbol,
         provided_role: TstpFormulaRole,
         provided_formula: TstpFormula,
-        provided_source: Symbol,
+        provided_source: TstpAnnotatedFormulaSource,
         provided_useful_info: Symbol,
     ) -> Self {
         Self {
@@ -57,6 +56,10 @@ pub enum TstpFormulaRole {
     // Logic used.
     Logic,
     Type,
+    // From TPTP's docs:
+    // "plain formulae have no special user semantics, and are typically used
+    // in derivation output"
+    Plain,
 }
 
 /// Syntactic category of expressions that denote formulas but, also, values inhabiting
@@ -94,7 +97,7 @@ pub enum TstpFormula {
 
 #[derive(Clone, Debug)]
 pub enum TstpOperator {
-    // Logic
+    // Logical connectives
     // From TPTP docs:
     // Defined predicates recognized: $true and $false, with the obvious interpretations.
     True,
@@ -158,6 +161,43 @@ pub enum TstpType {
 
     // TODO:? Function type: (TstpType ... ) > TstpType
     Fun(Vec<TstpType>, Box<TstpType>),
+}
+
+/// From TPTP's docs:
+/// "The source field is used to record where the annotated formula came from, and is most
+///   commonly a file record or an inference record. A file record stores the name of the file
+///   from which the annotated formula was read, and optionally the name of the annotated
+///   formula as it occurs in that file - this might be different from the name of the annotated
+///   formula itself, e.g., if an ATP systems reads an annotated formula, renames it, and then
+///   prints it out. An inference record stores information about an inferred formula."
+#[derive(Clone, Debug)]
+pub enum TstpAnnotatedFormulaSource {
+    // We are collapsing a little bit the structure of the grammar rules for "source".
+    // The following corresponds to the "internal_source" category from the grammar.
+    // <internal_source>  ::= introduced(<intro_type>,<useful_info>,<parents>)
+    Introduced(
+        TstpSourceIntroducedType,
+        Box<TstpSourceIntroducedUsefulInfo>,
+        Vec<TstpAnnotatedFormulaSource>,
+    ),
+
+    // No source provided
+    Empty,
+}
+
+#[derive(Clone, Debug)]
+pub enum TstpSourceIntroducedType {
+    Name(Symbol),
+    Definition,
+    Tautology,
+    Assumption,
+}
+
+#[derive(Clone, Debug)]
+pub enum TstpSourceIntroducedUsefulInfo {
+    NewSymbols(Vec<Symbol>),
+    // TODO: arbitrary list of symbols?
+    GeneralList(Vec<Symbol>),
 }
 
 pub type TstpProof = Vec<TstpAnnotatedFormula>;
