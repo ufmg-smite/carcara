@@ -151,7 +151,6 @@ pub fn check_parallel<T: io::BufRead>(
     use std::sync::Arc;
     let mut run_measures: RunMeasurement = RunMeasurement::default();
 
-    // Parsing (TODO : Complete rare rules)
     let total = Instant::now();
     let (problem, proof, _rules, pool) =
         parser::parse_instance(problem, proof, rules, parser_config)?;
