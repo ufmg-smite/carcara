@@ -246,8 +246,7 @@ impl SortError {
     ) -> Result<(), Self> {
         let any = Sort::Atom("?".to_owned(), Vec::new());
 
-        match got {
-            Sort::ParamSort(v, head) => {
+        if let Sort::ParamSort(v, head) = got {
                 if let Some(Sort::Var(name)) = head.as_sort() {
                     if name == "Array" {
                         if v.len() != 2 {
@@ -269,7 +268,6 @@ impl SortError {
                     }
                 }
             }
-            _ => (),
         }
 
         let expected = {
