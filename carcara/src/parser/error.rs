@@ -129,7 +129,7 @@ pub enum ParserError {
     #[error("not a valid qualified operator: '{0}'")]
     InvalidQualifiedOp(String),
 
-    /// The parser encountered an unknown qualified operator.
+    /// The parser encountered an invalid argument.
     #[error("not a valid format for the argument: '{0}'")]
     InvalidRareArgFormat(String),
 
