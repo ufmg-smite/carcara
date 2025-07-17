@@ -247,25 +247,24 @@ impl SortError {
         let any = Sort::Atom("?".to_owned(), Vec::new());
 
         if let Sort::ParamSort(v, head) = got {
-                if let Some(Sort::Var(name)) = head.as_sort() {
-                    if name == "Array" {
-                        if v.len() != 2 {
-                            let any = pool.add(Term::Sort(any.clone()));
-                            return Err(Self {
-                                expected: vec![Sort::Array(any.clone(), any)],
-                                got: got.clone(),
-                            });
-                        }
-
-                        let key = &v[0].as_sort().cloned();
-                        let value = v[1].as_sort().cloned();
-                        return Self::assert_array_sort(
-                            pool,
-                            key.as_ref(),
-                            value.as_ref(),
-                            &Sort::Array(v[0].clone(), v[1].clone()),
-                        );
+            if let Some(Sort::Var(name)) = head.as_sort() {
+                if name == "Array" {
+                    if v.len() != 2 {
+                        let any = pool.add(Term::Sort(any.clone()));
+                        return Err(Self {
+                            expected: vec![Sort::Array(any.clone(), any)],
+                            got: got.clone(),
+                        });
                     }
+
+                    let key = &v[0].as_sort().cloned();
+                    let value = v[1].as_sort().cloned();
+                    return Self::assert_array_sort(
+                        pool,
+                        key.as_ref(),
+                        value.as_ref(),
+                        &Sort::Array(v[0].clone(), v[1].clone()),
+                    );
                 }
             }
         }
