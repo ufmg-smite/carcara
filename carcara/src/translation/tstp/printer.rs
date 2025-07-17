@@ -71,7 +71,7 @@ impl<'a> PrintProof for TstpPrinter<'a> {
                 name,
                 role,
                 formula,
-                source: _,
+                source,
                 useful_info: _,
             } = command;
             {
@@ -80,8 +80,8 @@ impl<'a> PrintProof for TstpPrinter<'a> {
                     TstpPrinter::formula_name_to_concrete_syntax(name),
                     TstpPrinter::role_to_concrete_syntax(role),
                     TstpPrinter::formula_to_concrete_syntax(formula),
-                    // TODO: discarding source and useful_info
-                    "".to_owned(),
+                    TstpPrinter::source_to_concrete_syntax(source),
+                    // TODO: discarding useful_info
                     "".to_owned(),
                 ];
                 self.formatted_sink
@@ -119,6 +119,8 @@ impl<'a> TstpPrinter<'a> {
             TstpFormulaRole::Logic => "logic".to_owned(),
 
             TstpFormulaRole::Type => "type".to_owned(),
+
+            TstpFormulaRole::Plain => "plain".to_owned(),
         }
     }
 
@@ -169,7 +171,6 @@ impl<'a> TstpPrinter<'a> {
             }
 
             TstpFormula::FunctorApp(functor, arguments) => {
-                println!("FunctorApp {:?}", formula);
                 ret = functor.clone() + "(";
 
                 let mut first_element = true;
@@ -267,6 +268,102 @@ impl<'a> TstpPrinter<'a> {
         // For the moment, just converting everything to lowercase.
 
         str::to_lowercase(name)
+    }
+
+    fn source_to_concrete_syntax(source: &TstpAnnotatedFormulaSource) -> String {
+        let mut ret: String;
+
+        match source {
+            TstpAnnotatedFormulaSource::Empty => {
+                ret = "".to_owned();
+            }
+
+            TstpAnnotatedFormulaSource::Introduced(introduced_type, useful_info, parents) => {
+                ret = TstpPrinter::source_introduced_type_to_concrete_syntax(introduced_type);
+
+                ret += "(";
+
+                ret += &TstpPrinter::source_introduced_useful_info_to_concrete_syntax(useful_info);
+
+                ret += ", [";
+
+                // TODO: a more idiomatic way of solving this
+                let mut first_iteration = true;
+
+                parents.iter().for_each(|parent| {
+                    if first_iteration {
+                        ret += &TstpPrinter::source_to_concrete_syntax(parent);
+                        first_iteration = false;
+                    } else {
+                        // { ! first_iteration }
+                        ret += ", ";
+                        ret += &TstpPrinter::source_to_concrete_syntax(parent);
+                    }
+                });
+
+                ret += "])";
+            }
+        }
+
+        ret
+    }
+
+    fn source_introduced_type_to_concrete_syntax(intro_type: &TstpSourceIntroducedType) -> String {
+        match intro_type {
+            TstpSourceIntroducedType::Name(symbol) => symbol.clone(),
+
+            TstpSourceIntroducedType::Definition => "definition".to_owned(),
+
+            TstpSourceIntroducedType::Tautology => "tautology".to_owned(),
+
+            TstpSourceIntroducedType::Assumption => "assumption".to_owned(),
+        }
+    }
+
+    fn source_introduced_useful_info_to_concrete_syntax(
+        useful_info: &TstpSourceIntroducedUsefulInfo,
+    ) -> String {
+        let mut ret: String;
+
+        match useful_info {
+            TstpSourceIntroducedUsefulInfo::NewSymbols(symbols) => {
+                ret = "new_symbols(".to_owned();
+
+                let mut first_iteration = true;
+
+                symbols.iter().for_each(|symbol| {
+                    if first_iteration {
+                        ret += symbol;
+                        first_iteration = false;
+                    } else {
+                        // { ! first_iteration }
+                        ret += &(", ".to_owned() + &symbol.clone());
+                    }
+                });
+
+                ret += ")";
+            }
+
+            TstpSourceIntroducedUsefulInfo::GeneralList(symbols) => {
+                ret = "[".to_owned();
+
+                let mut first_iteration = true;
+
+                symbols.iter().for_each(|symbol| {
+                    if first_iteration {
+                        ret += symbol;
+                        first_iteration = false;
+                    } else {
+                        // { ! first_iteration }
+                        ret += &(", ".to_owned() + &symbol.clone());
+                    }
+                });
+
+                ret += "]";
+            }
+        }
+
+        ret
     }
 
     /// Query functions to help with the lack of expressiveness of the grammar

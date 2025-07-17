@@ -232,7 +232,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
             // TODO: how do we deal with this?
             Term::Sort(_sort) => {
                 // TstpTranslator::translate_sort(sort),
-                println!("No sabemos como traducir sort {:?}", _sort);
+                println!("Not known translation for sort {:?}", _sort);
                 panic!();
             }
 
@@ -626,7 +626,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
             TstpFormulaRole::Axiom,
             self.translate_term(term),
             // TODO: ?
-            "nil".to_owned(),
+            TstpAnnotatedFormulaSource::Empty,
             "nil".to_owned(),
         )
     }
@@ -640,10 +640,10 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
 
         match node {
             ProofNode::Step(StepNode {
-                id: _,
+                id,
                 depth: _,
                 clause,
-                rule: _,
+                rule,
                 premises,
                 args,
                 discharge: _,
@@ -661,13 +661,13 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 // Vec<Rc<Term>>, though it represents an
                 // invocation of Alethe's cl operator
                 // TODO: we are always adding the conclusion clause
-                let _conclusion: TstpFormula = if clause.is_empty() {
+                let conclusion: TstpFormula = if clause.is_empty() {
                     // TODO: ?
                     // TstpFormula::Variable(self.alethe_signature.empty_cl.clone())
-                    TstpFormula::Variable("dummy".to_owned())
+                    TstpFormula::Variable("this should an empty clause".to_owned())
                 } else {
                     // {!clause.is_empty()}
-                    TstpFormula::Variable("dummy_else".to_owned())
+                    TstpFormula::Variable("this should be a non-empty clause".to_owned())
                     // TstpFormula::App(
                     //     self.alethe_signature.cl.clone(),
                     //     clause
@@ -686,197 +686,39 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
 
                 // TODO: develop some generic programmatic way to deal with each rule's
                 // semantics (as explained in theory.rs) instead of this
-                // match rule.as_str() {
-                //     "la_generic" => {
-                //         self.tstp_proof.push(TstpCommand::Step {
-                //             id: id.clone(),
-                //             conclusion_clause: Some(conclusion),
-                //             rule: self.alethe_signature.la_generic.clone(),
-                //             // TODO: should we check if alethe_premises == []?
-                //             premises: TstpList { list: vec![] },
-                //             // The coefficients are one single argument.  This means they
-                //             // must be be wrapped in a single function call using an n-ary
-                //             // function.
-                //             arguments: TstpList {
-                //                 list: vec![TstpFormula::App(
-                //                     self.alethe_signature.add.clone(),
-                //                     tstp_arguments,
-                //                 )],
-                //             },
-                //         });
-                //     }
+                match rule.as_str() {
+                    "and_neg" => {
+                        self.get_mut_translator_data().translated_proof.push(
+                            TstpAnnotatedFormula::new(
+                                // TODO: some other language?
+                                // TODO: there should be an attribute of self that indicates
+                                //               the language being used
+                                TstpLanguage::Tff,
+                                id.clone(),
+                                TstpFormulaRole::Plain,
+                                conclusion,
+                                TstpAnnotatedFormulaSource::Empty,
+                                "".to_owned(),
+                            ),
+                        );
+                    }
 
-                //     "let" => {
-                //         // Include, as premises, previous step from the actual subproof.
-                //         alethe_premises.push(Self::get_previous_step_id(previous_step));
-
-                //         self.tstp_proof.push(TstpCommand::StepPop {
-                //             id: id.clone(),
-                //             conclusion_clause: Some(conclusion),
-                //             rule: self.alethe_signature.let_rule.clone(),
-                //             premises: TstpList { list: alethe_premises },
-                //             arguments: TstpList { list: tstp_arguments },
-                //         });
-                //     }
-
-                //     "refl" => {
-                //         // TODO: do not hard-code this string
-                //         tstp_arguments.push(TstpFormula::Variable("context".to_owned()));
-
-                //         self.tstp_proof.push(TstpCommand::Step {
-                //             id: id.clone(),
-                //             conclusion_clause: Some(conclusion),
-                //             rule: self.alethe_signature.refl.clone(),
-                //             premises: TstpList { list: alethe_premises },
-                //             arguments: TstpList { list: tstp_arguments },
-                //         });
-                //     }
-
-                //     "bind" => {
-                //         // Include, as premise, the previous step.
-                //         alethe_premises.push(Self::get_previous_step_id(previous_step));
-
-                //         // We include, as argument, the context surrounding this
-                //         // subproof's context.
-                //         tstp_arguments.push(self.get_last_introduced_context_id());
-
-                //         // :assumption: ctx
-                //         self.tstp_proof.push(TstpCommand::StepPop {
-                //             id: id.clone(),
-                //             conclusion_clause: Some(conclusion),
-                //             rule: self.alethe_signature.bind.clone(),
-                //             premises: TstpList { list: alethe_premises },
-                //             arguments: TstpList { list: tstp_arguments },
-                //         });
-                //     }
-
-                //     "subproof" => {
-                //         // TODO: check this
-                //         // The command (as mechanized in Tstp) gets the formula proven
-                //         // through an "assumption", hence, we use StepPop.
-                //         // The discharged assumptions (specified, in Alethe, through the
-                //         // "discharge" formal parameter), will be pushed
-                //         // NOTE: spurious value so the compiler won't comply
-                //         let mut implied_conclusion: TstpFormula = TstpFormula::Variable("dummy".to_owned());
-
-                //         // Assuming that the conclusion is of the form
-                //         // not φ1, ..., not φn, ψ
-                //         // extract ψ
-                //         let mut premise = TstpFormula::App(
-                //             self.alethe_signature.cl.clone(),
-                //             vec![self.alethe_signature.extract_consequent(&conclusion)],
-                //         );
-
-                //         let mut cl_disjuncts: Vec<TstpFormula> = vec![];
-
-                //         // Id of the premise step
-                //         let mut id_premise: Symbol = "".to_owned();
-
-                //         // TODO: some more efficient way to deal with
-                //         // the fact that we use a "stack" of assumptions?
-                //         let mut discharge_copy = discharge.clone();
-                //         discharge_copy.reverse();
-                //         discharge_copy.iter().for_each(|assumption| {
-                //             // TODO: we are discarding vector premises
-                //             match assumption.deref() {
-                //                 // TODO: ugly?
-                //                 ProofNode::Assume { id: _, depth: _, term } => {
-                //                     cl_disjuncts = vec![TstpFormula::App(
-                //                         self.alethe_signature.not.clone(),
-                //                         vec![self.translate_term(term)],
-                //                     )];
-
-                //                     cl_disjuncts.append(
-                //                         &mut self.alethe_signature.extract_cl_disjuncts(&premise),
-                //                     );
-
-                //                     implied_conclusion = TstpFormula::App(
-                //                         self.alethe_signature.cl.clone(),
-                //                         // TODO: too much cloning...
-                //                         cl_disjuncts.clone(),
-                //                     );
-
-                //                     // Get id of previous step
-                //                     id_premise = self.tstp_proof[self.tstp_proof.len() - 1]
-                //                         .get_step_id();
-
-                //                     self.tstp_proof.push(TstpCommand::StepPop {
-                //                         // TODO: change id!
-                //                         // TODO: ethos does not complain about repeated ids
-                //                         id: id.clone(),
-                //                         conclusion_clause: Some(implied_conclusion.clone()),
-                //                         rule: self.alethe_signature.subproof.clone(),
-                //                         premises: TstpList {
-                //                             list: vec![TstpFormula::Variable(id_premise.clone())],
-                //                         },
-                //                         arguments: TstpList { list: tstp_arguments.clone() },
-                //                     });
-
-                //                     // TODO: too much cloning...
-                //                     premise = implied_conclusion.clone();
-                //                 }
-
-                //                 _ => {
-                //                     // TODO: it shouldn't be a ProofNode different than an Assume
-                //                     panic!();
-                //                 }
-                //             }
-                //         });
-                //     }
-
-                //     "forall_inst" => {
-                //         // TODO: we are discarding premises arguments
-                //         self.tstp_proof.push(TstpCommand::Step {
-                //             id: id.clone(),
-                //             conclusion_clause: Some(conclusion),
-                //             rule: self.alethe_signature.forall_inst.clone(),
-                //             premises: TstpList { list: Vec::new() },
-                //             arguments: TstpList {
-                //                 list: vec![TstpFormula::App(
-                //                     self.alethe_signature.varlist_cons.clone(),
-                //                     tstp_arguments,
-                //                 )],
-                //             },
-                //         });
-                //     }
-
-                //     "onepoint" => {
-                //         self.tstp_proof.push(TstpCommand::StepPop {
-                //             id: id.clone(),
-                //             conclusion_clause: Some(conclusion),
-                //             rule: self.alethe_signature.onepoint.clone(),
-                //             premises: TstpList { list: alethe_premises },
-                //             arguments: TstpList { list: tstp_arguments },
-                //         });
-                //     }
-
-                //     "sko_ex" => {
-                //         // Include, as premise, the previous step.
-                //         alethe_premises.push(Self::get_previous_step_id(previous_step));
-
-                //         // We include, as argument, the context surrounding this
-                //         // subproof's context.
-                //         tstp_arguments.push(self.get_last_introduced_context_id());
-
-                //         self.tstp_proof.push(TstpCommand::StepPop {
-                //             id: id.clone(),
-                //             conclusion_clause: Some(conclusion),
-                //             rule: self.alethe_signature.sko_ex.clone(),
-                //             premises: TstpList { list: alethe_premises },
-                //             arguments: TstpList { list: tstp_arguments },
-                //         });
-                //     }
-
-                //     _ => {
-                //         self.tstp_proof.push(TstpCommand::Step {
-                //             id: id.clone(),
-                //             conclusion_clause: Some(conclusion),
-                //             rule: rule.clone(),
-                //             premises: TstpList { list: alethe_premises },
-                //             arguments: TstpList { list: tstp_arguments },
-                //         });
-                //     }
-                // }
+                    _ => {
+                        self.get_mut_translator_data().translated_proof.push(
+                            TstpAnnotatedFormula::new(
+                                // TODO: some other language?
+                                // TODO: there should be an attribute of self that indicates
+                                //               the language being used
+                                TstpLanguage::Tff,
+                                id.clone(),
+                                TstpFormulaRole::Plain,
+                                conclusion,
+                                TstpAnnotatedFormulaSource::Empty,
+                                "".to_owned(),
+                            ),
+                        );
+                    }
+                }
             }
 
             _ => {
@@ -919,7 +761,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                     Box::new(TstpFormula::Variable(pair.0.clone())),
                     TstpType::Universe,
                 ),
-                "".to_owned(),
+                TstpAnnotatedFormulaSource::Empty,
                 "".to_owned(),
             ));
         });
@@ -942,7 +784,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 pair.0.clone(),
                 TstpFormulaRole::Type,
                 TstpFormula::Typing(Box::new(TstpFormula::Variable(pair.0.clone())), tstp_type),
-                "".to_owned(),
+                TstpAnnotatedFormulaSource::Empty,
                 "".to_owned(),
             ));
         });
@@ -950,14 +792,14 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         // Translation of assertions: we represent them as
         // axioms.
         premises.iter().for_each(|assertion| {
-            // TODO: abstract this into a method to generate annotated formulas
             tstp_problem.push(TstpAnnotatedFormula::new(
                 // TODO: some other language?
                 TstpLanguage::Tff,
-                "some_name".to_owned(),
+                // TODO: define a proper way for generation and index of these names.
+                "some_formula_name".to_owned(),
                 TstpFormulaRole::Axiom,
                 self.translate_term(assertion),
-                "".to_owned(),
+                TstpAnnotatedFormulaSource::Empty,
                 "".to_owned(),
             ));
         });
