@@ -445,7 +445,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
             }
             Operator::BvSize | Operator::UBvToInt | Operator::SBvToInt => {
                 assert_num_args(&args, 1)?;
-                if !matches!(sorts[0], Sort::BitVec(_)) {
+                if !matches!(sorts[0], Sort::BitVec(_)) && !sorts[0].is_polymorphic()  {
                     return Err(ParserError::ExpectedBvSort(sorts[0].clone()));
                 }
             }
@@ -1927,12 +1927,14 @@ impl<'a, R: BufRead> Parser<'a, R> {
             }
             Token::OpenParen if polymorphic => {
                 let name = self.expect_symbol()?;
-                if !["BitVec".to_owned()].contains(&name)
-                    && !self.state.sort_defs.contains_key(&name)
-                {
-                    return Err(Error::Parser(ParserError::UndefinedSort(name), pos));
-                }
                 let args = self.parse_sequence(Self::parse_term, true)?;
+                let args = args.into_iter().map(|term| match &*term {
+                    Term::Var(v, sort) if sort.as_sort() == Some(&Sort::Type) => {
+                        return self.pool.add(Term::Sort(Sort::Var(v.to_owned())));
+                    }
+                    _ => term
+                }).collect();
+
                 let head_term = self.pool.add(Term::Sort(Sort::Var(name)));
                 return Ok(self.pool.add(Term::Sort(Sort::ParamSort(args, head_term))));
             }

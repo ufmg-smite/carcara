@@ -138,19 +138,27 @@ impl PrimitivePool {
                 | Operator::BvSRem
                 | Operator::BvSMod
                 | Operator::BvAShr => {
-                    let Sort::BitVec(width) =
-                        self.compute_sort(&args[0]).as_sort().unwrap().clone()
-                    else {
-                        unreachable!()
-                    };
-                    Sort::BitVec(width)
+                    match self.compute_sort(&args[0]).as_sort().unwrap().clone() {
+                        Sort::BitVec(width) => Sort::BitVec(width),
+                        Sort::ParamSort(v, head) => {
+                            if let Some(Sort::Var(_)) = head.as_sort() {
+                                Sort::ParamSort(v, head)
+                            } else {
+                                unreachable!()
+                            }
+                        }
+                        _ => unreachable!(),
+                    }
                 }
                 Operator::BvComp => Sort::BitVec(Integer::ONE.into()),
                 Operator::BvBbTerm | Operator::BvPBbTerm => Sort::BitVec(Integer::from(args.len())),
-                Operator::BvConst => {
-                    let bvsize = args[1].as_integer().unwrap();
-                    Sort::BitVec(bvsize)
-                }
+                Operator::BvConst => match &*args[1] {
+                    Term::Const(Constant::Integer(bvsize)) => Sort::BitVec(bvsize.clone()),
+                    _ => Sort::ParamSort(
+                        vec![args[1].clone()],
+                        self.add(Term::Sort(Sort::Var("BitVec".to_owned()))),
+                    ),
+                },
                 Operator::BvConcat => {
                     let mut total_width = Integer::ZERO;
                     for arg in args {
@@ -178,6 +186,13 @@ impl PrimitivePool {
                 Operator::IntDiv | Operator::Mod | Operator::Abs | Operator::ToInt => Sort::Int,
                 Operator::Select => match self.compute_sort(&args[0]).as_sort().unwrap() {
                     Sort::Array(_, y) => y.as_sort().unwrap().clone(),
+                    Sort::ParamSort(v, head) => {
+                        if let Some(Sort::Var(_)) = head.as_sort() {
+                            v[1].as_sort().unwrap().clone()
+                        } else {
+                            unreachable!()
+                        }
+                    }
                     _ => unreachable!(),
                 },
                 Operator::Store => self.compute_sort(&args[0]).as_sort().unwrap().clone(),
