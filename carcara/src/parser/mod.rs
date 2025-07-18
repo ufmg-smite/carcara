@@ -1932,9 +1932,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     .into_iter()
                     .map(|term| match &*term {
                         Term::Var(v, sort) if sort.as_sort() == Some(&Sort::Type) => {
-                            self.pool.add(Term::Sort(Sort::Var(v.to_owned())));
+                            self.pool.add(Term::Sort(Sort::Var(v.to_owned())))
                         }
-                        _ => term,
+                        _ => term
                     })
                     .collect();
 
