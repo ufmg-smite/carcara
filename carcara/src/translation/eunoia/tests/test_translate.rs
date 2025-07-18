@@ -85,11 +85,11 @@ fn test_small_example() {
     assert_eq!(
         "(define ctx1 ( ) true)\n\
          (assume context ctx1)\n\
-         (assume h1 (xor (not (> a 5.0)) (= b 10.0)))\n\
+         (assume h1 (@cl (xor (not (> a 5.0)) (= b 10.0))))\n\
          (step t1 (@cl (not (> a 5.0)) (= b 10.0)) :rule xor1 :premises ( h1 ))\n\
          (step t2 (@cl (<= a 5.0) (> a 5.0)) :rule la_generic :args ( (+ 1.0 1.0) ))\n\
-         (assume h2 (not (= b 10.0)))\n\
-         (assume h3 (not (<= a 5.0)))\n\
+         (assume h2 (@cl (not (= b 10.0))))\n\
+         (assume h3 (@cl (not (<= a 5.0))))\n\
          (step t3 @empty_cl :rule resolution :premises ( t1 t2 h2 h3 ))\n",
         std::str::from_utf8(&buf_proof).unwrap()
     );
@@ -144,7 +144,7 @@ fn test_let_example() {
     assert_eq!(
         "(define ctx1 ( ) true)\n\
          (assume context ctx1)\n\
-         (assume h1 (= a b))\n\
+         (assume h1 (@cl (= a b)))\n\
          (define ctx2 ( ) (@ctx ( ( x S ) ) (and (= x b) ctx1)))\n\
          (assume-push context ctx2)\n\
          (step t1 (@cl (= (@var ( ( x S ) ) x) b)) \

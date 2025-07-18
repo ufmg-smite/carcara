@@ -582,7 +582,10 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
             // Regular introduction of assumptions
             EunoiaCommand::Assume {
                 name: id.to_owned(),
-                term: self.translate_term(term),
+                term: EunoiaTerm::App(
+                    self.alethe_signature.cl.clone(),
+                    vec![self.translate_term(term)],
+                ),
             }
         } else {
             // { not self.get_read_translator_data().last_steps.last_steps_empty() }
@@ -595,13 +598,19 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                 // ethos assumption; we need to push every assumption
                 "subproof" => EunoiaCommand::AssumePush {
                     name: id.to_owned(),
-                    term: self.translate_term(term),
+                    term: EunoiaTerm::App(
+                        self.alethe_signature.cl.clone(),
+                        vec![self.translate_term(term)],
+                    ),
                 },
 
                 // Regular introduction of assumptions
                 _ => EunoiaCommand::Assume {
                     name: id.to_owned(),
-                    term: self.translate_term(term),
+                    term: EunoiaTerm::App(
+                        self.alethe_signature.cl.clone(),
+                        vec![self.translate_term(term)],
+                    ),
                 },
             }
         };
@@ -883,10 +892,9 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                     }
 
                     "cong" => {
-                        // We need to distinguish congruence over a variadic operator,
-                        // from congruence over an n-ary operator
                         let rule_name = self.alethe_signature.cong.clone();
 
+                        // TODO: build a constructor of Step ASTs
                         self.get_mut_translator_data()
                             .translated_proof
                             .push(EunoiaCommand::Step {
