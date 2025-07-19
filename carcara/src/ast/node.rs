@@ -356,7 +356,70 @@ fn proof_list_to_node(commands: Vec<ProofCommand>, root_id: Option<&str>) -> Opt
 fn proof_node_to_list(root: &Rc<ProofNode>) -> Vec<ProofCommand> {
     use std::collections::{HashMap, HashSet};
 
-    let mut stack: Vec<Vec<ProofCommand>> = vec![Vec::new()];
+    // To make sure all `assume` commands are placed before any other command, we store the
+    // commands as we process them in two separate vectors, one containing the `assume`s and another
+    // containing `step`s and subproofs.
+    #[derive(Default)]
+    struct Frame {
+        assumes: Vec<ProofCommand>,
+        steps: Vec<ProofCommand>,
+    }
+
+    // However, since we cannot know how many `assume`s there will be until after we finish
+    // processing a subproof, we cannot correctly determine the indices of other commands for step
+    // premises. To address this, whenever we add a premise to a `step` or subproof, we add this
+    // arbitrary large offset, to mark that this index should be updated. This technique has the
+    // side-effect of limiting the maximum number of steps in a subproof to `usize::MAX / 2`. Even
+    // on 32-bit systems, this will be more than 2 billion steps, so it is an acceptable limitation.
+    const STEP_INDEX_OFFSET: usize = usize::MAX / 2 + 1;
+
+    // Later, after we finish processing the entire subproof and know the exact ammount of
+    // `assume`s, we go through the subproof and update all indices that had the `STEP_INDEX_OFFSET`
+    // applied, and change the offset to be the number of `assume`s. Since there may be outbound
+    // premises, we also need to recurse into any subproof we find.
+    fn update_premise_indices(
+        commands: Vec<ProofCommand>,
+        depth: usize,
+        new_step_offset: usize,
+    ) -> Vec<ProofCommand> {
+        let mut stack = vec![(commands, 0)];
+        while let Some((commands, i)) = stack.last_mut() {
+            if *i < commands.len() {
+                match &mut commands[*i] {
+                    ProofCommand::Assume { .. } => *i += 1,
+                    ProofCommand::Step(step) => {
+                        step.premises
+                            .iter_mut()
+                            .chain(step.discharge.iter_mut())
+                            .for_each(|(d, i)| {
+                                if *d == depth && *i >= STEP_INDEX_OFFSET {
+                                    *i = *i - STEP_INDEX_OFFSET + new_step_offset;
+                                }
+                            });
+                        *i += 1;
+                    }
+                    ProofCommand::Subproof(subproof) => {
+                        let inner = std::mem::take(&mut subproof.commands);
+                        stack.push((inner, 0));
+                    }
+                }
+            } else {
+                let (finished, _) = stack.pop().unwrap();
+                if let Some((commands, i)) = stack.last_mut() {
+                    let ProofCommand::Subproof(subproof) = &mut commands[*i] else {
+                        unreachable!()
+                    };
+                    subproof.commands = finished;
+                    *i += 1;
+                } else {
+                    return finished;
+                }
+            }
+        }
+        unreachable!()
+    }
+
+    let mut stack: Vec<Frame> = vec![Frame::default()];
 
     let mut seen: HashMap<&Rc<ProofNode>, (usize, usize)> = HashMap::new();
     let mut todo: Vec<(&Rc<ProofNode>, bool)> = vec![(root, false)];
@@ -365,7 +428,11 @@ fn proof_node_to_list(root: &Rc<ProofNode>) -> Vec<ProofCommand> {
     loop {
         let Some((node, is_done)) = todo.pop() else {
             assert!(stack.len() == 1);
-            return stack.pop().unwrap();
+            let frame = stack.pop().unwrap();
+            let new_offset = frame.assumes.len();
+            let mut commands = frame.assumes;
+            commands.extend(frame.steps);
+            return update_premise_indices(commands, 0, new_offset);
         };
         if !is_done && seen.contains_key(&node) {
             continue;
@@ -414,15 +481,23 @@ fn proof_node_to_list(root: &Rc<ProofNode>) -> Vec<ProofCommand> {
 
                 todo.push((node, true));
                 todo.push((&s.last_step, false));
-                stack.push(Vec::new());
+                stack.push(Frame::default());
                 continue;
             }
             ProofNode::Subproof(s) => {
-                let commands = stack.pop().unwrap();
+                let frame = stack.pop().unwrap();
                 if stack.is_empty() {
-                    return commands;
+                    unreachable!();
                 }
-                assert!(commands.len() >= 2, "malformed subproof!");
+                assert!(frame.steps.len() >= 2, "malformed subproof!");
+
+                // After we finish the subproof, we concatenate the two vectors, and update the
+                // premise indices
+                let new_offset = frame.assumes.len();
+                let mut commands = frame.assumes;
+                commands.extend(frame.steps);
+                let commands = update_premise_indices(commands, stack.len(), new_offset);
+
                 ProofCommand::Subproof(Subproof {
                     commands,
                     args: s.args.clone(),
@@ -431,9 +506,19 @@ fn proof_node_to_list(root: &Rc<ProofNode>) -> Vec<ProofCommand> {
             }
         };
         let d = node.depth();
-        let index = stack[d].len();
+        // Depending on if the command is an `assume` command or not, we push it to a different
+        // vector in the stack frame
+        let index = if command.is_assume() {
+            stack[d].assumes.push(command);
+            stack[d].assumes.len() - 1
+        } else {
+            // If it is not an `assume`, we also need to add the `STEP_INDEX_OFFSET`
+            stack[d].steps.push(command);
+            let index = stack[d].steps.len() - 1;
+            assert!(index < usize::MAX - STEP_INDEX_OFFSET); // Make sure it won't overflow
+            index + STEP_INDEX_OFFSET
+        };
         seen.insert(node, (d, index));
-        stack[d].push(command);
     }
 }
 
