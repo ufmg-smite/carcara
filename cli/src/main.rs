@@ -646,7 +646,7 @@ fn slice_command(
         parser::parse_instance(problem, proof, options.parsing.into())?;
 
     let sliced = {
-        let (sliced_proof, sliced_problem_string, sliced_proof_string) = slice(
+        let (sliced_proof, sliced_problem_string, sliced_proof_string) = slice::slice(
             &problem,
             &proof,
             &options.from,
