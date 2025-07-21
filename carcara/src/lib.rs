@@ -421,7 +421,7 @@ struct Frame {
 }
 
 /// Returns a vector of proof commands representing the step to slice with its subproof context, if it exists, and its transitive premises.
-pub fn get_slice_body(
+fn get_slice_body(
     proof: &Proof,
     id: &str,
     pool: &mut PrimitivePool,

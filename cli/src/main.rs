@@ -93,19 +93,6 @@ struct Input {
 }
 
 #[derive(Args)]
-struct SliceOutput {
-    /// The path the output proof should be written to. If this argument is present,
-    /// the problem file argument must be as well. If neither is present, the output
-    /// will be written to the working directory.
-    sliced_proof_file: Option<String>,
-
-    /// The path the output problem should be written to. If this argument is present,
-    /// the proof file argument must be as well. If neither is present, the output
-    /// will be written to the working directory.
-    sliced_problem_file: Option<String>,
-}
-
-#[derive(Args)]
 struct StatsOptions {
     /// Enables the gathering of performance statistics
     #[clap(long)]
@@ -405,8 +392,10 @@ struct SliceCommandOptions {
     #[clap(flatten)]
     input: Input,
 
-    #[clap(flatten)]
-    output: SliceOutput,
+    /// The names of the sliced problem and proof will be given. If these are not supplied,
+    /// the files will be written to default locations in the working directory.
+    #[clap(long, value_names = &["SLICED_PROBLEM", "SLICED_PROOF"])]
+    sliced_output: Option<Vec<String>>,
 
     #[clap(flatten)]
     parsing: ParsingOptions,
@@ -666,26 +655,17 @@ fn slice_command(
         )
         .ok_or(CliError::InvalidSliceId(options.from.clone()))?;
 
-        let sliced_proof_file_name;
-        let sliced_problem_file_name;
-
-        if options.output.sliced_proof_file.is_none()
-            || options.output.sliced_problem_file.is_none()
-        {
-            if options.output.sliced_proof_file.is_none()
-                != options.output.sliced_problem_file.is_none()
-            {
-                log::warn!("Only one output filepath was specified, so both the output problem and proof will be written with default names to the directory containing the input proof.")
+        let (sliced_proof_file_name, sliced_problem_file_name) = match options.sliced_output {
+            Some(proof_prob) => (proof_prob[0].clone(), proof_prob[1].clone()),
+            None => {
+                let path = Path::new(&options.input.proof_file);
+                let path_without_extension = path.with_extension("");
+                let base_name = path_without_extension.file_name().unwrap();
+                let prob = format!("{}-{}.smt2", base_name.display(), options.from);
+                let proof = format!("{}-{}.alethe", base_name.display(), options.from);
+                (proof, prob)
             }
-            let path = Path::new(&options.input.proof_file);
-            let path_without_extension = path.with_extension("");
-            let base_name = path_without_extension.file_name().unwrap();
-            sliced_proof_file_name = format!("{}-{}.alethe", base_name.display(), options.from);
-            sliced_problem_file_name = format!("{}-{}.smt2", base_name.display(), options.from);
-        } else {
-            sliced_proof_file_name = options.output.sliced_proof_file.unwrap();
-            sliced_problem_file_name = options.output.sliced_problem_file.unwrap();
-        }
+        };
 
         fs::write(sliced_problem_file_name, sliced_problem_string)?;
         fs::write(sliced_proof_file_name, sliced_proof_string)?;
