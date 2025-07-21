@@ -160,16 +160,49 @@ impl PrimitivePool {
                     ),
                 },
                 Operator::BvConcat => {
-                    let mut total_width = Integer::ZERO;
-                    for arg in args {
-                        let Sort::BitVec(arg_width) =
-                            self.compute_sort(arg).as_sort().unwrap().clone()
-                        else {
-                            unreachable!()
-                        };
-                        total_width += arg_width;
+                    enum TotalWidth {
+                        Width(Integer),
+                        ParamSort(Rc<Term>),
                     }
-                    Sort::BitVec(total_width)
+                    let mut total_width: Vec<TotalWidth> = vec![];
+                    for arg in args {
+                        match self.compute_sort(arg).as_sort().unwrap().clone() {
+                            Sort::BitVec(arg_width) => {
+                                total_width.push(TotalWidth::Width(arg_width));
+                            }
+                            Sort::ParamSort(v, _) => {
+                                total_width.push(TotalWidth::ParamSort(v[0].clone()))
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                    if total_width
+                        .iter()
+                        .any(|x| matches!(x, TotalWidth::ParamSort(_)))
+                    {
+                        let add = Term::Op(
+                            Operator::Add,
+                            total_width
+                                .iter()
+                                .map(|x| match x {
+                                    TotalWidth::Width(w) => {
+                                        self.add(Term::Const(Constant::Integer(w.clone())))
+                                    }
+                                    TotalWidth::ParamSort(p) => p.clone(),
+                                })
+                                .collect(),
+                        );
+
+                        Sort::ParamSort(
+                            vec![self.add(add)],
+                            self.add(Term::Sort(Sort::Var("BitVec".to_owned()))),
+                        )
+                    } else {
+                        Sort::BitVec(total_width.iter().fold(Integer::ZERO, |acc, x| match x {
+                            TotalWidth::Width(w) => acc + w,
+                            TotalWidth::ParamSort(_) => unreachable!(),
+                        }))
+                    }
                 }
                 Operator::Ite => self.compute_sort(&args[1]).as_sort().unwrap().clone(),
                 Operator::Add | Operator::Sub | Operator::Mult => {
