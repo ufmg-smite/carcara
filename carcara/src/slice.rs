@@ -383,3 +383,108 @@ pub fn slice(
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::{self, parse_instance};
+
+    #[test]
+    fn test_slice() {
+        let problem_string: &[u8] = b"
+        (declare-const a Bool) 
+        (declare-const b Bool)
+        (declare-const c Bool)
+        (assert a)
+        (assert b)
+        (check-sat)
+        (exit)
+        ";
+
+        let proof_string: &[u8] = b"
+        (assume a0 a)
+        (step t0 (cl a b) :rule hole :premises (a0))
+        (step t1 (cl b a) :rule hole :premises (t0))
+        (step t2 (cl a b (not a)) :rule hole :premises (t0))
+        (anchor :step t3)
+        (assume t3.a0 (not a))
+        (step t3.t0 (cl b) :rule hole :premises (t3.a0 t1))
+        (step t3.t1 (cl b b) :rule hole :premises (t3.t0))
+        (step t3.t2 (cl (or b b)) :rule hole :premises (t3.t1))
+        (step t3 (cl (not (not a)) (or b b)) :rule subproof :discharge (t3.a0))
+        (step t4 (cl a (or b b)) :rule hole :premises (t3))
+        (step t5 (cl) :rule hole :premises (t4 a0 t2))   
+        ";
+
+        let (problem, proof, mut pool) =
+            parse_instance(problem_string, proof_string, parser::Config::new()).unwrap();
+
+        // Only steps that exist are sliceable
+        assert!(slice(&problem, &proof, "FAKE_STEP", &mut pool, 0).is_none());
+
+        // Assumes are unsliceable
+        assert!(slice(&problem, &proof, "a0", &mut pool, 0).is_none());
+        assert!(slice(&problem, &proof, "a1", &mut pool, 0).is_none());
+
+        // Slice a normal step with distance 0 (This one uses the last step of a subproof as a premise)
+        let expected_t4_d_0 = "(step t3 (cl (not (not a)) (or b b)) :rule hole :args (\"trust\"))
+(step t4 (cl a (or b b)) :rule hole :premises (t3))
+(step slice_end (cl) :rule hole :premises (t4) :args (\"trust\"))
+";
+
+        let actual_t4_d_0 = slice(&problem, &proof, "t4", &mut pool, 0).unwrap().2;
+        assert_eq!(expected_t4_d_0, actual_t4_d_0);
+
+        // Slice subproof conclusion with distance 0
+        let expected_t3_d_0 = "(anchor :step t3)
+(assume t3.a0 (not a))
+(step t3.t2 (cl (or b b)) :rule hole :args (\"trust\"))
+(step t3 (cl (not (not a)) (or b b)) :rule subproof :discharge (t3.a0))
+(step slice_end (cl) :rule hole :premises (t3) :args (\"trust\"))
+";
+
+        let actual_t3_d_0 = slice(&problem, &proof, "t3", &mut pool, 0).unwrap().2;
+        assert_eq!(expected_t3_d_0, actual_t3_d_0);
+
+        // Slice a step inside of a subproof with distance 0
+        let expected_t3_t1_d_0 = "(anchor :step t3)
+(assume t3.a0 (not a))
+(step t3.t0 (cl b) :rule hole :args (\"trust\"))
+(step t3.t1 (cl b b) :rule hole :premises (t3.t0))
+(step t3.t2 (cl (or b b)) :rule hole :premises (t3.t1) :args (\"trust\"))
+(step t3 (cl (not (not a)) (or b b)) :rule subproof :discharge (t3.a0))
+(step slice_end (cl) :rule hole :premises (t3) :args (\"trust\"))
+";
+
+        let actual_t3_t1_d_0 = slice(&problem, &proof, "t3.t1", &mut pool, 0).unwrap().2;
+        assert_eq!(expected_t3_t1_d_0, actual_t3_t1_d_0);
+
+        // Greater distances
+        let expected_t5_d_1 = "(assume a0 a)
+(step t0 (cl a b) :rule hole :args (\"trust\"))
+(step t2 (cl a b (not a)) :rule hole :premises (t0))
+(step t3 (cl (not (not a)) (or b b)) :rule hole :args (\"trust\"))
+(step t4 (cl a (or b b)) :rule hole :premises (t3))
+(step t5 (cl) :rule hole :premises (t4 a0 t2))
+(step slice_end (cl) :rule hole :premises (t5) :args (\"trust\"))
+";
+
+        let actual_t5_d_1 = slice(&problem, &proof, "t5", &mut pool, 1).unwrap().2;
+        assert_eq!(expected_t5_d_1, actual_t5_d_1);
+
+        let expected_t5_d_2 = "(assume a0 a)
+(step t0 (cl a b) :rule hole :premises (a0))
+(step t2 (cl a b (not a)) :rule hole :premises (t0))
+(anchor :step t3)
+(assume t3.a0 (not a))
+(step t3.t2 (cl (or b b)) :rule hole :args (\"trust\"))
+(step t3 (cl (not (not a)) (or b b)) :rule subproof :discharge (t3.a0))
+(step t4 (cl a (or b b)) :rule hole :premises (t3))
+(step t5 (cl) :rule hole :premises (t4 a0 t2))
+(step slice_end (cl) :rule hole :premises (t5) :args (\"trust\"))
+";
+
+        let actual_t5_d_2 = slice(&problem, &proof, "t5", &mut pool, 2).unwrap().2;
+        assert_eq!(expected_t5_d_2, actual_t5_d_2);
+    }
+}
