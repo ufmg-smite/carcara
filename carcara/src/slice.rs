@@ -108,7 +108,7 @@ struct Frame {
     commands: Vec<ProofCommand>,
 }
 
-/// Returns a vector of proof commands representing the step to slice with its subproof context, if it exists, and its transitive premises.
+/// Returns a vector of proof commands representing the step to slice with its subproof context, if it exists, its transitive premises, and a special end step.
 fn get_slice_body(
     proof: &Proof,
     id: &str,
@@ -127,8 +127,8 @@ fn get_slice_body(
 
     // Search for the proof step we are trying to slice out.
     while let Some(command) = iter.next() {
-        /* Maintain a stack of subproofs we've encountered in order to reconstruct
-        nested subproof context if the step we're slicing is in a subproof. */
+        // Maintain a stack of subproofs we've encountered in order to reconstruct
+        // nested subproof context if the step we're slicing is in a subproof.
         if let ProofCommand::Subproof(sp) = command {
             subproof_stack.push(sp);
         }
@@ -244,7 +244,6 @@ fn get_slice_body(
                     } else {
                         // If the step we are placing occurs after the target step and is the second to last step of a subproof,
                         // we should include child as a premise for it with :rule hole :args trust.
-                        // You're not gonna need_premises of that, by the way
                         ProofStep {
                             id: command.id().to_owned(),
                             clause: command.clause().to_vec(),
@@ -321,9 +320,7 @@ fn get_slice_body(
         id: "slice_end".to_owned(),
         clause: Vec::new(),
         rule: "hole".to_owned(),
-        premises: vec![
-            /* (0, stack.last().unwrap().current_position - 1)*/ child.unwrap(),
-        ],
+        premises: vec![child.unwrap()],
         args: vec![trust],
         discharge: Vec::new(),
     };
@@ -336,7 +333,6 @@ fn get_slice_body(
 }
 
 /// Slices a step with its associated subproof structure and constructs a proof containing that step.
-/// The beginning of the proof is an assumption of false that gets resolved with (not false) in the end.
 pub fn slice(
     problem: &Problem,
     proof: &Proof,
@@ -346,42 +342,38 @@ pub fn slice(
 ) -> Option<(Proof, String, String)> {
     use std::fmt::Write;
 
-    if let Some(sliced_step_commands) = get_slice_body(proof, id, pool, max_distance) {
-        let mut new_proof: Proof = Proof {
-            constant_definitions: proof.constant_definitions.clone(),
-            commands: Vec::new(),
-        };
-        for c in &sliced_step_commands {
-            new_proof.commands.push(c.clone());
-        }
+    let sliced_step_commands = get_slice_body(proof, id, pool, max_distance)?;
 
-        // TODO: Insert step deriving (cl) via rule hole
-        let proof_string = proof_to_string(pool, &problem.prelude, &new_proof, false);
-
-        // Create an assertion in the problem for each assumption in the proof.
-        let mut asserts = Vec::new();
-
-        for command in &new_proof.commands {
-            match command {
-                ProofCommand::Assume { term, .. } => asserts.push(term.clone()),
-                _ => break,
-            }
-        }
-
-        let mut problem_string = String::new();
-        write!(&mut problem_string, "{}", &problem.prelude).unwrap();
-
-        let mut bytes = Vec::new();
-        let _ =
-            crate::ast::printer::write_asserts(pool, &problem.prelude, &mut bytes, &asserts, false);
-        write!(&mut problem_string, "{}", String::from_utf8(bytes).unwrap()).unwrap();
-        writeln!(&mut problem_string, "(check-sat)").unwrap();
-        writeln!(&mut problem_string, "(exit)").unwrap();
-
-        Some((new_proof, problem_string, proof_string))
-    } else {
-        None
+    let mut new_proof: Proof = Proof {
+        constant_definitions: proof.constant_definitions.clone(),
+        commands: Vec::new(),
+    };
+    for c in &sliced_step_commands {
+        new_proof.commands.push(c.clone());
     }
+
+    let proof_string = proof_to_string(pool, &problem.prelude, &new_proof, false);
+
+    // Create an assertion in the problem for each assumption in the proof.
+    let mut asserts = Vec::new();
+
+    for command in &new_proof.commands {
+        match command {
+            ProofCommand::Assume { term, .. } => asserts.push(term.clone()),
+            _ => break,
+        }
+    }
+
+    let mut problem_string = String::new();
+    write!(&mut problem_string, "{}", &problem.prelude).unwrap();
+
+    let mut bytes = Vec::new();
+    let _ = crate::ast::printer::write_asserts(pool, &problem.prelude, &mut bytes, &asserts, false);
+    write!(&mut problem_string, "{}", String::from_utf8(bytes).unwrap()).unwrap();
+    writeln!(&mut problem_string, "(check-sat)").unwrap();
+    writeln!(&mut problem_string, "(exit)").unwrap();
+
+    Some((new_proof, problem_string, proof_string))
 }
 
 #[cfg(test)]
