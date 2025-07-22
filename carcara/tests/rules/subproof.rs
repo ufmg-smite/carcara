@@ -15,11 +15,11 @@ fn subproof() {
 
             "(anchor :step t1)
             (assume t1.h1 p)
-            (step t1.t2 (cl) :rule hole)
-            (assume t1.h3 q)
+            (assume t1.h2 q)
+            (step t1.t3 (cl) :rule hole)
             (step t1.t4 (cl (= r s)) :rule hole)
             (step t1 (cl (not p) (not q) (= r s))
-                :rule subproof :discharge (t1.h1 t1.h3))": true,
+                :rule subproof :discharge (t1.h1 t1.h2))": true,
         }
         "Missing assumption" {
             "(anchor :step t1)

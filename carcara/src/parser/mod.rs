@@ -852,9 +852,12 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         if stack.len() == 1 {
                             log::warn!("`assume` command '{}' appears after `step` commands", &id);
                         }
-                        // It is disallowed within subproofs. We will replace this warning with an error later.
+                        // It is disallowed within subproofs.
                         else {
-                            log::warn!("`assume` command '{}' appears after `step` commands within subproof", &id);
+                            return Err(Error::Parser(
+                                ParserError::AssumeAfterStepInSubproof(id),
+                                position,
+                            ));
                         }
                     }
 

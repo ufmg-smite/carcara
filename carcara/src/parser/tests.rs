@@ -706,6 +706,25 @@ fn test_premises_in_subproofs() {
 }
 
 #[test]
+fn test_assumes_after_steps_in_subproofs() {
+    let mut p = PrimitivePool::new();
+    let bad_input = "
+        (assume h1 true)
+        (assume h2 true)
+        (anchor :step t3)
+        (step t3.t1 (cl) :rule rule-name :premises (h1 h2))
+        (assume h3 false)
+        (step t3.t2 (cl) :rule rule-name :premises (t3.t1 h1 h2))
+        (step t3 (cl) :rule rule-name :premises (h1 t3.t1 h2 t3.t2))
+    ";
+
+    assert!(matches!(
+        parse_proof_err(&mut p, bad_input),
+        Error::Parser(ParserError::AssumeAfterStepInSubproof(_), _)
+    ));
+}
+
+#[test]
 fn test_bitvectors() {
     let mut p = PrimitivePool::new();
     let cases = [
