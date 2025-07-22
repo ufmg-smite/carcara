@@ -2,102 +2,74 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::ast::{
-    printer::proof_to_string, PrimitivePool, Problem, Proof, ProofCommand, ProofIter, ProofStep,
-    Rc, Subproof, Term, TermPool,
+    printer::proof_to_string, PrimitivePool, Problem, Proof, ProofCommand, ProofStep, Rc, Subproof,
+    Term, TermPool,
 };
 
-/// Produces a `ProofIter` to a command with a given id.
-fn get_iter_to_command<'a>(proof: &'a Proof, id: &'a str) -> (ProofIter<'a>, &'a ProofCommand) {
-    // Navigate to the command ending the subproof
-    let mut proof_iter = proof.iter();
-    while let Some(command) = proof_iter.next() {
-        if command.id() == id {
-            return (proof_iter, command);
-        }
-    }
-    panic!("Invalid command to get proof iterator to.");
+enum PremiseType {
+    Discharge,
+    Premise,
+    SubproofEnd,
 }
+/// Creates a map whose keys are step IDs in the proof whose values are vectors containing the IDs of those steps' premises.
+fn get_step_to_premises(proof: &Proof) -> HashMap<String, Vec<(String, PremiseType)>> {
+    let mut map = HashMap::new();
+    let mut iter = proof.iter();
+    while let Some(command) = iter.next() {
+        let ProofCommand::Step(step) = command else {
+            continue;
+        };
+        let mut premises: Vec<(String, PremiseType)> = step
+            .premises
+            .iter()
+            .map(|p| (iter.get_premise(*p).id().to_owned(), PremiseType::Premise))
+            .collect();
 
-/// Stores the string IDs of a step's :premises
-#[derive(Debug)]
-struct PremiseIds {
-    premises: Vec<String>,
+        let mut discharge: Vec<(String, PremiseType)> = step
+            .discharge
+            .iter()
+            .map(|p| (iter.get_premise(*p).id().to_owned(), PremiseType::Discharge))
+            .collect();
+
+        premises.append(&mut discharge);
+
+        if iter.is_end_step() {
+            let previous = iter.current_subproof().unwrap().iter().nth_back(1).unwrap();
+            premises.push((previous.id().to_owned(), PremiseType::SubproofEnd));
+        }
+        map.insert(step.id.clone(), premises);
+    }
+    map
 }
 
 /// Produces (1) a map containing all the ids of the transitive premises of the input step and
 /// bools denoting whether we need the premises of those premises and (2) a map that the IDs associates IDs of
 /// the transitive premises with the IDs of their premises.
 fn get_transitive_premises(
-    proof: &Proof,
     step_id: String,
+    step_to_premises: HashMap<String, Vec<(String, PremiseType)>>,
     max_distance: usize,
-) -> (HashMap<String, bool>, HashMap<String, PremiseIds>) {
+) -> HashMap<String, bool> {
     // Items to process in BFS
     let mut queue: VecDeque<(String, usize)> = VecDeque::new();
 
     // Output
     let mut id_to_keep_premises: HashMap<String, bool> = HashMap::new();
-    let mut id_to_premise_ids: HashMap<String, PremiseIds> = HashMap::new();
 
     queue.push_back((step_id, max_distance + 1)); // Different use of distance than in interface. Here it is the number of steps to include after this one
     while let Some((step_id, d)) = queue.pop_front() {
-        // Get an iterator for each step we are handling to make sure we get the right premises.
-        let (proof_iter, step) = get_iter_to_command(proof, &step_id);
-        let not_last = d != 0;
+        let last = d == 0;
         // We should always default to needing premises if there's a conflict between what's already in the map and what would be added.
-        let keep_premises = not_last || *id_to_keep_premises.get(step.id()).unwrap_or(&false);
-        match step {
-            ProofCommand::Assume { .. } => {
-                // Assumes have no premises to be kept
-                id_to_keep_premises.insert(step.id().to_owned(), false);
-                id_to_premise_ids.insert(step.id().to_owned(), PremiseIds { premises: Vec::new() });
-            }
-            ProofCommand::Step(proof_step) => {
-                // Steps have premises we may or may not need to keep
-                id_to_keep_premises.insert(step.id().to_owned(), keep_premises);
-                if not_last {
-                    let mut premise_entries: Vec<String> = Vec::new();
-                    // Add the premises to the queue to be processed and store ids of premises
-                    for premise in &proof_step.premises {
-                        let premise = proof_iter.get_premise(*premise);
-                        queue.push_back((premise.id().to_owned(), d - 1));
-                        premise_entries.push(premise.id().to_owned());
-                    }
-                    for premise in &proof_step.discharge {
-                        let premise = proof_iter.get_premise(*premise);
-                        queue.push_back((premise.id().to_owned(), d - 1));
-                    }
-                    id_to_premise_ids.insert(step_id, PremiseIds { premises: premise_entries });
-                }
-            }
-            ProofCommand::Subproof(subproof) => {
-                id_to_keep_premises.insert(step.id().to_owned(), keep_premises);
-                if not_last {
-                    for command in &subproof.commands {
-                        // Keep all assumptions of the subproof
-                        if command.is_assume() {
-                            queue.push_back((command.id().to_owned(), 0));
-                        } else {
-                            break;
-                        }
-                    }
-
-                    // Keep second to last step
-                    let penult = &subproof.commands[subproof.commands.len() - 2];
-                    queue.push_back((penult.id().to_owned(), d - 1));
-
-                    // We need to insert the subproof into the map so that we know to copy it when slicing
-                    id_to_premise_ids
-                        .insert(step.id().to_owned(), PremiseIds { premises: Vec::new() });
-
-                    // The last step has the same ID as subproof command, which we've already said we're keeping,
-                    // and no premises, so we don't need to handle it separately.
-                }
+        let keep_premises = !last || *id_to_keep_premises.get(&step_id).unwrap_or(&false);
+        id_to_keep_premises.insert(step_id.clone(), keep_premises);
+        if !last {
+            for (premise, _) in step_to_premises.get(&step_id).unwrap_or(&Vec::new()) {
+                queue.push_back((premise.to_owned(), d - 1));
             }
         }
     }
 
-    (id_to_keep_premises, id_to_premise_ids)
+    id_to_keep_premises
 }
 
 #[derive(Debug)]
@@ -145,8 +117,12 @@ fn get_slice_body(
 
     let from_step = from_step?;
 
-    let (mut to_keep, mut id_to_premise_ids) =
-        get_transitive_premises(proof, from_step.id().to_owned(), max_distance);
+    let step_to_premises = get_step_to_premises(proof);
+
+    let mut to_keep =
+        get_transitive_premises(from_step.id().to_owned(), step_to_premises, max_distance);
+
+    let id_to_premise_ids = get_step_to_premises(proof);
 
     // A map of IDs to their positions in the new proof.
     let mut id_to_index: HashMap<String, (usize, usize)> = HashMap::new();
@@ -156,8 +132,6 @@ fn get_slice_body(
         // Make a note to keep context of the step we're slicing.
         ProofCommand::Step(_) | ProofCommand::Subproof(_) => {
             for sp in subproof_stack {
-                let sp_id = sp.commands.last().unwrap().id();
-                id_to_premise_ids.insert(sp_id.to_owned(), PremiseIds { premises: Vec::new() });
                 // Get assumes
                 for command in &sp.commands {
                     if command.is_assume() {
@@ -226,9 +200,9 @@ fn get_slice_body(
                             if let Some(premise_ids) = id_to_premise_ids.get(command.id()) {
                                 (
                                     premise_ids
-                                        .premises
                                         .iter()
-                                        .map(|s| id_to_index[s])
+                                        .filter(|(_, t)| matches!(t, PremiseType::Premise))
+                                        .map(|(s, _)| id_to_index[s])
                                         .collect(),
                                     proof_step.discharge.clone(),
                                 )
