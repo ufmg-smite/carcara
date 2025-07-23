@@ -31,15 +31,14 @@ pub fn print_proof(
 }
 
 // Like print_proof, but to write to a string, not stdout
-pub fn proof_to_string(
+pub fn write_proof_to_dest(
     pool: &mut PrimitivePool,
     prelude: &ProblemPrelude,
     proof: &Proof,
+    dest: &mut dyn io::Write,
     use_sharing: bool,
-) -> String {
-    let mut bytes = Vec::new();
-    let _ = AlethePrinter::new(pool, prelude, use_sharing, &mut bytes).write_proof(proof);
-    String::from_utf8(bytes).unwrap()
+) -> io::Result<()> {
+    AlethePrinter::new(pool, prelude, use_sharing, dest).write_proof(proof)
 }
 
 /// Given the conclusion clause of a `lia_generic` step, this method will write to `dest` the

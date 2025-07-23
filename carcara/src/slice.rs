@@ -1,10 +1,7 @@
 //! Backend of the slice command.
 use std::collections::{HashMap, VecDeque};
 
-use crate::ast::{
-    printer::proof_to_string, PrimitivePool, Problem, Proof, ProofCommand, ProofStep, Rc, Subproof,
-    Term, TermPool,
-};
+use crate::ast::{PrimitivePool, Proof, ProofCommand, ProofStep, Rc, Subproof, Term, TermPool};
 
 enum PremiseType {
     Discharge,
@@ -308,25 +305,17 @@ fn get_slice_body(
 
 /// Slices a step with its associated subproof structure and constructs a proof containing that step.
 pub fn slice(
-    problem: &Problem,
     proof: &Proof,
     id: &str,
     pool: &mut PrimitivePool,
     max_distance: usize,
-) -> Option<(Proof, String, String)> {
-    use std::fmt::Write;
-
+) -> Option<(Proof, Vec<Rc<Term>>)> {
     let sliced_step_commands = get_slice_body(proof, id, pool, max_distance)?;
 
-    let mut new_proof: Proof = Proof {
+    let new_proof: Proof = Proof {
         constant_definitions: proof.constant_definitions.clone(),
-        commands: Vec::new(),
+        commands: sliced_step_commands,
     };
-    for c in &sliced_step_commands {
-        new_proof.commands.push(c.clone());
-    }
-
-    let proof_string = proof_to_string(pool, &problem.prelude, &new_proof, false);
 
     // Create an assertion in the problem for each assumption in the proof.
     let mut asserts = Vec::new();
@@ -338,26 +327,18 @@ pub fn slice(
         }
     }
 
-    let mut problem_string = String::new();
-    write!(&mut problem_string, "{}", &problem.prelude).unwrap();
-
-    let mut bytes = Vec::new();
-    let _ = crate::ast::printer::write_asserts(pool, &problem.prelude, &mut bytes, &asserts, false);
-    write!(&mut problem_string, "{}", String::from_utf8(bytes).unwrap()).unwrap();
-    writeln!(&mut problem_string, "(check-sat)").unwrap();
-    writeln!(&mut problem_string, "(exit)").unwrap();
-
-    Some((new_proof, problem_string, proof_string))
+    Some((new_proof, asserts))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::{self, parse_instance};
+    use crate::{
+        ast::{compare_nodes, ProofNode},
+        parser::{self, parse_instance, parse_instance_with_pool, Config},
+    };
 
-    #[test]
-    fn test_slice() {
-        let problem_string: &[u8] = b"
+    const PROBLEM_STRING: &[u8] = b"
         (declare-const a Bool) 
         (declare-const b Bool)
         (declare-const c Bool)
@@ -367,7 +348,7 @@ mod tests {
         (exit)
         ";
 
-        let proof_string: &[u8] = b"
+    const PROOF_STRING: &[u8] = b"
         (assume a0 a)
         (step t0 (cl a b) :rule hole :premises (a0))
         (step t1 (cl b a) :rule hole :premises (t0))
@@ -382,63 +363,49 @@ mod tests {
         (step t5 (cl) :rule hole :premises (t4 a0 t2))   
         ";
 
-        let (problem, proof, mut pool) =
-            parse_instance(problem_string, proof_string, parser::Config::new()).unwrap();
-
-        // Only steps that exist are sliceable
-        assert!(slice(&problem, &proof, "FAKE_STEP", &mut pool, 0).is_none());
-
-        // Assumes are unsliceable
-        assert!(slice(&problem, &proof, "a0", &mut pool, 0).is_none());
-        assert!(slice(&problem, &proof, "a1", &mut pool, 0).is_none());
-
-        // Slice a normal step with distance 0 (This one uses the last step of a subproof as a premise)
-        let expected_t4_d_0 = "(step t3 (cl (not (not a)) (or b b)) :rule hole :args (\"trust\"))
+    const PAIRS: [(&[u8], (&str, usize)); 5] = [
+        // from t4, d=0 (normal step)
+        (
+            b"(step t3 (cl (not (not a)) (or b b)) :rule hole :args (\"trust\"))
 (step t4 (cl a (or b b)) :rule hole :premises (t3))
-(step slice_end (cl) :rule hole :premises (t4) :args (\"trust\"))
-";
-
-        let actual_t4_d_0 = slice(&problem, &proof, "t4", &mut pool, 0).unwrap().2;
-        assert_eq!(expected_t4_d_0, actual_t4_d_0);
-
-        // Slice subproof conclusion with distance 0
-        let expected_t3_d_0 = "(anchor :step t3)
+(step slice_end (cl) :rule hole :premises (t4) :args (\"trust\"))",
+            ("t4", 0),
+        ),
+        // from t3, d=0 (subproof conclusion)
+        (
+            b"(anchor :step t3)
 (assume t3.a0 (not a))
 (step t3.t2 (cl (or b b)) :rule hole :args (\"trust\"))
 (step t3 (cl (not (not a)) (or b b)) :rule subproof :discharge (t3.a0))
 (step slice_end (cl) :rule hole :premises (t3) :args (\"trust\"))
-";
-
-        let actual_t3_d_0 = slice(&problem, &proof, "t3", &mut pool, 0).unwrap().2;
-        assert_eq!(expected_t3_d_0, actual_t3_d_0);
-
-        // Slice a step inside of a subproof with distance 0
-        let expected_t3_t1_d_0 = "(anchor :step t3)
+",
+            ("t3", 0),
+        ),
+        // from t3.t1, d=0 (step inside subproof)
+        (
+            b"(anchor :step t3)
 (assume t3.a0 (not a))
 (step t3.t0 (cl b) :rule hole :args (\"trust\"))
 (step t3.t1 (cl b b) :rule hole :premises (t3.t0))
 (step t3.t2 (cl (or b b)) :rule hole :premises (t3.t1) :args (\"trust\"))
 (step t3 (cl (not (not a)) (or b b)) :rule subproof :discharge (t3.a0))
 (step slice_end (cl) :rule hole :premises (t3) :args (\"trust\"))
-";
-
-        let actual_t3_t1_d_0 = slice(&problem, &proof, "t3.t1", &mut pool, 0).unwrap().2;
-        assert_eq!(expected_t3_t1_d_0, actual_t3_t1_d_0);
-
-        // Greater distances
-        let expected_t5_d_1 = "(assume a0 a)
+",
+            ("t3.t1", 0),
+        ),
+        (
+            b"(assume a0 a)
 (step t0 (cl a b) :rule hole :args (\"trust\"))
 (step t2 (cl a b (not a)) :rule hole :premises (t0))
 (step t3 (cl (not (not a)) (or b b)) :rule hole :args (\"trust\"))
 (step t4 (cl a (or b b)) :rule hole :premises (t3))
 (step t5 (cl) :rule hole :premises (t4 a0 t2))
 (step slice_end (cl) :rule hole :premises (t5) :args (\"trust\"))
-";
-
-        let actual_t5_d_1 = slice(&problem, &proof, "t5", &mut pool, 1).unwrap().2;
-        assert_eq!(expected_t5_d_1, actual_t5_d_1);
-
-        let expected_t5_d_2 = "(assume a0 a)
+",
+            ("t5", 1),
+        ),
+        (
+            b"(assume a0 a)
 (step t0 (cl a b) :rule hole :premises (a0))
 (step t2 (cl a b (not a)) :rule hole :premises (t0))
 (anchor :step t3)
@@ -448,9 +415,39 @@ mod tests {
 (step t4 (cl a (or b b)) :rule hole :premises (t3))
 (step t5 (cl) :rule hole :premises (t4 a0 t2))
 (step slice_end (cl) :rule hole :premises (t5) :args (\"trust\"))
-";
+",
+            ("t5", 2),
+        ),
+    ];
 
-        let actual_t5_d_2 = slice(&problem, &proof, "t5", &mut pool, 2).unwrap().2;
-        assert_eq!(expected_t5_d_2, actual_t5_d_2);
+    fn get_parser_config() -> Config {
+        let mut config = parser::Config::new();
+        config.parse_hole_args = true;
+        config
+    }
+
+    #[test]
+    fn test_slice() {
+        let (_, proof, mut pool) =
+            parse_instance(PROBLEM_STRING, PROOF_STRING, get_parser_config()).unwrap();
+
+        // Only steps that exist are sliceable
+        assert!(slice(&proof, "FAKE_STEP", &mut pool, 0).is_none());
+
+        // Assumes are unsliceable
+        assert!(slice(&proof, "a0", &mut pool, 0).is_none());
+        assert!(slice(&proof, "a1", &mut pool, 0).is_none());
+
+        for (expected, (id, d)) in PAIRS {
+            let (_, expected) =
+                parse_instance_with_pool(PROBLEM_STRING, expected, get_parser_config(), &mut pool)
+                    .unwrap();
+
+            let expected = ProofNode::from_commands(expected.commands);
+
+            let actual =
+                ProofNode::from_commands(slice(&proof, id, &mut pool, d).unwrap().0.commands);
+            assert!(compare_nodes(&expected, &actual));
+        }
     }
 }

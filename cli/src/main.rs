@@ -14,7 +14,7 @@ use git_version::git_version;
 use path_args::{get_instances_from_paths, infer_problem_path};
 use std::{
     fs::File,
-    io::{self, BufRead, IsTerminal},
+    io::{self, BufRead, IsTerminal, Write},
     path::Path,
     sync::atomic,
 };
@@ -490,10 +490,12 @@ fn main() {
             })
         }
         Command::Bench(options) => bench_command(options),
-        Command::Slice(options) => slice_command(options).and_then(|(pb, pf, mut pool)| {
-            ast::print_proof(&mut pool, &pb.prelude, &pf, !cli.no_print_with_sharing)?;
-            Ok(())
-        }),
+        Command::Slice(options) => {
+            slice_command(options, cli.no_print_with_sharing).and_then(|(pb, pf, mut pool)| {
+                ast::print_proof(&mut pool, &pb.prelude, &pf, !cli.no_print_with_sharing)?;
+                Ok(())
+            })
+        }
         Command::GenerateLiaProblems(options) => {
             generate_lia_problems_command(options, !cli.no_print_with_sharing)
         }
@@ -638,6 +640,7 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
 
 fn slice_command(
     options: SliceCommandOptions,
+    no_print_with_sharing: bool,
 ) -> CliResult<(ast::Problem, ast::Proof, ast::PrimitivePool)> {
     use std::fs;
 
@@ -646,8 +649,7 @@ fn slice_command(
         parser::parse_instance(problem, proof, options.parsing.into())?;
 
     let sliced = {
-        let (sliced_proof, sliced_problem_string, sliced_proof_string) = slice::slice(
-            &problem,
+        let (sliced_proof, sliced_asserts) = slice::slice(
             &proof,
             &options.from,
             &mut pool,
@@ -655,6 +657,7 @@ fn slice_command(
         )
         .ok_or(CliError::InvalidSliceId(options.from.clone()))?;
 
+        // Write sliced problem and proof to provided paths or default locations.
         let (sliced_proof_file_name, sliced_problem_file_name) = match options.sliced_output {
             Some(proof_prob) => (proof_prob[0].clone(), proof_prob[1].clone()),
             None => {
@@ -667,8 +670,29 @@ fn slice_command(
             }
         };
 
-        fs::write(sliced_problem_file_name, sliced_problem_string)?;
-        fs::write(sliced_proof_file_name, sliced_proof_string)?;
+        let mut sliced_problem_file = fs::File::create(sliced_problem_file_name)?;
+        sliced_problem_file
+            .write_all(format!("{}", problem.prelude).as_bytes())
+            .unwrap();
+        ast::write_asserts(
+            &mut pool,
+            &problem.prelude,
+            &mut sliced_problem_file,
+            &sliced_asserts,
+            false,
+        )?;
+        sliced_problem_file.write_all(b"(check-sat)\n")?;
+        sliced_problem_file.write_all(b"(exit)\n")?;
+
+        let mut sliced_proof_file = fs::File::create(sliced_proof_file_name)?;
+        ast::write_proof_to_dest(
+            &mut pool,
+            &problem.prelude,
+            &sliced_proof,
+            &mut sliced_proof_file,
+            !no_print_with_sharing,
+        )?;
+        sliced_proof_file.write_all(b"\n")?;
 
         sliced_proof
     };

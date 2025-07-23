@@ -23,7 +23,7 @@ pub use iter::ProofIter;
 pub use node::{ProofNode, StepNode, SubproofNode};
 pub use polyeq::{alpha_equiv, polyeq, Polyeq, PolyeqComparable, PolyeqConfig};
 pub use pool::{PrimitivePool, TermPool};
-pub use printer::{print_proof, USE_SHARING_IN_TERM_DISPLAY};
+pub use printer::{print_proof, write_asserts, write_proof_to_dest, USE_SHARING_IN_TERM_DISPLAY};
 pub use problem::*;
 pub use proof::*;
 pub use rc::Rc;
