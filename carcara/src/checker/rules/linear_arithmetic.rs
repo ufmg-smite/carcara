@@ -18,35 +18,95 @@ pub fn la_rw_eq(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_eq(u_2, u_3)
 }
 
-/// Takes a disequality term and returns its negation, represented by an operator and two linear
-/// combinations.
-/// The disequality can be:
-///
-/// - An application of the `<`, `>`, `<=` or `>=` operators
-/// - The negation of an application of one of these operators
-/// - The negation of an application of the `=` operator
-fn negate_disequality(term: &Rc<Term>) -> Result<(Operator, LinearComb, LinearComb), CheckerError> {
-    use Operator::*;
+/// A comparison operator, used by `la_generic`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CmpOperator {
+    Equals,
+    NotEquals,
+    GreaterEq,
+    LessEq,
+    GreaterThan,
+    LessThan,
+}
 
-    fn negate_operator(op: Operator) -> Option<Operator> {
+impl CmpOperator {
+    fn from_op(op: Operator) -> Option<Self> {
+        use CmpOperator::*;
         Some(match op {
-            LessThan => GreaterEq,
-            GreaterThan => LessEq,
-            LessEq => GreaterThan,
-            GreaterEq => LessThan,
+            Operator::GreaterEq => GreaterEq,
+            Operator::LessEq => LessEq,
+            Operator::GreaterThan => GreaterThan,
+            Operator::LessThan => LessThan,
+            Operator::Equals => Equals,
             _ => return None,
         })
     }
 
-    fn inner(term: &Rc<Term>) -> Option<(Operator, &[Rc<Term>])> {
-        if let Some(Term::Op(op, args)) = term.remove_negation().map(Rc::as_ref) {
-            if matches!(op, GreaterEq | LessEq | GreaterThan | LessThan | Equals) {
-                return Some((*op, args));
-            }
-        } else if let Term::Op(op, args) = term.as_ref() {
-            return Some((negate_operator(*op)?, args));
+    fn neg(self) -> Self {
+        use CmpOperator::*;
+        match self {
+            Equals => NotEquals,
+            NotEquals => Equals,
+            GreaterEq => LessThan,
+            LessEq => GreaterThan,
+            GreaterThan => LessEq,
+            LessThan => GreaterEq,
         }
-        None
+    }
+
+    fn add(self, other: Self) -> Option<Self> {
+        use CmpOperator::*;
+        match (self, other) {
+            (Equals, other) | (other, Equals) => Some(other),
+
+            (GreaterEq, GreaterEq) => Some(GreaterEq),
+            (GreaterThan, GreaterThan) => Some(GreaterThan),
+            (GreaterEq, GreaterThan) | (GreaterThan, GreaterEq) => Some(GreaterThan),
+
+            (LessEq, LessEq) => Some(LessEq),
+            (LessThan, LessThan) => Some(LessThan),
+            (LessEq, LessThan) | (LessThan, LessEq) => Some(LessThan),
+
+            (NotEquals, _) | (_, NotEquals) => None,
+            (GreaterEq | GreaterThan, LessEq | LessThan)
+            | (LessEq | LessThan, GreaterEq | GreaterThan) => None,
+        }
+    }
+}
+
+impl std::fmt::Display for CmpOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let s = match self {
+            CmpOperator::Equals => "=",
+            CmpOperator::NotEquals => "!=",
+            CmpOperator::GreaterEq => ">=",
+            CmpOperator::LessEq => "<=",
+            CmpOperator::GreaterThan => ">",
+            CmpOperator::LessThan => "<",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+/// Takes a disequality term and returns its negation, represented by an operator and two linear
+/// combinations.
+/// The disequality can be:
+///
+/// - An application of the `<`, `>`, `<=`, `>=` or `=` operators
+/// - The negation of an application of one of these operators
+fn negate_disequality(
+    term: &Rc<Term>,
+) -> Result<(CmpOperator, LinearComb, LinearComb), CheckerError> {
+    fn inner(term: &Rc<Term>) -> Option<(CmpOperator, &[Rc<Term>])> {
+        if let Some(Term::Op(op, args)) = term.remove_negation().map(Rc::as_ref) {
+            let op = CmpOperator::from_op(*op)?;
+            Some((op, args))
+        } else if let Term::Op(op, args) = term.as_ref() {
+            let op = CmpOperator::from_op(*op)?;
+            Some((op.neg(), args))
+        } else {
+            None
+        }
     }
 
     let (op, args) =
@@ -200,7 +260,7 @@ impl LinearComb {
     }
 }
 
-fn strengthen(op: Operator, disequality: &mut LinearComb, a: &Rational) -> Operator {
+fn strengthen(op: CmpOperator, disequality: &mut LinearComb, a: &Rational) -> CmpOperator {
     // Multiplications are expensive, so we avoid them if we can
     let is_integer = if *a == 0 {
         true
@@ -211,7 +271,7 @@ fn strengthen(op: Operator, disequality: &mut LinearComb, a: &Rational) -> Opera
     };
 
     match op {
-        Operator::GreaterEq if is_integer => op,
+        CmpOperator::GreaterEq if is_integer => op,
 
         // In some cases, when the disequality is over integers, we can make the strengthening
         // rules even stronger. Consider for instance the following example:
@@ -240,19 +300,19 @@ fn strengthen(op: Operator, disequality: &mut LinearComb, a: &Rational) -> Opera
         // all coefficients will continue being integers after the division. This strengthening is
         // still valid because, since the variables are integers, the result of their linear
         // combination will always be a multiple of their GCD.
-        Operator::GreaterThan if is_integer => {
+        CmpOperator::GreaterThan if is_integer => {
             // Instead of dividing and then multiplying back, we just multiply the "+ 1"
             // that is added by the strengthening rule
             disequality.1.floor_mut();
             disequality.1 += disequality.coefficients_gcd();
-            Operator::GreaterEq
+            CmpOperator::GreaterEq
         }
-        Operator::GreaterThan | Operator::GreaterEq => {
+        CmpOperator::GreaterThan | CmpOperator::GreaterEq => {
             disequality.1.floor_mut();
             disequality.1 += 1;
-            Operator::GreaterEq
+            CmpOperator::GreaterEq
         }
-        Operator::LessThan | Operator::LessEq => unreachable!(),
+        CmpOperator::LessThan | CmpOperator::LessEq => unreachable!(),
         _ => op,
     }
 }
@@ -281,12 +341,12 @@ pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
             disequality.1 = -disequality.1; // We negate d to move it to the other side
 
             // If the operator is < or <=, we flip the disequality so it is > or >=
-            if op == Operator::LessThan {
+            if op == CmpOperator::LessThan {
                 disequality.neg();
-                op = Operator::GreaterThan;
-            } else if op == Operator::LessEq {
+                op = CmpOperator::GreaterThan;
+            } else if op == CmpOperator::LessEq {
                 disequality.neg();
-                op = Operator::GreaterEq;
+                op = CmpOperator::GreaterEq;
             }
 
             // Step 4: Apply strengthening rules
@@ -294,7 +354,7 @@ pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
 
             // Step 5: Multiply disequality by a
             let a = match op {
-                Operator::Equals => a,
+                CmpOperator::Equals | CmpOperator::NotEquals => a,
                 _ => a.abs(),
             };
             disequality.mul(&a);
@@ -302,15 +362,13 @@ pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
             Ok((op, disequality))
         })
         .try_fold(
-            (Operator::Equals, LinearComb::new()),
+            (CmpOperator::Equals, LinearComb::new()),
             |(acc_op, acc), item| -> Result<_, CheckerError> {
                 let (op, diseq) = item?;
                 let new_acc = acc.add(diseq);
-                let new_op = match (acc_op, op) {
-                    (_, Operator::GreaterEq) => Operator::GreaterEq,
-                    (Operator::Equals, Operator::GreaterThan) => Operator::GreaterThan,
-                    _ => acc_op,
-                };
+                let new_op = acc_op
+                    .add(op)
+                    .ok_or(LinearArithmeticError::CannotAddOperators(acc_op, op))?;
                 Ok((new_op, new_acc))
             },
         )?;
@@ -319,14 +377,14 @@ pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
 
     let is_disequality_true = {
         use std::cmp::Ordering;
-        use Operator::*;
+        use CmpOperator::*;
 
         // If the operator encompasses the actual relationship between 0 and the right side, the
         // disequality is true
         match Rational::new().cmp(right_side) {
-            Ordering::Less => matches!(op, LessThan | LessEq),
+            Ordering::Less => matches!(op, LessThan | LessEq | NotEquals),
             Ordering::Equal => matches!(op, LessEq | GreaterEq | Equals),
-            Ordering::Greater => matches!(op, GreaterThan | GreaterEq),
+            Ordering::Greater => matches!(op, GreaterThan | GreaterEq | NotEquals),
         }
     };
 
@@ -431,17 +489,17 @@ pub fn la_tautology(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         disequality.1 = -disequality.1;
 
         // If the operator is < or <=, we flip the disequality so it is > or >=
-        if op == Operator::LessThan {
+        if op == CmpOperator::LessThan {
             disequality.neg();
-            op = Operator::GreaterThan;
-        } else if op == Operator::LessEq {
+            op = CmpOperator::GreaterThan;
+        } else if op == CmpOperator::LessEq {
             disequality.neg();
-            op = Operator::GreaterEq;
+            op = CmpOperator::GreaterEq;
         }
 
         // The final disequality should be tautological
         let is_disequality_true = disequality.0.is_empty()
-            && (disequality.1 > 0 || op == Operator::GreaterThan && disequality.1 == 0);
+            && (disequality.1 > 0 || op == CmpOperator::GreaterThan && disequality.1 == 0);
         rassert!(
             is_disequality_true,
             LinearArithmeticError::DisequalityIsNotTautology(op, disequality),

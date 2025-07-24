@@ -27,6 +27,8 @@ fn la_generic() {
             (declare-fun c () Real)
             (declare-fun m () Int)
             (declare-fun n () Int)
+            (declare-fun x () Int)
+            (declare-fun y () Int)
         ",
         "Simple working examples" {
             "(step t1 (cl (> a 0.0) (<= a 0.0)) :rule la_generic :args (1.0 1.0))": true,
@@ -67,6 +69,27 @@ fn la_generic() {
                 (<= (- 2) (* 2 n))
                 (not (<= m 1))
             ) :rule la_generic :args (1 1 1 1))": true,
+        }
+        "Extension to work with !=" {
+            "(step t1 (cl
+                (= 0 (+ x 1))
+                (not (= 0 (+ y x (- 1))))
+                (not (= 0 (+ y (- 2))))
+            ) :rule la_generic :args ((- 1) 1 (- 1)))": true,
+
+            // Only one = per step, since we cannot add two !=
+            "(step t1 (cl
+                (= 0 (+ x 1))
+                (= 0 (+ y x (- 1)))
+                (not (= 0 (+ y (- 2))))
+            ) :rule la_generic :args ((- 1) 1 (- 1)))": false,
+
+            // Mixing different operators
+            "(step t1 (cl
+                (not (= 0 (+ x 1)))
+                (not (< 1 (+ x y)))
+                (not (<= 2 (- y)))
+            ) :rule la_generic :args (1 1 1))": true,
         }
     }
 }

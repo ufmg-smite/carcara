@@ -1,6 +1,6 @@
 use crate::{
     ast::*,
-    checker::rules::linear_arithmetic::LinearComb,
+    checker::rules::linear_arithmetic::{CmpOperator, LinearComb},
     utils::{Range, TypeName},
 };
 use rug::{Integer, Rational};
@@ -286,10 +286,13 @@ pub enum LinearArithmeticError {
     TooManyArgsInDisequality(Rc<Term>),
 
     #[error("final disequality is not contradictory: '{}'", DisplayLinearComb(.0, .1))]
-    DisequalityIsNotContradiction(Operator, LinearComb),
+    DisequalityIsNotContradiction(CmpOperator, LinearComb),
 
     #[error("final disequality is not tautological: '{}'", DisplayLinearComb(.0, .1))]
-    DisequalityIsNotTautology(Operator, LinearComb),
+    DisequalityIsNotTautology(CmpOperator, LinearComb),
+
+    #[error("cannot add operators: '{}' and '{}'", .0, .1)]
+    CannotAddOperators(CmpOperator, CmpOperator),
 
     #[error("expected term '{0}' to be less than term '{1}'")]
     ExpectedLessThan(Rc<Term>, Rc<Term>),
@@ -345,7 +348,7 @@ pub enum SubproofError {
 }
 
 /// A wrapper struct that implements `fmt::Display` for linear combinations.
-struct DisplayLinearComb<'a>(&'a Operator, &'a LinearComb);
+struct DisplayLinearComb<'a>(&'a CmpOperator, &'a LinearComb);
 
 impl fmt::Display for DisplayLinearComb<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -357,8 +360,12 @@ impl fmt::Display for DisplayLinearComb<'_> {
             }
         }
 
-        let DisplayLinearComb(op, LinearComb(vars, constant)) = self;
-        write!(f, "({} ", op)?;
+        let DisplayLinearComb(op, LinearComb(vars, constant)) = *self;
+        if *op == CmpOperator::NotEquals {
+            write!(f, "(not (= ")?;
+        } else {
+            write!(f, "({} ", op)?;
+        }
         match vars.len() {
             0 => write!(f, "0.0"),
             1 => write_var(f, vars.iter().next().unwrap()),
@@ -371,6 +378,10 @@ impl fmt::Display for DisplayLinearComb<'_> {
                 write!(f, ")")
             }
         }?;
-        write!(f, " {:?})", constant.to_f64())
+        write!(f, " {:?})", constant.to_f64())?;
+        if *op == CmpOperator::NotEquals {
+            write!(f, ")")?;
+        }
+        Ok(())
     }
 }
