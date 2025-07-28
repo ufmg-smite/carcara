@@ -8,14 +8,28 @@ enum PremiseType {
     Premise,
     SubproofEnd,
 }
-/// Creates a map whose keys are step IDs in the proof whose values are vectors containing the IDs of those steps' premises.
-fn get_step_to_premises(proof: &Proof) -> HashMap<String, Vec<(String, PremiseType)>> {
+/// Creates a map whose keys are step IDs in the proof until the conclusion of the outermost subproof of the target step
+/// whose values are vectors containing the IDs of those steps' premises.
+fn get_step_to_premises(
+    proof: &Proof,
+    target_step: &str,
+) -> HashMap<String, Vec<(String, PremiseType)>> {
     let mut map = HashMap::new();
     let mut iter = proof.iter();
+    let mut num_open_subproofs = 0;
+    let mut found_target = false;
     while let Some(command) = iter.next() {
         let ProofCommand::Step(step) = command else {
+            if let ProofCommand::Subproof(_) = command {
+                num_open_subproofs += 1;
+            }
             continue;
         };
+
+        if command.id() == target_step {
+            found_target = true;
+        }
+
         let mut premises: Vec<(String, PremiseType)> = step
             .premises
             .iter()
@@ -33,18 +47,22 @@ fn get_step_to_premises(proof: &Proof) -> HashMap<String, Vec<(String, PremiseTy
         if iter.is_end_step() {
             let previous = iter.current_subproof().unwrap().iter().nth_back(1).unwrap();
             premises.push((previous.id().to_owned(), PremiseType::SubproofEnd));
+            num_open_subproofs -= 1;
         }
         map.insert(step.id.clone(), premises);
+
+        if found_target && num_open_subproofs == 0 {
+            break;
+        }
     }
     map
 }
 
-/// Produces (1) a map containing all the ids of the transitive premises of the input step and
-/// bools denoting whether we need the premises of those premises and (2) a map that the IDs associates IDs of
-/// the transitive premises with the IDs of their premises.
+/// Produces a map containing all the ids of the transitive premises of the input step and
+/// bools denoting whether we need the premises of those premises.
 fn get_transitive_premises(
     step_id: String,
-    step_to_premises: HashMap<String, Vec<(String, PremiseType)>>,
+    step_to_premises: &HashMap<String, Vec<(String, PremiseType)>>,
     max_distance: usize,
 ) -> HashMap<String, bool> {
     // Items to process in BFS
@@ -114,12 +132,10 @@ fn get_slice_body(
 
     let from_step = from_step?;
 
-    let step_to_premises = get_step_to_premises(proof);
+    let id_to_premise_ids = get_step_to_premises(proof, id);
 
     let mut to_keep =
-        get_transitive_premises(from_step.id().to_owned(), step_to_premises, max_distance);
-
-    let id_to_premise_ids = get_step_to_premises(proof);
+        get_transitive_premises(from_step.id().to_owned(), &id_to_premise_ids, max_distance);
 
     // A map of IDs to their positions in the new proof.
     let mut id_to_index: HashMap<String, (usize, usize)> = HashMap::new();
