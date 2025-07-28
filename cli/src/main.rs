@@ -677,7 +677,8 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
 }
 
 fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
-    let (mut problem, mut proof) = get_instance(&options.input, options.parsing.buffer_entire_file)?;
+    let (mut problem, mut proof) =
+        get_instance(&options.input, options.parsing.buffer_entire_file)?;
     let mut str_problem = String::new();
     let _ = problem.read_to_string(&mut str_problem);
     let mut str_proof = String::new();
@@ -687,8 +688,8 @@ fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
         str_problem.as_bytes(),
         str_proof.as_bytes(),
         options.parsing.into(),
-    )
-    .map_err(carcara::Error::from)?;
+    )?;
+    // .map_err(carcara::Error::from)?;
 
     let node = ast::ProofNode::from_commands(alethe_proof.commands);
     let mut translator = carcara::translation::eunoia::alethe_2_eunoia::EunoiaTranslator::new();

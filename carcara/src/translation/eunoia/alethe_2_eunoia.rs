@@ -333,7 +333,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                                 assert!(list.len() == 1);
                                 match &list[0] {
                                     EunoiaTerm::Var(var_name, ..) => {
-                                        choice_var = EunoiaTerm::Id(var_name.to_string());
+                                        choice_var = EunoiaTerm::Id(var_name.clone());
                                     }
 
                                     _ => panic!(),

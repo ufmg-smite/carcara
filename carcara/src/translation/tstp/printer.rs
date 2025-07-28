@@ -126,8 +126,8 @@ impl<'a> TstpPrinter<'a> {
 
     /// Concrete syntax rules (from TPTP's docs):
     /// - "In a formula, terms and atoms follow Prolog conventions - functions and predicates
-    ///      start with a lowercase letter or are 'single quoted', and variables start with an
-    ///      uppercase letter."
+    ///   start with a lowercase letter or are 'single quoted', and variables start with an
+    ///   uppercase letter."
     fn formula_to_concrete_syntax(formula: &TstpFormula) -> String {
         let mut ret: String;
 
