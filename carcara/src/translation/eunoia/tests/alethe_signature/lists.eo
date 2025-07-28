@@ -239,58 +239,124 @@
           )
          )
 
+;-------------
+; Reflection
+;-------------
 
-; program: $is_f_list
+; program: $f_list_operator_is_right_assoc
 ; args:
-; - list T : >
-;    A term representing the application of some operator over a sequence of operands.
-; return: A boolean indicating if the given parameter is an actual list or not.
-(program $is_f_list ((U Type) (T Type) (f (-> U T T)) (hd U) (tail T :list))
-         :signature (T) Bool
+; - f (-> A A B): Operator upon which we want to reflect.
+; return: A boolean indicating if the operator is declared as right assoc.
+(program $f_list_operator_is_right_assoc ((A Type) (B Type) (f (-> A B B)))
+         :signature ((-> A B B)) Bool
          (
           (
-           ($is_f_list (@cl hd tail))
+           ($f_list_operator_is_right_assoc @cl)
 
            true
            )
 
           (
-           ($is_f_list (or hd tail))
+           ($f_list_operator_is_right_assoc or)
 
            true
            )
 
           (
-           ($is_f_list (and hd tail))
+           ($f_list_operator_is_right_assoc and)
 
            true
            )
 
           (
-           ($is_f_list (+ hd tail))
+           ($f_list_operator_is_right_assoc +)
 
            true
            )
 
           (
-           ($is_f_list (* hd tail))
+           ($f_list_operator_is_right_assoc *)
 
            true
            )
 
           (
-           ($is_f_list (@varlist hd tail))
+           ($f_list_operator_is_right_assoc @varlist)
+           true
+           )
 
+          (; TODO : not sure about declaring @substitution as right_assoc
+           ($f_list_operator_is_right_assoc @substitution)
            true
            )
 
           (
-           ($is_f_list tail)
+           ($f_list_operator_is_right_assoc f)
 
            false
            )
           )
-)
+         )
+
+; program: $is_theory_f_list
+; args:
+; - f (-> T U): A function constant.
+; return: >
+;    A boolean indicating if the given parameter is a list operator or not, depending
+;    on whether the applied operator is actually defined in our theory, as
+;    left/right assoc-nil. In any other case, it returns false.
+(program $is_theory_f_list ((U Type) (T Type) (f (-> T U)))
+         :signature ((-> T U)) Bool
+         (
+          (
+           ($is_theory_f_list @cl)
+
+           true
+           )
+
+          (
+           ($is_theory_f_list or)
+
+           true
+           )
+
+          (
+           ($is_theory_f_list and)
+
+           true
+           )
+
+          (
+           ($is_theory_f_list +)
+
+           true
+           )
+
+          (
+           ($is_theory_f_list *)
+
+           true
+           )
+
+          (
+           ($is_theory_f_list @varlist)
+
+           true
+           )
+
+          (
+           ($is_theory_f_list @substitution)
+
+           true
+           )
+
+          (
+           ($is_theory_f_list f)
+
+           false
+           )
+          )
+         )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; lists (built with non-variadic operators)
