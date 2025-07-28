@@ -677,7 +677,7 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
 }
 
 fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
-    let (mut problem, mut proof) = get_instance(&options.input)?;
+    let (mut problem, mut proof) = get_instance(&options.input, options.parsing.buffer_entire_file)?;
     let mut str_problem = String::new();
     let _ = problem.read_to_string(&mut str_problem);
     let mut str_proof = String::new();
