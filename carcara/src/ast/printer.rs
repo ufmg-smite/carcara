@@ -30,7 +30,7 @@ pub fn print_proof(
     AlethePrinter::new(pool, prelude, use_sharing, &mut stdout).write_proof(proof)
 }
 
-// Like print_proof, but to write to a string, not stdout
+// Like print_proof, but to writes to some destination, not necessarily stdout
 pub fn write_proof_to_dest(
     pool: &mut PrimitivePool,
     prelude: &ProblemPrelude,

@@ -16,7 +16,7 @@ fn get_step_to_premises(
 ) -> HashMap<String, Vec<(String, PremiseType)>> {
     let mut map = HashMap::new();
     let mut iter = proof.iter();
-    let mut num_open_subproofs = 0;
+    let mut num_open_subproofs: usize = 0;
     let mut found_target = false;
     while let Some(command) = iter.next() {
         let ProofCommand::Step(step) = command else {
@@ -95,7 +95,8 @@ struct Frame {
     commands: Vec<ProofCommand>,
 }
 
-/// Returns a vector of proof commands representing the step to slice with its subproof context, if it exists, its transitive premises, and a special end step.
+/// Returns a vector of proof commands representing the step to slice with any necessary
+/// subproof context, the target step's transitive premises, and a special end step with a hole.
 fn get_slice_body(
     proof: &Proof,
     id: &str,
@@ -177,6 +178,7 @@ fn get_slice_body(
 
     let mut have_seen_target: bool = false;
 
+    // This variable is to make sure steps get linked to their children in the proof tree
     let mut child: Option<(usize, usize)> = None;
     while let Some(command) = copy_iter.next() {
         // Check if we want to copy this command
@@ -231,6 +233,7 @@ fn get_slice_body(
                     } else {
                         // If the step we are placing occurs after the target step and is the second to last step of a subproof,
                         // we should include child as a premise for it with :rule hole :args trust.
+                        // This is to prevent the target step from being removed from the proof if it is converted to a `ProofNode`
                         ProofStep {
                             id: command.id().to_owned(),
                             clause: command.clause().to_vec(),
@@ -251,6 +254,8 @@ fn get_slice_body(
                         id_to_index.insert(command.id().to_owned(), last_placed);
                     }
 
+                    // We need to artificially make the step we're slicing a transitive premise of any steps that occur after it,
+                    // i.e., any steps we keep from its enclosing subproofs
                     if proof_step.id == id {
                         child = Some(last_placed);
                     }
@@ -268,6 +273,7 @@ fn get_slice_body(
                             panic!("Expected subproof")
                         };
                         sp.commands.append(&mut popped_frame.commands);
+                        // We need to artifically make the inner subproofs a premise of the outer subproof.
                         if have_seen_target {
                             child =
                                 Some((stack.len() - 1, stack.last().unwrap().commands.len() - 1));
@@ -303,6 +309,7 @@ fn get_slice_body(
         }
     }
 
+    // The last step of the proof concludes (cl) using the rule hole and the argument "trust"
     let end_step: ProofStep = ProofStep {
         id: "slice_end".to_owned(),
         clause: Vec::new(),
@@ -409,6 +416,7 @@ mod tests {
 ",
             ("t3.t1", 0),
         ),
+        // Slicing with greater max distance values
         (
             b"(assume a0 a)
 (step t0 (cl a b) :rule hole :args (\"trust\"))
