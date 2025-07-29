@@ -7,14 +7,112 @@ use crate::translation::VecToVecTranslator;
 
 // Deref for ast::rc::Rc<Term>
 use std::ops::Deref;
+// formulas_count
+use std::collections::HashMap;
 
 pub struct TstpTranslator {
     translation: TranslatorData<TstpFormula, TstpProof>,
+    // To keep a counting of each annotated formula introduced, for
+    // naming purposes.
+    formulas_count: HashMap<TstpFormulaRole, rug::Integer>,
+    // To keep track of each named formula, for reference purposes.
+    formulas_map: HashMap<String, TstpFormula>,
 }
 
 impl TstpTranslator {
     pub fn new() -> Self {
-        Self { translation: TranslatorData::new() }
+        Self {
+            translation: TranslatorData::new(),
+            formulas_count: HashMap::new(),
+            formulas_map: HashMap::new(),
+        }
+    }
+
+    /// Abstracts the main mechanisms put to work to build an annotated formula:
+    /// - generate a new name
+    /// - build the corresponding AST
+    /// - maintain a correspondence between the given name and the formula
+    fn new_annotated_formula(
+        &mut self,
+        language: TstpLanguage,
+        role: TstpFormulaRole,
+        formula: TstpFormula,
+        source: TstpAnnotatedFormulaSource,
+        useful_info: Symbol,
+    ) -> TstpAnnotatedFormula {
+        let formula_name = self.new_formula_name(&role);
+
+        let annotated_formula = TstpAnnotatedFormula::new(
+            // TODO: some other language?
+            language,
+            formula_name.clone(),
+            // TODO: define a proper way for generation and index of these names.
+            // "some_formula_name".to_owned(),
+            role,
+            formula.clone(),
+            source,
+            useful_info,
+        );
+
+        // Register the formula
+        self.formulas_map.insert(formula_name, formula.clone());
+
+        annotated_formula
+    }
+
+    /// Abstracts the mechanism used to generate a new name for an annotated
+    /// formula, and register it, for future reference.
+    fn new_formula_name(&mut self, role: &TstpFormulaRole) -> String {
+        // For axioms, lemmas, conjecture, hypothesis, naming
+        // mechanism is rather simple: role + number.
+
+        let mut new_name: String;
+
+        if self.formulas_count.contains_key(role) {
+            self.formulas_count
+                .insert(role.clone(), self.formulas_count[role].clone() + 1);
+        } else {
+            // { ! self.formulas_count.contains_key(role) }
+            self.formulas_count
+                .insert(role.clone(), rug::Integer::from(1));
+        }
+
+        // TODO: ugly way to deal with this, since I do not want to implement
+        // the Display trait for TstpFormulaRole at this level (or at the level
+        // of the ASTs themselves).
+        match role {
+            TstpFormulaRole::Axiom => {
+                new_name = "axiom".to_owned();
+            }
+
+            TstpFormulaRole::Lemma => {
+                new_name = "lemma".to_owned();
+            }
+
+            TstpFormulaRole::Conjecture => {
+                new_name = "conjecture".to_owned();
+            }
+
+            TstpFormulaRole::Hypothesis => {
+                new_name = "hypothesis".to_owned();
+            }
+
+            TstpFormulaRole::Logic => {
+                new_name = "logic".to_owned();
+            }
+
+            TstpFormulaRole::Type => {
+                new_name = "type".to_owned();
+            }
+
+            TstpFormulaRole::Plain => {
+                new_name = "plain".to_owned();
+            }
+        }
+
+        new_name += &("_".to_owned() + &self.formulas_count[role].to_string());
+
+        new_name
     }
 }
 
@@ -616,19 +714,28 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
     /// expressed within Tstp.
     fn translate_assume(
         &mut self,
-        id: &str,
+        _id: &str,
         _depth: usize,
         term: &Rc<Term>,
     ) -> TstpAnnotatedFormula {
-        TstpAnnotatedFormula::new(
+        let translated_term = self.translate_term(term);
+
+        self.new_annotated_formula(
             TstpLanguage::Tff,
-            id.to_owned(),
             TstpFormulaRole::Axiom,
-            self.translate_term(term),
-            // TODO: ?
+            translated_term,
             TstpAnnotatedFormulaSource::Empty,
             "nil".to_owned(),
         )
+        // TstpAnnotatedFormula::new(
+        //     TstpLanguage::Tff,
+        //     id.to_owned(),
+        //     TstpFormulaRole::Axiom,
+        //     self.translate_term(term),
+        //     // TODO: ?
+        //     TstpAnnotatedFormulaSource::Empty,
+        //     "nil".to_owned(),
+        // )
     }
 
     /// Implements the translation of an Alethe `ProofStep`, taking into
@@ -688,19 +795,28 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 // semantics (as explained in theory.rs) instead of this
                 match rule.as_str() {
                     "and_neg" => {
-                        self.get_mut_translator_data().translated_proof.push(
-                            TstpAnnotatedFormula::new(
-                                // TODO: some other language?
-                                // TODO: there should be an attribute of self that indicates
-                                //               the language being used
-                                TstpLanguage::Tff,
-                                id.clone(),
-                                TstpFormulaRole::Plain,
-                                conclusion,
-                                TstpAnnotatedFormulaSource::Empty,
-                                "".to_owned(),
-                            ),
+                        let annotated_formula = self.new_annotated_formula(
+                            TstpLanguage::Tff,
+                            TstpFormulaRole::Plain,
+                            conclusion,
+                            TstpAnnotatedFormulaSource::Empty,
+                            "".to_owned(),
                         );
+
+                        self.get_mut_translator_data()
+                            .translated_proof
+                            .push(annotated_formula);
+                        // TstpAnnotatedFormula::new(
+                        //     // TODO: some other language?
+                        //     // TODO: there should be an attribute of self that indicates
+                        //     //               the language being used
+                        //     TstpLanguage::Tff,
+                        //     id.clone(),
+                        //     TstpFormulaRole::Plain,
+                        //     conclusion,
+                        //     TstpAnnotatedFormulaSource::Empty,
+                        //     "".to_owned(),
+                        // ),
                     }
 
                     _ => {
@@ -796,7 +912,8 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 // TODO: some other language?
                 TstpLanguage::Tff,
                 // TODO: define a proper way for generation and index of these names.
-                "some_formula_name".to_owned(),
+                self.new_formula_name(&TstpFormulaRole::Axiom),
+                // "some_formula_name".to_owned(),
                 TstpFormulaRole::Axiom,
                 self.translate_term(assertion),
                 TstpAnnotatedFormulaSource::Empty,
