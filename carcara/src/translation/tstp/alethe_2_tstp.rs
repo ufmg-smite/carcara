@@ -42,7 +42,11 @@ impl TstpTranslator {
     ) -> TstpAnnotatedFormula {
         let formula_name = self.new_formula_name(&role);
 
-        let annotated_formula = TstpAnnotatedFormula::new(
+        // Register the formula
+        self.formulas_map
+            .insert(formula_name.clone(), formula.clone());
+
+        TstpAnnotatedFormula::new(
             // TODO: some other language?
             language,
             formula_name.clone(),
@@ -52,12 +56,7 @@ impl TstpTranslator {
             formula.clone(),
             source,
             useful_info,
-        );
-
-        // Register the formula
-        self.formulas_map.insert(formula_name, formula.clone());
-
-        annotated_formula
+        )
     }
 
     /// Abstracts the mechanism used to generate a new name for an annotated
@@ -727,15 +726,6 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
             TstpAnnotatedFormulaSource::Empty,
             "nil".to_owned(),
         )
-        // TstpAnnotatedFormula::new(
-        //     TstpLanguage::Tff,
-        //     id.to_owned(),
-        //     TstpFormulaRole::Axiom,
-        //     self.translate_term(term),
-        //     // TODO: ?
-        //     TstpAnnotatedFormulaSource::Empty,
-        //     "nil".to_owned(),
-        // )
     }
 
     /// Implements the translation of an Alethe `ProofStep`, taking into
@@ -747,7 +737,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
 
         match node {
             ProofNode::Step(StepNode {
-                id,
+                id: _,
                 depth: _,
                 clause,
                 rule,
@@ -792,7 +782,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 });
 
                 // TODO: develop some generic programmatic way to deal with each rule's
-                // semantics (as explained in theory.rs) instead of this
+                // semantics instead of this
                 match rule.as_str() {
                     "and_neg" => {
                         let annotated_formula = self.new_annotated_formula(
@@ -806,33 +796,20 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                         self.get_mut_translator_data()
                             .translated_proof
                             .push(annotated_formula);
-                        // TstpAnnotatedFormula::new(
-                        //     // TODO: some other language?
-                        //     // TODO: there should be an attribute of self that indicates
-                        //     //               the language being used
-                        //     TstpLanguage::Tff,
-                        //     id.clone(),
-                        //     TstpFormulaRole::Plain,
-                        //     conclusion,
-                        //     TstpAnnotatedFormulaSource::Empty,
-                        //     "".to_owned(),
-                        // ),
                     }
 
                     _ => {
-                        self.get_mut_translator_data().translated_proof.push(
-                            TstpAnnotatedFormula::new(
-                                // TODO: some other language?
-                                // TODO: there should be an attribute of self that indicates
-                                //               the language being used
-                                TstpLanguage::Tff,
-                                id.clone(),
-                                TstpFormulaRole::Plain,
-                                conclusion,
-                                TstpAnnotatedFormulaSource::Empty,
-                                "".to_owned(),
-                            ),
+                        let annotated_formula = self.new_annotated_formula(
+                            TstpLanguage::Tff,
+                            TstpFormulaRole::Plain,
+                            conclusion,
+                            TstpAnnotatedFormulaSource::Empty,
+                            "".to_owned(),
                         );
+
+                        self.get_mut_translator_data()
+                            .translated_proof
+                            .push(annotated_formula);
                     }
                 }
             }
@@ -868,10 +845,8 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         // }
 
         sort_declarations.iter().for_each(|pair| {
-            tstp_problem.push(TstpAnnotatedFormula::new(
-                // TODO: some other language?
+            let annotated_formula = self.new_annotated_formula(
                 TstpLanguage::Tff,
-                pair.0.clone(),
                 TstpFormulaRole::Type,
                 TstpFormula::Typing(
                     Box::new(TstpFormula::Variable(pair.0.clone())),
@@ -879,7 +854,9 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 ),
                 TstpAnnotatedFormulaSource::Empty,
                 "".to_owned(),
-            ));
+            );
+
+            tstp_problem.push(annotated_formula);
         });
 
         function_declarations.iter().for_each(|pair| {
@@ -893,32 +870,34 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 }
             };
 
-            // TODO: abstract this into a method to generate annotated formulas
-            tstp_problem.push(TstpAnnotatedFormula::new(
-                // TODO: some other language?
+            let annotated_formula = self.new_annotated_formula(
                 TstpLanguage::Tff,
-                pair.0.clone(),
                 TstpFormulaRole::Type,
                 TstpFormula::Typing(Box::new(TstpFormula::Variable(pair.0.clone())), tstp_type),
                 TstpAnnotatedFormulaSource::Empty,
                 "".to_owned(),
-            ));
+            );
+
+            // TODO: abstract this into a method to generate annotated formulas
+            tstp_problem.push(annotated_formula);
         });
 
         // Translation of assertions: we represent them as
         // axioms.
         premises.iter().for_each(|assertion| {
-            tstp_problem.push(TstpAnnotatedFormula::new(
+            let translated_assertion = self.translate_term(assertion);
+
+            let annotated_formula = self.new_annotated_formula(
                 // TODO: some other language?
                 TstpLanguage::Tff,
-                // TODO: define a proper way for generation and index of these names.
-                self.new_formula_name(&TstpFormulaRole::Axiom),
                 // "some_formula_name".to_owned(),
                 TstpFormulaRole::Axiom,
-                self.translate_term(assertion),
+                translated_assertion,
                 TstpAnnotatedFormulaSource::Empty,
                 "".to_owned(),
-            ));
+            );
+
+            tstp_problem.push(annotated_formula);
         });
 
         tstp_problem
