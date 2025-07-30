@@ -709,7 +709,7 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
     let instances =
         generate_lia_smt_instances(problem, proof, options.parsing.into(), use_sharing)?;
     for (id, content) in instances {
-        let file_name = format!("{}.{}.lia_smt2", root_file_name, id);
+        let file_name = format!("{}-{}.lia_smt2", root_file_name, id);
         let mut f = File::create(file_name)?;
         write!(f, "{}", content)?;
     }
