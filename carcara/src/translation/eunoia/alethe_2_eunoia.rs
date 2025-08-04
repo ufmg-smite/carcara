@@ -96,6 +96,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
     /// Abstracts the process of traversing a given context, identifying the fixed
     /// variables and the substitutions. Returns the corresponding list of
     /// variables and substitutions to be used when building a @ctx.
+    /// PRE : { the corresponding new scope in `self.variables_in_scope` is already opened}
     fn process_anchor_context(&mut self, context: &[AnchorArg]) -> Vec<EunoiaTerm> {
         let mut ctx_params = Vec::new();
         // Variables bound by the context
@@ -133,31 +134,46 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                     _ => self.translate_term(term),
                 };
 
-                context_domain.push(EunoiaTerm::List(vec![
-                    EunoiaTerm::Id(name.clone()),
-                    eunoia_sort.clone(),
-                ]));
-
-                self.get_mut_translator_data()
+                match self
+                    .get_read_translator_data()
                     .alethe_scopes
-                    .insert_variable_in_scope(name, &eunoia_sort);
+                    .variables_in_scope
+                    .get_with_depth(name)
+                {
+                    Some((depth, _)) => {
+                        if depth
+                            < self
+                                .get_read_translator_data()
+                                .alethe_scopes
+                                .variables_in_scope
+                                .height()
+                                - 1
+                        {
+                            // This variable is bound somewhere else.  We
+                            // shadow any previous def.
+                            self.get_mut_translator_data()
+                                .alethe_scopes
+                                .insert_variable_in_scope(name, &eunoia_sort);
 
-                // match self.variables_in_scope.get_with_depth(name) {
-                //     Some((depth, _)) => {
-                //         if depth < self.variables_in_scope.height() - 1 {
-                //             // This variable is bound somewhere else.  We
-                //             // shadow any previous def.
-                //             self.variables_in_scope
-                //                 .insert(name.clone(), eunoia_sort.clone());
-                //         }
-                //     }
+                            context_domain.push(EunoiaTerm::List(vec![
+                                EunoiaTerm::Id(name.clone()),
+                                eunoia_sort.clone(),
+                            ]));
+                        }
+                    }
 
-                //     None => {
-                //         // This variable is not bound somewhere else.
-                //         self.variables_in_scope
-                //             .insert(name.clone(), eunoia_sort.clone());
-                //     }
-                // }
+                    None => {
+                        // This variable is not bound somewhere else.
+                        self.get_mut_translator_data()
+                            .alethe_scopes
+                            .insert_variable_in_scope(name, &eunoia_sort);
+
+                        context_domain.push(EunoiaTerm::List(vec![
+                            EunoiaTerm::Id(name.clone()),
+                            eunoia_sort.clone(),
+                        ]));
+                    }
+                }
 
                 // Substitution map of the form name -> rhs: we
                 // reify it as a term (= name rhs)

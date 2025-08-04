@@ -436,6 +436,7 @@ pub trait VecToVecTranslator<'a, StepType, TermType: Clone + 'a, TypeTermType, O
     /// Abstracts the process of traversing a given context, identifying the fixed
     /// variables and the substitutions. Returns the corresponding list of
     /// variables and substitutions to be used when building a @ctx.
+    /// PRE : { the corresponding new scope in `self.variables_in_scope` is already opened}
     fn process_anchor_context(&mut self, context: &[AnchorArg]) -> Vec<TermType>;
 
     /// Returns the identifier of the last context actually introduced within the proof certificate.
