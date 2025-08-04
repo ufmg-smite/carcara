@@ -1,6 +1,7 @@
 pub mod error;
 mod parallel;
 mod rules;
+mod shared;
 
 use crate::{
     ast::*,
@@ -11,6 +12,7 @@ use error::{CheckerError, SubproofError};
 use indexmap::IndexSet;
 pub use parallel::{scheduler::Scheduler, ParallelProofChecker};
 use rules::{Premise, Rule, RuleArgs, RuleResult};
+use shared::check_assume_shared;
 use std::{
     collections::HashSet,
     fmt,
@@ -200,67 +202,16 @@ impl<'c> ProofChecker<'c> {
         iter: &'i ProofIter<'i>,
         mut stats: &mut Option<&mut CheckerStatistics<CR>>,
     ) -> bool {
-        let time = Instant::now();
+        let result = check_assume_shared(
+            id,
+            term,
+            premises,
+            &self.config,
+            iter.is_in_subproof(),
+            &mut stats,
+        );
 
-        // Some subproofs contain `assume` commands inside them. These don't refer to the original
-        // problem premises, but are instead local assumptions that are discharged by the subproof's
-        // final step, so we ignore the `assume` command if it is inside a subproof.
-        if iter.is_in_subproof() {
-            return true;
-        }
-
-        if premises.contains(term) {
-            if let Some(s) = stats {
-                let time = time.elapsed();
-
-                s.assume_time += time;
-                s.results
-                    .add_assume_measurement(s.file_name, id, true, time);
-            }
-            return true;
-        }
-
-        if self.config.elaborated {
-            return false;
-        }
-
-        let mut found = false;
-        let mut polyeq_time = Duration::ZERO;
-        let mut core_time = Duration::ZERO;
-
-        for p in premises {
-            let mut this_polyeq_time = Duration::ZERO;
-
-            let mut comp = Polyeq::new().mod_reordering(true).mod_nary(true);
-            let result = comp.eq_with_time(term, p, &mut this_polyeq_time);
-            let depth = comp.max_depth();
-
-            polyeq_time += this_polyeq_time;
-
-            if let Some(s) = &mut stats {
-                s.results.add_polyeq_depth(depth);
-            }
-            if result {
-                core_time = this_polyeq_time;
-                found = true;
-                break;
-            }
-        }
-        if !found {
-            return false;
-        };
-
-        if let Some(s) = &mut stats {
-            let time = time.elapsed();
-
-            s.assume_time += time;
-            s.assume_core_time += core_time;
-            s.polyeq_time += polyeq_time;
-            s.results
-                .add_assume_measurement(s.file_name, id, false, time);
-        }
-
-        true
+        result
     }
 
     fn check_step<'i, CR: CollectResults + Send + Default>(
