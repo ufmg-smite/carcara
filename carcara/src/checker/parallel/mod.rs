@@ -344,18 +344,18 @@ impl<'c> ParallelProofChecker<'c> {
         term: &Rc<Term>,
         premises: &IndexSet<Rc<Term>>,
         iter: &ScheduleIter,
-        mut stats: &mut Option<&mut CheckerStatistics<CR>>,
+        stats: &mut Option<&mut CheckerStatistics<CR>>,
     ) -> bool {
-        let result = check_assume_shared(
+        
+
+        check_assume_shared(
             id,
             term,
             premises,
             &self.config,
             iter.is_in_subproof(),
-            &mut stats,
-        );
-
-        result
+            stats,
+        )
     }
 
     fn check_step<CR: CollectResults + Send + Default>(

@@ -200,18 +200,18 @@ impl<'c> ProofChecker<'c> {
         term: &Rc<Term>,
         premises: &IndexSet<Rc<Term>>,
         iter: &'i ProofIter<'i>,
-        mut stats: &mut Option<&mut CheckerStatistics<CR>>,
+        stats: &mut Option<&mut CheckerStatistics<CR>>,
     ) -> bool {
-        let result = check_assume_shared(
+        
+
+        check_assume_shared(
             id,
             term,
             premises,
             &self.config,
             iter.is_in_subproof(),
-            &mut stats,
-        );
-
-        result
+            stats,
+        )
     }
 
     fn check_step<'i, CR: CollectResults + Send + Default>(
