@@ -12,7 +12,7 @@ use error::{CheckerError};
 use indexmap::IndexSet;
 pub use parallel::{scheduler::Scheduler, ParallelProofChecker};
 use rules::{Premise, Rule, RuleArgs, RuleResult};
-use shared::{check_assume_shared, check_step_core, get_rule_shared};
+use shared::{check_assume_shared, check_step_core, get_rule_shared, StepCheckContext};
 use std::{
     collections::HashSet,
     fmt,
@@ -251,16 +251,15 @@ impl<'c> ProofChecker<'c> {
         };
 
         // Use shared core logic
-        let result = check_step_core(
-            step,
-            rule_args,
-            &self.config,
-            iter.is_end_step(),
-            iter.current_subproof(),
-            iter.depth(),
-            stats,
-            &mut self.is_holey,
-        );
+        let context = StepCheckContext {
+            config: &self.config,
+            is_end_step: iter.is_end_step(),
+            current_subproof: iter.current_subproof(),
+            subproof_depth: iter.depth(),
+            is_holey: &mut self.is_holey,
+        };
+
+        let result = check_step_core(step, rule_args, context, stats);
 
         // Update polyeq time in stats (this was previously done in the core, 
         // but polyeq_time is updated via the mutable reference in rule_args)

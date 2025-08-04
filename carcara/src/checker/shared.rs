@@ -78,20 +78,22 @@ pub fn check_assume_shared<CR: CollectResults + Send + Default>(
     found
 }
 
+/// Context information for step checking
+pub struct StepCheckContext<'a> {
+    pub config: &'a Config,
+    pub is_end_step: bool,
+    pub current_subproof: Option<&'a [ProofCommand]>,
+    pub subproof_depth: usize,
+    pub is_holey: &'a mut bool,
+}
+
 /// Shared core logic for checking a proof step. This contains all the rule validation
 /// and execution logic that's identical between single-threaded and parallel implementations.
-/// 
-/// This function handles the core rule checking logic while leaving pool and iterator management
-/// to the caller implementations.
 pub fn check_step_core<CR: CollectResults + Send + Default>(
     step: &ProofStep,
     rule_args: RuleArgs,
-    config: &Config,
-    is_end_step: bool,
-    current_subproof: Option<&[ProofCommand]>,
-    subproof_depth: usize,
+    context: StepCheckContext,
     stats: &mut Option<&mut CheckerStatistics<CR>>,
-    is_holey: &mut bool,
 ) -> RuleResult {
     let time = Instant::now();
 
@@ -100,10 +102,10 @@ pub fn check_step_core<CR: CollectResults + Send + Default>(
         return Err(CheckerError::Subproof(SubproofError::DischargeInWrongRule));
     }
 
-    let rule = match get_rule_shared(&step.rule, config.elaborated) {
+    let rule = match get_rule_shared(&step.rule, context.config.elaborated) {
         Some(r) => r,
-        None if config.ignore_unknown_rules || config.allowed_rules.contains(&step.rule) => {
-            *is_holey = true;
+        None if context.config.ignore_unknown_rules || context.config.allowed_rules.contains(&step.rule) => {
+            *context.is_holey = true;
             return Ok(());
         }
         None => {
@@ -113,15 +115,15 @@ pub fn check_step_core<CR: CollectResults + Send + Default>(
     };
 
     if step.rule == "hole" || step.rule == "lia_generic" {
-        *is_holey = true;
+        *context.is_holey = true;
     }
 
     // Execute the rule with the provided arguments
     rule(rule_args)?;
 
-    if is_end_step {
-        if let Some(subproof) = current_subproof {
-            check_discharge_shared(subproof, subproof_depth, &step.discharge)?;
+    if context.is_end_step {
+        if let Some(subproof) = context.current_subproof {
+            check_discharge_shared(subproof, context.subproof_depth, &step.discharge)?;
         }
     }
 

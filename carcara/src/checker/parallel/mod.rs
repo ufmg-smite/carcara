@@ -1,4 +1,4 @@
-use super::shared::{check_assume_shared, check_step_core};
+use super::shared::{check_assume_shared, check_step_core, StepCheckContext};
 pub mod scheduler;
 
 use super::{
@@ -396,16 +396,15 @@ impl<'c> ParallelProofChecker<'c> {
         };
 
         // Use shared core logic
-        let result = check_step_core(
-            step,
-            rule_args,
-            &self.config,
-            iter.is_end_step(),
-            iter.current_subproof(),
-            iter.depth(),
-            stats,
-            &mut self.is_holey,
-        );
+        let context = StepCheckContext {
+            config: &self.config,
+            is_end_step: iter.is_end_step(),
+            current_subproof: iter.current_subproof(),
+            subproof_depth: iter.depth(),
+            is_holey: &mut self.is_holey,
+        };
+
+        let result = check_step_core(step, rule_args, context, stats);
 
         // Update polyeq time in stats
         if let Some(s) = stats {
