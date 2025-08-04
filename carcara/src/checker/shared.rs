@@ -158,7 +158,7 @@ pub fn check_discharge_shared(
     }
 }
 
-/// Shared rule lookup logic - extracted from ProofChecker::get_rule
+/// Shared rule lookup logic - extracted from `ProofChecker::get_rule`
 pub fn get_rule_shared(rule_name: &str, elaborated: bool) -> Option<crate::checker::rules::Rule> {
     use crate::checker::rules::*;
 
