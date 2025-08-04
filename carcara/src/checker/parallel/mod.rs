@@ -1,10 +1,10 @@
-use super::shared::check_assume_shared;
+use super::shared::{check_assume_shared, check_step_core};
 pub mod scheduler;
 
 use super::{
-    error::{CheckerError, SubproofError},
+    error::{CheckerError},
     rules::{Premise, RuleArgs, RuleResult},
-    Config, ProofChecker,
+    Config,
 };
 use crate::benchmarking::{CollectResults, OnlineBenchmarkResults};
 use crate::checker::CheckerStatistics;
@@ -366,26 +366,9 @@ impl<'c> ParallelProofChecker<'c> {
         pool: &mut LocalPool,
         stats: &mut Option<&mut CheckerStatistics<CR>>,
     ) -> RuleResult {
-        let time = Instant::now();
         let mut polyeq_time = Duration::ZERO;
 
-        if !step.discharge.is_empty() && step.rule != "subproof" {
-            return Err(CheckerError::Subproof(SubproofError::DischargeInWrongRule));
-        }
-
-        let rule = match ProofChecker::get_rule(&step.rule, self.config.elaborated) {
-            Some(r) => r,
-            None if self.config.ignore_unknown_rules => {
-                self.is_holey = true;
-                return Ok(());
-            }
-            None => return Err(CheckerError::UnknownRule),
-        };
-
-        if step.rule == "hole" || step.rule == "lia_generic" {
-            self.is_holey = true;
-        }
-
+        // Collect premises and discharge - this part is iterator-specific
         let premises: Vec<_> = step
             .premises
             .iter()
@@ -400,6 +383,7 @@ impl<'c> ParallelProofChecker<'c> {
             .map(|&i| iter.get_premise(i))
             .collect();
 
+        // Prepare rule arguments - this is pool-specific
         let rule_args = RuleArgs {
             conclusion: &step.clause,
             premises: &premises,
@@ -411,19 +395,23 @@ impl<'c> ParallelProofChecker<'c> {
             polyeq_time: &mut polyeq_time,
         };
 
-        rule(rule_args)?;
+        // Use shared core logic
+        let result = check_step_core(
+            step,
+            rule_args,
+            &self.config,
+            iter.is_end_step(),
+            iter.current_subproof(),
+            iter.depth(),
+            stats,
+            &mut self.is_holey,
+        );
 
-        if iter.is_end_step() {
-            let subproof = iter.current_subproof().unwrap();
-            ProofChecker::check_discharge(subproof, iter.depth(), &step.discharge)?;
-        }
-
+        // Update polyeq time in stats
         if let Some(s) = stats {
-            let time = time.elapsed();
-            s.results
-                .add_step_measurement(s.file_name, &step.id, &step.rule, time);
             s.polyeq_time += polyeq_time;
         }
-        Ok(())
+
+        result
     }
 }
