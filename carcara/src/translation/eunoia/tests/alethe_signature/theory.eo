@@ -198,6 +198,5 @@
 (declare-const @substitution.nil @Substitution)
 
 ; TODO: we don't want for the user to employ directly this constructor
-; TODO : not sure about declaring @substitution as right_assoc
 (declare-const @substitution (-> @Substitute @Substitution @Substitution)
                :right-assoc-nil @substitution.nil)

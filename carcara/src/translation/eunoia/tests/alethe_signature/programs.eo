@@ -638,8 +638,9 @@
            ($context_get_substitute subst id)
            )
 
-          (
-           ($context_get_substitute (and (= id value) tl) id)
+          (; Since id is bound within the definition of the context, it appears
+           ; in the (@var (@varlist id) id) form.
+           ($context_get_substitute (and (= (@var (@varlist id) id) value) tl) id)
            
            value
            )
@@ -651,15 +652,16 @@
            ($context_get_substitute tl id)
            )
 
-          (
-           ($context_get_substitute (= id value) id)
+          (; Since id is bound within the definition of the context, it appears
+           ; in the (@var (@varlist id) id) form.
+           ($context_get_substitute (= (@var (@varlist id) id) value) id)
            
            value
            )
           )
 )
 
-; program: context_get_var_subst_pairs
+; program: $context_get_var_subst_pairs
 ; args:
 ; - context Bool: A context built with @ctx.
 ; - variables @VarList: >
@@ -691,9 +693,41 @@
           )
 )
 
+; program: $context_get_vars_substs
+; args:
+; - context Bool: A context built with @ctx.
+; - variables @VarList: >
+;   A @VarList with variables' names, with which to index "context".
+; return: >
+;   A @VarList with the values associated with each variable from, and in the 
+;   same order as in, "variables".
+(program $context_get_vars_substs ((A Type) (id A) (B Type)
+                                      (value B) (varlist @VarList) 
+                                      (context Bool) (and_list Bool)
+                                      (ids @VarList :list))
+         (Bool @VarList) @VarList
+         (
+          (
+           ($context_get_vars_substs context (@varlist id ids))
+           
+           ($f_list_cons @varlist 
+                         ($context_get_substitute context id)
+                         ($context_get_vars_substs context ids))
+           )
+
+          (
+           ($context_get_vars_substs context @varlist.nil)
+           
+           @varlist.nil
+           )
+          )
+)
+
 ; program: $context_var_is_fixed
 ; args:
-; - context Bool: A context built with @ctx
+; - context Bool: >
+;    A context built with @ctx, in a normalized form, where there are,
+;    at most, one binding defined for a given variable.
 ; - var A: >
 ;   Variable for which we want to know if it is fixed, as indicated
 ;   in "context".
@@ -718,43 +752,39 @@
            ($context_var_is_fixed and_list var)
            )
 
-          ; TODO: is it possible to have contexts
-          ; with shadowed mappings?
           (
-           ($context_var_is_fixed (and (= var var)) var)
+           ($context_var_is_fixed 
+            (and (= (@var (@varlist var) var) (@var (@varlist var) var))) var)
 
            true
            )
 
-          (; { var <> any}
-           ($context_var_is_fixed (and (= var any)) var)
+          (; { (@var (@varlist var) var) <> any}
+           ($context_var_is_fixed (and (= (@var (@varlist var) var) any)) var)
 
            false
            )
 
-          (; { var <> var_2}
+          (; { (@var (@varlist var) var) <> var_2}
            ($context_var_is_fixed (and (= var_2 any)) var)
 
-           true
+           false
            )
 
           (
-           ($context_var_is_fixed (and (= var var) eqs) var)
+           ($context_var_is_fixed 
+            (and (= (@var (@varlist var) var) (@var (@varlist var) var)) eqs) var)
            
-           ; We look into eqs for another subst. that could
-           ; shadow this one.
-           (eo::and true ($context_var_is_fixed eqs var))
+           true
            )
 
-          (; { var <> any}
-           ($context_var_is_fixed (and (= var any) eqs) var)
+          (; { (@var (@varlist var) var) <> any}
+           ($context_var_is_fixed (and (= (@var (@varlist var) var) any) eqs) var)
 
-           ; We look into eqs for another subst. that could
-           ; shadow this one.
-           (eo::and false ($context_var_is_fixed eqs var))
+           false
            )
 
-          (; { var <> var_2}
+          (; { (@var (@varlist var) var) <> var_2}
            ($context_var_is_fixed (and (= var_2 any) eqs) var)
            
            ($context_var_is_fixed eqs var)
@@ -764,7 +794,7 @@
            ; contexts.
            ($context_var_is_fixed (and true) var)
 
-           true
+           false
            )
           )
 )
@@ -1056,8 +1086,7 @@
            ($f_list_filter @varlist @varlist.nil
                            ($fv bool_body)
                            ($varlist_flag_members ($fv bool_body) 
-                                          vars)
-                           )
+                                          vars))
            )
 
           (
@@ -1071,8 +1100,11 @@
            )
 
           (; We consider (@var varlist x) as our representation of variables 
-           ; introduced by some binder. For reasoning purposes within $fv, 
+           ; introduced by some binder. That is, variables that are actually
+           ; bound by some enclosing binder. For reasoning purposes within $fv, 
            ; we just use 'x' as the representation of the variable.
+           ; In particular, it simplifies membership testing of it against a list of 
+           ; binding occurrences of variables, from a given binder.
            ($fv (@var (@varlist x) x))
 
            ($f_list_cons @varlist 
