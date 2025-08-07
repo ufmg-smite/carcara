@@ -96,7 +96,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
     /// Abstracts the process of traversing a given context, identifying the fixed
     /// variables and the substitutions. Returns the corresponding list of
     /// variables and substitutions to be used when building a @ctx.
-    /// PRE : { the corresponding new scope in `self.variables_in_scope` is already opened}
+    /// PRE : { the corresponding new scope in `self.variables_in_scope` is already opened }
     fn process_anchor_context(&mut self, context: &[AnchorArg]) -> Vec<EunoiaTerm> {
         let mut ctx_params = Vec::new();
         // Variables bound by the context
@@ -112,14 +112,48 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                 // Copy trait for EunoiaTerms
                 eunoia_sort = self.translate_term(sort);
 
-                self.get_mut_translator_data()
+                // TODO: encapsulate variables_in_scope
+                // TODO: see how to abstract this into a single function
+                match self
+                    .get_read_translator_data()
                     .alethe_scopes
-                    .insert_variable_in_scope(name, &eunoia_sort);
+                    .variables_in_scope
+                    .get_with_depth(name)
+                {
+                    Some((depth, _)) => {
+                        if depth
+                            < self
+                                .get_read_translator_data()
+                                .alethe_scopes
+                                .variables_in_scope
+                                .height()
+                                - 1
+                        {
+                            // This variable is bound somewhere else.  We
+                            // shadow any previous def.
+                            self.get_mut_translator_data()
+                                .alethe_scopes
+                                .insert_variable_in_scope(name, &eunoia_sort);
 
-                context_domain.push(EunoiaTerm::List(vec![
-                    EunoiaTerm::Id(name.clone()),
-                    eunoia_sort.clone(),
-                ]));
+                            context_domain.push(EunoiaTerm::List(vec![
+                                EunoiaTerm::Id(name.clone()),
+                                eunoia_sort.clone(),
+                            ]));
+                        }
+                    }
+
+                    None => {
+                        // This variable is not bound somewhere else.
+                        self.get_mut_translator_data()
+                            .alethe_scopes
+                            .insert_variable_in_scope(name, &eunoia_sort);
+
+                        context_domain.push(EunoiaTerm::List(vec![
+                            EunoiaTerm::Id(name.clone()),
+                            eunoia_sort.clone(),
+                        ]));
+                    }
+                }
             }
 
             AnchorArg::Assign((name, sort), term) => {
@@ -127,13 +161,8 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                 // Copy trait for EunoiaTerms
                 eunoia_sort = self.translate_term(sort);
 
-                // TODO: ugly patch...
-                let rhs: EunoiaTerm = match term.deref() {
-                    Term::Var(string, _) => EunoiaTerm::Id(string.clone()),
-
-                    _ => self.translate_term(term),
-                };
-
+                // TODO: see how to abstract this into a single function, it is repeated
+                // above.
                 match self
                     .get_read_translator_data()
                     .alethe_scopes
@@ -175,15 +204,25 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                     }
                 }
 
+                // TODO: ugly patch...
+                // { variable (name, sort) is in scope }
+                let rhs: EunoiaTerm = self.translate_term(term);
+                // let rhs: EunoiaTerm = match term.deref() {
+                //     Term::Var(string, _) => EunoiaTerm::Id(string.clone()),
+
+                //     _ => self.translate_term(term),
+                // };
+
                 // Substitution map of the form name -> rhs: we
                 // reify it as a term (= name rhs)
                 subst.push(EunoiaTerm::App(
                     self.alethe_signature.eq.clone(),
-                    vec![EunoiaTerm::Id(name.clone()), rhs],
+                    vec![self.build_var_binding(name), rhs],
                 ));
             }
         });
 
+        // Add the previous context, which we are extending.
         subst.push(EunoiaTerm::Id(self.get_last_introduced_context_id()));
 
         // Add typed params.
@@ -385,9 +424,10 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
     }
 
     /// For a given variable name "id", that is bound by some
-    /// context, it builds and returns its @var representation.
+    /// binder, it builds and returns its @var representation.
     /// That is, its representation as a variable bound by some
-    /// enclosing context.
+    /// enclosing binder.
+    /// PRE : { id is in scope }
     fn build_var_binding(&self, id: &str) -> EunoiaTerm {
         // TODO: using clone, ugly...
         let sort = match self

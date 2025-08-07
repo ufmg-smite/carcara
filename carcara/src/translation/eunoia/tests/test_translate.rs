@@ -145,7 +145,7 @@ fn test_let_example() {
         "(define ctx1 ( ) true)\n\
          (assume context ctx1)\n\
          (assume h1 (@cl (= a b)))\n\
-         (define ctx2 ( ) (@ctx ( ( x S ) ) (and (= x b) ctx1)))\n\
+         (define ctx2 ( ) (@ctx ( ( x S ) ) (and (= (@var ( ( x S ) ) x) b) ctx1)))\n\
          (assume-push context ctx2)\n\
          (step t1 (@cl (= (@var ( ( x S ) ) x) b)) \
          :rule refl :args ( context ))\n\
