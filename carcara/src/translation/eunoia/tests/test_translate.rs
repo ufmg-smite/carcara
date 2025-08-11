@@ -4,7 +4,7 @@
 use crate::ast::*;
 #[cfg(test)]
 use crate::translation::{
-    eunoia::{alethe_2_eunoia::*, printer::PrintProof, printer::*},
+    eunoia::{alethe_2_eunoia::*, printer::*},
     Translator,
 };
 

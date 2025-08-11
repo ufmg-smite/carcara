@@ -4,6 +4,8 @@ pub mod tstp;
 
 use crate::ast::*;
 
+// io::Result
+use std::io;
 // Deref for ast::rc::Rc<Term>
 use std::ops::Deref;
 // scopes
@@ -631,4 +633,11 @@ pub trait VecToVecTranslator<'a, StepType, TermType: Clone + 'a, TypeTermType, O
 
     /// Translates only an SMT-lib problem.
     fn translate_problem_2_vect(&mut self, problem: &Problem) -> Vec<StepType>;
+}
+
+/// Common pretty printing interface shared by Eunoia and TSTP compilers.
+pub trait PrintProof {
+    type Proof;
+
+    fn write_proof(&mut self, proof: &Self::Proof) -> io::Result<()>;
 }

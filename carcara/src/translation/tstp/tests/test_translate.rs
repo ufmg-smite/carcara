@@ -4,8 +4,8 @@
 use crate::ast::*;
 #[cfg(test)]
 use crate::translation::{
-    tstp::{alethe_2_tstp::*, printer::PrintProof, printer::*},
-    Translator,
+    tstp::{alethe_2_tstp::*, printer::*},
+    PrintProof, Translator,
 };
 
 // TODO: ugly, copying this from parser/tests.rs
@@ -24,8 +24,8 @@ const TEST_CONFIG: Config = Config {
 };
 
 #[test]
-fn test_let_example() {
-    // Test from files let.*
+fn test_simple_cong_example() {
+    // Test from files simple-cong.*
 
     let mut tstp_translator = TstpTranslator::new();
 
@@ -106,23 +106,25 @@ fn test_let_example() {
 
     printer_problem.write_proof(&tstp_problem).unwrap();
     // TODO : "The name identifies the formula within the problem"
-    // Hence, in tff('U',type,'U': $tType )., its named shouldn't be 'U'.
+    // Hence, in tff('U',type,'U': $tType )., its name shouldn't be 'U'.
     // See if we can use the conventions mentioned in the grammar doc.
+    // TODO: U should be printed as 'U'.
     assert_eq!(
-        "tff('U',type,'U': $tType ).
-tff(p1,type,p1: $o ).
-tff(p2,type,p2: $o ).
-tff(p3,type,p3: $o ).
-tff(a,type,a: 'U' ).
-tff(b,type,b: 'U' ).
-tff(c,type,c: 'U' ).
-tff(d,type,d: 'U' ).
-tff(f,type,f: ( 'U' * 'U' ) > 'U' ).
-tff(formula_1,axiom,a = b ).
-tff(formula_2,axiom,c = d ).
-tff(formula_3,axiom,p1 ).
-tff(formula_4,axiom,( ~ p1  | ( p2 & p3 ) ) ).
-tff(formula_5,axiom,( ~ p3 | ( f(a,c) != f(b,d) ) ) ).",
+        "tff(type_1, type, U: $tType).
+tff(type_2, type, p1: $o).
+tff(type_3, type, p2: $o).
+tff(type_4, type, p3: $o).
+tff(type_5, type, a: 'U').
+tff(type_6, type, b: 'U').
+tff(type_7, type, c: 'U').
+tff(type_8, type, d: 'U').
+tff(type_9, type, f: ( 'U' * 'U' ) > 'U').
+tff(axiom_1, axiom, ( a = b )).
+tff(axiom_2, axiom, ( c = d )).
+tff(axiom_3, axiom, ( p1 & $true )).
+tff(axiom_4, axiom, ( ~ p1 | ( p2 & p3 ) )).
+tff(axiom_5, axiom, ( ~ p3 | ~ ( f(a, c) = f(b, d) ) )).
+",
         std::str::from_utf8(&buf_problem).unwrap()
     );
 

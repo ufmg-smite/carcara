@@ -1,5 +1,7 @@
 //! A pretty printer for Eunoia proofs.
 use crate::translation::eunoia::eunoia_ast::*;
+// Re-exporting PrintProof, to avoid conflicting import paths in other modules.
+pub use crate::translation::PrintProof;
 use std::io;
 
 // TODO: struct for future actual formatting concerns
@@ -42,11 +44,9 @@ pub struct EunoiaPrinter<'a> {
     formatted_sink: SExpFormatter<'a>,
 }
 
-pub trait PrintProof {
-    fn write_proof(&mut self, proof: &EunoiaProof) -> io::Result<()>;
-}
-
 impl<'a> PrintProof for EunoiaPrinter<'a> {
+    type Proof = EunoiaProof;
+
     /// Formatted proof printing.
     fn write_proof(&mut self, proof: &EunoiaProof) -> io::Result<()> {
         let mut tag: String;

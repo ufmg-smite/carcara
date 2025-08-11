@@ -1,5 +1,7 @@
 //! A pretty printer for Tstp proofs.
 use crate::translation::tstp::tstp_ast::*;
+// Re-exporting PrintProof, to avoid conflicting import paths in other modules.
+pub use crate::translation::PrintProof;
 use std::io;
 
 // TODO: struct for future actual formatting concerns
@@ -54,11 +56,9 @@ pub struct TstpPrinter<'a> {
     formatted_sink: AnnotatedFormulaFormatter<'a>,
 }
 
-pub trait PrintProof {
-    fn write_proof(&mut self, proof: &TstpProof) -> io::Result<()>;
-}
-
 impl<'a> PrintProof for TstpPrinter<'a> {
+    type Proof = TstpProof;
+
     /// Formatted proof printing.
     fn write_proof(&mut self, proof: &TstpProof) -> io::Result<()> {
         let mut language_as_str: String;
@@ -107,6 +107,7 @@ impl<'a> TstpPrinter<'a> {
     }
 
     fn role_to_concrete_syntax(role: &TstpFormulaRole) -> String {
+        // TODO: reuse role.to_string()
         match role {
             TstpFormulaRole::Axiom => "axiom".to_owned(),
 

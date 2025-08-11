@@ -5,7 +5,7 @@ mod path_args;
 
 use carcara::{
     ast, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate, check_parallel, checker,
-    elaborator, generate_lia_smt_instances, parser, translation::eunoia::printer::PrintProof,
+    elaborator, generate_lia_smt_instances, parser, translation::PrintProof,
     translation::Translator,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};

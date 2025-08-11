@@ -75,6 +75,8 @@ pub enum TstpFormula {
 
     ExistentialQuant(Symbol, Box<TstpFormula>),
 
+    // Note: to simplify type system, we have just one
+    // OperatorApp category.
     OperatorApp(TstpOperator, Vec<TstpFormula>),
 
     // TPTP jargon: functor.
