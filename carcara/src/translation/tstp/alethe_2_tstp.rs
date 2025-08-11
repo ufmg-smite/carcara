@@ -339,7 +339,31 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                     .map(|operand| self.translate_term(operand))
                     .collect();
 
-                TstpFormula::OperatorApp(self.translate_operator(*operator), operands_tstp)
+                match self.translate_operator(*operator) {
+                    TstpOperator::NullaryOperator(nullary_op) => {
+                        assert!(operands.is_empty());
+
+                        TstpFormula::NullaryOperatorApp(nullary_op)
+                    }
+
+                    TstpOperator::UnaryOperator(unary_op) => {
+                        assert!(operands.len() == 1);
+
+                        TstpFormula::UnaryOperatorApp(unary_op, Box::new(operands_tstp[0].clone()))
+                    }
+
+                    TstpOperator::BinaryOperator(binary_op) => {
+                        assert!(operands.len() == 2);
+
+                        // From TPTP docs:
+                        // "The binary connectives are left associative."
+                        TstpFormula::BinaryOperatorApp(
+                            binary_op,
+                            Box::new(operands_tstp[0].clone()),
+                            Box::new(operands_tstp[1].clone()),
+                        )
+                    }
+                }
             }
 
             // TODO: not considering the sort of the variable.
@@ -582,46 +606,46 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         match operator {
             // TODO: put this into theory.rs
             // Logic
-            Operator::And => TstpOperator::And,
+            Operator::And => TstpOperator::BinaryOperator(TstpBinaryOperator::And),
 
-            Operator::Or => TstpOperator::Or,
+            Operator::Or => TstpOperator::BinaryOperator(TstpBinaryOperator::Or),
 
-            Operator::Xor => TstpOperator::Xor,
+            Operator::Xor => TstpOperator::BinaryOperator(TstpBinaryOperator::Xor),
 
-            Operator::Not => TstpOperator::Not,
+            Operator::Not => TstpOperator::UnaryOperator(TstpUnaryOperator::Not),
 
-            Operator::Implies => TstpOperator::Implies,
+            Operator::Implies => TstpOperator::BinaryOperator(TstpBinaryOperator::Implies),
 
-            Operator::Ite => TstpOperator::Ite,
+            Operator::Ite => TstpOperator::BinaryOperator(TstpBinaryOperator::Ite),
 
-            Operator::True => TstpOperator::True,
+            Operator::True => TstpOperator::NullaryOperator(TstpNullaryOperator::True),
 
-            Operator::False => TstpOperator::False,
+            Operator::False => TstpOperator::NullaryOperator(TstpNullaryOperator::False),
 
             // Order / Comparison.
-            Operator::Equals => TstpOperator::Equality,
+            Operator::Equals => TstpOperator::BinaryOperator(TstpBinaryOperator::Equality),
 
-            Operator::GreaterThan => TstpOperator::Greater,
+            Operator::GreaterThan => TstpOperator::BinaryOperator(TstpBinaryOperator::Greater),
 
-            Operator::GreaterEq => TstpOperator::GreaterEq,
+            Operator::GreaterEq => TstpOperator::BinaryOperator(TstpBinaryOperator::GreaterEq),
 
-            Operator::LessThan => TstpOperator::Less,
+            Operator::LessThan => TstpOperator::BinaryOperator(TstpBinaryOperator::Less),
 
-            Operator::LessEq => TstpOperator::LessEq,
+            Operator::LessEq => TstpOperator::BinaryOperator(TstpBinaryOperator::LessEq),
 
             // TODO:?
-            Operator::Distinct => TstpOperator::Inequality,
+            Operator::Distinct => TstpOperator::BinaryOperator(TstpBinaryOperator::Inequality),
 
             // Arithmetic
-            Operator::Add => TstpOperator::Sum,
+            Operator::Add => TstpOperator::BinaryOperator(TstpBinaryOperator::Sum),
 
-            Operator::Sub => TstpOperator::Difference,
+            Operator::Sub => TstpOperator::BinaryOperator(TstpBinaryOperator::Difference),
 
-            Operator::Mult => TstpOperator::Product,
+            Operator::Mult => TstpOperator::BinaryOperator(TstpBinaryOperator::Product),
 
-            Operator::IntDiv => TstpOperator::QuotientE,
+            Operator::IntDiv => TstpOperator::BinaryOperator(TstpBinaryOperator::QuotientE),
 
-            Operator::RealDiv => TstpOperator::Quotient,
+            Operator::RealDiv => TstpOperator::BinaryOperator(TstpBinaryOperator::Quotient),
 
             _ => {
                 println!("No defined translation for operator {:?}", operator);
@@ -765,6 +789,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 } else {
                     // {!clause.is_empty()}
                     TstpFormula::Variable("this should be a non-empty clause".to_owned())
+
                     // TstpFormula::App(
                     //     self.alethe_signature.cl.clone(),
                     //     clause

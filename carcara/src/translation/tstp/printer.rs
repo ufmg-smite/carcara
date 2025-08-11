@@ -142,33 +142,29 @@ impl<'a> TstpPrinter<'a> {
                 ret = name.clone();
             }
 
-            TstpFormula::OperatorApp(op, operands) => {
-                if TstpPrinter::is_nullary_operator(op) {
-                    assert!(operands.is_empty());
+            TstpFormula::NullaryOperatorApp(nullary_op) => {
+                ret = TstpPrinter::operator_to_concrete_syntax(&TstpOperator::NullaryOperator(
+                    nullary_op.clone(),
+                ));
+            }
 
-                    ret = TstpPrinter::operator_to_concrete_syntax(op);
-                } else {
-                    // { ! TstpPrinter::is_nullary_operator(op) }
-                    if TstpPrinter::is_unary_operator(op) {
-                        assert!(operands.len() == 1);
+            TstpFormula::UnaryOperatorApp(unary_op, operand) => {
+                ret = TstpPrinter::operator_to_concrete_syntax(&TstpOperator::UnaryOperator(
+                    unary_op.clone(),
+                )) + " "
+                    + &TstpPrinter::formula_to_concrete_syntax(operand);
+            }
 
-                        ret = TstpPrinter::operator_to_concrete_syntax(op)
-                            + " "
-                            + &TstpPrinter::formula_to_concrete_syntax(&operands[0]);
-                    } else {
-                        // { ! TstpPrinter::is_nullary_operator(op) /\
-                        //   ! TstpPrinter::is_unary_operator(op)}
-                        assert!(operands.len() == 2);
-
-                        ret = "( ".to_owned()
-                            + &TstpPrinter::formula_to_concrete_syntax(&operands[0])
-                            + " "
-                            + &TstpPrinter::operator_to_concrete_syntax(op)
-                            + " "
-                            + &TstpPrinter::formula_to_concrete_syntax(&operands[1])
-                            + " )";
-                    }
-                }
+            TstpFormula::BinaryOperatorApp(binary_op, left_operand, right_operand) => {
+                ret = "( ".to_owned()
+                    + &TstpPrinter::formula_to_concrete_syntax(left_operand)
+                    + " "
+                    + &TstpPrinter::operator_to_concrete_syntax(&TstpOperator::BinaryOperator(
+                        binary_op.clone(),
+                    ))
+                    + " "
+                    + &TstpPrinter::formula_to_concrete_syntax(right_operand)
+                    + " )";
             }
 
             TstpFormula::FunctorApp(functor, arguments) => {
@@ -238,23 +234,26 @@ impl<'a> TstpPrinter<'a> {
 
     fn operator_to_concrete_syntax(op: &TstpOperator) -> String {
         match op {
-            // Logic
-            TstpOperator::Not => "~".to_owned(),
+            // Logic nullary operators
+            TstpOperator::NullaryOperator(TstpNullaryOperator::True) => "$true".to_owned(),
 
-            TstpOperator::And => "&".to_owned(),
+            TstpOperator::NullaryOperator(TstpNullaryOperator::False) => "$false".to_owned(),
 
-            TstpOperator::Or => "|".to_owned(),
+            // Logic unary operators
+            TstpOperator::UnaryOperator(TstpUnaryOperator::Not) => "~".to_owned(),
 
-            TstpOperator::True => "$true".to_owned(),
+            // Logic binary operators
+            TstpOperator::BinaryOperator(TstpBinaryOperator::And) => "&".to_owned(),
 
-            TstpOperator::False => "$false".to_owned(),
+            TstpOperator::BinaryOperator(TstpBinaryOperator::Or) => "|".to_owned(),
 
-            // Relations
-            TstpOperator::Equality => "=".to_owned(),
+            // Binary relations
+            TstpOperator::BinaryOperator(TstpBinaryOperator::Equality) => "=".to_owned(),
 
-            TstpOperator::Inequality => "!=".to_owned(),
+            TstpOperator::BinaryOperator(TstpBinaryOperator::Inequality) => "!=".to_owned(),
 
-            TstpOperator::Uminus => "-".to_owned(),
+            // Arithmetic unary ops.
+            TstpOperator::UnaryOperator(TstpUnaryOperator::Uminus) => "-".to_owned(),
 
             _ => panic!(),
         }
@@ -365,29 +364,5 @@ impl<'a> TstpPrinter<'a> {
         }
 
         ret
-    }
-
-    /// Query functions to help with the lack of expressiveness of the grammar
-    /// being used to represent TPTP/TSTP.
-    fn is_unary_operator(op: &TstpOperator) -> bool {
-        match op {
-            // Unary operators
-            TstpOperator::Not => true,
-
-            TstpOperator::Uminus => true,
-
-            _ => false,
-        }
-    }
-
-    fn is_nullary_operator(op: &TstpOperator) -> bool {
-        match op {
-            // Unary operators
-            TstpOperator::True => true,
-
-            TstpOperator::False => true,
-
-            _ => false,
-        }
     }
 }

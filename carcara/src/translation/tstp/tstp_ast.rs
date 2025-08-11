@@ -75,9 +75,11 @@ pub enum TstpFormula {
 
     ExistentialQuant(Symbol, Box<TstpFormula>),
 
-    // Note: to simplify type system, we have just one
-    // OperatorApp category.
-    OperatorApp(TstpOperator, Vec<TstpFormula>),
+    // Application of built-in operators. Arity captured through ASTs, for more robust
+    // type checking.
+    NullaryOperatorApp(TstpNullaryOperator),
+    UnaryOperatorApp(TstpUnaryOperator, Box<TstpFormula>),
+    BinaryOperatorApp(TstpBinaryOperator, Box<TstpFormula>, Box<TstpFormula>),
 
     // TPTP jargon: functor.
     // TODO: do we need to introduce a special syntactic
@@ -99,14 +101,38 @@ pub enum TstpFormula {
     DistinctObject(String),
 }
 
+// NOTE: To simplify internal architecture, we define this sum-type of operators.
 #[derive(Clone, Debug)]
 pub enum TstpOperator {
-    // Logical connectives
+    NullaryOperator(TstpNullaryOperator),
+
+    UnaryOperator(TstpUnaryOperator),
+
+    BinaryOperator(TstpBinaryOperator),
+}
+
+#[derive(Clone, Debug)]
+pub enum TstpNullaryOperator {
+    // Logical nullary connectives
     // From TPTP docs:
     // Defined predicates recognized: $true and $false, with the obvious interpretations.
     True,
     False,
+}
+
+#[derive(Clone, Debug)]
+pub enum TstpUnaryOperator {
+    // Logical connectives
     Not,
+
+    // Unary minus of a number.
+    Uminus,
+}
+
+#[derive(Clone, Debug)]
+pub enum TstpBinaryOperator {
+    // Logical connectives
+    // From TPTP docs:
     Or,
     Xor,
     And,
@@ -120,8 +146,6 @@ pub enum TstpOperator {
     Sum,
     // Difference between two numbers.
     Difference,
-    // Unary minus of a number.
-    Uminus,
     Product,
     // Exact quotient of two numbers of the same type.
     Quotient,
