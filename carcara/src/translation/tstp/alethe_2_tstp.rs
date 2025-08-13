@@ -231,7 +231,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
     /// Abstracts the process of traversing a given context, identifying the fixed
     /// variables and the substitutions. Returns the corresponding list of
     /// variables and substitutions to be used when building a @ctx.
-    fn process_anchor_context(&mut self, _context: &[AnchorArg]) -> Vec<TstpFormula> {
+    fn process_anchor_context(&mut self, _context: Vec<&AnchorArg>) -> Vec<TstpFormula> {
         let mut _ctx_params: Vec<TstpFormula> = Vec::new();
         // Variables bound by the context
         let mut _context_domain: Vec<TstpFormula> = Vec::new();

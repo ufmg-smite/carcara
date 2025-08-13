@@ -96,8 +96,10 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
     /// Abstracts the process of traversing a given context, identifying the fixed
     /// variables and the substitutions. Returns the corresponding list of
     /// variables and substitutions to be used when building a @ctx.
-    /// PRE : { the corresponding new scope in `self.variables_in_scope` is already opened }
-    fn process_anchor_context(&mut self, context: &[AnchorArg]) -> Vec<EunoiaTerm> {
+    /// PRE : { the corresponding new scope in `self.variables_in_scope` is already opened
+    ///              &&
+    ///              `self.normalize_anchor_context(context)` = context }
+    fn process_anchor_context(&mut self, context: Vec<&AnchorArg>) -> Vec<EunoiaTerm> {
         let mut ctx_params = Vec::new();
         // Variables bound by the context
         let mut context_domain = Vec::new();
