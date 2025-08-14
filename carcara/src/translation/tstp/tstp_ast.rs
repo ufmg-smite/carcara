@@ -64,8 +64,8 @@ pub enum TstpFormulaRole {
     Plain,
 }
 
-/// Syntactic category of expressions that denote formulas but, also, values inhabiting
-/// other types: numeric and string literals.
+/// Syntactic category of expressions that denote formulas but, also, values
+/// inhabiting other types: numeric and string literals.
 #[derive(Clone, Debug)]
 pub enum TstpFormula {
     Variable(Symbol),

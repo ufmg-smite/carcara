@@ -113,6 +113,80 @@ impl TstpTranslator {
 
         new_name
     }
+
+    /// Translates the application of an Alethe operator into its expected TSTP
+    /// representation. We devote a specific method to this task, to tackle some
+    /// special situations that appear when translating into Tstp.
+    fn translate_operator_application(
+        &mut self,
+        operator: Operator,
+        operands: &[Rc<Term>],
+    ) -> TstpFormula {
+        let operands_tstp: Vec<TstpFormula> = operands
+            .iter()
+            .map(|operand| self.translate_term(operand))
+            .collect();
+
+        match self.translate_operator(operator) {
+            TstpOperator::NullaryOperator(nullary_op) => {
+                assert!(operands.is_empty());
+
+                TstpFormula::NullaryOperatorApp(nullary_op)
+            }
+
+            TstpOperator::UnaryOperator(unary_op) => {
+                assert!(operands.len() == 1);
+
+                TstpFormula::UnaryOperatorApp(unary_op, Box::new(operands_tstp[0].clone()))
+            }
+
+            TstpOperator::BinaryOperator(binary_op) => {
+                // From TPTP docs:
+                // "The binary connectives are left associative."
+                // Assumption: we never receive a partial application of a binary operator.
+
+                // translate_operator_application might be invoked to translate a unit clause.
+                assert!(!operands.is_empty());
+
+                let mut ret: TstpFormula;
+
+                if operands.len() >= 2 {
+                    ret = TstpFormula::BinaryOperatorApp(
+                        binary_op.clone(),
+                        Box::new(operands_tstp[0].clone()),
+                        Box::new(operands_tstp[1].clone()),
+                    );
+                } else {
+                    // { operands.len() == 1 }
+                    // We should be translating just a unit clause
+                    assert!(operator == Operator::Or);
+
+                    ret = TstpFormula::BinaryOperatorApp(
+                        binary_op.clone(),
+                        Box::new(TstpFormula::NullaryOperatorApp(TstpNullaryOperator::False)),
+                        Box::new(operands_tstp[0].clone()),
+                    );
+                }
+
+                // TODO: some better way to skip the first 2 positions?
+                let mut position = 0;
+                operands_tstp.iter().for_each(|operand| {
+                    if position > 1 {
+                        ret = TstpFormula::BinaryOperatorApp(
+                            binary_op.clone(),
+                            Box::new(ret.clone()),
+                            Box::new(operand.clone()),
+                        );
+                    } else {
+                        // { position <= 1 }
+                        position += 1;
+                    }
+                });
+
+                ret
+            }
+        }
+    }
 }
 
 impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOperator>
@@ -352,17 +426,11 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                         TstpFormula::UnaryOperatorApp(unary_op, Box::new(operands_tstp[0].clone()))
                     }
 
-                    TstpOperator::BinaryOperator(binary_op) => {
-                        assert!(operands.len() == 2);
-
-                        // From TPTP docs:
-                        // "The binary connectives are left associative."
-                        TstpFormula::BinaryOperatorApp(
-                            binary_op,
-                            Box::new(operands_tstp[0].clone()),
-                            Box::new(operands_tstp[1].clone()),
-                        )
-                    }
+                    TstpOperator::BinaryOperator(binary_op) => TstpFormula::BinaryOperatorApp(
+                        binary_op,
+                        Box::new(operands_tstp[0].clone()),
+                        Box::new(operands_tstp[1].clone()),
+                    ),
                 }
             }
 
@@ -602,6 +670,8 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         (TstpFormula::Variable("dummy".to_owned()), values)
     }
 
+    /// NOTE: In this case, we would not need a reference to self. Yet,
+    /// this is not the case for `Alethe2Eunoia`.
     fn translate_operator(&self, operator: Operator) -> TstpOperator {
         match operator {
             // TODO: put this into theory.rs
@@ -788,7 +858,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                     TstpFormula::Variable("this should an empty clause".to_owned())
                 } else {
                     // {!clause.is_empty()}
-                    TstpFormula::Variable("this should be a non-empty clause".to_owned())
+                    self.translate_operator_application(Operator::Or, clause)
 
                     // TstpFormula::App(
                     //     self.alethe_signature.cl.clone(),

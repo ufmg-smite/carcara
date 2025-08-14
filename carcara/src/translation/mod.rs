@@ -414,6 +414,8 @@ pub trait VecToVecTranslator<'a, StepType, TermType: Clone + 'a, TypeTermType, O
     /// translation of binding constructions.
     fn translate_term(&mut self, term: &Term) -> TermType;
 
+    /// In some situations, we need to access to the `VecToVecTranslator` object.
+    /// Hence the self reference.
     fn translate_operator(&self, operator: Operator) -> OperatorType;
 
     fn translate_constant(constant: &Constant) -> TermType;

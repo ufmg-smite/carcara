@@ -247,6 +247,8 @@ impl<'a> TstpPrinter<'a> {
 
             TstpOperator::BinaryOperator(TstpBinaryOperator::Or) => "|".to_owned(),
 
+            TstpOperator::BinaryOperator(TstpBinaryOperator::Implies) => "=>".to_owned(),
+
             // Binary relations
             TstpOperator::BinaryOperator(TstpBinaryOperator::Equality) => "=".to_owned(),
 
@@ -255,7 +257,10 @@ impl<'a> TstpPrinter<'a> {
             // Arithmetic unary ops.
             TstpOperator::UnaryOperator(TstpUnaryOperator::Uminus) => "-".to_owned(),
 
-            _ => panic!(),
+            _ => {
+                println!("Problems translating operator {:?}", op);
+                panic!()
+            }
         }
     }
 
