@@ -408,30 +408,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
             }
 
             Term::Op(operator, operands) => {
-                let operands_tstp: Vec<TstpFormula> = operands
-                    .iter()
-                    .map(|operand| self.translate_term(operand))
-                    .collect();
-
-                match self.translate_operator(*operator) {
-                    TstpOperator::NullaryOperator(nullary_op) => {
-                        assert!(operands.is_empty());
-
-                        TstpFormula::NullaryOperatorApp(nullary_op)
-                    }
-
-                    TstpOperator::UnaryOperator(unary_op) => {
-                        assert!(operands.len() == 1);
-
-                        TstpFormula::UnaryOperatorApp(unary_op, Box::new(operands_tstp[0].clone()))
-                    }
-
-                    TstpOperator::BinaryOperator(binary_op) => TstpFormula::BinaryOperatorApp(
-                        binary_op,
-                        Box::new(operands_tstp[0].clone()),
-                        Box::new(operands_tstp[1].clone()),
-                    ),
-                }
+                self.translate_operator_application(*operator, operands)
             }
 
             // TODO: not considering the sort of the variable.
