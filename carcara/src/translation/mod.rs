@@ -4,7 +4,6 @@ pub mod tstp;
 
 use crate::ast::*;
 
-use std::collections::HashSet;
 use std::io::Result;
 // Deref for ast::rc::Rc<Term>
 use std::ops::Deref;
@@ -438,48 +437,12 @@ pub trait VecToVecTranslator<'a, StepType, TermType: Clone + 'a, TypeTermType, O
     /// `option_ctx_params`: a vector with the variables introduced by the context (optionally)
     fn define_push_new_context(&mut self, option_ctx_params: Option<Vec<TermType>>);
 
-    /// For each context concrete representation, it is possible to obtain a reduced
-    /// concrete representation, such that contains the same information. This method
-    /// defines this concept. Note that each solver might emit certificates where the
-    /// contexts are represented differently, since the Alethe standard allows for some
-    /// degrees of freedom. We normalize them through this method.
-    /// For each `AnchorArg` in the context returned:
-    /// - A fixed variable x will be represented just as Variable(x) (i.e., we
-    ///   will not include an `AnchorArg` of the form Assign(x, x)).
-    /// - Assign(x, y) will be only used to substitutions x -> y, where x != y.
-    /// - For each variable x being fixed or substituted, there will be just a single
-    ///   Variable(x) or Assign(x, y), whatever corresponds.
-    fn normalize_anchor_context<'b>(&mut self, context: &'b [AnchorArg]) -> Vec<&'b AnchorArg> {
-        let mut returned_vector: Vec<&AnchorArg> = vec![];
-        let mut variables_already_seen = HashSet::new();
-
-        context.iter().for_each(|arg| match arg {
-            AnchorArg::Variable((name, _)) => {
-                if !variables_already_seen.contains(name) {
-                    variables_already_seen.insert(name);
-                    returned_vector.push(arg);
-                }
-            }
-
-            AnchorArg::Assign((name, _), _) => {
-                if !variables_already_seen.contains(name) {
-                    variables_already_seen.insert(name);
-                    returned_vector.push(arg);
-                }
-            }
-        });
-
-        returned_vector
-    }
-
     /// Abstracts the process of traversing a given context, identifying the fixed
     /// variables and the substitutions. Returns the corresponding list of
     /// variables and substitutions to be used when building a @ctx.
     /// PRE : { the corresponding new scope in `self.variables_in_scope` is
-    ///              already opened
-    ///              &&
-    ///              `self.normalize_anchor_context(context)` = context }
-    fn process_anchor_context(&mut self, context: Vec<&AnchorArg>) -> Vec<TermType>;
+    ///              already opened }
+    fn process_anchor_context(&mut self, context: &[AnchorArg]) -> Vec<TermType>;
 
     /// Returns the identifier of the last context actually introduced within the proof certificate.
     /// PRE: { 0 < `self.contexts_opened`}
@@ -609,9 +572,8 @@ pub trait VecToVecTranslator<'a, StepType, TermType: Clone + 'a, TypeTermType, O
                             .alethe_scopes
                             .open_context_scope();
 
-                        // Clean and process the vector of AnchorArgs.
-                        let clean_args = self.normalize_anchor_context(args);
-                        ctx_params = self.process_anchor_context(clean_args);
+                        // Process the vector of AnchorArgs.
+                        ctx_params = self.process_anchor_context(args);
 
                         // Define and open a new context
                         self.define_push_new_context(Some(ctx_params));
