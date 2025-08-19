@@ -1,6 +1,7 @@
 //! Tstp concrete syntax's AST.
 
 pub type Symbol = String;
+pub type TstpInferenceRuleName = String;
 
 /// Tstp annotated formula.
 pub struct TstpAnnotatedFormula {
@@ -205,12 +206,31 @@ pub enum TstpAnnotatedFormulaSource {
     // <internal_source>  ::= introduced(<intro_type>,<useful_info>,<parents>)
     Introduced(
         TstpSourceIntroducedType,
-        Box<TstpSourceIntroducedUsefulInfo>,
+        TstpSourceIntroducedUsefulInfo,
         Vec<TstpAnnotatedFormulaSource>,
+    ),
+
+    // Inference record: inference(rule name, general data, parent formulas)
+    Inference(
+        TstpInferenceRuleName,
+        Vec<TstpGeneralData>,
+        Vec<TstpParentFormulaSource>,
     ),
 
     // No source provided
     Empty,
+}
+
+pub type TstpParentFormulaSource = TstpAnnotatedFormulaSource;
+
+#[derive(Clone, Debug)]
+pub enum TstpGeneralData {
+    Status(TstpGeneralDataStatus),
+}
+
+#[derive(Clone, Debug)]
+pub enum TstpGeneralDataStatus {
+    Thm,
 }
 
 #[derive(Clone, Debug)]

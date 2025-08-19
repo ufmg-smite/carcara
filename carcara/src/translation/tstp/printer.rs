@@ -284,9 +284,13 @@ impl<'a> TstpPrinter<'a> {
             }
 
             TstpAnnotatedFormulaSource::Introduced(introduced_type, useful_info, parents) => {
-                ret = TstpPrinter::source_introduced_type_to_concrete_syntax(introduced_type);
+                // TODO: mixing different concerns: balanced terms should be dealt
+                // with elsewhere.
+                ret = "introduced(".to_owned();
 
-                ret += "(";
+                ret += &TstpPrinter::source_introduced_type_to_concrete_syntax(introduced_type);
+
+                ret += ", ";
 
                 ret += &TstpPrinter::source_introduced_useful_info_to_concrete_syntax(useful_info);
 
@@ -294,6 +298,48 @@ impl<'a> TstpPrinter<'a> {
 
                 // TODO: a more idiomatic way of solving this
                 let mut first_iteration = true;
+
+                parents.iter().for_each(|parent| {
+                    if first_iteration {
+                        ret += &TstpPrinter::source_to_concrete_syntax(parent);
+                        first_iteration = false;
+                    } else {
+                        // { ! first_iteration }
+                        ret += ", ";
+                        ret += &TstpPrinter::source_to_concrete_syntax(parent);
+                    }
+                });
+
+                ret += "])";
+            }
+
+            TstpAnnotatedFormulaSource::Inference(rule_name, general_data, parents) => {
+                // TODO: mixing different concerns: balanced terms should be dealt
+                // with elsewhere.
+                ret = "inference(".to_owned();
+
+                ret += rule_name;
+
+                ret += ", [";
+
+                // TODO: a more idiomatic way of solving this
+                let mut first_iteration = true;
+
+                general_data.iter().for_each(|data| {
+                    if first_iteration {
+                        ret += &TstpPrinter::general_data_to_concrete_syntax(data);
+                        first_iteration = false;
+                    } else {
+                        // { ! first_iteration }
+                        ret += ", ";
+                        ret += &TstpPrinter::general_data_to_concrete_syntax(data);
+                    }
+                });
+
+                ret += "], [";
+
+                // TODO: a more idiomatic way of solving this
+                first_iteration = true;
 
                 parents.iter().for_each(|parent| {
                     if first_iteration {
@@ -369,5 +415,27 @@ impl<'a> TstpPrinter<'a> {
         }
 
         ret
+    }
+
+    fn general_data_to_concrete_syntax(general_data: &TstpGeneralData) -> String {
+        let mut ret: String;
+
+        match general_data {
+            TstpGeneralData::Status(status) => {
+                ret = "status(".to_owned();
+
+                ret += &TstpPrinter::general_data_status_to_concrete_syntax(status);
+
+                ret += ")";
+            }
+        }
+
+        ret
+    }
+
+    fn general_data_status_to_concrete_syntax(status: &TstpGeneralDataStatus) -> String {
+        match status {
+            TstpGeneralDataStatus::Thm => "thm".to_owned(),
+        }
     }
 }

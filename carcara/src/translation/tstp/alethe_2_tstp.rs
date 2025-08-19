@@ -187,6 +187,52 @@ impl TstpTranslator {
             }
         }
     }
+
+    ////////////////////////////////////////////
+    // SZS ontology-related services.
+    ////////////////////////////////////////////
+
+    /// Classifies a rule according to its corresponding source (from TPTP's grammar).
+    /// Builds the corresponding step, according to the previous classification.
+    fn classify_source_build_step_term(
+        &mut self,
+        rule_name: &str,
+        conclusion: TstpFormula,
+        _premises: Vec<TstpFormula>,
+    ) -> TstpAnnotatedFormula {
+        // TODO: we should be extracting this from some "Alethe signature"
+        // instead of hard-coding these names
+        let tautologies = ["and_neg", "implies_neg1"];
+
+        if tautologies.contains(&rule_name) {
+            self.new_annotated_formula(
+                TstpLanguage::Tff,
+                TstpFormulaRole::Plain,
+                conclusion,
+                // TODO: abstract this into some method
+                TstpAnnotatedFormulaSource::Introduced(
+                    TstpSourceIntroducedType::Tautology,
+                    TstpSourceIntroducedUsefulInfo::GeneralList(vec![rule_name.to_owned()]),
+                    vec![],
+                ),
+                "".to_owned(),
+            )
+        } else {
+            // { not tautologies.contains(rule_name) }
+            self.new_annotated_formula(
+                TstpLanguage::Tff,
+                TstpFormulaRole::Plain,
+                conclusion,
+                // TODO: abstract this into some method
+                TstpAnnotatedFormulaSource::Inference(
+                    rule_name.to_owned(),
+                    vec![TstpGeneralData::Status(TstpGeneralDataStatus::Thm)],
+                    vec![],
+                ),
+                "".to_owned(),
+            )
+        }
+    }
 }
 
 impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOperator>
@@ -825,22 +871,11 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 // NOTE: in ProofStep, clause has type
                 // Vec<Rc<Term>>, though it represents an
                 // invocation of Alethe's cl operator
-                // TODO: we are always adding the conclusion clause
                 let conclusion: TstpFormula = if clause.is_empty() {
-                    // TODO: ?
-                    // TstpFormula::Variable(self.alethe_signature.empty_cl.clone())
-                    TstpFormula::Variable("this should an empty clause".to_owned())
+                    TstpFormula::NullaryOperatorApp(TstpNullaryOperator::False)
                 } else {
                     // {!clause.is_empty()}
                     self.translate_operator_application(Operator::Or, clause)
-
-                    // TstpFormula::App(
-                    //     self.alethe_signature.cl.clone(),
-                    //     clause
-                    //         .iter()
-                    //         .map(|term| self.translate_term(term))
-                    //         .collect(),
-                    // )
                 };
 
                 // NOTE: not adding conclusion clause to this list
@@ -852,35 +887,46 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
 
                 // TODO: develop some generic programmatic way to deal with each rule's
                 // semantics instead of this
-                match rule.as_str() {
-                    "and_neg" => {
-                        let annotated_formula = self.new_annotated_formula(
-                            TstpLanguage::Tff,
-                            TstpFormulaRole::Plain,
-                            conclusion,
-                            TstpAnnotatedFormulaSource::Empty,
-                            "".to_owned(),
-                        );
+                // match rule.as_str() {
+                //     "and_neg" => {
+                //         let annotated_formula = self.new_annotated_formula(
+                //             TstpLanguage::Tff,
+                //             TstpFormulaRole::Plain,
+                //             conclusion,
+                //             // TODO: abstract this into some method
+                //             TstpAnnotatedFormulaSource::Introduced(
+                //                 TstpSourceIntroducedType::Tautology,
+                //                 TstpSourceIntroducedUsefulInfo::GeneralList(vec!["and_neg".to_string()]),
+                //                 vec![],
+                //             ),
+                //             "".to_owned(),
+                //         );
 
-                        self.get_mut_translator_data()
-                            .translated_proof
-                            .push(annotated_formula);
-                    }
+                //         self.get_mut_translator_data()
+                //             .translated_proof
+                //             .push(annotated_formula);
+                //     }
 
-                    _ => {
-                        let annotated_formula = self.new_annotated_formula(
-                            TstpLanguage::Tff,
-                            TstpFormulaRole::Plain,
-                            conclusion,
-                            TstpAnnotatedFormulaSource::Empty,
-                            "".to_owned(),
-                        );
+                //     _ => {
+                //         let annotated_formula = self.new_annotated_formula(
+                //             TstpLanguage::Tff,
+                //             TstpFormulaRole::Plain,
+                //             conclusion,
+                //             TstpAnnotatedFormulaSource::Empty,
+                //             "".to_owned(),
+                //         );
 
-                        self.get_mut_translator_data()
-                            .translated_proof
-                            .push(annotated_formula);
-                    }
-                }
+                //         self.get_mut_translator_data()
+                //             .translated_proof
+                //             .push(annotated_formula);
+                //     }
+                // }
+
+                let annotated_formula =
+                    self.classify_source_build_step_term(rule, conclusion, alethe_premises);
+                self.get_mut_translator_data()
+                    .translated_proof
+                    .push(annotated_formula);
             }
 
             _ => {
