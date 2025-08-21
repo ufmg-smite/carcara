@@ -298,7 +298,7 @@ pub fn check_drat(
 
         if clause.contains(&negated_pivot) {
             let mut resolvent = clause.clone();
-            resolvent.remove(&negated_pivot);
+            resolvent.swap_remove(&negated_pivot);
             let mut resolvent = resolvent
                 .iter()
                 .map(|(p, literal)| {

@@ -129,7 +129,7 @@ impl LinearComb {
             Entry::Occupied(mut e) => {
                 *e.get_mut() += value;
                 if *e.get() == 0 {
-                    e.remove();
+                    e.swap_remove();
                 }
             }
             Entry::Vacant(e) => {

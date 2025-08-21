@@ -133,7 +133,7 @@ impl Substitution {
     /// This will clear `self.should_be_renamed`, such that it might need to be recomputed later.
     /// Therefore, you should avoid using this method if possible.
     pub(super) fn remove(&mut self, x: &Rc<Term>) {
-        let was_present = self.map.remove(x).is_some();
+        let was_present = self.map.swap_remove(x).is_some();
         if was_present {
             self.should_be_renamed = None;
         }

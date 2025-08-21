@@ -73,7 +73,7 @@ fn rup_resolution(conclusion: &[Rc<Term>], premises: &[Premise]) -> bool {
 
                 // Remove the negated literal from all clauses that contain it
                 for c in &mut clauses {
-                    c.remove(&negated_literal);
+                    c.swap_remove(&negated_literal);
                 }
             }
             _ => return false,
