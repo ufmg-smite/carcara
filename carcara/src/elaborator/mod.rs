@@ -1,3 +1,4 @@
+mod congruence;
 mod hole;
 mod lia_generic;
 mod polyeq;
@@ -160,6 +161,7 @@ impl<'e> Elaborator<'e> {
                 "eq_transitive" => transitivity::eq_transitive,
                 "trans" => transitivity::trans,
                 "resolution" | "th_resolution" => resolution::resolution,
+                "cong" => congruence::cong,
                 _ => return None,
             })
         }
