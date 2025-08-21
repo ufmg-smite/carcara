@@ -15,10 +15,6 @@ license = "Apache-2.0"
 [dependencies]
 indexmap = "2.0.0"
 log = "0.4.20"
-# Specific version until closing this issue (https://gitlab.com/tspiteri/gmp-mpfr-sys/-/issues/39)
-gmp-mpfr-sys = { version = "1.6", default-features = false, features = [
-    "use-system-libs",
-] }
 rug = { version = "1.21.0", default-features = false, features = [
     "integer",
     "rational",
