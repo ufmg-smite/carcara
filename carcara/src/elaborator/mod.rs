@@ -6,6 +6,7 @@ mod quantifiers;
 mod reflexivity;
 mod reordering;
 mod resolution;
+mod subproof;
 mod transitivity;
 mod uncrowding;
 
@@ -164,6 +165,7 @@ impl<'e> Elaborator<'e> {
                 "resolution" | "th_resolution" => resolution::resolution,
                 "cong" => congruence::cong,
                 "forall_inst" => quantifiers::forall_inst,
+                "subproof" => subproof::subproof,
                 _ => return None,
             })
         }
