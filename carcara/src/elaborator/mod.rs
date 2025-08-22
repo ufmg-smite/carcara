@@ -7,6 +7,7 @@ mod reflexivity;
 mod reordering;
 mod resolution;
 mod subproof;
+mod tautology;
 mod transitivity;
 mod uncrowding;
 
@@ -166,6 +167,7 @@ impl<'e> Elaborator<'e> {
                 "cong" => congruence::cong,
                 "forall_inst" => quantifiers::forall_inst,
                 "subproof" => subproof::subproof,
+                "ite_intro" => tautology::ite_intro,
                 _ => return None,
             })
         }
