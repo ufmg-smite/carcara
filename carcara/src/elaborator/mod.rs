@@ -1,10 +1,14 @@
+mod clausification;
 mod congruence;
 mod hole;
 mod lia_generic;
 mod polyeq;
+mod quantifiers;
 mod reflexivity;
 mod reordering;
 mod resolution;
+mod subproof;
+mod tautology;
 mod transitivity;
 mod uncrowding;
 
@@ -162,6 +166,10 @@ impl<'e> Elaborator<'e> {
                 "trans" => transitivity::trans,
                 "resolution" | "th_resolution" => resolution::resolution,
                 "cong" => congruence::cong,
+                "forall_inst" => quantifiers::forall_inst,
+                "subproof" => subproof::subproof,
+                "ite_intro" => tautology::ite_intro,
+                "bfun_elim" => clausification::bfun_elim,
                 _ => return None,
             })
         }
