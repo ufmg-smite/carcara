@@ -2,6 +2,7 @@ mod congruence;
 mod hole;
 mod lia_generic;
 mod polyeq;
+mod quantifiers;
 mod reflexivity;
 mod reordering;
 mod resolution;
@@ -162,6 +163,7 @@ impl<'e> Elaborator<'e> {
                 "trans" => transitivity::trans,
                 "resolution" | "th_resolution" => resolution::resolution,
                 "cong" => congruence::cong,
+                "forall_inst" => quantifiers::forall_inst,
                 _ => return None,
             })
         }
