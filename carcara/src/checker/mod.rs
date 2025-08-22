@@ -17,6 +17,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+// The elaborator needs to use this function to elaborate `bfun_elim` steps
+pub(crate) use rules::clausification::apply_bfun_elim;
+
 #[derive(Clone)]
 pub struct CheckerStatistics<'s, CR: CollectResults + Send + Default> {
     pub file_name: &'s str,

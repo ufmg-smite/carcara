@@ -318,7 +318,7 @@ fn bfun_elim_second_step(
 }
 
 /// Applies the simplification steps for the `bfun_elim` rule.
-fn apply_bfun_elim(
+pub fn apply_bfun_elim(
     pool: &mut dyn TermPool,
     term: &Rc<Term>,
     cache: &mut IndexMap<Rc<Term>, Rc<Term>>,

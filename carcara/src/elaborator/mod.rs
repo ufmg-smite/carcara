@@ -1,3 +1,4 @@
+mod clausification;
 mod congruence;
 mod hole;
 mod lia_generic;
@@ -168,6 +169,7 @@ impl<'e> Elaborator<'e> {
                 "forall_inst" => quantifiers::forall_inst,
                 "subproof" => subproof::subproof,
                 "ite_intro" => tautology::ite_intro,
+                "bfun_elim" => clausification::bfun_elim,
                 _ => return None,
             })
         }
