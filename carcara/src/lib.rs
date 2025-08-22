@@ -41,6 +41,7 @@ mod drup;
 pub mod elaborator;
 pub mod parser;
 mod resolution;
+pub mod slice;
 pub mod translation;
 mod utils;
 
