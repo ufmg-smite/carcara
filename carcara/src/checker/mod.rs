@@ -154,7 +154,10 @@ impl<'c> ProofChecker<'c> {
                         self.context.pop();
                     }
 
-                    if step.clause.is_empty() {
+                    // Note that for the purpose of whether the proof of the input assumptions
+                    // concludes the empty clause this test must be made only when the context is
+                    // empty, i.e., when we are not in a subproof
+                    if step.clause.is_empty() && self.context.is_empty() {
                         self.reached_empty_clause = true;
                     }
                 }
