@@ -1,7 +1,7 @@
 use itertools::Itertools;
 
 use super::Command;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 use std::fmt;
 use std::io;
 

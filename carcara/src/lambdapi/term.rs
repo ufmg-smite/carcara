@@ -5,7 +5,7 @@ use crate::ast::{
 use itertools::Itertools;
 use rug::Integer;
 use std::borrow::Borrow;
-use std::collections::VecDeque;
+use std::collections::{hash_set, HashSet, VecDeque};
 use std::ops::Deref;
 use std::{fmt, vec};
 
@@ -38,7 +38,7 @@ pub fn proof(term: Term) -> Term {
     Term::Alethe(LTerm::Proof(Box::new(term)))
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum BuiltinSort {
     /// a non-dependent function A ⤳ T where A and T are Set
     Arrow(Box<Term>, Box<Term>),
@@ -143,7 +143,7 @@ impl fmt::Display for Command {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Term {
     Alethe(LTerm),
     Sort(BuiltinSort),
@@ -171,23 +171,35 @@ macro_rules! terms {
 
 pub(crate) use terms;
 
+/// This trait implements the visitor pattern for Lambdapi terms,
+/// allowing systematic replacement of variables with their corresponding values
+/// from a provided mapping.
 pub trait VisitorArgs {
+    /// Visits and potentially modifies a term by applying variable substitutions.
     fn visit(&mut self, mapping: &Vec<(&(String, Rc<AletheTerm>), &Rc<AletheTerm>)>);
 }
 
 impl VisitorArgs for LTerm {
+    /// We implement the substitution perform by Alethe in subproof.
+    /// Given an SMT term: `∀ x, (P(x) ∧ Q(y))` with an Alethe context Γ :=  [x → a, y → b].
+    /// we then obtain `∀ x, (P(x) ∧ Q(b))`.
+    /// Note that `x` is not substituted inside the `∀ x, ...` scope
     fn visit(&mut self, mapping: &Vec<(&(String, Rc<AletheTerm>), &Rc<AletheTerm>)>) {
         match self {
             LTerm::Clauses(ts) | LTerm::NOr(ts) | LTerm::NAnd(ts) => {
                 ts.iter_mut().for_each(|t| t.visit(mapping));
             }
             LTerm::Choice(bs, t) => t.visit(
+                // Keep only mappings for variables that are NOT bound by this Choice
+                // `sbs.0`` in `filter` contains the bound variables, we exclude them from substitution    
                 &mapping
                     .into_iter()
                     .cloned()
-                    .filter(|((id, _ ), _)| bs.0.iter().any(|SortedTerm(bind_name, _)| matches!(bind_name.borrow(), Term::TermId(x) if x != id )))
+                    .filter(|((id, _ ), _)| bs.0.iter().any(|SortedTerm(bind_name, _)| matches!(bind_name.borrow(), Term::TermId(x) if x != id )))  // Keep the mapping if the bound variable name doesn't match the mapping id
+
                     .collect_vec()
             ),
+            // Quantifiers (∃ and ∀) bind variables - similar filtering logic as Choice
             LTerm::Exist(Bindings(bs), t) | LTerm::Forall(Bindings(bs), t) => t.visit(
                 &mapping
                     .into_iter()
@@ -199,12 +211,14 @@ impl VisitorArgs for LTerm {
                 t1.visit(mapping);
                 t2.visit(mapping);
             }
-            LTerm::Proof(t) => t.visit(mapping),
+            LTerm::Proof(t) => t.visit(mapping), // Proof wrapper - transparently visit the inner term
             LTerm::Neg(t) => {
                 if let Some(t) = t {
                     t.visit(mapping)
                 }
             }
+            // Base case: for all other LTerm variants, no action needed
+            // (likely literals or other constructs without subterms)
             _ => {}
         }
     }
@@ -291,102 +305,144 @@ impl<S: Into<String>> From<S> for Term {
     }
 }
 
-pub fn conv(term: &Rc<AletheTerm>, ctx: &crate::lambdapi::Context) -> Term {
-    ctx.term_sharing.get(term).map_or_else(
-        || match term.deref() {
-            AletheTerm::Sort(_) => Term::from(term),
-            AletheTerm::App(f, args) => {
-                let mut func = vec![conv(f, ctx)];
-                let mut args: Vec<Term> = args.into_iter().map(|a| conv(a, ctx)).collect();
-                func.append(&mut args);
-                Term::Terms(func)
-            }
-            AletheTerm::Op(operator, args) => {
-                let args = args
-                    .into_iter()
-                    .map(|a| conv(a, ctx))
-                    .collect::<VecDeque<_>>();
-                return match operator {
-                    Operator::Not => Term::Alethe(LTerm::Neg(Some(Box::new(
-                        args.front().map(|a| a.clone()).unwrap(),
-                    )))),
-                    Operator::Or => Term::Alethe(LTerm::NOr(args.into())),
-                    Operator::Equals => Term::Alethe(LTerm::Eq(
-                        Box::new(args[0].clone()),
-                        Box::new(args[1].clone()),
-                    )),
-                    Operator::And => Term::Alethe(LTerm::NAnd(args.into())),
-                    Operator::Implies => Term::Alethe(LTerm::Implies(
-                        Box::new(args[0].clone()),
-                        Box::new(args[1].clone()),
-                    )),
-                    Operator::Distinct => Term::Alethe(LTerm::Distinct(VecN(
-                        args.into_iter().map(Into::into).collect_vec(),
-                    ))),
-                    Operator::Sub if args.len() == 1 => {
-                        Term::Terms(vec!["—".into(), args[0].clone()])
+/// Converts an Alethe term to a Lambdapi term and collects shared variables (occurrences of a subexpression exceeds the value set by `dag-thresh` in cvc5).
+///
+/// The HashSet of shared terms is crucial for Lambdapi proof steps because it tells us
+/// which terms can be unfolded (`simplify`) (expanded to their definitions) during proof construction.
+///
+/// # Parameters
+/// * `term` - The Alethe term to convert
+/// * `ctx` - The context containing term sharing information
+///
+/// # Returns
+/// A tuple containing:
+/// * `Term` - The converted Lambdapi term
+/// * `HashSet<Term>` - Collection of shared variables found during conversion.
+///
+pub fn conv(term: &Rc<AletheTerm>, ctx: &crate::lambdapi::Context) -> (Term, HashSet<String>) {
+    let mut shared_var: HashSet<_> = HashSet::new();
+
+    /// Auxiliary function of `conv` above that performs the actual conversion work recursively with the shared variables passed in parameter.
+    fn conv_aux(
+        term: &Rc<AletheTerm>,
+        ctx: &crate::lambdapi::Context,
+        shared_var: &mut HashSet<String>,
+    ) -> Term {
+        // Check if this term is in the shared terms dictionary
+        if let Some((name, _def)) = ctx.term_sharing.get(term) {
+            shared_var.insert(name.into());
+            Term::from(name)
+        } else {
+            // Not a shared term - perform direct conversion
+            let t = match term.deref() {
+                AletheTerm::Sort(_) => Term::from(term), // Sort terms pass through unchanged
+                AletheTerm::App(f, args) => {
+                    // Function applications: convert function and arguments separately
+
+                    let mut func = vec![conv(f, ctx).0];
+                    let mut args: Vec<Term> = args
+                        .into_iter()
+                        .map(|a| conv_aux(a, ctx, shared_var))
+                        .collect();
+                    func.append(&mut args);
+                    Term::Terms(func)
+                }
+                AletheTerm::Op(operator, args) => {
+                    let args = args
+                        .into_iter()
+                        .map(|a| conv_aux(a, ctx, shared_var))
+                        .collect::<VecDeque<_>>();
+                    match operator {
+                        Operator::Not => Term::Alethe(LTerm::Neg(Some(Box::new(
+                            args.front().map(|a| a.clone()).unwrap(),
+                        )))),
+                        Operator::Or => Term::Alethe(LTerm::NOr(args.into())),
+                        Operator::Equals => Term::Alethe(LTerm::Eq(
+                            Box::new(args[0].clone()),
+                            Box::new(args[1].clone()),
+                        )),
+                        Operator::And => Term::Alethe(LTerm::NAnd(args.into())),
+                        Operator::Implies => Term::Alethe(LTerm::Implies(
+                            Box::new(args[0].clone()),
+                            Box::new(args[1].clone()),
+                        )),
+                        Operator::Distinct => Term::Alethe(LTerm::Distinct(VecN(
+                            args.into_iter().map(Into::into).collect_vec(),
+                        ))),
+                        Operator::Sub if args.len() == 1 => {
+                            Term::Terms(vec!["—".into(), args[0].clone()])
+                        }
+                        Operator::Sub if args.len() > 1 => {
+                            let args = args.into_iter().map(Into::into).collect_vec();
+                            let vs =
+                                itertools::intersperse(args.into_iter(), "-".into()).collect_vec();
+                            Term::Terms(vs)
+                        }
+                        Operator::Add => {
+                            let args = args.into_iter().map(Into::into).collect_vec();
+                            let vs =
+                                itertools::intersperse(args.into_iter(), "+".into()).collect_vec();
+                            Term::Terms(vs)
+                        }
+                        Operator::GreaterEq => {
+                            Term::Terms(vec![args[0].clone(), "≥".into(), args[1].clone()])
+                        }
+                        Operator::GreaterThan => {
+                            Term::Terms(vec![args[0].clone(), ">".into(), args[1].clone()])
+                        }
+                        Operator::LessEq => {
+                            Term::Terms(vec![args[0].clone(), "≤".into(), args[1].clone()])
+                        }
+                        Operator::LessThan => {
+                            Term::Terms(vec![args[0].clone(), "<".into(), args[1].clone()])
+                        }
+                        Operator::Mult => {
+                            let args = args.into_iter().map(Into::into).collect_vec();
+                            let vs =
+                                itertools::intersperse(args.into_iter(), "*".into()).collect_vec();
+                            Term::Terms(vs)
+                        }
+                        Operator::RareList => {
+                            Term::Terms(args.into_iter().map(From::from).collect_vec())
+                        }
+                        Operator::True => Term::Alethe(LTerm::True),
+                        Operator::False => Term::Alethe(LTerm::False),
+                        Operator::Ite => Term::Terms(vec![
+                            Term::from("ite".to_string()),
+                            args[0].clone(),
+                            args[1].clone(),
+                            args[2].clone(),
+                        ]),
+                        o => todo!("Operator {:?}", o),
                     }
-                    Operator::Sub if args.len() > 1 => {
-                        let args = args.into_iter().map(Into::into).collect_vec();
-                        let vs = itertools::intersperse(args.into_iter(), "-".into()).collect_vec();
-                        Term::Terms(vs)
-                    }
-                    Operator::Add => {
-                        let args = args.into_iter().map(Into::into).collect_vec();
-                        let vs = itertools::intersperse(args.into_iter(), "+".into()).collect_vec();
-                        Term::Terms(vs)
-                    }
-                    Operator::GreaterEq => {
-                        Term::Terms(vec![args[0].clone(), "≥".into(), args[1].clone()])
-                    }
-                    Operator::GreaterThan => {
-                        Term::Terms(vec![args[0].clone(), ">".into(), args[1].clone()])
-                    }
-                    Operator::LessEq => {
-                        Term::Terms(vec![args[0].clone(), "≤".into(), args[1].clone()])
-                    }
-                    Operator::LessThan => {
-                        Term::Terms(vec![args[0].clone(), "<".into(), args[1].clone()])
-                    }
-                    Operator::Mult => {
-                        let args = args.into_iter().map(Into::into).collect_vec();
-                        let vs = itertools::intersperse(args.into_iter(), "*".into()).collect_vec();
-                        Term::Terms(vs)
-                    }
-                    Operator::RareList => {
-                        Term::Terms(args.into_iter().map(From::from).collect_vec())
-                    }
-                    Operator::True => Term::Alethe(LTerm::True),
-                    Operator::False => Term::Alethe(LTerm::False),
-                    Operator::Ite => Term::Terms(vec![
-                        Term::from("ite".to_string()),
-                        args[0].clone(),
-                        args[1].clone(),
-                        args[2].clone(),
-                    ]),
-                    o => todo!("Operator {:?}", o),
-                };
-            }
-            AletheTerm::Let(..) => todo!("let term"),
-            AletheTerm::Binder(AletheBinder::Forall, bs, t) => {
-                Term::Alethe(LTerm::Forall(Bindings::from(bs), Box::new(conv(t, ctx))))
-            }
-            AletheTerm::Binder(AletheBinder::Exists, bs, t) => {
-                Term::Alethe(LTerm::Exist(Bindings::from(bs), Box::new(conv(t, ctx))))
-            }
-            AletheTerm::Binder(AletheBinder::Choice, bs, t) => {
-                Term::Alethe(LTerm::Choice(Bindings::from(bs), Box::new(conv(t, ctx))))
-            }
-            AletheTerm::Var(id, _term) => Term::TermId(id.to_string()),
-            AletheTerm::Const(c) => match c {
-                Constant::Integer(i) => Term::Int(i.clone()),
-                Constant::String(s) => Term::from(s),
-                c => unimplemented!("Constant {}", c),
-            },
-            e => todo!("{:#?}", e),
-        },
-        |(name, _def)| Term::from(name),
-    )
+                }
+                AletheTerm::Let(..) => todo!("let term"),
+                AletheTerm::Binder(AletheBinder::Forall, bs, t) => Term::Alethe(LTerm::Forall(
+                    Bindings::from(bs),
+                    Box::new(conv_aux(t, ctx, shared_var)),
+                )),
+                AletheTerm::Binder(AletheBinder::Exists, bs, t) => Term::Alethe(LTerm::Exist(
+                    Bindings::from(bs),
+                    Box::new(conv_aux(t, ctx, shared_var)),
+                )),
+                AletheTerm::Binder(AletheBinder::Choice, bs, t) => Term::Alethe(LTerm::Choice(
+                    Bindings::from(bs),
+                    Box::new(conv_aux(t, ctx, shared_var)),
+                )),
+                AletheTerm::Var(id, _term) => Term::TermId(id.to_string()),
+                AletheTerm::Const(c) => match c {
+                    Constant::Integer(i) => Term::Int(i.clone()),
+                    Constant::String(s) => Term::from(s),
+                    c => unimplemented!("Constant {}", c),
+                },
+                e => todo!("{:#?}", e),
+            };
+            t
+        }
+    }
+
+    let t = conv_aux(term, ctx, &mut shared_var);
+    (t, shared_var)
 }
 
 impl From<&Rc<AletheTerm>> for Term {
@@ -507,7 +563,7 @@ impl From<AletheTerm> for Term {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Param(pub String, pub Term);
 
 impl fmt::Display for Param {
@@ -518,7 +574,7 @@ impl fmt::Display for Param {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SortedTerm(pub Box<Term>, pub Box<Term>);
 
 impl From<&SortedVar> for SortedTerm {
@@ -538,7 +594,7 @@ impl fmt::Display for SortedTerm {
 
 /// Represent the Stdlib.List inductive type in a shallow Rust encoding (Vec).
 /// This structure exists for making pretty printing easier by not overloading LTerm.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Bindings(pub Vec<SortedTerm>);
 
 impl From<&BindingList> for Bindings {
@@ -563,7 +619,7 @@ impl fmt::Display for Bindings {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct VecN(pub Vec<Term>);
 
 impl fmt::Display for VecN {
@@ -577,8 +633,7 @@ impl fmt::Display for VecN {
     }
 }
 
-
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct List(pub Vec<Term>);
 
 impl fmt::Display for List {
@@ -592,8 +647,7 @@ impl fmt::Display for List {
     }
 }
 
-
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum LTerm {
     True,
     False,
@@ -619,68 +673,55 @@ pub enum LTerm {
     Distinct(VecN),
     List(List),
     Choice(Bindings, Box<Term>),
-
 }
 
-macro_rules! id {
-    ($x1:expr) => {
-        Term::TermId($x1.into())
-    };
-}
+#[cfg(test)]
+pub(crate) mod test_macros {
+    use super::*; // Import the types you need (Term, LTerm, etc.)
+    macro_rules! id {
+        ($x1:expr) => {
+            Term::TermId($x1.into())
+        };
+    }
 
-pub(crate) use id;
+    macro_rules! bid {
+        ($x1:expr) => {
+            Term::TermId($x1.into())
+        };
+    }
 
-macro_rules! bid {
-    ($x1:expr) => {
-        Term::TermId($x1.into())
-    };
-}
+    macro_rules! not {
+        ($x1:expr) => {
+            Term::Alethe(LTerm::Neg(Some(Box::new($x1))))
+        };
+    }
 
-pub(crate) use bid;
+    macro_rules! eq {
+        ($x1:expr, $x2:expr) => {
+            Term::Alethe(LTerm::Eq(Box::new($x1), Box::new($x2)))
+        };
+    }
 
-macro_rules! not {
-    ($x1:expr) => {
-        Term::Alethe(LTerm::Neg(Some(Box::new($x1))))
-    };
-}
+    macro_rules! imp {
+        ($x1:expr, $x2:expr) => {
+            Term::Alethe(LTerm::Implies(Box::new($x1), Box::new($x2)))
+        };
+    }
 
-pub(crate) use not;
+    macro_rules! iff {
+        ($x1:expr, $x2:expr) => {
+            Term::Alethe(LTerm::Iff($x1, $x2))
+        };
+    }
 
-macro_rules! eq {
-    ($x1:expr, $x2:expr) => {
-        Term::Alethe(LTerm::Eq(Box::new($x1), Box::new($x2)))
-    };
-}
-
-pub(crate) use eq;
-
-macro_rules! imp {
-    ($x1:expr, $x2:expr) => {
-        Term::Alethe(LTerm::Implies(Box::new($x1), Box::new($x2)))
-    };
-}
-
-pub(crate) use imp;
-
-macro_rules! iff {
-    ($x1:expr, $x2:expr) => {
-        Term::Alethe(LTerm::Iff($x1, $x2))
-    };
-}
-
-pub(crate) use iff;
-
-macro_rules! or {
+    macro_rules! or {
     ($($x:expr),+ $(,)?) => {
         Term::Alethe(LTerm::NOr(vec![
             $($x),+
         ]))
     };
 }
-
-pub(crate) use or;
-
-macro_rules! and {
+    macro_rules! and {
     ($($x:expr),+ $(,)?) => {
         Term::Alethe(LTerm::NAnd(vec![
             $($x),+
@@ -688,17 +729,14 @@ macro_rules! and {
     };
 }
 
-pub(crate) use and;
-
-
-macro_rules! forall {
+    macro_rules! forall {
     ([$( ($x:expr, $ty:expr) ),+ $(,)?], $term:expr) => {
         Term::Alethe(LTerm::Forall(Bindings(vec![$( SortedTerm( Box::new($x), Box::new($ty)) ),+ ]), Box::new($term)))
     };
 }
 
-pub(crate) use forall;
-
+    pub(crate) use forall;
+}
 
 impl fmt::Display for LTerm {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

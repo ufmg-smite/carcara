@@ -2684,3 +2684,58 @@ apply ∨ₑ h
   apply orN_append_left (eraseIdx ps i) (eraseIdx qs j) hps';
 }
 end;
+
+// Lemmas `cl_⭈_cl` and `disj_⭈_cl` are used to prove the iso:  π̇ c ≡ π (disj l) with the invariant (⟇_to_∨_rw c = disj l).
+// We need this lemma to use disj_resolutionN from π̇ c
+
+opaque symbol cl_⭈_cl c l: π̇ c → π (⟇_to_∨_rw c = disj l) → π (disj l) ≔
+begin
+  simplify;
+  change  Π c: Clause,  π (`∀ l: 𝕃 o, ⟇_to_∨_rw c ⇒ ⟇_to_∨_rw c = disj l ⇒ disj l);
+  refine ind_ℂ (λ u, `∀ l, ⟇_to_∨_rw u ⇒ ((⟇_to_∨_rw u = disj l) ⇒ disj l)) _ _
+  { simplify; assume l h heq; rewrite left heq; refine h  }
+  { assume c cs ih; induction
+    { simplify; assume h heq; rewrite left heq; apply h }
+    { assume l ls ih2 h1 h2; rewrite left h2; apply h1 }
+  };
+end;
+
+symbol disj_⭈_cl l c: π (disj l) → π (disj l = ⟇_to_∨_rw c) → π̇ c ≔
+begin
+  simplify;
+  induction
+  {simplify; assume x Hcontra; apply ⊥ₑ Hcontra}
+  {
+    assume l ls ihl;
+    refine ind_ℂ (λ u, disj (l ⸬ ls) ⇒ ((disj (l ⸬ ls) = ⟇_to_∨_rw u) ⇒ ⟇_to_∨_rw u)) _ _
+    { simplify; assume h heq; rewrite left heq; apply h }
+    {assume x xs ih2 h1 h2; rewrite left h2; apply h1 }
+  }
+end;
+
+symbol cl↪list : Clause → 𝕃 o;
+rule cl↪list ▩ ↪ □
+with cl↪list ($x ⟇ $xs) ↪ $x ⸬ (cl↪list $xs);
+
+symbol list↪cl :  𝕃 o → Clause;
+rule list↪cl □ ↪ ▩
+with list↪cl ($x ⸬ $xs) ↪ $x ⟇ (list↪cl $xs);
+
+coerce_rule coerce Clause (𝕃 o) $x ↪ cl↪list $x;
+coerce_rule coerce (𝕃 o) Clause  $x ↪ list↪cl $x;
+
+symbol barbar a b c d e : π̇ (a ⟇ b ⟇ c ⟇ ▩) → π̇ (d ⟇ (¬ b) ⟇ e ⟇ ▩) → π̇ (a ⟇ c ⟇ d ⟇ e ⟇ ▩) ≔
+begin
+  assume a b c d e h1 h2;
+  refine disj_resolutionN (a ⟇ b ⟇ c ⟇ ▩) (d ⟇ (¬ b) ⟇ e ⟇ ▩) 1 1 h1 h2 ⊤ᵢ ⊤ᵢ (ind_eq (¬¬ₑ_eq b) (λ z, b = z) (eq_refl b));
+end;
+
+// symbol cl_resolutionN [c1 c2: Clause] (ps qs:  𝕃 o) (i j: ℕ)
+//   (hps: π̇ c1)
+//   (hqs: π̇ c2)
+//   (hi: π (i < size ps))
+//   (hj: π (j < size qs))
+//   (hij: π ((nth ⊥ ps i) = ¬ (nth ⊥ qs j))) : π (disj ((eraseIdx ps i) Stdlib.List.++ (eraseIdx qs j))) ≔
+// begin
+//   assume c1 c2 ps qs i j;
+// end;

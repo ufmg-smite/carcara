@@ -4,7 +4,7 @@ use crate::ast::Constant;
 
 use super::*;
 
-pub fn translate_rare_simp(clause: &Vec<Rc<AletheTerm>>, args: &Vec<Rc<AletheTerm>>) -> Proof {
+pub fn translate_rare_simp(clause: &Vec<Rc<AletheTerm>>, args: &Vec<Rc<AletheTerm>>, dag_terms: HashSet<String>) -> Proof {
     let (rare_rule, args) = args.split_first().unwrap();
 
     let rule: String =
@@ -23,7 +23,7 @@ pub fn translate_rare_simp(clause: &Vec<Rc<AletheTerm>>, args: &Vec<Rc<AletheTer
         "bool-impl-elim" => translate_bool_impl_elim(args),
         "bool-and-de-morgan" => translate_bool_and_de_morgan(args),
         "bool-or-de-morgan" => translate_bool_or_de_morgan(args),
-        "arith-poly-norm" => translate_arith_poly_norm(),
+        "arith-poly-norm" => translate_arith_poly_norm(clause, dag_terms),
         "evaluate" => {
             let cl_first = clause.first().expect("evaluate can not be empty");
             match  match_term!((= l r) = cl_first) {
@@ -93,16 +93,72 @@ fn translate_evaluate_bool() -> Vec<ProofStep> {
     vec![ProofStep::Admit]
 }
 
-/// Use the RING solver to prove arith-poly-norm 
-fn translate_arith_poly_norm() -> Vec<ProofStep> {
-    // vec![
-    //     ProofStep::Simplify,
-    //     ProofStep::Rewrite(true, Some("[x in _ = x]".into()), Term::from("inj"), vec![],SubProofs(None)),
-    //     ProofStep::Rewrite(true, Some("[x in x = _]".into()), Term::from("inj"), vec![],SubProofs(None)),
-    //     ProofStep::Reflexivity
-    // ]
-    //FIXME: Ring has change for another method
-    vec![ProofStep::Admit]
+
+
+/// In Alethe, arith_poly_norm is the arithmetical polynomial normalization rule.
+/// It is used to justify steps where an arithmetic expression (a polynomial over integers, rationals, or reals) is rewritten into a canonical, normalized polynomial form. This usually involves:
+///   * Flattening nested additions and multiplications
+///   * Sorting terms in a fixed order (e.g., lexicographically by variable)
+///   * Combining like terms (e.g., 2x + 3x → 5x)
+///   * Normalizing coefficients (for rationals, ensuring a canonical denominator)
+///   * Eliminating redundant constants or zero terms (e.g., x + 0 → x)
+/// So, if a proof line in Alethe has justification `:rule arith_poly_norm`, it means the term was transformed into its canonical polynomial representation.
+/// This ensures that arithmetic equalities like:
+/// ```
+/// (x + 1) + (2*x - 3) ≡ 3*x - 2
+/// ```
+/// 
+/// We then would like to produce the script that re-use the normalise for `la_generic``.
+/// 
+/// ```
+/// have t50_t3 : π̇ (e1 = e2) ⟇ ▩) {
+///  apply ∨ᵢ₁;
+///  rewrite left .[x in x = _] reify_correct;
+///  rewrite left .[x in _ = x] reify_correct;
+///  set l ≔ reify e1;
+///  rewrite .[z in val z = _] eta_prod;
+///  rewrite left norm_correct (l ₁) (l ₂) ⊤ᵢ;
+///  set r ≔ reify e2;
+///  rewrite .[z in _ = val z] eta_prod;
+///  rewrite left norm_correct (r ₁) (r ₂) ⊤ᵢ;
+///  reflexivity    
+/// };
+/// ```
+fn translate_arith_poly_norm(clause: &Vec<Rc<AletheTerm>>, dag_terms: HashSet<String>) -> Vec<ProofStep> {
+    let mut proof = vec![];
+
+    let l_set_id = "l";
+    let r_set_id = "r";
+
+    proof.push(ProofStep::Simplify(Vec::from_iter(dag_terms)));
+
+    proof.push(ProofStep::Rewrite(true, Some("[x in x = _]".into()), Term::from("reify_correct"), vec![], SubProofs(None)));
+    proof.push(ProofStep::Rewrite(true, Some("[x in _ = x]".into()), Term::from("reify_correct"), vec![], SubProofs(None)));
+
+    let (left, right) = match_term!((= l r) = clause[0]).expect("no equality");
+
+    let e1 : Term = Term::Terms(vec!["reify".into() , left.into()]);
+    let e2 : Term = Term::Terms(vec!["reify".into() , right.into()]);
+    proof.push(ProofStep::Set(l_set_id.to_string(), e1));
+    proof.push(ProofStep::Set(r_set_id.to_string(), e2));
+
+    proof.push(ProofStep::Rewrite(false, Some("[x in val x = _]".into()), Term::from("eta_prod"), vec![], SubProofs(None)));
+    proof.push(ProofStep::Rewrite(false, Some("[x in _ = val x]".into()), Term::from("eta_prod"), vec![], SubProofs(None)));
+
+    proof.push(ProofStep::Rewrite(true, None, Term::from("norm_correct"), vec![
+        Term::Terms(vec![l_set_id.into(), Term::from("₁")]),
+        Term::Terms(vec![l_set_id.into(), Term::from("₂")]),
+        intro_top()
+    ],SubProofs(None)));
+
+    proof.push(ProofStep::Rewrite(true, None, Term::from("norm_correct"), vec![
+        Term::Terms(vec![r_set_id.into(), Term::from("₁")]),
+        Term::Terms(vec![r_set_id.into(), Term::from("₂")]),
+        intro_top()
+    ],SubProofs(None)));
+    proof.push(ProofStep::Reflexivity);
+
+    proof
 }
 
 // /// Translate (define-rule* bool-or-false ((xs Bool :list) (ys Bool :list)) (or xs false ys) (or xs ys))
@@ -280,9 +336,9 @@ fn translate_ac_simplify() -> Proof {
 fn translate_bool_and_de_morgan(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
     if matches!(args.last().unwrap().deref(), AletheTerm::Op(Operator::RareList, ref l) if l.len() == 0)
     {
-        vec![apply!(id!("morgan₁"))]
+        vec![apply!("morgan₁".into())]
     } else {
-        let args_conv: Vec<Term> = args.into_iter().map(|t| Term::from(t)).collect_vec();
+        let _args_conv: Vec<Term> = args.into_iter().map(|t| Term::from(t)).collect_vec();
         // vec![ProofStep::Apply(
         //     id!("bool-and-de-morgan"),
         //     args_conv,
@@ -295,9 +351,9 @@ fn translate_bool_and_de_morgan(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
 fn translate_bool_or_de_morgan(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
     if matches!(args.last().unwrap().deref(), AletheTerm::Op(Operator::RareList, ref l) if l.len() == 0)
     {
-        vec![apply!(id!("morgan₂"))]
+        vec![apply!("morgan₂".into())]
     } else {
-        let args_conv: Vec<Term> = args.into_iter().map(|t| Term::from(t)).collect_vec();
+        let _args_conv: Vec<Term> = args.into_iter().map(|t| Term::from(t)).collect_vec();
         // vec![ProofStep::Apply(
         //     id!("bool-or-de-morgan"),
         //     args_conv,

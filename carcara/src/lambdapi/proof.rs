@@ -36,7 +36,7 @@ pub enum ProofStep {
     Try(Box<ProofStep>),
     Rewrite(bool, Option<String>, Term, Vec<Term>, SubProofs),
     Symmetry,
-    Simplify,
+    Simplify(Vec<String>),
     Set(String, Term),
     Varmap(String, Vec<Term>),
     Why3,
@@ -180,9 +180,9 @@ impl fmt::Display for ProofStep {
                 write!(f, ";")
             }
             ProofStep::Symmetry => write!(f, "symmetry;"),
-            ProofStep::Simplify => write!(f, "simplify;"),
+            ProofStep::Simplify(s) => write!(f, "simplify;"),
             ProofStep::Set(name, def) => write!(f, "set {} ≔ {};", name, def),
-            ProofStep::Varmap(name, list) => write!(f, "set {} ≔;", name),
+            ProofStep::Varmap(name, _list) => write!(f, "set {} ≔;", name),
             ProofStep::Why3 => write!(f, "why3;"),
             ProofStep::Eval(t) => write!(f, "eval {};", t),
         }

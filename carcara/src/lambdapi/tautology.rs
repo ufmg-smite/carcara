@@ -137,7 +137,7 @@ pub fn translate_and(
 
     let premise_project = unary_clause_to_prf(premise.0.as_ref());
 
-    let project_right = (0..position).fold(premise_project, |acc, _| terms!(id!("∧ₑ₂"), acc));
+    let project_right = (0..position).fold(premise_project, |acc, _| terms!("∧ₑ₂".into(), acc));
 
     let conjonction_length = match_term!((and ...) = premise.1.first().unwrap())
         .unwrap()
@@ -146,10 +146,10 @@ pub fn translate_and(
     let projections = if conjonction_length == (position + 1) as usize {
         ProofStep::Apply(project_right, vec![], SubProofs(None))
     } else {
-        apply!(id!("∧ₑ₁"), { project_right })
+        apply!("∧ₑ₁".into(), { project_right })
     };
 
-    Ok(Proof(vec![apply!(id!("∨ᵢ₁")), projections]))
+    Ok(Proof(vec![apply!("∨ᵢ₁".into()), projections]))
 }
 
 pub fn translate_not_or(premise: &(String, &[Rc<AletheTerm>])) -> TradResult<Proof> {
@@ -237,7 +237,7 @@ pub fn translate_and_neg(clause: &[Rc<AletheTerm>]) -> TradResult<Proof> {
         vec![Term::Alethe(LTerm::List(conj_list)), Term::Underscore],
         SubProofs(None),
     ));
-    proof.push(ProofStep::Simplify);
+    proof.push(ProofStep::Simplify(vec![]));
     proof.push(ProofStep::Eval(Term::from("#repeat_or_id_r")));
     proof.push(ProofStep::Reflexivity);
     Ok(Proof(proof))
@@ -317,7 +317,7 @@ pub fn translate_or_neg(
         SubProofs(None),
     ));
 
-    proof.push(ProofStep::Simplify);
+    proof.push(ProofStep::Simplify(vec![]));
     proof.push(ProofStep::Eval(Term::from("#repeat_or_id_r")));
 
     proof.push(ProofStep::Reflexivity);
@@ -517,7 +517,7 @@ pub fn translate_ite1(premise: &(String, &[Rc<AletheTerm>])) -> TradResult<Proof
         unwrap_match!(term_ite.deref(), AletheTerm::Op(Operator::Ite, cte) => cte.as_slice() )
     {
         Ok(proof!(
-            apply!(id!("ite1"), { underscore!(), t.into() , underscore!(), unary_clause_to_prf(&premise.0) } )
+            apply!("ite1".into(), { underscore!(), t.into() , underscore!(), unary_clause_to_prf(&premise.0) } )
         ))
     } else {
         Err(TranslatorError::PremisesError)
@@ -536,7 +536,7 @@ pub fn translate_ite2(premise: &(String, &[Rc<AletheTerm>])) -> TradResult<Proof
         unwrap_match!(term_ite.deref(), AletheTerm::Op(Operator::Ite, cte) => cte.as_slice() )
     {
         Ok(proof!(
-            apply!(id!("ite2"), { underscore!(), underscore!(), e.into(), unary_clause_to_prf(&premise.0) } )
+            apply!("ite2".into(), { underscore!(), underscore!(), e.into(), unary_clause_to_prf(&premise.0) } )
         ))
     } else {
         Err(TranslatorError::PremisesError)

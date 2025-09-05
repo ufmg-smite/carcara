@@ -786,8 +786,6 @@ fn slice_command(
 }
 
 fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool) -> CliResult<()> {
-    use std::io::Write;
-
     let root_file_name = options.input.proof_file.clone();
     let (problem, proof, rules) = get_instance(&options.input, options.parsing.buffer_entire_file)?;
 

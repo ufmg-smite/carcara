@@ -11,11 +11,7 @@ use thiserror::Error;
 use try_match::unwrap_match;
 
 use std::{
-    collections::{HashSet, VecDeque},
-    fmt::{self},
-    ops::Deref,
-    time::Duration,
-    vec,
+    collections::{HashSet, VecDeque}, fmt::{self}, hash::Hash, ops::Deref, time::Duration, vec
 };
 
 mod dsl;
@@ -67,7 +63,7 @@ pub struct Context {
 
 impl Context {
     /// Convert dagify subexpression into `Term::TermId` otherwise just apply a canonical conversion
-    fn get_or_convert(&self, term: &Rc<AletheTerm>) -> Term {
+    fn get_or_convert(&self, term: &Rc<AletheTerm>) -> (Term, HashSet<String>) {
         term::conv(term, self)
     }
 }
@@ -457,7 +453,7 @@ fn translate_subproof<'a>(
 
     let clause = clause
         .iter()
-        .map(|t| context.get_or_convert(t))
+        .map(|t| context.get_or_convert(t).0)
         .collect_vec();
 
     let mut fresh_ctx = Context::default();
@@ -572,7 +568,7 @@ fn translate_resolution(
                         proof(Term::Alethe(LTerm::Clauses(
                             remove_pivot_in_clause(&pivot, h1.1, h2.1)
                                 .into_iter()
-                                .map(|t| context.get_or_convert(&t))
+                                .map(|t| context.get_or_convert(&t).0)
                                 .collect::<Vec<Term>>(),
                         ))),
                         make_resolution(pivot, &(&h1.0, h1.1), &(&h2.0, h2.1), context),
@@ -596,7 +592,7 @@ fn translate_resolution(
                         proof(Term::Alethe(LTerm::Clauses(
                             current_goal
                                 .iter()
-                                .map(|t| context.get_or_convert(&t))
+                                .map(|t| context.get_or_convert(&t).0)
                                 .collect::<Vec<Term>>(),
                         ))),
                         resolution,
@@ -679,7 +675,7 @@ where
         match command {
             ProofCommand::Assume { id, term } => proof_steps.push(f(
                 id.into(),
-                term::clauses(vec![ctx.get_or_convert(term)]),
+                term::clauses(vec![ctx.get_or_convert(term).0]),
                 None,
             )),
             ProofCommand::Step(AstProofStep {
@@ -693,7 +689,7 @@ where
                 let proof = translate_resolution(proof_iter, premises, args, ctx)?;
 
                 let clauses = Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(
-                    clause.into_iter().map(|a| ctx.get_or_convert(a)).collect(),
+                    clause.into_iter().map(|a| ctx.get_or_convert(a).0).collect(),
                 )))));
 
                 proof_steps.push(f(normalize_name(id), clauses, Some(proof)));
@@ -701,9 +697,19 @@ where
             ProofCommand::Step(AstProofStep {
                 id, clause, premises: _, rule, args, ..
             }) if rule == "rare_rewrite" => {
-                let terms: Vec<Term> = clause.into_iter().map(|a| ctx.get_or_convert(a)).collect();
+                //let mut dag_terms: HashSet<_> =  HashSet::new();
+                
+                let (terms, hs) : (Vec<Term>, Vec<HashSet<_>>)  = clause.into_iter().map(|a| {
+                    ctx.get_or_convert(a)
+                    //dag_terms.union(&h);
+                    
+                }).unzip();
 
-                let proof_script = translate_rare_simp(clause, args);
+                let dag_terms: HashSet<_> = hs.into_iter()
+                    .flatten()
+                    .collect();
+
+                let proof_script = translate_rare_simp(clause, args, dag_terms);
 
                 let step = f(
                     normalize_name(id),
@@ -714,7 +720,7 @@ where
                 proof_steps.push(step);
             }
             ProofCommand::Step(AstProofStep { id, clause, rule, .. }) if rule.contains("simp") => {
-                let terms: Vec<Term> = clause.into_iter().map(|a| ctx.get_or_convert(a)).collect();
+                let terms: Vec<Term> = clause.into_iter().map(|a| ctx.get_or_convert(a).0).collect();
 
                 let proof_script = translate_simplify_step(rule);
 
@@ -728,38 +734,13 @@ where
             ProofCommand::Step(AstProofStep {
                 id, clause, premises: _, rule, args, ..
             }) if rule == "la_generic" => {
-                // let mut proof_la = vec![ProofStep::Apply(
-                //     Term::from("∨ᵢ₁"),
-                //     vec![],
-                //     SubProofs(None),
-                // )];
-
-                //proof_la.append(&mut la_generic(clause, args)?.0);
-
-                //let id_temp_proof = String::from("Hla");
-
                 let proof = gen_proof_la_generic(&clause, args);
 
                 let clause = clause
                     .into_iter()
-                    .map(|term| ctx.get_or_convert(term))
+                    .map(|term| ctx.get_or_convert(term).0)
                     .collect_vec();
-
-                // let intermediate_proof = ProofStep::Have(
-                //     id_temp_proof.clone(),
-                //     Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(vec![
-                //         Term::Alethe(LTerm::NOr(clause.clone())),
-                //     ]))))),
-                //     proof_la,
-                // );
-
-                // let proof = vec![
-                //     intermediate_proof,
-                //     ProofStep::Simplify,
-                //     ProofStep::Rewrite(false, None, id!("or_identity_r"), vec![]),
-                //     ProofStep::Apply(unary_clause_to_prf(&id_temp_proof), vec![], SubProofs(None)),
-                // ];
-
+    
                 proof_steps.push(f(
                     normalize_name(id),
                     Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(clause))))),
@@ -773,7 +754,7 @@ where
 
                 let clause = clause
                     .into_iter()
-                    .map(|term| ctx.get_or_convert(term))
+                    .map(|term| ctx.get_or_convert(term).0)
                     .collect();
 
                 if let Some(step) = step {
@@ -845,8 +826,7 @@ where
                             vec![],
                             SubProofs(None),
                         ));
-                    } else if trailing_false_on_conclusion_clause
-                    {
+                    } else if trailing_false_on_conclusion_clause {
                         // Case with a trailing false
                         script.push(ProofStep::Apply(
                             Term::TermId("∨ᵢ₂".to_string()),
@@ -858,8 +838,7 @@ where
                             vec![],
                             SubProofs(None),
                         ));
-                    } else if trailing_false_on_last_step
-                    {
+                    } else if trailing_false_on_last_step {
                         // Case with a trailing false
                         script.push(ProofStep::Apply(
                             Term::TermId("∨ᵢ₁".to_string()),
@@ -871,9 +850,7 @@ where
                             vec![],
                             SubProofs(None),
                         ));
-                    }
-                    
-                    else {
+                    } else {
                         // Case without a trailing false
                         script.push(ProofStep::Apply(
                             Term::TermId("∨ᵢ₁".to_string()),

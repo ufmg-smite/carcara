@@ -345,7 +345,16 @@ have t14_t4_t2 : π̇ (((p_40 ≤ (— (f x))) = (¬ ((p_40 ≥ ((— (f x)) + 1
 };
 have t14_t4_t3 : π̇ ((((— 1) * (p_40 - ((— (f x)) + 1))) = ((— 1) * ((f x) - 1))) ⟇ ▩) {
     apply ∨ᵢ₁;
-    admit;
+    simplify p_40;
+    rewrite left  .[x in x = _] reify_correct;
+    rewrite left  .[x in _ = x] reify_correct;
+    set l ≔ (reify ((— 1) * ((— 0) - ((— (f x)) + 1))));
+    set r ≔ (reify ((— 1) * ((f x) - 1)));
+    rewrite .[x in val x = _] eta_prod;
+    rewrite .[x in _ = val x] eta_prod;
+    rewrite left  norm_correct ((l ₁)) ((l ₂)) (⊤ᵢ);
+    rewrite left  norm_correct ((r ₁)) ((r ₂)) (⊤ᵢ);
+    reflexivity;
 };
 have t14_t4_t4 : π̇ (((p_40 ≥ ((— (f x)) + 1)) = ((f x) ≥ 1)) ⟇ ▩) {
     admit;
@@ -711,7 +720,16 @@ end;
 opaque symbol t26_t14_t1 : π̇ ((p_69 = 0) ⟇ ▩) ≔ 
 begin
 apply ∨ᵢ₁;
-admit;
+simplify p_69;
+rewrite left  .[x in x = _] reify_correct;
+rewrite left  .[x in _ = x] reify_correct;
+set l ≔ (reify ((f 5) + ((— 1) * (f 5))));
+set r ≔ (reify 0);
+rewrite .[x in val x = _] eta_prod;
+rewrite .[x in _ = val x] eta_prod;
+rewrite left  norm_correct ((l ₁)) ((l ₂)) (⊤ᵢ);
+rewrite left  norm_correct ((r ₁)) ((r ₂)) (⊤ᵢ);
+reflexivity;
 end;
 
 opaque symbol t26_t14_t2 : π̇ ((4 = 4) ⟇ ▩) ≔ 
@@ -913,7 +931,16 @@ have t26_t14_t18_t2 : π̇ (((p_40 ≤ (— (f x))) = (¬ ((p_40 ≥ ((— (f x)
 };
 have t26_t14_t18_t3 : π̇ ((((— 1) * (p_40 - ((— (f x)) + 1))) = ((— 1) * ((f x) - 1))) ⟇ ▩) {
     apply ∨ᵢ₁;
-    admit;
+    simplify p_40;
+    rewrite left  .[x in x = _] reify_correct;
+    rewrite left  .[x in _ = x] reify_correct;
+    set l ≔ (reify ((— 1) * ((— 0) - ((— (f x)) + 1))));
+    set r ≔ (reify ((— 1) * ((f x) - 1)));
+    rewrite .[x in val x = _] eta_prod;
+    rewrite .[x in _ = val x] eta_prod;
+    rewrite left  norm_correct ((l ₁)) ((l ₂)) (⊤ᵢ);
+    rewrite left  norm_correct ((r ₁)) ((r ₂)) (⊤ᵢ);
+    reflexivity;
 };
 have t26_t14_t18_t4 : π̇ (((p_40 ≥ ((— (f x)) + 1)) = ((f x) ≥ 1)) ⟇ ▩) {
     admit;
@@ -1335,7 +1362,16 @@ have t26_t34_t2 : π̇ (((p_40 ≤ (— (f x))) = (¬ ((p_40 ≥ ((— (f x)) + 
 };
 have t26_t34_t3 : π̇ ((((— 1) * (p_40 - ((— (f x)) + 1))) = ((— 1) * ((f x) - 1))) ⟇ ▩) {
     apply ∨ᵢ₁;
-    admit;
+    simplify p_40;
+    rewrite left  .[x in x = _] reify_correct;
+    rewrite left  .[x in _ = x] reify_correct;
+    set l ≔ (reify ((— 1) * ((— 0) - ((— (f x)) + 1))));
+    set r ≔ (reify ((— 1) * ((f x) - 1)));
+    rewrite .[x in val x = _] eta_prod;
+    rewrite .[x in _ = val x] eta_prod;
+    rewrite left  norm_correct ((l ₁)) ((l ₂)) (⊤ᵢ);
+    rewrite left  norm_correct ((r ₁)) ((r ₂)) (⊤ᵢ);
+    reflexivity;
 };
 have t26_t34_t4 : π̇ (((p_40 ≥ ((— (f x)) + 1)) = ((f x) ≥ 1)) ⟇ ▩) {
     admit;
@@ -1720,15 +1756,16 @@ have t50_t2 : π̇ (((p_40 ≤ (— (f x))) = (¬ ((p_40 ≥ ((— (f x)) + 1)))
 };
 have t50_t3 : π̇ ((((— 1) * (p_40 - ((— (f x)) + 1))) = ((— 1) * ((f x) - 1))) ⟇ ▩) {
     apply ∨ᵢ₁;
-    rewrite left .[x in x = _] reify_correct;
-    rewrite left .[x in _ = x] reify_correct;
-    set l ≔ reify (— _1 * (p_40 - (— (f x) + _1)));
-    rewrite .[z in val z = _] eta_prod;
-    rewrite left norm_correct (l ₁) (l ₂) ⊤ᵢ;
-    set r ≔ reify (— _1 * (f x - _1));
-    rewrite .[z in _ = val z] eta_prod;
-    rewrite left norm_correct (r ₁) (r ₂) ⊤ᵢ;
-    reflexivity    
+    simplify p_40;
+    rewrite left  .[x in x = _] reify_correct;
+    rewrite left  .[x in _ = x] reify_correct;
+    set l ≔ (reify ((— 1) * ((— 0) - ((— (f x)) + 1))));
+    set r ≔ (reify ((— 1) * ((f x) - 1)));
+    rewrite .[x in val x = _] eta_prod;
+    rewrite .[x in _ = val x] eta_prod;
+    rewrite left  norm_correct ((l ₁)) ((l ₂)) (⊤ᵢ);
+    rewrite left  norm_correct ((r ₁)) ((r ₂)) (⊤ᵢ);
+    reflexivity;
 };
 have t50_t4 : π̇ (((p_40 ≥ ((— (f x)) + 1)) = ((f x) ≥ 1)) ⟇ ▩) {
     admit;
@@ -1929,13 +1966,15 @@ opaque symbol t71_t1_t1 : π̇ ((p_137 = 0) ⟇ ▩) ≔
 begin
 apply ∨ᵢ₁;
 simplify p_137;
-rewrite left reify_correct (((— _1 * f 0) + f 0));
-rewrite eta_prod (reify ((— _1 * f 0) + f 0));
-set σ ≔ (reify ((— _1 * f 0) + f 0) ₂);
-set r ≔ (reify ((— _1 * f 0) + f 0) ₁);
-rewrite left norm_correct r σ ⊤ᵢ;
-simplify;
-reflexivity
+rewrite left  .[x in x = _] reify_correct;
+rewrite left  .[x in _ = x] reify_correct;
+set l ≔ (reify (((— 1) * (f 0)) + (f 0)));
+set r ≔ (reify 0);
+rewrite .[x in val x = _] eta_prod;
+rewrite .[x in _ = val x] eta_prod;
+rewrite left  norm_correct ((l ₁)) ((l ₂)) (⊤ᵢ);
+rewrite left  norm_correct ((r ₁)) ((r ₂)) (⊤ᵢ);
+reflexivity;
 end;
 
 opaque symbol t71_t1_t2 : π̇ ((p_140 = (— 10)) ⟇ ▩) ≔ 

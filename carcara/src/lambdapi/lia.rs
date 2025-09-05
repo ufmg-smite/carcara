@@ -86,8 +86,8 @@ pub fn gen_proof_la_generic(
 
     proof.append(&mut vec![
         ring_computation_proof,
-        ProofStep::Simplify,
-        ProofStep::Rewrite(false, None, id!("or_identity_r"), vec![], SubProofs(None)),
+        ProofStep::Simplify(vec![]),
+        ProofStep::Rewrite(false, None, "or_identity_r".into(), vec![], SubProofs(None)),
         ProofStep::Apply(unary_clause_to_prf(&id_temp_proof), vec![], SubProofs(None)),
     ]);
 
@@ -254,28 +254,28 @@ fn la_generic(
                 Op::Lt => ProofStep::Rewrite(
                     false,
                     Some(format!("[x in {}]", pattern_with_or)),
-                    id!("Zlt_not_ge"),
+                    "Zlt_not_ge".into(),
                     vec![],
                     SubProofs(None)
                 ),
                 Op::Le => ProofStep::Rewrite(
                     false,
                     Some(format!("[x in {}]", pattern_with_or)),
-                    id!("Zle_not_gt"),
+                    "Zle_not_gt".into(),
                     vec![],
                     SubProofs(None)
                 ),
                 Op::Ge => ProofStep::Rewrite(
                     false,
                     Some(format!("[x in {}]", pattern_with_or)),
-                    id!("Zge_not_lt"),
+                    "Zge_not_lt".into(),
                     vec![],
                     SubProofs(None)
                 ),
                 Op::Gt => ProofStep::Rewrite(
                     false,
                     Some(format!("[x in {}]", pattern_with_or)),
-                    id!("Zgt_not_le"),
+                    "Zgt_not_le".into(),
                     vec![],
                     SubProofs(None)
                 ),
@@ -312,7 +312,7 @@ fn la_generic(
             normalize_step.push(ProofStep::Try(Box::new(ProofStep::Rewrite(
                 false,
                 None,
-                id!("Zinv_lt_eq"),
+                "Zinv_lt_eq".into(),
                 vec![],
                 SubProofs(None)
             ))));
@@ -324,7 +324,7 @@ fn la_generic(
             normalize_step.push(ProofStep::Try(Box::new(ProofStep::Rewrite(
                 false,
                 None,
-                id!("Zinv_le_eq"),
+                "Zinv_le_eq".into(),
                 vec![],
                 SubProofs(None)
             ))));
@@ -340,21 +340,21 @@ fn la_generic(
             Op::Eq => ProofStep::Rewrite(
                 false,
                 None,
-                id!("Z_diff_eq_Z0_eq"),
+                "Z_diff_eq_Z0_eq".into(),
                 vec![i.lhs.clone().into(), i.rhs.clone().into()],
                 SubProofs(None)
             ),
             Op::Ge => ProofStep::Rewrite(
                 false,
                 None,
-                id!("Z_diff_geq_Z0_eq"),
+                "Z_diff_geq_Z0_eq".into(),
                 vec![i.lhs.clone().into(), i.rhs.clone().into()],
                 SubProofs(None)
             ),
             Op::Gt => ProofStep::Rewrite(
                 false,
                 None,
-                id!("Z_diff_gt_Z0_eq"),
+                "Z_diff_gt_Z0_eq".into(),
                 vec![i.lhs.clone().into(), i.rhs.clone().into()],
                 SubProofs(None)
             ),
@@ -380,7 +380,7 @@ fn la_generic(
             ProofStep::Rewrite(
                 false,
                 None,
-                id!("Zgt_le_succ_r_eq"),
+                "Zgt_le_succ_r_eq".into(),
                 vec![i.lhs.clone().into(), i.rhs.clone().into()],
                 SubProofs(None)
             )
@@ -422,7 +422,7 @@ fn la_generic(
                 ProofStep::Rewrite(
                     false,
                     None,
-                    id!("Zmult_eq_compat_eq"),
+                    "Zmult_eq_compat_eq".into(),
                     vec![Term::Int(c.clone()), lhs.into(), rhs.into()],
                     SubProofs(None)
                 )
@@ -438,7 +438,7 @@ fn la_generic(
                 ProofStep::Rewrite(
                     false,
                     None,
-                    id!("Zmult_ge_compat_eq"),
+                    "Zmult_ge_compat_eq".into(),
                     vec![Term::Int(c.clone()), lhs.into(), rhs.into()],
                     SubProofs(None)
                 )
@@ -472,7 +472,7 @@ fn la_generic(
     step5.push(ProofStep::Try(Box::new(ProofStep::Rewrite(
         false,
         None,
-        id!("Z_eq_antisym"),
+        "Z_eq_antisym".into(),
         vec![],
         SubProofs(None)
     ))));
@@ -484,7 +484,7 @@ fn la_generic(
         .map(|(counter, _)| {
             vec![
                 //rewrite imp_eq_or; assume H1;
-                ProofStep::Rewrite(false, None, id!("imp_eq_or"), vec![], SubProofs(None)),
+                ProofStep::Rewrite(false, None, "imp_eq_or".into(), vec![], SubProofs(None)),
                 ProofStep::Assume(vec![format!("H{}", counter)]),
             ]
         })
@@ -547,13 +547,13 @@ fn la_generic(
 
     // We want to generate (Zsum_geq_s H0l' H0r' (H1l' + H2l') (H1r' + H2r') H0 (Zsum_geq_s H1l' H1r' H2l' H2r' H1 H2));
     let mut pack: Term = Term::Terms(vec![
-        id!("Zsum_geq_s"),
-        id!(format!("H{}l'", ine_len - 2)),
-        id!(format!("H{}r'", ine_len - 2)),
-        id!(format!("H{}l'", ine_len - 1)),
-        id!(format!("H{}r'", ine_len - 1)),
-        id!(format!("H{}", ine_len - 2)),
-        id!(format!("H{}", ine_len - 1)),
+        "Zsum_geq_s".into(),
+        format!("H{}l'", ine_len - 2).into(),
+        format!("H{}r'", ine_len - 2).into(),
+        format!("H{}l'", ine_len - 1).into(),
+        format!("H{}r'", ine_len - 1).into(),
+        format!("H{}", ine_len - 2).into(),
+        format!("H{}", ine_len - 1).into(),
     ]);
     inequalities
         .iter()
@@ -562,9 +562,9 @@ fn la_generic(
         .skip(2)
         .for_each(|(i, _)| {
             pack = Term::Terms(vec![
-                id!("Zsum_geq_s"),
-                id!(format!("H{}l'", i)),
-                id!(format!("H{}r'", i)),
+                "Zsum_geq_s".into(),
+                format!("H{}l'", i).into(),
+                format!("H{}r'", i).into(),
                 Term::Terms(vec![Term::from(sum_hyps("H", "l'", i + 1, ine_len))]),
                 Term::Terms(vec![Term::from(sum_hyps("H", "r'", i + 1, ine_len))]),
                 format!("H{}", i).into(),

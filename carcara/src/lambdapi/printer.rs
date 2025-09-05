@@ -212,14 +212,13 @@ impl PrettyPrint for VecN {
     }
 }
 
-
 impl PrettyPrint for List {
     fn to_doc(&self) -> RcDoc<()> {
         self.0.iter().fold(text("□"), |acc, elem| {
             concat! {
                 elem.to_doc().clone()
                 => text("⸬").spaces()
-                => acc 
+                => acc
             }
         })
     }
@@ -414,7 +413,7 @@ impl PrettyPrint for ProofStep {
                 }))
                 .append(semicolon()),
             ProofStep::Try(t) => text("try").append(space()).append(t.to_doc()),
-            ProofStep::Rewrite(flag, pattern, h, args,subproofs) => text("rewrite")
+            ProofStep::Rewrite(flag, pattern, h, args, subproofs) => text("rewrite")
                 .append(flag.then(|| text("left").spaces()).unwrap_or(text("")))
                 .append(space())
                 .append(pattern.as_ref().map_or(text(""), |pattern| {
@@ -423,7 +422,10 @@ impl PrettyPrint for ProofStep {
                 .append(
                     h.to_doc()
                         .append(args.is_empty().then(|| RcDoc::nil()).unwrap_or(space()))
-                        .append(RcDoc::intersperse(args.iter().map(|a| a.to_doc().parens()), space())), //.spaces(),
+                        .append(RcDoc::intersperse(
+                            args.iter().map(|a| a.to_doc().parens()),
+                            space(),
+                        )), //.spaces(),
                 )
                 .append(subproofs.0.is_some().then(|| space()))
                 .append(subproofs.0.as_ref().map_or(RcDoc::nil(), |proofs| {
@@ -443,14 +445,29 @@ impl PrettyPrint for ProofStep {
                 }))
                 .append(semicolon()),
             ProofStep::Symmetry => text("symmetry").append(semicolon()),
-            ProofStep::Simplify => text("simplify").append(semicolon()),
-            ProofStep::Set(name, def) => text("set").append(space()).append(text(name).append(is()).append(def.to_doc()).append(semicolon())),
-            ProofStep::Varmap(name, list) => text("set").append(space()).append(text(name).append(is()).append(
-                RcDoc::intersperse(
-                    list.into_iter().map(|term| term.to_doc()),
-                    text("⸬").spaces(),
-                ).append(text("⸬").spaces()).append(NIL)
-            ).append(semicolon())),
+            ProofStep::Simplify(ss) => text("simplify")
+                .append(ss.is_empty().then(|| text("")).unwrap_or(space()))
+                .append(RcDoc::intersperse(ss.into_iter().map(|s| text(s)), space()))
+                .append(semicolon()),
+            ProofStep::Set(name, def) => text("set").append(space()).append(
+                text(name)
+                    .append(is())
+                    .append(def.to_doc())
+                    .append(semicolon()),
+            ),
+            ProofStep::Varmap(name, list) => text("set").append(space()).append(
+                text(name)
+                    .append(is())
+                    .append(
+                        RcDoc::intersperse(
+                            list.into_iter().map(|term| term.to_doc()),
+                            text("⸬").spaces(),
+                        )
+                        .append(text("⸬").spaces())
+                        .append(NIL),
+                    )
+                    .append(semicolon()),
+            ),
             ProofStep::Why3 => text("why3").append(semicolon()),
             ProofStep::Eval(t) => text("eval").append(t.to_doc().spaces()).append(semicolon()),
         }
