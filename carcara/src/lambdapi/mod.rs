@@ -11,7 +11,12 @@ use thiserror::Error;
 use try_match::unwrap_match;
 
 use std::{
-    collections::{HashSet, VecDeque}, fmt::{self}, hash::Hash, ops::Deref, time::Duration, vec
+    collections::{HashSet, VecDeque},
+    fmt::{self},
+    hash::Hash,
+    ops::Deref,
+    time::Duration,
+    vec,
 };
 
 mod dsl;
@@ -222,7 +227,18 @@ fn get_pivots_from_args(args: &Vec<Rc<AletheTerm>>) -> Vec<(Rc<AletheTerm>, bool
         .collect_vec()
 }
 
-/// Remove the pivot and its negation form in a clause.
+/// Returns a new clause containing all literals of the resolvent premises after the pivot and its negation have been removed.
+/// 
+/// convention for the pivot polarity:
+/// * If `flag` is `true`, the positive pivot must occur in `clause_left` and its negation in `clause_right`.
+/// * If `flag` is `false`, the negated pivot must occur in `clause_left` and the positive pivot in `clause_right`.
+/// 
+/// Exactly one occurrence is removed from each side if present; the remaining literals are
+/// concatenated in order (left part first, then right part), preserving the original left-to-right
+/// order except for the single deletions.
+/// 
+/// This function does **not** panic if the pivot is missing; it simply leaves the clause
+/// unchanged on that side. (Sanity of pivot presence is enforced in `make_resolution`.
 fn remove_pivot_in_clause<'a>(
     (pivot, flag): &(Rc<AletheTerm>, bool),
     clause_left: &[Rc<AletheTerm>],
@@ -275,140 +291,124 @@ fn remove_pivot_in_clause<'a>(
     }
 }
 
+/// Build the Lambdapi proof step that performs binary resolution over a given pivot.
+///
+///
+/// t1: p,A     t2: ¬p,B
+/// ---------------------- (:rule resolution :premises (t1 t2) :args (p true))
+///    A,B
+/// 
+/// This function constructs the application of one of the two resolution lemmas
+/// `disj_resolutionN1` or `disj_resolutionN2` in Lambdapi, depending on where the negated
+/// occurrence of the pivot appears. The choice follows Carcara’s flag convention:
+/// - If `flag_position_pivot` is `true`, the positive pivot is in the **left** premise and the
+///   negated pivot is in the **right** premise; `disj_resolutionN2` is applied.
+/// - If `flag_position_pivot` is `false`, the negated pivot is in the **left** premise and the
+///   positive pivot is in the **right** premise; `disj_resolutionN1` is applied.
+///
+/// The function:
+/// 1) locates the pivot indices `i` and `j` inside the left and right clauses,
+/// 2) converts both clauses to Lambdapi terms using `ctx.get_or_convert`,
+/// 3) applies the appropriate lemma with the clauses, indices, hypotheses (step names),
+///    and trivial introductions of `⊤ᵢ` together with `eq_refl`.
+/// 
+/// ```text
+/// have t1_t2 : π̇ (a1 ⟇ ...⟇ p ⟇... ⟇ an ⟇ b1 ⟇ ...⟇ ¬ p ⟇... ⟇ bn ⟇ ▩) {
+///     apply disj_resolutionN1
+///         (a1 ⟇ ...⟇ p ⟇... ⟇ an ⟇ ▩)
+///         (b1 ⟇ ...⟇ ¬ p ⟇... ⟇ an ⟇ ▩)
+///         i
+///         j
+///         t1 t2
+///         ⊤ᵢ ⊤ᵢ (eq_refl _);
+/// };
+/// ```
 fn make_resolution(
     (pivot, flag_position_pivot): &(Rc<AletheTerm>, bool),
     (left_step_name, left_clause): &(&str, &[Rc<AletheTerm>]),
     (right_step_name, right_clause): &(&str, &[Rc<AletheTerm>]),
     ctx: &mut Context,
 ) -> Vec<ProofStep> {
-    let mut steps = vec![];
     let mut hyp_left_arg = Term::TermId(left_step_name.to_string());
     let mut hyp_right_arg = Term::TermId(right_step_name.to_string());
 
-    if flag_position_pivot.to_owned() {
-        // Pivot is in the left clause
-        if term_at_head_of_clause(pivot, left_clause) == false {
-            let (proof_eq, subst_term) = move_pivot_lemma(left_step_name, pivot, left_clause, ctx);
-            steps.push(proof_eq);
-            hyp_left_arg = subst_term;
-        }
-        if term_at_head_of_clause(&term_negated(pivot), right_clause) == false {
-            let (proof_eq, subst_term) =
-                move_pivot_lemma(right_step_name, &term_negated(pivot), right_clause, ctx);
-            steps.push(proof_eq);
-            hyp_right_arg = subst_term;
-        }
+    let neg_pivot = term_negated(pivot);
+
+    let (i, j) = if *flag_position_pivot {
+        let i = left_clause
+            .into_iter()
+            .position(|x| polyeq(pivot, x, &mut Duration::ZERO) == true)
+            .expect("1");
+        let j = right_clause
+            .into_iter()
+            .position(|x| polyeq(&neg_pivot, x, &mut Duration::ZERO) == true)
+            .expect("2");
+        (i, j)
     } else {
-        // Pivot is in the right clause
-        if term_at_head_of_clause(&term_negated(pivot), left_clause) == false {
-            let (proof_eq, subst_term) =
-                move_pivot_lemma(left_step_name, &term_negated(pivot), left_clause, ctx);
-            steps.push(proof_eq);
-            hyp_left_arg = subst_term;
-        }
-        if term_at_head_of_clause(pivot, right_clause) == false {
-            let (proof_eq, subst_term) =
-                move_pivot_lemma(right_step_name, pivot, right_clause, ctx);
-            steps.push(proof_eq);
-            hyp_right_arg = subst_term;
-        }
+        // flag at `false` so negation of the pivot is on the first premise and positive pivot on the 2nd.
+        let i = left_clause
+            .into_iter()
+            .position(|x| polyeq(&neg_pivot, x, &mut Duration::ZERO) == true)
+            .expect("3");
+        let j = right_clause
+            .into_iter()
+            .position(|x| polyeq(pivot, x, &mut Duration::ZERO) == true)
+            .expect("4");
+        (i, j)
     };
 
-    let resolution = LTerm::Resolution(
-        *flag_position_pivot,
-        None,
-        None,
-        None,
-        Box::new(hyp_left_arg),
-        Box::new(hyp_right_arg),
-    );
-
-    steps.push(ProofStep::Apply(
-        Term::Alethe(resolution),
-        vec![],
-        SubProofs(None),
+    let ps = Term::Alethe(LTerm::Clauses(
+        (left_clause
+            .into_iter()
+            .map(|c| ctx.get_or_convert(c).0)
+            .collect_vec()),
     ));
-    steps
+    let qs = Term::Alethe(LTerm::Clauses(
+        (right_clause
+            .into_iter()
+            .map(|c| ctx.get_or_convert(c).0)
+            .collect_vec()),
+    ));
+
+    // apply disj_resolutionN (p_29 ⟇ (p_11 ⟇ (p_10 ⟇ ▩))) (p_12 ⟇ ▩) (int2nat 1 ⊤ᵢ) Stdlib.Nat._0 t14_t0 t14_t9 ⊤ᵢ ⊤ᵢ (eq_refl _);
+    if *flag_position_pivot {
+        vec![ProofStep::Apply(
+            "disj_resolutionN2".into(),
+            vec![
+                ps,
+                qs,
+                int2nat(i),
+                int2nat(j),
+                hyp_left_arg,
+                hyp_right_arg,
+                intro_top(),
+                intro_top(),
+                Term::Terms(vec!["eq_refl".into(), Term::Underscore]),
+            ],
+            SubProofs(None),
+        )]
+    } else {
+        vec![ProofStep::Apply(
+            "disj_resolutionN1".into(),
+            vec![
+                ps,
+                qs,
+                int2nat(i),
+                int2nat(j),
+                hyp_left_arg,
+                hyp_right_arg,
+                intro_top(),
+                intro_top(),
+                Term::Terms(vec!["eq_refl".into(), Term::Underscore]),
+            ],
+            SubProofs(None),
+        )]
+    }
+    //left_clause.pos
 }
 
 fn term_negated(term: &Rc<AletheTerm>) -> Rc<AletheTerm> {
     Rc::new(AletheTerm::Op(Operator::Not, vec![term.clone()]))
-}
-
-fn term_at_head_of_clause(term: &Rc<AletheTerm>, terms: &[Rc<AletheTerm>]) -> bool {
-    let mut duration = Duration::ZERO;
-    terms.len() > 0 && polyeq(term, &terms[0], &mut duration)
-}
-
-/// Generate a sublemma to move the pivot. Consider the pivot `x` and the clause (cl a b (not x) c)
-/// this function will create the sublemma step to move the pivot:
-/// have move_head_notx: Prf((a ⟇ b ⟇ x ⟇ c)  →  (x ⟇ a ⟇ b ⟇ c))  {
-///     [proof generated here]
-/// }
-fn move_pivot_lemma(
-    name: &str,
-    pivot: &Rc<AletheTerm>,
-    clause: &[Rc<AletheTerm>],
-    _ctx: &mut Context,
-) -> (ProofStep, Term) {
-    let mut duration = Duration::ZERO;
-    //let pivot_tr: Term = ctx.get_or_convert(pivot);
-    let pivot_tr: Term = Term::from(pivot);
-
-    //FIXME: avoid to clone twice the clause
-    let previous_clause: Vec<_> = clause.into_iter().map(Into::into).collect();
-
-    let mut new_clause: VecDeque<_> = clause
-        .into_iter()
-        .filter(|t| polyeq(pivot, t, &mut duration) == false)
-        .map(From::from)
-        //.map(|t| ctx.get_or_convert(t))
-        .collect();
-    new_clause.push_front(pivot_tr.clone());
-
-    let mut new_clause2: VecDeque<Rc<AletheTerm>> = clause
-        .into_iter()
-        .filter(|t| polyeq(pivot, t, &mut duration) == false)
-        .map(|t| t.clone())
-        .collect();
-    new_clause2.push_front(pivot.clone());
-    new_clause2.make_contiguous();
-
-    let eq = LTerm::Eq(
-        Box::new(Term::Terms(vec![
-            Term::from("⟇_to_∨_rw"),
-            Term::Alethe(LTerm::Clauses(previous_clause.clone())),
-        ])),
-        Box::new(Term::Terms(vec![
-            Term::from("⟇_to_∨_rw"),
-            Term::Alethe(LTerm::Clauses(new_clause.clone().into())),
-        ])),
-    );
-    let prf_eq = Term::Alethe(LTerm::ClassicProof(Box::new(Term::Alethe(eq))));
-
-    let proof_script = vec![
-        ProofStep::Apply(
-            Term::Terms(vec![
-                Term::from("cl_perm_correct"),
-                Term::Alethe(LTerm::Clauses(previous_clause.clone())),
-                Term::Alethe(LTerm::Clauses(new_clause.clone().into())),
-            ]),
-            vec![],
-            SubProofs(None),
-        ),
-        ProofStep::Apply(intro_top(), vec![], SubProofs(None)),
-    ];
-
-    (
-        ProofStep::Have(format!("{}_perm", name), prf_eq, proof_script),
-        Term::Terms(vec![
-            Term::from("subst_equiv_clause"),
-            Term::Alethe(LTerm::Clauses(previous_clause.clone())),
-            Term::Alethe(LTerm::Clauses(new_clause.clone().into())),
-            Term::TermId(format!("{}_perm", name)),
-            Term::from(name),
-        ]),
-    )
 }
 
 #[inline]
@@ -635,9 +635,9 @@ fn translate_tautology(
         "and_neg" => Some(translate_and_neg(clause)),
         "and_pos" => Some(translate_and_pos(clause, args)),
         "or_neg" => Some(translate_or_neg(clause, args)),
-        "or_pos" => Some(translate_auto_rewrite(rule)),
+        "or_pos" => Some(Ok(Proof(vec![ProofStep::Admit]))),
         "not_and" => Some(translate_not_and(clause, premises.first()?.0.as_str())),
-        "not_or" => Some(translate_not_or(premises.first()?)),
+        "not_or" => Some(translate_not_or(premises.first()?, args)),
 
         "implies" => Some(translate_implies(premises.first()?.0.as_str())),
         "not_implies1" => Some(translate_not_implies1(premises.first()?.0.as_str())),
@@ -647,7 +647,7 @@ fn translate_tautology(
         "symm" => Some(translate_sym(premises.first()?.0.as_str())),
         "refl" => Some(translate_refl()),
         "and" => Some(translate_and(premises.first()?, args)),
-        "or" => Some(translate_or(premises.first()?.0.as_str())),
+        "or" => Some(translate_or(premises.first()?)),
         "sko_forall" => Some(translate_sko_forall()),
         "ite1" => Some(translate_ite1(premises.first()?)),
         "ite2" => Some(translate_ite2(premises.first()?)),
@@ -689,7 +689,10 @@ where
                 let proof = translate_resolution(proof_iter, premises, args, ctx)?;
 
                 let clauses = Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(
-                    clause.into_iter().map(|a| ctx.get_or_convert(a).0).collect(),
+                    clause
+                        .into_iter()
+                        .map(|a| ctx.get_or_convert(a).0)
+                        .collect(),
                 )))));
 
                 proof_steps.push(f(normalize_name(id), clauses, Some(proof)));
@@ -698,16 +701,16 @@ where
                 id, clause, premises: _, rule, args, ..
             }) if rule == "rare_rewrite" => {
                 //let mut dag_terms: HashSet<_> =  HashSet::new();
-                
-                let (terms, hs) : (Vec<Term>, Vec<HashSet<_>>)  = clause.into_iter().map(|a| {
-                    ctx.get_or_convert(a)
-                    //dag_terms.union(&h);
-                    
-                }).unzip();
 
-                let dag_terms: HashSet<_> = hs.into_iter()
-                    .flatten()
-                    .collect();
+                let (terms, hs): (Vec<Term>, Vec<HashSet<_>>) = clause
+                    .into_iter()
+                    .map(|a| {
+                        ctx.get_or_convert(a)
+                        //dag_terms.union(&h);
+                    })
+                    .unzip();
+
+                let dag_terms: HashSet<_> = hs.into_iter().flatten().collect();
 
                 let proof_script = translate_rare_simp(clause, args, dag_terms);
 
@@ -720,7 +723,10 @@ where
                 proof_steps.push(step);
             }
             ProofCommand::Step(AstProofStep { id, clause, rule, .. }) if rule.contains("simp") => {
-                let terms: Vec<Term> = clause.into_iter().map(|a| ctx.get_or_convert(a).0).collect();
+                let terms: Vec<Term> = clause
+                    .into_iter()
+                    .map(|a| ctx.get_or_convert(a).0)
+                    .collect();
 
                 let proof_script = translate_simplify_step(rule);
 
@@ -740,7 +746,7 @@ where
                     .into_iter()
                     .map(|term| ctx.get_or_convert(term).0)
                     .collect_vec();
-    
+
                 proof_steps.push(f(
                     normalize_name(id),
                     Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(clause))))),

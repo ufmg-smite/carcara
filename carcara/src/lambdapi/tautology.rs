@@ -123,64 +123,157 @@ pub fn translate_not_symm(premise: &str) -> TradResult<Proof> {
     }))
 }
 
-/// FIXME: admitted for now
+/// Rule 30: and
+/// 𝑖. ⊳  𝜑0 ∧ ⋯ ∧ 𝜑n (...)
+/// 𝑗. ⊳  𝜑n          (and 𝑖) k
+///
+///
+/// ```text
+/// refine ∧ₑₙ k (𝜑0 ⸬ ... ⸬ 𝜑𝑛 ⸬ □) ⊤ᵢ i
+/// ```
 pub fn translate_and(
     premise: &(String, &[Rc<AletheTerm>]),
     args: &Vec<Rc<AletheTerm>>,
 ) -> TradResult<Proof> {
-    let first_arg = args.first().expect("expected the position in :rule and");
-    assert!(first_arg.is_const());
+    //let mut proof = vec![];
 
-    let position = unwrap_match!(first_arg.as_ref() , AletheTerm::Const(Constant::Integer(d)) => d)
-        .to_u32()
-        .expect("Position is not a u32 in :rule and");
+    // position of 𝜑𝑘 in sequent i. ▷ ¬(𝜑1 ∨ ⋯ ∨ 𝜑𝑛)
+    let k = Term::Nat(
+        args[0]
+            .as_usize_err()
+            .expect("missing index 𝑘 in :args")
+            .try_into()
+            .unwrap(),
+    );
 
-    let premise_project = unary_clause_to_prf(premise.0.as_ref());
+    // get 𝜑0 ∧ ⋯ ∧ 𝜑n from i
+    let conj_list = Term::Alethe(LTerm::List(List(
+        match_term_err!((and ...) = premise.1.first().unwrap())
+            .unwrap()
+            .iter()
+            .rev()
+            .map(|t| t.into())
+            .collect_vec(),
+    )));
 
-    let project_right = (0..position).fold(premise_project, |acc, _| terms!("∧ₑ₂".into(), acc));
+    let premise_id = premise.0.to_string().into(); // i
 
-    let conjonction_length = match_term!((and ...) = premise.1.first().unwrap())
-        .unwrap()
-        .len();
-
-    let projections = if conjonction_length == (position + 1) as usize {
-        ProofStep::Apply(project_right, vec![], SubProofs(None))
-    } else {
-        apply!("∧ₑ₁".into(), { project_right })
-    };
-
-    Ok(Proof(vec![apply!("∨ᵢ₁".into()), projections]))
-}
-
-pub fn translate_not_or(premise: &(String, &[Rc<AletheTerm>])) -> TradResult<Proof> {
-    let apply_identity = Proof(vec![ProofStep::Apply(
-        Term::TermId("identity_⊥".into()),
-        vec![Term::from(premise.0.clone())],
+    Ok(Proof(vec![ProofStep::Refine(
+        "∧ₑₙ".into(),
+        vec![k, conj_list, intro_top(), premise_id],
         SubProofs(None),
-    )]);
-    let reflexivity = Proof(vec![ProofStep::Reflexivity]);
-
-    let disjunctions = unwrap_match!(premise.1.first().unwrap().deref(), AletheTerm::Op(Operator::Not, args) => args)
-        .into_iter()
-        .map(From::from)
-        .collect_vec();
-
-    Ok(Proof(vec![ProofStep::Apply(
-        Term::TermId("not_or".into()),
-        vec![Term::Terms(disjunctions)],
-        SubProofs(Some(vec![apply_identity, reflexivity])),
     )]))
+
+    // Ok(Proof(vec![apply!("∨ᵢ₁".into()), projections]))
 }
 
-/// FIXME: admitted for now
+/// Rule not_or:
+/// i. ▷ ¬(𝜑1 ∨ ⋯ ∨ 𝜑𝑛)
+/// j. ▷ ¬𝜑𝑘
+///
+/// We solve this with this script:
+/// ```text
+/// refine not_or Stdlib.Nat._1 (𝜑1 ⸬ ... ⸬ 𝜑𝑛 ⸬ □)) ⊤ᵢ _;
+/// simplify;
+/// refine fold_⇒ _;
+/// eval #repeat_or_id_r;
+/// refine (π̇ₗ Goal);
+/// ```
+pub fn translate_not_or(
+    premise: &(String, &[Rc<AletheTerm>]),
+    args: &Vec<Rc<AletheTerm>>,
+) -> TradResult<Proof> {
+    let mut proof = vec![];
+
+    // position of 𝜑𝑘 in sequent i. ▷ ¬(𝜑1 ∨ ⋯ ∨ 𝜑𝑛)
+    let k = Term::Nat(
+        args[0]
+            .as_usize_err()
+            .expect("missing index 𝑘 in :args")
+            .try_into()
+            .unwrap(),
+    );
+
+    // get 𝜑1 ∨ ⋯ ∨ 𝜑𝑛 from i
+    let disj_list = List(
+        match_term_err!((not (or ...)) = premise.1.first().unwrap())
+            .unwrap()
+            .iter()
+            .rev()
+            .map(|t| t.into())
+            .collect_vec(),
+    );
+
+    proof.push(ProofStep::Refine(
+        "not_or".into(),
+        vec![
+            k,
+            Term::Alethe(LTerm::List((disj_list))),
+            intro_top(),
+            underscore!(),
+        ],
+        SubProofs(None),
+    ));
+
+    proof.push(ProofStep::Simplify(vec![]));
+
+    proof.push(ProofStep::Refine(
+        "fold_⇒".into(),
+        vec![underscore!()],
+        SubProofs(None),
+    ));
+
+    proof.push(ProofStep::Eval("#repeat_or_id_r".into()));
+
+    proof.push(ProofStep::Refine(
+        unary_clause_to_prf(&premise.0),
+        vec![],
+        SubProofs(None),
+    ));
+
+    Ok(Proof(proof))
+}
+
+/// Rule 32: or
+/// transform a disjunction into a clause
+/// 𝑖. ⊳ 𝜑1 ∨ ... ∨ 𝜑n    (...)
+/// j. 𝜑1 , ... , 𝜑n.     (or i)
+///
+/// But in our case i will have the form `(𝜑1 ∨ ... ∨ 𝜑n) ⟇ ▩`
+///
+/// ```text
+/// refine ∨ₑₙ (𝜑0 ⸬ ... ⸬ 𝜑𝑛 ⸬ □) _
+/// simplify;
+/// eval #repeat_or_id_r;
+/// apply (π̇ₗ i)
+/// ```
 #[inline]
-pub fn translate_or(_premise_id: &str) -> TradResult<Proof> {
-    // Ok(Proof(vec![ProofStep::Apply(
-    //     Term::TermId("π̇ₗ".into()),
-    //     vec![Term::TermId(premise_id.into())],
-    //     SubProofs(None),
-    // )]))
-    Ok(Proof(vec![ProofStep::Admit]))
+pub fn translate_or(premise: &(String, &[Rc<AletheTerm>])) -> TradResult<Proof> {
+    let mut proof = vec![];
+
+    // get 𝜑1 ∨ ⋯ ∨ 𝜑𝑛 from i
+    let disj_list = Term::Alethe(LTerm::List(List(
+        match_term_err!((or ...) = premise.1.first().unwrap())
+            .unwrap()
+            .iter()
+            .rev()
+            .map(|t| t.into())
+            .collect_vec(),
+    )));
+
+    let i =  unary_clause_to_prf(premise.0.as_ref());
+
+    proof.push(ProofStep::Refine(
+        "∨ₑₙ".into(),
+        vec![disj_list, underscore!()],
+        SubProofs(None),
+    ));
+
+    proof.push(ProofStep::Simplify(vec![]));
+    proof.push(ProofStep::Eval(Term::from("#repeat_or_id_r")));
+    proof.push(ProofStep::Refine(i,vec![] ,SubProofs(None)));
+
+    Ok(Proof(proof))
 }
 
 /// Rule not_and
@@ -197,7 +290,7 @@ pub fn translate_not_and(clause: &[Rc<AletheTerm>], premise: &str) -> TradResult
 
     // collect the list 𝜑1, ... 𝜑𝑛 from the clause ¬𝜑1, … , ¬𝜑𝑛
     let conj_list = List(
-            clause
+        clause
             .iter()
             .rev()
             .map(|t| {
@@ -209,7 +302,10 @@ pub fn translate_not_and(clause: &[Rc<AletheTerm>], premise: &str) -> TradResult
 
     proof.push(ProofStep::Refine(
         Term::from("not_and"),
-        vec![Term::Alethe(LTerm::List(conj_list)), unary_clause_to_prf(premise)],
+        vec![
+            Term::Alethe(LTerm::List(conj_list)),
+            unary_clause_to_prf(premise),
+        ],
         SubProofs(None),
     ));
 
@@ -304,7 +400,11 @@ pub fn translate_or_neg(
 
     let k = args[0].as_usize_err().unwrap();
 
-    proof.push(ProofStep::Apply(Term::from("sym_clause"), vec![], SubProofs(None)));
+    proof.push(ProofStep::Apply(
+        Term::from("sym_clause"),
+        vec![],
+        SubProofs(None),
+    ));
 
     proof.push(ProofStep::Refine(
         Term::from("or_neg"),
@@ -608,6 +708,7 @@ pub fn translate_sko_forall() -> TradResult<Proof> {
 #[cfg(test)]
 mod tests_tautolog {
     use super::*;
+    use crate::lambdapi::test_macros::*;
     use crate::parser::{self, parse_instance};
 
     #[test]

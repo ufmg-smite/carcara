@@ -57,8 +57,8 @@ begin
     {
         rewrite or_identity_r;
         rewrite or_identity_r;
-        rewrite morgan₁;
-        rewrite .[¬ ((¬ (¬ p)) ∨ p)] morgan₂;
+        rewrite morgan1;
+        rewrite .[¬ ((¬ (¬ p)) ∨ p)] morgan2;
         rewrite distributive_or;
         rewrite or_idempotent;
         apply ∧ᵢ

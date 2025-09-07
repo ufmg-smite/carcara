@@ -65,6 +65,8 @@ builtin "remove" ≔ #remove;
 constant symbol #repeat : Tactic → Tactic;
 builtin "repeat" ≔ #repeat;
 
+notation #repeat prefix 2;
+
 constant symbol #rewrite_gen : String → String → Π [p], π p → Tactic;
 builtin "rewrite" ≔ #rewrite_gen;
 

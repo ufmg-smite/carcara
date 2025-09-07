@@ -735,6 +735,14 @@ pub(crate) mod test_macros {
     };
 }
 
+    pub(crate) use id;
+    pub(crate) use bid;
+    pub(crate) use not;
+    pub(crate) use eq;
+    pub(crate) use imp;
+    pub(crate) use iff;
+    pub(crate) use or;
+    pub(crate) use and;
     pub(crate) use forall;
 }
 
@@ -1028,4 +1036,12 @@ mod tests_term {
 #[inline]
 pub fn intro_top() -> Term {
     Term::from("⊤ᵢ")
+}
+
+/// In Lambdapi, decimal notation not possible for two types simultaneously.
+/// FIXME: can be remove when https://github.com/Deducteam/lambdapi/issues/1268 is solved
+/// (int2nat n ⊤ᵢ)
+#[inline]
+pub fn int2nat(n: usize) -> Term {
+    Term::Terms(vec!["int2nat".into(), format!("{}", n).into(), intro_top()])
 }

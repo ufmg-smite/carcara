@@ -10,15 +10,11 @@ pub fn translate_rare_simp(clause: &Vec<Rc<AletheTerm>>, args: &Vec<Rc<AletheTer
     let rule: String =
         unwrap_match!(**rare_rule, crate::ast::Term::Const(Constant::String(ref s)) => s.clone());
 
-    //FIXME: bugging rule
-    if rule == "bool-and-flatten" || rule == "bool-or-flatten" {
-        return Proof(vec![ProofStep::Admit]);
-    }
 
     let mut rewrites = match rule.as_str() {
         "bool-and-true" => translate_bool_and_true(args),
         "bool-or-false" => translate_bool_or_false(args),
-        "bool-or-flatten" => translate_bool_or_flatten(args),
+        "bool-or-flatten" => translate_bool_or_flatten(),
         "bool-and-flatten" => translate_bool_and_flatten(args),
         "bool-impl-elim" => translate_bool_impl_elim(args),
         "bool-and-de-morgan" => translate_bool_and_de_morgan(args),
@@ -223,34 +219,6 @@ fn translate_bool_impl_elim(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
     ]
 }
 
-// /// Translate the RARE rule:
-// /// `(define-rule* bool-or-flatten ((xs Bool :list) (b Bool) (ys Bool :list) (zs Bool :list)) (or xs (or b ys) zs) (or xs b ys zs))`
-fn translate_bool_or_flatten(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
-    let xs = 0;
-    let zs = 3;
-
-    let args_len = args
-        .iter()
-        .map(|term| {
-            match_ok!(**term, AletheTerm::Op(Operator::RareList, ref l) => l.len())
-                .or_else(|| Some(1))
-                .expect("can not convert rare-list")
-        })
-        .collect_vec();
-
-    if args_len[xs] == 0 {
-        lambdapi! {  rewrite "left ∨_assoc";  }
-    } else if args_len[zs] == 0 {
-        vec![]
-    } else {
-        let args: Vec<Term> = args.into_iter().map(|term| term.into()).collect_vec();
-        vec![
-            ProofStep::Rewrite(false, None, Term::from("bool-or-flatten"), args,SubProofs(None)),
-            ProofStep::Reflexivity,
-        ]
-    }
-}
-
 // // (define-rule* bool-and-flatten ((xs Bool :list) (b Bool) (ys Bool :list) (zs Bool :list)) (and xs (and b ys) zs) (and xs b ys zs))
 fn translate_bool_and_flatten(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
     let xs = 0;
@@ -285,7 +253,7 @@ pub fn translate_simplify_step(rule: &str) -> Proof {
         "implies_simplify" => translate_implies_simplify(),
         "ite_simplify" => translate_ite_simplify(),
         "ac_simp" => translate_ac_simplify(),
-        "all_simplify" => Proof(vec![ProofStep::Admit]),
+        "all_simplify" => Proof(vec![ProofStep::Admit]), 
         "bool_simplify" => Proof(vec![ProofStep::Admit]),
         "comp_simplify" => Proof(vec![ProofStep::Admit]),
         r => unimplemented!("{}", r),
@@ -333,32 +301,53 @@ fn translate_ac_simplify() -> Proof {
     })
 }
 
+
+/// (define-rule* bool-and-de-morgan ((x Bool) (y Bool) (zs Bool :list)) 
+///   (not (and x y zs))
+///   (not (and y zs))
+///   (or (not x) _))
+///
+/// eval #repeat (#rewrite morgan1);
+/// 
+/// We ignore arguments for this rule and take benefits of metatactics in Lambdapi.
 fn translate_bool_and_de_morgan(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
-    if matches!(args.last().unwrap().deref(), AletheTerm::Op(Operator::RareList, ref l) if l.len() == 0)
-    {
-        vec![apply!("morgan₁".into())]
-    } else {
-        let _args_conv: Vec<Term> = args.into_iter().map(|t| Term::from(t)).collect_vec();
-        // vec![ProofStep::Apply(
-        //     id!("bool-and-de-morgan"),
-        //     args_conv,
-        //     SubProofs(None),
-        // )]
-        admit()
-    }
+    vec![
+        ProofStep::Eval(Term::Terms(vec!["#repeat".into(),"#rewrite".into(), "morgan1".into()])),
+        ProofStep::Reflexivity,
+    ]
 }
 
+/// ```text
+/// (define-rule* bool-or-de-morgan ((x Bool) (y Bool) (zs Bool :list)) 
+///   (not (or x y zs))
+///   (not (or y zs))
+///   (and (not x) _))
+/// ```
+///
+/// Translate into:
+/// `eval #repeat (#rewrite morgan1);`
+/// 
+/// We ignore arguments for this rule and take benefits of metatactics in Lambdapi.
 fn translate_bool_or_de_morgan(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
-    if matches!(args.last().unwrap().deref(), AletheTerm::Op(Operator::RareList, ref l) if l.len() == 0)
-    {
-        vec![apply!("morgan₂".into())]
-    } else {
-        let _args_conv: Vec<Term> = args.into_iter().map(|t| Term::from(t)).collect_vec();
-        // vec![ProofStep::Apply(
-        //     id!("bool-or-de-morgan"),
-        //     args_conv,
-        //     SubProofs(None),
-        // )]
-        admit()
-    }
+    vec![
+        ProofStep::Eval(Term::Terms(vec!["#repeat".into(),"#rewrite".into(), "morgan2".into()])),
+        ProofStep::Reflexivity,
+    ]
+}
+
+/// ```text
+/// (define-rule* bool-or-flatten ((xs Bool :list) (b Bool) (ys Bool :list) (zs Bool :list))
+///     (or xs (or b ys) zs)
+///     (or xs b ys zs))
+/// ```
+/// 
+/// Translate into:
+/// `eval #repeat (#rewrite morgan1);`
+/// 
+/// We ignore arguments for this rule and take benefits of metatactics in Lambdapi.
+fn translate_bool_or_flatten() -> Vec<ProofStep> {
+    vec![
+        ProofStep::Eval(Term::Terms(vec!["#repeat".into(),"#rewrite".into(), "∨_assoc".into()])),
+        ProofStep::Reflexivity,
+    ]
 }

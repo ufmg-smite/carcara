@@ -198,8 +198,8 @@ begin
     assume x y zs;
     apply prop_ext;
     apply ∧ᵢ
-    { rewrite morgan₁; rewrite morgan₁;  assume H; refine H }
-    { rewrite morgan₁; rewrite morgan₁;  assume H; refine H }
+    { rewrite morgan1; rewrite morgan1;  assume H; refine H }
+    { rewrite morgan1; rewrite morgan1;  assume H; refine H }
 end;
 
 // (define-rule* bool-or-de-morgan ((x Bool) (y Bool) (zs Bool :list)) 
@@ -211,8 +211,8 @@ begin
     assume x y zs;
     apply prop_ext;
     apply ∧ᵢ
-    { rewrite morgan₂; rewrite morgan₂;  assume H; refine H }
-    { rewrite morgan₂; rewrite morgan₂;  assume H; refine H }
+    { rewrite morgan2; rewrite morgan2;  assume H; refine H }
+    { rewrite morgan2; rewrite morgan2;  assume H; refine H }
 end;
 
 

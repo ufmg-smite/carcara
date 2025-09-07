@@ -204,7 +204,7 @@ begin
   { assume Heq; rewrite Heq; apply ⇔_refl }
 end;
 
-opaque symbol morgan₁ p q : π ((¬ (p ∧ q)) = ((¬ p) ∨ (¬ q))) ≔
+opaque symbol morgan1 p q : π (¬ (p ∧ q) = (¬ p ∨ ¬ q)) ≔
 begin
   assume p q;
   apply prop_ext;
@@ -219,7 +219,7 @@ begin
   }
 end;
 
-opaque symbol morgan₂ p q : π ((¬ (p ∨ q)) = ((¬ p) ∧ (¬ q))) ≔
+opaque symbol morgan2 p q : π (¬ (p ∨ q) = (¬ p ∧ ¬ q)) ≔
 begin
   assume p q;
   apply prop_ext;
@@ -2165,12 +2165,12 @@ end;
 // Rule and:
 // i. ▷ (𝜑1 ∧ ⋯ ∧ 𝜑𝑛)
 // j. ▷ 𝜑𝑘
-symbol elim_n_and k l : π (k ∈ₙ (indexes l)) → π (conj l) → π̇ ((literal l k ) ⟇ ▩) ≔
+symbol ∧ₑₙ k l : π (k ∈ₙ (indexes l)) → π̇ (conj l ⟇ ▩) → π̇ ((literal l k ) ⟇ ▩) ≔
 begin
   assume k l h1 h2;
   simplify;
   rewrite or_identity_r;
-  refine select k l h1 h2
+  refine select k l h1 (π̇ₗ h2)
 end;
 
 
@@ -2299,7 +2299,7 @@ induction
 {
   assume h tl IH;
   rewrite left disj_eq;
-  rewrite morgan₂;
+  rewrite morgan2;
   rewrite IH;
   simplify;
   rewrite conj_eq;
@@ -2307,7 +2307,7 @@ induction
 }
 end;
 
-opaque symbol morgan2 (l: 𝕃 o) : π ((¬ (conj l)) = disj (negate l)) ≔
+opaque symbol morganN2 (l: 𝕃 o) : π ((¬ (conj l)) = disj (negate l)) ≔
 begin
 induction
 {
@@ -2322,7 +2322,7 @@ induction
   rewrite left IH;
   have foldneg: Π e, π (¬ e = (e ⇒ ⊥)) { reflexivity };
   rewrite left foldneg;
-  rewrite morgan₁ h (conj tl);
+  rewrite morgan1 h (conj tl);
   reflexivity
 }
 end;
@@ -2372,7 +2372,7 @@ begin
       rewrite conj_eq;
       refine Hconj;
     };
-    have g2: π (¬ x ∨  ¬ conj xs) { rewrite left morgan₁; refine g };
+    have g2: π (¬ x ∨  ¬ conj xs) { rewrite left morgan1; refine g };
     apply ∨ₑ g2 
     { assume Hnx; apply ∨ᵢ₁; refine Hnx; }
     { assume Hnxs; apply ∨ᵢ₂; refine IH Hnxs }
@@ -2416,7 +2416,7 @@ end;
 opaque symbol and_neg_aux (l: 𝕃 o) : π ((conj l) ∨ disj (negate l)) ≔
 begin
   assume l;
-  rewrite left morgan2 l;
+  rewrite left morganN2 l;
   refine em (conj l);
 end;
 
@@ -2649,7 +2649,8 @@ begin
   reflexivity
 end;
 
-symbol disj_resolutionN (ps qs:  𝕃 o) (i j: ℕ)
+// Used when carcara put the flag at `false`
+symbol disj_resolutionN1 (ps qs:  𝕃 o) (i j: ℕ)
   (hps: π (disj ps))
   (hqs: π (disj qs))
   (hi: π (i < size ps))
@@ -2683,6 +2684,17 @@ apply ∨ₑ h
    have hqs': π ((disj (eraseIdx qs j) ∨ nth ⊥ qs j)) { rewrite h2; apply hqs };
   apply orN_append_left (eraseIdx ps i) (eraseIdx qs j) hps';
 }
+end;
+
+// Used when carcara put the flag at `true`
+symbol disj_resolutionN2 (ps qs:  𝕃 o) (i j: ℕ)
+  (hps: π (disj ps))
+  (hqs: π (disj qs))
+  (hi: π (i < size ps))
+  (hj: π (j < size qs))
+  (hij: π (¬ (nth ⊥ ps i) = (nth ⊥ qs j))) : π (disj ((eraseIdx ps i) Stdlib.List.++ (eraseIdx qs j))) ≔
+begin
+admit
 end;
 
 // Lemmas `cl_⭈_cl` and `disj_⭈_cl` are used to prove the iso:  π̇ c ≡ π (disj l) with the invariant (⟇_to_∨_rw c = disj l).
@@ -2724,18 +2736,19 @@ with list↪cl ($x ⸬ $xs) ↪ $x ⟇ (list↪cl $xs);
 coerce_rule coerce Clause (𝕃 o) $x ↪ cl↪list $x;
 coerce_rule coerce (𝕃 o) Clause  $x ↪ list↪cl $x;
 
-symbol barbar a b c d e : π̇ (a ⟇ b ⟇ c ⟇ ▩) → π̇ (d ⟇ (¬ b) ⟇ e ⟇ ▩) → π̇ (a ⟇ c ⟇ d ⟇ e ⟇ ▩) ≔
+symbol ∨ₑₙ (l : 𝕃 o) : π̇ ((disj l) ⟇ ▩) → π̇ (cl_to_list l) ≔
 begin
-  assume a b c d e h1 h2;
-  refine disj_resolutionN (a ⟇ b ⟇ c ⟇ ▩) (d ⟇ (¬ b) ⟇ e ⟇ ▩) 1 1 h1 h2 ⊤ᵢ ⊤ᵢ (ind_eq (¬¬ₑ_eq b) (λ z, b = z) (eq_refl b));
+simplify;
+induction
+{simplify; assume h; apply ∨ₑ h { refine λ x, x } { refine λ x, x }}
+{
+  simplify;
+  assume x xs ih;
+  change π ((x ∨ disj xs) ∨ ⊥ ⇒ x ∨ ⟇_to_∨_rw (list↪cl (cl_to_list (list↪cl xs))));
+  rewrite or_identity_r;
+  assume h;
+  apply ∨ₑ h
+  { assume hx; apply ∨ᵢ₁; refine hx }
+  { assume hxs; apply ∨ᵢ₂; apply ih; apply ∨ᵢ₁; refine hxs}
+}
 end;
-
-// symbol cl_resolutionN [c1 c2: Clause] (ps qs:  𝕃 o) (i j: ℕ)
-//   (hps: π̇ c1)
-//   (hqs: π̇ c2)
-//   (hi: π (i < size ps))
-//   (hj: π (j < size qs))
-//   (hij: π ((nth ⊥ ps i) = ¬ (nth ⊥ qs j))) : π (disj ((eraseIdx ps i) Stdlib.List.++ (eraseIdx qs j))) ≔
-// begin
-//   assume c1 c2 ps qs i j;
-// end;
