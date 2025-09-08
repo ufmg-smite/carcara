@@ -396,6 +396,7 @@ impl PrettyPrint for ProofStep {
                 .nest(DEFAULT_INDENT)
                 .append(text(RBRACE))
                 .append(semicolon()),
+            ProofStep::Change(t) => text("change").append(space()).append(t.to_doc()).semicolon(),
             ProofStep::Reflexivity => text("reflexivity").append(semicolon()),
             ProofStep::Refine(func, args, subproofs) => text("refine")
                 .append(space())

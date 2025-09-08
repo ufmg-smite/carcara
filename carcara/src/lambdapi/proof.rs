@@ -29,6 +29,7 @@ impl fmt::Display for Proof {
 pub enum ProofStep {
     Assume(Vec<String>),
     Apply(Term, Vec<Term>, SubProofs),
+    Change(Term),
     Refine(Term, Vec<Term>, SubProofs),
     Have(String, Term, Vec<ProofStep>), //TODO: change Vec<ProofStep> for Proof
     Admit,
@@ -150,6 +151,7 @@ impl fmt::Display for ProofStep {
 
                 write!(f, ";")
             }
+            ProofStep::Change(t) =>  write!(f, "change {}", t),
             ProofStep::Refine(t, args, subproofs) => {
                 write!(
                     f,

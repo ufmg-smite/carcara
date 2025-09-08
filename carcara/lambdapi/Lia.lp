@@ -512,28 +512,115 @@ apply ∧ᵢ
 }
 end;
 
-symbol Zlt_not_ge n m:  π ((n < m) = ¬ (n ≥ m));
-symbol Zge_not_lt : Π n: ℤ, Π m: ℤ, π ((n ≥ m) = ¬ (n < m));
-symbol Zgt_not_le : Π n: ℤ, Π m: ℤ, π ((n > m) = ¬ (n ≤ m));
+symbol Zlt_not_ge n m:  π ((n < m) = ¬ (n ≥ m)) ≔
+begin
+  assume n m;
+  simplify ≥;
+  simplify rule off;
+  rewrite ¬¬ₑ_eq;
+  reflexivity
+end;
+
+symbol Zge_not_lt : Π n: ℤ, Π m: ℤ, π ((n ≥ m) = ¬ (n < m)) ≔
+begin
+  assume n m;
+  simplify ≥;
+  simplify rule off;
+  reflexivity
+end;
+
+symbol Zgt_not_le : Π n: ℤ, Π m: ℤ, π ((n > m) = ¬ (n ≤ m)) ≔
+begin
+  assume n m;
+  simplify ≤;
+  simplify rule off;
+  reflexivity
+end;
+
 symbol Zmult_gt_compat c a b : π (c > 0) → π (a > b) → π (c * a > c * b) ;
+
 symbol Zmult_ge_compat c a b : π (c > 0) → π (a ≥ b) → π (c * a ≥ c * b);
-symbol Zgt_le_succ_r a b: π (a > b) → π (a ≥ b + 1);
-symbol Zinv_lt a b: π (a < b) → π (— a > — b);
-symbol Zsum_geq_s a b c d : π (a ≥ b) → π (c ≥ d) → π (a + c ≥ b + d);
-symbol Z_diff_geq_Z0 a b: π (a ≥ b) → π (a - b ≥ 0);
-symbol Z_diff_gt_Z0 a b: π (a > b) → π (a - b > 0);
-symbol Zgt_le_succ_r_eq a b: π ((a > b) = (a ≥ b + 1));
-symbol Zinv_lt_eq a b: π ((a < b) = (— a > — b));
+
+// symbol Zgt_le_succ_r a b: π (a > b) → π (a ≥ b + 1);
+
+// symbol Zinv_lt a b: π (a < b) → π (— a > — b);
+
+// symbol Zsum_geq_s a b c d : π (a ≥ b) → π (c ≥ d) → π (a + c ≥ b + d);
+
+// symbol Z_diff_geq_Z0 a b: π (a ≥ b) → π (a - b ≥ 0);
+
+// symbol Z_diff_gt_Z0 a b: π (a > b) → π (a - b > 0);
+
+symbol Zgt_le_succ_r_eq a b: π ((a > b) = (a ≥ b + 1)) ≔
+begin
+  assume a b;
+  rewrite left iff_equiv_eq;
+  apply ∧ᵢ
+  {
+    admit
+  }
+  {
+    admit
+  }
+end;
+
+
+symbol Zinv_lt_eq a b: π ((a < b) = (— a > — b)) ≔
+begin
+  assume a b;
+  rewrite left iff_equiv_eq;
+  generalize a;
+  admit
+end;
+
+
 symbol Zinv_le_eq a b: π ((a ≤ b) = (— a ≥ — b));
 symbol Z_diff_geq_Z0_eq a b: π ((a ≥ b) = (a - b ≥ 0));
 symbol Z_diff_gt_Z0_eq a b: π ((a > b) = (a - b > 0));
-symbol Z_diff_eq_Z0_eq a b: π ((a = b) = (a - b = 0));
+
+symbol Z_diff_eq_Z0_eq a b: π ((a = b) = (a - b = 0)) ≔
+begin
+  assume a b;
+  rewrite left iff_equiv_eq;
+  apply ∧ᵢ
+  {
+    assume h; rewrite h; simplify;
+    apply -_same b;
+  }
+  {
+      assume h;
+      have g: π (((a - b) + b) = (0 + b)) { refine =_add_compat (a - b) 0 b h };
+      have g2: π ((a + (— b + b)) = b) { rewrite left +_assoc; refine g };
+      have g3: π ((a + 0) = b) { rewrite left -_same b; rewrite +_com b (— b); refine g2 };
+      refine g3
+    }
+end;
+
+//FIXME:
 symbol Z_eq_antisym (a b: τ int):  π ((¬ (a = b)) = ¬ (a ≥ b));
-symbol Zmult_eq_compat_eq (c a b: τ int) : π ((¬ (a = b)) = ¬ (c * a = c * b));
+
+symbol Zmult_eq_compat_eq (c a b: τ int) : π ((¬ (a = b)) = ¬ (c * a = c * b)) ≔
+begin
+ assume c a b;
+ apply feq (¬);
+ rewrite left iff_equiv_eq;
+ apply ∧ᵢ
+  {
+    assume heq; rewrite heq; reflexivity
+  }
+  {
+    assume h;
+    have g2: π ((c * a) - (c * b) = 0) { rewrite h; simplify;  rewrite -_same (c * b); reflexivity };
+    have g3: π (c * (a - b) = 0) { simplify;  rewrite *_distr_+; rewrite left neg_mul_r; refine g2 };
+    admit
+  }
+end;
+
 symbol Zmult_gt_compat_eq c a b : π (¬ (a > b) = ¬ (c * a > c * b)) ;
 symbol Zmult_ge_compat_eq c a b : π (¬ (a ≥ b) = ¬ (c * a ≥ c * b)) ;
-symbol la_mult_neg_eq [t1 t2 t3] : π ((t1 < 0) ⇒ (t2 = t3) ⇒ (t1 * t2) = (t1 * t3));
-symbol la_mult_neg_lt t1 t2 t3 : π (t1 < 0) → π (t2 < t3) → π ((t1 * t2) > (t1 * t3));
-symbol la_mult_neg_leq [t1 t2 t3] : π ((t1 < 0) ⇒ (t2 ≤ t3) ⇒ (t1 * t2) ≥ (t1 * t3));
-symbol la_mult_neg_gt [t1 t2 t3] : π ((t1 < 0) ⇒ (t2 > t3) ⇒ (t1 * t2) < (t1 * t3));
-symbol la_mult_neg_ge [t1 t2 t3] : π ((t1 < 0) ⇒ (t2 ≥ t3) ⇒ (t1 * t2) ≤ (t1 * t3));
+
+// symbol la_mult_neg_eq [t1 t2 t3] : π ((t1 < 0) ⇒ (t2 = t3) ⇒ (t1 * t2) = (t1 * t3));
+// symbol la_mult_neg_lt t1 t2 t3 : π (t1 < 0) → π (t2 < t3) → π ((t1 * t2) > (t1 * t3));
+// symbol la_mult_neg_leq [t1 t2 t3] : π ((t1 < 0) ⇒ (t2 ≤ t3) ⇒ (t1 * t2) ≥ (t1 * t3));
+// symbol la_mult_neg_gt [t1 t2 t3] : π ((t1 < 0) ⇒ (t2 > t3) ⇒ (t1 * t2) < (t1 * t3));
+// symbol la_mult_neg_ge [t1 t2 t3] : π ((t1 < 0) ⇒ (t2 ≥ t3) ⇒ (t1 * t2) ≤ (t1 * t3));

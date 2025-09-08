@@ -1,6 +1,28 @@
 require open lambdapi.Alethe;
 require open Stdlib.Comp;
 
+
+
+protected symbol compN : ℕ → ℕ → Comp;
+
+rule compN _0 _0 ↪ Eq
+with compN _0 (_ +1) ↪ Lt
+with compN (_ +1) _0 ↪ Gt
+with compN ($x +1) ($y +1) ↪ compN $x $y;
+
+protected opaque symbol compN_correct x y : π (compN x y = Eq ⇒ x = y) ≔
+begin
+induction
+{ induction
+  {assume h; reflexivity}
+  {assume y hy h; apply ⊥ₑ; apply Lt≠Eq h}
+}
+{ assume x hx; induction
+  {assume h; apply ⊥ₑ; apply Gt≠Eq h}
+  {assume y hy h; apply feq (+1); apply hx y h }
+}
+end;
+
 inductive ClauseAlg : TYPE ≔
 | p : ℕ → ClauseAlg;
 
@@ -15,7 +37,7 @@ rule compCl (p $i) (p $j) ↪ compN $i $j
 symbol split [a: Set] (l : τ (list a)): τ(list a × list a);
 rule split □ ↪ (□ ‚ □)
 with split ($x ⸬ □) ↪ (($x ⸬ □) ‚ □)
-with split ($x ⸬ $y ⸬ $l) ↪  
+with split ($x ⸬ $y ⸬ $l) ↪
     let res ≔  (split $l) in
         ($x ⸬ (res ₁)) ‚ ($y ⸬ (res ₂));
 
@@ -31,11 +53,50 @@ symbol den: 𝕃 o → 𝕃 cl → Prop;
 rule den $σ □ ↪ ⊥
 with den $σ ((p $i) ⸬ $xs) ↪ (nth ⊥ $σ $i) ∨ (den $σ $xs)
 ;
-// with den $σ ($x ⊗ $y) ↪  (den $σ $x) ∨ (den $σ $y);
- 
-symbol rfy: 𝕃 o → Clause → 𝕃 cl;
-rule rfy $σ ▩ ↪ □
-with rfy $σ ($x ⟇ $xs) ↪ (p (index prop_eq $x  $σ )) ⸬ (rfy $σ $xs);
+
+
+
+constant symbol R : TYPE;
+constant symbol Index : ℕ → R;
+constant symbol New : ℕ → R;
+
+symbol case [a] : R → (ℕ → τ a) → (ℕ → τ a) → τ a;
+
+rule case (Index $i) $f _ ↪ $f $i
+with case (New $i) _ $g ↪ $g $i;
+
+/* index of a value in a list: returns New if the value is not
+definitionally equivalent to some element of the list */
+
+sequential symbol index: ℕ → Π [a], τ a → τ(list a) → R;
+
+rule index $k _ □ ↪ New $k
+with index $k $x ($x ⸬ _) ↪ Index $k
+with index $k $x ($y ⸬ $l) ↪ index ($k +1) $x $l;
+
+//compute case (New Stdlib.Nat._0) (λ i, (p i) ‚ (□)) (λ i, (p i) ‚ (⊤ ⸬ □));
+
+symbol rfy_cl: 𝕃 o → Clause → τ (list cl × list o);
+rule rfy_cl $l ▩ ↪ (□ ‚ $l)
+with rfy_cl $l ($x ⟇ $xs) ↪ 
+  let X ≔  case (index 0 $x $l) (λ i, (p i) ‚ $l) (λ i, (p i) ‚ ($l Stdlib.List.++ ($x ⸬ □))) in
+  let x ≔ X ₁ in
+  let l' ≔ X ₂ in
+  let xs ≔ rfy_cl l' $xs in
+    ((x ⸬ (xs ₁)) ‚ (xs ₂));
+
+symbol reify_cl ≔ rfy_cl □;
+
+symbol a: Prop;
+symbol b: Prop;
+
+compute reify_cl (a ⟇ b ⟇ ▩);
+
+compute  den ((reify_cl (a ⟇ b ⟇ ▩)) ₂) ((reify_cl (a ⟇ b ⟇ ▩)) ₁);
+
+assert a b ⊢ reify_cl (a ⟇ b ⟇ ▩) ≡ (((p 0) ⸬ (p 1) ⸬ □) ‚ (a ⸬ b ⸬ □));
+
+assert a b ⊢ den ((reify_cl (a ⟇ b ⟇ ▩)) ₂) ((reify_cl (a ⟇ b ⟇ ▩)) ₁) ≡  ⟇_to_∨_rw (a ⟇ b ⟇ ▩);
 
 opaque symbol ++_eq_∨ l x y : π ((den l (x Stdlib.List.++ y)) = (den l x ∨ den l y)) ≔
 begin
@@ -118,7 +179,7 @@ begin
             induction;
             assume j ys ih2;
             simplify;
-            refine ind_Comp (λ u, (compN i j) = u ⇒  (den l (case_Comp u (p i ⸬ (p j ⸬ merge xs ys)) (p i ⸬ merge xs (p j ⸬ ys)) (p j ⸬ merge (p i ⸬ xs) ys)) = ((nth ⊥ l i ∨ den l xs) ∨ (nth ⊥ l j ∨ den l ys)))) _ _ _ (compN i j) _ 
+            refine ind_Comp (λ u, (compN i j) = u ⇒  (den l (case_Comp u (p i ⸬ (p j ⸬ merge xs ys)) (p i ⸬ merge xs (p j ⸬ ys)) (p j ⸬ merge (p i ⸬ xs) ys)) = ((nth ⊥ l i ∨ den l xs) ∨ (nth ⊥ l j ∨ den l ys)))) _ _ _ (compN i j) _
             {
                 simplify;
                 assume heq;
@@ -155,7 +216,7 @@ end;
 symbol mergesort:  τ (list cl) →  τ (list cl);
 rule mergesort □ ↪ □
 with mergesort ($x ⸬ □) ↪ ($x ⸬ □)
-with mergesort ($x ⸬ $y ⸬ $l) ↪ 
+with mergesort ($x ⸬ $y ⸬ $l) ↪
     let s ≔ split ($x ⸬ $y ⸬ $l) in
     let l1 ≔ s ₁ in
     let l2 ≔ s ₂ in
@@ -163,7 +224,7 @@ with mergesort ($x ⸬ $y ⸬ $l) ↪
 
 
 
-opaque symbol rec_𝕃 : Π [a: Set], Π l: 𝕃 a, Π p: (𝕃 a → Prop), π (p □) → (Π x0: τ a, Π l': 𝕃 a, π (p (x0 ⸬ l'))) → π (p l) ≔ 
+opaque symbol rec_𝕃 : Π [a: Set], Π l: 𝕃 a, Π p: (𝕃 a → Prop), π (p □) → (Π x0: τ a, Π l': 𝕃 a, π (p (x0 ⸬ l'))) → π (p l) ≔
 begin
   assume a l P H1 H2;
   refine @ind_𝕃 a P H1 (λ x l' ih, H2 x l') l
@@ -272,6 +333,10 @@ with remove_iden ((p $i) ⸬ (p $j) ⸬ $tl) ↪ case_Comp (compN $i $j)
                                             ((p $i) ⸬ (remove_iden ((p $j) ⸬ $tl)))
                                             ((p $i) ⸬ (remove_iden ((p $j) ⸬ $tl)));
 
+
+// Rule contraction:
+// 𝑖. ⊳ 𝑙1, ... , 𝑙n    (...)
+// 𝑗. ⊳  𝑙𝑘1, ... , 𝑙kn (contraction i)
 symbol contraction g ≔ remove_iden (mergesort g);
 
 opaque symbol remove_iden_correct l g : π (den l (remove_iden g) = den l g) ≔
@@ -315,11 +380,25 @@ begin
   }
 end;
 
-opaque symbol contraction_correct n l g : π (size g ≤ n) →  π (den l (contraction g) = den l g) ≔
+opaque symbol contraction_correct l g : π (den l (contraction g) = den l g) ≔
 begin
-  assume n l g Inv;
+  assume l g;
   simplify;
   rewrite remove_iden_correct;
   rewrite mergesort_correct;
   reflexivity
+end;
+
+private symbol example a b : π̇ (a ⟇ b ⟇ b ⟇ ▩) → π̇ (a ⟇ b ⟇ ▩) ≔
+begin
+  assume a b i;
+  set X ≔ (a ⟇ (b ⟇ (b ⟇ ▩)));
+  set Y ≔ (a ⟇ b ⟇ ▩);
+  have g : π (⟇_to_∨_rw X = ⟇_to_∨_rw Y) {
+    set r ≔ reify_cl X;
+    change π (den (r ₂) (r ₁) = ⟇_to_∨_rw Y);
+    rewrite left contraction_correct;
+    reflexivity
+  };
+  refine subst_equiv_clause X Y  g i
 end;

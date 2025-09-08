@@ -261,7 +261,7 @@ pub fn translate_or(premise: &(String, &[Rc<AletheTerm>])) -> TradResult<Proof> 
             .collect_vec(),
     )));
 
-    let i =  unary_clause_to_prf(premise.0.as_ref());
+    let i = unary_clause_to_prf(premise.0.as_ref());
 
     proof.push(ProofStep::Refine(
         "∨ₑₙ".into(),
@@ -271,7 +271,7 @@ pub fn translate_or(premise: &(String, &[Rc<AletheTerm>])) -> TradResult<Proof> 
 
     proof.push(ProofStep::Simplify(vec![]));
     proof.push(ProofStep::Eval(Term::from("#repeat_or_id_r")));
-    proof.push(ProofStep::Refine(i,vec![] ,SubProofs(None)));
+    proof.push(ProofStep::Refine(i, vec![], SubProofs(None)));
 
     Ok(Proof(proof))
 }
@@ -703,6 +703,98 @@ pub fn translate_sko_forall() -> TradResult<Proof> {
         rewrite "H";
         reflexivity;
     }))
+}
+
+/// Rule 9 contraction:
+///```text
+/// 𝑖. ⊳ 𝑙1, ... , 𝑙n    (...)
+/// 𝑗. ⊳  𝑙𝑘1, ... , 𝑙kn (contraction i)
+///```
+///
+/// Removes duplicated literal and does not reorder the literals.
+///
+/// ```text
+///   assume we have i: π̇ (𝑙𝑘1, ... , 𝑙kn)
+///
+///   have H : π (⟇_to_∨_rw 𝑙1, ... , 𝑙n = ⟇_to_∨_rw 𝑙𝑘1, ... , 𝑙kn) {
+///     set r ≔ reify_cl 𝑙1, ... , 𝑙n;
+///     change π (den (r ₂) (r ₁) = ⟇_to_∨_rw 𝑙𝑘1, ... , 𝑙kn);
+///     rewrite left contraction_correct;
+///     reflexivity
+///   };
+///   refine subst_equiv_clause (𝑙1, ... , 𝑙n) (𝑙𝑘1, ... , 𝑙kn)  H i
+/// end;
+/// ```
+pub fn translate_contraction(
+    clause: &[Rc<AletheTerm>],
+    premise: &(String, &[Rc<AletheTerm>]),
+) -> TradResult<Proof> {
+    let mut proof = vec![];
+
+    let i = premise.0.clone().into();
+
+    let i_cl = Term::Alethe(LTerm::Clauses(premise.1.into_iter().map(Into::into).collect_vec()));
+
+    let j_cl = Term::Alethe(LTerm::Clauses(clause.into_iter().map(Into::into).collect_vec()));
+
+    // reify_i represents reify_cl 𝑙1, ... , 𝑙n
+    let reify_i = Term::Terms(vec!["reify_cl".into(), i_cl.clone()]);
+
+    let alias_reify_i = "ir";
+
+    proof.push(ProofStep::Set(alias_reify_i.into(), reify_i.clone()));
+
+    // conv_i represents ⟇_to_∨_rw 𝑙1, ... , 𝑙n
+    let conv_i = Term::Terms(vec!["⟇_to_∨_rw".into(), i_cl.clone()]);
+
+    // conv_j represents ⟇_to_∨_rw 𝑙𝑘1, ... , 𝑙kn
+    let conv_j = Term::Terms(vec!["⟇_to_∨_rw".into(), j_cl.clone()]);
+
+    // π (⟇_to_∨_rw 𝑙1, ... , 𝑙n = ⟇_to_∨_rw 𝑙𝑘1, ... , 𝑙kn)
+    let goal_contra = Term::Alethe(LTerm::ClassicProof(Box::new(Term::Alethe(LTerm::Eq(
+        Box::new(conv_i.clone()),
+        Box::new(conv_j.clone()),
+    )))));
+
+    let have_id = "H";
+
+    // π (den (r ₂) (r ₁) = ⟇_to_∨_rw 𝑙1, ... , 𝑙n);
+    let change = ProofStep::Change(Term::Alethe(LTerm::ClassicProof(Box::new(Term::Alethe(LTerm::Eq(
+        Box::new(Term::Terms(vec![
+            "den".into(),
+            Term::Terms(vec![alias_reify_i.into(), "₂".into()]),
+            Term::Terms(vec![alias_reify_i.into(), "₁".into()]),
+        ])),
+        Box::new(conv_j.clone()),
+    ))))));
+
+    //   have eq : π (⟇_to_∨_rw 𝑙1, ... , 𝑙n = ⟇_to_∨_rw 𝑙1, ... , 𝑙n) {
+    //     set r ≔ ...;
+    //     change ...;
+    //   };
+    proof.push(ProofStep::Have(
+        have_id.to_string(),
+        goal_contra,
+        vec![
+            change,
+            ProofStep::Rewrite(
+                true,
+                None,
+                "contraction_correct".into(),
+                vec![],
+                SubProofs(None),
+            ),
+            ProofStep::Reflexivity,
+        ],
+    ));
+
+    proof.push(ProofStep::Refine(
+        "subst_equiv_clause".into(),
+        vec![i_cl, j_cl, have_id.into(), i],
+        SubProofs(None),
+    ));
+
+    Ok(Proof(proof))
 }
 
 #[cfg(test)]

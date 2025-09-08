@@ -151,6 +151,7 @@ fn gen_required_module() -> Vec<Command> {
         Command::RequireOpen("lambdapi.Simplify".to_string()),
         Command::RequireOpen("lambdapi.Rare".to_string()),
         Command::RequireOpen("lambdapi.Lia".to_string()),
+        Command::RequireOpen("lambdapi.Clause".to_string()),
     ]
 }
 
@@ -651,7 +652,8 @@ fn translate_tautology(
         "sko_forall" => Some(translate_sko_forall()),
         "ite1" => Some(translate_ite1(premises.first()?)),
         "ite2" => Some(translate_ite2(premises.first()?)),
-        "hole" | "reordering" | "contraction" => Some(Ok(Proof(admit()))), // specific rules of CVC5
+        "contraction" => Some(translate_contraction(clause, premises.first()?)),
+        "reordering" | "hole" => Some(Ok(Proof(admit()))), // specific rules of CVC5
         "la_mult_neg" => Some(Ok(Proof(admit()))),
         "la_mult_pos" => Some(Ok(Proof(admit()))),
         _ => Some(translate_simple_tautology(rule, premises.as_slice())),

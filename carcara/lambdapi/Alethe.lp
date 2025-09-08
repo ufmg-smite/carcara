@@ -1709,224 +1709,224 @@ begin
    reflexivity
 end;
 
-symbol head : Clause → τ o;
+// symbol head : Clause → τ o;
 
-rule head ▩ ↪ ⊥
-with head ($x ⟇ _) ↪ $x;
+// rule head ▩ ↪ ⊥
+// with head ($x ⟇ _) ↪ $x;
 
-symbol behead  : Clause → Clause;
+// symbol behead  : Clause → Clause;
 
-rule behead ▩ ↪ ▩
-with behead (_ ⟇ $l) ↪ $l;
+// rule behead ▩ ↪ ▩
+// with behead (_ ⟇ $l) ↪ $l;
 
-symbol ∨_left: τ o → τ o;
-rule ∨_left ($x ∨ _) ↪ $x;
+// symbol ∨_left: τ o → τ o;
+// rule ∨_left ($x ∨ _) ↪ $x;
 
-symbol ∨_right: τ o → τ o;
-rule ∨_right (_ ∨ $y) ↪ $y;
+// symbol ∨_right: τ o → τ o;
+// rule ∨_right (_ ∨ $y) ↪ $y;
 
-opaque symbol ⟇_inj [x:τ o] [l y m] : π ((x ⟇ l) = (y ⟇ m)) → π ((x = y) ∧ (l = m)) ≔
-begin
-  assume x l y m e;
-   apply ∧ᵢ { apply feq head e } { apply feq behead e }
-end;
+// opaque symbol ⟇_inj [x:τ o] [l y m] : π ((x ⟇ l) = (y ⟇ m)) → π ((x = y) ∧ (l = m)) ≔
+// begin
+//   assume x l y m e;
+//    apply ∧ᵢ { apply feq head e } { apply feq behead e }
+// end;
 
-opaque symbol ∨_inj [x:τ o] [l y m] : π ((x ∨ l) = (y ∨ m)) → π ((x = y) ∧ (l = m)) ≔
-begin
-  assume x l y m e; apply ∧ᵢ { refine feq (∨_left) e } { refine feq (∨_right) e }
-end;
+// opaque symbol ∨_inj [x:τ o] [l y m] : π ((x ∨ l) = (y ∨ m)) → π ((x = y) ∧ (l = m)) ≔
+// begin
+//   assume x l y m e; apply ∧ᵢ { refine feq (∨_left) e } { refine feq (∨_right) e }
+// end;
 
-opaque symbol ∨_inj2 [x:τ o] [l y m] : π ((x ∨ ⟇_to_∨_rw l) = (y ∨ ⟇_to_∨_rw m)) → π ((x = y) ∧ (⟇_to_∨_rw l = ⟇_to_∨_rw m)) ≔
-begin
-  assume x l y m e; apply ∧ᵢ { refine feq (∨_left) e } { refine feq (∨_right) e; }
-end;
+// opaque symbol ∨_inj2 [x:τ o] [l y m] : π ((x ∨ ⟇_to_∨_rw l) = (y ∨ ⟇_to_∨_rw m)) → π ((x = y) ∧ (⟇_to_∨_rw l = ⟇_to_∨_rw m)) ≔
+// begin
+//   assume x l y m e; apply ∧ᵢ { refine feq (∨_left) e } { refine feq (∨_right) e; }
+// end;
 
-symbol ℂ: TYPE;
-symbol Cl: Set;
-rule τ Cl ↪ ℂ;
-symbol P: Prop → ℂ;
-right associative commutative symbol ⊔: ℂ → ℂ → ℂ; notation ⊔ infix right 2;
-symbol ⬓: ℂ;
+// symbol ℂ: TYPE;
+// symbol Cl: Set;
+// rule τ Cl ↪ ℂ;
+// symbol P: Prop → ℂ;
+// right associative commutative symbol ⊔: ℂ → ℂ → ℂ; notation ⊔ infix right 2;
+// symbol ⬓: ℂ;
 
-symbol reify_cl: Clause → ℂ;
+// symbol reify_cl: Clause → ℂ;
 
-rule reify_cl ($x ⟇ $xs) ↪ (P $x) ⊔ (reify_cl $xs)
-with reify_cl ▩ ↪ ⬓
-;
+// rule reify_cl ($x ⟇ $xs) ↪ (P $x) ⊔ (reify_cl $xs)
+// with reify_cl ▩ ↪ ⬓
+// ;
 
-symbol is⬓ : ℂ → τ bool;
-rule is⬓ (P _) ↪ false
-with is⬓ ⬓ ↪ true
-with is⬓ (_ ⊔ _) ↪ false
-;
+// symbol is⬓ : ℂ → τ bool;
+// rule is⬓ (P _) ↪ false
+// with is⬓ ⬓ ↪ true
+// with is⬓ (_ ⊔ _) ↪ false
+// ;
 
-symbol isP : ℂ → τ bool;
-rule isP (P _) ↪ true
-with isP ⬓ ↪ false
-with isP (_ ⊔ _) ↪ false
-;
+// symbol isP : ℂ → τ bool;
+// rule isP (P _) ↪ true
+// with isP ⬓ ↪ false
+// with isP (_ ⊔ _) ↪ false
+// ;
 
-symbol is⊔ : ℂ → τ bool;
-rule is⊔ (P _) ↪ false
-with is⊔ ⬓ ↪ false
-with is⊔ (_ ⊔ _) ↪ true
-;
+// symbol is⊔ : ℂ → τ bool;
+// rule is⊔ (P _) ↪ false
+// with is⊔ ⬓ ↪ false
+// with is⊔ (_ ⊔ _) ↪ true
+// ;
 
-opaque symbol ⊔≠⬓ [x y: ℂ]: π (((x ⊔ y) = ⬓) ⇒ ⊥) ≔
-begin
-assume x y;  assume h;
-refine ind_eq h (λ l, istrue (is⬓ l)) ⊤ᵢ;
-end;
+// opaque symbol ⊔≠⬓ [x y: ℂ]: π (((x ⊔ y) = ⬓) ⇒ ⊥) ≔
+// begin
+// assume x y;  assume h;
+// refine ind_eq h (λ l, istrue (is⬓ l)) ⊤ᵢ;
+// end;
 
-opaque symbol ⊔≠P [a: τ o] [x y: ℂ]: π (((x ⊔ y) = P a) ⇒ ⊥) ≔
-begin
-assume a x y;  assume h;
-refine ind_eq h (λ l, istrue (isP l)) ⊤ᵢ;
-end;
+// opaque symbol ⊔≠P [a: τ o] [x y: ℂ]: π (((x ⊔ y) = P a) ⇒ ⊥) ≔
+// begin
+// assume a x y;  assume h;
+// refine ind_eq h (λ l, istrue (isP l)) ⊤ᵢ;
+// end;
 
-opaque symbol ⬓≠P [a: τ o] [x y: ℂ]: π ((⬓ = P a) ⇒ ⊥) ≔
-begin
-assume a x y;  assume h;
-refine ind_eq h (λ x, istrue (isP x)) ⊤ᵢ;
-end;
+// opaque symbol ⬓≠P [a: τ o] [x y: ℂ]: π ((⬓ = P a) ⇒ ⊥) ≔
+// begin
+// assume a x y;  assume h;
+// refine ind_eq h (λ x, istrue (isP x)) ⊤ᵢ;
+// end;
 
-sequential symbol  ⩦: ℂ → ℂ → 𝔹; notation ⩦ infix 11;
-rule (P $x) ⩦ (P $x) ↪ true
-with (P $x) ⩦ (P $y) ↪ false
-with ($x ⊔ $xs) ⩦ ($y ⊔ $ys) ↪ ($x ⩦ $y) Stdlib.Bool.and ($xs ⩦ $ys)
-with ⬓ ⩦ ⬓ ↪ true
-with ⬓ ⩦ (P _) ↪ false
-with (P _) ⩦ ⬓ ↪ false
-with (_ ⊔ _) ⩦ ⬓ ↪ false
-with ⬓ ⩦ (_ ⊔ _) ↪ false
-with (P _) ⩦ (_ ⊔ _) ↪ false
-with (_ ⊔ _) ⩦ (P _) ↪ false;
+// sequential symbol  ⩦: ℂ → ℂ → 𝔹; notation ⩦ infix 11;
+// rule (P $x) ⩦ (P $x) ↪ true
+// with (P $x) ⩦ (P $y) ↪ false
+// with ($x ⊔ $xs) ⩦ ($y ⊔ $ys) ↪ ($x ⩦ $y) Stdlib.Bool.and ($xs ⩦ $ys)
+// with ⬓ ⩦ ⬓ ↪ true
+// with ⬓ ⩦ (P _) ↪ false
+// with (P _) ⩦ ⬓ ↪ false
+// with (_ ⊔ _) ⩦ ⬓ ↪ false
+// with ⬓ ⩦ (_ ⊔ _) ↪ false
+// with (P _) ⩦ (_ ⊔ _) ↪ false
+// with (_ ⊔ _) ⩦ (P _) ↪ false;
 
-//NOTE: The proof use a meta reasoning here
-opaque symbol P⩦_correct:  π (`∀ x, `∀ y, (istrue (P x ⩦ P y)) ⇒ x = y) ≔
-begin assume x y;  assume Heq; apply ⊥ₑ Heq end;
+// //NOTE: The proof use a meta reasoning here
+// opaque symbol P⩦_correct:  π (`∀ x, `∀ y, (istrue (P x ⩦ P y)) ⇒ x = y) ≔
+// begin assume x y;  assume Heq; apply ⊥ₑ Heq end;
 
-symbol is▩: Clause → 𝔹;
+// symbol is▩: Clause → 𝔹;
 
-rule is▩ ▩ ↪ true
-with is▩ (_ ⟇ _) ↪ false;
+// rule is▩ ▩ ↪ true
+// with is▩ (_ ⟇ _) ↪ false;
 
-symbol is⊥: Prop → 𝔹;
-rule is⊥ ⊥ ↪ true
-with is⊥ (_ ∨ _) ↪ false;
+// symbol is⊥: Prop → 𝔹;
+// rule is⊥ ⊥ ↪ true
+// with is⊥ (_ ∨ _) ↪ false;
 
-opaque symbol ⟇≠▩ [x: Prop] [l: Clause] : π (( (x ⟇ l) =  ▩) ⇒ ⊥) ≔
-begin
-  assume x l;  simplify; assume h; type (ind_eq h (λ l, istrue(is▩ l))) _;
-    refine (ind_eq h (λ l, istrue(is▩ l)) ⊤ᵢ);
-end;
+// opaque symbol ⟇≠▩ [x: Prop] [l: Clause] : π (( (x ⟇ l) =  ▩) ⇒ ⊥) ≔
+// begin
+//   assume x l;  simplify; assume h; type (ind_eq h (λ l, istrue(is▩ l))) _;
+//     refine (ind_eq h (λ l, istrue(is▩ l)) ⊤ᵢ);
+// end;
 
-opaque symbol ∨≠⊥ [x: Prop] [l: Clause] : π (((⟇_to_∨_rw (x ⟇ l)) = (⟇_to_∨_rw ▩)) ⇒ ⊥) ≔
-begin
-  assume x l; simplify;    assume h;
-  refine (ind_eq h (λ l, istrue(is⊥ l))) ⊤ᵢ;
-end;
+// opaque symbol ∨≠⊥ [x: Prop] [l: Clause] : π (((⟇_to_∨_rw (x ⟇ l)) = (⟇_to_∨_rw ▩)) ⇒ ⊥) ≔
+// begin
+//   assume x l; simplify;    assume h;
+//   refine (ind_eq h (λ l, istrue(is⊥ l))) ⊤ᵢ;
+// end;
 
-opaque symbol ▩≠⟇ [x: Prop] [l: Clause] : π ((▩ = (x ⟇ l)) ⇒ ⊥) ≔
-begin
-  assume x l;
-   assume h;
-  have h': π ((x ⟇ l) = ▩) {symmetry; apply h};
-  apply  (@⟇≠▩ x l);
-  refine h'
-end;
+// opaque symbol ▩≠⟇ [x: Prop] [l: Clause] : π ((▩ = (x ⟇ l)) ⇒ ⊥) ≔
+// begin
+//   assume x l;
+//    assume h;
+//   have h': π ((x ⟇ l) = ▩) {symmetry; apply h};
+//   apply  (@⟇≠▩ x l);
+//   refine h'
+// end;
 
-opaque symbol ⊥≠∨ [x: Prop] [l: Clause] : π (((⟇_to_∨_rw ▩) = (⟇_to_∨_rw (x ⟇ l))) ⇒ ⊥) ≔
-begin
-  assume x l;
-   assume h;
-  have h': π (⟇_to_∨_rw (x ⟇ l) = ⟇_to_∨_rw ▩) {symmetry; apply h};
-  apply  (@∨≠⊥ x l);
-  refine h'
-end;
+// opaque symbol ⊥≠∨ [x: Prop] [l: Clause] : π (((⟇_to_∨_rw ▩) = (⟇_to_∨_rw (x ⟇ l))) ⇒ ⊥) ≔
+// begin
+//   assume x l;
+//    assume h;
+//   have h': π (⟇_to_∨_rw (x ⟇ l) = ⟇_to_∨_rw ▩) {symmetry; apply h};
+//   apply  (@∨≠⊥ x l);
+//   refine h'
+// end;
 
-symbol denote: ℂ → Prop;
-rule denote ($x ⊔ $y) ↪ (denote $x) ∨ (denote $y)
-with denote (P $x) ↪ $x
-with denote ⬓ ↪ ⊥
-;
+// symbol denote: ℂ → Prop;
+// rule denote ($x ⊔ $y) ↪ (denote $x) ∨ (denote $y)
+// with denote (P $x) ↪ $x
+// with denote ⬓ ↪ ⊥
+// ;
 
-print ind_ℂ;
+// print ind_ℂ;
 
-opaque symbol ⇓_⇑ : π (`∀ x: Clause, denote (reify_cl x) = (⟇_to_∨_rw x)) ≔
-begin
-  refine ind_ℂ (λ u, denote (reify_cl u) = (⟇_to_∨_rw u)) _ _
-  { reflexivity; }
-  {
-    assume x xs IH; simplify; rewrite IH; reflexivity
-  }
-end;
-
-
-opaque symbol cl_perm_correct': π (`∀ (a: Clause), `∀ (b: Clause), (istrue (reify_cl a ⩦ reify_cl b)) ⇒ (⟇_to_∨_rw a = ⟇_to_∨_rw b)) ≔
-begin
-  refine ind_ℂ (λ u, `∀ (b: Clause), (istrue (reify_cl u ⩦ reify_cl b)) ⇒ (⟇_to_∨_rw u = ⟇_to_∨_rw b))  _ _
-  {
-    refine ind_ℂ (λ u,  (istrue (reify_cl ▩ ⩦ reify_cl u)) ⇒ (⟇_to_∨_rw ▩ = ⟇_to_∨_rw u))  _ _
-    { simplify;  assume Htop; reflexivity  }
-    {
-      assume x xs; simplify; assume H;  assume contra; apply ⊥ₑ contra
-    }
-  }
-  {
-    assume x xs IH; 
-    refine ind_ℂ (λ u,  (istrue (reify_cl (x ⟇ xs) ⩦ reify_cl u)) ⇒ (⟇_to_∨_rw (x ⟇ xs) = ⟇_to_∨_rw u)) _ _
-    {
-       assume contra; apply ⊥ₑ contra
-    }
-    {
-      assume y ys;
-      assume IH2;
-       simplify ⩦; assume H;
-      simplify ⟇_to_∨_rw;
-      refine @feq2 o o o (∨) x y _ (⟇_to_∨_rw xs) (⟇_to_∨_rw ys) _
-      {
-        apply  P⩦_correct;
-        refine (@andₑ₁ (P x ⩦ P y) (reify_cl xs ⩦ reify_cl ys) H);
-      }
-      {
-        refine IH ys _;
-        refine @andₑ₂ (P x ⩦ P y) (reify_cl xs ⩦ reify_cl ys) H;
-      }
-    }
-  }
-end;
+// opaque symbol ⇓_⇑ : π (`∀ x: Clause, denote (reify_cl x) = (⟇_to_∨_rw x)) ≔
+// begin
+//   refine ind_ℂ (λ u, denote (reify_cl u) = (⟇_to_∨_rw u)) _ _
+//   { reflexivity; }
+//   {
+//     assume x xs IH; simplify; rewrite IH; reflexivity
+//   }
+// end;
 
 
+// opaque symbol cl_perm_correct': π (`∀ (a: Clause), `∀ (b: Clause), (istrue (reify_cl a ⩦ reify_cl b)) ⇒ (⟇_to_∨_rw a = ⟇_to_∨_rw b)) ≔
+// begin
+//   refine ind_ℂ (λ u, `∀ (b: Clause), (istrue (reify_cl u ⩦ reify_cl b)) ⇒ (⟇_to_∨_rw u = ⟇_to_∨_rw b))  _ _
+//   {
+//     refine ind_ℂ (λ u,  (istrue (reify_cl ▩ ⩦ reify_cl u)) ⇒ (⟇_to_∨_rw ▩ = ⟇_to_∨_rw u))  _ _
+//     { simplify;  assume Htop; reflexivity  }
+//     {
+//       assume x xs; simplify; assume H;  assume contra; apply ⊥ₑ contra
+//     }
+//   }
+//   {
+//     assume x xs IH; 
+//     refine ind_ℂ (λ u,  (istrue (reify_cl (x ⟇ xs) ⩦ reify_cl u)) ⇒ (⟇_to_∨_rw (x ⟇ xs) = ⟇_to_∨_rw u)) _ _
+//     {
+//        assume contra; apply ⊥ₑ contra
+//     }
+//     {
+//       assume y ys;
+//       assume IH2;
+//        simplify ⩦; assume H;
+//       simplify ⟇_to_∨_rw;
+//       refine @feq2 o o o (∨) x y _ (⟇_to_∨_rw xs) (⟇_to_∨_rw ys) _
+//       {
+//         apply  P⩦_correct;
+//         refine (@andₑ₁ (P x ⩦ P y) (reify_cl xs ⩦ reify_cl ys) H);
+//       }
+//       {
+//         refine IH ys _;
+//         refine @andₑ₂ (P x ⩦ P y) (reify_cl xs ⩦ reify_cl ys) H;
+//       }
+//     }
+//   }
+// end;
 
-opaque symbol cl_perm_complete: π (`∀ (a: Clause), `∀ (b: Clause), (a = b) ⇒ (istrue (reify_cl a ⩦ reify_cl b))) ≔
-begin
-  refine ind_ℂ (λ u, `∀ b, (u = b) ⇒  (istrue (reify_cl u ⩦ reify_cl b))) _ _
-  {
-    refine ind_ℂ (λ u, (▩ = u) ⇒ istrue (reify_cl ▩ ⩦ reify_cl u)) _ _
-    {  assume H; apply ⊤ᵢ }
-    { assume x xs H;   assume j; refine ⊥ₑ ( (@▩≠⟇ x xs) j); }
-  }
-  {
-    assume x xs IH;
-    refine ind_ℂ (λ u, ((x ⟇ xs) = u) ⇒ istrue (reify_cl (x ⟇ xs) ⩦ reify_cl u)) _ _
-    {  assume j; refine ⊥ₑ ( (@⟇≠▩ x xs) j); }
-    {
-      assume y ys IH2;  assume H;
-      have G: π ((x = y) ∧ (xs = ys)) { apply ⟇_inj H };
-        have G1: π (x = y ) { apply ∧ₑ₁  G };
-        have G2: π (xs = ys) { apply ∧ₑ₂  G };
-        rewrite G1;
-        rewrite left G2;
-        refine  IH xs _;
-        reflexivity
-    }
-  }
-end;
 
-// cl_perm_correct' with parameter
-opaque symbol cl_perm_correct a b : π (istrue (reify_cl a ⩦ reify_cl b)) → π (⟇_to_∨_rw a = ⟇_to_∨_rw b) ≔
-begin assume a b H; apply  (cl_perm_correct' a b) H end;
+
+// opaque symbol cl_perm_complete: π (`∀ (a: Clause), `∀ (b: Clause), (a = b) ⇒ (istrue (reify_cl a ⩦ reify_cl b))) ≔
+// begin
+//   refine ind_ℂ (λ u, `∀ b, (u = b) ⇒  (istrue (reify_cl u ⩦ reify_cl b))) _ _
+//   {
+//     refine ind_ℂ (λ u, (▩ = u) ⇒ istrue (reify_cl ▩ ⩦ reify_cl u)) _ _
+//     {  assume H; apply ⊤ᵢ }
+//     { assume x xs H;   assume j; refine ⊥ₑ ( (@▩≠⟇ x xs) j); }
+//   }
+//   {
+//     assume x xs IH;
+//     refine ind_ℂ (λ u, ((x ⟇ xs) = u) ⇒ istrue (reify_cl (x ⟇ xs) ⩦ reify_cl u)) _ _
+//     {  assume j; refine ⊥ₑ ( (@⟇≠▩ x xs) j); }
+//     {
+//       assume y ys IH2;  assume H;
+//       have G: π ((x = y) ∧ (xs = ys)) { apply ⟇_inj H };
+//         have G1: π (x = y ) { apply ∧ₑ₁  G };
+//         have G2: π (xs = ys) { apply ∧ₑ₂  G };
+//         rewrite G1;
+//         rewrite left G2;
+//         refine  IH xs _;
+//         reflexivity
+//     }
+//   }
+// end;
+
+// // cl_perm_correct' with parameter
+// opaque symbol cl_perm_correct a b : π (istrue (reify_cl a ⩦ reify_cl b)) → π (⟇_to_∨_rw a = ⟇_to_∨_rw b) ≔
+// begin assume a b H; apply  (cl_perm_correct' a b) H end;
 
 opaque symbol subst_equiv_clause : Π x: Clause, Π y: Clause, π (⟇_to_∨_rw x = ⟇_to_∨_rw y) → π̇ x → π̇ y ≔
 begin
@@ -1937,139 +1937,139 @@ rewrite left Heq;
 apply Hx
 end;
 
-require open Stdlib.List;
+// require open Stdlib.List;
 
-inductive ClauseAlg : TYPE ≔
-p : ℕ → ClauseAlg;
+// inductive ClauseAlg : TYPE ≔
+// p : ℕ → ClauseAlg;
 
-symbol clalg: Set;
+// symbol clalg: Set;
 
-rule τ clalg ↪ ClauseAlg;
+// rule τ clalg ↪ ClauseAlg;
 
-symbol ⇑ : 𝕃 o → Clause → 𝕃 clalg;
+// symbol ⇑ : 𝕃 o → Clause → 𝕃 clalg;
 
-symbol reify: 𝕃 o → Clause → τ(list clalg × list o);
+// symbol reify: 𝕃 o → Clause → τ(list clalg × list o);
 
-sequential symbol prop_eq: Prop → Prop → 𝔹;
-rule prop_eq $x $x ↪ true
-with prop_eq $x $y ↪ false;
+// sequential symbol prop_eq: Prop → Prop → 𝔹;
+// rule prop_eq $x $x ↪ true
+// with prop_eq $x $y ↪ false;
 
-rule ⇑ $ctx ($x ⟇ $xs) ↪ (p (index prop_eq $x $ctx )) ⸬ (⇑ $ctx $xs)
-with ⇑ _ ▩ ↪ □;
+// rule ⇑ $ctx ($x ⟇ $xs) ↪ (p (index prop_eq $x $ctx )) ⸬ (⇑ $ctx $xs)
+// with ⇑ _ ▩ ↪ □;
 
-symbol ⇓ : 𝕃 o → 𝕃 clalg → Prop;
-rule ⇓ $ctx □ ↪ ⊥
-with ⇓ $ctx ((p $i) ⸬ $tl) ↪  (nth ⊥ $ctx $i) ∨ (⇓ $ctx $tl);
+// symbol ⇓ : 𝕃 o → 𝕃 clalg → Prop;
+// rule ⇓ $ctx □ ↪ ⊥
+// with ⇓ $ctx ((p $i) ⸬ $tl) ↪  (nth ⊥ $ctx $i) ∨ (⇓ $ctx $tl);
 
-symbol den_reify ≔ λ l x, ⇓ l (⇑ l (x));
+// symbol den_reify ≔ λ l x, ⇓ l (⇑ l (x));
 
-require open Stdlib.Comp;
+// require open Stdlib.Comp;
 
-symbol compN : ℕ → ℕ → Comp;
+// symbol compN : ℕ → ℕ → Comp;
 
-rule compN _0 _0 ↪ Eq
-with compN _0 (_ +1) ↪ Lt
-with compN (_ +1) _0 ↪ Gt
-with compN ($x +1) ($y +1) ↪ compN $x $y;
+// rule compN _0 _0 ↪ Eq
+// with compN _0 (_ +1) ↪ Lt
+// with compN (_ +1) _0 ↪ Gt
+// with compN ($x +1) ($y +1) ↪ compN $x $y;
 
-opaque symbol compN_correct x y : π (compN x y = Eq ⇒ x = y) ≔
-begin
-induction
-{ induction
-  {assume h; reflexivity}
-  {assume y hy h; apply ⊥ₑ; apply Lt≠Eq h}
-}
-{ assume x hx; induction
-  {assume h; apply ⊥ₑ; apply Gt≠Eq h}
-  {assume y hy h; apply feq (+1); apply hx y h }
-}
-end;
+// opaque symbol compN_correct x y : π (compN x y = Eq ⇒ x = y) ≔
+// begin
+// induction
+// { induction
+//   {assume h; reflexivity}
+//   {assume y hy h; apply ⊥ₑ; apply Lt≠Eq h}
+// }
+// { assume x hx; induction
+//   {assume h; apply ⊥ₑ; apply Gt≠Eq h}
+//   {assume y hy h; apply feq (+1); apply hx y h }
+// }
+// end;
 
-symbol insert: ClauseAlg → τ(list clalg) → τ(list clalg);
-rule insert $x □ ↪ $x ⸬ □
-with insert (p $i) (p $j ⸬ $l) ↪
-     case_Comp (compN $i $j)
-            (p $i ⸬ p $j ⸬ $l)
-            (p $i ⸬ p $j ⸬ $l)
-            (p $j ⸬ insert (p $i) $l);
+// symbol insert: ClauseAlg → τ(list clalg) → τ(list clalg);
+// rule insert $x □ ↪ $x ⸬ □
+// with insert (p $i) (p $j ⸬ $l) ↪
+//      case_Comp (compN $i $j)
+//             (p $i ⸬ p $j ⸬ $l)
+//             (p $i ⸬ p $j ⸬ $l)
+//             (p $j ⸬ insert (p $i) $l);
 
-symbol sort_cl: τ(list clalg) → τ(list clalg);
+// symbol sort_cl: τ(list clalg) → τ(list clalg);
 
-rule sort_cl □ ↪ □
-with sort_cl ($x ⸬ $xs) ↪ insert $x (sort_cl $xs);
+// rule sort_cl □ ↪ □
+// with sort_cl ($x ⸬ $xs) ↪ insert $x (sort_cl $xs);
 
-symbol norm_cl l ≔ sort_cl l;
+// symbol norm_cl l ≔ sort_cl l;
 
-symbol insert_correct l gs g : π (⇓ l (insert g gs) =  ((⇓ l (g ⸬ □)) ∨  (⇓ l gs))) ≔
-begin
-assume l;
-induction
-{
-  assume g; simplify; rewrite or_identity_r; reflexivity
-}
-{
-  induction;
-  assume j xs IH;
-  induction;
-  assume i;
-  simplify;
-  refine ind_Comp (λ u, (compN i j) = u ⇒  ⇓ l (case_Comp u (p i ⸬ (p j ⸬ xs)) (p i ⸬ (p j ⸬ xs)) (p j ⸬ insert (p i) xs)) = ((nth ⊥ l i ∨ ⊥) ∨ (nth ⊥ l j ∨ ⇓ l xs))) _ _ _ (compN i j) _
-  { assume Heq; simplify; rewrite or_identity_r; reflexivity }
-  { assume Hlt; simplify; rewrite or_identity_r; reflexivity }
-  {
-    assume Hgt;
-    simplify;
-    rewrite IH;
-    simplify;
-    rewrite or_identity_r;
-    rewrite ∨_assoc;
-    rewrite .[in x in (x ∨ _) = _ ] ∨_com;
-    rewrite left ∨_assoc;
-    reflexivity
-  }
-  { reflexivity }
-}
-end;
+// symbol insert_correct l gs g : π (⇓ l (insert g gs) =  ((⇓ l (g ⸬ □)) ∨  (⇓ l gs))) ≔
+// begin
+// assume l;
+// induction
+// {
+//   assume g; simplify; rewrite or_identity_r; reflexivity
+// }
+// {
+//   induction;
+//   assume j xs IH;
+//   induction;
+//   assume i;
+//   simplify;
+//   refine ind_Comp (λ u, (compN i j) = u ⇒  ⇓ l (case_Comp u (p i ⸬ (p j ⸬ xs)) (p i ⸬ (p j ⸬ xs)) (p j ⸬ insert (p i) xs)) = ((nth ⊥ l i ∨ ⊥) ∨ (nth ⊥ l j ∨ ⇓ l xs))) _ _ _ (compN i j) _
+//   { assume Heq; simplify; rewrite or_identity_r; reflexivity }
+//   { assume Hlt; simplify; rewrite or_identity_r; reflexivity }
+//   {
+//     assume Hgt;
+//     simplify;
+//     rewrite IH;
+//     simplify;
+//     rewrite or_identity_r;
+//     rewrite ∨_assoc;
+//     rewrite .[in x in (x ∨ _) = _ ] ∨_com;
+//     rewrite left ∨_assoc;
+//     reflexivity
+//   }
+//   { reflexivity }
+// }
+// end;
 
-opaque symbol norm_correct l (x: τ (list clalg))  : π (⇓ l (norm_cl x) = (⇓ l x)) ≔
-begin
-  assume l;
-  induction
-  { reflexivity; }
-  { 
-    induction;
-    assume i xs IH;
-    simplify;
-    rewrite left IH;
-    simplify;
-    rewrite insert_correct;
-    simplify;
-    rewrite or_identity_r;
-    reflexivity
-  }
-end;
+// opaque symbol norm_correct l (x: τ (list clalg))  : π (⇓ l (norm_cl x) = (⇓ l x)) ≔
+// begin
+//   assume l;
+//   induction
+//   { reflexivity; }
+//   { 
+//     induction;
+//     assume i xs IH;
+//     simplify;
+//     rewrite left IH;
+//     simplify;
+//     rewrite insert_correct;
+//     simplify;
+//     rewrite or_identity_r;
+//     reflexivity
+//   }
+// end;
 
-private opaque symbol foo: π̇ (a ⟇ b ⟇ c ⟇ ▩) →  π̇ (c ⟇ b ⟇ a ⟇ ▩) ≔
-begin
-  assume h;
-  set l ≔ a ⸬ b ⸬ c ⸬ □;
-  have perm: π (⟇_to_∨_rw (a ⟇ b ⟇ c ⟇ ▩) = ⟇_to_∨_rw (c ⟇ b ⟇ a ⟇ ▩)) {
-    change π (⇓ l (⇑ l (a ⟇ (b ⟇ (c ⟇ ▩)))) = ⇓ l (⇑ l (c ⟇ (b ⟇ (a ⟇ ▩)))));
-    rewrite left norm_correct l;
-    rewrite left .[x in _ = x] norm_correct l;
-    reflexivity
-  };
-  refine subst_equiv_clause
-    (a ⟇ (b ⟇ (c ⟇ ▩)))
-    (c ⟇ (b ⟇ (a ⟇ ▩)))
-    perm h;
-end;
+// private opaque symbol foo: π̇ (a ⟇ b ⟇ c ⟇ ▩) →  π̇ (c ⟇ b ⟇ a ⟇ ▩) ≔
+// begin
+//   assume h;
+//   set l ≔ a ⸬ b ⸬ c ⸬ □;
+//   have perm: π (⟇_to_∨_rw (a ⟇ b ⟇ c ⟇ ▩) = ⟇_to_∨_rw (c ⟇ b ⟇ a ⟇ ▩)) {
+//     change π (⇓ l (⇑ l (a ⟇ (b ⟇ (c ⟇ ▩)))) = ⇓ l (⇑ l (c ⟇ (b ⟇ (a ⟇ ▩)))));
+//     rewrite left norm_correct l;
+//     rewrite left .[x in _ = x] norm_correct l;
+//     reflexivity
+//   };
+//   refine subst_equiv_clause
+//     (a ⟇ (b ⟇ (c ⟇ ▩)))
+//     (c ⟇ (b ⟇ (a ⟇ ▩)))
+//     perm h;
+// end;
 
 /**********************************************
 * N-ary rules
 **********************************************/
 
-
+require open Stdlib.List;
 
 symbol literal ≔ nth ⊥;
 symbol literals ≔ nths ⊥;
