@@ -52,6 +52,7 @@ pub enum TstpLanguage {
 /// Possible formulae roles.
 #[derive(PartialEq, Eq, Hash, Clone)] // To use them as HashMap keys.
 pub enum TstpFormulaRole {
+    Assumption,
     Axiom,
     Lemma,
     Conjecture,

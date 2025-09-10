@@ -367,6 +367,10 @@ pub struct TranslatorData<TermType: Clone, ProofType: Default> {
     last_steps: LastSteps,
 
     translated_proof: ProofType,
+
+    /// Translation of subproofs might require special treatment. We flag when
+    /// the compiler enters the body of a subproof.
+    is_in_subproof: bool,
 }
 
 impl<TermType: Clone, ProofType: Default> TranslatorData<TermType, ProofType> {
@@ -376,6 +380,7 @@ impl<TermType: Clone, ProofType: Default> TranslatorData<TermType, ProofType> {
             pre_ord_proof: PreOrderedAletheProof::default(),
             alethe_scopes: AletheScopes::new(),
             last_steps: LastSteps::new(),
+            is_in_subproof: false,
         }
     }
 }
@@ -552,12 +557,18 @@ pub trait VecToVecTranslator<'a, StepType, TermType: Clone + 'a, TypeTermType, O
                             self.get_mut_translator_data().alethe_scopes.close_scope();
 
                             // self.get_mut_translator_data().local_steps.pop();
+                            // Exiting the subproof.
+                            self.get_mut_translator_data().is_in_subproof = false;
                         }
                     }
                 }
 
                 // A subproof introduced by the 'anchor' command.
                 ProofNode::Subproof(SubproofNode { last_step, args, .. }) => {
+                    // Some compilers might to give special treatment to subproofs .
+                    // We flag once we enter a subproof.
+                    self.get_mut_translator_data().is_in_subproof = true;
+
                     // To store @VarList parameters to @ctx
                     let ctx_params;
 

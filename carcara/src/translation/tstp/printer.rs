@@ -109,6 +109,8 @@ impl<'a> TstpPrinter<'a> {
     fn role_to_concrete_syntax(role: &TstpFormulaRole) -> String {
         // TODO: reuse role.to_string()
         match role {
+            TstpFormulaRole::Assumption => "assumption".to_owned(),
+
             TstpFormulaRole::Axiom => "axiom".to_owned(),
 
             TstpFormulaRole::Lemma => "lemma".to_owned(),

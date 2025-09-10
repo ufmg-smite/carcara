@@ -134,10 +134,7 @@ tff(axiom_5, axiom, ( ~ p3 | ~ ( f(a, c) = f(b, d) ) )).
     printer_proof.write_proof(tstp_proof).unwrap();
 
     assert_eq!(
-        "%---Types:
-    tff('U',type, 'U': $tType ).
-
-    %---Declarations:
+        "tff('U',type, 'U': $tType ).
     tff(a,type, a: 'U' ).
     tff(b,type, b: 'U' ).
     tff(c,type, c: 'U' ).

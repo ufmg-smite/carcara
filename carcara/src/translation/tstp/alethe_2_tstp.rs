@@ -80,6 +80,10 @@ impl TstpTranslator {
         // the Display trait for TstpFormulaRole at this level (or at the level
         // of the ASTs themselves).
         match role {
+            TstpFormulaRole::Assumption => {
+                new_name = "assumption".to_owned();
+            }
+
             TstpFormulaRole::Axiom => {
                 new_name = "axiom".to_owned();
             }
@@ -832,12 +836,30 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         term: &Rc<Term>,
     ) -> TstpAnnotatedFormula {
         let translated_term = self.translate_term(term);
+        let formula_source: TstpAnnotatedFormulaSource;
+        let formula_role: TstpFormulaRole;
+
+        if self.get_read_translator_data().is_in_subproof {
+            // Subproof's assumption.
+            formula_source = TstpAnnotatedFormulaSource::Introduced(
+                TstpSourceIntroducedType::Assumption,
+                TstpSourceIntroducedUsefulInfo::GeneralList(vec![]),
+                vec![],
+            );
+
+            formula_role = TstpFormulaRole::Assumption;
+        } else {
+            // { not self.get_read_translator_data().is_in_subproof }
+            //  TODO: complete this.
+            formula_source = TstpAnnotatedFormulaSource::Empty;
+            formula_role = TstpFormulaRole::Axiom;
+        }
 
         self.new_annotated_formula(
             TstpLanguage::Tff,
-            TstpFormulaRole::Axiom,
+            formula_role,
             translated_term,
-            TstpAnnotatedFormulaSource::Empty,
+            formula_source,
             "nil".to_owned(),
         )
     }
