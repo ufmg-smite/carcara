@@ -68,13 +68,13 @@
 /// ```
 #[macro_export]
 macro_rules! match_term {
-    (true = $var:expr $(, $flag:ident)?) => {
+    (true = $var:expr) => {
         if $var.is_bool_true() { Some(()) } else { None }
     };
-    (false = $var:expr $(, $flag:ident)?) => {
+    (false = $var:expr) => {
         if $var.is_bool_false() { Some(()) } else { None }
     };
-    ("" = $var:expr $(, $flag:ident)?) => {
+    ("" = $var:expr) => {
         if $var.is_empty_string() { Some(()) } else { None }
     };
     ((forall ... $args:tt) = $var:expr) => {
@@ -225,7 +225,7 @@ macro_rules! match_term {
     (@GET_VARIANT reinter)    => { $crate::ast::Operator::ReIntersection };
 
     // In the last case it can match a literal integer
-    ($lit:literal = $var:expr $(, $flag:ident)?) => {
+    ($lit:literal = $var:expr) => {
         if let Some(i) = $var.as_integer() {
             if i == $lit {
                 Some(())
