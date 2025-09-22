@@ -50,12 +50,24 @@ pub enum TstpLanguage {
 }
 
 /// Possible formulae roles.
+/// The TPTP language spec. introduces formula roles
+/// using the the so-called "semantic grammar rules":
+/// "These define specific values that make semantic sense when more general
+/// syntactic rules apply".
 #[derive(PartialEq, Eq, Hash, Clone)] // To use them as HashMap keys.
 pub enum TstpFormulaRole {
+    // From the docs:
+    // "assumption"s can be used like axioms, but must be discharged before a derivation is complete.
     Assumption,
+    // From the docs:
+    // "axiom"s are accepted, without proof. There is no guarantee that the
+    // axioms of a problem are consistent.
     Axiom,
     Lemma,
     Conjecture,
+    // From the docs:
+    // "hypothesis"s are assumed to be true for a particular problem, and are
+    // used like "axiom"s.
     Hypothesis,
     // Logic used.
     Logic,
@@ -203,50 +215,95 @@ pub enum TstpType {
 #[derive(Clone, Debug)]
 pub enum TstpAnnotatedFormulaSource {
     // We are collapsing a little bit the structure of the grammar rules for "source".
+    // Its original rules are:
+    // <source> ::= <dag_source> | <internal_source> | <external_source> | unknown | [<sources>]
+
     // The following corresponds to the "internal_source" category from the grammar.
     // <internal_source>  ::= introduced(<intro_type>,<useful_info>,<parents>)
-    Introduced(
-        TstpSourceIntroducedType,
-        TstpSourceIntroducedUsefulInfo,
+    InternalSourceIntroduced(
+        TstpInternalSourceIntroducedType,
+        TstpSourceUsefulInfo,
         Vec<TstpAnnotatedFormulaSource>,
     ),
 
+    // The following corresponds to the "dag_source" category from the grammar.
+    // <dag_source>           ::= <name> | <inference_record>
+
     // Inference record: inference(rule name, general data, parent formulas)
-    Inference(
+    // From docs:
+    // "<parents> can be empty in cases when there is a justification for a
+    // tautologous theorem. In cases when a tautology is introduced as a leaf,
+    // e.g., for splitting, then use an <internal_source>.
+    DagSourceInference(
         TstpInferenceRuleName,
-        Vec<TstpGeneralData>,
-        Vec<TstpParentFormulaSource>,
+        TstpSourceUsefulInfo,
+        Vec<TstpParentFormula>,
     ),
+
+    DagSourceName(Symbol),
 
     // No source provided
     Empty,
 }
 
-pub type TstpParentFormulaSource = TstpAnnotatedFormulaSource;
+// TODO: we are just modelling the case when
+// <parent_details> produces an empty literal
+// <parent_info> ::= <source><parent_details>
+// <parent_details> ::= :<general_term> | <nothing>
+pub type TstpParentFormula = TstpAnnotatedFormulaSource;
 
 #[derive(Clone, Debug)]
-pub enum TstpGeneralData {
-    Status(TstpGeneralDataStatus),
-}
-
-#[derive(Clone, Debug)]
-pub enum TstpGeneralDataStatus {
+pub enum TstpInferenceStatus {
     Thm,
 }
 
 #[derive(Clone, Debug)]
-pub enum TstpSourceIntroducedType {
+pub enum TstpInternalSourceIntroducedType {
     Name(Symbol),
     Definition,
     Tautology,
     Assumption,
 }
 
+// useful_info has 2 kinds of productions:
+// - regular grammar rules: <useful_info> ::= <general_list>
+// - semantic grammar rules: <useful_info> :== [] | [<info_items>]
 #[derive(Clone, Debug)]
-pub enum TstpSourceIntroducedUsefulInfo {
-    NewSymbols(Vec<Symbol>),
+pub enum TstpSourceUsefulInfo {
+    // Regular grammar rules: "general data"
+    GeneralDataNewSymbols(Vec<Symbol>),
     // TODO: arbitrary list of symbols?
-    GeneralList(Vec<Symbol>),
+    GeneralDataGeneralList(Vec<Symbol>),
+
+    // Semantics grammar rules: "info items"
+    InfoItems(Vec<TstpInfoItem>),
+}
+
+/// Productions of <`info_item`>.
+#[derive(Clone, Debug)]
+pub enum TstpInfoItem {
+    // Productions of <inference_item>:
+    // <inference_status>
+    InferenceItemInferenceStatusStatus(TstpInferenceStatus),
+    InferenceItemInferenceStatusInferenceInfo(
+        TstpInferenceRuleName,
+        TstpInferenceInfoGeneralListQualifier,
+        // General list
+        Vec<Symbol>,
+    ),
+
+    // <assumptions_record>
+    InferenceItemAssumptionsRecord(Vec<Symbol>),
+}
+
+// Represents the possible values of <atomic_word> in the <inference_info>
+// production rule. From the docs
+// "<atomic_word> indicates the information being recorded in the
+//  <general_list>. The <atomic_word> are (loosely) set by TPTP
+// conventions, and include esplit, sr_split, and discharge."
+#[derive(Clone, Debug)]
+pub enum TstpInferenceInfoGeneralListQualifier {
+    Discharge,
 }
 
 pub type TstpProof = Vec<TstpAnnotatedFormula>;

@@ -134,15 +134,142 @@ tff(axiom_5, axiom, ( ~ p3 | ~ ( f(a, c) = f(b, d) ) )).
     printer_proof.write_proof(tstp_proof).unwrap();
 
     assert_eq!(
-        "tff('U',type, 'U': $tType ).
-    tff(a,type, a: 'U' ).
-    tff(b,type, b: 'U' ).
-    tff(c,type, c: 'U' ).
-    tff(d,type, d: 'U' ).
-    tff(f,type, f: ( 'U' * 'U' ) > 'U' ).
-    tff(p1,type, p1: $o ).
-    tff(p2,type, p2: $o ).
-    tff(p3,type, p3: $o ).",
+        "tff(t0,plain,
+    ( ( ( a = b )
+      & ( c = d ) )
+    | ( a != b )
+    | ( c != d ) ),
+    introduced(tautology,[and_neg],[]) ).
+tff(t1,plain,
+    ( ( ( ( a = b )
+        & ( c = d ) )
+     => ( f(a,c) = f(b,d) ) )
+    | ( ( a = b )
+      & ( c = d ) ) ),
+    introduced(tautology,[implies_neg1],[]) ).
+tff(t2.a0,assumption,
+    a = b,
+    introduced(assumption,[],[]) ).
+tff(t2.a1,assumption,
+    c = d,
+    introduced(assumption,[],[]) ).
+tff(t2.t0,plain,
+    f(a,c) = f(b,d),
+    inference(cong,[status(thm),assumptions(['t2.a0','t2.a1'])],['t2.a0','t2.a1']) ).
+tff(t2,plain,
+    ( ( a != b )
+    | ( c != d )
+    | ( f(a,c) = f(b,d) ) ),
+    inference(subproof,[status(thm),discharge(subproof,['t2.a0','t2.a1'])],['t2.a0','t2.a1','t2.t0']) ).
+tff(t3,plain,
+    ( ~ ( ( a = b )
+        & ( c = d ) )
+    | ( a = b ) ),
+    introduced(tautology,[and_pos(0)],[]) ).
+tff(t4,plain,
+    ( ~ ( ( a = b )
+        & ( c = d ) )
+    | ( c = d ) ),
+    introduced(tautology,[and_pos(1)],[]) ).
+tff(t5,plain,
+    ( ( f(a,c) = f(b,d) )
+    | ~ ( ( a = b )
+        & ( c = d ) )
+    | ~ ( ( a = b )
+        & ( c = d ) ) ),
+    inference(resolution,[status(thm)],[t2,t3,t4]) ).
+tff(t6,plain,
+    ( ~ ( ( a = b )
+        & ( c = d ) )
+    | ~ ( ( a = b )
+        & ( c = d ) )
+    | ( f(a,c) = f(b,d) ) ),
+    inference(reordering,[status(thm)],[t5]) ).
+tff(t7,plain,
+    ( ~ ( ( a = b )
+        & ( c = d ) )
+    | ( f(a,c) = f(b,d) ) ),
+    inference(contraction,[status(thm)],[t6]) ).
+tff(t8,plain,
+    ( ( ( ( a = b )
+        & ( c = d ) )
+     => ( f(a,c) = f(b,d) ) )
+    | ( f(a,c) = f(b,d) ) ),
+    inference(resolution,[status(thm)],[t1,t7]) ).
+tff(t9,plain,
+    ( ( ( ( a = b )
+        & ( c = d ) )
+     => ( f(a,c) = f(b,d) ) )
+    | ( f(a,c) != f(b,d) ) ),
+    introduced(tautology,[implies_neg2],[]) ).
+tff(t10,plain,
+    ( ( ( ( a = b )
+        & ( c = d ) )
+     => ( f(a,c) = f(b,d) ) )
+    | ( ( ( a = b )
+        & ( c = d ) )
+     => ( f(a,c) = f(b,d) ) ) ),
+    inference(resolution,[status(thm)],[t8,t9]) ).
+tff(t11,plain,
+    ( ( ( a = b )
+      & ( c = d ) )
+   => ( f(a,c) = f(b,d) ) ),
+    inference(contraction,[status(thm)],[t10]) ).
+tff(t12,plain,
+    ( ~ ( ( a = b )
+        & ( c = d ) )
+    | ( f(a,c) = f(b,d) ) ),
+    inference(implies,[status(thm)],[t11]) ).
+tff(t13,plain,
+    ( ( a != b )
+    | ( c != d )
+    | ( f(a,c) = f(b,d) ) ),
+    inference(resolution,[status(thm)],[t0,t12]) ).
+tff(t14,plain,
+    ( ( f(a,c) = f(b,d) )
+    | ( a != b )
+    | ( c != d ) ),
+    inference(reordering,[status(thm)],[t13]) ).
+tff(axiom_6, axiom, ( ~ p3 | ~ ( f(a, c) = f(b, d) ) )).
+tff(t15,plain,
+    ( ~ p3
+    | ( f(a,c) != f(b,d) ) ),
+    inference(or,[status(thm)],[a4]) ).
+tff(t16,plain,
+    ( ~ ( p2
+        & p3 )
+    | p3 ),
+    introduced(tautology,[and_pos(1)],[]) ).
+tff(t17,plain,
+    ( p3
+    | ~ ( p2
+        & p3 ) ),
+    inference(reordering,[status(thm)],[t16]) ).
+tff(axiom_7, axiom, ( ~ p1 | ( p2 & p3 ) )).
+tff(t18,plain,
+    ( ~ p1
+    | ( p2
+      & p3 ) ),
+    inference(or,[status(thm)],[a3]) ).
+tff(axiom_8, axiom, ( p1 & $true )).
+tff(t19,plain,
+    p1,
+    inference(and(0),[status(thm)],[a2]) ).
+tff(t20,plain,
+    ( p2
+    & p3 ),
+    inference(resolution,[status(thm)],[t18,t19]) ).
+tff(t21,plain,
+    p3,
+    inference(resolution,[status(thm)],[t17,t20]) ).
+tff(t22,plain,
+    f(a,c) != f(b,d),
+    inference(resolution,[status(thm)],[t15,t21]) ).
+tff(axiom_9, axiom, ( c = d )).
+tff(axiom_10, axiom, ( a = b )).
+tff(t23,plain,
+    $false,
+    inference(resolution,[status(thm)],[t14,t22,a1,a0]) ).",
         std::str::from_utf8(&buf_proof).unwrap()
     );
 }

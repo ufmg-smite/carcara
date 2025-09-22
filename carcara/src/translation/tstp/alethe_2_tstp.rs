@@ -29,18 +29,19 @@ impl TstpTranslator {
     }
 
     /// Abstracts the main mechanisms put to work to build an annotated formula:
-    /// - generate a new name
-    /// - build the corresponding AST
-    /// - maintain a correspondence between the given name and the formula
+    /// - generates a new name
+    /// - builds the corresponding AST
+    /// - maintains a correspondence between the given name and the formula
     fn new_annotated_formula(
         &mut self,
+        step_id: &str,
         language: TstpLanguage,
         role: TstpFormulaRole,
         formula: TstpFormula,
         source: TstpAnnotatedFormulaSource,
         useful_info: Symbol,
     ) -> TstpAnnotatedFormula {
-        let formula_name = self.new_formula_name(&role);
+        let formula_name = self.new_formula_name(step_id, &role);
 
         // Register the formula
         self.formulas_map
@@ -61,10 +62,9 @@ impl TstpTranslator {
 
     /// Abstracts the mechanism used to generate a new name for an annotated
     /// formula, and register it, for future reference.
-    fn new_formula_name(&mut self, role: &TstpFormulaRole) -> String {
+    fn new_formula_name(&mut self, step_id: &str, role: &TstpFormulaRole) -> String {
         // For axioms, lemmas, conjecture, hypothesis, naming
         // mechanism is rather simple: role + number.
-
         let mut new_name: String;
 
         if self.formulas_count.contains_key(role) {
@@ -81,39 +81,53 @@ impl TstpTranslator {
         // of the ASTs themselves).
         match role {
             TstpFormulaRole::Assumption => {
-                new_name = "assumption".to_owned();
+                // TODO: for the moment we are just using Alethe step's id.
+                // new_name = "assumption".to_owned();
+                new_name = step_id.to_owned();
             }
 
             TstpFormulaRole::Axiom => {
                 new_name = "axiom".to_owned();
+                new_name += &("_".to_owned() + &self.formulas_count[role].to_string());
             }
 
             TstpFormulaRole::Lemma => {
-                new_name = "lemma".to_owned();
+                // TODO: for the moment we are just using Alethe step's id.
+                // new_name = "lemma".to_owned();
+                new_name = step_id.to_owned();
             }
 
             TstpFormulaRole::Conjecture => {
-                new_name = "conjecture".to_owned();
+                // TODO: for the moment we are just using Alethe step's id.
+                // new_name = "conjecture".to_owned();
+                new_name = step_id.to_owned();
             }
 
             TstpFormulaRole::Hypothesis => {
-                new_name = "hypothesis".to_owned();
+                // TODO: for the moment we are just using Alethe step's id.
+                // new_name = "hypothesis".to_owned();
+                new_name = step_id.to_owned();
             }
 
             TstpFormulaRole::Logic => {
-                new_name = "logic".to_owned();
+                // TODO: for the moment we are just using Alethe step's id.
+                // new_name = "logic".to_owned();
+                new_name = step_id.to_owned();
             }
 
             TstpFormulaRole::Type => {
+                // TODO: it could be better if we just name it after the
+                // subject of the typing statement.
                 new_name = "type".to_owned();
+                new_name += &("_".to_owned() + &self.formulas_count[role].to_string());
             }
 
             TstpFormulaRole::Plain => {
-                new_name = "plain".to_owned();
+                // TODO: for the moment we are just using Alethe step's id.
+                // new_name = "plain".to_owned();
+                new_name = step_id.to_owned();
             }
         }
-
-        new_name += &("_".to_owned() + &self.formulas_count[role].to_string());
 
         new_name
     }
@@ -200,42 +214,102 @@ impl TstpTranslator {
     /// Builds the corresponding step, according to the previous classification.
     fn classify_source_build_step_term(
         &mut self,
+        step_id: &str,
         rule_name: &str,
         conclusion: TstpFormula,
-        _premises: Vec<TstpFormula>,
+        premises: Vec<Symbol>,
+        discharged_assumptions: Vec<Symbol>,
     ) -> TstpAnnotatedFormula {
-        // TODO: we should be extracting this from some "Alethe signature"
-        // instead of hard-coding these names
-        let tautologies = ["and_neg", "implies_neg1"];
-
-        if tautologies.contains(&rule_name) {
+        if TstpTranslator::is_tautology(rule_name) {
             self.new_annotated_formula(
+                step_id,
                 TstpLanguage::Tff,
                 TstpFormulaRole::Plain,
                 conclusion,
                 // TODO: abstract this into some method
-                TstpAnnotatedFormulaSource::Introduced(
-                    TstpSourceIntroducedType::Tautology,
-                    TstpSourceIntroducedUsefulInfo::GeneralList(vec![rule_name.to_owned()]),
+                TstpAnnotatedFormulaSource::InternalSourceIntroduced(
+                    TstpInternalSourceIntroducedType::Tautology,
+                    TstpSourceUsefulInfo::GeneralDataGeneralList(vec![rule_name.to_owned()]),
                     vec![],
                 ),
                 "".to_owned(),
             )
         } else {
-            // { not tautologies.contains(rule_name) }
+            // { not TstpTranslator::is_tautology(rule_name) }
+
             self.new_annotated_formula(
+                step_id,
                 TstpLanguage::Tff,
                 TstpFormulaRole::Plain,
                 conclusion,
-                // TODO: abstract this into some method
-                TstpAnnotatedFormulaSource::Inference(
-                    rule_name.to_owned(),
-                    vec![TstpGeneralData::Status(TstpGeneralDataStatus::Thm)],
-                    vec![],
+                TstpTranslator::get_inference_formula_source(
+                    rule_name,
+                    premises,
+                    discharged_assumptions,
                 ),
                 "".to_owned(),
             )
         }
+    }
+
+    fn is_tautology(rule_name: &str) -> bool {
+        // TODO: we should be extracting this from some "Alethe signature"
+        // instead of hard-coding these names
+        let tautologies = ["and_neg", "implies_neg1"];
+
+        tautologies.contains(&rule_name)
+    }
+
+    /// Builds the corresponding `TstpAnnotatedFormulaSource`, for an
+    /// step that represents the application of an inference rule.
+    /// PRE : { `rule_name` is not a tautology }
+    fn get_inference_formula_source(
+        rule_name: &str,
+        premises: Vec<Symbol>,
+        discharged_assumptions: Vec<Symbol>,
+    ) -> TstpAnnotatedFormulaSource {
+        // Collect useful info and parent formula source.
+        let mut useful_info_items = vec![TstpInfoItem::InferenceItemInferenceStatusStatus(
+            TstpInferenceStatus::Thm,
+        )];
+
+        let mut parent_formula_source: Vec<TstpParentFormula> = vec![];
+
+        if !premises.is_empty() {
+            // { ! premises.is_empty() }
+            // TODO: performance penalty: doing premises.clone()
+            useful_info_items.push(TstpInfoItem::InferenceItemAssumptionsRecord(
+                premises.clone(),
+            ));
+
+            premises.iter().for_each(|symbol| {
+                parent_formula_source
+                    .push(TstpAnnotatedFormulaSource::DagSourceName(symbol.to_owned()));
+            });
+        }
+
+        // Handling special cases
+        if rule_name == "subproof" {
+            // This rule discharges the premises.
+            assert!(premises.is_empty());
+            useful_info_items.push(TstpInfoItem::InferenceItemInferenceStatusInferenceInfo(
+                rule_name.to_owned(),
+                TstpInferenceInfoGeneralListQualifier::Discharge,
+                // TODO: cloning!
+                discharged_assumptions.clone(),
+            ));
+
+            discharged_assumptions.iter().for_each(|symbol| {
+                parent_formula_source
+                    .push(TstpAnnotatedFormulaSource::DagSourceName(symbol.to_owned()));
+            });
+        }
+
+        TstpAnnotatedFormulaSource::DagSourceInference(
+            rule_name.to_owned(),
+            TstpSourceUsefulInfo::InfoItems(useful_info_items),
+            parent_formula_source,
+        )
     }
 }
 
@@ -249,62 +323,6 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
     fn get_read_translator_data(&self) -> &TranslatorData<TstpFormula, TstpProof> {
         &self.translation
     }
-
-    // /// Inspects a given Alethe step from which we want to extract its id,
-    // /// also verifying that it is a proper "previous step" from another subproof's
-    // /// last step.
-    // fn get_previous_step_id(previous_step: &Option<Rc<ProofNode>>) -> TstpFormula {
-    //     // TODO: abstract this into a procedure
-    //     // Include, as premise, the previous step.
-    //     match previous_step {
-    //         Some(step) => {
-    //             match step.deref() {
-    //                 ProofNode::Step(StepNode { id, .. }) => TstpFormula::Variable(id.clone()),
-
-    //                 ProofNode::Subproof(SubproofNode { last_step, .. }) => {
-    //                     // The previous step is the closing step of a subproof.
-    //                     // It is represented as a single SubproofNode. We look
-    //                     // for the actual last step of this subproof.
-    //                     match last_step.deref() {
-    //                         ProofNode::Step(StepNode { id, .. }) => TstpFormula::Variable(id.clone()),
-
-    //                         _ => {
-    //                             // It shouldn't be another kind of ProofNode
-    //                             panic!();
-    //                         }
-    //                     }
-    //                 }
-
-    //                 ProofNode::Assume { .. } => {
-    //                     // It shouldn't be another kind of ProofNode
-    //                     panic!();
-    //                 }
-    //             }
-    //         }
-
-    //         _ => {
-    //             // There should be some previous step.
-    //             panic!();
-    //         }
-    //     }
-    // }
-
-    // /// Returns the identifier (as an `TstpFormula`) of the last context
-    // /// actually introduced within the proof certificate.
-    // /// PRE: { 0 < `self.contexts_opened`}
-    // fn get_last_introduced_context_id(&self) -> TstpFormula {
-    //     // TODO: do not hard-code this string
-    //     TstpFormula::Variable(
-    //         String::from("ctx")
-    //             + &(self.alethe_scopes.get_last_introduced_context_index() + 1).to_string(),
-    //     )
-    // }
-
-    // /// Encapsulates the mechanism used to generate fresh identifiers of contexts.
-    // fn generate_new_context_id(&self) -> String {
-    //     // TODO: do not hard-code this string
-    //     String::from("ctx") + &self.alethe_scopes.get_contexts_opened().to_string()
-    // }
 
     /// Abstracts the steps required to define and push a new context.
     /// PARAMS:
@@ -831,7 +849,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
     /// expressed within Tstp.
     fn translate_assume(
         &mut self,
-        _id: &str,
+        id: &str,
         _depth: usize,
         term: &Rc<Term>,
     ) -> TstpAnnotatedFormula {
@@ -841,9 +859,9 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
 
         if self.get_read_translator_data().is_in_subproof {
             // Subproof's assumption.
-            formula_source = TstpAnnotatedFormulaSource::Introduced(
-                TstpSourceIntroducedType::Assumption,
-                TstpSourceIntroducedUsefulInfo::GeneralList(vec![]),
+            formula_source = TstpAnnotatedFormulaSource::InternalSourceIntroduced(
+                TstpInternalSourceIntroducedType::Assumption,
+                TstpSourceUsefulInfo::GeneralDataGeneralList(vec![]),
                 vec![],
             );
 
@@ -856,6 +874,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         }
 
         self.new_annotated_formula(
+            id,
             TstpLanguage::Tff,
             formula_role,
             translated_term,
@@ -869,25 +888,33 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
     /// expressed within Tstp.
     /// Updates `self.tstp_proof`.
     fn translate_step(&mut self, node: &ProofNode) {
-        let mut alethe_premises: Vec<TstpFormula> = Vec::new();
+        let mut alethe_premises: Vec<Symbol> = Vec::new();
+        let mut alethe_discharged_assumptions: Vec<Symbol> = Vec::new();
 
         match node {
             ProofNode::Step(StepNode {
-                id: _,
+                id,
                 depth: _,
                 clause,
                 rule,
                 premises,
                 args,
-                discharge: _,
+                discharge,
                 previous_step: _,
             }) => {
                 // Add premises actually present in the original step command.
                 alethe_premises.extend(
                     premises
                         .iter()
-                        .map(|node| TstpFormula::Variable(String::from(node.deref().id())))
-                        .collect::<Vec<TstpFormula>>(),
+                        .map(|node| String::from(node.deref().id()))
+                        .collect::<Vec<Symbol>>(),
+                );
+
+                alethe_discharged_assumptions.extend(
+                    discharge
+                        .iter()
+                        .map(|node| String::from(node.deref().id()))
+                        .collect::<Vec<Symbol>>(),
                 );
 
                 // NOTE: in ProofStep, clause has type
@@ -907,45 +934,14 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                     tstp_arguments.push(self.translate_term(arg));
                 });
 
-                // TODO: develop some generic programmatic way to deal with each rule's
-                // semantics instead of this
-                // match rule.as_str() {
-                //     "and_neg" => {
-                //         let annotated_formula = self.new_annotated_formula(
-                //             TstpLanguage::Tff,
-                //             TstpFormulaRole::Plain,
-                //             conclusion,
-                //             // TODO: abstract this into some method
-                //             TstpAnnotatedFormulaSource::Introduced(
-                //                 TstpSourceIntroducedType::Tautology,
-                //                 TstpSourceIntroducedUsefulInfo::GeneralList(vec!["and_neg".to_string()]),
-                //                 vec![],
-                //             ),
-                //             "".to_owned(),
-                //         );
+                let annotated_formula = self.classify_source_build_step_term(
+                    id,
+                    rule,
+                    conclusion,
+                    alethe_premises,
+                    alethe_discharged_assumptions,
+                );
 
-                //         self.get_mut_translator_data()
-                //             .translated_proof
-                //             .push(annotated_formula);
-                //     }
-
-                //     _ => {
-                //         let annotated_formula = self.new_annotated_formula(
-                //             TstpLanguage::Tff,
-                //             TstpFormulaRole::Plain,
-                //             conclusion,
-                //             TstpAnnotatedFormulaSource::Empty,
-                //             "".to_owned(),
-                //         );
-
-                //         self.get_mut_translator_data()
-                //             .translated_proof
-                //             .push(annotated_formula);
-                //     }
-                // }
-
-                let annotated_formula =
-                    self.classify_source_build_step_term(rule, conclusion, alethe_premises);
                 self.get_mut_translator_data()
                     .translated_proof
                     .push(annotated_formula);
@@ -983,6 +979,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
 
         sort_declarations.iter().for_each(|pair| {
             let annotated_formula = self.new_annotated_formula(
+                "", // No step id.
                 TstpLanguage::Tff,
                 TstpFormulaRole::Type,
                 TstpFormula::Typing(
@@ -1008,6 +1005,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
             };
 
             let annotated_formula = self.new_annotated_formula(
+                "", // No step id.
                 TstpLanguage::Tff,
                 TstpFormulaRole::Type,
                 TstpFormula::Typing(Box::new(TstpFormula::Variable(pair.0.clone())), tstp_type),
@@ -1025,6 +1023,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
             let translated_assertion = self.translate_term(assertion);
 
             let annotated_formula = self.new_annotated_formula(
+                "", // No step id.
                 // TODO: some other language?
                 TstpLanguage::Tff,
                 // "some_formula_name".to_owned(),

@@ -285,16 +285,22 @@ impl<'a> TstpPrinter<'a> {
                 ret = "".to_owned();
             }
 
-            TstpAnnotatedFormulaSource::Introduced(introduced_type, useful_info, parents) => {
+            TstpAnnotatedFormulaSource::InternalSourceIntroduced(
+                introduced_type,
+                useful_info,
+                parents,
+            ) => {
                 // TODO: mixing different concerns: balanced terms should be dealt
                 // with elsewhere.
                 ret = "introduced(".to_owned();
 
-                ret += &TstpPrinter::source_introduced_type_to_concrete_syntax(introduced_type);
+                ret += &TstpPrinter::internal_source_introduced_type_to_concrete_syntax(
+                    introduced_type,
+                );
 
                 ret += ", ";
 
-                ret += &TstpPrinter::source_introduced_useful_info_to_concrete_syntax(useful_info);
+                ret += &TstpPrinter::source_useful_info_to_concrete_syntax(useful_info);
 
                 ret += ", [";
 
@@ -315,33 +321,38 @@ impl<'a> TstpPrinter<'a> {
                 ret += "])";
             }
 
-            TstpAnnotatedFormulaSource::Inference(rule_name, general_data, parents) => {
+            TstpAnnotatedFormulaSource::DagSourceInference(rule_name, useful_info, parents) => {
                 // TODO: mixing different concerns: balanced terms should be dealt
                 // with elsewhere.
                 ret = "inference(".to_owned();
 
                 ret += rule_name;
 
+                ret += ", ";
+
+                ret += &TstpPrinter::source_useful_info_to_concrete_syntax(useful_info);
                 ret += ", [";
+
+                // ret += ", [";
+
+                // // TODO: a more idiomatic way of solving this
+                // let mut first_iteration = true;
+
+                // general_data.iter().for_each(|data| {
+                //     if first_iteration {
+                //         ret += &TstpPrinter::general_data_to_concrete_syntax(data);
+                //         first_iteration = false;
+                //     } else {
+                //         // { ! first_iteration }
+                //         ret += ", ";
+                //         ret += &TstpPrinter::general_data_to_concrete_syntax(data);
+                //     }
+                // });
+
+                // ret += "], [";
 
                 // TODO: a more idiomatic way of solving this
                 let mut first_iteration = true;
-
-                general_data.iter().for_each(|data| {
-                    if first_iteration {
-                        ret += &TstpPrinter::general_data_to_concrete_syntax(data);
-                        first_iteration = false;
-                    } else {
-                        // { ! first_iteration }
-                        ret += ", ";
-                        ret += &TstpPrinter::general_data_to_concrete_syntax(data);
-                    }
-                });
-
-                ret += "], [";
-
-                // TODO: a more idiomatic way of solving this
-                first_iteration = true;
 
                 parents.iter().for_each(|parent| {
                     if first_iteration {
@@ -356,30 +367,34 @@ impl<'a> TstpPrinter<'a> {
 
                 ret += "])";
             }
+
+            TstpAnnotatedFormulaSource::DagSourceName(symbol) => {
+                ret = symbol.to_owned();
+            }
         }
 
         ret
     }
 
-    fn source_introduced_type_to_concrete_syntax(intro_type: &TstpSourceIntroducedType) -> String {
+    fn internal_source_introduced_type_to_concrete_syntax(
+        intro_type: &TstpInternalSourceIntroducedType,
+    ) -> String {
         match intro_type {
-            TstpSourceIntroducedType::Name(symbol) => symbol.clone(),
+            TstpInternalSourceIntroducedType::Name(symbol) => symbol.clone(),
 
-            TstpSourceIntroducedType::Definition => "definition".to_owned(),
+            TstpInternalSourceIntroducedType::Definition => "definition".to_owned(),
 
-            TstpSourceIntroducedType::Tautology => "tautology".to_owned(),
+            TstpInternalSourceIntroducedType::Tautology => "tautology".to_owned(),
 
-            TstpSourceIntroducedType::Assumption => "assumption".to_owned(),
+            TstpInternalSourceIntroducedType::Assumption => "assumption".to_owned(),
         }
     }
 
-    fn source_introduced_useful_info_to_concrete_syntax(
-        useful_info: &TstpSourceIntroducedUsefulInfo,
-    ) -> String {
+    fn source_useful_info_to_concrete_syntax(useful_info: &TstpSourceUsefulInfo) -> String {
         let mut ret: String;
 
         match useful_info {
-            TstpSourceIntroducedUsefulInfo::NewSymbols(symbols) => {
+            TstpSourceUsefulInfo::GeneralDataNewSymbols(symbols) => {
                 ret = "new_symbols(".to_owned();
 
                 let mut first_iteration = true;
@@ -397,7 +412,7 @@ impl<'a> TstpPrinter<'a> {
                 ret += ")";
             }
 
-            TstpSourceIntroducedUsefulInfo::GeneralList(symbols) => {
+            TstpSourceUsefulInfo::GeneralDataGeneralList(symbols) => {
                 ret = "[".to_owned();
 
                 let mut first_iteration = true;
@@ -414,30 +429,110 @@ impl<'a> TstpPrinter<'a> {
 
                 ret += "]";
             }
-        }
 
-        ret
-    }
+            TstpSourceUsefulInfo::InfoItems(info_items) => {
+                ret = "[".to_owned();
 
-    fn general_data_to_concrete_syntax(general_data: &TstpGeneralData) -> String {
-        let mut ret: String;
+                let mut first_iteration = true;
 
-        match general_data {
-            TstpGeneralData::Status(status) => {
-                ret = "status(".to_owned();
+                info_items.iter().for_each(|info_item| {
+                    if first_iteration {
+                        ret += &TstpPrinter::info_item_to_concrete_syntax(info_item);
+                        first_iteration = false;
+                    } else {
+                        // { ! first_iteration }
+                        ret += &(", ".to_owned()
+                            + &TstpPrinter::info_item_to_concrete_syntax(info_item));
+                    }
+                });
 
-                ret += &TstpPrinter::general_data_status_to_concrete_syntax(status);
-
-                ret += ")";
+                ret += "]";
             }
         }
 
         ret
     }
 
-    fn general_data_status_to_concrete_syntax(status: &TstpGeneralDataStatus) -> String {
+    fn info_item_to_concrete_syntax(info_item: &TstpInfoItem) -> String {
+        let mut ret: String;
+
+        match info_item {
+            TstpInfoItem::InferenceItemInferenceStatusStatus(status) => {
+                ret = "status(".to_owned();
+
+                ret += &TstpPrinter::inference_status_to_concrete_syntax(status);
+
+                ret += ")";
+            }
+
+            TstpInfoItem::InferenceItemInferenceStatusInferenceInfo(
+                rule_name,
+                general_list_qualifier,
+                general_list,
+            ) => {
+                ret = rule_name.to_owned();
+
+                ret += "(";
+
+                ret += &TstpPrinter::inference_info_general_list_qualifier_to_concrete_syntax(
+                    general_list_qualifier,
+                );
+
+                ret += ", [";
+                // TODO: abstract this into a single procedure
+                // TODO: more idiomatic way to deal with this?
+                let mut first_element = true;
+
+                general_list.iter().for_each(|assumption| {
+                    if first_element {
+                        ret += assumption;
+                        first_element = false;
+                    } else {
+                        // { ! first_element }
+                        ret += &(", ".to_owned() + assumption);
+                    }
+                });
+
+                ret += "])";
+            }
+
+            TstpInfoItem::InferenceItemAssumptionsRecord(assumptions) => {
+                assert!(!assumptions.is_empty());
+
+                ret = "assumptions([".to_owned();
+
+                // TODO: more idiomatic way to deal with this?
+                // TODO: abstract this into a single procedure
+                let mut first_element = true;
+
+                assumptions.iter().for_each(|assumption| {
+                    if first_element {
+                        ret += assumption;
+                        first_element = false;
+                    } else {
+                        // { ! first_element }
+                        ret += &(", ".to_owned() + assumption);
+                    }
+                });
+
+                ret += "])";
+            }
+        }
+
+        ret
+    }
+
+    fn inference_status_to_concrete_syntax(status: &TstpInferenceStatus) -> String {
         match status {
-            TstpGeneralDataStatus::Thm => "thm".to_owned(),
+            TstpInferenceStatus::Thm => "thm".to_owned(),
+        }
+    }
+
+    fn inference_info_general_list_qualifier_to_concrete_syntax(
+        list_qualifier: &TstpInferenceInfoGeneralListQualifier,
+    ) -> String {
+        match list_qualifier {
+            TstpInferenceInfoGeneralListQualifier::Discharge => "discharge".to_owned(),
         }
     }
 }
