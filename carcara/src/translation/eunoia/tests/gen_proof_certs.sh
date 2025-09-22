@@ -2,9 +2,19 @@
 
 # Generates Alethe proof certificates, using $COMMAND, from input problems
 # contained in $DIR.
-DIR="./verit_problems/"
-COMMAND="../../../../../../verit_gitlab/verit/veriT --proof=- --disable-print-success --disable-banner --proof-prune --proof-merge"
-CARCARA_COMMAND="../../../../../target/release/carcara check --allow-int-real-subtyping --ignore-unknown-rules"
+BENCHMARK="$1"
+
+# Check the value and perform actions
+if [ "$BENCHMARK" = "cvc5" ]; then
+    DIR="./cvc5_problems/"
+    COMMAND="cvc5 --dump-proofs --proof-format-mode=alethe --proof-elim-subtypes"
+else
+    DIR="./verit_problems/"
+    COMMAND="../../../../../../verit_gitlab/verit/veriT --proof=- --disable-print-success --disable-banner --proof-prune --proof-merge"
+
+fi
+
+CARCARA_COMMAND="../../../../../target/release/carcara check --expand-let-bindings --allow-int-real-subtyping --ignore-unknown-rules"
 
 # Loop through each file in the directory.
 for FILE in "$DIR"/*; do
@@ -16,7 +26,7 @@ for FILE in "$DIR"/*; do
         # Check if the file has the .smt2 extension
         if [ "$EXTENSION" == "smt2" ]; then
             # Proof certificate's name
-            PROOF_CERTIFICATE="${FILE}_verit_proof_certificate"
+            PROOF_CERTIFICATE="${FILE}_proof_certificate"
 
             # Execute the command and redirect the output to the new file
             ${COMMAND} "$FILE" > "$PROOF_CERTIFICATE"
