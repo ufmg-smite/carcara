@@ -233,7 +233,7 @@ impl Substitution {
                 })
             }
             Term::Sort(Sort::Atom(sort, args)) => {
-                let new_args = apply_to_sequence!(args);
+                let new_args = apply_to_sequence!(args).into_boxed_slice();
                 pool.add(Term::Sort(Sort::Atom(sort.clone(), new_args)))
             }
             Term::Sort(Sort::Function(args)) => {

@@ -1794,7 +1794,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
                         .params
                         .iter()
                         .cloned()
-                        .map(|name| self.pool.add(Term::Sort(Sort::Atom(name, Vec::new()))))
+                        .map(|name| {
+                            self.pool
+                                .add(Term::Sort(Sort::Atom(name.into_boxed_str(), Box::new([]))))
+                        })
                         .zip(args)
                         .collect();
 
@@ -1805,7 +1808,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 };
             }
             _ => match self.state.sort_declarations.get(&name) {
-                Some(arity) if *arity == args.len() => Ok(Sort::Atom(name, args)),
+                Some(arity) if *arity == args.len() => {
+                    Ok(Sort::Atom(name.into_boxed_str(), args.into_boxed_slice()))
+                }
                 Some(arity) => Err(ParserError::WrongNumberOfArgs((*arity).into(), args.len())),
                 None => Err(ParserError::UndefinedSort(name)),
             },

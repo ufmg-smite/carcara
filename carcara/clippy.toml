@@ -1,3 +1,2 @@
 disallowed-methods = ["std::rc::Rc::new", "alloc::rc::Rc::new"]
 type-complexity-threshold = 500
-large-error-threshold = 161
