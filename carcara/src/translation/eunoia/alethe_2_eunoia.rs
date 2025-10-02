@@ -762,6 +762,27 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                             });
                     }
 
+                    "la_mult_neg" => {
+                        let rule_name = self.alethe_signature.la_generic.clone();
+                        let add_signature = self.alethe_signature.add.clone();
+
+                        self.get_mut_translator_data()
+                            .translated_proof
+                            .push(EunoiaCommand::Step {
+                                id: id.clone(),
+                                conclusion_clause: Some(conclusion),
+                                rule: rule_name,
+                                // TODO: should we check if alethe_premises == []?
+                                premises: EunoiaList { list: vec![] },
+                                // The coefficients are one single argument.  This means they
+                                // must be be wrapped in a single function call using an n-ary
+                                // function.
+                                arguments: EunoiaList {
+                                    list: vec![EunoiaTerm::App(add_signature, eunoia_arguments)],
+                                },
+                            });
+                    }
+
                     "let" => {
                         // Include, as premises, previous step from the actual subproof.
                         alethe_premises
@@ -796,6 +817,25 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                                 rule: rule_name,
                                 premises: EunoiaList { list: alethe_premises },
                                 arguments: EunoiaList { list: eunoia_arguments },
+                            });
+                    }
+
+                    "resolution" => {
+                        let var_cons_signature = self.alethe_signature.varlist_cons.clone();
+
+                        self.get_mut_translator_data()
+                            .translated_proof
+                            .push(EunoiaCommand::Step {
+                                id: id.clone(),
+                                conclusion_clause: Some(conclusion),
+                                rule: rule.clone(),
+                                premises: EunoiaList { list: alethe_premises },
+                                arguments: EunoiaList {
+                                    list: vec![EunoiaTerm::App(
+                                        var_cons_signature,
+                                        eunoia_arguments,
+                                    )],
+                                },
                             });
                     }
 

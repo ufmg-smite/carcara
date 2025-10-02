@@ -2,9 +2,17 @@
 
 # Transpiles to Eunoia problem preludes and corresponding proof certificates,
 # contained in $DIR. Uses $COMMAND to invoke 'carcara'.
-DIR=$1
+BENCHMARK="$1"
+
+# Check the value and perform actions
+if [ "$BENCHMARK" = "cvc5" ]; then
+    DIR="./cvc5_problems"
+else
+    DIR="./verit_problems"
+fi
+
 # TODO: installation-dependent relative paths
-CARCARA_ELABORATE_COMMAND="../../../../../target/release/carcara elaborate --pipeline=local --no-print-with-sharing"
+CARCARA_ELABORATE_COMMAND="../../../../../target/release/carcara elaborate --pipeline=local --no-print-with-sharing --ignore-unknown-rules"
 CARCARA_TRANSLATE_COMMAND="../../../../../target/release/carcara translate --allow-int-real-subtyping"
 ETHOS_COMMAND="../../../../../../ethos_fork/ethos/build/src/ethos"
 
@@ -18,17 +26,15 @@ for FILE in "$DIR"/*; do
         # Check if the file has the .smt2 extension
         if [ "$EXTENSION" == "smt2" ]; then
             # Proof certificate's name
-            PROOF_CERTIFICATE="${FILE}_verit_proof_certificate"
+            PROOF_CERTIFICATE="${FILE}_proof_certificate"
 
             EUNOIA_OUTPUT="${FILE}.eo"
             echo "----------------------"
             echo "About to process $FILE"
             
             # Elaborate proof certificate first.
-            ${CARCARA_ELABORATE_COMMAND} "$PROOF_CERTIFICATE" "$FILE" > "${PROOF_CERTIFICATE}_elaborated"
-            
-            # Remove the "valid" word from the beginning of the file
-            tail -n +2 "${PROOF_CERTIFICATE}_elaborated" > "${PROOF_CERTIFICATE}_elaborated"
+            # Remove the "valid"/"holey" word from the beginning of the file
+            ${CARCARA_ELABORATE_COMMAND} "$PROOF_CERTIFICATE" "$FILE" | tail -n +2 > "${PROOF_CERTIFICATE}_elaborated"
 
             # Use Carcara to transpile to Eunoia, redirect the output to 
             # "$EUNOIA_OUTPUT" 
