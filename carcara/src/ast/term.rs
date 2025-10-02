@@ -59,7 +59,7 @@ pub enum Sort {
     ///
     /// The associated string is the sort name, and the associated terms are the sort arguments for
     /// this sort.
-    Atom(String, Vec<Rc<Term>>),
+    Atom(Box<str>, Box<[Rc<Term>]>),
 
     // A sort variable
     Var(String),

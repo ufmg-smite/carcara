@@ -286,10 +286,10 @@ pub enum LinearArithmeticError {
     TooManyArgsInDisequality(Rc<Term>),
 
     #[error("final disequality is not contradictory: '{}'", DisplayLinearComb(.0, .1))]
-    DisequalityIsNotContradiction(Operator, LinearComb),
+    DisequalityIsNotContradiction(Operator, Box<LinearComb>),
 
     #[error("final disequality is not tautological: '{}'", DisplayLinearComb(.0, .1))]
-    DisequalityIsNotTautology(Operator, LinearComb),
+    DisequalityIsNotTautology(Operator, Box<LinearComb>),
 
     #[error("expected term '{0}' to be less than term '{1}'")]
     ExpectedLessThan(Rc<Term>, Rc<Term>),
