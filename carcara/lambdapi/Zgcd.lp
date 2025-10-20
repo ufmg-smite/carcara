@@ -122,11 +122,6 @@ with abs (Zpos $x) ↪ Zpos $x
 with abs (Zneg $x) ↪ Zpos $x
 ;
 
-symbol sgn: ℤ → ℤ;
-rule sgn Z0 ↪ Z0
-with sgn (Zpos _) ↪ (Zpos H)
-with sgn (Zneg _) ↪ (Zneg H);
-
 // This function reduces the number `a` by the GCD compute with Stein algorithm
 symbol Z_red_Stein: ℤ → ℤ → ℤ;
 rule Z_red_Stein Z0 _ ↪ Z0 // 0 reduced by anything is 0 

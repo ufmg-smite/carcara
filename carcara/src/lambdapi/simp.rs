@@ -23,6 +23,7 @@ pub fn translate_rare_simp(
         "bool-and-de-morgan" => translate_bool_and_de_morgan(args),
         "bool-or-de-morgan" => translate_bool_or_de_morgan(args),
         "bool-double-not-elim" => translate_bool_double_not_elim(dag_terms),
+        "bool-implies-or-distrib" => translate_bool_implies_or_distrib(args, dag_terms),
         "bool-impl-true1" => translate_bool_imp_true1(dag_terms),
         "bool-impl-true2" => translate_bool_imp_true2(dag_terms),
         "bool-impl-false1" => translate_bool_imp_false1(dag_terms),
@@ -301,7 +302,7 @@ fn translate_evaluate_bool() -> Vec<ProofStep> {
 ///  set r ≔ reify e2;
 ///  rewrite .[z in _ = val z] eta_prod;
 ///  rewrite left norm_correct (r ₁) (r ₂) ⊤ᵢ;
-///  reflexivity    
+///  reflexivity
 /// };
 /// ```
 fn translate_arith_poly_norm(
@@ -602,4 +603,52 @@ fn translate_bool_or_flatten() -> Vec<ProofStep> {
         ])),
         ProofStep::Reflexivity,
     ]
+}
+
+/// ```text
+///  (define-rule* bool-implies-or-distrib
+///  ((y1 Bool) (y2 Bool) (ys Bool :list) (z Bool))
+///      (=> (or y1 y2 ys) z)
+///      (=> (or y2 ys) z)
+///      (and (=> y1 z) _))
+/// ```
+fn translate_bool_implies_or_distrib(
+    args: &[Rc<AletheTerm>],
+    dag_terms: HashSet<String>,
+) -> Vec<ProofStep> {
+    let mut proof = vec![];
+
+    if dag_terms.len() > 0 {
+        dag_terms
+            .into_iter()
+            .for_each(|s| proof.push(ProofStep::Simplify(vec![s.into()])));
+    }
+
+    let y1: Term = args[0].clone().into();
+    let y2: Term = args[1].clone().into();
+    let ys = unwrap_match!(*args[2], AletheTerm::Op(Operator::RareList, ref l) => l);
+
+    if ys.is_empty() {
+        // argument `x` of and_identity_l lemma should be inferred by Lambdapi
+        proof.push(ProofStep::Rewrite(
+            false,
+            None,
+            "bool_implies_or_distrib".into(),
+            vec![y1, y2],
+            SubProofs(None),
+        ));
+    } else {
+        let ys_term: Term = Term::from(AletheTerm::Op(Operator::RareList, ys.to_vec()));
+        proof.push(ProofStep::Rewrite(
+            false,
+            None,
+            "bool_implies_or_distrib_rec".into(),
+            vec![y1, y2, ys_term],
+            SubProofs(None),
+        ));
+    }
+
+    proof.push(ProofStep::Reflexivity);
+
+    proof
 }

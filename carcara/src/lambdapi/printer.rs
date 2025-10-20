@@ -159,7 +159,7 @@ impl PrettyPrint for Term {
             Term::Function(terms) => {
                 RcDoc::intersperse(terms.iter().map(|term| term.to_doc()), arrow().spaces())
             }
-            Term::Nat(n) => RcDoc::text(format!("Stdlib.Nat._{}", n)), //NOTE: Lambdapi builtin of Nat conflict with Int
+            Term::Nat(n) => RcDoc::text(format!("(to_nat {})", n)), //FIXME: Lambdapi builtin of Nat conflict with Int
             Term::Int(i) => {
                 if i.is_negative() {
                     RcDoc::text(format!("(— {})", i.clone().abs())) //FIXME: Carcara should use Operator::Minus insteand of Int with a negative value
@@ -574,7 +574,12 @@ impl PrettyPrintAx for Command {
                 .semicolon(),
             Command::Symbol(modifier, name, params, r#text, ..) => modifier
                 .as_ref()
-                .map(|m| m.to_doc().append(space()))
+                .map(|m|
+                    match m {
+                        Modifier::Constant => m.to_doc().append(space()),
+                        Modifier::Opaque => RcDoc::nil(),
+                    },
+                )
                 .unwrap_or(RcDoc::nil())
                 .append(symbol())
                 .append(space())

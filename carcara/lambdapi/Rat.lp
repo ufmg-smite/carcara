@@ -36,11 +36,11 @@ coerce_rule coerce ℤ ℚ $x ↪ inj_z $x;
 compute frac 152 12;
 
 rule _ / 0 ↪ 0 / 1;
-rule 0 / Zpos (I _) ↪ 0 / Zpos H
-with 0 / Zpos (O _) ↪ 0 / Zpos H
-with 0 / Zneg (I _) ↪ 0 / Zpos H
-with 0 / Zneg (O _) ↪ 0 / Zpos H
-with 0 / Zneg H ↪ 0 / Zpos H;
+rule 0 / Zpos (I _) ↪ 0 / 1
+with 0 / Zpos (O _) ↪ 0 / 1
+with 0 / Zneg (I _) ↪ 0 / 1
+with 0 / Zneg (O _) ↪ 0 / 1
+with 0 / Zneg H ↪ 0 / 1;
 
 rule (Zneg $x) / (Zneg $y) ↪ Zpos $x / Zpos $y;
 rule (Zpos $x) / (Zneg $y) ↪ Zneg $x / Zpos $y;
@@ -296,7 +296,16 @@ admitted;
 
 opaque symbol ᵣ+_neutral_div_l x : π ((0 / 1 ᵣ+ x) = x) ≔
 begin
-admitted;
+    refine ind_Rat (λ u, (((0 / _1) ᵣ+ u) = u)) _;
+    assume x y;
+    simplify ᵣ+;
+    change π (frac ((0 * (sign y * Z_red_Stein y x)) + ((sign y * Z_red_Stein x y) * _1)) (_1 * (sign y * Z_red_Stein y x)) = frac x y);
+    rewrite *_neutral;
+    rewrite *_neutral_l;
+    rewrite *_cancel_l;
+    simplify +;
+    admit
+end;
 
 opaque symbol ᵣ+_neutral_div_r x : π ((x ᵣ+ 0 / 1) = x) ≔
 begin

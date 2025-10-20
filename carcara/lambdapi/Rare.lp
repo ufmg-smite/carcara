@@ -428,3 +428,40 @@ apply ∧ᵢ
     {  refine  (∧ₑ₁ (≤_≥ t s)) (∧ₑ₁ H1); }
 }
 end;
+
+//  (define-rule* bool-implies-or-distrib
+//  ((y1 Bool) (y2 Bool) (ys Bool :list) (z Bool))
+//      (=> (or y1 y2 ys) z)
+//      (=> (or y2 ys) z)
+//      (and (=> y1 z) _))
+// Version without list of disjuncts `ys`
+opaque symbol bool_implies_or_distrib (y1 y2 z: τ o) : π (((y1 ∨ y2) ⇒ z) = ((y1 ⇒ z) ∧ (y2 ⇒ z))) ≔
+begin
+    assume y1 y2 z;
+    apply prop_ext;
+    apply ∧ᵢ
+    {
+        assume H;
+        apply ∧ᵢ
+        { assume H1; refine H (∨ᵢ₁ H1) }
+        { assume H2; refine H (∨ᵢ₂ H2) }
+    }
+    {
+        assume H H1;
+        apply ∨ₑ H1
+        { assume H2; refine (∧ₑ₁ H) H2 }
+        { assume Hy; refine (∧ₑ₂ H) Hy }
+    }
+end;
+
+//  (define-rule* bool-implies-or-distrib
+//  ((y1 Bool) (y2 Bool) (ys Bool :list) (z Bool))
+//      (=> (or y1 y2 ys) z)
+//      (=> (or y2 ys) z)
+//      (and (=> y1 z) _))
+// Version with list of disjuncts `ys`
+opaque symbol bool_implies_or_distrib_rec (y1 y2 ys z: τ o) : π (((y1 ∨ y2 ∨ ys) ⇒ z) = ((y1 ⇒ z) ∧ (y2 ∨ ys ⇒ z))) ≔
+begin
+    assume y1 y2 ys z;
+    refine bool_implies_or_distrib y1 (y2 ∨ ys) z;
+end;

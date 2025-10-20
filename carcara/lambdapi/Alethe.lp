@@ -14,9 +14,6 @@ private symbol e: Prop;
 
 symbol Bool ≔ o;
 
-// Index symbol for having a total equality function
-injective symbol 𝑰 [a]: ℕ → τ a;
-
 opaque symbol neg_⊥ : π (¬ ⊥) ≔ begin refine (λ x, x) end;
 
 // # Clause
@@ -1268,7 +1265,6 @@ with Arity $a $b ($n +1) ↪ $a ⤳ (Arity $a $b $n);
 // Symbol = has been declared constant, it cannot be used as the head of a rewrite rule LHS.
 // So we create our own eq symbol.
 
-// symbol 𝑰 [a]: ℕ → τ a;
 
 sequential symbol eq : Prop → Prop → 𝔹;
 rule eq $x $x ↪ true
@@ -2130,6 +2126,7 @@ end;
 opaque symbol literal_ext (l: 𝕃 o) (l0 : τ o) (n: τ nat) : 
     π (literal l n) → π (literal (l0 ⸬ l) (n +1)) ≔
 begin
+    simplify;
     assume l l0 n h1;
     refine h1
 end;
@@ -2145,21 +2142,22 @@ begin
         refine ∧ₑ₂ h2}
 end; 
 
-opaque symbol select (id : τ nat) (cnf: 𝕃 o) : 
-    π (id ∈ₙ (indexes cnf)) → π (conj cnf) → π (literal cnf id) ≔
+opaque symbol select (k : τ nat) (cnf: 𝕃 o) : 
+    π (k ∈ₙ (indexes cnf)) → π (conj cnf) → π (literal cnf k) ≔
 begin
     induction 
         {induction
             {assume h0 h1; refine h0}
             {assume x cnf h0 h1 h2; 
             refine conj_head x cnf h2}}
-        {assume id h0;
+        {assume k h0;
         induction
             {assume b; refine ⊥ₑ b}
-            {assume x cnf h1 h2 h3;
-            have ConjImpCl : π (conj cnf ⇒ literal cnf id)
-                {refine h0 cnf (indexes_decrement id x cnf h2)};
-            refine literal_ext cnf x id (ConjImpCl (conj_tail x cnf h3))}}
+            {assume x xs ih h2 h3;
+            have ConjImpCl : π (conj xs ⇒ literal xs k)
+                {refine h0 xs (indexes_decrement k x xs h2)};
+            simplify;
+            refine literal_ext xs x k (ConjImpCl (conj_tail x xs h3))}}
 end;
 
 // Rule and:
@@ -2567,9 +2565,10 @@ begin
       reflexivity
     }
    {
-      assume j ih2 h;
+      assume j ih2 h; print <;
       simplify;
       rewrite left ih j (case_l t l (j +1) h);
+      remove ih2;
       rewrite ∨_assoc;
       reflexivity
     }

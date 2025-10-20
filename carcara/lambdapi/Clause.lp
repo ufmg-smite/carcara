@@ -389,6 +389,13 @@ begin
   reflexivity
 end;
 
+opaque symbol contraction_correct_r l g : π (den l g = den l (contraction g)) ≔
+begin
+  assume l g;
+  symmetry;
+  refine contraction_correct l g
+end;
+
 private symbol example a b : π̇ (a ⟇ b ⟇ b ⟇ ▩) → π̇ (a ⟇ b ⟇ ▩) ≔
 begin
   assume a b i;
