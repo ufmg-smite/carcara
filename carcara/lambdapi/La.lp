@@ -1,4 +1,4 @@
-require open Stdlib.List Stdlib.propExt;
+require open Stdlib.List Stdlib.PropExt;
 require open lambdapi.Rat;
 
 inductive G: TYPE ≔

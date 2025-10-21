@@ -1,6 +1,6 @@
 require Stdlib.Nat as Nat;
 open Stdlib.Nat;
-require open Stdlib.Z Stdlib.List Stdlib.propExt;
+require open Stdlib.Z Stdlib.List Stdlib.PropExt;
 
 // type for arithmetic expressions
 
@@ -488,7 +488,7 @@ symbol ≐_decides_ngeq [x y] : π (x ≐ y ≠ Gt ∧ x ≐ y ≠ Eq ⇒ x ≱ 
 begin
 admitted;
 
-require open Stdlib.propExt;
+require open Stdlib.PropExt;
 
 symbol Zle_not_gt n m:  π ((n ≤ m) = ¬ (n > m)) ≔
 begin
