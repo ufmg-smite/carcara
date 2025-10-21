@@ -1,7 +1,7 @@
 require open Stdlib.HOL;
 require open Stdlib.Bool;
 require open Stdlib.Nat;
-require open Stdlib.propExt;
+require open Stdlib.PropExt;
 
 notation ¬ prefix 35;
 

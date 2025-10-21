@@ -541,15 +541,11 @@ symbol Zmult_gt_compat c a b : π (c > 0) → π (a > b) → π (c * a > c * b) 
 
 symbol Zmult_ge_compat c a b : π (c > 0) → π (a ≥ b) → π (c * a ≥ c * b);
 
-// symbol Zgt_le_succ_r a b: π (a > b) → π (a ≥ b + 1);
-
-// symbol Zinv_lt a b: π (a < b) → π (— a > — b);
-
-// symbol Zsum_geq_s a b c d : π (a ≥ b) → π (c ≥ d) → π (a + c ≥ b + d);
-
-// symbol Z_diff_geq_Z0 a b: π (a ≥ b) → π (a - b ≥ 0);
-
-// symbol Z_diff_gt_Z0 a b: π (a > b) → π (a - b > 0);
+symbol Zsum_geq_s a b c d : π (a ≥ b) → π (c ≥ d) → π (a + c ≥ b + d) ≔
+begin
+  assume a b c d hab hcd;
+  admit
+end;
 
 symbol Zgt_le_succ_r_eq a b: π ((a > b) = (a ≥ b + 1)) ≔
 begin
