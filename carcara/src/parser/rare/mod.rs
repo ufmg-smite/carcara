@@ -122,7 +122,7 @@ pub fn parse_rule<R: BufRead>(parser: &mut Parser<R>) -> CarcaraResult<RuleDefin
         body
     });
 
-    if Option::is_none(&body.conclusion) {
+    if body.conclusion.is_none() {
         return Err(Error::Parser(
             ParserError::UndefinedRareConclusion(name),
             parser.current_position,
