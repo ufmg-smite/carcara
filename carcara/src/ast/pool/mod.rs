@@ -414,7 +414,7 @@ impl PrimitivePool {
                 let mut vars = self.free_vars_with_priorities(inner, prior_pools);
                 for bound_var in bindings {
                     let term = self.add_with_priorities(bound_var.clone().into(), prior_pools);
-                    vars.remove(&term);
+                    vars.swap_remove(&term);
                 }
                 vars
             }
@@ -423,7 +423,7 @@ impl PrimitivePool {
                 for (var, value) in bindings {
                     let sort = self.sort_with_priorities(value, prior_pools);
                     let term = self.add_with_priorities((var.clone(), sort).into(), prior_pools);
-                    vars.remove(&term);
+                    vars.swap_remove(&term);
                 }
                 vars
             }

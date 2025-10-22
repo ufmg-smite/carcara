@@ -17,7 +17,7 @@ pub fn is_symbol_character(ch: char) -> bool {
 
         // While `'` is not a valid symbol character according to the SMT-LIB and Alethe specs, it
         // is used by Carcara to differentiate variables renamed by capture-avoidance in
-        // substitutions. To accomodate for that, we consider it a valid character when parsing.
+        // substitutions. To accommodate for that, we consider it a valid character when parsing.
         '\'' => true,
         _ => false,
     }
@@ -179,8 +179,8 @@ pub struct Range<T = usize>(Option<T>, Option<T>);
 
 impl<T: std::cmp::PartialOrd> Range<T> {
     pub fn contains(&self, n: T) -> bool {
-        self.0.as_ref().map_or(true, |bound| n >= *bound)
-            && self.1.as_ref().map_or(true, |bound| n <= *bound)
+        self.0.as_ref().is_none_or(|bound| n >= *bound)
+            && self.1.as_ref().is_none_or(|bound| n <= *bound)
     }
 }
 
@@ -248,4 +248,8 @@ impl TypeName for Binder {
 
 impl TypeName for BindingList {
     const NAME: &'static str = "binding list";
+}
+
+impl TypeName for Integer {
+    const NAME: &'static str = "integer";
 }

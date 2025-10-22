@@ -121,6 +121,10 @@ pub enum ParserError {
     #[error("subproof '{0}' was not closed")]
     UnclosedSubproof(String),
 
+    /// The parser encountered an `assume` after a `step` inside of a subproof.
+    #[error("`assume` command '{0}' appears after step inside subproof")]
+    AssumeAfterStepInSubproof(String),
+
     /// The parser encountered an unknown indexed operator.
     #[error("not a valid indexed operator: '{0}'")]
     InvalidIndexedOp(String),
@@ -183,7 +187,7 @@ where
 #[derive(Debug, Error)]
 pub struct SortError {
     /// The possible sorts that were expected.
-    pub expected: Vec<Sort>,
+    pub expected: Box<[Sort]>,
 
     /// The sort we got.
     pub got: Sort,
@@ -191,7 +195,7 @@ pub struct SortError {
 
 impl fmt::Display for SortError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.expected.as_slice() {
+        match &*self.expected {
             [] => unreachable!(),
             [p] => write!(f, "expected '{}', got '{}'", p, self.got),
             [first, middle @ .., last] => {
@@ -212,7 +216,7 @@ impl SortError {
             Ok(())
         } else {
             Err(Self {
-                expected: vec![expected.clone()],
+                expected: vec![expected.clone()].into_boxed_slice(),
                 got: got.clone(),
             })
         }
@@ -232,7 +236,7 @@ impl SortError {
             Ok(())
         } else {
             Err(Self {
-                expected: possibilities.to_vec(),
+                expected: possibilities.to_vec().into_boxed_slice(),
                 got: got.clone(),
             })
         }
@@ -244,7 +248,7 @@ impl SortError {
         value: Option<&Sort>,
         got: &Sort,
     ) -> Result<(), Self> {
-        let any = Sort::Atom("?".to_owned(), Vec::new());
+        let any = Sort::Atom("?".into(), Box::new([]));
 
         if let Sort::ParamSort(v, head) = got {
             if let Some(Sort::Var(name)) = head.as_sort() {
@@ -252,7 +256,7 @@ impl SortError {
                     if v.len() != 2 {
                         let any = pool.add(Term::Sort(any.clone()));
                         return Err(Self {
-                            expected: vec![Sort::Array(any.clone(), any)],
+                            expected: vec![Sort::Array(any.clone(), any)].into_boxed_slice(),
                             got: got.clone(),
                         });
                     }
@@ -272,7 +276,7 @@ impl SortError {
         let expected = {
             let key = pool.add(Term::Sort(key.cloned().unwrap_or_else(|| any.clone())));
             let value = pool.add(Term::Sort(value.cloned().unwrap_or_else(|| any.clone())));
-            vec![Sort::Array(key, value)]
+            vec![Sort::Array(key, value)].into_boxed_slice()
         };
         let Sort::Array(got_key, got_value) = got else {
             return Err(Self { expected, got: got.clone() });

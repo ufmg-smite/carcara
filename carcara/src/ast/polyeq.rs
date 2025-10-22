@@ -2,10 +2,10 @@
 //! contains two definitions of equality that differ from `PartialEq`:
 //!
 //! - `polyeq` considers `=` terms that are reflections of each other as equal, meaning the terms
-//!     `(= a b)` and `(= b a)` are considered equal by this method.
+//!   `(= a b)` and `(= b a)` are considered equal by this method.
 //!
 //! - `alpha_equiv` compares terms by alpha-equivalence, meaning it implements equality of terms
-//!     modulo renaming of bound variables.
+//!   modulo renaming of bound variables.
 
 use rug::Rational;
 
@@ -70,11 +70,11 @@ pub fn alpha_equiv(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> bool {
 /// Configuration for a `Polyeq`.
 ///
 /// - If `is_mod_reordering` is `true`, the comparator will compare terms modulo reordering of
-///     equalities.
+///   equalities.
 //  - If `is_alpha_equivalence` is `true`, the comparator will compare terms for alpha
-///     equivalence.
+///   equivalence.
 /// - If `is_mod_nary` is `true`, the comparator will compare terms modulo the expansion of
-///     n-ary operators.
+///   n-ary operators.
 /// - If `is_mod_string_concat` is `true`, the comparator will compare terms modulo the collection of
 ///
 /// String constants arguments in the String concatenation.
@@ -644,7 +644,9 @@ impl PolyeqComparable for Sort {
     fn eq(comp: &mut Polyeq, a: &Self, b: &Self) -> bool {
         match (a, b) {
             (Sort::Function(sorts_a), Sort::Function(sorts_b)) => comp.eq(sorts_a, sorts_b),
-            (Sort::Atom(a, sorts_a), Sort::Atom(b, sorts_b)) => a == b && comp.eq(sorts_a, sorts_b),
+            (Sort::Atom(a, sorts_a), Sort::Atom(b, sorts_b)) => {
+                a == b && comp.eq(sorts_a.as_ref(), sorts_b.as_ref())
+            }
             (Sort::Bool, Sort::Bool)
             | (Sort::Int, Sort::Int)
             | (Sort::Real, Sort::Real)

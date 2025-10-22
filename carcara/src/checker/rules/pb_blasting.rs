@@ -1,7 +1,7 @@
 use super::{assert_eq, assert_num_args, RuleArgs, RuleResult};
 use crate::{
     ast::{Binder, Rc, Sort, Term, TermPool},
-    checker::error::CheckerError,
+    checker::{error::CheckerError, rules::cutting_planes::split_summation},
 };
 use rug::Integer;
 
@@ -16,15 +16,6 @@ fn get_bit_width(x: &Rc<Term>, pool: &mut dyn TermPool) -> Result<usize, Checker
     n.to_usize().ok_or(CheckerError::Explanation(format!(
         "Failed to convert value {n} to usize"
     )))
-}
-
-// Helper to unwrap a summation list
-fn get_pbsum(pbsum: &Rc<Term>) -> &[Rc<Term>] {
-    if let Some(pbsum) = match_term!((+ ...) = pbsum) {
-        pbsum
-    } else {
-        std::slice::from_ref(pbsum)
-    }
 }
 
 // Helper to check that a summation has the expected shape
@@ -158,8 +149,8 @@ pub fn pbblast_bveq(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
         match_term_err!((= (= x y) (= (- sum_x sum_y) 0)) = &conclusion[0])?;
 
     // Get the summation lists
-    let sum_x = get_pbsum(sum_x);
-    let sum_y = get_pbsum(sum_y);
+    let sum_x = split_summation(sum_x);
+    let sum_y = split_summation(sum_y);
 
     // Check that the summations have the correct structure.
     // (For equality the order is: sum_x for x and sum_y for y.)
@@ -174,8 +165,8 @@ pub fn pbblast_bvult(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         match_term_err!((= (bvult x y) (>= (- sum_y sum_x) 1)) = &conclusion[0])?;
 
     // Get the summation lists
-    let sum_x = get_pbsum(sum_x);
-    let sum_y = get_pbsum(sum_y);
+    let sum_x = split_summation(sum_x);
+    let sum_y = split_summation(sum_y);
 
     // For bvult the summations occur in reverse: the "left" sum comes from y and the "right" from x.
     check_pbblast_constraint(pool, y, x, sum_y, sum_x)
@@ -190,8 +181,8 @@ pub fn pbblast_bvugt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         match_term_err!((= (bvugt x y) (>= (- sum_x sum_y) 1)) = &conclusion[0])?;
 
     // Get the summation lists
-    let sum_x = get_pbsum(sum_x);
-    let sum_y = get_pbsum(sum_y);
+    let sum_x = split_summation(sum_x);
+    let sum_y = split_summation(sum_y);
 
     // For bvugt the summations appear in the same order as in equality.
     check_pbblast_constraint(pool, x, y, sum_x, sum_y)
@@ -206,8 +197,8 @@ pub fn pbblast_bvuge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         match_term_err!((= (bvuge x y) (>= (- sum_x sum_y) 0)) = &conclusion[0])?;
 
     // Get the summation lists
-    let sum_x = get_pbsum(sum_x);
-    let sum_y = get_pbsum(sum_y);
+    let sum_x = split_summation(sum_x);
+    let sum_y = split_summation(sum_y);
 
     check_pbblast_constraint(pool, x, y, sum_x, sum_y)
 }
@@ -221,8 +212,8 @@ pub fn pbblast_bvule(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         match_term_err!((= (bvule x y) (>= (- sum_y sum_x) 0)) = &conclusion[0])?;
 
     // Get the summation lists
-    let sum_x = get_pbsum(sum_x);
-    let sum_y = get_pbsum(sum_y);
+    let sum_x = split_summation(sum_x);
+    let sum_y = split_summation(sum_y);
 
     check_pbblast_constraint(pool, x, y, sum_x, sum_y)
 }
@@ -279,8 +270,8 @@ pub fn pbblast_bvslt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     let ((x, y), (((sum_y, sign_y), (sign_x, sum_x)), _)) = match_term_err!((= (bvslt x y) (>= (+ (- sum_y sign_y) (- sign_x sum_x)) 1)) = &conclusion[0])?;
 
     // Get the summation lists
-    let sum_x = get_pbsum(sum_x);
-    let sum_y = get_pbsum(sum_y);
+    let sum_x = split_summation(sum_x);
+    let sum_y = split_summation(sum_y);
 
     let n = get_bit_width(x, pool)?;
 
@@ -300,8 +291,8 @@ pub fn pbblast_bvsgt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     let ((x, y), (((sum_x, sign_x), (sign_y, sum_y)), _)) = match_term_err!((= (bvsgt x y) (>= (+ (- sum_x sign_x) (- sign_y sum_y)) 1)) = &conclusion[0])?;
 
     // Get the summation lists
-    let sum_x = get_pbsum(sum_x);
-    let sum_y = get_pbsum(sum_y);
+    let sum_x = split_summation(sum_x);
+    let sum_y = split_summation(sum_y);
 
     // Get bit width of `x`
     let n = get_bit_width(x, pool)?;
@@ -321,8 +312,8 @@ pub fn pbblast_bvsge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     let ((x, y), (((sum_x, sign_x), (sign_y, sum_y)), _)) = match_term_err!((= (bvsge x y) (>= (+ (- sum_x sign_x) (- sign_y sum_y)) 0)) = &conclusion[0])?;
 
     // Get the summation lists
-    let sum_x = get_pbsum(sum_x);
-    let sum_y = get_pbsum(sum_y);
+    let sum_x = split_summation(sum_x);
+    let sum_y = split_summation(sum_y);
 
     // Get bit width of `x`
     let n = get_bit_width(x, pool)?;
@@ -342,8 +333,8 @@ pub fn pbblast_bvsle(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     let ((x, y), (((sum_y, sign_y), (sign_x, sum_x)), _)) = match_term_err!((= (bvsle x y) (>= (+ (- sum_y sign_y) (- sign_x sum_x)) 0)) = &conclusion[0])?;
 
     // Get the summation lists
-    let sum_x = get_pbsum(sum_x);
-    let sum_y = get_pbsum(sum_y);
+    let sum_x = split_summation(sum_x);
+    let sum_y = split_summation(sum_y);
 
     // Get bit width of `x`
     let n = get_bit_width(x, pool)?;
@@ -576,8 +567,54 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 }
 
 /// This rule extracts assertions of the ith bit of an application of
+/// `pbblast_bvxor`, given its arguments were x and y, we conclude
+///  `(>= (+ x y) r) (>= (+ r x) y) (>= (+ r y) x) (>= 2 (+ r x y))`
+/// In which ri is the choice element from the pseudo boolean bit blasting
+/// of the bvxor rule
+pub fn pbblast_bvxor_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_num_args(args, 2)?;
+    let x = &args[0];
+    let y = &args[1];
+    let (c1, c2, c3, c4) = match_term_err!((and c1 c2 c3 c4) = &conclusion[0])?;
+
+    // Build the expected choice term
+    let the_r = build_term!(pool,(choice (("z" Int)) (and
+         (>= (+ {x.clone()} {y.clone()}) (let z Int))
+         (>= (+ (let z Int) {x.clone()}) {y.clone()})
+         (>= (+ (let z Int) {y.clone()}) {x.clone()})
+         (>= 2 (+ (let z Int) {x.clone()} {y.clone()}))
+    )));
+
+    // c1 : (>= (+ x y) r)
+    let ((xc, yc), rc) = match_term_err!((>= (+ x y) r) = c1)?;
+    assert_eq(xc, x)?;
+    assert_eq(yc, y)?;
+    assert_eq(rc, &the_r)?;
+
+    // c2 : (>= (+ r x) y)
+    let ((rc, xc), yc) = match_term_err!((>= (+ r x) y) = c2)?;
+    assert_eq(xc, x)?;
+    assert_eq(yc, y)?;
+    assert_eq(rc, &the_r)?;
+
+    // c3 : (>= (+ r y) x)
+    let ((rc, yc), xc) = match_term_err!((>= (+ r y) x) = c3)?;
+    assert_eq(xc, x)?;
+    assert_eq(yc, y)?;
+    assert_eq(rc, &the_r)?;
+
+    // c4 : (>= 2 (+ r x y))
+    let (_, (rc, xc, yc)) = match_term_err!((>= 2 (+ r x y)) = c4)?;
+    assert_eq(xc, x)?;
+    assert_eq(yc, y)?;
+    assert_eq(rc, &the_r)?;
+
+    Ok(())
+}
+
+/// This rule extracts assertions of the ith bit of an application of
 /// `pbblast_bvand`, given its arguments were x and y, we conclude
-///  `(>= x r) (>= y r) (>= (+ r 1) (+ x y)))`
+///  `(>= x r) (>= y r) (>= (+ r 1) (+ x y))`
 /// In which ri is the choice element from the pseudo boolean bit blasting
 /// of the bvand rule
 pub fn pbblast_bvand_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) -> RuleResult {

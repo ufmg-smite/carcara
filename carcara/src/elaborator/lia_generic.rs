@@ -191,7 +191,7 @@ fn insert_solver_proof(
     // proof. No other assumptions must exist in the proof. If there
     // are less assumptions than elements of conclusion, then some of
     // the literals were not needed for the proof. In this case we
-    // create new assumptinos to account for them. Regardless, we
+    // create new assumptions to account for them. Regardless, we
     // rebuild the subproof_assumptions vector to guarantee that it is
     // the same order of the literals in the conclusion.
     let assume_term_to_node: HashMap<&Rc<Term>, Rc<ProofNode>> = subproof_assumptions

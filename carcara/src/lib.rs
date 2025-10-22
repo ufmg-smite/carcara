@@ -41,6 +41,7 @@ mod drup;
 pub mod elaborator;
 pub mod parser;
 mod resolution;
+pub mod slice;
 mod utils;
 
 use crate::benchmarking::{CollectResults, OnlineBenchmarkResults, RunMeasurement};
@@ -72,8 +73,8 @@ pub enum Error {
     #[error("checking failed on step '{step}' with rule '{rule}': {inner}")]
     Checker {
         inner: CheckerError,
-        rule: String,
-        step: String,
+        rule: Box<str>,
+        step: Box<str>,
     },
 
     // While this is a kind of checking error, it does not happen in a specific step like all other

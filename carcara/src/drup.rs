@@ -15,11 +15,12 @@ pub enum Implied<T, X> {
     NotUnsat(),
 }
 // A RUP Addition is a vector of the clause plus the unit clause and the hash of the clause
-pub type RupAdition = Vec<(IndexSet<Literal>, Option<Literal>, u64)>;
+pub type RupAddition = Vec<(IndexSet<Literal>, Option<Literal>, u64)>;
 
-//This enum is used to bookkeeping the action perfomed by a reverse unit propagation
+//This enum is used to bookkeeping the action performed by a reverse unit propagation
+#[allow(dead_code)]
 pub enum DRupProofAction {
-    RupStory(IndexSet<Literal>, RupAdition),
+    RupStory(IndexSet<Literal>, RupAddition),
     Delete(Rc<Term>),
 }
 
@@ -155,8 +156,8 @@ fn rup(
     pool: &mut dyn TermPool,
     drup_clauses: &HashMap<u64, IndexSet<Literal>>,
     goal: &[Rc<Term>],
-) -> Option<RupAdition> {
-    let mut unit_story: RupAdition = vec![];
+) -> Option<RupAddition> {
+    let mut unit_story: RupAddition = vec![];
 
     let mut clauses = vec![];
 
@@ -288,7 +289,7 @@ pub fn check_drat(
     pool: &mut dyn TermPool,
     drup_clauses: &HashMap<u64, IndexSet<Literal>>,
     goal: &[Rc<Term>],
-) -> Option<RupAdition> {
+) -> Option<RupAddition> {
     let pivot = &goal[0];
     let mut unit_history = vec![];
     for clause in drup_clauses.values() {
@@ -297,7 +298,7 @@ pub fn check_drat(
 
         if clause.contains(&negated_pivot) {
             let mut resolvent = clause.clone();
-            resolvent.remove(&negated_pivot);
+            resolvent.swap_remove(&negated_pivot);
             let mut resolvent = resolvent
                 .iter()
                 .map(|(p, literal)| {

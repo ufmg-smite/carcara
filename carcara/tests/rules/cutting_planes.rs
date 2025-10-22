@@ -279,3 +279,186 @@ fn cp_saturation() {
 
     }
 }
+
+#[test]
+fn cp_literal() {
+    test_cases! {
+        definitions = "
+            (declare-fun l () Int)
+            (define-fun neg_l () Int (- 1 l))
+        ",
+        "cp_literal correctly applied" {
+            r#"(step t1 (cl (>= l 0)) :rule cp_literal :args (l))"#: true,
+            r#"(step t1 (cl (>= (* 1 l) 0)) :rule cp_literal :args (l))"#: true,
+            r#"(step t1 (cl (>= neg_l 0)) :rule cp_literal :args (neg_l))"#: true,
+            r#"(step t1 (cl (>= (* 1 neg_l) 0)) :rule cp_literal :args (neg_l))"#: true,
+        }
+        "cp_literal invalid (coefficients)" {
+            r#"(step t1 (cl (>= (* 1 l) 0)) :rule cp_literal :args ((* 2 l)))"#: false,
+            r#"(step t1 (cl (>= (* 2 l) 0)) :rule cp_literal :args ((* 2 l)))"#: false,
+
+            r#"(step t1 (cl (>= (* 1 neg_l) 0)) :rule cp_literal :args ((* 2 neg_l)))"#: false,
+            r#"(step t1 (cl (>= (* 2 neg_l) 0)) :rule cp_literal :args ((* 2 neg_l)))"#: false,
+
+            // ! THIS SHOULD BE AVOIDED WHEN l is a PSEUDO BOOLEAN
+            r#"(step t1 (cl (>= (* 1 (* 2 l)) 0)) :rule cp_literal :args ((* 2 l)))"#: true,
+            r#"(step t1 (cl (>= (* 1 (* 2 neg_l)) 0)) :rule cp_literal :args ((* 2 neg_l)))"#: true,
+        }
+        "cp_literal invalid (number of args)" {
+            r#"(step t1 (cl (>= (* 1 l) 0)) :rule cp_literal)"#: false,
+            r#"(step t1 (cl (>= (* 1 l) 0)) :rule cp_literal :args (l neg_l))"#: false,
+            r#"(step t1 (cl (>= (* 1 neg_l) 0)) :rule cp_literal :args (neg_l l))"#: false,
+        }
+    }
+}
+
+#[test]
+fn cp_normalize() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () Int)
+            (declare-fun b () Int)
+            (declare-fun c () Int)
+            (declare-fun d () Int)
+            (declare-fun r0 () Int)
+            (declare-fun r1 () Int)
+            (declare-fun z0 () Int)
+            (declare-fun z1 () Int)
+        ",
+        "Term is already normalized" {
+            r#"(step t1 (cl (= (>= a 0) (>= a 0))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (- 1 a) 0) (>= (- 1 a) 0))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (* 2 a) 0) (>= (* 2 a) 0))) :rule cp_normalize)"#: true,
+
+            r#"(step t1 (cl (= (>= (+ a b) 0) (>= (+ a b) 0))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ (- 1 a) b) 0) (>= (+ (- 1 a) b) 0))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ (* 2 a) (* 3 b)) 0) (>= (+ (* 2 a) (* 3 b)) 0))) :rule cp_normalize)"#: true,
+        }
+        "Negative coefficient is pushed" {
+            r#"(step t1 (cl (= (>= (* -1 a) 0) (>= (* 1 (- 1 a)) 1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (* -1 a) 0) (>= (- 1 a) 1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (* -5 a) 0) (>= (* 5 (- 1 a)) 5))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ (* -1 a) (* -3 b)) 0) (>= (+ (- 1 a) (* 3 (- 1 b))) 4))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ (* -5 a) b) 0) (>= (+ (* 5 (- 1 a)) b) 5))) :rule cp_normalize)"#: true,
+        }
+        "Other relations are eliminated" {
+            r#"(step t1 (cl (= (<= a 0) (>= (- 1 a) 1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (<= (- 1 a) 0) (>= a 1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (<= (* -1 a) 0) (>= a 0))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (> a 0) (>= a 1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (< a 0) (>= (- 1 a) 2))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (= a 0) (and (>= a 0) (>= (- 1 a) 1)))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (= (* 1 a) 0) (and (>= a 0) (>= (- 1 a) 1)))) :rule cp_normalize)"#: true,
+        }
+        "Constants are moved to the right" {
+            r#"(step t1 (cl (= (>= (+ a 1) 0) (>= a -1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ a b 1) 0) (>= (+ a b) -1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ a 3 b 1) 0) (>= (+ a b) -4))) :rule cp_normalize)"#: true,
+        }
+        "Variables are moved to the left" {
+            r#"(step t1 (cl (= (>= a b) (>= (+ a (- 1 b)) 1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= a (+ b c)) (>= (+ a (- 1 b) (- 1 c)) 2))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (+ a 2) (+ b c)) (>= (+ a (- 1 b) (- 1 c)) 0))) :rule cp_normalize)"#: true,
+        }
+        "Invalid relations" {
+            r#"(step t1 (cl (= (and true true) (>= a 0))) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (not (= (>= a 1) (>= a 0)))) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (not (= (+ a 1) (+ 1 a)))) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (= (<= (* -1 a 1) 0) (>= a 0))) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (= (>= (+ a 1) 0) (>= a 0))) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (= (= a 0 0) (and (>= a 0) (>= (* -1 a) 1)))) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (= true (>= a 0))) :rule cp_normalize)"#: false,
+        }
+        "Instance of bigger example"  {
+            r#"(step t1 (cl (=
+                        (= (-       ;; This syntax is not a flat summation list
+                             (+ (* 1 r0) (* 2 r1))
+                             (+ (* 1 z0) (* 2 z1))
+                           ) 0)
+                        (and
+                            (>= (+
+                                    (* 1 r0)
+                                    (* 2 r1)
+                                    (* 1 (- 1 z0))
+                                    (* 2 (- 1 z1))
+                                ) 3)
+                            (>= (+
+                                    (* 1 (- 1 r0))
+                                    (* 2 (- 1 r1))
+                                    (* 1 z0)
+                                    (* 2 z1)
+                                ) 3)
+                        )
+                    )) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (=
+                        (= (-       
+                             (+ (* 1 r0) (* 2 r1))
+                             (+ (* 4 z0) (* 2 z1))
+                           ) 0)
+                        (and
+                            (>= (+
+                                    (* 1 r0)
+                                    (* 2 r1)
+                                    (* 4 (- 1 z0))
+                                    (* 2 (- 1 z1))
+                                ) 6)
+                            (>= (+
+                                    (* 1 (- 1 r0))
+                                    (* 2 (- 1 r1))
+                                    (* 4 z0)
+                                    (* 2 z1)
+                                ) 3)
+                        )
+                    )) :rule cp_normalize)"#: true,
+
+        }
+        "Validates variable list length" {
+            r#"(step t1 (cl (=
+                (= (- (+ (* 1 a) (* 2 b)) (+ (* 1 c) (* 2 d))) 0)
+                (and (>= (+ a (* 2 b) (- 1 c) (* 2 (- 1 d))) 3)
+                     (>= (+ (- 1 a) (* 2 (- 1 b)) (* 1 c) (* 2 d)) 3)
+                )
+            )) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (=
+                ; Constants b, c and d were forgotten on RHS                        
+                (= (- (+ (* 1 a) (* 2 b)) (+ (* 1 c) (* 2 d))) 0)
+                (and (>= a 3)
+                     (>= (- 1 a) 3)
+                )
+            )) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (=
+                (= (- (+ (* 1 a) (* 2 b)) (+ (* 1 c) (* 2 d))) 0)
+                ; Constants c and d were forgotten on RHS                        
+                (and (>= (+ a (* 2 b)) 3)
+                     (>= (+ (- 1 a) (* 2 (- 1 b))) 3)
+                )
+            )) :rule cp_normalize)"#: false,
+        }
+        "Unfolds enough constants" {
+            r#"(step t1 (cl (=
+                ;; See how 1 and 2*0 collapse into the constant on RHS of >=
+                (= (- (+ a (* 2 b)) (+ 1 (* 2 0))) 0)
+                (and (>= (+ a (* 2 b)) 1)
+                     (>= (+ (- 1 a) (* 2 (- 1 b))) 2)
+                )
+            )) :rule cp_normalize)"#: true,
+
+            r#"(step t1 (cl (=
+                (= (- (+ (* 1 a) (* 2 b)) (+ (* 1 1) (* 2 0))) 0)
+                ;; Consts must be on RHS --v------------v
+                (and (>= (+ a (* 2 b) (- 1 1) (* 2 (- 1 0))) 3)
+                     (>= (+ (- 1 a) (* 2 (- 1 b)) (* 1 1) (* 2 0)) 3)
+                )
+            )) :rule cp_normalize)"#: false,
+        }
+        "Improper normalized term" {
+            r#"(step t1 (cl (=
+                (= a 0)
+                (and
+                    (>= (+ a (* 1 1)) 0)
+                    (>= (- 1 a) 1)
+                )
+            )) :rule cp_normalize)"#: false,
+        }
+    }
+}

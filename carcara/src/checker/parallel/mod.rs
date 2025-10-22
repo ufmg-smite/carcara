@@ -68,7 +68,7 @@ impl<'c> ParallelProofChecker<'c> {
         proof: &Proof,
         scheduler: &Scheduler,
     ) -> CarcaraResult<bool> {
-        // Used to estimulate threads to abort prematurely (only happens when a
+        // Used to stimulate threads to abort prematurely (only happens when a
         // thread already found out an invalid step)
         let premature_abort = Arc::new(AtomicBool::new(false));
         let context_pool = ContextPool::from_global(&self.pool);
@@ -106,7 +106,7 @@ impl<'c> ParallelProofChecker<'c> {
             let mut err: Result<_, Error> = Ok(());
 
             // Wait until the threads finish and merge the results and statistics
-            threads
+            let _ = threads
                 .into_iter()
                 .map(|t| t.join().unwrap())
                 .try_for_each(|opt| {
@@ -123,7 +123,7 @@ impl<'c> ParallelProofChecker<'c> {
                     }
                 });
 
-            // If an error happend
+            // If an error happened
             err?;
 
             if reached {
@@ -141,7 +141,7 @@ impl<'c> ParallelProofChecker<'c> {
         scheduler: &Scheduler,
         stats: &mut CheckerStatistics<CR>,
     ) -> CarcaraResult<bool> {
-        // Used to estimulate threads to abort prematurely (only happens when a
+        // Used to stimulate threads to abort prematurely (only happens when a
         // thread already found out an invalid step)
         let premature_abort = Arc::new(AtomicBool::new(false));
         let context_pool = ContextPool::from_global(&self.pool);
@@ -221,7 +221,7 @@ impl<'c> ParallelProofChecker<'c> {
                     }
                 });
 
-            // If an error happend
+            // If an error happened
             err?;
 
             if reached {
@@ -280,8 +280,8 @@ impl<'c> ParallelProofChecker<'c> {
                             should_abort.store(true, Ordering::Release);
                             Error::Checker {
                                 inner: e,
-                                rule: step.rule.clone(),
-                                step: step.id.clone(),
+                                rule: step.rule.as_str().into(),
+                                step: step.id.as_str().into(),
                             }
                         })?;
 
@@ -318,7 +318,7 @@ impl<'c> ParallelProofChecker<'c> {
                         return Err(Error::Checker {
                             inner: CheckerError::Assume(term.clone()),
                             rule: "assume".into(),
-                            step: id.clone(),
+                            step: id.as_str().into(),
                         });
                     }
                 }

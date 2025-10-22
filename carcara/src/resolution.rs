@@ -50,7 +50,7 @@ impl<'a> ClauseCollection<'a> for IndexSet<Literal<'a>> {
     }
 
     fn remove_term(&mut self, item: &Literal<'a>) -> bool {
-        self.remove(item)
+        self.swap_remove(item)
     }
 }
 

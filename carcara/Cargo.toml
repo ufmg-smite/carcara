@@ -9,7 +9,7 @@ authors = [
     "Tiago Campos <tiagocampos@mixrank.com>",
 ]
 edition = "2021"
-rust-version = "1.72"
+rust-version = "1.87"
 license = "Apache-2.0"
 
 [dependencies]

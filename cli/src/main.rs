@@ -7,7 +7,7 @@ use carcara::{
     ast::{self, rare_rules::Rules},
     benchmarking::OnlineBenchmarkResults,
     check, check_and_elaborate, check_parallel, checker, elaborator, generate_lia_smt_instances,
-    parser,
+    parser, slice,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -16,7 +16,7 @@ use git_version::git_version;
 use path_args::{get_instances_from_paths, infer_problem_path};
 use std::{
     fs::File,
-    io::{self, BufRead, IsTerminal},
+    io::{self, BufRead, IsTerminal, Write},
     path::Path,
     sync::atomic,
 };
@@ -77,7 +77,7 @@ enum Command {
     /// Checks a series of proof files and records performance statistics.
     Bench(BenchCommandOptions),
 
-    /// Given a step, takes a slice of a proof consisting of all its transitive premises.
+    /// Given a step, takes a slice of a proof consisting of its transitive premises.
     Slice(SliceCommandOptions),
 
     /// Generates the equivalent SMT instance for every `lia_generic` step in a proof.
@@ -139,6 +139,12 @@ struct ParsingOptions {
     /// terms. In the future, this will be the default behaviour.
     #[clap(long)]
     parse_hole_args: bool,
+
+    /// Buffer the entire file in memory before parsing instead of reading line-by-line.
+    /// This can improve performance in network file systems or cluster environments
+    /// at the cost of increased memory usage.
+    #[clap(long)]
+    buffer_entire_file: bool,
 }
 
 impl From<ParsingOptions> for parser::Config {
@@ -391,12 +397,19 @@ struct SliceCommandOptions {
     #[clap(flatten)]
     input: Input,
 
+    /// The names of the sliced problem and proof will be given. If these are not supplied,
+    /// the files will be written to default locations in the working directory.
+    #[clap(long, value_names = &["SLICED_PROBLEM", "SLICED_PROOF"])]
+    sliced_output: Option<Vec<String>>,
+
     #[clap(flatten)]
     parsing: ParsingOptions,
 
     #[clap(long)]
     from: String,
 
+    /// How many layers of transitive premises to include beyond the direct premises of the step being sliced.
+    /// If this argument is not present, it will default to zero.
     #[clap(long, short = 'd')]
     max_distance: Option<usize>,
 
@@ -482,10 +495,12 @@ fn main() {
             })
         }
         Command::Bench(options) => bench_command(options),
-        Command::Slice(options) => slice_command(options).and_then(|(pb, pf, mut pool)| {
-            ast::print_proof(&mut pool, &pb.prelude, &pf, !cli.no_print_with_sharing)?;
-            Ok(())
-        }),
+        Command::Slice(options) => {
+            slice_command(options, cli.no_print_with_sharing).and_then(|(pb, pf, mut pool)| {
+                ast::print_proof(&mut pool, &pb.prelude, &pf, !cli.no_print_with_sharing)?;
+                Ok(())
+            })
+        }
         Command::GenerateLiaProblems(options) => {
             generate_lia_problems_command(options, !cli.no_print_with_sharing)
         }
@@ -498,13 +513,18 @@ fn main() {
 
 type CliInstance = CliResult<(Box<dyn BufRead>, Box<dyn BufRead>, Option<Box<dyn BufRead>>)>;
 
-fn get_instance(options: &Input) -> CliInstance {
-    fn reader_from_path<P: AsRef<Path>>(path: P) -> CliResult<Box<dyn BufRead>> {
-        Ok(Box::new(io::BufReader::new(File::open(path)?)))
+fn get_instance(options: &Input, buffer_entire_file: bool) -> CliInstance {
+    fn reader_from_path<P: AsRef<Path>>(path: P, buffer_file: bool) -> CliResult<Box<dyn BufRead>> {
+        if buffer_file {
+            let content = std::fs::read_to_string(&path)?;
+            Ok(Box::new(io::Cursor::new(content.into_bytes())))
+        } else {
+            Ok(Box::new(io::BufReader::new(File::open(path)?)))
+        }
     }
 
     let read_rare_file = || match &options.rare_file {
-        Some(file) => Ok::<Option<Box<dyn BufRead>>, CliError>(Some(reader_from_path(file)?)),
+        Some(file) => reader_from_path(file, buffer_entire_file).map(Some),
         None => Ok(None),
     };
 
@@ -513,7 +533,7 @@ fn get_instance(options: &Input) -> CliInstance {
         (Some(problem), "-") => {
             let rare_file = read_rare_file()?;
             Ok((
-                reader_from_path(problem)?,
+                reader_from_path(problem, buffer_entire_file)?,
                 Box::new(io::stdin().lock()),
                 rare_file,
             ))
@@ -522,23 +542,23 @@ fn get_instance(options: &Input) -> CliInstance {
             let rare_file = read_rare_file()?;
             Ok((
                 Box::new(io::stdin().lock()),
-                reader_from_path(proof)?,
+                reader_from_path(proof, buffer_entire_file)?,
                 rare_file,
             ))
         }
         (Some(problem), proof) => {
             let rare_file = read_rare_file()?;
             Ok((
-                reader_from_path(problem)?,
-                reader_from_path(proof)?,
+                reader_from_path(problem, buffer_entire_file)?,
+                reader_from_path(proof, buffer_entire_file)?,
                 rare_file,
             ))
         }
         (None, proof) => {
             let rare_file = read_rare_file()?;
             Ok((
-                reader_from_path(infer_problem_path(proof)?)?,
-                reader_from_path(proof)?,
+                reader_from_path(infer_problem_path(proof)?, buffer_entire_file)?,
+                reader_from_path(proof, buffer_entire_file)?,
                 rare_file,
             ))
         }
@@ -548,13 +568,13 @@ fn get_instance(options: &Input) -> CliInstance {
 fn parse_command(
     options: ParseCommandOptions,
 ) -> CliResult<(ast::Problem, ast::Proof, Rules, ast::PrimitivePool)> {
-    let (problem, proof, rules) = get_instance(&options.input)?;
+    let (problem, proof, rules) = get_instance(&options.input, options.parsing.buffer_entire_file)?;
     let result = parser::parse_instance(problem, proof, rules, options.parsing.into())?;
     Ok(result)
 }
 
 fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
-    let (problem, proof, rules) = get_instance(&options.input)?;
+    let (problem, proof, rules) = get_instance(&options.input, options.parsing.buffer_entire_file)?;
     let parser_config = options.parsing.into();
     let checker_config = options.checking.into();
 
@@ -586,7 +606,7 @@ fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
 fn elaborate_command(
     options: ElaborateCommandOptions,
 ) -> CliResult<(bool, ast::Problem, ast::Proof, ast::PrimitivePool)> {
-    let (problem, proof, rules) = get_instance(&options.input)?;
+    let (problem, proof, rules) = get_instance(&options.input, options.parsing.buffer_entire_file)?;
 
     let (elab_config, pipeline) = options.elaboration.into();
     check_and_elaborate(
@@ -655,16 +675,60 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
 
 fn slice_command(
     options: SliceCommandOptions,
+    no_print_with_sharing: bool,
 ) -> CliResult<(ast::Problem, ast::Proof, ast::PrimitivePool)> {
-    let (problem, proof, rules) = get_instance(&options.input)?;
-    let (problem, proof, _, pool) =
+    use std::fs;
+    let (problem, proof, rules) = get_instance(&options.input, false)?;
+    let (problem, proof, _, mut pool) =
         parser::parse_instance(problem, proof, rules, options.parsing.into())?;
 
-    let node = ast::ProofNode::from_commands_with_root_id(proof.commands, &options.from)
-        .ok_or_else(|| CliError::InvalidSliceId(options.from))?;
-    let sliced = ast::Proof {
-        commands: node.into_commands(),
-        ..proof
+    let sliced = {
+        let (sliced_proof, sliced_asserts) = slice::slice(
+            &proof,
+            &options.from,
+            &mut pool,
+            options.max_distance.unwrap_or(0),
+        )
+        .ok_or(CliError::InvalidSliceId(options.from.clone()))?;
+
+        // Write sliced problem and proof to provided paths or default locations.
+        let (sliced_proof_file_name, sliced_problem_file_name) = match options.sliced_output {
+            Some(proof_prob) => (proof_prob[0].clone(), proof_prob[1].clone()),
+            None => {
+                let path = Path::new(&options.input.proof_file);
+                let path_without_extension = path.with_extension("");
+                let base_name = path_without_extension.file_name().unwrap();
+                let prob = format!("{}-{}.smt2", base_name.display(), options.from);
+                let proof = format!("{}-{}.alethe", base_name.display(), options.from);
+                (proof, prob)
+            }
+        };
+
+        let mut sliced_problem_file = fs::File::create(sliced_problem_file_name)?;
+        sliced_problem_file
+            .write_all(format!("{}", problem.prelude).as_bytes())
+            .unwrap();
+        ast::write_asserts(
+            &mut pool,
+            &problem.prelude,
+            &mut sliced_problem_file,
+            &sliced_asserts,
+            false,
+        )?;
+        sliced_problem_file.write_all(b"(check-sat)\n")?;
+        sliced_problem_file.write_all(b"(exit)\n")?;
+
+        let mut sliced_proof_file = fs::File::create(sliced_proof_file_name)?;
+        ast::write_proof_to_dest(
+            &mut pool,
+            &problem.prelude,
+            &sliced_proof,
+            &mut sliced_proof_file,
+            !no_print_with_sharing,
+        )?;
+        sliced_proof_file.write_all(b"\n")?;
+
+        sliced_proof
     };
 
     Ok((problem, sliced, pool))
@@ -674,12 +738,12 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
     use std::io::Write;
 
     let root_file_name = options.input.proof_file.clone();
-    let (problem, proof, rules) = get_instance(&options.input)?;
+    let (problem, proof, rules) = get_instance(&options.input, options.parsing.buffer_entire_file)?;
 
     let instances =
         generate_lia_smt_instances(problem, proof, rules, options.parsing.into(), use_sharing)?;
     for (id, content) in instances {
-        let file_name = format!("{}.{}.lia_smt2", root_file_name, id);
+        let file_name = format!("{}-{}.lia_smt2", root_file_name, id);
         let mut f = File::create(file_name)?;
         write!(f, "{}", content)?;
     }

@@ -179,6 +179,9 @@ pub enum CheckerError {
     #[error(transparent)]
     BindingListEquality(#[from] EqualityError<BindingList>),
 
+    #[error(transparent)]
+    IntegerEquality(#[from] EqualityError<Integer>),
+
     #[error("unknown rule")]
     UnknownRule,
 }
@@ -266,7 +269,7 @@ pub enum QuantifierError {
     #[error("binding is missing in right-hand side: '{0}'")]
     CnfBindingIsMissing(String),
 
-    #[error("result clause doensn't appear in CNF of original term: '{0}'")]
+    #[error("result clause doesn't appear in CNF of original term: '{0}'")]
     ClauseDoesntAppearInCnf(Rc<Term>),
 }
 
@@ -283,10 +286,10 @@ pub enum LinearArithmeticError {
     TooManyArgsInDisequality(Rc<Term>),
 
     #[error("final disequality is not contradictory: '{}'", DisplayLinearComb(.0, .1))]
-    DisequalityIsNotContradiction(Operator, LinearComb),
+    DisequalityIsNotContradiction(Operator, Box<LinearComb>),
 
     #[error("final disequality is not tautological: '{}'", DisplayLinearComb(.0, .1))]
-    DisequalityIsNotTautology(Operator, LinearComb),
+    DisequalityIsNotTautology(Operator, Box<LinearComb>),
 
     #[error("expected term '{0}' to be less than term '{1}'")]
     ExpectedLessThan(Rc<Term>, Rc<Term>),

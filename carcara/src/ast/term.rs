@@ -59,7 +59,7 @@ pub enum Sort {
     ///
     /// The associated string is the sort name, and the associated terms are the sort arguments for
     /// this sort.
-    Atom(String, Vec<Rc<Term>>),
+    Atom(Box<str>, Box<[Rc<Term>]>),
 
     // A sort variable
     Var(String),
@@ -584,7 +584,7 @@ impl Sort {
     pub fn match_with(&self, target: &Sort, map: &mut IndexMap<String, Sort>) -> bool {
         match (self, target) {
             (Sort::Var(a), _) => {
-                match map.entry(a.to_string()) {
+                match map.entry(a.clone()) {
                     Entry::Vacant(e) => {
                         e.insert(target.clone());
                     }
