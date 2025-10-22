@@ -90,8 +90,7 @@ pub fn parse_instance_with_pool<T: BufRead>(
         let rules = parser.parse_rare();
         let rules = match rules {
             Ok(t) => Ok(t),
-            Err(v) => Err(v)
-            
+            Err(v) => Err(v),
         }?;
         return Ok((problem, proof, rules));
     }

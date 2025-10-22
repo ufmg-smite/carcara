@@ -69,25 +69,33 @@ impl<'a, R: BufRead> Parser<'a, R> {
     }
 
     fn parse_body(&mut self) -> CarcaraResult<Body> {
-        let qualified_arg: Vec<char> = self.expect_keyword()?.chars().collect();
-        println!("Parsing rare body: {:?}", qualified_arg);
-        match qualified_arg.as_slice() {
-            ['c', 'o', 'n', 'c', 'l', 'u', 's', 'i', 'o', 'n', ..] => {
+        let qualified_arg = self.expect_keyword()?;
+        match qualified_arg.as_str() {
+            "conclusion" => {
                 let rewrite_term = self.parse_term()?;
                 Ok(Body::Conclusion(rewrite_term))
             }
-            ['a', 'r', 'g', 's', ..] => {
-                self.expect_token(Token::OpenParen)?;
-                let args = self.parse_sequence(Self::expect_symbol, false)?;
+            "args" => {
+                fn parse_args<R: BufRead>(parser: &mut Parser<R>) -> CarcaraResult<Vec<String>> {
+                    parser.expect_token(Token::OpenParen)?;
+                    parser.parse_sequence(super::Parser::expect_symbol, false)
+                }
+                let args = parse_args(self)?;
                 Ok(Body::Args(args))
             }
-            ['p', 'r', 'e', 'm', 'i', 's', 'e', 's', ..] => {
+            "premises" => {
                 self.expect_token(Token::OpenParen)?;
-                let terms = self.parse_sequence(|parser| parser.parse_term(), false)?;
+                let terms = self.parse_sequence(
+                    |parser| {
+                        let term = parser.parse_term()?;
+                        Ok(term)
+                    },
+                    false,
+                )?;
                 Ok(Body::Premise(terms))
             }
-            attribute => Err(Error::Parser(
-                ParserError::InvalidRareFunctionAttribute(attribute.iter().collect()),
+            _ => Err(Error::Parser(
+                ParserError::InvalidRareFunctionAttribute(qualified_arg),
                 self.current_position,
             )),
         }
