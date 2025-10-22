@@ -90,10 +90,8 @@ pub fn parse_instance_with_pool<T: BufRead>(
         let rules = parser.parse_rare();
         let rules = match rules {
             Ok(t) => Ok(t),
-            Err(v) => {
-                println!("\x1b[1;31m[UNEXPECTED]\x1b[0m At \x1b[34m.rare\x1b[0m file");
-                Err(v)
-            }
+            Err(v) => Err(v)
+            
         }?;
         return Ok((problem, proof, rules));
     }
@@ -1757,46 +1755,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
                 func.apply(self.pool, args)
                     .map_err(|err| Error::Parser(err, head_pos))
-            }
-            Token::Symbol(s) if s == "eo" => {
-                // "Let" constructions unfold
-                self.expect_token(Token::Symbol("eo".to_owned()))?;
-                self.expect_keyword()?;
-                self.expect_token(Token::Keyword("define".to_owned()))?;
-                self.expect_token(Token::OpenParen)?;
-                let substitution = self.parse_sequence(
-                    |parser| {
-                        parser.expect_token(Token::OpenParen)?;
-                        let let_arg = parser.expect_symbol()?;
-                        let body = parser.parse_term()?;
-                        parser.expect_token(Token::CloseParen)?;
-                        Ok((let_arg, body))
-                    },
-                    true,
-                )?;
-
-                self.state.symbol_table.push_scope();
-                for (name, value) in &substitution {
-                    let sort = self.pool.sort(value);
-                    self.insert_sorted_var((name.clone(), sort));
-                }
-
-                let innerterm = self.parse_term()?;
-                self.state.symbol_table.pop_scope();
-                self.expect_token(Token::CloseParen)?;
-                let subs = substitution
-                    .iter()
-                    .map(|(ident, term)| {
-                        let ident = Term::Var(ident.clone(), self.pool.sort(term));
-                        (self.pool.add(ident), term.clone())
-                    })
-                    .collect::<IndexMap<_, _>>();
-
-                let innerterm = Substitution::new(self.pool, subs)
-                    .unwrap()
-                    .apply(self.pool, &innerterm);
-
-                Ok(innerterm)
             }
             Token::OpenParen => {
                 self.next_token()?;
