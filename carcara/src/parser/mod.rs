@@ -941,9 +941,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
         Ok(Proof { constant_definitions, commands })
     }
 
-    fn parse_rare(&mut self) -> CarcaraResult<Rules> {
-        rare::parse_rare(self)
-    }
     /// Parses an `assume` proof command. This method assumes that the `(` and `assume` tokens were
     /// already consumed.
     fn parse_assume_command(&mut self) -> CarcaraResult<(String, Rc<Term>)> {
