@@ -205,6 +205,7 @@ pub fn check_parallel<T: io::BufRead>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn check_and_elaborate<T: io::BufRead>(
     problem: T,
     proof: T,
