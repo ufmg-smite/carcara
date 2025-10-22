@@ -171,7 +171,7 @@ impl PrimitivePool {
                                 total_width.push(TotalWidth::Width(arg_width));
                             }
                             Sort::ParamSort(v, _) => {
-                                total_width.push(TotalWidth::ParamSort(v[0].clone()))
+                                total_width.push(TotalWidth::ParamSort(v[0].clone()));
                             }
                             _ => unreachable!(),
                         }
