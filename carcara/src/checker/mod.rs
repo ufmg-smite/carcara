@@ -10,7 +10,7 @@ use crate::{
 use error::{CheckerError, SubproofError};
 use indexmap::IndexSet;
 pub use parallel::{scheduler::Scheduler, ParallelProofChecker};
-use rules::{Premise, Rule, RuleArgs, RuleResult};
+use rules::{rare::check_rare, Premise, Rule, RuleArgs, RuleResult};
 use std::{
     collections::HashSet,
     fmt,
@@ -532,7 +532,7 @@ impl<'c> ProofChecker<'c> {
             // resolution rule will be called. Until that is decided and added to the specification,
             // we define a new specialized rule that calls it
             "strict_resolution" => resolution::strict_resolution,
-
+            "rare_rewrite" => check_rare,
             _ => return None,
         })
     }

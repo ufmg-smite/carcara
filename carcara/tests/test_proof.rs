@@ -1,9 +1,10 @@
 use carcara::{checker::*, parser};
 
 fn run_test(problem: &str, proof: &str, expected_result: bool) {
-    let (problem, proof, mut pool) = parser::parse_instance(
+    let (problem, proof, _, mut pool) = parser::parse_instance(
         problem.as_bytes(),
         proof.as_bytes(),
+        None,
         parser::Config::default(),
     )
     .unwrap();
