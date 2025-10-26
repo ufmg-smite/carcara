@@ -15,7 +15,7 @@ lpo.mk:
 	done
 
 %.lpo: %.lp
-	lambdapi check -v 0 -c $<
+	lambdapi check -v 0 $<
 
 .PHONY: clean
 clean:
