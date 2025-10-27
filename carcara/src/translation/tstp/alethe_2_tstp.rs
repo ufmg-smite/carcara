@@ -210,14 +210,16 @@ impl TstpTranslator {
     // SZS ontology-related services.
     ////////////////////////////////////////////
 
-    /// Classifies a rule according to its corresponding source (from TPTP's grammar).
-    /// Builds the corresponding step, according to the previous classification.
+    /// For a given step, classifies its rule according to its corresponding source
+    /// (from TPTP's grammar). Builds the corresponding annotated formula, according
+    /// to the previous classification.
     fn classify_source_build_step_term(
         &mut self,
         step_id: &str,
         rule_name: &str,
         conclusion: TstpFormula,
         premises: Vec<Symbol>,
+        args: Vec<TstpFormula>,
         discharged_assumptions: Vec<Symbol>,
     ) -> TstpAnnotatedFormula {
         if TstpTranslator::is_tautology(rule_name) {
@@ -226,12 +228,7 @@ impl TstpTranslator {
                 TstpLanguage::Tff,
                 TstpFormulaRole::Plain,
                 conclusion,
-                // TODO: abstract this into some method
-                TstpAnnotatedFormulaSource::InternalSourceIntroduced(
-                    TstpInternalSourceIntroducedType::Tautology,
-                    TstpSourceUsefulInfo::GeneralDataGeneralList(vec![rule_name.to_owned()]),
-                    vec![],
-                ),
+                TstpTranslator::get_tautology_formula_source(rule_name, args),
                 "".to_owned(),
             )
         } else {
@@ -246,6 +243,7 @@ impl TstpTranslator {
                     rule_name,
                     premises,
                     discharged_assumptions,
+                    args,
                 ),
                 "".to_owned(),
             )
@@ -255,18 +253,50 @@ impl TstpTranslator {
     fn is_tautology(rule_name: &str) -> bool {
         // TODO: we should be extracting this from some "Alethe signature"
         // instead of hard-coding these names
-        let tautologies = ["and_neg", "implies_neg1"];
+        let tautologies = ["and_neg", "implies_neg1", "implies_neg2", "and_pos"];
 
         tautologies.contains(&rule_name)
     }
 
     /// Builds the corresponding `TstpAnnotatedFormulaSource`, for an
+    /// step that represents the instantiation of a tautology.
+    /// PRE : { `rule_name` is a tautology }
+    fn get_tautology_formula_source(
+        rule_name: &str,
+        args: Vec<TstpFormula>,
+    ) -> TstpAnnotatedFormulaSource {
+        let source_introduced_type = TstpInternalSourceIntroducedType::Tautology;
+
+        // Determine if the rule receives arguments.
+        // TODO: abstract this into a process.
+        let useful_info: TstpUsefulInfo = if args.is_empty() {
+            TstpUsefulInfo::GeneralList(vec![TstpGeneralData::AtomicWord(rule_name.to_owned())])
+        } else {
+            // { !args.is_empty() }
+            TstpUsefulInfo::GeneralList(vec![TstpGeneralData::GeneralFunction(
+                rule_name.to_owned(),
+                args,
+            )])
+        };
+        // let useful_info: TstpUsefulInfo = if rule_name == "and_pos" {
+        // } else {
+        // };
+
+        TstpAnnotatedFormulaSource::InternalSourceIntroduced(
+            source_introduced_type,
+            useful_info,
+            vec![],
+        )
+    }
+
+    /// Builds the corresponding `TstpAnnotatedFormulaSource`, for a
     /// step that represents the application of an inference rule.
     /// PRE : { `rule_name` is not a tautology }
     fn get_inference_formula_source(
         rule_name: &str,
         premises: Vec<Symbol>,
         discharged_assumptions: Vec<Symbol>,
+        args: Vec<TstpFormula>,
     ) -> TstpAnnotatedFormulaSource {
         // Collect useful info and parent formula source.
         let mut useful_info_items = vec![TstpInfoItem::InferenceItemInferenceStatusStatus(
@@ -293,7 +323,7 @@ impl TstpTranslator {
             // This rule discharges the premises.
             assert!(premises.is_empty());
             useful_info_items.push(TstpInfoItem::InferenceItemInferenceStatusInferenceInfo(
-                rule_name.to_owned(),
+                TstpInferenceRuleName::RuleName(rule_name.to_owned()),
                 TstpInferenceInfoGeneralListQualifier::Discharge,
                 // TODO: cloning!
                 discharged_assumptions.clone(),
@@ -305,9 +335,20 @@ impl TstpTranslator {
             });
         }
 
+        // TODO: abstract this into a procedure
+        // NOTE: some Alethe rules require "arguments". For the moment,
+        // we model that in the form of "rule_name(arg,...)", as the
+        // rule name of a DagSourceInference.
+        let inference_rule_name = if args.is_empty() {
+            TstpInferenceRuleName::RuleName(rule_name.to_owned())
+        } else {
+            // { ! args.is_empty() }
+            TstpInferenceRuleName::RuleWithArgs(rule_name.to_owned(), args)
+        };
+
         TstpAnnotatedFormulaSource::DagSourceInference(
-            rule_name.to_owned(),
-            TstpSourceUsefulInfo::InfoItems(useful_info_items),
+            inference_rule_name,
+            TstpUsefulInfo::InfoItems(useful_info_items),
             parent_formula_source,
         )
     }
@@ -861,7 +902,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
             // Subproof's assumption.
             formula_source = TstpAnnotatedFormulaSource::InternalSourceIntroduced(
                 TstpInternalSourceIntroducedType::Assumption,
-                TstpSourceUsefulInfo::GeneralDataGeneralList(vec![]),
+                TstpUsefulInfo::GeneralList(vec![]),
                 vec![],
             );
 
@@ -890,6 +931,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
     fn translate_step(&mut self, node: &ProofNode) {
         let mut alethe_premises: Vec<Symbol> = Vec::new();
         let mut alethe_discharged_assumptions: Vec<Symbol> = Vec::new();
+        let mut alethe_translated_args: Vec<TstpFormula> = Vec::new();
 
         match node {
             ProofNode::Step(StepNode {
@@ -917,6 +959,12 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                         .collect::<Vec<Symbol>>(),
                 );
 
+                alethe_translated_args.extend(
+                    args.iter()
+                        .map(|arg| self.translate_term(arg))
+                        .collect::<Vec<TstpFormula>>(),
+                );
+
                 // NOTE: in ProofStep, clause has type
                 // Vec<Rc<Term>>, though it represents an
                 // invocation of Alethe's cl operator
@@ -939,6 +987,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                     rule,
                     conclusion,
                     alethe_premises,
+                    alethe_translated_args,
                     alethe_discharged_assumptions,
                 );
 

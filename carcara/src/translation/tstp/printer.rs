@@ -188,6 +188,10 @@ impl<'a> TstpPrinter<'a> {
                 ret += ")";
             }
 
+            TstpFormula::Integer(integer) => {
+                ret = integer.to_string();
+            }
+
             _ => {
                 println!("No defined translation for formula {:?}", formula);
                 panic!();
@@ -300,7 +304,7 @@ impl<'a> TstpPrinter<'a> {
 
                 ret += ", ";
 
-                ret += &TstpPrinter::source_useful_info_to_concrete_syntax(useful_info);
+                ret += &TstpPrinter::useful_info_to_concrete_syntax(useful_info);
 
                 ret += ", [";
 
@@ -326,11 +330,11 @@ impl<'a> TstpPrinter<'a> {
                 // with elsewhere.
                 ret = "inference(".to_owned();
 
-                ret += rule_name;
+                ret += &TstpPrinter::inference_rule_name_to_concrete_syntax(rule_name);
 
                 ret += ", ";
 
-                ret += &TstpPrinter::source_useful_info_to_concrete_syntax(useful_info);
+                ret += &TstpPrinter::useful_info_to_concrete_syntax(useful_info);
                 ret += ", [";
 
                 // ret += ", [";
@@ -390,47 +394,47 @@ impl<'a> TstpPrinter<'a> {
         }
     }
 
-    fn source_useful_info_to_concrete_syntax(useful_info: &TstpSourceUsefulInfo) -> String {
+    fn useful_info_to_concrete_syntax(useful_info: &TstpUsefulInfo) -> String {
         let mut ret: String;
 
         match useful_info {
-            TstpSourceUsefulInfo::GeneralDataNewSymbols(symbols) => {
-                ret = "new_symbols(".to_owned();
+            // TstpUsefulInfo::GeneralDataNewSymbols(symbols) => {
+            //     ret = "new_symbols(".to_owned();
 
-                let mut first_iteration = true;
+            //     let mut first_iteration = true;
 
-                symbols.iter().for_each(|symbol| {
-                    if first_iteration {
-                        ret += symbol;
-                        first_iteration = false;
-                    } else {
-                        // { ! first_iteration }
-                        ret += &(", ".to_owned() + &symbol.clone());
-                    }
-                });
+            //     symbols.iter().for_each(|symbol| {
+            //         if first_iteration {
+            //             ret += symbol;
+            //             first_iteration = false;
+            //         } else {
+            //             // { ! first_iteration }
+            //             ret += &(", ".to_owned() + &symbol.clone());
+            //         }
+            //     });
 
-                ret += ")";
-            }
-
-            TstpSourceUsefulInfo::GeneralDataGeneralList(symbols) => {
+            //     ret += ")";
+            // }
+            TstpUsefulInfo::GeneralList(general_datas) => {
                 ret = "[".to_owned();
 
                 let mut first_iteration = true;
 
-                symbols.iter().for_each(|symbol| {
+                general_datas.iter().for_each(|general_data| {
                     if first_iteration {
-                        ret += symbol;
+                        ret += &TstpPrinter::general_data_to_concrete_syntax(general_data);
                         first_iteration = false;
                     } else {
                         // { ! first_iteration }
-                        ret += &(", ".to_owned() + &symbol.clone());
+                        ret += &(", ".to_owned()
+                            + &TstpPrinter::general_data_to_concrete_syntax(general_data));
                     }
                 });
 
                 ret += "]";
             }
 
-            TstpSourceUsefulInfo::InfoItems(info_items) => {
+            TstpUsefulInfo::InfoItems(info_items) => {
                 ret = "[".to_owned();
 
                 let mut first_iteration = true;
@@ -447,6 +451,40 @@ impl<'a> TstpPrinter<'a> {
                 });
 
                 ret += "]";
+            }
+        }
+
+        ret
+    }
+
+    fn general_data_to_concrete_syntax(general_data: &TstpGeneralData) -> String {
+        let mut ret: String;
+
+        match general_data {
+            TstpGeneralData::AtomicWord(symbol) => {
+                ret = symbol.to_owned();
+            }
+
+            TstpGeneralData::GeneralFunction(atomic_word, params) => {
+                ret = atomic_word.clone();
+
+                ret += "(";
+
+                // TODO: repeating code, and a more idiomatic way
+                // to deal with this
+                let mut first_iteration = true;
+
+                params.iter().for_each(|param| {
+                    if first_iteration {
+                        ret += &TstpPrinter::formula_to_concrete_syntax(param);
+                        first_iteration = false;
+                    } else {
+                        // { ! first_iteration }
+                        ret += &(", ".to_owned() + &TstpPrinter::formula_to_concrete_syntax(param));
+                    }
+                });
+
+                ret += ")";
             }
         }
 
@@ -470,7 +508,7 @@ impl<'a> TstpPrinter<'a> {
                 general_list_qualifier,
                 general_list,
             ) => {
-                ret = rule_name.to_owned();
+                ret = TstpPrinter::inference_rule_name_to_concrete_syntax(rule_name);
 
                 ret += "(";
 
@@ -534,5 +572,39 @@ impl<'a> TstpPrinter<'a> {
         match list_qualifier {
             TstpInferenceInfoGeneralListQualifier::Discharge => "discharge".to_owned(),
         }
+    }
+
+    fn inference_rule_name_to_concrete_syntax(rule_name: &TstpInferenceRuleName) -> String {
+        let mut ret: String;
+
+        match rule_name {
+            TstpInferenceRuleName::RuleName(name) => {
+                ret = name.to_owned();
+            }
+
+            TstpInferenceRuleName::RuleWithArgs(name, args) => {
+                ret = name.clone();
+
+                ret += "(";
+
+                // TODO: repeating code, and a more idiomatic way
+                // to deal with this
+                let mut first_iteration = true;
+
+                args.iter().for_each(|arg| {
+                    if first_iteration {
+                        ret += &TstpPrinter::formula_to_concrete_syntax(arg);
+                        first_iteration = false;
+                    } else {
+                        // { ! first_iteration }
+                        ret += &(", ".to_owned() + &TstpPrinter::formula_to_concrete_syntax(arg));
+                    }
+                });
+
+                ret += ")";
+            }
+        }
+
+        ret
     }
 }

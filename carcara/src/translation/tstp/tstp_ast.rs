@@ -1,7 +1,6 @@
-//! Tstp concrete syntax's AST.
+//! Tptp/Tstp ASTs.
 
 pub type Symbol = String;
-pub type TstpInferenceRuleName = String;
 
 /// Tstp annotated formula.
 pub struct TstpAnnotatedFormula {
@@ -205,6 +204,17 @@ pub enum TstpType {
     Fun(Vec<TstpType>, Box<TstpType>),
 }
 
+/// NOTE: some Alethe rules are "applied" over arguments, besides premises.
+/// For the moment, we codify the first case into the <`inference_rule`>
+/// field of an <`inference_record`>, by extending it to be not just an atomic
+/// word, but also an atomic word followed by some arbitrary arguments.
+#[derive(Clone, Debug)]
+pub enum TstpInferenceRuleName {
+    RuleName(Symbol),
+
+    RuleWithArgs(Symbol, Vec<TstpFormula>),
+}
+
 /// From TPTP's docs:
 /// "The source field is used to record where the annotated formula came from, and is most
 ///   commonly a file record or an inference record. A file record stores the name of the file
@@ -222,7 +232,7 @@ pub enum TstpAnnotatedFormulaSource {
     // <internal_source>  ::= introduced(<intro_type>,<useful_info>,<parents>)
     InternalSourceIntroduced(
         TstpInternalSourceIntroducedType,
-        TstpSourceUsefulInfo,
+        TstpUsefulInfo,
         Vec<TstpAnnotatedFormulaSource>,
     ),
 
@@ -236,7 +246,7 @@ pub enum TstpAnnotatedFormulaSource {
     // e.g., for splitting, then use an <internal_source>.
     DagSourceInference(
         TstpInferenceRuleName,
-        TstpSourceUsefulInfo,
+        TstpUsefulInfo,
         Vec<TstpParentFormula>,
     ),
 
@@ -269,14 +279,24 @@ pub enum TstpInternalSourceIntroducedType {
 // - regular grammar rules: <useful_info> ::= <general_list>
 // - semantic grammar rules: <useful_info> :== [] | [<info_items>]
 #[derive(Clone, Debug)]
-pub enum TstpSourceUsefulInfo {
-    // Regular grammar rules: "general data"
-    GeneralDataNewSymbols(Vec<Symbol>),
-    // TODO: arbitrary list of symbols?
-    GeneralDataGeneralList(Vec<Symbol>),
+pub enum TstpUsefulInfo {
+    // <general_list> reduces mostly to <general_data> (plus
+    // list structure)
+    GeneralList(Vec<TstpGeneralData>),
 
     // Semantics grammar rules: "info items"
     InfoItems(Vec<TstpInfoItem>),
+}
+
+// <general_data> ::= <atomic_word> | <general_function> | <variable> | <number> |
+//                    <distinct_object> | <formula_data>
+#[derive(Clone, Debug)]
+pub enum TstpGeneralData {
+    AtomicWord(Symbol),
+    // <general_function> ::= <atomic_word>(<general_terms>)
+    // TODO: for the moment, it seems to be better for the
+    // parameters to be TstpFormulas...
+    GeneralFunction(Symbol, Vec<TstpFormula>),
 }
 
 /// Productions of <`info_item`>.
