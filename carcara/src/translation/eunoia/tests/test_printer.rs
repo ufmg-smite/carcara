@@ -208,25 +208,6 @@ mod tests {
     }
 
     #[test]
-    fn test_declare_type() {
-        let mut buf = Vec::new();
-        let s_exp_formatter = SExpFormatter::new(&mut buf);
-
-        let mut printer = EunoiaPrinter::new(s_exp_formatter);
-
-        // TODO: just a simple but semantically unsound test
-        let assumes = vec![EunoiaCommand::DeclareType {
-            name: String::from("S"),
-            kind: EunoiaList { list: vec![] },
-        }];
-
-        let expected = "(declare-type S ( ))\n";
-
-        printer.write_proof(&assumes).unwrap();
-        assert_eq!(expected, std::str::from_utf8(&buf).unwrap());
-    }
-
-    #[test]
     fn test_define() {
         let mut buf = Vec::new();
         let s_exp_formatter = SExpFormatter::new(&mut buf);

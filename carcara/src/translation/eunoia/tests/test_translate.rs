@@ -130,7 +130,7 @@ fn test_let_example() {
     printer_problem.write_proof(&eunoia_problem).unwrap();
 
     assert_eq!(
-        "(declare-type S ( ))\n\
+        "(declare-const S Type)\n\
          (declare-const a S)\n\
          (declare-const b S)\n",
         std::str::from_utf8(&buf_problem).unwrap()

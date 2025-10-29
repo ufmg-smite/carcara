@@ -79,19 +79,6 @@ impl<'a> PrintProof for EunoiaPrinter<'a> {
                     });
                 }
 
-                EunoiaCommand::DeclareType { name, kind } => {
-                    tag = "declare-type".to_owned();
-
-                    args = Vec::new();
-
-                    args.push(name.clone());
-
-                    args.append(&mut EunoiaPrinter::eunoia_list_to_concrete_syntax(
-                        kind,
-                        &EunoiaPrinter::type_to_concrete_syntax,
-                    ));
-                }
-
                 EunoiaCommand::Define { name, typed_params, term, attrs } => {
                     tag = "define".to_owned();
 

@@ -298,13 +298,6 @@ pub enum EunoiaCommand {
         attrs: Vec<EunoiaConsAttr>,
     },
 
-    // TODO: EunoiaTerm or EunoiaType?
-    // (declare-type <symbol> (<type>*))
-    DeclareType {
-        name: Symbol,
-        kind: EunoiaList<EunoiaType>,
-    },
-
     // SMT-lib 2 commands
     // (declare-sort name arity)
     DeclareSort {
