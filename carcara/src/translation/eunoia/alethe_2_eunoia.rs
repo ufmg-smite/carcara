@@ -1073,10 +1073,6 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                 eunoia_type: EunoiaTerm::Type(EunoiaType::Type),
                 attrs: Vec::new(),
             });
-            // eunoia_prelude.push(EunoiaCommand::DeclareType {
-            //     name: pair.0.clone(),
-            //     kind: EunoiaList { list: vec![] },
-            // });
         });
 
         function_declarations.iter().for_each(|pair| {
