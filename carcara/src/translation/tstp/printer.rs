@@ -135,28 +135,6 @@ impl<'a> TstpPrinter<'a> {
         let mut ret: String;
 
         match formula {
-            TstpFormula::Typing(var, type_inhabited) => {
-                ret = TstpPrinter::formula_to_concrete_syntax(var);
-                ret += &(": ".to_owned() + &TstpPrinter::type_to_concrete_syntax(type_inhabited));
-            }
-
-            TstpFormula::Variable(name) => {
-                ret = name.clone();
-            }
-
-            TstpFormula::NullaryOperatorApp(nullary_op) => {
-                ret = TstpPrinter::operator_to_concrete_syntax(&TstpOperator::NullaryOperator(
-                    nullary_op.clone(),
-                ));
-            }
-
-            TstpFormula::UnaryOperatorApp(unary_op, operand) => {
-                ret = TstpPrinter::operator_to_concrete_syntax(&TstpOperator::UnaryOperator(
-                    unary_op.clone(),
-                )) + " "
-                    + &TstpPrinter::formula_to_concrete_syntax(operand);
-            }
-
             TstpFormula::BinaryOperatorApp(binary_op, left_operand, right_operand) => {
                 ret = "( ".to_owned()
                     + &TstpPrinter::formula_to_concrete_syntax(left_operand)
@@ -192,6 +170,49 @@ impl<'a> TstpPrinter<'a> {
                 ret = integer.to_string();
             }
 
+            TstpFormula::NullaryOperatorApp(nullary_op) => {
+                ret = TstpPrinter::operator_to_concrete_syntax(&TstpOperator::NullaryOperator(
+                    nullary_op.clone(),
+                ));
+            }
+
+            TstpFormula::Typing(var, type_inhabited) => {
+                ret = TstpPrinter::formula_to_concrete_syntax(var);
+                ret += &(": ".to_owned() + &TstpPrinter::type_to_concrete_syntax(type_inhabited));
+            }
+
+            TstpFormula::UnaryOperatorApp(unary_op, operand) => {
+                ret = TstpPrinter::operator_to_concrete_syntax(&TstpOperator::UnaryOperator(
+                    unary_op.clone(),
+                )) + " "
+                    + &TstpPrinter::formula_to_concrete_syntax(operand);
+            }
+
+            TstpFormula::UniversalQuant(variables, scope) => {
+                ret = "(! [".to_owned();
+                // TODO: abstract this pattern into a procedure
+                let mut first_element = true;
+
+                variables.iter().for_each(|elem| {
+                    if first_element {
+                        ret += &TstpPrinter::typed_variable_to_concrete_syntax(elem);
+                        first_element = false;
+                    } else {
+                        // { ! first_element }
+                        ret += &(", ".to_owned()
+                            + &TstpPrinter::typed_variable_to_concrete_syntax(elem));
+                    }
+                });
+
+                ret += "] : ";
+                ret += &TstpPrinter::formula_to_concrete_syntax(scope);
+                ret += ")";
+            }
+
+            TstpFormula::Variable(name) => {
+                ret = name.clone();
+            }
+
             _ => {
                 println!("No defined translation for formula {:?}", formula);
                 panic!();
@@ -203,8 +224,6 @@ impl<'a> TstpPrinter<'a> {
 
     fn type_to_concrete_syntax(type_term: &TstpType) -> String {
         match type_term {
-            TstpType::UserDefined(name) => "\'".to_owned() + &name.clone() + "\'",
-
             TstpType::Bool => "$o".to_owned(),
 
             TstpType::Fun(domain, codomain) => {
@@ -230,12 +249,32 @@ impl<'a> TstpPrinter<'a> {
                 ret
             }
 
+            TstpType::Int => "$int".to_owned(),
+
+            TstpType::Real => "$real".to_owned(),
+
             TstpType::Universe => "$tType".to_owned(),
 
+            TstpType::UserDefined(name) => "\'".to_owned() + &name.clone() + "\'",
+
             _ => {
+                println!("Problems translating type term {:?}", type_term);
                 panic!();
             }
         }
+    }
+
+    fn typed_variable_to_concrete_syntax(typed_variable: &TstpTypedVariable) -> String {
+        let mut ret: String;
+
+        match typed_variable {
+            TstpTypedVariable::TypedVariable(name, var_type) => {
+                ret = name.clone();
+                ret += &(":".to_owned() + &TstpPrinter::type_to_concrete_syntax(var_type));
+            }
+        }
+
+        ret
     }
 
     fn operator_to_concrete_syntax(op: &TstpOperator) -> String {
@@ -262,6 +301,9 @@ impl<'a> TstpPrinter<'a> {
 
             // Arithmetic unary ops.
             TstpOperator::UnaryOperator(TstpUnaryOperator::Uminus) => "-".to_owned(),
+
+            // Arithmetic binary ops.
+            TstpOperator::BinaryOperator(TstpBinaryOperator::Sum) => "$sum".to_owned(),
 
             _ => {
                 println!("Problems translating operator {:?}", op);

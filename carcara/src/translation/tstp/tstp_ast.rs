@@ -79,14 +79,21 @@ pub enum TstpFormulaRole {
 
 /// Syntactic category of expressions that denote formulas but, also, values
 /// inhabiting other types: numeric and string literals.
+/// Note that we mix into a single category of "formulas", notions of formulas
+/// from different logics supported by TPTP.
 #[derive(Clone, Debug)]
 pub enum TstpFormula {
     Variable(Symbol),
 
     // Logic
-    UniversalQuant(Symbol, Box<TstpFormula>),
+    UniversalQuant(Vec<TstpTypedVariable>, Box<TstpFormula>),
 
-    ExistentialQuant(Symbol, Box<TstpFormula>),
+    ExistentialQuant(Vec<TstpTypedVariable>, Box<TstpFormula>),
+
+    // "Indefinite description", in TPTP's docs.
+    Choice(Box<TstpTypedVariable>, Box<TstpFormula>),
+
+    Lambda(Vec<TstpTypedVariable>, Box<TstpFormula>),
 
     // Application of built-in operators. Arity captured through ASTs, for more robust
     // type checking.
@@ -112,6 +119,12 @@ pub enum TstpFormula {
 
     // Distinct object: inhabitant of type Individual ($i, in TPTP)
     DistinctObject(String),
+}
+
+/// Bounding occurrences of variables in quantifiers.
+#[derive(Clone, Debug)]
+pub enum TstpTypedVariable {
+    TypedVariable(Symbol, Box<TstpType>),
 }
 
 // NOTE: To simplify internal architecture, we define this sum-type of operators.

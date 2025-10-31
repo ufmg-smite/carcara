@@ -352,6 +352,34 @@ impl TstpTranslator {
             parent_formula_source,
         )
     }
+
+    /// Translates `BindingList` constructs, as used for binder terms forall, exists,
+    /// choice and lambda. The "let" binder uses the same construction but assigns to
+    /// it a different semantics. See `translate_let_binding_list` for its translation.
+    fn translate_binding_list(binding_list: &BindingList) -> Vec<TstpTypedVariable> {
+        let mut ret_binding_list: Vec<TstpTypedVariable> = Vec::new();
+
+        binding_list.iter().for_each(|sorted_var| {
+            let (name, sort) = sorted_var;
+
+            let translated_sort: TstpType = match &**sort {
+                Term::Sort(actual_sort) => TstpTranslator::translate_sort(actual_sort),
+
+                _ => {
+                    // It shouldn't be another kind of Alethe term
+                    println!("Expected a Sort(sort) Alethe term, found {:?}.", sort);
+                    panic!();
+                }
+            };
+
+            ret_binding_list.push(TstpTypedVariable::TypedVariable(
+                name.clone(),
+                Box::new(translated_sort),
+            ));
+        });
+
+        ret_binding_list
+    }
 }
 
 impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOperator>
@@ -585,17 +613,15 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 TstpFormula::Variable("dummy".to_owned())
             }
 
-            Term::Binder(_binder, binding_list, _scope) => {
+            Term::Binder(binder, binding_list, scope) => {
                 // New scope to shadow those context variables that
-                // now bound by this binder.
-                // TODO: reusing variables_in_scope concept
-                // for this new kind of scope (not the one
-                // related with contexts introduced through
-                // "anchor" commands).
+                // are now bound by this binder.
                 self.get_mut_translator_data()
                     .alethe_scopes
                     .open_non_context_scope();
-                let _translated_bindings = self.translate_binding_list(binding_list);
+
+                let translated_bindings = TstpTranslator::translate_binding_list(binding_list);
+
                 // match translated_bindings {
                 //     TstpFormula::List(ref bindings) => {
                 //         bindings.iter().for_each(|var| match var {
@@ -616,54 +642,39 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 //     }
                 // }
 
-                // let translated_binder = match binder {
-                //     Binder::Forall => TstpFormula::App(
-                //         self.alethe_signature.forall_binder.clone(),
-                //         vec![translated_bindings, self.translate_term(scope)],
-                //     ),
+                let translated_binder = match binder {
+                    Binder::Forall => TstpFormula::UniversalQuant(
+                        translated_bindings,
+                        Box::new(self.translate_term(scope)),
+                    ),
 
-                //     Binder::Exists => TstpFormula::App(
-                //         self.alethe_signature.exists_binder.clone(),
-                //         vec![translated_bindings, self.translate_term(scope)],
-                //     ),
+                    Binder::Exists => TstpFormula::ExistentialQuant(
+                        translated_bindings,
+                        Box::new(self.translate_term(scope)),
+                    ),
 
-                //     Binder::Choice => {
-                //         let choice_var: TstpFormula;
-                //         // There should be just one defined variable.
-                //         match &translated_bindings {
-                //             TstpFormula::List(list) => {
-                //                 assert!(list.len() == 1);
-                //                 match &list[0] {
-                //                     TstpFormula::Var(var_name, ..) => {
-                //                         choice_var = TstpFormula::Variable(var_name.to_string());
-                //                     }
+                    Binder::Choice => {
+                        // There should be just one defined variable.
+                        assert!(translated_bindings.len() == 1);
 
-                //                     _ => panic!(),
-                //                 }
-                //             }
+                        TstpFormula::Choice(
+                            // TODO: cloning!
+                            Box::new(translated_bindings[0].clone()),
+                            Box::new(self.translate_term(scope)),
+                        )
+                    }
 
-                //             _ => panic!(),
-                //         };
-
-                //         TstpFormula::App(
-                //             self.alethe_signature.choice_binder.clone(),
-                //             vec![translated_bindings, choice_var, self.translate_term(scope)],
-                //         )
-                //     }
-
-                //     // TODO: complete
-                //     Binder::Lambda => TstpFormula::App(
-                //         self.alethe_signature.exists_binder.clone(),
-                //         vec![translated_bindings, self.translate_term(scope)],
-                //     ),
-                // };
+                    // TODO: complete
+                    Binder::Lambda => TstpFormula::Lambda(
+                        translated_bindings,
+                        Box::new(self.translate_term(scope)),
+                    ),
+                };
 
                 // Closing the context...
                 self.get_mut_translator_data().alethe_scopes.close_scope();
-                // self.local_steps.pop();
 
-                // translated_binder
-                TstpFormula::Variable("dummy".to_owned())
+                translated_binder
             }
 
             // TODO: complete
@@ -703,24 +714,6 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         //         TstpFormula::Variable(id.clone()),
         //     ],
         // )
-    }
-
-    /// Translates `BindingList` constructs, as used for binder terms forall, exists,
-    /// choice and lambda. The "let" binder uses the same construction but assigns to
-    /// it a different semantics. See `translate_let_binding_list` for its translation.
-    fn translate_binding_list(&mut self, binding_list: &BindingList) -> TstpFormula {
-        let mut _ret: Vec<TstpFormula> = Vec::new();
-
-        binding_list.iter().for_each(|sorted_var| {
-            let (_name, _sort) = sorted_var;
-            // ret.push(TstpFormula::Var(
-            //     name.clone(),
-            //     Box::new(self.translate_term(sort)),
-            // ));
-        });
-
-        // TstpFormula::List(ret)
-        TstpFormula::Variable("dummy".to_owned())
     }
 
     /// Translates a `BindingList` as required by our definition of @let: it builds a list
@@ -823,11 +816,11 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
     // TODO:
     fn translate_sort(sort: &Sort) -> TstpType {
         match sort {
-            Sort::Real => TstpType::Real,
-
             // User-defined sort
             // TODO: what about args?
             Sort::Atom(string, ..) => TstpType::UserDefined(string.clone()),
+
+            Sort::Bool => TstpType::Bool,
 
             Sort::Function(sorts) => {
                 // TODO: is this correct?
@@ -876,11 +869,13 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 TstpType::Fun(sorts_params, Box::new(return_sort))
             }
 
-            Sort::Bool => TstpType::Bool,
+            Sort::Int => TstpType::Int,
+
+            Sort::Real => TstpType::Real,
 
             _ => {
-                TstpType::Real
-                // TODO:
+                println!("Problems translating sort {:?}", sort);
+                panic!();
             }
         }
     }
