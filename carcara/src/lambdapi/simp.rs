@@ -314,7 +314,10 @@ fn translate_arith_poly_norm(
     let l_set_id = "l";
     let r_set_id = "r";
 
-    proof.push(ProofStep::Simplify(Vec::from_iter(dag_terms)));
+    // Simplify only if there are dag terms to simplify otherwise Lambdapi will over simplify everything and the proof will fail.
+    if dag_terms.len() > 0 {
+        proof.push(ProofStep::Simplify(Vec::from_iter(dag_terms)));
+    }
 
     proof.push(ProofStep::Rewrite(
         true,
@@ -360,7 +363,6 @@ fn translate_arith_poly_norm(
         vec![
             Term::Terms(vec![l_set_id.into(), Term::from("₁")]),
             Term::Terms(vec![l_set_id.into(), Term::from("₂")]),
-            intro_top(),
         ],
         SubProofs(None),
     ));
@@ -372,7 +374,6 @@ fn translate_arith_poly_norm(
         vec![
             Term::Terms(vec![r_set_id.into(), Term::from("₁")]),
             Term::Terms(vec![r_set_id.into(), Term::from("₂")]),
-            intro_top(),
         ],
         SubProofs(None),
     ));

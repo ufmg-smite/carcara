@@ -546,8 +546,8 @@ symbol all_ite_simplify a ≔
 symbol ite_simplify [a] ≔ #repeat (applyAny (all_ite_simplify a)) and #try (#reflexivity #orelse (#apply ⊤ᵢ));
 
 // Rule 73: ac_simp
-symbol ac_simp_and ≔ #repeat (#rewrite_gen "left" "" ∧_assoc) and #repeat (#rewrite ∧_idem) and #reflexivity;
-symbol ac_simp_or ≔ #repeat (#rewrite_gen "left" "" ∨_assoc) and #repeat (#rewrite ∨_idem) and #reflexivity;
+symbol ac_simp_and ≔ #repeat (#rewrite_gen "left" " " ∧_assoc) and #repeat (#rewrite ∧_idem) and #reflexivity;
+symbol ac_simp_or ≔ #repeat (#rewrite_gen "left" " " ∨_assoc) and #repeat (#rewrite ∨_idem) and #reflexivity;
 
 opaque symbol eq_symm [a] [x y: τ a] : π̇ ((x = y) = ((y = x)) ⟇ ▩) ≔
 begin

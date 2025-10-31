@@ -656,6 +656,7 @@ fn translate_tautology(
         "reordering" | "hole" => Some(Ok(Proof(admit()))), // specific rules of CVC5
         "la_mult_neg" => Some(Ok(Proof(admit()))),
         "la_mult_pos" => Some(Ok(Proof(admit()))),
+        "la_disequality" => Some(translate_la_disequality(clause)),
         _ => Some(translate_simple_tautology(rule, premises.as_slice())),
     }
 }

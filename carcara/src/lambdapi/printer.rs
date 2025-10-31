@@ -396,7 +396,10 @@ impl PrettyPrint for ProofStep {
                 .nest(DEFAULT_INDENT)
                 .append(text(RBRACE))
                 .append(semicolon()),
-            ProofStep::Change(t) => text("change").append(space()).append(t.to_doc()).semicolon(),
+            ProofStep::Change(t) => text("change")
+                .append(space())
+                .append(t.to_doc())
+                .semicolon(),
             ProofStep::Reflexivity => text("reflexivity").append(semicolon()),
             ProofStep::Refine(func, args, subproofs) => text("refine")
                 .append(space())
@@ -446,10 +449,12 @@ impl PrettyPrint for ProofStep {
                 }))
                 .append(semicolon()),
             ProofStep::Symmetry => text("symmetry").append(semicolon()),
-            ProofStep::Simplify(ss) => text("simplify")
-                .append(ss.is_empty().then(|| text("")).unwrap_or(space()))
-                .append(RcDoc::intersperse(ss.into_iter().map(|s| text(s)), space()))
-                .append(semicolon()),
+            ProofStep::Simplify(ss) if ss.is_empty() => text("simplify").append(semicolon()),
+            ProofStep::Simplify(ss) => ss.into_iter().fold(RcDoc::nil(), |acc, s| {
+                // We have to generate one simplify per term because Lambdapi does not support multiple arguments for simplify
+                acc.append(text("simplify").append(space()).append(text(s)))
+                    .append(semicolon())
+            }),
             ProofStep::Set(name, def) => text("set").append(space()).append(
                 text(name)
                     .append(is())
@@ -574,12 +579,10 @@ impl PrettyPrintAx for Command {
                 .semicolon(),
             Command::Symbol(modifier, name, params, r#text, ..) => modifier
                 .as_ref()
-                .map(|m|
-                    match m {
-                        Modifier::Constant => m.to_doc().append(space()),
-                        Modifier::Opaque => RcDoc::nil(),
-                    },
-                )
+                .map(|m| match m {
+                    Modifier::Constant => m.to_doc().append(space()),
+                    Modifier::Opaque => RcDoc::nil(),
+                })
                 .unwrap_or(RcDoc::nil())
                 .append(symbol())
                 .append(space())

@@ -116,11 +116,28 @@ pub fn translate_sym(premise: &str) -> TradResult<Proof> {
     }))
 }
 
+/// Rule 12: not_symm
+/// i. `¬(𝑡1 ≈ 𝑡2)`
+/// j. `¬(𝑡2 ≈ 𝑡1)`
+///     
+///
+/// /// is translated into the script:
+/// ```text
+/// refine not_symm [[i]];
+/// ```
 pub fn translate_not_symm(premise: &str) -> TradResult<Proof> {
-    Ok(Proof(lambdapi! {
-        apply "∨ᵢ₁";
-        apply "not_symm" (@unary_clause_to_prf(premise));
-    }))
+   let  mut proof = vec![];
+    proof.push(ProofStep::Apply(
+        Term::from("∨ᵢ₁"),
+        vec![],
+        SubProofs(None),
+    ));
+    proof.push(ProofStep::Refine(
+        Term::from("not_symm"),
+        vec![unary_clause_to_prf(premise)],
+        SubProofs(None),
+    ));
+    Ok(Proof(proof))
 }
 
 /// Rule 30: and
@@ -733,9 +750,13 @@ pub fn translate_contraction(
 
     let i = premise.0.clone().into();
 
-    let i_cl = Term::Alethe(LTerm::Clauses(premise.1.into_iter().map(Into::into).collect_vec()));
+    let i_cl = Term::Alethe(LTerm::Clauses(
+        premise.1.into_iter().map(Into::into).collect_vec(),
+    ));
 
-    let j_cl = Term::Alethe(LTerm::Clauses(clause.into_iter().map(Into::into).collect_vec()));
+    let j_cl = Term::Alethe(LTerm::Clauses(
+        clause.into_iter().map(Into::into).collect_vec(),
+    ));
 
     // reify_i represents reify_cl 𝑙1, ... , 𝑙n
     let reify_i = Term::Terms(vec!["reify_cl".into(), i_cl.clone()]);
@@ -759,14 +780,16 @@ pub fn translate_contraction(
     let have_id = "H";
 
     // π (den (r ₂) (r ₁) = ⟇_to_∨_rw 𝑙1, ... , 𝑙n);
-    let change = ProofStep::Change(Term::Alethe(LTerm::ClassicProof(Box::new(Term::Alethe(LTerm::Eq(
-        Box::new(Term::Terms(vec![
-            "den".into(),
-            Term::Terms(vec![alias_reify_i.into(), "₂".into()]),
-            Term::Terms(vec![alias_reify_i.into(), "₁".into()]),
-        ])),
-        Box::new(conv_j.clone()),
-    ))))));
+    let change = ProofStep::Change(Term::Alethe(LTerm::ClassicProof(Box::new(Term::Alethe(
+        LTerm::Eq(
+            Box::new(Term::Terms(vec![
+                "den".into(),
+                Term::Terms(vec![alias_reify_i.into(), "₂".into()]),
+                Term::Terms(vec![alias_reify_i.into(), "₁".into()]),
+            ])),
+            Box::new(conv_j.clone()),
+        ),
+    )))));
 
     //   have eq : π (⟇_to_∨_rw 𝑙1, ... , 𝑙n = ⟇_to_∨_rw 𝑙1, ... , 𝑙n) {
     //     set r ≔ ...;
@@ -791,6 +814,35 @@ pub fn translate_contraction(
     proof.push(ProofStep::Refine(
         "subst_equiv_clause".into(),
         vec![i_cl, j_cl, have_id.into(), i],
+        SubProofs(None),
+    ));
+
+    Ok(Proof(proof))
+}
+
+/// Rule 13: la_disequality
+/// `𝑡1 ≈ 𝑡2 ∨ ¬(𝑡1 ≤ 𝑡2) ∨ ¬(𝑡2 ≤ 𝑡1)``
+/// 
+/// is translated into the script:
+/// 
+/// ```text
+/// refine la_disequality t1 t2;
+/// ```
+pub fn translate_la_disequality(clause: &[Rc<AletheTerm>]) -> TradResult<Proof> {
+    let mut proof = vec![];
+
+    let eq_t1_t2 = match_term_err!((or ...) = &clause[0])
+        .unwrap()
+        .first()
+        .unwrap();
+
+    let (t1, t2): (Term, Term) = match_term_err!((= t1 t2) = eq_t1_t2)
+        .map(|(t1, t2)| (t1.into(), t2.into()))
+        .expect("No equality found in la_disequality?");
+
+    proof.push(ProofStep::Refine(
+        "la_disequality".into(),
+        vec![t1, t2],
         SubProofs(None),
     ));
 

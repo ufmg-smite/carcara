@@ -616,11 +616,9 @@ fn la_generic(
     proof.push(ProofStep::Rewrite(true, None, Term::from("norm_correct"), vec![
         Term::Terms(vec![left_prefix_term.clone(), Term::from("₁")]),
         Term::Terms(vec![left_prefix_term, Term::from("₂")]),
-        Term::Underscore,
-    ],SubProofs(Some(vec![
-        Proof(vec![ ProofStep::Refine(intro_top(), vec![], SubProofs(None)) ]),
-        Proof(vec![ ProofStep::Refine(intro_top(), vec![], SubProofs(None)) ]),
-    ]))));
+    ],SubProofs(None)));
+
+    proof.push(ProofStep::Refine(intro_top(), vec![], SubProofs(None)));
 
     Ok(Proof(proof))
 }

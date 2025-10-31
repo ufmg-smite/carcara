@@ -465,3 +465,23 @@ begin
     assume y1 y2 ys z;
     refine bool_implies_or_distrib y1 (y2 ∨ ys) z;
 end;
+
+// //FIXME: Move to Lia.lp ?
+// la_disequality: 𝑡1 ≈ 𝑡2 ∨ ¬(𝑡1 ≤ 𝑡2) ∨ ¬(𝑡2 ≤ 𝑡1 )
+opaque symbol la_disequality (t1 t2: τ int) : π̇ (((t1 = t2) ∨ ¬ (t1 ≤ t2) ∨ ¬ (t2 ≤ t1)) ⟇ ▩) ≔
+begin
+  assume t1 t2;
+  apply ∨ᵢ₁;
+  rewrite ∨_com;
+  rewrite left ∨_assoc;
+  rewrite imp_eq_or;
+  rewrite imp_eq_or;
+  refine ≤_antisym t1 t2
+end;
+
+opaque symbol la_totality (t1 t2: τ int) : π̇ (((t1 ≤ t2) ∨ (t2 ≤ t1)) ⟇ ▩) ≔
+begin
+  assume t1 t2;
+  apply ∨ᵢ₁;
+  refine ≤_total t1 t2
+end;
