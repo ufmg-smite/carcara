@@ -245,18 +245,7 @@ impl<T: Clone> AletheScopes<T> {
             self.contexts_opened += 1;
         }
 
-        // NOTE: HashMapStack::new() adds a scope. We only push another
-        // scope if this is not the first time open_scope was called, in order
-        // to maintain invariant
-        // self.context_introduced.len() == self.variables_in_scope.height()
-        if !self.context_introduced.is_empty() {
-            // NOTE: reusing variables_in_scope concept
-            // for this new kind of scope (not the one
-            // related with contexts introduced through
-            // "anchor" commands).
-            self.variables_in_scope.push_scope();
-        }
-
+        self.variables_in_scope.push_scope();
         self.context_introduced.push(context_introduced);
     }
 
