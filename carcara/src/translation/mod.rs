@@ -274,24 +274,6 @@ impl<T: Clone> AletheScopes<T> {
             self.contexts_opened -= 1;
         }
     }
-
-    /// Returns the index of the last surrounding context actually introduced
-    /// within the proof certificate. This is so since scopes are used to
-    /// represent scopes from contexts and other constructions with binding occurences
-    /// of variables.
-    pub fn get_last_introduced_context_index(&self) -> usize {
-        let mut last_scope: usize = 0;
-        let nesting_level: usize = self.get_contexts_opened() - 1;
-
-        for i in 0..nesting_level {
-            if self.context_introduced[nesting_level - 1 - i] {
-                last_scope = nesting_level - 1 - i;
-                break;
-            }
-        }
-
-        last_scope
-    }
 }
 
 /// Information from the last step of the actual subproof. Useful to retrieve
@@ -444,9 +426,10 @@ pub trait VecToVecTranslator<'a, StepType, TermType: Clone + 'a, TypeTermType, O
 
     /// Abstracts the process of traversing a given context, identifying the fixed
     /// variables and the substitutions. Returns the corresponding list of
-    /// variables and substitutions to be used when building a @ctx.
-    /// PRE : { the corresponding new scope in `self.variables_in_scope` is
-    ///              already opened }
+    /// variables and substitutions to be used when building the representation
+    /// of contexts.
+    /// PRE : { the scope representing the context to be processed is already
+    ///         opened }
     fn process_anchor_context(&mut self, context: &[AnchorArg]) -> Vec<TermType>;
 
     /// Returns the identifier of the last context actually introduced within the proof certificate.
@@ -457,8 +440,8 @@ pub trait VecToVecTranslator<'a, StepType, TermType: Clone + 'a, TypeTermType, O
             + &(self
                 .get_read_translator_data()
                 .alethe_scopes
-                .get_last_introduced_context_index()
-                + 1)
+                .get_contexts_opened()
+                - 1)
             .to_string()
     }
 
@@ -578,6 +561,7 @@ pub trait VecToVecTranslator<'a, StepType, TermType: Clone + 'a, TypeTermType, O
                             .open_non_context_scope();
                     } else {
                         // { !args.is_empty() }
+
                         // We actually have an anchor introducing new variables
                         self.get_mut_translator_data()
                             .alethe_scopes
