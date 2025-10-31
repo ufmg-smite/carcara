@@ -372,10 +372,10 @@ pub trait VecToVecTranslator<'a, StepType, TermType: Clone + 'a, TypeTermType, O
     /// enclosing context.
     fn build_var_binding(&self, id: &str) -> TermType;
 
-    /// Translates `BindingList` constructs, as used for binder terms forall, exists,
-    /// choice and lambda. The "let" binder uses the same construction but assigns to
-    /// it a different semantics. See `translate_let_binding_list` for its translation.
-    fn translate_binding_list(&mut self, binding_list: &BindingList) -> TermType;
+    // /// Translates `BindingList` constructs, as used for binder terms forall, exists,
+    // /// choice and lambda. The "let" binder uses the same construction but assigns to
+    // /// it a different semantics. See `translate_let_binding_list` for its translation.
+    // fn translate_binding_list(&mut self, binding_list: &BindingList) -> TermType;
 
     /// Translates a `BindingList`: it builds a list of pairs (variable, type) for the binding
     /// occurrences, and returns this coupled with the original list of actual values, as a `@VarList`.

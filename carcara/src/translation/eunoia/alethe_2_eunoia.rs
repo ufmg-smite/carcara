@@ -26,6 +26,23 @@ impl EunoiaTranslator {
             translation: TranslatorData::new(),
         }
     }
+
+    /// Translates `BindingList` constructs, as used for binder terms forall, exists,
+    /// choice and lambda. The "let" binder uses the same construction but assigns to
+    /// it a different semantics. See `translate_let_binding_list` for its translation.
+    fn translate_binding_list(&mut self, binding_list: &BindingList) -> EunoiaTerm {
+        let mut ret = Vec::new();
+
+        binding_list.iter().for_each(|sorted_var| {
+            let (name, sort) = sorted_var;
+            ret.push(EunoiaTerm::Var(
+                name.clone(),
+                Box::new(self.translate_term(sort)),
+            ));
+        });
+
+        EunoiaTerm::List(ret)
+    }
 }
 
 impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for EunoiaTranslator {
@@ -467,23 +484,6 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                 EunoiaTerm::Id(id.to_owned().clone()),
             ],
         )
-    }
-
-    /// Translates `BindingList` constructs, as used for binder terms forall, exists,
-    /// choice and lambda. The "let" binder uses the same construction but assigns to
-    /// it a different semantics. See `translate_let_binding_list` for its translation.
-    fn translate_binding_list(&mut self, binding_list: &BindingList) -> EunoiaTerm {
-        let mut ret = Vec::new();
-
-        binding_list.iter().for_each(|sorted_var| {
-            let (name, sort) = sorted_var;
-            ret.push(EunoiaTerm::Var(
-                name.clone(),
-                Box::new(self.translate_term(sort)),
-            ));
-        });
-
-        EunoiaTerm::List(ret)
     }
 
     /// Translates a `BindingList` as required by our definition of @let: it builds a list
