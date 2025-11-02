@@ -871,7 +871,7 @@ mod tests_tautolog {
             (assume h3 (= c d))
             (step t1 (cl (= a d)) :rule trans :premises (h1 h2 h3))
         ";
-        let (_, proof, _) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+        let (_, proof, _, _) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
 
         assert_eq!(4, proof.commands.len());
 
@@ -919,7 +919,7 @@ mod tests_tautolog {
             (assume h4 (= d h))
             (step t3 (cl (= (or a b c d) (or e f g h))) :rule cong :premises (h1 h2 h3 h4))
         ";
-        let (_, proof, _) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+        let (_, proof, _, _) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
 
         assert_eq!(5, proof.commands.len());
 
@@ -976,7 +976,7 @@ mod tests_tautolog {
             (assume h4 (= d h))
             (step t3 (cl (= (and a b c d) (and e f g h))) :rule cong :premises (h1 h2 h3 h4))
         ";
-        let (_, proof, _) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+        let (_, proof, _, _) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
 
         assert_eq!(5, proof.commands.len());
 
@@ -1024,7 +1024,7 @@ mod tests_tautolog {
             (assume h1 (= a b))
             (step t3 (cl (= (not a) (not b))) :rule cong :premises (h1))
         ";
-        let (_, proof, _) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+        let (_, proof, _, _) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
 
         assert_eq!(2, proof.commands.len());
 
@@ -1067,7 +1067,7 @@ mod tests_tautolog {
             (assume h2 (= b d))
             (step t3 (cl (= (=> a b) (=> c d))) :rule cong :premises (h1 h2))
         ";
-        let (_, proof, _) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+        let (_, proof, _, _) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
 
         assert_eq!(3, proof.commands.len());
 
@@ -1112,7 +1112,7 @@ mod tests_tautolog {
         let proof = b"
             (step t1 (cl (or (not (forall ((x S) (y T)) (P y x ))) (P b (f a)))) :rule forall_inst :args ((f a) b))
         ";
-        let (_, proof, _) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+        let (_, proof, _, _) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
 
         assert_eq!(1, proof.commands.len());
 
@@ -1165,7 +1165,7 @@ mod tests_tautolog {
             (step t1 (cl (ite (p a) (= b (ite (p a) b a)) (= a (ite (p a) b a)))) :rule hole)
             (step t2 (cl (p a) (= a (ite (p a) b a))) :rule ite1 :premises (t1))
         ";
-        let (_, proof, _) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+        let (_, proof, _, _) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
 
         assert_eq!(2, proof.commands.len());
 
@@ -1214,7 +1214,7 @@ mod tests_tautolog {
             (step t1 (cl (ite (p a) (= b (ite (p a) b a)) (= a (ite (p a) b a)))) :rule hole)
             (step t2 (cl (not (p a)) (= b (ite (p a) b a))) :rule ite2 :premises (t1))
         ";
-        let (_, proof, _) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+        let (_, proof, _, _) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
 
         assert_eq!(2, proof.commands.len());
 
@@ -1264,7 +1264,7 @@ mod tests_tautolog {
             (step t1 (cl (and (p a) (p b) (p c))) :rule hole)
             (step t2 (cl (p b)) :rule and :premises (t1) :args (1))
         ";
-        let (_, proof, _) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+        let (_, proof, _, _) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
 
         assert_eq!(2, proof.commands.len());
 
@@ -1306,7 +1306,7 @@ mod tests_tautolog {
             (step t1 (cl (and (p a) (p b) (p c))) :rule hole)
             (step t2 (cl (p a)) :rule and :premises (t1) :args (0))
         ";
-        let (_, proof, _) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+        let (_, proof, _, _) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
 
         assert_eq!(2, proof.commands.len());
 
@@ -1346,7 +1346,7 @@ mod tests_tautolog {
             (step t1 (cl (and (p a) (p b) (p c) (p d))) :rule hole)
             (step t2 (cl (p d)) :rule and :premises (t1) :args (3))
         ";
-        let (_, proof, _) = parse_instance(problem, proof, parser::Config::new()).unwrap();
+        let (_, proof, _, _) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
 
         assert_eq!(2, proof.commands.len());
 

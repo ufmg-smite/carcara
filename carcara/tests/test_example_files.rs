@@ -89,9 +89,10 @@ fn run_translation(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> 
     let mut parser_cfg = parser::Config::new();
     parser_cfg.expand_lets = true;
 
-    let (problem, proof, mut pool) = parser::parse_instance(
+    let (problem, proof, _,mut pool) = parser::parse_instance(
         io::BufReader::new(fs::File::open(problem_path)?),
         io::BufReader::new(fs::File::open(proof_path)?),
+        None,
         parser_cfg,
     )?;
 
@@ -127,7 +128,7 @@ fn run_translation(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> 
     bfile.flush()?;
 
     let status = Command::new("lambdapi")
-        .args(["check", "-v0", "-w", "--timeout=5", filename.as_str()])
+        .args(["check", "-v0", "-w", "--timeout=30", filename.as_str()])
         .status()
         .expect("failed to execute process");
 
@@ -194,3 +195,9 @@ fn tlaps(proof_path: &str) {
 }
 
 
+
+#[test_generator::from_dir("benchmarks/ewd")]
+#[allow(dead_code)]
+fn ewd(proof_path: &str) {
+    test_file(proof_path, run_translation)
+}

@@ -8,8 +8,7 @@ use carcara::{
     benchmarking::OnlineBenchmarkResults,
     check, check_and_elaborate, check_parallel, checker, elaborator, generate_lia_smt_instances,
     parser, slice,
-    ast, benchmarking::OnlineBenchmarkResults, check, check_and_elaborate, check_parallel, checker,
-    elaborator, generate_lia_smt_instances, lambdapi, lambdapi::output::*, parser,
+    lambdapi, lambdapi::output::*,
     produce_lambdapi_proof,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
@@ -887,7 +886,7 @@ pub fn split_proof(
 }
 
 fn translate_to_lambdapi(options: TranslationOption) -> CliResult<()> {
-    let (problem, proof) = get_instance(&options.input)?;
+    let (problem, proof, _) = get_instance(&options.input, true)?;
 
     let input_file_name = options.input.problem_file.unwrap().replace(".smt2", "");
     let mut path_file = std::path::PathBuf::from(input_file_name.clone());

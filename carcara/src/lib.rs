@@ -331,7 +331,7 @@ pub fn produce_lambdapi_proof<'a, T: io::BufRead>(
     elaborator_config: elaborator::Config,
     translate_config: lambdapi::Config,
 ) -> Result<lambdapi::output::ProofFile, Box<dyn std::error::Error>> {
-    let (problem, mut proof, mut pool) = parser::parse_instance(problem, proof, parser_config)?;
+    let (problem, mut proof, _, mut pool) = parser::parse_instance(problem, proof, None, parser_config)?;
 
     if translate_config.no_elab == false {
         let mut checker = checker::ProofChecker::new(&mut pool, checker_config);

@@ -450,7 +450,7 @@ impl From<&Rc<AletheTerm>> for Term {
         match term.deref() {
             AletheTerm::Sort(sort) => match sort {
                 Sort::Function(params) => Term::Function(params.iter().map(Term::from).collect()),
-                Sort::Atom(id, _terms) => Term::TermId(id.clone()),
+                Sort::Atom(id, _terms) => Term::TermId(id.to_string()),
                 Sort::Bool => Term::Sort(BuiltinSort::Bool),
                 Sort::Int => Term::Sort(BuiltinSort::Int),
                 s => todo!("{:#?}", s),
@@ -944,7 +944,7 @@ mod tests_term {
             (assume Goal (! (not (=> (! (and (forall ((c1 Idv) (c2 Idv)) (=> (and (Mem c1 Client) (Mem c2 Client)) (forall ((r Idv)) (=> (Mem r Res) (=> (Mem r (cap (FunApp Alloc c1) (FunApp Alloc c2))) (TrigEq c1 c2)))))) (and (and (! (TrigEqDollar (FunApp VarUnsat clt) SetEnum) :named @p_5) (! (TrigEqDollar (FunApp Alloc clt) SetEnum) :named @p_4)) (and (! (not (TrigEqDollar S SetEnum)) :named @p_3) (! (TrigEq UnsatPrim (FunExcept VarUnsat clt S)) :named @p_2)) (! (TrigEq AllocPrim Alloc) :named @p_1))) :named @p_6) (forall ((c1 Idv) (c2 Idv)) (=> (and (Mem c1 Client) (Mem c2 Client)) (forall ((r Idv)) (=> (Mem r Res) (=> (Mem r (cap (FunApp AllocPrim c1) (FunApp AllocPrim c2))) (TrigEq c1 c2)))))))) :named @p_7))
             (step t1 (cl (and (Mem S S) (not (=> (! (and (forall ((c1 Idv) (c2 Idv)) (=> (and (Mem c1 Client) (Mem c2 Client)) (forall ((r Idv)) (=> (Mem r Res) (=> (Mem r (cap (FunApp Alloc c1) (FunApp Alloc c2))) (TrigEq c1 c2)))))) (and (and (! (TrigEqDollar (FunApp VarUnsat clt) SetEnum) :named @p_5) (! (TrigEqDollar (FunApp Alloc clt) SetEnum) :named @p_4)) (and (! (not (TrigEqDollar S SetEnum)) :named @p_3) (! (TrigEq UnsatPrim (FunExcept VarUnsat clt S)) :named @p_2)) (! (TrigEq AllocPrim Alloc) :named @p_1))) :named @p_6) (forall ((c1 Idv) (c2 Idv)) (=> (and (Mem c1 Client) (Mem c2 Client)) (forall ((r Idv)) (=> (Mem r Res) (=> (Mem r (cap (FunApp AllocPrim c1) (FunApp AllocPrim c2))) (TrigEq c1 c2))))))))))  :rule hole)
         ";
-        let (problem, proof, mut pool) = parse_instance(problem, proof, Config::new()).unwrap();
+        let (problem, proof, _, mut pool) = parse_instance(problem, proof, None, Config::new()).unwrap();
 
         let mut ctx = Context::default();
 
@@ -989,7 +989,7 @@ mod tests_term {
                     (forall ((p Bool) (q Bool)) (or p (not q) (not s)))
                 )) :rule qnt_cnf)
         ";
-        let (problem, proof, mut pool) = parse_instance(problem, proof, Config::new()).unwrap();
+        let (problem, proof, _,mut pool) = parse_instance(problem, proof, None, Config::new()).unwrap();
 
         let global_variables: HashSet<_> = problem
             .prelude

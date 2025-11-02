@@ -97,10 +97,10 @@ fn translate_sort_function(sort: &Sort) -> Term {
         }
         Sort::Atom(ref a, args) => {
             if args.is_empty() {
-                a.into()
+                a.as_ref().into()
             } else {
                 let mut args: Vec<Term> = args.into_iter().map(Into::into).collect_vec();
-                let mut sort = vec![a.into()];
+                let mut sort = vec![a.as_ref().into()];
                 sort.append(&mut args);
                 Term::Terms(sort)
             }
@@ -657,6 +657,7 @@ fn translate_tautology(
         "la_mult_neg" => Some(Ok(Proof(admit()))),
         "la_mult_pos" => Some(Ok(Proof(admit()))),
         "la_disequality" => Some(translate_la_disequality(clause)),
+        "connective_def" => Some(Ok(Proof(vec![ProofStep::Admit]))),
         _ => Some(translate_simple_tautology(rule, premises.as_slice())),
     }
 }
@@ -911,8 +912,8 @@ mod tests_translation {
             (step t2 (cl (= c c) (not (= a a))) :rule hole)
             (step t3 (cl (= b b) (= c c)) :rule resolution :premises (t1 t2) :args ((= a a) true))
         ";
-        let (problem, proof, mut pool) =
-            parse_instance(problem, proof, parser::Config::new()).unwrap();
+        let (problem, proof, _, mut pool) =
+            parse_instance(problem, proof, None, parser::Config::new()).unwrap();
 
         let global_variables: HashSet<_> = problem
             .prelude

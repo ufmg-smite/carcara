@@ -522,6 +522,15 @@ induction
 {reflexivity}
 end;
 
+opaque symbol reify_correct_withenv l x: π(val(rfy l x) = x) ≔
+begin
+assume l;
+induction
+{reflexivity}
+{reflexivity}
+{reflexivity}
+end;
+
 symbol eta_prod [a b] (x:τ(a × b)): π(x = (x ₁) ‚ (x ₂));
 
 // symbol l1 x y : π(((2 * x) + y) - ((2 * x) + y) ≠ 1) ≔
