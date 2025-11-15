@@ -148,7 +148,10 @@ impl<'a> TstpPrinter<'a> {
             }
 
             TstpFormula::FunctorApp(functor, arguments) => {
-                ret = functor.clone() + "(";
+                // TODO: unnecessary clone
+                ret = TstpPrinter::operator_to_concrete_syntax(&TstpOperator::Functor(
+                    functor.clone(),
+                )) + "(";
 
                 let mut first_element = true;
 
@@ -299,11 +302,15 @@ impl<'a> TstpPrinter<'a> {
 
             TstpOperator::BinaryOperator(TstpBinaryOperator::Inequality) => "!=".to_owned(),
 
+            // Functors
             // Arithmetic unary ops.
-            TstpOperator::UnaryOperator(TstpUnaryOperator::Uminus) => "-".to_owned(),
+            TstpOperator::Functor(TstpFunctor::Uminus) => "-".to_owned(),
 
             // Arithmetic binary ops.
-            TstpOperator::BinaryOperator(TstpBinaryOperator::Sum) => "$sum".to_owned(),
+            TstpOperator::Functor(TstpFunctor::Sum) => "$sum".to_owned(),
+
+            // Problem functor.
+            TstpOperator::Functor(TstpFunctor::ProblemFunctor(functor)) => functor.clone(),
 
             _ => {
                 println!("Problems translating operator {:?}", op);

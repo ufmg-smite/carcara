@@ -164,18 +164,33 @@ impl TstpTranslator {
                 // Assumption: we never receive a partial application of a binary operator.
 
                 // translate_operator_application might be invoked to translate a unit clause.
-                assert!(!operands.is_empty());
+                assert!(!operands_tstp.is_empty());
 
                 let mut ret: TstpFormula;
 
-                if operands.len() >= 2 {
+                if operands_tstp.len() >= 2 {
                     ret = TstpFormula::BinaryOperatorApp(
                         binary_op.clone(),
                         Box::new(operands_tstp[0].clone()),
                         Box::new(operands_tstp[1].clone()),
                     );
+
+                    // TODO: some better way to skip the first 2 positions?
+                    let mut position = 0;
+                    operands_tstp.iter().for_each(|operand| {
+                        if position > 1 {
+                            ret = TstpFormula::BinaryOperatorApp(
+                                binary_op.clone(),
+                                Box::new(ret.clone()),
+                                Box::new(operand.clone()),
+                            );
+                        } else {
+                            // { position <= 1 }
+                            position += 1;
+                        }
+                    });
                 } else {
-                    // { operands.len() == 1 }
+                    // { operands_tstp.len() == 1 }
                     // We should be translating just a unit clause
                     assert!(operator == Operator::Or);
 
@@ -186,22 +201,13 @@ impl TstpTranslator {
                     );
                 }
 
-                // TODO: some better way to skip the first 2 positions?
-                let mut position = 0;
-                operands_tstp.iter().for_each(|operand| {
-                    if position > 1 {
-                        ret = TstpFormula::BinaryOperatorApp(
-                            binary_op.clone(),
-                            Box::new(ret.clone()),
-                            Box::new(operand.clone()),
-                        );
-                    } else {
-                        // { position <= 1 }
-                        position += 1;
-                    }
-                });
-
                 ret
+            }
+
+            TstpOperator::Functor(functor) => {
+                assert!(!operands_tstp.is_empty());
+
+                TstpFormula::FunctorApp(functor.clone(), operands_tstp)
             }
         }
     }
@@ -566,7 +572,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                     fun_params.push(self.translate_term(param));
                 });
 
-                TstpFormula::FunctorApp((*fun).to_string(), fun_params)
+                TstpFormula::FunctorApp(TstpFunctor::ProblemFunctor((*fun).to_string()), fun_params)
             }
 
             Term::Let(binding_list, _scope) => {
@@ -783,15 +789,15 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
             Operator::Distinct => TstpOperator::BinaryOperator(TstpBinaryOperator::Inequality),
 
             // Arithmetic
-            Operator::Add => TstpOperator::BinaryOperator(TstpBinaryOperator::Sum),
+            Operator::Add => TstpOperator::Functor(TstpFunctor::Sum),
 
-            Operator::Sub => TstpOperator::BinaryOperator(TstpBinaryOperator::Difference),
+            Operator::Sub => TstpOperator::Functor(TstpFunctor::Difference),
 
-            Operator::Mult => TstpOperator::BinaryOperator(TstpBinaryOperator::Product),
+            Operator::Mult => TstpOperator::Functor(TstpFunctor::Product),
 
-            Operator::IntDiv => TstpOperator::BinaryOperator(TstpBinaryOperator::QuotientE),
+            Operator::IntDiv => TstpOperator::Functor(TstpFunctor::QuotientE),
 
-            Operator::RealDiv => TstpOperator::BinaryOperator(TstpBinaryOperator::Quotient),
+            Operator::RealDiv => TstpOperator::Functor(TstpFunctor::Quotient),
 
             _ => {
                 println!("No defined translation for operator {:?}", operator);

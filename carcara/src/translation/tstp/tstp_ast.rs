@@ -102,9 +102,7 @@ pub enum TstpFormula {
     BinaryOperatorApp(TstpBinaryOperator, Box<TstpFormula>, Box<TstpFormula>),
 
     // TPTP jargon: functor.
-    // TODO: do we need to introduce a special syntactic
-    // category for functors?
-    FunctorApp(Symbol, Vec<TstpFormula>),
+    FunctorApp(TstpFunctor, Vec<TstpFormula>),
 
     //  Typing statements
     Typing(Box<TstpFormula>, TstpType),
@@ -135,6 +133,8 @@ pub enum TstpOperator {
     UnaryOperator(TstpUnaryOperator),
 
     BinaryOperator(TstpBinaryOperator),
+
+    Functor(TstpFunctor),
 }
 
 #[derive(Clone, Debug)]
@@ -150,9 +150,6 @@ pub enum TstpNullaryOperator {
 pub enum TstpUnaryOperator {
     // Logical connectives
     Not,
-
-    // Unary minus of a number.
-    Uminus,
 }
 
 #[derive(Clone, Debug)]
@@ -168,6 +165,21 @@ pub enum TstpBinaryOperator {
     // From TPTP docs: Conditional expressions have $ite as the functor.
     Ite,
 
+    // Relations (putting in the same category as operator, as happens in Alethe)
+    Equality,
+    Inequality,
+    Less,
+    LessEq,
+    Greater,
+    GreaterEq,
+}
+
+#[derive(Clone, Debug)]
+pub enum TstpFunctor {
+    // Functor defined in the problem.
+    ProblemFunctor(Symbol),
+
+    // Defined functors.
     // Arith
     Sum,
     // Difference between two numbers.
@@ -178,16 +190,9 @@ pub enum TstpBinaryOperator {
     // Integral quotient of two numbers:
     // $quotient_e(N,D) - the Euclidean quotient, which has a non-negative remainder.
     QuotientE,
-
-    // Relations (putting in the same category as operator, as happens in Alethe)
-    Equality,
-    Inequality,
-    Less,
-    LessEq,
-    Greater,
-    GreaterEq,
+    // Unary minus of a number.
+    Uminus,
 }
-
 /// Type terms.
 /// From TPTP docs:
 /// "The defined types are $o - the Boolean type, $i - the type of individuals, $real - the type
