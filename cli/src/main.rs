@@ -86,7 +86,7 @@ enum Command {
     Translate(TranslateCommandOptions),
 
     /// Translates an Alethe proof into TSTP.
-    TranslateTstp(TranslateTstpCommandOptions),
+    Translate2Tstp(Translate2TstpCommandOptions),
 }
 
 #[derive(Args)]
@@ -439,7 +439,7 @@ struct TranslateCommandOptions {
 }
 
 #[derive(Args)]
-struct TranslateTstpCommandOptions {
+struct Translate2TstpCommandOptions {
     #[clap(flatten)]
     input: Input,
 
@@ -525,7 +525,7 @@ fn main() {
             generate_lia_problems_command(options, !cli.no_print_with_sharing)
         }
         Command::Translate(options) => translate_command(options),
-        Command::TranslateTstp(options) => translate_tstp_command(options),
+        Command::Translate2Tstp(options) => translate_2_tstp_command(options),
     };
     if let Err(e) = result {
         log::error!("{}", e);
@@ -792,7 +792,7 @@ fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
     Ok(())
 }
 
-fn translate_tstp_command(options: TranslateTstpCommandOptions) -> CliResult<()> {
+fn translate_2_tstp_command(options: Translate2TstpCommandOptions) -> CliResult<()> {
     let (mut problem, mut proof) =
         get_instance(&options.input, options.parsing.buffer_entire_file)?;
     let mut str_problem = String::new();
