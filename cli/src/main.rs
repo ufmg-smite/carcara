@@ -84,6 +84,9 @@ enum Command {
 
     /// Translates an Alethe proof into Eunoia.
     Translate(TranslateCommandOptions),
+
+    /// Translates an Alethe proof into TSTP.
+    TranslateTstp(TranslateTstpCommandOptions),
 }
 
 #[derive(Args)]
@@ -435,6 +438,15 @@ struct TranslateCommandOptions {
     parsing: ParsingOptions,
 }
 
+#[derive(Args)]
+struct TranslateTstpCommandOptions {
+    #[clap(flatten)]
+    input: Input,
+
+    #[clap(flatten)]
+    parsing: ParsingOptions,
+}
+
 #[derive(ArgEnum, Clone)]
 enum LogLevel {
     Off,
@@ -513,6 +525,7 @@ fn main() {
             generate_lia_problems_command(options, !cli.no_print_with_sharing)
         }
         Command::Translate(options) => translate_command(options),
+        Command::TranslateTstp(options) => translate_tstp_command(options),
     };
     if let Err(e) = result {
         log::error!("{}", e);
@@ -773,6 +786,48 @@ fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
     println!("(include \"../alethe_signature/alethe.eo\")");
     println!("(include \"../alethe_signature/theory.eo\")");
     println!("(include \"../alethe_signature/programs.eo\")");
+    println!("{}", std::str::from_utf8(&buf_prelude).unwrap());
+    println!("{}", std::str::from_utf8(&buf_proof).unwrap());
+
+    Ok(())
+}
+
+fn translate_tstp_command(options: TranslateTstpCommandOptions) -> CliResult<()> {
+    let (mut problem, mut proof) =
+        get_instance(&options.input, options.parsing.buffer_entire_file)?;
+    let mut str_problem = String::new();
+    let _ = problem.read_to_string(&mut str_problem);
+    let mut str_proof = String::new();
+    let _ = proof.read_to_string(&mut str_proof);
+
+    let (alethe_problem, alethe_proof, _) = parser::parse_instance(
+        str_problem.as_bytes(),
+        str_proof.as_bytes(),
+        options.parsing.into(),
+    )?;
+    // .map_err(carcara::Error::from)?;
+
+    let node = ast::ProofNode::from_commands(alethe_proof.commands);
+    let mut translator = carcara::translation::tstp::alethe_2_tstp::TstpTranslator::new();
+    let tptp_problem = translator.translate_problem(&alethe_problem);
+    let tstp_proof = translator.translate(&node);
+
+    let mut buf_proof = Vec::new();
+    let s_exp_formatter_proof =
+        carcara::translation::tstp::printer::AnnotatedFormulaFormatter::new(&mut buf_proof);
+    let mut printer_proof =
+        carcara::translation::tstp::printer::TstpPrinter::new(s_exp_formatter_proof);
+
+    printer_proof.write_proof(tstp_proof).unwrap();
+
+    let mut buf_prelude = Vec::new();
+    let s_exp_formatter_prelude =
+        carcara::translation::tstp::printer::AnnotatedFormulaFormatter::new(&mut buf_prelude);
+    let mut printer_prelude =
+        carcara::translation::tstp::printer::TstpPrinter::new(s_exp_formatter_prelude);
+
+    printer_prelude.write_proof(&tptp_problem).unwrap();
+
     println!("{}", std::str::from_utf8(&buf_prelude).unwrap());
     println!("{}", std::str::from_utf8(&buf_proof).unwrap());
 
