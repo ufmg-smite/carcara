@@ -16,7 +16,7 @@ pub struct TstpTranslator {
     // naming purposes.
     formulas_count: HashMap<TstpFormulaRole, rug::Integer>,
     // To keep track of each named formula, for reference purposes.
-    formulas_map: HashMap<String, TstpFormula>,
+    formulas_map: HashMap<String, TstpAnnotatedFormula>,
 }
 
 impl TstpTranslator {
@@ -43,11 +43,7 @@ impl TstpTranslator {
     ) -> TstpAnnotatedFormula {
         let formula_name = self.new_formula_name(step_id, &role);
 
-        // Register the formula
-        self.formulas_map
-            .insert(formula_name.clone(), formula.clone());
-
-        TstpAnnotatedFormula::new(
+        let annotated_formula = TstpAnnotatedFormula::new(
             // TODO: some other language?
             language,
             formula_name.clone(),
@@ -57,7 +53,13 @@ impl TstpTranslator {
             formula.clone(),
             source,
             useful_info,
-        )
+        );
+
+        // Register the annotated formula
+        self.formulas_map
+            .insert(formula_name.clone(), annotated_formula.clone());
+
+        annotated_formula
     }
 
     /// Abstracts the mechanism used to generate a new name for an annotated
@@ -245,7 +247,7 @@ impl TstpTranslator {
                 TstpLanguage::Tff,
                 TstpFormulaRole::Plain,
                 conclusion,
-                TstpTranslator::get_inference_formula_source(
+                self.get_inference_formula_source(
                     rule_name,
                     premises,
                     discharged_assumptions,
@@ -299,6 +301,7 @@ impl TstpTranslator {
     /// step that represents the application of an inference rule.
     /// PRE : { `rule_name` is not a tautology }
     fn get_inference_formula_source(
+        &self,
         rule_name: &str,
         premises: Vec<Symbol>,
         discharged_assumptions: Vec<Symbol>,
@@ -313,10 +316,22 @@ impl TstpTranslator {
 
         if !premises.is_empty() {
             // { ! premises.is_empty() }
-            // TODO: performance penalty: doing premises.clone()
-            useful_info_items.push(TstpInfoItem::InferenceItemAssumptionsRecord(
-                premises.clone(),
-            ));
+
+            // We determine which of the provided premises are tagged as
+            // assumptions, to put them into an InferenceItemAssumptionsRecord.
+            let mut assumptions = vec![];
+
+            premises.iter().for_each(|premise_id| {
+                if let Some(premise) = self.formulas_map.get(premise_id) {
+                    if premise.is_assumption() {
+                        assumptions.push(premise_id.clone());
+                    }
+                }
+            });
+
+            if !assumptions.is_empty() {
+                useful_info_items.push(TstpInfoItem::InferenceItemAssumptionsRecord(assumptions));
+            }
 
             premises.iter().for_each(|symbol| {
                 parent_formula_source

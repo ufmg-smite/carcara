@@ -3,6 +3,7 @@
 pub type Symbol = String;
 
 /// Tstp annotated formula.
+#[derive(Clone)] // To use them as HashMap keys.
 pub struct TstpAnnotatedFormula {
     pub language: TstpLanguage,
     pub name: Symbol,
@@ -38,9 +39,15 @@ impl TstpAnnotatedFormula {
             useful_info: provided_useful_info,
         }
     }
+
+    /// Query methods.
+    pub fn is_assumption(&self) -> bool {
+        self.role == TstpFormulaRole::Assumption
+    }
 }
 
 /// Possible TPTP languages.
+#[derive(Clone)]
 pub enum TstpLanguage {
     // First-order logic
     Fof,
