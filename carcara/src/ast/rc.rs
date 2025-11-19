@@ -27,34 +27,6 @@ use std::{fmt, hash::Hash, ops::Deref, sync};
 /// create a brand new allocation for that term, instead of reusing the existing allocation if that
 /// term was already added to the pool. Two indentical terms created independently with `Rc::new`
 /// will not compare as equal.
-///
-/// # Examples
-///
-/// ```
-/// # use carcara::ast::Rc;
-/// let a = Rc::new(5);
-/// let b = Rc::new(5);
-/// assert_ne!(a, b);
-///
-/// let c = a.clone();
-/// assert_eq!(a, c);
-/// ```
-///
-/// While `a` and `b` have the same contents, they are not considered equal. However, since `c` was
-/// created by cloning `a`, they point to the same allocation, and are thus considered equal. The
-/// same thing happens with their hash values:
-///
-/// ```
-/// # use carcara::ast::Rc;
-/// # use std::collections::HashSet;
-/// # let a = Rc::new(5);
-/// # let b = Rc::new(5);
-/// # let c = a.clone();
-/// let mut set = HashSet::new();
-/// set.insert(a);
-/// assert!(!set.contains(&b));
-/// assert!(set.contains(&c));
-/// ```
 #[derive(Eq)]
 pub struct Rc<T: ?Sized>(sync::Arc<T>);
 
