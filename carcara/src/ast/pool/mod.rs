@@ -415,12 +415,8 @@ impl PrimitivePool {
             Term::Binder(_, bindings, inner) => {
                 let mut vars = self.free_vars_with_priorities(inner, prior_pools);
                 for bound_var in bindings {
-                    let _term = self.add_with_priorities(bound_var.clone().into(), prior_pools);
-                    //vars.remove(&term);
-                    vars = vars
-                        .into_iter()
-                        .filter(|e| matches!(e.deref(), Term::Var(name, sort) if *name != *bound_var.0 || sort.deref() != bound_var.1.deref() ))
-                        .collect();
+                    let term = self.add_with_priorities(bound_var.clone().into(), prior_pools);
+                    vars.swap_remove(&term);
                 }
                 vars
             }
