@@ -116,7 +116,20 @@ impl<T: ?Sized + fmt::Display> fmt::Display for Rc<T> {
 
 impl<T> Rc<T> {
     /// Constructs a new `Rc<T>`.
-    pub fn new(value: T) -> Self {
+    ///
+    /// # Safety
+    /// This method allows you to create an arbitrary new `Rc` for an object. The `PartialEq` and
+    /// `Hash` implementations of `Rc` expect that identical objects share the same allocation.
+    /// In the case of `Term`s, this preserves the property of hash-consing, and is enforced by
+    /// the term pool. When this property is broken, you observe weird behaviors like identical
+    /// terms comparing as different, or multiple identical terms being inserted in the same
+    /// `HashMap`/`HashSet`.
+    ///
+    /// In most cases, instead of using this method, you should use add the raw term into a term
+    /// pool, using `TermPool::add`; or clone the `Rc<Term>` from an existing allocation, if it
+    /// exists. Unless you know what you are doing, prefer one of those options instead of using
+    /// this method.
+    pub(super) unsafe fn new_raw(value: T) -> Self {
         #[allow(clippy::disallowed_methods)]
         Self(sync::Arc::new(value))
     }

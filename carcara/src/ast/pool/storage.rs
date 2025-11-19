@@ -44,7 +44,9 @@ impl Storage {
         match self.0.get(&term) {
             Some(t) => t.0.clone(),
             None => {
-                let result = Rc::new(term);
+                // SAFETY: We have just checked that the term does not exist in the pool, so we
+                // can create a new allocation.
+                let result = unsafe { Rc::new_raw(term) };
                 self.0.insert(ByValue(result.clone()));
                 result
             }
