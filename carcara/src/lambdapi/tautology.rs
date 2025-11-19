@@ -1,5 +1,5 @@
 use super::*;
-use crate::ast::{Constant, Operator, Rc, Term as AletheTerm};
+use crate::ast::{Operator, Rc, Term as AletheTerm};
 use std::ops::Deref;
 
 /// Generate the proof term for the rule `trans` e.g.

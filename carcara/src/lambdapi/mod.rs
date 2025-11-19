@@ -11,9 +11,8 @@ use thiserror::Error;
 use try_match::unwrap_match;
 
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::HashSet,
     fmt::{self},
-    hash::Hash,
     ops::Deref,
     time::Duration,
     vec,
@@ -185,16 +184,21 @@ pub fn produce_lambdapi_proof<'a>(
 
     context.global_variables = global_variables;
 
-    let commands = translate_commands(&mut context, &mut proof_elaborated.iter(), &mut pool, |id, t, ps| {
-        let modifier = ps.is_some().then(|| Modifier::Opaque);
-        Command::Symbol(
-            modifier,
-            normalize_name(id),
-            vec![],
-            t,
-            ps.map(|ps| Proof(ps)),
-        )
-    })?;
+    let commands = translate_commands(
+        &mut context,
+        &mut proof_elaborated.iter(),
+        &mut pool,
+        |id, t, ps| {
+            let modifier = ps.is_some().then(|| Modifier::Opaque);
+            Command::Symbol(
+                modifier,
+                normalize_name(id),
+                vec![],
+                t,
+                ps.map(|ps| Proof(ps)),
+            )
+        },
+    )?;
 
     let shared_terms = gen_shared_term(&context);
 
@@ -228,15 +232,15 @@ fn get_pivots_from_args(args: &Vec<Rc<AletheTerm>>) -> Vec<(Rc<AletheTerm>, bool
 }
 
 /// Returns a new clause containing all literals of the resolvent premises after the pivot and its negation have been removed.
-/// 
+///
 /// convention for the pivot polarity:
 /// * If `flag` is `true`, the positive pivot must occur in `clause_left` and its negation in `clause_right`.
 /// * If `flag` is `false`, the negated pivot must occur in `clause_left` and the positive pivot in `clause_right`.
-/// 
+///
 /// Exactly one occurrence is removed from each side if present; the remaining literals are
 /// concatenated in order (left part first, then right part), preserving the original left-to-right
 /// order except for the single deletions.
-/// 
+///
 /// This function does **not** panic if the pivot is missing; it simply leaves the clause
 /// unchanged on that side. (Sanity of pivot presence is enforced in `make_resolution`.
 fn remove_pivot_in_clause<'a>(
@@ -298,7 +302,7 @@ fn remove_pivot_in_clause<'a>(
 /// t1: p,A     t2: ¬p,B
 /// ---------------------- (:rule resolution :premises (t1 t2) :args (p true))
 ///    A,B
-/// 
+///
 /// This function constructs the application of one of the two resolution lemmas
 /// `disj_resolutionN1` or `disj_resolutionN2` in Lambdapi, depending on where the negated
 /// occurrence of the pivot appears. The choice follows Carcara’s flag convention:
@@ -312,7 +316,7 @@ fn remove_pivot_in_clause<'a>(
 /// 2) converts both clauses to Lambdapi terms using `ctx.get_or_convert`,
 /// 3) applies the appropriate lemma with the clauses, indices, hypotheses (step names),
 ///    and trivial introductions of `⊤ᵢ` together with `eq_refl`.
-/// 
+///
 /// ```text
 /// have t1_t2 : π̇ (a1 ⟇ ...⟇ p ⟇... ⟇ an ⟇ b1 ⟇ ...⟇ ¬ p ⟇... ⟇ bn ⟇ ▩) {
 ///     apply disj_resolutionN1
@@ -409,9 +413,9 @@ fn make_resolution(
     //left_clause.pos
 }
 
-
 /// Create the negation of a term
-#[inline] fn term_negated(term: &Rc<AletheTerm>, pool: &mut PrimitivePool) -> Rc<AletheTerm> {
+#[inline]
+fn term_negated(term: &Rc<AletheTerm>, pool: &mut PrimitivePool) -> Rc<AletheTerm> {
     pool.add(AletheTerm::Op(Operator::Not, vec![term.clone()]))
 }
 

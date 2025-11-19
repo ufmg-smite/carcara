@@ -1,11 +1,11 @@
 use crate::ast::{
-    pool, Binder as AletheBinder, BindingList, Constant, Operator, PrimitivePool, Rc, Sort,
+    Binder as AletheBinder, BindingList, Constant, Operator, PrimitivePool, Rc, Sort,
     SortedVar, Term as AletheTerm, TermPool,
 };
 use itertools::Itertools;
 use rug::Integer;
 use std::borrow::Borrow;
-use std::collections::{hash_set, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 use std::ops::Deref;
 use std::{fmt, vec};
 
