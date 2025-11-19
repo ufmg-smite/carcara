@@ -8,15 +8,18 @@ use carcara::{
     benchmarking::OnlineBenchmarkResults,
     check, check_and_elaborate, check_parallel, checker, elaborator, generate_lia_smt_instances,
     parser, slice,
+    lambdapi, lambdapi::output::*,
+    produce_lambdapi_proof,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
 use error::{CliError, CliResult};
 use git_version::git_version;
+use itertools::Itertools;
 use path_args::{get_instances_from_paths, infer_problem_path};
 use std::{
     fs::File,
-    io::{self, BufRead, IsTerminal, Write},
+    io::{self, BufRead, BufWriter, IsTerminal, Write},
     path::Path,
     sync::atomic,
 };
@@ -82,6 +85,9 @@ enum Command {
 
     /// Generates the equivalent SMT instance for every `lia_generic` step in a proof.
     GenerateLiaProblems(ParseCommandOptions),
+
+    /// Translate an Alethe proof into Lambdapi proof (WIP feature).  
+    Translate(TranslationOption),
 }
 
 #[derive(Args)]
@@ -427,6 +433,49 @@ struct SliceCommandOptions {
     hole_solver_args: Option<String>,
 }
 
+#[derive(Args)]
+struct TranslationOption {
+    #[clap(flatten)]
+    input: Input,
+
+    #[clap(flatten)]
+    parsing: ParsingOptions,
+
+    #[clap(flatten)]
+    checking: CheckingOptions,
+
+    #[clap(flatten)]
+    elaboration: ElaborationOptions,
+
+    #[clap(long, short = 'o')]
+    output_dir: Option<std::path::PathBuf>,
+
+    /// Split the proof into multiple files that will contain `n` symbols
+    #[clap(long, short = 'n', requires = "output-dir")]
+    segment_size: Option<usize>,
+
+    /// Try to prove hole step with the lambdapi tactic `why3`
+    #[clap(long, short = 'w')]
+    why3: bool,
+
+    /// Do not `check` and `elaborate` the proof before translating
+    #[clap(long)]
+    no_elab: bool,
+
+    /// Escape identifier with `{| x |}`.  
+    #[clap(long)]
+    escaped_id: bool,
+}
+
+impl From<TranslationOption> for lambdapi::Config {
+    fn from(val: TranslationOption) -> Self {
+        Self {
+            no_elab: val.no_elab,
+            why3: val.why3,
+        }
+    }
+}
+
 #[derive(ArgEnum, Clone)]
 enum LogLevel {
     Off,
@@ -486,9 +535,9 @@ fn main() {
         Command::Elaborate(options) => {
             elaborate_command(options).and_then(|(res, pb, pf, mut pool)| {
                 if res {
-                    println!("holey");
+                    //println!("holey");
                 } else {
-                    println!("valid");
+                    //println!("valid");
                 }
                 ast::print_proof(&mut pool, &pb.prelude, &pf, !cli.no_print_with_sharing)?;
                 Ok(())
@@ -504,6 +553,7 @@ fn main() {
         Command::GenerateLiaProblems(options) => {
             generate_lia_problems_command(options, !cli.no_print_with_sharing)
         }
+        Command::Translate(options) => translate_to_lambdapi(options),
     };
     if let Err(e) = result {
         log::error!("{}", e);
@@ -735,8 +785,6 @@ fn slice_command(
 }
 
 fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool) -> CliResult<()> {
-    use std::io::Write;
-
     let root_file_name = options.input.proof_file.clone();
     let (problem, proof, rules) = get_instance(&options.input, options.parsing.buffer_entire_file)?;
 
@@ -747,6 +795,183 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
         let mut f = File::create(file_name)?;
         write!(f, "{}", content)?;
     }
+
+    Ok(())
+}
+
+/// Lambdapi is limited to handling relatively small proofs (<500 steps) due to performance issues.
+/// The idea is to generate individual files corresponding to disjoint segments of a proof,
+/// compute the dependencies between those segments, check each file in a separate process.
+///
+/// Thus, the method split a proof into chunck of size equal to `segment_size`,
+/// and create an axioms (symbol without definition) and lemma (symbol with a definition) representation  for each chunk.
+/// Symbols from previous chunkc are imported as axioms to the current chunk.
+///
+/// To illustrate, consider a proof
+/// ```text
+/// (step tᵢ (cl Tᵢ))
+/// (step tᵢ₊ₙ (cl Tᵢ₊ₙ))
+/// (step tᵢ₊ₙ₊₁ (cl Tᵢ₊ₙ₊₁))
+/// (step tᵢ₊₂ₙ (cl Ttᵢ₊₂ₙ))
+/// ```
+///
+/// We create the four following files
+/// | Ranges            | axioms files            | Lemmma                                     |
+/// |-------------------|:-----------------------:|:------------------------------------------:|
+/// | Steps ᵢ...ᵢ₊ₙ     | symbol tᵢ: Tᵢ;          | symbol tᵢ: Tᵢ ≔ begin .. end;               |
+/// |                   |   ...                   | ...                                        |
+/// |                   | symbol tᵢ₊ₙ: Tᵢ₊ₙ;      | symbol tᵢ₊ₙ: Tᵢ₊ₙ ≔ begin .. end;            |
+/// |-------------------|:-----------------------:|:------------------------------------------:|
+/// | Steps ᵢ₊ₙ₊₁..ᵢ₊₂ₙ | symbol tᵢ₊ₙ₊₁ : Tᵢ₊ₙ₊₁;  | require open axioms-tᵢ-tᵢ₊ₙ.lp              |
+/// | Steps ᵢ₊ₙ₊₁..ᵢ₊₂ₙ | symbol tᵢ₊ₙ₊₁ : Tᵢ₊ₙ₊₁;  | symbol t ᵢ₊ₙ₊₁  : T ᵢ₊ₙ₊₁ ≔ begin .. end;   |
+/// |                   |   ...                   | ...                                        |
+/// |                   | symbol tᵢ₊₂ₙ: Tᵢ₊₂ₙ;    | symbol tᵢ₊₂ₙ: Tᵢ₊₂ₙ ≔ begin .. end;         |
+///
+pub fn split_proof(
+    module_name: String,
+    pf: ProofFile,
+    segment_size: usize,
+) -> Vec<(impl Render, impl Render)> {
+    // List of pair of Lemmas and Axioms files.
+    let mut pfiles = Vec::new();
+
+    for (chunck_index, symbols) in pf.content.chunks(segment_size).enumerate() {
+        let mut p = ProofFile::new();
+
+        //HACK: For now, we import all the previous chunck axioms in the requires of the current chunck.
+        // It would be more efficient to compute the dependencies and select only the axioms chunck necessary.
+        //TODO: Use the method `lambdapi::output::get_dependencies_map` to collect dependencies and compute the required chuncks.
+        let ranges_symbols = (0..chunck_index)
+            .map(|i| {
+                let lower_bound = i * segment_size;
+                let upper_bound = lower_bound + segment_size;
+                (lower_bound, upper_bound)
+            })
+            .collect_vec();
+
+        p.requires = pf.requires.clone();
+
+        p.requires
+            .push(lambdapi::term::Command::RequireOpen(format!(
+                "{}.definitions",
+                module_name
+            )));
+
+        ranges_symbols.into_iter().for_each(|(l, u)| {
+            p.requires
+                .push(lambdapi::term::Command::RequireOpen(format!(
+                    "{}.axioms-{}-{}",
+                    module_name, l, u
+                )))
+        });
+
+        p.content.extend_from_slice(symbols);
+
+        // Create the axioms file
+        let mut ax = AxiomsFile::new();
+
+        ax.requires = pf.requires.clone();
+
+        ax.requires
+            .push(lambdapi::term::Command::RequireOpen(format!(
+                "{}.definitions",
+                module_name
+            )));
+        ax.content.extend_from_slice(symbols);
+
+        pfiles.push((p, ax));
+    }
+
+    pfiles
+}
+
+fn translate_to_lambdapi(options: TranslationOption) -> CliResult<()> {
+    let (problem, proof, _) = get_instance(&options.input, true)?;
+
+    let input_file_name = options.input.problem_file.unwrap().replace(".smt2", "");
+    let mut path_file = std::path::PathBuf::from(input_file_name.clone());
+    path_file.set_extension("");
+
+    let package_name = path_file.file_name().unwrap().to_str().unwrap();
+
+    let (elab_config, _) = options.elaboration.into();
+
+    let config = lambdapi::Config {
+        why3: options.why3,
+        no_elab: options.no_elab,
+    };
+
+    let pf = produce_lambdapi_proof(
+        problem,
+        proof,
+        options.parsing.into(),
+        options.checking.into(),
+        elab_config,
+        config,
+    )
+    .map_err(|e| CliError::TranslationError(e))?;
+
+    match (options.output_dir, options.segment_size) {
+        (Some(path), Some(segment_size)) => {
+            std::fs::remove_dir_all(&path).ok();
+            std::fs::create_dir(&path)?;
+
+            let template_proof_name: &str = "{{proof}}";
+
+            // Generate the package file from the template directory
+            let mut pkg_file = File::create(path.join("lambdapi.pkg"))?;
+            let pkg = include_str!("../../proof-template/lambdapi.pkg");
+            pkg_file.write_all(pkg.replace(template_proof_name, package_name).as_bytes())?;
+            pkg_file.flush()?;
+
+            // Generate the Makefile from the template directory
+            let mut mk_file = File::create(path.join("Makefile"))?;
+            let mk: &str = include_str!("../../proof-template/Makefile");
+            mk_file.write_all(mk.replace(template_proof_name, package_name).as_bytes())?;
+            mk_file.flush()?;
+
+            // Create the shared definitions file
+            let defs = File::create(path.join("definitions.lp"))?;
+            let mut bufw = BufWriter::new(defs);
+            let mut definitionf = ProofFile::new();
+            definitionf.requires = pf.requires.clone();
+            definitionf.definitions = pf.definitions.clone();
+            definitionf.render(&mut bufw)?;
+
+            // Create the axioms and proofs chunck files
+            let pfs = split_proof(package_name.into(), pf, segment_size);
+
+            let mut i = 1;
+
+            for (pr, ax) in pfs.iter() {
+                let lower_bound = i * segment_size - segment_size;
+                let upper_bound = i * segment_size;
+
+                let file_axioms =
+                    File::create(path.join(format!("axioms-{}-{}.lp", lower_bound, upper_bound)))?;
+                let mut bfile = BufWriter::new(file_axioms);
+                ax.render(&mut bfile)?;
+                bfile.flush()?;
+
+                let file_proofs =
+                    File::create(path.join(format!("segment-{}-{}.lp", lower_bound, upper_bound)))?;
+                let mut bfile = BufWriter::new(file_proofs);
+                pr.render(&mut bfile)?;
+                bfile.flush()?;
+
+                i += 1;
+            }
+        }
+        (Some(path), None) if path.is_file() => {
+            let file = File::create(path)?;
+            let mut bfile = BufWriter::new(file);
+            pf.render(&mut bfile)?;
+            bfile.flush()?;
+        }
+        (_, _) => {
+            println!("{}", pf)
+        }
+    };
 
     Ok(())
 }

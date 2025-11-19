@@ -6,8 +6,10 @@ mod storage;
 use super::{Binder, Operator, Rc, Sort, Substitution, Term};
 use crate::ast::{Constant, ParamOperator};
 use indexmap::{IndexMap, IndexSet};
+use itertools::Itertools;
 use rug::Integer;
 use storage::Storage;
+use std::ops::Deref;
 
 pub trait TermPool {
     /// Returns the term corresponding to the boolean constant `true`.

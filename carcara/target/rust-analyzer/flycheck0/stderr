@@ -1,0 +1,8 @@
+error: failed to parse lock file at: /Users/alessiocoltellacci/Projects/carcara/Cargo.lock
+
+Caused by:
+  TOML parse error at line 55, column 2
+     |
+  55 |  "indexmap 2.10.0",
+     |  ^
+  missing comma between array elements, expected `,`

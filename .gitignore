@@ -2,3 +2,4 @@
 /benchmarks
 .vscode/
 .devcontainer/
+**/*.lpo

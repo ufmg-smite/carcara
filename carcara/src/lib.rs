@@ -39,6 +39,7 @@ pub mod benchmarking;
 pub mod checker;
 mod drup;
 pub mod elaborator;
+pub mod lambdapi;
 pub mod parser;
 mod resolution;
 pub mod slice;
@@ -320,4 +321,35 @@ pub fn generate_lia_smt_instances<T: io::BufRead>(
         }
     }
     Ok(result)
+}
+
+pub fn produce_lambdapi_proof<'a, T: io::BufRead>(
+    problem: T,
+    proof: T,
+    parser_config: parser::Config,
+    checker_config: checker::Config,
+    elaborator_config: elaborator::Config,
+    translate_config: lambdapi::Config,
+) -> Result<lambdapi::output::ProofFile, Box<dyn std::error::Error>> {
+    let (problem, mut proof, _, mut pool) = parser::parse_instance(problem, proof, None, parser_config)?;
+
+    if translate_config.no_elab == false {
+        let mut checker = checker::ProofChecker::new(&mut pool, checker_config);
+        checker.check(&problem, &proof)?;
+
+        let node = ast::ProofNode::from_commands(proof.commands);
+        let elaborated = elaborator::Elaborator::new(&mut pool, &problem, elaborator_config)
+            .elaborate_with_default_pipeline(&node);
+        proof = ast::Proof {
+            commands: elaborated.into_commands(),
+            ..proof
+        };
+    }
+
+    Ok(lambdapi::produce_lambdapi_proof(
+        problem.prelude,
+        proof,
+        pool,
+        translate_config,
+    )?)
 }
