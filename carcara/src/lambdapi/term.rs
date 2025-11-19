@@ -1,6 +1,6 @@
 use crate::ast::{
-    Binder as AletheBinder, BindingList, Constant, Operator, Rc, Sort, SortedVar,
-    Term as AletheTerm, TermPool,
+    pool, Binder as AletheBinder, BindingList, Constant, Operator, PrimitivePool, Rc, Sort,
+    SortedVar, Term as AletheTerm, TermPool,
 };
 use itertools::Itertools;
 use rug::Integer;
@@ -447,7 +447,19 @@ pub fn conv(term: &Rc<AletheTerm>, ctx: &crate::lambdapi::Context) -> (Term, Has
 
 impl From<&Rc<AletheTerm>> for Term {
     fn from(term: &Rc<AletheTerm>) -> Self {
-        match term.deref() {
+        Term::from(term.deref().clone())
+    }
+}
+
+impl From<Rc<AletheTerm>> for Term {
+    fn from(term: Rc<AletheTerm>) -> Self {
+        Self::from(&term)
+    }
+}
+
+impl From<AletheTerm> for Term {
+    fn from(term: AletheTerm) -> Self {
+        match term {
             AletheTerm::Sort(sort) => match sort {
                 Sort::Function(params) => Term::Function(params.iter().map(Term::from).collect()),
                 Sort::Atom(id, _terms) => Term::TermId(id.to_string()),
@@ -551,18 +563,6 @@ impl From<&Rc<AletheTerm>> for Term {
     }
 }
 
-impl From<Rc<AletheTerm>> for Term {
-    fn from(term: Rc<AletheTerm>) -> Self {
-        Self::from(&term)
-    }
-}
-
-impl From<AletheTerm> for Term {
-    fn from(term: AletheTerm) -> Self {
-        Self::from(&Rc::new(term))
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Param(pub String, pub Term);
 
@@ -599,6 +599,17 @@ pub struct Bindings(pub Vec<SortedTerm>);
 
 impl From<&BindingList> for Bindings {
     fn from(bindings: &BindingList) -> Self {
+        Bindings(
+            bindings
+                .into_iter()
+                .map(SortedTerm::from)
+                .collect::<Vec<_>>(),
+        )
+    }
+}
+
+impl From<BindingList> for Bindings {
+    fn from(bindings: BindingList) -> Self {
         Bindings(
             bindings
                 .into_iter()
@@ -735,15 +746,15 @@ pub(crate) mod test_macros {
     };
 }
 
-    pub(crate) use id;
-    pub(crate) use bid;
-    pub(crate) use not;
-    pub(crate) use eq;
-    pub(crate) use imp;
-    pub(crate) use iff;
-    pub(crate) use or;
     pub(crate) use and;
+    pub(crate) use bid;
+    pub(crate) use eq;
     pub(crate) use forall;
+    pub(crate) use id;
+    pub(crate) use iff;
+    pub(crate) use imp;
+    pub(crate) use not;
+    pub(crate) use or;
 }
 
 impl fmt::Display for LTerm {
@@ -832,11 +843,11 @@ macro_rules! cl {
 pub(crate) use cl;
 
 pub trait Visitor {
-    fn visit(&self, ctx: &mut Context);
+    fn visit(&self, ctx: &mut Context, pool: &mut PrimitivePool);
 }
 
 impl Visitor for Rc<AletheTerm> {
-    fn visit(&self, ctx: &mut Context) {
+    fn visit(&self, ctx: &mut Context, pool: &mut PrimitivePool) {
         match self.deref() {
             AletheTerm::Const(_)
             | AletheTerm::Var(..)
@@ -846,7 +857,7 @@ impl Visitor for Rc<AletheTerm> {
             | AletheTerm::Op(Operator::True, _)
             | AletheTerm::Op(Operator::False, _) => {}
             AletheTerm::Op(_, ops) => {
-                if self.is_closed(&mut ctx.pool, &ctx.global_variables) {
+                if self.is_closed(pool, &ctx.global_variables) {
                     if let Some((count, t)) = ctx.term_indices.get_mut(self) {
                         *count = *count + 1;
                         if *count >= 1 {
@@ -860,10 +871,10 @@ impl Visitor for Rc<AletheTerm> {
                         );
                     }
                 }
-                ops.into_iter().for_each(|op| op.visit(ctx));
+                ops.into_iter().for_each(|op| op.visit(ctx, pool));
             }
             AletheTerm::App(o, ops) => {
-                if self.is_closed(&mut ctx.pool, &ctx.global_variables) {
+                if self.is_closed(pool, &ctx.global_variables) {
                     if let Some((count, t)) = ctx.term_indices.get_mut(self) {
                         *count = *count + 1;
                         if *count >= 1 {
@@ -877,13 +888,12 @@ impl Visitor for Rc<AletheTerm> {
                         );
                     }
                 }
-                o.visit(ctx);
-                ops.into_iter().for_each(|op| op.visit(ctx));
+                o.visit(ctx, pool);
+                ops.into_iter().for_each(|op| op.visit(ctx, pool));
             }
             AletheTerm::Binder(_, bs, t) => {
                 let bounded_variables = bs.into_iter().map(|(name, _)| name).collect_vec();
-                let free_vars_remaining = ctx
-                    .pool
+                let free_vars_remaining = pool
                     .free_vars(self)
                     .into_iter()
                     .filter(|var| !ctx.global_variables.contains(var))
@@ -907,7 +917,7 @@ impl Visitor for Rc<AletheTerm> {
                         );
                     }
                 }
-                t.visit(ctx);
+                t.visit(ctx, pool);
             }
         }
     }
@@ -944,7 +954,8 @@ mod tests_term {
             (assume Goal (! (not (=> (! (and (forall ((c1 Idv) (c2 Idv)) (=> (and (Mem c1 Client) (Mem c2 Client)) (forall ((r Idv)) (=> (Mem r Res) (=> (Mem r (cap (FunApp Alloc c1) (FunApp Alloc c2))) (TrigEq c1 c2)))))) (and (and (! (TrigEqDollar (FunApp VarUnsat clt) SetEnum) :named @p_5) (! (TrigEqDollar (FunApp Alloc clt) SetEnum) :named @p_4)) (and (! (not (TrigEqDollar S SetEnum)) :named @p_3) (! (TrigEq UnsatPrim (FunExcept VarUnsat clt S)) :named @p_2)) (! (TrigEq AllocPrim Alloc) :named @p_1))) :named @p_6) (forall ((c1 Idv) (c2 Idv)) (=> (and (Mem c1 Client) (Mem c2 Client)) (forall ((r Idv)) (=> (Mem r Res) (=> (Mem r (cap (FunApp AllocPrim c1) (FunApp AllocPrim c2))) (TrigEq c1 c2)))))))) :named @p_7))
             (step t1 (cl (and (Mem S S) (not (=> (! (and (forall ((c1 Idv) (c2 Idv)) (=> (and (Mem c1 Client) (Mem c2 Client)) (forall ((r Idv)) (=> (Mem r Res) (=> (Mem r (cap (FunApp Alloc c1) (FunApp Alloc c2))) (TrigEq c1 c2)))))) (and (and (! (TrigEqDollar (FunApp VarUnsat clt) SetEnum) :named @p_5) (! (TrigEqDollar (FunApp Alloc clt) SetEnum) :named @p_4)) (and (! (not (TrigEqDollar S SetEnum)) :named @p_3) (! (TrigEq UnsatPrim (FunExcept VarUnsat clt S)) :named @p_2)) (! (TrigEq AllocPrim Alloc) :named @p_1))) :named @p_6) (forall ((c1 Idv) (c2 Idv)) (=> (and (Mem c1 Client) (Mem c2 Client)) (forall ((r Idv)) (=> (Mem r Res) (=> (Mem r (cap (FunApp AllocPrim c1) (FunApp AllocPrim c2))) (TrigEq c1 c2))))))))))  :rule hole)
         ";
-        let (problem, proof, _, mut pool) = parse_instance(problem, proof, None, Config::new()).unwrap();
+        let (problem, proof, _, mut pool) =
+            parse_instance(problem, proof, None, Config::new()).unwrap();
 
         let mut ctx = Context::default();
 
@@ -957,15 +968,20 @@ mod tests_term {
 
         ctx.global_variables = global_variables;
 
-        let res = crate::lambdapi::translate_commands(&mut ctx, &mut proof.iter(), |id, t, ps| {
-            Command::Symbol(
-                None,
-                crate::lambdapi::normalize_name(id),
-                vec![],
-                t,
-                ps.map(|ps| Proof(ps)),
-            )
-        })
+        let res = crate::lambdapi::translate_commands(
+            &mut ctx,
+            &mut proof.iter(),
+            &mut pool,
+            |id, t, ps| {
+                Command::Symbol(
+                    None,
+                    crate::lambdapi::normalize_name(id),
+                    vec![],
+                    t,
+                    ps.map(|ps| Proof(ps)),
+                )
+            },
+        )
         .expect("translate cong");
 
         assert_eq!(2, res.len());
@@ -989,7 +1005,8 @@ mod tests_term {
                     (forall ((p Bool) (q Bool)) (or p (not q) (not s)))
                 )) :rule qnt_cnf)
         ";
-        let (problem, proof, _,mut pool) = parse_instance(problem, proof, None, Config::new()).unwrap();
+        let (problem, proof, _, mut pool) =
+            parse_instance(problem, proof, None, Config::new()).unwrap();
 
         let global_variables: HashSet<_> = problem
             .prelude
@@ -1008,7 +1025,7 @@ mod tests_term {
 
         ctx.global_variables = global_variables;
 
-        clause.visit(&mut ctx);
+        clause.visit(&mut ctx, &mut pool);
     }
 
     use crate::ast::{pool::PrimitivePool, TermPool};

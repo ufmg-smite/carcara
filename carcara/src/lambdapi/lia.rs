@@ -32,23 +32,24 @@ struct ReifiedInequality {
     name: String,
 }
 
-fn inequalitie_with_alias_name(i: &ReifiedInequality) -> AletheTerm {
+fn inequalitie_with_alias_name(i: &ReifiedInequality, pool: &mut PrimitivePool) -> AletheTerm {
     let op: Operator = op_into_operator(&i.op);
-    let lhs = Rc::new(AletheTerm::Const(Constant::String(format!("{}l", i.name))));
-    let rhs = Rc::new(AletheTerm::Const(Constant::String(format!("{}r", i.name))));
+    let lhs = pool.add(AletheTerm::Const(Constant::String(format!("{}l", i.name))));
+    let rhs = pool.add(AletheTerm::Const(Constant::String(format!("{}r", i.name))));
 
-    let ine = AletheTerm::Op(op, vec![lhs, rhs]);
+    let ine = pool.add(AletheTerm::Op(op, vec![lhs, rhs]));
 
     if i.neg {
-        AletheTerm::Op(Operator::Not, vec![Rc::new(ine)])
+        AletheTerm::Op(Operator::Not, vec![ine])
     } else {
-        ine
+        ine.deref().clone()
     }
 }
 
 pub fn gen_proof_la_generic(
     clause: &[Rc<AletheTerm>],
     args: &Vec<Rc<AletheTerm>>,
+    pool: &mut PrimitivePool,
 ) -> Vec<ProofStep> {
     let inequalities: Vec<ReifiedInequality> = get_inequalities_from_clause(clause);
 
@@ -70,7 +71,7 @@ pub fn gen_proof_la_generic(
         SubProofs(None),
     )];
 
-    proof_la.append(&mut la_generic(inequalities, args).unwrap().0);
+    proof_la.append(&mut la_generic(inequalities, args, pool).unwrap().0);
 
     let id_temp_proof = String::from("Hla");
 
@@ -202,28 +203,9 @@ fn visit_arith_term(term: &AletheTerm) -> HashSet<AletheTerm> {
 fn la_generic(
     inequalities: Vec<ReifiedInequality>,
     args: &Vec<Rc<AletheTerm>>,
+    pool: &mut PrimitivePool,
 ) -> TradResult<Proof> {
     let mut inequalities = inequalities;
-
-    // let env_map_aletheterm: HashSet<AletheTerm> = inequalities
-    //     .iter()
-    //     .map(|i| {
-    //         visit_arith_term(&i.lhs)
-    //             .union(&visit_arith_term(&i.rhs))
-    //             .cloned()
-    //             .collect()
-    //     })
-    //     .reduce(|acc: HashSet<_>, e| acc.union(&e).cloned().collect())
-    //     .unwrap_or(HashSet::new());
-
-    //let env_map_as_vec: Vec<_> = env_map_aletheterm.iter().cloned().collect();
-    //let env_map = env_map_as_vec.into_iter().map(Term::from).collect_vec(); 
-
-    // We create alias to make generation of the proof easily
-    // inequalities.iter_mut().for_each(|i| {
-    //     i.lhs = Rc::new(AletheTerm::Const(Constant::String(format!("{}l", i.name))));
-    //     i.rhs = Rc::new(AletheTerm::Const(Constant::String(format!("{}r", i.name))));
-    // });
 
     let args = args
         .into_iter()
@@ -306,8 +288,8 @@ fn la_generic(
 
     for i in inequalities.iter_mut() {
         if i.op == Op::Lt {
-            i.lhs = Rc::new(AletheTerm::Op(Operator::Sub, vec![i.lhs.clone()]));
-            i.rhs = Rc::new(AletheTerm::Op(Operator::Sub, vec![i.rhs.clone()]));
+            i.lhs = pool.add(AletheTerm::Op(Operator::Sub, vec![i.lhs.clone()]));
+            i.rhs = pool.add(AletheTerm::Op(Operator::Sub, vec![i.rhs.clone()]));
             i.op = Op::Gt;
             normalize_step.push(ProofStep::Try(Box::new(ProofStep::Rewrite(
                 false,
@@ -318,8 +300,8 @@ fn la_generic(
             ))));
         }
         if i.op == Op::Le {
-            i.lhs = Rc::new(AletheTerm::Op(Operator::Sub, vec![i.lhs.clone()]));
-            i.rhs = Rc::new(AletheTerm::Op(Operator::Sub, vec![i.rhs.clone()]));
+            i.lhs = pool.add(AletheTerm::Op(Operator::Sub, vec![i.lhs.clone()]));
+            i.rhs = pool.add(AletheTerm::Op(Operator::Sub, vec![i.rhs.clone()]));
             i.op = Op::Ge;
             normalize_step.push(ProofStep::Try(Box::new(ProofStep::Rewrite(
                 false,
@@ -363,11 +345,11 @@ fn la_generic(
         .collect_vec();
 
     for i in inequalities.iter_mut() {
-        i.lhs = Rc::new(AletheTerm::Op(
+        i.lhs = pool.add(AletheTerm::Op(
             Operator::Sub,
             vec![i.lhs.clone(), i.rhs.clone()],
         ));
-        i.rhs = Rc::new(AletheTerm::Const(Constant::Integer(Integer::from(0))));
+        i.rhs = pool.add(AletheTerm::Const(Constant::Integer(Integer::from(0))));
     }
 
     //println!("Step 3 {:?}", inequalities);
@@ -389,11 +371,12 @@ fn la_generic(
 
     for i in inequalities.iter_mut() {
         if i.op == Op::Gt {
-            i.rhs = Rc::new(AletheTerm::Op(
+            let one = pool.add(AletheTerm::Const(Constant::Integer(Integer::from(1))));
+            i.rhs = pool.add(AletheTerm::Op(
                 Operator::Add,
                 vec![
                     i.rhs.clone(),
-                    Rc::new(AletheTerm::Const(Constant::Integer(Integer::from(1)))),
+                    one,
                 ],
             ));
             i.op = Op::Ge;
@@ -453,17 +436,18 @@ fn la_generic(
             Constant::Real(c) => c.into_numer_denom().0,
             _ => unreachable!(),
         };
-        i.lhs = Rc::new(AletheTerm::Op(
+        let c_const = pool.add(AletheTerm::Const(Constant::Integer(c.clone())));
+        i.lhs = pool.add(AletheTerm::Op(
             Operator::Mult,
             vec![
-                Rc::new(AletheTerm::Const(Constant::Integer(c.clone()))),
+                c_const.clone(),
                 i.lhs.clone(),
             ],
         ));
-        i.rhs = Rc::new(AletheTerm::Op(
+        i.rhs = pool.add(AletheTerm::Op(
             Operator::Mult,
             vec![
-                Rc::new(AletheTerm::Const(Constant::Integer(c))),
+                c_const,
                 i.rhs.clone(),
             ],
         ));

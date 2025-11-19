@@ -63,7 +63,6 @@ pub struct Context {
     pub term_sharing: IndexMap<Rc<AletheTerm>, (String, Term)>,
 
     pub global_variables: HashSet<Rc<AletheTerm>>,
-    pub pool: PrimitivePool,
 }
 
 impl Context {
@@ -186,7 +185,7 @@ pub fn produce_lambdapi_proof<'a>(
 
     context.global_variables = global_variables;
 
-    let commands = translate_commands(&mut context, &mut proof_elaborated.iter(), |id, t, ps| {
+    let commands = translate_commands(&mut context, &mut proof_elaborated.iter(), &mut pool, |id, t, ps| {
         let modifier = ps.is_some().then(|| Modifier::Opaque);
         Command::Symbol(
             modifier,
@@ -244,6 +243,7 @@ fn remove_pivot_in_clause<'a>(
     (pivot, flag): &(Rc<AletheTerm>, bool),
     clause_left: &[Rc<AletheTerm>],
     clause_right: &[Rc<AletheTerm>],
+    pool: &mut PrimitivePool,
 ) -> Vec<Rc<AletheTerm>> {
     let mut duration = Duration::ZERO;
 
@@ -261,7 +261,7 @@ fn remove_pivot_in_clause<'a>(
         let mut filtered_clause_right = clause_right.into_iter().map(|t| t.clone()).collect_vec();
         let index = filtered_clause_right
             .iter()
-            .position(|t| polyeq(&term_negated(pivot), t, &mut duration));
+            .position(|t| polyeq(&term_negated(pivot, pool), t, &mut duration));
         if let Some(index) = index {
             filtered_clause_right.remove(index);
         }
@@ -272,7 +272,7 @@ fn remove_pivot_in_clause<'a>(
         let mut filtered_clause_left = clause_left.into_iter().map(|t| t.clone()).collect_vec();
         let index = filtered_clause_left
             .iter()
-            .position(|t| polyeq(&term_negated(pivot), t, &mut duration));
+            .position(|t| polyeq(&term_negated(pivot, pool), t, &mut duration));
 
         if let Some(index) = index {
             filtered_clause_left.remove(index);
@@ -329,11 +329,12 @@ fn make_resolution(
     (left_step_name, left_clause): &(&str, &[Rc<AletheTerm>]),
     (right_step_name, right_clause): &(&str, &[Rc<AletheTerm>]),
     ctx: &mut Context,
+    pool: &mut PrimitivePool,
 ) -> Vec<ProofStep> {
-    let mut hyp_left_arg = Term::TermId(left_step_name.to_string());
-    let mut hyp_right_arg = Term::TermId(right_step_name.to_string());
+    let hyp_left_arg = Term::TermId(left_step_name.to_string());
+    let hyp_right_arg = Term::TermId(right_step_name.to_string());
 
-    let neg_pivot = term_negated(pivot);
+    let neg_pivot = term_negated(pivot, pool);
 
     let (i, j) = if *flag_position_pivot {
         let i = left_clause
@@ -408,8 +409,10 @@ fn make_resolution(
     //left_clause.pos
 }
 
-fn term_negated(term: &Rc<AletheTerm>) -> Rc<AletheTerm> {
-    Rc::new(AletheTerm::Op(Operator::Not, vec![term.clone()]))
+
+/// Create the negation of a term
+#[inline] fn term_negated(term: &Rc<AletheTerm>, pool: &mut PrimitivePool) -> Rc<AletheTerm> {
+    pool.add(AletheTerm::Op(Operator::Not, vec![term.clone()]))
 }
 
 #[inline]
@@ -443,6 +446,7 @@ fn translate_subproof<'a>(
     iter: &mut ProofIter<'a>,
     commands: &[ProofCommand],
     assignment_args: Vec<(&(String, Rc<AletheTerm>), &Rc<AletheTerm>)>,
+    pool: &mut PrimitivePool,
 ) -> TradResult<(String, Vec<Term>, Vec<ProofStep>)> {
     let subproof = commands.last().unwrap();
 
@@ -462,7 +466,7 @@ fn translate_subproof<'a>(
     fresh_ctx.term_indices = context.term_indices.clone();
     fresh_ctx.term_sharing = context.term_sharing.clone();
 
-    let mut proof_cmds = translate_commands(&mut fresh_ctx, iter, |id, t, ps| {
+    let mut proof_cmds = translate_commands(&mut fresh_ctx, iter, pool, |id, t, ps| {
         ProofStep::Have(normalize_name(id), t, ps.unwrap_or(admit()))
     })?;
 
@@ -553,6 +557,7 @@ fn translate_resolution(
     premises: &[(usize, usize)],
     args: &Vec<Rc<AletheTerm>>,
     context: &mut Context,
+    pool: &mut PrimitivePool,
 ) -> TradResult<Vec<ProofStep>> {
     let premises = get_premises_clause(&proof_iter, premises);
 
@@ -563,29 +568,30 @@ fn translate_resolution(
             [pivot, tl_pivot @ ..] => tl_premises.into_iter().zip(tl_pivot.into_iter()).fold(
                 (
                     format!("{}_{}", h1.0, h2.0),
-                    remove_pivot_in_clause(&pivot, h1.1, h2.1),
+                    remove_pivot_in_clause(&pivot, h1.1, h2.1, pool),
                     vec![ProofStep::Have(
                         format!("{}_{}", h1.0, h2.0),
                         proof(Term::Alethe(LTerm::Clauses(
-                            remove_pivot_in_clause(&pivot, h1.1, h2.1)
+                            remove_pivot_in_clause(&pivot, h1.1, h2.1, pool)
                                 .into_iter()
                                 .map(|t| context.get_or_convert(&t).0)
                                 .collect::<Vec<Term>>(),
                         ))),
-                        make_resolution(pivot, &(&h1.0, h1.1), &(&h2.0, h2.1), context),
+                        make_resolution(pivot, &(&h1.0, h1.1), &(&h2.0, h2.1), context, pool),
                     )],
                 ),
                 |(previous_goal_name, previous_goal, mut proof_steps), (premise, pivot)| {
                     let goal_name = format!("{}_{}", previous_goal_name, premise.0);
 
                     let current_goal =
-                        remove_pivot_in_clause(&pivot, previous_goal.as_slice(), premise.1);
+                        remove_pivot_in_clause(&pivot, previous_goal.as_slice(), premise.1, pool);
 
                     let resolution = make_resolution(
                         pivot,
                         &(format!("{}", previous_goal_name).as_str(), &previous_goal),
                         &(&premise.0, premise.1),
                         context,
+                        pool,
                     );
 
                     proof_steps.push(ProofStep::Have(
@@ -665,6 +671,7 @@ fn translate_tautology(
 fn translate_commands<'a, F, T>(
     ctx: &mut Context,
     proof_iter: &mut ProofIter<'a>,
+    pool: &mut PrimitivePool,
     f: F,
 ) -> TradResult<Vec<T>>
 where
@@ -674,7 +681,7 @@ where
 
     while let Some(command) = proof_iter.next() {
         let clause = command.clause();
-        clause.into_iter().for_each(|c| c.visit(ctx));
+        clause.into_iter().for_each(|c| c.visit(ctx, pool));
 
         match command {
             ProofCommand::Assume { id, term } => proof_steps.push(f(
@@ -690,7 +697,7 @@ where
                 args,
                 discharge: _,
             }) if rule == "resolution" || rule == "th_resolution" => {
-                let proof = translate_resolution(proof_iter, premises, args, ctx)?;
+                let proof = translate_resolution(proof_iter, premises, args, ctx, pool)?;
 
                 let clauses = Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(
                     clause
@@ -744,7 +751,7 @@ where
             ProofCommand::Step(AstProofStep {
                 id, clause, premises: _, rule, args, ..
             }) if rule == "la_generic" => {
-                let proof = gen_proof_la_generic(&clause, args);
+                let proof = gen_proof_la_generic(&clause, args, pool);
 
                 let clause = clause
                     .into_iter()
@@ -790,7 +797,7 @@ where
                         .filter(|a| matches!(a, AnchorArg::Assign(_, _)))
                         .map(|a| unwrap_match!(a, AnchorArg::Assign(s, t) => (s, t)))
                         .collect_vec(),
-                    //depth + 1,
+                    pool,
                 )?;
 
                 let sub = commands.last().unwrap();
@@ -926,7 +933,7 @@ mod tests_translation {
 
         ctx.global_variables = global_variables;
 
-        let res = translate_commands(&mut ctx, &mut proof.iter(), |id, t, ps| {
+        let res = translate_commands(&mut ctx, &mut proof.iter(), &mut pool, |id, t, ps| {
             let modifier = ps.is_some().then(|| Modifier::Opaque);
             Command::Symbol(
                 modifier,
