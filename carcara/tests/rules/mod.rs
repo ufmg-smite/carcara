@@ -8,9 +8,10 @@ use std::io::Cursor;
 fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
     for (i, (proof, expected)) in cases.iter().enumerate() {
         // This parses the definitions again for every case, which is not ideal
-        let (mut problem, mut proof, mut pool) = parser::parse_instance(
+        let (mut problem, mut proof, _, mut pool) = parser::parse_instance(
             Cursor::new(definitions),
             Cursor::new(proof),
+            None,
             parser::Config {
                 apply_function_defs: true,
                 ..Default::default()

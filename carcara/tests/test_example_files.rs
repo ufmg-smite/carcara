@@ -12,9 +12,10 @@ fn run_parallel_checker_test(
     use checker::Config;
     use std::sync::Arc;
 
-    let (problem, proof, pool) = parser::parse_instance(
+    let (problem, proof, _, pool) = parser::parse_instance(
         io::BufReader::new(fs::File::open(problem_path)?),
         io::BufReader::new(fs::File::open(proof_path)?),
+        None,
         parser::Config::new(),
     )?;
 
@@ -31,9 +32,10 @@ fn run_parallel_checker_test(
 }
 
 fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
-    let (problem, proof, mut pool) = parser::parse_instance(
+    let (problem, proof, _, mut pool) = parser::parse_instance(
         io::BufReader::new(fs::File::open(problem_path)?),
         io::BufReader::new(fs::File::open(proof_path)?),
+        None,
         parser::Config::new(),
     )?;
 

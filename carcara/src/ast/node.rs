@@ -119,6 +119,13 @@ impl ProofNode {
 }
 
 impl Rc<ProofNode> {
+    pub fn new(value: ProofNode) -> Self {
+        // SAFETY: In the case of proof nodes, we don't care about creating identical nodes in
+        // different allocations. It is safe to assume that nodes that were not `clone`d from each
+        // other are not equal.
+        unsafe { Rc::new_raw(value) }
+    }
+
     pub fn into_commands(&self) -> Vec<ProofCommand> {
         proof_node_to_list(self)
     }

@@ -59,7 +59,7 @@ pub enum Sort {
     ///
     /// The associated string is the sort name, and the associated terms are the sort arguments for
     /// this sort.
-    Atom(String, Vec<Rc<Term>>),
+    Atom(Box<str>, Box<[Rc<Term>]>),
 
     // A sort variable
     Var(String),
@@ -990,6 +990,16 @@ impl Constant {
         match self {
             Constant::Integer(i) => Some(i.clone()),
             _ => None,
+        }
+    }
+}
+
+impl Sort {
+    pub fn is_polymorphic(&self) -> bool {
+        match self {
+            Sort::Var(_) => true,
+            Sort::ParamSort(_, sort) if matches!(&**sort, Term::Sort(Sort::Var(_))) => true,
+            _ => false,
         }
     }
 }
