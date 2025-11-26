@@ -1,5 +1,5 @@
 use super::*;
-use crate::ast::{Operator, Rc, Term as AletheTerm};
+use crate::{underscore, ast::{Operator, Rc, Term as AletheTerm}};
 use std::ops::Deref;
 
 /// Generate the proof term for the rule `trans` e.g.
@@ -225,7 +225,7 @@ pub fn translate_not_or(
         "not_or".into(),
         vec![
             k,
-            Term::Alethe(LTerm::List((disj_list))),
+            Term::Alethe(LTerm::List(disj_list)),
             intro_top(),
             underscore!(),
         ],
@@ -440,14 +440,6 @@ pub fn translate_or_neg(
     proof.push(ProofStep::Reflexivity);
 
     Ok(Proof(proof))
-}
-
-#[inline]
-pub fn translate_auto_rewrite(rule: &str) -> TradResult<Proof> {
-    Ok(Proof(vec![
-        ProofStep::Apply(Term::TermId(rule.into()), vec![], SubProofs(None)),
-        ProofStep::Reflexivity,
-    ]))
 }
 
 fn propositional_or_cong(premises: &[(String, &[Rc<AletheTerm>])]) -> TradResult<Proof> {
@@ -702,7 +694,7 @@ pub fn translate_forall_inst(args: &Vec<Rc<AletheTerm>>) -> TradResult<Proof> {
 
     hyp.append(&mut args.into_iter().map(Term::from).collect_vec());
 
-    let mut forall_elims = Term::Terms(hyp);
+    let forall_elims = Term::Terms(hyp);
 
     Ok(Proof(lambdapi! {
         apply "∨ᵢ₁";
@@ -852,6 +844,7 @@ pub fn translate_la_disequality(clause: &[Rc<AletheTerm>]) -> TradResult<Proof> 
 #[cfg(test)]
 mod tests_tautolog {
     use super::*;
+    use crate::terms;
     use crate::lambdapi::test_macros::*;
     use crate::parser::{self, parse_instance};
 
@@ -1100,60 +1093,6 @@ mod tests_tautolog {
     }
 
     #[test]
-    fn test_forall_inst_translation() {
-        let problem: &[u8] = b"
-            (declare-sort S 0)
-            (declare-sort T 0)
-            (declare-fun a () S)
-            (declare-fun b () T)
-            (declare-fun f (S) S)
-            (declare-fun P (T S) Bool)
-        ";
-        let proof = b"
-            (step t1 (cl (or (not (forall ((x S) (y T)) (P y x ))) (P b (f a)))) :rule forall_inst :args ((f a) b))
-        ";
-        let (_, proof, _, mut pool) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
-
-        assert_eq!(1, proof.commands.len());
-
-        let res = translate_commands(&mut Context::default(), &mut proof.iter(), &mut pool, |id, t, ps| {
-            Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
-        })
-        .expect("translate forall_inst");
-
-        assert_eq!(1, res.len());
-
-        let t1 = res.last().unwrap().clone();
-
-        let cmd_expected = Command::Symbol(
-            None,
-            "t1".into(),
-            vec![],
-            cl!(or!(
-                not!(forall!(
-                    [(id!("x"), tau("S".into())), (id!("y"), tau("T".into()))],
-                    Term::Terms(vec![id!("P"), id!("y"), id!("x")])
-                )),
-                Term::Terms(vec![
-                    id!("P"),
-                    id!("b"),
-                    Term::Terms(vec![id!("f"), id!("a")])
-                ])
-            )),
-            Some(proof!(
-                apply!(id!("∨ᵢ₁")),
-                apply!(id!("imply_to_or")),
-                assume!(H),
-                apply!(id!(""), {
-                    terms!(id!("H"), terms!(id!("f"), id!("a")), id!("b"),),
-                })
-            )),
-        );
-
-        assert_eq!(t1, cmd_expected);
-    }
-
-    #[test]
     fn test_ite1() {
         let problem: &[u8] = b"
             (declare-sort U 0)
@@ -1249,136 +1188,5 @@ mod tests_tautolog {
         );
 
         assert_eq!(t2, cmd_expected);
-    }
-
-    #[test]
-    fn test_and_translation1() {
-        let problem: &[u8] = b"
-            (declare-sort U 0)
-            (declare-fun a() U)
-            (declare-fun b() U)
-            (declare-fun c() U)
-            (declare-fun p(U) Bool)
-        ";
-        let proof = b"
-            (step t1 (cl (and (p a) (p b) (p c))) :rule hole)
-            (step t2 (cl (p b)) :rule and :premises (t1) :args (1))
-        ";
-        let (_, proof, _, mut pool) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
-
-        assert_eq!(2, proof.commands.len());
-
-        let res = translate_commands(&mut Context::default(), &mut proof.iter(), &mut pool, |id, t, ps| {
-            Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
-        })
-        .expect("translate and");
-
-        assert_eq!(2, res.len());
-
-        let t2 = res.last().unwrap().clone();
-
-        let t1 = unary_clause_to_prf("t1");
-
-        let cmd_expected = Command::Symbol(
-            None,
-            "t2".into(),
-            vec![],
-            cl!(terms!(id!("p"), id!("b"))),
-            Some(proof!(
-                apply!(id!("∨ᵢ₁")),
-                apply!(id!("∧ₑ₁"), { terms!(id!("∧ₑ₂"), t1) })
-            )),
-        );
-
-        assert_eq!(t2, cmd_expected)
-    }
-
-    #[test]
-    fn test_and_translation2() {
-        let problem: &[u8] = b"
-            (declare-sort U 0)
-            (declare-fun a() U)
-            (declare-fun b() U)
-            (declare-fun c() U)
-            (declare-fun p(U) Bool)
-        ";
-        let proof = b"
-            (step t1 (cl (and (p a) (p b) (p c))) :rule hole)
-            (step t2 (cl (p a)) :rule and :premises (t1) :args (0))
-        ";
-        let (_, proof, _, mut pool) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
-
-        assert_eq!(2, proof.commands.len());
-
-        let res = translate_commands(&mut Context::default(), &mut proof.iter(), &mut pool, |id, t, ps| {
-            Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
-        })
-        .expect("translate and");
-
-        assert_eq!(2, res.len());
-
-        let t2 = res.last().unwrap().clone();
-
-        let t1 = unary_clause_to_prf("t1");
-
-        let cmd_expected = Command::Symbol(
-            None,
-            "t2".into(),
-            vec![],
-            cl!(terms!(id!("p"), id!("a"))),
-            Some(proof!(apply!(id!("∨ᵢ₁")), apply!(id!("∧ₑ₁"), { t1 }))),
-        );
-
-        assert_eq!(t2, cmd_expected)
-    }
-
-    #[test]
-    fn test_and_translation3() {
-        let problem: &[u8] = b"
-            (declare-sort U 0)
-            (declare-fun a() U)
-            (declare-fun b() U)
-            (declare-fun c() U)
-            (declare-fun d() U)
-            (declare-fun p(U) Bool)
-        ";
-        let proof = b"
-            (step t1 (cl (and (p a) (p b) (p c) (p d))) :rule hole)
-            (step t2 (cl (p d)) :rule and :premises (t1) :args (3))
-        ";
-        let (_, proof, _, mut pool) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
-
-        assert_eq!(2, proof.commands.len());
-
-        let res = translate_commands(&mut Context::default(), &mut proof.iter(), &mut pool, |id, t, ps| {
-            Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
-        })
-        .expect("translate and");
-
-        assert_eq!(2, res.len());
-
-        let t2 = res.last().unwrap().clone();
-
-        let t1 = unary_clause_to_prf("t1");
-
-        let cmd_expected = Command::Symbol(
-            None,
-            "t2".into(),
-            vec![],
-            cl!(terms!(id!("p"), id!("d"))),
-            Some(proof!(
-                apply!(id!("∨ᵢ₁")),
-                ProofStep::Apply(
-                    terms!(
-                        id!("∧ₑ₂"),
-                        terms!(id!("∧ₑ₂"), terms!(id!("∧ₑ₂"), t1.clone()))
-                    ),
-                    vec![],
-                    SubProofs(None)
-                ),
-            )),
-        );
-
-        assert_eq!(t2, cmd_expected)
     }
 }

@@ -44,14 +44,6 @@ pub enum ProofStep {
     Eval(Term),
 }
 
-macro_rules! assume {
-    ($id:ident) => {
-        ProofStep::Assume(vec![stringify!($id).to_string()])
-    };
-}
-
-pub(crate) use assume;
-
 macro_rules! apply {
     ($id:ident) => {
         ProofStep::Apply(Term::TermId(stringify!($id).into()), vec![], SubProofs(None))
@@ -72,32 +64,6 @@ macro_rules! apply {
 }
 
 pub(crate) use apply;
-
-macro_rules! refine {
-    ($id:ident) => {
-        ProofStep::Refine(Term::TermId(stringify!($id).into()), vec![], SubProofs(None))
-    };
-    ($t:expr) => {
-        ProofStep::Apply($t, vec![], SubProofs(None))
-    };
-    ($id:expr, [ $($sp:expr),+ $(,)?  ]) => {
-        ProofStep::Refine(Term::TermId(stringify!($id).into()), vec![], SubProofs(Some(
-            vec![
-                $( proof!($sp)),+
-            ]
-        )))
-    };
-}
-
-pub(crate) use refine;
-
-macro_rules! r#try {
-    ($t:expr) => {
-        ProofStep::Try(Box::new($t))
-    };
-}
-
-pub(crate) use r#try;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SubProofs(pub Option<Vec<Proof>>);
@@ -151,7 +117,7 @@ impl fmt::Display for ProofStep {
 
                 write!(f, ";")
             }
-            ProofStep::Change(t) =>  write!(f, "change {}", t),
+            ProofStep::Change(t) => write!(f, "change {}", t),
             ProofStep::Refine(t, args, subproofs) => {
                 write!(
                     f,
@@ -182,7 +148,12 @@ impl fmt::Display for ProofStep {
                 write!(f, ";")
             }
             ProofStep::Symmetry => write!(f, "symmetry;"),
-            ProofStep::Simplify(s) => write!(f, "simplify;"),
+            ProofStep::Simplify(s) => {
+                for term in s.iter() {
+                    write!(f, "simplify {};", term)?;
+                }
+                Ok(())
+            }
             ProofStep::Set(name, def) => write!(f, "set {} ≔ {};", name, def),
             ProofStep::Varmap(name, _list) => write!(f, "set {} ≔;", name),
             ProofStep::Why3 => write!(f, "why3;"),

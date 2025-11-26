@@ -26,6 +26,7 @@ mod simp;
 #[macro_use]
 mod tautology;
 mod lia;
+#[macro_use]
 pub mod term;
 
 use dsl::*;
@@ -166,7 +167,7 @@ pub fn produce_lambdapi_proof<'a>(
     prelude: ProblemPrelude,
     proof_elaborated: ProofElaborated,
     mut pool: pool::PrimitivePool,
-    config: Config,
+    _config: Config,
 ) -> TradResult<ProofFile> {
     let mut proof_file = ProofFile::new();
 
@@ -339,41 +340,41 @@ fn make_resolution(
     let hyp_right_arg = Term::TermId(right_step_name.to_string());
 
     let neg_pivot = term_negated(pivot, pool);
-
+    let mut zero_duration = Duration::ZERO;
     let (i, j) = if *flag_position_pivot {
         let i = left_clause
             .into_iter()
-            .position(|x| polyeq(pivot, x, &mut Duration::ZERO) == true)
+            .position(|x| polyeq(pivot, x, &mut zero_duration) == true)
             .expect("1");
         let j = right_clause
             .into_iter()
-            .position(|x| polyeq(&neg_pivot, x, &mut Duration::ZERO) == true)
+            .position(|x| polyeq(&neg_pivot, x, &mut zero_duration) == true)
             .expect("2");
         (i, j)
     } else {
         // flag at `false` so negation of the pivot is on the first premise and positive pivot on the 2nd.
         let i = left_clause
             .into_iter()
-            .position(|x| polyeq(&neg_pivot, x, &mut Duration::ZERO) == true)
+            .position(|x| polyeq(&neg_pivot, x, &mut zero_duration) == true)
             .expect("3");
         let j = right_clause
             .into_iter()
-            .position(|x| polyeq(pivot, x, &mut Duration::ZERO) == true)
+            .position(|x| polyeq(pivot, x, &mut zero_duration) == true)
             .expect("4");
         (i, j)
     };
 
     let ps = Term::Alethe(LTerm::Clauses(
-        (left_clause
+        left_clause
             .into_iter()
             .map(|c| ctx.get_or_convert(c).0)
-            .collect_vec()),
+            .collect_vec(),
     ));
     let qs = Term::Alethe(LTerm::Clauses(
-        (right_clause
+        right_clause
             .into_iter()
             .map(|c| ctx.get_or_convert(c).0)
-            .collect_vec()),
+            .collect_vec(),
     ));
 
     // apply disj_resolutionN (p_29 ⟇ (p_11 ⟇ (p_10 ⟇ ▩))) (p_12 ⟇ ▩) (int2nat 1 ⊤ᵢ) Stdlib.Nat._0 t14_t0 t14_t9 ⊤ᵢ ⊤ᵢ (eq_refl _);
@@ -535,16 +536,12 @@ fn translate_subproof<'a>(
     } else if rule == "sko_forall" {
         let last_step_id = unwrap_match!(commands.get(commands.len() - 1), Some(ProofCommand::Step(AstProofStep{id, ..})) => normalize_name(id));
 
-        //FIXME: hahah
         // end of the script
-        // proof_cmds.append(&mut lambdapi! {
-        //     apply "∨ᵢ₁";
-        //     apply "π̇ₗ" (@last_step_id.into());
-        // });
-        // proof_cmds.push(ProofStep::Admit);
-
-        // proof_cmds
-        admit()
+        proof_cmds.append(&mut lambdapi! {
+            apply "∨ᵢ₁";
+            apply "π̇ₗ" (@last_step_id.into());
+        });
+        proof_cmds
     } else {
         proof_cmds
     };
@@ -793,7 +790,7 @@ where
                 }
             }
             ProofCommand::Subproof(Subproof { commands, args, .. }) => {
-                let (id, clause, subproof) = translate_subproof(
+                let (_id, clause, subproof) = translate_subproof(
                     ctx,
                     proof_iter,
                     commands.as_slice(),
@@ -949,7 +946,7 @@ mod tests_translation {
         })
         .expect("translate trans");
 
-        let t3 = res.last().unwrap().clone();
+        let _: Command = res.last().unwrap().clone();
 
         //println!("{}", t3);
     }

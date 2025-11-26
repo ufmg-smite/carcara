@@ -155,21 +155,19 @@ pub enum Term {
     Underscore,
 }
 
+#[macro_export]
 macro_rules! underscore {
     () => {
         Term::Underscore
     };
 }
 
-pub(crate) use underscore;
-
+#[macro_export]
 macro_rules! terms {
     ($($t:expr),+ $(,)?) => {
         Term::Terms(vec![ $( $t),+ ])
     };
 }
-
-pub(crate) use terms;
 
 /// This trait implements the visitor pattern for Lambdapi terms,
 /// allowing systematic replacement of variables with their corresponding values
@@ -581,7 +579,7 @@ impl From<&SortedVar> for SortedTerm {
     fn from(var: &SortedVar) -> Self {
         SortedTerm(
             Box::new(Term::TermId(var.0.clone())),
-            Box::new(tau((Term::from(&var.1)))),
+            Box::new(tau(Term::from(&var.1))),
         )
     }
 }
@@ -688,7 +686,12 @@ pub enum LTerm {
 
 #[cfg(test)]
 pub(crate) mod test_macros {
-    use super::*; // Import the types you need (Term, LTerm, etc.)
+    macro_rules! cl {
+        ($($x:expr),+ $(,)?) => {
+            Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses( vec![ $($x),+ ] )))))
+        };
+    }
+
     macro_rules! id {
         ($x1:expr) => {
             Term::TermId($x1.into())
@@ -719,43 +722,25 @@ pub(crate) mod test_macros {
         };
     }
 
-    macro_rules! iff {
-        ($x1:expr, $x2:expr) => {
-            Term::Alethe(LTerm::Iff($x1, $x2))
+    macro_rules! or {
+        ($($x:expr),+ $(,)?) => {
+            Term::Alethe(LTerm::NOr(vec![
+                $($x),+
+            ]))
         };
     }
 
-    macro_rules! or {
-    ($($x:expr),+ $(,)?) => {
-        Term::Alethe(LTerm::NOr(vec![
-            $($x),+
-        ]))
-    };
-}
     macro_rules! and {
-    ($($x:expr),+ $(,)?) => {
-        Term::Alethe(LTerm::NAnd(vec![
-            $($x),+
-        ]))
-    };
+        ($($x:expr),+ $(,)?) => {
+            Term::Alethe(LTerm::NAnd(vec![
+                $($x),+
+            ]))
+        };
+    }
+
+    pub(crate) use {and, cl, bid, eq, id, imp, not, or};
 }
 
-    macro_rules! forall {
-    ([$( ($x:expr, $ty:expr) ),+ $(,)?], $term:expr) => {
-        Term::Alethe(LTerm::Forall(Bindings(vec![$( SortedTerm( Box::new($x), Box::new($ty)) ),+ ]), Box::new($term)))
-    };
-}
-
-    pub(crate) use and;
-    pub(crate) use bid;
-    pub(crate) use eq;
-    pub(crate) use forall;
-    pub(crate) use id;
-    pub(crate) use iff;
-    pub(crate) use imp;
-    pub(crate) use not;
-    pub(crate) use or;
-}
 
 impl fmt::Display for LTerm {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -833,14 +818,6 @@ impl fmt::Display for LTerm {
 pub fn clauses(terms: Vec<Term>) -> Term {
     Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(terms)))))
 }
-
-macro_rules! cl {
-    ($($x:expr),+ $(,)?) => {
-        Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses( vec![ $($x),+ ] )))))
-    };
-}
-
-pub(crate) use cl;
 
 pub trait Visitor {
     fn visit(&self, ctx: &mut Context, pool: &mut PrimitivePool);
@@ -985,8 +962,6 @@ mod tests_term {
         .expect("translate cong");
 
         assert_eq!(2, res.len());
-
-        let t1 = res.last().unwrap().clone();
     }
 
     #[test]

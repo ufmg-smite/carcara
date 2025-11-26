@@ -24,13 +24,15 @@ pub fn translate_rare_simp(
     };
 
     let mut rewrites = match rule.as_str() {
+        "bool-eq-true" => translate_bool_eq_true(),
+        "bool-eq-false" => translate_bool_eq_false(),
         "bool-and-true" => translate_bool_and_true(args),
         "bool-or-false" => translate_bool_or_false(args),
         "bool-or-flatten" => translate_bool_or_flatten(),
         "bool-and-flatten" => translate_bool_and_flatten(args),
-        "bool-impl-elim" => translate_bool_impl_elim(args),
-        "bool-and-de-morgan" => translate_bool_and_de_morgan(args),
-        "bool-or-de-morgan" => translate_bool_or_de_morgan(args),
+        "bool-impl-elim" => translate_bool_impl_elim(),
+        "bool-and-de-morgan" => translate_bool_and_de_morgan(),
+        "bool-or-de-morgan" => translate_bool_or_de_morgan(),
         "bool-double-not-elim" => translate_bool_double_not_elim(),
         "bool-implies-or-distrib" => translate_bool_implies_or_distrib(args),
         "bool-impl-true1" => translate_bool_imp_true1(),
@@ -80,14 +82,8 @@ pub fn translate_rare_simp(
 /// ```
 ///
 /// We simplify `p_*` all shared symbols otherwise the tactic `rewrite` does not work.
-fn translate_bool_eq_true(dag_terms: HashSet<String>) -> Vec<ProofStep> {
+fn translate_bool_eq_true() -> Vec<ProofStep> {
     let mut proof = vec![];
-
-    if dag_terms.len() > 0 {
-        dag_terms
-            .into_iter()
-            .for_each(|s| proof.push(ProofStep::Simplify(vec![s.into()])));
-    }
 
     proof.push(ProofStep::Rewrite(
         false,
@@ -111,14 +107,8 @@ fn translate_bool_eq_true(dag_terms: HashSet<String>) -> Vec<ProofStep> {
 /// ```
 ///
 /// We simplify `p_*` all shared symbols otherwise the tactic `rewrite` does not work.
-fn translate_bool_eq_false(dag_terms: HashSet<String>) -> Vec<ProofStep> {
+fn translate_bool_eq_false() -> Vec<ProofStep> {
     let mut proof = vec![];
-
-    if dag_terms.len() > 0 {
-        dag_terms
-            .into_iter()
-            .for_each(|s| proof.push(ProofStep::Simplify(vec![s.into()])));
-    }
 
     proof.push(ProofStep::Rewrite(
         false,
@@ -417,7 +407,7 @@ fn translate_bool_and_true(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
     }
 }
 
-fn translate_bool_impl_elim(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
+fn translate_bool_impl_elim() -> Vec<ProofStep> {
     vec![
         ProofStep::Rewrite(
             false,
@@ -526,7 +516,7 @@ fn translate_ac_simplify() -> Proof {
 /// eval #repeat (#rewrite morgan1);
 ///
 /// We ignore arguments for this rule and take benefits of metatactics in Lambdapi.
-fn translate_bool_and_de_morgan(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
+fn translate_bool_and_de_morgan() -> Vec<ProofStep> {
     vec![
         ProofStep::Eval(Term::Terms(vec![
             "#repeat".into(),
@@ -548,7 +538,7 @@ fn translate_bool_and_de_morgan(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
 /// `eval #repeat (#rewrite morgan1);`
 ///
 /// We ignore arguments for this rule and take benefits of metatactics in Lambdapi.
-fn translate_bool_or_de_morgan(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
+fn translate_bool_or_de_morgan() -> Vec<ProofStep> {
     vec![
         ProofStep::Eval(Term::Terms(vec![
             "#repeat".into(),

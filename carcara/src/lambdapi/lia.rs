@@ -13,16 +13,6 @@ enum Op {
     Le,
 }
 
-fn op_into_operator(op: &Op) -> Operator {
-    match op {
-        Op::Eq => Operator::Equals,
-        Op::Ge => Operator::GreaterEq,
-        Op::Gt => Operator::GreaterThan,
-        Op::Lt => Operator::LessThan,
-        Op::Le => Operator::LessEq,
-    }
-}
-
 #[derive(Debug)]
 struct ReifiedInequality {
     lhs: Rc<AletheTerm>,
@@ -30,20 +20,6 @@ struct ReifiedInequality {
     op: Op,
     neg: bool,
     name: String,
-}
-
-fn inequalitie_with_alias_name(i: &ReifiedInequality, pool: &mut PrimitivePool) -> AletheTerm {
-    let op: Operator = op_into_operator(&i.op);
-    let lhs = pool.add(AletheTerm::Const(Constant::String(format!("{}l", i.name))));
-    let rhs = pool.add(AletheTerm::Const(Constant::String(format!("{}r", i.name))));
-
-    let ine = pool.add(AletheTerm::Op(op, vec![lhs, rhs]));
-
-    if i.neg {
-        AletheTerm::Op(Operator::Not, vec![ine])
-    } else {
-        ine.deref().clone()
-    }
 }
 
 pub fn gen_proof_la_generic(
@@ -186,20 +162,6 @@ fn sum_hyps(prefix: &str, suffix: &str, start: usize, end: usize) -> String {
     s.join(" + ")
 }
 
-// TODO: Maybe optmise this function to reduce allocation?
-fn visit_arith_term(term: &AletheTerm) -> HashSet<AletheTerm> {
-    match term {
-        func @ AletheTerm::App(f, args) => HashSet::from([func.clone()]),
-        AletheTerm::Op(_f, args) => args
-            .into_iter()
-            .map(|a| visit_arith_term(&a))
-            .reduce(|acc, e| acc.union(&e).cloned().collect())
-            .unwrap_or(HashSet::new()),
-        var @ AletheTerm::Var(_, _) => HashSet::from([var.clone()]),
-        _ => HashSet::new(),
-    }
-}
-
 fn la_generic(
     inequalities: Vec<ReifiedInequality>,
     args: &Vec<Rc<AletheTerm>>,
@@ -226,7 +188,7 @@ fn la_generic(
     let mut step1 = inequalities
         .iter()
         .enumerate()
-        .filter(|(i, l)| l.neg == false && l.op != Op::Eq)
+        .filter(|(_, l)| l.neg == false && l.op != Op::Eq)
         .map(|(i, l)| {
             let mut pattern: Vec<String> = vec!["_".to_string(); inequalities.len()];
             pattern[i] = "x".to_string();

@@ -18,7 +18,7 @@ macro_rules! concat {
 }
 
 pub trait PrettyPrint {
-    fn to_doc(&self) -> RcDoc<()>;
+    fn to_doc(&self) -> RcDoc<'_, ()>;
 
     fn to_pretty_with_width(&self, width: usize) -> String {
         let mut w = Vec::new();
@@ -133,7 +133,7 @@ fn line<'a>() -> RcDoc<'a, ()> {
 }
 
 impl PrettyPrint for BuiltinSort {
-    fn to_doc(&self) -> RcDoc<()> {
+    fn to_doc(&self) -> RcDoc<'_,()> {
         match self {
             BuiltinSort::Bool => text("o"),
             BuiltinSort::Int => text("int"),
@@ -147,7 +147,7 @@ impl PrettyPrint for BuiltinSort {
 }
 
 impl PrettyPrint for Term {
-    fn to_doc(&self) -> RcDoc<()> {
+    fn to_doc(&self) -> RcDoc<'_, ()> {
         match self {
             Term::Alethe(term) => term.to_doc(),
             Term::TermId(id) => text(id),
@@ -172,7 +172,7 @@ impl PrettyPrint for Term {
 }
 
 impl PrettyPrint for Modifier {
-    fn to_doc(&self) -> RcDoc<()> {
+    fn to_doc(&self) -> RcDoc<'_, ()> {
         match self {
             Modifier::Constant => text("constant"),
             Modifier::Opaque => text("opaque"),
@@ -181,13 +181,13 @@ impl PrettyPrint for Modifier {
 }
 
 impl PrettyPrint for SortedTerm {
-    fn to_doc(&self) -> RcDoc<()> {
+    fn to_doc(&self) -> RcDoc<'_, ()> {
         self.0.to_doc().append(space()).append(self.1.to_doc())
     }
 }
 
 impl PrettyPrint for VecN {
-    fn to_doc(&self) -> RcDoc<()> {
+    fn to_doc(&self) -> RcDoc<'_, ()> {
         // Take the last element because we will reverse the list latter so: last l = first (rev l)
         let (first, elems) = self.0.split_last().expect("distinct should not be empty");
 
@@ -213,7 +213,7 @@ impl PrettyPrint for VecN {
 }
 
 impl PrettyPrint for List {
-    fn to_doc(&self) -> RcDoc<()> {
+    fn to_doc(&self) -> RcDoc<'_, ()> {
         self.0.iter().fold(text("□"), |acc, elem| {
             concat! {
                 elem.to_doc().clone()
@@ -225,7 +225,7 @@ impl PrettyPrint for List {
 }
 
 impl PrettyPrint for LTerm {
-    fn to_doc(&self) -> RcDoc<()> {
+    fn to_doc(&self) -> RcDoc<'_, ()> {
         match self {
             LTerm::True => text("⊤"),
             LTerm::False => text("⊥"),
@@ -343,7 +343,7 @@ impl PrettyPrint for LTerm {
 }
 
 impl PrettyPrint for Param {
-    fn to_doc(&self) -> RcDoc<()> {
+    fn to_doc(&self) -> RcDoc<'_, ()> {
         text(self.0.as_str())
             .append(colon().spaces())
             .append(self.1.to_doc())
@@ -351,7 +351,7 @@ impl PrettyPrint for Param {
 }
 
 impl PrettyPrint for ProofStep {
-    fn to_doc(&self) -> RcDoc<()> {
+    fn to_doc(&self) -> RcDoc<'_, ()> {
         match self {
             ProofStep::Admit => RcDoc::text("admit").append(semicolon()),
             ProofStep::Apply(func, args, subproofs) => RcDoc::text("apply")
@@ -481,13 +481,13 @@ impl PrettyPrint for ProofStep {
 }
 
 impl PrettyPrint for Proof {
-    fn to_doc(&self) -> RcDoc<()> {
+    fn to_doc(&self) -> RcDoc<'_, ()> {
         RcDoc::intersperse(self.0.iter().map(|step| step.to_doc()), line())
     }
 }
 
 impl PrettyPrint for Command {
-    fn to_doc(&self) -> RcDoc<()> {
+    fn to_doc(&self) -> RcDoc<'_, ()> {
         match self {
             Command::RequireOpen(path) => text("require open")
                 .append(space())
@@ -539,7 +539,7 @@ impl PrettyPrint for Command {
 }
 
 impl<'a> PrettyPrint for ProofFile {
-    fn to_doc(&self) -> RcDoc<()> {
+    fn to_doc(&self) -> RcDoc<'_, ()> {
         RcDoc::intersperse(
             self.requires
                 .iter()
@@ -552,7 +552,7 @@ impl<'a> PrettyPrint for ProofFile {
 }
 
 pub trait PrettyPrintAx {
-    fn to_ax(&self) -> RcDoc<()>;
+    fn to_ax(&self) -> RcDoc<'_, ()>;
 
     fn to_pretty_with_width(&self, width: usize) -> String {
         let mut w: Vec<u8> = Vec::new();
@@ -571,7 +571,7 @@ pub trait PrettyPrintAx {
 }
 
 impl PrettyPrintAx for Command {
-    fn to_ax(&self) -> RcDoc<()> {
+    fn to_ax(&self) -> RcDoc<'_, ()> {
         match self {
             Command::RequireOpen(path) => text("require open")
                 .append(space())
@@ -621,7 +621,7 @@ impl PrettyPrintAx for Command {
 }
 
 impl<'a> PrettyPrintAx for AxiomsFile {
-    fn to_ax(&self) -> RcDoc<()> {
+    fn to_ax(&self) -> RcDoc<'_, ()> {
         RcDoc::intersperse(
             self.requires
                 .iter()

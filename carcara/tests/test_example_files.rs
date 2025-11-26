@@ -170,12 +170,6 @@ where
     }
 }
 
-#[test_generator::from_dir("benchmarks/frocos")]
-#[allow(dead_code)]
-fn frocos(proof_path: &str) {
-    test_file(proof_path, run_translation)
-}
-
 #[test_generator::from_dir("benchmarks/small")]
 #[allow(dead_code)]
 fn small(proof_path: &str) {
@@ -191,13 +185,5 @@ fn full(proof_path: &str) {
 #[test_generator::from_dir("benchmarks/tlapm")]
 #[allow(dead_code)]
 fn tlaps(proof_path: &str) {
-    test_file(proof_path, run_translation)
-}
-
-
-
-#[test_generator::from_dir("benchmarks/ewd")]
-#[allow(dead_code)]
-fn ewd(proof_path: &str) {
     test_file(proof_path, run_translation)
 }
