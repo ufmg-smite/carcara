@@ -275,6 +275,32 @@ elaboration steps, in that order:</p>
 you need an extra <code>--</code> argument to denote the end of the pipeline list:</p>
 <pre><code>carcara elaborate --pipeline uncrowd polyeq -- example.smt2.alethe
 </code></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="polyequality-elaboration"><a class="header" href="#polyequality-elaboration">Polyequality elaboration</a></h1>
+<p>In Alethe, we call "polyequality" the notion of equivalence between terms modulo the reordering
+of equalities. For example, we say that the terms <code>(or (= a b) c)</code> and <code>(or (= b a) c)</code> are
+"polyequal", despite the equality term being flipped.</p>
+<p>When checking an Alethe proof, a checker often needs to reason modulo polyequality. The <code>refl</code>
+rule, for example, allows the two terms to be syntactically different, if they are equivalent by
+polyequality. The following step is valid:</p>
+<pre><code>(step t1 (cl (= (or (= a b) c) (or (= b a) c))) :rule refl)
+</code></pre>
+<p>The <code>polyeq</code> elaboration step can be used to remove all such instances where polyequality reasoning
+is required. For exemple, calling <code>carcara elaborate --pipeline polyeq</code> on the above step will
+transform it into the following steps:</p>
+<pre><code>(step t1.t1 (cl (= (= a b) (= b a))) :rule eq_symmetric)
+(step t1.t2 (cl (= (or (= a b) c) (or (= b a) c))) :rule cong :premises (t1.t1))
+</code></pre>
+<p>In this case, Carcara added an <code>eq_symmetric</code> step to equate the two flipped equalities, and used a
+<code>cong</code> step to construct the original conclusion of <code>t1</code>. The exact elaboration differs by rule. The
+rules affected by this elaboration step are:</p>
+<ul>
+<li><code>assume</code></li>
+<li><code>refl</code></li>
+<li><code>forall_inst</code></li>
+<li><code>subproof</code></li>
+<li><code>ite_intro</code></li>
+<li><code>bfun_elim</code></li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="other-features"><a class="header" href="#other-features">Other features</a></h1>
 <p>Besides proof checking and elaboration, Carcara has a number of other functions useful for dealing
 with Alethe proofs. Run <code>carcara --help</code> to see a full list of subcommands.</p>
