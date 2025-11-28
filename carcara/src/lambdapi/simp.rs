@@ -1,6 +1,6 @@
 use try_match::match_ok;
 
-use crate::ast::Constant;
+use crate::{terms, ast::Constant};
 
 use super::*;
 
@@ -61,7 +61,7 @@ pub fn translate_rare_simp(
         }
         r => {
             let args = args.into_iter().map(|term| term.into()).collect_vec();
-            vec![ProofStep::Apply(Term::from(r), args, SubProofs(None))]
+            vec![ProofStep::Apply(terms![Term::from(r), ..args], SubProofs(None))]
         }
     };
 

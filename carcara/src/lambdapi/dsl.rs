@@ -41,23 +41,23 @@ macro_rules! tactic {
         tactic![ $steps, $( $body )+ ]
     };
     ($steps:ident, refine $i:tt; $($body:tt)+) => {
-        $steps.push(ProofStep::Refine(Term::from($i), vec![], SubProofs(None)));
+        $steps.push(ProofStep::Refine(Term::from($i), SubProofs(None)));
         tactic![ $steps, $( $body )+ ]
     };
     ($steps:ident, refine @$e:expr; $($body:tt)+) => {
-        $steps.push(ProofStep::Refine(make_term![$e], vec![], SubProofs(None)));
+        $steps.push(ProofStep::Refine(make_term![$e], SubProofs(None)));
         tactic![ $steps, $( $body )+ ]
     };
     ($steps:ident, apply $i:tt; $($body:tt)+) => {
-        $steps.push(ProofStep::Apply(Term::from($i), vec![], SubProofs(None)));
+        $steps.push(ProofStep::Apply(Term::from($i), SubProofs(None)));
         tactic![ $steps, $( $body )+ ]
     };
     ($steps:ident, apply @$e:expr; $($body:tt)+) => {
-        $steps.push(ProofStep::Apply(make_term![$e], vec![], SubProofs(None)));
+        $steps.push(ProofStep::Apply(make_term![$e], SubProofs(None)));
         tactic![ $steps, $( $body )+ ]
     };
     ($steps:ident, apply $i:tt $arg:tt; $($body:tt)+) => {
-        $steps.push(ProofStep::Apply(Term::from($i), vec![ make_term![$arg] ], SubProofs(None)));
+        $steps.push(ProofStep::Apply(terms![Term::from($i), ..vec![ make_term![$arg] ]], SubProofs(None)));
         tactic![ $steps, $( $body )+ ]
     };
     ($steps:ident, apply $i:tt  $( ( $($args:tt) + ) ) * ; $($body:tt)+) => {

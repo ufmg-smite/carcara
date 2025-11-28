@@ -28,9 +28,9 @@ impl fmt::Display for Proof {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProofStep {
     Assume(Vec<String>),
-    Apply(Term, Vec<Term>, SubProofs),
+    Apply(Term, SubProofs),
     Change(Term),
-    Refine(Term, Vec<Term>, SubProofs),
+    Refine(Term, SubProofs),
     Have(String, Term, Vec<ProofStep>), //TODO: change Vec<ProofStep> for Proof
     Admit,
     Reflexivity,
@@ -46,16 +46,16 @@ pub enum ProofStep {
 
 macro_rules! apply {
     ($id:ident) => {
-        ProofStep::Apply(Term::TermId(stringify!($id).into()), vec![], SubProofs(None))
+        ProofStep::Apply(Term::TermId(stringify!($id).into()), SubProofs(None))
     };
     ($t:expr) => {
-        ProofStep::Apply($t, vec![], SubProofs(None))
+        ProofStep::Apply($t, SubProofs(None))
     };
     ($t:expr, { $($arg:expr),+ $(,)?  }) => {
-        ProofStep::Apply($t, vec![$($arg),+], SubProofs(None))
+        ProofStep::Apply(terms![$t, ..vec![$($arg),+]], SubProofs(None))
     };
     ($id:expr, { $($arg:expr),* $(,)?  }, [ $($sp:expr),* $(,)?  ]) => {
-        ProofStep::Apply(Term::TermId(stringify!($id).into()), vec![$($arg),*], SubProofs(Some(
+        ProofStep::Apply(terms![Term::TermId(stringify!($id).into()), ..vec![$($arg),*]], SubProofs(Some(
             vec![
                 $( proof!($sp) ),*
             ]
@@ -97,19 +97,8 @@ impl fmt::Display for ProofStep {
                 let have_fmt = format!("have {} : {} {{ {} }};\n", id, term, proof_steps_fmt);
                 write!(f, "{}", have_fmt)
             }
-            ProofStep::Apply(t, args, subproofs) => {
+            ProofStep::Apply(t, subproofs) => {
                 write!(f, "apply {}", t)?;
-
-                if args.len() > 0 {
-                    write!(
-                        f,
-                        " {}",
-                        args.iter()
-                            .map(|i| format!("{}", i))
-                            .collect::<Vec<_>>()
-                            .join(WHITE_SPACE)
-                    )?;
-                }
 
                 if let SubProofs(Some(sp)) = subproofs {
                     write!(f, " {}", SubProofs(Some(sp.to_vec())))?;
@@ -118,15 +107,11 @@ impl fmt::Display for ProofStep {
                 write!(f, ";")
             }
             ProofStep::Change(t) => write!(f, "change {}", t),
-            ProofStep::Refine(t, args, subproofs) => {
+            ProofStep::Refine(t, subproofs) => {
                 write!(
                     f,
-                    "refine {} {} {};",
+                    "refine {} {};",
                     t,
-                    args.iter()
-                        .map(|i| format!("{}", i))
-                        .collect::<Vec<_>>()
-                        .join(WHITE_SPACE),
                     subproofs
                 )
             }

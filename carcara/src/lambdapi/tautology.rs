@@ -1,5 +1,8 @@
 use super::*;
-use crate::{underscore, ast::{Operator, Rc, Term as AletheTerm}};
+use crate::{
+    ast::{Operator, Rc, Term as AletheTerm},
+    terms, underscore,
+};
 use std::ops::Deref;
 
 /// Generate the proof term for the rule `trans` e.g.
@@ -36,7 +39,7 @@ pub fn translate_trans(premises: &mut Vec<(String, &[Rc<AletheTerm>])>) -> TradR
         acc
     });
 
-    let proofstep = vec![ProofStep::Apply(proofterm, vec![], SubProofs(None))];
+    let proofstep = vec![ProofStep::Apply(proofterm, SubProofs(None))];
 
     Ok(Proof(proofstep))
 }
@@ -126,15 +129,10 @@ pub fn translate_sym(premise: &str) -> TradResult<Proof> {
 /// refine not_symm [[i]];
 /// ```
 pub fn translate_not_symm(premise: &str) -> TradResult<Proof> {
-   let  mut proof = vec![];
-    proof.push(ProofStep::Apply(
-        Term::from("∨ᵢ₁"),
-        vec![],
-        SubProofs(None),
-    ));
+    let mut proof = vec![];
+    proof.push(ProofStep::Apply(Term::from("∨ᵢ₁"), SubProofs(None)));
     proof.push(ProofStep::Refine(
-        Term::from("not_symm"),
-        vec![unary_clause_to_prf(premise)],
+        terms![Term::from("not_symm"), ..vec![unary_clause_to_prf(premise)],],
         SubProofs(None),
     ));
     Ok(Proof(proof))
@@ -176,8 +174,7 @@ pub fn translate_and(
     let premise_id = premise.0.to_string().into(); // i
 
     Ok(Proof(vec![ProofStep::Refine(
-        "∧ₑₙ".into(),
-        vec![k, conj_list, intro_top(), premise_id],
+        terms!["∧ₑₙ".into(), ..vec![k, conj_list, intro_top(), premise_id],],
         SubProofs(None),
     )]))
 
@@ -222,12 +219,14 @@ pub fn translate_not_or(
     );
 
     proof.push(ProofStep::Refine(
-        "not_or".into(),
-        vec![
-            k,
-            Term::Alethe(LTerm::List(disj_list)),
-            intro_top(),
-            underscore!(),
+        terms![
+            "not_or".into(),
+            ..vec![
+                k,
+                Term::Alethe(LTerm::List(disj_list)),
+                intro_top(),
+                underscore!(),
+            ]
         ],
         SubProofs(None),
     ));
@@ -235,8 +234,7 @@ pub fn translate_not_or(
     proof.push(ProofStep::Simplify(vec![]));
 
     proof.push(ProofStep::Refine(
-        "fold_⇒".into(),
-        vec![underscore!()],
+        terms!["fold_⇒".into(), ..vec![underscore!()],],
         SubProofs(None),
     ));
 
@@ -244,7 +242,6 @@ pub fn translate_not_or(
 
     proof.push(ProofStep::Refine(
         unary_clause_to_prf(&premise.0),
-        vec![],
         SubProofs(None),
     ));
 
@@ -281,14 +278,13 @@ pub fn translate_or(premise: &(String, &[Rc<AletheTerm>])) -> TradResult<Proof> 
     let i = unary_clause_to_prf(premise.0.as_ref());
 
     proof.push(ProofStep::Refine(
-        "∨ₑₙ".into(),
-        vec![disj_list, underscore!()],
+        terms!["∨ₑₙ".into(), ..vec![disj_list, underscore!()]],
         SubProofs(None),
     ));
 
     proof.push(ProofStep::Simplify(vec![]));
     proof.push(ProofStep::Eval(Term::from("#repeat_or_id_r")));
-    proof.push(ProofStep::Refine(i, vec![], SubProofs(None)));
+    proof.push(ProofStep::Refine(i, SubProofs(None)));
 
     Ok(Proof(proof))
 }
@@ -318,8 +314,8 @@ pub fn translate_not_and(clause: &[Rc<AletheTerm>], premise: &str) -> TradResult
     );
 
     proof.push(ProofStep::Refine(
-        Term::from("not_and"),
-        vec![
+        terms![
+            Term::from("not_and"),
             Term::Alethe(LTerm::List(conj_list)),
             unary_clause_to_prf(premise),
         ],
@@ -346,8 +342,10 @@ pub fn translate_and_neg(clause: &[Rc<AletheTerm>]) -> TradResult<Proof> {
     });
 
     proof.push(ProofStep::Refine(
-        Term::TermId("and_neg".into()),
-        vec![Term::Alethe(LTerm::List(conj_list)), Term::Underscore],
+        terms![
+            Term::TermId("and_neg".into()),
+            ..vec![Term::Alethe(LTerm::List(conj_list)), Term::Underscore],
+        ],
         SubProofs(None),
     ));
     proof.push(ProofStep::Simplify(vec![]));
@@ -379,11 +377,13 @@ pub fn translate_and_pos(
     let k = args[0].as_usize_err().unwrap();
 
     proof.push(ProofStep::Refine(
-        Term::from("and_pos"),
-        vec![
-            Term::Nat(k as u32),
-            Term::Alethe(LTerm::List(conj_list)),
-            intro_top(),
+        terms![
+            Term::from("and_pos"),
+            ..vec![
+                Term::Nat(k as u32),
+                Term::Alethe(LTerm::List(conj_list)),
+                intro_top(),
+            ]
         ],
         SubProofs(None),
     ));
@@ -417,15 +417,11 @@ pub fn translate_or_neg(
 
     let k = args[0].as_usize_err().unwrap();
 
-    proof.push(ProofStep::Apply(
-        Term::from("sym_clause"),
-        vec![],
-        SubProofs(None),
-    ));
+    proof.push(ProofStep::Apply(Term::from("sym_clause"), SubProofs(None)));
 
     proof.push(ProofStep::Refine(
-        Term::from("or_neg"),
-        vec![
+        terms![
+            Term::from("or_neg"),
             Term::Nat(k as u32),
             Term::Alethe(LTerm::List(disj_list)),
             Term::Underscore,
@@ -448,18 +444,15 @@ fn propositional_or_cong(premises: &[(String, &[Rc<AletheTerm>])]) -> TradResult
             Some((p, rest)) if !rest.is_empty() => {
                 let p_proof = Proof(vec![ProofStep::Apply(
                     Term::from(p.0.as_str()),
-                    vec![],
                     SubProofs(None),
                 )]);
                 Proof(vec![ProofStep::Apply(
                     Term::from("cong_or"),
-                    vec![],
                     SubProofs(Some(vec![p_proof, cong_tree(rest)])),
                 )])
             }
             Some((p, [])) => Proof(vec![ProofStep::Apply(
                 Term::from(p.0.as_str()),
-                vec![],
                 SubProofs(None),
             )]),
             _ => unreachable!("we should stop when rest is empty"),
@@ -475,18 +468,15 @@ fn propositional_and_cong(premises: &[(String, &[Rc<AletheTerm>])]) -> TradResul
             Some((p, rest)) if !rest.is_empty() => {
                 let p_proof = Proof(vec![ProofStep::Apply(
                     Term::from(p.0.as_str()),
-                    vec![],
                     SubProofs(None),
                 )]);
                 Proof(vec![ProofStep::Apply(
                     Term::from("cong_and"),
-                    vec![],
                     SubProofs(Some(vec![p_proof, cong_tree(rest)])),
                 )])
             }
             Some((p, [])) => Proof(vec![ProofStep::Apply(
                 Term::from(p.0.as_str()),
-                vec![],
                 SubProofs(None),
             )]),
             _ => unreachable!("we should stop when rest is empty"),
@@ -503,8 +493,7 @@ fn ite_cong(premises: &[(String, &[Rc<AletheTerm>])]) -> TradResult<Proof> {
         .collect_vec();
 
     Ok(proof!(ProofStep::Apply(
-        "ite_cong".into(),
-        premises,
+        terms!["ite_cong".into(), ..premises,],
         SubProofs(None)
     )))
 }
@@ -522,7 +511,7 @@ fn propositional_cong(
 
         Ok(Proof(lambdapi! {
             apply "∨ᵢ₁";
-            inject(vec![ProofStep::Apply(Term::from("feq"), vec![ symbol, premise ], SubProofs(None))]);
+            inject(vec![ProofStep::Apply(terms![Term::from("feq"), symbol, premise], SubProofs(None))]);
         }))
     } else {
         match symbol {
@@ -551,7 +540,7 @@ fn propositional_cong(
 
                 Ok(Proof(lambdapi! {
                     apply "∨ᵢ₁";
-                    inject(vec![ProofStep::Apply(feq, vec![], SubProofs(None))]);
+                    inject(vec![ProofStep::Apply(feq, SubProofs(None))]);
                 }))
             }
         }
@@ -578,7 +567,7 @@ fn application_cong(
 
     args.append(&mut hyps);
 
-    let feq = ProofStep::Apply(feq_name, args, SubProofs(None));
+    let feq = ProofStep::Apply(terms![feq_name, ..args], SubProofs(None));
 
     Ok(Proof(lambdapi! {
         apply "∨ᵢ₁";
@@ -657,11 +646,13 @@ pub fn translate_simple_tautology(
     premises: &[(String, &[Rc<AletheTerm>])],
 ) -> TradResult<Proof> {
     Ok(Proof(vec![ProofStep::Apply(
-        translate_rule_name(rule),
-        premises
-            .into_iter()
-            .map(|(name, _)| Term::TermId(name.to_string()))
-            .collect_vec(),
+        terms![
+            translate_rule_name(rule),
+            ..premises
+                .into_iter()
+                .map(|(name, _)| Term::TermId(name.to_string()))
+                .collect_vec()
+        ],
         SubProofs(None),
     )]))
 }
@@ -804,8 +795,7 @@ pub fn translate_contraction(
     ));
 
     proof.push(ProofStep::Refine(
-        "subst_equiv_clause".into(),
-        vec![i_cl, j_cl, have_id.into(), i],
+        terms!["subst_equiv_clause".into(), i_cl, j_cl, have_id.into(), i],
         SubProofs(None),
     ));
 
@@ -814,9 +804,9 @@ pub fn translate_contraction(
 
 /// Rule 13: la_disequality
 /// `𝑡1 ≈ 𝑡2 ∨ ¬(𝑡1 ≤ 𝑡2) ∨ ¬(𝑡2 ≤ 𝑡1)``
-/// 
+///
 /// is translated into the script:
-/// 
+///
 /// ```text
 /// refine la_disequality t1 t2;
 /// ```
@@ -833,8 +823,7 @@ pub fn translate_la_disequality(clause: &[Rc<AletheTerm>]) -> TradResult<Proof> 
         .expect("No equality found in la_disequality?");
 
     proof.push(ProofStep::Refine(
-        "la_disequality".into(),
-        vec![t1, t2],
+        terms!["la_disequality".into(), t1, t2],
         SubProofs(None),
     ));
 
@@ -844,9 +833,9 @@ pub fn translate_la_disequality(clause: &[Rc<AletheTerm>]) -> TradResult<Proof> 
 #[cfg(test)]
 mod tests_tautolog {
     use super::*;
-    use crate::terms;
     use crate::lambdapi::test_macros::*;
     use crate::parser::{self, parse_instance};
+    use crate::terms;
 
     #[test]
     fn test_transitivity_translation() {
@@ -864,13 +853,19 @@ mod tests_tautolog {
             (assume h3 (= c d))
             (step t1 (cl (= a d)) :rule trans :premises (h1 h2 h3))
         ";
-        let (_, proof, _, mut pool) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
+        let (_, proof, _, mut pool) =
+            parse_instance(problem, proof, None, parser::Config::new()).unwrap();
 
         assert_eq!(4, proof.commands.len());
 
-        let res = translate_commands(&mut Context::default(), &mut proof.iter(), &mut pool,|id, t, ps| {
-            Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
-        })
+        let res = translate_commands(
+            &mut Context::default(),
+            &mut proof.iter(),
+            &mut pool,
+            |id, t, ps| {
+                Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
+            },
+        )
         .expect("translate trans");
 
         assert_eq!(4, res.len());
@@ -912,13 +907,19 @@ mod tests_tautolog {
             (assume h4 (= d h))
             (step t3 (cl (= (or a b c d) (or e f g h))) :rule cong :premises (h1 h2 h3 h4))
         ";
-        let (_, proof, _, mut pool) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
+        let (_, proof, _, mut pool) =
+            parse_instance(problem, proof, None, parser::Config::new()).unwrap();
 
         assert_eq!(5, proof.commands.len());
 
-        let res = translate_commands(&mut Context::default(), &mut proof.iter(), &mut pool, |id, t, ps| {
-            Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
-        })
+        let res = translate_commands(
+            &mut Context::default(),
+            &mut proof.iter(),
+            &mut pool,
+            |id, t, ps| {
+                Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
+            },
+        )
         .expect("translate cong");
 
         assert_eq!(5, res.len());
@@ -969,13 +970,19 @@ mod tests_tautolog {
             (assume h4 (= d h))
             (step t3 (cl (= (and a b c d) (and e f g h))) :rule cong :premises (h1 h2 h3 h4))
         ";
-        let (_, proof, _, mut pool) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
+        let (_, proof, _, mut pool) =
+            parse_instance(problem, proof, None, parser::Config::new()).unwrap();
 
         assert_eq!(5, proof.commands.len());
 
-        let res = translate_commands(&mut Context::default(), &mut proof.iter(), &mut pool, |id, t, ps| {
-            Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
-        })
+        let res = translate_commands(
+            &mut Context::default(),
+            &mut proof.iter(),
+            &mut pool,
+            |id, t, ps| {
+                Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
+            },
+        )
         .expect("translate cong");
 
         assert_eq!(5, res.len());
@@ -1017,13 +1024,19 @@ mod tests_tautolog {
             (assume h1 (= a b))
             (step t3 (cl (= (not a) (not b))) :rule cong :premises (h1))
         ";
-        let (_, proof, _, mut pool) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
+        let (_, proof, _, mut pool) =
+            parse_instance(problem, proof, None, parser::Config::new()).unwrap();
 
         assert_eq!(2, proof.commands.len());
 
-        let res = translate_commands(&mut Context::default(), &mut proof.iter(), &mut pool, |id, t, ps| {
-            Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
-        })
+        let res = translate_commands(
+            &mut Context::default(),
+            &mut proof.iter(),
+            &mut pool,
+            |id, t, ps| {
+                Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
+            },
+        )
         .expect("translate cong");
 
         assert_eq!(2, res.len());
@@ -1060,13 +1073,19 @@ mod tests_tautolog {
             (assume h2 (= b d))
             (step t3 (cl (= (=> a b) (=> c d))) :rule cong :premises (h1 h2))
         ";
-        let (_, proof, _, mut pool) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
+        let (_, proof, _, mut pool) =
+            parse_instance(problem, proof, None, parser::Config::new()).unwrap();
 
         assert_eq!(3, proof.commands.len());
 
-        let res = translate_commands(&mut Context::default(), &mut proof.iter(), &mut pool, |id, t, ps| {
-            Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
-        })
+        let res = translate_commands(
+            &mut Context::default(),
+            &mut proof.iter(),
+            &mut pool,
+            |id, t, ps| {
+                Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
+            },
+        )
         .expect("translate cong");
 
         assert_eq!(3, res.len());
@@ -1104,13 +1123,19 @@ mod tests_tautolog {
             (step t1 (cl (ite (p a) (= b (ite (p a) b a)) (= a (ite (p a) b a)))) :rule hole)
             (step t2 (cl (p a) (= a (ite (p a) b a))) :rule ite1 :premises (t1))
         ";
-        let (_, proof, _, mut pool) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
+        let (_, proof, _, mut pool) =
+            parse_instance(problem, proof, None, parser::Config::new()).unwrap();
 
         assert_eq!(2, proof.commands.len());
 
-        let res = translate_commands(&mut Context::default(), &mut proof.iter(), &mut pool, |id, t, ps| {
-            Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
-        })
+        let res = translate_commands(
+            &mut Context::default(),
+            &mut proof.iter(),
+            &mut pool,
+            |id, t, ps| {
+                Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
+            },
+        )
         .expect("translate forall_inst");
 
         assert_eq!(2, res.len());
@@ -1153,13 +1178,19 @@ mod tests_tautolog {
             (step t1 (cl (ite (p a) (= b (ite (p a) b a)) (= a (ite (p a) b a)))) :rule hole)
             (step t2 (cl (not (p a)) (= b (ite (p a) b a))) :rule ite2 :premises (t1))
         ";
-        let (_, proof, _, mut pool) = parse_instance(problem, proof, None, parser::Config::new()).unwrap();
+        let (_, proof, _, mut pool) =
+            parse_instance(problem, proof, None, parser::Config::new()).unwrap();
 
         assert_eq!(2, proof.commands.len());
 
-        let res = translate_commands(&mut Context::default(), &mut proof.iter(), &mut pool, |id, t, ps| {
-            Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
-        })
+        let res = translate_commands(
+            &mut Context::default(),
+            &mut proof.iter(),
+            &mut pool,
+            |id, t, ps| {
+                Command::Symbol(None, normalize_name(id), vec![], t, ps.map(|ps| Proof(ps)))
+            },
+        )
         .expect("translate forall_inst");
 
         assert_eq!(2, res.len());

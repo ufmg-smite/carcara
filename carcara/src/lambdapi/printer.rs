@@ -354,11 +354,9 @@ impl PrettyPrint for ProofStep {
     fn to_doc(&self) -> RcDoc<'_, ()> {
         match self {
             ProofStep::Admit => RcDoc::text("admit").append(semicolon()),
-            ProofStep::Apply(func, args, subproofs) => RcDoc::text("apply")
+            ProofStep::Apply(t, subproofs) => RcDoc::text("apply")
                 .append(space())
-                .append(func.to_doc())
-                .append(args.is_empty().then(|| RcDoc::nil()).unwrap_or(space()))
-                .append(RcDoc::intersperse(args.iter().map(|a| a.to_doc()), space()))
+                .append(t.to_doc())
                 .append(subproofs.0.is_some().then(|| space()))
                 .append(subproofs.0.as_ref().map_or(RcDoc::nil(), |proofs| {
                     RcDoc::intersperse(
@@ -401,11 +399,10 @@ impl PrettyPrint for ProofStep {
                 .append(t.to_doc())
                 .semicolon(),
             ProofStep::Reflexivity => text("reflexivity").append(semicolon()),
-            ProofStep::Refine(func, args, subproofs) => text("refine")
+            ProofStep::Refine(func, subproofs) => text("refine")
                 .append(space())
                 .append(func.to_doc())
-                .append(args.is_empty().then(|| RcDoc::nil()).unwrap_or(space()))
-                .append(RcDoc::intersperse(args.iter().map(|a| a.to_doc()), space()))
+                .append(space())
                 .append(subproofs.0.as_ref().map_or(RcDoc::nil(), |proofs| {
                     RcDoc::intersperse(
                         proofs

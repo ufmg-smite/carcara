@@ -3,6 +3,7 @@ use rug::Integer;
 
 use super::*;
 use crate::ast::{Constant, Operator, Rc, Term as AletheTerm};
+use crate::terms;
 
 #[derive(Debug, PartialEq)]
 enum Op {
@@ -43,7 +44,6 @@ pub fn gen_proof_la_generic(
 
     let mut proof_la = vec![ProofStep::Apply(
         Term::from("∨ᵢ₁"),
-        vec![],
         SubProofs(None),
     )];
 
@@ -65,7 +65,7 @@ pub fn gen_proof_la_generic(
         ring_computation_proof,
         ProofStep::Simplify(vec![]),
         ProofStep::Rewrite(false, None, "or_identity_r".into(), vec![], SubProofs(None)),
-        ProofStep::Apply(unary_clause_to_prf(&id_temp_proof), vec![], SubProofs(None)),
+        ProofStep::Apply(unary_clause_to_prf(&id_temp_proof), SubProofs(None)),
     ]);
 
     proof
@@ -524,7 +524,7 @@ fn la_generic(
         sum_hyp_name.to_string(),
         Term::Alethe(LTerm::ClassicProof(Box::new(final_sum))),
         vec![
-            ProofStep::Refine(pack, vec![], SubProofs(None)),
+            ProofStep::Refine(pack, SubProofs(None)),
         ],
     );
 
@@ -541,7 +541,7 @@ fn la_generic(
 
     proof.push(contradiction);
 
-    proof.push(ProofStep::Refine(Term::from(sum_hyp_name),vec![Term::Underscore], SubProofs(None)));
+    proof.push(ProofStep::Refine(terms![Term::from(sum_hyp_name), Term::Underscore], SubProofs(None)));
     
     proof.push(ProofStep::Rewrite(true, None, Term::from("reify_correct"), vec![left_prefix_term.clone()], SubProofs(None)));
     proof.push(ProofStep::Rewrite(true, None, Term::from("reify_correct"), vec![right_prefix_term.clone()], SubProofs(None)));
@@ -564,7 +564,7 @@ fn la_generic(
         Term::Terms(vec![left_prefix_term, Term::from("₂")]),
     ],SubProofs(None)));
 
-    proof.push(ProofStep::Refine(intro_top(), vec![], SubProofs(None)));
+    proof.push(ProofStep::Refine(intro_top(), SubProofs(None)));
 
     Ok(Proof(proof))
 }

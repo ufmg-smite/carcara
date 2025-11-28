@@ -380,33 +380,37 @@ fn make_resolution(
     // apply disj_resolutionN (p_29 ⟇ (p_11 ⟇ (p_10 ⟇ ▩))) (p_12 ⟇ ▩) (int2nat 1 ⊤ᵢ) Stdlib.Nat._0 t14_t0 t14_t9 ⊤ᵢ ⊤ᵢ (eq_refl _);
     if *flag_position_pivot {
         vec![ProofStep::Apply(
-            "disj_resolutionN2".into(),
-            vec![
-                ps,
-                qs,
-                int2nat(i),
-                int2nat(j),
-                hyp_left_arg,
-                hyp_right_arg,
-                intro_top(),
-                intro_top(),
-                Term::Terms(vec!["eq_refl".into(), Term::Underscore]),
+            terms![
+                "disj_resolutionN2".into(),
+                ..vec![
+                    ps,
+                    qs,
+                    int2nat(i),
+                    int2nat(j),
+                    hyp_left_arg,
+                    hyp_right_arg,
+                    intro_top(),
+                    intro_top(),
+                    Term::Terms(vec!["eq_refl".into(), Term::Underscore]),
+                ]
             ],
             SubProofs(None),
         )]
     } else {
         vec![ProofStep::Apply(
-            "disj_resolutionN1".into(),
-            vec![
-                ps,
-                qs,
-                int2nat(i),
-                int2nat(j),
-                hyp_left_arg,
-                hyp_right_arg,
-                intro_top(),
-                intro_top(),
-                Term::Terms(vec!["eq_refl".into(), Term::Underscore]),
+            terms![
+                "disj_resolutionN1".into(),
+                ..vec![
+                    ps,
+                    qs,
+                    int2nat(i),
+                    int2nat(j),
+                    hyp_left_arg,
+                    hyp_right_arg,
+                    intro_top(),
+                    intro_top(),
+                    Term::Terms(vec!["eq_refl".into(), Term::Underscore]),
+                ]
             ],
             SubProofs(None),
         )]
@@ -515,20 +519,15 @@ fn translate_subproof<'a>(
             _ => unreachable!(),
         };
 
-        proof.push(ProofStep::Apply(Term::from("∨ᵢ₁"), vec![], SubProofs(None)));
+        proof.push(ProofStep::Apply(Term::from("∨ᵢ₁"), SubProofs(None)));
         assignment_args.into_iter().for_each(|term| {
-            proof.push(ProofStep::Apply(
-                Term::from(bind_lemma),
-                vec![],
-                SubProofs(None),
-            ));
+            proof.push(ProofStep::Apply(Term::from(bind_lemma), SubProofs(None)));
             proof.push(ProofStep::Assume(vec![format!("{}", term)]));
         });
         proof.append(&mut proof_cmds);
 
         proof.push(ProofStep::Apply(
-            Term::from("π̇ₗ"),
-            vec![Term::from(last_step_id)],
+            terms![Term::from("π̇ₗ"), Term::from(last_step_id)],
             SubProofs(None),
         ));
 
@@ -616,7 +615,6 @@ fn translate_resolution(
 
     steps.push(ProofStep::Refine(
         Term::TermId(last_goal_name),
-        vec![],
         SubProofs(None),
     ));
 
@@ -823,7 +821,6 @@ where
 
                     let mut script = std::iter::repeat(ProofStep::Apply(
                         Term::TermId("∨ᵢ₂".to_string()),
-                        vec![],
                         SubProofs(None),
                     ))
                     .take(premises_discharge.len())
@@ -839,46 +836,33 @@ where
                     // Some subproof can add a trailing false in their clause and also for the step just before the clonclusion of the subproof.
                     // We detect if there is a trailing false if the number of the element in the clause and the discharge are different
                     if trailing_false_on_conclusion_clause && trailing_false_on_last_step {
-                        script.push(ProofStep::Apply(
-                            psy_id.as_str().into(),
-                            vec![],
-                            SubProofs(None),
-                        ));
+                        script.push(ProofStep::Apply(psy_id.as_str().into(), SubProofs(None)));
                     } else if trailing_false_on_conclusion_clause {
                         // Case with a trailing false
                         script.push(ProofStep::Apply(
                             Term::TermId("∨ᵢ₂".to_string()),
-                            vec![],
                             SubProofs(None),
                         ));
-                        script.push(ProofStep::Apply(
-                            psy_id.as_str().into(),
-                            vec![],
-                            SubProofs(None),
-                        ));
+                        script.push(ProofStep::Apply(psy_id.as_str().into(), SubProofs(None)));
                     } else if trailing_false_on_last_step {
                         // Case with a trailing false
                         script.push(ProofStep::Apply(
                             Term::TermId("∨ᵢ₁".to_string()),
-                            vec![],
                             SubProofs(None),
                         ));
                         script.push(ProofStep::Apply(
                             unary_clause_to_prf(psy_id.as_str()),
-                            vec![],
                             SubProofs(None),
                         ));
                     } else {
                         // Case without a trailing false
                         script.push(ProofStep::Apply(
                             Term::TermId("∨ᵢ₁".to_string()),
-                            vec![],
                             SubProofs(None),
                         ));
 
                         script.push(ProofStep::Apply(
                             unary_clause_to_prf(psy_id.as_str()),
-                            vec![],
                             SubProofs(None),
                         ));
                     }

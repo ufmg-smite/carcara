@@ -164,10 +164,104 @@ macro_rules! underscore {
 
 #[macro_export]
 macro_rules! terms {
-    ($($t:expr),+ $(,)?) => {
-        Term::Terms(vec![ $( $t),+ ])
+    // Empty case
+    () => {
+        Term::Terms(vec![])
+    };
+    // Spread a vector: terms![..vec]
+    (..$vec:expr) => {
+        Term::Terms($vec)
+    };
+    // Single or multiple terms with optional spreading
+    ($($t:tt)*) => {{
+        let mut result = Vec::new();
+        $crate::terms_internal!(result; $($t)*);
+        Term::Terms(result)
+    }};
+}
+
+#[macro_export]
+#[doc(hidden)]
+macro_rules! terms_internal {
+    // Base case: nothing left
+    ($result:ident;) => {};
+
+    // Spread syntax: ..$vec
+    ($result:ident; ..$vec:expr $(, $($rest:tt)*)?) => {
+        $result.extend($vec);
+        $crate::terms_internal!($result; $($($rest)*)?);
+    };
+
+    // Regular term
+    ($result:ident; $t:expr $(, $($rest:tt)*)?) => {
+        $result.push($t);
+        $crate::terms_internal!($result; $($($rest)*)?);
     };
 }
+
+#[cfg(test)]
+mod tests_terms_macros {
+    use super::*;
+
+    #[test]
+    fn test_terms_macro_empty() {
+        let t = terms!();
+        assert_eq!(t, Term::Terms(vec![]));
+    }
+
+    #[test]
+    fn test_terms_macro_single() {
+        let t = terms!(Term::Nat(1));
+        assert_eq!(t, Term::Terms(vec![Term::Nat(1)]));
+    }
+
+    #[test]
+    fn test_terms_macro_multiple() {
+        let t = terms!(Term::Nat(1), Term::Nat(2), Term::Nat(3));
+        assert_eq!(t, Term::Terms(vec![Term::Nat(1), Term::Nat(2), Term::Nat(3)]));
+    }
+
+    #[test]
+    fn test_terms_macro_spread() {
+        let vec_terms = vec![Term::Nat(1), Term::Nat(2)];
+        let t = terms!(..vec_terms);
+        assert_eq!(t, Term::Terms(vec![Term::Nat(1), Term::Nat(2)]));
+    }
+
+    #[test]
+    fn test_terms_macro_mixed() {
+        let vec_terms = vec![Term::Nat(2), Term::Nat(3)];
+        let t = terms!(Term::Nat(1), ..vec_terms, Term::Nat(4));
+        assert_eq!(
+            t,
+            Term::Terms(vec![Term::Nat(1), Term::Nat(2), Term::Nat(3), Term::Nat(4)])
+        );
+    }
+
+    #[test]
+    fn test_terms_macro_multiple_spreads() {
+        let vec1 = vec![Term::Nat(1), Term::Nat(2)];
+        let vec2 = vec![Term::Nat(4), Term::Nat(5)];
+        let t = terms!(..vec1, Term::Nat(3), ..vec2);
+        assert_eq!(
+            t,
+            Term::Terms(vec![
+                Term::Nat(1),
+                Term::Nat(2),
+                Term::Nat(3),
+                Term::Nat(4),
+                Term::Nat(5)
+            ])
+        );
+    }
+
+    #[test]
+    fn test_underscore_macro() {
+        let t = underscore!();
+        assert_eq!(t, Term::Underscore);
+    }
+}
+
 
 /// This trait implements the visitor pattern for Lambdapi terms,
 /// allowing systematic replacement of variables with their corresponding values
@@ -189,7 +283,7 @@ impl VisitorArgs for LTerm {
             }
             LTerm::Choice(bs, t) => t.visit(
                 // Keep only mappings for variables that are NOT bound by this Choice
-                // `sbs.0`` in `filter` contains the bound variables, we exclude them from substitution    
+                // `sbs.0`` in `filter` contains the bound variables, we exclude them from substitution
                 &mapping
                     .into_iter()
                     .cloned()
