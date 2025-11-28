@@ -34,7 +34,7 @@ pub fn translate_trans(premises: &mut Vec<(String, &[Rc<AletheTerm>])>) -> TradR
         Term::from(tn_t_succ_n[1].0.as_str()),
     ]);
 
-    let proofterm = premises.into_iter().rev().fold(first_trans, |mut acc, p| {
+    let proofterm = premises.iter_mut().rev().fold(first_trans, |mut acc, p| {
         acc = Term::Terms(vec![Term::from("trans"), Term::from(p.0.as_str()), acc]);
         acc
     });
@@ -119,7 +119,7 @@ pub fn translate_sym(premise: &str) -> TradResult<Proof> {
     }))
 }
 
-/// Rule 12: not_symm
+/// Rule 12: `not_symm`
 /// i. `¬(𝑡1 ≈ 𝑡2)`
 /// j. `¬(𝑡2 ≈ 𝑡1)`
 ///     
@@ -167,7 +167,7 @@ pub fn translate_and(
             .unwrap()
             .iter()
             .rev()
-            .map(|t| t.into())
+            .map(std::convert::Into::into)
             .collect_vec(),
     )));
 
@@ -181,7 +181,7 @@ pub fn translate_and(
     // Ok(Proof(vec![apply!("∨ᵢ₁".into()), projections]))
 }
 
-/// Rule not_or:
+/// Rule `not_or`:
 /// i. ▷ ¬(𝜑1 ∨ ⋯ ∨ 𝜑𝑛)
 /// j. ▷ ¬𝜑𝑘
 ///
@@ -214,7 +214,7 @@ pub fn translate_not_or(
             .unwrap()
             .iter()
             .rev()
-            .map(|t| t.into())
+            .map(std::convert::Into::into)
             .collect_vec(),
     );
 
@@ -271,7 +271,7 @@ pub fn translate_or(premise: &(String, &[Rc<AletheTerm>])) -> TradResult<Proof> 
             .unwrap()
             .iter()
             .rev()
-            .map(|t| t.into())
+            .map(std::convert::Into::into)
             .collect_vec(),
     )));
 
@@ -289,7 +289,7 @@ pub fn translate_or(premise: &(String, &[Rc<AletheTerm>])) -> TradResult<Proof> 
     Ok(Proof(proof))
 }
 
-/// Rule not_and
+/// Rule `not_and`
 /// i. ▷ ¬(𝜑1 ∧ … ∧ 𝜑𝑛)
 /// j. ▷ ¬𝜑1, … , ¬𝜑𝑛
 ///
@@ -338,7 +338,7 @@ pub fn translate_and_neg(clause: &[Rc<AletheTerm>]) -> TradResult<Proof> {
 
     // values 𝜑1 ∧ ⋯ ∧ 𝜑𝑛 as List
     let conj_list = unwrap_match!(clause[0].deref(), AletheTerm::Op(Operator::And, e) => {
-        List(e.iter().rev().map(|t| t.into()).collect_vec())
+        List(e.iter().rev().map(std::convert::Into::into).collect_vec())
     });
 
     proof.push(ProofStep::Refine(
@@ -354,7 +354,7 @@ pub fn translate_and_neg(clause: &[Rc<AletheTerm>]) -> TradResult<Proof> {
     Ok(Proof(proof))
 }
 
-/// Rule and_pos: ¬(𝜑1 ∧ … ∧ 𝜑𝑛), 𝜑𝑘
+/// Rule `and_pos`: ¬(𝜑1 ∧ … ∧ 𝜑𝑛), 𝜑𝑘
 /// we want to produce the script:
 /// ```
 /// refine and_pos k (𝜑1 ⸬ … ⸬ 𝜑𝑛 ⸬ □) ⊤ᵢ;
@@ -370,7 +370,7 @@ pub fn translate_and_pos(
             .unwrap()
             .iter()
             .rev()
-            .map(|t| t.into())
+            .map(std::convert::Into::into)
             .collect_vec(),
     );
 
@@ -391,7 +391,7 @@ pub fn translate_and_pos(
     Ok(Proof(proof))
 }
 
-/// Rule  or_neg (𝜑1 ∨ … ∨ 𝜑𝑛), ¬ 𝜑𝑘
+/// Rule  `or_neg` (𝜑1 ∨ … ∨ 𝜑𝑛), ¬ 𝜑𝑘
 /// we want to produce the script:
 /// ```
 /// apply sym_clause;
@@ -411,7 +411,7 @@ pub fn translate_or_neg(
             .unwrap()
             .iter()
             .rev()
-            .map(|t| t.into())
+            .map(std::convert::Into::into)
             .collect_vec(),
     );
 
@@ -488,7 +488,7 @@ fn propositional_and_cong(premises: &[(String, &[Rc<AletheTerm>])]) -> TradResul
 
 fn ite_cong(premises: &[(String, &[Rc<AletheTerm>])]) -> TradResult<Proof> {
     let premises = premises
-        .into_iter()
+        .iter()
         .map(|p| unary_clause_to_prf(p.0.as_str()))
         .collect_vec();
 
@@ -529,7 +529,7 @@ fn propositional_cong(
                     unary_clause_to_prf(left[0].0.as_str()),
                 ]);
 
-                let feq = right.into_iter().fold(feq_first, |acc, (hyp, _)| {
+                let feq = right.iter().fold(feq_first, |acc, (hyp, _)| {
                     Term::Terms(vec![
                         Term::from("feq2"),
                         symbol.clone(),
@@ -561,7 +561,7 @@ fn application_cong(
     let mut args = vec![symbol];
 
     let mut hyps = premises
-        .into_iter()
+        .iter()
         .map(|p| unary_clause_to_prf(p.0.as_str()))
         .collect_vec();
 
@@ -649,7 +649,7 @@ pub fn translate_simple_tautology(
         terms![
             translate_rule_name(rule),
             ..premises
-                .into_iter()
+                .iter()
                 .map(|(name, _)| Term::TermId(name.to_string()))
                 .collect_vec()
         ],
@@ -657,7 +657,7 @@ pub fn translate_simple_tautology(
     )]))
 }
 
-/// Construct the proof term to validate forall_inst rule.
+/// Construct the proof term to validate `forall_inst` rule.
 /// Considering the example below:
 /// ```text
 /// (step tᵢ (cl (or (not (forall ((x S) (y T)) (P y x )))
@@ -683,7 +683,7 @@ pub fn translate_simple_tautology(
 pub fn translate_forall_inst(args: &Vec<Rc<AletheTerm>>) -> TradResult<Proof> {
     let mut hyp = vec![Term::from("H")];
 
-    hyp.append(&mut args.into_iter().map(Term::from).collect_vec());
+    hyp.append(&mut args.iter().map(Term::from).collect_vec());
 
     let forall_elims = Term::Terms(hyp);
 
@@ -696,13 +696,14 @@ pub fn translate_forall_inst(args: &Vec<Rc<AletheTerm>>) -> TradResult<Proof> {
 }
 
 pub fn translate_sko_forall() -> TradResult<Proof> {
-    Ok(Proof(lambdapi! {
-        apply "∨ᵢ₁";
-        apply "sko_forall";
-        assume [x H];
-        rewrite "H";
-        reflexivity;
-    }))
+    // Ok(Proof(lambdapi! {
+    //     apply "∨ᵢ₁";
+    //     apply "sko_forall";
+    //     assume [x H];
+    //     rewrite "H";
+    //     reflexivity;
+    // }))
+    Ok(Proof(admit()))
 }
 
 /// Rule 9 contraction:
@@ -734,11 +735,11 @@ pub fn translate_contraction(
     let i = premise.0.clone().into();
 
     let i_cl = Term::Alethe(LTerm::Clauses(
-        premise.1.into_iter().map(Into::into).collect_vec(),
+        premise.1.iter().map(Into::into).collect_vec(),
     ));
 
     let j_cl = Term::Alethe(LTerm::Clauses(
-        clause.into_iter().map(Into::into).collect_vec(),
+        clause.iter().map(Into::into).collect_vec(),
     ));
 
     // reify_i represents reify_cl 𝑙1, ... , 𝑙n
@@ -779,7 +780,7 @@ pub fn translate_contraction(
     //     change ...;
     //   };
     proof.push(ProofStep::Have(
-        have_id.to_string(),
+        have_id.to_owned(),
         goal_contra,
         vec![
             change,

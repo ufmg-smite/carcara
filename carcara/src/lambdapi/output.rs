@@ -35,6 +35,12 @@ impl Render for ProofFile {
     }
 }
 
+impl<'a> Default for ProofFile {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a> ProofFile {
     pub fn new() -> ProofFile {
         Self {
@@ -49,6 +55,12 @@ impl<'a> ProofFile {
 pub struct AxiomsFile {
     pub requires: Vec<Command>,
     pub content: Vec<Command>,
+}
+
+impl<'a> Default for AxiomsFile {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<'a> AxiomsFile {
@@ -88,7 +100,7 @@ pub fn get_dependencies_map<'a>(node: Rc<ProofNode>) -> DependenciesStepMap {
                     (
                         index_in_proof,
                         premises
-                            .into_iter()
+                            .iter()
                             .map(|n| normalize_name(n.id()))
                             .collect_vec(),
                     ),
@@ -100,7 +112,7 @@ pub fn get_dependencies_map<'a>(node: Rc<ProofNode>) -> DependenciesStepMap {
                         .entry(normalize_name(id))
                         .and_modify(|(_, dependencies)| {
                             let mut discharge_conv = discharge
-                                .into_iter()
+                                .iter()
                                 .map(|n| normalize_name(n.id()))
                                 .collect_vec();
                             dependencies.append(&mut discharge_conv);

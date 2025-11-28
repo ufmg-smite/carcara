@@ -909,7 +909,7 @@ fn translate_to_lambdapi(options: TranslationOption) -> CliResult<()> {
         elab_config,
         config,
     )
-    .map_err(|e| CliError::TranslationError(e))?;
+    .map_err(CliError::TranslationError)?;
 
     match (options.output_dir, options.segment_size) {
         (Some(path), Some(segment_size)) => {

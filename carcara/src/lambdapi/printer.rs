@@ -5,13 +5,13 @@ use std::io::{self};
 pub const DEFAULT_WIDTH: usize = 120;
 pub const DEFAULT_INDENT: isize = 4;
 
-pub const WHITE_SPACE: &'static str = " ";
-const LBRACE: &'static str = "{";
-const RBRACE: &'static str = "}";
-const COMMA: &'static str = ",";
-const CLAUSE_NIL: &'static str = "▩";
+pub const WHITE_SPACE: &str = " ";
+const LBRACE: &str = "{";
+const RBRACE: &str = "}";
+const COMMA: &str = ",";
+const CLAUSE_NIL: &str = "▩";
 
-const NIL: &'static str = "⧈";
+const NIL: &str = "⧈";
 
 macro_rules! concat {
     ($l:expr => $( $r:expr ) => * ) => { $l$(.append($r))* };
@@ -230,12 +230,12 @@ impl PrettyPrint for LTerm {
             LTerm::True => text("⊤"),
             LTerm::False => text("⊥"),
             LTerm::NAnd(terms) => RcDoc::intersperse(
-                terms.into_iter().map(|term| term.to_doc()),
+                terms.iter().map(|term| term.to_doc()),
                 text("∧").spaces(),
             )
             .parens(),
             LTerm::NOr(terms) => RcDoc::intersperse(
-                terms.into_iter().map(|term| term.to_doc()),
+                terms.iter().map(|term| term.to_doc()),
                 text("∨").spaces(),
             )
             .parens(),
@@ -251,7 +251,7 @@ impl PrettyPrint for LTerm {
                     text(CLAUSE_NIL)
                 } else {
                     RcDoc::intersperse(
-                        terms.into_iter().map(|term| term.to_doc()),
+                        terms.iter().map(|term| term.to_doc()),
                         line().append(text("⟇").spaces()),
                     )
                     .append(line().append(text("⟇").append(space()).append(text(CLAUSE_NIL))))
@@ -357,11 +357,11 @@ impl PrettyPrint for ProofStep {
             ProofStep::Apply(t, subproofs) => RcDoc::text("apply")
                 .append(space())
                 .append(t.to_doc())
-                .append(subproofs.0.is_some().then(|| space()))
+                .append(subproofs.0.is_some().then(space))
                 .append(subproofs.0.as_ref().map_or(RcDoc::nil(), |proofs| {
                     RcDoc::intersperse(
                         proofs
-                            .into_iter()
+                            .iter()
                             .map(|p| {
                                 line()
                                     .append(text(LBRACE).append(line()))
@@ -387,7 +387,7 @@ impl PrettyPrint for ProofStep {
                 .append(LBRACE)
                 .append(line())
                 .append(RcDoc::intersperse(
-                    steps.into_iter().map(|s| s.to_doc()),
+                    steps.iter().map(|s| s.to_doc()),
                     line(),
                 ))
                 .append(line())
@@ -406,7 +406,7 @@ impl PrettyPrint for ProofStep {
                 .append(subproofs.0.as_ref().map_or(RcDoc::nil(), |proofs| {
                     RcDoc::intersperse(
                         proofs
-                            .into_iter()
+                            .iter()
                             .map(|p| RcDoc::braces(p.to_doc()))
                             .collect_vec(),
                         line(),
@@ -422,17 +422,17 @@ impl PrettyPrint for ProofStep {
                 }))
                 .append(
                     h.to_doc()
-                        .append(args.is_empty().then(|| RcDoc::nil()).unwrap_or(space()))
+                        .append(args.is_empty().then(RcDoc::nil).unwrap_or(space()))
                         .append(RcDoc::intersperse(
                             args.iter().map(|a| a.to_doc().parens()),
                             space(),
                         )), //.spaces(),
                 )
-                .append(subproofs.0.is_some().then(|| space()))
+                .append(subproofs.0.is_some().then(space))
                 .append(subproofs.0.as_ref().map_or(RcDoc::nil(), |proofs| {
                     RcDoc::intersperse(
                         proofs
-                            .into_iter()
+                            .iter()
                             .map(|p| {
                                 line()
                                     .append(text(LBRACE).append(line()))
@@ -447,7 +447,7 @@ impl PrettyPrint for ProofStep {
                 .append(semicolon()),
             ProofStep::Symmetry => text("symmetry").append(semicolon()),
             ProofStep::Simplify(ss) if ss.is_empty() => text("simplify").append(semicolon()),
-            ProofStep::Simplify(ss) => ss.into_iter().fold(RcDoc::nil(), |acc, s| {
+            ProofStep::Simplify(ss) => ss.iter().fold(RcDoc::nil(), |acc, s| {
                 // We have to generate one simplify per term because Lambdapi does not support multiple arguments for simplify
                 acc.append(text("simplify").append(space()).append(text(s)))
                     .append(semicolon())
@@ -463,7 +463,7 @@ impl PrettyPrint for ProofStep {
                     .append(is())
                     .append(
                         RcDoc::intersperse(
-                            list.into_iter().map(|term| term.to_doc()),
+                            list.iter().map(|term| term.to_doc()),
                             text("⸬").spaces(),
                         )
                         .append(text("⸬").spaces())
@@ -492,13 +492,12 @@ impl PrettyPrint for Command {
                 .semicolon(),
             Command::Symbol(modifier, name, params, r#text, proof) => modifier
                 .as_ref()
-                .map(|m| m.to_doc().append(space()))
-                .unwrap_or(RcDoc::nil())
+                .map_or(RcDoc::nil(), |m| m.to_doc().append(space()))
                 .append(symbol())
                 .append(space())
                 .append(name)
-                .append(params.is_empty().then(|| RcDoc::nil()).unwrap_or(
-                    RcDoc::intersperse(params.into_iter().map(|p| p.to_doc()), space()).spaces(),
+                .append(params.is_empty().then(RcDoc::nil).unwrap_or(
+                    RcDoc::intersperse(params.iter().map(|p| p.to_doc()), space()).spaces(),
                 ))
                 .append(colon().spaces())
                 .append(r#text.to_doc())
@@ -511,8 +510,8 @@ impl PrettyPrint for Command {
             Command::Definition(name, params, r#type, definition) => symbol()
                 .append(space())
                 .append(text(name))
-                .append(params.is_empty().then(|| RcDoc::nil()).unwrap_or(
-                    RcDoc::intersperse(params.into_iter().map(|p| p.to_doc()), space()).spaces(),
+                .append(params.is_empty().then(RcDoc::nil).unwrap_or(
+                    RcDoc::intersperse(params.iter().map(|p| p.to_doc()), space()).spaces(),
                 ))
                 .append(
                     r#type
@@ -576,16 +575,15 @@ impl PrettyPrintAx for Command {
                 .semicolon(),
             Command::Symbol(modifier, name, params, r#text, ..) => modifier
                 .as_ref()
-                .map(|m| match m {
+                .map_or(RcDoc::nil(), |m| match m {
                     Modifier::Constant => m.to_doc().append(space()),
                     Modifier::Opaque => RcDoc::nil(),
                 })
-                .unwrap_or(RcDoc::nil())
                 .append(symbol())
                 .append(space())
                 .append(name)
-                .append(params.is_empty().then(|| RcDoc::nil()).unwrap_or(
-                    RcDoc::intersperse(params.into_iter().map(|p| p.to_doc()), space()).spaces(),
+                .append(params.is_empty().then(RcDoc::nil).unwrap_or(
+                    RcDoc::intersperse(params.iter().map(|p| p.to_doc()), space()).spaces(),
                 ))
                 .append(colon().spaces())
                 .append(r#text.to_doc())
@@ -593,8 +591,8 @@ impl PrettyPrintAx for Command {
             Command::Definition(name, params, r#type, definition) => symbol()
                 .append(space())
                 .append(text(name))
-                .append(params.is_empty().then(|| RcDoc::nil()).unwrap_or(
-                    RcDoc::intersperse(params.into_iter().map(|p| p.to_doc()), space()).spaces(),
+                .append(params.is_empty().then(RcDoc::nil).unwrap_or(
+                    RcDoc::intersperse(params.iter().map(|p| p.to_doc()), space()).spaces(),
                 ))
                 .append(
                     r#type

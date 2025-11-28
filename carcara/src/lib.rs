@@ -333,7 +333,7 @@ pub fn produce_lambdapi_proof<'a, T: io::BufRead>(
 ) -> Result<lambdapi::output::ProofFile, Box<dyn std::error::Error>> {
     let (problem, mut proof, _, mut pool) = parser::parse_instance(problem, proof, None, parser_config)?;
 
-    if translate_config.no_elab == false {
+    if !translate_config.no_elab {
         let mut checker = checker::ProofChecker::new(&mut pool, checker_config);
         checker.check(&problem, &proof)?;
 

@@ -14,10 +14,10 @@ pub fn translate_rare_simp(
     let rule: String =
         unwrap_match!(**rare_rule, crate::ast::Term::Const(Constant::String(ref s)) => s.clone());
 
-    let mut simps: Vec<_> = if dag_terms.len() > 0 {
+    let mut simps: Vec<_> = if !dag_terms.is_empty() {
         dag_terms
             .into_iter()
-            .map(|s| ProofStep::Simplify(vec![s.into()]))
+            .map(|s| ProofStep::Simplify(vec![s]))
             .collect_vec()
     } else {
         vec![]
@@ -60,7 +60,7 @@ pub fn translate_rare_simp(
             }
         }
         r => {
-            let args = args.into_iter().map(|term| term.into()).collect_vec();
+            let args = args.iter().map(std::convert::Into::into).collect_vec();
             vec![ProofStep::Apply(terms![Term::from(r), ..args], SubProofs(None))]
         }
     };
@@ -88,7 +88,7 @@ fn translate_bool_eq_true() -> Vec<ProofStep> {
     proof.push(ProofStep::Rewrite(
         false,
         None,
-        "⊤=".into(),
+        "=⊤".into(),
         vec![],
         SubProofs(None),
     ));
@@ -102,7 +102,7 @@ fn translate_bool_eq_true() -> Vec<ProofStep> {
 /// We translate it into:
 /// ```text
 /// simplify p_*;
-/// rewrite ⊥=;
+/// rewrite =⊥;
 /// reflexivity;
 /// ```
 ///
@@ -113,7 +113,7 @@ fn translate_bool_eq_false() -> Vec<ProofStep> {
     proof.push(ProofStep::Rewrite(
         false,
         None,
-        "⊥=".into(),
+        "=⊥".into(),
         vec![],
         SubProofs(None),
     ));
@@ -246,7 +246,7 @@ fn translate_evaluate_bool() -> Vec<ProofStep> {
     vec![ProofStep::Admit]
 }
 
-/// In Alethe, arith_poly_norm is the arithmetical polynomial normalization rule.
+/// In Alethe, `arith_poly_norm` is the arithmetical polynomial normalization rule.
 /// It is used to justify steps where an arithmetic expression (a polynomial over integers, rationals, or reals) is rewritten into a canonical, normalized polynomial form. This usually involves:
 ///   * Flattening nested additions and multiplications
 ///   * Sorting terms in a fixed order (e.g., lexicographically by variable)
@@ -293,7 +293,7 @@ fn translate_arith_poly_norm(clause: &Vec<Rc<AletheTerm>>) -> Vec<ProofStep> {
     // Encode: set l ≔ (reify e1);
     let (left, _) = match_term!((= l r) = clause[0]).expect("no equality");
     let e1: Term = Term::Terms(vec!["reify".into(), left.into()]);
-    proof.push(ProofStep::Set(l_set_id.to_string(), e1));
+    proof.push(ProofStep::Set(l_set_id.to_owned(), e1));
 
     // Encode: rewrite .[x in val x = _] eta_prod;
     proof.push(ProofStep::Rewrite(
@@ -349,7 +349,7 @@ fn translate_arith_poly_norm(clause: &Vec<Rc<AletheTerm>>) -> Vec<ProofStep> {
 // /// Translate (define-rule* bool-or-false ((xs Bool :list) (ys Bool :list)) (or xs false ys) (or xs ys))
 fn translate_bool_or_false(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
     let args = args
-        .into_iter()
+        .iter()
         .map(|term| unwrap_match!(**term, AletheTerm::Op(Operator::RareList, ref l) => l))
         .collect_vec();
 
@@ -376,7 +376,7 @@ fn translate_bool_or_false(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
 /// `(define-rule* bool-and-true ((xs Bool :list) (ys Bool :list)) (and xs true ys) (and xs ys))`
 fn translate_bool_and_true(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
     let args = args
-        .into_iter()
+        .iter()
         .map(|term| unwrap_match!(**term, AletheTerm::Op(Operator::RareList, ref l) => l))
         .collect_vec();
 
@@ -392,7 +392,7 @@ fn translate_bool_and_true(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
     } else {
         let args: Vec<Term> = args
             .into_iter()
-            .map(|terms| Term::from(AletheTerm::Op(Operator::RareList, terms.to_vec())))
+            .map(|terms| Term::from(AletheTerm::Op(Operator::RareList, terms.clone())))
             .collect_vec();
         vec![
             ProofStep::Rewrite(
@@ -439,7 +439,7 @@ fn translate_bool_and_flatten(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> {
     } else if args_len[zs] == 0 {
         vec![]
     } else {
-        let args: Vec<Term> = args.into_iter().map(|term| term.into()).collect_vec();
+        let args: Vec<Term> = args.iter().map(std::convert::Into::into).collect_vec();
         vec![
             ProofStep::Rewrite(
                 false,
@@ -594,7 +594,7 @@ fn translate_bool_implies_or_distrib(args: &[Rc<AletheTerm>]) -> Vec<ProofStep> 
             SubProofs(None),
         ));
     } else {
-        let ys_term: Term = Term::from(AletheTerm::Op(Operator::RareList, ys.to_vec()));
+        let ys_term: Term = Term::from(AletheTerm::Op(Operator::RareList, ys.clone()));
         proof.push(ProofStep::Rewrite(
             false,
             None,

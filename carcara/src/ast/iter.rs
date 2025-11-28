@@ -86,7 +86,7 @@ impl<'a> ProofIter<'a> {
             ProofCommand::Assume { id, .. } => id.to_string(),
             ProofCommand::Step(ProofStep { id, .. }) => id.to_string(),
             ProofCommand::Subproof(Subproof { commands, .. }) => {
-                commands.last().unwrap().id().to_string()
+                commands.last().unwrap().id().to_owned()
             }
         }
     }

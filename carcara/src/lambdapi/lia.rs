@@ -73,7 +73,7 @@ pub fn gen_proof_la_generic(
 
 fn get_inequalities_from_clause(clause: &[Rc<AletheTerm>]) -> Vec<ReifiedInequality> {
     clause
-        .into_iter()
+        .iter()
         .enumerate()
         .map(|(i, t)| match t.deref() {
             AletheTerm::Op(Operator::Equals, xs) => ReifiedInequality {
@@ -156,7 +156,6 @@ fn get_inequalities_from_clause(clause: &[Rc<AletheTerm>]) -> Vec<ReifiedInequal
 
 fn sum_hyps(prefix: &str, suffix: &str, start: usize, end: usize) -> String {
     let s = (start..end)
-        .into_iter()
         .map(|i| format!("{}{}{}", prefix, i, suffix))
         .collect_vec();
     s.join(" + ")
@@ -170,7 +169,7 @@ fn la_generic(
     let mut inequalities = inequalities;
 
     let args = args
-        .into_iter()
+        .iter()
         .map(|a| match a.deref() {
             AletheTerm::Const(c) => c,
             _ => unreachable!(),
@@ -188,12 +187,12 @@ fn la_generic(
     let mut step1 = inequalities
         .iter()
         .enumerate()
-        .filter(|(_, l)| l.neg == false && l.op != Op::Eq)
+        .filter(|(_, l)| !l.neg && l.op != Op::Eq)
         .map(|(i, l)| {
-            let mut pattern: Vec<String> = vec!["_".to_string(); inequalities.len()];
-            pattern[i] = "x".to_string();
+            let mut pattern: Vec<String> = vec!["_".to_owned(); inequalities.len()];
+            pattern[i] = "x".to_owned();
             let pattern_with_or: String =
-                itertools::intersperse(pattern.into_iter(), " ∨ ".to_string()).collect();
+                itertools::intersperse(pattern, " ∨ ".to_owned()).collect();
             match l.op {
                 Op::Lt => ProofStep::Rewrite(
                     false,
@@ -228,8 +227,8 @@ fn la_generic(
         })
         .collect_vec();
 
-    for i in inequalities.iter_mut() {
-        if i.neg == false {
+    for i in &mut inequalities {
+        if !i.neg {
             i.op = match i.op {
                 Op::Eq => Op::Eq,
                 Op::Lt => Op::Ge,
@@ -248,7 +247,7 @@ fn la_generic(
     // If 𝜑 = a ≤ b then 𝜑 = ~ a ≥ ~ b
     let mut normalize_step = vec![];
 
-    for i in inequalities.iter_mut() {
+    for i in &mut inequalities {
         if i.op == Op::Lt {
             i.lhs = pool.add(AletheTerm::Op(Operator::Sub, vec![i.lhs.clone()]));
             i.rhs = pool.add(AletheTerm::Op(Operator::Sub, vec![i.rhs.clone()]));
@@ -306,7 +305,7 @@ fn la_generic(
         })
         .collect_vec();
 
-    for i in inequalities.iter_mut() {
+    for i in &mut inequalities {
         i.lhs = pool.add(AletheTerm::Op(
             Operator::Sub,
             vec![i.lhs.clone(), i.rhs.clone()],
@@ -331,7 +330,7 @@ fn la_generic(
         })
         .collect_vec();
 
-    for i in inequalities.iter_mut() {
+    for i in &mut inequalities {
         if i.op == Op::Gt {
             let one = pool.add(AletheTerm::Const(Constant::Integer(Integer::from(1))));
             i.rhs = pool.add(AletheTerm::Op(
@@ -368,7 +367,7 @@ fn la_generic(
                     false,
                     None,
                     "Zmult_eq_compat_eq".into(),
-                    vec![Term::Int(c.clone()), lhs.into(), rhs.into()],
+                    vec![Term::Int(c.clone()), lhs, rhs],
                     SubProofs(None)
                 )
             }
@@ -384,7 +383,7 @@ fn la_generic(
                     false,
                     None,
                     "Zmult_ge_compat_eq".into(),
-                    vec![Term::Int(c.clone()), lhs.into(), rhs.into()],
+                    vec![Term::Int(c.clone()), lhs, rhs],
                     SubProofs(None)
                 )
             }
@@ -478,8 +477,8 @@ fn la_generic(
     let left_prefix = "l";
     let right_prefix = "r";
 
-    sets.push(ProofStep::Set(left_prefix.to_string(), left_sum));
-    sets.push(ProofStep::Set(right_prefix.to_string(), right_sum));
+    sets.push(ProofStep::Set(left_prefix.to_owned(), left_sum));
+    sets.push(ProofStep::Set(right_prefix.to_owned(), right_sum));
 
     let left_prefix_term = Term::from(left_prefix);
     let right_prefix_term = Term::from(right_prefix);
@@ -515,13 +514,13 @@ fn la_generic(
                 Term::Terms(vec![Term::from(sum_hyps("H", "r'", i + 1, ine_len))]),
                 format!("H{}", i).into(),
                 pack.clone(),
-            ])
+            ]);
         });
 
     let sum_hyp_name = "sum";
 
     let contradiction = ProofStep::Have(
-        sum_hyp_name.to_string(),
+        sum_hyp_name.to_owned(),
         Term::Alethe(LTerm::ClassicProof(Box::new(final_sum))),
         vec![
             ProofStep::Refine(pack, SubProofs(None)),

@@ -9,7 +9,7 @@ use std::collections::{HashSet, VecDeque};
 use std::ops::Deref;
 use std::{fmt, vec};
 
-const WHITE_SPACE: &'static str = " ";
+const WHITE_SPACE: &str = " ";
 
 use super::proof::Proof;
 use super::Context;
@@ -107,20 +107,19 @@ impl fmt::Display for Command {
                     "{}symbol {} {}: {}",
                     modifier
                         .as_ref()
-                        .map(|m| format!("{} ", m))
-                        .unwrap_or(String::new()),
+                        .map_or(String::new(), |m| format!("{} ", m)),
                     name,
                     params,
                     term
                 )?;
 
                 if let Some(proof) = proof {
-                    write!(f, " ≔\n")?;
+                    writeln!(f, " ≔")?;
                     writeln!(f, "begin")?;
                     write!(f, "{}", proof)?;
                     write!(f, "\nend")?;
                 }
-                write!(f, ";\n")
+                writeln!(f, ";")
             }
             Command::Definition(name, params, r#type, definition) => {
                 let params = params
@@ -136,7 +135,7 @@ impl fmt::Display for Command {
                     write!(f, " ≔ {}", def)?;
                 }
                 //write!(f, "symbol {} {} : {} ≔ {};", name, params, r#type, definition)
-                write!(f, ";\n")
+                writeln!(f, ";")
             }
             Command::Rule(l, r) => writeln!(f, "rule {} ↪ {};", l, r),
         }
@@ -285,8 +284,8 @@ impl VisitorArgs for LTerm {
                 // Keep only mappings for variables that are NOT bound by this Choice
                 // `sbs.0`` in `filter` contains the bound variables, we exclude them from substitution
                 &mapping
-                    .into_iter()
-                    .cloned()
+                    .iter()
+                    .copied()
                     .filter(|((id, _ ), _)| bs.0.iter().any(|SortedTerm(bind_name, _)| matches!(bind_name.borrow(), Term::TermId(x) if x != id )))  // Keep the mapping if the bound variable name doesn't match the mapping id
 
                     .collect_vec()
@@ -294,8 +293,8 @@ impl VisitorArgs for LTerm {
             // Quantifiers (∃ and ∀) bind variables - similar filtering logic as Choice
             LTerm::Exist(Bindings(bs), t) | LTerm::Forall(Bindings(bs), t) => t.visit(
                 &mapping
-                    .into_iter()
-                    .cloned()
+                    .iter()
+                    .copied()
                     .filter(|((id, _), _)| bs.iter().any(|SortedTerm(bind_name, _)| matches!(bind_name.borrow(), Term::TermId(x) if x != id )))
                     .collect_vec()
             ),
@@ -306,7 +305,7 @@ impl VisitorArgs for LTerm {
             LTerm::Proof(t) => t.visit(mapping), // Proof wrapper - transparently visit the inner term
             LTerm::Neg(t) => {
                 if let Some(t) = t {
-                    t.visit(mapping)
+                    t.visit(mapping);
                 }
             }
             // Base case: for all other LTerm variants, no action needed
@@ -399,7 +398,7 @@ impl<S: Into<String>> From<S> for Term {
 
 /// Converts an Alethe term to a Lambdapi term and collects shared variables (occurrences of a subexpression exceeds the value set by `dag-thresh` in cvc5).
 ///
-/// The HashSet of shared terms is crucial for Lambdapi proof steps because it tells us
+/// The `HashSet` of shared terms is crucial for Lambdapi proof steps because it tells us
 /// which terms can be unfolded (`simplify`) (expanded to their definitions) during proof construction.
 ///
 /// # Parameters
@@ -433,7 +432,7 @@ pub fn conv(term: &Rc<AletheTerm>, ctx: &crate::lambdapi::Context) -> (Term, Has
 
                     let mut func = vec![conv(f, ctx).0];
                     let mut args: Vec<Term> = args
-                        .into_iter()
+                        .iter()
                         .map(|a| conv_aux(a, ctx, shared_var))
                         .collect();
                     func.append(&mut args);
@@ -441,12 +440,12 @@ pub fn conv(term: &Rc<AletheTerm>, ctx: &crate::lambdapi::Context) -> (Term, Has
                 }
                 AletheTerm::Op(operator, args) => {
                     let args = args
-                        .into_iter()
+                        .iter()
                         .map(|a| conv_aux(a, ctx, shared_var))
                         .collect::<VecDeque<_>>();
                     match operator {
                         Operator::Not => Term::Alethe(LTerm::Neg(Some(Box::new(
-                            args.front().map(|a| a.clone()).unwrap(),
+                            args.front().cloned().unwrap(),
                         )))),
                         Operator::Or => Term::Alethe(LTerm::NOr(args.into())),
                         Operator::Equals => Term::Alethe(LTerm::Eq(
@@ -459,21 +458,21 @@ pub fn conv(term: &Rc<AletheTerm>, ctx: &crate::lambdapi::Context) -> (Term, Has
                             Box::new(args[1].clone()),
                         )),
                         Operator::Distinct => Term::Alethe(LTerm::Distinct(VecN(
-                            args.into_iter().map(Into::into).collect_vec(),
+                            args.into_iter().collect_vec(),
                         ))),
                         Operator::Sub if args.len() == 1 => {
                             Term::Terms(vec!["—".into(), args[0].clone()])
                         }
                         Operator::Sub if args.len() > 1 => {
-                            let args = args.into_iter().map(Into::into).collect_vec();
+                            let args = args.into_iter().collect_vec();
                             let vs =
-                                itertools::intersperse(args.into_iter(), "-".into()).collect_vec();
+                                itertools::intersperse(args, "-".into()).collect_vec();
                             Term::Terms(vs)
                         }
                         Operator::Add => {
-                            let args = args.into_iter().map(Into::into).collect_vec();
+                            let args = args.into_iter().collect_vec();
                             let vs =
-                                itertools::intersperse(args.into_iter(), "+".into()).collect_vec();
+                                itertools::intersperse(args, "+".into()).collect_vec();
                             Term::Terms(vs)
                         }
                         Operator::GreaterEq => {
@@ -489,18 +488,18 @@ pub fn conv(term: &Rc<AletheTerm>, ctx: &crate::lambdapi::Context) -> (Term, Has
                             Term::Terms(vec![args[0].clone(), "<".into(), args[1].clone()])
                         }
                         Operator::Mult => {
-                            let args = args.into_iter().map(Into::into).collect_vec();
+                            let args = args.into_iter().collect_vec();
                             let vs =
-                                itertools::intersperse(args.into_iter(), "*".into()).collect_vec();
+                                itertools::intersperse(args, "*".into()).collect_vec();
                             Term::Terms(vs)
                         }
                         Operator::RareList => {
-                            Term::Terms(args.into_iter().map(From::from).collect_vec())
+                            Term::Terms(args.into_iter().collect_vec())
                         }
                         Operator::True => Term::Alethe(LTerm::True),
                         Operator::False => Term::Alethe(LTerm::False),
                         Operator::Ite => Term::Terms(vec![
-                            Term::from("ite".to_string()),
+                            Term::from("ite".to_owned()),
                             args[0].clone(),
                             args[1].clone(),
                             args[2].clone(),
@@ -567,9 +566,9 @@ impl From<AletheTerm> for Term {
             }
             AletheTerm::Op(operator, args) => {
                 let args = args.into_iter().map(Term::from).collect::<VecDeque<_>>();
-                return match operator {
+                match operator {
                     Operator::Not => Term::Alethe(LTerm::Neg(Some(Box::new(
-                        args.front().map(|a| Term::from(a.clone())).unwrap(),
+                        args.front().cloned().unwrap(),
                     )))),
                     Operator::Or => {
                         //args.push_back(Term::Alethe(LTerm::False));
@@ -588,19 +587,19 @@ impl From<AletheTerm> for Term {
                         Box::new(args[1].clone()),
                     )),
                     Operator::Distinct => Term::Alethe(LTerm::Distinct(VecN(
-                        args.into_iter().map(Into::into).collect_vec(),
+                        args.into_iter().collect_vec(),
                     ))),
                     Operator::Sub if args.len() == 1 => {
                         Term::Terms(vec!["—".into(), args[0].clone()])
                     }
                     Operator::Sub if args.len() > 1 => {
-                        let args = args.into_iter().map(Into::into).collect_vec();
-                        let vs = itertools::intersperse(args.into_iter(), "-".into()).collect_vec();
+                        let args = args.into_iter().collect_vec();
+                        let vs = itertools::intersperse(args, "-".into()).collect_vec();
                         Term::Terms(vs)
                     }
                     Operator::Add => {
-                        let args = args.into_iter().map(Into::into).collect_vec();
-                        let vs = itertools::intersperse(args.into_iter(), "+".into()).collect_vec();
+                        let args = args.into_iter().collect_vec();
+                        let vs = itertools::intersperse(args, "+".into()).collect_vec();
                         Term::Terms(vs)
                     }
                     Operator::GreaterEq => {
@@ -616,23 +615,23 @@ impl From<AletheTerm> for Term {
                         Term::Terms(vec![args[0].clone(), "<".into(), args[1].clone()])
                     }
                     Operator::Mult => {
-                        let args = args.into_iter().map(Into::into).collect_vec();
-                        let vs = itertools::intersperse(args.into_iter(), "*".into()).collect_vec();
+                        let args = args.into_iter().collect_vec();
+                        let vs = itertools::intersperse(args, "*".into()).collect_vec();
                         Term::Terms(vs)
                     }
                     Operator::RareList => {
-                        Term::Terms(args.into_iter().map(From::from).collect_vec())
+                        Term::Terms(args.into_iter().collect_vec())
                     }
                     Operator::True => Term::Alethe(LTerm::True),
                     Operator::False => Term::Alethe(LTerm::False),
                     Operator::Ite => Term::Terms(vec![
-                        Term::from("ite".to_string()),
+                        Term::from("ite".to_owned()),
                         args[0].clone(),
                         args[1].clone(),
                         args[2].clone(),
                     ]),
                     o => todo!("Operator {:?}", o),
-                };
+                }
             }
             AletheTerm::Let(..) => todo!("let term"),
             AletheTerm::Binder(AletheBinder::Forall, bs, t) => {
@@ -685,7 +684,7 @@ impl fmt::Display for SortedTerm {
 }
 
 /// Represent the Stdlib.List inductive type in a shallow Rust encoding (Vec).
-/// This structure exists for making pretty printing easier by not overloading LTerm.
+/// This structure exists for making pretty printing easier by not overloading `LTerm`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Bindings(pub Vec<SortedTerm>);
 
@@ -715,7 +714,7 @@ impl fmt::Display for Bindings {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = Itertools::intersperse(
             self.0.iter().map(|t| format!("({})", t)),
-            WHITE_SPACE.to_string(),
+            WHITE_SPACE.to_owned(),
         )
         .collect::<String>();
         write!(f, "{}", s)
@@ -731,7 +730,7 @@ impl fmt::Display for VecN {
             .0
             .iter()
             .rev()
-            .fold("⧈".to_string(), |acc, e| format!("(cons {} {})", e, acc));
+            .fold("⧈".to_owned(), |acc, e| format!("(cons {} {})", e, acc));
         write!(f, "{}", s)
     }
 }
@@ -745,7 +744,7 @@ impl fmt::Display for List {
             .0
             .iter()
             .rev()
-            .fold("□".to_string(), |acc, e| format!("{} ⸬ {}", e, acc));
+            .fold("□".to_owned(), |acc, e| format!("{} ⸬ {}", e, acc));
         write!(f, "{}", s)
     }
 }
@@ -845,16 +844,16 @@ impl fmt::Display for LTerm {
             LTerm::Neg(None) => write!(f, "¬"),
             LTerm::NAnd(ts) => {
                 let s = Itertools::intersperse(
-                    ts.into_iter().map(|t| format!("{}", t)),
-                    " ∧ ".to_string(),
+                    ts.iter().map(|t| format!("{}", t)),
+                    " ∧ ".to_owned(),
                 )
                 .collect::<String>();
                 write!(f, "{}", s)
             }
             LTerm::NOr(ts) => {
                 let s = Itertools::intersperse(
-                    ts.into_iter().map(|t| format!("{}", t)),
-                    " ∨ ".to_string(),
+                    ts.iter().map(|t| format!("{}", t)),
+                    " ∨ ".to_owned(),
                 )
                 .collect::<String>();
                 write!(f, "{}", s)
@@ -864,8 +863,8 @@ impl fmt::Display for LTerm {
                     write!(f, "{}", LTerm::False)
                 } else {
                     let s = Itertools::intersperse(
-                        ts.into_iter().map(|t| format!("({})", t)),
-                        " ⟇ ".to_string(),
+                        ts.iter().map(|t| format!("({})", t)),
+                        " ⟇ ".to_owned(),
                     )
                     .collect::<String>();
                     write!(f, "{}", s)
@@ -920,20 +919,16 @@ pub trait Visitor {
 impl Visitor for Rc<AletheTerm> {
     fn visit(&self, ctx: &mut Context, pool: &mut PrimitivePool) {
         match self.deref() {
-            AletheTerm::Const(_)
-            | AletheTerm::Var(..)
-            | AletheTerm::Sort(_)
-            | AletheTerm::ParamOp { .. }
-            | AletheTerm::Let(..)
-            | AletheTerm::Op(Operator::True, _)
-            | AletheTerm::Op(Operator::False, _) => {}
+            AletheTerm::Const(_) | AletheTerm::Var(..) | AletheTerm::Sort(_) |
+AletheTerm::ParamOp { .. } | AletheTerm::Let(..) |
+AletheTerm::Op(Operator::True | Operator::False, _) => {}
             AletheTerm::Op(_, ops) => {
                 if self.is_closed(pool, &ctx.global_variables) {
                     if let Some((count, t)) = ctx.term_indices.get_mut(self) {
-                        *count = *count + 1;
+                        *count += 1;
                         if *count >= 1 {
                             ctx.term_sharing
-                                .insert(self.clone(), (t.to_string(), self.into()));
+                                .insert(self.clone(), ((*t).to_string(), self.into()));
                         }
                     } else {
                         ctx.term_indices.insert(
@@ -942,15 +937,15 @@ impl Visitor for Rc<AletheTerm> {
                         );
                     }
                 }
-                ops.into_iter().for_each(|op| op.visit(ctx, pool));
+                ops.iter().for_each(|op| op.visit(ctx, pool));
             }
             AletheTerm::App(o, ops) => {
                 if self.is_closed(pool, &ctx.global_variables) {
                     if let Some((count, t)) = ctx.term_indices.get_mut(self) {
-                        *count = *count + 1;
+                        *count += 1;
                         if *count >= 1 {
                             ctx.term_sharing
-                                .insert(self.clone(), (t.to_string(), self.into()));
+                                .insert(self.clone(), ((*t).to_string(), self.into()));
                         }
                     } else {
                         ctx.term_indices.insert(
@@ -960,7 +955,7 @@ impl Visitor for Rc<AletheTerm> {
                     }
                 }
                 o.visit(ctx, pool);
-                ops.into_iter().for_each(|op| op.visit(ctx, pool));
+                ops.iter().for_each(|op| op.visit(ctx, pool));
             }
             AletheTerm::Binder(_, bs, t) => {
                 let bounded_variables = bs.into_iter().map(|(name, _)| name).collect_vec();
@@ -969,17 +964,17 @@ impl Visitor for Rc<AletheTerm> {
                     .into_iter()
                     .filter(|var| !ctx.global_variables.contains(var))
                     .filter(|var| match var.deref() {
-                        AletheTerm::Var(var, _) => bounded_variables.contains(&var) == false,
+                        AletheTerm::Var(var, _) => !bounded_variables.contains(&var),
                         _ => false,
                     })
                     .collect_vec();
 
                 if free_vars_remaining.is_empty() {
                     if let Some((count, t)) = ctx.term_indices.get_mut(self) {
-                        *count = *count + 1;
+                        *count += 1;
                         if *count >= 1 {
                             ctx.term_sharing
-                                .insert(self.clone(), (t.to_string(), self.into()));
+                                .insert(self.clone(), ((*t).to_string(), self.into()));
                         }
                     } else {
                         ctx.term_indices.insert(
@@ -1125,7 +1120,7 @@ pub fn intro_top() -> Term {
 }
 
 /// In Lambdapi, decimal notation not possible for two types simultaneously.
-/// FIXME: can be remove when https://github.com/Deducteam/lambdapi/issues/1268 is solved
+/// FIXME: can be remove when <https://github.com/Deducteam/lambdapi/issues/1268> is solved
 /// (int2nat n ⊤ᵢ)
 #[inline]
 pub fn int2nat(n: usize) -> Term {

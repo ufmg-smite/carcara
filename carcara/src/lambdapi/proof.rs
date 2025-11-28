@@ -1,6 +1,6 @@
 use super::*;
 
-const WHITE_SPACE: &'static str = " ";
+const WHITE_SPACE: &str = " ";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Proof(pub Vec<ProofStep>);
@@ -71,7 +71,7 @@ pub struct SubProofs(pub Option<Vec<Proof>>);
 impl fmt::Display for SubProofs {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let SubProofs(Some(ps)) = self {
-            for p in ps.iter() {
+            for p in ps {
                 write!(f, "{{ {} }}", p)?;
             }
         }
@@ -86,9 +86,7 @@ impl fmt::Display for ProofStep {
                 write!(
                     f,
                     "assume {};",
-                    ids.iter()
-                        .map(|e| format!("{}", e))
-                        .collect::<Vec<_>>()
+                    ids.clone()
                         .join(WHITE_SPACE)
                 )
             }
@@ -101,7 +99,7 @@ impl fmt::Display for ProofStep {
                 write!(f, "apply {}", t)?;
 
                 if let SubProofs(Some(sp)) = subproofs {
-                    write!(f, " {}", SubProofs(Some(sp.to_vec())))?;
+                    write!(f, " {}", SubProofs(Some(sp.clone())))?;
                 }
 
                 write!(f, ";")
@@ -128,13 +126,13 @@ impl fmt::Display for ProofStep {
 
                 write!(f, "rewrite {} ({} {})", pattern, hyp, args)?;
                 if let SubProofs(Some(sp)) = subproofs {
-                    write!(f, " {}", SubProofs(Some(sp.to_vec())))?;
+                    write!(f, " {}", SubProofs(Some(sp.clone())))?;
                 };
                 write!(f, ";")
             }
             ProofStep::Symmetry => write!(f, "symmetry;"),
             ProofStep::Simplify(s) => {
-                for term in s.iter() {
+                for term in s {
                     write!(f, "simplify {};", term)?;
                 }
                 Ok(())

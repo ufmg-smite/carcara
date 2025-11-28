@@ -84,9 +84,9 @@ fn translate_sort_function(sort: &Sort) -> Term {
         Sort::Int => "int".into(),
         Sort::Function(params) => {
             let sorts = params
-                .into_iter()
+                .iter()
                 .map(|t| unwrap_match!(**t, AletheTerm::Sort(ref s) => s))
-                .map(|s| translate_sort_function(s))
+                .map(translate_sort_function)
                 .collect_vec();
 
             sorts
@@ -127,8 +127,7 @@ fn translate_prelude(prelude: ProblemPrelude) -> Vec<Command> {
     let mut function_declarations_symbols = prelude
         .function_declarations
         .into_iter()
-        .enumerate()
-        .map(|(_counter, (id, term))| {
+        .map(|(id, term)| {
             let sort = match *term {
                 AletheTerm::Sort(ref s) => tau(translate_sort_function(s)),
                 _ => unreachable!(),
@@ -146,11 +145,11 @@ fn translate_prelude(prelude: ProblemPrelude) -> Vec<Command> {
 #[inline]
 fn gen_required_module() -> Vec<Command> {
     vec![
-        Command::RequireOpen("lambdapi.Alethe".to_string()),
-        Command::RequireOpen("lambdapi.Simplify".to_string()),
-        Command::RequireOpen("lambdapi.Rare".to_string()),
-        Command::RequireOpen("lambdapi.Lia".to_string()),
-        Command::RequireOpen("lambdapi.Clause".to_string()),
+        Command::RequireOpen("lambdapi.Alethe".to_owned()),
+        Command::RequireOpen("lambdapi.Simplify".to_owned()),
+        Command::RequireOpen("lambdapi.Rare".to_owned()),
+        Command::RequireOpen("lambdapi.Lia".to_owned()),
+        Command::RequireOpen("lambdapi.Clause".to_owned()),
     ]
 }
 
@@ -190,13 +189,13 @@ pub fn produce_lambdapi_proof<'a>(
         &mut proof_elaborated.iter(),
         &mut pool,
         |id, t, ps| {
-            let modifier = ps.is_some().then(|| Modifier::Opaque);
+            let modifier = ps.is_some().then_some(Modifier::Opaque);
             Command::Symbol(
                 modifier,
                 normalize_name(id),
                 vec![],
                 t,
-                ps.map(|ps| Proof(ps)),
+                ps.map(Proof),
             )
         },
     )?;
@@ -215,14 +214,14 @@ fn get_premises_clause<'a>(
     premises: &'a [(usize, usize)],
 ) -> Vec<(String, &'a [Rc<AletheTerm>])> {
     premises
-        .into_iter()
+        .iter()
         .map(|p| proof_iter.get_premise(*p))
         .map(|c| (normalize_name(c.id()), c.clause()))
         .collect_vec()
 }
 
 fn get_pivots_from_args(args: &Vec<Rc<AletheTerm>>) -> Vec<(Rc<AletheTerm>, bool)> {
-    args.into_iter()
+    args.iter()
         .tuples()
         .map(|(x, y)| match (x, y) {
             (pivot, flag) if flag.is_bool_true() => ((*pivot).clone(), true),
@@ -254,7 +253,7 @@ fn remove_pivot_in_clause<'a>(
 
     //FIXME: pivot should be or there is a bug
     if *flag {
-        let mut filtered_clause_left = clause_left.into_iter().map(|t| t.clone()).collect_vec();
+        let mut filtered_clause_left = clause_left.iter().map(std::clone::Clone::clone).collect_vec();
         let index = filtered_clause_left
             .iter()
             .position(|t| polyeq(pivot, t, &mut duration));
@@ -263,7 +262,7 @@ fn remove_pivot_in_clause<'a>(
             filtered_clause_left.remove(index);
         }
 
-        let mut filtered_clause_right = clause_right.into_iter().map(|t| t.clone()).collect_vec();
+        let mut filtered_clause_right = clause_right.iter().map(std::clone::Clone::clone).collect_vec();
         let index = filtered_clause_right
             .iter()
             .position(|t| polyeq(&term_negated(pivot, pool), t, &mut duration));
@@ -274,7 +273,7 @@ fn remove_pivot_in_clause<'a>(
         filtered_clause_left.append(&mut filtered_clause_right);
         filtered_clause_left
     } else {
-        let mut filtered_clause_left = clause_left.into_iter().map(|t| t.clone()).collect_vec();
+        let mut filtered_clause_left = clause_left.iter().map(std::clone::Clone::clone).collect_vec();
         let index = filtered_clause_left
             .iter()
             .position(|t| polyeq(&term_negated(pivot, pool), t, &mut duration));
@@ -283,10 +282,10 @@ fn remove_pivot_in_clause<'a>(
             filtered_clause_left.remove(index);
         }
 
-        let mut filtered_clause_right = clause_right.into_iter().map(|t| t.clone()).collect_vec();
+        let mut filtered_clause_right = clause_right.iter().map(std::clone::Clone::clone).collect_vec();
         let index = filtered_clause_right
             .iter()
-            .position(|t| polyeq(&pivot, t, &mut duration));
+            .position(|t| polyeq(pivot, t, &mut duration));
 
         if let Some(index) = index {
             filtered_clause_right.remove(index);
@@ -336,43 +335,43 @@ fn make_resolution(
     ctx: &mut Context,
     pool: &mut PrimitivePool,
 ) -> Vec<ProofStep> {
-    let hyp_left_arg = Term::TermId(left_step_name.to_string());
-    let hyp_right_arg = Term::TermId(right_step_name.to_string());
+    let hyp_left_arg = Term::TermId((*left_step_name).to_owned());
+    let hyp_right_arg = Term::TermId((*right_step_name).to_owned());
 
     let neg_pivot = term_negated(pivot, pool);
     let mut zero_duration = Duration::ZERO;
     let (i, j) = if *flag_position_pivot {
         let i = left_clause
-            .into_iter()
-            .position(|x| polyeq(pivot, x, &mut zero_duration) == true)
+            .iter()
+            .position(|x| polyeq(pivot, x, &mut zero_duration))
             .expect("1");
         let j = right_clause
-            .into_iter()
-            .position(|x| polyeq(&neg_pivot, x, &mut zero_duration) == true)
+            .iter()
+            .position(|x| polyeq(&neg_pivot, x, &mut zero_duration))
             .expect("2");
         (i, j)
     } else {
         // flag at `false` so negation of the pivot is on the first premise and positive pivot on the 2nd.
         let i = left_clause
-            .into_iter()
-            .position(|x| polyeq(&neg_pivot, x, &mut zero_duration) == true)
+            .iter()
+            .position(|x| polyeq(&neg_pivot, x, &mut zero_duration))
             .expect("3");
         let j = right_clause
-            .into_iter()
-            .position(|x| polyeq(pivot, x, &mut zero_duration) == true)
+            .iter()
+            .position(|x| polyeq(pivot, x, &mut zero_duration))
             .expect("4");
         (i, j)
     };
 
     let ps = Term::Alethe(LTerm::Clauses(
         left_clause
-            .into_iter()
+            .iter()
             .map(|c| ctx.get_or_convert(c).0)
             .collect_vec(),
     ));
     let qs = Term::Alethe(LTerm::Clauses(
         right_clause
-            .into_iter()
+            .iter()
             .map(|c| ctx.get_or_convert(c).0)
             .collect_vec(),
     ));
@@ -440,10 +439,10 @@ fn normalize_name<S: AsRef<str>>(name: S) -> String {
 /// Map some rule name to their corresponding symbol in the Lambdapi stdlib
 fn translate_rule_name(rule: &str) -> Term {
     match rule {
-        "refl" => Term::TermId("⟺_refl".to_string()),
-        "symm" => Term::TermId("⟺_sym".to_string()),
-        "trans" => Term::TermId("⟺_trans".to_string()),
-        r => Term::TermId(r.to_string()),
+        "refl" => Term::TermId("⟺_refl".to_owned()),
+        "symm" => Term::TermId("⟺_sym".to_owned()),
+        "trans" => Term::TermId("⟺_trans".to_owned()),
+        r => Term::TermId(r.to_owned()),
     }
 }
 
@@ -482,12 +481,9 @@ fn translate_subproof<'a>(
     proof_cmds
         .iter_mut()
         .filter(|cmd| matches!(cmd, ProofStep::Have(_, _, _)))
-        .for_each(|cmd| match cmd {
-            ProofStep::Have(name, cl, steps) => {
-                cl.visit(&assignment_args);
-                *cmd = ProofStep::Have(name.to_string(), cl.clone(), steps.to_vec());
-            }
-            _ => {}
+        .for_each(|cmd| if let ProofStep::Have(name, cl, steps) = cmd {
+            cl.visit(&assignment_args);
+            *cmd = ProofStep::Have((*name).to_string(), cl.clone(), steps.clone());
         });
 
     let assignment_args = assignment_args
@@ -533,7 +529,7 @@ fn translate_subproof<'a>(
 
         proof
     } else if rule == "sko_forall" {
-        let last_step_id = unwrap_match!(commands.get(commands.len() - 1), Some(ProofCommand::Step(AstProofStep{id, ..})) => normalize_name(id));
+        let last_step_id = unwrap_match!(commands.last(), Some(ProofCommand::Step(AstProofStep{id, ..})) => normalize_name(id));
 
         // end of the script
         proof_cmds.append(&mut lambdapi! {
@@ -559,20 +555,20 @@ fn translate_resolution(
     context: &mut Context,
     pool: &mut PrimitivePool,
 ) -> TradResult<Vec<ProofStep>> {
-    let premises = get_premises_clause(&proof_iter, premises);
+    let premises = get_premises_clause(proof_iter, premises);
 
     let pivots = get_pivots_from_args(args);
 
     let (last_goal_name, _, mut steps) = match premises.as_slice() {
         [h1, h2, tl_premises @ ..] => match pivots.as_slice() {
-            [pivot, tl_pivot @ ..] => tl_premises.into_iter().zip(tl_pivot.into_iter()).fold(
+            [pivot, tl_pivot @ ..] => tl_premises.iter().zip(tl_pivot).fold(
                 (
                     format!("{}_{}", h1.0, h2.0),
-                    remove_pivot_in_clause(&pivot, h1.1, h2.1, pool),
+                    remove_pivot_in_clause(pivot, h1.1, h2.1, pool),
                     vec![ProofStep::Have(
                         format!("{}_{}", h1.0, h2.0),
                         proof(Term::Alethe(LTerm::Clauses(
-                            remove_pivot_in_clause(&pivot, h1.1, h2.1, pool)
+                            remove_pivot_in_clause(pivot, h1.1, h2.1, pool)
                                 .into_iter()
                                 .map(|t| context.get_or_convert(&t).0)
                                 .collect::<Vec<Term>>(),
@@ -584,11 +580,11 @@ fn translate_resolution(
                     let goal_name = format!("{}_{}", previous_goal_name, premise.0);
 
                     let current_goal =
-                        remove_pivot_in_clause(&pivot, previous_goal.as_slice(), premise.1, pool);
+                        remove_pivot_in_clause(pivot, previous_goal.as_slice(), premise.1, pool);
 
                     let resolution = make_resolution(
                         pivot,
-                        &(format!("{}", previous_goal_name).as_str(), &previous_goal),
+                        &(previous_goal_name.to_string().as_str(), &previous_goal),
                         &(&premise.0, premise.1),
                         context,
                         pool,
@@ -599,7 +595,7 @@ fn translate_resolution(
                         proof(Term::Alethe(LTerm::Clauses(
                             current_goal
                                 .iter()
-                                .map(|t| context.get_or_convert(&t).0)
+                                .map(|t| context.get_or_convert(t).0)
                                 .collect::<Vec<Term>>(),
                         ))),
                         resolution,
@@ -629,7 +625,7 @@ fn translate_tautology(
     rule: &str,
     args: &Vec<Rc<AletheTerm>>,
 ) -> Option<TradResult<Proof>> {
-    let mut premises: Vec<_> = get_premises_clause(&proof_iter, &premises);
+    let mut premises: Vec<_> = get_premises_clause(proof_iter, premises);
 
     match rule {
         "bind" | "subproof" => None,
@@ -680,7 +676,7 @@ where
 
     while let Some(command) = proof_iter.next() {
         let clause = command.clause();
-        clause.into_iter().for_each(|c| c.visit(ctx, pool));
+        clause.iter().for_each(|c| c.visit(ctx, pool));
 
         match command {
             ProofCommand::Assume { id, term } => proof_steps.push(f(
@@ -700,7 +696,7 @@ where
 
                 let clauses = Term::Alethe(LTerm::Proof(Box::new(Term::Alethe(LTerm::Clauses(
                     clause
-                        .into_iter()
+                        .iter()
                         .map(|a| ctx.get_or_convert(a).0)
                         .collect(),
                 )))));
@@ -713,7 +709,7 @@ where
                 //let mut dag_terms: HashSet<_> =  HashSet::new();
 
                 let (terms, hs): (Vec<Term>, Vec<HashSet<_>>) = clause
-                    .into_iter()
+                    .iter()
                     .map(|a| {
                         ctx.get_or_convert(a)
                         //dag_terms.union(&h);
@@ -734,7 +730,7 @@ where
             }
             ProofCommand::Step(AstProofStep { id, clause, rule, .. }) if rule.contains("simp") => {
                 let terms: Vec<Term> = clause
-                    .into_iter()
+                    .iter()
                     .map(|a| ctx.get_or_convert(a).0)
                     .collect();
 
@@ -750,10 +746,10 @@ where
             ProofCommand::Step(AstProofStep {
                 id, clause, premises: _, rule, args, ..
             }) if rule == "la_generic" => {
-                let proof = gen_proof_la_generic(&clause, args, pool);
+                let proof = gen_proof_la_generic(clause, args, pool);
 
                 let clause = clause
-                    .into_iter()
+                    .iter()
                     .map(|term| ctx.get_or_convert(term).0)
                     .collect_vec();
 
@@ -769,7 +765,7 @@ where
                 let step = translate_tautology(proof_iter, clause, premises, rule, args);
 
                 let clause = clause
-                    .into_iter()
+                    .iter()
                     .map(|term| ctx.get_or_convert(term).0)
                     .collect();
 
@@ -792,7 +788,7 @@ where
                     ctx,
                     proof_iter,
                     commands.as_slice(),
-                    args.into_iter()
+                    args.iter()
                         .filter(|a| matches!(a, AnchorArg::Assign(_, _)))
                         .map(|a| unwrap_match!(a, AnchorArg::Assign(s, t) => (s, t)))
                         .collect_vec(),
@@ -819,19 +815,18 @@ where
 
                     let premises_discharge = get_premises_clause(proof_iter, discharge);
 
-                    let mut script = std::iter::repeat(ProofStep::Apply(
-                        Term::TermId("∨ᵢ₂".to_string()),
+                    let mut script = std::iter::repeat_n(ProofStep::Apply(
+                        Term::TermId("∨ᵢ₂".to_owned()),
                         SubProofs(None),
-                    ))
-                    .take(premises_discharge.len())
+                    ), premises_discharge.len())
                     .collect_vec();
 
                     let (psy_id, trailing_false_on_last_step) = unwrap_match!(commands.get(commands.len() - 2), Some(ProofCommand::Step(AstProofStep{id, clause, ..})) => {
-                        (normalize_name(id), clause.iter().last().map(|t| t.is_bool_false()).unwrap_or(false))
+                        (normalize_name(id), clause.iter().last().is_some_and(|t| t.is_bool_false()))
                     });
 
                     let trailing_false_on_conclusion_clause =
-                        cl.iter().last().map(|t| t.is_bool_false()).unwrap_or(false);
+                        cl.iter().last().is_some_and(|t| t.is_bool_false());
 
                     // Some subproof can add a trailing false in their clause and also for the step just before the clonclusion of the subproof.
                     // We detect if there is a trailing false if the number of the element in the clause and the discharge are different
@@ -840,14 +835,14 @@ where
                     } else if trailing_false_on_conclusion_clause {
                         // Case with a trailing false
                         script.push(ProofStep::Apply(
-                            Term::TermId("∨ᵢ₂".to_string()),
+                            Term::TermId("∨ᵢ₂".to_owned()),
                             SubProofs(None),
                         ));
                         script.push(ProofStep::Apply(psy_id.as_str().into(), SubProofs(None)));
                     } else if trailing_false_on_last_step {
                         // Case with a trailing false
                         script.push(ProofStep::Apply(
-                            Term::TermId("∨ᵢ₁".to_string()),
+                            Term::TermId("∨ᵢ₁".to_owned()),
                             SubProofs(None),
                         ));
                         script.push(ProofStep::Apply(
@@ -857,7 +852,7 @@ where
                     } else {
                         // Case without a trailing false
                         script.push(ProofStep::Apply(
-                            Term::TermId("∨ᵢ₁".to_string()),
+                            Term::TermId("∨ᵢ₁".to_owned()),
                             SubProofs(None),
                         ));
 
