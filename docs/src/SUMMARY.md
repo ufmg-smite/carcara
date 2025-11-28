@@ -6,7 +6,7 @@
 - [Proof elaboration](./elaboration.md)
   - [Polyequality elaboration](./polyeq-elaboration.md)
   - [Hole elaboration]()
-  - ["Local" elaboration]()
+  - ["Local" elaboration](./local-elaboration.md)
   - [Resolution uncrowding]()
   - [Reordering elimination]()
 - [Other features](./other-features.md)
