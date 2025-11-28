@@ -4,7 +4,7 @@
 - [Checking proofs with Carcara](./checking.md)
   - [Checking Rare rewrites]()
 - [Proof elaboration](./elaboration.md)
-  - [Polyequality elaboration]()
+  - [Polyequality elaboration](./polyeq-elaboration.md)
   - [Hole elaboration]()
   - ["Local" elaboration]()
   - [Resolution uncrowding]()
