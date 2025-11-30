@@ -84,7 +84,7 @@ pub enum AnchorArg {
 
 impl Proof {
     /// Returns an iterator over the proof commands. See [`ProofIter`].
-    pub fn iter(&self) -> ProofIter {
+    pub fn iter(&self) -> ProofIter<'_> {
         ProofIter::new(&self.commands)
     }
 }
