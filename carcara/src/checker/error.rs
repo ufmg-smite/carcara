@@ -218,10 +218,9 @@ pub enum CheckerError {
 
     #[error("the conclusion of a rare rule should be exactly 1")]
     RareConclusionNumberInvalid(),
-    
+
     #[error("unknown rule")]
     UnknownRule,
-
 }
 
 /// Errors in which we expected two things to be equal but they weren't.

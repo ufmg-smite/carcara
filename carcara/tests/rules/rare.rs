@@ -1,5 +1,5 @@
+use carcara::{ast::ProofCommand, checker, parser};
 use std::io::Cursor;
-use carcara::{parser, ast::ProofCommand, checker};
 
 // Custom rare rules for testing
 const RARE_RULES: &str = r#"
@@ -80,7 +80,8 @@ fn run_rare_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
             discharge: Vec::new(),
         }));
 
-        let mut checker = checker::ProofChecker::new(&mut pool, &rare_rules, checker::Config::new());
+        let mut checker =
+            checker::ProofChecker::new(&mut pool, &rare_rules, checker::Config::new());
         let check_result = checker.check(&problem, &proof);
 
         let error_message = match &check_result {

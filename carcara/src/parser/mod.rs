@@ -97,13 +97,7 @@ pub fn parse_instance_with_pool<T: BufRead>(
         }?;
         return Ok((problem, proof, rules));
     }
-    Ok((
-        problem,
-        proof,
-        RareStatements {
-            rules: IndexMap::new()
-        },
-    ))
+    Ok((problem, proof, RareStatements { rules: IndexMap::new() }))
 }
 
 /// A function definition, from a `define-fun` command.

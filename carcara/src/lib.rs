@@ -40,10 +40,10 @@ pub mod checker;
 mod drup;
 pub mod elaborator;
 pub mod parser;
+mod rare;
 mod resolution;
 pub mod slice;
 mod utils;
-mod rare;
 
 use crate::benchmarking::{CollectResults, OnlineBenchmarkResults, RunMeasurement};
 use checker::{error::CheckerError, CheckerStatistics};
@@ -169,7 +169,7 @@ pub fn check_parallel<T: io::BufRead>(
         &problem.prelude,
         &schedule_context_usage,
         stack_size,
-        rules
+        rules,
     );
 
     if collect_stats {
