@@ -137,6 +137,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
             arguments: body.args.clone(),
             premises: body.premises.clone(),
             conclusion: body.conclusion.unwrap(),
+            is_elaborated: false
         })
     }
 
@@ -146,9 +147,10 @@ impl<'a, R: BufRead> Parser<'a, R> {
             rules.push(self.parse_rule()?);
         }
 
-        Ok(rules
+        Ok(RareStatements {rules: rules
             .iter()
             .map(|x| (x.name.clone(), (*x).clone()))
-            .collect())
+            .collect()
+        })
     }
 }

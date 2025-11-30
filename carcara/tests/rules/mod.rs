@@ -8,7 +8,7 @@ use std::io::Cursor;
 fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
     for (i, (proof, expected)) in cases.iter().enumerate() {
         // This parses the definitions again for every case, which is not ideal
-        let (mut problem, mut proof, _, mut pool) = parser::parse_instance(
+        let (mut problem, mut proof, rare_rules, mut pool) = parser::parse_instance(
             Cursor::new(definitions),
             Cursor::new(proof),
             None,
@@ -42,7 +42,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
             discharge: Vec::new(),
         }));
 
-        let mut checker = checker::ProofChecker::new(&mut pool, checker::Config::new());
+        let mut checker = checker::ProofChecker::new(&mut pool, &rare_rules, checker::Config::new());
         let check_result = checker.check(&problem, &proof);
 
         // Extract error message, if any
@@ -97,6 +97,7 @@ pub(super) mod extras;
 pub(super) mod linear_arithmetic;
 pub(super) mod pb_blasting;
 pub(super) mod quantifier;
+pub(super) mod rare;
 pub(super) mod reflexivity;
 pub(super) mod resolution;
 pub(super) mod simplification;
