@@ -18,8 +18,8 @@ pub fn check_rare(
         ..
     }: RuleArgs,
 ) -> RuleResult {
-    let rule_literal = args.get(0);
-    if rule_literal == None {
+    let rule_literal = args.first();
+    if rule_literal.is_none() {
         return Err(CheckerError::RareNotSpecifiedRule);
     }
 
@@ -101,7 +101,7 @@ pub fn check_rare(
         return Ok(());
     }
 
-    return Err(CheckerError::RareRuleExpectedLiteral(
+    Err(CheckerError::RareRuleExpectedLiteral(
         rule_literal.unwrap().clone(),
-    ));
+    ))
 }
