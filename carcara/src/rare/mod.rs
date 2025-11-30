@@ -9,6 +9,9 @@ pub fn get_rules() -> Vec<(RewriteTerm, RewriteTerm)> {
     vec![
         build_equation!((RareList ..x..) ~> x),
         build_equation!((Or true) ~> true),
+        build_equation!((Or) ~> true),
+        build_equation!((And) ~> false),
+        build_equation!((And false) ~> false),
     ]
 }
 
@@ -184,7 +187,7 @@ pub fn rewrite_meta_terms(
                     })
                     .collect::<Vec<_>>();
                 let new_term = pool.add(Term::Op(*op, new_args));
-                if let Some(_) = check_rewrites(pool, &new_term, rules) {
+                if check_rewrites(pool, &new_term, rules).is_some() {
                     return rewrite_meta_terms(pool, new_term, rules);
                 }
 
