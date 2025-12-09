@@ -8,7 +8,7 @@ use crate::{
     benchmarking::{CollectResults, OnlineBenchmarkResults},
     CarcaraResult, Error,
 };
-use error::{CheckerError};
+use error::CheckerError;
 use indexmap::IndexSet;
 pub use parallel::{scheduler::Scheduler, ParallelProofChecker};
 use rules::{Premise, Rule, RuleArgs, RuleResult};
@@ -204,8 +204,6 @@ impl<'c> ProofChecker<'c> {
         iter: &'i ProofIter<'i>,
         stats: &mut Option<&mut CheckerStatistics<CR>>,
     ) -> bool {
-        
-
         check_assume_shared(
             id,
             term,
@@ -263,7 +261,7 @@ impl<'c> ProofChecker<'c> {
 
         let result = check_step_core(step, rule_args, context, stats);
 
-        // Update polyeq time in stats (this was previously done in the core, 
+        // Update polyeq time in stats (this was previously done in the core,
         // but polyeq_time is updated via the mutable reference in rule_args)
         if let Some(s) = stats {
             s.polyeq_time += polyeq_time;

@@ -2,7 +2,7 @@ use super::shared::{check_assume_shared, check_step_core, StepCheckContext};
 pub mod scheduler;
 
 use super::{
-    error::{CheckerError},
+    error::CheckerError,
     rules::{Premise, RuleArgs, RuleResult},
     Config,
 };
@@ -346,8 +346,6 @@ impl<'c> ParallelProofChecker<'c> {
         iter: &ScheduleIter,
         stats: &mut Option<&mut CheckerStatistics<CR>>,
     ) -> bool {
-        
-
         check_assume_shared(
             id,
             term,

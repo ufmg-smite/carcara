@@ -1,7 +1,10 @@
 use crate::{
     ast::*,
     benchmarking::CollectResults,
-    checker::{CheckerStatistics, Config, rules::{RuleArgs, RuleResult}},
+    checker::{
+        rules::{RuleArgs, RuleResult},
+        CheckerStatistics, Config,
+    },
 };
 use indexmap::IndexSet;
 use std::time::{Duration, Instant};
@@ -104,7 +107,9 @@ pub fn check_step_core<CR: CollectResults + Send + Default>(
 
     let rule = match get_rule_shared(&step.rule, context.config.elaborated) {
         Some(r) => r,
-        None if context.config.ignore_unknown_rules || context.config.allowed_rules.contains(&step.rule) => {
+        None if context.config.ignore_unknown_rules
+            || context.config.allowed_rules.contains(&step.rule) =>
+        {
             *context.is_holey = true;
             return Ok(());
         }
@@ -143,7 +148,7 @@ pub fn check_discharge_shared(
     discharge: &[(usize, usize)],
 ) -> RuleResult {
     use crate::checker::error::{CheckerError, SubproofError};
-    
+
     let discharge: IndexSet<_> = discharge.iter().collect();
     if let Some((_, not_discharged)) = subproof
         .iter()
@@ -317,7 +322,7 @@ pub fn get_rule_shared(rule_name: &str, elaborated: bool) -> Option<crate::check
         "re_unfold_neg_concat_fixed_suffix" => strings::re_unfold_neg_concat_fixed_suffix,
         // Drup format rules
         "drup" => |x| crate::checker::rules::drup::drup(false, x),
-        // Drat format rules  
+        // Drat format rules
         "drat" => |x| crate::checker::rules::drup::drup(true, x),
 
         // Special rules that always check as valid, and are used to indicate holes in the
@@ -332,8 +337,7 @@ pub fn get_rule_shared(rule_name: &str, elaborated: bool) -> Option<crate::check
         // resolution rule will be called. Until that is decided and added to the specification,
         // we define a new specialized rule that calls it
         "strict_resolution" => resolution::strict_resolution,
-        
-        "rare_rewrite" => crate::checker::rules::rare::check_rare,
+
         _ => return None,
     })
 }
