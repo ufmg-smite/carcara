@@ -19,6 +19,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+pub(crate) use rules::clausification::apply_bfun_elim;
+
 #[derive(Clone)]
 pub struct CheckerStatistics<'s, CR: CollectResults + Send + Default> {
     pub file_name: &'s str,
@@ -142,8 +144,8 @@ impl<'c> ProofChecker<'c> {
                     self.check_step(step, previous_command, &iter, &mut stats)
                         .map_err(|e| Error::Checker {
                             inner: e,
-                            rule: step.rule.clone(),
-                            step: step.id.clone(),
+                            rule: step.rule.as_str().into(),
+                            step: step.id.as_str().into(),
                         })?;
 
                     // If this is the last command of a subproof, we have to pop the subproof
@@ -153,7 +155,7 @@ impl<'c> ProofChecker<'c> {
                         self.context.pop();
                     }
 
-                    if step.clause.is_empty() {
+                    if step.clause.is_empty() && self.context.is_empty() {
                         self.reached_empty_clause = true;
                     }
                 }
@@ -181,7 +183,7 @@ impl<'c> ProofChecker<'c> {
                         return Err(Error::Checker {
                             inner: CheckerError::Assume(term.clone()),
                             rule: "assume".into(),
-                            step: id.clone(),
+                            step: id.as_str().into(),
                         });
                     }
                 }

@@ -281,12 +281,12 @@ impl<'c> ParallelProofChecker<'c> {
                             should_abort.store(true, Ordering::Release);
                             Error::Checker {
                                 inner: e,
-                                rule: step.rule.clone(),
-                                step: step.id.clone(),
+                                rule: step.rule.as_str().into(),
+                                step: step.id.as_str().into(),
                             }
                         })?;
 
-                    if step.clause.is_empty() {
+                    if step.clause.is_empty() && self.context.is_empty() {
                         self.reached_empty_clause = true;
                     }
                 }
@@ -319,7 +319,7 @@ impl<'c> ParallelProofChecker<'c> {
                         return Err(Error::Checker {
                             inner: CheckerError::Assume(term.clone()),
                             rule: "assume".into(),
-                            step: id.clone(),
+                            step: id.as_str().into(),
                         });
                     }
                 }

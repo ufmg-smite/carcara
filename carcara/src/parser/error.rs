@@ -132,6 +132,26 @@ pub enum ParserError {
     /// The parser encountered an unknown qualified operator.
     #[error("not a valid qualified operator: '{0}'")]
     InvalidQualifiedOp(String),
+
+    /// The parser encountered an invalid argument.
+    #[error("not a valid format for the argument: '{0}'")]
+    InvalidRareArgFormat(String),
+
+    /// The parser encountered an unknown qualified operator.
+    #[error("not a valid qualified argument: '{0}'")]
+    InvalidRareArgAttribute(String),
+
+    /// The parser encountered an unknown rare rule attribute.
+    #[error("not a valid rule attribute: '{0}'")]
+    InvalidRareFunctionAttribute(String),
+
+    /// The parser encountered an unknown rare rule attribute.
+    #[error("the rule '{0}' has no conclusion")]
+    UndefinedRareConclusion(String),
+
+    /// The parser encountered an unknown rare rule attribute.
+    #[error("the rule '{0}' has to start with the arguments first")]
+    ExpectArgsFirst(String),
 }
 
 /// Returns an error if the length of `sequence` is not in the `expected` range.
@@ -167,7 +187,7 @@ where
 #[derive(Debug, Error)]
 pub struct SortError {
     /// The possible sorts that were expected.
-    pub expected: Vec<Sort>,
+    pub expected: Box<[Sort]>,
 
     /// The sort we got.
     pub got: Sort,
@@ -175,7 +195,7 @@ pub struct SortError {
 
 impl fmt::Display for SortError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.expected.as_slice() {
+        match &*self.expected {
             [] => unreachable!(),
             [p] => write!(f, "expected '{}', got '{}'", p, self.got),
             [first, middle @ .., last] => {
@@ -192,11 +212,11 @@ impl fmt::Display for SortError {
 impl SortError {
     /// Returns a sort error if `got` does not equal `expected`.
     pub(crate) fn assert_eq(expected: &Sort, got: &Sort) -> Result<(), Self> {
-        if expected == got {
+        if expected == got || expected.is_polymorphic() || got.is_polymorphic() {
             Ok(())
         } else {
             Err(Self {
-                expected: vec![expected.clone()],
+                expected: vec![expected.clone()].into_boxed_slice(),
                 got: got.clone(),
             })
         }
@@ -212,11 +232,11 @@ impl SortError {
 
     /// Returns a sort error if `got` is not one of `possibilities`.
     pub(crate) fn assert_one_of(possibilities: &[Sort], got: &Sort) -> Result<(), Self> {
-        if possibilities.contains(got) {
+        if possibilities.contains(got) || got.is_polymorphic() {
             Ok(())
         } else {
             Err(Self {
-                expected: possibilities.to_vec(),
+                expected: possibilities.to_vec().into_boxed_slice(),
                 got: got.clone(),
             })
         }
@@ -228,12 +248,35 @@ impl SortError {
         value: Option<&Sort>,
         got: &Sort,
     ) -> Result<(), Self> {
-        let any = Sort::Atom("?".to_owned(), Vec::new());
+        let any = Sort::Atom("?".into(), Box::new([]));
+
+        if let Sort::ParamSort(v, head) = got {
+            if let Some(Sort::Var(name)) = head.as_sort() {
+                if name == "Array" {
+                    if v.len() != 2 {
+                        let any = pool.add(Term::Sort(any.clone()));
+                        return Err(Self {
+                            expected: vec![Sort::Array(any.clone(), any)].into_boxed_slice(),
+                            got: got.clone(),
+                        });
+                    }
+
+                    let key = &v[0].as_sort().cloned();
+                    let value = v[1].as_sort().cloned();
+                    return Self::assert_array_sort(
+                        pool,
+                        key.as_ref(),
+                        value.as_ref(),
+                        &Sort::Array(v[0].clone(), v[1].clone()),
+                    );
+                }
+            }
+        }
 
         let expected = {
             let key = pool.add(Term::Sort(key.cloned().unwrap_or_else(|| any.clone())));
             let value = pool.add(Term::Sort(value.cloned().unwrap_or_else(|| any.clone())));
-            vec![Sort::Array(key, value)]
+            vec![Sort::Array(key, value)].into_boxed_slice()
         };
         let Sort::Array(got_key, got_value) = got else {
             return Err(Self { expected, got: got.clone() });

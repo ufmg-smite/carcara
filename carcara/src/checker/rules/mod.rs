@@ -155,8 +155,6 @@ fn assert_is_bool_constant(got: &Rc<Term>, expected: bool) -> RuleResult {
     Ok(())
 }
 
-// Since the rule submodules use the `rassert!` macro, we have to declare them here, after the
-// macro is declared
 pub(super) mod bitvectors;
 pub(super) mod clausification;
 pub(super) mod congruence;
@@ -166,6 +164,7 @@ pub(super) mod extras;
 pub(super) mod linear_arithmetic;
 pub(super) mod pb_blasting;
 pub(super) mod quantifier;
+pub(super) mod rare;
 pub(super) mod reflexivity;
 pub(super) mod resolution;
 pub(super) mod simplification;

@@ -452,8 +452,8 @@ mod tests {
 
     #[test]
     fn test_slice() {
-        let (_, proof, mut pool) =
-            parse_instance(PROBLEM_STRING, PROOF_STRING, get_parser_config()).unwrap();
+        let (_, proof, _, mut pool) =
+            parse_instance(PROBLEM_STRING, PROOF_STRING, None, get_parser_config()).unwrap();
 
         // Only steps that exist are sliceable
         assert!(slice(&proof, "FAKE_STEP", &mut pool, 0).is_none());
@@ -463,9 +463,14 @@ mod tests {
         assert!(slice(&proof, "a1", &mut pool, 0).is_none());
 
         for (expected, (id, d)) in PAIRS {
-            let (_, expected) =
-                parse_instance_with_pool(PROBLEM_STRING, expected, get_parser_config(), &mut pool)
-                    .unwrap();
+            let (_, expected, _) = parse_instance_with_pool(
+                PROBLEM_STRING,
+                expected,
+                None,
+                get_parser_config(),
+                &mut pool,
+            )
+            .unwrap();
 
             let expected = ProofNode::from_commands(expected.commands);
 

@@ -644,7 +644,9 @@ impl PolyeqComparable for Sort {
     fn eq(comp: &mut Polyeq, a: &Self, b: &Self) -> bool {
         match (a, b) {
             (Sort::Function(sorts_a), Sort::Function(sorts_b)) => comp.eq(sorts_a, sorts_b),
-            (Sort::Atom(a, sorts_a), Sort::Atom(b, sorts_b)) => a == b && comp.eq(sorts_a, sorts_b),
+            (Sort::Atom(a, sorts_a), Sort::Atom(b, sorts_b)) => {
+                a == b && comp.eq(sorts_a.as_ref(), sorts_b.as_ref())
+            }
             (Sort::Bool, Sort::Bool)
             | (Sort::Int, Sort::Int)
             | (Sort::Real, Sort::Real)

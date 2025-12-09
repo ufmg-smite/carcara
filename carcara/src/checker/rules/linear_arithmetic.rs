@@ -129,7 +129,7 @@ impl LinearComb {
             Entry::Occupied(mut e) => {
                 *e.get_mut() += value;
                 if *e.get() == 0 {
-                    e.remove();
+                    e.swap_remove();
                 }
             }
             Entry::Vacant(e) => {
@@ -334,7 +334,7 @@ pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
     // contradictory
     rassert!(
         left_side.is_empty() && !is_disequality_true,
-        LinearArithmeticError::DisequalityIsNotContradiction(*op, final_disequality.1),
+        LinearArithmeticError::DisequalityIsNotContradiction(*op, Box::new(final_disequality.1)),
     );
     Ok(())
 }
@@ -444,7 +444,7 @@ pub fn la_tautology(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
             && (disequality.1 > 0 || op == Operator::GreaterThan && disequality.1 == 0);
         rassert!(
             is_disequality_true,
-            LinearArithmeticError::DisequalityIsNotTautology(op, disequality),
+            LinearArithmeticError::DisequalityIsNotTautology(op, Box::new(disequality)),
         );
         Ok(())
     }

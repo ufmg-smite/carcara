@@ -332,7 +332,8 @@ pub fn get_rule_shared(rule_name: &str, elaborated: bool) -> Option<crate::check
         // resolution rule will be called. Until that is decided and added to the specification,
         // we define a new specialized rule that calls it
         "strict_resolution" => resolution::strict_resolution,
-
+        
+        "rare_rewrite" => crate::checker::rules::rare::check_rare,
         _ => return None,
     })
 }

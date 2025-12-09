@@ -456,7 +456,7 @@ fn test_declare_sort() {
         (declare-fun x () T)",
         ["x"],
     );
-    let expected_sort = p.add(Term::Sort(Sort::Atom("T".to_owned(), Vec::new())));
+    let expected_sort = p.add(Term::Sort(Sort::Atom("T".into(), Box::new([]))));
     assert_eq!(p.add(Term::new_var("x", expected_sort)), got);
 }
 
