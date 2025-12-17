@@ -254,10 +254,10 @@ pub fn check_and_elaborate<T: io::BufRead>(
     // Elaborating
     let elaboration = Instant::now();
 
-    let node = ast::ProofNode::from_commands(proof.commands);
+    let node = ast::ProofNodeForest::from_commands(proof.commands);
     let (elaborated, pipeline_durations) =
         elaborator::Elaborator::new(&mut pool, &problem, elaborator_config)
-            .elaborate_with_stats(&node, pipeline);
+            .elaborate_with_stats(node, pipeline);
     let elaborated = ast::Proof {
         commands: elaborated.into_commands(),
         ..proof

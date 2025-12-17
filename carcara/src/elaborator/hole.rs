@@ -186,7 +186,11 @@ fn insert_solver_proof(
     root_id: &str,
     depth: usize,
 ) -> Rc<ProofNode> {
-    let proof = ProofNode::from_commands(commands);
+    let proof = ProofNodeForest::from_commands(commands)
+        .0
+        .into_iter()
+        .find(|node| node.clause().is_empty())
+        .expect("solver proof does not conclude empty clause");
 
     let mut ids = IdHelper::new(root_id);
     let subproof_id = ids.next_id();
@@ -218,6 +222,7 @@ fn insert_solver_proof(
         // Since the subproof was inserted from the solver proof, it cannot reference anything
         // outside of it.
         outbound_premises: Vec::new(),
+        extra_steps: Vec::new(),
     }));
 
     let not_not_steps: Vec<_> = clause[..clause.len() - 1]
