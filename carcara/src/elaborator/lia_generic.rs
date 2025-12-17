@@ -146,8 +146,8 @@ fn parse_and_check_solver_proof(
     Ok(proof.commands)
 }
 
-fn increase_subproof_depth(proof: &Rc<ProofNode>, delta: usize, prefix: &str) -> Rc<ProofNode> {
-    mutate(proof, |_, node| {
+fn increase_subproof_depth(proof: Rc<ProofNode>, delta: usize, prefix: &str) -> Rc<ProofNode> {
+    proof.mutate(|_, node| {
         let node = match node.as_ref().clone() {
             ProofNode::Assume { id, depth, term } => ProofNode::Assume {
                 id: format!("{}.{}", prefix, id),
@@ -188,7 +188,7 @@ fn insert_solver_proof(
 
     clause.push(pool.bool_false());
 
-    let proof = increase_subproof_depth(&proof, depth + 1, &subproof_id);
+    let proof = increase_subproof_depth(proof, depth + 1, &subproof_id);
     let mut subproof_assumptions = proof.get_assumptions_of_depth(depth + 1);
 
     // every element of conclusion must be an assumption in the

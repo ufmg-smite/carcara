@@ -4,7 +4,7 @@ use crate::utils::DedupIterator;
 pub fn remove_reorderings(proof: ProofNodeForest) -> ProofNodeForest {
     let mut modified = HashSet::new();
 
-    mutate_forest(proof, |_, node| {
+    proof.mutate(|_, node| {
         let Some(step) = node.as_step() else {
             return node.clone();
         };

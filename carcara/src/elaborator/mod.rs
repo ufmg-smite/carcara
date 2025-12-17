@@ -104,7 +104,7 @@ impl<'e> Elaborator<'e> {
             current = match step {
                 ElaborationStep::Polyeq => self.elaborate_polyeq(current),
                 ElaborationStep::LiaGeneric if self.config.lia_options.is_some() => {
-                    mutate_forest(current, |_, node| match node.as_ref() {
+                    current.mutate(|_, node| match node.as_ref() {
                         ProofNode::Step(s) if s.rule == "lia_generic" => {
                             lia_generic::lia_generic(self, s).unwrap_or_else(|| node.clone())
                         }
@@ -113,7 +113,7 @@ impl<'e> Elaborator<'e> {
                 }
                 ElaborationStep::LiaGeneric => current,
                 ElaborationStep::Local => self.elaborate_local(current),
-                ElaborationStep::Uncrowd => mutate_forest(current, |_, node| match node.as_ref() {
+                ElaborationStep::Uncrowd => current.mutate(|_, node| match node.as_ref() {
                     ProofNode::Step(s)
                         if (s.rule == "resolution" || s.rule == "th_resolution")
                             && !s.args.is_empty() =>
@@ -127,7 +127,7 @@ impl<'e> Elaborator<'e> {
                     if self.config.hole_options.is_none() {
                         current
                     } else {
-                        mutate_forest(current, |_, node| match node.as_ref() {
+                        current.mutate(|_, node| match node.as_ref() {
                             ProofNode::Step(s)
                                 if (s.rule == "all_simplify" || s.rule == "rare_rewrite") =>
                             {
@@ -155,7 +155,7 @@ impl<'e> Elaborator<'e> {
             })
         }
 
-        mutate_forest(proof, |context, node| {
+        proof.mutate(|context, node| {
             match node.as_ref() {
                 ProofNode::Assume { id, depth, term }
                     if context.is_empty() && !self.problem.premises.contains(term) =>
@@ -185,7 +185,7 @@ impl<'e> Elaborator<'e> {
             })
         }
 
-        mutate_forest(proof, |context, node| {
+        proof.mutate(|context, node| {
             match node.as_ref() {
                 ProofNode::Step(s) => {
                     if let Some(func) = get_elaboration_function(&s.rule) {
@@ -272,25 +272,35 @@ pub fn add_refl_step(
 type ElaborationFunc =
     fn(&mut PrimitivePool, &mut ContextStack, &StepNode) -> Result<Rc<ProofNode>, CheckerError>;
 
-fn mutate_forest<F>(proof: ProofNodeForest, mut mutate_func: F) -> ProofNodeForest
-where
-    F: FnMut(&mut ContextStack, &Rc<ProofNode>) -> Rc<ProofNode>,
-{
-    let mut cache = HashMap::new();
-    let new_nodes = proof
-        .0
-        .into_iter()
-        .map(|node| mutate_impl(&node, &mut cache, &mut mutate_func))
-        .collect();
-    ProofNodeForest(new_nodes)
+trait Mutate {
+    fn mutate<F>(self, mutate_func: F) -> Self
+    where
+        F: FnMut(&mut ContextStack, &Rc<ProofNode>) -> Rc<ProofNode>;
 }
 
-fn mutate<F>(root: &Rc<ProofNode>, mutate_func: F) -> Rc<ProofNode>
-where
-    F: FnMut(&mut ContextStack, &Rc<ProofNode>) -> Rc<ProofNode>,
-{
-    let mut cache = HashMap::new();
-    mutate_impl(root, &mut cache, mutate_func)
+impl Mutate for ProofNodeForest {
+    fn mutate<F>(self, mut mutate_func: F) -> Self
+    where
+        F: FnMut(&mut ContextStack, &Rc<ProofNode>) -> Rc<ProofNode>,
+    {
+        let mut cache = HashMap::new();
+        let new_nodes = self
+            .0
+            .into_iter()
+            .map(|node| mutate_impl(&node, &mut cache, &mut mutate_func))
+            .collect();
+        ProofNodeForest(new_nodes)
+    }
+}
+
+impl Mutate for Rc<ProofNode> {
+    fn mutate<F>(self, mutate_func: F) -> Self
+    where
+        F: FnMut(&mut ContextStack, &Rc<ProofNode>) -> Rc<ProofNode>,
+    {
+        let mut cache = HashMap::new();
+        mutate_impl(&self, &mut cache, mutate_func)
+    }
 }
 
 fn mutate_impl<F>(
