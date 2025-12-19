@@ -57,13 +57,12 @@ pub fn check_rare(
         }
 
         let mut rare_premises = rare_term.premises.iter();
+        let mut subst = Substitution::new(pool, map.clone())?;
 
         for premise in premises {
             let premise = get_premise_term(premise)?;
             let rare_premise = rare_premises.next().unwrap();
-            let rare_premise = Substitution::new(pool, map.clone())
-                .unwrap()
-                .apply(pool, rare_premise);
+            let rare_premise = subst.apply(pool, rare_premise);
             let rare_premise = rewrite_meta_terms(pool, rare_premise, &get_rules());
 
             if *premise != rare_premise {
