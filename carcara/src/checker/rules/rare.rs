@@ -73,10 +73,7 @@ pub fn check_rare(
             }
         }
 
-        let got = Substitution::new(pool, map)
-            .unwrap()
-            .apply(pool, &rare_term.conclusion);
-
+        let got = subst.apply(pool, &rare_term.conclusion);
         for premise in premises {
             let premise = get_premise_term(premise)?;
             let premise_rare = rewrite_meta_terms(pool, premise.clone(), &get_rules());
