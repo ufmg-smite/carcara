@@ -2,7 +2,8 @@ use crate::{
     ast::*,
     benchmarking::CollectResults,
     checker::{
-        CheckerStatistics, Config, rules::{RuleArgs, RuleResult, rare::check_rare}
+        rules::{rare::check_rare, RuleArgs, RuleResult},
+        CheckerStatistics, Config,
     },
 };
 use indexmap::IndexSet;

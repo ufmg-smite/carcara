@@ -93,7 +93,5 @@ pub fn check_rare(
         return Ok(());
     }
 
-    Err(CheckerError::RareRuleExpectedLiteral(
-        rule_literal.clone(),
-    ))
+    Err(CheckerError::RareRuleExpectedLiteral(rule_literal.clone()))
 }
