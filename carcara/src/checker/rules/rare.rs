@@ -94,6 +94,6 @@ pub fn check_rare(
     }
 
     Err(CheckerError::RareRuleExpectedLiteral(
-        rule_literal.unwrap().clone(),
+        rule_literal.clone(),
     ))
 }
