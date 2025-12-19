@@ -18,12 +18,11 @@ pub fn check_rare(
         ..
     }: RuleArgs,
 ) -> RuleResult {
-    let rule_literal = args.first();
-    if rule_literal.is_none() {
+    let Some(rule_literal) = args.first() else {
         return Err(CheckerError::RareNotSpecifiedRule);
-    }
+    };
 
-    if let Term::Const(Constant::String(v)) = &**rule_literal.unwrap() {
+    if let Term::Const(Constant::String(v)) = &**rule_literal {
         let rule = rare_rules.rules.get(v);
         if rule.is_none() {
             return Err(CheckerError::RareRuleNotFound(v.clone()));
