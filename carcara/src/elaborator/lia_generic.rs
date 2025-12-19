@@ -141,7 +141,7 @@ fn parse_and_check_solver_proof(
     let (problem, proof, rules) =
         parser::parse_instance_with_pool(problem, proof, None, config, pool)?;
 
-    let config = checker::Config::new().ignore_unknown_rules(true); // To include rules (?)
+    let config = checker::Config::new().ignore_unknown_rules(true);
     checker::ProofChecker::new(pool, &rules, config).check(&problem, &proof)?;
     Ok(proof.commands)
 }
