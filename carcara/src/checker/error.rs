@@ -182,6 +182,43 @@ pub enum CheckerError {
     #[error(transparent)]
     IntegerEquality(#[from] EqualityError<Integer>),
 
+    // Rare Rules Error
+    #[error("expected a rare rule specified in the arguments")]
+    RareNotSpecifiedRule,
+
+    #[error("expected a rare rule specified in the arguments, but found {0}")]
+    RareRuleExpectedLiteral(Rc<Term>),
+
+    #[error("the rule {0} wasn`t found")]
+    RareRuleNotFound(String),
+
+    #[error("expected {0} number of premises, maybe you applied more arguments than needed")]
+    RareNumberOfPremisesWrong(usize),
+
+    #[error("parameter {0} wasn't not found")]
+    RareArgumentNotFound(String),
+
+    #[error("expected premise {0} to be '{1}' but instead it is a '{2}'")]
+    RareMisMatchTypes(String, Rc<Term>, Rc<Term>),
+
+    #[error("the list {0} contains unequal sorts: {1} and {2}")]
+    RareListNotSortUniform(Rc<Term>, Rc<Term>, Rc<Term>),
+
+    #[error("the term {0} has no sort defined")]
+    RareNotFoundSort(Rc<Term>),
+
+    #[error("the argument {0} isn't a list")]
+    RareArgumentIsNotRareList(String),
+
+    #[error("the premise {0} isn't equal to {1}")]
+    RarePremiseAreNotEqual(Rc<Term>, Rc<Term>),
+
+    #[error("the conclusion {0} isn't equal to {1}")]
+    RareConclusionAreNotEqual(Rc<Term>, Rc<Term>),
+
+    #[error("the conclusion of a rare rule should be exactly 1")]
+    RareConclusionNumberInvalid(),
+
     #[error("unknown rule")]
     UnknownRule,
 }

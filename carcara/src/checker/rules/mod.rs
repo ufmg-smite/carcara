@@ -3,7 +3,7 @@ use super::{
     ContextStack,
 };
 use crate::{
-    ast::*,
+    ast::{rare_rules::Rules, *},
     utils::{Range, TypeName},
 };
 use std::time::Duration;
@@ -18,6 +18,7 @@ pub struct RuleArgs<'a> {
     pub(super) args: &'a [Rc<Term>],
     pub(super) pool: &'a mut dyn TermPool,
     pub(super) context: &'a mut ContextStack,
+    pub(super) rare_rules: &'a Rules,
 
     // For rules that end a subproof, we need to pass the previous command in the subproof that it
     // is closing, because it may be implicitly referenced, and it is not given as premises. If a
@@ -164,6 +165,7 @@ pub(super) mod extras;
 pub(super) mod linear_arithmetic;
 pub(super) mod pb_blasting;
 pub(super) mod quantifier;
+pub(super) mod rare;
 pub(super) mod reflexivity;
 pub(super) mod resolution;
 pub(super) mod simplification;

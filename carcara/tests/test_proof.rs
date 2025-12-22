@@ -1,7 +1,7 @@
 use carcara::{checker::*, parser};
 
 fn run_test(problem: &str, proof: &str, expected_result: bool) {
-    let (problem, proof, _, mut pool) = parser::parse_instance(
+    let (problem, proof, rare_rules, mut pool) = parser::parse_instance(
         problem.as_bytes(),
         proof.as_bytes(),
         None,
@@ -9,7 +9,7 @@ fn run_test(problem: &str, proof: &str, expected_result: bool) {
     )
     .unwrap();
 
-    let got = ProofChecker::new(&mut pool, Config::new()).check(&problem, &proof);
+    let got = ProofChecker::new(&mut pool, &rare_rules, Config::new()).check(&problem, &proof);
 
     assert_eq!(got.is_ok(), expected_result);
 }
