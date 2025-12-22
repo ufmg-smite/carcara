@@ -7,7 +7,7 @@ use super::{
     Config,
 };
 use crate::benchmarking::{CollectResults, OnlineBenchmarkResults};
-use crate::checker::CheckerStatistics;
+use crate::{ast::rare_rules::Rules, checker::CheckerStatistics};
 use crate::{
     ast::{pool::advanced::*, *},
     CarcaraResult, Error,
@@ -29,6 +29,7 @@ pub struct ParallelProofChecker<'c> {
     reached_empty_clause: bool,
     is_holey: bool,
     stack_size: usize,
+    rare_rules: Rules,
 }
 
 impl<'c> ParallelProofChecker<'c> {
@@ -38,6 +39,7 @@ impl<'c> ParallelProofChecker<'c> {
         prelude: &'c ProblemPrelude,
         context_usage: &Vec<usize>,
         stack_size: usize,
+        rare_rules: Rules,
     ) -> Self {
         ParallelProofChecker {
             pool,
@@ -47,6 +49,7 @@ impl<'c> ParallelProofChecker<'c> {
             reached_empty_clause: false,
             is_holey: false,
             stack_size,
+            rare_rules,
         }
     }
 
@@ -60,6 +63,7 @@ impl<'c> ParallelProofChecker<'c> {
             reached_empty_clause: false,
             is_holey: false,
             stack_size: self.stack_size,
+            rare_rules: self.rare_rules.clone(),
         }
     }
 
@@ -391,6 +395,7 @@ impl<'c> ParallelProofChecker<'c> {
             previous_command,
             discharge: &discharge,
             polyeq_time: &mut polyeq_time,
+            rare_rules: &self.rare_rules,
         };
 
         // Use shared core logic

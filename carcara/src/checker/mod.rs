@@ -4,7 +4,7 @@ mod rules;
 mod shared;
 
 use crate::{
-    ast::*,
+    ast::{rare_rules::Rules, *},
     benchmarking::{CollectResults, OnlineBenchmarkResults},
     CarcaraResult, Error,
 };
@@ -86,16 +86,18 @@ pub struct ProofChecker<'c> {
     context: ContextStack,
     reached_empty_clause: bool,
     is_holey: bool,
+    rare_rules: &'c Rules,
 }
 
 impl<'c> ProofChecker<'c> {
-    pub fn new(pool: &'c mut PrimitivePool, config: Config) -> Self {
+    pub fn new(pool: &'c mut PrimitivePool, rare_rules: &'c Rules, config: Config) -> Self {
         ProofChecker {
             pool,
             config,
             context: ContextStack::new(),
             reached_empty_clause: false,
             is_holey: false,
+            rare_rules,
         }
     }
 
@@ -248,6 +250,7 @@ impl<'c> ProofChecker<'c> {
             previous_command,
             discharge: &discharge,
             polyeq_time: &mut polyeq_time,
+            rare_rules: self.rare_rules,
         };
 
         // Use shared core logic
