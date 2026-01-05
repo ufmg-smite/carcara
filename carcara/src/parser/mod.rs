@@ -11,7 +11,10 @@ pub use error::{ParserError, SortError};
 pub use lexer::{Lexer, Position, Reserved, Token};
 
 use crate::{
-    ast::{rare_rules::Rules, *},
+    ast::{
+        rare_rules::{RareStatements, Rules},
+        *,
+    },
     utils::{HashCache, HashMapStack},
     CarcaraResult, Error,
 };
@@ -94,7 +97,7 @@ pub fn parse_instance_with_pool<T: BufRead>(
         }?;
         return Ok((problem, proof, rules));
     }
-    Ok((problem, proof, IndexMap::new()))
+    Ok((problem, proof, RareStatements { rules: IndexMap::new() }))
 }
 
 /// A function definition, from a `define-fun` command.

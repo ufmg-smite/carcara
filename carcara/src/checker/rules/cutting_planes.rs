@@ -487,7 +487,7 @@ impl PartialEq for CoeffTimesVar<'_> {
 }
 
 // Returns either a `CoeffTimesVar` in the normal cases, or an `Integer` in the constant product case
-fn term_to_ctv(term: &Rc<Term>) -> Result<CoeffTimesVar, Integer> {
+fn term_to_ctv(term: &Rc<Term>) -> Result<CoeffTimesVar<'_>, Integer> {
     let (coeff, var) = if let Some((l, r)) = match_term!((* l r) = term) {
         match (l.as_integer(), r.as_integer()) {
             // Assuming `(* x y)` is treated as a variable
@@ -514,7 +514,7 @@ fn term_to_ctv(term: &Rc<Term>) -> Result<CoeffTimesVar, Integer> {
 }
 
 /// Collect the n added terms into a vector of n `CoeffTimesVar`
-fn collect_addition_list(term: &Rc<Term>) -> Result<Vec<CoeffTimesVar>, CheckerError> {
+fn collect_addition_list(term: &Rc<Term>) -> Result<Vec<CoeffTimesVar<'_>>, CheckerError> {
     let mut add_list = vec![];
     for t in split_summation(term) {
         let ctv = term_to_ctv(t).map_err(|i| {
@@ -556,7 +556,9 @@ fn accumulate_sum(args: &[Rc<Term>]) -> Result<(Vec<CoeffTimesVar<'_>>, Integer)
 /// (- (+ a b) (+ c d)) ==> [a,b,(* -1 c),(* -1 d)]
 /// Accumulate constants into a Integer
 /// (- (+ a 2) (+ 1 d)) ==> [a,(* -1 d)], 1
-fn flatten_addition_tree(term: &Rc<Term>) -> Result<(Vec<CoeffTimesVar>, Integer), CheckerError> {
+fn flatten_addition_tree(
+    term: &Rc<Term>,
+) -> Result<(Vec<CoeffTimesVar<'_>>, Integer), CheckerError> {
     match term.as_ref() {
         Term::Op(Operator::Add, args) => accumulate_sum(args),
         Term::Op(Operator::Sub, args) => {

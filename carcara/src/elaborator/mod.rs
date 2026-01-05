@@ -144,6 +144,17 @@ impl<'e> Elaborator<'e> {
     }
 
     fn elaborate_polyeq(&mut self, root: &Rc<ProofNode>) -> Rc<ProofNode> {
+        fn get_elaboration_function(rule: &str) -> Option<ElaborationFunc> {
+            Some(match rule {
+                "refl" => reflexivity::refl,
+                "forall_inst" => quantifiers::forall_inst,
+                "subproof" => subproof::subproof,
+                "ite_intro" => tautology::ite_intro,
+                "bfun_elim" => clausification::bfun_elim,
+                _ => return None,
+            })
+        }
+
         mutate(root, |context, node| {
             match node.as_ref() {
                 ProofNode::Assume { id, depth, term }
@@ -151,8 +162,12 @@ impl<'e> Elaborator<'e> {
                 {
                     self.elaborate_assume(id, *depth, term)
                 }
-                ProofNode::Step(s) if s.rule == "refl" => {
-                    reflexivity::refl(self.pool, context, s).unwrap() // TODO: add proper error handling
+                ProofNode::Step(s) => {
+                    if let Some(func) = get_elaboration_function(&s.rule) {
+                        func(self.pool, context, s).unwrap() // TODO: add proper error handling
+                    } else {
+                        node.clone()
+                    }
                 }
                 _ => node.clone(),
             }
@@ -166,10 +181,6 @@ impl<'e> Elaborator<'e> {
                 "trans" => transitivity::trans,
                 "resolution" | "th_resolution" => resolution::resolution,
                 "cong" => congruence::cong,
-                "forall_inst" => quantifiers::forall_inst,
-                "subproof" => subproof::subproof,
-                "ite_intro" => tautology::ite_intro,
-                "bfun_elim" => clausification::bfun_elim,
                 _ => return None,
             })
         }

@@ -1,10 +1,13 @@
-use super::{Constant, Operator, Rc, Term};
+use crate::ast::Constant;
+
+use super::{Operator, Rc, Term};
 use indexmap::IndexMap;
 use std::cell::RefCell;
+use std::fmt;
 
 pub type Holes = IndexMap<String, Rc<RefCell<Option<Rc<Term>>>>>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AttributeParameters {
     List,
     None,
@@ -23,9 +26,80 @@ pub struct RuleDefinition {
     pub arguments: Vec<String>,
     pub premises: Vec<Rc<Term>>,
     pub conclusion: Rc<Term>,
+    pub is_elaborated: bool,
 }
 
-pub type Rules = IndexMap<String, RuleDefinition>;
+impl fmt::Display for RuleDefinition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "(declare-rare-rule {} (", self.name)?;
+        for (name, param) in &self.parameters {
+            write!(
+                f,
+                "({} {} {}) ",
+                name,
+                param.term,
+                if param.attribute == AttributeParameters::List {
+                    ":list"
+                } else {
+                    ""
+                }
+            )?;
+        }
+        write!(f, ")\n  :args (")?;
+        for arg in &self.arguments {
+            write!(f, "{} ", arg)?;
+        }
+        write!(f, ")\n  :premises (")?;
+        for premise in &self.premises {
+            write!(f, "{} ", premise)?;
+        }
+        write!(f, ")\n  :conclusion {})\n", self.conclusion)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Program {
+    pub name: String,
+    pub parameters: IndexMap<String, TypeParameter>,
+    pub patterns: Vec<(Rc<Term>, Rc<Term>)>,
+    pub signature: Vec<Rc<Term>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeclAttr {
+    LeftAssoc,
+    RightAssoc,
+    RightAssocNil(Rc<Term>),
+    Chainable(String),
+    Binder(String),
+    Pairwise(String),
+}
+
+#[derive(Debug, Clone)]
+pub struct ParsedAnnotatedSort {
+    pub base_sort: Rc<Term>,
+    pub var_name: Option<String>,
+    pub implicit: bool,
+    pub requires: Vec<Vec<Rc<Term>>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeclConst {
+    pub name: String,
+    pub sort: Rc<Term>,
+    pub attrs: Vec<DeclAttr>,
+    pub parametrized_params: Vec<ParsedAnnotatedSort>,
+    pub ty_params: Vec<ParsedAnnotatedSort>,
+    pub is_parameterized: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct RareStatements {
+    pub rules: IndexMap<String, RuleDefinition>,
+}
+
+pub type Rules = RareStatements;
+
 #[derive(Debug, Clone)]
 pub enum RewriteTerm {
     ManyEq(Operator, &'static str),

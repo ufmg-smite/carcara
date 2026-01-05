@@ -77,13 +77,13 @@ impl ContextStack {
         self.len() == 0
     }
 
-    pub fn last(&self) -> Option<RwLockReadGuard<Option<Context>>> {
+    pub fn last(&self) -> Option<RwLockReadGuard<'_, Option<Context>>> {
         self.stack
             .last()
             .map(|id| self.context_vec[*id].1.read().unwrap())
     }
 
-    pub fn last_mut(&mut self) -> Option<RwLockWriteGuard<Option<Context>>> {
+    pub fn last_mut(&mut self) -> Option<RwLockWriteGuard<'_, Option<Context>>> {
         self.stack
             .last_mut()
             .map(|id| self.context_vec[*id].1.write().unwrap())
