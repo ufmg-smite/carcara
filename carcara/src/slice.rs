@@ -357,7 +357,7 @@ pub fn slice(
 mod tests {
     use super::*;
     use crate::{
-        ast::{compare_nodes, ProofNode},
+        ast::{compare_forests, ProofNodeForest},
         parser::{self, parse_instance, parse_instance_with_pool, Config},
     };
 
@@ -472,11 +472,11 @@ mod tests {
             )
             .unwrap();
 
-            let expected = ProofNode::from_commands(expected.commands);
+            let expected = ProofNodeForest::from_commands(expected.commands);
 
             let actual =
-                ProofNode::from_commands(slice(&proof, id, &mut pool, d).unwrap().0.commands);
-            assert!(compare_nodes(&expected, &actual));
+                ProofNodeForest::from_commands(slice(&proof, id, &mut pool, d).unwrap().0.commands);
+            assert!(compare_forests(&expected, &actual));
         }
     }
 }
