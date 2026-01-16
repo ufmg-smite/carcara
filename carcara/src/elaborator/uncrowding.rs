@@ -401,7 +401,10 @@ mod tests {
         ";
         let (_, proof, _, mut pool) =
             parse_instance(problem, proof, None, parser::Config::new()).unwrap();
-        let proof = ProofNode::from_commands(proof.commands);
+        let proof = ProofNodeForest::from_commands(proof.commands)
+            .0
+            .pop()
+            .unwrap();
         let ProofNode::Step(step) = proof.as_ref() else {
             unreachable!();
         };
@@ -430,7 +433,10 @@ mod tests {
         let (_, expected, _) =
             parse_instance_with_pool(problem, expected, None, parser::Config::new(), &mut pool)
                 .unwrap();
-        let expected = ProofNode::from_commands(expected.commands);
+        let expected = ProofNodeForest::from_commands(expected.commands)
+            .0
+            .pop()
+            .unwrap();
         assert!(compare_nodes(&expected, &got));
     }
 }

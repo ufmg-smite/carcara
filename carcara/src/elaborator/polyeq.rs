@@ -337,6 +337,7 @@ impl<'a> PolyeqElaborator<'a> {
             last_step: Rc::new(ProofNode::Step(last_step)),
             args,
             outbound_premises: Vec::new(), // TODO: recompute outbound premises
+            extra_steps: Vec::new(),
         }))
     }
 
