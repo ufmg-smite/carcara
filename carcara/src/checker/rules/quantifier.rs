@@ -64,28 +64,46 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
     assert_clause_len(conclusion, 1)?;
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
-    let (q_1, bindings_1, phi_1) = left.as_quant_err()?;
-
-    let free_vars = pool.free_vars(phi_1);
-    let expected: Vec<_> = bindings_1
+    let (q_1, left, phi_1) = left.as_quant_err()?;
+    let left: IndexSet<_> = left
         .iter()
-        .filter(|&var| {
-            let var = pool.add(var.clone().into());
-            free_vars.contains(&var)
-        })
-        .cloned()
+        .map(|var| pool.add(var.clone().into()))
         .collect();
 
-    // If all variables in the quantifier were unused, the quantifier is removed leaving only the
-    // inner term in the right-hand side
-    if expected.is_empty() {
-        return assert_eq(phi_1, right);
+    let free_vars = pool.free_vars(phi_1);
+
+    // If all variables can be removed, the right-hand side may be interpreted as just the inner
+    // term phi
+    if !left.iter().any(|v| free_vars.contains(v)) && phi_1 == right {
+        return Ok(());
     }
 
-    let (q_2, new_bindings, phi_2) = right.as_quant_err()?;
+    let (q_2, right, phi_2) = right.as_quant_err()?;
     assert_eq(&q_1, &q_2)?;
     assert_eq(phi_1, phi_2)?;
-    assert_is_expected(new_bindings, BindingList(expected))
+
+    let right: IndexSet<_> = right
+        .iter()
+        .map(|var| pool.add(var.clone().into()))
+        .collect();
+
+    // We need to ensure that:
+    // (1) the right-hand bindings do not contain new variables
+    if let Some(introduced) = right.difference(&left).next() {
+        return Err(CheckerError::Quant(QuantifierError::NewBindingIntroduced(
+            introduced.as_var().unwrap().to_owned(),
+        )));
+    }
+
+    // and (2) that they only remove variables which are unused.
+    for removed in left.difference(&right) {
+        if free_vars.contains(removed) {
+            return Err(CheckerError::Quant(QuantifierError::BindingIsMissing(
+                removed.as_var().unwrap().to_owned(),
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Converts a term into negation normal form, expanding all connectives.
@@ -271,9 +289,9 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     // `new_bindings` contains all bindings that existed in the original term, plus all bindings
     // added by the prenexing step. All bindings in the right side must be in this set
     if let Some((var, _)) = r_bindings.iter().find(|&b| !new_bindings.contains(b)) {
-        return Err(CheckerError::Quant(
-            QuantifierError::CnfNewBindingIntroduced(var.clone()),
-        ));
+        return Err(CheckerError::Quant(QuantifierError::NewBindingIntroduced(
+            var.clone(),
+        )));
     }
 
     let selected_clause = clauses
@@ -293,7 +311,7 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         .into_iter()
         .find(|var| !r_bindings.contains(var) && free_vars.contains(&pool.add(var.clone().into())));
     if let Some((var, _)) = found {
-        return Err(QuantifierError::CnfBindingIsMissing(var).into());
+        return Err(QuantifierError::BindingIsMissing(var).into());
     }
     Ok(())
 }
