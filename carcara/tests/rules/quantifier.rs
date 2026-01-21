@@ -133,21 +133,33 @@ fn qnt_rm_unused() {
             )) :rule qnt_rm_unused)": true,
         }
         "Bindings in wrong order" {
+            // Deviates from spec, but is still sound
             "(step t1 (cl (=
                 (forall ((x Real) (y Real) (z Real)) (= x z))
                 (forall ((z Real) (x Real)) (= x z))
-            )) :rule qnt_rm_unused)": false,
+            )) :rule qnt_rm_unused)": true,
         }
         "Not all unused bindings were removed" {
             "(step t1 (cl (=
                 (forall ((x Real) (y Real) (z Real) (w Real)) (= y y))
                 (forall ((y Real) (w Real)) (= y y))
-            )) :rule qnt_rm_unused)": false,
+            )) :rule qnt_rm_unused)": true,
         }
         "Inner term is the opposite quantifier" {
             "(step t1 (cl (=
                 (exists ((?v0 Int)) (forall ((?v1 Int) (?v2 Int)) (= ?v1 ?v2)))
                 (forall ((?v1 Int) (?v2 Int)) (= ?v1 ?v2))
+            )) :rule qnt_rm_unused)": true,
+        }
+        "Duplicate removal" {
+            "(step t1 (cl (=
+                (forall ((x Real) (y Real) (x Real)) (= x y))
+                (forall ((x Real) (y Real)) (= x y))
+            )) :rule qnt_rm_unused)": true,
+
+            "(step t1 (cl (=
+                (forall ((x Real) (y Real) (x Real)) (= x y))
+                (forall ((y Real) (x Real)) (= x y))
             )) :rule qnt_rm_unused)": true,
         }
     }

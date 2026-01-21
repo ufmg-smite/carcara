@@ -160,8 +160,8 @@ fn parse_and_check_solver_proof(
     Ok((proof.commands, res))
 }
 
-fn increase_subproof_depth(proof: &Rc<ProofNode>, delta: usize, prefix: &str) -> Rc<ProofNode> {
-    mutate(proof, |_, node| {
+fn increase_subproof_depth(proof: Rc<ProofNode>, delta: usize, prefix: &str) -> Rc<ProofNode> {
+    proof.mutate(|_, node| {
         let node = match node.as_ref().clone() {
             ProofNode::Assume { id, depth, term } => ProofNode::Assume {
                 id: format!("{}.{}", prefix, id),
@@ -186,7 +186,11 @@ fn insert_solver_proof(
     root_id: &str,
     depth: usize,
 ) -> Rc<ProofNode> {
-    let proof = ProofNode::from_commands(commands);
+    let proof = ProofNodeForest::from_commands(commands)
+        .0
+        .into_iter()
+        .find(|node| node.clause().is_empty())
+        .expect("solver proof does not conclude empty clause");
 
     let mut ids = IdHelper::new(root_id);
     let subproof_id = ids.next_id();
@@ -198,7 +202,7 @@ fn insert_solver_proof(
 
     clause.push(pool.bool_false());
 
-    let proof = increase_subproof_depth(&proof, depth + 1, root_id);
+    let proof = increase_subproof_depth(proof, depth + 1, root_id);
     let subproof_assumptions = proof.get_assumptions_of_depth(depth + 1);
 
     let last_step = Rc::new(ProofNode::Step(StepNode {
@@ -218,6 +222,7 @@ fn insert_solver_proof(
         // Since the subproof was inserted from the solver proof, it cannot reference anything
         // outside of it.
         outbound_premises: Vec::new(),
+        extra_steps: Vec::new(),
     }));
 
     let not_not_steps: Vec<_> = clause[..clause.len() - 1]

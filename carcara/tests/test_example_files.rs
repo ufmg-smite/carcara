@@ -56,9 +56,9 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
         hole_options: None,
         uncrowd_rotation: true,
     };
-    let node = ast::ProofNode::from_commands(proof.commands.clone());
+    let node = ast::ProofNodeForest::from_commands(proof.commands.clone());
     let elaborated_node = elaborator::Elaborator::new(&mut pool, &problem, config.clone())
-        .elaborate_with_default_pipeline(&node);
+        .elaborate_with_default_pipeline(node);
     let elaborated = ast::Proof {
         constant_definitions: proof.constant_definitions.clone(),
         commands: elaborated_node.into_commands(),
@@ -71,7 +71,7 @@ fn run_test(problem_path: &Path, proof_path: &Path) -> CarcaraResult<()> {
     // Finally, we elaborate the already elaborated proof, to make sure the elaboration step is
     // idempotent
     let elaborated_twice = elaborator::Elaborator::new(&mut pool, &problem, config)
-        .elaborate_with_default_pipeline(&elaborated_node);
+        .elaborate_with_default_pipeline(elaborated_node);
     assert!(
         elaborated.commands == elaborated_twice.into_commands(),
         "elaboration was not idempotent!"
