@@ -100,6 +100,11 @@ pub fn check_step_core<CR: CollectResults + Send + Default>(
 ) -> RuleResult {
     let time = Instant::now();
 
+    if context.config.allowed_rules.contains(&step.rule) {
+        *context.is_holey = true;
+        return Ok(());
+    }
+
     if !step.discharge.is_empty() && step.rule != "subproof" {
         use crate::checker::error::{CheckerError, SubproofError};
         return Err(CheckerError::Subproof(SubproofError::DischargeInWrongRule));
@@ -107,9 +112,7 @@ pub fn check_step_core<CR: CollectResults + Send + Default>(
 
     let rule = match get_rule_shared(&step.rule, context.config.elaborated) {
         Some(r) => r,
-        None if context.config.ignore_unknown_rules
-            || context.config.allowed_rules.contains(&step.rule) =>
-        {
+        None if context.config.ignore_unknown_rules => {
             *context.is_holey = true;
             return Ok(());
         }
