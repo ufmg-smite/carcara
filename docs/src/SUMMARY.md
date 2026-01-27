@@ -2,7 +2,7 @@
 - [Introduction](./introduction.md)
 - [Installation](./installation.md)
 - [Checking proofs with Carcara](./checking.md)
-  - [Checking Rare rewrites]()
+  - [Checking Rare rewrites](./rare-checking.md)
 - [Proof elaboration](./elaboration.md)
   - [Polyequality elaboration](./polyeq-elaboration.md)
   - [Hole elaboration]()
