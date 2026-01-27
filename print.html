@@ -244,6 +244,37 @@ elaboration chapter</a>.</p>
 to check the proof. If the given value is greater than 1, Carcara will split the proof steps among
 that many worker threads, and check them in parallel. Note that proof parsing, which is oftentimes a
 bottleneck in Carcara, will still be sequential.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="checking-rare-rules"><a class="header" href="#checking-rare-rules">Checking Rare Rules</a></h1>
+<p>SMT solvers can produce proofs that may depend on rare rules. In general, rare rules have the following format:</p>
+<pre><code>(declare-rare-rule bool-implies-de-morgan ((x1 Bool) (y1 Bool))
+  :args (x1 y1)
+  :conclusion (= (not (=&gt; x1 y1)) (and x1 (not y1)))
+)
+</code></pre>
+<p>First, we have a set of arguments and a conclusion. We can substitute the arguments into the conclusion. The substitution can be any first-order term available in the Alethe context.</p>
+<pre><code>(step st191.t1 
+  (cl (= (not (=&gt; (not (member$ ?v0 ?v1)) (= ?v0 ?v2)))
+         (and (not (member$ ?v0 ?v1)) (not (= ?v0 ?v2)))))
+  :rule rare_rewrite
+  :args ("bool-implies-de-morgan" (not (member$ ?v0 ?v1)) (= ?v0 ?v2)))
+</code></pre>
+<p>Arguments can also be polymorphic:</p>
+<pre><code class="language-lisp">(declare-rare-rule eq-refl ((@T0 Type) (t1 @T0))
+  :args (t1)
+  :premises ()
+  :conclusion (= (= t1 t1) true))
+</code></pre>
+<p>We use <code>@Type</code> to denote an argument that is a polymorphic type. Polymorphic arguments are not passed in the <code>:args</code> field of the step statement:</p>
+<pre><code class="language-lisp">(step t264
+  (cl (= (= (op e3 e3) (op e3 e3)) true))
+  :rule rare_rewrite
+  :args ("eq-refl" (op e3 e3)))
+</code></pre>
+<h1 id="flags"><a class="header" href="#flags">Flags</a></h1>
+<p>We use the <code>--rare-file</code> flag to pass the rare file, for example:</p>
+<pre><code class="language-bash">carcara check your_file.smt2.alethe your_file.smt2 --rare-file your_rare_file.rare
+</code></pre>
+<p>Note that Carcara will only be able to check your proofs if every rewrite rule mentioned in the Alethe file is also present in your rare file.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="proof-elaboration"><a class="header" href="#proof-elaboration">Proof elaboration</a></h1>
 <p>Besides checking a proof, Carcara is also capable of <em>proof elaboration</em>. You can elaborate a proof
 file using the <code>elaborate</code> command:</p>

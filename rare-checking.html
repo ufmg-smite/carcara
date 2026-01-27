@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Proof elaboration - Carcara Documentation</title>
+        <title>Checking Rare rewrites - Carcara Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -178,47 +178,47 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="proof-elaboration"><a class="header" href="#proof-elaboration">Proof elaboration</a></h1>
-<p>Besides checking a proof, Carcara is also capable of <em>proof elaboration</em>. You can elaborate a proof
-file using the <code>elaborate</code> command:</p>
-<pre><code>carcara elaborate example.smt2.alethe example.smt2
+                        <h1 id="checking-rare-rules"><a class="header" href="#checking-rare-rules">Checking Rare Rules</a></h1>
+<p>SMT solvers can produce proofs that may depend on rare rules. In general, rare rules have the following format:</p>
+<pre><code>(declare-rare-rule bool-implies-de-morgan ((x1 Bool) (y1 Bool))
+  :args (x1 y1)
+  :conclusion (= (not (=&gt; x1 y1)) (and x1 (not y1)))
+)
 </code></pre>
-<p>This will check and elaborate the given proof, and print the elaborated proof to the standard
-output. By default, Carcara will print proofs using term sharing, i.e., using the <code>(! ... :named ...)</code> syntax. You can change this behavior with the <code>--no-print-with-sharing</code>/<code>-v</code> option.</p>
-<p>Many of the same options used in the <code>check</code> command also apply to the <code>elaborate</code> command. See
-<code>carcara elaborate --help</code> for more details.</p>
-<h2 id="elaboration-pipeline"><a class="header" href="#elaboration-pipeline">Elaboration pipeline</a></h2>
-<p>The specific elaboration applied to the proof is controlled via a <code>--pipeline</code> option. This takes a
-series of elaboration steps, and will apply them in the given order. The possible elaboration steps
-are:</p>
-<ul>
-<li><a href=""><code>polyeq</code></a></li>
-<li><a href=""><code>lia-generic</code></a></li>
-<li><a href=""><code>local</code></a></li>
-<li><a href=""><code>uncrowd</code></a></li>
-<li><a href=""><code>reordering</code></a></li>
-<li><a href=""><code>hole</code></a></li>
-</ul>
-<p>By default, Carcara will attempt to apply all of these in the listed order.</p>
-<h3 id="example"><a class="header" href="#example">Example</a></h3>
-<p>The following command will elaborate the given proof file with the <code>uncrowd</code> and <code>polyeq</code>
-elaboration steps, in that order:</p>
-<pre><code>carcara elaborate example.smt2.alethe --pipeline uncrowd polyeq
+<p>First, we have a set of arguments and a conclusion. We can substitute the arguments into the conclusion. The substitution can be any first-order term available in the Alethe context.</p>
+<pre><code>(step st191.t1 
+  (cl (= (not (=&gt; (not (member$ ?v0 ?v1)) (= ?v0 ?v2)))
+         (and (not (member$ ?v0 ?v1)) (not (= ?v0 ?v2)))))
+  :rule rare_rewrite
+  :args ("bool-implies-de-morgan" (not (member$ ?v0 ?v1)) (= ?v0 ?v2)))
 </code></pre>
-<p>Note that, if you pass a positional argument (e.g. the proof filename) after the pipeline argument,
-you need an extra <code>--</code> argument to denote the end of the pipeline list:</p>
-<pre><code>carcara elaborate --pipeline uncrowd polyeq -- example.smt2.alethe
+<p>Arguments can also be polymorphic:</p>
+<pre><code class="language-lisp">(declare-rare-rule eq-refl ((@T0 Type) (t1 @T0))
+  :args (t1)
+  :premises ()
+  :conclusion (= (= t1 t1) true))
 </code></pre>
+<p>We use <code>@Type</code> to denote an argument that is a polymorphic type. Polymorphic arguments are not passed in the <code>:args</code> field of the step statement:</p>
+<pre><code class="language-lisp">(step t264
+  (cl (= (= (op e3 e3) (op e3 e3)) true))
+  :rule rare_rewrite
+  :args ("eq-refl" (op e3 e3)))
+</code></pre>
+<h1 id="flags"><a class="header" href="#flags">Flags</a></h1>
+<p>We use the <code>--rare-file</code> flag to pass the rare file, for example:</p>
+<pre><code class="language-bash">carcara check your_file.smt2.alethe your_file.smt2 --rare-file your_rare_file.rare
+</code></pre>
+<p>Note that Carcara will only be able to check your proofs if every rewrite rule mentioned in the Alethe file is also present in your rare file.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="rare-checking.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="checking.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="polyeq-elaboration.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="elaboration.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -228,11 +228,11 @@ you need an extra <code>--</code> argument to denote the end of the pipeline lis
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="rare-checking.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="checking.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="polyeq-elaboration.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="elaboration.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
