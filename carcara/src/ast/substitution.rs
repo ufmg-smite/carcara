@@ -75,11 +75,7 @@ impl Substitution {
                 return Err(SubstitutionError::NotAVariable(k.clone()));
             }
             if pool.sort(k) != pool.sort(v)
-                && !pool
-                    .sort(k)
-                    .as_sort()
-                    .map(|x| x.is_polymorphic())
-                    .unwrap_or(false)
+                && !pool.sort(k).as_sort().is_some_and(Sort::is_polymorphic)
             {
                 return Err(SubstitutionError::DifferentSorts(k.clone(), v.clone()));
             }
