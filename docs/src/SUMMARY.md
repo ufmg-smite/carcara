@@ -12,6 +12,4 @@
 - [Other features](./other-features.md)
   - [Proof parsing/printing](./parsing-printing.md)
   - [Proof slicing](./slicing.md)
-- [Contributing]()
-  - [Guidelines]()
-  - [Project Architecture]()
+- [Contributing](./contributing.md)
