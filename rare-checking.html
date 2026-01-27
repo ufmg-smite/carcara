@@ -178,7 +178,7 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="checking-rare-rules"><a class="header" href="#checking-rare-rules">Checking Rare Rules</a></h1>
+                        <h1 id="checking-rare-rewrites"><a class="header" href="#checking-rare-rewrites">Checking Rare rewrites</a></h1>
 <p>SMT solvers can produce proofs that may depend on rare rules. In general, rare rules have the following format:</p>
 <pre><code>(declare-rare-rule bool-implies-de-morgan ((x1 Bool) (y1 Bool))
   :args (x1 y1)
@@ -204,7 +204,7 @@
   :rule rare_rewrite
   :args ("eq-refl" (op e3 e3)))
 </code></pre>
-<h1 id="flags"><a class="header" href="#flags">Flags</a></h1>
+<h2 id="flags"><a class="header" href="#flags">Flags</a></h2>
 <p>We use the <code>--rare-file</code> flag to pass the rare file, for example:</p>
 <pre><code class="language-bash">carcara check your_file.smt2.alethe your_file.smt2 --rare-file your_rare_file.rare
 </code></pre>
