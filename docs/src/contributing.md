@@ -1,7 +1,7 @@
 # Contributing
 
 While Carcara is actively maintained by the folks at the SMITE research group at Universidade
-Federal de Minas Geras (UFMG), we gladly welcome external contributions.
+Federal de Minas Gerais (UFMG), we gladly welcome external contributions.
 
 If you wish to contribute to the project, please do so by opening a [pull request via
 GitHub](https://github.com/ufmg-smite/carcara/pulls).
