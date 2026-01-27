@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Proof slicing - Carcara Documentation</title>
+        <title>Contributing - Carcara Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -178,68 +178,32 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="proof-slicing"><a class="header" href="#proof-slicing">Proof slicing</a></h1>
-<p>The <code>carcara slice</code> command can be used to extract an individual step from a proof, along with
-its transitive premises. Besides the usual arguments for parsing and printing the proof, this
-command also takes a <code>--from</code> argument which gives the step id from which to slice, and an optional
-<code>--max-distance</code>/<code>-d</code> argument, that specifies how many layers of transitive premises the slice
-should include.</p>
-<h2 id="example"><a class="header" href="#example">Example</a></h2>
-<p>Consider the following Alethe proof:</p>
-<pre><code>(assume a0 a)
-(step t0 (cl a b) :rule hole :premises (a0))
-(step t1 (cl b a) :rule hole :premises (t0))
-(step t2 (cl a b (not a)) :rule hole :premises (t0))
-(anchor :step t3)
-(assume t3.a0 (not a))
-(step t3.t0 (cl b) :rule hole :premises (t3.a0 t1))
-(step t3.t1 (cl b b) :rule hole :premises (t3.t0))
-(step t3.t2 (cl (or b b)) :rule hole :premises (t3.t1))
-(step t3 (cl (not (not a)) (or b b)) :rule subproof :discharge (t3.a0))
-(step t4 (cl a (or b b)) :rule hole :premises (t3))
-(step t5 (cl) :rule hole :premises (t4 a0 t2))
+                        <h1 id="contributing"><a class="header" href="#contributing">Contributing</a></h1>
+<p>While Carcara is actively maintained by the folks at the SMITE research group at Universidade
+Federal de Minas Geras (UFMG), we gladly welcome external contributions.</p>
+<p>If you wish to contribute to the project, please do so by opening a <a href="https://github.com/ufmg-smite/carcara/pulls">pull request via
+GitHub</a>.</p>
+<h2 id="guidelines"><a class="header" href="#guidelines">Guidelines</a></h2>
+<p>In this project, we use <a href="https://github.com/rust-lang/rust-clippy">Clippy</a> as a linter and
+<a href="https://github.com/rust-lang/rustfmt">Rustfmt</a> for code formatting. If you manage your Rust
+toolchain using Rustup, you can install Clippy and Rustfmt by running:</p>
+<pre><code>rustup component add clippy rustfmt
 </code></pre>
-<p>Calling <code>carcara slice --from t1 -d 1</code> on it will result in the steps:</p>
-<pre><code>(assume a0 a)
-(step t0 (cl a b) :rule hole :premises (a0))
-(step t1 (cl b a) :rule hole :premises (t0))
-(step slice_end (cl) :rule hole :premises (t1) :args ("trust"))
-</code></pre>
-<p>Note that, to make sure the slice is still a valid proof, Carcara added a dummy <code>slice_end</code> step
-that concludes the empty clause.</p>
-<p>You can also slice from inside a subproof. Calling <code>carcara slice --from t3.t0</code> on the proof above
-results in the slice:</p>
-<pre><code>(step t1 (cl b a) :rule hole :args ("trust"))
-(anchor :step t3)
-(assume t3.a0 (not a))
-(step t3.t0 (cl b) :rule hole :premises (t3.a0 t1))
-(step t3.t2 (cl (or b b)) :rule hole :premises (t3.t0) :args ("trust"))
-(step t3 (cl (not (not a)) (or b b)) :rule subproof :discharge (t3.a0))
-(step slice_end (cl) :rule hole :premises (t3) :args ("trust"))
-</code></pre>
-<p>A few things of note:</p>
-<ul>
-<li>Since we did not pass <code>--max-distance</code>/<code>-d</code>, the slice only included the direct premises of
-<code>t3.t2</code>, and no transitive premises. For example, <code>t0</code>, which is a transitive premise of <code>t3.t2</code> via
-<code>t1</code>, was not included.</li>
-<li>To keep any context that might be introduced in an <code>anchor</code>, the slice included all <code>anchor</code>s
-surrounding the sliced step (in this case, <code>(anchor :step t3)</code>).</li>
-<li>To ensure that the resulting proof is still valid, the slice has to include the <code>t3</code> step that
-concludes the subproof, as well as the previous step (<code>t3.t2</code>) which is implicitly referenced by
-<code>t3</code>.</li>
-</ul>
+<p>Once they’re installed, you can run <code>cargo fmt</code> to format your code according to the project
+guidelines, or <code>cargo clippy</code> to detect possible problems using Clippy. You may also run <code>cargo clippy --fix</code> to let Clippy try to automatically fix the detected issues.</p>
+<p>When opening a pull request, make sure that your code compiles without warnings, and is formatted
+with Rustfmt. Run <code>cargo test</code> to ensure your changes do not break any existing behaviour.
+Additionally, we strive to support Rust versions as old as 1.87—please refrain from using features
+introduced in newer versions of Rust.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="parsing-printing.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="slicing.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="contributing.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                                <i class="fa fa-angle-right"></i>
-                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -247,13 +211,10 @@ concludes the subproof, as well as the previous step (<code>t3.t2</code>) which 
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="parsing-printing.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="slicing.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="contributing.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                        <i class="fa fa-angle-right"></i>
-                    </a>
             </nav>
 
         </div>

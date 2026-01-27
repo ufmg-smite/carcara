@@ -199,7 +199,7 @@ requires at least Rust version 1.87. Once you have installed an appropriate vers
 download and install the latest version of Carcara by running the following command:</p>
 <pre><code>cargo install --git https://github.com/ufmg-smite/carcara.git
 </code></pre>
-<p>This will build the project and place the <code>carcara</code> binary in Cargo's binary directory
+<p>This will build the project and place the <code>carcara</code> binary in Cargo’s binary directory
 (<code>~/.cargo/bin</code> by default).</p>
 <p>You can uninstall Carcara by running <code>cargo uninstall carcara-cli</code>.</p>
 <h2 id="pre-built-binary"><a class="header" href="#pre-built-binary">Pre-built binary</a></h2>
@@ -220,7 +220,7 @@ will infer it:</p>
 <ul>
 <li><code>valid</code>: The proof was fully checked, and no errors were found.</li>
 <li><code>invalid</code>: An error was found in part of the proof; an error message will have been printed.</li>
-<li><code>holey</code>: No errors were found, but the proof contained one or more "holes". These can be either
+<li><code>holey</code>: No errors were found, but the proof contained one or more “holes”. These can be either
 explicit applications of the <code>hole</code> rule, or steps that use an unknown or unsupported rule.</li>
 </ul>
 <p>See <code>carcara check --help</code> for a full list of options.</p>
@@ -236,7 +236,7 @@ will be considered <code>holey</code>.</p>
 <h2 id="the-lia_generic-rule"><a class="header" href="#the-lia_generic-rule">The <code>lia_generic</code> rule</a></h2>
 <p>Carcara does not check steps that use the <code>lia_generic</code> rule. This is an extremely coarse-grained
 rule from the Alethe format, and is in general NP-hard to check. If you need to validate proofs
-that contain this rule, you can use Carcara's proof elaboration to call an external tool that can
+that contain this rule, you can use Carcara’s proof elaboration to call an external tool that can
 elaborate these steps into a series of easier-to-check steps. For more details, see <a href="elaboration.html">the proof
 elaboration chapter</a>.</p>
 <h2 id="parallel-checking"><a class="header" href="#parallel-checking">Parallel checking</a></h2>
@@ -307,9 +307,9 @@ you need an extra <code>--</code> argument to denote the end of the pipeline lis
 <pre><code>carcara elaborate --pipeline uncrowd polyeq -- example.smt2.alethe
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="polyequality-elaboration"><a class="header" href="#polyequality-elaboration">Polyequality elaboration</a></h1>
-<p>In Alethe, we call "polyequality" the notion of equivalence between terms modulo the reordering
+<p>In Alethe, we call “polyequality” the notion of equivalence between terms modulo the reordering
 of equalities. For example, we say that the terms <code>(or (= a b) c)</code> and <code>(or (= b a) c)</code> are
-"polyequal", despite the equality term being flipped.</p>
+“polyequal”, despite the equality term being flipped.</p>
 <p>When checking an Alethe proof, a checker often needs to reason modulo polyequality. The <code>refl</code>
 rule, for example, allows the two terms to be syntactically different, if they are equivalent by
 polyequality. The following step is valid:</p>
@@ -332,7 +332,7 @@ rules affected by this elaboration step are:</p>
 <li><code>ite_intro</code></li>
 <li><code>bfun_elim</code></li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="local-elaboration"><a class="header" href="#local-elaboration">"Local" elaboration</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="local-elaboration"><a class="header" href="#local-elaboration">“Local” elaboration</a></h1>
 <p>Carcara has a number of small elaboration procedures for specific rules, that simplify steps in some small local way. These are grouped in the <code>local</code> elaboration step. The rules affected by this are:</p>
 <ul>
 <li><code>eq_transitive</code></li>
@@ -349,7 +349,7 @@ have:</p>
 (assume h3 (= c b))
 (step t4 (cl (= a d)) :rule trans :premises (h1 h2 h3))
 </code></pre>
-<p>In this case, the <code>local</code> elaboration step will change the order of <code>t4</code>'s premises so the transitivity chain is well ordered; and add an auxiliary step to flip the <code>h3</code> equality. After elaboration, we will have:</p>
+<p>In this case, the <code>local</code> elaboration step will change the order of <code>t4</code>’s premises so the transitivity chain is well ordered; and add an auxiliary step to flip the <code>h3</code> equality. After elaboration, we will have:</p>
 <pre><code>(assume h1 (= a b))
 (assume h2 (= c d))
 (assume h3 (= c b))
@@ -453,6 +453,23 @@ surrounding the sliced step (in this case, <code>(anchor :step t3)</code>).</li>
 concludes the subproof, as well as the previous step (<code>t3.t2</code>) which is implicitly referenced by
 <code>t3</code>.</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="contributing"><a class="header" href="#contributing">Contributing</a></h1>
+<p>While Carcara is actively maintained by the folks at the SMITE research group at Universidade
+Federal de Minas Geras (UFMG), we gladly welcome external contributions.</p>
+<p>If you wish to contribute to the project, please do so by opening a <a href="https://github.com/ufmg-smite/carcara/pulls">pull request via
+GitHub</a>.</p>
+<h2 id="guidelines"><a class="header" href="#guidelines">Guidelines</a></h2>
+<p>In this project, we use <a href="https://github.com/rust-lang/rust-clippy">Clippy</a> as a linter and
+<a href="https://github.com/rust-lang/rustfmt">Rustfmt</a> for code formatting. If you manage your Rust
+toolchain using Rustup, you can install Clippy and Rustfmt by running:</p>
+<pre><code>rustup component add clippy rustfmt
+</code></pre>
+<p>Once they’re installed, you can run <code>cargo fmt</code> to format your code according to the project
+guidelines, or <code>cargo clippy</code> to detect possible problems using Clippy. You may also run <code>cargo clippy --fix</code> to let Clippy try to automatically fix the detected issues.</p>
+<p>When opening a pull request, make sure that your code compiles without warnings, and is formatted
+with Rustfmt. Run <code>cargo test</code> to ensure your changes do not break any existing behaviour.
+Additionally, we strive to support Rust versions as old as 1.87—please refrain from using features
+introduced in newer versions of Rust.</p>
 
                     </main>
 

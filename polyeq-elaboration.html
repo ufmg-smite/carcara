@@ -179,9 +179,9 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="polyequality-elaboration"><a class="header" href="#polyequality-elaboration">Polyequality elaboration</a></h1>
-<p>In Alethe, we call "polyequality" the notion of equivalence between terms modulo the reordering
+<p>In Alethe, we call “polyequality” the notion of equivalence between terms modulo the reordering
 of equalities. For example, we say that the terms <code>(or (= a b) c)</code> and <code>(or (= b a) c)</code> are
-"polyequal", despite the equality term being flipped.</p>
+“polyequal”, despite the equality term being flipped.</p>
 <p>When checking an Alethe proof, a checker often needs to reason modulo polyequality. The <code>refl</code>
 rule, for example, allows the two terms to be syntactically different, if they are equivalent by
 polyequality. The following step is valid:</p>

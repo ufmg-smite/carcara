@@ -191,7 +191,7 @@ will infer it:</p>
 <ul>
 <li><code>valid</code>: The proof was fully checked, and no errors were found.</li>
 <li><code>invalid</code>: An error was found in part of the proof; an error message will have been printed.</li>
-<li><code>holey</code>: No errors were found, but the proof contained one or more "holes". These can be either
+<li><code>holey</code>: No errors were found, but the proof contained one or more “holes”. These can be either
 explicit applications of the <code>hole</code> rule, or steps that use an unknown or unsupported rule.</li>
 </ul>
 <p>See <code>carcara check --help</code> for a full list of options.</p>
@@ -207,7 +207,7 @@ will be considered <code>holey</code>.</p>
 <h2 id="the-lia_generic-rule"><a class="header" href="#the-lia_generic-rule">The <code>lia_generic</code> rule</a></h2>
 <p>Carcara does not check steps that use the <code>lia_generic</code> rule. This is an extremely coarse-grained
 rule from the Alethe format, and is in general NP-hard to check. If you need to validate proofs
-that contain this rule, you can use Carcara's proof elaboration to call an external tool that can
+that contain this rule, you can use Carcara’s proof elaboration to call an external tool that can
 elaborate these steps into a series of easier-to-check steps. For more details, see <a href="elaboration.html">the proof
 elaboration chapter</a>.</p>
 <h2 id="parallel-checking"><a class="header" href="#parallel-checking">Parallel checking</a></h2>

@@ -178,7 +178,7 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="local-elaboration"><a class="header" href="#local-elaboration">"Local" elaboration</a></h1>
+                        <h1 id="local-elaboration"><a class="header" href="#local-elaboration">“Local” elaboration</a></h1>
 <p>Carcara has a number of small elaboration procedures for specific rules, that simplify steps in some small local way. These are grouped in the <code>local</code> elaboration step. The rules affected by this are:</p>
 <ul>
 <li><code>eq_transitive</code></li>
@@ -195,7 +195,7 @@ have:</p>
 (assume h3 (= c b))
 (step t4 (cl (= a d)) :rule trans :premises (h1 h2 h3))
 </code></pre>
-<p>In this case, the <code>local</code> elaboration step will change the order of <code>t4</code>'s premises so the transitivity chain is well ordered; and add an auxiliary step to flip the <code>h3</code> equality. After elaboration, we will have:</p>
+<p>In this case, the <code>local</code> elaboration step will change the order of <code>t4</code>’s premises so the transitivity chain is well ordered; and add an auxiliary step to flip the <code>h3</code> equality. After elaboration, we will have:</p>
 <pre><code>(assume h1 (= a b))
 (assume h2 (= c d))
 (assume h3 (= c b))
