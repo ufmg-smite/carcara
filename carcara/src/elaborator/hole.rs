@@ -135,14 +135,15 @@ fn get_solver_proof(
         return Err(HoleError::OutputNotUnsat);
     }
 
-    parse_and_check_solver_proof(pool, problem.as_bytes(), proof)
+    let proof = str::from_utf8(proof).map_err(|_| HoleError::SolverGaveInvalidOutput)?;
+    parse_and_check_solver_proof(pool, &problem, proof)
         .map_err(|e| HoleError::InnerProofError(Box::new(e)))
 }
 
 fn parse_and_check_solver_proof(
     pool: &mut PrimitivePool,
-    problem: &[u8],
-    proof: &[u8],
+    problem: &str,
+    proof: &str,
 ) -> CarcaraResult<(Vec<ProofCommand>, bool)> {
     let config = parser::Config {
         apply_function_defs: false,

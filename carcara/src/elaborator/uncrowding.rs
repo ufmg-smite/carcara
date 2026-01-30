@@ -370,7 +370,7 @@ mod tests {
 
     #[test]
     fn test_uncrowd_resolution() {
-        let problem: &[u8] = b"
+        let problem = "
             (declare-const a Bool)
             (declare-const b Bool)
             (declare-const c Bool)
@@ -380,7 +380,7 @@ mod tests {
             (declare-const z Bool)
             (declare-const w Bool)
         ";
-        let proof = b"
+        let proof = "
             (step t1 (cl x a b) :rule hole)
             (step t2 (cl (not x) y a c) :rule hole)
             (step t3 (cl (not y) z b) :rule hole)
@@ -406,7 +406,7 @@ mod tests {
 
         let got = uncrowd_resolution(&mut pool, step, true);
 
-        let expected = b"
+        let expected = "
             (step t1 (cl x a b) :rule hole)
             (step t2 (cl (not x) y a c) :rule hole)
             (step t3 (cl (not y) z b) :rule hole)

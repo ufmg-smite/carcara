@@ -84,10 +84,10 @@ pub enum Error {
     DoesNotReachEmptyClause,
 }
 
-pub fn check<T: io::BufRead>(
-    problem: T,
-    proof: T,
-    rules: Option<T>,
+pub fn check<'s>(
+    problem: &'s str,
+    proof: &'s str,
+    rules: Option<&'s str>,
     parser_config: parser::Config,
     checker_config: checker::Config,
     collect_stats: bool,
@@ -140,10 +140,10 @@ pub fn check<T: io::BufRead>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn check_parallel<T: io::BufRead>(
-    problem: T,
-    proof: T,
-    rules: Option<T>,
+pub fn check_parallel<'s>(
+    problem: &'s str,
+    proof: &'s str,
+    rules: Option<&'s str>,
     parser_config: parser::Config,
     checker_config: checker::Config,
     collect_stats: bool,
@@ -209,10 +209,10 @@ pub fn check_parallel<T: io::BufRead>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn check_and_elaborate<T: io::BufRead>(
-    problem: T,
-    proof: T,
-    rules: Option<T>,
+pub fn check_and_elaborate<'s>(
+    problem: &'s str,
+    proof: &'s str,
+    rules: Option<&'s str>,
     parser_config: parser::Config,
     checker_config: checker::Config,
     elaborator_config: elaborator::Config,
@@ -278,10 +278,10 @@ pub fn check_and_elaborate<T: io::BufRead>(
     Ok((checking_result, problem, elaborated, pool))
 }
 
-pub fn generate_lia_smt_instances<T: io::BufRead>(
-    problem: T,
-    proof: T,
-    rules: Option<T>,
+pub fn generate_lia_smt_instances<'s>(
+    problem: &'s str,
+    proof: &'s str,
+    rules: Option<&'s str>,
     config: parser::Config,
     use_sharing: bool,
 ) -> Result<Vec<(String, String)>, Error> {

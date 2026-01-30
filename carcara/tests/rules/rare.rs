@@ -1,5 +1,4 @@
 use carcara::{ast::ProofCommand, checker, parser};
-use std::io::Cursor;
 
 // Custom rare rules for testing
 const RARE_RULES: &str = r#"
@@ -146,9 +145,9 @@ const BV_CONCAT_EXTRACT_MERGE_ALETHE: &str = r#"
 fn run_rare_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
     for (i, (proof, expected)) in cases.iter().enumerate() {
         let (mut problem, mut proof, rare_rules, mut pool) = parser::parse_instance(
-            Cursor::new(definitions),
-            Cursor::new(proof),
-            Some(Cursor::new(RARE_RULES)),
+            definitions,
+            proof,
+            Some(RARE_RULES),
             parser::Config {
                 apply_function_defs: true,
                 ..Default::default()
@@ -216,9 +215,9 @@ fn run_rare_file_test(
     expected_holey: bool,
 ) {
     let (problem, proof, rare_rules, mut pool) = parser::parse_instance(
-        Cursor::new(problem),
-        Cursor::new(proof),
-        Some(Cursor::new(rare_rules)),
+        problem,
+        proof,
+        Some(rare_rules),
         parser::Config {
             apply_function_defs: true,
             expand_lets: true,

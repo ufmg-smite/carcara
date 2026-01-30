@@ -613,13 +613,13 @@ mod tests {
     fn test_sharing() {
         use crate::parser;
 
-        let definitions: &[u8] = b"
+        let definitions = "
             (declare-const a Bool)
             (declare-const b Bool)
             (declare-const y Bool)
             (declare-const z Bool)
         ";
-        let proof: &[u8] = b"
+        let proof = "
             (step t1 (cl (and (= 1 2) (= 1 2))) :rule hole)
             (step t2 (cl (and (or a b) (not (or a b)))) :rule hole)
             (step t3 (cl (and (forall ((x Int)) (or (= x 2) (= 2 3))) (= 2 3))) :rule hole)

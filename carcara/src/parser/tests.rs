@@ -21,17 +21,17 @@ pub fn parse_terms<const N: usize>(
     definitions: &str,
     terms: [&str; N],
 ) -> [Rc<Term>; N] {
-    let mut parser = Parser::new(pool, TEST_CONFIG, definitions.as_bytes()).expect(ERROR_MESSAGE);
+    let mut parser = Parser::new(pool, TEST_CONFIG, definitions).expect(ERROR_MESSAGE);
     parser.parse_problem().expect(ERROR_MESSAGE);
 
     terms.map(|s| {
-        parser.reset(s.as_bytes()).expect(ERROR_MESSAGE);
+        parser.reset(s).expect(ERROR_MESSAGE);
         parser.parse_term().expect(ERROR_MESSAGE)
     })
 }
 
 pub fn parse_term(pool: &mut PrimitivePool, input: &str) -> Rc<Term> {
-    Parser::new(pool, TEST_CONFIG, input.as_bytes())
+    Parser::new(pool, TEST_CONFIG, input)
         .and_then(|mut parser| parser.parse_term())
         .expect(ERROR_MESSAGE)
 }
@@ -40,14 +40,14 @@ pub fn parse_term(pool: &mut PrimitivePool, input: &str) -> Rc<Term> {
 /// panics if no error is encountered.
 pub fn parse_term_err(input: &str) -> Error {
     let mut pool = PrimitivePool::new();
-    Parser::new(&mut pool, TEST_CONFIG, input.as_bytes())
+    Parser::new(&mut pool, TEST_CONFIG, input)
         .and_then(|mut p| p.parse_term())
         .expect_err("expected error")
 }
 
 /// Parses a proof from a `&str`. Panics if any error is encountered.
 pub fn parse_proof(pool: &mut PrimitivePool, input: &str) -> Proof {
-    Parser::new(pool, TEST_CONFIG, input.as_bytes())
+    Parser::new(pool, TEST_CONFIG, input)
         .expect(ERROR_MESSAGE)
         .parse_proof()
         .expect(ERROR_MESSAGE)
@@ -56,7 +56,7 @@ pub fn parse_proof(pool: &mut PrimitivePool, input: &str) -> Proof {
 /// Tries to parse a proof from a `&str`, expecting it to fail. Returns the error encountered, or
 /// panics if no error is encountered.
 pub fn parse_proof_err(pool: &mut PrimitivePool, input: &str) -> Error {
-    Parser::new(pool, TEST_CONFIG, input.as_bytes())
+    Parser::new(pool, TEST_CONFIG, input)
         .and_then(|mut p| p.parse_proof())
         .expect_err("expected error")
 }
@@ -80,7 +80,7 @@ fn test_hash_consing() {
         )
         (* 2 2)
     )";
-    let mut parser = Parser::new(&mut pool, Config::new(), input.as_bytes()).unwrap();
+    let mut parser = Parser::new(&mut pool, Config::new(), input).unwrap();
     parser.parse_term().unwrap();
 
     // We expect this input to result in 7 unique terms after parsing:
@@ -486,11 +486,11 @@ fn test_define_fun() {
 #[test]
 fn test_define_fun_rec() {
     fn run_test(pool: &mut PrimitivePool, problem: &str, expected_premises: &[&str]) {
-        let mut parser = Parser::new(pool, TEST_CONFIG, problem.as_bytes()).expect(ERROR_MESSAGE);
+        let mut parser = Parser::new(pool, TEST_CONFIG, problem).expect(ERROR_MESSAGE);
         let got = parser.parse_problem().expect(ERROR_MESSAGE).premises;
         assert_eq!(expected_premises.len(), got.len());
         for p in expected_premises {
-            parser.reset(p.as_bytes()).expect(ERROR_MESSAGE);
+            parser.reset(p).expect(ERROR_MESSAGE);
             let expected = parser.parse_term().expect(ERROR_MESSAGE);
             assert!(got.contains(&expected));
         }
