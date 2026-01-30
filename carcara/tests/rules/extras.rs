@@ -21,6 +21,32 @@ fn reordering() {
 }
 
 #[test]
+fn shuffle() {
+    test_cases! {
+        definitions = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (declare-fun x () Int)
+            (declare-fun y () Int)
+            (declare-fun z () Int)
+        ",
+        "Simple working examples" {
+            "(step t1 (cl (= (+ x y z) (+ z x y))) :rule shuffle)": true,
+
+            "(step t1 (cl (= (and p q q r p) (and q q p p r))) :rule shuffle)": true,
+        }
+        "Invalid examples" {
+            "(step t1 (cl (= (- x y z) (- x y z))) :rule shuffle)": false,
+            "(step t1 (cl (= (or p q r) (and p q r))) :rule shuffle)": false,
+            "(step t1 (cl (= (or p q r) true)) :rule shuffle)": false,
+            "(step t1 (cl (= (* x x y) (* x y y))) :rule shuffle)": false,
+            "(step t1 (cl (= (* x x y) (+ x y))) :rule shuffle)": false,
+        }
+    }
+}
+
+#[test]
 fn symm() {
     test_cases! {
         definitions = "

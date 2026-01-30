@@ -93,6 +93,12 @@ pub enum CheckerError {
     )]
     CannotApplyReUnfoldPosComponentDifferentArgNum(Rc<Term>, Rc<Term>),
 
+    #[error("operator '{0}' is not commutative")]
+    OperatorNotCommutative(Operator),
+
+    #[error("argument multisets are not equal")]
+    ShuffleArgsNotEqual,
+
     // General errors
     #[error("expected {0} premises, got {1}")]
     WrongNumberOfPremises(Range, usize),
