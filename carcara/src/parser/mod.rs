@@ -21,7 +21,7 @@ use crate::{
 use error::assert_num_args;
 use indexmap::{IndexMap, IndexSet};
 use rug::{Integer, Rational};
-use std::{io::BufRead, str::FromStr};
+use std::str::FromStr;
 
 use self::error::assert_indexed_op_args_value;
 
@@ -66,10 +66,10 @@ impl Config {
 ///
 /// This returns the parsed proof, as well as the `TermPool` used in parsing. Can take any type that
 /// implements `BufRead`.
-pub fn parse_instance<T: BufRead>(
-    problem: T,
-    proof: T,
-    rules: Option<T>,
+pub fn parse_instance<'s>(
+    problem: &'s str,
+    proof: &'s str,
+    rules: Option<&'s str>,
     config: Config,
 ) -> CarcaraResult<(Problem, Proof, Rules, PrimitivePool)> {
     let mut pool = PrimitivePool::new();
@@ -77,10 +77,10 @@ pub fn parse_instance<T: BufRead>(
         .map(|(prelude, proof, rules)| (prelude, proof, rules, pool))
 }
 
-pub fn parse_instance_with_pool<T: BufRead>(
-    problem: T,
-    proof: T,
-    rules: Option<T>,
+pub fn parse_instance_with_pool<'s>(
+    problem: &'s str,
+    proof: &'s str,
+    rules: Option<&'s str>,
     config: Config,
     pool: &mut PrimitivePool,
 ) -> CarcaraResult<(Problem, Proof, Rules)> {
@@ -156,10 +156,10 @@ struct ParserState {
 }
 
 /// A parser for the Alethe proof format.
-pub struct Parser<'a, R> {
-    pool: &'a mut PrimitivePool,
+pub struct Parser<'p, 's> {
+    pool: &'p mut PrimitivePool,
     config: Config,
-    lexer: Lexer<R>,
+    lexer: Lexer<'s>,
     current_token: Token,
     current_position: Position,
     state: ParserState,
@@ -167,11 +167,11 @@ pub struct Parser<'a, R> {
     problem: Option<Problem>,
 }
 
-impl<'a, R: BufRead> Parser<'a, R> {
+impl<'p, 's> Parser<'p, 's> {
     /// Constructs a new `Parser` from a type that implements `BufRead`.
     ///
     /// This operation can fail if there is an IO or lexer error on the first token.
-    pub fn new(pool: &'a mut PrimitivePool, config: Config, input: R) -> CarcaraResult<Self> {
+    pub fn new(pool: &'p mut PrimitivePool, config: Config, input: &'s str) -> CarcaraResult<Self> {
         let mut lexer = Lexer::new(input)?;
         let (current_token, current_position) = lexer.next_token()?;
         Ok(Parser {
@@ -188,7 +188,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     /// Resets the parser position and sets its input to `input`. This keeps the parser state,
     /// including all function, constant and sort declarations.
-    pub fn reset(&mut self, input: R) -> CarcaraResult<()> {
+    pub fn reset(&mut self, input: &'s str) -> CarcaraResult<()> {
         let mut lexer = Lexer::new(input)?;
         let (current_token, current_position) = lexer.next_token()?;
         self.lexer = lexer;

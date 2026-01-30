@@ -2,7 +2,6 @@ use super::{Parser, ParserError, Reserved, SortDef, Token};
 use crate::ast::*;
 use crate::CarcaraResult;
 use crate::{ast::rare_rules::*, Error};
-use std::io::BufRead;
 
 #[derive(Debug, Clone)]
 enum Body {
@@ -17,7 +16,7 @@ struct BodyDefinition<'a> {
     conclusion: Option<Rc<Term>>,
 }
 
-impl<'a, R: BufRead> Parser<'a, R> {
+impl<'p, 's> Parser<'p, 's> {
     fn parse_parameters(&mut self) -> CarcaraResult<(String, TypeParameter)> {
         self.expect_token(Token::OpenParen)?;
         let name = self.expect_symbol()?;
@@ -76,11 +75,8 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 Ok(Body::Conclusion(rewrite_term))
             }
             "args" => {
-                fn parse_args<R: BufRead>(parser: &mut Parser<R>) -> CarcaraResult<Vec<String>> {
-                    parser.expect_token(Token::OpenParen)?;
-                    parser.parse_sequence(super::Parser::expect_symbol, false)
-                }
-                let args = parse_args(self)?;
+                self.expect_token(Token::OpenParen)?;
+                let args = self.parse_sequence(Parser::expect_symbol, false)?;
                 Ok(Body::Args(args))
             }
             "premises" => {

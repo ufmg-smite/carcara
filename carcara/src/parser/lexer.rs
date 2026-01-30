@@ -3,8 +3,8 @@
 use crate::{parser::ParserError, utils::is_symbol_character, CarcaraResult, Error};
 use rug::{ops::Pow, Integer, Rational};
 use std::{
-    io::{self, BufRead},
-    str::FromStr,
+    io,
+    str::{Chars, FromStr},
 };
 
 /// A token in the SMT-LIB and Alethe formats.
@@ -151,179 +151,166 @@ impl_str_conversion_traits!(Reserved {
 /// Represents a position (line and column numbers) in the source input.
 pub type Position = (usize, usize);
 
-/// A lexer for the SMT-LIB and Alethe formats.
-pub struct Lexer<R> {
-    input: R,
-    current_line: Option<std::vec::IntoIter<char>>,
-    current_char: Option<char>,
-    position: Position,
+pub struct Lexer<'s> {
+    chars: Chars<'s>,
+    line_start: usize,
+    lines_read: usize,
+    input_len: usize,
 }
 
-impl<R: BufRead> Lexer<R> {
+impl<'s> Lexer<'s> {
     /// Constructs a new `Lexer` from a type that implements `BufRead`.
     ///
     /// This operation can fail if there is an IO error on the first token.
-    pub fn new(mut input: R) -> io::Result<Self> {
-        let mut buf = String::new();
-        let read = input.read_line(&mut buf)?;
-        if read == 0 {
-            Ok(Lexer {
-                input,
-                current_line: None,
-                current_char: None,
-                position: (0, 0),
-            })
-        } else {
-            let mut line = buf.chars().collect::<Vec<_>>().into_iter();
-            let current_char = line.next();
-            Ok(Lexer {
-                input,
-                current_line: Some(line),
-                current_char,
-                position: (1, 1),
-            })
-        }
+    pub fn new(input: &'s str) -> io::Result<Self> {
+        let input_len = input.len();
+        Ok(Self {
+            chars: input.chars(),
+            line_start: 0,
+            lines_read: 0,
+            input_len,
+        })
     }
 
     /// Advances the lexer by one character, and returns the previous `current_char`.
-    fn next_char(&mut self) -> io::Result<Option<char>> {
-        // If there are no more characters in the current line, go to the next line
-        if let Some(line) = &self.current_line {
-            if line.as_slice().is_empty() {
-                self.next_line()?;
-            }
+    fn next_char(&mut self) -> Option<char> {
+        let got = self.chars.next();
+        if got == Some('\n') {
+            self.lines_read += 1;
+            self.line_start = self.input_len - self.chars.as_str().len();
         }
-
-        let new = if let Some(line) = &mut self.current_line {
-            self.position.1 += 1;
-            line.next()
-        } else {
-            None
-        };
-        let old = std::mem::replace(&mut self.current_char, new);
-        Ok(old)
+        got
     }
 
     /// Advances the lexer by one line, discarding the remaining contents of the current line.
-    fn next_line(&mut self) -> io::Result<()> {
-        let mut buf = String::new();
-        let read = self.input.read_line(&mut buf)?;
-        if read == 0 {
-            self.current_line = None;
-        } else {
-            let line = buf.chars().collect::<Vec<_>>().into_iter();
-            self.current_line = Some(line);
-            self.position.0 += 1;
-            self.position.1 = 0;
+    fn next_line(&mut self) {
+        // Read characters until line end
+        while self.current().is_some_and(|c| c != '\n') {
+            self.next_char();
         }
-        Ok(())
+        // Then read the \n char itself
+        if self.current() == Some('\n') {
+            self.next_char();
+            // self.chars.next();
+            // self.lines_read += 1;
+            // self.line_start = self.input_len - self.chars.as_str().len();
+        }
+    }
+
+    fn current(&self) -> Option<char> {
+        self.chars.clone().next()
+    }
+
+    fn position(&self) -> Position {
+        let raw = self.input_len - self.chars.as_str().len();
+        (self.lines_read, raw - self.line_start)
     }
 
     /// Reads characters while the given predicate returns `true`, and stores them in a `String`.
     ///
     /// At the end, all characters in the returned string will satisfy the predicate, and
     /// `self.current_char` will be the first character that didn't satisfy the predicate.
-    fn read_chars_while<P: Fn(char) -> bool>(&mut self, predicate: P) -> io::Result<String> {
+    fn read_chars_while<P: Fn(char) -> bool>(&mut self, predicate: P) -> String {
         let mut result = String::new();
-        while let Some(c) = self.current_char {
+        while let Some(c) = self.current() {
             if !predicate(c) {
                 break;
             }
             result.push(c);
-            self.next_char()?;
+            self.next_char();
         }
-        Ok(result)
+        result
     }
 
     /// Reads and drops characters until a non-whitespace character is encountered.
     ///
     /// This is similar to calling `self.read_chars_while(char::is_whitespace)`, but this method
     /// doesn't allocate a string to store the result.
-    fn drop_while_whitespace(&mut self) -> io::Result<()> {
-        while let Some(c) = self.current_char {
+    fn drop_while_whitespace(&mut self) {
+        while let Some(c) = self.current() {
             if !c.is_whitespace() {
                 break;
             }
-            self.next_char()?;
+            self.next_char();
         }
-        Ok(())
     }
 
     /// Consumes all leading whitespace and comments in the input source.
-    fn consume_whitespace(&mut self) -> io::Result<()> {
-        self.drop_while_whitespace()?;
-        while self.current_char == Some(';') {
-            self.next_line()?;
-            self.next_char()?;
-            self.drop_while_whitespace()?;
+    fn consume_whitespace(&mut self) {
+        self.drop_while_whitespace();
+        while self.current() == Some(';') {
+            self.next_line();
+            self.drop_while_whitespace();
         }
-        Ok(())
     }
 
     /// Reads a token from the input source.
     pub fn next_token(&mut self) -> CarcaraResult<(Token, Position)> {
-        self.consume_whitespace()?;
-        let start_position = self.position;
-        let token = match self.current_char {
+        self.consume_whitespace();
+        let start_position = self.position();
+        let token = match self.current() {
             Some('(') => {
-                self.next_char()?;
+                self.next_char();
                 Ok(Token::OpenParen)
             }
             Some(')') => {
-                self.next_char()?;
+                self.next_char();
                 Ok(Token::CloseParen)
             }
             Some('"') => self.read_string(),
             Some('|') => self.read_quoted_symbol(),
-            Some(':') => self.read_keyword(),
+            Some(':') => Ok(self.read_keyword()),
             Some('#') => self.read_bitvector(),
             Some('-') => {
                 // If we encounter the '-' character, the token can either be a GMP-style numerical
                 // literal (e.g. '-5'), or a symbol that starts with '-' (e.g. the '-' operator
                 // itself)
-                self.next_char()?;
-                if self.current_char.as_ref().is_some_and(char::is_ascii_digit) {
+                self.next_char();
+                if self.current().as_ref().is_some_and(char::is_ascii_digit) {
                     self.read_number(true)
                 } else {
                     // This assumes that the symbol is never a reserved a word.
-                    let mut symbol = self.read_chars_while(is_symbol_character)?;
+                    let mut symbol = self.read_chars_while(is_symbol_character);
                     symbol.insert(0, '-');
                     Ok(Token::Symbol(symbol))
                 }
             }
             Some(c) if c.is_ascii_digit() => self.read_number(false),
-            Some(c) if is_symbol_character(c) => self.read_simple_symbol(),
+            Some(c) if is_symbol_character(c) => Ok(self.read_simple_symbol()),
             None => Ok(Token::Eof),
             Some(other) => Err(Error::Parser(
                 ParserError::UnexpectedChar(other),
-                self.position,
+                self.position(),
             )),
         }?;
         Ok((token, start_position))
     }
 
     /// Reads a simple symbol from the input source.
-    fn read_simple_symbol(&mut self) -> CarcaraResult<Token> {
-        let symbol = self.read_chars_while(is_symbol_character)?;
+    fn read_simple_symbol(&mut self) -> Token {
+        let symbol = self.read_chars_while(is_symbol_character);
         if let Ok(reserved) = Reserved::from_str(&symbol) {
-            Ok(Token::ReservedWord(reserved))
+            Token::ReservedWord(reserved)
         } else {
-            Ok(Token::Symbol(symbol))
+            Token::Symbol(symbol)
         }
     }
 
     /// Reads a quoted symbol from the input source.
     fn read_quoted_symbol(&mut self) -> CarcaraResult<Token> {
-        self.next_char()?; // Consume `|`
-        let symbol = self.read_chars_while(|c| c != '|' && c != '\\')?;
-        match self.current_char {
+        self.next_char(); // Consume `|`
+        let symbol = self.read_chars_while(|c| c != '|' && c != '\\');
+        match self.current() {
             Some('\\') => Err(Error::Parser(
                 ParserError::BackslashInQuotedSymbol,
-                self.position,
+                self.position(),
             )),
-            None => Err(Error::Parser(ParserError::EofInQuotedSymbol, self.position)),
+            None => Err(Error::Parser(
+                ParserError::EofInQuotedSymbol,
+                self.position(),
+            )),
             Some('|') => {
-                self.next_char()?;
+                self.next_char();
                 Ok(Token::Symbol(symbol))
             }
             _ => unreachable!(),
@@ -331,10 +318,10 @@ impl<R: BufRead> Lexer<R> {
     }
 
     /// Reads a keyword from the input source.
-    fn read_keyword(&mut self) -> CarcaraResult<Token> {
-        self.next_char()?; // Consume `:`
-        let symbol = self.read_chars_while(is_symbol_character)?;
-        Ok(Token::Keyword(symbol))
+    fn read_keyword(&mut self) -> Token {
+        self.next_char(); // Consume `:`
+        let symbol = self.read_chars_while(is_symbol_character);
+        Token::Keyword(symbol)
     }
 
     /// Reads a binary or hexadecimal bitvector literal, e.g. `#b0110` or `#x01Ab`.
@@ -342,21 +329,21 @@ impl<R: BufRead> Lexer<R> {
     /// Returns an error if any character other than `b` or `x` is encountered after the `#`, or if
     /// no digits are provided.
     fn read_bitvector(&mut self) -> CarcaraResult<Token> {
-        self.next_char()?; // Consume `#`
-        let (base, bits_per_char) = match self.next_char()? {
+        self.next_char(); // Consume `#`
+        let (base, bits_per_char) = match self.next_char() {
             Some('b') => (2, 1),
             Some('x') => (16, 4),
-            None => return Err(Error::Parser(ParserError::EmptyBitvector, self.position)),
+            None => return Err(Error::Parser(ParserError::EmptyBitvector, self.position())),
             Some(other) => {
                 return Err(Error::Parser(
                     ParserError::UnexpectedChar(other),
-                    self.position,
+                    self.position(),
                 ))
             }
         };
-        let s = self.read_chars_while(|c| c.is_digit(base as u32))?;
+        let s = self.read_chars_while(|c| c.is_digit(base as u32));
         if s.is_empty() {
-            return Err(Error::Parser(ParserError::EmptyBitvector, self.position));
+            return Err(Error::Parser(ParserError::EmptyBitvector, self.position()));
         }
 
         let width = s.len() * bits_per_char;
@@ -366,22 +353,22 @@ impl<R: BufRead> Lexer<R> {
 
     /// Reads an integer or decimal numerical literal.
     fn read_number(&mut self, negated: bool) -> CarcaraResult<Token> {
-        let first_part = self.read_chars_while(|c| c.is_ascii_digit())?;
+        let first_part = self.read_chars_while(|c| c.is_ascii_digit());
 
         if first_part.len() > 1 && first_part.starts_with('0') {
             return Err(Error::Parser(
                 ParserError::LeadingZero(first_part),
-                self.position,
+                self.position(),
             ));
         }
 
-        if let Some(delimiter @ ('/' | '.')) = self.current_char {
-            self.next_char()?;
-            let second_part = self.read_chars_while(|c| c.is_ascii_digit())?;
-            if let Some('/' | '.') = self.current_char {
+        if let Some(delimiter @ ('/' | '.')) = self.current() {
+            self.next_char();
+            let second_part = self.read_chars_while(|c| c.is_ascii_digit());
+            if let Some('/' | '.') = self.current() {
                 // A number can have only one delimiter
-                let e = ParserError::UnexpectedChar(self.current_char.unwrap());
-                return Err(Error::Parser(e, self.position));
+                let e = ParserError::UnexpectedChar(self.current().unwrap());
+                return Err(Error::Parser(e, self.position()));
             }
             let r = match delimiter {
                 '/' => {
@@ -389,7 +376,7 @@ impl<R: BufRead> Lexer<R> {
                         [first_part, second_part].map(|s| s.parse::<Integer>().unwrap());
                     if denom.is_zero() {
                         let e = ParserError::DivisionByZeroInLiteral(format!("{numer}/{denom}"));
-                        return Err(Error::Parser(e, self.position));
+                        return Err(Error::Parser(e, self.position()));
                     }
                     Rational::from((numer, denom))
                 }
@@ -409,31 +396,31 @@ impl<R: BufRead> Lexer<R> {
 
     /// Reads a string literal from the input source.
     fn read_string(&mut self) -> CarcaraResult<Token> {
-        self.next_char()?; // Consume `"`
+        self.next_char(); // Consume `"`
         let mut result = String::new();
         loop {
-            let Some(c) = self.current_char else {
-                return Err(Error::Parser(ParserError::EofInString, self.position));
+            let Some(c) = self.current() else {
+                return Err(Error::Parser(ParserError::EofInString, self.position()));
             };
             if c == '"' {
-                self.next_char()?;
-                if self.current_char == Some('"') {
+                self.next_char();
+                if self.current() == Some('"') {
                     result.push('"');
-                    self.next_char()?;
+                    self.next_char();
                 } else {
                     break;
                 }
             } else if c == '\\' {
-                self.next_char()?;
-                if self.current_char == Some('u') {
-                    self.next_char()?;
+                self.next_char();
+                if self.current() == Some('u') {
+                    self.next_char();
                     self.read_unicode_escape_sequence(&mut result)?;
                 } else {
                     result.push('\\');
                 }
             } else {
                 result.push(c);
-                self.next_char()?;
+                self.next_char();
             }
         }
         Ok(Token::String(result))
@@ -441,23 +428,24 @@ impl<R: BufRead> Lexer<R> {
 
     fn read_unicode_escape_sequence(&mut self, result: &mut String) -> CarcaraResult<()> {
         // At this point, '\' and 'u' have already been read
-        match self.current_char {
+        // <<<<<<< HEAD
+        match self.current() {
             Some('{') => {
-                self.next_char()?;
+                self.next_char();
                 // Read the contents inside the {} braces, up to five hex characters
                 let mut contents = String::new();
                 for _ in 0..5 {
-                    let Some(c) = self.current_char else {
-                        return Err(Error::Parser(ParserError::EofInString, self.position));
+                    let Some(c) = self.current() else {
+                        return Err(Error::Parser(ParserError::EofInString, self.position()));
                     };
                     if c == '}' || !c.is_ascii_hexdigit() {
                         break;
                     }
                     contents.push(c);
-                    self.next_char()?;
+                    self.next_char();
                 }
-                if self.current_char == Some('}') {
-                    self.next_char()?;
+                if self.current() == Some('}') {
+                    self.next_char();
                 } else {
                     // If the contents are not up to 5 hex digits followed by '}', this is not a
                     // well-formed unicode escape sequence, so we abort
@@ -487,7 +475,7 @@ impl<R: BufRead> Lexer<R> {
                 // 0xDFFF), which is also considered invalid. Therefore `char::from_u32` may still
                 // fail.
                 let c = char::from_u32(code).ok_or_else(|| {
-                    Error::Parser(ParserError::InvalidUnicode(contents), self.position)
+                    Error::Parser(ParserError::InvalidUnicode(contents), self.position())
                 })?;
                 result.push(c);
                 Ok(())
@@ -495,14 +483,14 @@ impl<R: BufRead> Lexer<R> {
             Some(_) => {
                 let mut contents = String::new();
                 for _ in 0..4 {
-                    let Some(c) = self.current_char else {
-                        return Err(Error::Parser(ParserError::EofInString, self.position));
+                    let Some(c) = self.current() else {
+                        return Err(Error::Parser(ParserError::EofInString, self.position()));
                     };
                     if !c.is_ascii_hexdigit() {
                         break;
                     }
                     contents.push(c);
-                    self.next_char()?;
+                    self.next_char();
                 }
                 if contents.len() != 4 {
                     // If the contents are not exactly 4 hex digits, this is not a well-formed
@@ -513,12 +501,12 @@ impl<R: BufRead> Lexer<R> {
                 }
                 let code = u32::from_str_radix(&contents, 16).unwrap();
                 let c = char::from_u32(code).ok_or_else(|| {
-                    Error::Parser(ParserError::InvalidUnicode(contents), self.position)
+                    Error::Parser(ParserError::InvalidUnicode(contents), self.position())
                 })?;
                 result.push(c);
                 Ok(())
             }
-            None => Err(Error::Parser(ParserError::EofInString, self.position)),
+            None => Err(Error::Parser(ParserError::EofInString, self.position())),
         }
     }
 }
@@ -528,12 +516,12 @@ mod tests {
     use super::*;
 
     fn lex_one(input: &str) -> CarcaraResult<Token> {
-        let mut lex = Lexer::new(std::io::Cursor::new(input))?;
+        let mut lex = Lexer::new(input)?;
         lex.next_token().map(|(tk, _)| tk)
     }
 
     fn lex_all(input: &str) -> Vec<Token> {
-        let mut lex = Lexer::new(std::io::Cursor::new(input)).expect("lexer error during test");
+        let mut lex = Lexer::new(input).expect("lexer error during test");
         let mut result = Vec::new();
         loop {
             let tk = lex.next_token().expect("lexer error during test").0;
