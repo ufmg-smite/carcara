@@ -283,5 +283,9 @@ fn contraction() {
             "(step t1 (cl p p q) :rule hole)
             (step t2 (cl p q r s) :rule contraction :premises (t1))": false,
         }
+        "Uncontraction" {
+            "(step t1 (cl p q) :rule hole)
+            (step t2 (cl p p q q) :rule contraction :premises (t1))": false,
+        }
     }
 }

@@ -1,5 +1,9 @@
 use super::IdHelper;
-use crate::{ast::*, resolution::*, utils::DedupIterator};
+use crate::{
+    ast::*,
+    resolution::*,
+    utils::{DedupIterator, MultiSet},
+};
 use std::collections::{HashMap, HashSet};
 
 fn literals_to_clause(pool: &mut dyn TermPool, clause: &[Literal]) -> Vec<Rc<Term>> {
@@ -190,26 +194,17 @@ fn add_partial_resolution_step<'a>(
 }
 
 fn get_weakening_clause(current: &[Rc<Term>], target: &[Rc<Term>]) -> Vec<Rc<Term>> {
-    let mut missing: HashMap<&Rc<Term>, usize> = HashMap::new();
-    for term in target {
-        *missing.entry(term).or_default() += 1;
-    }
+    let mut missing: MultiSet<_> = target.iter().collect();
     for term in current {
-        match missing.get_mut(term) {
-            Some(0) | None => panic!("current clause is not a subset of target clause!"),
-            Some(1) => {
-                missing.remove(term);
-            }
-            Some(count) => *count -= 1,
-        }
+        assert!(
+            missing.get(&term) != 0,
+            "current clause is not a subset of target clause!"
+        );
+        missing.remove(term);
     }
 
     let mut result = current.to_vec();
-    for (term, n) in missing {
-        for _ in 0..n {
-            result.push(term.clone());
-        }
-    }
+    result.extend(missing.into_iter().cloned());
     result
 }
 

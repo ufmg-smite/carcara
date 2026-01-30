@@ -2,7 +2,7 @@ use super::{
     assert_clause_len, assert_eq, assert_is_bool_constant, assert_num_args, assert_num_premises,
     CheckerError, Premise, RuleArgs, RuleResult,
 };
-use crate::{ast::*, resolution::*};
+use crate::{ast::*, resolution::*, utils::MultiSet};
 use indexmap::IndexSet;
 
 pub fn resolution(rule_args: RuleArgs) -> RuleResult {
@@ -222,13 +222,20 @@ pub fn tautology(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult 
 pub fn contraction(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_num_premises(premises, 1)?;
 
-    let premise_set: IndexSet<_> = premises[0].clause.iter().collect();
-    let conclusion_set: IndexSet<_> = conclusion.iter().collect();
-    if let Some(&t) = premise_set.difference(&conclusion_set).next() {
-        Err(CheckerError::ContractionMissingTerm(t.clone()))
-    } else if let Some(&t) = conclusion_set.difference(&premise_set).next() {
-        Err(CheckerError::ContractionExtraTerm(t.clone()))
-    } else {
-        Ok(())
+    let premise_set: MultiSet<_> = premises[0].clause.iter().collect();
+    let conclusion_set: MultiSet<_> = conclusion.iter().collect();
+    for (&t, &count) in &premise_set.0 {
+        let got = conclusion_set.get(&t);
+        if got == 0 {
+            return Err(CheckerError::ContractionMissingTerm(t.clone()));
+        } else if got > count {
+            return Err(CheckerError::ContractionExtraTerm(t.clone()));
+        }
     }
+    for (t, count) in conclusion_set.0 {
+        if premise_set.get(&t) < count {
+            return Err(CheckerError::ContractionExtraTerm(t.clone()));
+        }
+    }
+    Ok(())
 }
