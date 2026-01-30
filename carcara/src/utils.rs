@@ -173,6 +173,60 @@ impl<K, V> Default for HashMapStack<K, V> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct MultiSet<T>(IndexMap<T, usize>);
+
+impl<T> Default for MultiSet<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T> MultiSet<T> {
+    pub fn new() -> Self {
+        MultiSet(IndexMap::new())
+    }
+}
+
+impl<T: Hash + Eq> MultiSet<T> {
+    pub fn get(&self, value: &T) -> usize {
+        self.0.get(value).copied().unwrap_or_default()
+    }
+
+    pub fn get_mut(&mut self, value: T) -> &mut usize {
+        self.0.entry(value).or_default()
+    }
+
+    pub fn insert(&mut self, value: T) -> usize {
+        self.insert_n(value, 1)
+    }
+
+    pub fn insert_n(&mut self, value: T, n: usize) -> usize {
+        if n == 0 {
+            return self.get(&value);
+        }
+        let v = self.get_mut(value);
+        *v += n;
+        *v
+    }
+}
+
+impl<T: Hash + Eq> PartialEq for MultiSet<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<T: Hash + Eq> FromIterator<T> for MultiSet<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        let mut mset = MultiSet::new();
+        for i in iter {
+            mset.insert(i);
+        }
+        mset
+    }
+}
+
 // TODO: Document this struct
 #[derive(Debug)]
 pub struct Range<T = usize>(Option<T>, Option<T>);

@@ -4,7 +4,11 @@ use super::{
     assert_clause_len, assert_eq, assert_num_premises, get_premise_term, CheckerError,
     EqualityError, RuleArgs, RuleResult,
 };
-use crate::{ast::*, checker::rules::assert_operation_len};
+use crate::{
+    ast::*,
+    checker::{error::CongruenceError, rules::assert_operation_len},
+    utils::MultiSet,
+};
 use indexmap::IndexSet;
 
 pub fn reordering(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
@@ -22,6 +26,28 @@ pub fn reordering(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult
     } else {
         Ok(())
     }
+}
+
+pub fn shuffle(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
+    let (left_args, right_args) = {
+        let ((l_op, l), (r_op, r)) = (left.as_op_err()?, right.as_op_err()?);
+        if l_op != r_op {
+            return Err(CongruenceError::DifferentOperators(l_op, r_op).into());
+        }
+        match l_op {
+            Operator::Add | Operator::Mult | Operator::And | Operator::Or => (l, r),
+            other => return Err(CheckerError::OperatorNotCommutative(other)),
+        }
+    };
+
+    let left_multiset: MultiSet<_> = left_args.iter().collect();
+    let right_multiset: MultiSet<_> = right_args.iter().collect();
+    if left_multiset != right_multiset {
+        return Err(CheckerError::ShuffleArgsNotEqual);
+    }
+    Ok(())
 }
 
 pub fn symm(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
