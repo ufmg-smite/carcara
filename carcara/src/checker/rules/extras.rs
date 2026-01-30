@@ -7,9 +7,8 @@ use super::{
 use crate::{
     ast::*,
     checker::{error::CongruenceError, rules::assert_operation_len},
-    utils::MultiSet,
+    utils::{MultiSet, MultiSetDifference},
 };
-use indexmap::IndexSet;
 
 pub fn reordering(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_num_premises(premises, 1)?;
@@ -17,14 +16,12 @@ pub fn reordering(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult
     let premise = premises[0].clause;
     assert_clause_len(conclusion, premise.len())?;
 
-    let premise_set: IndexSet<_> = premise.iter().collect();
-    let conclusion_set: IndexSet<_> = conclusion.iter().collect();
-    if let Some(&t) = premise_set.difference(&conclusion_set).next() {
-        Err(CheckerError::ContractionMissingTerm(t.clone()))
-    } else if let Some(&t) = conclusion_set.difference(&premise_set).next() {
-        Err(CheckerError::ContractionExtraTerm(t.clone()))
-    } else {
-        Ok(())
+    let premise_set: MultiSet<_> = premise.iter().collect();
+    let conclusion_set: MultiSet<_> = conclusion.iter().collect();
+    match conclusion_set.symmetric_difference(&premise_set) {
+        MultiSetDifference::None => Ok(()),
+        MultiSetDifference::Missing(t) => Err(CheckerError::ContractionMissingTerm((*t).clone())),
+        MultiSetDifference::Extra(t) => Err(CheckerError::ContractionExtraTerm((*t).clone())),
     }
 }
 
