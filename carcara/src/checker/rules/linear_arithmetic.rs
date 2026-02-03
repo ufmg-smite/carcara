@@ -461,7 +461,6 @@ pub fn arith_poly_norm(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (t, s) = match_term_err!((= t s) = &conclusion[0])?;
     let (t_norm, s_norm) = (LinearComb::from_term(t), LinearComb::from_term(s));
-    dbg!(&t_norm, &s_norm);
     if !t_norm.sub(s_norm).is_zero() {
         Err(LinearArithmeticError::LinearCombNotEqual(t.clone(), s.clone()).into())
     } else {
