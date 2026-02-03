@@ -378,6 +378,122 @@ pub enum Operator {
     Delete,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NaryCase {
+    Chainable,
+    RightAssoc,
+    LeftAssoc,
+    Pairwise,
+}
+
+impl Operator {
+    pub fn nary_case(&self) -> Option<NaryCase> {
+        // We avoid using the wildcard pattern (i.e. `_`) in this match expression so that when
+        // someone adds a new operator, they are reminded to add it to this match
+        match self {
+            // Logical
+            Operator::Implies => Some(NaryCase::RightAssoc),
+            Operator::And | Operator::Or | Operator::Xor => Some(NaryCase::LeftAssoc),
+            Operator::Equals => Some(NaryCase::Chainable),
+            Operator::Distinct => Some(NaryCase::Pairwise),
+            Operator::True | Operator::False | Operator::Not | Operator::Ite => None,
+
+            // Integers/Reals
+            Operator::Add
+            | Operator::Sub
+            | Operator::Mult
+            | Operator::IntDiv
+            | Operator::RealDiv => Some(NaryCase::LeftAssoc),
+            Operator::LessThan | Operator::GreaterThan | Operator::LessEq | Operator::GreaterEq => {
+                Some(NaryCase::Chainable)
+            }
+            Operator::Mod
+            | Operator::Abs
+            | Operator::ToReal
+            | Operator::ToInt
+            | Operator::IsInt => None,
+
+            // Arrays
+            Operator::Select | Operator::Store => None,
+
+            // Strings
+            Operator::StrConcat
+            | Operator::StrLessThan
+            | Operator::StrLessEq
+            | Operator::ReConcat
+            | Operator::ReUnion
+            | Operator::ReIntersection
+            | Operator::ReDiff => Some(NaryCase::LeftAssoc),
+            Operator::StrLen
+            | Operator::CharAt
+            | Operator::Substring
+            | Operator::PrefixOf
+            | Operator::SuffixOf
+            | Operator::Contains
+            | Operator::IndexOf
+            | Operator::Replace
+            | Operator::ReplaceAll
+            | Operator::ReplaceRe
+            | Operator::ReplaceReAll
+            | Operator::StrIsDigit
+            | Operator::StrToCode
+            | Operator::StrFromCode
+            | Operator::StrToInt
+            | Operator::StrFromInt
+            | Operator::StrToRe
+            | Operator::StrInRe
+            | Operator::ReNone
+            | Operator::ReAll
+            | Operator::ReAllChar
+            | Operator::ReKleeneClosure
+            | Operator::ReComplement
+            | Operator::ReKleeneCross
+            | Operator::ReOption
+            | Operator::ReRange => None,
+
+            // Bitvectors
+            Operator::BvAnd | Operator::BvOr | Operator::BvAdd | Operator::BvMul => {
+                Some(NaryCase::LeftAssoc)
+            }
+            Operator::BvNot
+            | Operator::BvNeg
+            | Operator::BvUDiv
+            | Operator::BvURem
+            | Operator::BvShl
+            | Operator::BvLShr
+            | Operator::BvULt
+            | Operator::BvConcat
+            | Operator::BvNAnd
+            | Operator::BvNOr
+            | Operator::BvXor
+            | Operator::BvXNor
+            | Operator::BvComp
+            | Operator::BvSub
+            | Operator::BvSDiv
+            | Operator::BvSRem
+            | Operator::BvSMod
+            | Operator::BvAShr
+            | Operator::BvULe
+            | Operator::BvUGt
+            | Operator::BvUGe
+            | Operator::BvSLt
+            | Operator::BvSLe
+            | Operator::BvSGt
+            | Operator::BvSGe
+            | Operator::UBvToInt
+            | Operator::SBvToInt
+            | Operator::BvPBbTerm
+            | Operator::BvBbTerm
+            | Operator::BvConst
+            | Operator::BvSize
+            | Operator::RareList => None,
+
+            // Clausal
+            Operator::Cl | Operator::Delete => Some(NaryCase::LeftAssoc),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ParamOperator {
     // Indexed operators
