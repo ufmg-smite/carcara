@@ -42,6 +42,13 @@ impl Value {
         }
     }
 
+    pub fn as_bitvec(&self) -> Option<(&Integer, &Integer)> {
+        match self {
+            Value::BitVec(val, width) => Some((val, width)),
+            _ => None,
+        }
+    }
+
     pub fn into_term(self) -> Term {
         match self {
             Value::Bool(true) => Term::Op(Operator::True, Vec::new()),
@@ -113,6 +120,21 @@ macro_rules! arith_op {
         args[1..]
             .iter()
             .try_fold(first, |acc, arg| mixed_type_arith!($op, acc, arg))?
+    }};
+}
+
+macro_rules! bitvec_op {
+    ($op:tt, $args:expr) => {{
+        let args = $args;
+        let Value::BitVec(first, w) = args[0].clone() else {
+            return None;
+        };
+        let m = Integer::from(1) << w.to_usize().unwrap();
+        let res = args[1..].iter().try_fold(first, |acc, arg| {
+            let (arg, _) = arg.as_bitvec()?;
+            Some((acc $op arg) % &m)
+        })?;
+        Value::BitVec(res, w)
     }};
 }
 
@@ -191,9 +213,11 @@ fn eval_op(op: Operator, args: Vec<&Value>) -> Option<Value> {
         Operator::ToInt => Value::Integer(args[0].as_real()?.floor().into_numer_denom().0),
         Operator::IsInt => Value::Bool(args[0].as_real()?.is_integer()),
 
-        Operator::Select
-        | Operator::Store
-        | Operator::StrConcat
+        // TODO: Arrays
+        Operator::Select | Operator::Store => return None,
+
+        // TODO: Strings
+        Operator::StrConcat
         | Operator::StrLen
         | Operator::StrLessThan
         | Operator::StrLessEq
@@ -225,22 +249,68 @@ fn eval_op(op: Operator, args: Vec<&Value>) -> Option<Value> {
         | Operator::ReDiff
         | Operator::ReKleeneCross
         | Operator::ReOption
-        | Operator::ReRange
-        | Operator::BvNot
-        | Operator::BvNeg
-        | Operator::BvAnd
-        | Operator::BvOr
-        | Operator::BvAdd
-        | Operator::BvMul
-        | Operator::BvUDiv
-        | Operator::BvURem
-        | Operator::BvShl
-        | Operator::BvLShr
-        | Operator::BvULt
-        | Operator::BvConcat
-        | Operator::BvNAnd
+        | Operator::ReRange => return None,
+
+        // Bitvectors
+        Operator::BvNot => {
+            let (val, width) = args[0].as_bitvec()?;
+            Value::BitVec(!val.clone(), width.clone())
+        }
+        Operator::BvNeg => {
+            let (val, width) = args[0].as_bitvec()?;
+            let m = Integer::from(1) << width.to_usize().unwrap();
+            Value::BitVec(-val.clone() % m, width.clone())
+        }
+        Operator::BvAnd => bitvec_op!(&, args),
+        Operator::BvOr => bitvec_op!(|, args),
+        Operator::BvXor => bitvec_op!(^, args),
+        Operator::BvAdd => bitvec_op!(+, args),
+        Operator::BvMul => bitvec_op!(*, args),
+
+        Operator::BvUDiv => {
+            let ((a, w), (b, _)) = (args[0].as_bitvec()?, args[1].as_bitvec()?);
+            let value = if b.is_zero() {
+                (Integer::from(1) << w.to_usize()?) - 1
+            } else {
+                a.clone() / b
+            };
+            Value::BitVec(value, w.clone())
+        }
+        Operator::BvURem => {
+            let ((a, w), (b, _)) = (args[0].as_bitvec()?, args[1].as_bitvec()?);
+            let value = if b.is_zero() {
+                a.clone()
+            } else {
+                a.clone() % b
+            };
+            Value::BitVec(value, w.clone())
+        }
+        Operator::BvShl => {
+            let ((a, w), (b, _)) = (args[0].as_bitvec()?, args[1].as_bitvec()?);
+            let m = Integer::from(1) << w.to_usize().unwrap();
+            Value::BitVec((a.clone() << b.to_usize()?) % m, w.clone())
+        }
+        Operator::BvLShr => {
+            let ((a, w), (b, _)) = (args[0].as_bitvec()?, args[1].as_bitvec()?);
+            Value::BitVec(a.clone() >> b.to_usize()?, w.clone())
+        }
+        Operator::BvULt => {
+            let ((a, _), (b, _)) = (args[0].as_bitvec()?, args[1].as_bitvec()?);
+            Value::Bool(a < b)
+        }
+        Operator::BvConcat => {
+            let (value, width) = args.iter().try_fold((Integer::new(), 0usize), |acc, arg| {
+                let (a, i) = acc;
+                let (b, j) = arg.as_bitvec()?;
+                let j = j.to_usize().unwrap();
+                Some(((a << j) + b, i + j))
+            })?;
+            Value::BitVec(value, Integer::from(width))
+        }
+
+        // TODO: remaining bitvector operators
+        Operator::BvNAnd
         | Operator::BvNOr
-        | Operator::BvXor
         | Operator::BvXNor
         | Operator::BvComp
         | Operator::BvSub
@@ -260,9 +330,9 @@ fn eval_op(op: Operator, args: Vec<&Value>) -> Option<Value> {
         | Operator::BvPBbTerm
         | Operator::BvBbTerm
         | Operator::BvConst
-        | Operator::BvSize
-        | Operator::RareList
-        | Operator::Cl
-        | Operator::Delete => return None, // TODO
+        | Operator::BvSize => return None,
+
+        // TODO: Rare
+        Operator::RareList | Operator::Cl | Operator::Delete => return None,
     })
 }
