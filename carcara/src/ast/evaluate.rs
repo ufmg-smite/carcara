@@ -1,4 +1,4 @@
-use super::{Constant, Operator, Rc, Term};
+use super::{Constant, Operator, ParamOperator, Rc, Term};
 use rug::{Integer, Rational};
 use std::collections::{HashMap, HashSet};
 
@@ -102,13 +102,20 @@ impl Rc<Term> {
                 let values = args.iter().map(|a| &cache[a]).collect();
                 eval_op(*op, values)
             }
+            Term::ParamOp { op, op_args, args } => {
+                for a in op_args.iter().chain(args) {
+                    a.evaluate_impl(cache)?;
+                }
+                let op_args = op_args.iter().map(|a| &cache[a]).collect();
+                let args = args.iter().map(|a| &cache[a]).collect();
+                eval_param_op(*op, op_args, args)
+            }
 
             Term::Var(_, _)
             | Term::App(_, _)
             | Term::Sort(_)
             | Term::Binder(_, _, _)
             | Term::Let(_, _) => None,
-            Term::ParamOp { .. } => None, // TODO
         }?;
         cache.insert(self, result.clone());
         cache.get(self)
@@ -394,11 +401,93 @@ fn eval_op(op: Operator, args: Vec<&Value>) -> Option<Value> {
             }
             Value::BitVec(result, width)
         }
-
-        // TODO
-        Operator::BvPBbTerm => return None,
+        Operator::BvPBbTerm => {
+            let width = args.len();
+            let mut result = Integer::with_capacity(width);
+            for (i, b) in args.into_iter().enumerate() {
+                result.set_bit(i as u32, b.as_int()? == 1);
+            }
+            Value::BitVec(result, width)
+        }
 
         // TODO: Rare
         Operator::RareList | Operator::Cl | Operator::Delete => return None,
     })
+}
+
+fn eval_param_op(op: ParamOperator, op_args: Vec<&Value>, args: Vec<&Value>) -> Option<Value> {
+    Some(match op {
+        ParamOperator::BvExtract => {
+            let i = op_args[0].as_int()?.to_usize().unwrap();
+            let j = op_args[1].as_int()?.to_usize().unwrap();
+            let (bits, _) = args[0].as_bitvec()?;
+            let bits = bits.clone().keep_bits(i as u32) >> j;
+            Value::new_bitvec(bits, i - j + 1)
+        }
+        ParamOperator::ZeroExtend => {
+            let i = op_args[0].as_int()?.to_usize().unwrap();
+            let (value, w) = args[0].as_bitvec()?;
+            Value::new_bitvec(value.clone(), w + i)
+        }
+        ParamOperator::SignExtend => {
+            let i = op_args[0].as_int()?.to_usize().unwrap();
+            let (value, w) = args[0].as_signed_bitvec()?;
+            Value::new_bitvec(value, w + i)
+        }
+        ParamOperator::RotateLeft => {
+            let i = op_args[0].as_int()?.to_usize().unwrap();
+            let (value, w) = args[0].as_bitvec()?;
+            // A left rotation by i bits is just a right rotation by w - i bits
+            Value::new_bitvec(rotate_right(value, w, w - i), w)
+        }
+        ParamOperator::RotateRight => {
+            let i = op_args[0].as_int()?.to_usize().unwrap();
+            let (value, w) = args[0].as_bitvec()?;
+            Value::new_bitvec(rotate_right(value, w, i), w)
+        }
+        ParamOperator::Repeat => {
+            let i = op_args[0].as_int()?.to_usize().unwrap();
+            let (value, w) = args[0].as_bitvec()?;
+            let mut result = Integer::ZERO;
+            for _ in 0..i {
+                result <<= w;
+                result += value;
+            }
+            Value::new_bitvec(result, w * i)
+        }
+        ParamOperator::IntToBv => {
+            let w = op_args[0].as_int()?.to_usize().unwrap();
+            let value = args[0].as_int()?;
+            Value::new_bitvec(value, w)
+        }
+        ParamOperator::BvConst => {
+            let value = op_args[0].as_int()?;
+            let w = op_args[1].as_int()?.to_usize().unwrap();
+            Value::new_bitvec(value, w)
+        }
+        ParamOperator::BvBitOf => {
+            let i = op_args[0].as_int()?.to_usize().unwrap();
+            let (value, _) = args[0].as_bitvec()?;
+            Value::Bool(value.get_bit(i as u32))
+        }
+        ParamOperator::BvIntOf => {
+            let i = op_args[0].as_int()?.to_usize().unwrap();
+            let (value, _) = args[0].as_bitvec()?;
+            let bit = Integer::from(value.get_bit(i as u32) as usize);
+            Value::Integer(bit)
+        }
+
+        // TODO: Strings, Arrays
+        ParamOperator::RePower | ParamOperator::ReLoop | ParamOperator::ArrayConst => return None,
+    })
+}
+
+/// Rotates a `w`-sized bitvector `r` bits to the right
+fn rotate_right(value: &Integer, w: usize, r: usize) -> Integer {
+    let r = r % w;
+    // The least significant bits, that got rotated around
+    let rotated = value.clone().keep_bits(r as u32) << (w - r);
+    // The most significant bits, that only got shifted right
+    let shifted = value.clone() >> r;
+    rotated + shifted
 }
