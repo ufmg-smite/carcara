@@ -8,7 +8,7 @@ pub enum Value {
     Integer(Integer),
     Real(Rational),
     String(String),
-    BitVec(Integer, Integer),
+    BitVec(Integer, usize),
 }
 
 impl Value {
@@ -42,9 +42,9 @@ impl Value {
         }
     }
 
-    pub fn as_bitvec(&self) -> Option<(&Integer, &Integer)> {
+    pub fn as_bitvec(&self) -> Option<(&Integer, usize)> {
         match self {
-            Value::BitVec(val, width) => Some((val, width)),
+            Value::BitVec(val, width) => Some((val, *width)),
             _ => None,
         }
     }
@@ -129,7 +129,7 @@ macro_rules! bitvec_op {
         let Value::BitVec(first, w) = args[0].clone() else {
             return None;
         };
-        let m = Integer::from(1) << w.to_usize().unwrap();
+        let m = Integer::from(1) << w;
         let res = args[1..].iter().try_fold(first, |acc, arg| {
             let (arg, _) = arg.as_bitvec()?;
             Some((acc $op arg) % &m)
@@ -254,12 +254,12 @@ fn eval_op(op: Operator, args: Vec<&Value>) -> Option<Value> {
         // Bitvectors
         Operator::BvNot => {
             let (val, width) = args[0].as_bitvec()?;
-            Value::BitVec(!val.clone(), width.clone())
+            Value::BitVec(!val.clone(), width)
         }
         Operator::BvNeg => {
             let (val, width) = args[0].as_bitvec()?;
-            let m = Integer::from(1) << width.to_usize().unwrap();
-            Value::BitVec(-val.clone() % m, width.clone())
+            let m = Integer::from(1) << width;
+            Value::BitVec(-val.clone() % m, width)
         }
         Operator::BvAnd => bitvec_op!(&, args),
         Operator::BvOr => bitvec_op!(|, args),
@@ -270,11 +270,11 @@ fn eval_op(op: Operator, args: Vec<&Value>) -> Option<Value> {
         Operator::BvUDiv => {
             let ((a, w), (b, _)) = (args[0].as_bitvec()?, args[1].as_bitvec()?);
             let value = if b.is_zero() {
-                (Integer::from(1) << w.to_usize()?) - 1
+                (Integer::from(1) << w) - 1
             } else {
                 a.clone() / b
             };
-            Value::BitVec(value, w.clone())
+            Value::BitVec(value, w)
         }
         Operator::BvURem => {
             let ((a, w), (b, _)) = (args[0].as_bitvec()?, args[1].as_bitvec()?);
@@ -283,29 +283,28 @@ fn eval_op(op: Operator, args: Vec<&Value>) -> Option<Value> {
             } else {
                 a.clone() % b
             };
-            Value::BitVec(value, w.clone())
+            Value::BitVec(value, w)
         }
         Operator::BvShl => {
             let ((a, w), (b, _)) = (args[0].as_bitvec()?, args[1].as_bitvec()?);
-            let m = Integer::from(1) << w.to_usize().unwrap();
-            Value::BitVec((a.clone() << b.to_usize()?) % m, w.clone())
+            let m = Integer::from(1) << w;
+            Value::BitVec((a.clone() << b.to_usize()?) % m, w)
         }
         Operator::BvLShr => {
             let ((a, w), (b, _)) = (args[0].as_bitvec()?, args[1].as_bitvec()?);
-            Value::BitVec(a.clone() >> b.to_usize()?, w.clone())
+            Value::BitVec(a.clone() >> b.to_usize()?, w)
         }
         Operator::BvULt => {
             let ((a, _), (b, _)) = (args[0].as_bitvec()?, args[1].as_bitvec()?);
             Value::Bool(a < b)
         }
         Operator::BvConcat => {
-            let (value, width) = args.iter().try_fold((Integer::new(), 0usize), |acc, arg| {
+            let (value, width) = args.iter().try_fold((Integer::new(), 0), |acc, arg| {
                 let (a, i) = acc;
                 let (b, j) = arg.as_bitvec()?;
-                let j = j.to_usize().unwrap();
                 Some(((a << j) + b, i + j))
             })?;
-            Value::BitVec(value, Integer::from(width))
+            Value::BitVec(value, width)
         }
 
         // TODO: remaining bitvector operators

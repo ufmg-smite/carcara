@@ -1352,7 +1352,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
 
     pub fn parse_constant(&mut self) -> CarcaraResult<Constant> {
         let constant = match self.next_token()? {
-            (Token::Bitvector { value, width }, _) => Constant::BitVec(value, width.into()),
+            (Token::Bitvector { value, width }, _) => Constant::BitVec(value, width),
             (Token::Numeral(n), _) if self.interpret_ints_as_reals() => Constant::Real(n.into()),
             (Token::Numeral(n), _) => Constant::Integer(n),
             (Token::Decimal(r), _) => Constant::Real(r),
@@ -1568,7 +1568,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 assert_num_args(&op_args, 2)?;
                 assert_num_args(&args, 0)?;
                 let value = op_args[0].as_integer().unwrap();
-                let width = op_args[1].as_integer().unwrap();
+                let width = op_args[1].as_integer().unwrap().to_usize().unwrap();
                 assert_indexed_op_args_value(&[op_args[0].clone()], 0..)?;
                 assert_indexed_op_args_value(&[op_args[1].clone()], 1..)?;
                 return Ok(self.pool.add(Term::Const(Constant::BitVec(value, width))));
@@ -1595,17 +1595,14 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     }
                 }
                 assert_indexed_op_args_value(&op_args, 0..)?;
-                let i = op_args[0].as_integer().unwrap();
-                let j = op_args[1].as_integer().unwrap();
+                let i = op_args[0].as_integer().unwrap().to_usize().unwrap();
+                let j = op_args[1].as_integer().unwrap().to_usize().unwrap();
                 let Sort::BitVec(m) = sorts[0].clone() else {
                     unreachable!()
                 };
-                if !(m > i && i >= j && j >= Integer::ZERO) {
-                    return Err(ParserError::InvalidExtractArgs(
-                        i.to_usize().unwrap(),
-                        j.to_usize().unwrap(),
-                        m.to_usize().unwrap(),
-                    ));
+                // j >= 0 is ensured by the parser
+                if !(m > i && i >= j) {
+                    return Err(ParserError::InvalidExtractArgs(i, j, m));
                 }
             }
             ParamOperator::IntToBv => {
@@ -1899,7 +1896,9 @@ impl<'a, R: BufRead> Parser<'a, R> {
                     return Err(ParserError::WrongNumberOfArgs(1.into(), args.len()));
                 }
                 if let Some(width) = args[0].as_integer() {
-                    Ok(self.pool.add(Term::Sort(Sort::BitVec(width))))
+                    Ok(self
+                        .pool
+                        .add(Term::Sort(Sort::BitVec(width.to_usize().unwrap()))))
                 } else {
                     Err(ParserError::ExpectedIntegerConstant(args[0].clone()))
                 }
