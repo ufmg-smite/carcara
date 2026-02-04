@@ -21,6 +21,12 @@ impl Value {
         }
     }
 
+    /// Constructs a new bitvector value, truncating the `value` to `width` bits, and ensuring it
+    /// is non-negative
+    pub fn new_bitvec(value: Integer, width: usize) -> Self {
+        Self::BitVec(value.keep_bits(width as u32), width)
+    }
+
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             Value::Bool(b) => Some(*b),
@@ -47,6 +53,17 @@ impl Value {
             Value::BitVec(val, width) => Some((val, *width)),
             _ => None,
         }
+    }
+
+    pub fn as_signed_bitvec(&self) -> Option<(Integer, usize)> {
+        let (val, w) = self.as_bitvec()?;
+        let val = if val.get_bit((w - 1) as u32) {
+            let m = Integer::from(1) << w;
+            m.clone() - val
+        } else {
+            val.clone()
+        };
+        Some((val, w))
     }
 
     pub fn into_term(self) -> Term {
@@ -129,12 +146,11 @@ macro_rules! bitvec_op {
         let Value::BitVec(first, w) = args[0].clone() else {
             return None;
         };
-        let m = Integer::from(1) << w;
         let res = args[1..].iter().try_fold(first, |acc, arg| {
             let (arg, _) = arg.as_bitvec()?;
-            Some((acc $op arg) % &m)
+            Some((acc $op arg).keep_bits(w as u32))
         })?;
-        Value::BitVec(res, w)
+        Value::new_bitvec(res, w)
     }};
 }
 
@@ -154,6 +170,19 @@ macro_rules! comparison_op {
                 .windows(2)
                 .try_fold(true, |acc, w| Some(acc && compare(w)?))?,
         )
+    }};
+}
+
+macro_rules! bitvec_comparison_op {
+    ($op:tt, $args:expr, "signed") => {{
+        let args = $args;
+        let ((a, _), (b, _)) = (args[0].as_signed_bitvec()?, args[1].as_signed_bitvec()?);
+        Value::Bool(a $op b)
+    }};
+    ($op:tt, $args:expr) => {{
+        let args = $args;
+        let ((a, _), (b, _)) = (args[0].as_bitvec()?, args[1].as_bitvec()?);
+        Value::Bool(a $op b)
     }};
 }
 
@@ -254,19 +283,21 @@ fn eval_op(op: Operator, args: Vec<&Value>) -> Option<Value> {
         // Bitvectors
         Operator::BvNot => {
             let (val, width) = args[0].as_bitvec()?;
-            Value::BitVec(!val.clone(), width)
+            Value::new_bitvec(!val.clone(), width)
         }
         Operator::BvNeg => {
             let (val, width) = args[0].as_bitvec()?;
-            let m = Integer::from(1) << width;
-            Value::BitVec(-val.clone() % m, width)
+            Value::new_bitvec(-val.clone(), width)
         }
         Operator::BvAnd => bitvec_op!(&, args),
         Operator::BvOr => bitvec_op!(|, args),
         Operator::BvXor => bitvec_op!(^, args),
         Operator::BvAdd => bitvec_op!(+, args),
         Operator::BvMul => bitvec_op!(*, args),
-
+        Operator::BvSub => {
+            let ((a, w), (b, _)) = (args[0].as_signed_bitvec()?, args[1].as_signed_bitvec()?);
+            Value::new_bitvec(a - b, w)
+        }
         Operator::BvUDiv => {
             let ((a, w), (b, _)) = (args[0].as_bitvec()?, args[1].as_bitvec()?);
             let value = if b.is_zero() {
@@ -274,7 +305,7 @@ fn eval_op(op: Operator, args: Vec<&Value>) -> Option<Value> {
             } else {
                 a.clone() / b
             };
-            Value::BitVec(value, w)
+            Value::new_bitvec(value, w)
         }
         Operator::BvURem => {
             let ((a, w), (b, _)) = (args[0].as_bitvec()?, args[1].as_bitvec()?);
@@ -283,53 +314,89 @@ fn eval_op(op: Operator, args: Vec<&Value>) -> Option<Value> {
             } else {
                 a.clone() % b
             };
-            Value::BitVec(value, w)
+            Value::new_bitvec(value, w)
+        }
+        Operator::BvSDiv => {
+            let ((a, w), (b, _)) = (args[0].as_signed_bitvec()?, args[1].as_signed_bitvec()?);
+            if b.is_zero() {
+                return None;
+            }
+            Value::new_bitvec(a / b, w)
+        }
+        Operator::BvSRem | Operator::BvSMod => {
+            let ((a, w), (b, _)) = (args[0].as_signed_bitvec()?, args[1].as_signed_bitvec()?);
+            if b.is_zero() {
+                return None;
+            }
+            let signum: Integer = if op == Operator::BvSRem { &a } else { &b }
+                .signum_ref()
+                .into();
+            let value = a.abs() % b.abs();
+            Value::new_bitvec(value * signum, w)
         }
         Operator::BvShl => {
             let ((a, w), (b, _)) = (args[0].as_bitvec()?, args[1].as_bitvec()?);
-            let m = Integer::from(1) << w;
-            Value::BitVec((a.clone() << b.to_usize()?) % m, w)
+            Value::new_bitvec(a.clone() << b.to_usize()?, w)
         }
         Operator::BvLShr => {
             let ((a, w), (b, _)) = (args[0].as_bitvec()?, args[1].as_bitvec()?);
-            Value::BitVec(a.clone() >> b.to_usize()?, w)
+            Value::new_bitvec(a.clone() >> b.to_usize()?, w)
         }
-        Operator::BvULt => {
-            let ((a, _), (b, _)) = (args[0].as_bitvec()?, args[1].as_bitvec()?);
-            Value::Bool(a < b)
+        Operator::BvAShr => {
+            let ((a, w), (b, _)) = (args[0].as_signed_bitvec()?, args[1].as_bitvec()?);
+            Value::new_bitvec(a.clone() >> b.to_usize()?, w)
         }
+        Operator::BvULt => bitvec_comparison_op!(<, args),
+        Operator::BvULe => bitvec_comparison_op!(<=, args),
+        Operator::BvUGt => bitvec_comparison_op!(>, args),
+        Operator::BvUGe => bitvec_comparison_op!(>=, args),
+        Operator::BvSLt => bitvec_comparison_op!(<, args, "signed"),
+        Operator::BvSLe => bitvec_comparison_op!(<=, args, "signed"),
+        Operator::BvSGt => bitvec_comparison_op!(>, args, "signed"),
+        Operator::BvSGe => bitvec_comparison_op!(>=, args, "signed"),
         Operator::BvConcat => {
             let (value, width) = args.iter().try_fold((Integer::new(), 0), |acc, arg| {
                 let (a, i) = acc;
                 let (b, j) = arg.as_bitvec()?;
                 Some(((a << j) + b, i + j))
             })?;
-            Value::BitVec(value, width)
+            Value::new_bitvec(value, width)
+        }
+        Operator::BvNAnd => {
+            let ((a, w), (b, _)) = (args[0].as_bitvec()?, args[1].as_bitvec()?);
+            Value::new_bitvec(!(a.clone() & b), w)
+        }
+        Operator::BvNOr => {
+            let ((a, w), (b, _)) = (args[0].as_bitvec()?, args[1].as_bitvec()?);
+            Value::new_bitvec(!(a.clone() | b), w)
+        }
+        Operator::BvXNor => {
+            let ((a, w), (b, _)) = (args[0].as_bitvec()?, args[1].as_bitvec()?);
+            Value::new_bitvec(!(a.clone() ^ b), w)
+        }
+        Operator::BvComp => {
+            let ((a, _), (b, _)) = (args[0].as_bitvec()?, args[1].as_bitvec()?);
+            Value::new_bitvec(Integer::from(if a == b { 1 } else { 0 }), 1)
+        }
+        Operator::UBvToInt => Value::Integer(args[0].as_bitvec()?.0.clone()),
+        Operator::SBvToInt => Value::Integer(args[0].as_signed_bitvec()?.0),
+        Operator::BvSize => Value::Integer(args[0].as_bitvec()?.1.into()),
+        Operator::BvConst => {
+            let value = args[0].as_int()?;
+            let width = args[1].as_int()?.to_usize().unwrap();
+            Value::new_bitvec(value, width)
+        }
+        Operator::BvBbTerm => {
+            let width = args.len();
+            let mut result = Integer::with_capacity(width);
+            for (i, b) in args.into_iter().enumerate() {
+                result.set_bit(i as u32, b.as_bool()?);
+            }
+            Value::BitVec(result, width)
         }
 
-        // TODO: remaining bitvector operators
-        Operator::BvNAnd
-        | Operator::BvNOr
-        | Operator::BvXNor
-        | Operator::BvComp
-        | Operator::BvSub
-        | Operator::BvSDiv
-        | Operator::BvSRem
-        | Operator::BvSMod
-        | Operator::BvAShr
-        | Operator::BvULe
-        | Operator::BvUGt
-        | Operator::BvUGe
-        | Operator::BvSLt
-        | Operator::BvSLe
-        | Operator::BvSGt
-        | Operator::BvSGe
-        | Operator::UBvToInt
-        | Operator::SBvToInt
-        | Operator::BvPBbTerm
-        | Operator::BvBbTerm
-        | Operator::BvConst
-        | Operator::BvSize => return None,
+        // TODO
+        Operator::BvPBbTerm => return None,
 
         // TODO: Rare
         Operator::RareList | Operator::Cl | Operator::Delete => return None,
