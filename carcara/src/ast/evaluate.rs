@@ -78,7 +78,7 @@ impl Value {
     pub fn into_term(self) -> Term {
         match self {
             Value::Bool(true) => Term::Op(Operator::True, Vec::new()),
-            Value::Bool(false) => Term::Op(Operator::True, Vec::new()),
+            Value::Bool(false) => Term::Op(Operator::False, Vec::new()),
             Value::Integer(i) => Term::Const(Constant::Integer(i)),
             Value::Real(r) => Term::Const(Constant::Real(r)),
             Value::String(s) => Term::Const(Constant::String(s)),
