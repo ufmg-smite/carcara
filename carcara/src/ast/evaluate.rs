@@ -375,9 +375,10 @@ fn eval_op(op: Operator, args: Vec<&Value>) -> Option<Value> {
             let mut result = a.clone() >> b;
             if a.get_bit((w - 1) as u32) {
                 // If the leading bit is 1, we have to fill the new bits with 1s. The mask is b 1s
-                // followed by w 0s:
-                // --b--|---w---
-                // 11111|0000000
+                // followed by w - b 0s:
+                // |----w----|
+                // |-b-|
+                // 11111000000
                 let mask = ((Integer::from(1) << b) - 1) << (w - b);
                 result |= mask;
             }
