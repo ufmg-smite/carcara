@@ -2,6 +2,8 @@ use super::{Constant, Operator, ParamOperator, Rc, Term};
 use rug::{Integer, Rational};
 use std::collections::{HashMap, HashSet};
 
+/// A representation of the value of an SMT-LIB/Alethe term. This is constructed by evaluating a
+/// term (see [`Rc::<Term>::evaluate`]).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Value {
     Bool(bool),
@@ -12,6 +14,7 @@ pub enum Value {
 }
 
 impl Value {
+    /// Constructs a value from a [`Constant`].
     pub fn from_constant(c: Constant) -> Self {
         match c {
             Constant::Integer(i) => Value::Integer(i),
@@ -21,12 +24,13 @@ impl Value {
         }
     }
 
-    /// Constructs a new bitvector value, truncating the `value` to `width` bits, and ensuring it
-    /// is non-negative
+    /// Constructs a new bitvector value, truncating the integer `value` to `width` bits, and
+    /// ensuring it is non-negative.
     pub fn new_bitvec(value: Integer, width: usize) -> Self {
         Self::BitVec(value.keep_bits(width as u32), width)
     }
 
+    /// Tries to extract a `bool` from the value.
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             Value::Bool(b) => Some(*b),
@@ -34,6 +38,7 @@ impl Value {
         }
     }
 
+    /// Tries to extract an [`Integer`] from the value.
     pub fn as_int(&self) -> Option<Integer> {
         match self {
             Value::Integer(i) => Some(i.clone()),
@@ -41,6 +46,7 @@ impl Value {
         }
     }
 
+    /// Tries to extract a [`Rational`] from the value.
     pub fn as_real(&self) -> Option<Rational> {
         match self {
             Value::Real(r) => Some(r.clone()),
@@ -48,6 +54,7 @@ impl Value {
         }
     }
 
+    /// Tries to extract a bitvector from the value, interpreting the bits as an unsigned integer.
     pub fn as_bitvec(&self) -> Option<(&Integer, usize)> {
         match self {
             Value::BitVec(val, width) => Some((val, *width)),
@@ -55,6 +62,7 @@ impl Value {
         }
     }
 
+    /// Tries to extract a bitvector from the value, interpreting the bits as a signed integer.
     pub fn as_signed_bitvec(&self) -> Option<(Integer, usize)> {
         let (val, w) = self.as_bitvec()?;
         let val = if val.get_bit((w - 1) as u32) {
@@ -66,6 +74,7 @@ impl Value {
         Some((val, w))
     }
 
+    /// Constructs a constant term that corresponds to this value.
     pub fn into_term(self) -> Term {
         match self {
             Value::Bool(true) => Term::Op(Operator::True, Vec::new()),
@@ -79,6 +88,12 @@ impl Value {
 }
 
 impl Rc<Term> {
+    /// Tries to obtain a [`Value`] from a term by evaluating it. This will return `Some` if the
+    /// term is "evaluatable".
+    ///
+    /// We say that a term is evaluatable if it is either:
+    /// - a constant term
+    /// - an application of an operator over evaluatable terms
     pub fn evaluate(&self) -> Option<Value> {
         self.evaluate_impl(&mut HashMap::new()).cloned()
     }
