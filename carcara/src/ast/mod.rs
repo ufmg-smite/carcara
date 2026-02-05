@@ -5,6 +5,7 @@
 #[macro_use]
 mod macros;
 mod context;
+mod evaluate;
 mod iter;
 mod node;
 mod polyeq;
@@ -20,6 +21,7 @@ mod term;
 mod tests;
 
 pub use context::{Context, ContextStack};
+pub use evaluate::Value;
 pub use iter::ProofIter;
 pub use node::{ProofNode, ProofNodeForest, StepNode, SubproofNode};
 pub use polyeq::{alpha_equiv, polyeq, Polyeq, PolyeqComparable, PolyeqConfig};

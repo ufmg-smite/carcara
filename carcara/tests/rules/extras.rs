@@ -228,3 +228,38 @@ fn mod_simplify() {
         }
     }
 }
+
+#[test]
+fn evaluate() {
+    test_cases! {
+        definitions = "",
+        "Booleans" {
+            "(step t1 (cl (=
+                (=> (and true true) (or true false) (ite false false true))
+                true
+            )) :rule evaluate)": true,
+
+            "(step t1 (cl (= (or (= 0 0 1) (distinct 1 2 3 1)) false)) :rule evaluate)": true,
+        }
+        "Arithmetic" {
+            "(step t1 (cl (= (+ 1 2 (* 3 (- 1))) 0)) :rule evaluate)": true,
+            "(step t1 (cl (= (+ (div 3 (abs 2)) (mod (- 7) (- 3))) 0)) :rule evaluate)": true,
+            "(step t1 (cl (= (/ 1.0 (to_real 7)) 1/7)) :rule evaluate)": true,
+        }
+        "Bitvectors" {
+            "(step t1 (cl (=
+                (bvnot (bvudiv #b100 (@bbterm false true false)))
+                #b101
+            )) :rule evaluate)": true,
+
+            "(step t1 (cl (=
+                (bvashr ((_ rotate_left 3) #b0101100) #b0000001)
+                #b1110001
+            )) :rule evaluate)": true,
+        }
+        "Invalid examples" {
+            "(step t1 (cl (= 2 (+ 1 1))) :rule evaluate)": false,
+            "(step t1 (cl (= (forall ((x Int)) true) true)) :rule evaluate)": false,
+        }
+    }
+}

@@ -33,7 +33,7 @@ pub enum Token {
     Decimal(Rational),
 
     /// A bitvector literal.
-    Bitvector { value: Integer, width: u64 },
+    Bitvector { value: Integer, width: usize },
 
     /// A string literal.
     String(String),
@@ -359,7 +359,7 @@ impl<R: BufRead> Lexer<R> {
             return Err(Error::Parser(ParserError::EmptyBitvector, self.position));
         }
 
-        let width = s.len() as u64 * bits_per_char;
+        let width = s.len() * bits_per_char;
         let value = Integer::from_str_radix(&s, base).unwrap();
         Ok(Token::Bitvector { value, width })
     }

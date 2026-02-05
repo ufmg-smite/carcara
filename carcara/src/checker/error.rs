@@ -99,6 +99,9 @@ pub enum CheckerError {
     #[error("argument multisets are not equal")]
     ShuffleArgsNotEqual,
 
+    #[error("cannot evaluate term: '{0}'")]
+    CannotEvaluateTerm(Rc<Term>),
+
     // General errors
     #[error("expected {0} premises, got {1}")]
     WrongNumberOfPremises(Range, usize),
