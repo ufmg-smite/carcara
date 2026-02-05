@@ -273,6 +273,8 @@ pub fn get_rule_shared(rule_name: &str, elaborated: bool) -> Option<crate::check
         "la_mult_pos" => extras::la_mult_pos,
         "la_mult_neg" => extras::la_mult_neg,
         "mod_simplify" => extras::mod_simplify,
+        "evaluate" => extras::evaluate,
+
         "bitblast_extract" => bitvectors::extract,
         "bitblast_bvadd" => bitvectors::add,
         "bitblast_ult" => bitvectors::ult,

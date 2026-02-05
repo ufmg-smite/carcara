@@ -31,8 +31,6 @@ pub fn ult(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         unreachable!();
     };
 
-    let size = size.to_usize().unwrap();
-
     let x = build_term_vec(x, size, pool);
     let y = build_term_vec(y, size, pool);
 
@@ -57,8 +55,6 @@ pub fn add(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
         unreachable!();
     };
-
-    let size = size.to_usize().unwrap();
 
     let x = build_term_vec(x, size, pool);
     let y = build_term_vec(y, size, pool);
