@@ -245,6 +245,11 @@ fn eval_op(op: Operator, args: Vec<&Value>) -> Option<Value> {
             }
         }
         Operator::Add => arith_op!(+, args),
+        Operator::Sub if args.len() == 1 => match args[0] {
+            Value::Integer(i) => Value::Integer(-i.clone()),
+            Value::Real(r) => Value::Real(-r.clone()),
+            _ => return None,
+        },
         Operator::Sub => arith_op!(-, args),
         Operator::Mult => arith_op!(*, args),
         Operator::IntDiv => arith_op!(/, args),
