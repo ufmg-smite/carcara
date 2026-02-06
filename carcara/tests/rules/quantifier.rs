@@ -209,3 +209,70 @@ fn qnt_cnf() {
         }
     }
 }
+
+#[test]
+fn miniscope_distribute() {
+    test_cases! {
+        definitions = "
+            (declare-fun r () Bool)
+            (declare-fun s () Bool)
+        ",
+        "Simple working examples" {
+            "(step t1 (cl (=
+                (forall ((p Bool) (q Bool)) (and p q false))
+                (and
+                    (forall ((p Bool) (q Bool)) p)
+                    (forall ((p Bool) (q Bool)) q)
+                    (forall ((p Bool) (q Bool)) false)
+                )
+            )) :rule miniscope_distribute)": true,
+
+            "(step t1 (cl (=
+                (exists ((p Bool)) (or r s p))
+                (or (exists ((p Bool)) r) (exists ((p Bool)) s) (exists ((p Bool)) p))
+            )) :rule miniscope_distribute)": true,
+        }
+        "Different quantifiers" {
+            "(step t1 (cl (=
+                (exists ((p Bool)) (or r s p))
+                (or (exists ((p Bool)) r) (forall ((p Bool)) s) (forall ((p Bool)) p))
+            )) :rule miniscope_distribute)": false,
+        }
+        "Wrong operator" {
+            "(step t1 (cl (=
+                (forall ((p Bool)) (and p p))
+                (or (forall ((p Bool)) p) (forall ((p Bool)) p))
+            )) :rule miniscope_distribute)": false,
+
+            "(step t1 (cl (=
+                (exists ((p Bool)) (and p p))
+                (or (exists ((p Bool)) p) (exists ((p Bool)) p))
+            )) :rule miniscope_distribute)": false,
+        }
+        "Wrong number of arguments" {
+            "(step t1 (cl (=
+                (forall ((p Bool)) (and p p))
+                (and (forall ((p Bool)) p))
+            )) :rule miniscope_distribute)": false,
+        }
+        "Wrong binding list" {
+            "(step t1 (cl (=
+                (forall ((p Bool) (q Bool)) (and p q false))
+                (and
+                    (forall ((p Bool) (q Bool)) p)
+                    (forall ((p Bool) (q Bool)) q)
+                    (forall ((p Bool)) false)
+                )
+            )) :rule miniscope_distribute)": false,
+
+            "(step t1 (cl (=
+                (forall ((p Bool) (q Bool)) (and p q false))
+                (and
+                    (forall ((p Bool) (q Bool)) p)
+                    (forall ((p Bool) (q Bool)) q)
+                    (forall ((p Bool) (x Int)) false)
+                )
+            )) :rule miniscope_distribute)": false,
+        }
+    }
+}

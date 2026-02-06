@@ -1,6 +1,6 @@
 use super::{
     assert_alpha_equiv_expected, assert_clause_len, assert_eq, assert_is_expected, assert_num_args,
-    CheckerError, RuleArgs, RuleResult,
+    assert_operation_len, CheckerError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::QuantifierError, utils::DedupIterator};
 use indexmap::{IndexMap, IndexSet};
@@ -312,6 +312,28 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         .find(|var| !r_bindings.contains(var) && free_vars.contains(&pool.add(var.clone().into())));
     if let Some((var, _)) = found {
         return Err(QuantifierError::BindingIsMissing(var).into());
+    }
+    Ok(())
+}
+
+pub fn miniscope_distribute(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (op, ((bindings, phis), right_args)) =
+        match_term_err!((= (forall ... (and ...)) (and ...)) = &conclusion[0])
+            .map(|values| (Operator::And, values))
+            .or_else(|_| {
+                match_term_err!((= (exists ... (or ...)) (or ...)) = &conclusion[0])
+                    .map(|values| (Operator::Or, values))
+            })?;
+    assert_operation_len(op, right_args, phis.len())?;
+    for (phi, right) in phis.iter().zip(right_args) {
+        let (b, inner) = match op {
+            Operator::And => match_term_err!((forall ... phi) = right)?,
+            Operator::Or => match_term_err!((exists ... phi) = right)?,
+            _ => unreachable!(),
+        };
+        assert_eq(bindings, b)?;
+        assert_eq(phi, inner)?;
     }
     Ok(())
 }
