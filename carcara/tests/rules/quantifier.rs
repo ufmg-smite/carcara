@@ -278,6 +278,64 @@ fn miniscope_distribute() {
 }
 
 #[test]
+fn miniscope_split() {
+    test_cases! {
+        definitions = "
+            (declare-fun r () Bool)
+        ",
+        "Simple working examples" {
+            "(step t1 (cl (=
+                (forall ((p Bool) (q Bool)) (or p q))
+                (or (forall ((p Bool)) p) (forall ((q Bool)) q))
+            )) :rule miniscope_split)": true,
+
+            "(step t1 (cl (=
+                (exists ((p Bool) (q Bool)) (and p q (= p q)))
+                (and
+                    (exists ((p Bool)) p)
+                    (exists ((q Bool)) q)
+                    (exists ((p Bool) (q Bool)) (= p q))
+                )
+            )) :rule miniscope_split)": true,
+        }
+        "Different quantifiers" {
+            "(step t1 (cl (=
+                (forall ((p Bool)) (or p p))
+                (or (forall ((p Bool)) p) (exists ((p Bool)) p))
+            )) :rule miniscope_distribute)": false,
+        }
+        "Wrong operator" {
+            "(step t1 (cl (=
+                (forall ((p Bool)) (or p p))
+                (and (forall ((p Bool)) p) (forall ((p Bool)) p))
+            )) :rule miniscope_distribute)": false,
+
+            "(step t1 (cl (=
+                (exists ((p Bool)) (or p p))
+                (and (exists ((p Bool)) p) (exists ((p Bool)) p))
+            )) :rule miniscope_distribute)": false,
+        }
+        "Wrong number of arguments" {
+            "(step t1 (cl (=
+                (forall ((p Bool)) (or p p))
+                (or (forall ((p Bool)) p))
+            )) :rule miniscope_distribute)": false,
+        }
+        "Wrong binding list" {
+            "(step t1 (cl (=
+                (forall ((p Bool) (q Bool)) (and p q))
+                (and (forall ((p Bool)) p) (forall ((q Bool) (x Int)) q))
+            )) :rule miniscope_distribute)": false,
+
+            "(step t1 (cl (=
+                (forall ((p Bool) (r Bool)) (and p r))
+                (and (forall ((p Bool)) p) (forall ((p Bool)) r))
+            )) :rule miniscope_distribute)": false,
+        }
+    }
+}
+
+#[test]
 fn miniscope_ite() {
     test_cases! {
         definitions = "
