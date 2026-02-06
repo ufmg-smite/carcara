@@ -259,6 +259,7 @@ pub fn get_rule_shared(rule_name: &str, elaborated: bool) -> Option<crate::check
         "bind" => subproof::bind,
         "qnt_cnf" => quantifier::qnt_cnf,
         "miniscope_distribute" => quantifier::miniscope_distribute,
+        "miniscope_ite" => quantifier::miniscope_ite,
         "subproof" => subproof::subproof,
         "let" => subproof::r#let,
         "onepoint" => subproof::onepoint,
