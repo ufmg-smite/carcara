@@ -338,6 +338,37 @@ pub fn miniscope_distribute(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult
     Ok(())
 }
 
+pub fn miniscope_split(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (op, ((bindings, phis), right_args)) =
+        match_term_err!((= (forall ... (or ...)) (or ...)) = &conclusion[0])
+            .map(|values| (Operator::Or, values))
+            .or_else(|_| {
+                match_term_err!((= (exists ... (and ...)) (and ...)) = &conclusion[0])
+                    .map(|values| (Operator::And, values))
+            })?;
+    assert_operation_len(op, right_args, phis.len())?;
+    let bindings_set: IndexSet<_> = bindings.iter().collect();
+    for (phi, right) in phis.iter().zip(right_args) {
+        let (inner_bindings, inner) = match op {
+            Operator::Or => match_term_err!((forall ... phi) = right)?,
+            Operator::And => match_term_err!((exists ... phi) = right)?,
+            _ => unreachable!(),
+        };
+        assert_eq(phi, inner)?;
+        if let Some((var, _)) = inner_bindings.iter().find(|&b| !bindings_set.contains(b)) {
+            return Err(QuantifierError::NewBindingIntroduced(var.clone()).into());
+        }
+        for var in pool.free_vars(right) {
+            let var = (var.as_var().unwrap().to_owned(), pool.sort(&var));
+            if bindings_set.contains(&var) {
+                return Err(QuantifierError::MiniscopeFreeVar(var.0, right.clone()).into());
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn miniscope_ite(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (
