@@ -276,3 +276,47 @@ fn miniscope_distribute() {
         }
     }
 }
+
+#[test]
+fn miniscope_ite() {
+    test_cases! {
+        definitions = "
+            (declare-fun r () Bool)
+        ",
+        "Simple working examples" {
+            "(step t1 (cl (=
+                (forall ((p Bool) (q Bool)) (ite r true false))
+                (ite r (forall ((p Bool) (q Bool)) true) (forall ((p Bool) (q Bool)) false))
+            )) :rule miniscope_ite)": true,
+        }
+        "Wrong format" {
+            "(step t1 (cl (=
+                (forall ((p Bool)) (ite r true false))
+                (ite r (forall ((p Bool)) true) (exists ((p Bool)) false))
+            )) :rule miniscope_ite)": false,
+
+            "(step t1 (cl (=
+                (forall ((p Bool)) (ite r true false))
+                (ite (forall ((p Bool)) r) (forall ((p Bool)) true) (forall ((p Bool)) false))
+            )) :rule miniscope_ite)": false,
+        }
+        "Wrong binding list" {
+            "(step t1 (cl (=
+                (forall ((p Bool)) (ite r true false))
+                (ite r (forall ((p Bool)) true) (forall ((q Bool)) false))
+            )) :rule miniscope_ite)": false,
+        }
+        "Wrong phis" {
+            "(step t1 (cl (=
+                (forall ((p Bool)) (ite r true false))
+                (ite r (forall ((p Bool)) false) (forall ((p Bool)) true))
+            )) :rule miniscope_ite)": false,
+        }
+        "Bound variable in condition" {
+            "(step t1 (cl (=
+                (forall ((r Bool)) (ite r true false))
+                (ite r (forall ((r Bool)) false) (forall ((r Bool)) true))
+            )) :rule miniscope_ite)": false,
+        }
+    }
+}

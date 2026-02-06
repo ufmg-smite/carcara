@@ -338,6 +338,29 @@ pub fn miniscope_distribute(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult
     Ok(())
 }
 
+pub fn miniscope_ite(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (
+        (bindings_1, (phi1_l, phi2_l, phi3_l)),
+        (phi1_r, (bindings_2, phi2_r), (bindings_3, phi3_r)),
+    ) = match_term_err!(
+        (= (forall ... (ite phi1 phi2 phi3)) (ite phi1 (forall ... phi2) (forall ... phi3)))
+        = &conclusion[0]
+    )?;
+    assert_eq(phi1_l, phi1_r)?;
+    assert_eq(phi2_l, phi2_r)?;
+    assert_eq(phi3_l, phi3_r)?;
+    assert_eq(bindings_1, bindings_2)?;
+    assert_eq(bindings_1, bindings_3)?;
+    let free_vars = pool.free_vars(phi1_l);
+    for v in bindings_1 {
+        if free_vars.contains(&pool.add(v.clone().into())) {
+            return Err(QuantifierError::MiniscopeFreeVar(v.0.clone(), phi1_l.clone()).into());
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

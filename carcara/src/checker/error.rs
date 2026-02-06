@@ -317,6 +317,9 @@ pub enum QuantifierError {
 
     #[error("result clause doesn't appear in CNF of original term: '{0}'")]
     ClauseDoesntAppearInCnf(Rc<Term>),
+
+    #[error("binding '{0}' appears as free variable in term '{1}'")]
+    MiniscopeFreeVar(String, Rc<Term>),
 }
 
 /// Errors relevant to the linear arithmetic rules.
