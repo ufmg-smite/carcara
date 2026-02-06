@@ -348,7 +348,8 @@ pub fn miniscope_split(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResul
                     .map(|values| (Operator::And, values))
             })?;
     assert_operation_len(op, right_args, phis.len())?;
-    let bindings_set: IndexSet<_> = bindings.iter().collect();
+
+    let mut bindings_set: IndexSet<_> = bindings.iter().collect();
     for (phi, right) in phis.iter().zip(right_args) {
         let (inner_bindings, inner) = match op {
             Operator::Or => match_term_err!((forall ... phi) = right)?,
@@ -356,16 +357,21 @@ pub fn miniscope_split(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResul
             _ => unreachable!(),
         };
         assert_eq(phi, inner)?;
-        if let Some((var, _)) = inner_bindings.iter().find(|&b| !bindings_set.contains(b)) {
-            return Err(QuantifierError::NewBindingIntroduced(var.clone()).into());
-        }
-        for var in pool.free_vars(right) {
-            let var = (var.as_var().unwrap().to_owned(), pool.sort(&var));
-            if bindings_set.contains(&var) {
-                return Err(QuantifierError::MiniscopeFreeVar(var.0, right.clone()).into());
+        for b in inner_bindings {
+            if !bindings_set.swap_remove(b) {
+                return Err(QuantifierError::NewBindingIntroduced(b.0.clone()).into());
             }
         }
     }
+
+    let right_term = pool.add(Term::Op(op, right_args.to_vec()));
+    let free_vars = pool.free_vars(&right_term);
+    for v in bindings {
+        if free_vars.contains(&pool.add(v.clone().into())) {
+            return Err(QuantifierError::MiniscopeFreeVar(v.0.clone(), right_term).into());
+        }
+    }
+
     Ok(())
 }
 
