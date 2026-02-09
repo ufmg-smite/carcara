@@ -340,8 +340,8 @@ pub enum LinearArithmeticError {
     #[error("final disequality is not tautological: '{}'", DisplayLinearComb(.0, .1))]
     DisequalityIsNotTautology(Operator, Box<LinearComb>),
 
-    #[error("terms are not equal after arithmetic normalization: '{0}' and '{1}'")]
-    LinearCombNotEqual(Rc<Term>, Rc<Term>),
+    #[error("terms are not equal after polynomial normalization: '{0}' and '{1}'")]
+    PolynomialsNotEqual(Rc<Term>, Rc<Term>),
 
     #[error("expected term '{0}' to be less than term '{1}'")]
     ExpectedLessThan(Rc<Term>, Rc<Term>),

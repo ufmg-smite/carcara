@@ -141,10 +141,6 @@ impl LinearComb {
         }
     }
 
-    fn is_zero(&self) -> bool {
-        self.0.is_empty() && self.1.is_zero()
-    }
-
     fn add(mut self, other: Self) -> Self {
         for (var, coeff) in other.0 {
             self.insert(var, coeff);
@@ -453,17 +449,6 @@ pub fn la_tautology(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
             is_disequality_true,
             LinearArithmeticError::DisequalityIsNotTautology(op, Box::new(disequality)),
         );
-        Ok(())
-    }
-}
-
-pub fn poly_simp(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
-    assert_clause_len(conclusion, 1)?;
-    let (t, s) = match_term_err!((= t s) = &conclusion[0])?;
-    let (t_norm, s_norm) = (LinearComb::from_term(t), LinearComb::from_term(s));
-    if !t_norm.sub(s_norm).is_zero() {
-        Err(LinearArithmeticError::LinearCombNotEqual(t.clone(), s.clone()).into())
-    } else {
         Ok(())
     }
 }
