@@ -1,7 +1,7 @@
 use super::{assert_clause_len, RuleArgs, RuleResult};
 use crate::{
     ast::{Operator, Rc, Term},
-    checker::error::{CheckerError, LinearArithmeticError},
+    checker::error::LinearArithmeticError,
 };
 use indexmap::{map::Entry, IndexMap};
 use rug::{ops::NegAssign, Rational};
@@ -53,7 +53,20 @@ impl Polynomial {
                 }
             }
             Term::Op(Operator::Mult, args) => {
-                args.iter().map(Self::from_term).reduce(Self::mul);
+                let result = args.iter().map(Self::from_term).reduce(Self::mul).unwrap();
+                for (var, inner_coeff) in result.0 {
+                    self.insert(var, inner_coeff * coeff);
+                }
+                self.1 += result.1;
+            }
+            Term::Op(Operator::RealDiv, args)
+                if args.len() == 2 && args[1].as_fraction().is_some_and(|r| !r.is_zero()) =>
+            {
+                let r = args[1].as_fraction().unwrap();
+                self.add_term(&args[0], &(coeff / r));
+            }
+            Term::Op(Operator::ToReal, args) => {
+                self.add_term(&args[0], coeff);
             }
             _ => {
                 if let Some(mut r) = term.as_fraction() {
