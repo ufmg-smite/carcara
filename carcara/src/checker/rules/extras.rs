@@ -232,9 +232,5 @@ pub fn mod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 pub fn evaluate(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (term, value) = match_term_err!((= term value) = &conclusion[0])?;
-    let evaluated = term
-        .evaluate()
-        .ok_or_else(|| CheckerError::CannotEvaluateTerm(term.clone()))?
-        .into_term();
-    assert_eq(&pool.add(evaluated), value)
+    assert_eq(&term.evaluate(pool), value)
 }
