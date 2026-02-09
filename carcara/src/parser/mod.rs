@@ -1519,7 +1519,6 @@ impl<'a, R: BufRead> Parser<'a, R> {
             );
             return Ok((ParamOperator::BvConst, constant_args));
         }
-
         let op = ParamOperator::from_str(op_symbol.as_str()).map_err(|_| {
             Error::Parser(
                 ParserError::InvalidIndexedOp(op_symbol),
