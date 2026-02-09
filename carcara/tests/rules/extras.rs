@@ -232,7 +232,10 @@ fn mod_simplify() {
 #[test]
 fn evaluate() {
     test_cases! {
-        definitions = "",
+        definitions = "
+            (declare-const x Int)
+            (declare-fun f (Int Int) Int)
+        ",
         "Booleans" {
             "(step t1 (cl (=
                 (=> (and true true) (or true false) (ite false false true))
@@ -256,6 +259,10 @@ fn evaluate() {
                 (bvashr ((_ rotate_left 3) #b0101100) #b0000001)
                 #b1110001
             )) :rule evaluate)": true,
+        }
+        "Partial evaluation" {
+            "(step t1 (cl (= (+ x (+ 1 1)) (+ x 2))) :rule evaluate)": true,
+            "(step t1 (cl (= (f x (+ 1 1)) (f x 2))) :rule evaluate)": false,
         }
         "Invalid examples" {
             "(step t1 (cl (= 2 (+ 1 1))) :rule evaluate)": false,

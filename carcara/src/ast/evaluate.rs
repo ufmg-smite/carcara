@@ -1,4 +1,4 @@
-use super::{Constant, Operator, ParamOperator, Rc, Term};
+use super::{Constant, Operator, ParamOperator, Rc, Term, TermPool};
 use rug::{Integer, Rational};
 use std::collections::{HashMap, HashSet};
 
@@ -21,6 +21,16 @@ impl Value {
             Constant::Real(r) => Value::Real(r),
             Constant::String(s) => Value::String(s),
             Constant::BitVec(val, width) => Value::BitVec(val, width),
+        }
+    }
+
+    /// Tries to construct a value from a term, return `None` if it is not possible.
+    pub fn from_term(t: &Rc<Term>) -> Option<Self> {
+        match t.as_ref() {
+            Term::Const(c) => Some(Value::from_constant(c.clone())),
+            Term::Op(Operator::True, _) => Some(Value::Bool(true)),
+            Term::Op(Operator::False, _) => Some(Value::Bool(false)),
+            _ => None,
         }
     }
 
@@ -94,46 +104,55 @@ impl Rc<Term> {
     /// We say that a term is evaluatable if it is either:
     /// - a constant term
     /// - an application of an operator over evaluatable terms
-    pub fn evaluate(&self) -> Option<Value> {
-        self.evaluate_impl(&mut HashMap::new()).cloned()
+    pub fn evaluate(&self, pool: &mut dyn TermPool) -> Rc<Term> {
+        self.evaluate_impl(&mut HashMap::new(), pool).clone()
     }
 
     fn evaluate_impl<'t, 'c>(
         &'t self,
-        cache: &'c mut HashMap<&'t Rc<Term>, Value>,
-    ) -> Option<&'c Value> {
+        cache: &'c mut HashMap<&'t Rc<Term>, Rc<Term>>,
+        pool: &mut dyn TermPool,
+    ) -> &'c Rc<Term> {
         if cache.contains_key(self) {
-            return Some(&cache[self]);
+            return &cache[self];
         }
 
         let result = match self.as_ref() {
-            Term::Const(c) => Some(Value::from_constant(c.clone())),
+            Term::Const(c) => Value::from_constant(c.clone()).into_term(),
             Term::Op(op, args) => {
-                // To avoid lifetime issues, first we compute the evaluation of each argument and
-                // then collect the values into a vector by looking into the cache
-                for a in args {
-                    a.evaluate_impl(cache)?;
-                }
-                let values = args.iter().map(|a| &cache[a]).collect();
-                eval_op(*op, values)
+                let args: Vec<_> = args
+                    .iter()
+                    .map(|a| a.evaluate_impl(cache, pool).clone())
+                    .collect();
+                eval_op(*op, &args).map_or_else(|| Term::Op(*op, args), Value::into_term)
             }
             Term::ParamOp { op, op_args, args } => {
-                for a in op_args.iter().chain(args) {
-                    a.evaluate_impl(cache)?;
-                }
-                let op_args = op_args.iter().map(|a| &cache[a]).collect();
-                let args = args.iter().map(|a| &cache[a]).collect();
-                eval_param_op(*op, op_args, args)
+                let op_args: Vec<_> = op_args
+                    .iter()
+                    .map(|a| a.evaluate_impl(cache, pool).clone())
+                    .collect();
+                let args: Vec<_> = args
+                    .iter()
+                    .map(|a| a.evaluate_impl(cache, pool).clone())
+                    .collect();
+
+                eval_param_op(*op, &op_args, &args).map_or_else(
+                    || Term::ParamOp { op: *op, op_args, args },
+                    Value::into_term,
+                )
             }
 
             Term::Var(_, _)
             | Term::App(_, _)
             | Term::Sort(_)
             | Term::Binder(_, _, _)
-            | Term::Let(_, _) => None,
-        }?;
-        cache.insert(self, result.clone());
-        cache.get(self)
+            | Term::Let(_, _) => {
+                cache.insert(self, self.clone());
+                return cache.get(self).unwrap();
+            }
+        };
+        cache.insert(self, pool.add(result));
+        cache.get(self).unwrap()
     }
 }
 
@@ -178,7 +197,7 @@ macro_rules! bitvec_op {
 
 macro_rules! comparison_op {
     ($op:tt, $args:expr) => {{
-        fn compare(window: &[&Value]) -> Option<bool> {
+        fn compare(window: &[Value]) -> Option<bool> {
             match window {
                 [Value::Integer(l), Value::Integer(r)] => Some(l $op r),
                 [Value::Integer(l), Value::Real(r)] => Some(l $op r),
@@ -208,7 +227,8 @@ macro_rules! bitvec_comparison_op {
     }};
 }
 
-fn eval_op(op: Operator, args: Vec<&Value>) -> Option<Value> {
+fn eval_op(op: Operator, args: &[Rc<Term>]) -> Option<Value> {
+    let args: Vec<_> = args.iter().map(Value::from_term).collect::<Option<_>>()?;
     Some(match op {
         Operator::True => Value::Bool(true),
         Operator::False => Value::Bool(false),
@@ -234,7 +254,7 @@ fn eval_op(op: Operator, args: Vec<&Value>) -> Option<Value> {
         ),
         Operator::Equals => Value::Bool(args.windows(2).all(|w| w[0] == w[1])),
         Operator::Distinct => {
-            let set: HashSet<&Value> = args.iter().copied().collect();
+            let set: HashSet<&Value> = args.iter().collect();
             Value::Bool(set.len() == args.len())
         }
         Operator::Ite => {
@@ -245,7 +265,7 @@ fn eval_op(op: Operator, args: Vec<&Value>) -> Option<Value> {
             }
         }
         Operator::Add => arith_op!(+, args),
-        Operator::Sub if args.len() == 1 => match args[0] {
+        Operator::Sub if args.len() == 1 => match &args[0] {
             Value::Integer(i) => Value::Integer(-i.clone()),
             Value::Real(r) => Value::Real(-r.clone()),
             _ => return None,
@@ -446,7 +466,14 @@ fn eval_op(op: Operator, args: Vec<&Value>) -> Option<Value> {
     })
 }
 
-fn eval_param_op(op: ParamOperator, op_args: Vec<&Value>, args: Vec<&Value>) -> Option<Value> {
+fn eval_param_op(op: ParamOperator, op_args: &[Rc<Term>], args: &[Rc<Term>]) -> Option<Value> {
+    let op_args: Vec<_> = op_args
+        .iter()
+        .map(Value::from_term)
+        .collect::<Option<_>>()?;
+
+    let args: Vec<_> = args.iter().map(Value::from_term).collect::<Option<_>>()?;
+
     Some(match op {
         ParamOperator::BvExtract => {
             let i = op_args[0].as_int()?.to_usize().unwrap();
