@@ -110,4 +110,9 @@ impl<T> Rc<T> {
     pub fn strong_count(this: &Self) -> usize {
         sync::Arc::strong_count(&this.0)
     }
+
+    /// Provides a raw pointer to the data.
+    pub fn as_ptr(rc: &Self) -> *const T {
+        sync::Arc::as_ptr(&rc.0)
+    }
 }

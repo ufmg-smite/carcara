@@ -164,6 +164,7 @@ pub(super) mod drup;
 pub(super) mod extras;
 pub(super) mod linear_arithmetic;
 pub(super) mod pb_blasting;
+pub(super) mod polynomial;
 pub(super) mod quantifier;
 pub(super) mod rare;
 pub(super) mod reflexivity;
