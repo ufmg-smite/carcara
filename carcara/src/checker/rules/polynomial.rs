@@ -57,7 +57,7 @@ impl Polynomial {
                 for (var, inner_coeff) in result.0 {
                     self.insert(var, inner_coeff * coeff);
                 }
-                self.1 += result.1;
+                self.1 += coeff * result.1;
             }
             Term::Op(Operator::RealDiv, args)
                 if args.len() == 2 && args[1].as_fraction().is_some_and(|r| !r.is_zero()) =>
@@ -67,6 +67,13 @@ impl Polynomial {
             }
             Term::Op(Operator::ToReal, args) => {
                 self.add_term(&args[0], coeff);
+            }
+            // We check for division by zero separately because `.as_fraction` panics if the
+            // denominator is zero. In this case, we consider the term an atom.
+            Term::Op(Operator::RealDiv | Operator::IntDiv, args)
+                if args.len() == 2 && args[1].as_fraction().is_some_and(|r| r.is_zero()) =>
+            {
+                self.insert(Monomial(vec![term.clone()]), coeff.clone());
             }
             _ => {
                 if let Some(mut r) = term.as_fraction() {

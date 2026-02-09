@@ -4,6 +4,7 @@ fn poly_simp() {
         definitions = "
             (declare-fun k () Int)
             (declare-fun n () Int)
+            (declare-fun a () Int)
             (declare-fun x () Real)
             (declare-fun y () Real)
         ",
@@ -25,6 +26,10 @@ fn poly_simp() {
         "Failing examples" {
             "(step t1 (cl (= (+ k k) (+ k 0))) :rule poly_simp)": false,
             "(step t1 (cl (= (* 2.0 x) (+ 2.0 x))) :rule poly_simp)": false,
+        }
+        "Regression" {
+            "(step t1 (cl (= (- a (* 2 2)) (+ a (* -1 (* 2 2))) )) :rule poly_simp)": true,
+            "(step t1 (cl (= (* 0 (div 0 0)) 0)) :rule poly_simp)": true,
         }
     }
 }
