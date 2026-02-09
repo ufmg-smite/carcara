@@ -157,8 +157,12 @@ impl Rc<Term> {
 }
 
 macro_rules! mixed_type_arith {
-    ($op:tt, $a:expr, $b:expr) => {
+    ($op:tt, $a:expr, $b:expr, $is_real:expr) => {
         match ($a, $b) {
+            (Value::Integer(l), Value::Integer(r)) if $is_real => {
+                let (l, r) = (Rational::from(l), Rational::from(r));
+                Some(Value::Real(l $op r))
+            }
             (Value::Integer(l), Value::Integer(r)) => Some(Value::Integer(l $op r)),
             (Value::Integer(l), Value::Real(r)) => Some(Value::Real(Rational::from(l) $op r)),
             (Value::Real(l), Value::Integer(r)) => Some(Value::Real(l $op Rational::from(r))),
@@ -169,15 +173,17 @@ macro_rules! mixed_type_arith {
 }
 
 macro_rules! arith_op {
-    ($op:tt, $args:expr) => {{
+    ($op:tt, $args:expr $(, $flag:literal)?) => {{
         let args = $args;
         let first = args[0].clone();
         if !matches!(first, Value::Integer(_) | Value::Real(_)) {
             return None;
         }
+        // Hacky way to set `real` to `true` if the "real" flag is passed
+        let real = $($flag == "real" ||)? false;
         args[1..]
             .iter()
-            .try_fold(first, |acc, arg| mixed_type_arith!($op, acc, arg))?
+            .try_fold(first, |acc, arg| mixed_type_arith!($op, acc, arg, real))?
     }};
 }
 
@@ -273,7 +279,7 @@ fn eval_op(op: Operator, args: &[Rc<Term>]) -> Option<Value> {
         Operator::Sub => arith_op!(-, args),
         Operator::Mult => arith_op!(*, args),
         Operator::IntDiv => arith_op!(/, args),
-        Operator::RealDiv => arith_op!(/, args),
+        Operator::RealDiv => arith_op!(/, args, "real"),
         Operator::Mod => Value::Integer(args[0].as_int()? % args[1].as_int()?),
         Operator::Abs => match &args[0] {
             Value::Integer(i) => Value::Integer(i.clone().abs()),
