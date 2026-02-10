@@ -1,10 +1,10 @@
 use super::{assert_clause_len, RuleArgs, RuleResult};
 use crate::{
-    ast::{Operator, Rc, Term},
-    checker::error::LinearArithmeticError,
+    ast::{Operator, Rc, Sort, Term},
+    checker::error::PolynomialError,
 };
 use indexmap::{map::Entry, IndexMap};
-use rug::{ops::NegAssign, Rational};
+use rug::{ops::NegAssign, Integer, Rational};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct Monomial(Vec<Rc<Term>>);
@@ -34,25 +34,25 @@ impl Polynomial {
         result
     }
 
-    // /// Processes a term and adds it to the polynomial.
+    /// Processes a term and adds it to the polynomial.
     fn add_term(&mut self, term: &Rc<Term>, coeff: &Rational) {
         // We traverse the term without using a cache for the same reasons as `LinearComb`.
         match term.as_ref() {
-            Term::Op(Operator::Add, args) => {
+            Term::Op(Operator::Add | Operator::BvAdd, args) => {
                 for a in args {
                     self.add_term(a, coeff);
                 }
             }
-            Term::Op(Operator::Sub, args) if args.len() == 1 => {
+            Term::Op(Operator::Sub | Operator::BvNeg, args) if args.len() == 1 => {
                 self.add_term(&args[0], &coeff.as_neg());
             }
-            Term::Op(Operator::Sub, args) => {
+            Term::Op(Operator::Sub | Operator::BvSub, args) => {
                 self.add_term(&args[0], coeff);
                 for a in &args[1..] {
                     self.add_term(a, &coeff.as_neg());
                 }
             }
-            Term::Op(Operator::Mult, args) => {
+            Term::Op(Operator::Mult | Operator::BvMul, args) => {
                 let result = args.iter().map(Self::from_term).reduce(Self::mul).unwrap();
                 for (var, inner_coeff) in result.0 {
                     self.insert(var, inner_coeff * coeff);
@@ -79,6 +79,10 @@ impl Polynomial {
                 if let Some(mut r) = term.as_fraction() {
                     r *= coeff;
                     self.1 += r;
+                } else if let Some((value, _)) = term.as_bitvector() {
+                    // The width is irrelevant for the normalization, overflow will be dealt with
+                    // later, using the `modulo` method
+                    self.1 += Rational::from(value) * coeff;
                 } else {
                     self.insert(Monomial(vec![term.clone()]), coeff.clone());
                 }
@@ -141,6 +145,21 @@ impl Polynomial {
         other.neg();
         self.add(other)
     }
+
+    fn modulo(mut self, n: &Integer) -> Option<Self> {
+        for (_, coeff) in &mut self.0 {
+            if !coeff.is_integer() {
+                return None;
+            }
+            *coeff = coeff.numer().clone().modulo(n).into();
+        }
+        if self.1.is_integer() {
+            self.1 = self.1.numer().clone().modulo(n).into();
+            Some(self)
+        } else {
+            None
+        }
+    }
 }
 
 pub fn poly_simp(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
@@ -148,7 +167,26 @@ pub fn poly_simp(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     let (t, s) = match_term_err!((= t s) = &conclusion[0])?;
     let (t_norm, s_norm) = (Polynomial::from_term(t), Polynomial::from_term(s));
     if !t_norm.sub(s_norm).is_zero() {
-        Err(LinearArithmeticError::PolynomialsNotEqual(t.clone(), s.clone()).into())
+        Err(PolynomialError::PolynomialsNotEqual(t.clone(), s.clone()).into())
+    } else {
+        Ok(())
+    }
+}
+
+pub fn bv_poly_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (t, s) = match_term_err!((= t s) = &conclusion[0])?;
+    let width = match pool.sort(t).as_sort().unwrap() {
+        Sort::BitVec(w) => *w,
+        other => return Err(PolynomialError::ExpectedBvSort(other.clone()).into()),
+    };
+    let max = Integer::from(1) << width;
+    let (t_norm, s_norm) = (
+        Polynomial::from_term(t).modulo(&max).unwrap(),
+        Polynomial::from_term(s).modulo(&max).unwrap(),
+    );
+    if !t_norm.sub(s_norm).is_zero() {
+        Err(PolynomialError::PolynomialsNotEqual(t.clone(), s.clone()).into())
     } else {
         Ok(())
     }

@@ -38,6 +38,9 @@ pub enum CheckerError {
     LinearArithmetic(#[from] LinearArithmeticError),
 
     #[error(transparent)]
+    Polynomial(#[from] PolynomialError),
+
+    #[error(transparent)]
     Subproof(#[from] SubproofError),
 
     #[error("reflexivity failed with terms '{0}' and '{1}'")]
@@ -340,14 +343,21 @@ pub enum LinearArithmeticError {
     #[error("final disequality is not tautological: '{}'", DisplayLinearComb(.0, .1))]
     DisequalityIsNotTautology(Operator, Box<LinearComb>),
 
-    #[error("terms are not equal after polynomial normalization: '{0}' and '{1}'")]
-    PolynomialsNotEqual(Rc<Term>, Rc<Term>),
-
     #[error("expected term '{0}' to be less than term '{1}'")]
     ExpectedLessThan(Rc<Term>, Rc<Term>),
 
     #[error("expected term '{0}' to be less than or equal to term '{1}'")]
     ExpectedLessEq(Rc<Term>, Rc<Term>),
+}
+
+/// Errors relevant to the polynomial simplification rules.
+#[derive(Debug, Error)]
+pub enum PolynomialError {
+    #[error("terms are not equal after polynomial normalization: '{0}' and '{1}'")]
+    PolynomialsNotEqual(Rc<Term>, Rc<Term>),
+
+    #[error("expected bitvector sort, got '{0}'")]
+    ExpectedBvSort(Sort),
 }
 
 /// Errors relevant to all rules that end subproofs (not just the `subproof` rule).

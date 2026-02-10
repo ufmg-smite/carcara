@@ -203,6 +203,7 @@ pub fn get_rule_shared(rule_name: &str, elaborated: bool) -> Option<crate::check
         "la_totality" => linear_arithmetic::la_totality,
         "la_tautology" => linear_arithmetic::la_tautology,
         "poly_simp" => polynomial::poly_simp,
+        "bv_poly_simp" => polynomial::bv_poly_simp,
         "forall_inst" => quantifier::forall_inst,
         "qnt_join" => quantifier::qnt_join,
         "qnt_rm_unused" => quantifier::qnt_rm_unused,
