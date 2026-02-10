@@ -21,6 +21,32 @@ fn reordering() {
 }
 
 #[test]
+fn shuffle() {
+    test_cases! {
+        definitions = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (declare-fun x () Int)
+            (declare-fun y () Int)
+            (declare-fun z () Int)
+        ",
+        "Simple working examples" {
+            "(step t1 (cl (= (+ x y z) (+ z x y))) :rule shuffle)": true,
+
+            "(step t1 (cl (= (and p q q r p) (and q q p p r))) :rule shuffle)": true,
+        }
+        "Invalid examples" {
+            "(step t1 (cl (= (- x y z) (- x y z))) :rule shuffle)": false,
+            "(step t1 (cl (= (or p q r) (and p q r))) :rule shuffle)": false,
+            "(step t1 (cl (= (or p q r) true)) :rule shuffle)": false,
+            "(step t1 (cl (= (* x x y) (* x y y))) :rule shuffle)": false,
+            "(step t1 (cl (= (* x x y) (+ x y))) :rule shuffle)": false,
+        }
+    }
+}
+
+#[test]
 fn symm() {
     test_cases! {
         definitions = "
@@ -199,6 +225,48 @@ fn mod_simplify() {
         }
         "Modulo by zero" {
             "(step t1 (cl (= (mod 3 0) 1)) :rule mod_simplify)": false,
+        }
+    }
+}
+
+#[test]
+fn evaluate() {
+    test_cases! {
+        definitions = "
+            (declare-const x Int)
+            (declare-fun f (Int Int) Int)
+        ",
+        "Booleans" {
+            "(step t1 (cl (=
+                (=> (and true true) (or true false) (ite false false true))
+                true
+            )) :rule evaluate)": true,
+
+            "(step t1 (cl (= (or (= 0 0 1) (distinct 1 2 3 1)) false)) :rule evaluate)": true,
+        }
+        "Arithmetic" {
+            "(step t1 (cl (= (+ 1 2 (* 3 (- 1))) 0)) :rule evaluate)": true,
+            "(step t1 (cl (= (+ (div 3 (abs 2)) (mod (- 7) (- 3))) 0)) :rule evaluate)": true,
+            "(step t1 (cl (= (/ 1.0 (to_real 7)) 1/7)) :rule evaluate)": true,
+        }
+        "Bitvectors" {
+            "(step t1 (cl (=
+                (bvnot (bvudiv #b100 (@bbterm false true false)))
+                #b101
+            )) :rule evaluate)": true,
+
+            "(step t1 (cl (=
+                (bvashr ((_ rotate_left 3) #b0101100) #b0000001)
+                #b1110001
+            )) :rule evaluate)": true,
+        }
+        "Partial evaluation" {
+            "(step t1 (cl (= (+ x (+ 1 1)) (+ x 2))) :rule evaluate)": true,
+            "(step t1 (cl (= (f x (+ 1 1)) (f x 2))) :rule evaluate)": false,
+        }
+        "Invalid examples" {
+            "(step t1 (cl (= 2 (+ 1 1))) :rule evaluate)": false,
+            "(step t1 (cl (= (forall ((x Int)) true) true)) :rule evaluate)": false,
         }
     }
 }

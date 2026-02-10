@@ -1,6 +1,6 @@
 use super::{
     assert_alpha_equiv_expected, assert_clause_len, assert_eq, assert_is_expected, assert_num_args,
-    CheckerError, RuleArgs, RuleResult,
+    assert_operation_len, CheckerError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::QuantifierError, utils::DedupIterator};
 use indexmap::{IndexMap, IndexSet};
@@ -64,28 +64,46 @@ pub fn qnt_rm_unused(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
     assert_clause_len(conclusion, 1)?;
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
-    let (q_1, bindings_1, phi_1) = left.as_quant_err()?;
-
-    let free_vars = pool.free_vars(phi_1);
-    let expected: Vec<_> = bindings_1
+    let (q_1, left, phi_1) = left.as_quant_err()?;
+    let left: IndexSet<_> = left
         .iter()
-        .filter(|&var| {
-            let var = pool.add(var.clone().into());
-            free_vars.contains(&var)
-        })
-        .cloned()
+        .map(|var| pool.add(var.clone().into()))
         .collect();
 
-    // If all variables in the quantifier were unused, the quantifier is removed leaving only the
-    // inner term in the right-hand side
-    if expected.is_empty() {
-        return assert_eq(phi_1, right);
+    let free_vars = pool.free_vars(phi_1);
+
+    // If all variables can be removed, the right-hand side may be interpreted as just the inner
+    // term phi
+    if !left.iter().any(|v| free_vars.contains(v)) && phi_1 == right {
+        return Ok(());
     }
 
-    let (q_2, new_bindings, phi_2) = right.as_quant_err()?;
+    let (q_2, right, phi_2) = right.as_quant_err()?;
     assert_eq(&q_1, &q_2)?;
     assert_eq(phi_1, phi_2)?;
-    assert_is_expected(new_bindings, BindingList(expected))
+
+    let right: IndexSet<_> = right
+        .iter()
+        .map(|var| pool.add(var.clone().into()))
+        .collect();
+
+    // We need to ensure that:
+    // (1) the right-hand bindings do not contain new variables
+    if let Some(introduced) = right.difference(&left).next() {
+        return Err(CheckerError::Quant(QuantifierError::NewBindingIntroduced(
+            introduced.as_var().unwrap().to_owned(),
+        )));
+    }
+
+    // and (2) that they only remove variables which are unused.
+    for removed in left.difference(&right) {
+        if free_vars.contains(removed) {
+            return Err(CheckerError::Quant(QuantifierError::BindingIsMissing(
+                removed.as_var().unwrap().to_owned(),
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Converts a term into negation normal form, expanding all connectives.
@@ -271,9 +289,9 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     // `new_bindings` contains all bindings that existed in the original term, plus all bindings
     // added by the prenexing step. All bindings in the right side must be in this set
     if let Some((var, _)) = r_bindings.iter().find(|&b| !new_bindings.contains(b)) {
-        return Err(CheckerError::Quant(
-            QuantifierError::CnfNewBindingIntroduced(var.clone()),
-        ));
+        return Err(CheckerError::Quant(QuantifierError::NewBindingIntroduced(
+            var.clone(),
+        )));
     }
 
     let selected_clause = clauses
@@ -293,7 +311,89 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         .into_iter()
         .find(|var| !r_bindings.contains(var) && free_vars.contains(&pool.add(var.clone().into())));
     if let Some((var, _)) = found {
-        return Err(QuantifierError::CnfBindingIsMissing(var).into());
+        return Err(QuantifierError::BindingIsMissing(var).into());
+    }
+    Ok(())
+}
+
+pub fn miniscope_distribute(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (op, ((bindings, phis), right_args)) =
+        match_term_err!((= (forall ... (and ...)) (and ...)) = &conclusion[0])
+            .map(|values| (Operator::And, values))
+            .or_else(|_| {
+                match_term_err!((= (exists ... (or ...)) (or ...)) = &conclusion[0])
+                    .map(|values| (Operator::Or, values))
+            })?;
+    assert_operation_len(op, right_args, phis.len())?;
+    for (phi, right) in phis.iter().zip(right_args) {
+        let (b, inner) = match op {
+            Operator::And => match_term_err!((forall ... phi) = right)?,
+            Operator::Or => match_term_err!((exists ... phi) = right)?,
+            _ => unreachable!(),
+        };
+        assert_eq(bindings, b)?;
+        assert_eq(phi, inner)?;
+    }
+    Ok(())
+}
+
+pub fn miniscope_split(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (op, ((bindings, phis), right_args)) =
+        match_term_err!((= (forall ... (or ...)) (or ...)) = &conclusion[0])
+            .map(|values| (Operator::Or, values))
+            .or_else(|_| {
+                match_term_err!((= (exists ... (and ...)) (and ...)) = &conclusion[0])
+                    .map(|values| (Operator::And, values))
+            })?;
+    assert_operation_len(op, right_args, phis.len())?;
+
+    let mut bindings_set: IndexSet<_> = bindings.iter().collect();
+    for (phi, right) in phis.iter().zip(right_args) {
+        let (inner_bindings, inner) = match op {
+            Operator::Or => match_term_err!((forall ... phi) = right)?,
+            Operator::And => match_term_err!((exists ... phi) = right)?,
+            _ => unreachable!(),
+        };
+        assert_eq(phi, inner)?;
+        for b in inner_bindings {
+            if !bindings_set.swap_remove(b) {
+                return Err(QuantifierError::NewBindingIntroduced(b.0.clone()).into());
+            }
+        }
+    }
+
+    let right_term = pool.add(Term::Op(op, right_args.to_vec()));
+    let free_vars = pool.free_vars(&right_term);
+    for v in bindings {
+        if free_vars.contains(&pool.add(v.clone().into())) {
+            return Err(QuantifierError::MiniscopeFreeVar(v.0.clone(), right_term).into());
+        }
+    }
+
+    Ok(())
+}
+
+pub fn miniscope_ite(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (
+        (bindings_1, (phi1_l, phi2_l, phi3_l)),
+        (phi1_r, (bindings_2, phi2_r), (bindings_3, phi3_r)),
+    ) = match_term_err!(
+        (= (forall ... (ite phi1 phi2 phi3)) (ite phi1 (forall ... phi2) (forall ... phi3)))
+        = &conclusion[0]
+    )?;
+    assert_eq(phi1_l, phi1_r)?;
+    assert_eq(phi2_l, phi2_r)?;
+    assert_eq(phi3_l, phi3_r)?;
+    assert_eq(bindings_1, bindings_2)?;
+    assert_eq(bindings_1, bindings_3)?;
+    let free_vars = pool.free_vars(phi1_l);
+    for v in bindings_1 {
+        if free_vars.contains(&pool.add(v.clone().into())) {
+            return Err(QuantifierError::MiniscopeFreeVar(v.0.clone(), phi1_l.clone()).into());
+        }
     }
     Ok(())
 }

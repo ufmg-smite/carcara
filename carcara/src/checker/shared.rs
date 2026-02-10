@@ -100,6 +100,11 @@ pub fn check_step_core<CR: CollectResults + Send + Default>(
 ) -> RuleResult {
     let time = Instant::now();
 
+    if context.config.allowed_rules.contains(&step.rule) {
+        *context.is_holey = true;
+        return Ok(());
+    }
+
     if !step.discharge.is_empty() && step.rule != "subproof" {
         use crate::checker::error::{CheckerError, SubproofError};
         return Err(CheckerError::Subproof(SubproofError::DischargeInWrongRule));
@@ -107,9 +112,7 @@ pub fn check_step_core<CR: CollectResults + Send + Default>(
 
     let rule = match get_rule_shared(&step.rule, context.config.elaborated) {
         Some(r) => r,
-        None if context.config.ignore_unknown_rules
-            || context.config.allowed_rules.contains(&step.rule) =>
-        {
+        None if context.config.ignore_unknown_rules => {
             *context.is_holey = true;
             return Ok(());
         }
@@ -199,6 +202,7 @@ pub fn get_rule_shared(rule_name: &str, elaborated: bool) -> Option<crate::check
         "la_disequality" => linear_arithmetic::la_disequality,
         "la_totality" => linear_arithmetic::la_totality,
         "la_tautology" => linear_arithmetic::la_tautology,
+        "poly_simp" => linear_arithmetic::poly_simp,
         "forall_inst" => quantifier::forall_inst,
         "qnt_join" => quantifier::qnt_join,
         "qnt_rm_unused" => quantifier::qnt_rm_unused,
@@ -254,12 +258,16 @@ pub fn get_rule_shared(rule_name: &str, elaborated: bool) -> Option<crate::check
         "bfun_elim" => clausification::bfun_elim,
         "bind" => subproof::bind,
         "qnt_cnf" => quantifier::qnt_cnf,
+        "miniscope_distribute" => quantifier::miniscope_distribute,
+        "miniscope_split" => quantifier::miniscope_split,
+        "miniscope_ite" => quantifier::miniscope_ite,
         "subproof" => subproof::subproof,
         "let" => subproof::r#let,
         "onepoint" => subproof::onepoint,
         "sko_ex" => subproof::sko_ex,
         "sko_forall" => subproof::sko_forall,
         "reordering" => extras::reordering,
+        "shuffle" => extras::shuffle,
         "symm" => extras::symm,
         "not_symm" => extras::not_symm,
         "eq_symmetric" => extras::eq_symmetric,
@@ -268,9 +276,25 @@ pub fn get_rule_shared(rule_name: &str, elaborated: bool) -> Option<crate::check
         "la_mult_pos" => extras::la_mult_pos,
         "la_mult_neg" => extras::la_mult_neg,
         "mod_simplify" => extras::mod_simplify,
-        "bitblast_extract" => bitvectors::extract,
-        "bitblast_bvadd" => bitvectors::add,
+        "evaluate" => extras::evaluate,
+
+        "bitblast_const" => bitvectors::value,
+        "bitblast_var" => bitvectors::var,
+        "bitblast_and" => bitvectors::and,
+        "bitblast_or" => bitvectors::or,
+        "bitblast_xor" => bitvectors::xor,
+        "bitblast_xnor" => bitvectors::xnor,
+        "bitblast_not" => bitvectors::not,
+        "bitblast_comp" => bitvectors::comp,
         "bitblast_ult" => bitvectors::ult,
+        "bitblast_slt" => bitvectors::slt,
+        "bitblast_add" => bitvectors::add,
+        "bitblast_mult" => bitvectors::mult,
+        "bitblast_neg" => bitvectors::neg,
+        "bitblast_equal" => bitvectors::equality,
+        "bitblast_extract" => bitvectors::extract,
+        "bitblast_concat" => bitvectors::concat,
+        "bitblast_sign_extend" => bitvectors::sign_extend,
 
         "concat_eq" => strings::concat_eq,
         "concat_unify" => strings::concat_unify,

@@ -1,4 +1,4 @@
-# Checking Rare Rules
+# Checking Rare rewrites
 
 SMT solvers can produce proofs that may depend on rare rules. In general, rare rules have the following format:
 
@@ -37,7 +37,7 @@ We use `@Type` to denote an argument that is a polymorphic type. Polymorphic arg
   :args ("eq-refl" (op e3 e3)))
 ```
 
-# Flags
+## Flags
 
 We use the `--rare-file` flag to pass the rare file, for example:
 

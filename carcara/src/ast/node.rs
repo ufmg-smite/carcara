@@ -26,19 +26,6 @@ pub enum ProofNode {
 }
 
 impl ProofNode {
-    /// Creates a proof node from a list of commands.
-    ///
-    /// The root node will be the fist command that concludes an empty clause, or, if no command
-    /// does so, the last command in the vector.
-    pub fn from_commands(commands: Vec<ProofCommand>) -> Rc<Self> {
-        proof_list_to_node(commands, None).unwrap()
-    }
-
-    /// Creates a proof node from a list of commands, specifying a command id to be the root node.
-    pub fn from_commands_with_root_id(commands: Vec<ProofCommand>, root: &str) -> Option<Rc<Self>> {
-        proof_list_to_node(commands, Some(root))
-    }
-
     /// Returns the unique id of this command.
     ///
     /// For subproofs, this is the id of the last step in the subproof.
@@ -126,10 +113,6 @@ impl Rc<ProofNode> {
         unsafe { Rc::new_raw(value) }
     }
 
-    pub fn into_commands(&self) -> Vec<ProofCommand> {
-        proof_node_to_list(self)
-    }
-
     /// Visits every node of the proof, in postorder, and calls `visit_func` on them.
     pub fn traverse<F>(&self, mut visit_func: F)
     where
@@ -192,6 +175,7 @@ impl Rc<ProofNode> {
         });
         result
     }
+
     /// Returns a vector containing this proof's assumptions of the desired level
     pub fn get_assumptions_of_depth(&self, of_depth: usize) -> Vec<Rc<ProofNode>> {
         let mut result = Vec::new();
@@ -250,10 +234,27 @@ pub struct SubproofNode {
     /// The outbound premises of a subproof, that is, the premises from steps in the subproof that
     /// refer to steps outside it.
     pub outbound_premises: Vec<Rc<ProofNode>>,
+
+    /// Optional set of extra (possibly unused) steps to be included in the subproof, even if they
+    /// are not transitively used by `last_step`.
+    pub extra_steps: Vec<Rc<ProofNode>>,
 }
 
-/// Converts a list of proof commands into a `ProofNode`.
-fn proof_list_to_node(commands: Vec<ProofCommand>, root_id: Option<&str>) -> Option<Rc<ProofNode>> {
+pub struct ProofNodeForest(pub Vec<Rc<ProofNode>>);
+
+impl ProofNodeForest {
+    /// Creates a forest of proof nodes from a list of commands.
+    pub fn from_commands(commands: Vec<ProofCommand>) -> Self {
+        proof_list_to_nodes(commands)
+    }
+
+    pub fn into_commands(&self) -> Vec<ProofCommand> {
+        proof_nodes_to_list(self)
+    }
+}
+
+/// Converts a list of proof commands into a `ProofNodeForest`.
+fn proof_list_to_nodes(commands: Vec<ProofCommand>) -> ProofNodeForest {
     use indexmap::IndexSet;
 
     struct Frame {
@@ -338,108 +339,38 @@ fn proof_list_to_node(commands: Vec<ProofCommand>, root_id: Option<&str>) -> Opt
                     }
                 }
 
+                let last_step = frame.accumulator.pop().unwrap();
                 ProofNode::Subproof(SubproofNode {
-                    last_step: frame.accumulator.pop().unwrap(),
+                    last_step,
                     args: frame.args,
                     outbound_premises: frame.outbound_premises.into_iter().collect(),
+                    // We make sure all other steps are included as extra steps, even if they're
+                    // not used
+                    extra_steps: frame.accumulator,
                 })
             }
         };
         stack.last_mut().unwrap().accumulator.push(Rc::new(node));
     };
 
-    if let Some(root_id) = root_id {
-        new_root_proof.into_iter().find(|node| node.id() == root_id)
-    } else {
-        new_root_proof
-            .iter()
-            .find(|node| node.clause().is_empty())
-            .or(new_root_proof.last())
-            .cloned()
-    }
+    ProofNodeForest(new_root_proof)
 }
 
 /// Converts a `ProofNode` into a list of proof commands.
-fn proof_node_to_list(root: &Rc<ProofNode>) -> Vec<ProofCommand> {
+fn proof_nodes_to_list(proof: &ProofNodeForest) -> Vec<ProofCommand> {
     use std::collections::{HashMap, HashSet};
 
-    // To make sure all `assume` commands are placed before any other command, we store the
-    // commands as we process them in two separate vectors, one containing the `assume`s and another
-    // containing `step`s and subproofs.
-    #[derive(Default)]
-    struct Frame {
-        assumes: Vec<ProofCommand>,
-        steps: Vec<ProofCommand>,
-    }
-
-    // However, since we cannot know how many `assume`s there will be until after we finish
-    // processing a subproof, we cannot correctly determine the indices of other commands for step
-    // premises. To address this, whenever we add a premise to a `step` or subproof, we add this
-    // arbitrary large offset, to mark that this index should be updated. This technique has the
-    // side-effect of limiting the maximum number of steps in a subproof to `usize::MAX / 2`. Even
-    // on 32-bit systems, this will be more than 2 billion steps, so it is an acceptable limitation.
-    const STEP_INDEX_OFFSET: usize = usize::MAX / 2 + 1;
-
-    // Later, after we finish processing the entire subproof and know the exact ammount of
-    // `assume`s, we go through the subproof and update all indices that had the `STEP_INDEX_OFFSET`
-    // applied, and change the offset to be the number of `assume`s. Since there may be outbound
-    // premises, we also need to recurse into any subproof we find.
-    fn update_premise_indices(
-        commands: Vec<ProofCommand>,
-        depth: usize,
-        new_step_offset: usize,
-    ) -> Vec<ProofCommand> {
-        let mut stack = vec![(commands, 0)];
-        while let Some((commands, i)) = stack.last_mut() {
-            if *i < commands.len() {
-                match &mut commands[*i] {
-                    ProofCommand::Assume { .. } => *i += 1,
-                    ProofCommand::Step(step) => {
-                        step.premises
-                            .iter_mut()
-                            .chain(step.discharge.iter_mut())
-                            .for_each(|(d, i)| {
-                                if *d == depth && *i >= STEP_INDEX_OFFSET {
-                                    *i = *i - STEP_INDEX_OFFSET + new_step_offset;
-                                }
-                            });
-                        *i += 1;
-                    }
-                    ProofCommand::Subproof(subproof) => {
-                        let inner = std::mem::take(&mut subproof.commands);
-                        stack.push((inner, 0));
-                    }
-                }
-            } else {
-                let (finished, _) = stack.pop().unwrap();
-                if let Some((commands, i)) = stack.last_mut() {
-                    let ProofCommand::Subproof(subproof) = &mut commands[*i] else {
-                        unreachable!()
-                    };
-                    subproof.commands = finished;
-                    *i += 1;
-                } else {
-                    return finished;
-                }
-            }
-        }
-        unreachable!()
-    }
-
-    let mut stack: Vec<Frame> = vec![Frame::default()];
+    let mut stack: Vec<Vec<ProofCommand>> = vec![Vec::new()];
 
     let mut seen: HashMap<&Rc<ProofNode>, (usize, usize)> = HashMap::new();
-    let mut todo: Vec<(&Rc<ProofNode>, bool)> = vec![(root, false)];
+    let mut todo: Vec<(&Rc<ProofNode>, bool)> =
+        proof.0.iter().rev().map(|node| (node, false)).collect();
     let mut did_outbound: HashSet<&Rc<ProofNode>> = HashSet::new();
 
     loop {
         let Some((node, is_done)) = todo.pop() else {
             assert!(stack.len() == 1);
-            let frame = stack.pop().unwrap();
-            let new_offset = frame.assumes.len();
-            let mut commands = frame.assumes;
-            commands.extend(frame.steps);
-            return update_premise_indices(commands, 0, new_offset);
+            return stack.pop().unwrap();
         };
         if !is_done && seen.contains_key(&node) {
             continue;
@@ -488,22 +419,16 @@ fn proof_node_to_list(root: &Rc<ProofNode>) -> Vec<ProofCommand> {
 
                 todo.push((node, true));
                 todo.push((&s.last_step, false));
-                stack.push(Frame::default());
+                todo.extend(s.extra_steps.iter().rev().map(|node| (node, false)));
+                stack.push(Vec::new());
                 continue;
             }
             ProofNode::Subproof(s) => {
-                let frame = stack.pop().unwrap();
+                let commands = stack.pop().unwrap();
                 if stack.is_empty() {
                     unreachable!();
                 }
-                assert!(frame.steps.len() >= 2, "malformed subproof!");
-
-                // After we finish the subproof, we concatenate the two vectors, and update the
-                // premise indices
-                let new_offset = frame.assumes.len();
-                let mut commands = frame.assumes;
-                commands.extend(frame.steps);
-                let commands = update_premise_indices(commands, stack.len(), new_offset);
+                assert!(commands.len() >= 2, "malformed subproof!");
 
                 ProofCommand::Subproof(Subproof {
                     commands,
@@ -515,18 +440,15 @@ fn proof_node_to_list(root: &Rc<ProofNode>) -> Vec<ProofCommand> {
         let d = node.depth();
         // Depending on if the command is an `assume` command or not, we push it to a different
         // vector in the stack frame
-        let index = if command.is_assume() {
-            stack[d].assumes.push(command);
-            stack[d].assumes.len() - 1
-        } else {
-            // If it is not an `assume`, we also need to add the `STEP_INDEX_OFFSET`
-            stack[d].steps.push(command);
-            let index = stack[d].steps.len() - 1;
-            assert!(index < usize::MAX - STEP_INDEX_OFFSET); // Make sure it won't overflow
-            index + STEP_INDEX_OFFSET
-        };
+        let index = stack[d].len();
         seen.insert(node, (d, index));
+        stack[d].push(command);
     }
+}
+
+#[cfg(test)]
+pub fn compare_forests(a: &ProofNodeForest, b: &ProofNodeForest) -> bool {
+    a.0.len() == b.0.len() && a.0.iter().zip(b.0.iter()).all(|(a, b)| compare_nodes(a, b))
 }
 
 #[cfg(test)]

@@ -4,8 +4,11 @@ use super::{
     assert_clause_len, assert_eq, assert_num_premises, get_premise_term, CheckerError,
     EqualityError, RuleArgs, RuleResult,
 };
-use crate::{ast::*, checker::rules::assert_operation_len};
-use indexmap::IndexSet;
+use crate::{
+    ast::*,
+    checker::{error::CongruenceError, rules::assert_operation_len},
+    utils::{MultiSet, MultiSetDifference},
+};
 
 pub fn reordering(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_num_premises(premises, 1)?;
@@ -13,15 +16,35 @@ pub fn reordering(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult
     let premise = premises[0].clause;
     assert_clause_len(conclusion, premise.len())?;
 
-    let premise_set: IndexSet<_> = premise.iter().collect();
-    let conclusion_set: IndexSet<_> = conclusion.iter().collect();
-    if let Some(&t) = premise_set.difference(&conclusion_set).next() {
-        Err(CheckerError::ContractionMissingTerm(t.clone()))
-    } else if let Some(&t) = conclusion_set.difference(&premise_set).next() {
-        Err(CheckerError::ContractionExtraTerm(t.clone()))
-    } else {
-        Ok(())
+    let premise_set: MultiSet<_> = premise.iter().collect();
+    let conclusion_set: MultiSet<_> = conclusion.iter().collect();
+    match conclusion_set.symmetric_difference(&premise_set) {
+        MultiSetDifference::None => Ok(()),
+        MultiSetDifference::Missing(t) => Err(CheckerError::ContractionMissingTerm((*t).clone())),
+        MultiSetDifference::Extra(t) => Err(CheckerError::ContractionExtraTerm((*t).clone())),
     }
+}
+
+pub fn shuffle(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
+    let (left_args, right_args) = {
+        let ((l_op, l), (r_op, r)) = (left.as_op_err()?, right.as_op_err()?);
+        if l_op != r_op {
+            return Err(CongruenceError::DifferentOperators(l_op, r_op).into());
+        }
+        match l_op {
+            Operator::Add | Operator::Mult | Operator::And | Operator::Or => (l, r),
+            other => return Err(CheckerError::OperatorNotCommutative(other)),
+        }
+    };
+
+    let left_multiset: MultiSet<_> = left_args.iter().collect();
+    let right_multiset: MultiSet<_> = right_args.iter().collect();
+    if left_multiset != right_multiset {
+        return Err(CheckerError::ShuffleArgsNotEqual);
+    }
+    Ok(())
 }
 
 pub fn symm(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
@@ -204,4 +227,10 @@ pub fn mod_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         CheckerError::ExpectedNumber(expected.into(), right.clone())
     );
     Ok(())
+}
+
+pub fn evaluate(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (term, value) = match_term_err!((= term value) = &conclusion[0])?;
+    assert_eq(&term.evaluate(pool), value)
 }

@@ -1,10 +1,10 @@
 use super::*;
 use crate::utils::DedupIterator;
 
-pub fn remove_reorderings(root: &Rc<ProofNode>) -> Rc<ProofNode> {
+pub fn remove_reorderings(proof: ProofNodeForest) -> ProofNodeForest {
     let mut modified = HashSet::new();
 
-    mutate(root, |_, node| {
+    proof.mutate(|_, node| {
         let Some(step) = node.as_step() else {
             return node.clone();
         };

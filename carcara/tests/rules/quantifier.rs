@@ -133,21 +133,33 @@ fn qnt_rm_unused() {
             )) :rule qnt_rm_unused)": true,
         }
         "Bindings in wrong order" {
+            // Deviates from spec, but is still sound
             "(step t1 (cl (=
                 (forall ((x Real) (y Real) (z Real)) (= x z))
                 (forall ((z Real) (x Real)) (= x z))
-            )) :rule qnt_rm_unused)": false,
+            )) :rule qnt_rm_unused)": true,
         }
         "Not all unused bindings were removed" {
             "(step t1 (cl (=
                 (forall ((x Real) (y Real) (z Real) (w Real)) (= y y))
                 (forall ((y Real) (w Real)) (= y y))
-            )) :rule qnt_rm_unused)": false,
+            )) :rule qnt_rm_unused)": true,
         }
         "Inner term is the opposite quantifier" {
             "(step t1 (cl (=
                 (exists ((?v0 Int)) (forall ((?v1 Int) (?v2 Int)) (= ?v1 ?v2)))
                 (forall ((?v1 Int) (?v2 Int)) (= ?v1 ?v2))
+            )) :rule qnt_rm_unused)": true,
+        }
+        "Duplicate removal" {
+            "(step t1 (cl (=
+                (forall ((x Real) (y Real) (x Real)) (= x y))
+                (forall ((x Real) (y Real)) (= x y))
+            )) :rule qnt_rm_unused)": true,
+
+            "(step t1 (cl (=
+                (forall ((x Real) (y Real) (x Real)) (= x y))
+                (forall ((y Real) (x Real)) (= x y))
             )) :rule qnt_rm_unused)": true,
         }
     }
@@ -194,6 +206,177 @@ fn qnt_cnf() {
                 (not (forall ((p Bool)) (or p (and false (forall ((q Bool)) q)))))
                 (forall ((p Bool)) (or p false))
             )) :rule qnt_cnf)": true,
+        }
+    }
+}
+
+#[test]
+fn miniscope_distribute() {
+    test_cases! {
+        definitions = "
+            (declare-fun r () Bool)
+            (declare-fun s () Bool)
+        ",
+        "Simple working examples" {
+            "(step t1 (cl (=
+                (forall ((p Bool) (q Bool)) (and p q false))
+                (and
+                    (forall ((p Bool) (q Bool)) p)
+                    (forall ((p Bool) (q Bool)) q)
+                    (forall ((p Bool) (q Bool)) false)
+                )
+            )) :rule miniscope_distribute)": true,
+
+            "(step t1 (cl (=
+                (exists ((p Bool)) (or r s p))
+                (or (exists ((p Bool)) r) (exists ((p Bool)) s) (exists ((p Bool)) p))
+            )) :rule miniscope_distribute)": true,
+        }
+        "Different quantifiers" {
+            "(step t1 (cl (=
+                (exists ((p Bool)) (or r s p))
+                (or (exists ((p Bool)) r) (forall ((p Bool)) s) (forall ((p Bool)) p))
+            )) :rule miniscope_distribute)": false,
+        }
+        "Wrong operator" {
+            "(step t1 (cl (=
+                (forall ((p Bool)) (and p p))
+                (or (forall ((p Bool)) p) (forall ((p Bool)) p))
+            )) :rule miniscope_distribute)": false,
+
+            "(step t1 (cl (=
+                (exists ((p Bool)) (and p p))
+                (or (exists ((p Bool)) p) (exists ((p Bool)) p))
+            )) :rule miniscope_distribute)": false,
+        }
+        "Wrong number of arguments" {
+            "(step t1 (cl (=
+                (forall ((p Bool)) (and p p))
+                (and (forall ((p Bool)) p))
+            )) :rule miniscope_distribute)": false,
+        }
+        "Wrong binding list" {
+            "(step t1 (cl (=
+                (forall ((p Bool) (q Bool)) (and p q false))
+                (and
+                    (forall ((p Bool) (q Bool)) p)
+                    (forall ((p Bool) (q Bool)) q)
+                    (forall ((p Bool)) false)
+                )
+            )) :rule miniscope_distribute)": false,
+
+            "(step t1 (cl (=
+                (forall ((p Bool) (q Bool)) (and p q false))
+                (and
+                    (forall ((p Bool) (q Bool)) p)
+                    (forall ((p Bool) (q Bool)) q)
+                    (forall ((p Bool) (x Int)) false)
+                )
+            )) :rule miniscope_distribute)": false,
+        }
+    }
+}
+
+#[test]
+fn miniscope_split() {
+    test_cases! {
+        definitions = "
+            (declare-fun r () Bool)
+        ",
+        "Simple working examples" {
+            "(step t1 (cl (=
+                (forall ((p Bool) (q Bool)) (or p q))
+                (or (forall ((p Bool)) p) (forall ((q Bool)) q))
+            )) :rule miniscope_split)": true,
+
+            "(step t1 (cl (=
+                (exists ((p Bool) (q Bool) (s Bool)) (and p q s))
+                (and (exists ((p Bool)) p) (exists ((q Bool)) q) (exists ((s Bool)) s))
+            )) :rule miniscope_split)": true,
+        }
+        "Different quantifiers" {
+            "(step t1 (cl (=
+                (forall ((p Bool)) (or p p))
+                (or (forall ((p Bool)) p) (exists ((p Bool)) p))
+            )) :rule miniscope_distribute)": false,
+        }
+        "Wrong operator" {
+            "(step t1 (cl (=
+                (forall ((p Bool) (q Bool)) (or p q))
+                (and (forall ((p Bool)) p) (forall ((q Bool)) q))
+            )) :rule miniscope_distribute)": false,
+
+            "(step t1 (cl (=
+                (exists ((p Bool) (q Bool)) (or p q))
+                (and (exists ((p Bool)) p) (exists ((q Bool)) q))
+            )) :rule miniscope_distribute)": false,
+        }
+        "Wrong number of arguments" {
+            "(step t1 (cl (=
+                (forall ((p Bool) (q Bool)) (or p q))
+                (or (forall ((p Bool) (q Bool)) p))
+            )) :rule miniscope_distribute)": false,
+        }
+        "Wrong binding list" {
+            "(step t1 (cl (=
+                (forall ((p Bool) (q Bool)) (or p q))
+                (or (forall ((p Bool)) p) (forall ((q Bool) (x Int)) q))
+            )) :rule miniscope_distribute)": false,
+
+            "(step t1 (cl (=
+                (forall ((p Bool) (q Bool) (r Bool)) (or p (= q r)))
+                (or (forall ((p Bool)) p) (forall ((q Bool)) (= q r)))
+            )) :rule miniscope_distribute)": false,
+        }
+        "Overlapping binding lists" {
+            "(step t1 (cl (=
+                (forall ((p Bool)) (or p (not p)))
+                (or (forall ((p Bool)) p) (forall ((p Bool)) (not p)))
+            )) :rule miniscope_distribute)": false,
+        }
+    }
+}
+
+#[test]
+fn miniscope_ite() {
+    test_cases! {
+        definitions = "
+            (declare-fun r () Bool)
+        ",
+        "Simple working examples" {
+            "(step t1 (cl (=
+                (forall ((p Bool) (q Bool)) (ite r true false))
+                (ite r (forall ((p Bool) (q Bool)) true) (forall ((p Bool) (q Bool)) false))
+            )) :rule miniscope_ite)": true,
+        }
+        "Wrong format" {
+            "(step t1 (cl (=
+                (forall ((p Bool)) (ite r true false))
+                (ite r (forall ((p Bool)) true) (exists ((p Bool)) false))
+            )) :rule miniscope_ite)": false,
+
+            "(step t1 (cl (=
+                (forall ((p Bool)) (ite r true false))
+                (ite (forall ((p Bool)) r) (forall ((p Bool)) true) (forall ((p Bool)) false))
+            )) :rule miniscope_ite)": false,
+        }
+        "Wrong binding list" {
+            "(step t1 (cl (=
+                (forall ((p Bool)) (ite r true false))
+                (ite r (forall ((p Bool)) true) (forall ((q Bool)) false))
+            )) :rule miniscope_ite)": false,
+        }
+        "Wrong phis" {
+            "(step t1 (cl (=
+                (forall ((p Bool)) (ite r true false))
+                (ite r (forall ((p Bool)) false) (forall ((p Bool)) true))
+            )) :rule miniscope_ite)": false,
+        }
+        "Bound variable in condition" {
+            "(step t1 (cl (=
+                (forall ((r Bool)) (ite r true false))
+                (ite r (forall ((r Bool)) false) (forall ((r Bool)) true))
+            )) :rule miniscope_ite)": false,
         }
     }
 }

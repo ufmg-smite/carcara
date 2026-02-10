@@ -1,5 +1,5 @@
 use crate::{
-    ast::{node::ProofNode, pool::PrimitivePool, Polyeq, TermPool},
+    ast::{node::ProofNodeForest, pool::PrimitivePool, Polyeq, TermPool},
     parser::tests::parse_terms,
 };
 use indexmap::IndexSet;
@@ -141,24 +141,10 @@ fn test_node() {
             (step t5 (cl true) :rule blah :premises (t5.t2) :discharge (t5.h1))
         (step t6 (cl) :rule blah :premises (t3 t5))
     ";
-    let expected = "
-        (assume h0 (= 0 0))
-        (assume h2 (= 2 2))
-        (step t3 (cl true) :rule blah :premises (h0 h2))
-        (step t4 (cl true) :rule blah)
-        (anchor :step t5)
-            (assume t5.h1 (= 3 3))
-            (step t5.t2 (cl true) :rule blah :premises (t4))
-            (step t5.t4 (cl true) :rule blah)
-            (step t5 (cl true) :rule blah :premises (t5.t2) :discharge (t5.h1))
-        (step t6 (cl) :rule blah :premises (t3 t5))
-    ";
     let mut pool = PrimitivePool::new();
     let original = parse_proof(&mut pool, original);
 
-    let expected = parse_proof(&mut pool, expected);
-
-    let node = ProofNode::from_commands(original.commands);
+    let node = ProofNodeForest::from_commands(original.commands.clone());
     let got = node.into_commands();
-    assert_eq!(expected.commands, got);
+    assert_eq!(original.commands, got);
 }
