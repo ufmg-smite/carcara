@@ -1,7 +1,8 @@
-use super::{assert_clause_len, RuleArgs, RuleResult};
+use super::{assert_clause_len, assert_eq, RuleArgs, RuleResult};
 use crate::{
     ast::{Operator, Rc, Sort, Term},
     checker::error::PolynomialError,
+    checker::rules::{assert_num_premises, get_premise_term},
 };
 use indexmap::{map::Entry, IndexMap};
 use rug::{ops::NegAssign, Integer, Rational};
@@ -189,5 +190,44 @@ pub fn bv_poly_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         Err(PolynomialError::PolynomialsNotEqual(t.clone(), s.clone()).into())
     } else {
         Ok(())
+    }
+}
+
+pub fn poly_simp_rel(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    use Operator::*;
+
+    assert_num_premises(premises, 1)?;
+    assert_clause_len(conclusion, 1)?;
+    let prem = get_premise_term(&premises[0])?;
+
+    let ((c1, xs), (c2, ys)) = match_term_err!((= (* c1 xs) (* c2 ys)) = prem)?;
+    let (x1, x2) =
+        match_term_err!((to_real (- x1 x2)) = xs).or_else(|_| match_term_err!((- x1 x2) = xs))?;
+    let (y1, y2) =
+        match_term_err!((to_real (- y1 y2)) = ys).or_else(|_| match_term_err!((- y1 y2) = ys))?;
+
+    let (c1, c2) = (c1.as_fraction_err()?, c2.as_fraction_err()?);
+    for c in [&c1, &c2] {
+        rassert!(!c.is_zero(), PolynomialError::CoeffIsZero(c.clone()));
+    }
+
+    let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
+    match (left.as_op_err()?, right.as_op_err()?) {
+        (
+            (op @ (LessThan | LessEq | Equals | GreaterEq | GreaterThan), [l1, l2]),
+            (op2, [r1, r2]),
+        ) if op2 == op => {
+            rassert!(
+                op == Equals || c1.is_positive() == c2.is_positive(),
+                PolynomialError::CoeffDifferentSignums(c1.clone(), c2.clone()),
+            );
+
+            assert_eq(l1, x1)?;
+            assert_eq(l2, x2)?;
+            assert_eq(r1, y1)?;
+            assert_eq(r2, y2)?;
+            Ok(())
+        }
+        ((op1, _), (op2, _)) => Err(PolynomialError::InvalidOperators(op1, op2).into()),
     }
 }

@@ -174,6 +174,8 @@ macro_rules! match_term {
     (@GET_VARIANT <=)       => { $crate::ast::Operator::LessEq };
     (@GET_VARIANT >=)       => { $crate::ast::Operator::GreaterEq };
 
+    (@GET_VARIANT to_real)  => { $crate::ast::Operator::ToReal };
+
     (@GET_VARIANT cl)    => { $crate::ast::Operator::Cl };
     (@GET_VARIANT delete)    => { $crate::ast::Operator::Delete };
 

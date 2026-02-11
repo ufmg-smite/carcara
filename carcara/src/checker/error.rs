@@ -358,6 +358,15 @@ pub enum PolynomialError {
 
     #[error("expected bitvector sort, got '{0}'")]
     ExpectedBvSort(Sort),
+
+    #[error("coefficient can't be zero: '{0}'")]
+    CoeffIsZero(Rational),
+
+    #[error("coefficients should have the same signum: '{0}' and '{1}'")]
+    CoeffDifferentSignums(Rational, Rational),
+
+    #[error("invalid relation operators: '{0}' and '{1}'")]
+    InvalidOperators(Operator, Operator),
 }
 
 /// Errors relevant to all rules that end subproofs (not just the `subproof` rule).
