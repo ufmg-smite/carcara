@@ -1843,6 +1843,13 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 [x, y] => Ok(Sort::Array(x.clone(), y.clone())),
                 _ => Err(ParserError::WrongNumberOfArgs(2.into(), args.len())),
             },
+            "rare-list" | "RareList" => match args.as_slice() {
+                [elem] => Ok(Sort::RareList(elem.clone())),
+                [] => Ok(Sort::RareList(
+                    self.pool.add(Term::Sort(Sort::Var("T".to_owned()))),
+                )),
+                _ => Err(ParserError::WrongNumberOfArgs(1.into(), args.len())),
+            },
             other
                 if polymorphic
                     && other.starts_with('@')
@@ -1923,6 +1930,13 @@ impl<'a, R: BufRead> Parser<'a, R> {
             }
             Token::OpenParen if polymorphic => {
                 let name = self.expect_symbol()?;
+                if matches!(name.as_str(), "rare-list" | "RareList") {
+                    let args = self
+                        .parse_sequence(|parser| Parser::parse_sort(parser, polymorphic), true)?;
+                    return self
+                        .make_sort(name, args, polymorphic)
+                        .map_err(|e| Error::Parser(e, pos));
+                }
                 let args = self.parse_sequence(Self::parse_term, true)?;
                 let args = args
                     .into_iter()

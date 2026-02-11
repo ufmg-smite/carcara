@@ -1,7 +1,7 @@
 use indexmap::IndexMap;
 
 use crate::{
-    ast::{Constant, Substitution, Term},
+    ast::{Constant, Sort, Substitution, Term},
     checker::{error::CheckerError, rules::get_premise_term},
     rare::{get_rules, rewrite_meta_terms},
 };
@@ -41,9 +41,26 @@ pub fn check_rare(
 
         for arg in rare_term.arguments.iter().rev() {
             let arg_sort = rare_term.parameters.get(arg).unwrap();
+            let value = arguments.next().unwrap().clone();
+            let var_sort = if arg_sort.attribute == crate::ast::rare_rules::AttributeParameters::List
+            {
+                match arg_sort.term.as_sort().unwrap() {
+                    Sort::RareList(elem_sort) => {
+                        let value_sort = pool.sort(&value);
+                        if value_sort.as_sort() == Some(arg_sort.term.as_sort().unwrap()) {
+                            arg_sort.term.clone()
+                        } else {
+                            elem_sort.clone()
+                        }
+                    }
+                    _ => arg_sort.term.clone(),
+                }
+            } else {
+                arg_sort.term.clone()
+            };
             map.insert(
-                pool.add(Term::Var(arg.clone(), arg_sort.term.clone())),
-                arguments.next().unwrap().clone(),
+                pool.add(Term::Var(arg.clone(), var_sort)),
+                value,
             );
         }
 

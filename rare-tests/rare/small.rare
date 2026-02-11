@@ -1,0 +1,10 @@
+(declare-rare-rule bv-concat-extract-merge ((xs1 (_ BitVec 1) :list) (s1 (_ BitVec 8)) (ys1 (_ BitVec 1) :list))
+  :premises ((= 2 (+ 1 1)))
+  :args (xs1 s1 ys1)
+  :conclusion (= (concat xs1 ((_ extract 7 2) s1) ((_ extract 1 1) s1) ys1) (concat xs1 ((_ extract 7 1) s1) ys1))
+)
+
+(declare-rare-rule bool-and-de-morgan ((x1 Bool) (y1 Bool))
+  :args (x1 y1)
+  :conclusion (= (not (and x1 y1)) (or (not x1) (not y1)))
+)

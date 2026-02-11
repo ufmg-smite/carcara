@@ -91,8 +91,8 @@ pub enum Sort {
     /// A parametric sort, with a set of sort variables that can appear in the second argument.
     ParamSort(Vec<Rc<Term>>, Rc<Term>),
 
-    /// The sort of RARE lists.
-    RareList,
+    /// The sort of RARE lists, parameterized by their element sort.
+    RareList(Rc<Term>),
 
     /// The sort of sorts.
     Type,
@@ -617,8 +617,10 @@ impl Sort {
             | (Sort::Real, Sort::Real)
             | (Sort::String, Sort::String)
             | (Sort::RegLan, Sort::RegLan)
-            | (Sort::RareList, Sort::RareList)
             | (Sort::Type, Sort::Type) => true,
+            (Sort::RareList(a), Sort::RareList(b)) => {
+                a.as_sort().unwrap().match_with(b.as_sort().unwrap(), map)
+            }
             (Sort::Array(x_a, y_a), Sort::Array(x_b, y_b)) => {
                 let s_x_a = x_a.as_sort().unwrap();
                 let s_y_a = y_a.as_sort().unwrap();
@@ -999,6 +1001,10 @@ impl Sort {
         match self {
             Sort::Var(_) => true,
             Sort::ParamSort(_, sort) if matches!(&**sort, Term::Sort(Sort::Var(_))) => true,
+            Sort::RareList(inner) => inner
+                .as_sort()
+                .map(Sort::is_polymorphic)
+                .unwrap_or(false),
             _ => false,
         }
     }

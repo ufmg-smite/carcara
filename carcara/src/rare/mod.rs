@@ -8,9 +8,9 @@ use crate::{
 pub fn get_rules() -> Vec<(RewriteTerm, RewriteTerm)> {
     vec![
         build_equation!((RareList ..x..) ~> x),
+        build_equation!((And x) ~> x),
+        build_equation!((Or x) ~> x),
         build_equation!((Or true) ~> true),
-        build_equation!((Or) ~> true),
-        build_equation!((And) ~> false),
         build_equation!((And false) ~> false),
     ]
 }

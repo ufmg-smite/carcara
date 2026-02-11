@@ -171,7 +171,7 @@ impl PrimitivePool {
                                 total_width.push(TotalWidth::Width(arg_width));
                             }
                             Sort::ParamSort(v, _) => {
-                                total_width.push(TotalWidth::ParamSort(v[0].clone()));
+                                total_width.push(TotalWidth::ParamSort(v[0].clone()))
                             }
                             _ => unreachable!(),
                         }
@@ -254,7 +254,13 @@ impl PrimitivePool {
                 | Operator::ReKleeneCross
                 | Operator::ReOption
                 | Operator::ReRange => Sort::RegLan,
-                Operator::RareList => Sort::RareList,
+                Operator::RareList => {
+                    let element_sort = args
+                        .first()
+                        .map(|arg| self.compute_sort(arg))
+                        .unwrap_or_else(|| self.add(Term::Sort(Sort::Var("T".to_owned()))));
+                    Sort::RareList(element_sort)
+                }
             },
             Term::App(f, args) => {
                 match self.compute_sort(f).as_sort().unwrap() {
