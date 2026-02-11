@@ -1,4 +1,0 @@
-(assume a0 (and (not (= (concat b0 b1 y) (concat b0 b1 y))) true))
-(step t0 (cl (not (= (concat b0 b1 y) (concat b0 b1 y)))) :rule and :premises (a0) :args (0))
-(step t1 (cl (= (concat b0 b1 y) (concat b0 b1 y))) :rule rare_rewrite :args ("bv-concat-list-right-id" (rare-list b0 b1) y))
-(step t2 (cl) :rule resolution :premises (t1 t0))

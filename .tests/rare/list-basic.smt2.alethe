@@ -1,4 +1,0 @@
-(assume a0 (and (not (= (or p q z) (or p q z))) true))
-(step t0 (cl (not (= (or p q z) (or p q z)))) :rule and :premises (a0) :args (0))
-(step t1 (cl (= (or p q z) (or p q z))) :rule rare_rewrite :args ("bool-or-list-pack" (rare-list p q) z))
-(step t2 (cl) :rule resolution :premises (t1 t0))
