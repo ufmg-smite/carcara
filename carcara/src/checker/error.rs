@@ -93,6 +93,15 @@ pub enum CheckerError {
     )]
     CannotApplyReUnfoldPosComponentDifferentArgNum(Rc<Term>, Rc<Term>),
 
+    #[error("operator '{0}' is not commutative")]
+    OperatorNotCommutative(Operator),
+
+    #[error("argument multisets are not equal")]
+    ShuffleArgsNotEqual,
+
+    #[error("cannot evaluate term: '{0}'")]
+    CannotEvaluateTerm(Rc<Term>),
+
     // General errors
     #[error("expected {0} premises, got {1}")]
     WrongNumberOfPremises(Range, usize),
@@ -308,6 +317,9 @@ pub enum QuantifierError {
 
     #[error("result clause doesn't appear in CNF of original term: '{0}'")]
     ClauseDoesntAppearInCnf(Rc<Term>),
+
+    #[error("binding '{0}' appears as free variable in term '{1}'")]
+    MiniscopeFreeVar(String, Rc<Term>),
 }
 
 /// Errors relevant to the linear arithmetic rules.
@@ -327,6 +339,9 @@ pub enum LinearArithmeticError {
 
     #[error("final disequality is not tautological: '{}'", DisplayLinearComb(.0, .1))]
     DisequalityIsNotTautology(Operator, Box<LinearComb>),
+
+    #[error("terms are not equal after arithmetic normalization: '{0}' and '{1}'")]
+    LinearCombNotEqual(Rc<Term>, Rc<Term>),
 
     #[error("expected term '{0}' to be less than term '{1}'")]
     ExpectedLessThan(Rc<Term>, Rc<Term>),

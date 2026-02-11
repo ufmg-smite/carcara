@@ -1,6 +1,6 @@
 use super::{
     assert_alpha_equiv_expected, assert_clause_len, assert_eq, assert_is_expected, assert_num_args,
-    CheckerError, RuleArgs, RuleResult,
+    assert_operation_len, CheckerError, RuleArgs, RuleResult,
 };
 use crate::{ast::*, checker::error::QuantifierError, utils::DedupIterator};
 use indexmap::{IndexMap, IndexSet};
@@ -312,6 +312,95 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         .find(|var| !r_bindings.contains(var) && free_vars.contains(&pool.add(var.clone().into())));
     if let Some((var, _)) = found {
         return Err(QuantifierError::BindingIsMissing(var).into());
+    }
+    Ok(())
+}
+
+pub fn miniscope_distribute(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (op, ((bindings, phis), right_args)) =
+        match_term_err!((= (forall ... (and ...)) (and ...)) = &conclusion[0])
+            .map(|values| (Operator::And, values))
+            .or_else(|_| {
+                match_term_err!((= (exists ... (or ...)) (or ...)) = &conclusion[0])
+                    .map(|values| (Operator::Or, values))
+            })?;
+    assert_operation_len(op, right_args, phis.len())?;
+    for (phi, right) in phis.iter().zip(right_args) {
+        let (b, inner) = match op {
+            Operator::And => match_term_err!((forall ... phi) = right)?,
+            Operator::Or => match_term_err!((exists ... phi) = right)?,
+            _ => unreachable!(),
+        };
+        assert_eq(bindings, b)?;
+        assert_eq(phi, inner)?;
+    }
+    Ok(())
+}
+
+pub fn miniscope_split(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (op, ((bindings, phis), right_args)) =
+        match_term_err!((= (forall ... (or ...)) (or ...)) = &conclusion[0])
+            .map(|values| (Operator::Or, values))
+            .or_else(|_| {
+                match_term_err!((= (exists ... (and ...)) (and ...)) = &conclusion[0])
+                    .map(|values| (Operator::And, values))
+            })?;
+    assert_operation_len(op, right_args, phis.len())?;
+
+    let mut bindings_set: IndexSet<_> = bindings.iter().collect();
+    for (phi, right) in phis.iter().zip(right_args) {
+        // `right` is the same as `phi`, it must have no bound variables from the quantifier being
+        // split, which is checked afterwards.
+        if phi == right {
+            continue;
+        }
+        // Otherwise an appropriate binder must have been put around `right` and its variables must
+        // be from the bindings_set in the LHS of the conclusion
+        let (inner_bindings, inner) = match op {
+            Operator::Or => match_term_err!((forall ... phi) = right)?,
+            Operator::And => match_term_err!((exists ... phi) = right)?,
+            _ => unreachable!(),
+        };
+        assert_eq(phi, inner)?;
+        for b in inner_bindings {
+            if !bindings_set.swap_remove(b) {
+                return Err(QuantifierError::NewBindingIntroduced(b.0.clone()).into());
+            }
+        }
+    }
+
+    let right_term = pool.add(Term::Op(op, right_args.to_vec()));
+    let free_vars = pool.free_vars(&right_term);
+    for v in bindings {
+        if free_vars.contains(&pool.add(v.clone().into())) {
+            return Err(QuantifierError::MiniscopeFreeVar(v.0.clone(), right_term).into());
+        }
+    }
+
+    Ok(())
+}
+
+pub fn miniscope_ite(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (
+        (bindings_1, (phi1_l, phi2_l, phi3_l)),
+        (phi1_r, (bindings_2, phi2_r), (bindings_3, phi3_r)),
+    ) = match_term_err!(
+        (= (forall ... (ite phi1 phi2 phi3)) (ite phi1 (forall ... phi2) (forall ... phi3)))
+        = &conclusion[0]
+    )?;
+    assert_eq(phi1_l, phi1_r)?;
+    assert_eq(phi2_l, phi2_r)?;
+    assert_eq(phi3_l, phi3_r)?;
+    assert_eq(bindings_1, bindings_2)?;
+    assert_eq(bindings_1, bindings_3)?;
+    let free_vars = pool.free_vars(phi1_l);
+    for v in bindings_1 {
+        if free_vars.contains(&pool.add(v.clone().into())) {
+            return Err(QuantifierError::MiniscopeFreeVar(v.0.clone(), phi1_l.clone()).into());
+        }
     }
     Ok(())
 }

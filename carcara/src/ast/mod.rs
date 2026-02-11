@@ -5,6 +5,7 @@
 #[macro_use]
 mod macros;
 mod context;
+mod evaluate;
 mod iter;
 mod node;
 mod polyeq;
@@ -20,6 +21,7 @@ mod term;
 mod tests;
 
 pub use context::{Context, ContextStack};
+pub use evaluate::Value;
 pub use iter::ProofIter;
 pub use node::{ProofNode, ProofNodeForest, StepNode, SubproofNode};
 pub use polyeq::{alpha_equiv, polyeq, Polyeq, PolyeqComparable, PolyeqConfig};
@@ -29,7 +31,9 @@ pub use problem::*;
 pub use proof::*;
 pub use rc::Rc;
 pub use substitution::{Substitution, SubstitutionError};
-pub use term::{Binder, BindingList, Constant, Operator, ParamOperator, Sort, SortedVar, Term};
+pub use term::{
+    Binder, BindingList, Constant, NaryCase, Operator, ParamOperator, Sort, SortedVar, Term,
+};
 
 #[cfg(test)]
 pub(crate) use node::compare_forests;

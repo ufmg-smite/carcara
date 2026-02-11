@@ -83,10 +83,11 @@ pub enum Sort {
     ///
     /// The two associated terms are the sort arguments for this sort.
     Array(Rc<Term>, Rc<Term>),
+
     ///  `BitVec` sort.
     ///
-    /// The associated term is the BV width of this sort.
-    BitVec(Integer),
+    /// The associated `usize` is the BV width of this sort.
+    BitVec(usize),
 
     /// A parametric sort, with a set of sort variables that can appear in the second argument.
     ParamSort(Vec<Rc<Term>>, Rc<Term>),
@@ -114,7 +115,9 @@ pub enum Constant {
     String(String),
 
     /// A bitvector literal term.
-    BitVec(Integer, Integer),
+    ///
+    /// The associated values are the bitvector's value and width respectively.
+    BitVec(Integer, usize),
 }
 
 /// A binder, either a quantifier (`forall` or `exists`), `choice`, or `lambda`.
@@ -376,6 +379,122 @@ pub enum Operator {
     // The clausal operators
     Cl,
     Delete,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NaryCase {
+    Chainable,
+    RightAssoc,
+    LeftAssoc,
+    Pairwise,
+}
+
+impl Operator {
+    pub fn nary_case(&self) -> Option<NaryCase> {
+        // We avoid using the wildcard pattern (i.e. `_`) in this match expression so that when
+        // someone adds a new operator, they are reminded to add it to this match
+        match self {
+            // Logical
+            Operator::Implies => Some(NaryCase::RightAssoc),
+            Operator::And | Operator::Or | Operator::Xor => Some(NaryCase::LeftAssoc),
+            Operator::Equals => Some(NaryCase::Chainable),
+            Operator::Distinct => Some(NaryCase::Pairwise),
+            Operator::True | Operator::False | Operator::Not | Operator::Ite => None,
+
+            // Integers/Reals
+            Operator::Add
+            | Operator::Sub
+            | Operator::Mult
+            | Operator::IntDiv
+            | Operator::RealDiv => Some(NaryCase::LeftAssoc),
+            Operator::LessThan | Operator::GreaterThan | Operator::LessEq | Operator::GreaterEq => {
+                Some(NaryCase::Chainable)
+            }
+            Operator::Mod
+            | Operator::Abs
+            | Operator::ToReal
+            | Operator::ToInt
+            | Operator::IsInt => None,
+
+            // Arrays
+            Operator::Select | Operator::Store => None,
+
+            // Strings
+            Operator::StrConcat
+            | Operator::StrLessThan
+            | Operator::StrLessEq
+            | Operator::ReConcat
+            | Operator::ReUnion
+            | Operator::ReIntersection
+            | Operator::ReDiff => Some(NaryCase::LeftAssoc),
+            Operator::StrLen
+            | Operator::CharAt
+            | Operator::Substring
+            | Operator::PrefixOf
+            | Operator::SuffixOf
+            | Operator::Contains
+            | Operator::IndexOf
+            | Operator::Replace
+            | Operator::ReplaceAll
+            | Operator::ReplaceRe
+            | Operator::ReplaceReAll
+            | Operator::StrIsDigit
+            | Operator::StrToCode
+            | Operator::StrFromCode
+            | Operator::StrToInt
+            | Operator::StrFromInt
+            | Operator::StrToRe
+            | Operator::StrInRe
+            | Operator::ReNone
+            | Operator::ReAll
+            | Operator::ReAllChar
+            | Operator::ReKleeneClosure
+            | Operator::ReComplement
+            | Operator::ReKleeneCross
+            | Operator::ReOption
+            | Operator::ReRange => None,
+
+            // Bitvectors
+            Operator::BvAnd | Operator::BvOr | Operator::BvAdd | Operator::BvMul => {
+                Some(NaryCase::LeftAssoc)
+            }
+            Operator::BvNot
+            | Operator::BvNeg
+            | Operator::BvUDiv
+            | Operator::BvURem
+            | Operator::BvShl
+            | Operator::BvLShr
+            | Operator::BvULt
+            | Operator::BvConcat
+            | Operator::BvNAnd
+            | Operator::BvNOr
+            | Operator::BvXor
+            | Operator::BvXNor
+            | Operator::BvComp
+            | Operator::BvSub
+            | Operator::BvSDiv
+            | Operator::BvSRem
+            | Operator::BvSMod
+            | Operator::BvAShr
+            | Operator::BvULe
+            | Operator::BvUGt
+            | Operator::BvUGe
+            | Operator::BvSLt
+            | Operator::BvSLe
+            | Operator::BvSGt
+            | Operator::BvSGe
+            | Operator::UBvToInt
+            | Operator::SBvToInt
+            | Operator::BvPBbTerm
+            | Operator::BvBbTerm
+            | Operator::BvConst
+            | Operator::BvSize
+            | Operator::RareList => None,
+
+            // Clausal
+            Operator::Cl | Operator::Delete => Some(NaryCase::LeftAssoc),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -659,8 +778,8 @@ impl Term {
     }
 
     /// Constructs a new bv term.
-    pub fn new_bv(value: impl Into<Integer>, width: impl Into<Integer>) -> Self {
-        Term::Const(Constant::BitVec(value.into(), width.into()))
+    pub fn new_bv(value: impl Into<Integer>, width: usize) -> Self {
+        Term::Const(Constant::BitVec(value.into(), width))
     }
 
     /// Constructs a new variable term.
@@ -747,9 +866,9 @@ impl Term {
 
     /// Tries to extract a `BitVec` from a term. Returns `Some` if the
     /// term is a bitvector constant.
-    pub fn as_bitvector(&self) -> Option<(Integer, Integer)> {
+    pub fn as_bitvector(&self) -> Option<(Integer, usize)> {
         match self {
-            Term::Const(Constant::BitVec(v, w)) => Some((v.clone(), w.clone())),
+            Term::Const(Constant::BitVec(v, w)) => Some((v.clone(), *w)),
             _ => None,
         }
     }
@@ -984,7 +1103,7 @@ impl Constant {
             Constant::Integer(_) => Sort::Int,
             Constant::Real(_) => Sort::Real,
             Constant::String(_) => Sort::String,
-            Constant::BitVec(_, width) => Sort::BitVec(width.clone()),
+            Constant::BitVec(_, width) => Sort::BitVec(*width),
         }
     }
 
