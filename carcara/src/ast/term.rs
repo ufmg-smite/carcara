@@ -1001,10 +1001,7 @@ impl Sort {
         match self {
             Sort::Var(_) => true,
             Sort::ParamSort(_, sort) if matches!(&**sort, Term::Sort(Sort::Var(_))) => true,
-            Sort::RareList(inner) => inner
-                .as_sort()
-                .map(Sort::is_polymorphic)
-                .unwrap_or(false),
+            Sort::RareList(inner) => inner.as_sort().is_some_and(Sort::is_polymorphic),
             _ => false,
         }
     }

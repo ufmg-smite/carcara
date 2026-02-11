@@ -49,8 +49,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         };
 
         let term = if attribute == AttributeParameters::List {
-            self.pool
-                .add(Term::Sort(Sort::RareList(base_term.clone())))
+            self.pool.add(Term::Sort(Sort::RareList(base_term.clone())))
         } else {
             base_term.clone()
         };

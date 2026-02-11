@@ -244,7 +244,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
         match sort {
             Sort::BitVec(_) => true,
             Sort::ParamSort(_, head) => matches!(head.as_sort(), Some(Sort::Var(_))),
-            Sort::RareList(inner) => inner.as_sort().map(Self::is_bv_sort).unwrap_or(false),
+            Sort::RareList(inner) => inner.as_sort().is_some_and(Self::is_bv_sort),
             _ => false,
         }
     }

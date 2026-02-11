@@ -180,14 +180,15 @@ impl PrimitivePool {
                     }
                     let mut total_width: Vec<TotalWidth> = vec![];
                     for arg in args {
-                        let sort =
-                            Self::unwrap_rare_list_sort(self.compute_sort(arg).as_sort().unwrap().clone());
+                        let sort = Self::unwrap_rare_list_sort(
+                            self.compute_sort(arg).as_sort().unwrap().clone(),
+                        );
                         match sort {
                             Sort::BitVec(arg_width) => {
                                 total_width.push(TotalWidth::Width(arg_width));
                             }
                             Sort::ParamSort(v, _) => {
-                                total_width.push(TotalWidth::ParamSort(v[0].clone()))
+                                total_width.push(TotalWidth::ParamSort(v[0].clone()));
                             }
                             _ => unreachable!(),
                         }
@@ -275,10 +276,11 @@ impl PrimitivePool {
                 | Operator::ReOption
                 | Operator::ReRange => Sort::RegLan,
                 Operator::RareList => {
-                    let element_sort = args
-                        .first()
-                        .map(|arg| self.compute_sort(arg))
-                        .unwrap_or_else(|| self.add(Term::Sort(Sort::Var("T".to_owned()))));
+                    let element_sort = if let Some(arg) = args.first() {
+                        self.compute_sort(arg)
+                    } else {
+                        self.add(Term::Sort(Sort::Var("T".to_owned())))
+                    };
                     Sort::RareList(element_sort)
                 }
             },

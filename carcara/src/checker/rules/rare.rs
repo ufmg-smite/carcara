@@ -42,15 +42,15 @@ pub fn check_rare(
         for arg in rare_term.arguments.iter().rev() {
             let arg_sort = rare_term.parameters.get(arg).unwrap();
             let value = arguments.next().unwrap().clone();
-            let var_sort = if arg_sort.attribute == crate::ast::rare_rules::AttributeParameters::List
-            {
-                match arg_sort.term.as_sort().unwrap() {
-                    Sort::RareList(elem_sort) => elem_sort.clone(),
-                    _ => arg_sort.term.clone(),
-                }
-            } else {
-                arg_sort.term.clone()
-            };
+            let var_sort =
+                if arg_sort.attribute == crate::ast::rare_rules::AttributeParameters::List {
+                    match arg_sort.term.as_sort().unwrap() {
+                        Sort::RareList(elem_sort) => elem_sort.clone(),
+                        _ => arg_sort.term.clone(),
+                    }
+                } else {
+                    arg_sort.term.clone()
+                };
             let variable = pool.add(Term::Var(arg.clone(), var_sort));
             map.insert(variable, value);
         }
