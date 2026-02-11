@@ -1,0 +1,4 @@
+(assume a0 (and (not (= (bvxor x x) (_ bv0 8))) true))
+(step t0 (cl (not (= (bvxor x x) (_ bv0 8)))) :rule and :premises (a0) :args (0))
+(step t1 (cl (= (bvxor x x) (_ bv0 8))) :rule rare_rewrite :args ("bv-xor-self-zero" x))
+(step t2 (cl) :rule resolution :premises (t1 t0))

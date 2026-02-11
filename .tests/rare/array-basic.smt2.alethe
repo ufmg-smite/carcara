@@ -1,0 +1,4 @@
+(assume a0 (and (not (= (select (store a i v) i) v)) true))
+(step t0 (cl (not (= (select (store a i v) i) v))) :rule and :premises (a0) :args (0))
+(step t1 (cl (= (select (store a i v) i) v)) :rule rare_rewrite :args ("array-select-store-same" a i v))
+(step t2 (cl) :rule resolution :premises (t1 t0))

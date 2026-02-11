@@ -1,0 +1,19 @@
+(declare-rare-rule bv-xor-self-zero ((x (_ BitVec 8)))
+  :args (x)
+  :conclusion (= (bvxor x x) (_ bv0 8))
+)
+
+(declare-rare-rule array-select-store-same ((@K Type) (@V Type) (a (Array @K @V)) (i @K) (v @V))
+  :args (a i v)
+  :conclusion (= (select (store a i v) i) v)
+)
+
+(declare-rare-rule bool-or-list-pack ((xs Bool :list) (z Bool))
+  :args (xs z)
+  :conclusion (= (or xs z) (or xs z))
+)
+
+(declare-rare-rule bv-concat-list-right-id ((xs (_ BitVec 1) :list) (y (_ BitVec 1)))
+  :args (xs y)
+  :conclusion (= (concat xs y) (concat xs y))
+)
