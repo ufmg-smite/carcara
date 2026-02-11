@@ -45,23 +45,14 @@ pub fn check_rare(
             let var_sort = if arg_sort.attribute == crate::ast::rare_rules::AttributeParameters::List
             {
                 match arg_sort.term.as_sort().unwrap() {
-                    Sort::RareList(elem_sort) => {
-                        let value_sort = pool.sort(&value);
-                        if value_sort.as_sort() == Some(arg_sort.term.as_sort().unwrap()) {
-                            arg_sort.term.clone()
-                        } else {
-                            elem_sort.clone()
-                        }
-                    }
+                    Sort::RareList(elem_sort) => elem_sort.clone(),
                     _ => arg_sort.term.clone(),
                 }
             } else {
                 arg_sort.term.clone()
             };
-            map.insert(
-                pool.add(Term::Var(arg.clone(), var_sort)),
-                value,
-            );
+            let variable = pool.add(Term::Var(arg.clone(), var_sort));
+            map.insert(variable, value);
         }
 
         if rare_term.premises.len() != premises.len() {
