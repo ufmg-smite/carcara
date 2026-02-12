@@ -86,6 +86,30 @@ pub fn weakening(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult 
     Ok(())
 }
 
+pub fn and_intro(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let and_contents = match_term_err!((and ...) = &conclusion[0])?;
+    assert_num_premises(premises, and_contents.len())?;
+
+    // for the rule to be correct, each element of `and_contents` must
+    // be the conclusion of a premise, in the right order. If a
+    // premise has a non-unit conclusion, it must correspond to an OR
+    // term in `and_contents`
+    for i in 0..and_contents.len() {
+        let and_arg = &and_contents[i];
+        match &premises[i].clause[..] {
+            [term] => {
+                assert_eq(and_arg, term)?;
+            }
+            _ => {
+                let premise_as_or = pool.add(Term::Op(Operator::Or, premises[i].clause.to_vec()));
+                assert_eq(and_arg, &premise_as_or)?;
+            }
+        };
+    }
+    Ok(())
+}
+
 pub fn bind_let(
     RuleArgs {
         conclusion,
