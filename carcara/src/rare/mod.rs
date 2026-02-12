@@ -1,17 +1,19 @@
 use indexmap::IndexMap;
 
 use crate::{
-    ast::{rare_rules::RewriteTerm, Rc, Term, TermPool},
+    ast::{rare_rules::RewriteTerm, Operator, Rc, Term, TermPool},
     build_equation, pseudo_term,
 };
 
 pub fn get_rules() -> Vec<(RewriteTerm, RewriteTerm)> {
     vec![
         build_equation!((RareList ..x..) ~> x),
+        build_equation!((And (RareList ..x..)) ~> (And x)),
+        build_equation!((Or (RareList ..x..)) ~> (Or x)),
         build_equation!((And x) ~> x),
         build_equation!((Or x) ~> x),
         build_equation!((Or true) ~> true),
-        build_equation!((And false) ~> false),
+        build_equation!((And false) ~> false)
     ]
 }
 
@@ -81,8 +83,9 @@ fn reconstruct_meta_terms<'a>(
             let mut args = vec![];
             for param in params {
                 let k = reconstruct_meta_terms(pool, param, traces);
-                if let Trace::Term(term) = k {
-                    args.push(term.clone());
+                match k {
+                    Trace::Term(term) => args.push(term.clone()),
+                    Trace::ManyTerm(terms) => args.extend(terms.iter().cloned()),
                 }
             }
             Trace::Term(pool.add(Term::Op(*op, args)))
@@ -113,6 +116,52 @@ fn check_rewrites(
     None
 }
 
+fn rewrite_arg_for_parent(
+    pool: &mut dyn TermPool,
+    arg: &Rc<Term>,
+    rules: &[(RewriteTerm, RewriteTerm)],
+) -> Vec<Rc<Term>> {
+    if let Some(trace) = check_rewrites(pool, arg, rules) {
+        match trace {
+            Trace::Term(t) => {
+                if t == *arg {
+                    vec![t]
+                } else {
+                    vec![rewrite_meta_terms(pool, t, rules)]
+                }
+            }
+            Trace::ManyTerm(subs) => match arg.as_ref() {
+                Term::Op(Operator::RareList, _) => subs,
+                _ => vec![arg.clone()],
+            },
+        }
+    } else {
+        vec![rewrite_meta_terms(pool, arg.clone(), rules)]
+    }
+}
+
+fn rewrite_arguments(
+    pool: &mut dyn TermPool,
+    args: &[Rc<Term>],
+    rules: &[(RewriteTerm, RewriteTerm)],
+) -> Vec<Rc<Term>> {
+    let mut flattened = Vec::new();
+    for arg in args {
+        flattened.extend(rewrite_arg_for_parent(pool, arg, rules));
+    }
+
+    let mut normalized = Vec::with_capacity(flattened.len());
+    for arg in flattened {
+        let rewritten = rewrite_meta_terms(pool, arg.clone(), rules);
+        if rewritten == arg {
+            normalized.push(arg);
+        } else {
+            normalized.push(rewritten);
+        }
+    }
+    normalized
+}
+
 pub fn rewrite_meta_terms(
     pool: &mut dyn TermPool,
     term: Rc<Term>,
@@ -125,19 +174,7 @@ pub fn rewrite_meta_terms(
 
         Term::App(f, args) => {
             let f_prime = rewrite_meta_terms(pool, f.clone(), rules);
-            let new_args = args
-                .iter()
-                .flat_map(|arg| {
-                    if let Some(trace) = check_rewrites(pool, arg, rules) {
-                        match trace {
-                            Trace::Term(t) => vec![t],
-                            Trace::ManyTerm(subs) => subs,
-                        }
-                    } else {
-                        vec![rewrite_meta_terms(pool, arg.clone(), rules)]
-                    }
-                })
-                .collect::<Vec<_>>();
+            let new_args = rewrite_arguments(pool, args, rules);
             let new_term = pool.add(Term::App(f_prime, new_args));
             if new_term != term {
                 return rewrite_meta_terms(pool, new_term, rules);
@@ -149,21 +186,15 @@ pub fn rewrite_meta_terms(
         Term::Op(op, args) => {
             if let Some(trace) = check_rewrites(pool, &term, rules) {
                 match trace {
-                    Trace::Term(t) => t,
+                    Trace::Term(t) => {
+                        if t == term {
+                            t
+                        } else {
+                            rewrite_meta_terms(pool, t, rules)
+                        }
+                    }
                     Trace::ManyTerm(_) => {
-                        let new_args = args
-                            .iter()
-                            .flat_map(|arg| {
-                                if let Some(trace) = check_rewrites(pool, arg, rules) {
-                                    match trace {
-                                        Trace::Term(t) => vec![t],
-                                        Trace::ManyTerm(subs) => subs,
-                                    }
-                                } else {
-                                    vec![rewrite_meta_terms(pool, arg.clone(), rules)]
-                                }
-                            })
-                            .collect::<Vec<_>>();
+                        let new_args = rewrite_arguments(pool, args, rules);
                         let new_term: Rc<Term> = pool.add(Term::Op(*op, new_args));
                         if new_term != term {
                             return rewrite_meta_terms(pool, new_term, rules);
@@ -173,19 +204,7 @@ pub fn rewrite_meta_terms(
                     }
                 }
             } else {
-                let new_args = args
-                    .iter()
-                    .flat_map(|arg| {
-                        if let Some(trace) = check_rewrites(pool, arg, rules) {
-                            match trace {
-                                Trace::Term(t) => vec![t],
-                                Trace::ManyTerm(subs) => subs,
-                            }
-                        } else {
-                            vec![rewrite_meta_terms(pool, arg.clone(), rules)]
-                        }
-                    })
-                    .collect::<Vec<_>>();
+                let new_args = rewrite_arguments(pool, args, rules);
                 let new_term = pool.add(Term::Op(*op, new_args));
                 if check_rewrites(pool, &new_term, rules).is_some() {
                     return rewrite_meta_terms(pool, new_term, rules);

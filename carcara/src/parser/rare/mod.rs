@@ -69,6 +69,21 @@ impl<'a, R: BufRead> Parser<'a, R> {
             },
         );
 
+        // Accept both `T` and `@T` references for rare type parameters declared as `Type`.
+        // This keeps compatibility with rule files that declare `(T0 Type)` but use `@T0`.
+        if matches!(base_term.as_sort(), Some(Sort::Type)) {
+            let alias = if let Some(stripped) = name.strip_prefix('@') {
+                stripped.to_owned()
+            } else {
+                format!("@{}", name)
+            };
+
+            self.state.sort_defs.entry(alias).or_insert_with(|| SortDef {
+                body: self.pool.add(Term::Sort(Sort::Type)),
+                params: Vec::default(),
+            });
+        }
+
         Ok((name, TypeParameter { term, attribute }))
     }
 
