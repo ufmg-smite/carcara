@@ -213,6 +213,7 @@ pub fn get_rule_shared(rule_name: &str, elaborated: bool) -> Option<crate::check
         "trans" => transitivity::trans,
         "cong" => congruence::cong,
         "ho_cong" => congruence::ho_cong,
+        "and_intro" => extras::and_intro,
         "and" => clausification::and,
         "tautology" => resolution::tautology,
         "not_or" => clausification::not_or,
