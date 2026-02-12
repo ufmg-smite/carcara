@@ -524,7 +524,7 @@ impl<'a, R: BufRead> Parser<'a, R> {
                 }
                 SortError::assert_all_eq(&sorts)?;
             }
-            Operator::RareList => SortError::assert_all_eq(&sorts)?,
+            Operator::RareList => (),
         }
         Ok(self.pool.add(Term::Op(op, args)))
     }
