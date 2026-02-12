@@ -372,6 +372,12 @@ pub enum Operator {
     BvConst,
     BvSize,
 
+    // power of 2 to x, and whether x is a power of 2
+    Pow2,
+    IsPow2,
+    // logarithm in base 2 of x
+    Log2,
+
     // Misc.
     /// The `rare-list` operator, used to represent RARE lists.
     RareList,
@@ -489,6 +495,9 @@ impl Operator {
             | Operator::BvBbTerm
             | Operator::BvConst
             | Operator::BvSize
+            | Operator::Pow2
+            | Operator::IsPow2
+            | Operator::Log2
             | Operator::RareList => None,
 
             // Clausal
@@ -623,6 +632,10 @@ impl_str_conversion_traits!(Operator {
     BvBbTerm: "@bbterm",
     BvConst: "@bv",
     BvSize: "@bvsize",
+
+    Pow2: "int.pow2",
+    IsPow2: "int.ispow2",
+    Log2: "int.log2",
 
     RareList: "rare-list",
 

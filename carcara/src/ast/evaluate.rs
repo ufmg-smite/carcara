@@ -286,6 +286,31 @@ fn eval_op(op: Operator, args: &[Rc<Term>]) -> Option<Value> {
             Value::Real(r) => Value::Real(r.clone().abs()),
             _ => return None,
         },
+        Operator::Pow2 => {
+            let v = args[0].as_int()?;
+            if v < 0 {
+                return Some(Value::Integer(Integer::from(0)));
+            }
+            if v == 0 {
+                return Some(Value::Integer(Integer::from(1)));
+            }
+            let v = v.to_usize()?;
+            let two = Value::Integer(Integer::from(2));
+            let twos = vec![two; v];
+            arith_op!(*, twos)
+        }
+        Operator::Log2 => {
+            let v = args[0].as_int()?;
+            if v <= 0 {
+                Value::Integer(Integer::from(0))
+            } else {
+                Value::Integer(Integer::from(v.significant_bits() - 1))
+            }
+        }
+        Operator::IsPow2 => {
+            let v = args[0].as_int()?;
+            Value::Bool(v.is_power_of_two())
+        }
         Operator::LessThan => comparison_op!(<, args),
         Operator::GreaterThan => comparison_op!(>, args),
         Operator::LessEq => comparison_op!(<=, args),
