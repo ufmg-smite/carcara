@@ -2,9 +2,12 @@ use super::{
     assert_clause_len, assert_eq, assert_is_bool_constant, CheckerError, EqualityError, RuleArgs,
     RuleResult,
 };
-use crate::{ast::*, utils::DedupIterator};
+use crate::{
+    ast::*,
+    utils::{DedupIterator, MultiSet},
+};
 use indexmap::{IndexMap, IndexSet};
-use rug::Rational;
+use rug::{Integer, Rational};
 
 /// A macro to define the possible transformations for a "simplify" rule.
 macro_rules! simplify {
@@ -735,4 +738,132 @@ pub fn ac_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         flattened,
         &apply_ac_simp(pool, &mut IndexMap::new(), original),
     )
+}
+
+// Term is given as argument as well because if the operator is
+// parametric, such as a BV operator, the width of the arguments will
+// be relevant.
+fn identity_of_op(pool: &mut dyn TermPool, op: &Operator, term: &Rc<Term>) -> Option<Term> {
+    match op {
+        Operator::Or => Some(Term::new_bool(false)),
+        Operator::And => Some(Term::new_bool(true)),
+        // TODO modularize this so it's not repeated below
+        Operator::Add => match term.as_ref() {
+            Term::Op(_, args) => match pool.sort(&args[0]).as_sort().unwrap() {
+                Sort::Int => Some(Term::new_int(0)),
+                Sort::Real => Some(Term::new_real(0)),
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        },
+        Operator::Mult => match term.as_ref() {
+            Term::Op(_, args) => match pool.sort(&args[0]).as_sort().unwrap() {
+                Sort::Int => Some(Term::new_int(1)),
+                Sort::Real => Some(Term::new_real(1)),
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        },
+        Operator::BvAdd | Operator::BvOr | Operator::BvXor => match term.as_ref() {
+            Term::Op(_, args) => {
+                let Sort::BitVec(size) = pool.sort(&args[0]).as_sort().cloned().unwrap() else {
+                    unreachable!();
+                };
+                Some(Term::new_bv(Integer::from(0), size))
+            }
+            _ => unreachable!(),
+        },
+        Operator::BvMul => match term.as_ref() {
+            Term::Op(_, args) => {
+                let Sort::BitVec(size) = pool.sort(&args[0]).as_sort().cloned().unwrap() else {
+                    unreachable!();
+                };
+                Some(Term::new_bv(Integer::from(1), size))
+            }
+            _ => unreachable!(),
+        },
+        Operator::BvAnd => match term.as_ref() {
+            Term::Op(_, args) => {
+                let Sort::BitVec(size) = pool.sort(&args[0]).as_sort().cloned().unwrap() else {
+                    unreachable!();
+                };
+                Some(Term::new_bv((Integer::from(1) << size) - 1, size))
+            }
+            _ => unreachable!(),
+        },
+        _ => None,
+    }
+}
+
+pub fn aci_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let (t1, t2) = match_term_err!((= t1 t2) = &conclusion[0])?;
+    let mut cache = IndexMap::new();
+
+    let t11 = if let Term::Op(op, _) = t1.as_ref() {
+        let identity = identity_of_op(pool, op, t1);
+        &apply_aci_simp(pool, &mut cache, t1, op, &identity)
+    } else {
+        t1
+    };
+    let t22 = if let Term::Op(op, _) = t2.as_ref() {
+        let identity = identity_of_op(pool, op, t2);
+
+        &apply_aci_simp(pool, &mut cache, t2, op, &identity)
+    } else {
+        t2
+    };
+    match (t11.as_ref(), t22.as_ref()) {
+        (Term::Op(op1, args1), Term::Op(op2, args2))
+            if op1.is_assoc() && *op1 != Operator::BvConcat && op1 == op2 =>
+        {
+            let args1_multiset: MultiSet<_> = args1.iter().collect();
+            let args2_multiset: MultiSet<_> = args2.iter().collect();
+            if args1_multiset != args2_multiset {
+                return Err(CheckerError::ShuffleArgsNotEqual);
+            }
+            Ok(())
+        }
+        _ => assert_eq(t11, t22),
+    }
+}
+
+fn apply_aci_simp(
+    pool: &mut dyn TermPool,
+    cache: &mut IndexMap<Rc<Term>, Rc<Term>>,
+    term: &Rc<Term>,
+    op: &Operator,
+    identity: &Option<Term>,
+) -> Rc<Term> {
+    if !op.is_assoc() {
+        return term.clone();
+    }
+    if let Some(t) = cache.get(term) {
+        return t.clone();
+    }
+    let result = match term.as_ref() {
+        // flatten and remove duplicate on the result
+        Term::Op(opp, args) if opp == op => {
+            let args: Vec<_> = args
+                .iter()
+                .flat_map(|term| {
+                    let term = apply_aci_simp(pool, cache, term, op, identity);
+                    match term.as_ref() {
+                        Term::Op(inner_op, inner_args) if inner_op == op => inner_args.clone(),
+                        _ => vec![term.clone()],
+                    }
+                })
+                .dedup()
+                .filter(|t| identity.is_none() || *t.as_ref() != identity.clone().unwrap())
+                .collect();
+            if args.len() == 1 {
+                args[0].clone()
+            } else {
+                pool.add(Term::Op(*op, args))
+            }
+        }
+        _ => term.clone(),
+    };
+    cache.insert(term.clone(), result.clone());
+    result
 }
