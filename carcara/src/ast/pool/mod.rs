@@ -349,8 +349,8 @@ impl PrimitivePool {
                                         "bitvector parametric sort missing width in zero/sign extend"
                                     )
                                 });
-                                let ext =
-                                    self.add(Term::Const(Constant::Integer(extension_width.into())));
+                                let ext = self
+                                    .add(Term::Const(Constant::Integer(extension_width.into())));
                                 let add = self.add(Term::Op(Operator::Add, vec![ext, width]));
                                 Sort::ParamSort(vec![add], head)
                             }
@@ -367,10 +367,14 @@ impl PrimitivePool {
                             sort => sort,
                         };
                         match sort {
-                            Sort::BitVec(bv_width) => Sort::BitVec((repetitions * bv_width).to_usize().unwrap()),
+                            Sort::BitVec(bv_width) => {
+                                Sort::BitVec((repetitions * bv_width).to_usize().unwrap())
+                            }
                             Sort::ParamSort(v, head) => {
                                 let width = v.first().cloned().unwrap_or_else(|| {
-                                    unreachable!("bitvector parametric sort missing width in repeat")
+                                    unreachable!(
+                                        "bitvector parametric sort missing width in repeat"
+                                    )
                                 });
                                 let reps =
                                     self.add(Term::Const(Constant::Integer(repetitions.clone())));

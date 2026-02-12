@@ -86,7 +86,9 @@ impl Substitution {
             let k_sort = pool.sort(k).as_sort().unwrap().clone();
             let v_sort = pool.sort(v).as_sort().unwrap().clone();
             if k_sort != v_sort
-                && !pool.sort(k).as_sort().is_some_and(Sort::is_polymorphic) && !Self::compare_sort_rare_list(&k_sort, &v_sort)
+                && !k_sort.is_polymorphic()
+                && !v_sort.is_polymorphic()
+                && !Self::compare_sort_rare_list(&k_sort, &v_sort)
             {
                 return Err(SubstitutionError::DifferentSorts(k.clone(), v.clone()));
             }
@@ -117,7 +119,11 @@ impl Substitution {
         }
         let x_sort = pool.sort(&x).as_sort().unwrap().clone();
         let t_sort = pool.sort(&t).as_sort().unwrap().clone();
-        if x_sort != t_sort && !Self::compare_sort_rare_list(&x_sort, &t_sort) {
+        if x_sort != t_sort
+            && !x_sort.is_polymorphic()
+            && !t_sort.is_polymorphic()
+            && !Self::compare_sort_rare_list(&x_sort, &t_sort)
+        {
             return Err(SubstitutionError::DifferentSorts(x, t));
         }
 
