@@ -46,6 +46,14 @@ pub struct Substitution {
 }
 
 impl Substitution {
+    fn compare_sort_rare_list(lhs: &Sort, rhs: &Sort) -> bool {
+        match (lhs, rhs) {
+            (Sort::RareList(inner), other) => inner.as_sort().is_some_and(|s| s == other),
+            (other, Sort::RareList(inner)) => inner.as_sort().is_some_and(|s| s == other),
+            _ => false,
+        }
+    }
+
     /// Constructs an empty substitution.
     pub fn empty() -> Self {
         Self {
@@ -74,8 +82,13 @@ impl Substitution {
             if !k.is_var() && !k.is_sort_var() {
                 return Err(SubstitutionError::NotAVariable(k.clone()));
             }
-            if pool.sort(k) != pool.sort(v)
-                && !pool.sort(k).as_sort().is_some_and(Sort::is_polymorphic)
+
+            let k_sort = pool.sort(k).as_sort().unwrap().clone();
+            let v_sort = pool.sort(v).as_sort().unwrap().clone();
+            if k_sort != v_sort
+                && !k_sort.is_polymorphic()
+                && !v_sort.is_polymorphic()
+                && !Self::compare_sort_rare_list(&k_sort, &v_sort)
             {
                 return Err(SubstitutionError::DifferentSorts(k.clone(), v.clone()));
             }
@@ -104,7 +117,13 @@ impl Substitution {
         if !x.is_var() && !x.is_sort_var() {
             return Err(SubstitutionError::NotAVariable(x));
         }
-        if pool.sort(&x) != pool.sort(&t) {
+        let x_sort = pool.sort(&x).as_sort().unwrap().clone();
+        let t_sort = pool.sort(&t).as_sort().unwrap().clone();
+        if x_sort != t_sort
+            && !x_sort.is_polymorphic()
+            && !t_sort.is_polymorphic()
+            && !Self::compare_sort_rare_list(&x_sort, &t_sort)
+        {
             return Err(SubstitutionError::DifferentSorts(x, t));
         }
 

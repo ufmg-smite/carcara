@@ -1,0 +1,4 @@
+(anchor :step t38 :args ((x (_ BitVec 64)) (:= (x (_ BitVec 64)) x)))
+(step t38.t0 (cl (= (not (and (= t (bvxor s x)) (= x (concat (_ bv0 63) (bvand _x ((_ extract 0 0) x)))))) (or (not (= t (bvxor s x))) (not (= x (concat (_ bv0 63) (bvand _x ((_ extract 0 0) x)))))))) :rule rare_rewrite :args ("bool-and-de-morgan" (= t (bvxor s x)) (= x (concat (_ bv0 63) (bvand _x ((_ extract 0 0) x)))) rare-list))
+(step t38 (cl (= (forall ((x (_ BitVec 64))) (not (and (= t (bvxor s x)) (= x (concat (_ bv0 63) (bvand _x ((_ extract 0 0) x))))))) (forall ((x (_ BitVec 64))) (or (not (= t (bvxor s x))) (not (= x (concat (_ bv0 63) (bvand _x ((_ extract 0 0) x))))))))) :rule bind)
+(step t73 (cl) :rule hole)
