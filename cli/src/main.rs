@@ -179,6 +179,11 @@ struct CheckingOptions {
     #[clap(long, multiple = true)]
     allowed_rules: Option<Vec<String>>,
 
+    /// Check resolution steps using only Reverse Unit Propagation (RUP), instead of first trying a
+    /// greedy algorithm.
+    #[clap(long)]
+    rup_resolution: bool,
+
     /// Enforce restrictions on the granularity of the proof.
     ///
     /// If this is "normal", the proof is checked normally, with no extra restrictions. If this
@@ -196,6 +201,7 @@ impl From<CheckingOptions> for checker::Config {
             elaborated: val.check_granularity == CheckGranularity::Elaborated,
             ignore_unknown_rules: val.ignore_unknown_rules || val.skip_unknown_rules,
             allowed_rules: val.allowed_rules.unwrap_or_default().into_iter().collect(),
+            rup_resolution: val.rup_resolution,
         }
     }
 }
