@@ -110,7 +110,11 @@ pub fn check_step_core<CR: CollectResults + Send + Default>(
         return Err(CheckerError::Subproof(SubproofError::DischargeInWrongRule));
     }
 
-    let rule = match get_rule_shared(&step.rule, context.config.elaborated) {
+    let rule = match get_rule(
+        &step.rule,
+        context.config.elaborated,
+        context.config.rup_resolution,
+    ) {
         Some(r) => r,
         None if context.config.ignore_unknown_rules => {
             *context.is_holey = true;
@@ -166,7 +170,11 @@ pub fn check_discharge_shared(
     }
 }
 
-pub fn get_rule_shared(rule_name: &str, elaborated: bool) -> Option<crate::checker::rules::Rule> {
+pub fn get_rule(
+    rule_name: &str,
+    elaborated: bool,
+    prefer_rup: bool,
+) -> Option<crate::checker::rules::Rule> {
     use crate::checker::rules::*;
 
     Some(match rule_name {
@@ -209,6 +217,7 @@ pub fn get_rule_shared(rule_name: &str, elaborated: bool) -> Option<crate::check
         "qnt_join" => quantifier::qnt_join,
         "qnt_rm_unused" => quantifier::qnt_rm_unused,
         "resolution" | "th_resolution" if elaborated => resolution::resolution_with_args,
+        "resolution" | "th_resolution" if prefer_rup => resolution::rup_resolution,
         "resolution" | "th_resolution" => resolution::resolution,
         "refl" if elaborated => reflexivity::strict_refl,
         "refl" => reflexivity::refl,

@@ -11,8 +11,8 @@ use crate::{
 use error::CheckerError;
 use indexmap::IndexSet;
 pub use parallel::{scheduler::Scheduler, ParallelProofChecker};
-use rules::{Premise, Rule, RuleArgs, RuleResult};
-use shared::{check_assume_shared, check_step_core, get_rule_shared, StepCheckContext};
+use rules::{Premise, RuleArgs, RuleResult};
+use shared::{check_assume_shared, check_step_core, StepCheckContext};
 use std::{
     collections::HashSet,
     fmt,
@@ -59,6 +59,10 @@ pub struct Config {
     /// If `true`, the checker will skip any steps with rules that it does not recognize, and will
     /// consider them as holes. Normally, using an unknown rule is considered an error.
     pub ignore_unknown_rules: bool,
+
+    /// If `true`, the checker will check resolution steps using only Reverse Unit Propagation
+    /// (RUP). Normally, we use a greedy algorithm first, and use RUP as a fallback.
+    pub rup_resolution: bool,
 
     /// A set of rule names that the checker will allow, considering them holes in the proof.
     pub allowed_rules: HashSet<String>,
@@ -271,9 +275,5 @@ impl<'c> ProofChecker<'c> {
         }
 
         result
-    }
-
-    pub fn get_rule(rule_name: &str, elaborated: bool) -> Option<Rule> {
-        get_rule_shared(rule_name, elaborated)
     }
 }

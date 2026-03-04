@@ -95,6 +95,7 @@ fn test_file(proof_path: &str) {
             elaborated: false,
             ignore_unknown_rules: false,
             allowed_rules: ["all_simplify", "rare_rewrite"].map(str::to_owned).into(),
+            rup_resolution: false,
         };
         (parsing, checking)
     } else {

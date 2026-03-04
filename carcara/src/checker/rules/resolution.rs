@@ -30,7 +30,7 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
     greedy_resolution(conclusion, &premise_clauses, pool, false)
         .map(|_| ())
         .or_else(|greedy_error| {
-            if rup_resolution(conclusion, premises) {
+            if rup(conclusion, premises) {
                 Ok(())
             } else {
                 // If RUP resolution also fails, we return the error originally returned by the greedy
@@ -40,7 +40,15 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
         })
 }
 
-fn rup_resolution(conclusion: &[Rc<Term>], premises: &[Premise]) -> bool {
+pub fn rup_resolution(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    if rup(conclusion, premises) {
+        Ok(())
+    } else {
+        Err(ResolutionError::RupFailed.into())
+    }
+}
+
+fn rup(conclusion: &[Rc<Term>], premises: &[Premise]) -> bool {
     let mut clauses: Vec<IndexSet<(bool, &Rc<Term>)>> = premises
         .iter()
         .map(|p| {
