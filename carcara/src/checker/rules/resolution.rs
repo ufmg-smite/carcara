@@ -4,6 +4,7 @@ use super::{
 };
 use crate::{ast::*, resolution::*, utils::MultiSet};
 use indexmap::IndexSet;
+use std::collections::{HashMap, VecDeque};
 
 pub fn resolution(rule_args: RuleArgs) -> RuleResult {
     if !rule_args.args.is_empty() {
@@ -49,7 +50,9 @@ pub fn rup_resolution(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleRe
 }
 
 fn rup(conclusion: &[Rc<Term>], premises: &[Premise]) -> bool {
-    let mut clauses: Vec<IndexSet<(bool, &Rc<Term>)>> = premises
+    // A `None` clause signifies that the clause was removed (equivalent to the clause ⊤). A `Some`
+    // empty clause represents an actual empty clause, i.e. ⊥.
+    let mut clauses: Vec<Option<IndexSet<(bool, &Rc<Term>)>>> = premises
         .iter()
         .map(|p| {
             p.clause
@@ -57,36 +60,55 @@ fn rup(conclusion: &[Rc<Term>], premises: &[Premise]) -> bool {
                 .map(Rc::remove_all_negations_with_polarity)
                 .collect()
         })
+        .map(Some)
         .collect();
-    clauses.extend(conclusion.iter().map(|t| {
-        let (p, t) = t.remove_all_negations_with_polarity();
-        let mut clause = IndexSet::new();
-        clause.insert((!p, t));
-        clause
-    }));
 
-    loop {
-        if clauses.is_empty() {
-            return false;
-        }
-        let smallest = clauses.iter().min_by_key(|c| c.len()).unwrap();
-        match smallest.len() {
-            0 => return true,
-            1 => {
-                let literal = *smallest.iter().next().unwrap();
-                let negated_literal = (!literal.0, literal.1);
-
-                // Remove all clauses that contain the literal
-                clauses.retain(|c| !c.contains(&literal));
-
-                // Remove the negated literal from all clauses that contain it
-                for c in &mut clauses {
-                    c.swap_remove(&negated_literal);
-                }
-            }
-            _ => return false,
+    // A map from literals to a list of clauses that use them
+    let mut used_in: HashMap<&Rc<Term>, Vec<usize>> = HashMap::new();
+    for (i, cl) in clauses.iter().enumerate() {
+        let Some(cl) = cl else { continue };
+        for lit in cl {
+            used_in.entry(lit.1).or_default().push(i);
         }
     }
+
+    // We make a queue with all the unit literals, starting from the negated conclusion
+    let mut queue: VecDeque<(bool, &Rc<Term>)> = conclusion
+        .iter()
+        .map(Rc::remove_all_negations_with_polarity)
+        .map(|(p, l)| (!p, l))
+        .collect();
+    // ...and including any premise clause that happens to be unit
+    queue.extend(clauses.iter().filter_map(|cl| {
+        let cl = cl.as_ref()?;
+        if cl.len() == 1 {
+            cl.iter().next().copied()
+        } else {
+            None
+        }
+    }));
+
+    while let Some(lit) = queue.pop_front() {
+        let negated = (!lit.0, lit.1);
+        for c in used_in.get(lit.1).iter().copied().flatten() {
+            let Some(cl) = &mut clauses[*c] else { continue };
+
+            // Remove all clauses that contain the literal
+            if cl.contains(&lit) {
+                clauses[*c] = None;
+            // Remove the negated literal from all clauses that contain it
+            } else if cl.swap_remove(&negated) {
+                if cl.is_empty() {
+                    return true; // return true as soon as a clause becomes empty
+                } else if cl.len() == 1 {
+                    // ...or if the clause becomes unit, add the literal to the queue
+                    let unit = cl.iter().next().unwrap();
+                    queue.push_back(*unit);
+                }
+            }
+        }
+    }
+    false
 }
 
 pub fn resolution_with_args(
