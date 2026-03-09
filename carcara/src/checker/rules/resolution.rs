@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{ast::*, resolution::*, utils::MultiSet};
 use indexmap::IndexSet;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{hash_map::Entry, HashMap, VecDeque};
 
 pub fn resolution(rule_args: RuleArgs) -> RuleResult {
     if !rule_args.args.is_empty() {
@@ -63,6 +63,8 @@ fn rup(conclusion: &[Rc<Term>], premises: &[Premise]) -> bool {
         .map(Some)
         .collect();
 
+    let mut assignments: HashMap<&Rc<Term>, bool> = HashMap::new();
+
     // A map from literals to a list of clauses that use them
     let mut used_in: HashMap<&Rc<Term>, Vec<usize>> = HashMap::new();
     for (i, cl) in clauses.iter().enumerate() {
@@ -89,6 +91,11 @@ fn rup(conclusion: &[Rc<Term>], premises: &[Premise]) -> bool {
     }));
 
     while let Some(lit) = queue.pop_front() {
+        match assignments.entry(lit.1) {
+            Entry::Occupied(e) if *e.get() != lit.0 => return true, // conflict!
+            Entry::Occupied(_) => continue,
+            Entry::Vacant(e) => e.insert(lit.0),
+        };
         let negated = (!lit.0, lit.1);
         for c in used_in.get(lit.1).iter().copied().flatten() {
             let Some(cl) = &mut clauses[*c] else { continue };

@@ -130,6 +130,11 @@ fn resolution() {
             "(assume h1 true)
             (step t2 (cl true) :rule resolution :premises (h1))": false,
         }
+        "Tricky case for RUP" {
+            "(step t1 (cl (not p) p) :rule hole)
+            (step t2 (cl (not p) p) :rule hole)
+            (step t3 (cl (not p) p) :rule resolution :premises (t1 t2))": true,
+        }
     }
 }
 
