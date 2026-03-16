@@ -118,6 +118,11 @@ fn test_polyeq() {
             ("(=> p (=> q (=> r s)))", "(=> p q r s)"),
             ("(=> p q r s)", "(=> p (=> q (=> r s)))"),
             ("(=> p q (=> r (=> s t)))", "(=> p (=> q (=> r s t)))"),
+            // Singleton cases
+            ("(and p)", "p"),
+            ("(and (and (and p)))", "p"),
+            ("(and p)", "(and (and (and p)))"),
+            ("(and (and p q))", "(and p q)"),
         ],
         TestType::ModNary,
     );
