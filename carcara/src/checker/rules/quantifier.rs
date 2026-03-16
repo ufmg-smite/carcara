@@ -351,6 +351,13 @@ pub fn miniscope_split(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResul
 
     let mut bindings_set: IndexSet<_> = bindings.iter().collect();
     for (phi, right) in phis.iter().zip(right_args) {
+        // `right` is the same as `phi`, it must have no bound variables from the quantifier being
+        // split, which is checked afterwards.
+        if phi == right {
+            continue;
+        }
+        // Otherwise an appropriate binder must have been put around `right` and its variables must
+        // be from the bindings_set in the LHS of the conclusion
         let (inner_bindings, inner) = match op {
             Operator::Or => match_term_err!((forall ... phi) = right)?,
             Operator::And => match_term_err!((exists ... phi) = right)?,

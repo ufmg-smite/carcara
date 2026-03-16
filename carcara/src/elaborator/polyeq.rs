@@ -153,7 +153,7 @@ impl<'a> PolyeqElaborator<'a> {
                     previous_step: Some(previous),
                     ..Default::default()
                 };
-                self.close_subproof(args, last_step)
+                self.close_subproof(args, last_step, Vec::new())
             }
 
             (Term::Let(a_bindings, a_inner), Term::Let(b_bindings, b_inner)) => {
@@ -167,7 +167,7 @@ impl<'a> PolyeqElaborator<'a> {
                 // The values of the binding lists in the `let` terms may not be syntactically
                 // identical, in which case we need to prove their equality so the `bind_let` step
                 // is valid.
-                let premises = a_bindings
+                let premises: Vec<_> = a_bindings
                     .iter()
                     .zip(b_bindings)
                     .filter_map(|(a, b)| {
@@ -187,12 +187,14 @@ impl<'a> PolyeqElaborator<'a> {
                     depth: self.depth(),
                     clause: vec![build_term!(pool, (= {a.clone()} {b.clone()}))],
                     rule: "bind_let".to_owned(),
-                    premises,
+                    premises: premises.clone(),
                     args: Vec::new(),
                     discharge: Vec::new(),
                     previous_step: Some(previous),
                 };
-                self.close_subproof(args, last_step)
+                // The premises to the `bind_let` step are outbound, so we need to pass them to
+                // `close_subproof`
+                self.close_subproof(args, last_step, premises)
             }
             // If one of the terms is a constant, but they are still polyequal, we can't break it up
             // into smaller parts, so we just use a direct refl step. This is hack to deal with the
@@ -339,7 +341,12 @@ impl<'a> PolyeqElaborator<'a> {
         self.ids.push();
     }
 
-    fn close_subproof(&mut self, args: Vec<AnchorArg>, mut last_step: StepNode) -> Rc<ProofNode> {
+    fn close_subproof(
+        &mut self,
+        args: Vec<AnchorArg>,
+        mut last_step: StepNode,
+        outbound_premises: Vec<Rc<ProofNode>>,
+    ) -> Rc<ProofNode> {
         self.cache.pop_scope();
         self.ids.pop();
 
@@ -349,7 +356,7 @@ impl<'a> PolyeqElaborator<'a> {
         Rc::new(ProofNode::Subproof(SubproofNode {
             last_step: Rc::new(ProofNode::Step(last_step)),
             args,
-            outbound_premises: Vec::new(), // TODO: recompute outbound premises
+            outbound_premises,
             extra_steps: Vec::new(),
         }))
     }

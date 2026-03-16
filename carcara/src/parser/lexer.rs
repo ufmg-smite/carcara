@@ -457,6 +457,11 @@ impl<R: BufRead> Lexer<R> {
                     self.next_char()?;
                 }
                 if self.current_char == Some('}') {
+                    if contents.is_empty() {
+                        // Handle "\u{}" edge case
+                        result.push_str("\\u{");
+                        return Ok(());
+                    }
                     self.next_char()?;
                     contents
                 } else {
@@ -671,8 +676,7 @@ mod tests {
 
     #[test]
     fn test_weird_unicode_escape_sequences() {
-        let input =
-            r#" "\u{61}" "\u{00061}" "\u{000061}" "\u00061" "\u61" "\u" "\u{12x4}" "\u{123" "#;
+        let input = r#" "\u{61}" "\u{00061}" "\u{000061}" "\u00061" "\u61" "\u" "\u{12x4}" "\u{123" "\u{}" "#;
         let expected = [
             "a",
             "a",
@@ -682,6 +686,7 @@ mod tests {
             "\\u",
             "\\u{12x4}",
             "\\u{123",
+            "\\u{}",
         ]
         .map(str::to_owned)
         .map(Token::String);
