@@ -7,13 +7,28 @@ BENCHMARK="$1"
 # Check the value and perform actions
 if [ "$BENCHMARK" = "cvc5" ]; then
     DIR="./cvc5_problems"
+    # TODO: installation-dependent relative paths
+    CARCARA_ELABORATE_COMMAND="../../../../../target/release/carcara elaborate 
+                                            --pipeline polyeq local uncrowd lia_generic reordering  
+                                            --expand-let-bindings 
+                                            --pipeline=local 
+                                            --no-print-with-sharing 
+                                            --ignore-unknown-rules
+                                            --allow-int-real-subtyping                      
+                                            --rare-file ./rare_rules.rare"
 else
     DIR="./verit_problems"
+    # TODO: installation-dependent relative paths
+    CARCARA_ELABORATE_COMMAND="../../../../../target/release/carcara elaborate 
+                                            --pipeline polyeq local uncrowd lia_generic reordering 
+                                            --no-print-with-sharing 
+                                            --ignore-unknown-rules
+                                            --allow-int-real-subtyping                  
+                                            --rare-file ./rare_rules.rare"
 fi
 
-# TODO: installation-dependent relative paths
-CARCARA_ELABORATE_COMMAND="../../../../../target/release/carcara elaborate --pipeline=local --no-print-with-sharing --ignore-unknown-rules"
-CARCARA_TRANSLATE_COMMAND="../../../../../target/release/carcara translate --allow-int-real-subtyping"
+CARCARA_TRANSLATE_COMMAND="../../../../../target/release/carcara translate 
+                                            --allow-int-real-subtyping"
 ETHOS_COMMAND="../../../../../../ethos_fork/ethos/build/src/ethos"
 
 # Loop through each file in the directory.

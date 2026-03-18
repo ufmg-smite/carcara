@@ -1,51 +1,16 @@
 //! Small test suite for Eunoia ASTs generation, from Alethe proof certificates.
 
 #[cfg(test)]
-use crate::ast::*;
-#[cfg(test)]
-use crate::translation::{
-    eunoia::{alethe_2_eunoia::*, printer::*},
-    Translator,
-};
-
-// TODO: ugly, copying this from parser/tests.rs
-#[cfg(test)]
-use crate::parser::*;
-#[cfg(test)]
-const ERROR_MESSAGE: &str = "parser error during test";
-#[cfg(test)]
-const TEST_CONFIG: Config = Config {
-    // Some tests need function definitions to be applied
-    apply_function_defs: true,
-    expand_lets: false,
-    allow_int_real_subtyping: false,
-    strict: false,
-    parse_hole_args: false,
-};
+use crate::translation::eunoia::tests::*;
 
 #[test]
 fn test_small_example() {
-    let mut eunoia_translator = EunoiaTranslator::new();
-
-    let mut buf_problem = Vec::new();
-    let s_exp_formatter_problem = SExpFormatter::new(&mut buf_problem);
-    let mut printer_problem = EunoiaPrinter::new(s_exp_formatter_problem);
-
-    let mut buf_proof = Vec::new();
-    let s_exp_formatter_proof = SExpFormatter::new(&mut buf_proof);
-    let mut printer_proof = EunoiaPrinter::new(s_exp_formatter_proof);
-
-    let problem = "(declare-const a Real)
+    let alethe_problem = "(declare-const a Real)
                    (declare-const b Real)
                    (assert (xor (not (> a 5.0)) (= b 10.0)))
                    (assert (not (= b 10.0)))
                    (assert (not (<= a 5.0)))";
 
-    // TODO: in (! (= b 10.0) :named s1), s1 seems to be considered
-    // an identifier introduced during parsing, and each of its
-    // occurrences are replaced, later, by = b 10.0
-    // TODO: ProofNode::from_commands(proof_ast.commands);
-    // returns only the last command
     let alethe_certificate = "(assume h1 (xor (not (> a 5.0)) (! (= b 10.0) :named s1)))
                           (assume h2 (not (= b 10.0)))
                           (assume h3 (not (<= a 5.0)))
@@ -53,61 +18,25 @@ fn test_small_example() {
                           (step t1 (cl (not (> a 5.0)) s1) :rule xor1 :premises (h1))
                           (step t2 (cl (<= a 5.0) (> a 5.0)) :rule la_generic :args (1.0 1.0))
                           (step t3 (cl) :rule resolution :premises (t1 t2 h2 h3))";
-    // TODO: in small.eo step t2 is translated as:
-    // (step t2 :rule la_generic :args ((@cl (<= a 5.0) (> a 5.0)) (+ 1.0 1.0)))
-    // note the list of arguments: why the '+'?
-    // TODO: ugly, copying this from parser/tests.rs
-    let (problem_ast, proof_ast, _pool) = parse_instance(
-        problem.as_bytes(),
-        alethe_certificate.as_bytes(),
-        TEST_CONFIG,
-    )
-    .expect(ERROR_MESSAGE);
 
-    let eunoia_problem = eunoia_translator.translate_problem(&problem_ast);
-
-    printer_problem.write_proof(&eunoia_problem).unwrap();
-
-    assert_eq!(
-        "(declare-const a Real)\n\
-         (declare-const b Real)\n",
-        std::str::from_utf8(&buf_problem).unwrap()
-    );
-
-    let commands = ProofNode::from_commands(proof_ast.commands);
-    let eunoia_proof = eunoia_translator.translate(&commands);
-
-    printer_proof.write_proof(eunoia_proof).unwrap();
-
-    // TODO: fix differences with small.eo
-    // TODO: maybe we do not need to have a context created if we do not
-    // have an anchor statement previously
-    assert_eq!(
-        "(define ctx1 ( ) true)\n\
+    let eunoia_problem = "(declare-const a Real)\n\
+                          (declare-const b Real)\n";
+    
+    let eunoia_certificate = "(define ctx1 ( ) true)\n\
          (assume context ctx1)\n\
          (assume h1 (@cl (xor (not (> a 5.0)) (= b 10.0))))\n\
          (step t1 (@cl (not (> a 5.0)) (= b 10.0)) :rule xor1 :premises ( h1 ))\n\
-         (step t2 (@cl (<= a 5.0) (> a 5.0)) :rule la_generic :args ( (+ 1.0 1.0) ))\n\
+         (step t2 (@cl (<= a 5.0) (> a 5.0)) :rule la_generic :args ( (@varlist 1.0 1.0) ))\n\
          (assume h2 (@cl (not (= b 10.0))))\n\
          (assume h3 (@cl (not (<= a 5.0))))\n\
-         (step t3 @empty_cl :rule resolution :premises ( t1 t2 h2 h3 ) :args ( (@varlist) ))\n",
-        std::str::from_utf8(&buf_proof).unwrap()
-    );
+         (step t3 @empty_cl :rule resolution :premises ( t1 t2 h2 h3 ) :args ( (@varlist) ))\n";
+
+    eunoia_full_translation_test(alethe_problem, alethe_certificate, eunoia_problem, eunoia_certificate);
 }
 
 #[test]
 fn test_let_example() {
-    let mut eunoia_translator = EunoiaTranslator::new();
-
-    let mut buf_problem = Vec::new();
-    let s_exp_formatter_problem = SExpFormatter::new(&mut buf_problem);
-    let mut printer_problem = EunoiaPrinter::new(s_exp_formatter_problem);
-
-    let mut buf_proof = Vec::new();
-    let s_exp_formatter_proof = SExpFormatter::new(&mut buf_proof);
-    let mut printer_proof = EunoiaPrinter::new(s_exp_formatter_proof);
-
-    let problem = "(set-logic UF)
+    let alethe_problem = "(set-logic UF)
                            (declare-sort S 0)
                            (declare-const a S)
                            (declare-const b S)
@@ -118,39 +47,19 @@ fn test_let_example() {
                               (step t1 (cl (= x b)) :rule refl)
                               (step t2 (cl (= (let ((x a)) x) b)) :rule let :premises (h1))";
 
-    let (problem_ast, proof_ast, _pool) = parse_instance(
-        problem.as_bytes(),
-        alethe_certificate.as_bytes(),
-        TEST_CONFIG,
-    )
-    .expect(ERROR_MESSAGE);
-
-    let eunoia_problem = eunoia_translator.translate_problem(&problem_ast);
-
-    printer_problem.write_proof(&eunoia_problem).unwrap();
-
-    assert_eq!(
-        "(declare-const S Type)\n\
+    let eunoia_problem = "(declare-const S Type)\n\
          (declare-const a S)\n\
-         (declare-const b S)\n",
-        std::str::from_utf8(&buf_problem).unwrap()
-    );
+         (declare-const b S)\n";
 
-    let commands = ProofNode::from_commands(proof_ast.commands);
-    let eunoia_proof = eunoia_translator.translate(&commands);
-
-    printer_proof.write_proof(eunoia_proof).unwrap();
-
-    assert_eq!(
-        "(define ctx1 ( ) true)\n\
+    let eunoia_certificate = "(define ctx1 ( ) true)\n\
          (assume context ctx1)\n\
          (assume h1 (@cl (= a b)))\n\
          (define ctx2 ( ) (@ctx ( ( x S ) ) (and (= (@var ( ( x S ) ) x) b) ctx1)))\n\
          (assume-push context ctx2)\n\
          (step t1 (@cl (= (@var ( ( x S ) ) x) b)) \
          :rule refl :premises ( context ))\n\
-         (step-pop t2 (@cl (= ( _ (@let ( ( x (eo::typeof a) ) ) (@var ( ( x (eo::typeof a) ) ) x)) a) b)) \
-         :rule let_elim :premises ( h1 t1 ))\n",
-        std::str::from_utf8(&buf_proof).unwrap()
-    );
+         (step-pop t2 (@cl (= ( _ (@let ( ( x S ) ) (@var ( ( x S ) ) x)) a) b)) \
+         :rule let_elim :premises ( h1 t1 ))\n";
+
+    eunoia_full_translation_test(alethe_problem, alethe_certificate, eunoia_problem, eunoia_certificate);
 }

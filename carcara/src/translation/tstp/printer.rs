@@ -212,12 +212,33 @@ impl<'a> TstpPrinter<'a> {
                 ret += ")";
             }
 
+            TstpFormula::ExistentialQuant(variables, scope) => {
+                ret = "(? [".to_owned();
+                // TODO: abstract this pattern into a procedure
+                let mut first_element = true;
+
+                variables.iter().for_each(|elem| {
+                    if first_element {
+                        ret += &TstpPrinter::typed_variable_to_concrete_syntax(elem);
+                        first_element = false;
+                    } else {
+                        // { ! first_element }
+                        ret += &(", ".to_owned()
+                            + &TstpPrinter::typed_variable_to_concrete_syntax(elem));
+                    }
+                });
+
+                ret += "] : ";
+                ret += &TstpPrinter::formula_to_concrete_syntax(scope);
+                ret += ")";
+            }
+
             TstpFormula::Variable(name) => {
                 ret = name.clone();
             }
 
             _ => {
-                println!("No defined translation for formula {:?}", formula);
+                println!("No defined printer for TSTP formula {:?}", formula);
                 panic!();
             }
         }
@@ -302,6 +323,14 @@ impl<'a> TstpPrinter<'a> {
 
             TstpOperator::BinaryOperator(TstpBinaryOperator::Inequality) => "!=".to_owned(),
 
+            TstpOperator::BinaryOperator(TstpBinaryOperator::Less) => "$less".to_owned(),
+
+            TstpOperator::BinaryOperator(TstpBinaryOperator::LessEq) => "$lesseq".to_owned(),
+
+            TstpOperator::BinaryOperator(TstpBinaryOperator::Greater) => "$greater".to_owned(),
+
+            TstpOperator::BinaryOperator(TstpBinaryOperator::GreaterEq) => "$greatereq".to_owned(),
+
             // Functors
             // Arithmetic unary ops.
             TstpOperator::Functor(TstpFunctor::Uminus) => "-".to_owned(),
@@ -313,7 +342,7 @@ impl<'a> TstpPrinter<'a> {
             TstpOperator::Functor(TstpFunctor::ProblemFunctor(functor)) => functor.clone(),
 
             _ => {
-                println!("Problems translating operator {:?}", op);
+                println!("No defined printer for TSTP operator {:?}", op);
                 panic!()
             }
         }

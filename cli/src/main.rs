@@ -4,10 +4,12 @@ mod logger;
 mod path_args;
 
 use carcara::{
-    ast::{self, rare_rules::Rules},
+    ast::{self, rare_rules::Rules, ProofNode, Rc, StepNode},
     benchmarking::OnlineBenchmarkResults,
     check, check_and_elaborate, check_parallel, checker, elaborator, generate_lia_smt_instances,
-    parser, slice, translation::PrintProof, translation::Translator,
+    parser, slice,
+    translation::PrintProof,
+    translation::Translator,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -778,24 +780,53 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
 }
 
 fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
-    let (mut problem, mut proof) =
-        get_instance(&options.input, options.parsing.buffer_entire_file)?;
-    let mut str_problem = String::new();
-    let _ = problem.read_to_string(&mut str_problem);
-    let mut str_proof = String::new();
-    let _ = proof.read_to_string(&mut str_proof);
+    let (problem, proof, rules) = get_instance(&options.input, options.parsing.buffer_entire_file)?;
 
-    let (alethe_problem, alethe_proof, _) = parser::parse_instance(
-        str_problem.as_bytes(),
-        str_proof.as_bytes(),
-        options.parsing.into(),
-    )?;
-    // .map_err(carcara::Error::from)?;
+    let (alethe_problem, alethe_proof, _, _) =
+        parser::parse_instance(problem, proof, rules, options.parsing.into())?;
 
-    let node = ast::ProofNode::from_commands(alethe_proof.commands);
+    let node = ast::ProofNodeForest::from_commands(alethe_proof.commands);
+    // TODO: vacuous init.
+    let mut empty_clause_node = Rc::new(ProofNode::Step(StepNode {
+        id: "".to_string(),
+        depth: 0,
+        clause: Vec::new(),
+        rule: "".to_string(),
+        premises: Vec::new(),
+        args: Vec::new(),
+        discharge: Vec::new(),
+        previous_step: Option::None,
+    }));
+
+    // TODO: abstract this into a procedure
+    for proof_node in node.0 {
+        match &*proof_node {
+            ProofNode::Step(StepNode {
+                id: _,
+                depth: _,
+                clause,
+                rule: _,
+                premises: _,
+                args: _,
+                discharge: _,
+                previous_step: _,
+            }) => {
+                // Last node of the proof.
+                if clause.is_empty() {
+                    empty_clause_node = proof_node;
+                    break;
+                }
+            }
+
+            _ => {
+                continue;
+            }
+        }
+    }
+
     let mut translator = carcara::translation::eunoia::alethe_2_eunoia::EunoiaTranslator::new();
     let eunoia_prelude = translator.translate_problem(&alethe_problem);
-    let eunoia_proof = translator.translate(&node);
+    let eunoia_proof = translator.translate(&empty_clause_node);
 
     let mut buf_proof = Vec::new();
     let s_exp_formatter_proof =
@@ -816,9 +847,11 @@ fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
     // TODO: do not hard-code this in here
     // TODO: fix where to include these depedencies
     // Include Alethe's mechanization in Eunoia
-    println!("(include \"../alethe_signature/alethe.eo\")");
-    println!("(include \"../alethe_signature/theory.eo\")");
-    println!("(include \"../alethe_signature/programs.eo\")");
+    println!("(include \"../alethe_signature/rules/alethe.eo\")");
+    println!("(include \"../alethe_signature/rules/tautologies.eo\")");
+    println!("(include \"../alethe_signature/theories/theory.eo\")");
+    println!("(include \"../alethe_signature/programs/programs.eo\")");
+    println!("(include \"../alethe_signature/programs/arith.eo\")");
     println!("{}", std::str::from_utf8(&buf_prelude).unwrap());
     println!("{}", std::str::from_utf8(&buf_proof).unwrap());
 
@@ -826,24 +859,53 @@ fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
 }
 
 fn translate_2_tstp_command(options: Translate2TstpCommandOptions) -> CliResult<()> {
-    let (mut problem, mut proof) =
-        get_instance(&options.input, options.parsing.buffer_entire_file)?;
-    let mut str_problem = String::new();
-    let _ = problem.read_to_string(&mut str_problem);
-    let mut str_proof = String::new();
-    let _ = proof.read_to_string(&mut str_proof);
+    let (problem, proof, rules) = get_instance(&options.input, options.parsing.buffer_entire_file)?;
 
-    let (alethe_problem, alethe_proof, _) = parser::parse_instance(
-        str_problem.as_bytes(),
-        str_proof.as_bytes(),
-        options.parsing.into(),
-    )?;
-    // .map_err(carcara::Error::from)?;
+    let (alethe_problem, alethe_proof, _, _) =
+        parser::parse_instance(problem, proof, rules, options.parsing.into())?;
 
-    let node = ast::ProofNode::from_commands(alethe_proof.commands);
+    let node = ast::ProofNodeForest::from_commands(alethe_proof.commands);
+    // TODO: vacuous init.
+    let mut empty_clause_node = Rc::new(ProofNode::Step(StepNode {
+        id: "".to_string(),
+        depth: 0,
+        clause: Vec::new(),
+        rule: "".to_string(),
+        premises: Vec::new(),
+        args: Vec::new(),
+        discharge: Vec::new(),
+        previous_step: Option::None,
+    }));
+
+    // TODO: abstract this into a procedure
+    for proof_node in node.0 {
+        match &*proof_node {
+            ProofNode::Step(StepNode {
+                id: _,
+                depth: _,
+                clause,
+                rule: _,
+                premises: _,
+                args: _,
+                discharge: _,
+                previous_step: _,
+            }) => {
+                // Last node of the proof.
+                if clause.is_empty() {
+                    empty_clause_node = proof_node;
+                    break;
+                }
+            }
+
+            _ => {
+                continue;
+            }
+        }
+    }
+
     let mut translator = carcara::translation::tstp::alethe_2_tstp::TstpTranslator::new();
     let tptp_problem = translator.translate_problem(&alethe_problem);
-    let tstp_proof = translator.translate(&node);
+    let tstp_proof = translator.translate(&empty_clause_node);
 
     let mut buf_proof = Vec::new();
     let s_exp_formatter_proof =

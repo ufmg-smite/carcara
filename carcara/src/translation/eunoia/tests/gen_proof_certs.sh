@@ -7,14 +7,34 @@ BENCHMARK="$1"
 # Check the value and perform actions
 if [ "$BENCHMARK" = "cvc5" ]; then
     DIR="./cvc5_problems/"
-    COMMAND="cvc5 --dump-proofs --proof-format-mode=alethe --proof-elim-subtypes"
+    COMMAND="cvc5 --dag-thresh=2 
+             --produce-proofs 
+             --dump-proofs 
+             --proof-format-mode=alethe 
+             --proof-granularity=dsl-rewrite    
+             --proof-alethe-res-pivots 
+             --proof-elim-subtypes 
+             --print-arith-lit-token"
+    CARCARA_COMMAND="../../../../../target/release/carcara check 
+                         --expand-let-bindings 
+                         --allow-int-real-subtyping 
+                         --ignore-unknown-rules 
+                         --rare-file ./rare_rules.rare"
 else
     DIR="./verit_problems/"
-    COMMAND="../../../../../../verit_gitlab/verit/veriT --proof=- --disable-print-success --disable-banner --proof-prune --proof-merge"
+    COMMAND="../../../../../../verit_gitlab/verit/veriT 
+              --proof=- 
+              --disable-print-success 
+              --disable-banner 
+              --proof-prune 
+              --proof-merge
+              --proof-with-sharing"
+    CARCARA_COMMAND="../../../../../target/release/carcara check 
+                         --allow-int-real-subtyping 
+                         --ignore-unknown-rules 
+                         --rare-file ./rare_rules.rare"
 
 fi
-
-CARCARA_COMMAND="../../../../../target/release/carcara check --expand-let-bindings --allow-int-real-subtyping --ignore-unknown-rules"
 
 # Loop through each file in the directory.
 for FILE in "$DIR"/*; do
@@ -31,19 +51,19 @@ for FILE in "$DIR"/*; do
             # Execute the command and redirect the output to the new file
             ${COMMAND} "$FILE" > "$PROOF_CERTIFICATE"
 
-            # Check the return code of the command
-            if [ $? -eq 0 ]; then
-                ${CARCARA_COMMAND} "$PROOF_CERTIFICATE" "$FILE"
+            # # Check the return code of the command
+            # if [ $? -eq 0 ]; then
+            #     ${CARCARA_COMMAND} "$PROOF_CERTIFICATE" "$FILE"
 
-                if [ $? -eq 0 ]; then
-                echo "Successfully processed $FILE and saved output to $PROOF_CERTIFICATE"
-                echo ""
-                else
-                    # Print an error message
-                    echo "Failed to process $FILE"
-                    echo ""
-                fi
-            fi
+            #     if [ $? -eq 0 ]; then
+            #     echo "Successfully processed $FILE and saved output to $PROOF_CERTIFICATE"
+            #     echo ""
+            #     else
+            #         # Print an error message
+            #         echo "Failed to process $FILE"
+            #         echo ""
+            #     fi
+            # fi
         fi
     fi
 done

@@ -11,7 +11,7 @@ use std::ops::Deref;
 use std::collections::HashMap;
 
 pub struct TstpTranslator {
-    translation: TranslatorData<TstpFormula, TstpProof>,
+    translation: TranslatorData<TstpType, TstpProof>,
     // To keep a counting of each annotated formula introduced, for
     // naming purposes.
     formulas_count: HashMap<TstpFormulaRole, rug::Integer>,
@@ -377,14 +377,14 @@ impl TstpTranslator {
     /// Translates `BindingList` constructs, as used for binder terms forall, exists,
     /// choice and lambda. The "let" binder uses the same construction but assigns to
     /// it a different semantics. See `translate_let_binding_list` for its translation.
-    fn translate_binding_list(binding_list: &BindingList) -> Vec<TstpTypedVariable> {
+    fn translate_binding_list(&mut self, binding_list: &BindingList) -> Vec<TstpTypedVariable> {
         let mut ret_binding_list: Vec<TstpTypedVariable> = Vec::new();
 
         binding_list.iter().for_each(|sorted_var| {
             let (name, sort) = sorted_var;
 
-            let translated_sort: TstpType = match &**sort {
-                Term::Sort(actual_sort) => TstpTranslator::translate_sort(actual_sort),
+            let translated_sort: TstpType = match **sort {
+                Term::Sort(ref actual_sort) => TstpTranslator::translate_sort(actual_sort),
 
                 _ => {
                     // It shouldn't be another kind of Alethe term
@@ -394,9 +394,15 @@ impl TstpTranslator {
             };
 
             ret_binding_list.push(TstpTypedVariable::TypedVariable(
-                name.clone(),
-                Box::new(translated_sort),
+                // Quantified variables are all in uppercase.
+                name.to_uppercase().clone(),
+                Box::new(translated_sort.clone()),
             ));
+
+            // Add variables into scope.
+            self.get_mut_translator_data()
+                .alethe_scopes
+                .insert_variable_in_scope(name, &translated_sort);
         });
 
         ret_binding_list
@@ -406,11 +412,11 @@ impl TstpTranslator {
 impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOperator>
     for TstpTranslator
 {
-    fn get_mut_translator_data(&mut self) -> &mut TranslatorData<TstpFormula, TstpProof> {
+    fn get_mut_translator_data(&mut self) -> &mut TranslatorData<TstpType, TstpProof> {
         &mut self.translation
     }
 
-    fn get_read_translator_data(&self) -> &TranslatorData<TstpFormula, TstpProof> {
+    fn get_read_translator_data(&self) -> &TranslatorData<TstpType, TstpProof> {
         &self.translation
     }
 
@@ -641,7 +647,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                     .alethe_scopes
                     .open_non_context_scope();
 
-                let translated_bindings = TstpTranslator::translate_binding_list(binding_list);
+                let translated_bindings = self.translate_binding_list(binding_list);
 
                 // match translated_bindings {
                 //     TstpFormula::List(ref bindings) => {
@@ -708,33 +714,8 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
     /// TODO: In the THF, TFF, and FOF languages, every variable in a Formula
     /// must be bound by a preceding quantification with adequate scope.
     fn build_var_binding(&self, id: &str) -> TstpFormula {
-        // TODO: using clone, ugly...
-        let _sort = match self
-            .get_read_translator_data()
-            .alethe_scopes
-            .get_variable_in_scope(&id.to_owned())
-        {
-            Some(value) => value.clone(),
-
-            None => {
-                // Not satisfying pre-condition
-                panic!()
-            }
-        };
-
-        // TODO:
-        TstpFormula::Variable("dummy".to_owned())
-
-        // TstpFormula::App(
-        //     self.alethe_signature.var.clone(),
-        //     vec![
-        //         TstpFormula::List(vec![TstpFormula::List(vec![
-        //             TstpFormula::Variable(id.clone()),
-        //             sort,
-        //         ])]),
-        //         TstpFormula::Variable(id.clone()),
-        //     ],
-        // )
+        // Quantified variables are always in uppercase.
+        TstpFormula::Variable(id.to_uppercase().clone())
     }
 
     /// Translates a `BindingList` as required by our definition of @let: it builds a list
@@ -839,7 +820,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         match sort {
             // User-defined sort
             // TODO: what about args?
-            Sort::Atom(string, ..) => TstpType::UserDefined(string.clone()),
+            Sort::Atom(string, ..) => TstpType::UserDefined(string.to_string()),
 
             Sort::Bool => TstpType::Bool,
 
