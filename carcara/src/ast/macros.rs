@@ -224,9 +224,9 @@ macro_rules! match_term {
     (@GET_VARIANT strinre)    => { $crate::ast::Operator::StrInRe };
     (@GET_VARIANT reinter)    => { $crate::ast::Operator::ReIntersection };
 
-    // In the last case it can match a literal integer
+    // In the last case it can match a literal of an integer or rational
     ($lit:literal = $var:expr) => {
-        if let Some(i) = $var.as_integer() {
+        if let Some(i) = $var.as_number() {
             if i == $lit {
                 Some(())
             } else {
