@@ -126,7 +126,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                 // TODO: either use borrows or implement
                 // Copy trait for EunoiaTerms
                 eunoia_sort = match **sort {
-                    Term::Sort(ref actual_sort) => EunoiaTranslator::translate_sort(&actual_sort),
+                    Term::Sort(ref actual_sort) => EunoiaTranslator::translate_sort(actual_sort),
 
                     _ => {
                         println!("Expected sort1, got {:?}", sort);
@@ -193,7 +193,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                 // TODO: either use borrows or implement
                 // Copy trait for EunoiaTerms
                 eunoia_sort = match **sort {
-                    Term::Sort(ref actual_sort) => EunoiaTranslator::translate_sort(&actual_sort),
+                    Term::Sort(ref actual_sort) => EunoiaTranslator::translate_sort(actual_sort),
 
                     _ => {
                         println!("Expected sort2, got {:?}", sort);
@@ -362,7 +362,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
 
                                 self.get_mut_translator_data()
                                     .alethe_scopes
-                                    .insert_variable_in_scope(id, &eunoia_sort);
+                                    .insert_variable_in_scope(id, eunoia_sort);
                             }
 
                             _ => {
@@ -417,7 +417,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
 
                                 self.get_mut_translator_data()
                                     .alethe_scopes
-                                    .insert_variable_in_scope(id, &eunoia_sort);
+                                    .insert_variable_in_scope(id, eunoia_sort);
                             }
 
                             _ => {
@@ -1034,7 +1034,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                             .push(EunoiaCommand::Step {
                                 id: id.clone(),
                                 conclusion_clause: Some(conclusion),
-                                rule: rule_name.to_string(),
+                                rule: rule_name.clone(),
                                 premises: EunoiaList { list: alethe_premises },
                                 arguments: EunoiaList { list: vec![] },
                             });
