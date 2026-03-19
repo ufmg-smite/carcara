@@ -4,31 +4,30 @@ use crate::utils::DedupIterator;
 pub fn remove_reorderings(proof: ProofNodeForest) -> ProofNodeForest {
     let mut modified = HashSet::new();
 
-    proof.mutate(|_, node| {
+    proof.mutate(|_, node, premises_changed| {
         let Some(step) = node.as_step() else {
             return node.clone();
         };
 
+        // For reordering steps, we remove the step and return its only premise
         if step.rule == "reordering" {
-            // Since the premises are changed before the mutation function is called, we have to
-            // insert the new node in the modified set
-            let new = Rc::new(step.premises[0].as_ref().clone());
-            modified.insert(new.clone());
-            return new;
+            return step.premises[0].clone();
         }
 
         // If the rule is order-sensitive, and any premise was modified, we recompute the conclusion
         if let Some(recompute) = get_recomputation_func(&step.rule) {
-            if step.premises.iter().any(|p| modified.contains(p)) {
+            if premises_changed {
                 let new = Rc::new(ProofNode::Step(StepNode {
                     clause: recompute(step),
                     ..step.clone()
                 }));
+                println!("inserting {}", new.id());
                 modified.insert(new.clone());
                 return new;
             }
         }
 
+        // Otherwise the node is unchanged
         node.clone()
     })
 }
