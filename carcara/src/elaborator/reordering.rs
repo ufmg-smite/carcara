@@ -2,8 +2,6 @@ use super::*;
 use crate::utils::DedupIterator;
 
 pub fn remove_reorderings(proof: ProofNodeForest) -> ProofNodeForest {
-    let mut modified = HashSet::new();
-
     proof.mutate(|_, node, premises_changed| {
         let Some(step) = node.as_step() else {
             return node.clone();
@@ -21,8 +19,6 @@ pub fn remove_reorderings(proof: ProofNodeForest) -> ProofNodeForest {
                     clause: recompute(step),
                     ..step.clone()
                 }));
-                println!("inserting {}", new.id());
-                modified.insert(new.clone());
                 return new;
             }
         }
