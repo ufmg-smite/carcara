@@ -441,7 +441,7 @@ impl<R: BufRead> Lexer<R> {
 
     fn read_unicode_escape_sequence(&mut self, result: &mut String) -> CarcaraResult<()> {
         // At this point, '\' and 'u' have already been read
-        let contents = match self.current_char {
+        match self.current_char {
             Some('{') => {
                 self.next_char()?;
                 // Read the contents inside the {} braces, up to five hex characters
@@ -457,13 +457,7 @@ impl<R: BufRead> Lexer<R> {
                     self.next_char()?;
                 }
                 if self.current_char == Some('}') {
-                    if contents.is_empty() {
-                        // Handle "\u{}" edge case
-                        result.push_str("\\u{");
-                        return Ok(());
-                    }
                     self.next_char()?;
-                    contents
                 } else {
                     // If the contents are not up to 5 hex digits followed by '}', this is not a
                     // well-formed unicode escape sequence, so we abort
@@ -471,6 +465,32 @@ impl<R: BufRead> Lexer<R> {
                     result.push_str(&contents);
                     return Ok(());
                 }
+                if contents.is_empty() {
+                    // Handle "\u{}" edge case
+                    result.push_str("\\u{}");
+                    return Ok(());
+                }
+                let code = u32::from_str_radix(&contents, 16).unwrap();
+
+                // In the SMT-LIB unicode escape syntax, only the planes 0 to 2 of Unicode are
+                // allowed, meaning values up to 0x2FFFF. For values beyond that, we treat the
+                // escape sequence as a literal string.
+                if code > 0x2FFFF {
+                    result.push_str("\\u{");
+                    result.push_str(&contents);
+                    result.push('}');
+                    return Ok(());
+                }
+
+                // While the previous check ensures that the codepoint is not out-of-bounds for
+                // Unicode, it might still lie in the Unicode High Surrogate Area (0xD800 to
+                // 0xDFFF), which is also considered invalid. Therefore `char::from_u32` may still
+                // fail.
+                let c = char::from_u32(code).ok_or_else(|| {
+                    Error::Parser(ParserError::InvalidUnicode(contents), self.position)
+                })?;
+                result.push(c);
+                Ok(())
             }
             Some(_) => {
                 let mut contents = String::new();
@@ -491,15 +511,15 @@ impl<R: BufRead> Lexer<R> {
                     result.push_str(&contents);
                     return Ok(());
                 }
-                contents
+                let code = u32::from_str_radix(&contents, 16).unwrap();
+                let c = char::from_u32(code).ok_or_else(|| {
+                    Error::Parser(ParserError::InvalidUnicode(contents), self.position)
+                })?;
+                result.push(c);
+                Ok(())
             }
-            None => return Err(Error::Parser(ParserError::EofInString, self.position)),
-        };
-        let code = u32::from_str_radix(&contents, 16).unwrap();
-        let c = char::from_u32(code)
-            .ok_or_else(|| Error::Parser(ParserError::InvalidUnicode(contents), self.position))?;
-        result.push(c);
-        Ok(())
+            None => Err(Error::Parser(ParserError::EofInString, self.position)),
+        }
     }
 }
 
@@ -676,7 +696,9 @@ mod tests {
 
     #[test]
     fn test_weird_unicode_escape_sequences() {
-        let input = r#" "\u{61}" "\u{00061}" "\u{000061}" "\u00061" "\u61" "\u" "\u{12x4}" "\u{123" "\u{}" "#;
+        let input = r#"
+            "\u{61}" "\u{00061}" "\u{000061}" "\u00061" "\u61"
+            "\u" "\u{12x4}" "\u{123" "\u{}" "\u{30000}" "#;
         let expected = [
             "a",
             "a",
@@ -687,6 +709,7 @@ mod tests {
             "\\u{12x4}",
             "\\u{123",
             "\\u{}",
+            "\\u{30000}",
         ]
         .map(str::to_owned)
         .map(Token::String);
