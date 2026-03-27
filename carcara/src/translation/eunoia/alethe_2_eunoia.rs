@@ -1014,8 +1014,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                     }
 
                     "rare_rewrite" => {
-                        // TODO: what about rules receiving more arguments?
-                        assert!(eunoia_arguments.len() == 1);
+                        assert!(!eunoia_arguments.is_empty());
 
                         let rule_name = match &eunoia_arguments[0] {
                             EunoiaTerm::String(rare_rewrite_name) => rare_rewrite_name,
