@@ -165,10 +165,18 @@ impl Polynomial {
     }
 }
 
-pub fn poly_simp(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+pub fn poly_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (t, s) = match_term_err!((= t s) = &conclusion[0])?;
-    let (t_norm, s_norm) = (Polynomial::from_term(t), Polynomial::from_term(s));
+    let (mut t_norm, mut s_norm) = (Polynomial::from_term(t), Polynomial::from_term(s));
+
+    // If the sort is a bitvector sort, we must take the modulo
+    if let Sort::BitVec(width) = pool.sort(t).as_sort().unwrap() {
+        let max = Integer::from(1) << width;
+        t_norm = t_norm.modulo(&max).unwrap();
+        s_norm = s_norm.modulo(&max).unwrap();
+    }
+
     if !t_norm.sub(s_norm).is_zero() {
         Err(PolynomialError::PolynomialsNotEqual(t.clone(), s.clone()).into())
     } else {
@@ -176,31 +184,33 @@ pub fn poly_simp(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     }
 }
 
-pub fn bv_poly_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
-    assert_clause_len(conclusion, 1)?;
-    let (t, s) = match_term_err!((= t s) = &conclusion[0])?;
-    let width = match pool.sort(t).as_sort().unwrap() {
-        Sort::BitVec(w) => *w,
-        other => return Err(PolynomialError::ExpectedBvSort(other.clone()).into()),
-    };
-    let max = Integer::from(1) << width;
-    let (t_norm, s_norm) = (
-        Polynomial::from_term(t).modulo(&max).unwrap(),
-        Polynomial::from_term(s).modulo(&max).unwrap(),
-    );
-    if !t_norm.sub(s_norm).is_zero() {
-        Err(PolynomialError::PolynomialsNotEqual(t.clone(), s.clone()).into())
-    } else {
-        Ok(())
-    }
-}
-
-pub fn poly_simp_rel(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+pub fn poly_simp_rel(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> RuleResult {
     use Operator::*;
 
     assert_num_premises(premises, 1)?;
     assert_clause_len(conclusion, 1)?;
     let prem = get_premise_term(&premises[0])?;
+
+    let bitvector_case = match_term!(
+        (= (bvmul c1 (bvsub x1 x2)) (bvmul c2 (bvsub y1 y2)))
+        = get_premise_term(&premises[0])?);
+    if let Some(((c1, (x1, x2)), (c2, (y1, y2)))) = bitvector_case {
+        let sort = pool.sort(c1);
+        let Sort::BitVec(width) = sort.as_sort().unwrap() else {
+            unreachable!() // The parser ensures that the sort is a bitvector sort
+        };
+        let one = pool.add(Term::new_bv(Integer::from(1), *width));
+        assert_is_expected(c1, one.clone())?;
+        assert_is_expected(c2, one)?;
+
+        let ((l1, l2), (r1, r2)) = match_term_err!((= (= x1 x2) (= y1 y2)) = &conclusion[0])?;
+
+        assert_eq(l1, x1)?;
+        assert_eq(l2, x2)?;
+        assert_eq(r1, y1)?;
+        assert_eq(r2, y2)?;
+        return Ok(());
+    }
 
     let ((c1, xs), (c2, ys)) = match_term_err!((= (* c1 xs) (* c2 ys)) = prem)?;
     let (x1, x2) =
@@ -232,28 +242,4 @@ pub fn poly_simp_rel(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleRes
         }
         ((op1, _), (op2, _)) => Err(PolynomialError::InvalidOperators(op1, op2).into()),
     }
-}
-
-pub fn bv_poly_simp_eq(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> RuleResult {
-    assert_num_premises(premises, 1)?;
-    assert_clause_len(conclusion, 1)?;
-
-    let ((c1, (x1, x2)), (c2, (y1, y2))) =
-        match_term_err!((= (* c1 (- x1 x2)) (* c2 (- y1 y2))) = get_premise_term(&premises[0])?)?;
-
-    let sort = pool.sort(c1);
-    let Sort::BitVec(width) = sort.as_sort().unwrap() else {
-        unreachable!() // The parser ensures that the sort is a bitvector sort
-    };
-    let one = pool.add(Term::new_bv(Integer::from(1), *width));
-    assert_is_expected(c1, one.clone())?;
-    assert_is_expected(c2, one)?;
-
-    let ((l1, l2), (r1, r2)) = match_term_err!((= (= x1 x2) (= y1 y2)) = &conclusion[0])?;
-
-    assert_eq(l1, x1)?;
-    assert_eq(l2, x2)?;
-    assert_eq(r1, y1)?;
-    assert_eq(r2, y2)?;
-    Ok(())
 }
