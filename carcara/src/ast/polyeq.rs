@@ -532,6 +532,17 @@ impl PolyeqComparable for Term {
                 },
             ) => op_a == op_b && op_args_a == op_args_b && comp.eq(args_a, args_b),
 
+            // Check the singleton case (op a) = a, where op is left-associative
+            (Term::Op(op, args), other) | (other, Term::Op(op, args))
+                if comp.is_mod_nary
+                    && args.len() == 1
+                    && op.nary_case() == Some(NaryCase::LeftAssoc)
+                    // We have to check with `==` first because we are calling into `comp.eq` with
+                    // `&Term`s directly (instead of `Rc<Term>`s), so the `==` check is skipped
+                    && (args[0].as_ref() == other || comp.eq(args[0].as_ref(), other)) =>
+            {
+                true
+            }
             (Term::Op(op_a, args_a), Term::Op(op_b, args_b)) => {
                 comp.compare_op(*op_a, args_a, *op_b, args_b)
             }

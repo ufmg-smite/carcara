@@ -176,7 +176,7 @@ struct CheckingOptions {
     skip_unknown_rules: bool,
 
     /// A set of extra rules to be allowed by the checker, and considered as holes.
-    #[clap(long, multiple = true, conflicts_with = "ignore-unknown-rules")]
+    #[clap(long, multiple = true)]
     allowed_rules: Option<Vec<String>>,
 
     /// Enforce restrictions on the granularity of the proof.
