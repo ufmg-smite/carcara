@@ -210,6 +210,7 @@ pub fn get_rule_shared(rule_name: &str, elaborated: bool) -> Option<crate::check
         "resolution" | "th_resolution" => resolution::resolution,
         "refl" if elaborated => reflexivity::strict_refl,
         "refl" => reflexivity::refl,
+        "strict_refl" => reflexivity::strict_refl,
         "trans" => transitivity::trans,
         "cong" => congruence::cong,
         "ho_cong" => congruence::ho_cong,
