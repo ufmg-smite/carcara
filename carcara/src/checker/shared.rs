@@ -199,6 +199,7 @@ pub fn get_rule_shared(rule_name: &str, elaborated: bool) -> Option<crate::check
         "distinct_elim" => clausification::distinct_elim,
         "la_rw_eq" => linear_arithmetic::la_rw_eq,
         "la_generic" => linear_arithmetic::la_generic,
+        "bounded_farkas" => linear_arithmetic::la_marabou,
         "la_disequality" => linear_arithmetic::la_disequality,
         "la_totality" => linear_arithmetic::la_totality,
         "la_tautology" => linear_arithmetic::la_tautology,

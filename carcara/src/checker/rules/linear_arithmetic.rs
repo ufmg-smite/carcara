@@ -264,11 +264,7 @@ fn strengthen(op: Operator, disequality: &mut LinearComb, a: &Rational) -> Opera
     }
 }
 
-pub fn la_generic(rule_args: RuleArgs) -> RuleResult {
-    if rule_args.args.len() != rule_args.conclusion.len() {
-        return la_marabou(rule_args);
-    }
-    let RuleArgs { conclusion, args, .. } = rule_args;
+pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
     assert_num_args(args, conclusion.len())?;
 
     let args: Vec<_> = args
@@ -473,12 +469,8 @@ pub fn poly_simp(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 }
 
 pub fn la_marabou(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
-    let num_args = conclusion
-        .iter()
-        .take_while(|phi| match_term!((not (= ...)) = phi).is_some())
-        .count();
-
-    let args: Vec<_> = args[..num_args]
+    let num_args = args.len();
+    let args: Vec<_> = args
         .iter()
         .map(|a| {
             a.as_fraction()
@@ -489,8 +481,6 @@ pub fn la_marabou(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
         .iter()
         .zip(args)
         .map(|(phi, a)| -> Result<_, CheckerError> {
-            match_term_err!((not (= a b)) = phi)?; // Make sure operator is !=
-
             // Steps 1 and 2: Negate the disequality
             let (_, s1, s2) = negate_disequality(phi)?;
 
