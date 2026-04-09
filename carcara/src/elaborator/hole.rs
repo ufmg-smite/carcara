@@ -161,7 +161,7 @@ fn parse_and_check_solver_proof(
 }
 
 fn increase_subproof_depth(proof: Rc<ProofNode>, delta: usize, prefix: &str) -> Rc<ProofNode> {
-    proof.mutate(|_, node| {
+    proof.mutate(|_, node, _| {
         let node = match node.as_ref().clone() {
             ProofNode::Assume { id, depth, term } => ProofNode::Assume {
                 id: format!("{}.{}", prefix, id),

@@ -104,7 +104,7 @@ impl<'e> Elaborator<'e> {
             current = match step {
                 ElaborationStep::Polyeq => self.elaborate_polyeq(current),
                 ElaborationStep::LiaGeneric if self.config.lia_options.is_some() => {
-                    current.mutate(|_, node| match node.as_ref() {
+                    current.mutate(|_, node, _| match node.as_ref() {
                         ProofNode::Step(s) if s.rule == "lia_generic" => {
                             lia_generic::lia_generic(self, s).unwrap_or_else(|| node.clone())
                         }
@@ -113,7 +113,7 @@ impl<'e> Elaborator<'e> {
                 }
                 ElaborationStep::LiaGeneric => current,
                 ElaborationStep::Local => self.elaborate_local(current),
-                ElaborationStep::Uncrowd => current.mutate(|_, node| match node.as_ref() {
+                ElaborationStep::Uncrowd => current.mutate(|_, node, _| match node.as_ref() {
                     ProofNode::Step(s)
                         if (s.rule == "resolution" || s.rule == "th_resolution")
                             && !s.args.is_empty() =>
@@ -127,7 +127,7 @@ impl<'e> Elaborator<'e> {
                     if self.config.hole_options.is_none() {
                         current
                     } else {
-                        current.mutate(|_, node| match node.as_ref() {
+                        current.mutate(|_, node, _| match node.as_ref() {
                             ProofNode::Step(s)
                                 if (s.rule == "all_simplify" || s.rule == "rare_rewrite") =>
                             {
@@ -155,7 +155,7 @@ impl<'e> Elaborator<'e> {
             })
         }
 
-        proof.mutate(|context, node| {
+        proof.mutate(|context, node, _| {
             match node.as_ref() {
                 ProofNode::Assume { id, depth, term }
                     if context.is_empty() && !self.problem.premises.contains(term) =>
@@ -185,7 +185,7 @@ impl<'e> Elaborator<'e> {
             })
         }
 
-        proof.mutate(|context, node| {
+        proof.mutate(|context, node, _| {
             match node.as_ref() {
                 ProofNode::Step(s) => {
                     if let Some(func) = get_elaboration_function(&s.rule) {
@@ -275,13 +275,13 @@ type ElaborationFunc =
 trait Mutate {
     fn mutate<F>(self, mutate_func: F) -> Self
     where
-        F: FnMut(&mut ContextStack, &Rc<ProofNode>) -> Rc<ProofNode>;
+        F: FnMut(&mut ContextStack, &Rc<ProofNode>, bool) -> Rc<ProofNode>;
 }
 
 impl Mutate for ProofNodeForest {
     fn mutate<F>(self, mut mutate_func: F) -> Self
     where
-        F: FnMut(&mut ContextStack, &Rc<ProofNode>) -> Rc<ProofNode>,
+        F: FnMut(&mut ContextStack, &Rc<ProofNode>, bool) -> Rc<ProofNode>,
     {
         let mut cache = HashMap::new();
         let new_nodes = self
@@ -296,7 +296,7 @@ impl Mutate for ProofNodeForest {
 impl Mutate for Rc<ProofNode> {
     fn mutate<F>(self, mutate_func: F) -> Self
     where
-        F: FnMut(&mut ContextStack, &Rc<ProofNode>) -> Rc<ProofNode>,
+        F: FnMut(&mut ContextStack, &Rc<ProofNode>, bool) -> Rc<ProofNode>,
     {
         let mut cache = HashMap::new();
         mutate_impl(&self, &mut cache, mutate_func)
@@ -309,7 +309,7 @@ fn mutate_impl<F>(
     mut mutate_func: F,
 ) -> Rc<ProofNode>
 where
-    F: FnMut(&mut ContextStack, &Rc<ProofNode>) -> Rc<ProofNode>,
+    F: FnMut(&mut ContextStack, &Rc<ProofNode>, bool) -> Rc<ProofNode>,
 {
     let mut did_outbound: HashSet<&Rc<ProofNode>> = HashSet::new();
     let mut todo = vec![(root, false)];
@@ -323,7 +323,7 @@ where
         }
 
         let mutated = match node.as_ref() {
-            ProofNode::Assume { .. } => mutate_func(&mut context, node),
+            ProofNode::Assume { .. } => mutate_func(&mut context, node, false),
             ProofNode::Step(s) if !is_done => {
                 todo.push((node, true));
 
@@ -343,6 +343,12 @@ where
                 let premises: Vec<_> = s.premises.iter().map(|p| cache[p].clone()).collect();
                 let discharge: Vec<_> = s.discharge.iter().map(|p| cache[p].clone()).collect();
                 let previous_step = s.previous_step.as_ref().map(|p| cache[p].clone());
+                let changed = s
+                    .premises
+                    .iter()
+                    .chain(s.discharge.iter())
+                    .chain(s.previous_step.iter())
+                    .any(|p| *p != cache[p]);
 
                 let new_node = Rc::new(ProofNode::Step(StepNode {
                     premises,
@@ -350,7 +356,7 @@ where
                     previous_step,
                     ..s.clone()
                 }));
-                mutate_func(&mut context, &new_node)
+                mutate_func(&mut context, &new_node, changed)
             }
             ProofNode::Subproof(s) if !is_done => {
                 assert!(
