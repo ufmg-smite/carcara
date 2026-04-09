@@ -5,11 +5,18 @@ use crate::{
 };
 use rug::Integer;
 
-fn build_term_vec(term: &Rc<Term>, size: usize, pool: &mut dyn TermPool) -> Vec<Rc<Term>> {
+fn bitvector_size(pool: &mut dyn TermPool, term: &Rc<Term>) -> usize {
+    let Sort::BitVec(size) = pool.sort(term).as_sort().cloned().unwrap() else {
+        panic!("trying to get size of non-bitvector term: {}", term);
+    };
+    size
+}
+
+fn get_term_bits(term: &Rc<Term>, pool: &mut dyn TermPool) -> Vec<Rc<Term>> {
     let term = if let Some((Operator::BvBbTerm, args_x)) = term.as_op() {
         args_x.to_vec()
     } else {
-        (0..size)
+        (0..bitvector_size(pool, term))
             .map(|i| {
                 let op_args = vec![pool.add(Term::new_int(i))];
                 pool.add(Term::ParamOp {
@@ -23,14 +30,10 @@ fn build_term_vec(term: &Rc<Term>, size: usize, pool: &mut dyn TermPool) -> Vec<
     term
 }
 
-fn ripple_carry_adder(
-    x: &Rc<Term>,
-    y: &Rc<Term>,
-    size: usize,
-    pool: &mut dyn TermPool,
-) -> Rc<Term> {
-    let x = build_term_vec(x, size, pool);
-    let y = build_term_vec(y, size, pool);
+fn ripple_carry_adder(x: &Rc<Term>, y: &Rc<Term>, pool: &mut dyn TermPool) -> Rc<Term> {
+    let size = bitvector_size(pool, x);
+    let x = get_term_bits(x, pool);
+    let y = get_term_bits(y, pool);
 
     let mut carries = vec![pool.bool_false()];
 
@@ -62,14 +65,10 @@ fn ripple_carry_adder(
     pool.add(Term::Op(Operator::BvBbTerm, res_args))
 }
 
-fn shift_add_multiplier(
-    x: &Rc<Term>,
-    y: &Rc<Term>,
-    size: usize,
-    pool: &mut dyn TermPool,
-) -> Rc<Term> {
-    let x = build_term_vec(x, size, pool);
-    let y = build_term_vec(y, size, pool);
+fn shift_add_multiplier(x: &Rc<Term>, y: &Rc<Term>, pool: &mut dyn TermPool) -> Rc<Term> {
+    let size = bitvector_size(pool, x);
+    let x = get_term_bits(x, pool);
+    let y = get_term_bits(y, pool);
 
     let false_term = pool.bool_false();
     let shift: Vec<Vec<_>> = (0..size)
@@ -167,13 +166,14 @@ pub fn var(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (x, res) = match_term_err!((= x res) = &conclusion[0])?;
 
-    let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
-        return Err(CheckerError::Explanation(format!(
+    rassert!(
+        matches!(pool.sort(x).as_sort().unwrap(), &Sort::BitVec(_)),
+        CheckerError::Explanation(format!(
             "Could not get BV sort out of (expected-to-be variable) term {}",
             x
-        )));
-    };
-    let x = build_term_vec(x, size, pool);
+        ))
+    );
+    let x = get_term_bits(x, pool);
 
     assert_eq(&pool.add(Term::Op(Operator::BvBbTerm, x)), res)
 }
@@ -182,29 +182,15 @@ pub fn and(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (bvand_args, res) = match_term_err!((= (bvand ...) res) = &conclusion[0])?;
 
-    let Sort::BitVec(size) = pool.sort(&bvand_args[0]).as_sort().cloned().unwrap() else {
-        unreachable!();
-    };
-    // check all arguments have the same size
-    for arg in bvand_args {
-        let Sort::BitVec(size1) = pool.sort(arg).as_sort().cloned().unwrap() else {
-            unreachable!();
-        };
-        if size1 != size {
-            return Err(CheckerError::Explanation(format!(
-                "bvand arguments {} and {} have different sizes",
-                bvand_args[0], arg
-            )));
-        }
-    }
+    let size = bitvector_size(pool, &bvand_args[0]);
 
     // the conjunction is build left-to-right
     let mut i = 1;
     let mut expected_res = bvand_args[0].clone();
 
     while i < bvand_args.len() {
-        let x = build_term_vec(&expected_res, size, pool);
-        let y = build_term_vec(&bvand_args[i], size, pool);
+        let x = get_term_bits(&expected_res, pool);
+        let y = get_term_bits(&bvand_args[i], pool);
 
         let res_args: Vec<_> = (0..size)
             .map(|i| {
@@ -225,30 +211,15 @@ pub fn or(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (bvor_args, res) = match_term_err!((= (bvor ...) res) = &conclusion[0])?;
 
-    let Sort::BitVec(size) = pool.sort(&bvor_args[0]).as_sort().cloned().unwrap() else {
-        unreachable!();
-    };
-
-    // check all arguments have the same size
-    for arg in bvor_args {
-        let Sort::BitVec(size1) = pool.sort(arg).as_sort().cloned().unwrap() else {
-            unreachable!();
-        };
-        if size1 != size {
-            return Err(CheckerError::Explanation(format!(
-                "bvor arguments {} and {} have different sizes",
-                bvor_args[0], arg
-            )));
-        }
-    }
+    let size = bitvector_size(pool, &bvor_args[0]);
 
     // the disjunction is build left-to-right
     let mut i = 1;
     let mut expected_res = bvor_args[0].clone();
 
     while i < bvor_args.len() {
-        let x = build_term_vec(&expected_res, size, pool);
-        let y = build_term_vec(&bvor_args[i], size, pool);
+        let x = get_term_bits(&expected_res, pool);
+        let y = get_term_bits(&bvor_args[i], pool);
 
         let res_args: Vec<_> = (0..size)
             .map(|i| {
@@ -269,30 +240,15 @@ pub fn xor(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (bvxor_args, res) = match_term_err!((= (bvxor ...) res) = &conclusion[0])?;
 
-    let Sort::BitVec(size) = pool.sort(&bvxor_args[0]).as_sort().cloned().unwrap() else {
-        unreachable!();
-    };
-
-    // check all arguments have the same size
-    for arg in bvxor_args {
-        let Sort::BitVec(size1) = pool.sort(arg).as_sort().cloned().unwrap() else {
-            unreachable!();
-        };
-        if size1 != size {
-            return Err(CheckerError::Explanation(format!(
-                "bvxor arguments {} and {} have different sizes",
-                bvxor_args[0], arg
-            )));
-        }
-    }
+    let size = bitvector_size(pool, &bvxor_args[0]);
 
     // the conjunction is build left-to-right
     let mut i = 1;
     let mut expected_res = bvxor_args[0].clone();
 
     while i < bvxor_args.len() {
-        let x = build_term_vec(&expected_res, size, pool);
-        let y = build_term_vec(&bvxor_args[i], size, pool);
+        let x = get_term_bits(&expected_res, pool);
+        let y = get_term_bits(&bvxor_args[i], pool);
 
         let res_args: Vec<_> = (0..size)
             .map(|i| {
@@ -313,12 +269,9 @@ pub fn xnor(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let ((x, y), res) = match_term_err!((= (bvxnor x y) res) = &conclusion[0])?;
 
-    let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
-        unreachable!();
-    };
-
-    let x = build_term_vec(x, size, pool);
-    let y = build_term_vec(y, size, pool);
+    let size = bitvector_size(pool, x);
+    let x = get_term_bits(x, pool);
+    let y = get_term_bits(y, pool);
 
     let res_args: Vec<_> = (0..size)
         .map(|i| {
@@ -338,11 +291,8 @@ pub fn not(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (x, res) = match_term_err!((= (bvnot x) res) = &conclusion[0])?;
 
-    let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
-        unreachable!();
-    };
-
-    let x = build_term_vec(x, size, pool);
+    let size = bitvector_size(pool, x);
+    let x = get_term_bits(x, pool);
 
     let res_args: Vec<_> = (0..size)
         .map(|i| {
@@ -360,12 +310,9 @@ pub fn not(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
 /// Bitblasts `(bvult x y)`
 fn bitblast_ult(pool: &mut dyn TermPool, x: &Rc<Term>, y: &Rc<Term>) -> Rc<Term> {
-    let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
-        unreachable!();
-    };
-
-    let x = build_term_vec(x, size, pool);
-    let y = build_term_vec(y, size, pool);
+    let size = bitvector_size(pool, x);
+    let x = get_term_bits(x, pool);
+    let y = get_term_bits(y, pool);
 
     let mut res = build_term!(pool, (and (not {x[0].clone()}) {y[0].clone()}));
 
@@ -392,12 +339,9 @@ pub fn slt(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let ((x, y), res) = match_term_err!((= (bvslt x y) res) = &conclusion[0])?;
 
-    let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
-        unreachable!();
-    };
-
-    let x = build_term_vec(x, size, pool);
-    let y = build_term_vec(y, size, pool);
+    let size = bitvector_size(pool, x);
+    let x = get_term_bits(x, pool);
+    let y = get_term_bits(y, pool);
 
     // if size is 1, check directly if x, whose only bit is its LSB,
     // is negative (i.e., first bit is 1) and y positive (i.e., it is
@@ -436,27 +380,10 @@ pub fn add(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (add_args, res) = match_term_err!((= (bvadd ...) res) = &conclusion[0])?;
 
-    let Sort::BitVec(size) = pool.sort(&add_args[0]).as_sort().cloned().unwrap() else {
-        unreachable!();
-    };
-
-    // check all arguments have the same size
-    for arg in add_args {
-        let Sort::BitVec(size1) = pool.sort(arg).as_sort().cloned().unwrap() else {
-            unreachable!();
-        };
-        if size1 != size {
-            return Err(CheckerError::Explanation(format!(
-                "Addition arguments {} and {} have different sizes",
-                add_args[0], arg
-            )));
-        }
-    }
-
     let mut i = 1;
     let mut expected_res = add_args[0].clone();
     while i < add_args.len() {
-        expected_res = ripple_carry_adder(&expected_res, &add_args[i], size, pool);
+        expected_res = ripple_carry_adder(&expected_res, &add_args[i], pool);
         i += 1;
     }
     assert_eq(&expected_res, res)
@@ -466,27 +393,10 @@ pub fn mult(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (mult_args, res) = match_term_err!((= (bvmul ...) res) = &conclusion[0])?;
 
-    let Sort::BitVec(size) = pool.sort(&mult_args[0]).as_sort().cloned().unwrap() else {
-        unreachable!();
-    };
-
-    // check all arguments have the same size
-    for arg in mult_args {
-        let Sort::BitVec(size1) = pool.sort(arg).as_sort().cloned().unwrap() else {
-            unreachable!();
-        };
-        if size1 != size {
-            return Err(CheckerError::Explanation(format!(
-                "Multiplication arguments {} and {} have different sizes",
-                mult_args[0], arg
-            )));
-        }
-    }
-
     let mut i = 1;
     let mut expected_res = mult_args[0].clone();
     while i < mult_args.len() {
-        expected_res = shift_add_multiplier(&expected_res, &mult_args[i], size, pool);
+        expected_res = shift_add_multiplier(&expected_res, &mult_args[i], pool);
         i += 1;
     }
     assert_eq(&expected_res, res)
@@ -496,11 +406,8 @@ pub fn neg(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (x, res) = match_term_err!((= (bvneg x) res) = &conclusion[0])?;
 
-    let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
-        unreachable!();
-    };
-
-    let x = build_term_vec(x, size, pool);
+    let size = bitvector_size(pool, x);
+    let x = get_term_bits(x, pool);
 
     let mut carries = vec![pool.bool_true()];
 
@@ -530,11 +437,9 @@ pub fn equality(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let ((x, y), res) = match_term_err!((= (= x y) res) = &conclusion[0])?;
 
-    let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
-        unreachable!();
-    };
-    let x = build_term_vec(x, size, pool);
-    let y = build_term_vec(y, size, pool);
+    let size = bitvector_size(pool, x);
+    let x = get_term_bits(x, pool);
+    let y = get_term_bits(y, pool);
 
     let expected_res_args: Vec<_> = (0..size)
         .map(|i| {
@@ -557,11 +462,9 @@ pub fn comp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let ((x, y), res) = match_term_err!((= (bvcomp x y) res) = &conclusion[0])?;
 
-    let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
-        unreachable!();
-    };
-    let x = build_term_vec(x, size, pool);
-    let y = build_term_vec(y, size, pool);
+    let size = bitvector_size(pool, x);
+    let x = get_term_bits(x, pool);
+    let y = get_term_bits(y, pool);
 
     let expected_res_args: Vec<_> = (0..size)
         .map(|i| {
@@ -616,15 +519,8 @@ pub fn concat(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (concat_args, res_args) = match_term_err!((= (concat ...) (bbterm ...)) = &conclusion[0])?;
 
-    let Sort::BitVec(mut size) = pool
-        .sort(&concat_args[concat_args.len() - 1])
-        .as_sort()
-        .cloned()
-        .unwrap()
-    else {
-        unreachable!();
-    };
-    let mut expected_res = build_term_vec(&concat_args[concat_args.len() - 1], size, pool);
+    let mut size = bitvector_size(pool, &concat_args[concat_args.len() - 1]);
+    let mut expected_res = get_term_bits(&concat_args[concat_args.len() - 1], pool);
 
     let mut i = 1;
     while i < concat_args.len() {
@@ -636,11 +532,7 @@ pub fn concat(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         else {
             unreachable!();
         };
-        expected_res.extend(build_term_vec(
-            &concat_args[concat_args.len() - 1 - i],
-            size_i,
-            pool,
-        ));
+        expected_res.extend(get_term_bits(&concat_args[concat_args.len() - 1 - i], pool));
 
         size += size_i;
         i += 1;
@@ -668,10 +560,8 @@ pub fn sign_extend(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         return assert_eq(x, res);
     }
 
-    let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
-        unreachable!();
-    };
-    let mut x = build_term_vec(x, size, pool);
+    let size = bitvector_size(pool, x);
+    let mut x = get_term_bits(x, pool);
 
     for _j in 0..i {
         x.push(x[size - 1].clone());
@@ -683,16 +573,14 @@ pub fn sign_extend(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
 /// Bitblasts `(bvshl x y)`
 fn bitblast_shl(pool: &mut dyn TermPool, x: &Rc<Term>, y: &Rc<Term>) -> Rc<Term> {
-    let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
-        unreachable!();
-    };
+    let size = bitvector_size(pool, x);
 
     // First, we will need to bitblast a term that corresponds to `(bvult y size)`
     let size_term = pool.add(Term::new_bv(size, size));
     let y_ult_size = bitblast_ult(pool, y, &size_term);
 
-    let x = build_term_vec(x, size, pool);
-    let y = build_term_vec(y, size, pool);
+    let x = get_term_bits(x, pool);
+    let y = get_term_bits(y, pool);
 
     let mut res = x;
 
