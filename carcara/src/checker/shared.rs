@@ -306,6 +306,7 @@ pub fn get_rule(
         "bitblast_extract" => bitvectors::extract,
         "bitblast_concat" => bitvectors::concat,
         "bitblast_sign_extend" => bitvectors::sign_extend,
+        "bitblast_shl" => bitvectors::shl,
 
         "concat_eq" => strings::concat_eq,
         "concat_unify" => strings::concat_unify,

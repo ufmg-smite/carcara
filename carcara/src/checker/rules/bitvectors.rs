@@ -358,10 +358,8 @@ pub fn not(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_eq(&expected_res, res)
 }
 
-pub fn ult(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
-    assert_clause_len(conclusion, 1)?;
-    let ((x, y), res) = match_term_err!((= (bvult x y) res) = &conclusion[0])?;
-
+/// Bitblasts `(bvult x y)`
+fn bitblast_ult(pool: &mut dyn TermPool, x: &Rc<Term>, y: &Rc<Term>) -> Rc<Term> {
     let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
         unreachable!();
     };
@@ -369,18 +367,25 @@ pub fn ult(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     let x = build_term_vec(x, size, pool);
     let y = build_term_vec(y, size, pool);
 
-    let mut expected_res = build_term!(pool, (and (not {x[0].clone()}) {y[0].clone()}));
+    let mut res = build_term!(pool, (and (not {x[0].clone()}) {y[0].clone()}));
 
     for i in 1..size {
-        let new_res = build_term!(
+        res = build_term!(
             pool,
-            (or (and (= {x[i].clone()} {y[i].clone()}) {expected_res.clone()})
+            (or (and (= {x[i].clone()} {y[i].clone()}) {res.clone()})
                 (and (not {x[i].clone()}) {y[i].clone()}))
         );
-        expected_res = new_res;
     }
+    res
+}
 
-    assert_eq(&expected_res, res)
+pub fn ult(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let ((x, y), res) = match_term_err!((= (bvult x y) res) = &conclusion[0])?;
+
+    let expected = bitblast_ult(pool, x, y);
+
+    assert_eq(&expected, res)
 }
 
 pub fn slt(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
@@ -674,4 +679,53 @@ pub fn sign_extend(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
     let expected_res = pool.add(Term::Op(Operator::BvBbTerm, x));
     assert_eq(&expected_res, res)
+}
+
+/// Bitblasts `(bvshl x y)`
+fn bitblast_shl(pool: &mut dyn TermPool, x: &Rc<Term>, y: &Rc<Term>) -> Rc<Term> {
+    let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
+        unreachable!();
+    };
+
+    // First, we will need to bitblast a term that corresponds to `(bvult y size)`
+    let size_term = pool.add(Term::new_bv(size, size));
+    let y_ult_size = bitblast_ult(pool, y, &size_term);
+
+    let x = build_term_vec(x, size, pool);
+    let y = build_term_vec(y, size, pool);
+
+    let mut res = x;
+
+    // We only need to check the bits upto k = ceil(log2(size)). Note that ilog2 rounds down, so we
+    // add 1 if it's not an exact power of 2
+    let k = size.ilog2() as usize + if size.is_power_of_two() { 0 } else { 1 };
+
+    #[allow(clippy::needless_range_loop)] // clippy gets confused here
+    for s in 0..k {
+        let previous_res = res.clone();
+        let thresh = 1 << s;
+        for i in 0..size {
+            let ite_args = if i < thresh {
+                (pool.bool_false(), previous_res[i].clone())
+            } else {
+                (previous_res[i - thresh].clone(), previous_res[i].clone())
+            };
+            res[i] = build_term!(pool, (ite {y[s].clone()} {ite_args.0} {ite_args.1}));
+        }
+    }
+
+    for bit in &mut res {
+        *bit = build_term!(pool, (ite {y_ult_size.clone()} {bit.clone()} false));
+    }
+
+    pool.add(Term::Op(Operator::BvBbTerm, res))
+}
+
+pub fn shl(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let ((x, y), res) = match_term_err!((= (bvshl x y) res) = &conclusion[0])?;
+
+    let expected = bitblast_shl(pool, x, y);
+
+    assert_eq(&expected, res)
 }
