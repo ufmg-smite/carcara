@@ -264,9 +264,71 @@ fn strengthen(op: Operator, disequality: &mut LinearComb, a: &Rational) -> Opera
     }
 }
 
-pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
-    assert_num_args(args, conclusion.len())?;
+fn process_disequality(
+    (acc_op, acc): (Operator, LinearComb),
+    (phi, arg): (&Rc<Term>, Option<Rational>),
+) -> Result<(Operator, LinearComb), CheckerError> {
+    // Steps 1 and 2: Negate the disequality
+    let (mut op, s1, s2) = negate_disequality(phi)?;
 
+    // Step 3: Move all non constant terms to the left side, and the d terms to the right.
+    // We move everything to the left side by subtracting s2 from s1
+    let mut disequality = s1.sub(s2);
+    disequality.1 = -disequality.1; // We negate d to move it to the other side
+
+    // If the operator is < or <=, we flip the disequality so it is > or >=
+    if op == Operator::LessThan {
+        disequality.neg();
+        op = Operator::GreaterThan;
+    } else if op == Operator::LessEq {
+        disequality.neg();
+        op = Operator::GreaterEq;
+    }
+
+    // Extra step: infer argument if it is missing
+    let arg = match arg {
+        Some(a) => a,
+        None => {
+            rassert!(
+                disequality.0.len() == 1,
+                CheckerError::Explanation("disequality not unit".to_owned())
+            );
+            let (var, coeff_1) = disequality.0.iter().next().unwrap();
+            assert!(!coeff_1.is_zero()); // TODO
+            let coeff_2 = acc
+                .0
+                .get(var)
+                .ok_or(CheckerError::Explanation("coeff not found".to_owned()))?;
+            -coeff_2.clone() / coeff_1
+        }
+    };
+
+    // Step 4: Apply strengthening rules
+    let op = strengthen(op, &mut disequality, &arg);
+
+    // Step 5: Multiply disequality by a
+    let arg = match op {
+        Operator::Equals => arg,
+        _ => arg.abs(),
+    };
+    disequality.mul(&arg);
+
+    // let (op, diseq) = item?;
+    let new_acc = acc.add(disequality);
+    let new_op = match (acc_op, op) {
+        (_, Operator::GreaterEq) => Operator::GreaterEq,
+        (Operator::Equals, Operator::GreaterThan) => Operator::GreaterThan,
+        _ => acc_op,
+    };
+    Ok((new_op, new_acc))
+}
+
+pub fn la_generic(rule_args: RuleArgs) -> RuleResult {
+    assert_num_args(rule_args.args, rule_args.conclusion.len())?;
+    la_generic_partial(rule_args)
+}
+
+pub fn la_generic_partial(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
     let args: Vec<_> = args
         .iter()
         .map(|a| {
@@ -274,56 +336,14 @@ pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
                 .ok_or_else(|| CheckerError::ExpectedAnyNumber(a.clone()))
         })
         .collect::<Result<_, _>>()?;
+    let args = args.into_iter().map(Some).chain(std::iter::repeat(None));
 
-    let final_disequality = conclusion
+    let (op, final_disequality) = conclusion
         .iter()
         .zip(args)
-        .map(|(phi, a)| -> Result<_, CheckerError> {
-            // Steps 1 and 2: Negate the disequality
-            let (mut op, s1, s2) = negate_disequality(phi)?;
+        .try_fold((Operator::Equals, LinearComb::new()), process_disequality)?;
 
-            // Step 3: Move all non constant terms to the left side, and the d terms to the right.
-            // We move everything to the left side by subtracting s2 from s1
-            let mut disequality = s1.sub(s2);
-            disequality.1 = -disequality.1; // We negate d to move it to the other side
-
-            // If the operator is < or <=, we flip the disequality so it is > or >=
-            if op == Operator::LessThan {
-                disequality.neg();
-                op = Operator::GreaterThan;
-            } else if op == Operator::LessEq {
-                disequality.neg();
-                op = Operator::GreaterEq;
-            }
-
-            // Step 4: Apply strengthening rules
-            let op = strengthen(op, &mut disequality, &a);
-
-            // Step 5: Multiply disequality by a
-            let a = match op {
-                Operator::Equals => a,
-                _ => a.abs(),
-            };
-            disequality.mul(&a);
-
-            Ok((op, disequality))
-        })
-        .try_fold(
-            (Operator::Equals, LinearComb::new()),
-            |(acc_op, acc), item| -> Result<_, CheckerError> {
-                let (op, diseq) = item?;
-                let new_acc = acc.add(diseq);
-                let new_op = match (acc_op, op) {
-                    (_, Operator::GreaterEq) => Operator::GreaterEq,
-                    (Operator::Equals, Operator::GreaterThan) => Operator::GreaterThan,
-                    _ => acc_op,
-                };
-                Ok((new_op, new_acc))
-            },
-        )?;
-
-    let (op, LinearComb(left_side, right_side)) = &final_disequality;
-
+    let LinearComb(left_side, right_side): &LinearComb = &final_disequality;
     let is_disequality_true = {
         use std::cmp::Ordering;
         use Operator::*;
@@ -339,11 +359,14 @@ pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
 
     // The left side must be empty (that is, equal to 0), and the final disequality must be
     // contradictory
-    rassert!(
-        left_side.is_empty() && !is_disequality_true,
-        LinearArithmeticError::DisequalityIsNotContradiction(*op, Box::new(final_disequality.1)),
-    );
-    Ok(())
+    if left_side.is_empty() && !is_disequality_true {
+        Ok(())
+    } else {
+        Err(
+            LinearArithmeticError::DisequalityIsNotContradiction(op, Box::new(final_disequality))
+                .into(),
+        )
+    }
 }
 
 pub fn la_disequality(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
@@ -466,97 +489,4 @@ pub fn poly_simp(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     } else {
         Ok(())
     }
-}
-
-pub fn la_marabou(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
-    let num_args = args.len();
-    let args: Vec<_> = args
-        .iter()
-        .map(|a| {
-            a.as_fraction()
-                .ok_or_else(|| CheckerError::ExpectedAnyNumber(a.clone()))
-        })
-        .collect::<Result<_, _>>()?;
-    let equalities_comb = conclusion
-        .iter()
-        .zip(args)
-        .map(|(phi, a)| -> Result<_, CheckerError> {
-            // Steps 1 and 2: Negate the disequality
-            let (_, s1, s2) = negate_disequality(phi)?;
-
-            // Step 3: Move all non constant terms to the left side, and the d terms to the right.
-            // We move everything to the left side by subtracting s2 from s1
-            let mut disequality = s1.sub(s2);
-            disequality.1 = -disequality.1; // We negate d to move it to the other side
-
-            // Step 5: Multiply disequality by a
-            disequality.mul(&a);
-
-            Ok(disequality)
-        })
-        .try_fold(LinearComb::new(), |acc, item| -> Result<_, CheckerError> {
-            Ok(acc.add(item?))
-        })?;
-    let rest = conclusion[num_args..]
-        .iter()
-        .map(|phi| -> Result<_, CheckerError> {
-            // Steps 1 and 2: Negate the disequality
-            let (op, s1, s2) = negate_disequality(phi)?;
-            rassert!(
-                op != Operator::Equals,
-                CheckerError::Explanation("op is =".to_owned())
-            );
-
-            // Step 3: Move all non constant terms to the left side, and the d terms to the right.
-            // We move everything to the left side by subtracting s2 from s1
-            let mut disequality = s1.sub(s2);
-            disequality.1 = -disequality.1; // We negate d to move it to the other side
-
-            // If the operator is < or <=, we flip the disequality so it is > or >=
-            if op == Operator::LessThan || op == Operator::LessEq {
-                disequality.neg();
-            }
-
-            rassert!(
-                disequality.0.len() == 1,
-                CheckerError::Explanation("disequality not unit".to_owned())
-            );
-            let (var, coeff_1) = disequality.0.iter().next().unwrap();
-            assert!(!coeff_1.is_zero());
-            let coeff_2 = equalities_comb
-                .0
-                .get(var)
-                .ok_or(CheckerError::Explanation("coeff not found".to_owned()))?;
-            let inferred_arg = -coeff_2.clone() / coeff_1;
-            disequality.mul(&inferred_arg);
-            Ok(disequality)
-        })
-        .try_fold(LinearComb::new(), |acc, item| -> Result<_, CheckerError> {
-            Ok(acc.add(item?))
-        })?;
-
-    let final_disequality = equalities_comb.add(rest);
-    let LinearComb(left_side, right_side) = &final_disequality;
-
-    let is_disequality_true = {
-        use std::cmp::Ordering;
-
-        // If the operator encompasses the actual relationship between 0 and the right side, the
-        // disequality is true
-        match Rational::new().cmp(right_side) {
-            Ordering::Less | Ordering::Equal => false,
-            Ordering::Greater => true,
-        }
-    };
-
-    // The left side must be empty (that is, equal to 0), and the final disequality must be
-    // contradictory
-    rassert!(
-        left_side.is_empty() && !is_disequality_true,
-        LinearArithmeticError::DisequalityIsNotContradiction(
-            Operator::GreaterEq,
-            Box::new(final_disequality)
-        ),
-    );
-    Ok(())
 }
