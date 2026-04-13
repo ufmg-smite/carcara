@@ -250,7 +250,7 @@ impl<'e> Elaborator<'e> {
     }
 }
 
-pub fn add_refl_step(
+fn add_refl_step(
     pool: &mut dyn TermPool,
     a: Rc<Term>,
     b: Rc<Term>,
@@ -263,6 +263,22 @@ pub fn add_refl_step(
         clause: vec![build_term!(pool, (= {a} {b}))],
         rule: "refl".to_owned(),
         premises: Vec::new(),
+        args: Vec::new(),
+        discharge: Vec::new(),
+        previous_step: None,
+    }))
+}
+
+fn add_symm_step(pool: &mut PrimitivePool, node: &Rc<ProofNode>, id: String) -> Rc<ProofNode> {
+    assert_eq!(node.clause().len(), 1);
+    let (a, b) = match_term!((= a b) = node.clause()[0]).unwrap();
+    let clause = vec![build_term!(pool, (= {b.clone()} {a.clone()}))];
+    Rc::new(ProofNode::Step(StepNode {
+        id,
+        depth: node.depth(),
+        clause,
+        rule: "symm".into(),
+        premises: vec![node.clone()],
         args: Vec::new(),
         discharge: Vec::new(),
         previous_step: None,
