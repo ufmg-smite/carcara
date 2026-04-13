@@ -510,3 +510,16 @@ mod tests {
         }
     }
 }
+
+#[macro_export]
+macro_rules! match_term_flat_err {
+    ($pat:tt = $var:expr) => {{
+        let var = $var;
+        carcara_macros::match_term_flat!($pat = var).ok_or_else(|| {
+            $crate::checker::error::CheckerError::TermOfWrongForm(
+                stringify!($pat),
+                var.clone(),
+            )
+        })
+    }};
+}
