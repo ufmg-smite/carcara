@@ -617,3 +617,53 @@ pub fn shl(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
     assert_eq(&expected, res)
 }
+
+/// Bitblasts `(bvlshr x y)`
+fn bitblast_lshr(pool: &mut dyn TermPool, x: &Rc<Term>, y: &Rc<Term>) -> Rc<Term> {
+    let size = bitvector_size(pool, x);
+
+    // First, we will need to bitblast a term that corresponds to `(bvult y size)`
+    let size_term = pool.add(Term::new_bv(size, size));
+    let y_ult_size = bitblast_ult(pool, y, &size_term);
+
+    let x = get_term_bits(x, pool);
+    let y = get_term_bits(y, pool);
+
+    let mut res = x;
+
+    // We only need to check the bits upto k = ceil(log2(size)). Note that ilog2 rounds down, so we
+    // add 1 if it's not an exact power of 2
+    let k = size.ilog2() as usize + if size.is_power_of_two() { 0 } else { 1 };
+
+    #[allow(clippy::needless_range_loop)] // clippy gets confused here
+    for s in 0..k {
+        let previous_res = res.clone();
+        let thresh = 1 << s;
+        for i in 0..size {
+            res[i] = if i + thresh >= size {
+                build_term!(pool, (ite {y[s].clone()} false {previous_res[i].clone()}))
+            } else {
+                build_term!(pool, (ite
+                    (not {y[s].clone()})
+                    {previous_res[i].clone()}
+                    {previous_res[i + thresh].clone()}
+                ))
+            };
+        }
+    }
+
+    for bit in &mut res {
+        *bit = build_term!(pool, (ite {y_ult_size.clone()} {bit.clone()} false));
+    }
+
+    pool.add(Term::Op(Operator::BvBbTerm, res))
+}
+
+pub fn lshr(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let ((x, y), res) = match_term_err!((= (bvlshr x y) res) = &conclusion[0])?;
+
+    let expected = bitblast_lshr(pool, x, y);
+
+    assert_eq(&expected, res)
+}
