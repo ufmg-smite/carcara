@@ -594,45 +594,34 @@ fn bitblast_shift_op(
     // add 1 if it's not an exact power of 2
     let k = size.ilog2() as usize + if size.is_power_of_two() { 0 } else { 1 };
 
-    #[allow(clippy::needless_range_loop)] // clippy gets confused here
-    for s in 0..k {
-        let previous_res = res.clone();
+    for (s, ys) in y.into_iter().enumerate().take(k) {
+        let previous = res.clone();
         let thresh = 1 << s;
         for i in 0..size {
+            let ys = ys.clone();
             res[i] = match op {
                 Operator::BvShl => {
                     if i < thresh {
-                        build_term!(pool,
-                            (ite {y[s].clone()} {pool.bool_false()} {previous_res[i].clone()}))
+                        build_term!(pool, (ite {ys} {pool.bool_false()} {previous[i].clone()}))
                     } else {
-                        build_term!(pool, (ite
-                            {y[s].clone()}
-                            {previous_res[i - thresh].clone()}
-                            {previous_res[i].clone()}
-                        ))
+                        build_term!(pool,
+                            (ite {ys} {previous[i - thresh].clone()} {previous[i].clone()}))
                     }
                 }
                 Operator::BvLShr => {
                     if i + thresh >= size {
-                        build_term!(pool, (ite {y[s].clone()} false {previous_res[i].clone()}))
+                        build_term!(pool, (ite {ys} false {previous[i].clone()}))
                     } else {
-                        build_term!(pool, (ite
-                            (not {y[s].clone()})
-                            {previous_res[i].clone()}
-                            {previous_res[i + thresh].clone()}
-                        ))
+                        build_term!(pool,
+                            (ite (not {ys}) {previous[i].clone()} {previous[i + thresh].clone()}))
                     }
                 }
                 Operator::BvAShr => {
                     if i + thresh >= size {
-                        build_term!(pool,
-                            (ite {y[s].clone()} {sign_bit.clone()} {previous_res[i].clone()}))
+                        build_term!(pool, (ite {ys} {sign_bit.clone()} {previous[i].clone()}))
                     } else {
-                        build_term!(pool, (ite
-                            (not {y[s].clone()})
-                            {previous_res[i].clone()}
-                            {previous_res[i + thresh].clone()}
-                        ))
+                        build_term!(pool,
+                            (ite (not {ys}) {previous[i].clone()} {previous[i + thresh].clone()}))
                     }
                 }
                 _ => unreachable!(),
