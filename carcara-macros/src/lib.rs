@@ -274,6 +274,7 @@ fn op_to_variant(op: &str) -> TokenStream2 {
         "bvurem" => quote! { crate::ast::Operator::BvURem },
         "bvshl" => quote! { crate::ast::Operator::BvShl },
         "bvlshr" => quote! { crate::ast::Operator::BvLShr },
+        "bvashr" => quote! { crate::ast::Operator::BvAShr },
         "concat" => quote! { crate::ast::Operator::BvConcat },
 
         // Bitvector — comparisons
