@@ -198,6 +198,7 @@ macro_rules! match_term {
     (@GET_VARIANT bvurem)   => { $crate::ast::Operator::BvURem };
     (@GET_VARIANT bvshl)    => { $crate::ast::Operator::BvShl };
     (@GET_VARIANT bvlshr)   => { $crate::ast::Operator::BvLShr };
+    (@GET_VARIANT bvashr)   => { $crate::ast::Operator::BvAShr };
     (@GET_VARIANT concat)   => { $crate::ast::Operator::BvConcat };
 
     (@GET_VARIANT bvuge)    => { $crate::ast::Operator::BvUGe };
