@@ -311,6 +311,8 @@ pub fn get_rule(
         "bitblast_shl" => bitvectors::shl,
         "bitblast_lshr" => bitvectors::lshr,
         "bitblast_ashr" => bitvectors::ashr,
+        "bitblast_udiv" => bitvectors::udiv,
+        "bitblast_urem" => bitvectors::urem,
 
         "concat_eq" => strings::concat_eq,
         "concat_unify" => strings::concat_unify,
