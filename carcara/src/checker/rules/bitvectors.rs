@@ -30,12 +30,14 @@ fn get_term_bits(term: &Rc<Term>, pool: &mut dyn TermPool) -> Vec<Rc<Term>> {
     term
 }
 
-fn ripple_carry_adder(x: &Rc<Term>, y: &Rc<Term>, pool: &mut dyn TermPool) -> Rc<Term> {
-    let size = bitvector_size(pool, x);
-    let x = get_term_bits(x, pool);
-    let y = get_term_bits(y, pool);
-
-    let mut carries = vec![pool.bool_false()];
+fn ripple_carry_adder(
+    x: &[Rc<Term>],
+    y: &[Rc<Term>],
+    carry: Option<Rc<Term>>,
+    pool: &mut dyn TermPool,
+) -> (Vec<Rc<Term>>, Rc<Term>) {
+    let size = x.len();
+    let mut carries = vec![carry.unwrap_or_else(|| pool.bool_false())];
 
     for i in 1..size {
         let carry_i = build_term!(
@@ -53,16 +55,10 @@ fn ripple_carry_adder(x: &Rc<Term>, y: &Rc<Term>, pool: &mut dyn TermPool) -> Rc
         carries.push(carry_i);
     }
 
-    let res_args: Vec<_> = (0..size)
-        .map(|i| {
-            build_term!(
-                pool,
-                (xor (xor {x[i].clone()} {y[i].clone()}) {carries[i].clone()})
-            )
-        })
+    let res = (0..size)
+        .map(|i| build_term!(pool, (xor (xor {x[i].clone()} {y[i].clone()}) {carries[i].clone()})))
         .collect();
-
-    pool.add(Term::Op(Operator::BvBbTerm, res_args))
+    (res, carries.pop().unwrap())
 }
 
 fn shift_add_multiplier(x: &Rc<Term>, y: &Rc<Term>, pool: &mut dyn TermPool) -> Rc<Term> {
@@ -381,11 +377,18 @@ pub fn add(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     let (add_args, res) = match_term_err!((= (bvadd ...) res) = &conclusion[0])?;
 
     let mut i = 1;
-    let mut expected_res = add_args[0].clone();
+    let mut expected_res = get_term_bits(&add_args[0], pool);
     while i < add_args.len() {
-        expected_res = ripple_carry_adder(&expected_res, &add_args[i], pool);
+        expected_res = ripple_carry_adder(
+            &expected_res,
+            &get_term_bits(&add_args[i], pool),
+            None,
+            pool,
+        )
+        .0;
         i += 1;
     }
+    let expected_res = pool.add(Term::Op(Operator::BvBbTerm, expected_res));
     assert_eq(&expected_res, res)
 }
 
@@ -659,6 +662,120 @@ pub fn ashr(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     let ((x, y), res) = match_term_err!((= (bvashr x y) res) = &conclusion[0])?;
 
     let expected = bitblast_shift_op(pool, Operator::BvAShr, x, y);
+
+    assert_eq(&expected, res)
+}
+
+// Returns a quotient/remainder pair
+fn bitblast_udiv_urem_rec(
+    pool: &mut dyn TermPool,
+    x: &[Rc<Term>],
+    y: &[Rc<Term>],
+    n: usize,
+) -> (Vec<Rc<Term>>, Vec<Rc<Term>>) {
+    fn shift_right(pool: &mut dyn TermPool, v: &mut [Rc<Term>]) {
+        v.rotate_left(1); // Rust and SMT-LIB disagree on endianess
+        *v.last_mut().unwrap() = pool.bool_false();
+    }
+
+    fn shift_left(pool: &mut dyn TermPool, v: &mut [Rc<Term>]) {
+        v.rotate_right(1); // Rust and SMT-LIB disagree on endianess
+        *v.first_mut().unwrap() = pool.bool_false();
+    }
+
+    if n == 0 || x.iter().all(|xi| xi.is_bool_false()) {
+        let zero = vec![pool.bool_false(); x.len()];
+        return (zero.clone(), zero);
+    }
+
+    let mut x1 = x.to_vec();
+    shift_right(pool, &mut x1);
+
+    let (mut q1, mut r1) = bitblast_udiv_urem_rec(pool, &x1, y, n - 1);
+
+    shift_left(pool, &mut q1);
+    shift_left(pool, &mut r1);
+
+    let one_if_odd = build_term!(pool, (ite (= {x[0].clone()} true) true false));
+
+    let (mut r1_shift_add, _) = ripple_carry_adder(
+        &r1,
+        &vec![pool.bool_false(); x.len()],
+        Some(one_if_odd),
+        pool,
+    );
+    let not_y: Vec<_> = y
+        .iter()
+        .map(|yi| build_term!(pool, (not {yi.clone()})))
+        .collect();
+
+    let (_, co1) = ripple_carry_adder(&r1_shift_add, &not_y, Some(pool.bool_true()), pool);
+    let sign = build_term!(pool, (not { co1 }));
+    q1[0] = build_term!(pool, (ite {sign.clone()} {q1[0].clone()} true));
+
+    for bit in &mut r1_shift_add {
+        *bit = build_term!(pool, (ite {sign.clone()} {bit.clone()} true));
+    }
+
+    let (_, co2) = ripple_carry_adder(x, &not_y, Some(pool.bool_true()), pool);
+    let x_lt_y = build_term!(pool, (not { co2 }));
+
+    let (quot, rem) = (0..x.len())
+        .map(|i| {
+            let q = build_term!(pool, (ite {x_lt_y.clone()} false {q1[i].clone()}));
+            let r =
+                build_term!(pool, (ite {x_lt_y.clone()} {x[i].clone()} {r1_shift_add[i].clone()}));
+            (q, r)
+        })
+        .unzip();
+    (quot, rem)
+}
+
+fn bitblast_udiv_urem(
+    pool: &mut dyn TermPool,
+    x: &Rc<Term>,
+    y: &Rc<Term>,
+) -> (Vec<Rc<Term>>, Vec<Rc<Term>>) {
+    let [x, y] = [x, y].map(|t| get_term_bits(t, pool));
+
+    let (quot, rem) = bitblast_udiv_urem_rec(pool, &x, &y, x.len());
+
+    let y_is_zero = {
+        let args: Vec<_> = y
+            .into_iter()
+            .map(|yi| build_term!(pool, (= {yi} false)))
+            .collect();
+        pool.add(Term::Op(Operator::And, args))
+    };
+
+    let quot = quot
+        .into_iter()
+        .map(|qi| build_term!(pool, (ite {y_is_zero.clone()} true {qi})))
+        .collect();
+    let rem = rem
+        .into_iter()
+        .zip(x)
+        .map(|(ri, xi)| build_term!(pool, (ite {y_is_zero.clone()} {xi} {ri})))
+        .collect();
+    (quot, rem)
+}
+
+pub fn udiv(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let ((x, y), res) = match_term_err!((= (bvudiv x y) res) = &conclusion[0])?;
+
+    let (expected, _) = bitblast_udiv_urem(pool, x, y);
+    let expected = pool.add(Term::Op(Operator::BvBbTerm, expected));
+
+    assert_eq(&expected, res)
+}
+
+pub fn urem(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
+    let ((x, y), res) = match_term_err!((= (bvurem x y) res) = &conclusion[0])?;
+
+    let (_, expected) = bitblast_udiv_urem(pool, x, y);
+    let expected = pool.add(Term::Op(Operator::BvBbTerm, expected));
 
     assert_eq(&expected, res)
 }
