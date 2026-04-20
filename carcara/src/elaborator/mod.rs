@@ -181,6 +181,7 @@ impl<'e> Elaborator<'e> {
                 "trans" => transitivity::trans,
                 "resolution" | "th_resolution" => resolution::resolution,
                 "cong" => congruence::cong,
+                "eq_congruent" => congruence::eq_congruent,
                 _ => return None,
             })
         }

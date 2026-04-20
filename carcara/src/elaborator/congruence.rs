@@ -1,5 +1,10 @@
 use super::{add_symm_step, IdHelper};
-use crate::{ast::*, checker::error::CheckerError};
+use crate::{
+    ast::*,
+    checker::error::CheckerError,
+    utils::{DedupIterator, MultiSet},
+};
+use std::collections::HashSet;
 
 fn build_eq_symm_step(
     pool: &mut PrimitivePool,
@@ -212,4 +217,180 @@ fn elaborate_cong_between_equalities(
         // the step is invalid
         unreachable!()
     }
+}
+
+pub fn eq_congruent(
+    pool: &mut PrimitivePool,
+    _: &mut ContextStack,
+    step: &StepNode,
+) -> Result<Rc<ProofNode>, CheckerError> {
+    assert!(step.clause.len() >= 2);
+
+    let premises: Vec<_> = step.clause[..step.clause.len() - 1]
+        .iter()
+        .map(|term| match_term!((not (= t u)) = term).unwrap())
+        .collect();
+
+    let (f, g) = match_term_err!((= f g) = step.clause.last().unwrap())?;
+    let [f_args, g_args] = [f, g].map(term_args);
+
+    let mut flipped = vec![false; premises.len()];
+    let is_valid = check_cong(&premises, f_args, g_args, Some(&mut flipped));
+    assert!(is_valid);
+
+    if !flipped.iter().any(|f| *f) {
+        return Ok(Rc::new(ProofNode::Step(step.clone())));
+    }
+
+    // If there are any flipped premises, we need to change the `eq_congruent` step's conclusion to
+    // fix them, and then reconstruct the original conclusion. The general idea is to, for each
+    // flipped premise `(not (= u t))`, add an `eq_symmetric` step concluding `(= (= u t) (= t u))`,
+    // and use `equiv1` to turn that into `(cl (not (= u t)) (= t u))`. Then, we resolve the fixed
+    // `eq_congruent` step with this `equiv1` step to replace the flipped premise, and reach the
+    // original conclusion after a reordering.
+    //
+    // The annoying case is when there are duplicate flipped premises. Then, we must take extra
+    // care to make sure the resolution step is still valid. We must:
+    // - first apply a `contraction` to the `eq_congruent` step before resolution,
+    // - omit the `eq_symmetric`/`equiv1` construction for duplicate premises,
+    // - omit these duplicates in the `resolution` conclusion,
+    // - and add a `weakening` step to get back the conclusion with duplicates.
+
+    let mut ids = IdHelper::new(&step.id);
+
+    // (1) First, we build the fixed `eq_congruent` step, possibly applying a `contraction` if there
+    // are duplicate premises.
+    let fixed_eq_congruent_step = {
+        let fixed_conclusion: Vec<_> = premises
+            .iter()
+            .zip(&flipped)
+            .map(|(&(t, u), flipped)| if *flipped { (u, t) } else { (t, u) })
+            .map(|(t, u)| build_term!(pool, (not (= {t.clone()} {u.clone()}))))
+            .chain(std::iter::once(step.clause.last().unwrap().clone()))
+            .collect();
+
+        let contracted: Vec<_> = fixed_conclusion.iter().dedup().cloned().collect();
+        let needs_contraction = contracted.len() != fixed_conclusion.len();
+
+        let eq_congruent = Rc::new(ProofNode::Step(StepNode {
+            id: ids.next_id(),
+            depth: step.depth,
+            clause: fixed_conclusion,
+            rule: "eq_congruent".to_owned(),
+            ..StepNode::default()
+        }));
+
+        if needs_contraction {
+            Rc::new(ProofNode::Step(StepNode {
+                id: ids.next_id(),
+                depth: step.depth,
+                clause: contracted,
+                rule: "contraction".to_owned(),
+                premises: vec![eq_congruent],
+                ..StepNode::default()
+            }))
+        } else {
+            eq_congruent
+        }
+    };
+
+    let mut seen_premises = HashSet::new();
+    let mut resolution_premises = vec![fixed_eq_congruent_step];
+    let mut resolution_args = Vec::new();
+
+    // (2) Then, we construct `eq_symmetric`/`equiv1` steps for each unique flipped premise.
+    for (&(u, t), _) in premises
+        .iter()
+        .zip(&flipped)
+        .filter(|(_, flipped)| **flipped)
+    {
+        // The resolution step we are building would not work with duplicate premises, so we must
+        // skip them. This will be fixed later with a weakening step.
+        if !seen_premises.insert((u.clone(), t.clone())) {
+            continue;
+        }
+
+        let t_eq_u = build_term!(pool, (= {t.clone()} {u.clone()}));
+        let u_eq_t = build_term!(pool, (= {u.clone()} {t.clone()}));
+        let eq_symmetric = Rc::new(ProofNode::Step(StepNode {
+            id: ids.next_id(),
+            depth: step.depth,
+            clause: vec![build_term!(pool, (= {u_eq_t.clone()} {t_eq_u.clone()}))],
+            rule: "eq_symmetric".to_owned(),
+            ..StepNode::default()
+        }));
+        let equiv_1 = Rc::new(ProofNode::Step(StepNode {
+            id: ids.next_id(),
+            depth: step.depth,
+            clause: vec![build_term!(pool, (not { u_eq_t })), t_eq_u.clone()],
+            rule: "equiv1".to_owned(),
+            premises: vec![eq_symmetric],
+            ..StepNode::default()
+        }));
+        resolution_premises.push(equiv_1);
+        resolution_args.extend([t_eq_u, pool.bool_false()]);
+    }
+
+    // (3) Next, we create the resolution step.
+    let resolution_clause: Vec<_> = {
+        flipped.push(false); // Add an extra `false` for the conclusion term
+
+        // The conclusion of the resolution step will be, first, all terms which are not flipped
+        // premises
+        step.clause
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !flipped[*i])
+            // ...followed by the flipped premises, which are added by resolution
+            .chain(step.clause.iter().enumerate().filter(|(i, _)| flipped[*i]))
+            .map(|(_, t)| t.clone())
+            .dedup() // ...with duplicates removed
+            .collect()
+    };
+
+    // If there are any duplicate premises, they were omitted in the resolution clause. We will add
+    // them back with a `weakening` step.
+    let needs_weakening = step.clause.len() != resolution_clause.len();
+    let resolution = Rc::new(ProofNode::Step(StepNode {
+        id: ids.next_id(),
+        depth: step.depth,
+        clause: resolution_clause,
+        rule: "resolution".to_owned(),
+        premises: resolution_premises,
+        args: resolution_args,
+        ..StepNode::default()
+    }));
+
+    // (4) If needed, we apply `weakening` to add back the duplicate premises.
+    let weakened = if needs_weakening {
+        // we have to make sure that the terms added by weakening are at the end of the clause
+        let mut missing: MultiSet<_> = step.clause.iter().collect();
+        for term in resolution.clause() {
+            assert!(missing.get(&term) != 0);
+            missing.remove(term);
+        }
+        let mut clause = resolution.clause().to_vec();
+        clause.extend(missing.into_iter().cloned());
+
+        Rc::new(ProofNode::Step(StepNode {
+            id: ids.next_id(),
+            depth: step.depth,
+            clause,
+            rule: "weakening".to_owned(),
+            premises: vec![resolution],
+            ..StepNode::default()
+        }))
+    } else {
+        resolution
+    };
+
+    // (5) Finally, we apply a reordering to get back the original clause.
+    Ok(Rc::new(ProofNode::Step(StepNode {
+        id: step.id.clone(),
+        depth: step.depth,
+        clause: step.clause.clone(),
+        rule: "reordering".to_owned(),
+        premises: vec![weakened],
+        ..StepNode::default()
+    })))
 }
