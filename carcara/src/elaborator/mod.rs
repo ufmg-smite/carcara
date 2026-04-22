@@ -286,6 +286,26 @@ fn add_symm_step(pool: &mut PrimitivePool, node: &Rc<ProofNode>, id: String) -> 
     }))
 }
 
+fn add_trans_step(
+    pool: &mut PrimitivePool,
+    nodes: impl IntoIterator<Item = Rc<ProofNode>>,
+    id: String,
+) -> Rc<ProofNode> {
+    let premises: Vec<_> = nodes.into_iter().collect();
+    let depth = premises.first().unwrap().depth();
+    let (a, _) =
+        match_term!((= a b) = premises.first().unwrap().clause().first().unwrap()).unwrap();
+    let (_, b) = match_term!((= a b) = premises.last().unwrap().clause().first().unwrap()).unwrap();
+    Rc::new(ProofNode::Step(StepNode {
+        id,
+        depth,
+        clause: vec![build_term!(pool, (= {a.clone()} {b.clone()}))],
+        rule: "trans".to_owned(),
+        premises,
+        ..StepNode::default()
+    }))
+}
+
 type ElaborationFunc =
     fn(&mut PrimitivePool, &mut ContextStack, &StepNode) -> Result<Rc<ProofNode>, CheckerError>;
 

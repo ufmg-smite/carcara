@@ -32,61 +32,79 @@ pub fn refl(
 
     let (left, right) = match_term_err!((= l r) = &step.clause[0])?;
 
+    // This elaboration has the goal of fixing two problems we see in real world proofs: the need
+    // for polyequality reasoning, and the need for applying the context to the right-hand term.
+    //
+    // In the most trivial case, no context application and no polyequality is needed.
     if left == right {
         return Ok(Rc::new(ProofNode::Step(step.clone())));
     }
 
-    // We don't compute the new left and right terms until they are needed
+    // In the case where we only need to apply the context to the left-hand term, no elaboration
+    // is needed also.
     let new_left = context.apply(pool, left);
     if new_left == *right {
         return Ok(Rc::new(ProofNode::Step(step.clone())));
     }
-    let new_right = context.apply(pool, right);
-    if *left == new_right || new_left == new_right {
-        return Ok(Rc::new(ProofNode::Step(step.clone())));
-    }
 
+    // The remaining cases actually require elaboration
     let mut ids = IdHelper::new(&step.id);
     let depth = step.depth;
 
-    // There are three cases to consider when elaborating a `refl` step. In the simpler case, no
-    // context application is needed, and we can prove the equivalence of the left and right terms
-    // directly. In the second case, we need to first apply the context to the left term, using a
-    // `refl` step, and then prove the equivalence of the new left term with the right term. In the
-    // third case, we also need to apply the context to the right term, using another `refl` step.
+    // First, we will handle the cases where no polyequality is needed, and we just need to sort out
+    // the context application.
+    //
+    // If the substitution needs to be applied on the right term, we flip the `refl` equality and
+    // add a `symm` step to flip it back.
+    let new_right = context.apply(pool, right);
+    if *left == new_right {
+        let flipped = add_refl_step(pool, right.clone(), new_right, ids.next_id(), depth);
+        return Ok(add_symm_step(pool, &flipped, step.id.clone()));
+    }
+
+    // If it needs to be applied to both sides, we split it into two `refl` steps, and add a `symm`
+    // and `trans` to stitch them together.
+    if new_left == new_right {
+        let left_refl = add_refl_step(pool, left.clone(), new_left, ids.next_id(), depth);
+        let right_refl = add_refl_step(pool, right.clone(), new_right, ids.next_id(), depth);
+        let right_symm = add_symm_step(pool, &right_refl, ids.next_id());
+
+        return Ok(add_trans_step(
+            pool,
+            [left_refl, right_symm],
+            step.id.clone(),
+        ));
+    }
+
+    // Now for the cases where we might also need polyequality. These mostly mirror the previous
+    // cases
     if alpha_equiv(left, right) {
-        let equality_step = elaborate_equality(pool, left, right, &mut ids, depth);
-        Ok(equality_step)
+        // First, the case where no context application is needed, only polyequality reasoning
+        Ok(elaborate_equality(pool, left, right, &mut ids, depth))
+    } else if alpha_equiv(&new_left, right) {
+        // Next, the one where we only need to apply the context on the left
+        let left_refl = add_refl_step(pool, left.clone(), new_left.clone(), ids.next_id(), depth);
+        let polyeq = elaborate_equality(pool, &new_left, right, &mut ids, depth);
+        Ok(add_trans_step(pool, [left_refl, polyeq], step.id.clone()))
+    } else if alpha_equiv(left, &new_right) {
+        // Next, when we need to apply the context on the right
+        let polyeq = elaborate_equality(pool, left, &new_right, &mut ids, depth);
+        let right_refl = add_refl_step(pool, right.clone(), new_right, ids.next_id(), depth);
+        let right_symm = add_symm_step(pool, &right_refl, ids.next_id());
+        Ok(add_trans_step(pool, [polyeq, right_symm], step.id.clone()))
+    } else if alpha_equiv(&new_left, &new_right) {
+        // And finally, the case where we need to apply it to both sides
+        let left_refl = add_refl_step(pool, left.clone(), new_left.clone(), ids.next_id(), depth);
+        let polyeq = elaborate_equality(pool, &new_left, &new_right, &mut ids, depth);
+        let right_refl = add_refl_step(pool, right.clone(), new_right, ids.next_id(), depth);
+        let right_symm = add_symm_step(pool, &right_refl, ids.next_id());
+        Ok(add_trans_step(
+            pool,
+            [left_refl, polyeq, right_symm],
+            step.id.clone(),
+        ))
     } else {
-        let first_step = add_refl_step(pool, left.clone(), new_left.clone(), ids.next_id(), depth);
-
-        if alpha_equiv(&new_left, right) {
-            let second_step = elaborate_equality(pool, &new_left, right, &mut ids, depth);
-
-            Ok(Rc::new(ProofNode::Step(StepNode {
-                id: ids.next_id(),
-                depth,
-                clause: step.clause.clone(),
-                rule: "trans".to_owned(),
-                premises: vec![first_step, second_step],
-                ..Default::default()
-            })))
-        } else if alpha_equiv(&new_left, &new_right) {
-            let second_step = elaborate_equality(pool, &new_left, right, &mut ids, depth);
-
-            let third_step =
-                add_refl_step(pool, new_right.clone(), right.clone(), ids.next_id(), depth);
-
-            Ok(Rc::new(ProofNode::Step(StepNode {
-                id: ids.next_id(),
-                depth,
-                clause: step.clause.clone(),
-                rule: "trans".to_owned(),
-                premises: vec![first_step, second_step, third_step],
-                ..Default::default()
-            })))
-        } else {
-            Err(CheckerError::ReflexivityFailed(left.clone(), right.clone()))
-        }
+        // If no case matches, this step is not valid!
+        Err(CheckerError::ReflexivityFailed(left.clone(), right.clone()))
     }
 }
