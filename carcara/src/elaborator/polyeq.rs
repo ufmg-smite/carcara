@@ -29,7 +29,7 @@ impl<'a> PolyeqElaborator<'a> {
     /// proves their equality.
     pub fn elaborate(
         &mut self,
-        pool: &mut dyn TermPool,
+        pool: &mut PrimitivePool,
         a: Rc<Term>,
         b: Rc<Term>,
     ) -> Rc<ProofNode> {
@@ -46,7 +46,7 @@ impl<'a> PolyeqElaborator<'a> {
 
     fn elaborate_impl(
         &mut self,
-        pool: &mut dyn TermPool,
+        pool: &mut PrimitivePool,
         a: Rc<Term>,
         b: Rc<Term>,
     ) -> Rc<ProofNode> {
@@ -212,7 +212,7 @@ impl<'a> PolyeqElaborator<'a> {
     }
 
     /// Returns `true` if the terms are directly equal, modulo application of the current context.
-    fn directly_eq(&mut self, pool: &mut dyn TermPool, a: &Rc<Term>, b: &Rc<Term>) -> bool {
+    fn directly_eq(&mut self, pool: &mut PrimitivePool, a: &Rc<Term>, b: &Rc<Term>) -> bool {
         match &mut self.context {
             Some(c) => c.apply(pool, a) == *b,
             None => a == b,
@@ -221,7 +221,7 @@ impl<'a> PolyeqElaborator<'a> {
 
     /// Returns `true` if the terms are equal modulo reordering of inequalities, and modulo
     /// application of the current context.
-    fn polyeq(&mut self, pool: &mut dyn TermPool, a: &Rc<Term>, b: &Rc<Term>) -> bool {
+    fn polyeq(&mut self, pool: &mut PrimitivePool, a: &Rc<Term>, b: &Rc<Term>) -> bool {
         match &mut self.context {
             Some(c) => self.checker.eq(&c.apply(pool, a), b),
             None => self.checker.eq(a, b),
@@ -230,7 +230,7 @@ impl<'a> PolyeqElaborator<'a> {
 
     fn build_cong(
         &mut self,
-        pool: &mut dyn TermPool,
+        pool: &mut PrimitivePool,
         (a, b): (&Rc<Term>, &Rc<Term>),
         (a_args, b_args): (&[Rc<Term>], &[Rc<Term>]),
     ) -> Rc<ProofNode> {
@@ -259,7 +259,7 @@ impl<'a> PolyeqElaborator<'a> {
 
     fn flip_equality(
         &mut self,
-        pool: &mut dyn TermPool,
+        pool: &mut PrimitivePool,
         (a, a_left, a_right): (Rc<Term>, Rc<Term>, Rc<Term>),
         (b, b_left, b_right): (Rc<Term>, Rc<Term>, Rc<Term>),
     ) -> Rc<ProofNode> {
@@ -326,14 +326,7 @@ impl<'a> PolyeqElaborator<'a> {
             ..Default::default()
         }));
 
-        Rc::new(ProofNode::Step(StepNode {
-            id: self.ids.next_id(),
-            depth: self.depth(),
-            clause: vec![build_term!(pool, (= {a} {b}))],
-            rule: "trans".to_owned(),
-            premises: vec![cong_step, equiv_step],
-            ..Default::default()
-        }))
+        add_trans_step(pool, [cong_step, equiv_step], self.ids.next_id())
     }
 
     fn open_subproof(&mut self) {
@@ -365,7 +358,7 @@ impl<'a> PolyeqElaborator<'a> {
     /// quantifier or `let` terms. This assumes the subproof has already been opened.
     fn create_bind_subproof(
         &mut self,
-        pool: &mut dyn TermPool,
+        pool: &mut PrimitivePool,
         inner_equality: (Rc<Term>, Rc<Term>),
     ) -> Rc<ProofNode> {
         let (a, b) = inner_equality;
@@ -392,7 +385,7 @@ impl<'a> PolyeqElaborator<'a> {
 
     fn elaborate_assoc(
         &mut self,
-        pool: &mut dyn TermPool,
+        pool: &mut PrimitivePool,
         op: Operator,
         nary: &[Rc<Term>],
         binary: &Rc<Term>,
@@ -437,19 +430,12 @@ impl<'a> PolyeqElaborator<'a> {
             ..Default::default()
         }));
 
-        Rc::new(ProofNode::Step(StepNode {
-            id: self.ids.next_id(),
-            depth: self.depth(),
-            clause: vec![build_term!(pool, (= {nary.clone()} {binary.clone()}))],
-            rule: "trans".to_owned(),
-            premises: vec![cong_step, nary_elim_step],
-            ..Default::default()
-        }))
+        add_trans_step(pool, [cong_step, nary_elim_step], self.ids.next_id())
     }
 
     fn get_assoc_premises(
         &mut self,
-        pool: &mut dyn TermPool,
+        pool: &mut PrimitivePool,
         premises: &mut Vec<Rc<ProofNode>>,
         op: Operator,
         nary: &[Rc<Term>],

@@ -2,6 +2,7 @@ use super::{add_symm_step, IdHelper};
 use crate::{
     ast::*,
     checker::error::CheckerError,
+    elaborator::add_trans_step,
     utils::{DedupIterator, MultiSet},
 };
 use std::collections::HashSet;
@@ -95,10 +96,10 @@ pub fn cong(
         } else {
             flip_needed_premises(pool, step.clone())
         };
-    Ok(Rc::new(ProofNode::Step(step)))
+    Ok(step)
 }
 
-fn flip_needed_premises(pool: &mut PrimitivePool, step: StepNode) -> StepNode {
+fn flip_needed_premises(pool: &mut PrimitivePool, step: StepNode) -> Rc<ProofNode> {
     let (f, g) = match_term!((= f g) = &step.clause[0]).unwrap();
     let [f_args, g_args] = [f, g].map(term_args);
     let premises: Vec<_> = step
@@ -124,9 +125,9 @@ fn flip_needed_premises(pool: &mut PrimitivePool, step: StepNode) -> StepNode {
                 }
             })
             .collect();
-        StepNode { premises: new_premises, ..step }
+        Rc::new(ProofNode::Step(StepNode { premises: new_premises, ..step }))
     } else {
-        step
+        Rc::new(ProofNode::Step(step))
     }
 }
 
@@ -135,18 +136,18 @@ fn elaborate_cong_between_equalities(
     step: &StepNode,
     (f1, f2): (&Rc<Term>, &Rc<Term>),
     (g1, g2): (&Rc<Term>, &Rc<Term>),
-) -> Result<StepNode, CheckerError> {
+) -> Result<Rc<ProofNode>, CheckerError> {
     // At this point, we know there are either one or two premises
     assert!(step.premises.len() <= 2);
 
     // Similar to the `refl` case, sometimes `cong` is used to derive `(= (= a b) (= b a))`. In this
     // case, we turn the step into a `eq_symmetric` step, without any premise
     if f1 == g2 && f2 == g1 {
-        return Ok(StepNode {
+        return Ok(Rc::new(ProofNode::Step(StepNode {
             rule: "eq_symmetric".to_owned(),
             premises: vec![],
             ..step.clone()
-        });
+        })));
     }
 
     let premises: Vec<_> = step
@@ -172,15 +173,8 @@ fn elaborate_cong_between_equalities(
             premises: step.premises.clone(),
             ..StepNode::default()
         };
-        let cong_step = Rc::new(ProofNode::Step(flip_needed_premises(pool, cong_step)));
-        let trans_step = StepNode {
-            id: step.id.clone(),
-            depth: step.depth,
-            clause: step.clause.clone(),
-            rule: "trans".to_owned(),
-            premises: vec![eq_symm_step, cong_step],
-            ..StepNode::default()
-        };
+        let cong_step = flip_needed_premises(pool, cong_step);
+        let trans_step = add_trans_step(pool, [eq_symm_step, cong_step], step.id.clone());
         Ok(trans_step)
     } else if check_cong(&premises, [f1, f2], [g2, g1], None) {
         // g is flipped
@@ -195,15 +189,8 @@ fn elaborate_cong_between_equalities(
             premises: step.premises.clone(),
             ..StepNode::default()
         };
-        let cong_step = Rc::new(ProofNode::Step(flip_needed_premises(pool, cong_step)));
-        let trans_step = StepNode {
-            id: step.id.clone(),
-            depth: step.depth,
-            clause: step.clause.clone(),
-            rule: "trans".to_owned(),
-            premises: vec![cong_step, eq_symm_step],
-            ..StepNode::default()
-        };
+        let cong_step = flip_needed_premises(pool, cong_step);
+        let trans_step = add_trans_step(pool, [cong_step, eq_symm_step], step.id.clone());
         Ok(trans_step)
     } else if check_cong(&premises, [f2, f1], [g2, g1], None) {
         // Both are flipped. This can only happen if there are two premises

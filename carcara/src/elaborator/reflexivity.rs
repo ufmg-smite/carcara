@@ -13,7 +13,7 @@ fn alpha_equiv(a: &Rc<Term>, b: &Rc<Term>) -> bool {
 }
 
 fn elaborate_equality(
-    pool: &mut dyn TermPool,
+    pool: &mut PrimitivePool,
     l: &Rc<Term>,
     r: &Rc<Term>,
     ids: &mut IdHelper,
