@@ -65,7 +65,7 @@ fn run_test(
     checker::ProofChecker::new(&mut pool, &rare_rules, config.1.clone().elaborated(true))
         .check(&problem, &elaborated)?;
 
-    // Finally, we elaborate the already elaborated proof, to make sure the elaboration step is
+    // Finally, we elaborate the already elaborated proof, to make sure the elaboration is
     // idempotent
     let elaborated_twice = elaborator::Elaborator::new(&mut pool, &problem, elab_config)
         .elaborate_with_default_pipeline(elaborated_node);

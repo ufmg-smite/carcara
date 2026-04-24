@@ -207,7 +207,7 @@ impl From<CheckingOptions> for checker::Config {
 }
 
 #[derive(ArgEnum, Clone)]
-enum ElaborationStep {
+enum ElaborationPass {
     Polyeq,
     LiaGeneric,
     Local,
@@ -251,28 +251,28 @@ struct ElaborationOptions {
     )]
     hole_solver_args: String,
 
-    /// The pipeline of elaboration steps to use.
+    /// The pipeline of elaboration passes to use.
     #[clap(
         arg_enum,
         long,
         multiple = true,
         default_values = &["polyeq", "lia-generic", "local", "uncrowd", "reordering", "hole"]
     )]
-    pipeline: Vec<ElaborationStep>,
+    pipeline: Vec<ElaborationPass>,
 }
 
-impl From<ElaborationOptions> for (elaborator::Config, Vec<elaborator::ElaborationStep>) {
+impl From<ElaborationOptions> for (elaborator::Config, Vec<elaborator::ElaborationPass>) {
     fn from(val: ElaborationOptions) -> Self {
         let pipeline: Vec<_> = val
             .pipeline
             .into_iter()
-            .map(|s| match s {
-                ElaborationStep::Polyeq => elaborator::ElaborationStep::Polyeq,
-                ElaborationStep::LiaGeneric => elaborator::ElaborationStep::LiaGeneric,
-                ElaborationStep::Local => elaborator::ElaborationStep::Local,
-                ElaborationStep::Uncrowd => elaborator::ElaborationStep::Uncrowd,
-                ElaborationStep::Reordering => elaborator::ElaborationStep::Reordering,
-                ElaborationStep::Hole => elaborator::ElaborationStep::Hole,
+            .map(|p| match p {
+                ElaborationPass::Polyeq => elaborator::ElaborationPass::Polyeq,
+                ElaborationPass::LiaGeneric => elaborator::ElaborationPass::LiaGeneric,
+                ElaborationPass::Local => elaborator::ElaborationPass::Local,
+                ElaborationPass::Uncrowd => elaborator::ElaborationPass::Uncrowd,
+                ElaborationPass::Reordering => elaborator::ElaborationPass::Reordering,
+                ElaborationPass::Hole => elaborator::ElaborationPass::Hole,
             })
             .collect();
         let lia_options = val.lia_solver.map(|solver| elaborator::LiaGenericOptions {
