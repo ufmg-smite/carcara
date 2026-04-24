@@ -36,7 +36,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum ElaborationStep {
+pub enum ElaborationPass {
     Polyeq,
     LiaGeneric,
     Local,
@@ -79,7 +79,7 @@ impl<'e> Elaborator<'e> {
     }
 
     pub fn elaborate_with_default_pipeline(&mut self, proof: ProofNodeForest) -> ProofNodeForest {
-        use ElaborationStep::*;
+        use ElaborationPass::*;
         let pipeline = vec![Polyeq, LiaGeneric, Local, Uncrowd, Reordering];
         self.elaborate(proof, pipeline)
     }
@@ -87,7 +87,7 @@ impl<'e> Elaborator<'e> {
     pub fn elaborate(
         &mut self,
         proof: ProofNodeForest,
-        pipeline: Vec<ElaborationStep>,
+        pipeline: Vec<ElaborationPass>,
     ) -> ProofNodeForest {
         self.elaborate_with_stats(proof, pipeline).0
     }
@@ -95,15 +95,15 @@ impl<'e> Elaborator<'e> {
     pub fn elaborate_with_stats(
         &mut self,
         proof: ProofNodeForest,
-        pipeline: Vec<ElaborationStep>,
+        pipeline: Vec<ElaborationPass>,
     ) -> (ProofNodeForest, Vec<Duration>) {
         let mut durations = Vec::new();
         let mut current = proof;
-        for step in pipeline {
+        for pass in pipeline {
             let time = Instant::now();
-            current = match step {
-                ElaborationStep::Polyeq => self.elaborate_polyeq(current),
-                ElaborationStep::LiaGeneric if self.config.lia_options.is_some() => {
+            current = match pass {
+                ElaborationPass::Polyeq => self.elaborate_polyeq(current),
+                ElaborationPass::LiaGeneric if self.config.lia_options.is_some() => {
                     current.mutate(|_, node, _| match node.as_ref() {
                         ProofNode::Step(s) if s.rule == "lia_generic" => {
                             lia_generic::lia_generic(self, s).unwrap_or_else(|| node.clone())
@@ -111,9 +111,9 @@ impl<'e> Elaborator<'e> {
                         _ => node.clone(),
                     })
                 }
-                ElaborationStep::LiaGeneric => current,
-                ElaborationStep::Local => self.elaborate_local(current),
-                ElaborationStep::Uncrowd => current.mutate(|_, node, _| match node.as_ref() {
+                ElaborationPass::LiaGeneric => current,
+                ElaborationPass::Local => self.elaborate_local(current),
+                ElaborationPass::Uncrowd => current.mutate(|_, node, _| match node.as_ref() {
                     ProofNode::Step(s)
                         if (s.rule == "resolution" || s.rule == "th_resolution")
                             && !s.args.is_empty() =>
@@ -122,8 +122,8 @@ impl<'e> Elaborator<'e> {
                     }
                     _ => node.clone(),
                 }),
-                ElaborationStep::Reordering => reordering::remove_reorderings(current),
-                ElaborationStep::Hole => {
+                ElaborationPass::Reordering => reordering::remove_reorderings(current),
+                ElaborationPass::Hole => {
                     if self.config.hole_options.is_none() {
                         current
                     } else {

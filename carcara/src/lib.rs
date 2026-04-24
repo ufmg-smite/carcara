@@ -216,7 +216,7 @@ pub fn check_and_elaborate<'s>(
     parser_config: parser::Config,
     checker_config: checker::Config,
     elaborator_config: elaborator::Config,
-    pipeline: Vec<elaborator::ElaborationStep>,
+    pipeline: Vec<elaborator::ElaborationPass>,
     collect_stats: bool,
 ) -> Result<(bool, ast::Problem, ast::Proof, ast::PrimitivePool), Error> {
     let mut run: RunMeasurement = RunMeasurement::default();
