@@ -16,9 +16,9 @@ Many of the same options used in the `check` command also apply to the `elaborat
 The specific elaboration applied to the proof is controlled via a `--pipeline` option. This takes a
 series of elaboration steps, and will apply them in the given order. The possible elaboration steps
 are:
-- [`polyeq`]()
+- [`polyeq`](./elaboration/polyeq.md)
 - [`lia-generic`]()
-- [`local`]()
+- [`local`](./elaboration/local.md)
 - [`uncrowd`]()
 - [`reordering`]()
 - [`hole`]()
