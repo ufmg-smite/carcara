@@ -1066,6 +1066,12 @@ impl Rc<Term> {
             .ok_or_else(|| CheckerError::ExpectedAnyNumber(self.clone()))
     }
 
+    /// Similar to `Term::as_bitvector`, but returns a `CheckerError` on failure.
+    pub fn as_bitvector_err(&self) -> Result<(Integer, usize), CheckerError> {
+        self.as_bitvector()
+            .ok_or_else(|| CheckerError::ExpectedBitvector(self.clone()))
+    }
+
     /// Similar to `Term::as_fraction`, but returns a `CheckerError` on failure.
     pub fn as_fraction_err(&self) -> Result<Rational, CheckerError> {
         self.as_fraction()
