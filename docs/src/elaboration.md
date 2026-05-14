@@ -20,7 +20,7 @@ elaboration passes are:
 - [`lia-generic`]()
 - [`local`](./elaboration/local.md)
 - [`uncrowd`]()
-- [`reordering`]()
+- [`reordering`](./elaboration/reordering.md)
 - [`hole`]()
 
 By default, Carcara will attempt to apply all of these in the listed order.
