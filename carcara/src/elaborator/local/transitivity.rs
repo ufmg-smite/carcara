@@ -1,5 +1,8 @@
-use super::{add_symm_step, IdHelper};
-use crate::{ast::*, checker::error::CheckerError};
+use crate::{
+    ast::*,
+    checker::error::CheckerError,
+    elaborator::{add_symm_step, IdHelper},
+};
 
 /// Similar to `find_chain`, but reorders a premises vector to match the found chain. In `trans`,
 /// this is used to reorder the step premises vector; in `eq_transitive`, it is used to reorder the

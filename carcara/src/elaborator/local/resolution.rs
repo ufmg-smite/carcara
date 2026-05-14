@@ -1,5 +1,6 @@
-use super::*;
-use crate::{ast::*, checker::error::CheckerError, resolution::*, utils::DedupIterator};
+use crate::{
+    ast::*, checker::error::CheckerError, elaborator::*, resolution::*, utils::DedupIterator,
+};
 
 pub fn resolution(
     pool: &mut PrimitivePool,
