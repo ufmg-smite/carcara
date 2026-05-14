@@ -1,31 +1,35 @@
 use super::*;
 use crate::utils::DedupIterator;
 
+// TODO: add proper error handling
 pub fn remove_reorderings(proof: ProofNodeForest) -> ProofNodeForest {
-    proof.mutate(|_, node, premises_changed| {
-        let Some(step) = node.as_step() else {
-            return node.clone();
-        };
+    let Ok(got) = proof.mutate(
+        |_, node, premises_changed| -> Result<_, std::convert::Infallible> {
+            let Some(step) = node.as_step() else {
+                return Ok(node.clone());
+            };
 
-        // For reordering steps, we remove the step and return its only premise
-        if step.rule == "reordering" {
-            return step.premises[0].clone();
-        }
-
-        // If the rule is order-sensitive, and any premise was modified, we recompute the conclusion
-        if let Some(recompute) = get_recomputation_func(&step.rule) {
-            if premises_changed {
-                let new = Rc::new(ProofNode::Step(StepNode {
-                    clause: recompute(step),
-                    ..step.clone()
-                }));
-                return new;
+            // For reordering steps, we remove the step and return its only premise
+            if step.rule == "reordering" {
+                return Ok(step.premises[0].clone());
             }
-        }
 
-        // Otherwise the node is unchanged
-        node.clone()
-    })
+            // If the rule is order-sensitive, and any premise was modified, we recompute the conclusion
+            if let Some(recompute) = get_recomputation_func(&step.rule) {
+                if premises_changed {
+                    let new = Rc::new(ProofNode::Step(StepNode {
+                        clause: recompute(step),
+                        ..step.clone()
+                    }));
+                    return Ok(new);
+                }
+            }
+
+            // Otherwise the node is unchanged
+            Ok(node.clone())
+        },
+    );
+    got
 }
 
 type RecomputationFunc = fn(&StepNode) -> Vec<Rc<Term>>;

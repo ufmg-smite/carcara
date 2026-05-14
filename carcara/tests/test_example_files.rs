@@ -55,7 +55,7 @@ fn run_test(
     };
     let node = ast::ProofNodeForest::from_commands(proof.commands.clone());
     let elaborated_node = elaborator::Elaborator::new(&mut pool, &problem, elab_config.clone())
-        .elaborate_with_default_pipeline(node);
+        .elaborate_with_default_pipeline(node)?;
     let elaborated = ast::Proof {
         constant_definitions: proof.constant_definitions.clone(),
         commands: elaborated_node.into_commands(),
@@ -68,7 +68,7 @@ fn run_test(
     // Finally, we elaborate the already elaborated proof, to make sure the elaboration is
     // idempotent
     let elaborated_twice = elaborator::Elaborator::new(&mut pool, &problem, elab_config)
-        .elaborate_with_default_pipeline(elaborated_node);
+        .elaborate_with_default_pipeline(elaborated_node)?;
     assert!(
         elaborated.commands == elaborated_twice.into_commands(),
         "elaboration was not idempotent!"
@@ -118,6 +118,9 @@ fn test_file(proof_path: &str) {
             Error::Parser(_, (line, column)) => format!("parser error at {}:{}", line, column),
             Error::Checker { rule, step, .. } => format!("checker error at '{}' ({})", step, rule),
             Error::DoesNotReachEmptyClause => format!("{}", e), // This one is already pretty short
+            Error::Elaborator { rule, step, .. } => {
+                format!("elaborator error at '{}' ({})", step, rule)
+            }
         };
         panic!(
             "\"{}\" returned error: {}",

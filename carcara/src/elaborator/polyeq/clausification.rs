@@ -2,6 +2,7 @@ use super::{IdHelper, PolyeqElaborator};
 use crate::{
     ast::*,
     checker::{apply_bfun_elim, error::CheckerError},
+    elaborator::error::ElaborationError,
 };
 use indexmap::IndexMap;
 
@@ -9,11 +10,11 @@ pub fn bfun_elim(
     pool: &mut PrimitivePool,
     _: &mut ContextStack,
     step: &StepNode,
-) -> Result<Rc<ProofNode>, CheckerError> {
+) -> Result<Rc<ProofNode>, ElaborationError> {
     assert_eq!(step.premises.len(), 1);
     assert_eq!(step.clause.len(), 1);
     let psi = &step.premises[0].clause()[0];
-    let expected = apply_bfun_elim(pool, psi, &mut IndexMap::new())?;
+    let expected = apply_bfun_elim(pool, psi, &mut IndexMap::new()).map_err(CheckerError::from)?;
     let got = &step.clause[0];
 
     if *got == expected {

@@ -1,11 +1,11 @@
 use super::*;
-use crate::{ast::*, checker::error::CheckerError};
+use crate::ast::*;
 
 pub fn ite_intro(
     pool: &mut PrimitivePool,
     _: &mut ContextStack,
     step: &StepNode,
-) -> Result<Rc<ProofNode>, CheckerError> {
+) -> Result<Rc<ProofNode>, ElaborationError> {
     assert_eq!(step.clause.len(), 1);
     let mut ids = IdHelper::new(&step.id);
     let mut polyeq = Polyeq::new().mod_reordering(true);

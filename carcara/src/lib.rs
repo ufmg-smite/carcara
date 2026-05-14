@@ -47,6 +47,7 @@ mod utils;
 
 use crate::benchmarking::{CollectResults, OnlineBenchmarkResults, RunMeasurement};
 use checker::{error::CheckerError, CheckerStatistics};
+use elaborator::error::ElaborationError;
 use parser::{ParserError, Position};
 use std::io;
 use std::time::{Duration, Instant};
@@ -82,6 +83,13 @@ pub enum Error {
     // checker errors, so we model it as a different variant
     #[error("checker error: proof does not conclude empty clause")]
     DoesNotReachEmptyClause,
+
+    #[error("elaboration failed on step '{step}' with rule '{rule}': {inner}")]
+    Elaborator {
+        inner: ElaborationError,
+        rule: Box<str>,
+        step: Box<str>,
+    },
 }
 
 pub fn check<'s>(
@@ -259,7 +267,7 @@ pub fn check_and_elaborate<'s>(
     let node = ast::ProofNodeForest::from_commands(proof.commands);
     let (elaborated, pipeline_durations) =
         elaborator::Elaborator::new(&mut pool, &problem, elaborator_config)
-            .elaborate_with_stats(node, pipeline);
+            .elaborate_with_stats(node, pipeline)?;
     let elaborated = ast::Proof {
         commands: elaborated.into_commands(),
         ..proof

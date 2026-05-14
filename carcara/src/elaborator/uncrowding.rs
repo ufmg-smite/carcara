@@ -1,4 +1,4 @@
-use super::IdHelper;
+use super::{error::ElaborationError, IdHelper};
 use crate::{
     ast::*,
     resolution::*,
@@ -66,11 +66,13 @@ fn apply_naive_resolution<'a>(premises: &[ResolutionPremise<'a>]) -> Vec<Literal
     current
 }
 
+// TODO: add proper error handling
+#[allow(clippy::unnecessary_wraps)]
 pub fn uncrowd_resolution(
     pool: &mut PrimitivePool,
     step: &StepNode,
     rotate_premises: bool,
-) -> Rc<ProofNode> {
+) -> Result<Rc<ProofNode>, ElaborationError> {
     let target_conclusion: HashSet<_> = step.clause.iter().map(Rc::remove_all_negations).collect();
 
     let mut premises = ResolutionPremise::from_step(step);
@@ -137,7 +139,7 @@ pub fn uncrowd_resolution(
     // To make sure elaboration is idempotent, we need to change the last id to match the original
     // step's id
     final_step.id = step.id.clone();
-    Rc::new(ProofNode::Step(final_step))
+    Ok(Rc::new(ProofNode::Step(final_step)))
 }
 
 fn add_partial_resolution_step<'a>(
@@ -404,7 +406,7 @@ mod tests {
             unreachable!();
         };
 
-        let got = uncrowd_resolution(&mut pool, step, true);
+        let got = uncrowd_resolution(&mut pool, step, true).unwrap();
 
         let expected = "
             (step t1 (cl x a b) :rule hole)
