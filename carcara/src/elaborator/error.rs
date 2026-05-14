@@ -1,4 +1,4 @@
-use crate::CheckerError;
+use crate::{resolution::ResolutionError, CheckerError};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -14,6 +14,9 @@ pub enum ElaborationError {
 
     #[error("could not infer pivots for resolution step")]
     CouldNotInferPivots,
+
+    #[error("cannot uncrowd resolution without pivots being provided")]
+    UncrowdMissingPivots,
 }
 
 impl ElaborationError {
@@ -24,5 +27,11 @@ impl ElaborationError {
             rule: step.rule.as_str().into(),
             step: step.id.as_str().into(),
         }
+    }
+}
+
+impl From<ResolutionError> for ElaborationError {
+    fn from(value: ResolutionError) -> Self {
+        Self::Checker(value.into())
     }
 }
