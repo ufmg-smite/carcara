@@ -1,8 +1,7 @@
-use super::{add_symm_step, IdHelper};
 use crate::{
     ast::*,
     checker::error::CheckerError,
-    elaborator::add_trans_step,
+    elaborator::{add_symm_step, add_trans_step, IdHelper},
     utils::{DedupIterator, MultiSet},
 };
 use std::collections::HashSet;

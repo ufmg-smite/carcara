@@ -1,15 +1,8 @@
-mod clausification;
-mod congruence;
 mod hole;
 mod lia_generic;
+mod local;
 mod polyeq;
-mod quantifiers;
-mod reflexivity;
 mod reordering;
-mod resolution;
-mod subproof;
-mod tautology;
-mod transitivity;
 mod uncrowding;
 
 use crate::{ast::*, CheckerError};
@@ -146,11 +139,11 @@ impl<'e> Elaborator<'e> {
     fn elaborate_polyeq(&mut self, proof: ProofNodeForest) -> ProofNodeForest {
         fn get_elaboration_function(rule: &str) -> Option<ElaborationFunc> {
             Some(match rule {
-                "refl" => reflexivity::refl,
-                "forall_inst" => quantifiers::forall_inst,
-                "subproof" => subproof::subproof,
-                "ite_intro" => tautology::ite_intro,
-                "bfun_elim" => clausification::bfun_elim,
+                "refl" => polyeq::reflexivity::refl,
+                "forall_inst" => polyeq::quantifiers::forall_inst,
+                "subproof" => polyeq::subproof::subproof,
+                "ite_intro" => polyeq::tautology::ite_intro,
+                "bfun_elim" => polyeq::clausification::bfun_elim,
                 _ => return None,
             })
         }
@@ -177,11 +170,11 @@ impl<'e> Elaborator<'e> {
     fn elaborate_local(&mut self, proof: ProofNodeForest) -> ProofNodeForest {
         fn get_elaboration_function(rule: &str) -> Option<ElaborationFunc> {
             Some(match rule {
-                "eq_transitive" => transitivity::eq_transitive,
-                "trans" => transitivity::trans,
-                "resolution" | "th_resolution" => resolution::resolution,
-                "cong" => congruence::cong,
-                "eq_congruent" => congruence::eq_congruent,
+                "eq_transitive" => local::transitivity::eq_transitive,
+                "trans" => local::transitivity::trans,
+                "resolution" | "th_resolution" => local::resolution::resolution,
+                "cong" => local::congruence::cong,
+                "eq_congruent" => local::congruence::eq_congruent,
                 _ => return None,
             })
         }

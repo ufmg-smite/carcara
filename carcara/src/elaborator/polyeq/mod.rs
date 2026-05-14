@@ -1,3 +1,9 @@
+pub mod clausification;
+pub mod quantifiers;
+pub mod reflexivity;
+pub mod subproof;
+pub mod tautology;
+
 use super::*;
 use crate::{
     ast::*,
