@@ -8,7 +8,7 @@
   - [Hole elaboration]()
   - ["Local" elaboration](./elaboration/local.md)
   - [Resolution uncrowding]()
-  - [Reordering elimination]()
+  - [Reordering elimination](./elaboration/reordering.md)
 - [Other features](./etc.md)
   - [Proof parsing/printing](./etc/parse.md)
   - [Proof slicing](./etc/slice.md)
