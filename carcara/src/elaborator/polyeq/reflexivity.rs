@@ -27,7 +27,7 @@ pub fn refl(
     pool: &mut PrimitivePool,
     context: &mut ContextStack,
     step: &StepNode,
-) -> Result<Rc<ProofNode>, CheckerError> {
+) -> Result<Rc<ProofNode>, ElaborationError> {
     assert_eq!(step.clause.len(), 1);
 
     let (left, right) = match_term_err!((= l r) = &step.clause[0])?;
@@ -105,6 +105,6 @@ pub fn refl(
         ))
     } else {
         // If no case matches, this step is not valid!
-        Err(CheckerError::ReflexivityFailed(left.clone(), right.clone()))
+        Err(CheckerError::ReflexivityFailed(left.clone(), right.clone()).into())
     }
 }

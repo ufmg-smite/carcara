@@ -57,7 +57,7 @@ fn run_job<T: CollectResults + Default + Send>(
         let node = ast::ProofNodeForest::from_commands(proof.commands);
         let (elaborated, pipeline_durations) =
             elaborator::Elaborator::new(&mut pool, &problem, config)
-                .elaborate_with_stats(node, pipeline);
+                .elaborate_with_stats(node, pipeline)?;
         elaborated.into_commands();
         (elaboration.elapsed(), pipeline_durations)
     } else {

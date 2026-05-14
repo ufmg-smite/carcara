@@ -1,11 +1,11 @@
 use super::*;
-use crate::{ast::*, checker::error::CheckerError};
+use crate::ast::*;
 
 pub fn subproof(
     pool: &mut PrimitivePool,
     _: &mut ContextStack,
     step: &StepNode,
-) -> Result<Rc<ProofNode>, CheckerError> {
+) -> Result<Rc<ProofNode>, ElaborationError> {
     let unchanged = || Ok(Rc::new(ProofNode::Step(step.clone())));
 
     let previous_step = &step.previous_step.as_ref().unwrap().as_step().unwrap();

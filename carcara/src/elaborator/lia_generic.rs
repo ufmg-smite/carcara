@@ -58,18 +58,15 @@ fn get_problem_string(
     problem
 }
 
-pub fn lia_generic(elaborator: &mut Elaborator, step: &StepNode) -> Option<Rc<ProofNode>> {
+pub fn lia_generic(
+    elaborator: &mut Elaborator,
+    step: &StepNode,
+) -> Result<Rc<ProofNode>, ElaborationError> {
     let problem = get_problem_string(elaborator.pool, &elaborator.problem.prelude, &step.clause);
     let options = elaborator.config.lia_options.as_ref().unwrap();
-    let commands = match get_solver_proof(elaborator.pool, problem, options) {
-        Ok(c) => c,
-        Err(e) => {
-            log::warn!("failed to elaborate `lia_generic` step: {}", e);
-            return None;
-        }
-    };
+    let commands = get_solver_proof(elaborator.pool, problem, options)?;
 
-    Some(insert_solver_proof(
+    Ok(insert_solver_proof(
         elaborator.pool,
         commands,
         &step.clause,
@@ -148,22 +145,26 @@ fn parse_and_check_solver_proof(
 }
 
 fn increase_subproof_depth(proof: Rc<ProofNode>, delta: usize, prefix: &str) -> Rc<ProofNode> {
-    proof.mutate(|_, node, _| {
-        let node = match node.as_ref().clone() {
-            ProofNode::Assume { id, depth, term } => ProofNode::Assume {
-                id: format!("{}.{}", prefix, id),
-                depth: depth + delta,
-                term,
-            },
-            ProofNode::Step(mut s) => {
-                s.id = format!("{}.{}", prefix, s.id);
-                s.depth += delta;
-                ProofNode::Step(s)
-            }
-            ProofNode::Subproof(_) => unreachable!(),
-        };
-        Rc::new(node)
-    })
+    let Ok(node) = proof.mutate(
+        // I'd rather use the never type (!) than `Infallible`, but it's still unstable
+        |_, node, _| -> Result<Rc<ProofNode>, std::convert::Infallible> {
+            let node = match node.as_ref().clone() {
+                ProofNode::Assume { id, depth, term } => ProofNode::Assume {
+                    id: format!("{}.{}", prefix, id),
+                    depth: depth + delta,
+                    term,
+                },
+                ProofNode::Step(mut s) => {
+                    s.id = format!("{}.{}", prefix, s.id);
+                    s.depth += delta;
+                    ProofNode::Step(s)
+                }
+                ProofNode::Subproof(_) => unreachable!(),
+            };
+            Ok(Rc::new(node))
+        },
+    );
+    node
 }
 
 fn insert_solver_proof(
