@@ -7,7 +7,7 @@
   - [Polyequality elaboration](./elaboration/polyeq.md)
   - [Hole elaboration]()
   - ["Local" elaboration](./elaboration/local.md)
-  - [Resolution uncrowding]()
+  - [Resolution uncrowding](./elaboration/uncrowding.md)
   - [Reordering elimination](./elaboration/reordering.md)
 - [Other features](./etc.md)
   - [Proof parsing/printing](./etc/parse.md)

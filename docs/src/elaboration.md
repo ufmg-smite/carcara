@@ -19,7 +19,7 @@ elaboration passes are:
 - [`polyeq`](./elaboration/polyeq.md)
 - [`lia-generic`]()
 - [`local`](./elaboration/local.md)
-- [`uncrowd`]()
+- [`uncrowd`](./elaboration/uncrowding.md)
 - [`reordering`](./elaboration/reordering.md)
 - [`hole`]()
 
