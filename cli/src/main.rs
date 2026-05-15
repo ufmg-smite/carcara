@@ -17,7 +17,6 @@ use path_args::{get_instances_from_paths, infer_problem_path};
 use std::{
     fs::File,
     io::{self, IsTerminal, Read, Write},
-    path::Path,
     sync::atomic,
 };
 
@@ -403,8 +402,7 @@ struct SliceCommandOptions {
     #[clap(flatten)]
     input: Input,
 
-    /// The names of the sliced problem and proof will be given. If these are not supplied,
-    /// the files will be written to default locations in the working directory.
+    /// If provided, write the sliced problem and proof to these files.
     #[clap(long, value_names = &["SLICED_PROBLEM", "SLICED_PROOF"])]
     sliced_output: Option<Vec<String>>,
 
@@ -683,42 +681,33 @@ fn slice_command(
         )
         .ok_or(CliError::InvalidSliceId(options.from.clone()))?;
 
-        // Write sliced problem and proof to provided paths or default locations.
-        let (sliced_proof_file_name, sliced_problem_file_name) = match options.sliced_output {
-            Some(proof_prob) => (proof_prob[0].clone(), proof_prob[1].clone()),
-            None => {
-                let path = Path::new(&options.input.proof_file);
-                let path_without_extension = path.with_extension("");
-                let base_name = path_without_extension.file_name().unwrap();
-                let prob = format!("{}-{}.smt2", base_name.display(), options.from);
-                let proof = format!("{}-{}.alethe", base_name.display(), options.from);
-                (proof, prob)
-            }
-        };
+        // Write sliced problem and proof to output paths, if provided
+        if let Some(files) = options.sliced_output {
+            let (sliced_proof_file_name, sliced_problem_file_name) = (&files[0], &files[1]);
+            let mut sliced_problem_file = fs::File::create(sliced_problem_file_name)?;
+            sliced_problem_file
+                .write_all(format!("{}", problem.prelude).as_bytes())
+                .unwrap();
+            ast::write_asserts(
+                &mut pool,
+                &problem.prelude,
+                &mut sliced_problem_file,
+                &sliced_asserts,
+                false,
+            )?;
+            sliced_problem_file.write_all(b"(check-sat)\n")?;
+            sliced_problem_file.write_all(b"(exit)\n")?;
 
-        let mut sliced_problem_file = fs::File::create(sliced_problem_file_name)?;
-        sliced_problem_file
-            .write_all(format!("{}", problem.prelude).as_bytes())
-            .unwrap();
-        ast::write_asserts(
-            &mut pool,
-            &problem.prelude,
-            &mut sliced_problem_file,
-            &sliced_asserts,
-            false,
-        )?;
-        sliced_problem_file.write_all(b"(check-sat)\n")?;
-        sliced_problem_file.write_all(b"(exit)\n")?;
-
-        let mut sliced_proof_file = fs::File::create(sliced_proof_file_name)?;
-        ast::write_proof_to_dest(
-            &mut pool,
-            &problem.prelude,
-            &sliced_proof,
-            &mut sliced_proof_file,
-            !no_print_with_sharing,
-        )?;
-        sliced_proof_file.write_all(b"\n")?;
+            let mut sliced_proof_file = fs::File::create(sliced_proof_file_name)?;
+            ast::write_proof_to_dest(
+                &mut pool,
+                &problem.prelude,
+                &sliced_proof,
+                &mut sliced_proof_file,
+                !no_print_with_sharing,
+            )?;
+            sliced_proof_file.write_all(b"\n")?;
+        }
 
         sliced_proof
     };
