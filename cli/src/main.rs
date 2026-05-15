@@ -409,11 +409,12 @@ struct SliceCommandOptions {
     #[clap(flatten)]
     parsing: ParsingOptions,
 
+    /// The id of the step which will be the root of the slice.
     #[clap(long)]
     from: String,
 
-    /// How many layers of transitive premises to include beyond the direct premises of the step being sliced.
-    /// If this argument is not present, it will default to zero.
+    /// How many layers of transitive premises to include beyond the direct premises of the step
+    /// being sliced. If this argument is not present, it will default to zero.
     #[clap(long, short = 'd')]
     max_distance: Option<usize>,
 
