@@ -55,12 +55,13 @@ pub fn resolution(
 
     let ResolutionTrace { not_not_added, pivot_trace } =
         greedy_resolution(&step.clause, &premise_clauses, pool, true)
-            .or_else(|_| {
+            .or_else(|first_error| {
                 premises.reverse();
                 let premise_clauses: Vec<_> = premises.iter().map(|p| p.clause()).collect();
                 greedy_resolution(&step.clause, &premise_clauses, pool, true)
+                    .map_err(|_| first_error) // we prefer returning the first error
             })
-            .map_err(|_| ElaborationError::CouldNotInferPivots)?;
+            .map_err(ElaborationError::CouldNotInferPivots)?;
 
     let pivots = pivot_trace
         .into_iter()
