@@ -120,7 +120,7 @@ impl<'e> Elaborator<'e> {
                     }
                     _ => Ok(node.clone()),
                 })?,
-                ElaborationPass::Reordering => reordering::remove_reorderings(current),
+                ElaborationPass::Reordering => reordering::remove_reorderings(current)?,
                 ElaborationPass::Hole => {
                     if self.config.hole_options.is_none() {
                         current
