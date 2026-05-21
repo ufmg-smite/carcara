@@ -834,6 +834,29 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                         );
                     }
 
+                    "bind_let" => {
+                        // Include, as premises, previous step from the actual subproof.
+                        alethe_premises
+                            .push(EunoiaTerm::Id(Self::get_previous_step_id(previous_step)));
+
+                        // We include, as argument, the context surrounding this
+                        // subproof's context.
+                        eunoia_arguments
+                            .push(EunoiaTerm::Id(self.get_last_introduced_context_id()));
+
+                        let rule_name = self.alethe_signature.bind_let.clone();
+
+                        self.get_mut_translator_data().translated_proof.push(
+                            EunoiaCommand::StepPop {
+                                id: id.clone(),
+                                conclusion_clause: Some(conclusion),
+                                rule: rule_name,
+                                premises: EunoiaList { list: alethe_premises },
+                                arguments: EunoiaList { list: eunoia_arguments },
+                            },
+                        );
+                    }
+
                     "refl" => {
                         // TODO: do not hard-code this string
                         // We include, as a premise, the context surrounding this
@@ -1014,7 +1037,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                     }
 
                     "rare_rewrite" => {
-                        assert!(!eunoia_arguments.is_empty());
+                        assert!(eunoia_arguments.len() == 1 || eunoia_arguments.len() == 2);
 
                         let rule_name = match &eunoia_arguments[0] {
                             EunoiaTerm::String(rare_rewrite_name) => rare_rewrite_name,
