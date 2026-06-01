@@ -97,7 +97,7 @@ pub fn and_intro(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> RuleR
     // term in `and_contents`
     for i in 0..and_contents.len() {
         let and_arg = &and_contents[i];
-        match &premises[i].clause[..] {
+        match premises[i].clause {
             [term] => {
                 assert_eq(and_arg, term)?;
             }
