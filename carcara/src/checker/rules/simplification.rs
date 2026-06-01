@@ -741,8 +741,9 @@ pub fn ac_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 }
 
 // Operators considered in aci_simp
-fn is_assoc(op : &Operator) -> bool {
-    match op {
+fn is_assoc(op: Operator) -> bool {
+    matches!(
+        op,
         Operator::And
             | Operator::Or
             | Operator::Add
@@ -752,15 +753,14 @@ fn is_assoc(op : &Operator) -> bool {
             | Operator::BvMul
             | Operator::BvAnd
             | Operator::BvXor
-            | Operator::BvConcat => true,
-        _ => false,
-    }
+            | Operator::BvConcat
+    )
 }
 
 // Term is given as argument as well because if the operator is
 // parametric, such as a BV operator, the width of the arguments will
 // be relevant.
-fn identity_of_op(pool: &mut dyn TermPool, op: &Operator, term: &Rc<Term>) -> Option<Term> {
+fn identity_of_op(pool: &mut dyn TermPool, op: Operator, term: &Rc<Term>) -> Option<Term> {
     match op {
         Operator::Or => Some(Term::new_bool(false)),
         Operator::And => Some(Term::new_bool(true)),
@@ -818,21 +818,21 @@ pub fn aci_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     let mut cache = IndexMap::new();
 
     let t11 = if let Term::Op(op, _) = t1.as_ref() {
-        let identity = identity_of_op(pool, op, t1);
-        &apply_aci_simp(pool, &mut cache, t1, op, &identity)
+        let identity = identity_of_op(pool, *op, t1);
+        &apply_aci_simp(pool, &mut cache, t1, *op, &identity)
     } else {
         t1
     };
     let t22 = if let Term::Op(op, _) = t2.as_ref() {
-        let identity = identity_of_op(pool, op, t2);
+        let identity = identity_of_op(pool, *op, t2);
 
-        &apply_aci_simp(pool, &mut cache, t2, op, &identity)
+        &apply_aci_simp(pool, &mut cache, t2, *op, &identity)
     } else {
         t2
     };
     match (t11.as_ref(), t22.as_ref()) {
         (Term::Op(op1, args1), Term::Op(op2, args2))
-            if is_assoc(op1) && *op1 != Operator::BvConcat && op1 == op2 =>
+            if is_assoc(*op1) && *op1 != Operator::BvConcat && op1 == op2 =>
         {
             let args1_multiset: MultiSet<_> = args1.iter().collect();
             let args2_multiset: MultiSet<_> = args2.iter().collect();
@@ -849,7 +849,7 @@ fn apply_aci_simp(
     pool: &mut dyn TermPool,
     cache: &mut IndexMap<Rc<Term>, Rc<Term>>,
     term: &Rc<Term>,
-    op: &Operator,
+    op: Operator,
     identity: &Option<Term>,
 ) -> Rc<Term> {
     if !is_assoc(op) {
@@ -860,13 +860,13 @@ fn apply_aci_simp(
     }
     let result = match term.as_ref() {
         // flatten and remove duplicate on the result
-        Term::Op(opp, args) if opp == op => {
+        Term::Op(opp, args) if *opp == op => {
             let args: Vec<_> = args
                 .iter()
                 .flat_map(|term| {
                     let term = apply_aci_simp(pool, cache, term, op, identity);
                     match term.as_ref() {
-                        Term::Op(inner_op, inner_args) if inner_op == op => inner_args.clone(),
+                        Term::Op(inner_op, inner_args) if *inner_op == op => inner_args.clone(),
                         _ => vec![term.clone()],
                     }
                 })
@@ -876,7 +876,7 @@ fn apply_aci_simp(
             if args.len() == 1 {
                 args[0].clone()
             } else {
-                pool.add(Term::Op(*op, args))
+                pool.add(Term::Op(op, args))
             }
         }
         _ => term.clone(),
