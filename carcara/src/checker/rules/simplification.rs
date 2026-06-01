@@ -740,6 +740,23 @@ pub fn ac_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     )
 }
 
+// Operators considered in aci_simp
+fn is_assoc(op : &Operator) -> bool {
+    match op {
+        Operator::And
+            | Operator::Or
+            | Operator::Add
+            | Operator::Mult
+            | Operator::BvAdd
+            | Operator::BvOr
+            | Operator::BvMul
+            | Operator::BvAnd
+            | Operator::BvXor
+            | Operator::BvConcat => true,
+        _ => false,
+    }
+}
+
 // Term is given as argument as well because if the operator is
 // parametric, such as a BV operator, the width of the arguments will
 // be relevant.
@@ -815,7 +832,7 @@ pub fn aci_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     };
     match (t11.as_ref(), t22.as_ref()) {
         (Term::Op(op1, args1), Term::Op(op2, args2))
-            if op1.is_assoc() && *op1 != Operator::BvConcat && op1 == op2 =>
+            if is_assoc(op1) && *op1 != Operator::BvConcat && op1 == op2 =>
         {
             let args1_multiset: MultiSet<_> = args1.iter().collect();
             let args2_multiset: MultiSet<_> = args2.iter().collect();
@@ -835,7 +852,7 @@ fn apply_aci_simp(
     op: &Operator,
     identity: &Option<Term>,
 ) -> Rc<Term> {
-    if !op.is_assoc() {
+    if !is_assoc(op) {
         return term.clone();
     }
     if let Some(t) = cache.get(term) {
