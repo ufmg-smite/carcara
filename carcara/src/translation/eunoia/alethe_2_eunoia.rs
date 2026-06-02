@@ -821,6 +821,11 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                         alethe_premises
                             .push(EunoiaTerm::Id(Self::get_previous_step_id(previous_step)));
 
+                        // We include, as argument, the context surrounding this
+                        // subproof's context.
+                        eunoia_arguments
+                            .push(EunoiaTerm::Id(self.get_last_introduced_context_id()));
+
                         let rule_name = self.alethe_signature.let_rule.clone();
 
                         self.get_mut_translator_data().translated_proof.push(
