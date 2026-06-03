@@ -708,3 +708,95 @@ fn ac_simp() {
         }
     }
 }
+
+#[test]
+fn aci_simp() {
+    test_cases! {
+        definitions = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (declare-fun s () Bool)
+            (declare-fun i () Int)
+            (declare-fun j () Int)
+            (declare-fun k () Int)
+            (declare-fun x () Real)
+            (declare-fun y () Real)
+            (declare-fun z () Real)
+            (declare-fun a () (_ BitVec 4))
+            (declare-fun b () (_ BitVec 4))
+            (declare-fun c () (_ BitVec 4))
+        ",
+        "Flattening (associativity)" {
+            "(step t1 (cl (= (and (and p q) (and r s)) (and p q r s))) :rule aci_simp)": true,
+            "(step t1 (cl (= (or (or (or p q) r) s) (or p q r s))) :rule aci_simp)": true,
+            "(step t1 (cl (= (+ i (+ j k)) (+ i j k))) :rule aci_simp)": true,
+            "(step t1 (cl (= (* x (* y z)) (* x y z))) :rule aci_simp)": true,
+
+            "(step t1 (cl (= (and (and p q) (and r s)) (and p q r))) :rule aci_simp)": false,
+            // Flattening does not recurse through a different operator: the
+            // nested `and` is opaque under the top-level `or`, so it is not
+            // flattened and the two sides do not match.
+            "(step t1 (cl (= (or p (and (and q r) s)) (or p (and q r s)))) :rule aci_simp)": false,
+        }
+        "Commutativity" {
+            "(step t1 (cl (= (and p q) (and q p))) :rule aci_simp)": true,
+            "(step t1 (cl (= (or p q r) (or r q p))) :rule aci_simp)": true,
+            "(step t1 (cl (= (+ i j k) (+ k j i))) :rule aci_simp)": true,
+            "(step t1 (cl (= (* x y z) (* z y x))) :rule aci_simp)": true,
+
+            "(step t1 (cl (= (or p q) (or p r))) :rule aci_simp)": false,
+            "(step t1 (cl (= (and p q) (and p q r))) :rule aci_simp)": false,
+        }
+        "Idempotency (removing duplicates)" {
+            "(step t1 (cl (= (or p p q r s) (or p q r s))) :rule aci_simp)": true,
+            // Duplicates are removed regardless of position, not just when adjacent.
+            "(step t1 (cl (= (or p q p) (or p q))) :rule aci_simp)": true,
+            "(step t1 (cl (= (and (and p q) (and q r)) (and p q r))) :rule aci_simp)": true,
+            // Both sides are normalized, so duplicates are removed on either side.
+            "(step t1 (cl (= (and (and p q) (and q r)) (and p q q r))) :rule aci_simp)": true,
+
+            // Idempotency is not applied inside a nested, different operator,
+            // so the `(and p p)` is left untouched and differs from `p`.
+            "(step t1 (cl (= (or s (and p p)) (or s p))) :rule aci_simp)": false,
+        }
+        "Identity removal" {
+            "(step t1 (cl (= (or p false) p)) :rule aci_simp)": true,
+            "(step t1 (cl (= (and p true) p)) :rule aci_simp)": true,
+            "(step t1 (cl (= (and p q true) (and q p))) :rule aci_simp)": true,
+            "(step t1 (cl (= (or p false q) (or p q))) :rule aci_simp)": true,
+            "(step t1 (cl (= (+ i j 0) (+ i j))) :rule aci_simp)": true,
+            "(step t1 (cl (= (+ x 0.0) x)) :rule aci_simp)": true,
+            "(step t1 (cl (= (* i j 1) (* i j))) :rule aci_simp)": true,
+            "(step t1 (cl (= (* x y 1.0) (* y x))) :rule aci_simp)": true,
+
+            "(step t1 (cl (= (and p q true) (and p q r))) :rule aci_simp)": false,
+            // The identity is only removed for the top-level operator; a nested,
+            // different operator is opaque, so `true` is not stripped here.
+            "(step t1 (cl (= (or p (and q true)) (or p q))) :rule aci_simp)": false,
+        }
+        "Bitvector operators" {
+            "(step t1 (cl (= (bvadd a b) (bvadd b a))) :rule aci_simp)": true,
+            "(step t1 (cl (= (bvadd a (bvadd b c)) (bvadd c b a))) :rule aci_simp)": true,
+            "(step t1 (cl (= (bvadd a #b0000) a)) :rule aci_simp)": true,
+            "(step t1 (cl (= (bvor a #b0000) a)) :rule aci_simp)": true,
+            "(step t1 (cl (= (bvand a #b1111) a)) :rule aci_simp)": true,
+            "(step t1 (cl (= (bvmul a #b0001) a)) :rule aci_simp)": true,
+            "(step t1 (cl (= (bvxor a b c) (bvxor c b a))) :rule aci_simp)": true,
+
+            "(step t1 (cl (= (bvadd a b) (bvadd a c))) :rule aci_simp)": false,
+            // The identity of `bvand` is the all-ones vector, not zero, so
+            // `#b0000` is not stripped.
+            "(step t1 (cl (= (bvand a #b0000) a)) :rule aci_simp)": false,
+            // Likewise, the identity of `bvor` is zero, not the all-ones vector.
+            "(step t1 (cl (= (bvor a #b1111) a)) :rule aci_simp)": false,
+        }
+        "Bitvector concatenation" {
+            "(step t1 (cl (= (concat (concat a b) c) (concat a b c))) :rule aci_simp)": true,
+            "(step t1 (cl (= (concat a (concat b c)) (concat a b c))) :rule aci_simp)": true,
+
+            // Concat not commutative
+            "(step t1 (cl (= (concat (concat a b) c) (concat a (concat c b)))) :rule aci_simp)": false,
+        }
+    }
+}
