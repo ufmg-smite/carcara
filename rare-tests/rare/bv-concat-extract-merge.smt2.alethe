@@ -1,0 +1,30 @@
+(assume a0
+  (and
+    (= 2 (+ 1 1))
+    (not
+      (=
+        (concat ((_ extract 0 0) x) ((_ extract 7 2) x) ((_ extract 1 1) x) ((_ extract 0 0) x))
+        (concat ((_ extract 0 0) x) ((_ extract 7 1) x) ((_ extract 0 0) x))))))
+
+(step t0 (cl (= 2 (+ 1 1)))
+  :rule and
+  :premises (a0)
+  :args (0))
+
+(step t1 (cl (not (=
+                    (concat ((_ extract 0 0) x) ((_ extract 7 2) x) ((_ extract 1 1) x) ((_ extract 0 0) x))
+                    (concat ((_ extract 0 0) x) ((_ extract 7 1) x) ((_ extract 0 0) x)))))
+  :rule and
+  :premises (a0)
+  :args (1))
+
+(step t2 (cl (=
+              (concat ((_ extract 0 0) x) ((_ extract 7 2) x) ((_ extract 1 1) x) ((_ extract 0 0) x))
+              (concat ((_ extract 0 0) x) ((_ extract 7 1) x) ((_ extract 0 0) x))))
+  :rule rare_rewrite
+  :premises (t0)
+  :args ("bv-concat-extract-merge" ((_ extract 0 0) x) x ((_ extract 0 0) x)))
+
+(step t3 (cl)
+  :rule resolution
+  :premises (t2 t1))

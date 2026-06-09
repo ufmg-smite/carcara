@@ -81,8 +81,9 @@ fn reconstruct_meta_terms<'a>(
             let mut args = vec![];
             for param in params {
                 let k = reconstruct_meta_terms(pool, param, traces);
-                if let Trace::Term(term) = k {
-                    args.push(term.clone());
+                match k {
+                    Trace::Term(term) => args.push(term.clone()),
+                    Trace::ManyTerm(terms) => args.extend(terms.iter().cloned()),
                 }
             }
             Trace::Term(pool.add(Term::Op(*op, args)))
