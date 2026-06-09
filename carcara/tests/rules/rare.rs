@@ -44,6 +44,24 @@ const RARE_RULES: &str = r#"
     :args (x y)
     :premises ()
     :conclusion (= (=> x y) (or (not x) y)))
+
+; N-ary arithmetic with a list parameter: the list is spliced into the (+ ...)
+(declare-rare-rule add-flatten (
+    (xs Int :list)
+    (y Int)
+)
+    :args (xs y)
+    :premises ()
+    :conclusion (= (+ xs y) (+ xs y)))
+
+; N-ary bitvector with a list parameter: the list is spliced into the (bvadd ...)
+(declare-rare-rule bvadd-flatten (
+    (xs (_ BitVec 4) :list)
+    (y (_ BitVec 4))
+)
+    :args (xs y)
+    :premises ()
+    :conclusion (= (bvadd xs y) (bvadd xs y)))
 "#;
 
 const SMALL_RARE_RULES: &str = r#"
@@ -257,6 +275,33 @@ fn rare_rewrite() {
             "(step t1 (cl (= (=> r q) (or (not r) q))) :rule rare_rewrite :args (\"implies-expand\" r q))": true,
 
             "(step t1 (cl (= (=> p q) (or p q))) :rule rare_rewrite :args (\"implies-expand\" p q))": false,
+        }
+    }
+}
+
+#[test]
+fn rare_rewrite_nary_list() {
+    rare_test_cases! {
+        definitions = "
+            (declare-const a Int)
+            (declare-const b Int)
+            (declare-const c Int)
+        ",
+        "Arithmetic list flatten" {
+            // (rare-list a b) is spliced into (+ ... c), yielding (+ a b c).
+            "(step t1 (cl (= (+ a b c) (+ a b c))) :rule rare_rewrite :args (\"add-flatten\" (rare-list a b) c))": true,
+
+            // A singleton list collapses, yielding (+ a c).
+            "(step t1 (cl (= (+ a c) (+ a c))) :rule rare_rewrite :args (\"add-flatten\" (rare-list a) c))": true,
+
+            // The spliced result must match the clause.
+            "(step t1 (cl (= (+ a c) (+ a b c))) :rule rare_rewrite :args (\"add-flatten\" (rare-list a b) c))": false,
+        }
+
+        "Bitvector list flatten" {
+            "(step t1 (cl (= (bvadd #b0001 #b0010 #b0011) (bvadd #b0001 #b0010 #b0011))) :rule rare_rewrite :args (\"bvadd-flatten\" (rare-list #b0001 #b0010) #b0011))": true,
+
+            "(step t1 (cl (= (bvadd #b0001 #b0011) (bvadd #b0001 #b0011))) :rule rare_rewrite :args (\"bvadd-flatten\" (rare-list #b0001) #b0011))": true,
         }
     }
 }
