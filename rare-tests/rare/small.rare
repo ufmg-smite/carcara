@@ -1,0 +1,4 @@
+(declare-rare-rule bool-and-de-morgan ((x1 Bool) (y1 Bool))
+  :args (x1 y1)
+  :conclusion (= (not (and x1 y1)) (or (not x1) (not y1)))
+)
