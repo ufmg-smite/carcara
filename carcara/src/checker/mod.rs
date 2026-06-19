@@ -20,6 +20,7 @@ use std::{
 };
 
 pub(crate) use rules::clausification::apply_bfun_elim;
+pub(crate) use rules::linear_arithmetic::la_generic_partial;
 
 #[derive(Clone)]
 pub struct CheckerStatistics<'s, CR: CollectResults + Send + Default> {

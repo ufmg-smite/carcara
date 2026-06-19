@@ -263,6 +263,7 @@ fn strengthen(op: Operator, disequality: &mut LinearComb, a: &Rational) -> Opera
 fn process_disequality(
     (acc_op, acc): (Operator, LinearComb),
     (phi, arg): (&Rc<Term>, Option<Rational>),
+    coeff_trace: &mut Option<Vec<Rational>>,
 ) -> Result<(Operator, LinearComb), CheckerError> {
     // Steps 1 and 2: Negate the disequality
     let (mut op, s1, s2) = negate_disequality(phi)?;
@@ -295,7 +296,11 @@ fn process_disequality(
                 .0
                 .get(var)
                 .ok_or(CheckerError::Explanation("coeff not found".to_owned()))?;
-            -coeff_2.clone() / coeff_1
+            let inferred = -coeff_2.clone() / coeff_1;
+            if let Some(trace) = coeff_trace {
+                trace.push(inferred.clone());
+            }
+            inferred
         }
     };
 
@@ -321,10 +326,18 @@ fn process_disequality(
 
 pub fn la_generic(rule_args: RuleArgs) -> RuleResult {
     assert_num_args(rule_args.args, rule_args.conclusion.len())?;
-    la_generic_partial(rule_args)
+    la_generic_partial(rule_args.conclusion, rule_args.args, &mut None)
 }
 
-pub fn la_generic_partial(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
+pub fn bounded_farkas(rule_args: RuleArgs) -> RuleResult {
+    la_generic_partial(rule_args.conclusion, rule_args.args, &mut None)
+}
+
+pub fn la_generic_partial(
+    conclusion: &[Rc<Term>],
+    args: &[Rc<Term>],
+    coeff_trace: &mut Option<Vec<Rational>>,
+) -> RuleResult {
     let args: Vec<_> = args
         .iter()
         .map(|a| {
@@ -337,7 +350,9 @@ pub fn la_generic_partial(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleRe
     let (op, final_disequality) = conclusion
         .iter()
         .zip(args)
-        .try_fold((Operator::Equals, LinearComb::new()), process_disequality)?;
+        .try_fold((Operator::Equals, LinearComb::new()), |acc, diseq| {
+            process_disequality(acc, diseq, coeff_trace)
+        })?;
 
     let LinearComb(left_side, right_side): &LinearComb = &final_disequality;
     let is_disequality_true = {
