@@ -7,10 +7,6 @@ use thiserror::Error;
 /// The error type for errors when constructing or applying substitutions.
 #[derive(Debug, PartialEq, Eq, Error)]
 pub enum SubstitutionError {
-    /// A term in the left-hand side of the substitution was not a variable.
-    #[error("term in the left-hand side of substitution is not a variable: '{0}'")]
-    NotAVariable(Rc<Term>),
-
     /// One of the mappings in the substitution was mapping a term to a term of a different sort.
     #[error("trying to substitute term '{0}' with a term of a different sort: '{1}'")]
     DifferentSorts(Rc<Term>, Rc<Term>),
@@ -39,6 +35,10 @@ pub struct Substitution {
     /// The substitution's mappings.
     map: IndexMap<Rc<Term>, Rc<Term>>,
 
+    /// Whether the substitution should be applied in a capture-avoiding way or not. By default this
+    /// will be true but can be set to false.
+    avoid_capture: bool,
+
     /// The variables that should be renamed to preserve capture-avoidance, if they are bound by a
     /// binder term.
     should_be_renamed: Option<IndexSet<String>>,
@@ -58,13 +58,14 @@ impl Substitution {
     pub fn empty() -> Self {
         Self {
             map: IndexMap::new(),
+            avoid_capture: true,
             should_be_renamed: None,
             cache: IndexMap::new(),
         }
     }
 
     /// Constructs a singleton substitution mapping `x` to `t`. This returns an error if the sorts
-    /// of the given terms are not the same, or if `x` is not a variable term.
+    /// of the given terms are not the same.
     pub fn single(pool: &mut dyn TermPool, x: Rc<Term>, t: Rc<Term>) -> SubstitutionResult<Self> {
         let mut this = Self::empty();
         this.insert(pool, x, t)?;
@@ -72,17 +73,12 @@ impl Substitution {
     }
 
     /// Constructs a new substitution from an arbitrary mapping of terms to other terms. This
-    /// returns an error if any term in the left-hand side is not a variable, or if any term is
-    /// mapped to a term of a different sort.
+    /// returns an error if any term is mapped to a term of a different sort.
     pub fn new(
         pool: &mut dyn TermPool,
         map: IndexMap<Rc<Term>, Rc<Term>>,
     ) -> SubstitutionResult<Self> {
         for (k, v) in &map {
-            if !k.is_var() && !k.is_sort_var() {
-                return Err(SubstitutionError::NotAVariable(k.clone()));
-            }
-
             let k_sort = pool.sort(k).as_sort().unwrap().clone();
             let v_sort = pool.sort(v).as_sort().unwrap().clone();
             if k_sort != v_sort
@@ -96,6 +92,7 @@ impl Substitution {
 
         Ok(Self {
             map,
+            avoid_capture: true,
             should_be_renamed: None,
             cache: IndexMap::new(),
         })
@@ -107,16 +104,13 @@ impl Substitution {
     }
 
     /// Extends the substitution by adding a new mapping from `x` to `t`. This returns an error if
-    /// the sorts of the given terms are not the same, or if `x` is not a variable term.
+    /// the sorts of the given terms are not the same.
     pub(crate) fn insert(
         &mut self,
         pool: &mut dyn TermPool,
         x: Rc<Term>,
         t: Rc<Term>,
     ) -> SubstitutionResult<()> {
-        if !x.is_var() && !x.is_sort_var() {
-            return Err(SubstitutionError::NotAVariable(x));
-        }
         let x_sort = pool.sort(&x).as_sort().unwrap().clone();
         let t_sort = pool.sort(&t).as_sort().unwrap().clone();
         if x_sort != t_sort
@@ -158,6 +152,10 @@ impl Substitution {
         if was_present {
             self.should_be_renamed = None;
         }
+    }
+
+    pub fn set_capture_avoidance(&mut self, avoid_capture: bool) {
+        self.avoid_capture = avoid_capture;
     }
 
     /// Computes which binder variables will need to be renamed, and stores the result in
@@ -349,7 +347,9 @@ impl Substitution {
         binding_list: &[SortedVar],
         inner: &Rc<Term>,
     ) -> Rc<Term> {
-        self.compute_should_be_renamed(pool);
+        if self.avoid_capture {
+            self.compute_should_be_renamed(pool);
+        }
 
         // In some situations, if the substitution has only one mapping (say, `x -> t`) we can skip
         // applying the substitution to a binder term altogether. This can happen if the variable
@@ -360,7 +360,10 @@ impl Substitution {
         // we can just skip the substitution entirely, which is way faster in some cases. In
         // particular, the skolemization rules require this optimization to have acceptable
         // performance.
-        if self.can_skip_instead_of_renaming(binding_list) {
+        //
+        // TODO guarding this with "avoid_capture" as well to guarantee I'm not breaking anything
+        // (i.e., by not computing "should_be_renamed" maybe this will be applied inadvertently)
+        if self.avoid_capture && self.can_skip_instead_of_renaming(binding_list) {
             return original_term.clone();
         }
 
@@ -388,6 +391,9 @@ impl Substitution {
         binding_list: &[SortedVar],
         is_value_list: bool,
     ) -> (BindingList, Self) {
+        if !self.avoid_capture {
+            return (BindingList(binding_list.to_vec()), Self::empty());
+        }
         let mut new_substitution = Self::empty();
         let mut new_vars = IndexSet::new();
         let new_binding_list = binding_list
@@ -411,7 +417,7 @@ impl Substitution {
                     {
                         break;
                     }
-                    new_var.push('\'');
+                    new_var.push_str("_renamed");
                     changed = true;
                 }
 
