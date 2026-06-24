@@ -298,6 +298,10 @@ fn op_to_variant(op: &str) -> TokenStream2 {
         "strinre" => quote! { crate::ast::Operator::StrInRe },
         "reinter" => quote! { crate::ast::Operator::ReIntersection },
 
+        // Arrays
+        "select" => quote! { crate::ast::Operator::Select },
+        "store" => quote! { crate::ast::Operator::Store },
+
         other => panic!("unknown operator in match_term_flat!: {other:?}"),
     }
 }

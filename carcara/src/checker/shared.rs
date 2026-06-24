@@ -315,6 +315,12 @@ pub fn get_rule(
         "bitblast_udiv" => bitvectors::udiv,
         "bitblast_urem" => bitvectors::urem,
 
+        // array rules
+        "arrays_idx" => arrays::idx,
+        "arrays_row" => arrays::row,
+        "arrays_row_contra" => arrays::row_contra,
+        "arrays_ext" => arrays::ext,
+
         "concat_eq" => strings::concat_eq,
         "concat_unify" => strings::concat_unify,
         "concat_conflict" => strings::concat_conflict,
