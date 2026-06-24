@@ -912,6 +912,14 @@ impl Term {
         }
     }
 
+    /// Tries to extract a `String` from a term. Returns `Some` if the term is a boolean constant.
+    pub fn as_string(&self) -> Option<String> {
+        match self {
+            Term::Const(Constant::String(s)) => Some(s.to_owned()),
+            _ => None,
+        }
+    }
+
     /// Tries to extract a `Rational` from a term, allowing fractions. This method will return
     /// `Some` if the term is:
     ///

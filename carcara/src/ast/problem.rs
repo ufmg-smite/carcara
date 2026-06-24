@@ -27,7 +27,7 @@ pub struct ProblemPrelude {
     /// The sort declarations, each represented by its name and arity.
     pub(crate) sort_declarations: Vec<(String, usize)>,
 
-    /// The function declarations, each represented by its name and body.
+    /// The function declarations, each represented by its name and sort.
     pub(crate) function_declarations: Vec<(String, Rc<Term>)>,
 
     /// The problem's logic string, if it exists.

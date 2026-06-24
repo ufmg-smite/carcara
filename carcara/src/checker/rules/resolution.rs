@@ -10,7 +10,7 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
     if !rule_args.args.is_empty() {
         // If the rule was given arguments, we redirect to the variant of "resolution" that takes
         // the pivots as arguments
-        return resolution_with_args(rule_args);
+        return strict_resolution(rule_args);
     }
     let RuleArgs { conclusion, premises, pool, .. } = rule_args;
 

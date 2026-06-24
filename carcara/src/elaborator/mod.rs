@@ -4,6 +4,7 @@ mod lia_generic;
 mod local;
 mod polyeq;
 mod reordering;
+mod sat_refutation;
 mod uncrowding;
 
 use crate::{ast::*, Error};
@@ -28,6 +29,8 @@ pub struct Config {
     pub uncrowd_rotation: bool,
 
     pub hole_options: Option<HoleOptions>,
+
+    pub sat_refutation_options: Option<SatRefutationOptions>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -38,6 +41,7 @@ pub enum ElaborationPass {
     Uncrowd,
     Reordering,
     Hole,
+    SatRefutation,
 }
 
 /// The options that control how `lia_generic` steps are elaborated using an external solver.
@@ -60,6 +64,26 @@ pub struct HoleOptions {
 
     /// The arguments to pass to the solver.
     pub arguments: Vec<Box<str>>,
+}
+
+/// The options that control how `hole` steps are elaborated using an external solver.
+#[derive(Debug, Clone)]
+pub struct SatRefutationOptions {
+    /// The external SAT solver path. The solver should be a binary that can read DIMACS and output a DRAT proof..
+    pub sat_solver: Box<str>,
+    /// The arguments to pass to `CaDiCaL`
+    pub sat_arguments: Vec<Box<str>>,
+
+    /// The external DRAT checker/trimmer path. The tool should be a binary that can read DRAT from stdin and output a proof core and an LRAT.
+    pub drat_checker: Box<str>,
+    /// The arguments to pass to `CaDiCaL`
+    pub drat_arguments: Vec<Box<str>>,
+
+    /// The external SMT solver path. The solver should be a binary that can read SMT-LIB from stdin and
+    /// output an Alethe proof to stdout.
+    pub smt_solver: Box<str>,
+    /// The arguments to pass to the solver.
+    pub smt_arguments: Vec<Box<str>>,
 }
 
 pub struct Elaborator<'e> {
@@ -133,6 +157,22 @@ impl<'e> Elaborator<'e> {
                             }
                             _ => Ok(node.clone()),
                         })?
+                    }
+                }
+                ElaborationPass::SatRefutation => {
+                    if self.config.sat_refutation_options.is_none() {
+                        current
+                    } else {
+                        // TODO: proper error handling
+                        current
+                            .mutate::<_, ()>(|_, node, _| match node.as_ref() {
+                                ProofNode::Step(s) if (s.rule == "sat_refutation") => {
+                                    Ok(sat_refutation::sat_refutation(self, s)
+                                        .unwrap_or_else(|| node.clone()))
+                                }
+                                _ => Ok(node.clone()),
+                            })
+                            .unwrap()
                     }
                 }
             };
@@ -306,7 +346,7 @@ fn add_trans_step(
 type ElaborationFunc =
     fn(&mut PrimitivePool, &mut ContextStack, &StepNode) -> Result<Rc<ProofNode>, ElaborationError>;
 
-trait Mutate: Sized {
+pub trait Mutate: Sized {
     fn mutate<F, E>(self, mutate_func: F) -> Result<Self, E>
     where
         F: FnMut(&mut ContextStack, &Rc<ProofNode>, bool) -> Result<Rc<ProofNode>, E>;
@@ -438,20 +478,20 @@ where
     Ok(cache[root].clone())
 }
 
-struct IdHelper {
+pub struct IdHelper {
     root: String,
     stack: Vec<usize>,
 }
 
 impl IdHelper {
-    fn new(root: &str) -> Self {
+    pub fn new(root: &str) -> Self {
         Self {
             root: root.to_owned(),
             stack: vec![0],
         }
     }
 
-    fn next_id(&mut self) -> String {
+    pub fn next_id(&mut self) -> String {
         use std::fmt::Write;
 
         let mut current = self.root.clone();
@@ -462,11 +502,11 @@ impl IdHelper {
         current
     }
 
-    fn push(&mut self) {
+    pub fn push(&mut self) {
         self.stack.push(0);
     }
 
-    fn pop(&mut self) {
+    pub fn pop(&mut self) {
         assert!(self.stack.len() >= 2, "can't pop last frame from the stack");
         self.stack.pop();
     }

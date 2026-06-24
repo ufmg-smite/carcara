@@ -71,6 +71,7 @@ pub struct PrimitivePool {
     pub(crate) storage: Storage,
     pub(crate) free_vars_cache: IndexMap<Rc<Term>, IndexSet<Rc<Term>>>,
     pub(crate) sorts_cache: IndexMap<Rc<Term>, Rc<Term>>,
+    pub(crate) binders_cache: IndexMap<(Rc<Term>, Binder), IndexSet<Rc<Term>>>,
     pub(crate) dt_defs: IndexMap<Rc<Term>, DatatypeDef>,
 }
 
@@ -527,6 +528,43 @@ impl PrimitivePool {
             unreachable!();
         }
         self.dt_defs.insert(sort.clone(), def.clone());
+    }
+
+    pub fn collect_binders(&mut self, term: &Rc<Term>, binder: Binder) -> IndexSet<Rc<Term>> {
+        if let Some(set) = self.binders_cache.get(&(term.clone(), binder)) {
+            return set.clone();
+        }
+        let set = match term.as_ref() {
+            Term::App(_, args) | Term::Op(_, args) | Term::ParamOp { op: _, op_args: _, args } => {
+                let mut set = IndexSet::new();
+                for a in args {
+                    set.extend(self.collect_binders(a, binder).into_iter());
+                }
+                set
+            }
+            Term::Binder(b, _, inner) => {
+                let mut set = IndexSet::new();
+                if *b == Binder::Choice {
+                    set.insert(term.clone());
+                }
+                set.extend(self.collect_binders(inner, binder));
+                set
+            }
+            Term::Let(_, inner) => self.collect_binders(inner, binder),
+            Term::Match(term, patterns) => {
+                let mut set = self.collect_binders(term, binder);
+                for (_, _, res) in patterns {
+                    set.extend(self.collect_binders(res, binder).into_iter());
+                }
+                set
+            }
+            Term::Var(..) | Term::Const(_) | Term::Sort(_) => IndexSet::new(),
+        };
+        self.binders_cache.insert((term.clone(), binder), set);
+        self.binders_cache
+            .get(&(term.clone(), binder))
+            .unwrap()
+            .clone()
     }
 }
 

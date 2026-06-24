@@ -1,11 +1,42 @@
+use crate::external::ExternalError;
 use crate::{
     ast::*,
     checker::rules::linear_arithmetic::LinearComb,
     utils::{Range, TypeName},
 };
 use rug::{Integer, Rational};
-use std::fmt;
+use std::{fmt, io};
 use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum LiaGenericError {
+    #[error("failed to spawn solver process")]
+    FailedSpawnSolver(io::Error),
+
+    #[error("failed to write to solver stdin")]
+    FailedWriteToSolverStdin(io::Error),
+
+    #[error("error while waiting for solver to exit")]
+    FailedWaitForSolver(io::Error),
+
+    #[error("solver gave invalid output")]
+    SolverGaveInvalidOutput,
+
+    #[error("solver output not unsat")]
+    OutputNotUnsat,
+
+    #[error("solver timed out when solving problem")]
+    SolverTimeout,
+
+    #[error(
+        "solver returned non-zero exit code: {}",
+        if let Some(i) = .0 { format!("{}", i) } else { "none".to_owned() }
+    )]
+    NonZeroExitCode(Option<i32>),
+
+    #[error("error in inner proof: {0}")]
+    InnerProofError(Box<crate::Error>),
+}
 
 #[derive(Debug, Error)]
 pub enum CheckerError {
@@ -39,6 +70,12 @@ pub enum CheckerError {
 
     #[error(transparent)]
     Polynomial(#[from] PolynomialError),
+
+    #[error(transparent)]
+    LiaGeneric(#[from] LiaGenericError),
+
+    #[error(transparent)]
+    External(#[from] ExternalError),
 
     #[error(transparent)]
     Subproof(#[from] SubproofError),

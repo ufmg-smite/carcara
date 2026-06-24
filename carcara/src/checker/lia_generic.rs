@@ -1,332 +1,84 @@
 use super::*;
-use crate::{checker::error::LiaGenericError, parser, LiaGenericOptions};
-use indexmap::IndexMap;
+use crate::checker::error::LiaGenericError;
+use crate::external::*;
+use std::collections::HashMap;
+use std::process;
 use std::{
-    io::{BufRead, Write},
+    fs::File,
+    io::Write,
     process::{Command, Stdio},
 };
 
-fn get_problem_string(conclusion: &[Rc<Term>], prelude: &ProblemPrelude) -> String {
+fn sat_refutation_external_check(
+    pool: &mut PrimitivePool,
+    cnf_path: String,
+    prelude: &ProblemPrelude,
+    // choice_assertions: &Vec<Rc<Term>>,
+    checker_path: String,
+    lemmas: &[Rc<Term>],
+    lemmas_to_th_ids: &HashMap<Rc<Term>, String>,
+) -> RuleResult {
     use std::fmt::Write;
 
-    let mut problem = String::new();
-    write!(&mut problem, "(set-option :produce-proofs true)").unwrap();
-    write!(&mut problem, "{}", prelude).unwrap();
+    let prelude_path = format!("prelude_{}.smt2", process::id());
+    log::info!("[sat_refutation check] Print prelude file {}", prelude_path);
+    let mut prelude_file_str = String::new();
+    writeln!(&mut prelude_file_str, "{}", prelude).unwrap();
+    // choice_assertions.iter().for_each(|a| {
+    //     writeln!(&mut prelude_file_str, "(assert {})", a).unwrap();
+    // });
+    write!(
+        File::create(prelude_path.clone()).unwrap(),
+        "{}",
+        prelude_file_str
+    )
+    .unwrap();
 
-    let mut bytes = Vec::new();
-    printer::write_lia_smt_instance(&mut bytes, conclusion, true).unwrap();
-    write!(&mut problem, "{}", String::from_utf8(bytes).unwrap()).unwrap();
-
-    writeln!(&mut problem, "(check-sat)").unwrap();
-    writeln!(&mut problem, "(get-proof)").unwrap();
-    writeln!(&mut problem, "(exit)").unwrap();
-
-    problem
-}
-
-pub fn lia_generic_single_thread(
-    pool: &mut PrimitivePool,
-    conclusion: &[Rc<Term>],
-    prelude: &ProblemPrelude,
-    elaborator: Option<&mut Elaborator>,
-    root_id: &str,
-    options: &LiaGenericOptions,
-) -> bool {
-    let problem = get_problem_string(conclusion, prelude);
-    let commands = match get_solver_proof(pool, problem, options) {
-        Ok(c) => c,
-        Err(e) => {
-            log::warn!("failed to check `lia_generic` step: {}", e);
-            if let Some(elaborator) = elaborator {
-                elaborator.unchanged(conclusion);
-            }
-            return true;
-        }
-    };
-
-    if let Some(elaborator) = elaborator {
-        insert_solver_proof(pool, elaborator, commands, conclusion, root_id);
-    }
-    false
-}
-
-pub fn lia_generic_multi_thread(
-    conclusion: &[Rc<Term>],
-    prelude: &ProblemPrelude,
-    options: &LiaGenericOptions,
-) -> bool {
-    let mut pool = PrimitivePool::new();
-    let problem = get_problem_string(conclusion, prelude);
-    if let Err(e) = get_solver_proof(&mut pool, problem, options) {
-        log::warn!("failed to check `lia_generic` step using: {}", e);
-        true
-    } else {
-        false
-    }
-}
-
-fn get_solver_proof(
-    pool: &mut PrimitivePool,
-    problem: String,
-    options: &LiaGenericOptions,
-) -> Result<Vec<ProofCommand>, LiaGenericError> {
-    let mut process = Command::new(options.solver.as_ref())
-        .args(options.arguments.iter().map(AsRef::as_ref))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(LiaGenericError::FailedSpawnSolver)?;
-
-    process
-        .stdin
-        .take()
-        .expect("failed to open solver stdin")
-        .write_all(problem.as_bytes())
-        .map_err(LiaGenericError::FailedWriteToSolverStdin)?;
-
-    let output = process
-        .wait_with_output()
-        .map_err(LiaGenericError::FailedWaitForSolver)?;
-
-    if !output.status.success() {
-        if let Ok(s) = std::str::from_utf8(&output.stderr) {
-            if s.contains("interrupted by timeout.") {
-                return Err(LiaGenericError::SolverTimeout);
-            }
-        }
-        return Err(LiaGenericError::NonZeroExitCode(output.status.code()));
-    }
-
-    let mut proof = output.stdout.as_slice();
-    let mut first_line = String::new();
-
-    proof
-        .read_line(&mut first_line)
-        .map_err(|_| LiaGenericError::SolverGaveInvalidOutput)?;
-
-    if first_line.trim_end() != "unsat" {
-        return Err(LiaGenericError::OutputNotUnsat);
-    }
-
-    parse_and_check_solver_proof(pool, problem.as_bytes(), proof)
-        .map_err(|e| LiaGenericError::InnerProofError(Box::new(e)))
-}
-
-fn parse_and_check_solver_proof(
-    pool: &mut PrimitivePool,
-    problem: &[u8],
-    proof: &[u8],
-) -> CarcaraResult<Vec<ProofCommand>> {
-    let mut parser = parser::Parser::new(pool, parser::Config::new(), problem)?;
-    let (prelude, premises) = parser.parse_problem()?;
-    parser.reset(proof)?;
-    let commands = parser.parse_proof()?;
-    let proof = Proof { premises, commands };
-
-    ProofChecker::new(pool, Config::new(), &prelude).check(&proof)?;
-    Ok(proof.commands)
-}
-
-fn update_premises(commands: &mut [ProofCommand], delta: usize, root_id: &str) {
-    for c in commands {
-        match c {
-            ProofCommand::Assume { id, .. } => {
-                *id = format!("{}.{}", root_id, id);
-            }
-            ProofCommand::Step(s) => {
-                s.id = format!("{}.{}", root_id, s.id);
-                for p in s.premises.iter_mut().chain(s.discharge.iter_mut()) {
-                    if p.0 == 0 {
-                        p.1 += delta;
-                    }
-                    p.0 += 1;
-                }
-            }
-            ProofCommand::Subproof(s) => {
-                update_premises(&mut s.commands, delta, root_id);
-            }
-        }
-    }
-}
-
-fn insert_missing_assumes(
-    pool: &mut PrimitivePool,
-    elaborator: &mut Elaborator,
-    conclusion: &[Rc<Term>],
-    proof: &[ProofCommand],
-    root_id: &str,
-) -> (Vec<Rc<Term>>, usize) {
-    let mut count_map: IndexMap<&Rc<Term>, usize> = IndexMap::new();
-    for c in conclusion {
-        *count_map.entry(c).or_default() += 1;
-    }
-
-    let proof_premises: Vec<_> = proof
-        .iter()
-        .filter_map(|c| {
-            if let ProofCommand::Assume { term, .. } = c {
-                Some(term.remove_negation().unwrap().clone())
+    // transform each AND arg, if any, into a string and put each
+    // lemma string in a different line in the file below.
+    let mut lemmas_str = String::new();
+    let mut counter = 0;
+    lemmas.iter().for_each(|lemma| {
+        let lemma_or = if let Some((Operator::RareList, lemma_lits)) = lemma.as_op() {
+            if lemma_lits.len() == 1 {
+                lemma_lits[0].clone()
             } else {
-                None
+                pool.add(Term::Op(Operator::Or, lemma_lits.to_vec()))
             }
-        })
-        .collect();
-    for p in &proof_premises {
-        *count_map.get_mut(p).unwrap() -= 1;
-    }
-
-    let mut all = Vec::new();
-    for (t, mut count) in count_map {
-        while count > 0 {
-            let id = elaborator.get_new_id(root_id);
-            all.push(t.clone());
-            let term = build_term!(pool, (not {t.clone()}));
-            elaborator.add_new_command(ProofCommand::Assume { id, term }, true);
-            count -= 1;
+        } else {
+            unreachable!();
+        };
+        let mut bytes = Vec::new();
+        printer::write_term(
+            pool,
+            prelude,
+            &mut bytes,
+            &lemma_or,
+            true,
+            format!("@p{}_", counter),
+        )
+        .unwrap();
+        counter += 1;
+        if !lemmas_to_th_ids.contains_key(lemma) {
+            log::debug!("Lemma {} not in map {:?}", lemma, lemmas_to_th_ids);
+            unreachable!();
         }
-    }
-    let num_added = all.len();
-    all.extend(proof_premises);
-    (all, num_added)
-}
-
-fn insert_solver_proof(
-    pool: &mut PrimitivePool,
-    elaborator: &mut Elaborator,
-    mut commands: Vec<ProofCommand>,
-    conclusion: &[Rc<Term>],
-    root_id: &str,
-) {
-    let subproof_id = elaborator.get_new_id(root_id);
-    elaborator.open_accumulator_subproof();
-
-    let (all_premises, num_added) = insert_missing_assumes(
-        pool,
-        elaborator,
-        conclusion,
-        &commands,
-        // This is a bit ugly, but we have to add the ".added" to avoid colliding with the first few
-        // steps in the solver proof
-        &format!("{}.added", root_id),
-    );
-
-    let (mut clause, discharge): (Vec<_>, Vec<_>) = all_premises
-        .iter()
-        .enumerate()
-        .map(|(i, t)| {
-            let term = build_term!(pool, (not (not {t.clone()})));
-            (term, (1usize, i))
-        })
-        .unzip();
-    clause.push(pool.bool_false());
-
-    update_premises(&mut commands, num_added, &subproof_id);
-    for c in commands {
-        elaborator.add_new_command(c, true);
-    }
-
-    let subproof = elaborator.close_accumulator_subproof(
-        Vec::new(),
-        Vec::new(),
-        ProofStep {
-            id: subproof_id,
-            clause: clause.clone(),
-            rule: "subproof".to_owned(),
-            premises: Vec::new(),
-            args: Vec::new(),
-            discharge,
-        },
-        root_id,
-    );
-
-    let not_not_steps: Vec<_> = clause[..clause.len() - 1]
-        .iter()
-        .map(|term| {
-            let clause = vec![
-                build_term!(pool, (not {term.clone()})),
-                term.remove_negation()
-                    .unwrap()
-                    .remove_negation()
-                    .unwrap()
-                    .clone(),
-            ];
-            let id = elaborator.get_new_id(root_id);
-            elaborator.add_new_step(ProofStep {
-                id,
-                clause,
-                rule: "not_not".to_owned(),
-                premises: Vec::new(),
-                args: Vec::new(),
-                discharge: Vec::new(),
-            })
-        })
-        .collect();
-    let id = elaborator.get_new_id(root_id);
-    let false_step = elaborator.add_new_step(ProofStep {
-        id,
-        clause: vec![build_term!(pool, (not {pool.bool_false()}))],
-        rule: "false".to_owned(),
-        premises: Vec::new(),
-        args: Vec::new(),
-        discharge: Vec::new(),
+        writeln!(
+            &mut lemmas_str,
+            "{};{}",
+            lemmas_to_th_ids[lemma],
+            String::from_utf8(bytes).unwrap()
+        )
+        .unwrap();
     });
+    let lemmas_path = format!("lemmas_{}.smt2", process::id());
+    log::info!("[sat_refutation check] Print lemmas file {}", lemmas_path);
+    write!(File::create(lemmas_path.clone()).unwrap(), "{}", lemmas_str).unwrap();
+    log::info!("[sat_refutation check] Invoke oracle");
 
-    let mut premises = vec![subproof];
-    premises.extend(not_not_steps);
-    premises.push(false_step);
-
-    let id = elaborator.get_new_id(root_id);
-    elaborator.push_elaborated_step(ProofStep {
-        id,
-        clause: conclusion.to_vec(),
-        rule: "resolution".to_owned(),
-        premises,
-        args: Vec::new(),
-        discharge: Vec::new(),
-    });
-}
-
-pub fn sat_external_prove_lemmas(RuleArgs { pool, args, .. }: RuleArgs) -> RuleResult {
-    let Sort::String = pool.sort(&args[0].as_term().unwrap()).as_sort().cloned().unwrap() else {
-        unreachable!();
-    };
-    let Sort::String = pool.sort(&args[1].as_term().unwrap()).as_sort().cloned().unwrap() else {
-        unreachable!();
-    };
-    let Sort::Bool = pool.sort(&args[2].as_term().unwrap()).as_sort().cloned().unwrap() else {
-        unreachable!();
-    };
-
-    let lemmas = args[2].as_term().unwrap();
-
-    // transform each AND arg, if any, into a string and build a
-    // string "(and ... )" so that each lemma has its own names
-    let term_str = if let Some(and_args) = match_term!((and ...) = lemmas) {
-        let mut j = 0;
-        let mut term_str2 = String::new();
-        use std::fmt::Write;
-        write!(&mut term_str2, "(and").unwrap();
-        while j < and_args.len() {
-            if j < and_args.len() - 1 {
-                write!(&mut term_str2, " {}", and_args[j]).unwrap();
-            }
-            else {
-                write!(&mut term_str2, "{}", and_args[j]).unwrap();
-            }
-            j += 1;
-        }
-        write!(&mut term_str2, ")").unwrap();
-        term_str2
-    } else {
-        format!("{}", lemmas)
-    };
-
-    let string = format!("(\n{}\n{}\n{}\n)",
-                         args[0].as_term().unwrap(), args[1].as_term().unwrap(), term_str);
-
+    let string = format!("(\n{}\n{}\n{}\n)", cnf_path, prelude_path, lemmas_path);
     // this will make it expect this script from where you are running Carcara
-    let mut process = Command::new("./sat-lemmas-prove.sh")
+    let mut process = Command::new(checker_path.clone())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -357,5 +109,388 @@ pub fn sat_external_prove_lemmas(RuleArgs { pool, args, .. }: RuleArgs) -> RuleR
     if res == b"true\n" {
         return Ok(());
     }
-    return Err(CheckerError::Unspecified);
+    println!("{:?}\n", String::from_utf8(res.to_vec()));
+    Err(CheckerError::Explanation(format!(
+        "External checker {} did not validate step",
+        checker_path
+    )))
+}
+
+pub fn sat_refutation(
+    pool: &mut PrimitivePool,
+    premise_steps: Vec<&ProofCommand>,
+    prelude: &ProblemPrelude,
+    checker_path: Option<String>,
+    cadical_path: Option<String>,
+    drattrim_path: Option<String>,
+    cvc5_path: Option<String>,
+) -> RuleResult {
+    // Create the DIMACS file from the premises and the lemmas.
+    //
+    // Lemmas (i.e., conclusions of "hole") are non-unit clauses if
+    // they are OR terms, and unit otherwise. Literals are going to be
+    // generated by doing the "remove_all_negations()" method of
+    // terms.
+    //
+    // For the remaining premises, we can have some of them which
+    // occur as arguments in others, which as a safer thing we also
+    // add them as unit clauses with a literal corresponding to the
+    // whole clause.
+
+    let mut lemmas_to_th_ids: HashMap<Rc<Term>, String> = HashMap::new();
+    let mut lemmas_to_step_ids: HashMap<Rc<Term>, String> = HashMap::new();
+    let mut clause_id_to_lemma: HashMap<usize, Rc<Term>> = HashMap::new();
+    let mut choice_terms: HashSet<Rc<Term>> = HashSet::new();
+    let premise_clauses = collect_premise_clauses(
+        pool,
+        &premise_steps,
+        &mut lemmas_to_th_ids,
+        &mut lemmas_to_step_ids,
+        &mut clause_id_to_lemma,
+        &mut choice_terms,
+    );
+    log::info!(
+        "[sat_refutation check] Premises yield {} clauses of which {} are lemmas (and {} choices)",
+        premise_clauses.len(),
+        lemmas_to_step_ids.len(),
+        choice_terms.len()
+    );
+
+    let mut sat_clause_to_lemma: HashMap<Vec<i32>, Rc<Term>> = HashMap::new();
+    let mut term_to_var: HashMap<&Rc<Term>, i32> = HashMap::new();
+
+    // create constants for each choice term and a substitution from that choice term into the
+    // constant representing it.
+    let mut choice_id = 0;
+    let mut choice_term_const_name = Vec::new();
+    let substitution: IndexMap<_, _> = choice_terms
+        .iter()
+        .map(|epsilon| {
+            log::debug!(
+                "\t[sat_refutation check] Collected choice term: {}",
+                epsilon
+            );
+            let (bindings, _) = match_term_err!((choice ... body) = epsilon)?;
+            let (_, var_sort) = &bindings[0];
+            let choice_const_name = format!("epsilon{}", choice_id);
+            let choice_const = pool.add(Term::new_var(choice_const_name.clone(), var_sort.clone()));
+            choice_id += 1;
+            choice_term_const_name.push((epsilon.clone(), choice_const.clone(), choice_const_name));
+            Ok((epsilon.clone(), choice_const.clone()))
+        })
+        .collect::<Result<_, CheckerError>>()?;
+    let mut substitution = Substitution::new(pool, substitution)?;
+    substitution.set_capture_avoidance(false);
+    log::debug!("\t[sat_refutation check] substitution {:?}", substitution);
+    let mut choice_assertions = Vec::new();
+    let handling_choice = choice_id > 0;
+    // maps all assertions needed to define the choice term that appears in a given lemma
+    let mut epsilon_to_assertion: HashMap<&Rc<Term>, Rc<Term>> = HashMap::new();
+    let mut epsilon_to_dependencies: HashMap<&Rc<Term>, Vec<Rc<Term>>> = HashMap::new();
+
+    let prelude = if handling_choice {
+        let mut choice_const_declarations = choice_term_const_name
+            .iter()
+            .map(|(choice_term, k, k_name)| {
+                // create an assertion
+                //
+                //  (forall ((x1 T1) ... (xn Tn)) (=> (exists ((v T)) F[v, x1,...,xn]) (F[k, x1,...,xn])))
+                //
+                // to properly define k, where the variables x1...xn are created to stand-in for the
+                // choice terms that occur in the definition of k. We replace them by the intruduced
+                // variables.
+                //
+                // The rationale is that we want to define k for all values it may depend on, not
+                // only the choice terms used during the original Skolemization process. Since we
+                // will try to revalidate the Skolemization lemma, we cannot force the Skolemization
+                // to be done with exactly the terms used originally, otherwise we would not really
+                // be checking anything (the lemma would just correspond to `false`).
+                let (bindings, body) = match_term!((choice ... body) = choice_term).unwrap();
+                let mut counter = 0;
+                let mut internal_substitution = IndexMap::new();
+                let mut forall_bindings = Vec::new();
+                let (choice_var_name, _) = &bindings[0];
+                let mut choice_dependencies = Vec::new();
+                let univ_vars = pool
+                    .collect_binders(body, Binder::Choice)
+                    .iter()
+                    .map(|c| {
+                        choice_dependencies.push(c.clone());
+                        let univ_var_name = format!("{}{}", choice_var_name, counter);
+                        counter += 1;
+                        let c_sort = pool.sort(c);
+                        let univ_var =
+                            pool.add(Term::new_var(univ_var_name.clone(), c_sort.clone()));
+                        internal_substitution.insert(c.clone(), univ_var.clone());
+                        forall_bindings.push((univ_var_name, c_sort.clone()));
+                        univ_var
+                    })
+                    .collect::<Vec<Rc<Term>>>();
+                let mut internal_substitution =
+                    Substitution::new(pool, internal_substitution).unwrap();
+                internal_substitution.set_capture_avoidance(false);
+                let choice_body_norm = internal_substitution.apply(pool, body);
+                let exists = pool.add(Term::Binder(
+                    Binder::Exists,
+                    bindings.clone(),
+                    choice_body_norm.clone(),
+                ));
+                let var = pool.add(Term::from(bindings[0].clone()));
+                let mut s = Substitution::single(pool, var.clone(), k.clone()).unwrap();
+                s.set_capture_avoidance(false);
+                let constant_definding_form = s.apply(pool, &choice_body_norm);
+                let assert = if !univ_vars.is_empty() {
+                    let inner_assert = build_term!(pool, (=> {exists} {constant_definding_form}));
+                    pool.add(Term::Binder(
+                        Binder::Forall,
+                        BindingList(forall_bindings),
+                        inner_assert,
+                    ))
+                } else {
+                    build_term!(pool, (=> {exists} {constant_definding_form}))
+                };
+                choice_assertions.push(assert.clone());
+
+                epsilon_to_assertion.insert(choice_term, assert.clone());
+                epsilon_to_dependencies.insert(choice_term, choice_dependencies);
+
+                (k_name.clone(), pool.sort(k).clone())
+            })
+            .collect::<Vec<(String, Rc<Term>)>>();
+        choice_const_declarations.extend(prelude.function_declarations.clone());
+        ProblemPrelude {
+            logic: Some("ALL".into()),
+            function_declarations: choice_const_declarations,
+            ..prelude.clone()
+        }
+    } else {
+        prelude.clone()
+    };
+
+    match checker_path {
+        Some(checker_path) => {
+            let cnf_path = gen_dimacs(
+                &premise_clauses,
+                &clause_id_to_lemma,
+                &mut sat_clause_to_lemma,
+                &mut term_to_var,
+                true,
+            );
+            // Note that I have to get these lemmas aligned with the
+            // order in which they are printed in the CNF, which is
+            // guaranteed if I follow the same order of
+            // premise_clauses
+            let lemmas: Vec<Rc<Term>> = (0..premise_clauses.len())
+                .filter_map(|i| {
+                    clause_id_to_lemma.get(&i).map(|lemma| {
+                        if handling_choice {
+                            let choice_assertions: Vec<_> = pool
+                                .collect_binders(lemma, Binder::Choice)
+                                .iter()
+                                .map(|epsilon| epsilon_to_assertion[epsilon].clone())
+                                .collect();
+                            let rw_lemma = substitution.apply(pool, lemma);
+                            if choice_assertions.is_empty() {
+                                rw_lemma
+                            } else {
+                                // recreate the lemma adding the negation of the conjunction of the
+                                // assertions as one of the literals
+                                let res_lemma = if let Some((Operator::RareList, lemma_lits)) =
+                                    rw_lemma.as_op()
+                                {
+                                    let mut lits = Vec::from(lemma_lits);
+                                    let choice_definitions = if choice_assertions.len() > 1 {
+                                        pool.add(Term::Op(Operator::And, choice_assertions))
+                                    } else {
+                                        choice_assertions[0].clone()
+                                    };
+                                    lits.push(
+                                        pool.add(Term::Op(Operator::Not, vec![choice_definitions])),
+                                    );
+                                    pool.add(Term::Op(Operator::RareList, lits.clone()))
+                                } else {
+                                    unreachable!();
+                                };
+                                res_lemma
+                            }
+                            // substitution.apply(pool, &lemma)
+                        } else {
+                            lemma.clone()
+                        }
+                    })
+                })
+                .collect();
+            // we also need to update the lemmas_to_th_ids map with the choice terms
+            let rw_lemmas_to_th_ids = if handling_choice {
+                lemmas_to_th_ids
+                    .iter()
+                    .map(|(k, v)| {
+                        // collect choices before we apply substitution in lemma
+                        let choice_assertions: Vec<_> = pool
+                            .collect_binders(k, Binder::Choice)
+                            .iter()
+                            .map(|epsilon| epsilon_to_assertion[epsilon].clone())
+                            .collect();
+                        let rw_lemma = substitution.apply(pool, k);
+                        if choice_assertions.is_empty() {
+                            (rw_lemma, v.clone())
+                        } else {
+                            // recreate the lemma adding the negation of the conjunction of the
+                            // assertions as one of the literals
+                            let lemma =
+                                if let Some((Operator::RareList, lemma_lits)) = rw_lemma.as_op() {
+                                    let mut lits = Vec::from(lemma_lits);
+                                    let choice_definitions = if choice_assertions.len() > 1 {
+                                        pool.add(Term::Op(Operator::And, choice_assertions))
+                                    } else {
+                                        choice_assertions[0].clone()
+                                    };
+                                    lits.push(
+                                        pool.add(Term::Op(Operator::Not, vec![choice_definitions])),
+                                    );
+                                    pool.add(Term::Op(Operator::RareList, lits.clone()))
+                                } else {
+                                    unreachable!();
+                                };
+                            (lemma, v.clone())
+                        }
+                    })
+                    .collect()
+            } else {
+                lemmas_to_th_ids
+            };
+
+            if clause_id_to_lemma.len() != lemmas.len() {
+                return Err(CheckerError::Explanation(format!(
+                    "{} lemmas in CNF but {} lemma terms",
+                    clause_id_to_lemma.len(),
+                    lemmas.len()
+                )));
+            }
+
+            sat_refutation_external_check(
+                pool,
+                cnf_path,
+                &prelude,
+                // &choice_assertions,
+                checker_path,
+                &lemmas,
+                &rw_lemmas_to_th_ids,
+            )
+        }
+        None => {
+            let cnf_path = gen_dimacs(
+                &premise_clauses,
+                &clause_id_to_lemma,
+                &mut sat_clause_to_lemma,
+                &mut term_to_var,
+                false,
+            );
+
+            match get_core_lemmas(
+                cnf_path,
+                &sat_clause_to_lemma,
+                cadical_path.unwrap(),
+                drattrim_path.unwrap(),
+            ) {
+                Ok(core_lemmas) => {
+                    log::info!(
+                        "[sat_refutation check] Check {} core lemmas",
+                        core_lemmas.len()
+                    );
+                    let cvc5_path = cvc5_path.unwrap();
+
+                    // for each core lemma, we will run cvc5, parse the proof in, and check it
+                    for lemma in &core_lemmas {
+                        let mut lemma_choices = Vec::new();
+                        let lemma = if handling_choice {
+                            &lemma
+                                .iter()
+                                .map(|l| {
+                                    pool.collect_binders(l, Binder::Choice).iter().for_each(
+                                        |epsilon| {
+                                            lemma_choices.push(epsilon.clone());
+                                        },
+                                    );
+                                    substitution.apply(pool, l)
+                                })
+                                .collect::<Vec<Rc<Term>>>()
+                        } else {
+                            lemma
+                        };
+                        // build assertions
+                        let mut assertions = Vec::new();
+                        lemma.iter().for_each(|l| {
+                            assertions.push(build_term!(pool, (not {l.clone()})));
+                        });
+                        lemma_choices.iter().for_each(|epsilon| {
+                            if !epsilon_to_assertion.contains_key(epsilon) {
+                                log::debug!(
+                                    "\t[sat_refutation check] choice not in map: {:?}\nmap: {:?}",
+                                    epsilon,
+                                    epsilon_to_assertion
+                                );
+                                unreachable!();
+                            }
+                            assertions.push(epsilon_to_assertion[epsilon].clone());
+                        });
+
+                        log::debug!("\t[sat_refutation check] Check lemma: {:?}", lemma);
+                        let problem = get_problem_string(pool, &prelude, &assertions);
+
+                        if let Err(e) = get_solver_proof(pool, problem.clone(), &cvc5_path) {
+                            log::debug!(
+                                "\t[sat_refutation check] Failed to check with problem:\n{}",
+                                problem
+                            );
+                            return Err(CheckerError::External(e));
+                        }
+                    }
+                    log::info!("[sat_refutation check] All successfully checked");
+                    Ok(())
+                }
+                Err(e) => Err(CheckerError::External(e)),
+            }
+        }
+    }
+}
+
+pub fn external_checker(RuleArgs { args, .. }: RuleArgs, checker_path: String) -> RuleResult {
+    let args_str: Vec<String> = args.iter().map(|t| format!("{}", t)).collect();
+    let string = format!("(\n{}\n)", args_str.join("\n"));
+    // this will make it expect this script from where you are running Carcara
+    let mut process = Command::new(checker_path.clone())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(LiaGenericError::FailedSpawnSolver)?;
+
+    process
+        .stdin
+        .take()
+        .expect("failed to open solver stdin")
+        .write_all(string.as_bytes())
+        .map_err(LiaGenericError::FailedWriteToSolverStdin)?;
+
+    let output = process
+        .wait_with_output()
+        .map_err(LiaGenericError::FailedWaitForSolver)?;
+
+    if !output.status.success() {
+        if let Ok(s) = std::str::from_utf8(&output.stderr) {
+            if s.contains("interrupted by timeout.") {
+                return Err(CheckerError::Unspecified);
+            }
+        }
+        return Err(CheckerError::Unspecified);
+    }
+    let res = output.stdout.as_slice();
+    if res == b"true\n" {
+        return Ok(());
+    }
+    Err(CheckerError::Explanation(format!(
+        "External checker {} did not validate step",
+        checker_path
+    )))
 }

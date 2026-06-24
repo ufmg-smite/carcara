@@ -53,7 +53,7 @@ pub fn write_lia_smt_instance(
     let mut printer = AlethePrinter::new(pool, prelude, use_sharing, dest);
     // We have to override the default prefix "@p_" because symbols starting with "@" are reserved
     // in SMT-LIB.
-    printer.term_sharing_variable_prefix = "p_";
+    printer.term_sharing_variable_prefix = "p_".to_owned();
     // Since we are printing an SMT-LIB problem, we have to be
     // compliant. For Carcara, this means that arithmetic constants
     // cannot use the GMP notation
@@ -71,7 +71,7 @@ pub fn write_asserts(
     let mut printer = AlethePrinter::new(pool, prelude, use_sharing, dest);
     // We have to override the default prefix "@p_" because symbols starting with "@" are reserved
     // in SMT-LIB.
-    printer.term_sharing_variable_prefix = "p_";
+    printer.term_sharing_variable_prefix = "p_".to_owned();
     // Since we are printing an SMT-LIB problem, we have to be
     // compliant. For Carcara, this means that arithmetic constants
     // cannot use the GMP notation
@@ -82,6 +82,25 @@ pub fn write_asserts(
         assertion.print_with_sharing(&mut printer)?;
         writeln!(printer.inner, ")")?;
     }
+    Ok(())
+}
+
+#[allow(unused)] // TODO
+pub fn write_term(
+    pool: &mut PrimitivePool,
+    prelude: &ProblemPrelude,
+    dest: &mut dyn io::Write,
+    term: &Rc<Term>,
+    use_sharing: bool,
+    prefix: String,
+) -> io::Result<()> {
+    let mut printer = AlethePrinter::new(pool, prelude, use_sharing, dest);
+    printer.term_sharing_variable_prefix = prefix;
+    // Since we are printing an SMT-LIB problem, we have to be
+    // compliant. For Carcara, this means that arithmetic constants
+    // cannot use the GMP notation
+    printer.smt_lib_strict = true;
+    term.print_with_sharing(&mut printer)?;
     Ok(())
 }
 
@@ -127,12 +146,14 @@ impl PrintWithSharing for Rc<Term> {
             if !cannot_use_sharing {
                 return if let Some(i) = indices.get(self) {
                     write!(p.inner, "{}{}", p.term_sharing_variable_prefix, i)
-                } else {
+                } else if p.use_sharing {
                     let i = indices.len();
                     indices.insert(self.clone(), i);
                     write!(p.inner, "(! ")?;
                     p.write_raw_term(self)?;
                     write!(p.inner, " :named {}{})", p.term_sharing_variable_prefix, i)
+                } else {
+                    p.write_raw_term(self)
                 };
             }
         }
@@ -176,14 +197,15 @@ impl PrintWithSharing for ParamOperator {
     }
 }
 
-struct AlethePrinter<'a> {
+pub struct AlethePrinter<'a> {
     pool: &'a mut PrimitivePool,
     inner: &'a mut dyn io::Write,
     term_indices: Option<IndexMap<Rc<Term>, usize>>,
-    term_sharing_variable_prefix: &'static str,
+    term_sharing_variable_prefix: String,
     global_vars: HashSet<Rc<Term>>,
     defined_constants: HashMap<Rc<Term>, String>,
     smt_lib_strict: bool,
+    use_sharing: bool,
 }
 
 impl PrintProof for AlethePrinter<'_> {
@@ -270,10 +292,11 @@ impl<'a> AlethePrinter<'a> {
             pool,
             inner: dest,
             term_indices: use_sharing.then(IndexMap::new),
-            term_sharing_variable_prefix: "@p_",
+            term_sharing_variable_prefix: "@p_".to_owned(),
             global_vars: global_variables,
             defined_constants: HashMap::new(),
             smt_lib_strict: false,
+            use_sharing,
         }
     }
 
@@ -295,7 +318,7 @@ impl<'a> AlethePrinter<'a> {
         write!(self.inner, ")")
     }
 
-    fn write_raw_term(&mut self, term: &Term) -> io::Result<()> {
+    pub fn write_raw_term(&mut self, term: &Term) -> io::Result<()> {
         match term {
             Term::Const(c) => {
                 if self.smt_lib_strict {
@@ -344,7 +367,11 @@ impl<'a> AlethePrinter<'a> {
                 write!(self.inner, "({} ", binder)?;
                 bindings.print_with_sharing(self)?;
                 write!(self.inner, " ")?;
+                // for now we avoid creating names within binders
+                let place_holder = self.use_sharing;
+                self.use_sharing = false;
                 term.print_with_sharing(self)?;
+                self.use_sharing = place_holder;
                 write!(self.inner, ")")
             }
             Term::Let(bindings, term) => {
@@ -485,10 +512,11 @@ impl fmt::Display for Term {
             pool: &mut pool,
             inner: &mut buf,
             term_indices: use_sharing.then(IndexMap::new),
-            term_sharing_variable_prefix: "@p_",
+            term_sharing_variable_prefix: "@p_".to_owned(),
             global_vars: HashSet::new(),
             defined_constants: HashMap::new(),
             smt_lib_strict: false,
+            use_sharing,
         };
         printer.write_raw_term(self).unwrap();
         let result = std::str::from_utf8(&buf).unwrap();

@@ -213,6 +213,7 @@ enum ElaborationPass {
     Uncrowd,
     Reordering,
     Hole,
+    SatRefutation,
 }
 
 #[derive(Args, Clone)]
@@ -272,6 +273,7 @@ impl From<ElaborationOptions> for (elaborator::Config, Vec<elaborator::Elaborati
                 ElaborationPass::Uncrowd => elaborator::ElaborationPass::Uncrowd,
                 ElaborationPass::Reordering => elaborator::ElaborationPass::Reordering,
                 ElaborationPass::Hole => elaborator::ElaborationPass::Hole,
+                ElaborationPass::SatRefutation => elaborator::ElaborationPass::SatRefutation,
             })
             .collect();
         let lia_options = val.lia_solver.map(|solver| elaborator::LiaGenericOptions {
@@ -296,6 +298,7 @@ impl From<ElaborationOptions> for (elaborator::Config, Vec<elaborator::Elaborati
             lia_options,
             uncrowd_rotation: val.uncrowd_rotate,
             hole_options,
+            sat_refutation_options: None, // TODO
         };
         (config, pipeline)
     }
@@ -438,6 +441,7 @@ enum LogLevel {
     Error,
     Warn,
     Info,
+    Debug,
 }
 
 impl From<LogLevel> for log::LevelFilter {
@@ -447,6 +451,7 @@ impl From<LogLevel> for log::LevelFilter {
             LogLevel::Error => Self::Error,
             LogLevel::Warn => Self::Warn,
             LogLevel::Info => Self::Info,
+            LogLevel::Debug => Self::Debug,
         }
     }
 }
