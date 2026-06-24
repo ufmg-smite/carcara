@@ -149,6 +149,20 @@ fn expand_string_constants(pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term>
                 args: new_args,
             })
         }
+        Term::Match(t, patterns) => {
+            let new_t = expand_string_constants(pool, t);
+            let new_patterns = patterns
+                .iter()
+                .map(|(vars, pattern, res)| {
+                    (
+                        vars.clone(),
+                        pattern.clone(),
+                        expand_string_constants(pool, res),
+                    )
+                })
+                .collect();
+            pool.add(Term::Match(new_t, new_patterns))
+        }
         Term::Var(..) | Term::Const(_) | Term::Sort(_) => term.clone(),
     }
 }

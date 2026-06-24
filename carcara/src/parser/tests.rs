@@ -808,7 +808,7 @@ fn test_qualified_operators() {
     ));
     assert!(matches!(
         parse_term_err("((as undefined (Array Int Int)) 1)"),
-        Error::Parser(ParserError::InvalidQualifiedOp(_), _),
+        Error::Parser(ParserError::UndefinedIden(_), _),
     ));
 }
 

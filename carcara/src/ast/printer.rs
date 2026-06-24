@@ -354,6 +354,13 @@ impl<'a> AlethePrinter<'a> {
                 term.print_with_sharing(self)?;
                 write!(self.inner, ")")
             }
+            Term::Match(term, patterns) => {
+                write!(self.inner, "(match {} (", term)?;
+                for (_, pattern, res) in patterns {
+                    write!(self.inner, "({} {})", pattern, res)?;
+                }
+                write!(self.inner, ")")
+            }
             Term::ParamOp { op, op_args, args } => {
                 if !args.is_empty() {
                     write!(self.inner, "(")?;
@@ -555,6 +562,7 @@ impl fmt::Display for Sort {
             Sort::Real => write!(f, "Real"),
             Sort::String => write!(f, "String"),
             Sort::RegLan => write!(f, "RegLan"),
+            Sort::Datatype(name, args) => write_s_expr(f, quote_symbol(name), args),
             Sort::Var(name) => write!(f, "{}", name),
             Sort::ParamSort(args, s) => write!(f, "(par {:?} {})", args, s),
             Sort::Array(x, y) => write_s_expr(f, "Array", &[x, y]),

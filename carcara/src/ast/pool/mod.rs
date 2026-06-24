@@ -8,6 +8,15 @@ use crate::ast::{Constant, ParamOperator};
 use indexmap::{IndexMap, IndexSet};
 use storage::Storage;
 
+/// A `step` command.
+#[derive(Debug, Clone)]
+pub struct DatatypeDef {
+    /// The datatype name
+    pub name: String,
+    // For each constructor, its selectors and tester
+    pub cons_map: IndexMap<Rc<Term>, (Vec<Rc<Term>>, Rc<Term>)>,
+}
+
 pub trait TermPool {
     /// Returns the term corresponding to the boolean constant `true`.
     fn bool_true(&mut self) -> Rc<Term> {
@@ -44,6 +53,8 @@ pub trait TermPool {
     /// This method uses a cache, so there is no additional cost to computing the free variables of
     /// a term multiple times.
     fn free_vars(&mut self, term: &Rc<Term>) -> IndexSet<Rc<Term>>;
+
+    fn dt_def(&self, sort: &Rc<Term>) -> &DatatypeDef;
 }
 
 /// A structure to store and manage all allocated terms.
@@ -60,6 +71,7 @@ pub struct PrimitivePool {
     pub(crate) storage: Storage,
     pub(crate) free_vars_cache: IndexMap<Rc<Term>, IndexSet<Rc<Term>>>,
     pub(crate) sorts_cache: IndexMap<Rc<Term>, Rc<Term>>,
+    pub(crate) dt_defs: IndexMap<Rc<Term>, DatatypeDef>,
 }
 
 impl PrimitivePool {
@@ -321,6 +333,11 @@ impl PrimitivePool {
                 Sort::Function(result)
             }
             Term::Let(_, inner) => self.compute_sort(inner).as_sort().unwrap().clone(),
+            Term::Match(_, patterns) => self
+                .compute_sort(&patterns.last().unwrap().2)
+                .as_sort()
+                .unwrap()
+                .clone(),
             Term::ParamOp { op, op_args, args } => {
                 let sort = match op {
                     ParamOperator::BvExtract => {
@@ -378,7 +395,7 @@ impl PrimitivePool {
                         let bvsize = op_args[0].as_integer().unwrap().to_usize().unwrap();
                         Sort::BitVec(bvsize)
                     }
-                    ParamOperator::BvBitOf => Sort::Bool,
+                    ParamOperator::BvBitOf | ParamOperator::Tester => Sort::Bool,
                     ParamOperator::BvIntOf => Sort::Int,
                     ParamOperator::RePower | ParamOperator::ReLoop => Sort::RegLan,
                     ParamOperator::ArrayConst => op_args[0].as_sort().unwrap().clone(),
@@ -466,6 +483,18 @@ impl PrimitivePool {
                 }
                 vars
             }
+            Term::Match(term, patterns) => {
+                let mut vars = self.free_vars_with_priorities(term, prior_pools);
+                for (bindings, _, res) in patterns {
+                    let mut res_vars = self.free_vars_with_priorities(res, prior_pools);
+                    for bound_var in bindings {
+                        let term = self.add_with_priorities(bound_var.clone().into(), prior_pools);
+                        res_vars.swap_remove(&term);
+                    }
+                    vars.extend(res_vars.into_iter());
+                }
+                vars
+            }
             Term::Var(..) => {
                 let mut set = IndexSet::with_capacity(1);
                 set.insert(term.clone());
@@ -490,6 +519,14 @@ impl PrimitivePool {
             sort => sort,
         }
     }
+
+    pub fn add_dt_def(&mut self, sort: &Rc<Term>, def: &DatatypeDef) {
+        if !sort.is_sort_dt() {
+            // return Err(ParserError::ExpectedDTSort(sort.clone()));
+            unreachable!();
+        }
+        self.dt_defs.insert(sort.clone(), def.clone());
+    }
 }
 
 impl TermPool for PrimitivePool {
@@ -505,5 +542,13 @@ impl TermPool for PrimitivePool {
 
     fn free_vars(&mut self, term: &Rc<Term>) -> IndexSet<Rc<Term>> {
         self.free_vars_with_priorities(term, [])
+    }
+
+    fn dt_def(&self, sort: &Rc<Term>) -> &DatatypeDef {
+        if !sort.is_sort_dt() {
+            // return Err(ParserError::ExpectedDTSort(sort.clone()));
+            unreachable!();
+        }
+        &self.dt_defs[sort]
     }
 }

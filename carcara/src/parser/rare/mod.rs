@@ -17,7 +17,7 @@ struct BodyDefinition<'a> {
 }
 
 impl<'p, 's> Parser<'p, 's> {
-    fn parse_parameters(&mut self) -> CarcaraResult<(String, TypeParameter)> {
+    fn parse_rare_parameters(&mut self) -> CarcaraResult<(String, TypeParameter)> {
         self.expect_token(Token::OpenParen)?;
         let name = self.expect_symbol()?;
         let base_term = self.parse_sort(true)?;
@@ -124,7 +124,7 @@ impl<'p, 's> Parser<'p, 's> {
         self.expect_token(Token::ReservedWord(Reserved::DeclareRareRule))?;
         let name = self.expect_symbol()?;
         self.expect_token(Token::OpenParen)?;
-        let parameters = self.parse_sequence(Self::parse_parameters, false)?;
+        let parameters = self.parse_sequence(Self::parse_rare_parameters, false)?;
 
         let body_definitions = BodyDefinition {
             args: &vec![],

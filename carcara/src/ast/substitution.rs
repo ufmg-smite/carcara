@@ -244,6 +244,29 @@ impl Substitution {
                 };
                 pool.add(Term::Let(new_bindings, new_term))
             }
+            Term::Match(term, patterns) => {
+                let new_term = self.apply(pool, term);
+                let new_patterns = patterns
+                    .iter()
+                    .map(|(binding_list, pattern, res)| {
+                        let (new_bindings, mut renaming) =
+                            self.rename_binding_list(pool, binding_list, true);
+                        let new_pattern = if renaming.is_empty() {
+                            pattern.clone()
+                        } else {
+                            renaming.apply(pool, pattern)
+                        };
+                        let new_res = if renaming.is_empty() {
+                            self.apply(pool, res)
+                        } else {
+                            let renamed = renaming.apply(pool, res);
+                            self.apply(pool, &renamed)
+                        };
+                        (new_bindings, new_pattern, new_res)
+                    })
+                    .collect();
+                pool.add(Term::Match(new_term, new_patterns))
+            }
             Term::Const(_) | Term::Var(..) => term.clone(),
             Term::ParamOp { op, op_args, args } => {
                 let new_args = apply_to_sequence!(args);
@@ -264,6 +287,10 @@ impl Substitution {
             Term::Sort(Sort::Array(x, y)) => {
                 let [x, y] = [x, y].map(|s| self.apply(pool, s));
                 pool.add(Term::Sort(Sort::Array(x, y)))
+            }
+            Term::Sort(Sort::Datatype(sort, args)) => {
+                let new_args = apply_to_sequence!(args);
+                pool.add(Term::Sort(Sort::Datatype(sort.clone(), new_args)))
             }
             Term::Sort(Sort::ParamSort(vars, sort)) => {
                 let new_sort = self.apply(pool, sort);

@@ -150,6 +150,7 @@ impl Rc<Term> {
                 cache.insert(self, self.clone());
                 return cache.get(self).unwrap();
             }
+            Term::Match(_, _) => todo!(), // TODO
         };
         cache.insert(self, pool.add(result));
         cache.get(self).unwrap()
@@ -563,6 +564,8 @@ fn eval_param_op(op: ParamOperator, op_args: &[Rc<Term>], args: &[Rc<Term>]) -> 
 
         // TODO: Strings, Arrays
         ParamOperator::RePower | ParamOperator::ReLoop | ParamOperator::ArrayConst => return None,
+
+        ParamOperator::Tester => todo!(), // TODO
     })
 }
 

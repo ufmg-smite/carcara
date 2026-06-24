@@ -361,6 +361,7 @@ fn rewrite_meta_terms_inner(
                 args: new_args,
             })
         }
+        Term::Match(_, _) => todo!(), // TODO
     };
 
     ctx.in_progress.shift_remove(&term);

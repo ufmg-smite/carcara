@@ -96,6 +96,15 @@ pub enum Reserved {
     /// The `declare-sort` reserved word.
     DeclareSort,
 
+    // The `declare-datatype` reserved word.
+    DeclareDatatype,
+
+    // The `declare-datatypes` reserved word.
+    DeclareDatatypes,
+
+    // The `par` reserved word.
+    Par,
+
     /// The `define-fun` reserved word.
     DefineFun,
 
@@ -136,6 +145,9 @@ impl_str_conversion_traits!(Reserved {
     Step: "step",
     Anchor: "anchor",
     DeclareFun: "declare-fun",
+    DeclareDatatype: "declare-datatype",
+    DeclareDatatypes: "declare-datatypes",
+    Par: "par",
     DeclareConst: "declare-const",
     DeclareSort: "declare-sort",
     DefineFun: "define-fun",

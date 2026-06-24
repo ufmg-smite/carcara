@@ -65,9 +65,25 @@ pub enum ParserError {
     #[error("expected bitvector sort, got '{0}'")]
     ExpectedBvSort(Sort),
 
+    /// Expected `DatatypeSort`
+    #[error("expected datatype sort, got '{0}'")]
+    ExpectedDTSort(Sort),
+
     // Expected Constant::Integer, got other Term
     #[error("expected integer constant, got '{0}'")]
     ExpectedIntegerConstant(Rc<Term>),
+
+    /// Pattern in match is not valid
+    #[error("invalid pattern '{0}'")]
+    InvalidPattern(Rc<Term>),
+
+    /// Results in match do not have the same type
+    #[error("invalid match results (different types) '{0} and {1}'")]
+    InvalidMatchResults(Rc<Term>, Rc<Term>),
+
+    /// Results in match do not have the same type
+    #[error("Patterns in match statement do not have variable or do not cover all constructors")]
+    InvalidPatterns,
 
     /// A term that is not a function was used as a function.
     #[error("'{0}' is not a function sort")]
