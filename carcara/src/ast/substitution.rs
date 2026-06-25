@@ -498,33 +498,37 @@ mod tests {
             "(forall ((p Bool)) (and p q))" [q -> r] => "(forall ((p Bool)) (and p r))",
 
             // Simple renaming
-            "(forall ((y Int)) (> y 0))" [x -> y] => "(forall ((y' Int)) (> y' 0))",
+            "(forall ((y Int)) (> y 0))" [x -> y] => "(forall ((y_renamed Int)) (> y_renamed 0))",
 
             // Renaming may be skipped
             "(forall ((x Int)) (> x 0))" [x -> y] => "(forall ((x Int)) (> x 0))",
 
             // Capture-avoidance
-            "(forall ((y Int)) (> y x))" [x -> y] => "(forall ((y' Int)) (> y' y))",
+            "(forall ((y Int)) (> y x))" [x -> y] => "(forall ((y_renamed Int)) (> y_renamed y))",
             "(forall ((x Int) (y Int)) (= x y))" [x -> y] =>
-                "(forall ((x' Int) (y' Int)) (= x' y'))",
+                "(forall ((x_renamed Int) (y_renamed Int)) (= x_renamed y_renamed))",
             "(forall ((x Int) (y Int)) (= x y))" [x -> x] => "(forall ((x Int) (y Int)) (= x y))",
-            "(forall ((y Int)) (> y x))" [x -> (+ y 0)] => "(forall ((y' Int)) (> y' (+ y 0)))",
+            "(forall ((y Int)) (> y x))" [x -> (+ y 0)] =>
+                "(forall ((y_renamed Int)) (> y_renamed (+ y 0)))",
 
-            "(forall ((y Int) (y' Int)) (= y y'))" [x -> y] =>
-                "(forall ((y' Int) (y'' Int)) (= y' y''))",
-            "(forall ((y Int) (y' Int) (y'' Int)) (= y y' y''))" [x -> y] =>
-                "(forall ((y' Int) (y'' Int) (y''' Int)) (= y' y'' y'''))",
+            "(forall ((y Int) (y_renamed Int)) (= y y_renamed))" [x -> y] =>
+                "(forall ((y_renamed Int) (y_renamed_renamed Int)) (= y_renamed y_renamed_renamed))",
+            "(forall ((y Int) (y_renamed Int) (y_renamed_renamed Int))
+                (= y y_renamed y_renamed_renamed))" [x -> y]
+            => "(forall ((y_renamed Int) (y_renamed_renamed Int) (y_renamed_renamed_renamed Int))
+                    (= y_renamed y_renamed_renamed y_renamed_renamed_renamed))",
 
             // The capture-avoidance may disambiguate repeated bindings
-            "(forall ((y Int) (y' Int) (y' Int)) (= y y' y'))" [x -> y] =>
-                "(forall ((y' Int) (y'' Int) (y''' Int)) (= y' y''' y'''))",
+            "(forall ((y Int) (y_renamed Int) (y_renamed Int)) (= y y_renamed y_renamed))" [x -> y] =>
+                "(forall ((y_renamed Int) (y_renamed_renamed Int) (y_renamed_renamed_renamed Int))
+                    (= y_renamed y_renamed_renamed_renamed y_renamed_renamed_renamed))",
 
-            // In theory, since x does not appear in this term, renaming y to y' is unnecessary
-            "(forall ((y Int)) (> y 0))" [x -> y] => "(forall ((y' Int)) (> y' 0))",
+            // In theory, since x does not appear in this term, renaming y to y_renamed is unnecessary
+            "(forall ((y Int)) (> y 0))" [x -> y] => "(forall ((y_renamed Int)) (> y_renamed 0))",
 
             // Name collision with variables with different types
             "(forall ((y Bool)) (and y (> x 0)))" [x -> y] =>
-                "(forall ((y' Bool)) (and y' (> y 0)))",
+                "(forall ((y_renamed Bool)) (and y_renamed (> y 0)))",
 
             // TODO: Add tests for `choice`, `let`, and `lambda` terms
         }

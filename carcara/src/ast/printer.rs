@@ -367,11 +367,11 @@ impl<'a> AlethePrinter<'a> {
                 write!(self.inner, "({} ", binder)?;
                 bindings.print_with_sharing(self)?;
                 write!(self.inner, " ")?;
-                // for now we avoid creating names within binders
-                let place_holder = self.use_sharing;
-                self.use_sharing = false;
+                // TODO: should we avoid creating names within binders?
+                // let place_holder = self.use_sharing;
+                // self.use_sharing = false;
                 term.print_with_sharing(self)?;
-                self.use_sharing = place_holder;
+                // self.use_sharing = place_holder;
                 write!(self.inner, ")")
             }
             Term::Let(bindings, term) => {
