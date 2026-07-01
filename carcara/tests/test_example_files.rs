@@ -92,12 +92,7 @@ fn test_file(proof_path: &str) {
             strict: false,
             parse_hole_args: false,
         };
-        let checking = checker::Config {
-            elaborated: false,
-            ignore_unknown_rules: false,
-            allowed_rules: ["all_simplify", "rare_rewrite"].map(str::to_owned).into(),
-            rup_resolution: false,
-        };
+        let checking = checker::Config::new().allowed_rules(["all_simplify", "rare_rewrite"]);
         (parsing, checking)
     } else {
         (parser::Config::new(), checker::Config::new())

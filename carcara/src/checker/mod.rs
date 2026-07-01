@@ -1,4 +1,5 @@
 pub mod error;
+mod lia_generic;
 mod parallel;
 mod rules;
 mod shared;
@@ -9,7 +10,7 @@ use crate::{
     CarcaraResult, Error,
 };
 use error::CheckerError;
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 pub use parallel::{scheduler::Scheduler, ParallelProofChecker};
 use rules::{Premise, RuleArgs, RuleResult};
 use shared::{check_assume_shared, check_step_core, StepCheckContext};
@@ -19,6 +20,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+// The elaborator needs to use this function to elaborate `bfun_elim` steps
 pub(crate) use rules::clausification::apply_bfun_elim;
 pub(crate) use rules::linear_arithmetic::la_generic_partial;
 
@@ -67,6 +69,10 @@ pub struct Config {
 
     /// A set of rule names that the checker will allow, considering them holes in the proof.
     pub allowed_rules: HashSet<String>,
+
+    pub rule_checkers: IndexMap<String, String>,
+
+    pub external_tools: IndexMap<String, String>,
 }
 
 impl Config {
@@ -81,6 +87,22 @@ impl Config {
 
     pub fn ignore_unknown_rules(mut self, value: bool) -> Self {
         self.ignore_unknown_rules = value;
+        self
+    }
+
+    pub fn allowed_rules(mut self, values: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        let values = values.into_iter().map(Into::into).collect();
+        self.allowed_rules = values;
+        self
+    }
+
+    pub fn rule_checkers(mut self, value: IndexMap<String, String>) -> Self {
+        self.rule_checkers = value;
+        self
+    }
+
+    pub fn external_tools(mut self, value: IndexMap<String, String>) -> Self {
+        self.external_tools = value;
         self
     }
 }
@@ -148,7 +170,7 @@ impl<'c> ProofChecker<'c> {
                     } else {
                         None
                     };
-                    self.check_step(step, previous_command, &iter, &mut stats)
+                    self.check_step(step, previous_command, &iter, &mut stats, &problem.prelude)
                         .map_err(|e| Error::Checker {
                             inner: e,
                             rule: step.rule.as_str().into(),
@@ -162,6 +184,9 @@ impl<'c> ProofChecker<'c> {
                         self.context.pop();
                     }
 
+                    // Note that for the purpose of whether the proof of the input assumptions
+                    // concludes the empty clause this test must be made only when the context is
+                    // empty, i.e., when we are not in a subproof
                     if step.clause.is_empty() && self.context.is_empty() {
                         self.reached_empty_clause = true;
                     }
@@ -227,6 +252,7 @@ impl<'c> ProofChecker<'c> {
         previous_command: Option<Premise>,
         iter: &'i ProofIter<'i>,
         stats: &mut Option<&mut CheckerStatistics<CR>>,
+        prelude: &ProblemPrelude,
     ) -> RuleResult {
         let mut polyeq_time = Duration::ZERO;
 
@@ -245,6 +271,46 @@ impl<'c> ProofChecker<'c> {
             .map(|&i| iter.get_premise(i))
             .collect();
 
+        // TODO: for now, sat refutation and calling external solvers is only supported in
+        // sequential checking mode
+        if step.rule == "sat_refutation" && !self.config.allowed_rules.contains("sat_refutation") {
+            let premises_steps: Vec<_> =
+                step.premises.iter().map(|&p| iter.get_premise(p)).collect();
+            return if let Some(checker) = self.config.rule_checkers.get(&step.rule) {
+                lia_generic::sat_refutation(
+                    self.pool,
+                    premises_steps,
+                    prelude,
+                    Some(checker.to_owned()),
+                    None,
+                    None,
+                    None,
+                )
+            } else {
+                match (
+                    self.config.external_tools.get("sat-solver"),
+                    self.config.external_tools.get("drat-checker"),
+                    self.config.external_tools.get("smt-solver"),
+                ) {
+                    (Some(cadical), Some(drattrim), Some(cvc5)) => lia_generic::sat_refutation(
+                        self.pool,
+                        premises_steps,
+                        prelude,
+                        None,
+                        Some(cadical.to_owned()),
+                        Some(drattrim.to_owned()),
+                        Some(cvc5.to_owned()),
+                    ),
+                    _ => Err(CheckerError::Explanation(
+                        "The `sat_refutation` rule checking requires paths to be given for a SAT \
+                        solver (`sat-solver`), DRAT checker (`drat-checker`), and an SMT solver \
+                        (`smt-solver`) via the external-tools option"
+                            .to_owned(),
+                    )),
+                }
+            };
+        }
+
         // Prepare rule arguments - this is pool-specific
         let rule_args = RuleArgs {
             conclusion: &step.clause,
@@ -257,6 +323,10 @@ impl<'c> ProofChecker<'c> {
             polyeq_time: &mut polyeq_time,
             rare_rules: self.rare_rules,
         };
+
+        if let Some(custom_checker) = self.config.rule_checkers.get(&step.rule) {
+            return lia_generic::external_checker(rule_args, custom_checker.clone());
+        }
 
         // Use shared core logic
         let context = StepCheckContext {
