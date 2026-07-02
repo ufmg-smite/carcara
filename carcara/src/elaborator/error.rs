@@ -7,7 +7,7 @@ pub enum ElaborationError {
     Checker(#[from] CheckerError),
 
     #[error(transparent)]
-    LiaGeneric(#[from] crate::elaborator::lia_generic::LiaGenericError),
+    External(#[from] crate::external::ExternalError),
 
     #[error(transparent)]
     Hole(#[from] crate::elaborator::hole::HoleError),

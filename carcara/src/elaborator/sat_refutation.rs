@@ -249,18 +249,26 @@ pub fn sat_refutation(elaborator: &mut Elaborator, step: &StepNode) -> Option<Rc
         let smt_solver = options.smt_solver.as_ref().to_owned();
         // for each core lemma, we will run cvc5, parse the proof in, and check it
         for (i, li) in core_lemmas.iter().enumerate() {
-            let asserts = &li
+            let asserts: Vec<_> = li
                 .iter()
                 .map(|l| build_term!(elaborator.pool, (not {l.clone()})))
                 .collect();
             let problem = get_problem_string(
                 elaborator.pool,
                 &elaborator.problem.prelude.clone(),
-                asserts,
+                &asserts,
             );
             log::debug!("\tGet proof for lemma {}", i);
+
+            // TODO: don't hardcode args
+            let args = [
+                "--proof-format=alethe",
+                "--no-symmetry-breaker",
+                "--enum-inst",
+                "--tlimit=30000",
+            ];
             let solver_proof_commands =
-                match get_solver_proof(elaborator.pool, problem.clone(), &smt_solver) {
+                match get_solver_proof(elaborator.pool, problem.clone(), &smt_solver, args) {
                     Ok((c, _)) => c,
                     Err(e) => {
                         log::warn!("\t\tfailed to elaborate theory lemma {:?}: {}", li, e);

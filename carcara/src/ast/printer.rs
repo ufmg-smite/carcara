@@ -61,11 +61,11 @@ pub fn write_lia_smt_instance(
     printer.write_lia_smt_instance(clause)
 }
 
-pub fn write_asserts(
+pub fn write_asserts<'a, I: IntoIterator<Item = &'a Rc<Term>>>(
     pool: &mut PrimitivePool,
     prelude: &ProblemPrelude,
     dest: &mut dyn io::Write,
-    asserts: &Vec<Rc<Term>>,
+    assertions: I,
     use_sharing: bool,
 ) -> io::Result<()> {
     let mut printer = AlethePrinter::new(pool, prelude, use_sharing, dest);
@@ -77,7 +77,7 @@ pub fn write_asserts(
     // cannot use the GMP notation
     printer.smt_lib_strict = true;
 
-    for assertion in asserts {
+    for assertion in assertions {
         write!(printer.inner, "(assert ")?;
         assertion.print_with_sharing(&mut printer)?;
         writeln!(printer.inner, ")")?;

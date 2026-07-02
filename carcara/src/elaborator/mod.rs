@@ -52,7 +52,7 @@ pub struct LiaGenericOptions {
     pub solver: Box<str>,
 
     /// The arguments to pass to the solver.
-    pub arguments: Vec<Box<str>>,
+    pub arguments: Vec<String>,
 }
 
 /// The options that control how `hole` steps are elaborated using an external solver.

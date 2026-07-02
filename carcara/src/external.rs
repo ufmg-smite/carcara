@@ -38,10 +38,10 @@ pub enum ExternalError {
     LemmaNotChecked(Rc<Term>),
 }
 
-pub fn get_problem_string(
+pub fn get_problem_string<'a, I: IntoIterator<Item = &'a Rc<Term>>>(
     pool: &mut PrimitivePool,
     prelude: &ProblemPrelude,
-    assertions: &Vec<Rc<Term>>,
+    assertions: I,
 ) -> String {
     use std::fmt::Write;
 
@@ -82,15 +82,11 @@ pub fn parse_and_check_solver_proof(
 pub fn get_solver_proof(
     pool: &mut PrimitivePool,
     problem: String,
-    cvc5_path: &String,
+    solver: &str,
+    arguments: impl IntoIterator<Item = impl AsRef<std::ffi::OsStr>>,
 ) -> Result<(Vec<ProofCommand>, bool), ExternalError> {
-    let mut process = Command::new(cvc5_path)
-        .args([
-            "--proof-format=alethe".to_owned(),
-            "--no-symmetry-breaker".to_owned(),
-            "--enum-inst".to_owned(),
-            "--tlimit=30000".to_owned(),
-        ])
+    let mut process = Command::new(solver)
+        .args(arguments)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -383,9 +379,10 @@ pub fn get_core_lemmas(
     Ok(core_lemmas)
 }
 
-fn increase_subproof_depth(proof: ProofNodeForest, delta: usize, prefix: &str) -> ProofNodeForest {
-    proof
-        .mutate::<_, ()>(|_, node, _| {
+fn increase_subproof_depth(proof: Rc<ProofNode>, delta: usize, prefix: &str) -> Rc<ProofNode> {
+    let Ok(node) = proof.mutate(
+        // I'd rather use the never type (!) than `Infallible`, but it's still unstable
+        |_, node, _| -> Result<Rc<ProofNode>, std::convert::Infallible> {
             let node = match node.as_ref().clone() {
                 ProofNode::Assume { id, depth, term } => ProofNode::Assume {
                     id: format!("{}.{}", prefix, id),
@@ -400,8 +397,9 @@ fn increase_subproof_depth(proof: ProofNodeForest, delta: usize, prefix: &str) -
                 ProofNode::Subproof(_) => unreachable!(),
             };
             Ok(Rc::new(node))
-        })
-        .unwrap()
+        },
+    );
+    node
 }
 
 pub fn insert_solver_proof(
@@ -411,7 +409,11 @@ pub fn insert_solver_proof(
     root_id: &str,
     depth: usize,
 ) -> Rc<ProofNode> {
-    let proof = ProofNodeForest::from_commands(commands);
+    let proof = ProofNodeForest::from_commands(commands)
+        .0
+        .into_iter()
+        .find(|node| node.clause().is_empty())
+        .expect("solver proof does not conclude empty clause");
 
     let mut ids = IdHelper::new(root_id);
     let subproof_id = ids.next_id();
@@ -425,9 +427,6 @@ pub fn insert_solver_proof(
 
     let proof = increase_subproof_depth(proof, depth + 1, &subproof_id);
     let term_to_subproof_assumption: HashMap<Rc<Term>, Rc<ProofNode>> = proof
-        .0
-        .last()
-        .unwrap()
         .get_assumptions_of_depth(depth + 1)
         .iter()
         .map(|p| {
@@ -449,6 +448,45 @@ pub fn insert_solver_proof(
     // assumptions there, but one of them has id "...a5").
     let mut next_assumption_id = clause.len() + 1;
 
+    // we have to make sure the assumptions are given in the right order as the conclusion
+    let discharge = (0..clause.len() - 1)
+        .map(|i| {
+            let Some(t) = match_term!((not t) = &clause[i]) else {
+                unreachable!()
+            };
+
+            if let Some(a) = term_to_subproof_assumption.get(t) {
+                return a.clone();
+            }
+
+            // No assumption from the subproof matches this term directly. We will check if this
+            // term could have matched modulo polyeq with any of the assumptions. Only if that fails
+            // we create a new assumption
+            let mut assumption_opt: Option<Rc<ProofNode>> = None;
+            term_to_subproof_assumption.iter().for_each(|(assume, pf)| {
+                // TODO: is this actually doing anything if mod_reordering is false?
+                if Polyeq::new().mod_reordering(false).eq(t, assume) {
+                    assumption_opt = Some(pf.clone());
+                }
+            });
+            if let Some(assumption_opt) = assumption_opt {
+                return assumption_opt;
+            }
+            // this marks the case in which the assumption corresponding to this literal
+            // was not necessary for deriving unsat, i.e., the validity of the initial
+            // clause does not depend on it. Regardless, to produce the necessary clause
+            // as conclusion, so the whole proof is properly connected, we must generate an
+            // assumption for this literal
+            let assumption = Rc::new(ProofNode::Assume {
+                id: format!("{}{}", last_assumption_id_prefix, next_assumption_id),
+                depth: depth + 1,
+                term: t.clone(),
+            });
+            next_assumption_id += 1;
+            assumption
+        })
+        .collect();
+
     let last_step = Rc::new(ProofNode::Step(StepNode {
         id: subproof_id,
         depth: depth + 1,
@@ -456,49 +494,8 @@ pub fn insert_solver_proof(
         rule: "subproof".to_owned(),
         premises: Vec::new(),
         args: Vec::new(),
-        // we have to make sure the assumptions are given in the right order as
-        // the conclusion
-        discharge: (0..clause.len() - 1)
-            .map(|i| {
-                if let Some(t) = match_term!((not t) = &clause[i]) {
-                    if let Some(a) = term_to_subproof_assumption.get(t) {
-                        a.clone()
-                    } else {
-                        // we will see if this term could have matched modulo
-                        // polyeq with any of the assumptions. Only if that
-                        // fails we create a new assumption
-                        let mut assumption_opt: Option<Rc<ProofNode>> = None;
-                        term_to_subproof_assumption.iter().for_each(|(assume, pf)| {
-                            if Polyeq::new().mod_reordering(false).eq(t, assume) {
-                                // println!("\t[should match] Term {} with assumption {}", t, assume);
-                                assumption_opt = Some(pf.clone());
-                            }
-                        });
-                        if let Some(assumption_opt) = assumption_opt {
-                            return assumption_opt;
-                        }
-                        // println!("\t[didn't match] Term {}", t);
-                        // this marks the case in which the assumption
-                        // corresponding to this literal was not necessary for
-                        // deriving unsat, i.e., the validity of the initial
-                        // clause does not depend on it. Regardless, to produce
-                        // the necessary clause as conclusion, so the whole
-                        // proof is properly connected, we must generate an
-                        // assumption for this literal
-                        let assumption = Rc::new(ProofNode::Assume {
-                            id: format!("{}{}", last_assumption_id_prefix, next_assumption_id),
-                            depth: depth + 1,
-                            term: t.clone(),
-                        });
-                        next_assumption_id += 1;
-                        assumption
-                    }
-                } else {
-                    unreachable!();
-                }
-            })
-            .collect(),
-        previous_step: Some(proof.0.last().unwrap().clone()),
+        discharge,
+        previous_step: Some(proof),
     }));
 
     let subproof = Rc::new(ProofNode::Subproof(SubproofNode {

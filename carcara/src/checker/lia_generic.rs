@@ -438,7 +438,14 @@ pub fn sat_refutation(
                         log::debug!("\t[sat_refutation check] Check lemma: {:?}", lemma);
                         let problem = get_problem_string(pool, &prelude, &assertions);
 
-                        if let Err(e) = get_solver_proof(pool, problem.clone(), &cvc5_path) {
+                        // TODO: don't hardcode args
+                        let args = [
+                            "--proof-format=alethe",
+                            "--no-symmetry-breaker",
+                            "--enum-inst",
+                            "--tlimit=30000",
+                        ];
+                        if let Err(e) = get_solver_proof(pool, problem.clone(), &cvc5_path, args) {
                             log::debug!(
                                 "\t[sat_refutation check] Failed to check with problem:\n{}",
                                 problem
