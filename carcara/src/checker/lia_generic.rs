@@ -1,6 +1,5 @@
 use super::*;
-use crate::checker::error::LiaGenericError;
-use crate::external::*;
+use crate::external::{self, ExternalError};
 use std::collections::HashMap;
 use std::process;
 use std::{
@@ -13,7 +12,6 @@ fn sat_refutation_external_check(
     pool: &mut PrimitivePool,
     cnf_path: String,
     prelude: &ProblemPrelude,
-    // choice_assertions: &Vec<Rc<Term>>,
     checker_path: String,
     lemmas: &[Rc<Term>],
     lemmas_to_th_ids: &HashMap<Rc<Term>, String>,
@@ -24,9 +22,6 @@ fn sat_refutation_external_check(
     log::info!("[sat_refutation check] Print prelude file {}", prelude_path);
     let mut prelude_file_str = String::new();
     writeln!(&mut prelude_file_str, "{}", prelude).unwrap();
-    // choice_assertions.iter().for_each(|a| {
-    //     writeln!(&mut prelude_file_str, "(assert {})", a).unwrap();
-    // });
     write!(
         File::create(prelude_path.clone()).unwrap(),
         "{}",
@@ -83,18 +78,18 @@ fn sat_refutation_external_check(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(LiaGenericError::FailedSpawnSolver)?;
+        .map_err(ExternalError::FailedSpawnSolver)?;
 
     process
         .stdin
         .take()
         .expect("failed to open solver stdin")
         .write_all(string.as_bytes())
-        .map_err(LiaGenericError::FailedWriteToSolverStdin)?;
+        .map_err(ExternalError::FailedWriteToSolverStdin)?;
 
     let output = process
         .wait_with_output()
-        .map_err(LiaGenericError::FailedWaitForSolver)?;
+        .map_err(ExternalError::FailedWaitForSolver)?;
 
     if !output.status.success() {
         if let Ok(s) = std::str::from_utf8(&output.stderr) {
@@ -141,7 +136,7 @@ pub fn sat_refutation(
     let mut lemmas_to_step_ids: HashMap<Rc<Term>, String> = HashMap::new();
     let mut clause_id_to_lemma: HashMap<usize, Rc<Term>> = HashMap::new();
     let mut choice_terms: HashSet<Rc<Term>> = HashSet::new();
-    let premise_clauses = collect_premise_clauses(
+    let premise_clauses = external::collect_premise_clauses(
         pool,
         &premise_steps,
         &mut lemmas_to_th_ids,
@@ -269,7 +264,7 @@ pub fn sat_refutation(
 
     match checker_path {
         Some(checker_path) => {
-            let cnf_path = gen_dimacs(
+            let cnf_path = external::gen_dimacs(
                 &premise_clauses,
                 &clause_id_to_lemma,
                 &mut sat_clause_to_lemma,
@@ -379,7 +374,7 @@ pub fn sat_refutation(
             )
         }
         None => {
-            let cnf_path = gen_dimacs(
+            let cnf_path = external::gen_dimacs(
                 &premise_clauses,
                 &clause_id_to_lemma,
                 &mut sat_clause_to_lemma,
@@ -387,7 +382,7 @@ pub fn sat_refutation(
                 false,
             );
 
-            match get_core_lemmas(
+            match external::get_core_lemmas(
                 cnf_path,
                 &sat_clause_to_lemma,
                 cadical_path.unwrap(),
@@ -436,7 +431,7 @@ pub fn sat_refutation(
                         });
 
                         log::debug!("\t[sat_refutation check] Check lemma: {:?}", lemma);
-                        let problem = get_problem_string(pool, &prelude, &assertions);
+                        let problem = external::get_problem_string(pool, &prelude, &assertions);
 
                         // TODO: don't hardcode args
                         let args = [
@@ -445,7 +440,9 @@ pub fn sat_refutation(
                             "--enum-inst",
                             "--tlimit=30000",
                         ];
-                        if let Err(e) = get_solver_proof(pool, problem.clone(), &cvc5_path, args) {
+                        if let Err(e) =
+                            external::get_solver_proof(pool, problem.clone(), &cvc5_path, args)
+                        {
                             log::debug!(
                                 "\t[sat_refutation check] Failed to check with problem:\n{}",
                                 problem
@@ -460,44 +457,4 @@ pub fn sat_refutation(
             }
         }
     }
-}
-
-pub fn external_checker(RuleArgs { args, .. }: RuleArgs, checker_path: String) -> RuleResult {
-    let args_str: Vec<String> = args.iter().map(|t| format!("{}", t)).collect();
-    let string = format!("(\n{}\n)", args_str.join("\n"));
-    // this will make it expect this script from where you are running Carcara
-    let mut process = Command::new(checker_path.clone())
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(LiaGenericError::FailedSpawnSolver)?;
-
-    process
-        .stdin
-        .take()
-        .expect("failed to open solver stdin")
-        .write_all(string.as_bytes())
-        .map_err(LiaGenericError::FailedWriteToSolverStdin)?;
-
-    let output = process
-        .wait_with_output()
-        .map_err(LiaGenericError::FailedWaitForSolver)?;
-
-    if !output.status.success() {
-        if let Ok(s) = std::str::from_utf8(&output.stderr) {
-            if s.contains("interrupted by timeout.") {
-                return Err(CheckerError::Unspecified);
-            }
-        }
-        return Err(CheckerError::Unspecified);
-    }
-    let res = output.stdout.as_slice();
-    if res == b"true\n" {
-        return Ok(());
-    }
-    Err(CheckerError::Explanation(format!(
-        "External checker {} did not validate step",
-        checker_path
-    )))
 }

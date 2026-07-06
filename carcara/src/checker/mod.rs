@@ -324,10 +324,6 @@ impl<'c> ProofChecker<'c> {
             rare_rules: self.rare_rules,
         };
 
-        if let Some(custom_checker) = self.config.rule_checkers.get(&step.rule) {
-            return lia_generic::external_checker(rule_args, custom_checker.clone());
-        }
-
         // Use shared core logic
         let context = StepCheckContext {
             config: &self.config,

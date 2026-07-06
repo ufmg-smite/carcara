@@ -2,12 +2,18 @@ use crate::{
     ast::*,
     benchmarking::CollectResults,
     checker::{
+        error::{CheckerError, SubproofError},
         rules::{rare::check_rare, RuleArgs, RuleResult},
         CheckerStatistics, Config,
     },
+    external::ExternalError,
 };
 use indexmap::IndexSet;
-use std::time::{Duration, Instant};
+use std::{
+    io::Write,
+    process::{Command, Stdio},
+    time::{Duration, Instant},
+};
 
 /// Shared logic for checking assume commands that both single-threaded and parallel
 /// implementations can use. Returns true if the assume is valid.
@@ -106,8 +112,11 @@ pub fn check_step_core<CR: CollectResults + Send + Default>(
     }
 
     if !step.discharge.is_empty() && step.rule != "subproof" {
-        use crate::checker::error::{CheckerError, SubproofError};
         return Err(CheckerError::Subproof(SubproofError::DischargeInWrongRule));
+    }
+
+    if let Some(custom_checker) = context.config.rule_checkers.get(&step.rule) {
+        return check_external(rule_args.args, custom_checker);
     }
 
     let rule = match get_rule(
@@ -121,7 +130,6 @@ pub fn check_step_core<CR: CollectResults + Send + Default>(
             return Ok(());
         }
         None => {
-            use crate::checker::error::CheckerError;
             return Err(CheckerError::UnknownRule);
         }
     };
@@ -154,8 +162,6 @@ pub fn check_discharge_shared(
     depth: usize,
     discharge: &[(usize, usize)],
 ) -> RuleResult {
-    use crate::checker::error::{CheckerError, SubproofError};
-
     let discharge: IndexSet<_> = discharge.iter().collect();
     if let Some((_, not_discharged)) = subproof
         .iter()
@@ -168,6 +174,46 @@ pub fn check_discharge_shared(
     } else {
         Ok(())
     }
+}
+
+fn check_external(args: &[Rc<Term>], checker_path: &str) -> RuleResult {
+    let args_str: Vec<String> = args.iter().map(|t| format!("{}", t)).collect();
+    let string = format!("(\n{}\n)", args_str.join("\n"));
+    // this will make it expect this script from where you are running Carcara
+    let mut process = Command::new(checker_path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(ExternalError::FailedSpawnSolver)?;
+
+    process
+        .stdin
+        .take()
+        .expect("failed to open solver stdin")
+        .write_all(string.as_bytes())
+        .map_err(ExternalError::FailedWriteToSolverStdin)?;
+
+    let output = process
+        .wait_with_output()
+        .map_err(ExternalError::FailedWaitForSolver)?;
+
+    if !output.status.success() {
+        if let Ok(s) = std::str::from_utf8(&output.stderr) {
+            if s.contains("interrupted by timeout.") {
+                return Err(CheckerError::Unspecified);
+            }
+        }
+        return Err(CheckerError::Unspecified);
+    }
+    let res = output.stdout.as_slice();
+    if res == b"true\n" {
+        return Ok(());
+    }
+    Err(CheckerError::Explanation(format!(
+        "External checker {} did not validate step",
+        checker_path
+    )))
 }
 
 pub fn get_rule(
