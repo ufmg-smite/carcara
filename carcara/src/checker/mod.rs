@@ -1,7 +1,7 @@
 pub mod error;
-mod lia_generic;
 mod parallel;
 mod rules;
+mod sat_refutation;
 mod shared;
 
 use crate::{
@@ -277,7 +277,7 @@ impl<'c> ProofChecker<'c> {
             let premises_steps: Vec<_> =
                 step.premises.iter().map(|&p| iter.get_premise(p)).collect();
             return if let Some(checker) = self.config.rule_checkers.get(&step.rule) {
-                lia_generic::sat_refutation(
+                sat_refutation::sat_refutation(
                     self.pool,
                     premises_steps,
                     prelude,
@@ -292,7 +292,7 @@ impl<'c> ProofChecker<'c> {
                     self.config.external_tools.get("drat-checker"),
                     self.config.external_tools.get("smt-solver"),
                 ) {
-                    (Some(cadical), Some(drattrim), Some(cvc5)) => lia_generic::sat_refutation(
+                    (Some(cadical), Some(drattrim), Some(cvc5)) => sat_refutation::sat_refutation(
                         self.pool,
                         premises_steps,
                         prelude,
