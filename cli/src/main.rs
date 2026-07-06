@@ -240,11 +240,10 @@ impl From<CheckingOptions> for checker::Config {
 #[derive(ArgEnum, Clone)]
 enum ElaborationPass {
     Polyeq,
-    LiaGeneric,
+    Hole,
     Local,
     Uncrowd,
     Reordering,
-    Hole,
     SatRefutation,
 }
 
@@ -314,11 +313,10 @@ impl From<ElaborationOptions> for (elaborator::Config, Vec<elaborator::Elaborati
             .into_iter()
             .map(|p| match p {
                 ElaborationPass::Polyeq => elaborator::ElaborationPass::Polyeq,
-                ElaborationPass::LiaGeneric => elaborator::ElaborationPass::LiaGeneric,
+                ElaborationPass::Hole => elaborator::ElaborationPass::Hole,
                 ElaborationPass::Local => elaborator::ElaborationPass::Local,
                 ElaborationPass::Uncrowd => elaborator::ElaborationPass::Uncrowd,
                 ElaborationPass::Reordering => elaborator::ElaborationPass::Reordering,
-                ElaborationPass::Hole => elaborator::ElaborationPass::Hole,
                 ElaborationPass::SatRefutation => elaborator::ElaborationPass::SatRefutation,
             })
             .collect();

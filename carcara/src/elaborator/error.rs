@@ -9,9 +9,6 @@ pub enum ElaborationError {
     #[error(transparent)]
     External(#[from] crate::external::ExternalError),
 
-    #[error(transparent)]
-    Hole(#[from] crate::elaborator::hole::HoleError),
-
     #[error("could not infer pivots for resolution step: {0}")]
     CouldNotInferPivots(ResolutionError),
 

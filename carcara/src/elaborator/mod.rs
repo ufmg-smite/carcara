@@ -1,6 +1,5 @@
 pub mod error;
 mod hole;
-mod lia_generic;
 mod local;
 mod polyeq;
 mod reordering;
@@ -36,11 +35,10 @@ pub struct Config {
 #[derive(Debug, Clone, Copy)]
 pub enum ElaborationPass {
     Polyeq,
-    LiaGeneric,
+    Hole,
     Local,
     Uncrowd,
     Reordering,
-    Hole,
     SatRefutation,
 }
 
@@ -63,10 +61,10 @@ pub struct HoleOptions {
     pub solver: Box<str>,
 
     /// The arguments to pass to the solver.
-    pub arguments: Vec<Box<str>>,
+    pub arguments: Vec<String>,
 }
 
-/// The options that control how `hole` steps are elaborated using an external solver.
+/// The options that control how `sat_refutation` steps are elaborated using an external solver.
 #[derive(Debug, Clone)]
 pub struct SatRefutationOptions {
     /// The external SAT solver path. The solver should be a binary that can read DIMACS and output a DRAT proof..
@@ -102,7 +100,7 @@ impl<'e> Elaborator<'e> {
         proof: ProofNodeForest,
     ) -> Result<ProofNodeForest, Error> {
         use ElaborationPass::*;
-        let pipeline = vec![Polyeq, LiaGeneric, Local, Uncrowd, Reordering];
+        let pipeline = vec![Polyeq, Hole, Local, Uncrowd, Reordering];
         self.elaborate(proof, pipeline)
     }
 
@@ -125,14 +123,7 @@ impl<'e> Elaborator<'e> {
             let time = Instant::now();
             current = match pass {
                 ElaborationPass::Polyeq => self.elaborate_polyeq(current)?,
-                ElaborationPass::LiaGeneric if self.config.lia_options.is_some() => current
-                    .mutate(|_, node, _| match node.as_ref() {
-                        ProofNode::Step(s) if s.rule == "lia_generic" => {
-                            lia_generic::lia_generic(self, s).map_err(|e| e.at(s))
-                        }
-                        _ => Ok(node.clone()),
-                    })?,
-                ElaborationPass::LiaGeneric => current,
+                ElaborationPass::Hole => self.elaborate_hole(current)?,
                 ElaborationPass::Local => self.elaborate_local(current)?,
                 ElaborationPass::Uncrowd => current.mutate(|_, node, _| match node.as_ref() {
                     ProofNode::Step(s)
@@ -145,20 +136,6 @@ impl<'e> Elaborator<'e> {
                     _ => Ok(node.clone()),
                 })?,
                 ElaborationPass::Reordering => reordering::remove_reorderings(current)?,
-                ElaborationPass::Hole => {
-                    if self.config.hole_options.is_none() {
-                        current
-                    } else {
-                        current.mutate(|_, node, _| match node.as_ref() {
-                            ProofNode::Step(s)
-                                if (s.rule == "all_simplify" || s.rule == "rare_rewrite") =>
-                            {
-                                hole::hole(self, s).map_err(|e| e.at(s))
-                            }
-                            _ => Ok(node.clone()),
-                        })?
-                    }
-                }
                 ElaborationPass::SatRefutation => {
                     if self.config.sat_refutation_options.is_none() {
                         current
@@ -205,6 +182,26 @@ impl<'e> Elaborator<'e> {
                 } else {
                     Ok(node.clone())
                 }
+            }
+            _ => Ok(node.clone()),
+        })
+    }
+
+    fn elaborate_hole(&mut self, proof: ProofNodeForest) -> Result<ProofNodeForest, Error> {
+        // Skip `mutate` in the common case where neither option was given
+        if self.config.hole_options.is_none() && self.config.lia_options.is_none() {
+            return Ok(proof);
+        }
+
+        proof.mutate(|_, node, _| match node.as_ref() {
+            ProofNode::Step(s)
+                if self.config.hole_options.is_some()
+                    && (s.rule == "all_simplify" || s.rule == "rare_rewrite") =>
+            {
+                hole::hole(self, s).map_err(|e| e.at(s))
+            }
+            ProofNode::Step(s) if self.config.lia_options.is_some() && s.rule == "lia_generic" => {
+                hole::lia_generic(self, s).map_err(|e| e.at(s))
             }
             _ => Ok(node.clone()),
         })

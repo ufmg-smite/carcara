@@ -34,6 +34,9 @@ pub enum ExternalError {
     #[error("error in inner proof: {0}")]
     InnerProofError(Box<crate::Error>),
 
+    #[error("proof returned by solver is holey")]
+    InnerProofHoley,
+
     #[error("couldn't check lemma: '{0}'")]
     LemmaNotChecked(Rc<Term>),
 }
