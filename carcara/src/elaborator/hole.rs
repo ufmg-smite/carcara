@@ -20,13 +20,8 @@ pub fn hole(
         .map(|l| build_term!(elaborator.pool, (not {l.clone()})))
         .collect();
     let problem = external::get_problem_string(elaborator.pool, &prelude, &asserts);
-    let options = elaborator.config.hole_options.as_ref().unwrap();
-    let (commands, holey) = external::get_solver_proof(
-        elaborator.pool,
-        problem.clone(),
-        &options.solver,
-        &options.arguments,
-    )?;
+    let solver = elaborator.config.hole_solver.as_ref().unwrap();
+    let (commands, holey) = external::get_solver_proof(elaborator.pool, problem.clone(), solver)?;
     if holey {
         return Err(ExternalError::InnerProofHoley.into());
     }
@@ -51,13 +46,8 @@ pub fn lia_generic(
         .collect();
     let problem =
         external::get_problem_string(elaborator.pool, &elaborator.problem.prelude, &asserts);
-    let options = elaborator.config.lia_options.as_ref().unwrap();
-    let (commands, _) = external::get_solver_proof(
-        elaborator.pool,
-        problem,
-        &options.solver,
-        &options.arguments,
-    )?;
+    let solver = elaborator.config.lia_solver.as_ref().unwrap();
+    let (commands, _) = external::get_solver_proof(elaborator.pool, problem, solver)?;
 
     Ok(external::insert_solver_proof(
         elaborator.pool,

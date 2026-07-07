@@ -1,40 +1,112 @@
 use super::*;
-use crate::ast::*;
-use crate::elaborator::{IdHelper, Mutate};
-use crate::{checker, parser, CarcaraResult};
-use std::collections::{HashMap, HashSet};
-use std::fs;
+use crate::{
+    ast::*,
+    checker,
+    elaborator::{IdHelper, Mutate},
+    parser, CarcaraResult,
+};
 use std::{
-    fs::File,
+    borrow::ToOwned,
+    collections::{HashMap, HashSet},
+    convert::Infallible,
+    fmt, fs,
     io::{BufRead, Write},
-    process::{Command, Stdio},
+    process::{Command, Output, Stdio},
+    str::FromStr,
 };
 use thiserror::Error;
 
+#[derive(Debug, Clone)]
+pub struct ExternalTool {
+    pub command: String,
+    pub args: Vec<String>,
+}
+
+impl fmt::Display for ExternalTool {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.command)?;
+        for a in &self.args {
+            write!(f, " {}", a)?;
+        }
+        Ok(())
+    }
+}
+
+impl FromStr for ExternalTool {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::new(s))
+    }
+}
+
+impl ExternalTool {
+    pub fn new(s: &str) -> Self {
+        let mut iter = s.split_whitespace();
+        let command = iter.next().unwrap().to_owned();
+        let args = iter.map(ToOwned::to_owned).collect();
+        Self { command, args }
+    }
+
+    pub fn call(&self, stdin: &[u8]) -> Result<Output, ExternalError> {
+        self.call_with_extra_args([], stdin)
+    }
+
+    pub fn call_with_extra_args<'a>(
+        &'a self,
+        extra_args: impl IntoIterator<Item = &'a str>,
+        stdin: &[u8],
+    ) -> Result<Output, ExternalError> {
+        let mut process = Command::new(&self.command)
+            .args(self.args.iter().map(String::as_str).chain(extra_args))
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(ExternalError::FailedSpawn)?;
+
+        if !stdin.is_empty() {
+            process
+                .stdin
+                .take()
+                .expect("failed to open solver stdin")
+                .write_all(stdin)
+                .map_err(ExternalError::FailedWriteToStdin)?;
+        }
+
+        process
+            .wait_with_output()
+            .map_err(ExternalError::FailedWait)
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum ExternalError {
-    #[error("failed to spawn solver process")]
-    FailedSpawnSolver(io::Error),
+    #[error("failed to spawn external tool process")]
+    FailedSpawn(io::Error),
 
-    #[error("failed to write to solver stdin")]
-    FailedWriteToSolverStdin(io::Error),
+    #[error("failed to open external tool stdin")]
+    FailedOpenStdin(io::Error),
 
-    #[error("error while waiting for solver to exit")]
-    FailedWaitForSolver(io::Error),
+    #[error("failed to write to external tool stdin")]
+    FailedWriteToStdin(io::Error),
 
-    #[error("solver gave invalid output")]
-    SolverGaveInvalidOutput,
+    #[error("error while waiting for external tool to exit")]
+    FailedWait(io::Error),
 
-    #[error("solver output not unsat")]
+    #[error("external tool gave invalid output")]
+    InvalidOutput,
+
+    #[error("external tool output not unsat")]
     OutputNotUnsat,
 
-    #[error("solver timed out when solving problem")]
-    SolverTimeout,
+    #[error("external tool timed out")]
+    Timeout,
 
     #[error("error in inner proof: {0}")]
     InnerProofError(Box<crate::Error>),
 
-    #[error("proof returned by solver is holey")]
+    #[error("proof returned by external tool is holey")]
     InnerProofHoley,
 
     #[error("couldn't check lemma: '{0}'")]
@@ -85,35 +157,16 @@ pub fn parse_and_check_solver_proof(
 pub fn get_solver_proof(
     pool: &mut PrimitivePool,
     problem: String,
-    solver: &str,
-    arguments: impl IntoIterator<Item = impl AsRef<std::ffi::OsStr>>,
+    solver: &ExternalTool,
 ) -> Result<(Vec<ProofCommand>, bool), ExternalError> {
-    let mut process = Command::new(solver)
-        .args(arguments)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(ExternalError::FailedSpawnSolver)?;
-
-    process
-        .stdin
-        .take()
-        .expect("failed to open solver stdin")
-        .write_all(problem.as_bytes())
-        .map_err(ExternalError::FailedWriteToSolverStdin)?;
-
-    let output = process
-        .wait_with_output()
-        .map_err(ExternalError::FailedWaitForSolver)?;
-
+    let output = solver.call(problem.as_bytes())?;
     if !output.status.success() {
         if let Ok(s) = std::str::from_utf8(&output.stderr) {
             if s.contains("interrupted by timeout.") {
-                return Err(ExternalError::SolverTimeout);
+                return Err(ExternalError::Timeout);
             }
         }
-        return Err(ExternalError::SolverGaveInvalidOutput);
+        return Err(ExternalError::InvalidOutput);
     }
 
     let mut proof = output.stdout.as_slice();
@@ -121,13 +174,13 @@ pub fn get_solver_proof(
 
     proof
         .read_line(&mut first_line)
-        .map_err(|_| ExternalError::SolverGaveInvalidOutput)?;
+        .map_err(|_| ExternalError::InvalidOutput)?;
 
     if first_line.trim_end() != "unsat" {
         return Err(ExternalError::OutputNotUnsat);
     }
 
-    let proof = str::from_utf8(proof).map_err(|_| ExternalError::SolverGaveInvalidOutput)?;
+    let proof = str::from_utf8(proof).map_err(|_| ExternalError::InvalidOutput)?;
     parse_and_check_solver_proof(pool, &problem, proof)
         .map_err(|e| ExternalError::InnerProofError(Box::new(e)))
 }
@@ -185,7 +238,7 @@ pub fn gen_dimacs<'a>(
     write!(&mut dimacs, "{}", clauses).unwrap();
     let cnf_path = "proof.cnf".to_owned();
     log::info!("[sat_refutation check] Print CNF {}", cnf_path);
-    write!(File::create(cnf_path.clone()).unwrap(), "{}", dimacs).unwrap();
+    write!(fs::File::create(cnf_path.clone()).unwrap(), "{}", dimacs).unwrap();
 
     cnf_path
 }
@@ -299,29 +352,17 @@ pub fn collect_premise_clauses(
 }
 
 pub fn get_core_lemmas(
-    cnf_path: String,
+    cnf_path: &str,
     sat_clause_to_lemma: &HashMap<Vec<i32>, Rc<Term>>,
-    cadical_path: String,
-    drattrim_path: String,
+    cadical: &ExternalTool,
+    drat_trim: &ExternalTool,
 ) -> Result<Vec<Vec<Rc<Term>>>, ExternalError> {
     // not gonna pass input via stdin because in that case
     // CaDiCaL gets confused with receiving the name of the
     // proof file as an argument. If we could get the proof in
     // stdout then there would be no need to write a CNF file nor a DRAT file
-    let cadical_process = Command::new(cadical_path)
-        .args([
-            cnf_path.clone(),
-            "proof.drat".to_owned(),
-            "--no-binary".to_owned(),
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(ExternalError::FailedSpawnSolver)?;
+    let output = cadical.call_with_extra_args([cnf_path, "proof.drat", "--no-binary"], &[])?;
 
-    let output = cadical_process
-        .wait_with_output()
-        .map_err(ExternalError::FailedWaitForSolver)?;
     log::info!("[get_core_lemmas] Checking CNF {} with CaDiCaL", cnf_path);
 
     // CaDiCaL's exit code when successful is 10/20 (for
@@ -333,28 +374,22 @@ pub fn get_core_lemmas(
             return Err(ExternalError::OutputNotUnsat);
         }
     } else {
-        return Err(ExternalError::SolverGaveInvalidOutput);
+        return Err(ExternalError::InvalidOutput);
     }
     // pass cnf + proof to drat-trim
-    let drattrim_process = Command::new(drattrim_path)
-        .args([
-            cnf_path.clone(),
-            "proof.drat".to_owned(),
-            "-c".to_owned(),
-            "proof.core".to_owned(),
-            "-L".to_owned(),
-            "proof.lrat".to_owned(),
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(ExternalError::FailedSpawnSolver)?;
+    let drat_trim_output = drat_trim.call_with_extra_args(
+        [
+            cnf_path,
+            "proof.drat",
+            "-c",
+            "proof.core",
+            "-L",
+            "proof.lrat",
+        ],
+        &[],
+    )?;
 
-    log::info!("[get_core_lemmas] Checking DRAT with DRAT-trim, extracting core");
-    let output_drattrim = drattrim_process
-        .wait_with_output()
-        .map_err(ExternalError::FailedWaitForSolver)?;
-    if !output_drattrim.status.success() {
+    if !drat_trim_output.status.success() {
         return Err(ExternalError::OutputNotUnsat);
     }
 

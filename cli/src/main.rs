@@ -7,7 +7,7 @@ use carcara::{
     ast::{self, rare_rules::Rules},
     benchmarking::OnlineBenchmarkResults,
     check, check_and_elaborate, check_parallel, checker, elaborator, generate_lia_smt_instances,
-    parser, slice,
+    parser, slice, ExternalTool,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -42,11 +42,13 @@ const VERSION_STRING: &str = formatcp!(
 );
 
 /// Parse a single key-value pair
-fn parse_key_val(s: &str) -> Result<(String, String), Box<dyn Error + Send + Sync + 'static>> {
-    let pos = s
-        .find('=')
+fn parse_rule_checkers(
+    s: &str,
+) -> Result<(String, ExternalTool), Box<dyn Error + Send + Sync + 'static>> {
+    let (rule, checker) = s
+        .split_once("=")
         .ok_or_else(|| format!("invalid KEY=value: no `=` found in `{s}`"))?;
-    Ok((s[..pos].parse()?, s[pos + 1..].parse()?))
+    Ok((rule.parse()?, checker.parse()?))
 }
 
 #[derive(Parser)]
@@ -210,18 +212,18 @@ struct CheckingOptions {
     // but this makes adding an argument after the values impossible:
     // my_program -D a=1 -D b=2 my_input_file
     // becomes invalid.
-    #[clap(short = 'o', value_parser = parse_key_val)]
-    rule_checkers: Vec<(String, String)>,
+    #[clap(short = 'o', value_parser = parse_rule_checkers)]
+    rule_checkers: Vec<(String, ExternalTool)>,
 
-    // number_of_values = 1 forces the user to repeat the -D option for each key-value pair:
-    // my_program -D a=1 -D b=2
-    // Without number_of_values = 1 you can do:
-    // my_program -D a=1 b=2
-    // but this makes adding an argument after the values impossible:
-    // my_program -D a=1 -D b=2 my_input_file
-    // becomes invalid.
-    #[clap(short = 'e', value_parser = parse_key_val)]
-    external_tools: Vec<(String, String)>,
+    // TODO: deduplicate with elaboration options
+    #[clap(long)]
+    sat_solver: Option<ExternalTool>,
+
+    #[clap(long)]
+    drat_checker: Option<ExternalTool>,
+
+    #[clap(long)]
+    smt_solver: Option<ExternalTool>,
 }
 
 impl From<CheckingOptions> for checker::Config {
@@ -232,7 +234,9 @@ impl From<CheckingOptions> for checker::Config {
             allowed_rules: val.allowed_rules.unwrap_or_default().into_iter().collect(),
             rup_resolution: val.rup_resolution,
             rule_checkers: val.rule_checkers.into_iter().collect(),
-            external_tools: val.external_tools.into_iter().collect(),
+            sat_solver: val.sat_solver,
+            drat_checker: val.drat_checker,
+            smt_solver: val.smt_solver,
         }
     }
 }
@@ -256,52 +260,22 @@ struct ElaborationOptions {
 
     /// SAT solver that can be used when elaborating proof steps.
     #[clap(long)]
-    sat_solver: Option<String>,
-
-    /// The arguments to pass to the SAT solver. This should be a single string where
-    /// multiple arguments are separated by spaces.
-    #[clap(
-        long,
-        requires = "sat-solver",
-        allow_hyphen_values = true,
-        default_value = "proof.drat --no-binary"
-    )]
-    sat_solver_args: String,
+    sat_solver: Option<ExternalTool>,
 
     /// DRAT checker and trimmer that can be used when elaborating proof steps.
     #[clap(long)]
-    drat_checker: Option<String>,
-
-    /// The arguments to pass to the DRAT checker. This should be a single string where
-    /// multiple arguments are separated by spaces.
-    #[clap(
-        long,
-        requires = "drat-checker",
-        allow_hyphen_values = true,
-        default_value = "proof.drat -c proof.core -L proof.lrat"
-    )]
-    drat_checker_args: String,
+    drat_checker: Option<ExternalTool>,
 
     /// SMT solver that can be used when elaborating proof steps.
     #[clap(long)]
-    smt_solver: Option<String>,
-
-    /// The arguments to pass to the SMT solver. This should be a single string where
-    /// multiple arguments are separated by spaces.
-    #[clap(
-        long,
-        requires = "smt-solver",
-        allow_hyphen_values = true,
-        default_value = "--tlimit=10000 --lang=smt2 --proof-format-mode=alethe --no-symmetry-breaker"
-    )]
-    smt_solver_args: String,
+    smt_solver: Option<ExternalTool>,
 
     /// The pipeline of elaboration passes to use.
     #[clap(
         arg_enum,
         long,
         multiple = true,
-        default_values = &["polyeq", "lia-generic", "local", "uncrowd", "reordering", "hole"]
+        default_values = &["polyeq", "hole", "local", "uncrowd", "reordering"]
     )]
     pipeline: Vec<ElaborationPass>,
 }
@@ -320,55 +294,17 @@ impl From<ElaborationOptions> for (elaborator::Config, Vec<elaborator::Elaborati
                 ElaborationPass::SatRefutation => elaborator::ElaborationPass::SatRefutation,
             })
             .collect();
-        let lia_options = val
-            .smt_solver
-            .clone()
-            .map(|solver| elaborator::LiaGenericOptions {
-                solver: solver.into(),
-                arguments: val
-                    .smt_solver_args
-                    .split_whitespace()
-                    .map(Into::into)
-                    .collect(),
-            });
-
-        let hole_options = val
-            .smt_solver
-            .clone()
-            .map(|solver| elaborator::HoleOptions {
-                solver: solver.into(),
-                arguments: val
-                    .smt_solver_args
-                    .split_whitespace()
-                    .map(Into::into)
-                    .collect(),
-            });
 
         let config = elaborator::Config {
-            lia_options,
+            lia_solver: val.smt_solver.clone(),
             uncrowd_rotation: val.uncrowd_rotate,
-            hole_options,
+            hole_solver: val.smt_solver.clone(),
             sat_refutation_options: match (val.sat_solver, val.drat_checker, val.smt_solver) {
                 (Some(sat_solver), Some(drat_checker), Some(smt_solver)) => {
                     Some(elaborator::SatRefutationOptions {
-                        sat_solver: sat_solver.into(),
-                        sat_arguments: val
-                            .sat_solver_args
-                            .split_whitespace()
-                            .map(Into::into)
-                            .collect(),
-                        drat_checker: drat_checker.into(),
-                        drat_arguments: val
-                            .drat_checker_args
-                            .split_whitespace()
-                            .map(Into::into)
-                            .collect(),
-                        smt_solver: smt_solver.into(),
-                        smt_arguments: val
-                            .smt_solver_args
-                            .split_whitespace()
-                            .map(Into::into)
-                            .collect(),
+                        sat_solver,
+                        drat_checker,
+                        smt_solver,
                     })
                 }
                 _ => None,

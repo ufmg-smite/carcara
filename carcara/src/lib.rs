@@ -46,6 +46,8 @@ mod resolution;
 pub mod slice;
 mod utils;
 
+pub use external::ExternalTool;
+
 use crate::benchmarking::{CollectResults, OnlineBenchmarkResults, RunMeasurement};
 use checker::{error::CheckerError, CheckerStatistics};
 use elaborator::error::ElaborationError;

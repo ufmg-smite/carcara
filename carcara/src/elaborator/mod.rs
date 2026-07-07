@@ -6,7 +6,7 @@ mod reordering;
 mod sat_refutation;
 mod uncrowding;
 
-use crate::{ast::*, Error};
+use crate::{ast::*, external::ExternalTool, Error};
 use error::ElaborationError;
 use indexmap::IndexSet;
 use polyeq::PolyeqElaborator;
@@ -20,14 +20,14 @@ pub struct Config {
     /// If `Some`, enables the elaboration of `lia_generic` steps using an external solver. When
     /// checking a proof, this means calling the solver to solve the linear integer arithmetic
     /// problem, checking the proof, and discarding it. When elaborating, the proof will instead be
-    /// inserted in the place of the `lia_generic` step. See [`LiaGenericOptions`] for more details.
-    pub lia_options: Option<LiaGenericOptions>,
+    /// inserted in the place of the `lia_generic` step.
+    pub lia_solver: Option<ExternalTool>,
 
     /// Enables an optimization that reorders premises when uncrowding resolution steps, in order to
     /// further minimize the number of `contraction` steps added.
     pub uncrowd_rotation: bool,
 
-    pub hole_options: Option<HoleOptions>,
+    pub hole_solver: Option<ExternalTool>,
 
     pub sat_refutation_options: Option<SatRefutationOptions>,
 }
@@ -42,46 +42,18 @@ pub enum ElaborationPass {
     SatRefutation,
 }
 
-/// The options that control how `lia_generic` steps are elaborated using an external solver.
-#[derive(Debug, Clone)]
-pub struct LiaGenericOptions {
-    /// The external solver path. The solver should be a binary that can read SMT-LIB from stdin and
-    /// output an Alethe proof to stdout.
-    pub solver: Box<str>,
-
-    /// The arguments to pass to the solver.
-    pub arguments: Vec<String>,
-}
-
-/// The options that control how `hole` steps are elaborated using an external solver.
-#[derive(Debug, Clone)]
-pub struct HoleOptions {
-    /// The external solver path. The solver should be a binary that can read SMT-LIB from stdin and
-    /// output an Alethe proof to stdout.
-    pub solver: Box<str>,
-
-    /// The arguments to pass to the solver.
-    pub arguments: Vec<String>,
-}
-
 /// The options that control how `sat_refutation` steps are elaborated using an external solver.
 #[derive(Debug, Clone)]
 pub struct SatRefutationOptions {
     /// The external SAT solver path. The solver should be a binary that can read DIMACS and output a DRAT proof..
-    pub sat_solver: Box<str>,
-    /// The arguments to pass to `CaDiCaL`
-    pub sat_arguments: Vec<Box<str>>,
+    pub sat_solver: ExternalTool,
 
     /// The external DRAT checker/trimmer path. The tool should be a binary that can read DRAT from stdin and output a proof core and an LRAT.
-    pub drat_checker: Box<str>,
-    /// The arguments to pass to `CaDiCaL`
-    pub drat_arguments: Vec<Box<str>>,
+    pub drat_checker: ExternalTool,
 
     /// The external SMT solver path. The solver should be a binary that can read SMT-LIB from stdin and
     /// output an Alethe proof to stdout.
-    pub smt_solver: Box<str>,
-    /// The arguments to pass to the solver.
-    pub smt_arguments: Vec<Box<str>>,
+    pub smt_solver: ExternalTool,
 }
 
 pub struct Elaborator<'e> {
@@ -189,18 +161,18 @@ impl<'e> Elaborator<'e> {
 
     fn elaborate_hole(&mut self, proof: ProofNodeForest) -> Result<ProofNodeForest, Error> {
         // Skip `mutate` in the common case where neither option was given
-        if self.config.hole_options.is_none() && self.config.lia_options.is_none() {
+        if self.config.hole_solver.is_none() && self.config.lia_solver.is_none() {
             return Ok(proof);
         }
 
         proof.mutate(|_, node, _| match node.as_ref() {
             ProofNode::Step(s)
-                if self.config.hole_options.is_some()
+                if self.config.hole_solver.is_some()
                     && (s.rule == "all_simplify" || s.rule == "rare_rewrite") =>
             {
                 hole::hole(self, s).map_err(|e| e.at(s))
             }
-            ProofNode::Step(s) if self.config.lia_options.is_some() && s.rule == "lia_generic" => {
+            ProofNode::Step(s) if self.config.lia_solver.is_some() && s.rule == "lia_generic" => {
                 hole::lia_generic(self, s).map_err(|e| e.at(s))
             }
             _ => Ok(node.clone()),

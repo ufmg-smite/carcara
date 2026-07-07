@@ -1,18 +1,14 @@
 use super::*;
-use crate::external::{self, ExternalError};
+use crate::external::{self, ExternalTool};
 use std::collections::HashMap;
 use std::process;
-use std::{
-    fs::File,
-    io::Write,
-    process::{Command, Stdio},
-};
+use std::{fs::File, io::Write};
 
 fn sat_refutation_external_check(
     pool: &mut PrimitivePool,
     cnf_path: String,
     prelude: &ProblemPrelude,
-    checker_path: String,
+    checker: &ExternalTool,
     lemmas: &[Rc<Term>],
     lemmas_to_th_ids: &HashMap<Rc<Term>, String>,
 ) -> RuleResult {
@@ -72,24 +68,8 @@ fn sat_refutation_external_check(
     log::info!("[sat_refutation check] Invoke oracle");
 
     let string = format!("(\n{}\n{}\n{}\n)", cnf_path, prelude_path, lemmas_path);
-    // this will make it expect this script from where you are running Carcara
-    let mut process = Command::new(checker_path.clone())
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(ExternalError::FailedSpawnSolver)?;
 
-    process
-        .stdin
-        .take()
-        .expect("failed to open solver stdin")
-        .write_all(string.as_bytes())
-        .map_err(ExternalError::FailedWriteToSolverStdin)?;
-
-    let output = process
-        .wait_with_output()
-        .map_err(ExternalError::FailedWaitForSolver)?;
+    let output = checker.call(string.as_bytes())?;
 
     if !output.status.success() {
         if let Ok(s) = std::str::from_utf8(&output.stderr) {
@@ -107,7 +87,7 @@ fn sat_refutation_external_check(
     println!("{:?}\n", String::from_utf8(res.to_vec()));
     Err(CheckerError::Explanation(format!(
         "External checker {} did not validate step",
-        checker_path
+        checker
     )))
 }
 
@@ -115,10 +95,10 @@ pub fn sat_refutation(
     pool: &mut PrimitivePool,
     premise_steps: Vec<&ProofCommand>,
     prelude: &ProblemPrelude,
-    checker_path: Option<String>,
-    cadical_path: Option<String>,
-    drattrim_path: Option<String>,
-    cvc5_path: Option<String>,
+    checker: Option<&ExternalTool>,
+    cadical: Option<&ExternalTool>,
+    drat_trim: Option<&ExternalTool>,
+    cvc5: Option<&ExternalTool>,
 ) -> RuleResult {
     // Create the DIMACS file from the premises and the lemmas.
     //
@@ -262,8 +242,8 @@ pub fn sat_refutation(
         prelude.clone()
     };
 
-    match checker_path {
-        Some(checker_path) => {
+    match checker {
+        Some(checker) => {
             let cnf_path = external::gen_dimacs(
                 &premise_clauses,
                 &clause_id_to_lemma,
@@ -367,8 +347,7 @@ pub fn sat_refutation(
                 pool,
                 cnf_path,
                 &prelude,
-                // &choice_assertions,
-                checker_path,
+                checker,
                 &lemmas,
                 &rw_lemmas_to_th_ids,
             )
@@ -383,17 +362,17 @@ pub fn sat_refutation(
             );
 
             match external::get_core_lemmas(
-                cnf_path,
+                cnf_path.as_str(),
                 &sat_clause_to_lemma,
-                cadical_path.unwrap(),
-                drattrim_path.unwrap(),
+                cadical.unwrap(),
+                drat_trim.unwrap(),
             ) {
                 Ok(core_lemmas) => {
                     log::info!(
                         "[sat_refutation check] Check {} core lemmas",
                         core_lemmas.len()
                     );
-                    let cvc5_path = cvc5_path.unwrap();
+                    let cvc5 = cvc5.unwrap();
 
                     // for each core lemma, we will run cvc5, parse the proof in, and check it
                     for lemma in &core_lemmas {
@@ -433,16 +412,7 @@ pub fn sat_refutation(
                         log::debug!("\t[sat_refutation check] Check lemma: {:?}", lemma);
                         let problem = external::get_problem_string(pool, &prelude, &assertions);
 
-                        // TODO: don't hardcode args
-                        let args = [
-                            "--proof-format=alethe",
-                            "--no-symmetry-breaker",
-                            "--enum-inst",
-                            "--tlimit=30000",
-                        ];
-                        if let Err(e) =
-                            external::get_solver_proof(pool, problem.clone(), &cvc5_path, args)
-                        {
+                        if let Err(e) = external::get_solver_proof(pool, problem.clone(), cvc5) {
                             log::debug!(
                                 "\t[sat_refutation check] Failed to check with problem:\n{}",
                                 problem

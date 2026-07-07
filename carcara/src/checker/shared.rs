@@ -6,14 +6,10 @@ use crate::{
         rules::{rare::check_rare, RuleArgs, RuleResult},
         CheckerStatistics, Config,
     },
-    external::ExternalError,
+    ExternalTool,
 };
 use indexmap::IndexSet;
-use std::{
-    io::Write,
-    process::{Command, Stdio},
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 /// Shared logic for checking assume commands that both single-threaded and parallel
 /// implementations can use. Returns true if the assume is valid.
@@ -176,27 +172,11 @@ pub fn check_discharge_shared(
     }
 }
 
-fn check_external(args: &[Rc<Term>], checker_path: &str) -> RuleResult {
+fn check_external(args: &[Rc<Term>], checker: &ExternalTool) -> RuleResult {
     let args_str: Vec<String> = args.iter().map(|t| format!("{}", t)).collect();
     let string = format!("(\n{}\n)", args_str.join("\n"));
-    // this will make it expect this script from where you are running Carcara
-    let mut process = Command::new(checker_path)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(ExternalError::FailedSpawnSolver)?;
 
-    process
-        .stdin
-        .take()
-        .expect("failed to open solver stdin")
-        .write_all(string.as_bytes())
-        .map_err(ExternalError::FailedWriteToSolverStdin)?;
-
-    let output = process
-        .wait_with_output()
-        .map_err(ExternalError::FailedWaitForSolver)?;
+    let output = checker.call(string.as_bytes())?;
 
     if !output.status.success() {
         if let Ok(s) = std::str::from_utf8(&output.stderr) {
@@ -212,7 +192,7 @@ fn check_external(args: &[Rc<Term>], checker_path: &str) -> RuleResult {
     }
     Err(CheckerError::Explanation(format!(
         "External checker {} did not validate step",
-        checker_path
+        checker
     )))
 }
 

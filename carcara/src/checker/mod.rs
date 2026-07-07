@@ -7,7 +7,7 @@ mod shared;
 use crate::{
     ast::{rare_rules::Rules, *},
     benchmarking::{CollectResults, OnlineBenchmarkResults},
-    CarcaraResult, Error,
+    CarcaraResult, Error, ExternalTool,
 };
 use error::CheckerError;
 use indexmap::{IndexMap, IndexSet};
@@ -70,9 +70,12 @@ pub struct Config {
     /// A set of rule names that the checker will allow, considering them holes in the proof.
     pub allowed_rules: HashSet<String>,
 
-    pub rule_checkers: IndexMap<String, String>,
+    pub rule_checkers: IndexMap<String, ExternalTool>,
 
-    pub external_tools: IndexMap<String, String>,
+    // TODO: move to separate struct, unify with elaborator's satref options
+    pub sat_solver: Option<ExternalTool>,
+    pub drat_checker: Option<ExternalTool>,
+    pub smt_solver: Option<ExternalTool>,
 }
 
 impl Config {
@@ -93,16 +96,6 @@ impl Config {
     pub fn allowed_rules(mut self, values: impl IntoIterator<Item = impl Into<String>>) -> Self {
         let values = values.into_iter().map(Into::into).collect();
         self.allowed_rules = values;
-        self
-    }
-
-    pub fn rule_checkers(mut self, value: IndexMap<String, String>) -> Self {
-        self.rule_checkers = value;
-        self
-    }
-
-    pub fn external_tools(mut self, value: IndexMap<String, String>) -> Self {
-        self.external_tools = value;
         self
     }
 }
@@ -281,25 +274,25 @@ impl<'c> ProofChecker<'c> {
                     self.pool,
                     premises_steps,
                     prelude,
-                    Some(checker.to_owned()),
+                    Some(checker),
                     None,
                     None,
                     None,
                 )
             } else {
                 match (
-                    self.config.external_tools.get("sat-solver"),
-                    self.config.external_tools.get("drat-checker"),
-                    self.config.external_tools.get("smt-solver"),
+                    &self.config.sat_solver,
+                    &self.config.drat_checker,
+                    &self.config.smt_solver,
                 ) {
-                    (Some(cadical), Some(drattrim), Some(cvc5)) => sat_refutation::sat_refutation(
+                    (Some(cadical), Some(drat_trim), Some(cvc5)) => sat_refutation::sat_refutation(
                         self.pool,
                         premises_steps,
                         prelude,
                         None,
-                        Some(cadical.to_owned()),
-                        Some(drattrim.to_owned()),
-                        Some(cvc5.to_owned()),
+                        Some(cadical),
+                        Some(drat_trim),
+                        Some(cvc5),
                     ),
                     _ => Err(CheckerError::Explanation(
                         "The `sat_refutation` rule checking requires paths to be given for a SAT \

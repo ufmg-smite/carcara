@@ -49,8 +49,8 @@ fn run_test(
 
     // Then we elaborate it
     let elab_config = elaborator::Config {
-        lia_options: None,
-        hole_options: None,
+        lia_solver: None,
+        hole_solver: None,
         uncrowd_rotation: true,
         sat_refutation_options: None,
     };
