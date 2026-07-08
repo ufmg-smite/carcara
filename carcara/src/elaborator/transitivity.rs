@@ -1,21 +1,5 @@
-use super::IdHelper;
+use super::{add_symm_step, IdHelper};
 use crate::{ast::*, checker::error::CheckerError};
-
-fn add_symm_step(pool: &mut PrimitivePool, node: &Rc<ProofNode>, id: String) -> Rc<ProofNode> {
-    assert_eq!(node.clause().len(), 1);
-    let (a, b) = match_term!((= a b) = node.clause()[0]).unwrap();
-    let clause = vec![build_term!(pool, (= {b.clone()} {a.clone()}))];
-    Rc::new(ProofNode::Step(StepNode {
-        id,
-        depth: node.depth(),
-        clause,
-        rule: "symm".into(),
-        premises: vec![node.clone()],
-        args: Vec::new(),
-        discharge: Vec::new(),
-        previous_step: None,
-    }))
-}
 
 /// Similar to `find_chain`, but reorders a premises vector to match the found chain. In `trans`,
 /// this is used to reorder the step premises vector; in `eq_transitive`, it is used to reorder the

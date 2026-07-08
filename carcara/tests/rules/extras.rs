@@ -129,6 +129,70 @@ fn weakening() {
 }
 
 #[test]
+fn and_intro() {
+    test_cases! {
+        definitions = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+        ",
+        "Simple working examples" {
+            "(assume h1 p)
+            (assume h2 q)
+            (step t1 (cl (and p q)) :rule and_intro :premises (h1 h2))": true,
+
+            "(assume h1 p)
+            (assume h2 q)
+            (assume h3 r)
+            (step t1 (cl (and p q r)) :rule and_intro :premises (h1 h2 h3))": true,
+        }
+        "Non-unit premise corresponds to a disjunction" {
+            "(step t1 (cl p q) :rule hole)
+            (assume h2 r)
+            (step t2 (cl (and (or p q) r)) :rule and_intro :premises (t1 h2))": true,
+
+            // A unit premise whose term is itself an `or` matches the same conjunct.
+            "(assume h1 (or p q))
+            (assume h2 r)
+            (step t1 (cl (and (or p q) r)) :rule and_intro :premises (h1 h2))": true,
+        }
+        "Premises must be in the right order" {
+            "(assume h1 p)
+            (assume h2 q)
+            (step t1 (cl (and q p)) :rule and_intro :premises (h1 h2))": false,
+        }
+        "A conjunct does not match its premise" {
+            "(assume h1 p)
+            (assume h2 q)
+            (step t1 (cl (and p r)) :rule and_intro :premises (h1 h2))": false,
+
+            // The disjuncts of the conjunct must match the clause order.
+            "(step t1 (cl p q) :rule hole)
+            (assume h2 r)
+            (step t2 (cl (and (or q p) r)) :rule and_intro :premises (t1 h2))": false,
+
+            // A non-unit premise must correspond to an `or`, not a single literal.
+            "(step t1 (cl p q) :rule hole)
+            (assume h2 r)
+            (step t2 (cl (and p r)) :rule and_intro :premises (t1 h2))": false,
+        }
+        "Wrong number of premises" {
+            "(assume h1 p)
+            (step t1 (cl (and p q)) :rule and_intro :premises (h1))": false,
+
+            "(assume h1 p)
+            (assume h2 q)
+            (assume h3 r)
+            (step t1 (cl (and p q)) :rule and_intro :premises (h1 h2 h3))": false,
+        }
+        "Conclusion is not a conjunction" {
+            "(assume h1 p)
+            (step t1 (cl p) :rule and_intro :premises (h1))": false,
+        }
+    }
+}
+
+#[test]
 fn bind_let() {
     test_cases! {
         definitions = "",

@@ -372,6 +372,12 @@ pub enum Operator {
     BvConst,
     BvSize,
 
+    // power of 2 to x, and whether x is a power of 2
+    Pow2,
+    IsPow2,
+    // logarithm in base 2 of x
+    Log2,
+
     // Misc.
     /// The `rare-list` operator, used to represent RARE lists.
     RareList,
@@ -489,6 +495,9 @@ impl Operator {
             | Operator::BvBbTerm
             | Operator::BvConst
             | Operator::BvSize
+            | Operator::Pow2
+            | Operator::IsPow2
+            | Operator::Log2
             | Operator::RareList => None,
 
             // Clausal
@@ -623,6 +632,10 @@ impl_str_conversion_traits!(Operator {
     BvBbTerm: "@bbterm",
     BvConst: "@bv",
     BvSize: "@bvsize",
+
+    Pow2: "int.pow2",
+    IsPow2: "int.ispow2",
+    Log2: "int.log2",
 
     RareList: "rare-list",
 
@@ -1051,6 +1064,12 @@ impl Rc<Term> {
     pub fn as_signed_number_err(&self) -> Result<Rational, CheckerError> {
         self.as_signed_number()
             .ok_or_else(|| CheckerError::ExpectedAnyNumber(self.clone()))
+    }
+
+    /// Similar to `Term::as_bitvector`, but returns a `CheckerError` on failure.
+    pub fn as_bitvector_err(&self) -> Result<(Integer, usize), CheckerError> {
+        self.as_bitvector()
+            .ok_or_else(|| CheckerError::ExpectedBitvector(self.clone()))
     }
 
     /// Similar to `Term::as_fraction`, but returns a `CheckerError` on failure.

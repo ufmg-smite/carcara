@@ -62,7 +62,7 @@ fn run_test(
     };
 
     // After that, we check the elaborated proof to make sure it is valid
-    checker::ProofChecker::new(&mut pool, &rare_rules, config.1.clone())
+    checker::ProofChecker::new(&mut pool, &rare_rules, config.1.clone().elaborated(true))
         .check(&problem, &elaborated)?;
 
     // Finally, we elaborate the already elaborated proof, to make sure the elaboration step is

@@ -73,13 +73,6 @@ pub fn ite_intro(
         fixed_right_side.clone(),
         right_side.clone(),
     );
-    let trans_step = Rc::new(ProofNode::Step(StepNode {
-        id: step.id.clone(),
-        depth: step.depth,
-        clause: step.clause.clone(),
-        rule: "trans".to_owned(),
-        premises: vec![new_ite_intro_step, polyeq_step],
-        ..StepNode::default()
-    }));
+    let trans_step = add_trans_step(pool, [new_ite_intro_step, polyeq_step], step.id.clone());
     Ok(trans_step)
 }

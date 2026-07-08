@@ -60,14 +60,11 @@ pub fn strict_refl(RuleArgs { conclusion, pool, context, .. }: RuleArgs) -> Rule
         return Err(CheckerError::ReflexivityFailed(left.clone(), right.clone()));
     }
 
-    // This follows the same logic as the `refl` function, but without using alpha equivalence
+    // Unlike the traditional `refl` function, we do not use alpha equivalence, and we only try to
+    // apply the context on the left-hand side.
     let new_left = context.apply(pool, left);
-    let result = new_left == *right || {
-        let new_right = context.apply(pool, right);
-        *left == new_right || new_left == new_right
-    };
     rassert!(
-        result,
+        new_left == *right,
         CheckerError::ReflexivityFailed(left.clone(), right.clone()),
     );
     Ok(())
