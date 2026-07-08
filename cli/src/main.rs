@@ -8,7 +8,7 @@ use app::*;
 use carcara::{
     ast::{self, rare_rules::Rules},
     benchmarking::OnlineBenchmarkResults,
-    check, check_and_elaborate, check_parallel, checker, generate_lia_smt_instances, parser, slice,
+    check, check_and_elaborate, check_parallel, generate_lia_smt_instances, parser, slice,
 };
 use error::{CliError, CliResult};
 use path_args::{get_instances_from_paths, infer_problem_path};
@@ -128,16 +128,19 @@ fn parse_command(
     options: ParseCommandOptions,
 ) -> CliResult<(ast::Problem, ast::Proof, Rules, ast::PrimitivePool)> {
     let (problem, proof, rules) = get_instance(&options.input)?;
-    let result =
-        parser::parse_instance(&problem, &proof, rules.as_deref(), options.parsing.into())?;
+    let result = parser::parse_instance(
+        &problem,
+        &proof,
+        rules.as_deref(),
+        options.parsing.into_config(),
+    )?;
     Ok(result)
 }
 
 fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
     let (problem, proof, rules) = get_instance(&options.input)?;
-    let parser_config = options.parsing.into();
-    let mut checker_config: checker::Config = options.checking.into();
-    checker_config.tools = options.tools.into();
+    let parser_config = options.parsing.into_config();
+    let checker_config = (options.checking, options.tools).into_config();
 
     let collect_stats = options.stats.stats;
     if options.num_threads == 1 {
@@ -169,16 +172,14 @@ fn elaborate_command(
 ) -> CliResult<(bool, ast::Problem, ast::Proof, ast::PrimitivePool)> {
     let (problem, proof, rules) = get_instance(&options.input)?;
 
-    let mut checker_config: checker::Config = options.checking.into();
-    checker_config.tools = options.tools.clone().into();
-    let (mut elab_config, pipeline) = options.elaboration.into();
-    elab_config.sat_refutation_options = options.tools.into();
+    let checker_config = (options.checking, options.tools.clone()).into_config();
+    let (elab_config, pipeline) = (options.elaboration, options.tools).into_config();
 
     check_and_elaborate(
         &problem,
         &proof,
         rules.as_deref(),
-        options.parsing.into(),
+        options.parsing.into_config(),
         checker_config,
         elab_config,
         pipeline,
@@ -200,17 +201,15 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         options.num_runs
     );
 
-    let mut checker_config: checker::Config = options.checking.into();
-    checker_config.tools = options.tools.clone().into();
-    let (mut elab_config, pipeline) = options.elaboration.into();
-    elab_config.sat_refutation_options = options.tools.into();
+    let checker_config = (options.checking, options.tools.clone()).into_config();
+    let (elab_config, pipeline) = (options.elaboration, options.tools).into_config();
 
     if options.dump_to_csv {
         benchmarking::run_csv_benchmark(
             &instances,
             options.num_runs,
             options.num_jobs,
-            options.parsing.into(),
+            options.parsing.into_config(),
             checker_config,
             options.elaborate.then_some((elab_config, pipeline)),
             &mut File::create("runs.csv")?,
@@ -223,7 +222,7 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         &instances,
         options.num_runs,
         options.num_jobs,
-        options.parsing.into(),
+        options.parsing.into_config(),
         checker_config,
         options.elaborate.then_some((elab_config, pipeline)),
     );
@@ -249,8 +248,12 @@ fn slice_command(
 ) -> CliResult<(ast::Problem, ast::Proof, ast::PrimitivePool)> {
     use std::fs;
     let (problem, proof, rules) = get_instance(&options.input)?;
-    let (problem, proof, _, mut pool) =
-        parser::parse_instance(&problem, &proof, rules.as_deref(), options.parsing.into())?;
+    let (problem, proof, _, mut pool) = parser::parse_instance(
+        &problem,
+        &proof,
+        rules.as_deref(),
+        options.parsing.into_config(),
+    )?;
 
     let sliced = {
         let (sliced_proof, sliced_asserts) = slice::slice(
@@ -305,7 +308,7 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
         &problem,
         &proof,
         rules.as_deref(),
-        options.parsing.into(),
+        options.parsing.into_config(),
         use_sharing,
     )?;
     for (id, content) in instances {

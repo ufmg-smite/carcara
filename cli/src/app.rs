@@ -123,16 +123,6 @@ pub struct ToolOptions {
     pub smt_solver: Option<ExternalTool>,
 }
 
-impl From<ToolOptions> for SatTools {
-    fn from(val: ToolOptions) -> Self {
-        Self {
-            sat_solver: val.sat_solver,
-            drat_checker: val.drat_checker,
-            smt_solver: val.smt_solver,
-        }
-    }
-}
-
 #[derive(Args, Clone, Copy)]
 pub struct ParsingOptions {
     /// Expand function definitions introduced by `define-fun`s in the SMT problem. If this flag is
@@ -167,18 +157,6 @@ pub struct ParsingOptions {
     /// at the cost of increased memory usage.
     #[clap(long)]
     pub buffer_entire_file: bool,
-}
-
-impl From<ParsingOptions> for parser::Config {
-    fn from(val: ParsingOptions) -> Self {
-        Self {
-            apply_function_defs: val.apply_function_defs,
-            expand_lets: val.expand_let_bindings,
-            allow_int_real_subtyping: val.allow_int_real_subtyping,
-            strict: val.strict,
-            parse_hole_args: val.parse_hole_args,
-        }
-    }
 }
 
 #[derive(ArgEnum, Clone, Copy, PartialEq, Eq)]
@@ -228,19 +206,6 @@ pub struct CheckingOptions {
     pub rule_checkers: Vec<(String, ExternalTool)>,
 }
 
-impl From<CheckingOptions> for checker::Config {
-    fn from(val: CheckingOptions) -> Self {
-        Self {
-            elaborated: val.check_granularity == CheckGranularity::Elaborated,
-            ignore_unknown_rules: val.ignore_unknown_rules || val.skip_unknown_rules,
-            allowed_rules: val.allowed_rules.unwrap_or_default().into_iter().collect(),
-            rup_resolution: val.rup_resolution,
-            rule_checkers: val.rule_checkers.into_iter().collect(),
-            tools: SatTools::default(), // Should be filled in later with `ToolOptions`
-        }
-    }
-}
-
 #[derive(ArgEnum, Clone)]
 pub enum ElaborationPass {
     Polyeq,
@@ -271,31 +236,6 @@ pub struct ElaborationOptions {
         default_values = &["polyeq", "hole", "local", "uncrowd", "reordering"]
     )]
     pub pipeline: Vec<ElaborationPass>,
-}
-
-impl From<ElaborationOptions> for (elaborator::Config, Vec<elaborator::ElaborationPass>) {
-    fn from(val: ElaborationOptions) -> Self {
-        let pipeline: Vec<_> = val
-            .pipeline
-            .into_iter()
-            .map(|p| match p {
-                ElaborationPass::Polyeq => elaborator::ElaborationPass::Polyeq,
-                ElaborationPass::Hole => elaborator::ElaborationPass::Hole,
-                ElaborationPass::Local => elaborator::ElaborationPass::Local,
-                ElaborationPass::Uncrowd => elaborator::ElaborationPass::Uncrowd,
-                ElaborationPass::Reordering => elaborator::ElaborationPass::Reordering,
-                ElaborationPass::SatRefutation => elaborator::ElaborationPass::SatRefutation,
-            })
-            .collect();
-
-        let config = elaborator::Config {
-            lia_solver: val.hole_solver.clone(),
-            uncrowd_rotation: val.uncrowd_rotate,
-            hole_solver: val.hole_solver.clone(),
-            sat_refutation_options: SatTools::default(), // Should be filled in later with `ToolOptions`
-        };
-        (config, pipeline)
-    }
 }
 
 #[derive(Args)]
@@ -468,5 +408,81 @@ impl From<LogLevel> for log::LevelFilter {
             LogLevel::Info => Self::Info,
             LogLevel::Debug => Self::Debug,
         }
+    }
+}
+
+// Due to the orphan rule with tuples, we can't use the standard `From`/`Into` traits for this
+pub trait IntoConfig {
+    type Output;
+
+    fn into_config(self) -> Self::Output;
+}
+
+impl IntoConfig for ToolOptions {
+    type Output = SatTools;
+
+    fn into_config(self) -> Self::Output {
+        SatTools {
+            sat_solver: self.sat_solver,
+            drat_checker: self.drat_checker,
+            smt_solver: self.smt_solver,
+        }
+    }
+}
+
+impl IntoConfig for ParsingOptions {
+    type Output = parser::Config;
+
+    fn into_config(self) -> Self::Output {
+        parser::Config {
+            apply_function_defs: self.apply_function_defs,
+            expand_lets: self.expand_let_bindings,
+            allow_int_real_subtyping: self.allow_int_real_subtyping,
+            strict: self.strict,
+            parse_hole_args: self.parse_hole_args,
+        }
+    }
+}
+
+impl IntoConfig for (CheckingOptions, ToolOptions) {
+    type Output = checker::Config;
+
+    fn into_config(self) -> Self::Output {
+        let (c, t) = self;
+        checker::Config {
+            elaborated: c.check_granularity == CheckGranularity::Elaborated,
+            ignore_unknown_rules: c.ignore_unknown_rules || c.skip_unknown_rules,
+            allowed_rules: c.allowed_rules.unwrap_or_default().into_iter().collect(),
+            rup_resolution: c.rup_resolution,
+            rule_checkers: c.rule_checkers.into_iter().collect(),
+            tools: t.into_config(),
+        }
+    }
+}
+
+impl IntoConfig for (ElaborationOptions, ToolOptions) {
+    type Output = (elaborator::Config, Vec<elaborator::ElaborationPass>);
+
+    fn into_config(self) -> Self::Output {
+        let (e, t) = self;
+        let pipeline: Vec<_> = e
+            .pipeline
+            .into_iter()
+            .map(|p| match p {
+                ElaborationPass::Polyeq => elaborator::ElaborationPass::Polyeq,
+                ElaborationPass::Hole => elaborator::ElaborationPass::Hole,
+                ElaborationPass::Local => elaborator::ElaborationPass::Local,
+                ElaborationPass::Uncrowd => elaborator::ElaborationPass::Uncrowd,
+                ElaborationPass::Reordering => elaborator::ElaborationPass::Reordering,
+                ElaborationPass::SatRefutation => elaborator::ElaborationPass::SatRefutation,
+            })
+            .collect();
+        let config = elaborator::Config {
+            lia_solver: e.hole_solver.clone(),
+            uncrowd_rotation: e.uncrowd_rotate,
+            hole_solver: e.hole_solver.clone(),
+            sat_refutation_options: t.into_config(),
+        };
+        (config, pipeline)
     }
 }
