@@ -238,7 +238,7 @@ struct CheckingOptions {
     // but this makes adding an argument after the values impossible:
     // my_program -D a=1 -D b=2 my_input_file
     // becomes invalid.
-    #[clap(short = 'o', value_parser = parse_rule_checkers, help_heading = "EXTERNAL TOOL OPTIONS")]
+    #[clap(short = 'x', value_parser = parse_rule_checkers, help_heading = "EXTERNAL TOOL OPTIONS")]
     rule_checkers: Vec<(String, ExternalTool)>,
 }
 
