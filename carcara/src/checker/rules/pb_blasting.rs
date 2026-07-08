@@ -143,8 +143,7 @@ fn check_pbblast_constraint(
 /// The expected shape is:
 ///    `(= (= x y) (= (- (+ sum_x) (+ sum_y)) 0))`
 pub fn pbblast_bveq(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), ((sum_x, sum_y), _)) =
-        match_term_err!((= (= x y) (= (- sum_x sum_y) 0)) = &conclusion[0])?;
+    let (x, y, sum_x, sum_y) = match_term_err!((= (= x y) (= (- sum_x sum_y) 0)) = &conclusion[0])?;
 
     // Get the summation lists
     let sum_x = split_summation(sum_x);
@@ -159,7 +158,7 @@ pub fn pbblast_bveq(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
 /// The expected shape is:
 ///    `(= (bvult x y) (>= (- (+ sum_y) (+ sum_x)) 1))`
 pub fn pbblast_bvult(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), ((sum_y, sum_x), _)) =
+    let (x, y, sum_y, sum_x) =
         match_term_err!((= (bvult x y) (>= (- sum_y sum_x) 1)) = &conclusion[0])?;
 
     // Get the summation lists
@@ -175,7 +174,7 @@ pub fn pbblast_bvult(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// The expected shape is:
 ///    `(= (bvugt x y) (>= (- (+ sum_x) (+ sum_y)) 1))`
 pub fn pbblast_bvugt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), ((sum_x, sum_y), _)) =
+    let (x, y, sum_x, sum_y) =
         match_term_err!((= (bvugt x y) (>= (- sum_x sum_y) 1)) = &conclusion[0])?;
 
     // Get the summation lists
@@ -191,7 +190,7 @@ pub fn pbblast_bvugt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// The expected shape is:
 ///    `(= (bvuge x y) (>= (- (+ sum_x) (+ sum_y)) 0))`
 pub fn pbblast_bvuge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), ((sum_x, sum_y), ())) =
+    let (x, y, sum_x, sum_y) =
         match_term_err!((= (bvuge x y) (>= (- sum_x sum_y) 0)) = &conclusion[0])?;
 
     // Get the summation lists
@@ -206,7 +205,7 @@ pub fn pbblast_bvuge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// The expected shape is:
 ///    `(= (bvule x y) (>= (- (+ sum_y) (+ sum_x)) 0))`
 pub fn pbblast_bvule(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), ((sum_y, sum_x), ())) =
+    let (x, y, sum_y, sum_x) =
         match_term_err!((= (bvule x y) (>= (- sum_y sum_x) 0)) = &conclusion[0])?;
 
     // Get the summation lists
@@ -235,7 +234,7 @@ fn check_pbblast_signed_relation(n: usize, sign: &Rc<Term>, bitvector: &Rc<Term>
     }
 
     // Check the signs
-    let (coeff, (idx, bv)) = match_term_err!((* coeff ((_ int_of idx) bv)) = sign)?;
+    let (coeff, idx, bv) = match_term_err!((* coeff ((_ int_of idx) bv)) = sign)?;
     let coeff = coeff.as_integer_err()?;
     let idx = idx.as_integer_err()?;
 
@@ -265,7 +264,7 @@ fn check_pbblast_signed_relation(n: usize, sign: &Rc<Term>, bitvector: &Rc<Term>
 /// The expected shape is:
 ///    `(= (bvslt x y) (>= (+ (- y_sum (* 2^(n-1) y_n-1))) (- (* 2^(n-1) x_n-1) x_sum)) 1))`
 pub fn pbblast_bvslt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), (((sum_y, sign_y), (sign_x, sum_x)), _)) = match_term_err!((= (bvslt x y) (>= (+ (- sum_y sign_y) (- sign_x sum_x)) 1)) = &conclusion[0])?;
+    let (x, y, sum_y, sign_y, sign_x, sum_x) = match_term_err!((= (bvslt x y) (>= (+ (- sum_y sign_y) (- sign_x sum_x)) 1)) = &conclusion[0])?;
 
     // Get the summation lists
     let sum_x = split_summation(sum_x);
@@ -286,7 +285,7 @@ pub fn pbblast_bvslt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// The expected shape is:
 ///    `(= (bvsgt x y) (>= (+ (- x_sum (* 2^(n-1) x_n-1))) (- (* 2^(n-1) y_n-1) y_sum)) 1))`
 pub fn pbblast_bvsgt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), (((sum_x, sign_x), (sign_y, sum_y)), _)) = match_term_err!((= (bvsgt x y) (>= (+ (- sum_x sign_x) (- sign_y sum_y)) 1)) = &conclusion[0])?;
+    let (x, y, sum_x, sign_x, sign_y, sum_y) = match_term_err!((= (bvsgt x y) (>= (+ (- sum_x sign_x) (- sign_y sum_y)) 1)) = &conclusion[0])?;
 
     // Get the summation lists
     let sum_x = split_summation(sum_x);
@@ -307,7 +306,7 @@ pub fn pbblast_bvsgt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// The expected shape is:
 ///    `(= (bvsge x y) (>= (+ (- x_sum (* 2^(n-1) x_n-1))) (- (* 2^(n-1) y_n-1) y_sum)) 0))`
 pub fn pbblast_bvsge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), (((sum_x, sign_x), (sign_y, sum_y)), _)) = match_term_err!((= (bvsge x y) (>= (+ (- sum_x sign_x) (- sign_y sum_y)) 0)) = &conclusion[0])?;
+    let (x, y, sum_x, sign_x, sign_y, sum_y) = match_term_err!((= (bvsge x y) (>= (+ (- sum_x sign_x) (- sign_y sum_y)) 0)) = &conclusion[0])?;
 
     // Get the summation lists
     let sum_x = split_summation(sum_x);
@@ -328,7 +327,7 @@ pub fn pbblast_bvsge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// The expected shape is:
 ///    `(= (bvsle x y) (>= (+ (- y_sum (* 2^(n-1) y_n-1))) (- (* 2^(n-1) x_n-1) x_sum)) 0))`
 pub fn pbblast_bvsle(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), (((sum_y, sign_y), (sign_x, sum_x)), _)) = match_term_err!((= (bvsle x y) (>= (+ (- sum_y sign_y) (- sign_x sum_x)) 0)) = &conclusion[0])?;
+    let (x, y, sum_y, sign_y, sign_x, sum_x) = match_term_err!((= (bvsle x y) (>= (+ (- sum_y sign_y) (- sign_x sum_x)) 0)) = &conclusion[0])?;
 
     // Get the summation lists
     let sum_x = split_summation(sum_x);
@@ -447,15 +446,14 @@ fn get_bitvector_terms(bv: &Rc<Term>, pool: &mut dyn TermPool) -> Vec<Rc<Term>> 
 
 /// Implements the bitwise exclusive or operation.
 pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), bit_constraints) =
-        match_term_err!((= (bvxor x y) (pbbterm ...)) = &conclusion[0])?;
+    let (x, y, bit_constraints) = match_term_err!((= (bvxor x y) (pbbterm ...)) = &conclusion[0])?;
 
     let xs = get_bitvector_terms(x, pool);
     let ys = get_bitvector_terms(y, pool);
 
     // Zip three lists into tuples
     for ((bc, xi), yi) in bit_constraints.iter().zip(xs.iter()).zip(ys.iter()) {
-        let (bindings, (c1, c2, c3, c4)) = match_term_err!((choice ... (and c1 c2 c3 c4)) = bc)?;
+        let (bindings, c1, c2, c3, c4) = match_term_err!((choice ... (and c1 c2 c3 c4)) = bc)?;
 
         // Check z -> Int
         let (z_name, z_type) = &bindings[0];
@@ -469,7 +467,7 @@ pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         );
 
         // c1 : (>= (+ xi yi) z)
-        let ((xic, yic), zc) = match_term_err!((>= (+ xi yi) z) = c1)?;
+        let (xic, yic, zc) = match_term_err!((>= (+ xi yi) z) = c1)?;
         assert_eq(xic, xi)?;
         assert_eq(yic, yi)?;
         rassert!(
@@ -478,7 +476,7 @@ pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         );
 
         // c2 : (>= (+ z xi) yi)
-        let ((zc, xic), yic) = match_term_err!((>= (+ z xi) yi) = c2)?;
+        let (zc, xic, yic) = match_term_err!((>= (+ z xi) yi) = c2)?;
         assert_eq(xic, xi)?;
         assert_eq(yic, yi)?;
         rassert!(
@@ -487,7 +485,7 @@ pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         );
 
         // c3 : (>= (+ z yi) xi)
-        let ((zc, yic), xic) = match_term_err!((>= (+ z yi) xi) = c3)?;
+        let (zc, yic, xic) = match_term_err!((>= (+ z yi) xi) = c3)?;
         assert_eq(xic, xi)?;
         assert_eq(yic, yi)?;
         rassert!(
@@ -496,7 +494,7 @@ pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         );
 
         // c4 : (>= 2 (+ z xi yi)
-        let (_, (zc, xic, yic)) = match_term_err!((>= 2 (+ z xi yi)) = c4)?;
+        let (zc, xic, yic) = match_term_err!((>= 2 (+ z xi yi)) = c4)?;
         assert_eq(xic, xi)?;
         assert_eq(yic, yi)?;
         rassert!(
@@ -510,15 +508,14 @@ pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 
 /// Implements the bitwise and operation.
 pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
-    let ((x, y), bit_constraints) =
-        match_term_err!((= (bvand x y) (pbbterm ...)) = &conclusion[0])?;
+    let (x, y, bit_constraints) = match_term_err!((= (bvand x y) (pbbterm ...)) = &conclusion[0])?;
 
     let xs = get_bitvector_terms(x, pool);
     let ys = get_bitvector_terms(y, pool);
 
     // Zip three lists into tuples
     for ((bc, xi), yi) in bit_constraints.iter().zip(xs.iter()).zip(ys.iter()) {
-        let (bindings, (c1, c2, c3)) = match_term_err!((choice ... (and c1 c2 c3)) = bc)?;
+        let (bindings, c1, c2, c3) = match_term_err!((choice ... (and c1 c2 c3)) = bc)?;
 
         // Check z -> Int
         let (z_name, z_type) = &bindings[0];
@@ -548,7 +545,7 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         );
 
         // c3 : (>= (+ z 1) (+ @x0 @y0))
-        let ((zc, _), (xic, yic)) = match_term_err!((>= (+ z 1) (+ xi yi)) = c3)?;
+        let (zc, xic, yic) = match_term_err!((>= (+ z 1) (+ xi yi)) = c3)?;
         rassert!(
             zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
             CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
@@ -580,25 +577,25 @@ pub fn pbblast_bvxor_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) 
     )));
 
     // c1 : (>= (+ x y) r)
-    let ((xc, yc), rc) = match_term_err!((>= (+ x y) r) = c1)?;
+    let (xc, yc, rc) = match_term_err!((>= (+ x y) r) = c1)?;
     assert_eq(xc, x)?;
     assert_eq(yc, y)?;
     assert_eq(rc, &the_r)?;
 
     // c2 : (>= (+ r x) y)
-    let ((rc, xc), yc) = match_term_err!((>= (+ r x) y) = c2)?;
+    let (rc, xc, yc) = match_term_err!((>= (+ r x) y) = c2)?;
     assert_eq(xc, x)?;
     assert_eq(yc, y)?;
     assert_eq(rc, &the_r)?;
 
     // c3 : (>= (+ r y) x)
-    let ((rc, yc), xc) = match_term_err!((>= (+ r y) x) = c3)?;
+    let (rc, yc, xc) = match_term_err!((>= (+ r y) x) = c3)?;
     assert_eq(xc, x)?;
     assert_eq(yc, y)?;
     assert_eq(rc, &the_r)?;
 
     // c4 : (>= 2 (+ r x y))
-    let (_, (rc, xc, yc)) = match_term_err!((>= 2 (+ r x y)) = c4)?;
+    let (rc, xc, yc) = match_term_err!((>= 2 (+ r x y)) = c4)?;
     assert_eq(xc, x)?;
     assert_eq(yc, y)?;
     assert_eq(rc, &the_r)?;
@@ -635,7 +632,7 @@ pub fn pbblast_bvand_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) 
     assert_eq(rc, &the_r)?;
 
     // c3 : (>= (+ r 1) (+ x y))
-    let ((rc, _), (x, y)) = match_term_err!((>= (+ r 1) (+ x y)) = c3)?;
+    let (rc, x, y) = match_term_err!((>= (+ r 1) (+ x y)) = c3)?;
     assert_eq(xc, x)?;
     assert_eq(yc, y)?;
     assert_eq(rc, &the_r)?;

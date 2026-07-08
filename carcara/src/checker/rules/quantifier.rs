@@ -12,7 +12,7 @@ pub fn forall_inst(
 ) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
 
-    let ((bindings, original), substituted) =
+    let (bindings, original, substituted) =
         match_term_err!((or (not (forall ... original)) result) = &conclusion[0])?;
 
     assert_num_args(args, bindings.len())?;
@@ -318,12 +318,12 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
 pub fn miniscope_distribute(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
-    let (op, ((bindings, phis), right_args)) =
+    let (op, bindings, phis, right_args) =
         match_term_err!((= (forall ... (and ...)) (and ...)) = &conclusion[0])
-            .map(|values| (Operator::And, values))
+            .map(|(bindings, phis, right_args)| (Operator::And, bindings, phis, right_args))
             .or_else(|_| {
                 match_term_err!((= (exists ... (or ...)) (or ...)) = &conclusion[0])
-                    .map(|values| (Operator::Or, values))
+                    .map(|(bindings, phis, right_args)| (Operator::Or, bindings, phis, right_args))
             })?;
     assert_operation_len(op, right_args, phis.len())?;
     for (phi, right) in phis.iter().zip(right_args) {
@@ -340,12 +340,12 @@ pub fn miniscope_distribute(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult
 
 pub fn miniscope_split(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
-    let (op, ((bindings, phis), right_args)) =
+    let (op, bindings, phis, right_args) =
         match_term_err!((= (forall ... (or ...)) (or ...)) = &conclusion[0])
-            .map(|values| (Operator::Or, values))
+            .map(|(bindings, phis, right_args)| (Operator::Or, bindings, phis, right_args))
             .or_else(|_| {
                 match_term_err!((= (exists ... (and ...)) (and ...)) = &conclusion[0])
-                    .map(|values| (Operator::And, values))
+                    .map(|(bindings, phis, right_args)| (Operator::And, bindings, phis, right_args))
             })?;
     assert_operation_len(op, right_args, phis.len())?;
 
@@ -384,10 +384,7 @@ pub fn miniscope_split(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResul
 
 pub fn miniscope_ite(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
-    let (
-        (bindings_1, (phi1_l, phi2_l, phi3_l)),
-        (phi1_r, (bindings_2, phi2_r), (bindings_3, phi3_r)),
-    ) = match_term_err!(
+    let (bindings_1, phi1_l, phi2_l, phi3_l, phi1_r, bindings_2, phi2_r, bindings_3, phi3_r) = match_term_err!(
         (= (forall ... (ite phi1 phi2 phi3)) (ite phi1 (forall ... phi2) (forall ... phi3)))
         = &conclusion[0]
     )?;

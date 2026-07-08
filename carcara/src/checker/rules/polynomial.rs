@@ -202,7 +202,7 @@ pub fn poly_simp_rel(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleRes
     assert_clause_len(conclusion, 1)?;
     let prem = get_premise_term(&premises[0])?;
 
-    let ((c1, xs), (c2, ys)) = match_term_err!((= (* c1 xs) (* c2 ys)) = prem)?;
+    let (c1, xs, c2, ys) = match_term_err!((= (* c1 xs) (* c2 ys)) = prem)?;
     let (x1, x2) =
         match_term_err!((to_real (- x1 x2)) = xs).or_else(|_| match_term_err!((- x1 x2) = xs))?;
     let (y1, y2) =
@@ -238,7 +238,7 @@ pub fn bv_poly_simp_eq(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) ->
     assert_num_premises(premises, 1)?;
     assert_clause_len(conclusion, 1)?;
 
-    let ((c1, (x1, x2)), (c2, (y1, y2))) =
+    let (c1, x1, x2, c2, y1, y2) =
         match_term_err!((= (* c1 (- x1 x2)) (* c2 (- y1 y2))) = get_premise_term(&premises[0])?)?;
 
     let sort = pool.sort(c1);
@@ -249,7 +249,7 @@ pub fn bv_poly_simp_eq(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) ->
     assert_is_expected(c1, one.clone())?;
     assert_is_expected(c2, one)?;
 
-    let ((l1, l2), (r1, r2)) = match_term_err!((= (= x1 x2) (= y1 y2)) = &conclusion[0])?;
+    let (l1, l2, r1, r2) = match_term_err!((= (= x1 x2) (= y1 y2)) = &conclusion[0])?;
 
     assert_eq(l1, x1)?;
     assert_eq(l2, x2)?;
