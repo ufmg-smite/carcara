@@ -95,11 +95,18 @@ pub fn sat_refutation(
     pool: &mut PrimitivePool,
     premise_steps: Vec<&ProofCommand>,
     prelude: &ProblemPrelude,
-    checker: Option<&ExternalTool>,
-    cadical: Option<&ExternalTool>,
-    drat_trim: Option<&ExternalTool>,
-    cvc5: Option<&ExternalTool>,
+    config: &SatRefConfig,
 ) -> RuleResult {
+    if matches!(config, SatRefConfig::None) {
+        // TODO: better error message
+        return Err(CheckerError::Explanation(
+            "The `sat_refutation` rule checking requires paths to be given for a SAT \
+            solver (`sat-solver`), DRAT checker (`drat-checker`), and an SMT solver \
+            (`smt-solver`) via the external-tools option"
+                .to_owned(),
+        ));
+    }
+
     // Create the DIMACS file from the premises and the lemmas.
     //
     // Lemmas (i.e., conclusions of "hole") are non-unit clauses if
@@ -242,8 +249,9 @@ pub fn sat_refutation(
         prelude.clone()
     };
 
-    match checker {
-        Some(checker) => {
+    match config {
+        SatRefConfig::None => unreachable!(),
+        SatRefConfig::Dedicated(checker) => {
             let cnf_path = external::gen_dimacs(
                 &premise_clauses,
                 &clause_id_to_lemma,
@@ -352,7 +360,11 @@ pub fn sat_refutation(
                 &rw_lemmas_to_th_ids,
             )
         }
-        None => {
+        SatRefConfig::Sat(SatTools {
+            sat_solver,
+            drat_checker,
+            smt_solver,
+        }) => {
             let cnf_path = external::gen_dimacs(
                 &premise_clauses,
                 &clause_id_to_lemma,
@@ -364,15 +376,14 @@ pub fn sat_refutation(
             match external::get_core_lemmas(
                 cnf_path.as_str(),
                 &sat_clause_to_lemma,
-                cadical.unwrap(),
-                drat_trim.unwrap(),
+                sat_solver,
+                drat_checker,
             ) {
                 Ok(core_lemmas) => {
                     log::info!(
                         "[sat_refutation check] Check {} core lemmas",
                         core_lemmas.len()
                     );
-                    let cvc5 = cvc5.unwrap();
 
                     // for each core lemma, we will run cvc5, parse the proof in, and check it
                     for lemma in &core_lemmas {
@@ -412,7 +423,9 @@ pub fn sat_refutation(
                         log::debug!("\t[sat_refutation check] Check lemma: {:?}", lemma);
                         let problem = external::get_problem_string(pool, &prelude, &assertions);
 
-                        if let Err(e) = external::get_solver_proof(pool, problem.clone(), cvc5) {
+                        if let Err(e) =
+                            external::get_solver_proof(pool, problem.clone(), smt_solver)
+                        {
                             log::debug!(
                                 "\t[sat_refutation check] Failed to check with problem:\n{}",
                                 problem

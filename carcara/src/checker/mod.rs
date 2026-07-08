@@ -51,6 +51,14 @@ impl<CR: CollectResults + Send + Default> fmt::Debug for CheckerStatistics<'_, C
 }
 
 #[derive(Debug, Default, Clone)]
+pub enum SatRefConfig {
+    #[default]
+    None,
+    Dedicated(ExternalTool),
+    Sat(SatTools),
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct Config {
     /// If `true`, the checker will assume that the proof is elaborated, and enforce extra
     /// restrictions when checking it.
@@ -73,7 +81,7 @@ pub struct Config {
 
     pub rule_checkers: IndexMap<String, ExternalTool>,
 
-    pub tools: SatTools,
+    pub sat_ref_config: SatRefConfig,
 }
 
 impl Config {
@@ -267,39 +275,12 @@ impl<'c> ProofChecker<'c> {
         if step.rule == "sat_refutation" && !self.config.allowed_rules.contains("sat_refutation") {
             let premises_steps: Vec<_> =
                 step.premises.iter().map(|&p| iter.get_premise(p)).collect();
-            return if let Some(checker) = self.config.rule_checkers.get(&step.rule) {
-                sat_refutation::sat_refutation(
-                    self.pool,
-                    premises_steps,
-                    prelude,
-                    Some(checker),
-                    None,
-                    None,
-                    None,
-                )
-            } else {
-                match &self.config.tools {
-                    SatTools {
-                        sat_solver: Some(cadical),
-                        drat_checker: Some(drat_trim),
-                        smt_solver: Some(cvc5),
-                    } => sat_refutation::sat_refutation(
-                        self.pool,
-                        premises_steps,
-                        prelude,
-                        None,
-                        Some(cadical),
-                        Some(drat_trim),
-                        Some(cvc5),
-                    ),
-                    _ => Err(CheckerError::Explanation(
-                        "The `sat_refutation` rule checking requires paths to be given for a SAT \
-                        solver (`sat-solver`), DRAT checker (`drat-checker`), and an SMT solver \
-                        (`smt-solver`) via the external-tools option"
-                            .to_owned(),
-                    )),
-                }
-            };
+            return sat_refutation::sat_refutation(
+                self.pool,
+                premises_steps,
+                prelude,
+                &self.config.sat_ref_config,
+            );
         }
 
         // Prepare rule arguments - this is pool-specific

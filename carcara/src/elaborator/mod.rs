@@ -33,7 +33,7 @@ pub struct Config {
 
     pub hole_solver: Option<ExternalTool>,
 
-    pub sat_refutation_options: SatTools,
+    pub sat_ref_tools: Option<SatTools>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -99,7 +99,7 @@ impl<'e> Elaborator<'e> {
                 })?,
                 ElaborationPass::Reordering => reordering::remove_reorderings(current)?,
                 ElaborationPass::SatRefutation => {
-                    if self.config.sat_refutation_options.all_some() {
+                    if self.config.sat_ref_tools.is_some() {
                         // TODO: proper error handling
                         current
                             .mutate::<_, ()>(|_, node, _| match node.as_ref() {

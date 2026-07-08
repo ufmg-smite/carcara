@@ -200,6 +200,9 @@ pub struct CheckingOptions {
     // becomes invalid.
     #[clap(short = 'x', value_parser = parse_rule_checkers, help_heading = "EXTERNAL TOOL OPTIONS")]
     pub rule_checkers: Vec<(String, ExternalTool)>,
+
+    #[clap(long, help_heading = "EXTERNAL TOOL OPTIONS")]
+    pub sat_ref_checker: Option<ExternalTool>,
 }
 
 #[derive(ArgEnum, Clone)]
@@ -373,6 +376,8 @@ pub struct SliceCommandOptions {
     #[clap(short = 'x', value_parser = parse_rule_checkers, hide = true)]
     rule_checkers: Vec<(String, ExternalTool)>,
     #[clap(long, hide = true)]
+    sat_ref_checker: Option<ExternalTool>,
+    #[clap(long, hide = true)]
     sat_solver: Option<ExternalTool>,
     #[clap(long, hide = true)]
     drat_checker: Option<ExternalTool>,
@@ -413,14 +418,14 @@ pub trait IntoConfig {
 }
 
 impl IntoConfig for ToolOptions {
-    type Output = SatTools;
+    type Output = Option<SatTools>;
 
     fn into_config(self) -> Self::Output {
-        SatTools {
-            sat_solver: self.sat_solver,
-            drat_checker: self.drat_checker,
-            smt_solver: self.smt_solver,
-        }
+        Some(SatTools {
+            sat_solver: self.sat_solver?,
+            drat_checker: self.drat_checker?,
+            smt_solver: self.smt_solver?,
+        })
     }
 }
 
@@ -443,13 +448,21 @@ impl IntoConfig for (CheckingOptions, ToolOptions) {
 
     fn into_config(self) -> Self::Output {
         let (c, t) = self;
+        let sat_ref_config = if let Some(checker) = c.sat_ref_checker {
+            // TODO: add warning for when both are passed?
+            checker::SatRefConfig::Dedicated(checker)
+        } else if let Some(sat_tools) = t.into_config() {
+            checker::SatRefConfig::Sat(sat_tools)
+        } else {
+            checker::SatRefConfig::None
+        };
         checker::Config {
             elaborated: c.check_granularity == CheckGranularity::Elaborated,
             ignore_unknown_rules: c.ignore_unknown_rules,
             allowed_rules: c.allowed_rules.unwrap_or_default().into_iter().collect(),
             rup_resolution: c.rup_resolution,
             rule_checkers: c.rule_checkers.into_iter().collect(),
-            tools: t.into_config(),
+            sat_ref_config,
         }
     }
 }
@@ -471,11 +484,12 @@ impl IntoConfig for (ElaborationOptions, ToolOptions) {
                 ElaborationPass::SatRefutation => elaborator::ElaborationPass::SatRefutation,
             })
             .collect();
+
         let config = elaborator::Config {
             lia_solver: e.hole_solver.clone(),
             uncrowd_rotation: e.uncrowd_rotate,
             hole_solver: e.hole_solver.clone(),
-            sat_refutation_options: t.into_config(),
+            sat_ref_tools: t.into_config(),
         };
         (config, pipeline)
     }
