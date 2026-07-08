@@ -6,7 +6,7 @@ use crate::{
         rules::{rare::check_rare, RuleArgs, RuleResult},
         CheckerStatistics, Config,
     },
-    ExternalTool,
+    external::ExternalTool,
 };
 use indexmap::IndexSet;
 use std::time::{Duration, Instant};

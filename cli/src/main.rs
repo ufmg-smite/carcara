@@ -6,8 +6,9 @@ mod path_args;
 use carcara::{
     ast::{self, rare_rules::Rules},
     benchmarking::OnlineBenchmarkResults,
-    check, check_and_elaborate, check_parallel, checker, elaborator, generate_lia_smt_instances,
-    parser, slice, ExternalTool,
+    check, check_and_elaborate, check_parallel, checker, elaborator,
+    external::{ExternalTool, SatTools},
+    generate_lia_smt_instances, parser, slice,
 };
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use const_format::{formatcp, str_index};
@@ -122,6 +123,31 @@ struct StackOptions {
     stack_size: usize,
 }
 
+#[derive(Args, Clone)]
+struct ToolOptions {
+    /// SAT solver that can be used when checking or elaborating proofs.
+    #[clap(long, help_heading = "EXTERNAL TOOL OPTIONS")]
+    sat_solver: Option<ExternalTool>,
+
+    /// DRAT checker and trimmer that can be used when checking or elaborating proofs.
+    #[clap(long, help_heading = "EXTERNAL TOOL OPTIONS")]
+    drat_checker: Option<ExternalTool>,
+
+    /// SMT solver that can be used when checking or elaborating proof steps.
+    #[clap(long, help_heading = "EXTERNAL TOOL OPTIONS")]
+    smt_solver: Option<ExternalTool>,
+}
+
+impl From<ToolOptions> for SatTools {
+    fn from(val: ToolOptions) -> Self {
+        Self {
+            sat_solver: val.sat_solver,
+            drat_checker: val.drat_checker,
+            smt_solver: val.smt_solver,
+        }
+    }
+}
+
 #[derive(Args, Clone, Copy)]
 struct ParsingOptions {
     /// Expand function definitions introduced by `define-fun`s in the SMT problem. If this flag is
@@ -212,18 +238,8 @@ struct CheckingOptions {
     // but this makes adding an argument after the values impossible:
     // my_program -D a=1 -D b=2 my_input_file
     // becomes invalid.
-    #[clap(short = 'o', value_parser = parse_rule_checkers)]
+    #[clap(short = 'o', value_parser = parse_rule_checkers, help_heading = "EXTERNAL TOOL OPTIONS")]
     rule_checkers: Vec<(String, ExternalTool)>,
-
-    // TODO: deduplicate with elaboration options
-    #[clap(long)]
-    sat_solver: Option<ExternalTool>,
-
-    #[clap(long)]
-    drat_checker: Option<ExternalTool>,
-
-    #[clap(long)]
-    smt_solver: Option<ExternalTool>,
 }
 
 impl From<CheckingOptions> for checker::Config {
@@ -234,9 +250,7 @@ impl From<CheckingOptions> for checker::Config {
             allowed_rules: val.allowed_rules.unwrap_or_default().into_iter().collect(),
             rup_resolution: val.rup_resolution,
             rule_checkers: val.rule_checkers.into_iter().collect(),
-            sat_solver: val.sat_solver,
-            drat_checker: val.drat_checker,
-            smt_solver: val.smt_solver,
+            tools: SatTools::default(), // Should be filled in later with `ToolOptions`
         }
     }
 }
@@ -258,17 +272,10 @@ struct ElaborationOptions {
     #[clap(long)]
     uncrowd_rotate: bool,
 
-    /// SAT solver that can be used when elaborating proof steps.
-    #[clap(long)]
-    sat_solver: Option<ExternalTool>,
-
-    /// DRAT checker and trimmer that can be used when elaborating proof steps.
-    #[clap(long)]
-    drat_checker: Option<ExternalTool>,
-
+    // TODO: maybe remove this in favor of using the value from `ToolOptions`
     /// SMT solver that can be used when elaborating proof steps.
-    #[clap(long)]
-    smt_solver: Option<ExternalTool>,
+    #[clap(long, help_heading = "EXTERNAL TOOL OPTIONS")]
+    hole_solver: Option<ExternalTool>,
 
     /// The pipeline of elaboration passes to use.
     #[clap(
@@ -296,19 +303,10 @@ impl From<ElaborationOptions> for (elaborator::Config, Vec<elaborator::Elaborati
             .collect();
 
         let config = elaborator::Config {
-            lia_solver: val.smt_solver.clone(),
+            lia_solver: val.hole_solver.clone(),
             uncrowd_rotation: val.uncrowd_rotate,
-            hole_solver: val.smt_solver.clone(),
-            sat_refutation_options: match (val.sat_solver, val.drat_checker, val.smt_solver) {
-                (Some(sat_solver), Some(drat_checker), Some(smt_solver)) => {
-                    Some(elaborator::SatRefutationOptions {
-                        sat_solver,
-                        drat_checker,
-                        smt_solver,
-                    })
-                }
-                _ => None,
-            },
+            hole_solver: val.hole_solver.clone(),
+            sat_refutation_options: SatTools::default(), // Should be filled in later with `ToolOptions`
         };
         (config, pipeline)
     }
@@ -333,6 +331,9 @@ struct CheckCommandOptions {
 
     #[clap(flatten)]
     checking: CheckingOptions,
+
+    #[clap(flatten)]
+    tools: ToolOptions,
 
     /// Defines the number of cores for proof checking.
     #[clap(short = 'u', long, required = false, default_value = "1", validator = |s: &str| -> Result<(), String> {
@@ -370,6 +371,9 @@ struct ElaborateCommandOptions {
     elaboration: ElaborationOptions,
 
     #[clap(flatten)]
+    tools: ToolOptions,
+
+    #[clap(flatten)]
     stats: StatsOptions,
 }
 
@@ -387,6 +391,9 @@ struct BenchCommandOptions {
 
     #[clap(flatten)]
     elaboration: ElaborationOptions,
+
+    #[clap(flatten)]
+    tools: ToolOptions,
 
     /// Number of times to run the benchmark for each file.
     #[clap(short, long, default_value_t = 1)]
@@ -582,7 +589,8 @@ fn parse_command(
 fn check_command(options: CheckCommandOptions) -> CliResult<bool> {
     let (problem, proof, rules) = get_instance(&options.input)?;
     let parser_config = options.parsing.into();
-    let checker_config = options.checking.into();
+    let mut checker_config: checker::Config = options.checking.into();
+    checker_config.tools = options.tools.into();
 
     let collect_stats = options.stats.stats;
     if options.num_threads == 1 {
@@ -614,13 +622,17 @@ fn elaborate_command(
 ) -> CliResult<(bool, ast::Problem, ast::Proof, ast::PrimitivePool)> {
     let (problem, proof, rules) = get_instance(&options.input)?;
 
-    let (elab_config, pipeline) = options.elaboration.into();
+    let mut checker_config: checker::Config = options.checking.into();
+    checker_config.tools = options.tools.clone().into();
+    let (mut elab_config, pipeline) = options.elaboration.into();
+    elab_config.sat_refutation_options = options.tools.into();
+
     check_and_elaborate(
         &problem,
         &proof,
         rules.as_deref(),
         options.parsing.into(),
-        options.checking.into(),
+        checker_config,
         elab_config,
         pipeline,
         options.stats.stats,
@@ -641,14 +653,19 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         options.num_runs
     );
 
+    let mut checker_config: checker::Config = options.checking.into();
+    checker_config.tools = options.tools.clone().into();
+    let (mut elab_config, pipeline) = options.elaboration.into();
+    elab_config.sat_refutation_options = options.tools.into();
+
     if options.dump_to_csv {
         benchmarking::run_csv_benchmark(
             &instances,
             options.num_runs,
             options.num_jobs,
             options.parsing.into(),
-            options.checking.into(),
-            options.elaborate.then(|| options.elaboration.into()),
+            checker_config,
+            options.elaborate.then_some((elab_config, pipeline)),
             &mut File::create("runs.csv")?,
             &mut File::create("steps.csv")?,
         )?;
@@ -660,8 +677,8 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         options.num_runs,
         options.num_jobs,
         options.parsing.into(),
-        options.checking.into(),
-        options.elaborate.then(|| options.elaboration.into()),
+        checker_config,
+        options.elaborate.then_some((elab_config, pipeline)),
     );
     if results.is_empty() {
         println!("no benchmark data collected");

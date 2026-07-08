@@ -229,13 +229,20 @@ pub fn sat_refutation(elaborator: &mut Elaborator, step: &StepNode) -> Option<Rc
         &mut term_to_var,
         false,
     );
-    let options = elaborator.config.sat_refutation_options.as_ref().unwrap();
+    let SatTools {
+        sat_solver: Some(sat_solver),
+        drat_checker: Some(drat_checker),
+        smt_solver: Some(smt_solver),
+    } = &elaborator.config.sat_refutation_options
+    else {
+        unreachable!()
+    };
 
     if let Ok(core_lemmas) = get_core_lemmas(
         cnf_path.as_str(),
         &sat_clause_to_lemma,
-        &options.sat_solver,
-        &options.drat_checker,
+        sat_solver,
+        drat_checker,
     ) {
         log::info!(
             "[sat_refutation elab] Get proofs for {} core lemmas",
@@ -260,7 +267,7 @@ pub fn sat_refutation(elaborator: &mut Elaborator, step: &StepNode) -> Option<Rc
             log::debug!("\tGet proof for lemma {}", i);
 
             let solver_proof_commands =
-                match get_solver_proof(elaborator.pool, problem.clone(), &options.smt_solver) {
+                match get_solver_proof(elaborator.pool, problem.clone(), smt_solver) {
                     Ok((c, _)) => c,
                     Err(e) => {
                         log::warn!("\t\tfailed to elaborate theory lemma {:?}: {}", li, e);

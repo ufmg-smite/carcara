@@ -6,7 +6,11 @@ mod reordering;
 mod sat_refutation;
 mod uncrowding;
 
-use crate::{ast::*, external::ExternalTool, Error};
+use crate::{
+    ast::*,
+    external::{ExternalTool, SatTools},
+    Error,
+};
 use error::ElaborationError;
 use indexmap::IndexSet;
 use polyeq::PolyeqElaborator;
@@ -29,7 +33,7 @@ pub struct Config {
 
     pub hole_solver: Option<ExternalTool>,
 
-    pub sat_refutation_options: Option<SatRefutationOptions>,
+    pub sat_refutation_options: SatTools,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -40,20 +44,6 @@ pub enum ElaborationPass {
     Uncrowd,
     Reordering,
     SatRefutation,
-}
-
-/// The options that control how `sat_refutation` steps are elaborated using an external solver.
-#[derive(Debug, Clone)]
-pub struct SatRefutationOptions {
-    /// The external SAT solver path. The solver should be a binary that can read DIMACS and output a DRAT proof..
-    pub sat_solver: ExternalTool,
-
-    /// The external DRAT checker/trimmer path. The tool should be a binary that can read DRAT from stdin and output a proof core and an LRAT.
-    pub drat_checker: ExternalTool,
-
-    /// The external SMT solver path. The solver should be a binary that can read SMT-LIB from stdin and
-    /// output an Alethe proof to stdout.
-    pub smt_solver: ExternalTool,
 }
 
 pub struct Elaborator<'e> {
@@ -109,9 +99,7 @@ impl<'e> Elaborator<'e> {
                 })?,
                 ElaborationPass::Reordering => reordering::remove_reorderings(current)?,
                 ElaborationPass::SatRefutation => {
-                    if self.config.sat_refutation_options.is_none() {
-                        current
-                    } else {
+                    if self.config.sat_refutation_options.all_some() {
                         // TODO: proper error handling
                         current
                             .mutate::<_, ()>(|_, node, _| match node.as_ref() {
@@ -122,6 +110,8 @@ impl<'e> Elaborator<'e> {
                                 _ => Ok(node.clone()),
                             })
                             .unwrap()
+                    } else {
+                        current
                     }
                 }
             };

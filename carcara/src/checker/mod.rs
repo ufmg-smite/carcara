@@ -7,7 +7,8 @@ mod shared;
 use crate::{
     ast::{rare_rules::Rules, *},
     benchmarking::{CollectResults, OnlineBenchmarkResults},
-    CarcaraResult, Error, ExternalTool,
+    external::{ExternalTool, SatTools},
+    CarcaraResult, Error,
 };
 use error::CheckerError;
 use indexmap::{IndexMap, IndexSet};
@@ -72,10 +73,7 @@ pub struct Config {
 
     pub rule_checkers: IndexMap<String, ExternalTool>,
 
-    // TODO: move to separate struct, unify with elaborator's satref options
-    pub sat_solver: Option<ExternalTool>,
-    pub drat_checker: Option<ExternalTool>,
-    pub smt_solver: Option<ExternalTool>,
+    pub tools: SatTools,
 }
 
 impl Config {
@@ -280,12 +278,12 @@ impl<'c> ProofChecker<'c> {
                     None,
                 )
             } else {
-                match (
-                    &self.config.sat_solver,
-                    &self.config.drat_checker,
-                    &self.config.smt_solver,
-                ) {
-                    (Some(cadical), Some(drat_trim), Some(cvc5)) => sat_refutation::sat_refutation(
+                match &self.config.tools {
+                    SatTools {
+                        sat_solver: Some(cadical),
+                        drat_checker: Some(drat_trim),
+                        smt_solver: Some(cvc5),
+                    } => sat_refutation::sat_refutation(
                         self.pool,
                         premises_steps,
                         prelude,

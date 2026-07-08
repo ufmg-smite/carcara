@@ -52,7 +52,7 @@ fn run_test(
         lia_solver: None,
         hole_solver: None,
         uncrowd_rotation: true,
-        sat_refutation_options: None,
+        sat_refutation_options: Default::default(),
     };
     let node = ast::ProofNodeForest::from_commands(proof.commands.clone());
     let elaborated_node = elaborator::Elaborator::new(&mut pool, &problem, elab_config.clone())

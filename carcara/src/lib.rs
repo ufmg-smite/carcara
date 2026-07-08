@@ -39,14 +39,12 @@ pub mod benchmarking;
 pub mod checker;
 mod drup;
 pub mod elaborator;
-mod external;
+pub mod external;
 pub mod parser;
 mod rare;
 mod resolution;
 pub mod slice;
 mod utils;
-
-pub use external::ExternalTool;
 
 use crate::benchmarking::{CollectResults, OnlineBenchmarkResults, RunMeasurement};
 use checker::{error::CheckerError, CheckerStatistics};

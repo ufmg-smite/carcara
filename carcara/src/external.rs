@@ -16,6 +16,19 @@ use std::{
 };
 use thiserror::Error;
 
+#[derive(Debug, Default, Clone)]
+pub struct SatTools {
+    pub sat_solver: Option<ExternalTool>,
+    pub drat_checker: Option<ExternalTool>,
+    pub smt_solver: Option<ExternalTool>,
+}
+
+impl SatTools {
+    pub fn all_some(&self) -> bool {
+        self.sat_solver.is_some() && self.drat_checker.is_some() && self.smt_solver.is_some()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ExternalTool {
     pub command: String,
