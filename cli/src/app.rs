@@ -222,11 +222,6 @@ pub struct ElaborationOptions {
     #[clap(long)]
     pub uncrowd_rotate: bool,
 
-    // TODO: maybe remove this in favor of using the value from `ToolOptions`
-    /// SMT solver that can be used when elaborating proof steps.
-    #[clap(long, help_heading = "EXTERNAL TOOL OPTIONS")]
-    pub hole_solver: Option<ExternalTool>,
-
     /// The pipeline of elaboration passes to use.
     #[clap(
         arg_enum,
@@ -486,9 +481,9 @@ impl IntoConfig for (ElaborationOptions, ToolOptions) {
             .collect();
 
         let config = elaborator::Config {
-            lia_solver: e.hole_solver.clone(),
+            lia_solver: t.smt_solver.clone(),
             uncrowd_rotation: e.uncrowd_rotate,
-            hole_solver: e.hole_solver.clone(),
+            hole_solver: t.smt_solver.clone(),
             sat_ref_tools: t.into_config(),
         };
         (config, pipeline)
