@@ -28,18 +28,6 @@ fn main() {
 
     logger::init(cli.log_level.into(), colors_enabled);
 
-    if let Command::Check(CheckCommandOptions { checking, .. })
-    | Command::Elaborate(ElaborateCommandOptions { checking, .. })
-    | Command::Bench(BenchCommandOptions { checking, .. }) = &cli.command
-    {
-        if checking.skip_unknown_rules {
-            log::warn!(
-                "the `--skip-unknown-rules` option is deprecated, please use \
-                `--ignore-unknown-rules` instead"
-            )
-        }
-    }
-
     let result = match cli.command {
         Command::Parse(options) => parse_command(options).and_then(|(pb, pf, _rules, mut pool)| {
             ast::print_proof(&mut pool, &pb.prelude, &pf, !cli.no_print_with_sharing)?;

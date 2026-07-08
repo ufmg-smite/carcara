@@ -171,10 +171,6 @@ pub struct CheckingOptions {
     #[clap(short, long)]
     pub ignore_unknown_rules: bool,
 
-    // Note: the `--skip-unknown-rules` flag has been deprecated in favor of `--ignore-unknown-rules`
-    #[clap(long, conflicts_with("ignore-unknown-rules"), hide = true)]
-    pub skip_unknown_rules: bool,
-
     /// A set of extra rules to be allowed by the checker, and considered as holes.
     #[clap(long, multiple = true)]
     pub allowed_rules: Option<Vec<String>>,
@@ -368,8 +364,6 @@ pub struct SliceCommandOptions {
     // subcommand
     #[clap(short, long)]
     ignore_unknown_rules: bool,
-    #[clap(long, conflicts_with("ignore-unknown-rules"), hide = true)]
-    skip_unknown_rules: bool,
     #[clap(long, multiple = true, hide = true)]
     allowed_rules: Option<Vec<String>>,
     #[clap(long, hide = true)]
@@ -451,7 +445,7 @@ impl IntoConfig for (CheckingOptions, ToolOptions) {
         let (c, t) = self;
         checker::Config {
             elaborated: c.check_granularity == CheckGranularity::Elaborated,
-            ignore_unknown_rules: c.ignore_unknown_rules || c.skip_unknown_rules,
+            ignore_unknown_rules: c.ignore_unknown_rules,
             allowed_rules: c.allowed_rules.unwrap_or_default().into_iter().collect(),
             rup_resolution: c.rup_resolution,
             rule_checkers: c.rule_checkers.into_iter().collect(),
