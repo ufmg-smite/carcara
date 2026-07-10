@@ -250,6 +250,10 @@ impl SortError {
     ) -> Result<(), Self> {
         let any = Sort::Atom("?".into(), Box::new([]));
 
+        if let Sort::RareList(inner) = got {
+            return Self::assert_array_sort(pool, key, value, inner.as_sort().unwrap());
+        }
+
         if let Sort::ParamSort(v, head) = got {
             if let Some(Sort::Var(name)) = head.as_sort() {
                 if name == "Array" {

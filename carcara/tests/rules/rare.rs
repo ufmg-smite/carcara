@@ -46,6 +46,64 @@ const RARE_RULES: &str = r#"
     :conclusion (= (=> x y) (or (not x) y)))
 "#;
 
+const SMALL_RARE_RULES: &str = r#"
+(declare-rare-rule bv-concat-extract-merge ((xs1 (_ BitVec 1) :list) (s1 (_ BitVec 8)) (ys1 (_ BitVec 1) :list))
+  :premises ((= 2 (+ 1 1)))
+  :args (xs1 s1 ys1)
+  :conclusion (= (concat xs1 ((_ extract 7 2) s1) ((_ extract 1 1) s1) ys1) (concat xs1 ((_ extract 7 1) s1) ys1))
+)
+"#;
+
+const BV_CONCAT_EXTRACT_MERGE_SMT2: &str = r#"
+; EXPECT: unsat
+(set-logic ALL)
+
+(declare-fun x () (_ BitVec 8))
+
+(assert
+  (and
+    (= 2 (+ 1 1))
+    (not
+      (=
+        (concat ((_ extract 0 0) x) ((_ extract 7 2) x) ((_ extract 1 1) x) ((_ extract 0 0) x))
+        (concat ((_ extract 0 0) x) ((_ extract 7 1) x) ((_ extract 0 0) x))))))
+
+(check-sat)
+"#;
+
+const BV_CONCAT_EXTRACT_MERGE_ALETHE: &str = r#"
+(assume a0
+  (and
+    (= 2 (+ 1 1))
+    (not
+      (=
+        (concat ((_ extract 0 0) x) ((_ extract 7 2) x) ((_ extract 1 1) x) ((_ extract 0 0) x))
+        (concat ((_ extract 0 0) x) ((_ extract 7 1) x) ((_ extract 0 0) x))))))
+
+(step t0 (cl (= 2 (+ 1 1)))
+  :rule and
+  :premises (a0)
+  :args (0))
+
+(step t1 (cl (not (=
+                    (concat ((_ extract 0 0) x) ((_ extract 7 2) x) ((_ extract 1 1) x) ((_ extract 0 0) x))
+                    (concat ((_ extract 0 0) x) ((_ extract 7 1) x) ((_ extract 0 0) x)))))
+  :rule and
+  :premises (a0)
+  :args (1))
+
+(step t2 (cl (=
+              (concat ((_ extract 0 0) x) ((_ extract 7 2) x) ((_ extract 1 1) x) ((_ extract 0 0) x))
+              (concat ((_ extract 0 0) x) ((_ extract 7 1) x) ((_ extract 0 0) x))))
+  :rule rare_rewrite
+  :premises (t0)
+  :args ("bv-concat-extract-merge" ((_ extract 0 0) x) x ((_ extract 0 0) x)))
+
+(step t3 (cl)
+  :rule resolution
+  :premises (t2 t1))
+"#;
+
 fn run_rare_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
     for (i, (proof, expected)) in cases.iter().enumerate() {
         let (mut problem, mut proof, rare_rules, mut pool) = parser::parse_instance(
@@ -111,6 +169,40 @@ fn run_rare_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
     }
 }
 
+fn run_rare_file_test(
+    test_name: &str,
+    problem: &str,
+    proof: &str,
+    rare_rules: &str,
+    expected_holey: bool,
+) {
+    let (problem, proof, rare_rules, mut pool) = parser::parse_instance(
+        Cursor::new(problem),
+        Cursor::new(proof),
+        Some(Cursor::new(rare_rules)),
+        parser::Config {
+            apply_function_defs: true,
+            expand_lets: true,
+            allow_int_real_subtyping: true,
+            parse_hole_args: true,
+            ..Default::default()
+        },
+    )
+    .unwrap_or_else(|e| panic!("parser error during test \"{}\": {}", test_name, e));
+
+    let mut checker = checker::ProofChecker::new(&mut pool, &rare_rules, checker::Config::new());
+    let check_result = checker.check(&problem, &proof);
+
+    match check_result {
+        Ok(is_holey) => assert_eq!(
+            is_holey, expected_holey,
+            "test '{}' expected holey={} but got holey={}",
+            test_name, expected_holey, is_holey
+        ),
+        Err(e) => panic!("checker error during test \"{}\": {}", test_name, e),
+    }
+}
+
 macro_rules! rare_test_cases {
     (
         definitions = $defs:expr,
@@ -167,4 +259,15 @@ fn rare_rewrite() {
             "(step t1 (cl (= (=> p q) (or p q))) :rule rare_rewrite :args (\"implies-expand\" p q))": false,
         }
     }
+}
+
+#[test]
+fn encoded_rare_examples() {
+    run_rare_file_test(
+        "bv-concat-extract-merge",
+        BV_CONCAT_EXTRACT_MERGE_SMT2,
+        BV_CONCAT_EXTRACT_MERGE_ALETHE,
+        SMALL_RARE_RULES,
+        false,
+    );
 }
