@@ -1,4 +1,4 @@
-use super::{assert_clause_len, assert_eq, assert_is_expected, RuleArgs, RuleResult};
+use super::{assert_clause_len, assert_eq, RuleArgs, RuleResult};
 use crate::{
     ast::{Operator, Rc, Sort, Term},
     checker::{
@@ -244,28 +244,4 @@ pub fn poly_simp_rel(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> R
         }
         ((op1, _), (op2, _)) => Err(PolynomialError::InvalidOperators(op1, op2).into()),
     }
-}
-
-pub fn bv_poly_simp_eq(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> RuleResult {
-    assert_num_premises(premises, 1)?;
-    assert_clause_len(conclusion, 1)?;
-
-    let (c1, x1, x2, c2, y1, y2) =
-        match_term_err!((= (* c1 (- x1 x2)) (* c2 (- y1 y2))) = get_premise_term(&premises[0])?)?;
-
-    let sort = pool.sort(c1);
-    let Sort::BitVec(width) = sort.as_sort().unwrap() else {
-        unreachable!() // The parser ensures that the sort is a bitvector sort
-    };
-    let one = pool.add(Term::new_bv(Integer::from(1), *width));
-    assert_is_expected(c1, one.clone())?;
-    assert_is_expected(c2, one)?;
-
-    let (l1, l2, r1, r2) = match_term_err!((= (= x1 x2) (= y1 y2)) = &conclusion[0])?;
-
-    assert_eq(l1, x1)?;
-    assert_eq(l2, x2)?;
-    assert_eq(r1, y1)?;
-    assert_eq(r2, y2)?;
-    Ok(())
 }
