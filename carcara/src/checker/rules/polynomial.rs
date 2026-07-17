@@ -191,20 +191,21 @@ pub fn poly_simp_rel(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> R
     assert_clause_len(conclusion, 1)?;
     let prem = get_premise_term(&premises[0])?;
 
+    // Bitvector case: (= (bvmul c1 (bvsub x1 x2)) (bvmul c2 (bvsub y1 y2)))
     let bitvector_case = match_term!(
         (= (bvmul c1 (bvsub x1 x2)) (bvmul c2 (bvsub y1 y2)))
         = get_premise_term(&premises[0])?);
     if let Some(((c1, (x1, x2)), (c2, (y1, y2)))) = bitvector_case {
         let sort = pool.sort(c1);
         let Sort::BitVec(_) = sort.as_sort().unwrap() else {
-            unreachable!() // The parser ensures that the sort is a bitvector sort
+            unreachable!()
         };
         for c in [c1, c2] {
             let (c, _) = c.as_bitvector_err()?;
             rassert!(c.is_odd(), PolynomialError::CoeffEven(c));
         }
 
-        let ((l1, l2), (r1, r2)) = match_term_err!((= (= x1 x2) (= y1 y2)) = &conclusion[0])?;
+        let (l1, l2, r1, r2) = match_term_err!((= (= x1 x2) (= y1 y2)) = &conclusion[0])?;
 
         assert_eq(l1, x1)?;
         assert_eq(l2, x2)?;
@@ -213,7 +214,7 @@ pub fn poly_simp_rel(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> R
         return Ok(());
     }
 
-    let ((c1, xs), (c2, ys)) = match_term_err!((= (* c1 xs) (* c2 ys)) = prem)?;
+    let (c1, xs, c2, ys) = match_term_err!((= (* c1 xs) (* c2 ys)) = prem)?;
     let (x1, x2) =
         match_term_err!((to_real (- x1 x2)) = xs).or_else(|_| match_term_err!((- x1 x2) = xs))?;
     let (y1, y2) =

@@ -86,3 +86,40 @@ fn refl() {
         }
     }
 }
+
+#[test]
+fn strict_refl() {
+    test_cases! {
+        definitions = "
+            (declare-fun f (Real) Real)
+            (declare-fun g (Real) Real)
+            (declare-fun z () Real)
+        ",
+        "Simple working examples (same as refl)" {
+            "(anchor :step t1 :args ((y Real) (:= (x Real) y)))
+            (step t1.t1 (cl (= x y)) :rule strict_refl)
+            (step t1 (cl) :rule hole)": true,
+            "(anchor :step t1)
+            (step t1.t1 (cl (= z z)) :rule strict_refl)
+            (step t1 (cl) :rule hole)": true,
+        }
+        "Multiple substitutions in sequence" {
+            "(anchor :step t1 :args ((z Real) (:= (y Real) z) (:= (x Real) y)))
+            (step t1.t1 (cl (= x z)) :rule strict_refl)
+            (step t1 (cl) :rule hole)": true,
+        }
+        "Should reject alpha-equivalent terms (unlike refl)" {
+            // strict_refl does NOT use alpha equivalence, so this should fail
+            // even though refl would accept it
+            "(step t1 (cl (=
+                (forall ((x Int)) (> x 0))
+                (forall ((y Int)) (> y 0))
+            )) :rule strict_refl)": false,
+        }
+        "Terms aren't equal after applying context substitution" {
+            "(anchor :step t1 :args ((y Real) (:= (x Real) y)))
+            (step t1.t1 (cl (= x z)) :rule strict_refl)
+            (step t1 (cl) :rule hole)": false,
+        }
+    }
+}

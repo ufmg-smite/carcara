@@ -311,7 +311,7 @@ pub fn xor(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
 pub fn xnor(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
-    let ((x, y), res) = match_term_err!((= (bvxnor x y) res) = &conclusion[0])?;
+    let (x, y, res) = match_term_err!((= (bvxnor x y) res) = &conclusion[0])?;
 
     let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
         unreachable!();
@@ -360,7 +360,7 @@ pub fn not(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
 pub fn ult(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
-    let ((x, y), res) = match_term_err!((= (bvult x y) res) = &conclusion[0])?;
+    let (x, y, res) = match_term_err!((= (bvult x y) res) = &conclusion[0])?;
 
     let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
         unreachable!();
@@ -385,7 +385,7 @@ pub fn ult(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
 pub fn slt(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
-    let ((x, y), res) = match_term_err!((= (bvslt x y) res) = &conclusion[0])?;
+    let (x, y, res) = match_term_err!((= (bvslt x y) res) = &conclusion[0])?;
 
     let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
         unreachable!();
@@ -523,7 +523,7 @@ pub fn neg(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
 pub fn equality(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
-    let ((x, y), res) = match_term_err!((= (= x y) res) = &conclusion[0])?;
+    let (x, y, res) = match_term_err!((= (= x y) res) = &conclusion[0])?;
 
     let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
         unreachable!();
@@ -550,7 +550,7 @@ pub fn equality(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
 pub fn comp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
-    let ((x, y), res) = match_term_err!((= (bvcomp x y) res) = &conclusion[0])?;
+    let (x, y, res) = match_term_err!((= (bvcomp x y) res) = &conclusion[0])?;
 
     let Sort::BitVec(size) = pool.sort(x).as_sort().cloned().unwrap() else {
         unreachable!();
@@ -579,7 +579,7 @@ pub fn comp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 //TODO I think this can be redone with build_term_vec.
 pub fn extract(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
-    let (((_, left_j), left_x), right) =
+    let (_, left_j, left_x, right) =
         match_term_err!((= ((_ extract i j) x) (bbterm ...)) = &conclusion[0])?;
 
     let left_j = left_j.as_integer().unwrap();
@@ -656,7 +656,7 @@ pub fn concat(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
 pub fn sign_extend(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
-    let ((i, x), res) = match_term_err!((= ((_ sign_extend i) x) res) = &conclusion[0])?;
+    let (i, x, res) = match_term_err!((= ((_ sign_extend i) x) res) = &conclusion[0])?;
 
     let i = i.as_integer().unwrap().to_usize().unwrap();
     if i == 0 {

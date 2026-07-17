@@ -9,7 +9,7 @@ use rug::{ops::NegAssign, Integer, Rational};
 pub fn la_rw_eq(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
 
-    let ((t_1, u_1), ((t_2, u_2), (u_3, t_3))) = match_term_err!(
+    let (t_1, u_1, t_2, u_2, u_3, t_3) = match_term_err!(
         (= (= t u) (and (<= t u) (<= u t))) = &conclusion[0]
     )?;
     assert_eq(t_1, t_2)?;
@@ -345,7 +345,7 @@ pub fn la_generic(RuleArgs { conclusion, args, .. }: RuleArgs) -> RuleResult {
 pub fn la_disequality(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
 
-    let ((t1_1, t2_1), (t1_2, t2_2), (t2_3, t1_3)) = match_term_err!(
+    let (t1_1, t2_1, t1_2, t2_2, t2_3, t1_3) = match_term_err!(
         (or (= t1 t2) (not (<= t1 t2)) (not (<= t2 t1))) = &conclusion[0]
     )?;
     assert_eq(t1_1, t1_2)?;
@@ -357,8 +357,7 @@ pub fn la_disequality(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 pub fn la_totality(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
 
-    let ((t1_1, t2_1), (t2_2, t1_2)) =
-        match_term_err!((or (<= t1 t2) (<= t2 t1)) = &conclusion[0])?;
+    let (t1_1, t2_1, t2_2, t1_2) = match_term_err!((or (<= t1 t2) (<= t2 t1)) = &conclusion[0])?;
 
     assert_eq(t1_1, t1_2)?;
     assert_eq(t2_1, t2_2)

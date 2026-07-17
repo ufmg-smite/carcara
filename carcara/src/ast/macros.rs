@@ -248,19 +248,13 @@ macro_rules! match_term {
 macro_rules! match_term_err {
     ($pat:tt = $var:expr) => {{
         let var = $var;
-        match_term!($pat = var).ok_or_else(|| {
-            // Note: Annoyingly, the `stringify!` macro can't fully keep whitespace when turning a
-            // token tree into a string. It will add spaces when they are required for the tokens
-            // to make sense, but remove any other whitespace. This means that, for instance, the
-            // token tree `(not (and ...))` will be stringified to `(not(and ...))`. One way to
-            // solve this would be to create a procedural macro that uses the tokens `span` to
-            // infer how many characters there were between each token, and assume they were all
-            // spaces
+        carcara_macros::match_term_flat!($pat = var).ok_or_else(|| {
+            // Note: `stringify!` can't fully preserve whitespace when turning a token
+            // tree into a string — e.g. `(not (and ...))` becomes `(not(and ...))`.
             $crate::checker::error::CheckerError::TermOfWrongForm(stringify!($pat), var.clone())
         })
     }};
 }
-
 /// A macro to help build new terms.
 ///
 /// This macro takes two arguments: the `TermPool` with which to build the term, and an s-expression
