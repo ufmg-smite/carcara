@@ -1,7 +1,4 @@
 /// Services for the translation of Alethe proofs.
-pub mod eunoia;
-pub mod tstp;
-
 use crate::ast::*;
 
 use std::io::Result;

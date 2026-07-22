@@ -9,7 +9,6 @@ use carcara::{
     ast::{self, rare_rules::Rules, ProofNode, Rc, StepNode},
     benchmarking::OnlineBenchmarkResults,
     check, check_and_elaborate, check_parallel, generate_lia_smt_instances, parser, slice,
-    translation::{self, ProofPrinter, Translator},
 };
 use error::{CliError, CliResult};
 use path_args::{get_instances_from_paths, infer_problem_path};
@@ -67,7 +66,6 @@ fn main() {
         Command::GenerateLiaProblems(options) => {
             generate_lia_problems_command(options, !cli.no_print_with_sharing)
         }
-        Command::Translate(options) => translate_command(options),
     };
     if let Err(e) = result {
         log::error!("{}", e);
@@ -306,129 +304,6 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
         let mut f = File::create(file_name)?;
         write!(f, "{}", content)?;
     }
-
-    Ok(())
-}
-
-// Translation-related commands.
-fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
-    let (problem, proof, rules) = get_instance(&options.input)?;
-
-    let (alethe_problem, alethe_proof, _, _) = parser::parse_instance(
-        &problem,
-        &proof,
-        rules.as_deref(),
-        options.parsing.into_config(),
-    )?;
-
-    let node = ast::ProofNodeForest::from_commands(alethe_proof.commands);
-    // TODO: vacuous init.
-    let mut empty_clause_node = Rc::new(ProofNode::Step(StepNode {
-        id: "".to_string(),
-        depth: 0,
-        clause: Vec::new(),
-        rule: "".to_string(),
-        premises: Vec::new(),
-        args: Vec::new(),
-        discharge: Vec::new(),
-        previous_step: Option::None,
-    }));
-
-    // TODO: abstract this into a procedure
-    for proof_node in node.0 {
-        match &*proof_node {
-            ProofNode::Step(StepNode {
-                id: _,
-                depth: _,
-                clause,
-                rule: _,
-                premises: _,
-                args: _,
-                discharge: _,
-                previous_step: _,
-            }) => {
-                // Last node of the proof.
-                if clause.is_empty() {
-                    empty_clause_node = proof_node;
-                    break;
-                }
-            }
-
-            _ => {
-                continue;
-            }
-        }
-    }
-
-    match &options.target {
-        TranslationTarget::Eunoia => {
-            translate_2_eunoia_command(&alethe_problem, &empty_clause_node)
-        }
-
-        TranslationTarget::Tstp => translate_2_tstp_command(&alethe_problem, &empty_clause_node),
-    }
-}
-
-fn translate_2_eunoia_command(
-    alethe_problem: &ast::Problem,
-    empty_clause_node: &Rc<ProofNode>,
-) -> CliResult<()> {
-    let mut translator = translation::eunoia::alethe_2_eunoia::EunoiaTranslator::new();
-    let eunoia_prelude = translator.translate_problem(alethe_problem);
-    let eunoia_proof = translator.translate(empty_clause_node);
-
-    let mut buf_proof = Vec::new();
-    let s_exp_formatter_proof = translation::eunoia::printer::SExpFormatter::new(&mut buf_proof);
-    let mut printer_proof = translation::eunoia::printer::EunoiaPrinter::new(s_exp_formatter_proof);
-
-    printer_proof.write_proof(eunoia_proof).unwrap();
-
-    let mut buf_prelude = Vec::new();
-    let s_exp_formatter_prelude =
-        carcara::translation::eunoia::printer::SExpFormatter::new(&mut buf_prelude);
-    let mut printer_prelude =
-        carcara::translation::eunoia::printer::EunoiaPrinter::new(s_exp_formatter_prelude);
-
-    printer_prelude.write_proof(&eunoia_prelude).unwrap();
-
-    // TODO: do not hard-code this in here
-    // TODO: fix where to include these depedencies
-    // Include Alethe's mechanization in Eunoia
-    println!("(include \"../alethe_signature/rules/alethe.eo\")");
-    println!("(include \"../alethe_signature/rules/tautologies.eo\")");
-    println!("(include \"../alethe_signature/theories/theory.eo\")");
-    println!("(include \"../alethe_signature/programs/programs.eo\")");
-    println!("(include \"../alethe_signature/programs/arith.eo\")");
-    println!("{}", std::str::from_utf8(&buf_prelude).unwrap());
-    println!("{}", std::str::from_utf8(&buf_proof).unwrap());
-
-    Ok(())
-}
-
-fn translate_2_tstp_command(
-    alethe_problem: &ast::Problem,
-    empty_clause_node: &Rc<ProofNode>,
-) -> CliResult<()> {
-    let mut translator = translation::tstp::alethe_2_tstp::TstpTranslator::new();
-    let tptp_problem = translator.translate_problem(alethe_problem);
-    let tstp_proof = translator.translate(empty_clause_node);
-
-    let mut buf_proof = Vec::new();
-    let s_exp_formatter_proof =
-        translation::tstp::printer::AnnotatedFormulaFormatter::new(&mut buf_proof);
-    let mut printer_proof = translation::tstp::printer::TstpPrinter::new(s_exp_formatter_proof);
-
-    printer_proof.write_proof(tstp_proof).unwrap();
-
-    let mut buf_prelude = Vec::new();
-    let s_exp_formatter_prelude =
-        translation::tstp::printer::AnnotatedFormulaFormatter::new(&mut buf_prelude);
-    let mut printer_prelude = translation::tstp::printer::TstpPrinter::new(s_exp_formatter_prelude);
-
-    printer_prelude.write_proof(&tptp_problem).unwrap();
-
-    println!("{}", std::str::from_utf8(&buf_prelude).unwrap());
-    println!("{}", std::str::from_utf8(&buf_proof).unwrap());
 
     Ok(())
 }
