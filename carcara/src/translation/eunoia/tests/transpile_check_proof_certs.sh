@@ -9,7 +9,7 @@ if [ "$BENCHMARK" = "cvc5" ]; then
     DIR="./cvc5_problems"
     # TODO: installation-dependent relative paths
     CARCARA_ELABORATE_COMMAND="../../../../../target/release/carcara elaborate 
-                                            --pipeline polyeq local lia-generic reordering  
+                                            --pipeline polyeq local lia-generic reordering uncrowd
                                             --expand-let-bindings 
                                             --pipeline=local 
                                             --no-print-with-sharing 
