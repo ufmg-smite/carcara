@@ -1,0 +1,137 @@
+(include "../theories/theory.eo")
+
+; Library of auxiliary programs, useful to manipulate f-lists (associative 
+; operators with nil-terminators) as binary trees
+
+;;;;;;;;;;;
+;; trees
+;;;;;;;;;;;
+
+; program: $binary_tree_height
+; args:
+; - f (-> A B B): A binary tree constructor.
+; - tree B: Tree built with `f`.
+; return: The number of root nodes from its largest path.
+(program $binary_tree_height ((A Type) (B Type) (f (-> A B B))
+                              (lhs A) (rhs B))
+
+         :signature ((-> A B B) B) Int
+
+         (
+          (
+           ($binary_tree_height f (f lhs rhs))
+
+           (eo::define
+            
+            (
+             (lhs_height ($binary_tree_height f lhs))
+
+             (rhs_height ($binary_tree_height f rhs))
+             )
+
+            (eo::ite (eo::gt lhs_height rhs_height)
+
+                     (eo::add 1 lhs_height)
+
+                     ; { not (eo::gt lhs_height rhs_height) }
+                     (eo::add 1 rhs_height)))
+           )
+
+          (; { rhs is a leaf }
+           ($binary_tree_height f rhs)
+
+           0
+           )
+         )
+         )
+
+; program: $binary_tree_remove_elem
+; args:
+; - f (-> A B B): A binary tree constructor.
+; - tree B: Tree built with `f`.
+; - elem A: Arbitrary element that we want to remove from `tree`.
+; return: >
+;   The result from removing the first occurrence of `elem` from `tree`, 
+;   traversing `tree` in a pre-order fashion.
+(program $binary_tree_remove_elem ((A Type) (B Type) (f (-> A B B))
+                                   (lhs A) (rhs B) (elem A))
+         :signature ((-> A B B) B A) B
+
+         (
+          (
+           ($binary_tree_remove_elem f (f elem rhs) elem)
+
+           rhs
+           )
+
+          (
+           ($binary_tree_remove_elem f (f lhs elem) elem)
+
+           lhs
+           )
+
+          (; { lhs, rhs != elem }
+           ($binary_tree_remove_elem f (f lhs rhs) elem)
+
+           (eo::ite (eo::gt ($binary_tree_height f lhs) 0)
+
+                    (eo::define 
+
+                     (
+                      (lhs_modified ($binary_tree_remove_elem f lhs elem))
+                      )
+
+                     (eo::ite (eo::is_eq lhs lhs_modified)
+                              
+                              ; We continue with the right branch.
+                              (eo::ite (eo::gt ($binary_tree_height f rhs) 0)
+
+                                       (f lhs ($binary_tree_remove_elem f rhs elem))
+
+                                       ; { not (eo::gt ($binary_tree_height f rhs) 0) }
+                                       ; The element is not in (f lhs rhs).
+                                       (f lhs rhs))
+
+                              ; { not (eo::is_eq lhs lhs_modified) }
+                              ; We found elem.
+                              (f lhs_modified rhs)))
+
+                    ; { not (eo::gt ($binary_tree_height f lhs) 0) }
+                    ; We try with the right branch.
+                    (eo::ite (eo::gt ($binary_tree_height f rhs) 0)
+
+                             (f lhs ($binary_tree_remove_elem f rhs elem))
+
+                             ; { not (eo::gt ($binary_tree_height f rhs) 0) }
+                             ; The element is not in (f lhs rhs).
+                             (f lhs rhs)))
+           )
+          )
+         )
+
+; program: $binary_tree_get_left_most_leaf
+; args:
+; - tree_constructor (-> A A A): A binary tree constructor
+; - tree A: A binary tree, built with `tree_constructor`.
+; return: The left-most leave of `tree`
+(program $binary_tree_get_left_most_leaf ((A Type) (lhs A) (rhs A) (op (-> A A A)))
+         :signature ((-> A A A) A) A
+         (
+          (
+           ($binary_tree_get_left_most_leaf op (op lhs rhs))
+
+           (eo::ite (eo::gt (eo::to_q ($binary_tree_height op lhs)) 0/1)
+
+                    ($binary_tree_get_left_most_leaf op lhs)
+
+                    ; { $list_len op lhs = 1 }
+                    lhs)
+           )
+
+          ( ; { lhs is not an op-list }
+           ($binary_tree_get_left_most_leaf op lhs)
+           
+           lhs
+           )
+          )
+         )

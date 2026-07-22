@@ -22,8 +22,8 @@
 ;   Int and Real Arithmetic
 ; ---------------------------
 
-(declare-type Int ())
-(declare-type Real ())
+(declare-const Int Type)
+(declare-const Real Type)
 
 (declare-consts <numeral> Int)
 (declare-consts <rational> Real)
@@ -42,7 +42,7 @@
 ;   @return the "union" of x and y.
 ; The returned type is the type of the result of mixed arithmetic operators taking arguments x and y.
 (program $arith_typeunion ()
-    (Type Type) Type
+    :signature (Type Type) Type
     (
       (($arith_typeunion Int Int) Int)
       (($arith_typeunion Real Real) Real)
@@ -55,7 +55,7 @@
 ;   @param x
 ;   @returns true if x is Int or Real
 (program $is_arith_type ()
-    (Type) Bool
+    :signature (Type) Bool
     (
       (($is_arith_type Int) true)
       (($is_arith_type Real) true)
@@ -127,7 +127,7 @@
 ;   Quantifiers
 ; ---------------
 
-(declare-type @VarList ())
+(declare-const @VarList Type)
 (declare-const @varlist.nil @VarList)
 (declare-parameterized-const @varlist ((T Type :implicit)) 
                              (-> T @VarList @VarList) :right-assoc-nil @varlist.nil)
@@ -145,7 +145,7 @@
 ;   The expected function type, with domain in the product type of 
 ;   and return type B.
 (program $get_lambda_type ((x @VarList) (xs @VarList :list) (B Type))
-  (@VarList Type) Type
+  :signature (@VarList Type) Type
   (
     (
      ($get_lambda_type (@varlist x xs) B) 
@@ -163,6 +163,14 @@
 
 (declare-parameterized-const @let ((B Type :implicit) (L @VarList))
                        (-> B ($get_lambda_type L B)) :binder @varlist)
+
+; ------
+; Pairs
+; ------
+(declare-const @Pair Type)
+(declare-parameterized-const @pair ((Var Type :implicit) 
+                                    (Value Type :implicit))
+                             (-> Var Value @Pair))
 
 ; ------------
 ;   Contexts
@@ -188,12 +196,12 @@
 
 ; Since some rules are defined directly in terms of a given substitution.
 ; Single substitute variable -> value
-(declare-type @Substitute ())
+(declare-const @Substitute Type)
 (declare-parameterized-const @substitute ((Var Type :implicit) 
                                           (Value Type :implicit))
                              (-> Var Value @Substitute))
 
-(declare-type @Substitution ())
+(declare-const @Substitution Type)
 
 (declare-const @substitution.nil @Substitution)
 

@@ -1,0 +1,4969 @@
+(include "../theories/theory.eo")
+(include "../programs/programs.eo")
+(include "../programs/arith.eo")
+
+; Rule: assume is native
+; Note: The hole here does not allow for args or premises.
+
+; rule: hole
+; premises:
+; - premises Bool: Arbitrary list of premises. There could be no premises at all.
+; conclusion: Just the arbitrary conclusion passed to the rule.
+; sorry: >
+;   This models the following (taken from the standard spec.):
+;   "A proof checker must not accept as valid a proof that contains this
+;     rule even if the checker can somehow check this rule."
+(declare-rule hole ((conclusion Bool) (premises Bool))
+  :premise-list premises and
+  :conclusion-explicit conclusion
+  :sorry
+)
+
+(declare-rule true ()
+  :conclusion-explicit (@cl true)
+)
+
+;-------------
+; Rule false
+;-------------
+
+; rule: false
+; conclusion: Conclusion must be of the form (@cl (not false)).
+(declare-rule false ()
+  :conclusion-explicit (@cl (not false))
+)
+
+;-------------
+; Rule not_not
+;-------------
+
+; rule: not_not
+; conclusion: >
+;   Conclusion should be of the form ¬(¬¬𝜑), 𝜑, for some proposition 𝜑.
+(declare-rule not_not ((phi Bool))
+  :conclusion-explicit (@cl (not (not (not phi))) phi)
+)
+
+;----------------------
+; Rule th_resolution
+;----------------------
+
+; program: $remove_double_negation
+; args:
+; - formula Bool: An arbitrary formula.
+; return: >
+;   A formula equivalent to `formula`, with leading double negations cancelled.
+(program $remove_double_negation ((formula Bool))
+         :signature (Bool) Bool
+         (
+          (
+           ($remove_double_negation (not (not formula)))
+
+           formula
+           )
+
+          (; { `formula` does not begin with a double negation }
+           ($remove_double_negation formula)
+
+           formula
+           )
+          )
+         )
+
+; program: $normalize_single_clause
+; args:
+; - clause Bool: A clause built with @cl.
+; return: >
+;    A clause logically equivalent to `clause`, where leading double negations
+;    in disjuncts are removed.
+(program $normalize_single_clause ((formula Bool) (formulas Bool :list))
+         :signature (Bool) Bool
+         (
+          (; { literals != false }
+           ($normalize_single_clause (@cl formula formulas))
+
+           ($f_list_cons @cl 
+                         ($remove_double_negation formula) 
+                         ($normalize_single_clause formulas))
+           )
+
+          (
+           ($normalize_single_clause @empty_cl)
+
+           @empty_cl
+           )
+
+          (; { formula != empty_cl }
+           ($normalize_single_clause formula)
+
+           ($remove_double_negation formula)
+           )          
+
+          
+          )
+         )
+
+; program: $normalize_clauses
+; args:
+; - clauses Bool: And-list of clauses.
+; return: >
+;    An and-list of clauses where each single clause is normalized according 
+;    to $normalize_single_clause.
+(program $normalize_clauses ((clause Bool) (clauses Bool :list))
+         :signature (Bool) Bool
+         (
+          (
+           ($normalize_clauses (and clause clauses))
+
+           ($f_list_cons and 
+                         ($normalize_single_clause clause)
+                         ($normalize_clauses clauses))
+           )
+          
+          (; { clause != and ... }
+           ($normalize_clauses clause)
+           
+           ($normalize_single_clause clause)
+           )
+          )
+         )
+
+; program: $remove_pivot_from_clause
+; args:
+; - pivot Bool: Pivot literal contained in `clause`.
+; - clause Bool: Clause containing the pivot.
+; return: The clause obtained from removing `pivot` from `clause`.
+; note: >
+;  PRE : { `pivot` is contained in `clause` 
+;          &&
+;          `pivot` is normalized
+;          &&
+;          `clause` is normalized }
+(program $remove_pivot_from_clause ((hd Bool) (tail Bool :list) 
+                                    (pivot Bool))
+         :signature (Bool Bool) Bool
+         (
+          (; { tail != false }
+           ($remove_pivot_from_clause pivot (@cl pivot))
+
+           @empty_cl
+           )
+
+          (; { tail != false }
+           ($remove_pivot_from_clause pivot (@cl pivot tail))
+
+           ; We remove every instance of pivot.
+           ($remove_pivot_from_clause pivot tail)
+           )
+
+          (; { hd != pivot, tail != false }
+           ($remove_pivot_from_clause pivot (@cl hd tail))
+
+           ; $remove_pivot_from_clause could return @empty_cl,
+           ; we need to resort to $cl_disjunct semantics to
+           ; build the result clause.
+           ($cl_disjunct (@cl hd)
+                         ($remove_pivot_from_clause pivot tail))
+           )
+
+          ;; (
+          ;;  ($remove_pivot_from_clause pivot pivot)
+
+          ;;  @empty_cl
+          ;;  )
+
+          (
+           ($remove_pivot_from_clause pivot tail)
+           
+           @empty_cl
+           )
+          )
+         )
+
+; program: $find_and_remove_pivot_from_clauses
+; args:
+; - pivot Bool: >
+;   Pivot to be found and removed from the corresponding clause, if it exists.
+; - clauses Bool: And-list of clauses.
+; return: The clause containing `pivot`, without `pivot` itself.
+; note: >
+;  PRE : { `pivot` is contained in some clause from `clauses`
+;                && 
+;               `pivot` is normalized
+;                && 
+;               `clause` is normalized }
+(program $find_and_remove_pivot_from_clauses ((clause Bool) (clauses Bool :list) 
+                                               (pivot Bool))
+         :signature (Bool Bool) Bool
+         (
+          (; {clauses != true}
+           ($find_and_remove_pivot_from_clauses pivot (and clause clauses))
+
+           (eo::ite ($f_list_contains_elem @cl pivot clause)
+
+                    ($remove_pivot_from_clause pivot clause)
+                    
+                    ($find_and_remove_pivot_from_clauses pivot clauses)
+                    )
+           )
+
+          (; By pre, `clause` should contain `pivot`.
+           ; { clause is just a single @cl clause }
+           ($find_and_remove_pivot_from_clauses pivot clause)
+
+           ($remove_pivot_from_clause pivot clause)
+           )
+          )
+)
+
+; program: $find_clause
+; args:
+; - pivot Bool: >
+;   Pivot to be found from a clause, if it exists.
+; - clauses Bool: And-list of clauses.
+; - already_tried_clauses Bool: >
+;   And-list of clauses that should not be selected from `clauses`.
+; return: >
+;   The clause containing `pivot` that is also not present in 
+;   `already_tried_clauses` if it exists, or @empty_cl, otherwise.
+; note: PRE : { `pivot` is normalized &&  `clause` is normalized }
+(program $find_clause ((clause Bool) (clauses Bool :list) 
+                       (already_tried_clauses Bool)
+                       (pivot Bool))
+         :signature (Bool Bool Bool) Bool
+         (
+          (; {clauses != true}
+           ($find_clause pivot (and clause clauses) already_tried_clauses)
+
+           (eo::ite (eo::and ($f_list_contains_elem @cl pivot clause)
+                             (eo::not ($f_list_contains_elem and clause already_tried_clauses)))
+
+                    clause
+                    
+                    ($find_clause pivot clauses already_tried_clauses)
+                    )
+           )
+
+          (; Empty clauses
+           ($find_clause pivot true already_tried_clauses)
+
+           @empty_cl
+           )
+
+          (; { clause is just a single @cl clause }
+           ($find_clause pivot clause already_tried_clauses)
+
+           (eo::ite (eo::and ($f_list_contains_elem @cl pivot clause)
+                             (eo::not ($f_list_contains_elem and clause already_tried_clauses)))
+
+                    clause
+                    
+                    @empty_cl)
+           )
+          )
+         )
+
+; program: $check_resolution_with_normalized_clauses 
+; args:
+; - clauses Bool: >
+;   And-list of normalized clauses (double negation is simplified) not yet 
+;   considered for resolution.
+; - already_tried_pivot_clauses Bool: >
+;   And-list of clauses already considered for resolution with the current
+;   pivot (firs element in `pivots`)
+; - already_tried_not_pivot_clauses Bool: >
+;   And-list of clauses already considered for resolution with the negation
+;   of the current pivot (firs element in `pivots`)
+; - pivots @VarList: A list of pivots used during resolution.
+; - conclusion Bool: Conclusion provided to the rule.
+; return: >
+;   A boolean indicating if `conclusion` is a resolvent that can be
+;   obtained from applying resolution over `clauses`, using the pivots
+;   contained in `pivots`, in the same order of their appearance in the list.
+; note: >
+;   PRE : { `clauses` are normalized (double negation is simplified) &
+;           `already_tried_pivot_clauses`, `already_tried_pivot_clauses` and
+;           `clauses` are mutually disjoint &
+;           `conclusion` is normalized }
+(program $check_resolution_with_normalized_clauses  ((current_clauses Bool)
+                                                     (already_tried_pivot_clauses Bool)
+                                                     (already_tried_not_pivot_clauses Bool)
+                                                     (polarity Bool)
+                                                     (pivot Bool) 
+                                                     (pivots @VarList :list)
+                                                     (conclusion Bool))
+  :signature (Bool Bool Bool @VarList Bool) Bool
+  (
+   (; Carcara's elaboration indicates that the pivots are followed by their 
+    ; "polarity": in this case, true means that `pivot` appears exactly as it is, 
+    ; in some clause.
+    ; { current_clauses != true }
+    ($check_resolution_with_normalized_clauses current_clauses
+                                               already_tried_pivot_clauses
+                                               already_tried_not_pivot_clauses
+                                               (@varlist pivot polarity pivots)
+                                               conclusion)
+
+    (eo::define
+     (
+      (normalized_pivot ($remove_double_negation 
+                         (eo::ite polarity pivot (not pivot))))
+
+      (normalized_negated_pivot ($remove_double_negation (eo::ite polarity (not pivot) pivot)))
+      )
+     (eo::define
+      (
+       (single_clause_with_pivot ($find_clause 
+                                  normalized_pivot
+                                  current_clauses
+                                  already_tried_pivot_clauses))
+       )
+
+      (eo::ite (eo::not ($eo_is_eq single_clause_with_pivot @empty_cl))
+
+               (eo::define
+                (
+
+                 (single_clause_with_not_pivot ($find_clause
+                                                normalized_negated_pivot
+                                                ($f_list_remove_elem and
+                                                                     current_clauses
+                                                                     single_clause_with_pivot
+                                                                     true)
+                                                already_tried_not_pivot_clauses))
+                 )
+
+                (eo::ite (eo::not ($eo_is_eq single_clause_with_not_pivot @empty_cl))
+
+                         (eo::define
+                          
+                          (
+                           (single_clause_without_pivot ($remove_pivot_from_clause 
+                                                         normalized_pivot
+                                                         single_clause_with_pivot))
+                           )
+
+                          (eo::define
+                           (
+                            (single_clause_without_not_pivot ($remove_pivot_from_clause 
+                                                              normalized_negated_pivot
+                                                              single_clause_with_not_pivot))
+                            )
+
+                           (eo::define
+                            (
+                             (new_clause ($cl_disjunct single_clause_without_pivot
+                                                       single_clause_without_not_pivot))
+                             )
+                            
+                            (eo::ite ($f_list_equal_mod_commut_and_length @cl conclusion new_clause)
+
+                                     true
+
+                                     ; {not ($cl_equal new_clause conclusion) }
+                                     ; We continue through this path, or try with different
+                                     ; paths.
+                                     (eo::ite ($check_resolution_with_normalized_clauses
+                                               ($f_list_cons and 
+                                                             new_clause
+                                                             current_clauses)
+                                               ; New pivot, we empty the sets of
+                                               ; already tried pivots.
+                                               true
+                                               true
+                                               pivots 
+                                               conclusion)
+
+                                              true
+
+                                              ; { not ($check_resolution_with_normalized_clauses ... }
+                                              ; We try with changing already selected clauses
+                                              (eo::ite ($check_resolution_with_normalized_clauses
+                                                        current_clauses
+                                                        already_tried_pivot_clauses
+                                                        ($f_list_cons and
+                                                                      single_clause_with_not_pivot
+                                                                      already_tried_not_pivot_clauses)
+                                                        (@varlist pivot polarity pivots)
+                                                        conclusion)
+
+                                                       true
+
+                                                       ($check_resolution_with_normalized_clauses
+                                                        current_clauses
+                                                        ($f_list_cons and
+                                                                      single_clause_with_pivot
+                                                                      already_tried_pivot_clauses)
+                                                        already_tried_not_pivot_clauses
+                                                        (@varlist pivot polarity pivots)
+                                                        conclusion))
+                                              )))))
+                         ; { not (eo::not ($eo_is_eq single_clause_with_not_pivot @empty_cl)) }
+                         false))
+               ; { (eo::not ($eo_is_eq single_clause_with_pivot @empty_cl)) }
+               false))
+     )
+    )
+
+   (
+    ($check_resolution_with_normalized_clauses current_clauses
+                                               already_tried_pivot_clauses
+                                               already_tried_not_pivot_clauses
+                                               @varlist.nil 
+                                               conclusion)
+
+    false
+    )
+   )
+  )
+
+; program: $check_resolution
+; args:
+; - clauses Bool: And-list of clauses.
+; - pivots @VarList: A list of pivots used during resolution.
+; - conclusion Bool: Conclusion provided to the rule.
+; return: >
+;   A boolean indicating if `conclusion` is a resolvent that can be
+;   obtained from applying chain resolution over `clauses`, using the pivots
+;   contained in `pivots`, in the same order of their appearance in the list.
+(program $check_resolution ((clauses Bool) (pivots @VarList)
+                            (conclusion Bool))
+  :signature (Bool @VarList Bool) Bool
+  (
+   (
+    ($check_resolution clauses pivots conclusion)
+
+    (eo::define
+     
+     (
+      (normalized_clauses ($normalize_clauses clauses))
+      (normalized_conclusion ($normalize_single_clause conclusion))
+      )
+     
+    ($check_resolution_with_normalized_clauses normalized_clauses
+                                               true
+                                               true
+                                               pivots 
+                                               normalized_conclusion)
+    )
+    )
+   )
+  )
+
+; rule: th_resolution
+; premises:
+; - premises Bool: And-list of premises over which "resolution" is applied.
+; args:
+; - pivots @VarList: >
+;   @VarList of pivots used in each binary resolution step, each pivot followed
+;   by its polarity.
+; requires: >
+;   For the conclusion of the rule to be result of the application of the chain
+;   resolution rule, over the given premises, using the provided pivots.
+; conclusion-explicit: >
+;   A clause containing a subset of the disjuncts the belong to the premises,
+;   obtained through chain resolution over the premises.
+; note: This rule is not emitted by the sat-solver. See rule `resolution`
+;   for the rule emitted by the sat-solver.
+(declare-rule th_resolution ((premises Bool) (conclusion Bool) (pivots @VarList))
+  :premise-list premises and
+  :args (pivots)
+  :requires ((($check_resolution premises pivots conclusion) true))
+  :conclusion-explicit conclusion
+)
+
+;-------------
+; Rule resolution
+;-------------
+
+; rule: resolution
+; premises:
+; - premises Bool: And-list of premises over which "resolution" is applied.
+; args:
+; - pivots @VarList: >
+;   @VarList of pivots used in each binary resolution step, each pivot followed
+;   by its polarity.
+; requires: >
+;   For the conclusion of the rule to be result of the application of the chain
+;   resolution rule, over the given premises, using the provided pivots.
+; conclusion-explicit: >
+;   A clause containing a subset of the disjuncts the belong to the premises,
+;   obtained through chain resolution over the premises.
+; note: This rule is emitted only by the sat-solver.
+(declare-rule resolution ((premises Bool) (conclusion Bool) (pivots @VarList))
+  :premise-list premises and
+  :args (pivots)
+  :requires ((($check_resolution premises pivots conclusion) true))
+  :conclusion-explicit conclusion
+)
+
+;-------------
+; Rule contraction
+;-------------
+
+; program: check_contraction
+; args:
+; - premise Bool: Premise given to rule "contraction". Must be a @cl.
+; - conclusion Bool: Conclusion given to rule "contraction". Must be a @cl.
+; return:
+;   A boolean indicating if conclusion is equivalent to premise, without 
+;   duplicated disjuncts.
+(program $check_contraction ((premise Bool) (conclusion Bool))
+  :signature (Bool Bool) Bool
+  (
+   (
+    ; Check that both clauses contain the same elements, regardless of order
+    ; and possible repetitions.
+    ($check_contraction premise conclusion)
+
+    ($f_list_equal_mod_commut_and_length @cl 
+                                         ($cl_remove_duplicates premise) 
+                                         conclusion)
+    )
+   )
+  )
+
+; rule: contraction
+; premises:
+; - premise Bool: A clause from which we want to eliminate duplicated literals.
+; requires: >
+;   For the conclusion to be equivalent to premise, with removed duplicated disjuncts.
+; conclusion: The previously described conclusion.
+(declare-rule contraction ((premise Bool) (conclusion Bool))
+  :premises (premise)
+  :requires ((($check_contraction premise conclusion) true))
+  :conclusion-explicit conclusion
+)
+
+;-------------
+; Rule subproof
+;-------------
+
+; program: $check_subproof
+; args:
+; - assumption Bool: Assumption passed to "subproof".
+; - premise Bool: Last step before the application of "subproof".
+; - conclusion Bool: Conclusion of the "subproof" step.
+; return: >
+;   A boolean indicating if `conclusion` is of the form 
+;   (@cl (not assumption), premise)
+(program $check_subproof ((assumption Bool) (premise Bool) 
+                          (conclusion Bool))
+  :signature (Bool Bool Bool) Bool
+  (
+   (
+    ($check_subproof (@cl assumption) @empty_cl conclusion)
+
+    (eo::and
+     ($f_list_contains_elem @cl (not assumption) conclusion)
+     ; To deal with the inclusion of @empty_cl within conclusion
+     ($f_list_contains_elem @cl false conclusion))
+    )
+
+   (; { premise =/= @empty_cl }
+    ($check_subproof (@cl assumption) premise conclusion)
+
+    (eo::and
+     ($f_list_contains_elem @cl (not assumption) conclusion)
+     ($f_list_contains_f_list @cl premise conclusion))
+    )
+  )
+)
+
+; rule: subproof
+; assumption:
+; - assumption Bool: Assumption passed to "subproof".
+; premises:
+; - premise Bool: Last step before the application of "subproof".
+; args:
+; - conclusion Bool: Conclusion of the step.
+; requires: >
+;   For conclusion to be of the form (@cl (not assumption) premise).
+;   Note that, for the cases where we have more than 1 assumption,
+;   rule subproof is applied stepwise, discharging 1 assumption at a time.
+; conclusion:  The previously described conclusion.
+(declare-rule subproof ((assumption Bool) (premise Bool) (conclusion Bool))
+  :assumption assumption
+  :premises (premise)
+  :requires ((($check_subproof assumption premise conclusion) true))
+  :conclusion-explicit conclusion
+)
+
+;--------------------
+; Rule la_generic
+;--------------------
+
+; From "The Alethe Proof Format":
+; "Checking the validity of this clause amounts to checking the unsatisfiability 
+; of the system of linear equations 𝜑1, 𝜑2, … , 𝜑𝑛. The annotation of an 
+; la_generic step contains a coefficient for each (in)equality. The result of 
+; forming the linear combination of the literals with the coefficients is a trivial 
+; inequality between constants".
+
+; program: $invert_order
+; args:
+; - order (-> A A A): An order over numbers of some numeric type A.
+; return: The complement relation of `order`.
+(program $invert_order ((A Type) (rel (-> A A Bool)))
+         :signature ((-> A A Bool)) (-> A A Bool)
+         (
+          (
+           ($invert_order <)
+
+           >=
+           )
+
+          (
+           ($invert_order <=)
+
+           >
+           )
+
+          (
+           ($invert_order >)
+
+           <=
+           )
+
+          (
+           ($invert_order >=)
+
+           <
+           )
+          )
+)
+
+; program: $negate_inequality
+; args:
+; - inequality Bool: A linear inequaity that we want to negate.
+; return: The negated form of `inequality`, according to `$invert_order`.
+(program $negate_inequality ((A Type) (order (-> A A Bool)) (lhs A) (rhs A)
+                             (inequality Bool))
+         :signature (Bool) Bool
+         (
+          (
+           ($negate_inequality (not inequality))
+
+           inequality
+           )
+
+          (
+           ($negate_inequality (order lhs rhs))
+
+           (eo::define
+            (
+             (inverted_order ($invert_order order))
+             )
+            
+            (inverted_order lhs rhs))
+           )
+          )
+         )
+
+; program: $manipulate_inequality
+; args:
+; - inequality Bool: >
+;   The inequality to be manipulated. Should have the form 
+;   (ineq (+ d1 summatory1) (+ d2 summatory2)), for some order `ineq`.
+; return: >
+;   The inequality resulting from manipulations that preserve the solutions of 
+;   `inequality`:
+;   - rewrites the inequality just in terms of >, >= or =, accordingly
+;   - it subtracts the right-hand side summatory, from both sides
+;   - it subtracts the right-hand side additive constant, from both sides
+;   - for the resultant right-hand side constant "d", it corrects it to 
+;     floor(d) + 1, and converts > to >=
+; note: >
+;   PRE : { `inequality` is already in its negated form, according to 
+;           `$negate_inequality` }
+(program $manipulate_inequality ((A Type) (d1 A :list) (d2 A :list)
+                                 (c1 A) (c2 A)
+                                 (summatory1 A :list) (summatory2 A :list) 
+                                 (order (-> A A Bool))
+                                 (lhs_c A) (lhs_term A :list) (rhs_c A) 
+                                 (rhs_term A :list))
+         :signature (Bool) Bool
+         (; Some "normalization" steps.
+          (
+           ($manipulate_inequality (< d1 d2))
+
+           ($manipulate_inequality (> d2 d1))
+           )
+
+          (; NOTE: see how could we rewrite reusing some other case.
+           ($manipulate_inequality (> (+ (* lhs_c lhs_term) d1) 
+                                      (+ (* rhs_c rhs_term) d2)))
+
+           (>= (- (* lhs_c lhs_term) (* rhs_c rhs_term))
+
+              (eo::ite (eo::not 
+                        (eo::is_eq (eo::typeof (- (* lhs_c lhs_term) 
+                                                  (* rhs_c rhs_term))) 
+                                           Int))
+
+                       (- d2 d1)
+
+                       ; { every variable is integer sorted }
+                       ; (- d2 d1) = (to_int (- d2 d1)) if (- d2 d1) is
+                       ; integer sorted, so no need distinguish based on type 
+                       ; of (- d2 d1).
+                       ; Floor function as a result of converting to Z.
+                       ($f_list_cons + (to_int (- d2 d1)) 1.0)))
+           )
+
+          (; NOTE: see how could we rewrite reusing some other case.
+           ($manipulate_inequality (> (+ (+ lhs_c lhs_term) d1) 
+                                      (+ (+ rhs_c rhs_term) d2)))
+
+           (>= (- (+ lhs_c lhs_term) (+ rhs_c rhs_term))
+
+              (eo::ite (eo::not 
+                        (eo::is_eq (eo::typeof (- (+ lhs_c lhs_term) 
+                                                  (+ rhs_c rhs_term))) 
+                                           Int))
+
+                       (- d2 d1)
+
+                       ; { every variable is integer sorted }
+                       ; (- d2 d1) = (to_int (- d2 d1)) if (- d2 d1) is
+                       ; integer sorted, so no need distinguish based on type 
+                       ; of (- d2 d1).
+                       ; Floor function as a result of converting to Z.
+                       ($f_list_cons + (to_int (- d2 d1)) 1.0)))
+           )
+
+          (; { summatory1 and summatory2 are actual additions of monomials }
+           ($manipulate_inequality (> (+ c1 summatory1) (+ c2 summatory2)))
+
+           (>= (- summatory1 summatory2)
+
+              (eo::ite (eo::not (eo::is_eq (eo::typeof (- summatory1 summatory2)) 
+                                           Int))
+
+                       (- c2 c1)
+
+                       ; { every variable is integer sorted }
+                       ; (- d2 d1) = (to_int (- d2 d1)) if (- d2 d1) is
+                       ; integer sorted, so no need distinguish based on type 
+                       ; of (- d2 d1).
+                       ; Floor function as a result of converting to Z.
+                       ($f_list_cons + (to_int (- c2 c1)) 1.0)))
+           )
+
+          (
+           ($manipulate_inequality (> (* lhs_c lhs_term) (* rhs_c rhs_term)))
+           ; {d1 = d2 = 0}
+           (>= (- (* lhs_c lhs_term) (* rhs_c rhs_term))
+
+              (eo::ite (eo::not (eo::is_eq (eo::typeof (- (* lhs_c lhs_term) 
+                                                          (* rhs_c rhs_term))) 
+                                           Int))
+                       
+                       0/1
+
+                       ; { every variable is integer sorted }
+                       ; d1 = d2 = 0, so we have an integer
+                       1/1))
+           )
+
+          (; { d1 and d2 are additive constants }
+           ($manipulate_inequality (> d1 d2))
+           ; { summatory1 = summatory2 = 0}
+           (> 0/1
+                          
+              ; (- d2 d1) = (to_int (- d2 d1)) if (- d2 d1) is
+              ; integer sorted, so no need distinguish based on type 
+              ; of (- d2 d1).
+              (- d2 d1))
+           )
+
+          ; Some "normalization" steps.
+          (
+           ($manipulate_inequality (<= d1 d2))
+
+           ($manipulate_inequality (>= d2 d1))
+           )
+
+          (
+           ($manipulate_inequality (>= (+ (* lhs_c lhs_term) d1) 
+                                      (+ (* rhs_c rhs_term) d2)))
+
+           (>= (- (* lhs_c lhs_term) (* rhs_c rhs_term))
+
+              (eo::ite (eo::not (eo::is_eq (eo::typeof (- (* lhs_c lhs_term) 
+                                                          (* rhs_c rhs_term))) 
+                                           Int))
+
+                       (- d2 d1)
+
+                       ; { every variable is integer sorted }
+                       (eo::ite (eo::is_eq (eo::typeof (- d2 d1)) Int)
+
+                                (- d2 d1)
+
+                                ; { not (eo::is_eq (eo::typeof (- d2 d1)) Int) }
+                                ; Floor function as a result of converting to Z.
+                                ($f_list_cons + (to_int (- d2 d1)) 1.0))))
+           )
+
+          (
+           ($manipulate_inequality (>= (+ (+ lhs_c lhs_term) d1) 
+                                      (+ (+ rhs_c rhs_term) d2)))
+
+           (>= (- (+ lhs_c lhs_term) (+ rhs_c rhs_term))
+
+              (eo::ite (eo::not (eo::is_eq (eo::typeof (- (+ lhs_c lhs_term) 
+                                                          (+ rhs_c rhs_term))) 
+                                           Int))
+
+                       (- d2 d1)
+
+                       ; { every variable is integer sorted }
+                       (eo::ite (eo::is_eq (eo::typeof (- d2 d1)) Int)
+
+                                (- d2 d1)
+
+                                ; { not (eo::is_eq (eo::typeof (- d2 d1)) Int) }
+                                ; Floor function as a result of converting to Z.
+                                ($f_list_cons + (to_int (- d2 d1)) 1.0))))
+           )
+
+          (; { summatory1 and summatory2 are actual additions of monomials }
+           ($manipulate_inequality (>= (+ c1 summatory1) (+ c2 summatory2)))
+
+           (>= (- summatory1 summatory2)
+
+              (eo::ite (eo::not (eo::is_eq (eo::typeof (- summatory1 summatory2)) 
+                                           Int))
+
+                       (- c2 c1)
+
+                       ; { every variable is integer sorted }
+                       (eo::ite (eo::is_eq (eo::typeof (- c2 c1)) Int)
+
+                                (- c2 c1)
+
+                                ; { not (eo::is_eq (eo::typeof (- c2 c1)) Int) }
+                                ; Floor function as a result of converting to Z.
+                                ($f_list_cons + (to_int (- c2 c1)) 1.0))))
+           )
+
+          (
+           ($manipulate_inequality (>= (* lhs_c lhs_term) (* rhs_c rhs_term)))
+           ; {d1 = d2 = 0}
+           (>= (- (* lhs_c lhs_term) (* rhs_c rhs_term))
+
+              (eo::ite (eo::not (eo::is_eq (eo::typeof (- (* lhs_c lhs_term) 
+                                                          (* rhs_c rhs_term))) 
+                                           Int))
+                       
+                       0/1
+
+                       ; { every variable is integer sorted }
+                       ; d1 = d2 = 0, so we have an integer.
+                       1/1))
+           )
+
+          (; { d1 and d2 are additive constants }
+           ($manipulate_inequality (>= d1 d2))
+           ; { summatory1 = summatory2 = 0}
+           ; { every variable is integer sorted }
+           (>= 0/1
+              (- d2 d1))
+           )
+
+          ; Some "normalization" steps.
+          (
+           ($manipulate_inequality (= (+ (* lhs_c lhs_term) d1) (+ (* rhs_c rhs_term) d2)))
+           
+           (= (- (* lhs_c lhs_term) (* rhs_c rhs_term))
+              (- d2 d1))
+           )
+
+          (
+           ($manipulate_inequality (= (+ (+ lhs_c lhs_term) d1) (+ (+ rhs_c rhs_term) d2)))
+           
+           (= (- (+ lhs_c lhs_term) (+ rhs_c rhs_term))
+              (- d2 d1))
+           )
+          
+          (
+           ($manipulate_inequality (= (+ c1 summatory1) (+ c2 summatory2)))
+
+           (= (- summatory1 summatory2)
+              (- c2 c1))
+           )
+          (; Special case, not to be confused with just having additive
+           ; constants.
+           ($manipulate_inequality (= (* lhs_c lhs_term) 
+                                      (* rhs_c rhs_term)))
+           
+           (= (- (* lhs_c lhs_term) (* rhs_c rhs_term))
+              0.0)
+           )
+
+          ( ; { d1 and d2 are just additive constants }
+           ($manipulate_inequality (= d1 d2))
+
+           (= 0.0 (- d2 d1))
+           )
+          )
+         )
+
+; program: $abs
+; args:
+; - constant A: A numeric literal.
+; return: The absolute value of "constant".
+(program $abs ((A Type) (constant A))
+         :signature (A) A
+
+         (
+          (
+           ($abs constant)
+
+           (eo::ite (eo::is_neg constant)
+
+                    (eo::neg constant)
+
+                    constant)
+          )
+          )
+)
+
+; program: $apply_coefficients
+; args:
+; - inequality Bool: A linear inequality.
+; - coeff A: A numeric coefficient.
+; return: >
+;   An inequality obtained from `inequality` by multiplying `coeff`
+;   in both sides.
+(program $apply_coefficients ((A Type) (lhs A) (rhs A) (coeff A) 
+                              (order (-> A A Bool)))
+         :signature (Bool A) Bool
+         (
+          (
+           ($apply_coefficients (= lhs rhs) coeff)
+
+           (= ($f_list_cons * coeff lhs)
+               
+              ($f_list_cons * coeff rhs))
+           )
+
+          (; { order != "=" }
+           ($apply_coefficients (order lhs rhs) coeff)
+
+           (eo::define
+            (; `coeff` could be an alethe arith expression like (- 1.0), we need
+             ; to convert it into a numeric literal, so $abs can be applied.
+             (evaluated_coeff ($evaluate_arith_term coeff))
+             )
+            
+            (order 
+             ($f_list_cons * ($abs evaluated_coeff) lhs)
+
+             ($f_list_cons * ($abs evaluated_coeff) rhs)))
+           )
+          )
+         )
+
+; program: $decide_order
+; args:
+; - lhs_order (-> A A Bool): An arbitrary order.
+; - ineq_order (-> A A Bool): An arbitrary order.
+; return: >
+;   For 2 inequalities expressed in terms of orders `lhs_order` and `rhs_order`,
+;   returns the order that relates the 2 terms, that result from adding the
+;   left-hand sides and right-hand sides of the previous inequalities.
+(program $decide_order ((A Type) (order1 (-> A A Bool)) (order2 (-> A A Bool))
+                        (ineq_order (-> A A Bool)))
+         :signature ((-> A A Bool) (-> A A Bool)) (-> A A Bool)
+         (
+          (
+           ($decide_order = ineq_order)
+
+           ineq_order
+           )
+
+          (
+           ($decide_order ineq_order =)
+
+           ineq_order
+           )
+
+          (
+           ($decide_order < <=)
+
+           <
+           )
+
+          (
+           ($decide_order > >=)
+
+           >
+           )
+
+          (
+           ($decide_order order1 order1)
+
+           order1
+           )
+
+          (; To avoid repeating previous equations...
+           ($decide_order order1 order2)
+
+           ($decide_order order2 order1)
+           )
+          )
+         )
+
+; program: $add_inequalities
+; args:
+; - inequality1 Bool: An inequality.
+; - inequality2 Bool: An inequality.
+; return: The inequality that results from adding `inequality1` with `inequality2`.
+(program $add_inequalities ((A Type) (lhs_lhs A) (lhs_rhs A)
+                            (rhs_lhs A) (rhs_rhs A) (lhs_order (-> A A Bool))
+                            (rhs_order (-> A A Bool)))
+         :signature (Bool Bool) Bool
+         (
+          (
+           ($add_inequalities (lhs_order lhs_lhs lhs_rhs)
+                              (rhs_order rhs_lhs rhs_rhs))
+
+           (eo::define
+            (
+             (resulting_order ($decide_order lhs_order rhs_order))
+             )
+
+            (resulting_order
+
+             ($evaluate_arith_term (+ lhs_lhs rhs_lhs))
+
+             ($evaluate_arith_term (+ lhs_rhs rhs_rhs)))
+            )
+           )
+         )
+         )
+
+; program: $process_inequalities
+; args:
+; - coefficients @VarList: >
+;   A @VarList of coefficients for each given inequality.
+; - inequalities Bool: A clause whose disjuncts are linear inequalities.
+; return: >
+;   The negation of the given clause, in the form of the conjunction of its 
+;   negated disjuntcs (inequalities). Each inequality i is also manipulated
+;   according to `$manipulate_inequality`, and multiplied with coefficient i
+;   from the given `coefficients` `@VarList`.
+(program $process_inequalities ((A Type) (coeff A) (coeffs @VarList :list)
+                                (ineq Bool) (ineqs Bool :list))
+         :signature (@VarList Bool) Bool
+         (
+          (
+           ($process_inequalities (@varlist coeff coeffs)
+                                  (@cl ineq ineqs))
+
+           ($f_list_cons
+
+            and
+
+            ($apply_coefficients
+             ($manipulate_inequality
+               ($negate_inequality ineq))
+             coeff)
+
+            ($process_inequalities coeffs ineqs))
+           )
+
+          (
+           ($process_inequalities @varlist.nil false)
+
+           true
+           )
+          )
+)
+
+; program: $add_processed_inequalities
+; args:
+; - ineqs Bool: >
+;   And-list of already processed inequalities, according to 
+;   $process_inequalities.
+; return: The inequality resulting from adding together inequalities from `ineqs`.
+(program $add_processed_inequalities ((ineq Bool) (ineqs Bool :list))
+         :signature (Bool) Bool
+         (
+          (
+           ($add_processed_inequalities (and ineq ineqs))
+
+           ($add_inequalities
+            ineq
+            ($add_processed_inequalities ineqs))
+           )
+
+          (
+           ($add_processed_inequalities true)
+           ;; TODO: would this suffice?
+           (= 0.0 0.0)
+           )
+          )
+)
+
+; program: $verify_contradiction
+; args:
+; - inequality A: An inequality whose sides are numeric literals.
+; return: A boolean representing the truth value of `inequality`.
+(program $verify_contradiction ((A Type) (lhs A) (rhs A))
+         :signature (Bool) Bool
+
+         (
+          (
+           ($verify_contradiction (> lhs rhs))
+
+           (eo::gt ($evaluate_arith_term lhs)
+                   ($evaluate_arith_term rhs))
+           )
+
+          (
+           ($verify_contradiction (>= lhs rhs))
+           (eo::or 
+            (eo::gt ($evaluate_arith_term lhs) 
+                    ($evaluate_arith_term rhs))
+            (eo::eq ($evaluate_arith_term lhs)
+                    ($evaluate_arith_term rhs)))
+           )
+
+          (
+           ($verify_contradiction (< lhs rhs))
+
+           ($verify_contradiction (> rhs lhs))
+           )
+
+          (
+           ($verify_contradiction (<= lhs rhs))
+
+           ($verify_contradiction (>= rhs lhs))
+           )
+
+          (
+           ($verify_contradiction (= lhs rhs))
+
+           (eo::eq ($evaluate_arith_term lhs) ($evaluate_arith_term rhs))
+           )
+          )
+         )
+
+; program: $check_la_generic
+; args:
+; - coeffs @VarList: >
+;   Coefficients passed to la_generic, as a @VarList. The i-th coefficient 
+;   corresponds to the i-th inequality from the conclusion passed.
+; - conclusion Bool: Conclusion passed to the rule.
+; return: >
+;   A boolean indicating if the conjunction of the negation of each inequality 
+;   in `conclusion` is unsatisfiable.
+(program $check_la_generic ((coeffs @VarList) (conclusion Bool))
+  :signature (@VarList Bool) Bool
+  (
+   (
+    ($check_la_generic coeffs conclusion) 
+
+    (eo::not 
+     ($verify_contradiction
+      ($add_processed_inequalities
+       ($process_inequalities coeffs conclusion)))
+     )
+    )
+   )
+)
+
+; rule: la_generic
+; premises:
+; - conclusion Bool: A clause whose disjuncts are linear inequalities.
+; args:
+; - coeffs @VarList: >
+;   Coefficients passed to la_generic, as a @VarList. The i-th coefficient 
+;   corresponds to the i-th inequality from the conclusion passed.
+; requires: >
+;   For the conjunction of the negation of each inequality in `conclusion` 
+;   to be unsatisfiable.
+; conclusion:
+(declare-rule la_generic ((coeffs @VarList) (conclusion Bool))
+  :args (coeffs)
+  :requires ((($check_la_generic coeffs conclusion) true))
+  :conclusion-explicit conclusion
+)
+
+;TODO
+(program $check_lia_generic ((CL Bool))
+  :signature (Bool) Bool
+  (
+   (($check_lia_generic CL) true)
+  )
+)
+
+;TRUST
+(declare-rule lia_generic ((CL Bool))
+  :args (CL)
+  :requires ((($check_lia_generic CL) true))
+  :conclusion CL
+)
+
+(declare-rule la_disequality ((t1 Real) (t2 Real))
+  :args ((@cl (or (= t1 t2) (not (<= t1 t2)) (not (<= t2 t1)))))
+  :conclusion (@cl (or (= t1 t2) (not (<= t1 t2)) (not (<= t2 t1))))
+)
+
+(declare-rule la_totality ((t1 Real) (t2 Real))
+  :args ((@cl (or (<= t1 t2) (<= t2 t1))))
+  :conclusion (@cl (or (<= t1 t2) (<= t2 t1)))
+)
+
+;TODO
+(program $check_la_tautology ((CL Bool))
+  :signature (Bool) Bool
+  (
+   (($check_la_tautology CL) true)
+  )
+)
+
+;TRUST
+(declare-rule la_tautology ((CL Bool))
+  :args (CL)
+  :requires ((($check_la_tautology CL) true))
+  :conclusion CL
+)
+
+;---------------------
+; Rule la_mult_pos
+;---------------------
+
+; args:
+; - conclusion Bool: Conclusion given to rule "la_mult_pos".
+; return: >
+;   A boolean indicating if `conclusion` is an implication of the form, either:
+;   - (𝑡1 > 0 ∧ 𝑡2 ⋈ 𝑡3) → 𝑡1 ∗ 𝑡2 ⋈ 𝑡1 ∗ 𝑡3, with ⋈ ∈ {<, >, ≤, ≥, ≈}.
+;   - (𝑡1 > 0 ∧ ¬(𝑡2 ≈ 𝑡3 )) → ¬(𝑡1 ∗ 𝑡2 ≈ 𝑡1 ∗ 𝑡3 )
+(program $check_la_mult_pos ((A Type) (rel (-> A A Bool))
+                             (t1 A) (t2 A) (t3 A)
+                             (conclusion Bool))
+  :signature (Bool) Bool
+  (
+   (
+    ($check_la_mult_pos (@cl (=> (and (> t1 0/1) (rel t2 t3))
+                                (rel (* t1 t2) (* t1 t3)))))
+
+    ($is_rel_op rel)
+    )
+
+   (
+    ($check_la_mult_pos (@cl (=> (and (> t1 0) (rel t2 t3))
+                                (rel (* t1 t2) (* t1 t3)))))
+
+    ($is_rel_op rel)
+    )
+
+   (
+    ($check_la_mult_pos (@cl (=> (and (> t1 0.0) (rel t2 t3))
+                                (rel (* t1 t2) (* t1 t3)))))
+
+    ($is_rel_op rel)
+    )
+
+   (
+    ($check_la_mult_pos (@cl (=> (and (> t1 0) (not (= t2 t3)))
+                                (not (= (* t1 t2) (* t1 t3))))))
+
+    true
+    )
+
+   (
+    ($check_la_mult_pos (@cl (=> (and (> t1 0/1) (not (= t2 t3)))
+                                (not (= (* t1 t2) (* t1 t3))))))
+
+    true
+    )
+
+   (
+    ($check_la_mult_pos (@cl (=> (and (> t1 0.0) (not (= t2 t3)))
+                                (not (= (* t1 t2) (* t1 t3))))))
+
+    true
+    )
+   )
+)
+
+; rule: la_mult_pos
+; requires: >
+;   For conclusion to be an implication of the form, either:
+;   - (𝑡1 > 0 ∧ 𝑡2 ⋈ 𝑡3) → 𝑡1 ∗ 𝑡2 ⋈ 𝑡1 ∗ 𝑡3, with ⋈ ∈ {<, >, ≤, ≥, ≈}.
+;   - (𝑡1 > 0 ∧ ¬(𝑡2 ≈ 𝑡3 )) → ¬(𝑡1 ∗ 𝑡2 ≈ 𝑡1 ∗ 𝑡3 )
+; conclusion-explicit: A conclusion satisfying the previous side-condition.
+(declare-rule la_mult_pos ((conclusion Bool))
+  :requires ((($check_la_mult_pos conclusion) true))
+  :conclusion-explicit conclusion
+)
+
+
+;---------------------
+; Rule la_mult_neg
+;---------------------
+
+; program: $check_inverse_relations
+; args:
+; - rel (-> A A Bool): A relation over numbers.
+; - inv_rel (-> A A Bool): A relation over numbers.
+; return: >
+;   A boolean indicating if `inv_rel` is the inverse, as a relation, of `rel`.
+(program $check_inverse_relations ((A Type) (rel (-> A A Bool)) 
+                                   (inv_rel (-> A A Bool)))
+         :signature ((-> A A Bool) (-> A A Bool)) Bool
+         (
+          (
+           ($check_inverse_relations < >)
+
+           true
+           )
+
+          (
+           ($check_inverse_relations <= >=)
+
+           true
+           )
+
+          (
+           ($check_inverse_relations = =)
+
+           true
+           )
+
+          (
+           ($check_inverse_relations > <)
+
+           true
+           )
+
+          (
+           ($check_inverse_relations >= <=)
+
+           true
+           )
+
+          (
+           ($check_inverse_relations rel inv_rel)
+
+           false
+           )
+          )
+)
+
+; program: $check_la_mult_neg
+; args:
+; - conclusion Bool: Conclusion given to rule "la_mult_neg".
+; return: >
+;   A boolean indicating if `conclusion` is an implication of the form, either:
+;   - (𝑡1 < 0 ∧𝑡2 ⋈ 𝑡3) → 𝑡1∗𝑡2 ⋈_𝑖𝑛𝑣 𝑡1∗𝑡3
+;   where ⋈ and ⋈_𝑖𝑛𝑣 are relations over numbers, one being the inverse
+;   of the other, as captured by the predicate $check_inverse_relations.
+;   - (𝑡1 < 0 ∧ ¬(𝑡2 ≈ 𝑡3)) → ¬(𝑡1∗𝑡2 ≈ 𝑡1∗𝑡3)
+(program $check_la_mult_neg ((A Type) (rel (-> A A Bool)) (inv_rel (-> A A Bool))
+                             (t1 A) (t2 A) (t3 A)
+                             (conclusion Bool))
+  :signature (Bool) Bool
+  (
+   (
+    ($check_la_mult_neg (@cl (=> (and (< t1 0.0) (rel t2 t3))
+                                (inv_rel (* t1 t2) (* t1 t3)))))
+
+    (eo::ite ($check_inverse_relations rel inv_rel)
+
+             true
+
+             false)
+    )
+
+   (
+    ($check_la_mult_neg (@cl (=> (and (< t1 0.0) (not (= t2 t3)))
+                                (not (= (* t1 t2) (* t1 t3))))))
+
+    true
+    )
+
+   (
+
+    ($check_la_mult_neg conclusion)
+    
+    false
+    )
+   )
+)
+
+; rule: la_mult_neg
+; requires: >
+;   For conclusion to be an implication of the form, either:
+;   - (𝑡1 < 0 ∧ 𝑡2 ⋈ 𝑡3) → 𝑡1∗𝑡2 ⋈_𝑖𝑛𝑣 𝑡1∗𝑡3
+;   where ⋈ and ⋈_𝑖𝑛𝑣 are relations over numbers, one being the inverse
+;   of the other, as captured by the predicate $check_inverse_relations.
+;   - (𝑡1 < 0 ∧ ¬(𝑡2 ≈ 𝑡3)) → ¬(𝑡1∗𝑡2 ≈ 𝑡1∗𝑡3)
+; conclusion-explicit: A conclusion satisfying the previous side-condition.
+(declare-rule la_mult_neg ((conclusion Bool))
+  :requires ((($check_la_mult_neg conclusion) true))
+  :conclusion-explicit conclusion
+)
+
+;-------------
+; Rule bind
+;-------------
+; TODO: remove this once we have higher-order programs
+; program: $embed_within_vars
+; args:
+; - varlist @VarList: A list of names of variables.
+; return: >
+;   A @VarList obtained by embedding each name within varlist
+;   within a @var construction (i.e., (@var (@varlist id) id) for a name id in 
+;   varlist).
+(program $embed_within_vars ((T Type) (id T) (tail @VarList :list))
+         :signature (@VarList) @VarList
+         (
+          (
+           ($embed_within_vars @varlist.nil)
+           
+           @varlist.nil
+           )
+
+          (
+           ($embed_within_vars (@varlist id tail))
+           
+           ($f_list_cons @varlist 
+                         (@var (@varlist id) id)
+                         ($embed_within_vars tail))
+           )
+          )
+)
+
+; NOTE: Rules like `bind` can have multiple forms: without and with
+; @var.  In the first case the bind rule is
+;                @var xs. φ = @var ys. φ'
+;              --­­------­­­­­------------­ bind
+;                   ∀ xs. φ = ∀ ys. φ'
+; This means that the variable that are free in the premise get bound by
+; a @var.  However, since `bind` and other context-extending steps can
+; be nested, it could also have the form
+;              @var xs₁ ∪ xs₂. φ = @var ys₁ ∪ ys₂. φ'
+;        --­­­­­­­--------------------------------­ bind
+;             @var xs₁. ∀ xs₂. φ = @var ys₁. ∀ ys₂. φ'
+; In situations where `bind` is combined with rules like `sko_ex`, the
+; @var could occur on only one side.
+; Since this signature would check the binders in the side condition,
+; the binders are invisible here.
+; This affects the rules `bind`, `sko_ex`, `sko_forall`, `let`,
+; and `onepoint`.
+
+; program: $check_bind
+; args:
+; - old_context Bool: >
+;    Context enclosing the premise passed to the application of the rule "bind".
+; - new_context Bool: >
+;    Context enclosing the conclusion passed to the application of the rule "bind".
+; - premise Bool: >
+;    Premise passed to the application of the rule "bind". Must be of the form
+;    (@cl (= lhs_body rhs_body)).
+; - conclusion Bool: >
+;    Conclusion passed to the application of the rule "bind". Must be of the form
+;    (@cl (= (Q lhs_vars lhs_body) (Q rhs_vars rhs_body))), for some quantifier Q,
+;    and bounded variables lhs_vars and rhs_vars.
+; return: >
+;    A boolean resulting from the conjunction of the following conditions:
+;    - Every variable in rhs_vars appear fixed in `new_context`.
+;    - Vars in lhs_vars are substituted by rhs_vars
+;    - rhs_vars should not appear free in (Q lhs_vars lhs_body)
+;    - rhs_vars should not appear in the first part of the new_context (old_context)
+;    - lhs_vars should not appear in the first part of the new_context (old_context)
+;    - new_context must be just an extension of old_context
+(program $check_bind ((old_context Bool) (new_context Bool)
+                      (T Type) (l T) (r T) (l1 T) (r1 T)
+                      (premise Bool) 
+                      (lhs_vars @VarList) (lhs_body Bool) 
+                      (rhs_vars @VarList) (rhs_body Bool))
+  :signature (Bool Bool Bool Bool) Bool
+  (
+   (
+    ($check_bind old_context new_context
+                 (@cl (= lhs_body rhs_body))
+                 (@cl (= (forall lhs_vars lhs_body) 
+                         (forall rhs_vars rhs_body))))
+
+    (eo::and
+     ; Every variable in rhs_vars appear fixed in `new_context`.
+     ($context_vars_are_fixed new_context rhs_vars)
+
+     ; Vars in lhs_vars are substituted by rhs_vars.
+     ; Note: we need to embed each var in rhs_vars within a @var construction,
+     ; since that is how they will appear within a context.
+     ($f_list_equal_mod_commut_and_length 
+      @varlist 
+      ($embed_within_vars rhs_vars)
+      ($context_get_vars_substs new_context lhs_vars))
+
+     ; rhs_vars should not appear free in (forall lhs_vars lhs_body)
+     (eo::define ((lhs_free_vars ($fv (forall lhs_vars lhs_body))))
+                 ($f_list_equal_mod_commut_and_length 
+                  @varlist
+                  lhs_free_vars
+                  ($f_list_filter @varlist
+                                  @varlist.nil
+                                  lhs_free_vars
+                                  ($varlist_flag_members 
+                                   lhs_free_vars
+                                   rhs_vars))))
+
+     ; rhs_vars should not appear in the first part of the new_context (old_context)
+     (eo::not ($context_vars_are_defined old_context rhs_vars))
+
+     ; lhs_vars should not appear in the first part of the new_context (old_context)
+     (eo::not ($context_vars_are_defined old_context lhs_vars))
+
+     ; new_context must be just an extension of old_context
+     ($context_is_extended new_context old_context)
+     )
+    )
+
+   (
+    ($check_bind old_context new_context
+                 (@cl (= lhs_body rhs_body))
+                 (@cl (= (exists lhs_vars lhs_body) (exists rhs_vars rhs_body))))
+
+    (eo::and
+
+     ; Every variable in rhs_vars appear fixed in `context`.
+     ($context_vars_are_fixed new_context rhs_vars)
+
+     ; Vars in lhs_vars are substituted by rhs_vars
+     ; Note: we need to embed each var in rhs_vars within a @var construction,
+     ; since that is how they will appear within a context.
+     ($f_list_equal_mod_commut_and_length 
+      @varlist 
+      ($embed_within_vars rhs_vars)
+      ($context_get_vars_substs new_context lhs_vars))
+
+     ; rhs_vars should not appear free in (forall lhs_vars lhs_body)
+     (eo::define ((lhs_free_vars ($fv (forall lhs_vars lhs_body))))
+                 ($f_list_equal_mod_commut_and_length 
+                  @varlist
+                  lhs_free_vars
+                  ($f_list_filter @varlist
+                                  @varlist.nil
+                                  lhs_free_vars
+                                  ($varlist_flag_members lhs_free_vars
+                                                         rhs_vars))))
+    
+     ; rhs_vars should not appear in the first part of the new_context (old_context)
+     (eo::not ($context_vars_are_defined old_context rhs_vars))
+
+     ; lhs_vars should not appear in the first part of the new_context (old_context)
+     (eo::not ($context_vars_are_defined old_context lhs_vars))
+
+     ; new_context must be just an extension of old_context
+     ($context_is_extended new_context old_context)
+     )
+    )
+   )
+  )
+
+; rule: bind
+; premises:
+; - premise Bool: >
+;    Premise passed to the application of the rule "bind". Must be of the form
+;    (@cl (= lhs_body rhs_body)).
+; assumption:
+; - new_context Bool: >
+;    Context enclosing the conclusion passed to the application of the rule "bind".
+; args:
+; - old_context Bool: >
+;    Context enclosing the premise passed to the application of the rule "bind".
+; requires: >
+;    For old_context, new_context, premise and  conclusion to be well-formed with
+;    respect to the definitions enforced by $check_bind.
+; conclusion: A proper renaming of bound variables, according to $check_bind.
+(declare-rule bind ((old_context Bool) (new_context Bool) (premise Bool) (conclusion Bool) 
+                    (phi_lhs Bool) (phi_rhs Bool) (lhs_vars @VarList) (rhs_vars @VarList)
+                    (quantifier (-> @VarList Bool Bool)))
+  :assumption new_context
+  :premises ((@cl (= phi_lhs phi_rhs)))
+  :args (old_context)
+  :requires ((($check_bind old_context new_context 
+                           (@cl (= phi_lhs phi_rhs)) 
+                           (@cl (= (quantifier lhs_vars phi_lhs) (quantifier rhs_vars phi_rhs)))) true))
+  :conclusion-explicit (@cl (= (quantifier lhs_vars phi_lhs) (quantifier rhs_vars phi_rhs)))
+)
+
+;-------------
+; Rule sko_ex
+;-------------
+
+; program: $check_sko_build_skolem_vars
+; args:
+; - choice_body Bool: Body of the choice operator to be built.
+; - exist_vars @VarList: @VarList containing the existentially quantified variables.
+; return: >
+;    A @VarList containing pairs (also as @VarList) of the form (𝑥𝑖, 𝜀𝑥𝑖.(∃𝑥𝑖+1, … , 𝑥𝑛.𝜑).)
+(program $check_sko_ex_build_skolem_vars ((choice_body Bool) (A Type) (x A) 
+                                       (tail @VarList :list))
+         :signature (Bool @VarList) @VarList
+         (
+          (
+           ($check_sko_ex_build_skolem_vars choice_body (@varlist x))
+
+           (@varlist (@pair x (choice (@varlist x) x choice_body)))
+           )
+
+          (; { tail != @varlist.nil }
+           ($check_sko_ex_build_skolem_vars choice_body (@varlist x tail))
+
+           ($f_list_cons @varlist 
+                         (@pair x (choice (@varlist x) x (exists tail choice_body)))
+                         ($check_sko_ex_build_skolem_vars choice_body tail))
+           )
+
+          (; { tail != @varlist.nil }
+           ($check_sko_ex_build_skolem_vars choice_body @varlist.nil)
+
+           @varlist.nil
+           )
+          )
+)
+
+; program: $check_sko_ex_new_context
+; args:
+; - ex_body Bool: Body of the existential quantification.
+; - new_context Bool: Context of sko_ex premise.
+; - ex_vars @VarList: List of existentially quantified variables.
+; return: >
+;    Checks that `new_context` contains the expected mapping between each variable in
+;    `ex_vars` and its corresponding skolem term.
+(program $check_sko_ex_new_context ((ex_body Bool) (new_context Bool) (ex_vars @VarList))
+         :signature (Bool Bool @VarList) Bool
+         (
+          (
+           ($check_sko_ex_new_context ex_body new_context ex_vars)
+
+           ($f_list_equal_mod_commut_and_length 
+            @varlist 
+            ($check_sko_ex_build_skolem_vars ex_body ex_vars)
+            ($context_get_var_subst_pairs new_context ex_vars))
+           )
+          )
+)
+
+; program: $check_sko_ex
+; args:
+; - old_context Bool: Context used outside of the current subproof.
+; - new_context Bool: Context within the subproof.
+; - premise Bool: Premise passed to sko_ex rule.
+; - conclusion Bool: Conclusion passed to sko_ex rule.
+; return:
+;    A boolean indicating if conclusion has the form
+;    𝑄𝑥1, … , 𝑥𝑛.𝜑 ≈ 𝑄𝑦1, … , 𝑦𝑛.𝜑′, for a premise 𝜑 ≈ 𝜑′. It also indicates
+;    if the context within the subproof has the form 
+;    Γ, 𝑦1, … , 𝑦𝑛, 𝑥1 ↦ 𝑦1, … , 𝑥𝑛 ↦ 𝑦𝑛, where Γ should be the context
+;    outside of the subproof being closed by sko_ex.
+(program $check_sko_ex ((old_context Bool) (new_context Bool) (lhs Bool) (rhs Bool) 
+                                                 (conclusion Bool) (ex_vars @VarList))
+  :signature (Bool Bool Bool Bool) Bool
+  (
+   (
+    ($check_sko_ex old_context new_context 
+                   (@cl (= lhs rhs)) (@cl (= (exists ex_vars lhs) rhs)))
+
+    (eo::and
+     ; new_context should be just an extension of old_context.
+     ($context_is_extended new_context old_context)
+
+     ; new_context should contain the expected mapping between each variable in
+     ; `ex_vars` and its corresponding skolem term.
+     ($check_sko_ex_new_context lhs new_context ex_vars)
+
+     ; ex_vars should not appear in the first part of the new_context (old_context)
+     (eo::not ($context_vars_are_defined old_context ex_vars))
+     )
+    )
+  )
+)
+
+; rule: sko_ex
+; assumption:
+; - new_context Bool: The subproof context, built with @ctx.
+; premises:
+; - premise Bool: Premise passed to rule sko_ex.
+; args:
+; - old_context Bool: >
+;    Context from the outside of current subproof, built with @ctx.
+; requires: >
+;    Conclusion should have the form exists 𝑥1, … , 𝑥𝑛.𝜑 ≈ 𝜓, with enclosing
+;     Γ, for a premise 𝜑 ≈ 𝜓 with enclosing context of the form.
+;     Γ, 𝑥1 ↦𝜀1, … , 𝑥𝑛↦𝜀𝑛 .
+; conclusion: Conclusion of the form exists 𝑥1, … , 𝑥𝑛.𝜑 ≈ 𝜓.
+(declare-rule sko_ex ((old_context Bool) (new_context Bool) (premise Bool) 
+                      (phi Bool) (psi Bool) (existential_vars @VarList))
+  :assumption new_context
+  :premises ((@cl (= phi psi)))
+  :args (old_context)
+  :requires ((($check_sko_ex old_context new_context (@cl (= phi psi))
+                             (@cl (= (exists existential_vars phi) psi))) true))
+  :conclusion-explicit (@cl (= (exists existential_vars phi) psi))
+)
+
+;TODO
+(program $check_sko_forall ((ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T))
+  :signature (Bool T T T T) Bool
+  (
+   (($check_sko_forall ctx l r l1 r1) true)
+  )
+)
+
+;TRUST
+(declare-rule sko_forall ((ctx Bool) (old_ctx Bool) (T Type) (l T) (r T) (l1 T) (r1 T))
+  :assumption ctx
+  :premises (old_ctx (@cl (= l1 r1)))
+  :args ((@cl (= l r)))
+  :requires ((($context_is_extended ctx old_ctx) true) (($check_sko_forall ctx l r l1 r1) true))
+  :conclusion (@cl (= l r))
+)
+
+;--------------------
+; Rule forall_inst
+;--------------------
+
+; program: $check_forall_inst
+; args:
+; - conclusion Bool: Conclusion given to rule forall_inst.
+; - variables_substitutions @VarList: A list of the substitutes of each quantified variable.
+; return: >
+;    A boolean indicating if conclusion is of the form ¬(∀𝑥1, … , 𝑥𝑛.𝑃) ∨𝑃[𝑥1 ↦𝑡1, … , 𝑥𝑛↦𝑡𝑛],
+;    for terms t1,...,tn taken from variables_substitutions.
+(program $check_forall_inst ((forall_vars @VarList) 
+                                                       (body Bool)
+                                                       (instantiated_body Bool) 
+                                                       (variables_substitutions @VarList))
+  :signature (Bool @VarList) Bool
+  (
+   (;  TODO: 𝑥𝑖 and 𝑡𝑖 have the same sort
+    ($check_forall_inst (@cl (or (not (forall forall_vars body)) instantiated_body))
+                        variables_substitutions)
+    ($eo_is_eq instantiated_body ($substitution_apply body 
+                                                            ($substitution_build 
+                                                             forall_vars
+                                                             variables_substitutions)))
+    )
+   )
+)
+
+; rule: forall_inst
+; args:
+; - variables_substitutions @VarList: A list of the substitutes of each quantified variable.
+;    Conclusion should be of the form ¬(∀𝑥1, … , 𝑥𝑛.𝑃) ∨𝑃[𝑥1 ↦𝑡1, … , 𝑥𝑛↦𝑡𝑛],
+;    for terms t1,...,tn being used in the instantiation.
+; requires:
+; conclusion: A conclusion of the form of the ¬(∀𝑥1, … , 𝑥𝑛.𝑃) ∨𝑃[𝑥1 ↦𝑡1, … , 𝑥𝑛↦𝑡𝑛].
+(declare-rule forall_inst ((variables_substitutions @VarList) (variables_quantified @VarList)
+                           (forall_body Bool) (forall_body_instantiated Bool))
+
+  :args (variables_substitutions)
+  :requires ((($check_forall_inst 
+               (@cl (or (not (forall variables_quantified forall_body))
+                        forall_body_instantiated))
+               variables_substitutions) true))
+  :conclusion-explicit (@cl (or (not (forall variables_quantified forall_body))
+                                forall_body_instantiated))
+)
+
+;--------------------
+; Rule refl
+;--------------------
+
+; program: $check_refl
+; args:
+; - context Bool: Context corresponding to the refl step.
+; - conclusion Bool: >
+;    Conclusion of the form (@cl (= lhs rhs)), provided to the application of the
+;    refl rule.
+; return: >
+;    A boolean indicating if, by applying the substitution (induced by the 
+;    context) to the left-hand side of the conclusion, we obtain a term that is
+;    equivalent (modulo alpha-conversion) to the right-hand side.
+(program $check_refl ((context Bool) (conclusion Bool) (A Type) (lhs A) (rhs A))
+  :signature (Bool Bool) Bool
+  (
+   (
+    ($check_refl context (@cl (= lhs rhs)))
+
+    ($eo_is_eq 
+
+     ($substitution_apply lhs 
+                          ($substitution_build_from_context context))
+
+     rhs)
+    )
+  )
+)
+
+; rule: refl
+; premises:
+; - context Bool: The context that corresponds to the step applying rule refl.
+; requires: >
+;    That, by applying the substitution (induced by the context) to the left-hand 
+;    side of the conclusion, we obtain a term that is equivalent (modulo 
+;    alpha-conversion) to the right-hand side.
+; conclusion:
+(declare-rule refl ((context Bool) (t1 Bool) (t2 Bool))
+  :premises (context)
+  :requires ((($check_refl context (@cl (= t1 t2))) true))
+  :conclusion-explicit (@cl (= t1 t2))
+)
+
+;-------------
+; Rule trans
+;-------------
+
+; program: $last_eq_right
+; args:
+; - eqs Bool: Premises given to rule trans (equivalences), chained with "and".
+; - lhs T: >
+;   Expression of arbitrary type T, for which we want to determine its
+;   transitively related element, traversing eqs
+; return: >
+;   The last element of type T related with lhs, through transitivity, 
+;   following the equivalences in eqs.
+(program $last_eq_right ((T Type) (t1 T) (t2 T) (eqs Bool))
+  :signature (Bool T) Bool
+  (
+   (; case (@cl (= t1 t2) false)
+    ($last_eq_right (@cl (= t1 t2)) t1)
+    
+    t2
+    )
+
+   (; case (@cl (= t1 t2) false)
+    ($last_eq_right (@cl (= t1 t2)) t2)
+    
+    t1
+    )
+
+   (; case (and (@cl (= t1 t2) false) true)
+    ($last_eq_right (and (@cl (= t1 t2))) t1) 
+
+    t2
+    )
+
+   (; case (and (@cl (= t1 t2) false) true)
+    ($last_eq_right (and (@cl (= t1 t2))) t2) 
+
+    t1
+    )
+
+    (; { eqs != true}
+     ; case (and (@cl (= t1 t2) false) eqs)
+     ($last_eq_right (and (@cl (= t1 t2)) eqs) t1) 
+
+     ($last_eq_right eqs t2)
+     )
+
+    (; { eqs != true}
+     ; case (and (@cl (= t1 t2) false) eqs)
+     ($last_eq_right (and (@cl (= t1 t2)) eqs) t2)
+
+     ($last_eq_right eqs t1)
+     )
+
+   ; TODO: are they always clauses? (seems that it is not the
+   ; case if the premises where just "assume"s)
+    (; case (and (= t1 t2) true) 
+     ($last_eq_right (and (= t1 t2)) t1)
+
+     t2
+     )
+
+    (; case (and (= t1 t2) true)
+     ($last_eq_right (and (= t1 t2)) t2)
+
+     t1
+     )
+
+    (; { eqs != true}
+     ; case (and (= t1 t2) eqs)
+     ($last_eq_right (and (= t1 t2) eqs) t1)
+     
+     ($last_eq_right eqs t2)
+     )
+
+    (; { eqs != true}
+     ; case (and (= t1 t2) eqs)
+     ($last_eq_right (and (= t1 t2) eqs) t2)
+     
+     ($last_eq_right eqs t1)
+     )
+  )
+)
+
+; program: $make_trans
+; args:
+; - eqs Bool: Premises given to rule trans (equivalences), chained with "and".
+; - lhs T: >
+;   Expression of arbitrary type T, for which we want to determine its
+;   transitively related element, traversing eqs.
+; return: >
+;   An equivalence of the form (= lhs rhs), where rhs is the last element of 
+;   type T related with lhs, through transitivity, following the equivalences 
+;   in eqs.
+(program $make_trans ((T Type) (t1 T) (t2 T) (eqs Bool :list))
+  :signature (Bool T) Bool
+  (
+   (; case (and (= t1 t2) true)
+    ($make_trans (and (@cl (= t1 t2))) t1)
+    
+    (= t1 t2)
+    )
+
+   (; case (and (= t1 t2) true)
+    ($make_trans (and (@cl (= t1 t2))) t2)
+    
+    (= t1 t2)
+    )
+
+   (; { eqs != true }
+    ($make_trans (and (@cl (= t1 t2)) eqs) t1) 
+    
+    (= t1 ($last_eq_right eqs t2))
+    )
+
+   (; { eqs != true }
+    ($make_trans (and (@cl (= t1 t2)) eqs) t2) 
+    
+    (= t2 ($last_eq_right eqs t1))
+    )
+  )
+)
+
+; program: $check_trans
+; args:
+; - premises Bool: Equivalence premises given to rule trans, chained through "and".
+; - conclusion Bool: Conclusion given to rule trans. Must be built with @cl.
+; return: >
+;   A boolean indicating if `conclusion` is the equivalence resulting from
+;   the transitivity of equivalence, identifying the lhs of the first 
+;   premise equivalence with the rhs of the last premise equivalence.
+(program $check_trans ((A Type) (lhs A) (lhs_1 A) (lhs_2 A)
+                       (rhs A) (rhs_1 A) (rhs_2 A)
+                       (eqs Bool :list))
+  :signature (Bool Bool) Bool
+  (
+   ; We perform the first step of $make_trans here, to be able to select
+   ; which side of the equation to follow.
+   (
+    ($check_trans (and (@cl (= lhs rhs))) (@cl (= lhs rhs)))
+    
+    true
+    )
+
+   (
+    ($check_trans (and (@cl (= lhs rhs))) (@cl (= rhs lhs)))
+    
+    true
+    )
+
+   (
+    ($check_trans (and (@cl (= lhs rhs_2)) eqs) (@cl (= lhs rhs_1)))
+
+    ($f_list_equal_mod_commut_and_length 
+     = 
+     ($make_trans (and (@cl (= lhs rhs_2)) eqs) lhs) (= lhs rhs_1))
+    )
+
+   (
+    ($check_trans (and (@cl (= lhs_1 rhs)) eqs) (@cl (= lhs_2 rhs)))
+
+    ($f_list_equal_mod_commut_and_length 
+     = 
+     ($make_trans (and (@cl (= lhs_1 rhs)) eqs) rhs) (= lhs_2 rhs))
+    )
+  )
+)
+
+;TODO what about scopes here? can a premise come from an outers scope
+; rule: trans
+; premises:
+; - premise-list Bool: Premises given to rule "trans", chained with "and"
+; requires: >
+;   For "conclusion" to be the equivalence resulting from
+;   the transitivity of equivalence, identifying the lhs of the first 
+;   premise equivalence with the rhs of the last premise equivalence.
+; conclusion-explicit: >
+;   Conclusion should be of the form (@cl (= t1 tn)), satisfying the described
+;   side-condition.
+(declare-rule trans ((premises Bool) (premises Bool) (t1 Bool) (tn Bool))
+  :premise-list premises and
+  :requires ((($check_trans premises (@cl (= t1 tn))) true))
+  :conclusion-explicit (@cl (= t1 tn))
+)
+
+;---------------
+; Rule cong
+;---------------
+
+; program: $check_n_ary_application
+; args:
+; - lhs U: LHS of the equality in the conclusion passed to the cong rule.
+; - rhs U: RHS of the equality in the conclusion passed to the cong rule.
+; - premises Bool: Premises passed to the cong rule, but in the reverse order.
+; return: >
+;    A boolean indicating if lhs, rhs and premises correspond to the proper
+;    application of the cong rule, for a n-ary operator. Note that, in this case,
+;    we are dealing with the single application of a n-ary operator. No 
+;    associativity is involved.
+(program $check_n_ary_application ((T Type) (U Type) 
+                                          (f (-> T U U)) (f2 (-> T U U)) (t1 T) (t2 T) (t3 T)
+                                          (lhs U) (rhs U) (tail Bool :list) (premises Bool))
+    :signature (U U Bool) Bool
+    (
+     (
+      ($check_n_ary_application (f t1) (f t2) (and (@cl (= t1 t2))))
+
+      true
+      )
+
+     ( ; TODO: ill-typed?
+      ($check_n_ary_application (f t1) (f2 t2) (and (@cl (= t1 t2)) tail))
+
+      ($check_n_ary_application f f2 tail)
+      )
+     
+     ( ; Rule cong allows for the premises to not include the cases of reflexive 
+       ; equalities. We treat that here.
+      ($check_n_ary_application (f t1) (f2 t1) (and (@cl (= t2 t3)) tail))
+
+      ($check_n_ary_application f f2 (and (@cl (= t2 t3)) tail))
+      )
+     )
+    )
+
+; program: $check_variadic_left_assoc
+; args:
+; - lhs U: LHS of the equality in the conclusion passed to the cong rule.
+; - rhs U: RHS of the equality in the conclusion passed to the cong rule.
+; - premises Bool: Premises passed to the cong rule, but in the reverse order.
+; return: >
+;    A boolean indicating if lhs, rhs and premises correspond to the proper
+;    application of the cong rule, for a left-assoc operator.
+(program $check_variadic_left_assoc ((T Type) (U Type) 
+                                          (f (-> T U U)) (f2 (-> T U U)) (t1 T) (t2 T) (t3 T)
+                                          (lhs U) (rhs U) (tail Bool :list) (premises Bool))
+    :signature (U U Bool) Bool
+    (
+     (; This case covers the situation where f is actually
+      ; the original variadic operator being applied to its nil
+      ; value, as it would be the case for a left-assoc-nil op.
+      ($check_variadic_left_assoc (f t1) (f t2) (and (@cl (= t1 t2))))
+
+      true
+      )
+
+     ( ; TODO: ill-typed?
+      ($check_variadic_left_assoc (f t1) (f2 t2) (and (@cl (= t1 t2)) tail))
+
+      ($check_variadic_left_assoc f f2 tail)
+      )
+
+     (; Rule cong allows for the premises to not include the cases of reflexive 
+      ; equalities. We treat that here.
+      ($check_variadic_left_assoc (f t1) (f2 t1) (and (@cl (= t2 t3)) tail))
+
+      ($check_variadic_left_assoc f f2 (and (@cl (= t2 t3)) tail))
+      )
+     )
+    )
+
+; program: $check_variadic_right_assoc
+; args:
+; - lhs U: LHS of the equality, in the conclusion.
+; - rhs U: RHS of the equality, in the conclusion.
+; - rev_premises Bool: Premises given to the cong rule.
+; return:
+(program $check_variadic_right_assoc ((T Type) (U Type) (f (-> T U U)) 
+                                           (f2 (-> T U U)) (t1 T) (t2 T) (t3 T) (nil U :list) (lhs U :list) (rhs U :list)
+                                           (premises Bool) (tail Bool :list))
+    :signature (U U Bool) Bool
+    (
+     (; Ending of both f-lists
+      ($check_variadic_right_assoc (f t1 nil) (f t2 nil) (and (@cl (= t1 t2))))
+
+      true
+      )
+
+     ( ; TODO: ill-typed
+      ($check_variadic_right_assoc (f t1 lhs) (f t2 rhs) (and (@cl (= t1 t2)) tail))
+
+      ($check_variadic_right_assoc lhs rhs tail)
+      )
+
+     (; Rule cong allows for the premises to not include the cases of reflexive 
+      ; equalities. We treat that here.
+      ($check_variadic_right_assoc (f t1 lhs) (f t1 rhs) (and (@cl (= t2 t3)) tail))
+
+      ($check_variadic_right_assoc lhs rhs (and (@cl (= t2 t3)) tail))
+      )
+     )
+    )
+
+; program: $cong_extract_operator
+; args:
+; - lhs (-> T U) : >
+;    The left-hand side of the conclusion given to the cong rule, where the last argument
+;    of the function application has been removed. This is so for typing purposes.
+; - rhs (-> T U) : >
+;    The right-hand side of the conclusion given to the cong rule, where the last argument
+;    of the function application has been removed. This is so for typing purposes.
+; return: >
+;    If both sides contain the same function being applied, 
+;    $cong_extract_operator returns it.
+(program $cong_extract_operator ((T Type) (U Type)
+                                 (lhs_f (-> T U)) (rhs_f (-> T U)) (lhs U) (rhs U))
+    :signature ((-> T U) (-> T U)) (-> T U)
+    (
+     (; I can type lhs_f and rhs_f as being unary, because of currying.
+      ; This matches, regardless of the associativity of the operators involved.
+      ($cong_extract_operator (lhs_f lhs) (rhs_f rhs))
+      ; Since the expected type of the parameters is (-> T U), it contemplates the case
+      ; where lhs_f and rhs_f are not actual unary functions.
+      ($cong_extract_operator lhs_f rhs_f)
+      )
+
+     (; We cannot decompose the parameters received as an application of some
+      ; unary function: we must have reached to the function itself, and lhs and rhs
+      ; should contain the same function.
+      ($cong_extract_operator lhs_f lhs_f)
+
+      lhs_f
+      )
+     )
+    )
+
+; program: $check_cong
+; args:
+; - premises Bool: >
+;   Premises given to rule cong. Must be an and-list of each premise (equality).
+; - conclusion Bool: Conclusion clause given to rule cong.
+; return: >
+;   A boolean indicating if `conclusion` follows from the and-list of premises
+;   given.
+(program $check_cong ((T Type) (U Type) (f_lhs (-> T U)) (lhs U) (f_rhs (-> T U)) (rhs U) 
+                      (premises Bool))
+  :signature (Bool Bool) Bool
+  (
+   (
+    ($check_cong premises (@cl (= (f_lhs lhs) (f_rhs rhs))))
+
+    (eo::define ((operator ($cong_extract_operator f_lhs f_rhs)))
+                (eo::ite ($is_theory_f_list operator)
+                         ; Operator is variadic. It must be left or right assoc.
+                         (eo::ite ($is_theory_op_left_assoc operator)
+                                  ($check_variadic_left_assoc (f_lhs lhs) (f_rhs rhs)
+                                                              (eo::list_rev and premises))
+
+                                  ; { not ($is_theory_op_left_assoc operator) }
+                                  ($check_variadic_right_assoc (f_lhs lhs) (f_rhs rhs)
+                                                               premises)
+                                  )
+                         
+                         ; { not ($is_theory_f_list operator) }
+                         ; For the single application of a n-ary operator, there is no associativity
+                         ; involved. We do not need to distinguish among left/righ assoc. or no assoc.
+                         ; at all.
+                         ; Note that every user defined function constant ends up being n-ary.
+                         ($check_n_ary_application (f_lhs lhs) (f_rhs rhs) (eo::list_rev and premises)))
+                )
+    )
+   )
+)
+
+; rule: cong
+; premises:
+; - premises Bool: An and-list of premises of the form t1 = u1, ..., tm = um.
+; requires: >
+;   For "conclusion" to be of the form:
+;   f s1 ... sn t1 ... tm = f s1 ... sn u1 ... um
+;   with premises: 
+;   t1 = u1, ..., tm = um.
+; conclusion-explicit: >
+;   A conclusion of the form f s1 ... sn t1 ... tm = f s1 ... sn u1 ... um, 
+;   satisfying the previous side-condition.
+(declare-rule cong ((premises Bool) (conclusion Bool))
+  :premise-list premises and
+  :requires ((($check_cong premises conclusion) true))
+  :conclusion-explicit conclusion
+)
+
+;----------------------
+; Rule eq_reflexive
+;----------------------
+; rule: eq_reflexive
+; conclusion: >
+; Conclusion should be of the form (@cl (= t t)), for some arbitrary
+; term t.
+(declare-rule eq_reflexive ((T Type) (t T))
+  :conclusion-explicit (@cl (= t t))
+)
+
+;-----------------
+; Rule qnt_cnf
+;-----------------
+
+; program: $negative_normal_form
+; args:
+; - formula Bool: A formula to be converted to its NNF.
+; - flag Bool: >
+;   A boolean flag indicating if the formula should is currently under a single 
+;   negation (`flag` = false) or not (`flag` = true). This is useful for 
+;   recursive definition purposes. The NNF of a formula 𝜑 would be the result of
+;   (`$negative_normal_form` 𝜑 true).
+; return: >
+;   The NNF-equivalent formula of `formula` (if `flag` = true) or its negated
+;   equivalent (if `flag` = false).
+(program $negative_normal_form ((phi_1 Bool) (phi_2 Bool) (phi_3 Bool)
+                                (disjunct Bool) (disjuncts Bool :list)
+                                (conjunct Bool) (conjuncts Bool :list)
+                                (varlist @VarList) (body Bool))
+
+         :signature (Bool Bool) Bool
+
+         (
+          (
+           ($negative_normal_form (not phi_1) true)
+
+           ($negative_normal_form phi_1 false)
+           )
+
+          (
+           ($negative_normal_form (not phi_1) false)
+
+           ($negative_normal_form phi_1 true)
+           )
+
+          (
+           ($negative_normal_form (or disjunct disjuncts) true)
+
+           ($f_list_cons or 
+                         ($negative_normal_form disjunct true)
+                         ($negative_normal_form disjuncts true))
+           )
+
+          (
+           ($negative_normal_form (or disjunct disjuncts) false)
+
+           ($f_list_cons and 
+                         ($negative_normal_form disjunct false)
+                         ($negative_normal_form disjuncts false))
+           )
+
+          (
+           ($negative_normal_form (and conjunct conjuncts) true)
+
+           ($f_list_cons and
+                         ($negative_normal_form conjunct true)
+                         ($negative_normal_form conjuncts true))
+           )
+
+          (
+           ($negative_normal_form (and conjunct conjuncts) false)
+
+           ($f_list_cons or
+                         ($negative_normal_form conjunct false)
+                         ($negative_normal_form conjuncts false))
+           )
+
+          (
+           ($negative_normal_form (=> phi_1 phi_2) true)
+
+           ($f_list_cons or
+                         ($negative_normal_form phi_1 false)
+                         ($negative_normal_form phi_2 true))
+           )
+
+          (
+           ($negative_normal_form (=> phi_1 phi_2) false)
+
+           ($f_list_cons and
+                         ($negative_normal_form phi_1 true)
+                         ($negative_normal_form phi_2 false))
+           )
+
+          (
+           ($negative_normal_form (ite phi_1 phi_2 phi_3) true)
+
+           ($f_list_cons and
+                         ($f_list_cons or
+                                       ($negative_normal_form phi_1 false)
+                                       ($negative_normal_form phi_2 true))
+
+                         ($f_list_cons or
+                                       ($negative_normal_form phi_1 true)
+                                       ($negative_normal_form phi_3 true)))
+           )
+
+          (
+           ($negative_normal_form (ite phi_1 phi_2 phi_3) false)
+
+           ($f_list_cons or
+                         ($f_list_cons and
+                                       ($negative_normal_form phi_1 true)
+                                       ($negative_normal_form phi_2 false))
+
+                         ($f_list_cons and
+                                       ($negative_normal_form phi_1 false)
+                                       ($negative_normal_form phi_3 false)))
+           )
+
+          (
+           ($negative_normal_form (forall varlist body) true)
+
+           (forall varlist ($negative_normal_form body true))
+           )
+
+          (
+           ($negative_normal_form (forall varlist body) false)
+
+           (exists varlist ($negative_normal_form body false))
+           )
+
+          (
+           ($negative_normal_form (exists varlist body) true)
+
+           (exists varlist ($negative_normal_form body true))
+           )
+
+          (
+           ($negative_normal_form (exists varlist body) false)
+
+           (forall varlist ($negative_normal_form body false))
+           )
+
+          (; { phi_1 is an atom }
+           ($negative_normal_form phi_1 true)
+
+           phi_1
+           )
+
+          (; { phi_1 is an atom }
+           ($negative_normal_form phi_1 false)
+
+           (not phi_1)
+           )
+          )
+         )
+
+; program: $small_step_prenex_normal_form
+; args:
+; - formula Bool: An arbitrary formula, in NNF.
+; return: >
+;   The result of applying a single step of rewrite towards converting `formula`
+;   into its prenex normal form.
+; note: PRE : { `formula` is in NNF }
+(program $small_step_prenex_normal_form ((formula Bool) (formulas Bool)
+                                         (varlist @VarList) (body Bool)
+                                         (op (-> Bool Bool Bool)))
+
+         :signature (Bool) Bool
+
+         (; NOTE: not abstracting the specific quantifiers to avoid undesired
+          ; matches with other kind of constructions of the form
+          ; (some_function value values)
+          (; NOTE: for this to always hold, the domain of the quantifier 
+           ; should not be empty.
+           ($small_step_prenex_normal_form (op (forall varlist body) formulas))
+
+           (forall varlist (op body formulas))
+           )
+
+          (; NOTE: for this to always hold, the domain of the quantifier 
+           ; should not be empty.
+           ($small_step_prenex_normal_form (op (exists varlist body) formulas))
+
+           (exists varlist (op body formulas))
+           )
+
+          (; NOTE: for this to always hold, the domain of the quantifier 
+           ; should not be empty.
+           ($small_step_prenex_normal_form (op formula (forall varlist body)))
+
+           (forall varlist (op formula body))
+           )
+
+          (; NOTE: for this to always hold, the domain of the quantifier 
+           ; should not be empty.
+           ($small_step_prenex_normal_form (op formula (exists varlist body)))
+
+           (exists varlist (op formula body))
+           )
+
+          (; { formula is an atom, a negated atom or a quantifier}
+           ($small_step_prenex_normal_form formula)
+
+           formula
+           )
+          )
+         )
+
+; program: $prenex_normal_form
+; args:
+; - formula Bool: An arbitrary formula, in NNF.
+; return: >
+;   The prenex normal form of `formula`.
+; note: PRE : { `formula` is in NNF }
+(program $prenex_normal_form ((formula Bool) (other_formulas Bool :list)
+                              (variables @VarList) (body Bool)
+                              (op (-> Bool Bool Bool))
+                              (quantifier (-> @VarList Bool Bool)))
+
+         :signature (Bool) Bool
+
+         (
+          (; NOTE: not abstracting the specific quantifiers to avoid undesired
+           ; matches with other kind of constructions of the form
+           ; (some_function value values)
+           ($prenex_normal_form (forall variables body))
+
+           (eo::define
+            
+            (
+             (prenex_body ($prenex_normal_form body))
+             )
+
+            (eo::ite ($eo_is_eq body prenex_body)
+                     ; Original formula is in prenex form.
+                     (forall variables body)
+
+                     ; { not ($eo_is_eq body prenex_body) }
+                     (forall variables ($prenex_normal_form prenex_body))))
+           )
+
+          (
+           ($prenex_normal_form (exists variables body))
+
+           (eo::define
+            
+            (
+             (prenex_body ($prenex_normal_form body))
+             )
+
+            (eo::ite ($eo_is_eq body prenex_body)
+                     ; Original formula is in prenex form.
+                     (exists variables body)
+
+                     ; { not ($eo_is_eq body prenex_body) }
+                     (exists variables ($prenex_normal_form prenex_body))))
+           )
+
+          (
+           ($prenex_normal_form (op formula other_formulas))
+
+           (eo::define
+            
+            (
+             (prenex_formula ($prenex_normal_form formula))
+
+             (prenex_other_formulas ($prenex_normal_form other_formulas))
+             )
+            
+            (eo::define
+             
+             (
+              (prenex_op_formula ($small_step_prenex_normal_form 
+                                  (op prenex_formula prenex_other_formulas)))
+              )
+
+             (eo::ite ($eo_is_eq (op prenex_formula prenex_other_formulas) 
+                                 prenex_op_formula)
+
+                      ; Original formula is in prenex form.
+                      prenex_op_formula
+
+                      ; { not ($eo_is_eq (op formula other_formulas) 
+                      ;        prenex_op_formula) }
+                      ($prenex_normal_form prenex_op_formula))))
+           )
+
+          (; { formula is an atom or a negated atom }
+           ($prenex_normal_form formula)
+
+           formula
+           )
+          )
+         )
+
+; program: $small_step_conjunctive_normal_form
+; args:
+; - $conjunctive_normal_form nil:
+; return:
+; note: PRE : { `formula` is in NNF and does not contain quantifiers }
+(program $small_step_conjunctive_normal_form ((formula Bool) 
+                                              (disjunct Bool) (disjuncts Bool :list)
+                                              (conjunct Bool) (conjuncts Bool :list)
+                                              (op_or (-> Bool Bool Bool))
+                                              (op_and (-> Bool Bool Bool)))
+
+         :signature (Bool) Bool
+
+         (
+          (; Trying some trick to avoid assoc-nil semantics.
+           ($small_step_conjunctive_normal_form (op_or disjunct (op_and conjunct 
+                                                                        conjuncts)))
+
+           (eo::ite ($eo_is_eq op_or or)
+                    
+                    (eo::ite ($eo_is_eq op_and and)
+                             
+                             (op_and (op_or disjunct conjunct) 
+                                     (op_or disjunct conjuncts))
+
+                             ; { not ($eo_is_eq op_and and) }
+                             ; { op_and == or }
+                             (op_or disjunct (op_and conjunct conjuncts)))
+
+                    ; { not ($eo_is_eq op_or or) }
+                    ; { op_or == and }
+                    (op_or disjunct (op_and conjunct conjuncts)))
+           )
+
+          (; Trying some trick to avoid assoc-nil semantics.
+           ($small_step_conjunctive_normal_form (op_or (op_and conjunct conjuncts)
+                                                       disjuncts))
+
+           (eo::ite ($eo_is_eq op_or or)
+                    
+                    (eo::ite ($eo_is_eq op_and and)
+                             
+                             (op_and (op_or conjunct disjuncts) 
+                                     (op_or conjuncts disjuncts))
+
+                             ; { not ($eo_is_eq op_and and) }
+                             ; { op_and == or }
+                             (op_or (op_and conjunct conjuncts)
+                                    disjuncts))
+
+                    ; { not ($eo_is_eq op_or or) }
+                    ; { op_or == and }
+                    (op_or (op_and conjunct conjuncts)
+                           disjuncts))
+           )
+
+          (; { formula is, either, a variable or a negated variable }
+           ($small_step_conjunctive_normal_form formula)
+           
+           formula
+           )
+          )
+         )
+
+; program: $rec_conjunctive_normal_form
+; args:
+; - $rec_conjunctive_normal_form nil:
+; return:
+; note: PRE : { `formula` is in NNF and does not contain quantifiers }
+(program $rec_conjunctive_normal_form ((formula Bool) (other_formulas Bool :list)
+                                   (op (-> Bool Bool Bool)))
+
+         :signature (Bool) Bool
+
+         (
+          (
+           ($rec_conjunctive_normal_form (op formula other_formulas))
+
+           (eo::define
+            
+            (
+             (conjunctive_formula ($rec_conjunctive_normal_form formula))
+
+             (conjunctive_other_formulas ($rec_conjunctive_normal_form other_formulas))
+             )
+            
+            (eo::define
+             
+             (
+              (conjunctive_op_formula ($small_step_conjunctive_normal_form 
+                                  (op conjunctive_formula conjunctive_other_formulas)))
+              )
+
+             (eo::ite ($eo_is_eq (op conjunctive_formula conjunctive_other_formulas) 
+                                 conjunctive_op_formula)
+
+                      ; We reach to a conjunctive normal form.
+                      conjunctive_op_formula
+
+                      ; { not ($eo_is_eq (op formula other_formulas) 
+                      ;        conjunctive_op_formula) }
+                      ($rec_conjunctive_normal_form conjunctive_op_formula))))
+           )
+
+          (; { formula is a variable or a negated variable }
+           ($rec_conjunctive_normal_form formula)
+
+           formula
+           )
+          )
+         )
+
+; program: $$conjunctive_normal_form
+; args:
+; - formula Bool: An formula in prenex form and NNF.
+; return: >
+;   Returns the CNF of `formula`, preserving its leading quantifiers, it present.
+; note: PRE : { `formula` is in prenex and NNF }
+(program $conjunctive_normal_form ((formula Bool) 
+                                   (varlist @VarList) (body Bool))
+
+         :signature (Bool) Bool
+
+         (
+          (
+           ($conjunctive_normal_form (forall varlist body))
+
+           (forall varlist ($conjunctive_normal_form body))
+           )
+
+          (
+           ($conjunctive_normal_form (exists varlist body))
+
+           (exists varlist ($conjunctive_normal_form body))
+           )
+
+          (; { `formula` does not begin with quantifiers }
+           ($conjunctive_normal_form formula)
+
+           ($flat_and_or and ($rec_conjunctive_normal_form formula))
+           )
+          )
+         )
+
+; program: $check_qnt_cnf
+; args:
+; - xs @VarList: >
+;   The list of variables quantified by the left-hand side disjunct of the conclusion
+;   passed to `qnt_cnf`.
+; - phi Bool: >
+;   The body of the left-hand side quantification of the conclusion
+;   passed to `qnt_cnf`.
+; - xsP @VarList: >
+;   The list of variables quantified by the right-hand side disjunct of the conclusion
+;   passed to `qnt_cnf`.
+; - phiP Bool: >
+;   The body of the right-hand side quantification of the conclusion
+;   passed to `qnt_cnf`.
+; return: >
+;   A boolean indicating if phiP is a clause from the CNF form of phi, and xsP
+;   is contained in xs.
+(program $check_qnt_cnf ((phi Bool) (phiP Bool) (xs @VarList) (xsP @VarList))
+
+  :signature (@VarList Bool @VarList Bool) Bool
+
+  (
+   (
+    ($check_qnt_cnf xs phi xsP phiP) 
+
+
+    (eo::and 
+     ; xs is contained in xsP
+     ($f_list_contains_f_list @varlist xs xsP)
+
+     ($f_list_contains_elem and 
+                            phiP 
+                            ($conjunctive_normal_form
+                             ($prenex_normal_form ($negative_normal_form phi true)))))
+    )
+   )
+  )
+
+
+; rule: qnt_cnf
+; requires: >
+;   For conclusion to be of the form ¬(∀𝑥1, … , 𝑥𝑛.𝜑) ∨ ∀𝑥𝑘1, … , 𝑥𝑘𝑚.𝜑′, with
+;   𝜑′ a clause from the CNF form of 𝜑, and 𝑥𝑘1, … , 𝑥𝑘𝑚 a permutation of 
+;   𝑥1, … , 𝑥𝑛.
+; conclusion-explicit: >
+;   A conclusion of the form (@cl (or (not (forall xs phi)) (forall xsP phiP))),
+;   satisfying the previous side-condition.
+(declare-rule qnt_cnf ((phi Bool) (phiP Bool) (xs @VarList) (xsP @VarList))
+  :requires ((($check_qnt_cnf xs phi xsP phiP) true))
+  :conclusion-explicit (@cl 
+                        ($f_list_cons or (not (forall xs phi)) (forall xsP phiP)))
+)
+
+;-------------
+; Table 7: Clausification rules
+;-------------
+
+;-------------
+; Rule and
+;-------------
+
+; program: check_and
+; args:
+; - premise Bool       : >
+;   Premise of the "and" rule: a conjunction of terms, embedded within a single-term clause 
+;   (built with @cl).
+; - index Int          : >
+;   Conjunct index, as provided to the rule. 0 <= index <= number of conjuncts - 1
+; - conclusion Bool    : >
+;   Conclusion provided to the rule. 
+; return: >
+;   A boolean indicating if `conclusion` is a conjunct from 
+;   `premise`, with index `index`.
+(program $check_and ((premise Bool) (premise_non_cl Bool) (index Int) (conclusion Bool))
+  :signature (Bool Int Bool) Bool
+  (
+   (
+    ($check_and premise index conclusion)
+
+    ($cl_equal ($to_cl ($f_list_index and ($from_cl premise) index))
+               conclusion)
+    )
+  )
+)
+
+; TODO: this overloads PandP
+; rule: and
+; premises:
+; - premise: The conjunctions over which "and elimination" is applied.
+; args:
+; - index Int: >
+;   The index of the conjunct being selected. 0 <= index <= number of conjuncts - 1.
+; requires: >
+;   The conclusion should be one conjunct from the premise,
+;   in the position indicated by index.
+; conclusion: A conjunct from "premise", satisfying the previous side-condition.
+(declare-rule and ((premise Bool) (index Int) (conclusion Bool))
+  :premises (premise)
+  :args (index)
+  :requires ((($check_and premise index conclusion) true))
+  :conclusion-explicit conclusion
+)
+
+;-------------
+; Rule not_or
+;-------------
+
+; program: check_not_or
+; args:
+; - premise Bool       : >
+;   Premise of the "not_or" rule: a negation of a disjunction of terms.
+;   It could be embedded within a single-term clause 
+;   (built with @cl).
+; - index Int          : >
+;   Conjunct index, as provided to the rule. 0 <= index <= number of conjuncts - 1
+; - conclusion Bool    : >
+;   Conclusion provided to the rule. 
+; return: >
+;   A boolean indicating if `conclusion` is a conjunct from `premise` (after
+;   applying DeMorgan's law), in position `index`.
+(program $check_not_or ((disjuncts Bool) (premise_non_cl Bool) (index Int) (conclusion Bool))
+  :signature (Bool Int Bool) Bool
+  (; To facilitate the use of the program, we allow 
+   ; the presence of a @cl constructor
+   (($check_not_or (@cl premise_non_cl) index conclusion)
+    ($check_not_or premise_non_cl index conclusion))
+
+   (($check_not_or (not disjuncts) index conclusion)
+    ($cl_equal ($to_cl (not ($f_list_index or disjuncts index)))
+               conclusion))
+   )
+)
+
+; rule: not_or
+; premises:
+; - premise: The negated disjunction over which "not_or" is applied.
+; args:
+; - index Int: The index of the conjunct being selected.
+;              0 <= index <= number of conjuncts - 1
+; requires: >
+;   The conclusion should be one disjunct from the result
+;   of applying DeMorgan's rule over the premise. The disjunct
+;   position must correspond to what is specified by the index
+;   parameter
+; conclusion-explicit: >
+;   A conclusion satisfying the previous side-condition.
+(declare-rule not_or ((premise Bool) (index Int) (conclusion Bool))
+  :premises (premise)
+  :args (index)
+  :requires ((($check_not_or premise index conclusion) true))
+  :conclusion-explicit conclusion
+)
+
+;-------------
+; Rule or
+;-------------
+
+; program: check_or
+; args:
+; - premise Bool: >
+;   Premise of the "or" rule: a disjunction of terms, built with "or" operator. 
+;   It could be embedded within a single-term clause built with @cl.
+; - conclusion Bool: >
+;   Conclusion provided to the rule. 
+; return: >
+;   A boolean indicating if `conclusion` is equivalent to `premise`, but built 
+;   with @cl.
+(program $check_or ((premise Bool) (conclusion Bool))
+  :signature (Bool Bool) Bool
+  (
+   (
+    ($check_or (@cl premise) conclusion)
+
+    ($cl_equal ($convert_or_to_cl premise)
+               conclusion)
+    )
+  )
+)
+
+; rule: or
+; premises:
+; - premise: >
+;   The clause, built with the "or" operator, over which the rule is applied. 
+;   It could be embedded within a single-term clause built with @cl.
+; requires: >
+;   The conclusion should be a clause equivalent to `premise`, 
+;   but built with @cl.
+; conclusion-explicit: >
+;   A conclusion satisfying the previous side-condition.
+(declare-rule or ((premise Bool) (conclusion Bool))
+  :premises (premise)
+  :requires ((($check_or premise conclusion) true))
+  :conclusion-explicit conclusion
+)
+
+;-----------------
+; Rule shuffle
+;-----------------
+
+; rule: shuffle
+; requires: >
+;   For conclusion to be an implication of the form, either:
+;   - (𝑡1 > 0 ∧ 𝑡2 ⋈ 𝑡3) → 𝑡1 ∗ 𝑡2 ⋈ 𝑡1 ∗ 𝑡3, with ⋈ ∈ {<, >, ≤, ≥, ≈}.
+;   - (𝑡1 > 0 ∧ ¬(𝑡; - lhs A: >
+;   Conclusion provided to the rule. 
+; return: >
+;   A boolean indicating if `conclusion` is equivalent to `premise`, but built 
+;   with @cl.
+(program $check_shuffle ((A Type) (term_l A) (terms_l A :list)
+                         (term_r A) (terms_r A :list))
+
+  :signature (A A) Bool
+  (
+   (
+    ($check_shuffle (+ term_l terms_l) (+ term_r terms_r))
+
+    ($f_list_equal_mod_commut + (+ term_l terms_l) (+ term_r terms_r))
+    )
+
+   (
+    ($check_shuffle (* term_l terms_l) (* term_r terms_r))
+
+    ($f_list_equal_mod_commut * (* term_l terms_l) (* term_r terms_r))
+    )
+
+   (
+    ($check_shuffle (and term_l terms_l) (and term_r terms_r))
+
+    ($f_list_equal_mod_commut and (and term_l terms_l) (and term_r terms_r))
+    )
+
+   (
+    ($check_shuffle (or term_l terms_l) (or term_r terms_r))
+
+    ($f_list_equal_mod_commut or (or term_l terms_l) (or term_r terms_r))
+    )
+  )
+)
+
+; rule: shuffle
+; requires: >
+;   For `lhs` to be equivalent to `rhs` modulo commutativity, for the
+;   operations +, ∗, ∧ and ∨.
+; conclusion-explicit: >
+;   A conclusion of the form (@cl (= lhs rhs)), where `lhs` is equivalent to 
+;   `rhs` according to the previous side-condition.
+(declare-rule shuffle ((A Type) (lhs A) (rhs A))
+:requires ((($check_shuffle lhs rhs) true))
+:conclusion-explicit (@cl (= lhs rhs))
+)
+
+;-------------
+; Rule not_and
+;-------------
+
+; program: check_not_and
+; args:
+; - premise Bool: Premise of the not_and rule: a negated conjunction of propositions.
+; - conclusion Bool: >
+;   The conclusion provided to the not_and rule.
+; return: >
+;   A boolean indicating if `conclusion` is a clause built with
+;   @cl, where each disjunct is negated and corresponds to some conjunct from
+;   `premise`.
+(program $check_not_and ((conjunction Bool) (conclusion Bool))
+  :signature (Bool Bool) Bool
+  (
+   (
+    ($check_not_and (@cl (not conjunction)) conclusion)
+
+     ($cl_equal ($f_list_cons @cl false ($de_morgan_not_and conjunction)) 
+                ($f_list_cons @cl (not true) conclusion))
+     )
+  )
+)
+
+; rule: not_and
+; premises:
+; - premise Bool: >
+;  The premise clause: a negated conjunction of propositions.
+; requires: >
+;  For "conclusion" to be a clause built with @cl, that results from applying
+;  DeMorgan's rule over "premise".
+; conclusion-explicit: >
+;  A conclusion satisfying the previous side-condition.
+(declare-rule not_and ((premise Bool) (conclusion Bool))
+  :premises (premise)
+  :requires ((($check_not_and premise conclusion) true))
+  :conclusion-explicit conclusion
+)
+
+;-------------
+; Rule xor1
+;-------------
+
+; rule: xor1
+; premises:
+; - premise Bool: A premise of the form (@cl (xor phi1 phi2)).
+; conclusion: A conclusion of the form (@cl phi1 phi2).
+(declare-rule xor1 ((phi1 Bool) (phi2 Bool))
+  :premises ((@cl (xor phi1 phi2)))
+  :conclusion-explicit (@cl phi1 phi2)
+)
+
+;-------------
+; Rule xor2
+;-------------
+
+; rule: xor2
+; premises:
+; - premise Bool: A premise of the form (@cl (xor phi1 phi2)).
+; conclusion: A conclusion of the form (@cl (not phi1) (not phi2)).
+(declare-rule xor2  ((phi1 Bool) (phi2 Bool))
+  :premises ((@cl (xor phi1 phi2)))
+  :conclusion-explicit (@cl (not phi1) (not phi2))
+)
+
+;-------------
+; Rule not_xor1
+;-------------
+
+; rule: not_xor1
+; premises:
+; - premise Bool: A premise of the form (@cl (not (xor phi1 phi2))).
+; conclusion: A conclusion of the form (@cl phi1 (not phi2)).
+(declare-rule not_xor1  ((phi1 Bool) (phi2 Bool))
+  :premises ((@cl (not (xor phi1 phi2))))
+  :conclusion-explicit (@cl phi1 (not phi2))
+)
+
+
+;-------------
+; Rule not_xor2
+;-------------
+
+; rule: not_xor2
+; premises:
+; - premise Bool: A premise of the form (@cl (not (xor phi1 phi2))).
+; conclusion: A conclusion of the form (@cl (not phi1) phi2).
+(declare-rule not_xor2   ((phi1 Bool) (phi2 Bool))
+  :premises ((@cl (not (xor phi1 phi2))))
+  :conclusion-explicit (@cl (not phi1) phi2)
+)
+
+;-------------
+; Rule implies
+;-------------
+; rule: implies
+; premises:
+; - premise Bool: >
+;   Premise of the implies rule. Should be an implication,
+;   built with the => constructor.
+; conclusion-explicit: >
+;   The conclusion should be the characterization (i.e., "not antecedent 
+;   or consequent" form) of the implication given as premise of the rule.
+(declare-rule implies ((phi1 Bool) (phi2 Bool))
+  :premises ((@cl (=> phi1 phi2)))
+  :conclusion-explicit (@cl (not phi1) phi2)
+)
+
+;----------------------
+; Rule not_implies1
+;----------------------
+
+; rule: not_implies1
+; premises:
+; - premise Bool: A premise of the form ((@cl (not (=> phi1 phi2)))).
+; conclusion: >
+;    Conclusion must be just the antecedent phi1 of the implication
+;    in the premise.
+(declare-rule not_implies1 ((phi1 Bool) (phi2 Bool))
+  :premises ((@cl (not (=> phi1 phi2))))
+  :conclusion-explicit (@cl phi1)
+)
+
+;----------------------
+; Rule not_implies2
+;----------------------
+; rule: not_implies2
+; premises:
+; - premise Bool: A premise of the form ((@cl (not (=> phi1 phi2)))).
+; conclusion: >
+;    Conclusion must be just the negated consequent phi2 of the 
+;    implication in the premise.
+(declare-rule not_implies2  ((phi1 Bool) (phi2 Bool))
+  :premises ((@cl (not (=> phi1 phi2))))
+  :conclusion-explicit (@cl (not phi2))
+)
+
+;-------------
+; Rule equiv1
+;-------------
+; rule: equiv1
+; premises:
+; - premise Bool: >
+;   An equivalence between some propositions phi1 and phi2 (phi1 = phi2).
+; conclusion-explicit: >
+;   The conclusion should be the characterization (i.e., "not antecedent 
+;   or consequent" form) of the implication phi1 => phi2.
+(declare-rule equiv1 ((phi1 Bool) (phi2 Bool))
+  :premises ((@cl (= phi1 phi2)))
+  :conclusion-explicit (@cl (not phi1) phi2)
+)
+
+;-------------
+; Rule equiv2
+;-------------
+
+; rule: equiv2
+; premises:
+; - premise Bool: >
+;   An equivalence between some propositions phi1 and phi2 (phi1 = phi2).
+; conclusion-explicit: >
+;   The conclusion should be the characterization (i.e., "not antecedent 
+;   or consequent" form) of the implication phi2 => phi1.
+(declare-rule equiv2  ((phi1 Bool) (phi2 Bool))
+  :premises ((@cl (= phi1 phi2)))
+  :conclusion-explicit (@cl phi1 (not phi2))
+)
+
+
+;--------------------
+; Rule not_equiv1
+;--------------------
+; rule: not_equiv1
+; premises:
+; - premise Bool: >
+;   A negated equivalence between some propositions phi1 and phi2, in clause form:
+;   (@cl (not (phi1 = phi2))).
+; conclusion-explicit: >
+;   The conclusion should be of the form (@cl phi1 phi2).
+(declare-rule not_equiv1 ((phi1 Bool) (phi2 Bool))
+  :premises ((@cl (not (= phi1 phi2))))
+  :conclusion-explicit (@cl phi1 phi2)
+)
+
+;--------------------
+; Rule not_equiv2
+;--------------------
+; rule: not_equiv2
+; premises:
+; - premise Bool: >
+;   A negated equivalence between some propositions phi1 and phi2, in clause form:
+;   (@cl (not (phi1 = phi2))).
+; conclusion-explicit: >
+;   The conclusion should be of the form (@cl (not phi1) (not phi2)).
+(declare-rule not_equiv2 ((phi1 Bool) (phi2 Bool))
+  :premises ((@cl (not (= phi1 phi2))))
+  :conclusion-explicit (@cl (not phi1) (not phi2))
+)
+
+;-------------------
+; Rule bfun_elim
+;-------------------
+
+; program: $extract_bool_variables
+; args:
+; - vars @VarList: A list of binding occurrences of variables.
+; return: >
+;   Returns a @VarList containing only those variables of type Bool,
+;   in the same order as that of their binding occurrences. 
+(program $extract_bool_variables ((A Type) (var A) (vars @VarList :list))
+         :signature (@VarList) @VarList
+         (
+          (
+           ($extract_bool_variables (@varlist var vars))
+
+           (eo::ite ($eo_is_eq (eo::typeof var) Bool)
+
+                    ($f_list_cons @varlist 
+                                  var 
+                                  ($extract_bool_variables vars))
+
+                    ($extract_bool_variables vars))
+           )
+
+          (
+           ($extract_bool_variables @varlist.nil)
+
+           @varlist.nil
+           )
+          )
+         )
+
+; program: bit_to_boolean
+; args:
+; - b A: An arbitrary natural number in binary (natural codification)
+; - pos Int: The digit of `b` that we want to convert.
+; return: Boolean representation of digit `pos` from b.
+(program $bit_to_boolean ((A Type) (b A) (pos Int))
+         :signature (A Int) @VarList
+         (
+          (
+           ($bit_to_boolean b pos)
+
+           (eo::ite ($eo_is_eq (eo::extract b pos pos) #b0)
+
+                    false
+
+                    ; { not ($eo_is_eq (eo::extract b pos pos) #b0) }
+                    true)
+           )
+          )
+         )
+
+; program: $binary_interval_to_boolean_varlist
+; args:
+; - b Int: An arbitrary natural number in binary (natural codification)
+; - limit Int: The last position from `b` that we want to convert.
+; - pos Int: Initial position from where to convert.
+; return: >
+;   A @VarList containing the representation of `b`[limit:pos], using boolean 
+;   values for each binary digit in `b`, but in inverse order: 
+;   least-significant bit first, most-significant bit last. 
+(program $binary_interval_to_boolean_varlist ((A Type) (b A) (limit Int) (pos Int))
+         :signature (A Int Int) @VarList
+         (
+          (
+           ($binary_interval_to_boolean_varlist b limit limit)
+           
+           (@varlist ($bit_to_boolean b limit))
+           )
+
+          (
+           ($binary_interval_to_boolean_varlist b limit pos)
+
+           ($f_list_cons @varlist 
+                         ($bit_to_boolean b pos)
+                         ($binary_interval_to_boolean_varlist b limit (eo::add pos 1)))
+           )
+          )
+         )
+
+; program: $binary_to_boolean_varlist
+; args:
+; - b Int: An arbitrary natural number in binary (natural codification)
+; - width Int: Width of binary `b`.
+; return: >
+;   A @VarList containing the representation of `b`, using boolean 
+;   values for each binary digit in `b`, but in inverse order: 
+;   least-significant bit first, most-significant bit last. 
+(program $binary_to_boolean_varlist ((A Type) (b A) (width Int))
+         :signature (A Int) @VarList
+         (
+          (
+           ($binary_to_boolean_varlist b width)
+
+           ($binary_interval_to_boolean_varlist b (eo::add width (eo::neg 1)) 0)
+           )
+          )
+         )
+
+; program: $natural_to_binary_varlist_form
+; args:
+; - n Int: An arbitrary natural number.
+; - width Int: >
+;   A natural number representing the width to be used for the binary representation.
+; return: >
+;   A @VarList containing the binary representation of `n`, in natural codification,
+;   but in inverse order: least-significant bit first, and so on.
+(program $natural_to_binary_varlist_form ((n Int) (width Int))
+         :signature (Int Int) @VarList
+
+         (
+          (
+           ($natural_to_binary_varlist_form n width)
+
+           ($binary_to_boolean_varlist (eo::to_bin width n) width)
+           )
+          )
+         )
+
+; program: $build_boolean_interval_varlist_form
+; args:
+; - n Int: Natural number from which begin the interval.
+; - limit Int: Open upper limit of the interval.
+; - width Int: Width of the binary representation.
+; return: >
+;   A @VarList containing the binary representation, with width `width` of 
+;   each natural number from `n` up to `limit`-1 (inclusive), in natural 
+;   codification, but in inverse order: least-significant bit first, and so on.
+; note: PRE : { `n` < `limit` && log limit <= width }
+(program $build_boolean_interval_varlist_form ((limit Int) (n Int) (width Int))
+         :signature (Int Int Int) @VarList
+         (
+          (
+           ($build_boolean_interval_varlist_form limit limit width)
+
+           @varlist.nil
+           )
+
+          (; { limit != n }
+           ; { n < limit, by pre }
+           ($build_boolean_interval_varlist_form n limit width)
+
+           ($f_list_cons @varlist 
+                         ($natural_to_binary_varlist_form n width)
+                         ($build_boolean_interval_varlist_form (eo::add n 1) 
+                                                                      limit 
+                                                                      width))
+           )
+          )
+         )
+
+; program: $instantiate_specific_bool_variables
+; args:
+; - formula Bool: An arbitrary formula
+; - substitutes @VarList: >
+;   A @VarList of @VarLists of pairs of the form (variable, boolean).
+; - quantifier (-> @VarList Bool Bool): >
+;   Quantifier to be considered for the instantiation.
+; return: >
+;   A conjunction or disjunction (depending on `quantifier`) of instantiations 
+;   of `formula`, each instantiation being the result of the simultaneous 
+;   substitution of the variables by their corresponding boolean values, as 
+;   indicated by `substitutes`.
+(program $instantiate_specific_bool_variables ((substitutes @VarList) (tail @VarList :list)
+                                      (body Bool))
+         :signature (Bool @VarList (-> @VarList Bool Bool)) Bool         
+         (
+          (
+           ($instantiate_specific_bool_variables body (@varlist substitutes tail) forall)
+
+           ($f_list_cons and 
+                         ($substitution_apply body ($substitution_build_from_pairs substitutes))
+                         ($instantiate_specific_bool_variables body tail forall))
+           )
+
+          (
+           ($instantiate_specific_bool_variables body @varlist.nil forall)
+
+           true
+           )
+
+          (
+           ($instantiate_specific_bool_variables body (@varlist substitutes tail) exists)
+
+           ($f_list_cons or 
+                         ($substitution_apply body ($substitution_build_from_pairs substitutes))
+                         ($instantiate_specific_bool_variables body tail exists))
+           )
+
+          (
+           ($instantiate_specific_bool_variables body @varlist.nil exists)
+
+           false
+           )
+          )
+         )
+
+; program: $instantiate_bool_variables
+; args:
+; - formula Bool: A quantified formula.
+; - boolean_vars @VarList: >
+;   A list of variables of type Bool that are going to be instantiated.
+; return: >
+;   A formula identical to `formula`, but whose body is a conjunction or
+;   disjunction of instantiated versions of the original body of `formula`,
+;   each instantiation being that of a boolean variable from `boolean_vars`.
+;   Binding occurrences of instantiated variables are removed.
+(program $instantiate_bool_variables ((quantifier (-> @VarList Bool Bool))
+                                      (varlist @VarList) (body Bool))
+         :signature (Bool) @VarList
+         (
+          (
+           ($instantiate_bool_variables (quantifier varlist body))
+
+           (eo::define
+
+            (
+             (bool_vars ($extract_bool_variables varlist))
+             )
+
+            (eo::define
+
+             (
+              (varlist_without_bool_vars ($f_list_filter @varlist 
+                                                         @varlist.nil 
+                                                         varlist 
+                                                         ($varlist_flag_members varlist 
+                                                                                bool_vars)))
+
+              (quantity_bool_vars (eo::add ($f_list_length @varlist bool_vars)
+                                           (eo::neg 1)))
+              )
+
+             (eo::define
+
+             (
+              (exp ($int_exp 2 quantity_bool_vars))
+              )
+
+             (eo::define
+              (
+               (boolean_sequence
+                ($build_boolean_interval_varlist_form 0 exp quantity_bool_vars))
+
+               (bool_vars_repeated
+                ($f_list_repeat_elem @varlist bool_vars @varlist.nil exp))
+               )
+
+              (eo::define
+               (
+                (subst_pairs 
+                 ($f_list_map_zip @varlist 
+                                  @varlist.nil 
+                                  bool_vars_repeated 
+                                  boolean_sequence 
+                                  @pair))
+                )
+
+               (eo::define
+
+                (
+                 (instantiated_body ($instantiate_specific_bool_variables body 
+                                                                          subst_pairs 
+                                                                          quantifier))
+                 )
+
+                
+                (eo::ite ($eo_is_eq @varlist.nil varlist_without_bool_vars)
+
+                         instantiated_body
+
+                         ; { not ($eo_is_eq @varlist.nil varlist_without_bool_vars) }
+                         (quantifier varlist_without_bool_vars instantiated_body))))))))
+           )
+          )
+         )
+
+; program: $extract_function_applied
+; args:
+; - term A: Term representing the evaluation of some function over parameters.
+; return: The function that is being applied in `term`.
+(program $extract_function_applied ((A Type) (B Type) (f (-> B A)) (param B)
+                                    (atom A))
+         :signature (A) A
+         (
+          (
+           ($extract_function_applied (f param))
+
+           ($extract_function_applied f)
+           )
+
+          (
+           ($extract_function_applied atom)
+
+           atom
+           )
+          )
+         )
+
+; program: $next_parameter
+; args: 
+; - current_app (-> A B): A term representing the partial application of some function.
+; - fully_app B: >
+;   A term that represents the application of `current_app`, over one or more
+;   parameters.
+; return: >
+;   A term "param", where param is the next parameter
+;   over which `current_app` is applied to, within `fully_app`.
+; note: PRE : { `current_app` is a proper subterm of `fully_app` }
+(program $next_parameter ((A Type) (B Type) (C Type) (D Type)
+                                    (f (-> A B)) (a A)
+                                    (g (-> C B)) (b C))
+         :signature ((-> A B) B) B
+         (
+          (
+           ($next_parameter f (f a))
+
+           a
+           )
+
+          (; TODO: problems typing this...
+           ($next_parameter f (g b))
+
+           ($next_parameter f g)
+           )
+          )
+         )
+
+; program: $substitute_in_function_application_rec
+; args:
+; - partial_app (-> A A): >
+;   Term containing the already traversed prefix of `f_totally_applied`, where
+;   the desired substitutions are already applied.
+; - f (-> A A A): >
+;   Prefix of the function application over which we want to apply the 
+;   substitution (that is, we want to substitute `a` by `substitute`, in (`f` `a`)).
+; - a A: Term representing the parameter of `f` that we want to substitute.
+; - substitute A: Term to substitute `a`.
+; - f_totally_applied A: >
+;   Original term representing the total evaluation of a function, within which
+;   we want to substitute `a` by `substitute`.
+; - prefix_f_totally_applied A: > 
+;   A prefix of `f_totally_applied`, used to determine when we finished 
+;   traversing the whole `f_totally_applied` term.
+; return: >
+;   A term like `f_totally_applied`, but where parameter `a` has been substituted
+;   by `substitute`.
+; note: >
+;   PRE : { `prefix_f_totally_applied` is a prefix of `f_totally_applied` &
+;           `prefix_f_totally_applied` is a function application over the
+;           same quantity of parameters as in `partial_app`}
+(program $substitute_in_function_application_rec ((A Type)
+                                                  (f (-> A A A))
+                                                  (g (-> A A))
+                                                  (h (-> A A))
+                                                  (a A) (b A) (i A) (substitute A)
+                                                  (f_totally_applied A))
+         ; TODO: assign a proper type to this...
+         :signature ((-> A A) (-> A A A) A A (-> A A) A) A
+         (
+          (
+           ($substitute_in_function_application_rec (f a) f a substitute
+                                                    f_totally_applied
+                                                    f_totally_applied)
+
+           ; Either, application of a function over a single parameter,
+           ; or the substitution needed to be performed over the last
+           ; parameter, among 2 or more parameters.
+           (f substitute)
+           )
+
+          (; { f != (g b) }
+           ($substitute_in_function_application_rec f g b substitute
+                                                    f_totally_applied
+                                                    f_totally_applied)
+
+           ; We finished traversing `f_totally_applied`. `f` contains
+           ; the desired substitution.
+           f
+           )
+
+          (
+           ($substitute_in_function_application_rec (f a) f a substitute
+                                                    f_totally_applied (g a))
+
+           (eo::define
+
+            (
+             (next_param ($next_parameter (g a) f_totally_applied))
+             )
+
+            ($substitute_in_function_application_rec 
+
+             (f substitute next_param)
+
+             f
+
+             a 
+
+             substitute
+
+             f_totally_applied
+             
+             (g a next_param))
+            )
+           )
+
+          (; { f != g }
+           ($substitute_in_function_application_rec (f i) g b substitute 
+                                                    f_totally_applied (h i))
+
+           (eo::define
+
+            (
+             (next_param ($next_parameter (h i) f_totally_applied))
+             )
+
+            ($substitute_in_function_application_rec 
+
+             (f i next_param)
+
+             g
+
+             b 
+
+             substitute
+
+             f_totally_applied
+
+             (h i next_param))
+            )
+           )
+          )
+         )
+
+; program: $substitute_in_function_application
+; args:
+; - f (-> A A A): >
+;   Prefix of the function application over which we want to apply the 
+;   substitution (that is, we want to substitute `a` by `substitute`, in (`f` `a`)).
+; - a A: Term representing the parameter of `f` that we want to substitute.
+; - substitute A: Term to substitute `a`.
+; - f_totally_applied A: >
+;   Original term representing the total evaluation of a function, within which
+;   we want to substitute parameter `a` by `substitute`.
+; return: >
+;   A term like `f_totally_applied`, but where parameter `a` has been substituted
+;   by `substitute`.
+(program $substitute_in_function_application ((A Type)
+                                              (f (-> A A A))
+                                              (a A) (substitute A)
+                                              (f_totally_applied A))
+
+                                        ; TODO: assign a proper type to this...
+         :signature ((-> A A) A A A) A
+         (
+          (
+           ($substitute_in_function_application f a substitute
+                                                f_totally_applied)
+
+           ($substitute_in_function_application_rec (f a) f a substitute
+                                                    f_totally_applied (f a))
+           )
+          )
+         )
+
+; program: $traverse_function_application
+; args:
+; - current_app (-> A B): 
+; - next_app B:
+; - total_app C: The original function application totally evaluated.
+; return:
+; note : >
+;   PRE : { `current_app` is a proper subterm of `next_app` & 
+;           `next_app` is a subterm of `total_app`}
+(program $traverse_function_application ((A Type) (B Type) (C Type)
+                                         (f (-> A B)) (a A) (f_totally_applied C))
+         :signature ((-> A B) B C) C
+         (
+          (
+           ($traverse_function_application f (f a) f_totally_applied)
+
+           ; "If the argument is already the constant ⊤or ⊥, it is ignored".
+           (eo::ite (eo::and ($eo_is_eq (eo::typeof a) Bool)
+                             (eo::not ($eo_is_eq a true))
+                             (eo::not ($eo_is_eq a false)))
+
+                    (eo::define
+
+                     (
+                      (if_branch
+                       ($substitute_in_function_application f a true f_totally_applied))
+
+                      (else_branch
+                       ($substitute_in_function_application f a false f_totally_applied))
+                      )
+
+                     (eo::ite ($eo_is_eq (f a) f_totally_applied)
+                              
+                              ; We finish the traversing.
+                              (ite a if_branch else_branch)
+                              
+                              ; { not ($eo_is_eq (f a) f_totally_applied) }
+                              ; There are more parameters to consider.
+                              (eo::define
+
+                               (
+                                (next_parameter
+                                 ($next_parameter (f a) f_totally_applied))
+                                )
+
+                               (ite a
+
+                                    ($traverse_function_application (f true) 
+                                                                    (f true next_parameter)
+                                                                    if_branch)
+
+                                    ($traverse_function_application (f false)
+                                                                    (f false next_parameter)
+                                                                    else_branch)))))
+
+                    ; { not ($eo_is_eq (eo::typeof a) Bool) or `a` is a boolean
+                    ;   constant }
+                    (eo::ite ($eo_is_eq (f a) f_totally_applied)
+                             
+                             ; We finish the traversing.
+                             f_totally_applied
+                             
+                             ; { not ($eo_is_eq (f a) f_totally_applied) }
+                             ; There are more parameters to consider
+                             ($traverse_function_application (f a) 
+
+                                                             (f a 
+                                                             ($next_parameter 
+                                                              (f a)
+                                                              f_totally_applied))
+
+                                                             f_totally_applied)))
+           )
+          )
+         )
+
+; program: $instantiate_bool_parameters
+; args:
+; - formula Bool: A quantified formula.
+; - boolean_vars @VarList: >
+;   A list of variables of type Bool that are going to be instantiated.
+; return: >
+;   A formula identical to `formula`, but whose body is a conjunction or
+;   disjunction of instantiated versions of the original body of `formula`,
+;   each instantiation being that of a boolean variable from `boolean_vars`.
+;   Binding occurrences of instantiated variables are removed.
+(program $instantiate_bool_parameters ((A Type) (f_totally_applied A))
+         :signature (A) A
+         (
+          (
+           ($instantiate_bool_parameters f_totally_applied)
+
+           (eo::define
+
+            (
+             (function_applied ($extract_function_applied f_totally_applied))
+             )
+            
+            (eo::define
+             (
+              (first_parameter ($next_parameter function_applied f_totally_applied))
+              )
+
+             ($traverse_function_application function_applied
+                                             (function_applied first_parameter)
+                                             f_totally_applied)))
+           )
+          )
+         )
+
+; program: $instantiate_bool_terms_rec
+; args:
+; - formula Bool: An arbitrary formula.
+; return: >
+;   A formula built from `formula`, where: 
+;   - If `formula` is a quantification, its body is a conjunction or
+;   disjunction of instantiated versions of the original body of `formula`,
+;   each instantiation being that of a boolean variable from `boolean_vars`.
+;   Binding occurrences of instantiated variables are removed.
+;   - Besides the previous, if some term is the application of some arbitrary
+;   function with boolean parameter, each boolean parameter is function expanded 
+;   by introducing appropriate if-then-else terms (using `ite`).
+(program $instantiate_bool_terms_rec ((A Type)
+                                      (varlist @VarList) 
+                                      (body Bool)
+                                      (f (-> A A)) (param A)
+                                      (lhs Bool) (rhs Bool :list)
+                                      (formula Bool))
+         :signature (Bool) Bool
+         (
+          (
+           ($instantiate_bool_terms_rec (forall varlist body))
+
+           (eo::define
+
+            (
+             (instantiated_body ($instantiate_bool_terms_rec body))
+             )
+
+            ($instantiate_bool_variables (forall varlist body)))
+            )
+
+          (
+           ($instantiate_bool_terms_rec (exists varlist body))
+
+           (eo::define
+
+            (
+             (instantiated_body ($instantiate_bool_terms_rec body))
+             )
+
+            ($instantiate_bool_variables (exists varlist body)))
+            )
+
+          (
+           ($instantiate_bool_terms_rec (and lhs rhs))
+
+           (eo::define
+
+            (
+             (instantiated_lhs ($instantiate_bool_terms_rec lhs))
+
+             (instantiated_rhs ($instantiate_bool_terms_rec rhs))
+             )
+
+            ($f_list_cons and instantiated_lhs instantiated_rhs))
+            )
+
+          (
+           ($instantiate_bool_terms_rec (or lhs rhs))
+
+           (eo::define
+
+            (
+             (instantiated_lhs ($instantiate_bool_terms_rec lhs))
+
+             (instantiated_rhs ($instantiate_bool_terms_rec rhs))
+             )
+
+            ($f_list_cons or instantiated_lhs instantiated_rhs))
+            )
+
+          (
+           ($instantiate_bool_terms_rec (xor lhs rhs))
+
+           (eo::define
+
+            (
+             (instantiated_lhs ($instantiate_bool_terms_rec lhs))
+
+             (instantiated_rhs ($instantiate_bool_terms_rec rhs))
+             )
+
+            (xor instantiated_lhs instantiated_rhs))
+            )
+
+          (
+           ($instantiate_bool_terms_rec (=> lhs rhs))
+
+           (eo::define
+
+            (
+             (instantiated_lhs ($instantiate_bool_terms_rec lhs))
+
+             (instantiated_rhs ($instantiate_bool_terms_rec rhs))
+             )
+
+            (=> instantiated_lhs instantiated_rhs))
+            )
+
+          (
+           ($instantiate_bool_terms_rec (not formula))
+
+           (eo::define
+
+            (
+             (instantiated_formula ($instantiate_bool_terms_rec formula))
+             )
+
+            (not instantiated_formula))
+            )
+
+          (
+           ($instantiate_bool_terms_rec (= lhs rhs))
+
+           (eo::define
+
+            (
+             (instantiated_lhs ($instantiate_bool_terms_rec lhs))
+
+             (instantiated_rhs ($instantiate_bool_terms_rec rhs))
+             )
+
+            (= instantiated_lhs instantiated_rhs))
+            )
+
+          (
+           ($instantiate_bool_terms_rec (f param))
+
+           ($instantiate_bool_parameters (f param))
+           )
+          
+          (; { `formula` is just an atom }
+           ($instantiate_bool_terms_rec formula)
+
+           formula
+           )
+          )
+         )
+
+; program: $check_bfun_elim
+; args:
+; - premise Bool: Premise passed to `bfun_elim`.
+; - conclusion Bool: Conclusion passed to `bfun_elim`.
+; return: >
+;   A boolean indicating if `conclusion` results from 
+;   applying the following operations, over `premise`:
+;   - Expansion of quantified variables of type Bool.
+;   - Expansion of function arguments of boolean types, 
+;     by introducing appropriate if-then-else terms.
+(program $check_bfun_elim ((premise Bool) (conclusion Bool))
+  :signature (Bool Bool) Bool
+  (
+   (
+    ($check_bfun_elim (@cl premise) (@cl conclusion)) 
+
+    ($eo_is_eq ($instantiate_bool_terms_rec premise) conclusion)
+    )
+   )
+  )
+
+; rule: bfun_elim
+; premises:
+; - premise Bool: A premise of the form (@cl psi), for some formula psi.
+; requires: >
+;   The conclusion should result from applying the following operations over 
+;   the premise:
+;   - Expansion of quantified variables of type Bool.
+;   - Expansion of function arguments of boolean types, by introducing 
+;     appropriate if-then-else terms.
+; conclusion-explicit: >
+;   A conclusion of the form (@cl phi), for some formula phi that satisfies
+;   the previous side-condition.
+(declare-rule bfun_elim ((psi Bool) (phi Bool))
+  :premises (psi)
+  :requires ((($check_bfun_elim psi (@cl phi)) true))
+  :conclusion-explicit (@cl phi)
+)
+
+;-------------
+; Rule and_pos
+;-------------
+
+; program: check_and_pos
+; args:
+; - pos Int: Position of the selected conjunct. 
+;            0 <= pos <= number of conjuncts - 1.
+; - conclusion Bool: >
+;   The conclusion clause provided to the rule. It must be always built with
+;   @cl.
+; return: >
+;   A boolean indicating if `conclusion` satisfies the property of being
+;   an instance of the weakening rule for implication, where the antecedent is 
+;   a conjunction.
+(program $check_and_pos ((pos Int) (antecedent Bool) (consequent Bool))
+  :signature (Int Bool) Bool
+  (
+   (
+    ($check_and_pos pos (@cl (not antecedent) consequent))
+
+    ($cl_equal ($f_list_index and antecedent pos) consequent)
+    )
+
+   ; To simplify the use of the checker
+   (
+    ($check_and_pos pos (@cl consequent (not antecedent)))
+
+    ($cl_equal ($f_list_index and antecedent pos) consequent)
+    )
+  )
+)
+
+;TRUST
+; rule: and_pos
+; args:
+; - pos Int: Position of the conjunct selected in the weakening. 
+;            0 <= pos <= number of conjuncts - 1
+; requires: >
+;   The conclusion should be the characterization (i.e., "not antecedent 
+;   or consequent" form) of an instance of the weakening rule for implication,
+;   where the antecedent is a conjunction.
+; conclusion-explicit: >
+;   A conclusion of the form described by the previous side-condition.
+(declare-rule and_pos ((pos Int) (conclusion Bool))
+  :args (pos)
+  :requires ((($check_and_pos pos conclusion) true))
+  :conclusion-explicit conclusion
+)
+
+;-------------
+; Rule and_neg
+;-------------
+
+; program: check_and_neg
+; args:
+; - conclusion Bool: >
+;   This should be the conclusion to the application of and_neg. It must be
+;   a clause built with @cl.
+; return: >
+;   A boolean indicating if `conclusion` is an instance of excluded middle,
+;   for a proposition of the form phi_1 /\ ... /\ phi_n.
+(program $check_and_neg ((left_disjunct Bool) (right_disjunct Bool :list))
+  :signature (Bool) Bool
+  (
+   (
+    ($check_and_neg (@cl left_disjunct right_disjunct))
+
+    ; We add a false to the lhs, and (not true) to rhs, to deal with the
+    ; expansion of applications of right-assoc-nil operators.
+    ($cl_equal ($f_list_cons @cl false ($de_morgan_not_and left_disjunct))
+               ($f_list_cons @cl (not true) right_disjunct))
+    )
+  )
+)
+
+; rule: and_neg
+; requires: >
+;   The conclusion should be an instance of excluded middle,
+;   for a proposition of the form phi_1 /\ ... /\ phi_n.
+; conclusion-explicit: >
+;   A conclusion of the form described by the previous side-condition.
+(declare-rule and_neg ((left_disjunct Bool) (right_disjunct Bool :list))
+  :requires ((($check_and_neg (@cl left_disjunct right_disjunct)) true))
+  :conclusion-explicit (@cl left_disjunct right_disjunct)
+)
+
+;-------------
+; Rule or_pos
+;-------------
+
+; program: check_or_pos
+; args:
+; - conclusion Bool: >
+;   Conclusion given to rule or_pos. It is expected to be built with @cl.
+; return: >
+;   A boolean indicating if conclusion is of the form
+;   ¬(𝜑1 ∨⋯∨𝜑𝑛), 𝜑1, … , 𝜑𝑛, for some given propositions 𝜑1, ..., 𝜑𝑛.
+(program $check_or_pos ((left_disjunct Bool) (right_disjunct Bool :list))
+  :signature (Bool) Bool
+  (
+   (
+    ($check_or_pos (@cl (not left_disjunct) right_disjunct))
+
+    ($cl_equal ($convert_or_to_cl left_disjunct)
+              (@cl right_disjunct))
+    )
+  )
+)
+
+; rule: or_pos
+; requires: >
+;   For the conclusion to be of the form
+;   ¬(𝜑1 ∨⋯∨𝜑𝑛), 𝜑1, … , 𝜑𝑛, for some given propositions 𝜑1, ..., 𝜑𝑛.
+; conclusion-explicit: >
+;   A conclusion of the form described by the previous side-condition.
+(declare-rule or_pos ((conclusion Bool))
+  :requires ((($check_or_pos conclusion) true))
+  :conclusion-explicit conclusion
+)
+
+;-------------
+; Rule or_neg
+;-------------
+
+; program: check_or_neg
+; args:
+; - pos Int: Position of the selected disjunct.
+;            0 <= pos <= number of disjuncts - 1.
+; - conclusion Bool: >
+;   The conclusion clause provided to the rule. It must be always built with
+;   @cl.
+; return: >
+;   A boolean indicating if `conclusion` satisfies the property of being
+;   an instance of the weakening rule for implication, with the form 
+;   not phi_k, phi_0 \/ ... \/ phi_n, with 0 <= k <= n.
+(program $check_or_neg ((index Int) (left_disjunct Bool) (right_disjunct Bool))
+  :signature (Int Bool) Bool
+  (
+   (
+    ($check_or_neg index (@cl left_disjunct (not right_disjunct)))
+    
+    ($prop_syntax_eq ($f_list_index or left_disjunct index) right_disjunct)
+    )
+   
+   (
+    ($check_or_neg index (@cl (not left_disjunct) right_disjunct))
+    
+    ($prop_syntax_eq right_disjunct ($f_list_index or left_disjunct index))
+    )
+  )
+)
+
+; rule: or_neg
+; args:
+; - index Int: The index of the disjunct which is weakened in the conclusion.
+; requires: >
+;   Th conclusion must be an instance of the weakening rule for implication, 
+;   with the form not phi_k, phi_0 \/ ... \/ phi_n, with 0 <= k <= n.
+; conclusion-explicit: >
+;   A conclusion of the form described by the previous side-condition.
+(declare-rule or_neg ((index Int) (conclusion Bool))
+  :args (index)
+  :requires ((($check_or_neg index conclusion) true))
+  :conclusion-explicit conclusion
+)
+
+;-------------
+; Rule implies_pos
+;-------------
+; rule: implies_pos
+; conclusion-explicit: >
+;   The conclusion should be an instance of excluded middle,
+;   for a proposition of the form (=> phi_1 phi_2).
+(declare-rule implies_pos ((phi1 Bool) (phi2 Bool))
+  :conclusion-explicit (@cl (not (=> phi1 phi2)) (not phi1) phi2)
+)
+
+;-------------
+; Rule implies_neg1
+;-------------
+
+; rule: implies_neg1
+; conclusion-explicit: >
+;   The conclusion should be of the form (@cl (=>phi1 phi2) phi1),
+;   for given formulas phi1 and phi2.
+(declare-rule implies_neg1  ((phi1 Bool) (phi2 Bool))
+  :conclusion-explicit (@cl (=> phi1 phi2) phi1)
+)
+
+;-------------
+; Rule implies_neg2
+;-------------
+; rule: implies_neg2
+; conclusion-explicit: >
+;   The conclusion should be of the form (@cl (=>phi1 phi2) (not phi2)),
+;   for given formulas phi1 and phi2.
+(declare-rule implies_neg2 ((phi1 Bool) (phi2 Bool))
+  :conclusion-explicit (@cl (=> phi1 phi2) (not phi2))
+)
+
+;-------------
+; Rule equiv_pos1
+;-------------
+; rule: equiv_pos1
+; conclusion-explicit: >
+;   Conclusion should be equal to the clause 
+;   (@cl (not (= phi_1 phi2)) phi_1 (not phi_2)), for some props. phi_1 and phi_2.
+(declare-rule equiv_pos1 ((phi1 Bool) (phi2 Bool))
+  :conclusion-explicit (@cl (not (= phi1 phi2)) phi1 (not phi2))
+)
+
+;-------------
+; Rule equiv_pos2
+;-------------
+; rule: equiv_pos2
+; conclusion-explicit: >
+;   Conclusion should be equal to the clause 
+;   (@cl (not (= phi_1 phi2)) (not phi_1) phi_2), for some props. phi_1 and phi_2.
+(declare-rule equiv_pos2 ((phi1 Bool) (phi2 Bool)) 
+  :conclusion-explicit (@cl (not (= phi1 phi2)) (not phi1) phi2)
+)
+
+;-------------
+; Rule ite1
+;-------------
+; rule: ite1
+; premises: >
+;   A premise of the form (@cl (ite phi1 phi2 phi3)). Note that phi2 and phi3 must be
+;   of boolean type.
+; conclusion-explicit: >
+;   Conclusion should be of the form (@cl phi_1 phi_3).
+(declare-rule ite1 ((phi1 Bool) (phi2 Bool) (phi3 Bool))
+  :premises ((@cl (ite phi1 phi2 phi3)))
+  :conclusion-explicit (@cl phi1 phi3)
+)
+
+; rule: ite2
+; premises: >
+;   A premise of the form (@cl (ite phi1 phi2 phi3)). Note that phi2 and phi3 must be
+;   of boolean type.
+; conclusion-explicit: >
+;   Conclusion should be of the form (@cl (not phi_1) phi_2).
+(declare-rule ite2 ((phi1 Bool) (phi2 Bool) (phi3 Bool))
+  :premises ((@cl (ite phi1 phi2 phi3)))
+  :conclusion-explicit (@cl (not phi1) phi2)
+)
+
+;-------------
+; Rule not_ite1
+;-------------
+; rule: not_ite1
+; premises: >
+;   A premise of the form (@cl (not (ite phi1 phi2 phi3))). Note that phi2 and phi3 must be
+;   of boolean type.
+; conclusion-explicit: >
+;   Conclusion should be of the form (@cl phi_1 (not phi_3)).
+(declare-rule not_ite1  ((phi1 Bool) (phi2 Bool) (phi3 Bool))
+  :premises ((@cl (not (ite phi1 phi2 phi3))))
+  :conclusion-explicit (@cl phi1 (not phi3))
+)
+
+;-------------
+; Rule not_ite2
+;-------------
+; rule: not_ite2
+; premises: >
+;   A premise of the form (@cl (not (ite phi1 phi2 phi3))). Note that phi2 and phi3 must be
+;   of boolean type.
+; conclusion-explicit: >
+;   Conclusion should be of the form (@cl (not phi_1) (not phi_2)).
+(declare-rule not_ite2  ((phi1 Bool) (phi2 Bool) (phi3 Bool))
+  :premises ((@cl (not (ite phi1 phi2 phi3))))
+  :conclusion-explicit (@cl (not phi1) (not phi2))
+
+)
+
+;-------------
+; Rule implies_simplify
+;-------------
+
+; program: check_implies_simplify
+; args:
+; - conclusion Bool: Conclusion provided to rule implies_simplify.
+; return: >
+;   A boolean indicating if conclusion has the form 𝜑1 → 𝜑2 ≈ 𝜓, where 𝜓
+;   results from the application of equivalence preserving transformations, 
+;   as specified in "rewrite_implication".
+(program $check_implies_simplify ((phi_1 Bool) (phi_2 Bool) (psy Bool))
+  :signature (Bool) Bool
+  (
+   (
+    ($check_implies_simplify (@cl (= (=> phi_1 phi_2) psy)))
+
+                                        ; TODO: use proper comparison for props
+    ($cl_equal (@cl ($rewrite_implication (=> phi_1 phi_2)))
+               (@cl psy))
+    )
+   )
+)
+
+; rule: implies_simplify
+; requires: >
+;   For the conclusion to be of the form 𝜑1 → 𝜑2 ≈ 𝜓, where 𝜓 
+;   results from the application of equivalence
+;   preserving transformations, as specified in "rewrite_implication".
+; conclusion-explicit: >
+;   A conclusion satisfying the previous side-condition.
+(declare-rule implies_simplify ((conclusion Bool))
+  :requires ((($check_implies_simplify conclusion) true))
+  :conclusion-explicit conclusion
+)
+
+;-------------
+; Rule equiv_simplify
+;-------------
+; program: check_equiv_simplify
+; args:
+; - conclusion Bool: Conclusion provided to rule equiv_simplify.
+; return: >
+;   A boolean indicating if conclusion has the form (𝜑1 ≈ 𝜑2) ≈ 𝜓, where 𝜓 
+;   results from the application of equivalence preserving transformations, 
+;   as specified in "rewrite_equivalence".
+(program $check_equiv_simplify ((phi_1 Bool) (phi_2 Bool) (psy Bool))
+  :signature (Bool) Bool
+  (
+   (
+    ($check_equiv_simplify (@cl (= (= phi_1 phi_2) psy)))
+    
+                                        ; TODO: use proper comparison for props
+    ($cl_equal (@cl ($rewrite_equivalence (= phi_1 phi_2))) (@cl psy))
+    )
+   )
+)
+
+; rule: equiv_simplify
+; requires: >
+;   For the conclusion to be of the form 𝜑1 → 𝜑2 ≈ 𝜓, where 𝜓
+;   results from the application of equivalence
+;   preserving transformations, as specified in "rewrite_equivalence".
+; conclusion-explicit: >
+;   A conclusion satisfying the previous side-condition
+(declare-rule equiv_simplify ((conclusion Bool))
+  :requires ((($check_equiv_simplify conclusion) true))
+  :conclusion-explicit conclusion
+)
+
+
+;------------------
+; Rule onepoint
+;------------------
+
+; program: $flag_non_fixed_variables
+; args:
+; - $flag_non_fixed_variables nil:
+; return:
+(program $flag_non_fixed_variables ((A Type) (var A) (tail @VarList :list)
+                                    (fixed_vars @VarList))
+
+         :signature (@VarList @VarList) @VarList
+
+         (
+          (
+           ($flag_non_fixed_variables (@varlist var tail) fixed_vars)
+
+           (eo::ite ($f_list_contains_elem @varlist var fixed_vars)
+                    ; We should remove the variable.
+                    ($f_list_cons @varlist 
+                                  true
+                                  ($flag_non_fixed_variables tail fixed_vars))
+
+                    ($f_list_cons @varlist 
+                                  false
+                                  ($flag_non_fixed_variables tail fixed_vars)))
+           )
+
+          (
+           ($flag_non_fixed_variables @varlist.nil fixed_vars)
+
+           @varlist.nil
+          )
+         )
+)
+
+; program: $check_onepoint
+; args:
+; - conclusion Bool:
+; return:
+(program $check_onepoint ((old_context Bool) (new_context Bool)
+                          (lhs_vars @VarList) (rhs_vars @VarList)
+                          (lhs_body Bool) (rhs_body Bool)
+                          (quantifier (-> @VarList Bool Bool)))
+
+  :signature (Bool Bool Bool Bool) Bool
+  (
+   (
+    ($check_onepoint old_context new_context 
+                     (quantifier lhs_vars lhs_body) 
+                     (quantifier rhs_vars rhs_body))
+
+    (eo::and
+     ; rhs_vars is contained in lhs_vars.
+     ($f_list_contains_f_list @varlist rhs_vars lhs_vars)
+
+     ; new_context must be just an extension of old_context.
+     ($context_is_extended new_context old_context)
+
+     ; Every variable in rhs_vars appear fixed in `new_context`.
+     ($context_vars_are_fixed new_context rhs_vars)
+
+     ; The remaining variables should be assigned one "point".
+     ($context_vars_are_defined new_context 
+                                ($f_list_filter @varlist @varlist.nil lhs_vars
+                                                ($flag_non_fixed_variables lhs_vars 
+                                                                           rhs_vars))))
+    )
+   )
+  )
+
+
+; rule: onepoint
+; implements: TODO?
+; premises:
+; - onepoint nil:
+; args:
+; requires:
+; conclusion:
+(declare-rule onepoint ((old_context Bool) (new_context Bool) (lhs Bool) (rhs Bool)
+                        (quantifier (-> @VarList Bool Bool)) (varlist_1 @VarList)
+                        (varlist_2 @VarList))
+
+  :assumption new_context ; Context of the premise, extends `old_context`
+  :premises ((@cl (= lhs rhs)))
+  ; Context that extends `new_context`, and is the context of the conclusion.
+  :args (old_context)
+  :requires ((($check_onepoint old_context new_context
+                               (quantifier varlist_1 lhs) (quantifier varlist_2 rhs))
+              true))
+  :conclusion-explicit (@cl (= (quantifier varlist_1 lhs)
+                               (quantifier varlist_2 rhs)))
+)
+
+;------------------
+; Rule qnt_join
+;------------------
+
+
+; program: $check_qnt_join
+; args:
+; - varlist_1 @VarList: >
+;   List of quantified variables from the first quantification in the left-hand
+;   side of the conclusion passed to qnt_join.
+; - varlist_2 @VarList: >
+;   List of quantified variables from the nested quantification in the left-hand
+;   side of the conclusion passed to qnt_join.
+; - varlist_3 @VarList: >
+;   List of quantified variables from the right-hand side of the conclusion 
+;   passed to qnt_join.
+; return: >
+;   A boolean indicating if variables in `varlist_3` can be obtained by removing
+;   duplicates from varlist_1 ++ varlist_2.
+(program $check_qnt_join ((varlist_1 @VarList) (varlist_2 @VarList) (varlist_3 @VarList))
+  :signature (@VarList @VarList @VarList) Bool
+  (
+   (
+    ($check_qnt_join varlist_1 varlist_2 varlist_3)
+
+    ($f_list_equal_mod_commut_and_length 
+     @varlist 
+     varlist_3
+     ($f_list_remove_duplicates @varlist
+                                ($varlist_concat varlist_1 varlist_2)))
+    )
+  )
+)
+
+; rule: qnt_join
+; requires: >
+;  Variables in right-hand side of the conclusion can be obtained by removing
+;  duplicates from the list of quantified variables in the left-hand side.
+; conclusion-explicit: >
+;  A conclusion of the form:
+;  (@cl (= (quanfitication varlist_1 (quantification varlist_2 body))
+;          (quantification varlist_3 body)))
+(declare-rule qnt_join ((varlist_1 @VarList) (varlist_2 @VarList) 
+                        (varlist_3 @VarList) (quantification (-> @VarList Bool Bool))
+                        (body Bool))
+
+  :requires ((($check_qnt_join varlist_1 varlist_2 varlist_3) true))
+  :conclusion-explicit (@cl (= (quantification varlist_1 
+                                               (quantification varlist_2 body))
+                               (quantification varlist_3 body)))
+)
+
+;-------------
+; Rule let
+;-------------
+
+(program $verify_let_premises ((context Bool) (premises Bool) 
+                              (A Type) (var A)
+                              (B Type) (value B)
+                              (tl @VarList :list))
+  :signature (Bool Bool @VarList) Bool
+  (
+   (
+    ($verify_let_premises context premises 
+                         ($f_list_cons @varlist 
+                                      ($f_list_cons @varlist var value) 
+                                      tl))
+
+    (eo::or ($f_list_contains_elem 
+             and 
+             (@cl (= value ($context_get_substitute context var)))
+             premises)
+            ($verify_let_premises context premises tl)
+            )
+    )
+
+   (
+    ($verify_let_premises context premises @varlist.nil)
+    
+    true
+    )
+   )
+)
+
+; program: check_let_elim
+; args:
+; - context Bool: Context of the subproof being closed.
+; - premises Bool: And-list containing premises passed to rule let_elim.
+; - conclusion Bool: Conclusion given to rule let_elim.
+; return: >
+;    A boolean indicating if the given conclusion has the form
+;    (let 𝑥1 = 𝑡1, … , 𝑥𝑛= 𝑡𝑛 in 𝑢) ≈ 𝑢′
+;    And the premises are of the form:
+;    𝑖1. Γ ⊳ 𝑡1 ≈ 𝑠1 (… )
+;     ...
+;   𝑖𝑛. Γ ⊳ 𝑡𝑛 ≈ 𝑠𝑛 (… )
+;   𝑗. Γ, 𝑥1 ↦𝑠1, … , 𝑥𝑛 ↦ 𝑠𝑛 ⊳ 𝑢 ≈ 𝑢′ (… )
+;   Note that the context given must correspond to the one of the immediate
+;   premise j, that is, Γ, 𝑥1 ↦𝑠1, … , 𝑥𝑛 ↦ 𝑠𝑛.
+(program $check_let_elim ((context Bool) (premises Bool) 
+                         (let_type Type) (let_def let_type)
+                         (var_defs @VarList) 
+                         (A Type) (lhs A) (rhs A)
+                         (B Type)
+                         (var_values B))
+  :signature (Bool Bool Bool) Bool
+  (
+   (
+    ($check_let_elim context premises
+                    (@cl (= let_def rhs)))
+
+    (eo::and 
+     ; There should be a conclusion of the form (@cl (= lhs rhs))
+     ; TODO: this must be the just the conclusion of the previous step
+     ($f_list_contains_elem and (@cl (= ($let_get_body let_def) rhs)) premises)
+     ($verify_let_premises context premises 
+                          ($let_get_vars_substitutes ($let_get_vars let_def)
+                                                    ($let_get_values let_def)))
+     )
+    )
+   )
+)
+
+
+; rule: let_elim
+; assumption:
+; - ctx: Context from the actual subproof.
+; premise-list: And-list of the premises passed to the rule.
+; requires: >
+;    For the given conclusion to be a proper elimination of a let, under the provided
+;    premises and context, as specified by predicate $check_let_elim.
+; conclusion-explicit: A conclusion satisfying the previous side-condition.
+(declare-rule let_elim ((ctx Bool) (premises Bool) (conclusion Bool))
+  :assumption ctx
+  :premise-list premises and
+  :requires ((($check_let_elim ctx premises conclusion) true))
+  :conclusion-explicit conclusion
+)
+
+;-------------
+; Rule distinct_elim
+;-------------
+
+; program: build_distinct_list
+; args:
+; - list Bool: An and-list of distinct-list elements.
+; return:
+; Returns the reinterpretation of the given and-list of distinct-list elements,
+; as a conjunction of inequalities.
+(program $build_distinct_list ((A Type) (lhs A) (rhs A) (tl Bool :list))
+  :signature (Bool) Bool
+  (
+   (
+    ($build_distinct_list (and (distinct lhs rhs) tl))
+
+    ($f_list_cons and 
+                 (not (= lhs rhs)) 
+                 ($build_distinct_list tl))
+    )
+
+   ; Only one proposition
+   (
+    ($build_distinct_list (distinct lhs rhs)) 
+
+    (not (= lhs rhs))
+    )
+
+   ; Only one proposition
+   (
+    ($build_distinct_list (distinct lhs)) 
+
+    true
+    )
+   
+   (
+    ($build_distinct_list true) 
+
+    true
+    )
+  )
+)
+
+; TODO: DELETE THIS IF WE FIND A GENERIC WAY TO IMPLEMENT THIS
+
+; program: conjunction_contains_ineq
+; args:
+; - ineq Bool: >
+;   An inequality of the form (not (= lhs rhs)), for some terms lhs and rhs of
+;   type A.
+; - conjunctions Bool: A conjunctions of inequalities of the form (not (= lhs' rhs'))
+; return: >
+;   A boolean indicating if ineq appears in `conjunctions`, modulo symmetry of the
+;   equality within ineq.
+(program $conjunction_contains_ineq ((A Type) (lhs A) (rhs A) (hd Bool) (tl Bool :list))
+  :signature (Bool Bool) Bool
+  (
+   (
+    ($conjunction_contains_ineq (not (= lhs rhs)) (and (not (= lhs rhs)) tl))
+
+    true
+    )
+
+   (
+    ($conjunction_contains_ineq (not (= lhs rhs)) (and (not (= rhs lhs)) tl))
+
+    true
+    )
+
+   ; { hd =/= not (= rhs lhs))}
+   (
+    ($conjunction_contains_ineq (not (= lhs rhs)) (and hd tl))
+
+    ($conjunction_contains_ineq (not (= lhs rhs)) tl)
+    )
+
+   (
+    ($conjunction_contains_ineq (not (= lhs rhs)) (not (= lhs rhs)))
+
+    true
+    )
+
+   (
+    ($conjunction_contains_ineq (not (= lhs rhs)) (not (= rhs lhs)))
+
+    true
+    )
+
+   ; { hd =/= (not (= lhs rhs))}
+   (
+    ($conjunction_contains_ineq (not (= lhs rhs)) hd)
+
+    false
+    )
+  )
+)
+
+; program: conjunction_contains_conjunction
+; args:
+; - list_1 A: An and-list, of inequalities of the form (not (= lhs rhs))
+; - list_2 A: An and-list, of inequalities of the form (not (= lhs rhs)).
+; return: >
+;    A boolean indicating if the elements from list_1 also appear in list_2, 
+;    according to comparison predicate $conjunction_contains_ineq.
+(program $conjunction_contains_conjunction ((hd Bool) (tl Bool :list)
+                                           (f_list_2 Bool))
+  :signature (Bool Bool) Bool
+  (
+   (
+    ($conjunction_contains_conjunction (and hd tl) f_list_2)
+
+    ; TODO: I need some way to build boolean values
+    ; combining other boolean values, but I would like
+    ; to avoid built-in operators.
+    (eo::and ($conjunction_contains_ineq hd f_list_2)
+             ($conjunction_contains_conjunction tl f_list_2))
+    )
+
+   ; { f_list_1 is not an and-list}
+   (
+    ($conjunction_contains_conjunction true f_list_2)
+
+    true
+    )
+
+   ; { hd must be an inequaity }
+   (
+    ($conjunction_contains_conjunction hd f_list_2)
+
+    ($conjunction_contains_ineq hd f_list_2)
+    )
+  )
+)
+
+; program: conjunctions_equal
+; args:
+; - list_1 A: An and-list, of inequalities of the form (not (= lhs rhs))
+; - list_2 A: An and-list, of inequalities of the form (not (= lhs rhs)).
+; return: >
+; A boolean indicating if the conjuncts from list_1 and list_2 are the 
+; same, regardless of the order.
+(program $conjunctions_equal ((list_1 Bool) (list_2 Bool))
+  :signature (Bool Bool) Bool
+  (
+   (
+    ($conjunctions_equal list_1 list_2)
+    
+    (eo::and ($conjunction_contains_conjunction list_1 list_2)
+             ($conjunction_contains_conjunction list_2 list_1))
+    )
+  )
+)
+
+; program: check_distinct_elim
+; args:
+; - conclusion Bool: The conclusion give to the distinct_elim rule.
+; return:
+; A Boolean indicating if the given `conclusion` has the shape
+; (distinct 𝑡1 … 𝑡𝑛) ≈ ⋀ 𝑡𝑖 ≈/≈ 𝑡𝑗.
+(program $check_distinct_elim ((A Type) (hd A) (inequalities Bool) (conjunctions Bool))
+  :signature (Bool) Bool
+  (; TODO: assuming that inequalities come first
+   (
+    ($check_distinct_elim (@cl (= inequalities conjunctions)))
+    
+    ($conjunctions_equal ($build_distinct_list inequalities) conjunctions)
+    )
+
+   ; Only one proposition
+   (
+    ($check_distinct_elim (@cl (= (distinct hd) true))) 
+    
+    true
+    )
+  )
+)
+
+; rule: distinct_elim
+; requires: >
+;   Requires for "conclusion" to be of the shape
+;   (distinct 𝑡1 … 𝑡𝑛) ≈ ⋀ 𝑡𝑖 ≈/≈ 𝑡𝑗.
+; conclusion-explicit: >
+;   A conclusion satisfying the previous side-condition.
+(declare-rule distinct_elim ((conclusion Bool))
+  :requires ((($check_distinct_elim conclusion) true))
+  :conclusion-explicit conclusion
+)
+
+;-------------
+; Rule la_rw_eq
+;-------------
+
+; TODO: other number types. Can the equality be flipped?
+; rule: la_rw_eq
+; conclusion-explicit: >
+;   Conclusion shoud be a clause of the form 
+;   (= (= t u) (and (<= t u) (<= u t))), for some numbers t and u.
+(declare-rule la_rw_eq ((t Int) (u Int))
+  :conclusion-explicit (@cl (= (= t u) (and (<= t u) (<= u t))))
+)
+
+;-------------
+; Rule nary_elim
+;-------------
+
+; program: check_nary_elim
+; args:
+; - conclusion Bool: >
+;   Conclusion given to rule nary_elim. It must be built with @cl.
+; return:
+;   - A boolean indicating if conclusion has one of the following forms:
+;     ○ 𝑡𝑖 ≈ (… ((𝑡1 ∘𝑡2) ∘𝑡3) ∘⋯𝑡𝑛) (for a left assoc. operator ∘)
+;     ○ 𝑡𝑖 ≈ (𝑡1 ∘⋯∘(𝑡𝑛−2 ∘(𝑡𝑛−1 ∘𝑡𝑛) … ) (for a right assoc. operator ∘)
+;     ○ 𝑡𝑖 ≈ (𝑡1 ∘𝑡2) ∧(𝑡2 ∘𝑡3) ∧⋯∧ (𝑡𝑛−1 ∘𝑡𝑛) (for a chainable operator ∘)
+;   - ∘ cannot be ∧ or ∨.
+(program $check_nary_elim ((A Type) (hd A) (tl A :list))
+  :signature (Bool) Bool
+  (; TODO: check that op is not /\ nor \/
+   (
+    ($check_nary_elim (@cl (= (=> hd tl) (=> hd tl))))
+    ; right-assoc operator
+    ; We leverage the desugaring process, that turns both lists
+    ; into the folded application of the operator, already
+    ; associated to the right.
+    true
+    )
+  )
+)
+
+; rule: nary_elim
+; requires: >
+;   - The conclusion should have one of the following forms:
+;     ○ 𝑡𝑖 ≈ (… ((𝑡1 ∘𝑡2) ∘𝑡3) ∘⋯𝑡𝑛) (for a left assoc. operator ∘)
+;     ○ 𝑡𝑖 ≈ (𝑡1 ∘⋯∘(𝑡𝑛−2 ∘(𝑡𝑛−1 ∘𝑡𝑛) … ) (for a right assoc. operator ∘)
+;     ○ 𝑡𝑖 ≈ (𝑡1 ∘𝑡2) ∧(𝑡2 ∘𝑡3) ∧⋯∧ (𝑡𝑛−1 ∘𝑡𝑛) (for a chainable operator ∘)
+;   - ∘ cannot be ∧ or ∨.
+; conclusion-explicit: >
+;   A conclusion satisfying the previous side-condition.
+(declare-rule nary_elim ((conclusion Bool))
+  :requires ((($check_nary_elim conclusion) true))
+  :conclusion-explicit conclusion
+)
+
+;-------------------
+; Rule ite_intro
+;-------------------
+
+; program: $ite_intro_check_conjuncts
+; args:
+; - ites @VarList: >
+;   A @VarList containing each of the ite constructions present on the left-hand
+;   side of the conclusion passed to rule `ite_intro`.
+; - conjuncts Bool: >
+;   and-list of terms of the form "ite 𝜓𝑖 ( 𝑠𝑖 ≈ 𝑟𝑖) (𝑠𝑖 ≈ 𝑟′𝑖)" that are part
+;   of the conjunction in the right-hand side of the conclusion passed to rule 
+;   `ite_intro`.
+; return: >
+;   A boolean indicating if for every ite construction of the form
+;   "ite 𝜓𝑖 ri 𝑟′𝑖" present on `ites`, there is a corresponding ite
+;   construction of the form "ite 𝜓𝑖 ( 𝑠𝑖 ≈ 𝑟𝑖) (𝑠𝑖 ≈ 𝑟′𝑖)" in `conjuncts`.
+(program $ite_intro_check_conjuncts ((guard Bool) (if Bool) (else Bool) 
+                                     (conjuncts Bool)
+                                     (tail @VarList :list))
+
+         :signature (@VarList Bool) Bool
+
+         (
+          (
+           ($ite_intro_check_conjuncts (@varlist (ite guard if else) tail) conjuncts)
+
+           (eo::and (eo::or
+                     ($f_list_contains_elem 
+                     and 
+                     (ite guard (= (ite guard if else) if) (= (ite guard if else) else))
+                     conjuncts)
+
+                     ($f_list_contains_elem 
+                      and 
+                      (ite guard (= if (ite guard if else)) (= else (ite guard if else)))
+                      conjuncts))
+
+                    ($ite_intro_check_conjuncts tail conjuncts))
+           )
+
+          (
+           ($ite_intro_check_conjuncts @varlist.nil conjuncts)
+           
+           true
+           )
+          )
+         )
+
+; program: $get_ite_terms
+; args:
+; - formula Bool: An arbitrary boolean formula.
+; return: A @VarList containing every ite construction present in `formula`.
+(program $get_ite_terms ((guard Bool) (if Bool) (else Bool) (hd Bool) (tail Bool)
+                         (op (-> Bool Bool Bool)))
+
+         :signature (Bool) @VarList
+
+         (
+          (
+           ($get_ite_terms (ite guard if else))
+
+           ($varlist_concat
+            (@varlist (ite guard if else))
+            ($varlist_concat ($get_ite_terms guard)
+                             ($varlist_concat ($get_ite_terms if) 
+                                              ($get_ite_terms else))))
+           )
+
+          (
+           ($get_ite_terms (op hd tail))
+
+           ($varlist_concat ($get_ite_terms hd) ($get_ite_terms tail))
+           )
+
+          (
+           ($get_ite_terms (not hd))
+
+           ($get_ite_terms hd)
+           )
+
+          (
+           ($get_ite_terms hd)
+
+           @varlist.nil
+           )
+          )
+         )
+
+; program: $check_ite_intro
+; args:
+; - t1 Bool: The left-hand side of the conclusion passed to rule `ite_intro`.
+; - t2 Bool: >
+;   The first conjunct from the right-hand side of the conclusion passed to rule 
+;   `ite_intro`.
+; - conjuncts Bool: >
+;   The remaining conjuncts from the right-hand side of the conclusion passed to 
+;   rule `ite_intro`.
+; return: >
+;   A boolean indicating if for every ite construction of the form
+;   "ite 𝜓𝑖 ri 𝑟′𝑖" present on `t1`, there is a corresponding ite
+;   construction of the form "ite 𝜓𝑖 ( 𝑠𝑖 ≈ 𝑟𝑖) (𝑠𝑖 ≈ 𝑟′𝑖)" in `conjuncts`.
+(program $check_ite_intro ((t1 Bool) (t2 Bool) (conjuncts Bool :list))
+
+  :signature (Bool Bool Bool) Bool
+  (
+   (; Case t1 = t2 in the ite_intro rule.
+    ($check_ite_intro t1 t1 conjuncts)
+    
+    ($ite_intro_check_conjuncts ($get_ite_terms t1) conjuncts)
+    )
+
+   (; Case t1 = t2 in the ite_intro rule.
+    ($check_ite_intro t1 t2 conjuncts)
+    
+    ($ite_intro_check_conjuncts ($get_ite_terms t1) conjuncts)
+    )
+  )
+)
+
+; rule: ite_intro
+; requires: >
+;   For every ite construction of the form "ite 𝜓𝑖 ri 𝑟′𝑖" present on `t1`, 
+;   to be a corresponding ite construction of the form 
+;   "ite 𝜓𝑖 ( 𝑠𝑖 ≈ 𝑟𝑖) (𝑠𝑖 ≈ 𝑟′𝑖)" in `conjuncts`.
+; conclusion-explicit: A conclusion of the form (@cl (= t (and t' conjuncts))).
+(declare-rule ite_intro ((t1 Bool) (t2 Bool) (conjuncts Bool :list))
+  :requires ((($check_ite_intro t1 t2 conjuncts) true))
+  :conclusion-explicit (@cl (= t1 (and t2 conjuncts)))
+)
+
+;---------------
+; Rule and_intro
+;---------------
+
+(program $check_and_intro ((lhs Bool) (rhs Bool))
+         :signature (Bool Bool Bool) Bool
+         (
+          (
+           ($check_and_intro (@cl lhs) (@cl rhs) (@cl (and lhs rhs)))
+
+           true
+           )
+          )
+         )
+
+(declare-rule and_intro ((lhs Bool) (rhs Bool) (conclusion Bool))
+   :premises ( lhs rhs )
+   :requires ((($check_and_intro lhs rhs conclusion) true))
+   :conclusion-explicit conclusion
+)
+
+;-------------
+; Table 10: Rules used by cvc5, but not by veriT
+;-------------
+
+;-------------
+; Rule reordering
+;-------------
+
+; program: check_reordering
+; args:
+; - premise Bool: >
+;   Premise given to rule reordering. Must be a clause built with @cl.
+; - conclusion Bool: >
+;   Conclusion given to rule reordering. Must be a clause built with @cl.
+; return: >
+;   A boolean indicating if conclusion is a permutation of the premise.
+(program $check_reordering ((hd_premise Bool) (tl_premise Bool :list)
+                           (hd_conclusion Bool) (tl_conclusion Bool :list))
+  :signature (Bool Bool) Bool
+  (
+   (
+    ($check_reordering (@cl hd_premise tl_premise) (@cl hd_conclusion tl_conclusion))
+
+    ($check_reordering tl_premise 
+                       ($f_list_remove_elem @cl (@cl hd_conclusion tl_conclusion) hd_premise false))
+    )
+
+   (
+    ($check_reordering false false)
+
+    true
+    )
+
+   (
+    ($check_reordering hd_premise hd_conclusion)
+
+    false
+    )
+  )
+)
+
+; rule: reordering
+; premises:
+; - premise Bool: >
+;   Premise given to rule reordering. Must be a clause built with @cl.
+; requires: >
+;   For conclusion to be a permutation of the premise.
+; conclusion-explicit: >
+;   A conclusion satisfying the previous side-condition.
+(declare-rule reordering ((premise Bool) (conclusion Bool))
+  :premises (premise)
+  :requires ((($check_reordering premise conclusion) 
+              true))
+  :conclusion-explicit conclusion
+)
+
+;-------------------
+; Rule symm
+;-------------------
+
+; rule: symm
+; premises: >
+;   An equality of the form (@cl (not (= phi psy))), for arbitrary formulas phi 
+;   and psy.
+; conclusion-explicit: >
+;   The conclusion should have the form (@cl (= psy phi)).
+(declare-rule symm ((phi Bool) (psy Bool))
+  :premises ((@cl (= phi psy)))
+  :conclusion-explicit (@cl (= psy phi))
+)
+
+;-------------------
+; Rule not_symm
+;-------------------
+
+; rule: not_symm
+; premises: >
+;   An equality of the form (@cl (not (= phi psy))), for arbitrary formulas phi 
+;   and psy.
+; conclusion-explicit: >
+;   The conclusion should have the form (@cl (not (= psy phi))).
+(declare-rule not_symm ((phi Bool) (psy Bool))
+  :premises ((@cl (not (= phi psy))))
+  :conclusion-explicit (@cl (not (= psy phi)))
+)
+
+;-------------------
+; Rule weakening
+;-------------------
+
+; program: $check_weakening
+; args:
+; - premise Bool: Premise clause passed to rule `weakening`.
+; - conclusion Bool: Conclusion clause passed to rule `weakening`.
+; return: >
+;   A boolean indicating if `conclusion` follows from `premise` by weakening
+;   of disjunction.
+(program $check_weakening ((premise Bool) (conclusion Bool))
+         :signature (Bool Bool) Bool
+         (
+          (
+           ($check_weakening premise conclusion)
+
+           (eo::and ($f_list_contains_f_list @cl premise conclusion)
+                    (eo::gt ($f_list_length @cl conclusion)
+                            ($f_list_length @cl premise)))
+           )
+          )
+         )
+
+; rule: weakening
+; premises:
+; - premise Bool: A premise clause passed to the rule.
+; requires: >
+;   For the conclusion to follow from the premise, from weakening of disjunction.
+; conclusion: A conclusion clause satisfying the previous side-condition. 
+(declare-rule weakening ((premise Bool) (conclusion Bool))
+  :premises (premise)
+  :requires ((($check_weakening premise conclusion) true))
+  :conclusion-explicit conclusion
+  )
+
+
+;-------------
+; Rare
+;-------------
+
+;TODO
+(program $check_rare_rewrite ((Flag Bool) (CL Bool))
+  :signature (Bool Bool) Bool
+  (
+   (($check_rare_rewrite Flag CL) true)
+  )
+)
+
+;TRUST
+(declare-rule rare_rewrite ((flag Bool) (conclusion Bool))
+  :args (flag)
+  :requires ((($check_rare_rewrite flag conclusion) true))
+  :conclusion-explicit conclusion
+)

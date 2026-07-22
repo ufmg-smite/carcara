@@ -1,0 +1,29 @@
+(include "../theories/theory.eo")
+
+;----------------------------
+; Non-dependent pair datatype
+;----------------------------
+
+; Projections
+
+(program $pair_fst ((A Type) (B Type) (pair @Pair) (fst A) (snd B))
+         :signature (@Pair) A
+         (
+          (
+           ($pair_fst (@pair fst snd))
+
+           fst
+           )
+          )
+         )
+
+(program $pair_snd ((A Type) (B Type) (pair @Pair) (fst A) (snd B))
+         :signature (@Pair) B
+         (
+          (
+           ($pair_snd (@pair fst snd))
+
+           snd
+           )
+          )
+         )

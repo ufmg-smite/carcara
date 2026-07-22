@@ -1,5 +1,6 @@
-(include "./theory.eo")
+(include "../theories/theory.eo")
 (include "./lists.eo")
+(include "./trees.eo")
 
 ; Library of auxiliary programs, useful to manipulate many different
 ; Eunoia constructions.
@@ -15,7 +16,7 @@
 ; - t2 Terms: Term to be compared.
 ; return: Simulates the behavior of eo::is_eq.
 (program $eo_is_eq ((Terms Type) (t1 Terms) (t2 Terms))
-         (Terms Terms) Bool
+         :signature (Terms Terms) Bool
          (
           (
            ($eo_is_eq t1 t1)
@@ -143,37 +144,28 @@
            false
            )
           )
-)
+         )
 
 ;-------------
 ; @VarList
 ;-------------
 
-; TODO: this should be implemented using f-list functions
-; program: varlist_concat
+; program: $varlist_concat
 ; args:
-; - varlist_concat nil:
-; return:
-(program $varlist_concat ((A Type) (hd A) (tl @VarList :list)
-                         (varlist_2 @VarList))
-  (@VarList @VarList) @VarList
+; - list1 @VarList: A @VarList.
+; - list2 @VarList:: A @VarList.
+; return: The @VarList: resulting from concatenating `list1` and `list2`.
+(program $varlist_concat ((varlist_1 @VarList) (varlist_2 @VarList))
+  :signature (@VarList @VarList) @VarList
 
   (
    (
-    ($varlist_concat (@varlist hd tl) varlist_2)
+    ($varlist_concat varlist_1 varlist_2)
     
-    ($f_list_cons @varlist 
-                 hd
-                 ($varlist_concat tl varlist_2))
-    )
-
-   (
-    ($varlist_concat @varlist.nil varlist_2)
-    
-    varlist_2
+    ($f_list_concat @varlist @varlist.nil varlist_1 varlist_2)
     )
    )
-)
+  )
 
 ; program: varlist_reverse
 ; args:
@@ -182,13 +174,13 @@
 ; - tl @VarList:
 ; return:
 (program $varlist_reverse ((A Type) (hd A) (tl @VarList :list))
-  (@VarList) @VarList
+  :signature (@VarList) @VarList
   (
    (
     ($varlist_reverse (@varlist hd tl))
 
     ($varlist_concat ($varlist_reverse tl) 
-                    ($f_list_cons @varlist hd @varlist.nil))
+                     ($f_list_cons @varlist hd @varlist.nil))
     )
    (
     ($varlist_reverse @varlist.nil)
@@ -205,7 +197,7 @@
 ; return:
 ;  The zip of the received @VarLists, as another @VarList.
 (program $varlist_zip ((A Type) (hd_1 A) (tl_1 A :list) (hd_2 A) (tl_2 A :list))
-         (@VarList @VarList) @VarList
+         :signature (@VarList @VarList) @VarList
 
          (
           (
@@ -239,7 +231,7 @@
                         (hd_1 A) (tl_1 A :list)
                         (varlist_2 @VarList))
 
-         (@VarList @VarList) @VarList
+         :signature (@VarList @VarList) @VarList
 
          (
           (
@@ -267,7 +259,7 @@
 ;    PRE : { len(varlist) > 0 }
 (program $varlist_hd ((A Type) (hd A) (tail @VarList))
 
-         (@VarList) A
+         :signature (@VarList) A
 
          (
           (
@@ -285,7 +277,7 @@
 ;    The tail of the given @VarList; "varlist" could be nil.
 (program $varlist_tl ((A Type) (hd A) (tail @VarList))
 
-         (@VarList) @VarList
+         :signature (@VarList) @VarList
 
          (
           (
@@ -308,7 +300,7 @@
 ; - elem A: An element for which we want to test membership
 ; return: A boolean indicating if "elem" appears in "varlist".
 (program $varlist_contains_elem ((A Type) (elem A) (head A) (tail @VarList :list))
-         (@VarList A) Bool
+         :signature (@VarList A) Bool
          (
           (
            ($varlist_contains_elem @varlist.nil elem)
@@ -338,7 +330,7 @@
 ;    A new @VarList that is equal to "varlist" except that it does not
 ;    contain the first occurrence of "elem".
 (program $varlist_remove_elem ((A Type) (elem A) (head A) (tail @VarList :list))
-         (@VarList A) @VarList
+         :signature (@VarList A) @VarList
          (
           (
            ($varlist_remove_elem @varlist.nil elem)
@@ -361,7 +353,6 @@
           )
 )
 
-
 ;-------------
 ; Clauses
 ;-------------
@@ -373,7 +364,7 @@
 ;   For a unit clause, built with @cl, removes the top @cl if 
 ;   any, returning the only disjunct. Otherwise, returns T.
 (program $from_cl ((T Bool))
-    (Bool) Bool
+    :signature (Bool) Bool
     (
      (
 
@@ -396,7 +387,7 @@
 ;   Embeds T within a unit clause built with @cl, only
 ;   if T is not a unit clause built with @cl itself. 
 (program $to_cl ((T Bool))
-    (Bool) Bool
+    :signature (Bool) Bool
     (
      (
       ($to_cl (@cl T))
@@ -419,7 +410,7 @@
 ; - phi_2 Bool: A proposition.
 ; return: A boolean indicating if phi_1 and phi_2 are syntactically equal.
 (program $prop_syntax_eq ((phi Bool) (psi Bool))
-  (Bool Bool) Bool
+  :signature (Bool Bool) Bool
   (
    (
     ($prop_syntax_eq phi phi) 
@@ -442,14 +433,57 @@
 ; return: >
 ;   A boolean indicating if cl_1 and cl_2 are equal modulo permutations.
 (program $cl_equal ((cl_1 Bool) (cl_2 Bool))
-  (Bool Bool) Bool
+  :signature (Bool Bool) Bool
   (
    (
     ($cl_equal cl_1 cl_2)
 
-    ($f_list_equal @cl cl_1 cl_2)
+    ($f_list_equal_mod_commut @cl cl_1 cl_2)
     )
   )
+)
+
+; program: $cl_disjunct
+; args:
+; - cl_1 Bool: A clause built with @cl.
+; - cl_2 Bool: A clause built with @cl.
+; return: >
+;   The clause formed by concatenating the literals of `cl_1` and `cl_2`, taking
+;   into account the semantics of `@empty_cl`.
+(program $cl_disjunct ((clause Bool) (left_disjunct Bool) (right_disjunct Bool)
+                       (left_tail Bool :list) (right_tail Bool :list))
+                       
+         :signature (Bool Bool) Bool
+         (
+          (
+           ($cl_disjunct @empty_cl clause)
+
+           clause
+           )
+
+          (; {clause != @empty_cl }
+           ($cl_disjunct clause @empty_cl)
+
+           clause
+           )
+
+          (
+           ($cl_disjunct (@cl left_disjunct) 
+                         (@cl right_disjunct right_tail))
+
+           (@cl left_disjunct right_disjunct right_tail)
+           )
+
+          (; { left_tail != false}
+           ($cl_disjunct (@cl left_disjunct left_tail) 
+                         (@cl right_disjunct right_tail))
+
+           ($f_list_cons @cl 
+                         left_disjunct 
+                         ($cl_disjunct left_tail
+                                       (@cl right_disjunct right_tail)))
+           )
+          )
 )
 
 ; program: convert_or_to_cl
@@ -460,7 +494,7 @@
 ; return: >
 ;   A clause equivalent to "or_clause", built exclusively with @cl.
 (program $convert_or_to_cl ((or_clause Bool) (disjunct_1 Bool) (disjunct_2 Bool :list))
-  (Bool) Bool
+  :signature (Bool) Bool
   (
    (
     ($convert_or_to_cl (or disjunct_1 disjunct_2))
@@ -482,19 +516,19 @@
 ; return: >
 ;   Applies De Morgan's law over the conjuncts of "ls", returning a new clause
 ;   built with @cl.
-(program $de_morgan_not_and ((l Bool) (ls Bool))
-  (Bool) Bool
+(program $de_morgan_not_and ((l Bool) (ls Bool :list))
+  :signature (Bool) Bool
   (
    (
     ($de_morgan_not_and (and l ls))
-
-    (@cl (not l) ($from_cl ($de_morgan_not_and ls)))
+    
+    ($f_list_cons @cl (not l) ($de_morgan_not_and ls))
     )
 
-   (
+   (; { l is an atom }
     ($de_morgan_not_and l) 
 
-    (@cl (not l))
+    (not l)
     )
   )
 )
@@ -510,7 +544,7 @@
                            (f (-> A A B))
                            (nil_elem A)
                            (hd A) (tl A :list))
-         ((-> A A B) A A) @VarList
+         :signature ((-> A A B) A A) @VarList
 
          (
           (
@@ -545,7 +579,7 @@
 ; - clause Bool: A clause from which we want to delete duplicates.
 ; return: A clause that contains every element from "clause", without duplicates.
 (program $cl_remove_duplicates ((clause Bool))
-         (Bool) Bool
+         :signature (Bool) Bool
          (
           (
            ($cl_remove_duplicates clause)
@@ -568,7 +602,7 @@
 ;   A proposition that is equivalent to "implication", but that is
 ;   not built with =>.
 (program $rewrite_implication ((phi_1 Bool) (phi_2 Bool))
-         (Bool) Bool
+         :signature (Bool) Bool
          (; We apply semantics preserving rewrites.
           (
            ($rewrite_implication (=> (not phi_1) (not phi_2)))
@@ -628,7 +662,7 @@
 ;   A proposition that is equivalent to "equivalence", but that is
 ;   not built with =.
 (program $rewrite_equivalence ((phi_1 Bool) (phi_2 Bool))
-         (Bool) Bool
+         :signature (Bool) Bool
          (; We apply semantics preserving rewrites.
           (
            ($rewrite_equivalence (= (not phi_1) (not phi_2)))
@@ -680,6 +714,107 @@
           )
          )
 
+; program: $is_implication
+; args:
+; - formula Bool: An arbitrary boolean formula.
+; return: A boolean indicating if `formula` is built with =>
+(program $is_implication ((antecedent Bool) (consequent Bool) (formula Bool))
+
+         :signature (Bool) Bool
+
+         (
+          (
+           ($is_implication (=> antecedent consequent))
+
+           true
+           )
+
+          (
+           ($is_implication formula)
+
+           false
+           )
+          )
+         )
+
+; program: $implication_get_antecedent
+; args:
+; - formula Bool: A formula built with =>.
+; return: The antecedent of `formula`.
+; note: PRE : { `formula` be built with => }
+(program $implication_get_antecedent ((antecedent Bool) (consequent Bool))
+
+         :signature (Bool) Bool
+
+         (
+          (
+           ($implication_get_antecedent (=> antecedent consequent))
+
+           antecedent
+           )
+          )
+         )
+
+; program: $implication_get_consequent
+; args:
+; - formula Bool: A formula built with =>.
+; return: The consequent of `formula`.
+; note: PRE : { `formula` be built with => }
+(program $implication_get_consequent ((antecedent Bool) (consequent Bool))
+
+         :signature (Bool) Bool
+
+         (
+          (
+           ($implication_get_consequent (=> antecedent consequent))
+
+           consequent
+           )
+          )
+         )
+
+;-------------------------------
+; Misc. boolean formula services
+;-------------------------------
+
+; program: $flat_and_or
+; args:
+; - formula Bool: >
+;   An arbitrary boolean formula, built just with conjunctions or disjunctions.
+; return: A flattened version of `formula`.
+(program $flat_and_or ((formula Bool) (formulas Bool)
+                       (op (-> Bool Bool Bool)))
+
+         :signature ((-> Bool Bool Bool) Bool) Bool
+
+         (
+          (
+           ($flat_and_or op (op formula formulas))
+
+           (eo::define
+
+            (
+             (left_most_leaf ($binary_tree_get_left_most_leaf 
+                              op
+                              (op formula formulas)))
+             )
+
+            ($f_list_cons op
+                          left_most_leaf
+                          ($flat_and_or 
+                           op
+                           ($binary_tree_remove_elem op
+                                                     (op formula formulas) 
+                                                     left_most_leaf))))
+           )
+         
+          (; { `formula` is not an application of op }
+           ($flat_and_or op formula)
+
+           formula
+           )
+          )
+         )
 
 ;-------------
 ; contexts
@@ -694,7 +829,7 @@
                     (value B) (hd Bool) (tl Bool :list)
                     (varlist @VarList)
                     (subst Bool))
-         (Bool A) B
+         :signature (Bool A) B
          (
           (; Just to discard possible leading @ctx constructor
            ($context_get_substitute (@ctx varlist subst) id)
@@ -744,16 +879,14 @@
                                       (value B) (varlist @VarList) 
                                       (context Bool) (and_list Bool)
                                       (ids @VarList :list))
-         (Bool @VarList) @VarList
+         :signature (Bool @VarList) @VarList
          (
           (
            ($context_get_var_subst_pairs context (@varlist id ids))
            
            ($f_list_cons @varlist 
-                        ($f_list_cons @varlist id
-                                      ($f_list_cons @varlist 
-                                                    ($context_get_substitute context id) @varlist.nil))
-                        ($context_get_var_subst_pairs context ids))
+                         (@pair id ($context_get_substitute context id))
+                         ($context_get_var_subst_pairs context ids))
            )
 
           (
@@ -771,19 +904,19 @@
 ;   A @VarList with the variables bound by "context".
 (program $context_get_variables ((varlist @VarList) (subst Bool) (any Bool) 
                                  (eqs Bool :list))
-         (Bool) @VarList
+         :signature (Bool) @VarList
          (
           (
            ($context_get_variables (@ctx varlist subst))
            
-           ($f_list_remove_duplicates @varlist @varlist.nil
+           ($f_list_remove_duplicates @varlist
                                       ($varlist_concat varlist ($context_get_variables subst)))
            )
 
           (
            ($context_get_variables (and (@ctx varlist subst)))
            
-           ($f_list_remove_duplicates @varlist @varlist.nil
+           ($f_list_remove_duplicates @varlist
                                       ($varlist_concat varlist ($context_get_variables subst)))
            )
 
@@ -813,7 +946,7 @@
                                       (value B) (varlist @VarList) 
                                       (context Bool) (and_list Bool)
                                       (ids @VarList :list))
-         (Bool @VarList) @VarList
+         :signature (Bool @VarList) @VarList
          (
           (
            ($context_get_vars_substs context (@varlist id ids))
@@ -845,7 +978,7 @@
                                 (B Type) (any B)
                                 (eqs Bool :list)
                                 (varlist @VarList) (and_list Bool))
-         (Bool A) Bool
+         :signature (Bool A) Bool
          
          (
           (; Case: most nested @ctx.
@@ -917,7 +1050,7 @@
 ;   A boolean indicating if every variable in "vars" appear fixed in "context".
 (program $context_vars_are_fixed ((A Type) (var A) (tl @VarList :list)
                                   (context Bool))
-         (Bool @VarList) Bool
+         :signature (Bool @VarList) Bool
          
          (
           (
@@ -944,7 +1077,7 @@
 ;    A boolean indicating if "var" is defined in "context".
 (program $context_var_is_defined ((A Type) (var A) (eq Bool)
                                   (varlist @VarList :list) (and_list Bool :list))
-         (Bool A) Bool
+         :signature (Bool A) Bool
          
          (
           (
@@ -986,7 +1119,7 @@
 ;    A boolean indicating if at least some variable in "vars" is defined in "context".
 (program $context_vars_are_defined ((A Type) (var A)
                                   (vars @VarList :list) (context Bool))
-         (Bool @VarList) Bool
+         :signature (Bool @VarList) Bool
          
          (
           (
@@ -1016,7 +1149,7 @@
 ;    old_ctx.
 (program $context_is_extended ((old_ctx Bool) (new_ctx Bool)
                                (varlist @VarList) (eq Bool) (and_list Bool :list))
-    (Bool Bool) Bool
+    :signature (Bool Bool) Bool
     (
         (; We admit for the contexts to be equal
          ($context_is_extended new_ctx new_ctx) 
@@ -1071,7 +1204,7 @@
                        (A Type) (var_values A)
                        (B Type) (nested_func_app B))
 
-         (let_type) @VarList
+         :signature (let_type) @VarList
          (
           (
            ($let_get_vars (_ (@let var_defs body) var_values))
@@ -1096,7 +1229,7 @@
                          (B Type) (nested_func_app B)
                          (A Type) (value A))
 
-         (let_type) @VarList
+         :signature (let_type) @VarList
          (
           (
            ($let_get_values (_ (@let varlist body) value))
@@ -1125,7 +1258,7 @@
                          (B Type) (nested_func_app B)
                          (A Type) (value A))
 
-         (let_type) body_type
+         :signature (let_type) body_type
          (
           (
            ($let_get_body (_ (@let varlist body) value))
@@ -1152,7 +1285,7 @@
                                    (U Type) (value_x U) 
                                    (parameters @VarList :list))
 
-         (@VarList @VarList) @VarList
+         :signature (@VarList @VarList) @VarList
          (
           (
            ($let_get_vars_substitutes (@varlist x vardefs)
@@ -1184,7 +1317,7 @@
               (bool_body Bool)
               (E Type) (x E)
               (F Type) (G Type) (function (-> F G)) (actual_argument F))
-         (A) @VarList
+         :signature (A) @VarList
 
          (
           (
@@ -1265,7 +1398,8 @@
 ; Substitution
 ;-------------
 
-; Manipulation/application of substitutions.
+; Manipulation/application of substitutions. Requires the pairs and lists 
+; libraries.
 
 ; program: $substitution_contains_substitute
 ; args:
@@ -1278,7 +1412,7 @@
 (program $substitution_contains_substitute ((Vars Type) (Values Type)
                                             (var Vars) (var2 Vars) (value Values) 
                                             (substitutions @Substitution :list))
-         (@Substitution Vars) Bool
+         :signature (@Substitution Vars) Bool
          (
           (
            ($substitution_contains_substitute 
@@ -1324,6 +1458,7 @@
 
                  substitutions
                  
+                 ; { not ($substitution_contains_substitute substitutions var) }
                  ($f_list_cons @substitution
                                (@substitute var value) substitutions)
                  )
@@ -1340,7 +1475,7 @@
 ; return: The corresponding @Substitution.
 (program $substitution_build ( (Vars Type) (Values Type) (var Vars) (value Values)
                                (vars_tail @VarList :list) (values_tail @VarList :list))
-         (@VarList @VarList) @Substitution
+         :signature (@VarList @VarList) @Substitution
          (
           (
            ($substitution_build @varlist.nil @varlist.nil)
@@ -1354,7 +1489,7 @@
            ($substitution_extend ($substitution_build vars_tail values_tail) var value)
            )
           )
-)
+         )
 
 ; program: $substitution_build_from_pairs
 ; args:
@@ -1364,7 +1499,7 @@
 ; return: The corresponding @Substitution.
 (program $substitution_build_from_pairs ((Vars Type) (Values Type) (var Vars) 
                                          (value Values) (pairs_tail @VarList :list))
-         (@VarList) @Substitution
+         :signature (@VarList) @Substitution
          (
           (
            ($substitution_build_from_pairs @varlist.nil)
@@ -1373,19 +1508,19 @@
            )
 
           (
-           ($substitution_build_from_pairs (@varlist (@varlist var value) pairs_tail))
+           ($substitution_build_from_pairs (@varlist (@pair var value) pairs_tail))
 
            ($substitution_extend ($substitution_build_from_pairs pairs_tail) var value)
            )
           )
-)
+         )
 
 ; program: $substitution_build_from_context
 ; args:
 ; - context Bool: A context from which we want to build a substitution function.
 ; return: The corresponding @Substitution.
 (program $substitution_build_from_context ((context Bool))
-         (Bool) @Substitution
+         :signature (Bool) @Substitution
          (
           (
            ($substitution_build_from_context context)
@@ -1401,9 +1536,11 @@
 ; args:
 ; - $substitution_remove_substitutes nil:
 ; return:
-(program $substitution_remove_substitutes ((Vars Type) (Values Type) (var Vars) (value Values)
-                                                                                    (vars @VarList) (substitutions @Substitution :list))
-         (@Substitution @VarList) @Substitution
+(program $substitution_remove_substitutes ((Vars Type) (Values Type) (var Vars) 
+                                           (value Values)
+                                           (vars @VarList) 
+                                           (substitutions @Substitution :list))
+         :signature (@Substitution @VarList) @Substitution
 
          (
           (
@@ -1438,7 +1575,7 @@
 (program $substitution_get_value ((Vars Type) (Values Type) (var Vars) (var2 Vars)
                                   (value Values)
                                   (substitutions @Substitution :list))
-         (@Substitution Vars) Values
+         :signature (@Substitution Vars) Values
          (
           (
            ($substitution_get_value 
@@ -1470,7 +1607,7 @@
                       (substitution @Substitution)
                       (A Type) (B Type) (function (-> A B))
                       (actual_argument A))
-         (Terms @Substitution) Terms
+         :signature (Terms @Substitution) Terms
 
          (
           (
