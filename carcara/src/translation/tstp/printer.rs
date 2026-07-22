@@ -1,7 +1,7 @@
 //! A pretty printer for Tstp proofs.
 use crate::translation::tstp::tstp_ast::*;
-// Re-exporting PrintProof, to avoid conflicting import paths in other modules.
-pub use crate::translation::PrintProof;
+// Re-exporting ProofPrinter, to avoid conflicting import paths in other modules.
+pub use crate::translation::ProofPrinter;
 use std::io;
 
 // TODO: struct for future actual formatting concerns
@@ -56,7 +56,7 @@ pub struct TstpPrinter<'a> {
     formatted_sink: AnnotatedFormulaFormatter<'a>,
 }
 
-impl<'a> PrintProof for TstpPrinter<'a> {
+impl<'a> ProofPrinter for TstpPrinter<'a> {
     type Proof = TstpProof;
 
     /// Formatted proof printing.

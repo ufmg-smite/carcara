@@ -704,8 +704,10 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 translated_binder
             }
 
-            // TODO: complete
-            Term::ParamOp { .. } => panic!(),
+            _ => {
+                println!("No defined translation for term {:?}", term);
+                panic!()
+            }
         }
     }
 

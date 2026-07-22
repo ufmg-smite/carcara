@@ -482,8 +482,10 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                 translated_binder
             }
 
-            // TODO: complete
-            Term::ParamOp { .. } => panic!(),
+            _ => {
+                println!("No defined translation for term {:?}", term);
+                panic!()
+            }
         }
     }
 
