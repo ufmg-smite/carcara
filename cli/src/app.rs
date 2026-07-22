@@ -395,15 +395,15 @@ pub enum TranslationTarget {
 }
 
 #[derive(Args)]
-struct TranslateCommandOptions {
-    #[clap(flatten)]
-    input: Input,
+pub struct TranslateCommandOptions {
+    #[clap(arg_enum)]
+    pub target: TranslationTarget,
 
     #[clap(flatten)]
-    target: TranslationTarget,
+    pub input: Input,
 
     #[clap(flatten)]
-    parsing: ParsingOptions,
+    pub parsing: ParsingOptions,
 }
 
 #[derive(ArgEnum, Clone)]
