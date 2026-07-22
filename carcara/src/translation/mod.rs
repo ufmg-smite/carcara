@@ -632,7 +632,7 @@ pub trait VecToVecTranslator<
 }
 
 /// Common pretty printing interface shared by Eunoia and TSTP compilers.
-pub trait PrintProof {
+pub trait ProofPrinter {
     type Proof;
 
     fn write_proof(&mut self, proof: &Self::Proof) -> Result<()>;
