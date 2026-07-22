@@ -130,6 +130,11 @@ fn resolution() {
             "(assume h1 true)
             (step t2 (cl true) :rule resolution :premises (h1))": false,
         }
+        "Tricky case for RUP" {
+            "(step t1 (cl (not p) p) :rule hole)
+            (step t2 (cl (not p) p) :rule hole)
+            (step t3 (cl (not p) p) :rule resolution :premises (t1 t2))": true,
+        }
     }
 }
 
@@ -286,6 +291,50 @@ fn contraction() {
         "Uncontraction" {
             "(step t1 (cl p q) :rule hole)
             (step t2 (cl p p q q) :rule contraction :premises (t1))": false,
+        }
+    }
+}
+
+#[test]
+fn resolution_with_args() {
+    test_cases! {
+        definitions = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (declare-fun s () Bool)
+            (declare-fun t () Bool)
+            (declare-fun u () Bool)
+        ",
+        "Resolution with explicit pivot arguments" {
+            "(step t1 (cl p q r) :rule hole)
+            (step t2 (cl (not q) s) :rule hole)
+            (step t3 (cl p r s) :rule resolution :premises (t1 t2) :args (q true))": true,
+
+            "(step t1 (cl p (not q) r) :rule hole)
+            (step t2 (cl (not r) s q) :rule hole)
+            (step t3 (cl p r (not r) s)
+                :rule resolution :premises (t1 t2) :args (q false))": true,
+        }
+        "Multiple pivots specified" {
+            "(step t1 (cl p q) :rule hole)
+            (step t2 (cl (not q) (not r)) :rule hole)
+            (step t3 (cl (not s) (not (not r)) t) :rule hole)
+            (step t4 (cl s (not t) u) :rule hole)
+            (step t5 (cl p t (not t) u)
+                :rule resolution
+                :premises (t1 t2 t3 t4)
+                :args (q true (not r) true s false))": true,
+        }
+        "Wrong pivot polarity in args" {
+            "(step t1 (cl p q r) :rule hole)
+            (step t2 (cl (not q) s) :rule hole)
+            (step t3 (cl p r s) :rule resolution :premises (t1 t2) :args (q false))": false,
+        }
+        "Pivot not present in premises" {
+            "(step t1 (cl p q r) :rule hole)
+            (step t2 (cl (not q) s) :rule hole)
+            (step t3 (cl p r s) :rule resolution :premises (t1 t2) :args (t true))": false,
         }
     }
 }

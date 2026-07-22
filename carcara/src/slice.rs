@@ -361,7 +361,7 @@ mod tests {
         parser::{self, parse_instance, parse_instance_with_pool, Config},
     };
 
-    const PROBLEM_STRING: &[u8] = b"
+    const PROBLEM_STRING: &str = "
         (declare-const a Bool) 
         (declare-const b Bool)
         (declare-const c Bool)
@@ -369,9 +369,9 @@ mod tests {
         (assert b)
         (check-sat)
         (exit)
-        ";
+    ";
 
-    const PROOF_STRING: &[u8] = b"
+    const PROOF_STRING: &str = "
         (assume a0 a)
         (step t0 (cl a b) :rule hole :premises (a0))
         (step t1 (cl b a) :rule hole :premises (t0))
@@ -384,62 +384,58 @@ mod tests {
         (step t3 (cl (not (not a)) (or b b)) :rule subproof :discharge (t3.a0))
         (step t4 (cl a (or b b)) :rule hole :premises (t3))
         (step t5 (cl) :rule hole :premises (t4 a0 t2))   
-        ";
+    ";
 
-    const PAIRS: [(&[u8], (&str, usize)); 5] = [
+    const PAIRS: [(&str, (&str, usize)); 5] = [
         // from t4, d=0 (normal step)
         (
-            b"(step t3 (cl (not (not a)) (or b b)) :rule hole :args (\"trust\"))
-(step t4 (cl a (or b b)) :rule hole :premises (t3))
-(step slice_end (cl) :rule hole :premises (t4) :args (\"trust\"))",
+            "(step t3 (cl (not (not a)) (or b b)) :rule hole :args (\"trust\"))
+            (step t4 (cl a (or b b)) :rule hole :premises (t3))
+            (step slice_end (cl) :rule hole :premises (t4) :args (\"trust\"))",
             ("t4", 0),
         ),
         // from t3, d=0 (subproof conclusion)
         (
-            b"(anchor :step t3)
-(assume t3.a0 (not a))
-(step t3.t2 (cl (or b b)) :rule hole :args (\"trust\"))
-(step t3 (cl (not (not a)) (or b b)) :rule subproof :discharge (t3.a0))
-(step slice_end (cl) :rule hole :premises (t3) :args (\"trust\"))
-",
+            "(anchor :step t3)
+            (assume t3.a0 (not a))
+            (step t3.t2 (cl (or b b)) :rule hole :args (\"trust\"))
+            (step t3 (cl (not (not a)) (or b b)) :rule subproof :discharge (t3.a0))
+            (step slice_end (cl) :rule hole :premises (t3) :args (\"trust\"))",
             ("t3", 0),
         ),
         // from t3.t1, d=0 (step inside subproof)
         (
-            b"(anchor :step t3)
-(assume t3.a0 (not a))
-(step t3.t0 (cl b) :rule hole :args (\"trust\"))
-(step t3.t1 (cl b b) :rule hole :premises (t3.t0))
-(step t3.t2 (cl (or b b)) :rule hole :premises (t3.t1) :args (\"trust\"))
-(step t3 (cl (not (not a)) (or b b)) :rule subproof :discharge (t3.a0))
-(step slice_end (cl) :rule hole :premises (t3) :args (\"trust\"))
-",
+            "(anchor :step t3)
+            (assume t3.a0 (not a))
+            (step t3.t0 (cl b) :rule hole :args (\"trust\"))
+            (step t3.t1 (cl b b) :rule hole :premises (t3.t0))
+            (step t3.t2 (cl (or b b)) :rule hole :premises (t3.t1) :args (\"trust\"))
+            (step t3 (cl (not (not a)) (or b b)) :rule subproof :discharge (t3.a0))
+            (step slice_end (cl) :rule hole :premises (t3) :args (\"trust\"))",
             ("t3.t1", 0),
         ),
         // Slicing with greater max distance values
         (
-            b"(assume a0 a)
-(step t0 (cl a b) :rule hole :args (\"trust\"))
-(step t2 (cl a b (not a)) :rule hole :premises (t0))
-(step t3 (cl (not (not a)) (or b b)) :rule hole :args (\"trust\"))
-(step t4 (cl a (or b b)) :rule hole :premises (t3))
-(step t5 (cl) :rule hole :premises (t4 a0 t2))
-(step slice_end (cl) :rule hole :premises (t5) :args (\"trust\"))
-",
+            "(assume a0 a)
+            (step t0 (cl a b) :rule hole :args (\"trust\"))
+            (step t2 (cl a b (not a)) :rule hole :premises (t0))
+            (step t3 (cl (not (not a)) (or b b)) :rule hole :args (\"trust\"))
+            (step t4 (cl a (or b b)) :rule hole :premises (t3))
+            (step t5 (cl) :rule hole :premises (t4 a0 t2))
+            (step slice_end (cl) :rule hole :premises (t5) :args (\"trust\"))",
             ("t5", 1),
         ),
         (
-            b"(assume a0 a)
-(step t0 (cl a b) :rule hole :premises (a0))
-(step t2 (cl a b (not a)) :rule hole :premises (t0))
-(anchor :step t3)
-(assume t3.a0 (not a))
-(step t3.t2 (cl (or b b)) :rule hole :args (\"trust\"))
-(step t3 (cl (not (not a)) (or b b)) :rule subproof :discharge (t3.a0))
-(step t4 (cl a (or b b)) :rule hole :premises (t3))
-(step t5 (cl) :rule hole :premises (t4 a0 t2))
-(step slice_end (cl) :rule hole :premises (t5) :args (\"trust\"))
-",
+            "(assume a0 a)
+            (step t0 (cl a b) :rule hole :premises (a0))
+            (step t2 (cl a b (not a)) :rule hole :premises (t0))
+            (anchor :step t3)
+            (assume t3.a0 (not a))
+            (step t3.t2 (cl (or b b)) :rule hole :args (\"trust\"))
+            (step t3 (cl (not (not a)) (or b b)) :rule subproof :discharge (t3.a0))
+            (step t4 (cl a (or b b)) :rule hole :premises (t3))
+            (step t5 (cl) :rule hole :premises (t4 a0 t2))
+            (step slice_end (cl) :rule hole :premises (t5) :args (\"trust\"))",
             ("t5", 2),
         ),
     ];

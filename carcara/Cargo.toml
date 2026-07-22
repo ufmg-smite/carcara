@@ -13,6 +13,7 @@ rust-version = "1.87"
 license = "Apache-2.0"
 
 [dependencies]
+carcara-macros = { path = "../carcara-macros" }
 indexmap = "2.0.0"
 log = "0.4.20"
 rug = { version = "1.21.0", default-features = false, features = [

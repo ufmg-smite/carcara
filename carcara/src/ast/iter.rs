@@ -26,10 +26,8 @@ use super::*;
 ///     (step t4 (cl (not (forall ((x Int)) (> x 0))) (forall ((y Int)) (> y 0)))
 ///         :rule equiv1 :premises (t3))
 ///     (step t5 (cl) :rule resolution :premises (t4 h1 h2))
-/// "
-/// .as_bytes();
-/// let (_, proof, _, _) =
-///     parser::parse_instance("".as_bytes(), proof, None, parser::Config::new())?;
+/// ";
+/// let (_, proof, _, _) = parser::parse_instance("", proof, None, parser::Config::new())?;
 /// let ids: Vec<_> = proof.iter().map(|c| c.id()).collect();
 /// assert_eq!(ids, ["h1", "h2", "t3", "t3.t1", "t3.t2", "t3", "t4", "t5"]);
 /// # Ok(())

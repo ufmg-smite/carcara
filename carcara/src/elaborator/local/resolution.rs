@@ -1,11 +1,10 @@
-use super::*;
-use crate::{ast::*, checker::error::CheckerError, resolution::*, utils::DedupIterator};
+use crate::{ast::*, elaborator::*, resolution::*, utils::DedupIterator};
 
 pub fn resolution(
     pool: &mut PrimitivePool,
     _: &mut ContextStack,
     step: &StepNode,
-) -> Result<Rc<ProofNode>, CheckerError> {
+) -> Result<Rc<ProofNode>, ElaborationError> {
     if !step.args.is_empty() {
         return Ok(Rc::new(ProofNode::Step(step.clone())));
     }
@@ -55,11 +54,14 @@ pub fn resolution(
     let premise_clauses: Vec<_> = premises.iter().map(|p| p.clause()).collect();
 
     let ResolutionTrace { not_not_added, pivot_trace } =
-        greedy_resolution(&step.clause, &premise_clauses, pool, true).or_else(|_| {
-            premises.reverse();
-            let premise_clauses: Vec<_> = premises.iter().map(|p| p.clause()).collect();
-            greedy_resolution(&step.clause, &premise_clauses, pool, true)
-        })?;
+        greedy_resolution(&step.clause, &premise_clauses, pool, true)
+            .or_else(|first_error| {
+                premises.reverse();
+                let premise_clauses: Vec<_> = premises.iter().map(|p| p.clause()).collect();
+                greedy_resolution(&step.clause, &premise_clauses, pool, true)
+                    .map_err(|_| first_error) // we prefer returning the first error
+            })
+            .map_err(ElaborationError::CouldNotInferPivots)?;
 
     let pivots = pivot_trace
         .into_iter()

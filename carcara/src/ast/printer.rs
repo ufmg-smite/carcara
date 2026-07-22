@@ -53,7 +53,7 @@ pub fn write_lia_smt_instance(
     let mut printer = AlethePrinter::new(pool, prelude, use_sharing, dest);
     // We have to override the default prefix "@p_" because symbols starting with "@" are reserved
     // in SMT-LIB.
-    printer.term_sharing_variable_prefix = "p_";
+    printer.term_sharing_variable_prefix = "p_".to_owned();
     // Since we are printing an SMT-LIB problem, we have to be
     // compliant. For Carcara, this means that arithmetic constants
     // cannot use the GMP notation
@@ -61,27 +61,46 @@ pub fn write_lia_smt_instance(
     printer.write_lia_smt_instance(clause)
 }
 
-pub fn write_asserts(
+pub fn write_asserts<'a, I: IntoIterator<Item = &'a Rc<Term>>>(
     pool: &mut PrimitivePool,
     prelude: &ProblemPrelude,
     dest: &mut dyn io::Write,
-    asserts: &Vec<Rc<Term>>,
+    assertions: I,
     use_sharing: bool,
 ) -> io::Result<()> {
     let mut printer = AlethePrinter::new(pool, prelude, use_sharing, dest);
     // We have to override the default prefix "@p_" because symbols starting with "@" are reserved
     // in SMT-LIB.
-    printer.term_sharing_variable_prefix = "p_";
+    printer.term_sharing_variable_prefix = "p_".to_owned();
     // Since we are printing an SMT-LIB problem, we have to be
     // compliant. For Carcara, this means that arithmetic constants
     // cannot use the GMP notation
     printer.smt_lib_strict = true;
 
-    for assertion in asserts {
+    for assertion in assertions {
         write!(printer.inner, "(assert ")?;
         assertion.print_with_sharing(&mut printer)?;
         writeln!(printer.inner, ")")?;
     }
+    Ok(())
+}
+
+#[allow(unused)] // TODO
+pub fn write_term(
+    pool: &mut PrimitivePool,
+    prelude: &ProblemPrelude,
+    dest: &mut dyn io::Write,
+    term: &Rc<Term>,
+    use_sharing: bool,
+    prefix: String,
+) -> io::Result<()> {
+    let mut printer = AlethePrinter::new(pool, prelude, use_sharing, dest);
+    printer.term_sharing_variable_prefix = prefix;
+    // Since we are printing an SMT-LIB problem, we have to be
+    // compliant. For Carcara, this means that arithmetic constants
+    // cannot use the GMP notation
+    printer.smt_lib_strict = true;
+    term.print_with_sharing(&mut printer)?;
     Ok(())
 }
 
@@ -127,12 +146,14 @@ impl PrintWithSharing for Rc<Term> {
             if !cannot_use_sharing {
                 return if let Some(i) = indices.get(self) {
                     write!(p.inner, "{}{}", p.term_sharing_variable_prefix, i)
-                } else {
+                } else if p.use_sharing {
                     let i = indices.len();
                     indices.insert(self.clone(), i);
                     write!(p.inner, "(! ")?;
                     p.write_raw_term(self)?;
                     write!(p.inner, " :named {}{})", p.term_sharing_variable_prefix, i)
+                } else {
+                    p.write_raw_term(self)
                 };
             }
         }
@@ -176,14 +197,15 @@ impl PrintWithSharing for ParamOperator {
     }
 }
 
-struct AlethePrinter<'a> {
+pub struct AlethePrinter<'a> {
     pool: &'a mut PrimitivePool,
     inner: &'a mut dyn io::Write,
     term_indices: Option<IndexMap<Rc<Term>, usize>>,
-    term_sharing_variable_prefix: &'static str,
+    term_sharing_variable_prefix: String,
     global_vars: HashSet<Rc<Term>>,
     defined_constants: HashMap<Rc<Term>, String>,
     smt_lib_strict: bool,
+    use_sharing: bool,
 }
 
 impl PrintProof for AlethePrinter<'_> {
@@ -270,10 +292,11 @@ impl<'a> AlethePrinter<'a> {
             pool,
             inner: dest,
             term_indices: use_sharing.then(IndexMap::new),
-            term_sharing_variable_prefix: "@p_",
+            term_sharing_variable_prefix: "@p_".to_owned(),
             global_vars: global_variables,
             defined_constants: HashMap::new(),
             smt_lib_strict: false,
+            use_sharing,
         }
     }
 
@@ -295,7 +318,7 @@ impl<'a> AlethePrinter<'a> {
         write!(self.inner, ")")
     }
 
-    fn write_raw_term(&mut self, term: &Term) -> io::Result<()> {
+    pub fn write_raw_term(&mut self, term: &Term) -> io::Result<()> {
         match term {
             Term::Const(c) => {
                 if self.smt_lib_strict {
@@ -344,7 +367,11 @@ impl<'a> AlethePrinter<'a> {
                 write!(self.inner, "({} ", binder)?;
                 bindings.print_with_sharing(self)?;
                 write!(self.inner, " ")?;
+                // TODO: should we avoid creating names within binders?
+                // let place_holder = self.use_sharing;
+                // self.use_sharing = false;
                 term.print_with_sharing(self)?;
+                // self.use_sharing = place_holder;
                 write!(self.inner, ")")
             }
             Term::Let(bindings, term) => {
@@ -352,6 +379,13 @@ impl<'a> AlethePrinter<'a> {
                 bindings.print_with_sharing(self)?;
                 write!(self.inner, " ")?;
                 term.print_with_sharing(self)?;
+                write!(self.inner, ")")
+            }
+            Term::Match(term, patterns) => {
+                write!(self.inner, "(match {} (", term)?;
+                for (_, pattern, res) in patterns {
+                    write!(self.inner, "({} {})", pattern, res)?;
+                }
                 write!(self.inner, ")")
             }
             Term::ParamOp { op, op_args, args } => {
@@ -478,10 +512,11 @@ impl fmt::Display for Term {
             pool: &mut pool,
             inner: &mut buf,
             term_indices: use_sharing.then(IndexMap::new),
-            term_sharing_variable_prefix: "@p_",
+            term_sharing_variable_prefix: "@p_".to_owned(),
             global_vars: HashSet::new(),
             defined_constants: HashMap::new(),
             smt_lib_strict: false,
+            use_sharing,
         };
         printer.write_raw_term(self).unwrap();
         let result = std::str::from_utf8(&buf).unwrap();
@@ -555,11 +590,12 @@ impl fmt::Display for Sort {
             Sort::Real => write!(f, "Real"),
             Sort::String => write!(f, "String"),
             Sort::RegLan => write!(f, "RegLan"),
+            Sort::Datatype(name, args) => write_s_expr(f, quote_symbol(name), args),
             Sort::Var(name) => write!(f, "{}", name),
             Sort::ParamSort(args, s) => write!(f, "(par {:?} {})", args, s),
             Sort::Array(x, y) => write_s_expr(f, "Array", &[x, y]),
             Sort::BitVec(w) => write!(f, "(_ BitVec {})", w),
-            Sort::RareList => write!(f, "rare-list"),
+            Sort::RareList(elem) => write_s_expr(f, "rare-list", &[elem]),
             Sort::Type => write!(f, "Type"),
         }
     }
@@ -613,13 +649,13 @@ mod tests {
     fn test_sharing() {
         use crate::parser;
 
-        let definitions: &[u8] = b"
+        let definitions = "
             (declare-const a Bool)
             (declare-const b Bool)
             (declare-const y Bool)
             (declare-const z Bool)
         ";
-        let proof: &[u8] = b"
+        let proof = "
             (step t1 (cl (and (= 1 2) (= 1 2))) :rule hole)
             (step t2 (cl (and (or a b) (not (or a b)))) :rule hole)
             (step t3 (cl (and (forall ((x Int)) (or (= x 2) (= 2 3))) (= 2 3))) :rule hole)

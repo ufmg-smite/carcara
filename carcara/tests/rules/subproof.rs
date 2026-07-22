@@ -50,6 +50,12 @@ fn subproof() {
             (step t1 (cl (not p) (not q) (not (= r s)))
                 :rule subproof :discharge (t1.h1 t1.h2))": false,
         }
+        "Empty clause" {
+            "(anchor :step t1)
+            (assume t1.h1 p)
+            (step t1.t2 (cl) :rule hole)
+            (step t1 (cl (not p) false) :rule subproof :discharge (t1.h1))": true,
+        }
     }
 }
 

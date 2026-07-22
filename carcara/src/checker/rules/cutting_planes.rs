@@ -646,7 +646,7 @@ pub fn cp_normalize(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 
     if relation_operator == &Operator::Equals {
         // • 𝜑 = 𝑘 ⇒ (𝜑 ≥ 𝑘) ∧ (¬𝜑 ≥ −𝑘)
-        let ((sum_l, kl), (sum_r, kr)) =
+        let (sum_l, kl, sum_r, kr) =
             match_term_err!((and (>= sum_l kl) (>= sum_r kr)) = normalized_relation)?;
 
         // Check (𝜑 ≥ 𝑘)

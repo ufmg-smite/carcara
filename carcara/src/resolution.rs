@@ -18,6 +18,9 @@ pub enum ResolutionError {
 
     #[error("pivot was not found in clause: '{0}'")]
     PivotNotFound(Rc<Term>),
+
+    #[error("RUP resolution failed")]
+    RupFailed,
 }
 
 pub type Literal<'a> = (u32, &'a Rc<Term>);

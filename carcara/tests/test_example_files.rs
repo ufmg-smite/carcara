@@ -1,6 +1,6 @@
 use carcara::*;
 use std::{
-    fs, io,
+    fs,
     path::{Path, PathBuf},
 };
 
@@ -13,8 +13,8 @@ fn run_parallel_checker_test(
     use std::sync::Arc;
 
     let (problem, proof, rare_rules, pool) = parser::parse_instance(
-        io::BufReader::new(fs::File::open(problem_path)?),
-        io::BufReader::new(fs::File::open(proof_path)?),
+        &fs::read_to_string(problem_path)?,
+        &fs::read_to_string(proof_path)?,
         None,
         config.0,
     )?;
@@ -38,8 +38,8 @@ fn run_test(
     config: (parser::Config, checker::Config),
 ) -> CarcaraResult<()> {
     let (problem, proof, rare_rules, mut pool) = parser::parse_instance(
-        io::BufReader::new(fs::File::open(problem_path)?),
-        io::BufReader::new(fs::File::open(proof_path)?),
+        &fs::read_to_string(problem_path)?,
+        &fs::read_to_string(proof_path)?,
         None,
         config.0,
     )?;
@@ -49,26 +49,27 @@ fn run_test(
 
     // Then we elaborate it
     let elab_config = elaborator::Config {
-        lia_options: None,
-        hole_options: None,
+        lia_solver: None,
+        hole_solver: None,
         uncrowd_rotation: true,
+        sat_ref_tools: None,
     };
     let node = ast::ProofNodeForest::from_commands(proof.commands.clone());
     let elaborated_node = elaborator::Elaborator::new(&mut pool, &problem, elab_config.clone())
-        .elaborate_with_default_pipeline(node);
+        .elaborate_with_default_pipeline(node)?;
     let elaborated = ast::Proof {
         constant_definitions: proof.constant_definitions.clone(),
         commands: elaborated_node.into_commands(),
     };
 
     // After that, we check the elaborated proof to make sure it is valid
-    checker::ProofChecker::new(&mut pool, &rare_rules, config.1.clone())
+    checker::ProofChecker::new(&mut pool, &rare_rules, config.1.clone().elaborated(true))
         .check(&problem, &elaborated)?;
 
-    // Finally, we elaborate the already elaborated proof, to make sure the elaboration step is
+    // Finally, we elaborate the already elaborated proof, to make sure the elaboration is
     // idempotent
     let elaborated_twice = elaborator::Elaborator::new(&mut pool, &problem, elab_config)
-        .elaborate_with_default_pipeline(elaborated_node);
+        .elaborate_with_default_pipeline(elaborated_node)?;
     assert!(
         elaborated.commands == elaborated_twice.into_commands(),
         "elaboration was not idempotent!"
@@ -91,11 +92,7 @@ fn test_file(proof_path: &str) {
             strict: false,
             parse_hole_args: false,
         };
-        let checking = checker::Config {
-            elaborated: false,
-            ignore_unknown_rules: false,
-            allowed_rules: ["all_simplify", "rare_rewrite"].map(str::to_owned).into(),
-        };
+        let checking = checker::Config::new().allowed_rules(["all_simplify", "rare_rewrite"]);
         (parsing, checking)
     } else {
         (parser::Config::new(), checker::Config::new())
@@ -117,6 +114,9 @@ fn test_file(proof_path: &str) {
             Error::Parser(_, (line, column)) => format!("parser error at {}:{}", line, column),
             Error::Checker { rule, step, .. } => format!("checker error at '{}' ({})", step, rule),
             Error::DoesNotReachEmptyClause => format!("{}", e), // This one is already pretty short
+            Error::Elaborator { rule, step, .. } => {
+                format!("elaborator error at '{}' ({})", step, rule)
+            }
         };
         panic!(
             "\"{}\" returned error: {}",

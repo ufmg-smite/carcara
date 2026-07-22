@@ -6,7 +6,7 @@ pub fn forall_inst(
     pool: &mut PrimitivePool,
     _: &mut ContextStack,
     step: &StepNode,
-) -> Result<Rc<ProofNode>, CheckerError> {
+) -> Result<Rc<ProofNode>, ElaborationError> {
     assert_eq!(step.clause.len(), 1);
 
     let (quantified, substituted) =
@@ -25,7 +25,7 @@ pub fn forall_inst(
             (var.clone(), value.clone())
         })
         .collect();
-    let mut substitution = Substitution::new(pool, substitution)?;
+    let mut substitution = Substitution::new(pool, substitution).map_err(CheckerError::from)?;
 
     // Equalities may be reordered, and the application of the substitution might rename bound
     // variables, so we need to compare for alpha-equivalence here

@@ -1,25 +1,29 @@
 pub mod error;
 mod parallel;
 mod rules;
+mod sat_refutation;
 mod shared;
 
 use crate::{
     ast::{rare_rules::Rules, *},
     benchmarking::{CollectResults, OnlineBenchmarkResults},
+    external::{ExternalTool, SatTools},
     CarcaraResult, Error,
 };
 use error::CheckerError;
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 pub use parallel::{scheduler::Scheduler, ParallelProofChecker};
-use rules::{Premise, Rule, RuleArgs, RuleResult};
-use shared::{check_assume_shared, check_step_core, get_rule_shared, StepCheckContext};
+use rules::{Premise, RuleArgs, RuleResult};
+use shared::{check_assume_shared, check_step_core, StepCheckContext};
 use std::{
     collections::HashSet,
     fmt,
     time::{Duration, Instant},
 };
 
+// The elaborator needs to use this function to elaborate `bfun_elim` steps
 pub(crate) use rules::clausification::apply_bfun_elim;
+pub(crate) use rules::linear_arithmetic::la_generic_partial;
 
 #[derive(Clone)]
 pub struct CheckerStatistics<'s, CR: CollectResults + Send + Default> {
@@ -47,6 +51,14 @@ impl<CR: CollectResults + Send + Default> fmt::Debug for CheckerStatistics<'_, C
 }
 
 #[derive(Debug, Default, Clone)]
+pub enum SatRefConfig {
+    #[default]
+    None,
+    Dedicated(ExternalTool),
+    Sat(SatTools),
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct Config {
     /// If `true`, the checker will assume that the proof is elaborated, and enforce extra
     /// restrictions when checking it.
@@ -60,8 +72,16 @@ pub struct Config {
     /// consider them as holes. Normally, using an unknown rule is considered an error.
     pub ignore_unknown_rules: bool,
 
+    /// If `true`, the checker will check resolution steps using only Reverse Unit Propagation
+    /// (RUP). Normally, we use a greedy algorithm first, and use RUP as a fallback.
+    pub rup_resolution: bool,
+
     /// A set of rule names that the checker will allow, considering them holes in the proof.
     pub allowed_rules: HashSet<String>,
+
+    pub rule_checkers: IndexMap<String, ExternalTool>,
+
+    pub sat_ref_config: SatRefConfig,
 }
 
 impl Config {
@@ -76,6 +96,12 @@ impl Config {
 
     pub fn ignore_unknown_rules(mut self, value: bool) -> Self {
         self.ignore_unknown_rules = value;
+        self
+    }
+
+    pub fn allowed_rules(mut self, values: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        let values = values.into_iter().map(Into::into).collect();
+        self.allowed_rules = values;
         self
     }
 }
@@ -143,7 +169,7 @@ impl<'c> ProofChecker<'c> {
                     } else {
                         None
                     };
-                    self.check_step(step, previous_command, &iter, &mut stats)
+                    self.check_step(step, previous_command, &iter, &mut stats, &problem.prelude)
                         .map_err(|e| Error::Checker {
                             inner: e,
                             rule: step.rule.as_str().into(),
@@ -157,6 +183,9 @@ impl<'c> ProofChecker<'c> {
                         self.context.pop();
                     }
 
+                    // Note that for the purpose of whether the proof of the input assumptions
+                    // concludes the empty clause this test must be made only when the context is
+                    // empty, i.e., when we are not in a subproof
                     if step.clause.is_empty() && self.context.is_empty() {
                         self.reached_empty_clause = true;
                     }
@@ -222,6 +251,7 @@ impl<'c> ProofChecker<'c> {
         previous_command: Option<Premise>,
         iter: &'i ProofIter<'i>,
         stats: &mut Option<&mut CheckerStatistics<CR>>,
+        prelude: &ProblemPrelude,
     ) -> RuleResult {
         let mut polyeq_time = Duration::ZERO;
 
@@ -239,6 +269,19 @@ impl<'c> ProofChecker<'c> {
             .iter()
             .map(|&i| iter.get_premise(i))
             .collect();
+
+        // TODO: for now, sat refutation and calling external solvers is only supported in
+        // sequential checking mode
+        if step.rule == "sat_refutation" && !self.config.allowed_rules.contains("sat_refutation") {
+            let premises_steps: Vec<_> =
+                step.premises.iter().map(|&p| iter.get_premise(p)).collect();
+            return sat_refutation::sat_refutation(
+                self.pool,
+                premises_steps,
+                prelude,
+                &self.config.sat_ref_config,
+            );
+        }
 
         // Prepare rule arguments - this is pool-specific
         let rule_args = RuleArgs {
@@ -271,9 +314,5 @@ impl<'c> ProofChecker<'c> {
         }
 
         result
-    }
-
-    pub fn get_rule(rule_name: &str, elaborated: bool) -> Option<Rule> {
-        get_rule_shared(rule_name, elaborated)
     }
 }

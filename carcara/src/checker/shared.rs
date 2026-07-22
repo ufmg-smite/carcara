@@ -2,9 +2,11 @@ use crate::{
     ast::*,
     benchmarking::CollectResults,
     checker::{
+        error::{CheckerError, SubproofError},
         rules::{rare::check_rare, RuleArgs, RuleResult},
         CheckerStatistics, Config,
     },
+    external::ExternalTool,
 };
 use indexmap::IndexSet;
 use std::time::{Duration, Instant};
@@ -106,18 +108,24 @@ pub fn check_step_core<CR: CollectResults + Send + Default>(
     }
 
     if !step.discharge.is_empty() && step.rule != "subproof" {
-        use crate::checker::error::{CheckerError, SubproofError};
         return Err(CheckerError::Subproof(SubproofError::DischargeInWrongRule));
     }
 
-    let rule = match get_rule_shared(&step.rule, context.config.elaborated) {
+    if let Some(custom_checker) = context.config.rule_checkers.get(&step.rule) {
+        return check_external(rule_args.args, custom_checker);
+    }
+
+    let rule = match get_rule(
+        &step.rule,
+        context.config.elaborated,
+        context.config.rup_resolution,
+    ) {
         Some(r) => r,
         None if context.config.ignore_unknown_rules => {
             *context.is_holey = true;
             return Ok(());
         }
         None => {
-            use crate::checker::error::CheckerError;
             return Err(CheckerError::UnknownRule);
         }
     };
@@ -150,8 +158,6 @@ pub fn check_discharge_shared(
     depth: usize,
     discharge: &[(usize, usize)],
 ) -> RuleResult {
-    use crate::checker::error::{CheckerError, SubproofError};
-
     let discharge: IndexSet<_> = discharge.iter().collect();
     if let Some((_, not_discharged)) = subproof
         .iter()
@@ -166,7 +172,35 @@ pub fn check_discharge_shared(
     }
 }
 
-pub fn get_rule_shared(rule_name: &str, elaborated: bool) -> Option<crate::checker::rules::Rule> {
+fn check_external(args: &[Rc<Term>], checker: &ExternalTool) -> RuleResult {
+    let args_str: Vec<String> = args.iter().map(|t| format!("{}", t)).collect();
+    let string = format!("(\n{}\n)", args_str.join("\n"));
+
+    let output = checker.call(string.as_bytes())?;
+
+    if !output.status.success() {
+        if let Ok(s) = std::str::from_utf8(&output.stderr) {
+            if s.contains("interrupted by timeout.") {
+                return Err(CheckerError::Unspecified);
+            }
+        }
+        return Err(CheckerError::Unspecified);
+    }
+    let res = output.stdout.as_slice();
+    if res == b"true\n" {
+        return Ok(());
+    }
+    Err(CheckerError::Explanation(format!(
+        "External checker {} did not validate step",
+        checker
+    )))
+}
+
+pub fn get_rule(
+    rule_name: &str,
+    elaborated: bool,
+    prefer_rup: bool,
+) -> Option<crate::checker::rules::Rule> {
     use crate::checker::rules::*;
 
     Some(match rule_name {
@@ -199,22 +233,25 @@ pub fn get_rule_shared(rule_name: &str, elaborated: bool) -> Option<crate::check
         "distinct_elim" => clausification::distinct_elim,
         "la_rw_eq" => linear_arithmetic::la_rw_eq,
         "la_generic" => linear_arithmetic::la_generic,
+        "bounded_farkas" => linear_arithmetic::bounded_farkas,
         "la_disequality" => linear_arithmetic::la_disequality,
         "la_totality" => linear_arithmetic::la_totality,
         "la_tautology" => linear_arithmetic::la_tautology,
-        // We allow the usage of legacy rules `bv_poly_simp(_eq)`
-        "poly_simp" | "bv_poly_simp" => polynomial::poly_simp,
-        "poly_simp_rel" | "bv_poly_simp_eq" => polynomial::poly_simp_rel,
+        "poly_simp" => polynomial::poly_simp,
+        "poly_simp_rel" => polynomial::poly_simp_rel,
         "forall_inst" => quantifier::forall_inst,
         "qnt_join" => quantifier::qnt_join,
         "qnt_rm_unused" => quantifier::qnt_rm_unused,
         "resolution" | "th_resolution" if elaborated => resolution::resolution_with_args,
+        "resolution" | "th_resolution" if prefer_rup => resolution::rup_resolution,
         "resolution" | "th_resolution" => resolution::resolution,
         "refl" if elaborated => reflexivity::strict_refl,
         "refl" => reflexivity::refl,
+        "strict_refl" => reflexivity::strict_refl,
         "trans" => transitivity::trans,
         "cong" => congruence::cong,
         "ho_cong" => congruence::ho_cong,
+        "and_intro" => extras::and_intro,
         "and" => clausification::and,
         "tautology" => resolution::tautology,
         "not_or" => clausification::not_or,
@@ -257,6 +294,7 @@ pub fn get_rule_shared(rule_name: &str, elaborated: bool) -> Option<crate::check
         "comp_simplify" => simplification::comp_simplify,
         "nary_elim" => clausification::nary_elim,
         "ac_simp" => simplification::ac_simp,
+        "aci_simp" => simplification::aci_simp,
         "bfun_elim" => clausification::bfun_elim,
         "bind" => subproof::bind,
         "qnt_cnf" => quantifier::qnt_cnf,
@@ -297,6 +335,17 @@ pub fn get_rule_shared(rule_name: &str, elaborated: bool) -> Option<crate::check
         "bitblast_extract" => bitvectors::extract,
         "bitblast_concat" => bitvectors::concat,
         "bitblast_sign_extend" => bitvectors::sign_extend,
+        "bitblast_shl" => bitvectors::shl,
+        "bitblast_lshr" => bitvectors::lshr,
+        "bitblast_ashr" => bitvectors::ashr,
+        "bitblast_udiv" => bitvectors::udiv,
+        "bitblast_urem" => bitvectors::urem,
+
+        // array rules
+        "arrays_idx" => arrays::idx,
+        "arrays_row" => arrays::row,
+        "arrays_row_contra" => arrays::row_contra,
+        "arrays_ext" => arrays::ext,
 
         "concat_eq" => strings::concat_eq,
         "concat_unify" => strings::concat_unify,

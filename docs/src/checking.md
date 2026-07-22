@@ -19,17 +19,19 @@ explicit applications of the `hole` rule, or steps that use an unknown or unsupp
 
 See `carcara check --help` for a full list of options.
 
-## Dealing with unknown rules
-By default, Carcara will return a checking error when encountering a rule it does not recognize.
-If instead you want to ignore such rules, you can use the `--ignore-unknown-rules`/`-i` flag.
-Alternatively, you can use the `--allowed-rules` option to pass a specific list of unkown rules to
-allow. For example:
+## Bypassing checking for specific rules
+If you want Carcara to skip checking for specific rules, you can use the `--allowed-rules` option,
+for example:
 ```
 carcara check example.smt2.alethe --allowed-rules foo bar
 ```
+With this option, Carcara will ignore steps that use any of the given rules, and will consider them
+holes in the proof.
 
+By default, Carcara returns a checking error when encountering a rule it does not recognize.
+If instead you want to ignore all such rules, you can use the `--ignore-unknown-rules`/`-i` flag.
 If a proof uses a rule that is allowed by either `--ignore-unknown-rules` or `--allowed-rules`, it
-will be considered `holey`.
+will be reported as `holey`.
 
 ## The `lia_generic` rule
 Carcara does not check steps that use the `lia_generic` rule. This is an extremely coarse-grained

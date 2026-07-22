@@ -1,3 +1,4 @@
+use crate::external::ExternalError;
 use crate::{
     ast::*,
     checker::rules::linear_arithmetic::LinearComb,
@@ -39,6 +40,9 @@ pub enum CheckerError {
 
     #[error(transparent)]
     Polynomial(#[from] PolynomialError),
+
+    #[error(transparent)]
+    External(#[from] ExternalError),
 
     #[error(transparent)]
     Subproof(#[from] SubproofError),
@@ -153,6 +157,9 @@ pub enum CheckerError {
 
     #[error("expected term '{0}' to be an non-negative integer constant")]
     ExpectedNonnegInteger(Rc<Term>),
+
+    #[error("expected term '{0}' to be a bitvector constant")]
+    ExpectedBitvector(Rc<Term>),
 
     #[error("expected operation term, got '{0}'")]
     ExpectedOperationTerm(Rc<Term>),
@@ -364,6 +371,9 @@ pub enum PolynomialError {
 
     #[error("coefficients should have the same signum: '{0}' and '{1}'")]
     CoeffDifferentSignums(Rational, Rational),
+
+    #[error("coefficient should be odd: '{0}'")]
+    CoeffEven(Integer),
 
     #[error("invalid relation operators: '{0}' and '{1}'")]
     InvalidOperators(Operator, Operator),

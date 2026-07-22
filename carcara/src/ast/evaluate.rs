@@ -150,6 +150,7 @@ impl Rc<Term> {
                 cache.insert(self, self.clone());
                 return cache.get(self).unwrap();
             }
+            Term::Match(_, _) => todo!(), // TODO
         };
         cache.insert(self, pool.add(result));
         cache.get(self).unwrap()
@@ -286,6 +287,26 @@ fn eval_op(op: Operator, args: &[Rc<Term>]) -> Option<Value> {
             Value::Real(r) => Value::Real(r.clone().abs()),
             _ => return None,
         },
+        Operator::Pow2 => {
+            let v = args[0].as_int()?;
+            if v < 0 {
+                return Some(Value::Integer(Integer::from(0)));
+            }
+            let v = v.to_usize()?;
+            Value::Integer(Integer::from(1) << v)
+        }
+        Operator::Log2 => {
+            let v = args[0].as_int()?;
+            if v <= 0 {
+                Value::Integer(Integer::from(0))
+            } else {
+                Value::Integer(Integer::from(v.significant_bits() - 1))
+            }
+        }
+        Operator::IsPow2 => {
+            let v = args[0].as_int()?;
+            Value::Bool(v.is_power_of_two())
+        }
         Operator::LessThan => comparison_op!(<, args),
         Operator::GreaterThan => comparison_op!(>, args),
         Operator::LessEq => comparison_op!(<=, args),
@@ -543,6 +564,8 @@ fn eval_param_op(op: ParamOperator, op_args: &[Rc<Term>], args: &[Rc<Term>]) -> 
 
         // TODO: Strings, Arrays
         ParamOperator::RePower | ParamOperator::ReLoop | ParamOperator::ArrayConst => return None,
+
+        ParamOperator::Tester => todo!(), // TODO
     })
 }
 

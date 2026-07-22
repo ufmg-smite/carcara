@@ -13,21 +13,21 @@ Many of the same options used in the `check` command also apply to the `elaborat
 `carcara elaborate --help` for more details.
 
 ## Elaboration pipeline
-The specific elaboration applied to the proof is controlled via a `--pipeline` option. This takes a
-series of elaboration steps, and will apply them in the given order. The possible elaboration steps
-are:
-- [`polyeq`]()
+The specific way in which Carcara elaborates the proof is controlled via a `--pipeline` option.
+This takes a series of _elaboration passes_, and will apply them in the given order. The possible
+elaboration passes are:
+- [`polyeq`](./elaboration/polyeq.md)
 - [`lia-generic`]()
-- [`local`]()
-- [`uncrowd`]()
-- [`reordering`]()
+- [`local`](./elaboration/local.md)
+- [`uncrowd`](./elaboration/uncrowding.md)
+- [`reordering`](./elaboration/reordering.md)
 - [`hole`]()
 
 By default, Carcara will attempt to apply all of these in the listed order.
 
 ### Example
 The following command will elaborate the given proof file with the `uncrowd` and `polyeq`
-elaboration steps, in that order:
+elaboration passes, in that order:
 ```
 carcara elaborate example.smt2.alethe --pipeline uncrowd polyeq
 ```

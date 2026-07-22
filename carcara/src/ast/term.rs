@@ -31,6 +31,11 @@ pub enum Term {
     /// A `let` binder term.
     Let(BindingList, Rc<Term>),
 
+    /// A `match` term, consisting of a term to be matched and a
+    /// sequence of (pattern,result) pairs, where each each pattern
+    /// binds a number of variables
+    Match(Rc<Term>, Vec<(BindingList, Rc<Term>, Rc<Term>)>),
+
     /// A parameterized operation term, that is, an operation term whose operator receives extra
     /// parameters.
     ///
@@ -39,6 +44,7 @@ pub enum Term {
     ///   syntax. In this case, the operator parameters must be constants.
     /// - A `qualified` operation term, that uses a qualified operator denoted by the `(as ...)`
     ///   syntax. In this case, the single operator parameter must be a sort.
+    /// - A `tester` of a datatype constructor `C`, denoted by `(_ is C)`.
     ParamOp {
         op: ParamOperator,
         op_args: Vec<Rc<Term>>,
@@ -89,11 +95,15 @@ pub enum Sort {
     /// The associated `usize` is the BV width of this sort.
     BitVec(usize),
 
+    /// A datatype sort only has its name and its type parameters
+    Datatype(String, Vec<Rc<Term>>),
+
+    // TODO delete this and incorporate it to function sort?
     /// A parametric sort, with a set of sort variables that can appear in the second argument.
     ParamSort(Vec<Rc<Term>>, Rc<Term>),
 
-    /// The sort of RARE lists.
-    RareList,
+    /// The sort of RARE lists, parameterized by their element sort.
+    RareList(Rc<Term>),
 
     /// The sort of sorts.
     Type,
@@ -372,6 +382,12 @@ pub enum Operator {
     BvConst,
     BvSize,
 
+    // power of 2 to x, and whether x is a power of 2
+    Pow2,
+    IsPow2,
+    // logarithm in base 2 of x
+    Log2,
+
     // Misc.
     /// The `rare-list` operator, used to represent RARE lists.
     RareList,
@@ -489,6 +505,9 @@ impl Operator {
             | Operator::BvBbTerm
             | Operator::BvConst
             | Operator::BvSize
+            | Operator::Pow2
+            | Operator::IsPow2
+            | Operator::Log2
             | Operator::RareList => None,
 
             // Clausal
@@ -514,6 +533,9 @@ pub enum ParamOperator {
 
     RePower,
     ReLoop,
+
+    // Datatypes,
+    Tester,
 
     // Qualified operators
     ArrayConst,
@@ -624,6 +646,10 @@ impl_str_conversion_traits!(Operator {
     BvConst: "@bv",
     BvSize: "@bvsize",
 
+    Pow2: "int.pow2",
+    IsPow2: "int.ispow2",
+    Log2: "int.log2",
+
     RareList: "rare-list",
 
     Cl: "cl",
@@ -645,6 +671,8 @@ impl_str_conversion_traits!(ParamOperator {
 
     RePower: "re.^",
     ReLoop: "re.loop",
+
+    Tester: "is",
 
     ArrayConst: "const",
 });
@@ -731,13 +759,26 @@ impl Sort {
                     a_s.match_with(b_s, map)
                 })
             }
+            (Sort::Datatype(a, sorts_a), Sort::Datatype(b, sorts_b)) => {
+                if a != b {
+                    false
+                } else {
+                    sorts_a.iter().zip(sorts_b.iter()).all(|(t_a, t_b)| {
+                        let s_a = t_a.as_sort().unwrap();
+                        let s_b = t_b.as_sort().unwrap();
+                        s_a.match_with(s_b, map)
+                    })
+                }
+            }
             (Sort::Bool, Sort::Bool)
             | (Sort::Int, Sort::Int)
             | (Sort::Real, Sort::Real)
             | (Sort::String, Sort::String)
             | (Sort::RegLan, Sort::RegLan)
-            | (Sort::RareList, Sort::RareList)
             | (Sort::Type, Sort::Type) => true,
+            (Sort::RareList(a), Sort::RareList(b)) => {
+                a.as_sort().unwrap().match_with(b.as_sort().unwrap(), map)
+            }
             (Sort::Array(x_a, y_a), Sort::Array(x_b, y_b)) => {
                 let s_x_a = x_a.as_sort().unwrap();
                 let s_y_a = y_a.as_sort().unwrap();
@@ -871,6 +912,14 @@ impl Term {
         }
     }
 
+    /// Tries to extract a `String` from a term. Returns `Some` if the term is a boolean constant.
+    pub fn as_string(&self) -> Option<String> {
+        match self {
+            Term::Const(Constant::String(s)) => Some(s.to_owned()),
+            _ => None,
+        }
+    }
+
     /// Tries to extract a `Rational` from a term, allowing fractions. This method will return
     /// `Some` if the term is:
     ///
@@ -931,8 +980,18 @@ impl Term {
 
     /// Returns `true` if the term is a user defined parametric sort
     pub fn is_sort_parametric(&self) -> bool {
-        matches!(self, Term::Sort(Sort::ParamSort(_, _)))
+        match self {
+            Term::Sort(Sort::ParamSort(_, _)) => true,
+            Term::Sort(Sort::Datatype(_, args)) if !args.is_empty() => true,
+            _ => false,
+        }
     }
+
+    /// Returns `true` if the term is a user defined sort with arity zero, or a sort variable.
+    pub fn is_sort_dt(&self) -> bool {
+        matches!(self, Term::Sort(Sort::Datatype(_, _)))
+    }
+
     /// Tries to unwrap an operation term, returning the `Operator` and the arguments. Returns
     /// `None` if the term is not an operation term.
     pub fn as_op(&self) -> Option<(Operator, &[Rc<Term>])> {
@@ -1053,6 +1112,12 @@ impl Rc<Term> {
             .ok_or_else(|| CheckerError::ExpectedAnyNumber(self.clone()))
     }
 
+    /// Similar to `Term::as_bitvector`, but returns a `CheckerError` on failure.
+    pub fn as_bitvector_err(&self) -> Result<(Integer, usize), CheckerError> {
+        self.as_bitvector()
+            .ok_or_else(|| CheckerError::ExpectedBitvector(self.clone()))
+    }
+
     /// Similar to `Term::as_fraction`, but returns a `CheckerError` on failure.
     pub fn as_fraction_err(&self) -> Result<Rational, CheckerError> {
         self.as_fraction()
@@ -1118,6 +1183,7 @@ impl Sort {
         match self {
             Sort::Var(_) => true,
             Sort::ParamSort(_, sort) if matches!(&**sort, Term::Sort(Sort::Var(_))) => true,
+            Sort::RareList(inner) => inner.as_sort().is_some_and(Sort::is_polymorphic),
             _ => false,
         }
     }
