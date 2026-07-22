@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Checking proofs with Carcara - Carcara Documentation</title>
+        <title>Checking Rare rewrites - Carcara Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -12,34 +12,34 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="favicon.svg">
-        <link rel="shortcut icon" href="favicon.png">
-        <link rel="stylesheet" href="css/variables.css">
-        <link rel="stylesheet" href="css/general.css">
-        <link rel="stylesheet" href="css/chrome.css">
-        <link rel="stylesheet" href="css/print.css" media="print">
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="fonts/fonts.css">
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="highlight-css" href="highlight.css">
-        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
-        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
 
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "";
+            const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "ayu";
-            window.path_to_searchindex_js = "searchindex.js";
+            window.path_to_searchindex_js = "../searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc.js"></script>
+        <script src="../toc.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -106,7 +106,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -141,7 +141,7 @@
                     <h1 class="menu-title">Carcara Documentation</h1>
 
                     <div class="right-buttons">
-                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
                         <a href="https://github.com/ufmg-smite/carcara" title="Git repository" aria-label="Git repository">
@@ -178,55 +178,47 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="checking-proofs-with-carcara"><a class="header" href="#checking-proofs-with-carcara">Checking proofs with Carcara</a></h1>
-<p>To check a proof file with Carcara, use the <code>check</code> command, passing both the proof file and the
-original SMT-LIB problem file:</p>
-<pre><code>carcara check example.smt2.alethe example.smt2
+                        <h1 id="checking-rare-rewrites"><a class="header" href="#checking-rare-rewrites">Checking Rare rewrites</a></h1>
+<p>SMT solvers can produce proofs that may depend on rare rules. In general, rare rules have the following format:</p>
+<pre><code>(declare-rare-rule bool-implies-de-morgan ((x1 Bool) (y1 Bool))
+  :args (x1 y1)
+  :conclusion (= (not (=&gt; x1 y1)) (and x1 (not y1)))
+)
 </code></pre>
-<p>If the problem filename is exactly the proof filename minus <code>.alethe</code>, you can omit it, and Carcara
-will infer it:</p>
-<pre><code>carcara check example.smt2.alethe
+<p>First, we have a set of arguments and a conclusion. We can substitute the arguments into the conclusion. The substitution can be any first-order term available in the Alethe context.</p>
+<pre><code>(step st191.t1 
+  (cl (= (not (=&gt; (not (member$ ?v0 ?v1)) (= ?v0 ?v2)))
+         (and (not (member$ ?v0 ?v1)) (not (= ?v0 ?v2)))))
+  :rule rare_rewrite
+  :args ("bool-implies-de-morgan" (not (member$ ?v0 ?v1)) (= ?v0 ?v2)))
 </code></pre>
-<p>When checking a proof, Carcara will report one of three outcomes:</p>
-<ul>
-<li><code>valid</code>: The proof was fully checked, and no errors were found.</li>
-<li><code>invalid</code>: An error was found in part of the proof; an error message will have been printed.</li>
-<li><code>holey</code>: No errors were found, but the proof contained one or more “holes”. These can be either
-explicit applications of the <code>hole</code> rule, or steps that use an unknown or unsupported rule.</li>
-</ul>
-<p>See <code>carcara check --help</code> for a full list of options.</p>
-<h2 id="bypassing-checking-for-specific-rules"><a class="header" href="#bypassing-checking-for-specific-rules">Bypassing checking for specific rules</a></h2>
-<p>If you want Carcara to skip checking for specific rules, you can use the <code>--allowed-rules</code> option,
-for example:</p>
-<pre><code>carcara check example.smt2.alethe --allowed-rules foo bar
+<p>Arguments can also be polymorphic:</p>
+<pre><code class="language-lisp">(declare-rare-rule eq-refl ((@T0 Type) (t1 @T0))
+  :args (t1)
+  :premises ()
+  :conclusion (= (= t1 t1) true))
 </code></pre>
-<p>With this option, Carcara will ignore steps that use any of the given rules, and will consider them
-holes in the proof.</p>
-<p>By default, Carcara returns a checking error when encountering a rule it does not recognize.
-If instead you want to ignore all such rules, you can use the <code>--ignore-unknown-rules</code>/<code>-i</code> flag.
-If a proof uses a rule that is allowed by either <code>--ignore-unknown-rules</code> or <code>--allowed-rules</code>, it
-will be reported as <code>holey</code>.</p>
-<h2 id="the-lia_generic-rule"><a class="header" href="#the-lia_generic-rule">The <code>lia_generic</code> rule</a></h2>
-<p>Carcara does not check steps that use the <code>lia_generic</code> rule. This is an extremely coarse-grained
-rule from the Alethe format, and is in general NP-hard to check. If you need to validate proofs
-that contain this rule, you can use Carcara’s proof elaboration to call an external tool that can
-elaborate these steps into a series of easier-to-check steps. For more details, see <a href="elaboration.html">the proof
-elaboration chapter</a>.</p>
-<h2 id="parallel-checking"><a class="header" href="#parallel-checking">Parallel checking</a></h2>
-<p>Using the <code>--num-threads</code>/<code>-u</code> option, you can control how many concurrent threads Carcara will use
-to check the proof. If the given value is greater than 1, Carcara will split the proof steps among
-that many worker threads, and check them in parallel. Note that proof parsing, which is oftentimes a
-bottleneck in Carcara, will still be sequential.</p>
+<p>We use <code>@Type</code> to denote an argument that is a polymorphic type. Polymorphic arguments are not passed in the <code>:args</code> field of the step statement:</p>
+<pre><code class="language-lisp">(step t264
+  (cl (= (= (op e3 e3) (op e3 e3)) true))
+  :rule rare_rewrite
+  :args ("eq-refl" (op e3 e3)))
+</code></pre>
+<h2 id="flags"><a class="header" href="#flags">Flags</a></h2>
+<p>We use the <code>--rare-file</code> flag to pass the rare file, for example:</p>
+<pre><code class="language-bash">carcara check your_file.smt2.alethe your_file.smt2 --rare-file your_rare_file.rare
+</code></pre>
+<p>Note that Carcara will only be able to check your proofs if every rewrite rule mentioned in the Alethe file is also present in your rare file.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="installation.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../checking.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="checking/rare.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../elaboration.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -236,11 +228,11 @@ bottleneck in Carcara, will still be sequential.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="installation.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../checking.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="checking/rare.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../elaboration.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
@@ -255,13 +247,13 @@ bottleneck in Carcara, will still be sequential.</p>
         </script>
 
 
-        <script src="elasticlunr.min.js"></script>
-        <script src="mark.min.js"></script>
-        <script src="searcher.js"></script>
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
 
-        <script src="clipboard.min.js"></script>
-        <script src="highlight.js"></script>
-        <script src="book.js"></script>
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
 
         <!-- Custom JS scripts -->
 

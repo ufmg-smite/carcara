@@ -224,15 +224,17 @@ will infer it:</p>
 explicit applications of the <code>hole</code> rule, or steps that use an unknown or unsupported rule.</li>
 </ul>
 <p>See <code>carcara check --help</code> for a full list of options.</p>
-<h2 id="dealing-with-unknown-rules"><a class="header" href="#dealing-with-unknown-rules">Dealing with unknown rules</a></h2>
-<p>By default, Carcara will return a checking error when encountering a rule it does not recognize.
-If instead you want to ignore such rules, you can use the <code>--ignore-unknown-rules</code>/<code>-i</code> flag.
-Alternatively, you can use the <code>--allowed-rules</code> option to pass a specific list of unkown rules to
-allow. For example:</p>
+<h2 id="bypassing-checking-for-specific-rules"><a class="header" href="#bypassing-checking-for-specific-rules">Bypassing checking for specific rules</a></h2>
+<p>If you want Carcara to skip checking for specific rules, you can use the <code>--allowed-rules</code> option,
+for example:</p>
 <pre><code>carcara check example.smt2.alethe --allowed-rules foo bar
 </code></pre>
-<p>If a proof uses a rule that is allowed by either <code>--ignore-unknown-rules</code> or <code>--allowed-rules</code>, it
-will be considered <code>holey</code>.</p>
+<p>With this option, Carcara will ignore steps that use any of the given rules, and will consider them
+holes in the proof.</p>
+<p>By default, Carcara returns a checking error when encountering a rule it does not recognize.
+If instead you want to ignore all such rules, you can use the <code>--ignore-unknown-rules</code>/<code>-i</code> flag.
+If a proof uses a rule that is allowed by either <code>--ignore-unknown-rules</code> or <code>--allowed-rules</code>, it
+will be reported as <code>holey</code>.</p>
 <h2 id="the-lia_generic-rule"><a class="header" href="#the-lia_generic-rule">The <code>lia_generic</code> rule</a></h2>
 <p>Carcara does not check steps that use the <code>lia_generic</code> rule. This is an extremely coarse-grained
 rule from the Alethe format, and is in general NP-hard to check. If you need to validate proofs
@@ -285,21 +287,21 @@ output. By default, Carcara will print proofs using term sharing, i.e., using th
 <p>Many of the same options used in the <code>check</code> command also apply to the <code>elaborate</code> command. See
 <code>carcara elaborate --help</code> for more details.</p>
 <h2 id="elaboration-pipeline"><a class="header" href="#elaboration-pipeline">Elaboration pipeline</a></h2>
-<p>The specific elaboration applied to the proof is controlled via a <code>--pipeline</code> option. This takes a
-series of elaboration steps, and will apply them in the given order. The possible elaboration steps
-are:</p>
+<p>The specific way in which Carcara elaborates the proof is controlled via a <code>--pipeline</code> option.
+This takes a series of <em>elaboration passes</em>, and will apply them in the given order. The possible
+elaboration passes are:</p>
 <ul>
-<li><a href=""><code>polyeq</code></a></li>
+<li><a href="./elaboration/polyeq.html"><code>polyeq</code></a></li>
 <li><a href=""><code>lia-generic</code></a></li>
-<li><a href=""><code>local</code></a></li>
-<li><a href=""><code>uncrowd</code></a></li>
-<li><a href=""><code>reordering</code></a></li>
+<li><a href="./elaboration/local.html"><code>local</code></a></li>
+<li><a href="./elaboration/uncrowding.html"><code>uncrowd</code></a></li>
+<li><a href="./elaboration/reordering.html"><code>reordering</code></a></li>
 <li><a href=""><code>hole</code></a></li>
 </ul>
 <p>By default, Carcara will attempt to apply all of these in the listed order.</p>
 <h3 id="example"><a class="header" href="#example">Example</a></h3>
 <p>The following command will elaborate the given proof file with the <code>uncrowd</code> and <code>polyeq</code>
-elaboration steps, in that order:</p>
+elaboration passes, in that order:</p>
 <pre><code>carcara elaborate example.smt2.alethe --pipeline uncrowd polyeq
 </code></pre>
 <p>Note that, if you pass a positional argument (e.g. the proof filename) after the pipeline argument,
@@ -315,7 +317,7 @@ rule, for example, allows the two terms to be syntactically different, if they a
 polyequality. The following step is valid:</p>
 <pre><code>(step t1 (cl (= (or (= a b) c) (or (= b a) c))) :rule refl)
 </code></pre>
-<p>The <code>polyeq</code> elaboration step can be used to remove all such instances where polyequality reasoning
+<p>The <code>polyeq</code> elaboration pass can be used to remove all such instances where polyequality reasoning
 is required. For exemple, calling <code>carcara elaborate --pipeline polyeq</code> on the above step will
 transform it into the following steps:</p>
 <pre><code>(step t1.t1 (cl (= (= a b) (= b a))) :rule eq_symmetric)
@@ -323,7 +325,7 @@ transform it into the following steps:</p>
 </code></pre>
 <p>In this case, Carcara added an <code>eq_symmetric</code> step to equate the two flipped equalities, and used a
 <code>cong</code> step to construct the original conclusion of <code>t1</code>. The exact elaboration differs by rule. The
-rules affected by this elaboration step are:</p>
+rules affected by this elaboration pass are:</p>
 <ul>
 <li><code>assume</code></li>
 <li><code>refl</code></li>
@@ -333,10 +335,12 @@ rules affected by this elaboration step are:</p>
 <li><code>bfun_elim</code></li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="local-elaboration"><a class="header" href="#local-elaboration">“Local” elaboration</a></h1>
-<p>Carcara has a number of small elaboration procedures for specific rules, that simplify steps in some small local way. These are grouped in the <code>local</code> elaboration step. The rules affected by this are:</p>
+<p>Carcara has a number of small elaboration procedures for specific rules, that simplify steps in some
+small local way. These are grouped in the <code>local</code> elaboration pass. The rules affected by this are:</p>
 <ul>
 <li><code>eq_transitive</code></li>
 <li><code>trans</code></li>
+<li><code>eq_congruent</code></li>
 <li><code>cong</code></li>
 <li><code>resolution</code></li>
 </ul>
@@ -349,7 +353,9 @@ have:</p>
 (assume h3 (= c b))
 (step t4 (cl (= a d)) :rule trans :premises (h1 h2 h3))
 </code></pre>
-<p>In this case, the <code>local</code> elaboration step will change the order of <code>t4</code>’s premises so the transitivity chain is well ordered; and add an auxiliary step to flip the <code>h3</code> equality. After elaboration, we will have:</p>
+<p>In this case, the <code>local</code> elaboration pass will change the order of <code>t4</code>’s premises so the
+transitivity chain is well ordered; and add an auxiliary step to flip the <code>h3</code> equality. After
+elaboration, we will have:</p>
 <pre><code>(assume h1 (= a b))
 (assume h2 (= c d))
 (assume h3 (= c b))
@@ -357,10 +363,23 @@ have:</p>
 (step t4 (cl (= a d)) :rule trans :premises (h1 t4.t1 h2))
 </code></pre>
 <p>A similar procedure is applied for the <code>eq_transitive</code> rule.</p>
-<h2 id="cong-rule"><a class="header" href="#cong-rule"><code>cong</code> rule</a></h2>
+<h2 id="congruence-rules"><a class="header" href="#congruence-rules">Congruence rules</a></h2>
+<p>In some applications of the <code>eq_congruent</code> and <code>cong</code> rules, the premise equalities may be flipped.
+In this case, Carcara will make this symmetry reasoning explicit. For example, the proof:</p>
+<pre><code>(assume h1 (= b a))
+(assume h2 (= c d))
+(step t3 (cl (= (and a c) (and b d))) :rule cong :premises (h1 h2))
+</code></pre>
+<p>will become</p>
+<pre><code>(assume h1 (= b a))
+(assume h2 (= c d))
+(step t3.t1 (cl (= a b)) :rule symm :premises (h1))
+(step t3 (cl (= (and a c) (and b d))) :rule cong :premises (t3.t1 h2))
+</code></pre>
+<p>after elaboration. A similar elaboration is applied for the <code>eq_congruent</code> rule.</p>
 <p>In the specific case where the <code>cong</code> rule is used over the <code>=</code> operator, the argument order might
-be flipped in one of the terms. For example, the following step is valid according to the Alethe
-specification:</p>
+also be flipped in one of the conclusion terms. For example, the following step is valid according
+to the Alethe specification:</p>
 <pre><code>(assume h1 (= x y))
 (step t2 (cl (= (= 0 x) (= y 0))) :rule cong :premises (h1))
 </code></pre>
@@ -372,7 +391,8 @@ resulting in the following:</p>
 (step t2 (cl (= (= 0 x) (= y 0))) :rule trans :premises (t2.t1 t2.t2))
 </code></pre>
 <h2 id="resolution-rule"><a class="header" href="#resolution-rule"><code>resolution</code> rule</a></h2>
-<p>In Alethe, <code>resolution</code> steps do not need to provide the pivots used in the resolution chain. For example, in the following proof, the step <code>t4</code> omits the pivots:</p>
+<p>In Alethe, <code>resolution</code> steps do not need to provide the pivots used in the resolution chain. For
+example, in the following proof, the step <code>t4</code> omits the pivots:</p>
 <pre><code>(step t1 (cl p (not q)) :rule hole)
 (step t2 (cl (not p)) :rule hole)
 (step t3 (cl q r) :rule hole)
@@ -384,7 +404,60 @@ whether it appears on the left-hand clause with positive polarity. For the examp
 elaborated step will be:</p>
 <pre><code>(step t4 (cl r) :rule resolution :premises (t1 t2 t3) :args (p true q false))
 </code></pre>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="other-features"><a class="header" href="#other-features">Other features</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="resolution-uncrowding"><a class="header" href="#resolution-uncrowding">Resolution uncrowding</a></h1>
+<p>Besides <a href="elaboration/./local.html#resolution-rule">finding resolution pivots</a>, Carcara is also able to refine
+<code>resolution</code> steps by <em>uncrowding</em> them. This refers the process of making the implicit removal of
+duplicates explicit, by the addition of <code>contraction</code> steps.</p>
+<p>More specifically, the <code>uncrowd</code> elaboration pass will find all spots in the resolution chain where
+a pivot is used to remove a duplicate literal. Then, it breaks the resolution chain at that point,
+and adds a contraction step. Consider, for example, the following proof:</p>
+<pre><code>(step t1 (cl a b) :rule hole)
+(step t2 (cl (not b) a) :rule hole)
+(step t3 (cl (not a)) :rule hole)
+(step t4 (cl) :rule resolution :premises (t1 t2 t3) :args (b true a true))
+</code></pre>
+<p>Here, the <code>a</code> pivot is duplicated after resolving <code>t1</code> and <code>t2</code>, but is removed by the single <code>(not a)</code> literal in <code>t3</code>. After elaboration, the resulting proof will be:</p>
+<pre><code>(step t1 (cl a b) :rule hole)
+(step t2 (cl (not b) a) :rule hole)
+(step t3 (cl (not a)) :rule hole)
+(step t4.t1 (cl a a) :rule resolution :premises (t1 t2) :args (b true))
+(step t4.t2 (cl a) :rule contraction :premises (t4.t1))
+(step t4 (cl) :rule resolution :premises (t4.t2 t3) :args (a true))
+</code></pre>
+<p>The resolution chain was broken after <code>t2</code>, with <code>t4.t1</code> containing the two duplicate <code>a</code> literals
+explicitly. Then, a contraction step was added (<code>t4.t2</code>) to deduplicate them. Finally, the
+resolution chain continues in <code>t4</code>, reaching the same conclusion.</p>
+<p>Besides adding <code>contraction</code> steps, the uncrowding elaboration pass may also add a <code>reordering</code> step
+at the end of the resolution chain, to make any implicit reordering of clause literals explicit.</p>
+<p>If the option <code>--uncrowd-rotate</code> is given, Carcara will try to further minimize the number of
+<code>contraction</code> steps added by reordering the resolution premises when possible, in an effort to make
+a single <code>contraction</code> step deduplicate multiple pivots.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="reordering-elimination"><a class="header" href="#reordering-elimination">Reordering elimination</a></h1>
+<p>For many use cases of Alethe like proof translation or reconstruction in proof assistants, clause
+reordering steps can be challenging to deal with. With that in mind, Carcara has an elaboration step
+that can completely remove all <code>reordering</code> steps from a proof.</p>
+<p>This is done by replacing the <code>reordering</code> step with its premise and, anytime it is used as a
+premise in another step, recomputing the clause of the step that used it. As an exmple, consider the
+following proof:</p>
+<pre><code>(step t1 (cl a b c) :rule hole)
+(step t2 (cl b a c) :rule reordering :premises (t1))
+(step t3 (cl b a c d) :rule weakening :premises (t2))
+</code></pre>
+<p>Here, step <code>t2</code> will be eliminated, such that step <code>t3</code> uses <code>t1</code> directly as its premise. However,
+simply changing the premise clause of step <code>t4</code> would make it invalid<sup class="footnote-reference" id="fr-1-1"><a href="#footnote-1">1</a></sup>. To avoid this, Carcara
+must also recompute the conclusion of <code>t3</code>, resulting in the following proof:</p>
+<pre><code>(step t1 (cl a b c) :rule hole)
+(step t3 (cl a b c d) :rule weakening :premises (t1))
+</code></pre>
+<p>Of course, if any step further down in the proof uses <code>t3</code> as a premise, it will also need to
+be recomputed, and these changes will propagate down the proof.</p>
+<hr>
+<ol class="footnote-definition"><li id="footnote-1">
+<p>Strictly speaking, the step would not be invalid according to the semantics of Alethe, which
+are entirely agnostic to clause ordering. However, when elaborating a proof, we aim to ensure a more
+strict semantics, in which clause ordering is maitained in rules such as <code>weakening</code>. <a href="#fr-1-1">↩</a></p>
+</li>
+</ol><div style="break-before: page; page-break-before: always;"></div><h1 id="other-features"><a class="header" href="#other-features">Other features</a></h1>
 <p>Besides proof checking and elaboration, Carcara has a number of other functions useful for dealing
 with Alethe proofs. Run <code>carcara --help</code> to see a full list of subcommands.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="proof-parsingprinting"><a class="header" href="#proof-parsingprinting">Proof parsing/printing</a></h1>

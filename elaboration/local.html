@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Proof parsing/printing - Carcara Documentation</title>
+        <title>&quot;Local&quot; elaboration - Carcara Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -12,34 +12,34 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="favicon.svg">
-        <link rel="shortcut icon" href="favicon.png">
-        <link rel="stylesheet" href="css/variables.css">
-        <link rel="stylesheet" href="css/general.css">
-        <link rel="stylesheet" href="css/chrome.css">
-        <link rel="stylesheet" href="css/print.css" media="print">
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="fonts/fonts.css">
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="highlight-css" href="highlight.css">
-        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
-        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
 
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "";
+            const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "ayu";
-            window.path_to_searchindex_js = "searchindex.js";
+            window.path_to_searchindex_js = "../searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc.js"></script>
+        <script src="../toc.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -106,7 +106,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -141,7 +141,7 @@
                     <h1 class="menu-title">Carcara Documentation</h1>
 
                     <div class="right-buttons">
-                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
                         <a href="https://github.com/ufmg-smite/carcara" title="Git repository" aria-label="Git repository">
@@ -178,32 +178,86 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="proof-parsingprinting"><a class="header" href="#proof-parsingprinting">Proof parsing/printing</a></h1>
-<p>You can use the <code>carcara parse</code> command to parse a proof file and print it back to standard output.
-This can be used to validate if a proof is syntactically valid without checking any proof steps, or
-to print the proof with some syntactical transformation applied.</p>
-<h2 id="addingremoving-term-sharing"><a class="header" href="#addingremoving-term-sharing">Adding/removing term sharing</a></h2>
-<p>When printing a proof, Carcara automatically adds term sharing (i.e., the <code>(! ... :named ...)</code>
-syntax). If you parse a proof that does not make use of term sharing with <code>carcara parse</code>, it will
-by default be printed with term sharing added. Alternatively, you can remove term sharing from a
-proof that uses it by passing the <code>--no-print-with-sharing</code>/<code>-v</code> option.</p>
-<h2 id="expanding-let-terms"><a class="header" href="#expanding-let-terms">Expanding <code>let</code> terms</a></h2>
-<p>You can use the <code>--expand-let-bindings</code> option to remove all <code>let</code> terms from the proof by inlining all attributed values. For example, the term</p>
-<pre><code>(let ((x 1)) (let ((y (+ x 2))) (+ y 3)))
+                        <h1 id="local-elaboration"><a class="header" href="#local-elaboration">“Local” elaboration</a></h1>
+<p>Carcara has a number of small elaboration procedures for specific rules, that simplify steps in some
+small local way. These are grouped in the <code>local</code> elaboration pass. The rules affected by this are:</p>
+<ul>
+<li><code>eq_transitive</code></li>
+<li><code>trans</code></li>
+<li><code>eq_congruent</code></li>
+<li><code>cong</code></li>
+<li><code>resolution</code></li>
+</ul>
+<h2 id="transitivity-rules"><a class="header" href="#transitivity-rules">Transitivity rules</a></h2>
+<p>The <code>eq_transitive</code> and <code>trans</code> rules may sometimes contain the transitivity chain in an incorrect
+order. Additionally, the premise equalities might be flipped. For example, for <code>trans</code>, you may
+have:</p>
+<pre><code>(assume h1 (= a b))
+(assume h2 (= c d))
+(assume h3 (= c b))
+(step t4 (cl (= a d)) :rule trans :premises (h1 h2 h3))
 </code></pre>
-<p>will be expanded into</p>
-<pre><code>(+ (+ 1 2) 3)
+<p>In this case, the <code>local</code> elaboration pass will change the order of <code>t4</code>’s premises so the
+transitivity chain is well ordered; and add an auxiliary step to flip the <code>h3</code> equality. After
+elaboration, we will have:</p>
+<pre><code>(assume h1 (= a b))
+(assume h2 (= c d))
+(assume h3 (= c b))
+(step t4.t1 (cl (= b c)) :rule symm :premises (h3))
+(step t4 (cl (= a d)) :rule trans :premises (h1 t4.t1 h2))
+</code></pre>
+<p>A similar procedure is applied for the <code>eq_transitive</code> rule.</p>
+<h2 id="congruence-rules"><a class="header" href="#congruence-rules">Congruence rules</a></h2>
+<p>In some applications of the <code>eq_congruent</code> and <code>cong</code> rules, the premise equalities may be flipped.
+In this case, Carcara will make this symmetry reasoning explicit. For example, the proof:</p>
+<pre><code>(assume h1 (= b a))
+(assume h2 (= c d))
+(step t3 (cl (= (and a c) (and b d))) :rule cong :premises (h1 h2))
+</code></pre>
+<p>will become</p>
+<pre><code>(assume h1 (= b a))
+(assume h2 (= c d))
+(step t3.t1 (cl (= a b)) :rule symm :premises (h1))
+(step t3 (cl (= (and a c) (and b d))) :rule cong :premises (t3.t1 h2))
+</code></pre>
+<p>after elaboration. A similar elaboration is applied for the <code>eq_congruent</code> rule.</p>
+<p>In the specific case where the <code>cong</code> rule is used over the <code>=</code> operator, the argument order might
+also be flipped in one of the conclusion terms. For example, the following step is valid according
+to the Alethe specification:</p>
+<pre><code>(assume h1 (= x y))
+(step t2 (cl (= (= 0 x) (= y 0))) :rule cong :premises (h1))
+</code></pre>
+<p>To simplify this, the <code>local</code> elaboration will add <code>eq_symmetric</code> and <code>trans</code> auxiliary steps,
+resulting in the following:</p>
+<pre><code>(assume h1 (= x y))
+(step t2.t1 (cl (= (= 0 x) (= x 0))) :rule eq_symmetric)
+(step t2.t2 (cl (= (= x 0) (= y 0))) :rule cong :premises (h1))
+(step t2 (cl (= (= 0 x) (= y 0))) :rule trans :premises (t2.t1 t2.t2))
+</code></pre>
+<h2 id="resolution-rule"><a class="header" href="#resolution-rule"><code>resolution</code> rule</a></h2>
+<p>In Alethe, <code>resolution</code> steps do not need to provide the pivots used in the resolution chain. For
+example, in the following proof, the step <code>t4</code> omits the pivots:</p>
+<pre><code>(step t1 (cl p (not q)) :rule hole)
+(step t2 (cl (not p)) :rule hole)
+(step t3 (cl q r) :rule hole)
+(step t4 (cl r) :rule resolution :premises (t1 t2 t3))
+</code></pre>
+<p>During elaboration, Carcara can find which pivots were used and add them to the proof step as
+arguments. For each pivot, two arguments are provided: the pivot term, and a boolean indicating
+whether it appears on the left-hand clause with positive polarity. For the example above, the
+elaborated step will be:</p>
+<pre><code>(step t4 (cl r) :rule resolution :premises (t1 t2 t3) :args (p true q false))
 </code></pre>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="other-features.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../elaboration/polyeq.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="slicing.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../elaboration/uncrowding.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -213,11 +267,11 @@ proof that uses it by passing the <code>--no-print-with-sharing</code>/<code>-v<
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="other-features.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../elaboration/polyeq.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="slicing.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../elaboration/uncrowding.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
@@ -232,13 +286,13 @@ proof that uses it by passing the <code>--no-print-with-sharing</code>/<code>-v<
         </script>
 
 
-        <script src="elasticlunr.min.js"></script>
-        <script src="mark.min.js"></script>
-        <script src="searcher.js"></script>
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
 
-        <script src="clipboard.min.js"></script>
-        <script src="highlight.js"></script>
-        <script src="book.js"></script>
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
 
         <!-- Custom JS scripts -->
 
