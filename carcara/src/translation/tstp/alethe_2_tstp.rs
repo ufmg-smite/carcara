@@ -409,7 +409,7 @@ impl TstpTranslator {
     }
 }
 
-impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOperator>
+impl<'a> VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOperator>
     for TstpTranslator
 {
     fn get_mut_translator_data(&mut self) -> &mut TranslatorData<TstpType, TstpProof> {
@@ -890,7 +890,6 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
     fn translate_assume(
         &mut self,
         id: &str,
-        _depth: usize,
         term: &Rc<Term>,
     ) -> TstpAnnotatedFormula {
         let translated_term = self.translate_term(term);
@@ -927,36 +926,34 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
     /// account technical differences in the way Alethe rules are
     /// expressed within Tstp.
     /// Updates `self.tstp_proof`.
-    fn translate_step(&mut self, node: &ProofNode) {
+    fn translate_step(&mut self, command: &ProofCommand) {
         let mut alethe_premises: Vec<Symbol> = Vec::new();
         let mut alethe_discharged_assumptions: Vec<Symbol> = Vec::new();
         let mut alethe_translated_args: Vec<TstpFormula> = Vec::new();
 
-        match node {
-            ProofNode::Step(StepNode {
+        match command {
+            ProofCommand::Step(ProofStep {
                 id,
-                depth: _,
                 clause,
                 rule,
                 premises,
                 args,
                 discharge,
-                previous_step: _,
             }) => {
                 // Add premises actually present in the original step command.
-                alethe_premises.extend(
-                    premises
-                        .iter()
-                        .map(|node| String::from(node.deref().id()))
-                        .collect::<Vec<Symbol>>(),
-                );
+                // alethe_premises.extend(
+                //     premises
+                //         .iter()
+                //         .map(|node| String::from(node.deref().id()))
+                //         .collect::<Vec<Symbol>>(),
+                // );
 
-                alethe_discharged_assumptions.extend(
-                    discharge
-                        .iter()
-                        .map(|node| String::from(node.deref().id()))
-                        .collect::<Vec<Symbol>>(),
-                );
+                // alethe_discharged_assumptions.extend(
+                //     discharge
+                //         .iter()
+                //         .map(|node| String::from(node.deref().id()))
+                //         .collect::<Vec<Symbol>>(),
+                // );
 
                 alethe_translated_args.extend(
                     args.iter()
@@ -1094,10 +1091,10 @@ impl Default for TstpTranslator {
     }
 }
 
-impl Translator for TstpTranslator {
+impl <'a>Translator<'a> for TstpTranslator {
     type Output = TstpProof;
 
-    fn translate<'a>(&'a mut self, proof: &Rc<ProofNode>) -> &'a Self::Output {
+    fn translate(& mut self, proof: &Vec<ProofCommand>) -> & Self::Output {
         self.translate_2_vect(proof)
     }
 

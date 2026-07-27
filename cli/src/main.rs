@@ -6,7 +6,7 @@ mod path_args;
 
 use app::*;
 use carcara::{
-    ast::{self, rare_rules::Rules, ProofNode, Rc, StepNode},
+    ast::{self, rare_rules::Rules, ProofCommand, ProofNode, Rc, StepNode},
     benchmarking::OnlineBenchmarkResults,
     check, check_and_elaborate, check_parallel, generate_lia_smt_instances, parser, slice,
     translation::{self, ProofPrinter, Translator},
@@ -321,61 +321,23 @@ fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
         options.parsing.into_config(),
     )?;
 
-    let node = ast::ProofNodeForest::from_commands(alethe_proof.commands);
-    // TODO: vacuous init.
-    let mut empty_clause_node = Rc::new(ProofNode::Step(StepNode {
-        id: "".to_string(),
-        depth: 0,
-        clause: Vec::new(),
-        rule: "".to_string(),
-        premises: Vec::new(),
-        args: Vec::new(),
-        discharge: Vec::new(),
-        previous_step: Option::None,
-    }));
-
-    // TODO: abstract this into a procedure
-    for proof_node in node.0 {
-        match &*proof_node {
-            ProofNode::Step(StepNode {
-                id: _,
-                depth: _,
-                clause,
-                rule: _,
-                premises: _,
-                args: _,
-                discharge: _,
-                previous_step: _,
-            }) => {
-                // Last node of the proof.
-                if clause.is_empty() {
-                    empty_clause_node = proof_node;
-                    break;
-                }
-            }
-
-            _ => {
-                continue;
-            }
-        }
-    }
-
     match &options.target {
         TranslationTarget::Eunoia => {
-            translate_2_eunoia_command(&alethe_problem, &empty_clause_node)
+            translate_2_eunoia_command(&alethe_problem, &alethe_proof.commands)
         }
 
-        TranslationTarget::Tstp => translate_2_tstp_command(&alethe_problem, &empty_clause_node),
+        TranslationTarget::Tstp => translate_2_tstp_command(&alethe_problem, &alethe_proof.commands),
     }
+
 }
 
 fn translate_2_eunoia_command(
     alethe_problem: &ast::Problem,
-    empty_clause_node: &Rc<ProofNode>,
+    proof: &Vec<ProofCommand>,
 ) -> CliResult<()> {
     let mut translator = translation::eunoia::alethe_2_eunoia::EunoiaTranslator::new();
     let eunoia_prelude = translator.translate_problem(alethe_problem);
-    let eunoia_proof = translator.translate(empty_clause_node);
+    let eunoia_proof = translator.translate(proof);
 
     let mut buf_proof = Vec::new();
     let s_exp_formatter_proof = translation::eunoia::printer::SExpFormatter::new(&mut buf_proof);
@@ -408,11 +370,11 @@ fn translate_2_eunoia_command(
 
 fn translate_2_tstp_command(
     alethe_problem: &ast::Problem,
-    empty_clause_node: &Rc<ProofNode>,
+    proof: &Vec<ProofCommand>,
 ) -> CliResult<()> {
     let mut translator = translation::tstp::alethe_2_tstp::TstpTranslator::new();
     let tptp_problem = translator.translate_problem(alethe_problem);
-    let tstp_proof = translator.translate(empty_clause_node);
+    let tstp_proof = translator.translate(proof);
 
     let mut buf_proof = Vec::new();
     let s_exp_formatter_proof =

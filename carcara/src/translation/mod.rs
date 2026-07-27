@@ -16,163 +16,14 @@ use crate::utils::HashMapStack;
 pub type Symbol = String;
 
 /// Interface with an Alethe proof compiler.
-pub trait Translator {
+pub trait Translator<'a> {
     type Output;
 
     /// Translates a proof in its DAG form, into some target language.
-    fn translate<'a>(&'a mut self, proof: &Rc<ProofNode>) -> &'a Self::Output;
+    fn translate(&mut self, proof: &Vec<ProofCommand>) -> & Self::Output;
 
     /// Translates only an SMT-lib problem.
     fn translate_problem(&mut self, problem: &Problem) -> Self::Output;
-}
-
-/// For translation purposes, it is useful to have a pre-ordered version of the
-/// proof to be translated. This struct represents that concept.
-#[derive(Default)]
-struct PreOrderedAletheProof {
-    // TODO: declared as attributes to avoid
-    // "cannot move out... a captured variable in an `FnMut` closure" errors
-    // TODO: declared as Vec<ProofNode> (not using borrows) to avoid
-    // error "borrowed data escapes outside of closure"
-    /// Pre-ordered version of a given `ProofNode` graph.
-    pre_ord_proof: Vec<ProofNode>,
-
-    // TODO: this should be a variable local to post_order_to_list
-    /// Depth of the previous node visited.
-    previous_depth: usize,
-
-    /// Auxiliary attribute useful to maintain a pre-ordered version
-    /// of every node from a subproof with depth bigger than 1.
-    pre_ord_subproofs: Vec<Vec<ProofNode>>,
-}
-
-/// Services to translate an ordinary Alethe proof into its pre-ordered version.
-impl PreOrderedAletheProof {
-    pub fn new(proof: &Rc<ProofNode>) -> Self {
-        let mut new_pre_ord_proof = Self {
-            pre_ord_proof: Vec::new(),
-            previous_depth: 0,
-            pre_ord_subproofs: Vec::new(),
-        };
-
-        new_pre_ord_proof.post_order_to_list(proof);
-
-        new_pre_ord_proof
-    }
-
-    fn post_order_to_list(&mut self, proof: &Rc<ProofNode>) {
-        // NOTE: need to clone ProofNodes to avoid
-        // "borrowed data escapes outside of closure" error here.
-        proof.traverse(|node: &Rc<ProofNode>| {
-            self.node_post_order_to_list(node);
-        });
-    }
-
-    // TODO: is there some practical way of doing partial application of
-    // procedures? Quick fix: using attributes (aux_pre_ord_proof_node, etc)
-    /// For a given &Rc<ProofNode>,
-    fn node_post_order_to_list(&mut self, node: &Rc<ProofNode>) {
-        match (*node).deref() {
-            ProofNode::Assume { id: _, depth, .. } => {
-                if *depth > self.previous_depth {
-                    // A new subproof
-                    // TODO: ugly
-                    while self.pre_ord_subproofs.len() < *depth {
-                        self.pre_ord_subproofs.push(Vec::new());
-                    }
-
-                    // { self.pre_ord_subproofs.len() == *depth }
-
-                    self.pre_ord_subproofs[*depth - 1].push((*node).deref().clone());
-                } else {
-                    // TODO: abstract this last step into some procedure; it
-                    // is repeated for each ProofNode case.
-
-                    // { *depth <= self.previous_depth }
-                    // We jumped out of a subproof.
-                    if *depth == 0 {
-                        // This is not a node from another subproof, we can
-                        // safely push it into pre_ord_proof_node.
-                        self.pre_ord_proof.push((*node).deref().clone());
-                    } else {
-                        // { *depth > 0 }
-                        // We are still within some subproof
-                        assert!(self.pre_ord_subproofs.len() >= *depth - 1);
-                        // A node of depth "depth", always belong to
-                        // subproof "depth" - 1.
-                        self.pre_ord_subproofs[*depth - 1].push((*node).deref().clone());
-                    }
-                }
-
-                self.previous_depth = *depth;
-            }
-
-            ProofNode::Step(StepNode { id: _, depth, .. }) => {
-                if *depth > self.previous_depth {
-                    // A new subproof
-                    // TODO: ugly
-                    while self.pre_ord_subproofs.len() < *depth {
-                        self.pre_ord_subproofs.push(Vec::new());
-                    }
-
-                    // { self.pre_ord_subproofs.len() >= *depth }
-                    self.pre_ord_subproofs[*depth - 1].push((*node).deref().clone());
-                } else {
-                    // { *depth <= self.previous_depth }
-                    if *depth == 0 {
-                        // This is not a node from a subproof, we can safely push it
-                        // into pre_ord_proof_node.
-                        self.pre_ord_proof.push((*node).deref().clone());
-                    } else {
-                        // { *depth > 0 }
-                        // We are still within a subproof
-                        assert!(self.pre_ord_subproofs.len() >= *depth);
-                        self.pre_ord_subproofs[*depth - 1].push((*node).deref().clone());
-                    }
-                }
-
-                self.previous_depth = *depth;
-            }
-
-            // A subproof introduced by the 'anchor' command.
-            ProofNode::Subproof(SubproofNode { last_step, .. }) => {
-                match (*last_step).deref() {
-                    ProofNode::Step(StepNode { id: _, depth, .. }) => {
-                        assert!(1 <= *depth && *depth == self.previous_depth);
-
-                        if *depth == 1 {
-                            // Outermost subproof: we return to self.pre_ord_proof
-                            self.pre_ord_proof.push((*node).deref().clone());
-                            self.pre_ord_proof
-                                .append(&mut self.pre_ord_subproofs[*depth - 1]);
-                        } else {
-                            // { depth > 1 }
-                            // UNSAFE
-                            let (left_slice, right_slice) =
-                                self.pre_ord_subproofs.split_at_mut(*depth - 1);
-                            left_slice[*depth - 2].push((*node).deref().clone());
-                            left_slice[*depth - 2].append(&mut right_slice[0]);
-                        }
-
-                        // Pop the subproof being closed
-                        self.pre_ord_subproofs.pop();
-
-                        // We jump out of the subproof.
-                        self.previous_depth = *depth - 1;
-                    }
-
-                    _ => {
-                        // It shouldn't be a ProofNode different than a Step
-                        panic!();
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn get_pre_ord_proof(&mut self) -> &mut Vec<ProofNode> {
-        &mut self.pre_ord_proof
-    }
 }
 
 /// Generic representation of scopes of variables introduced by the several
@@ -327,8 +178,10 @@ impl LastSteps {
 
 /// Maintains several related data-structures, useful for translation purposes.
 pub struct TranslatorData<TermType: Clone, ProofType: Default> {
-    /// Pre-ordered version of the Alethe proof to be translated.
-    pre_ord_proof: PreOrderedAletheProof,
+    // /// Pre-ordered version of the Alethe proof to be translated.
+    // pre_ord_proof: PreOrderedAletheProof,
+    /// Alethe proof to be translated, as a vector of ProofCommands
+    alethe_proof: Vec<ProofCommand>,
 
     /// Information about scopes of variables introduced by contexts,
     /// quantifications and other binders.
@@ -348,7 +201,8 @@ impl<TermType: Clone, ProofType: Default> TranslatorData<TermType, ProofType> {
     fn new() -> Self {
         Self {
             translated_proof: ProofType::default(),
-            pre_ord_proof: PreOrderedAletheProof::default(),
+            // pre_ord_proof: PreOrderedAletheProof::default(),
+            alethe_proof: Vec::new(),
             alethe_scopes: AletheScopes::new(),
             last_steps: LastSteps::new(),
             is_in_subproof: false,
@@ -407,13 +261,13 @@ pub trait VecToVecTranslator<
     /// Implements the translation of an Alethe `Assume`, taking into
     /// account technical differences in the way Alethe rules are
     /// expressed in the target language.
-    fn translate_assume(&mut self, id: &str, _depth: usize, term: &Rc<Term>) -> StepType;
+    fn translate_assume(&mut self, id: &str, term: &Rc<Term>) -> StepType;
 
     /// Implements the translation of an Alethe `ProofStep`, taking into
     /// account technical differences in the way Alethe rules are
     /// expressed in the target language.
     /// Updates `self.get_mut_translator_data().translated_proof`.
-    fn translate_step(&mut self, node: &ProofNode);
+    fn translate_step(&mut self, command: &ProofCommand);
 
     /// Abstracts the steps required to define and push a new context.
     /// PARAMS:
@@ -490,11 +344,8 @@ pub trait VecToVecTranslator<
                 .to_string()
     }
 
-    /// Implements the actual translation logic, but over a list representation of the proof.
-    /// That is, once the original `ProofNode` graph has been translated into a list of single
-    /// `ProofNode` steps.
-    /// PRE : { `self.pre_ord_proof` is set with a pre-ordered version of the corresponding
-    ///               Alethe proof }
+    /// Implements the actual translation logic, over a list representation of 
+    /// the proof set in self.althe_proof.
     fn translate_pre_ord_proof_node(&mut self) {
         let proof;
 
@@ -503,22 +354,21 @@ pub trait VecToVecTranslator<
         {
             proof = self
                 .get_mut_translator_data()
-                .pre_ord_proof
-                .get_pre_ord_proof()
+                .alethe_proof
                 .clone();
         }
 
         proof.iter().for_each(|node| {
             match node {
-                ProofNode::Assume { id, depth, term } => {
+                ProofCommand::Assume { id, term } => {
                     // TODO: what about :named?
-                    let translated_assume = self.translate_assume(id, *depth, term);
+                    let translated_assume = self.translate_assume(id, term);
                     self.get_mut_translator_data()
                         .translated_proof
                         .push(translated_assume);
                 }
 
-                ProofNode::Step(StepNode { id, .. }) => {
+                ProofCommand::Step(ProofStep { id, .. }) => {
                     self.translate_step(node);
 
                     // Is this the closing step of the actual subproof?
@@ -543,7 +393,7 @@ pub trait VecToVecTranslator<
                 }
 
                 // A subproof introduced by the 'anchor' command.
-                ProofNode::Subproof(SubproofNode { last_step, args, .. }) => {
+                ProofCommand::Subproof(Subproof { commands, args, .. }) => {
                     // Some compilers might to give special treatment to subproofs .
                     // We flag once we enter a subproof.
                     self.get_mut_translator_data().is_in_subproof = true;
@@ -571,14 +421,15 @@ pub trait VecToVecTranslator<
                     }
 
                     // Save information about the last step of the subproof
-                    match (*last_step).deref() {
-                        ProofNode::Step(StepNode {
+                    let last_step = commands.last();
+
+                    match last_step {
+                        Some(ProofCommand::Step(ProofStep {
                             id: last_step_id,
-                            depth: _,
                             clause: _,
                             rule: last_step_rule,
                             ..
-                        }) => {
+                        })) => {
                             self.get_mut_translator_data()
                                 .last_steps
                                 .last_steps_push(last_step_rule.as_str(), last_step_id.as_str());
@@ -594,16 +445,18 @@ pub trait VecToVecTranslator<
         });
     }
 
-    /// Translation of proof certificates, working over a `ProofNode` DAG representation
+    /// Translation of proof certificates, working over a `ProofCommand` DAG representation
     /// of the proof. Reorders the received DAG proof into its list of steps representations, and
     /// invokes the corresponding translation routine to translate the result.
-    fn translate_2_vect(&'a mut self, proof: &Rc<ProofNode>) -> &'a Vec<StepType> {
+    fn translate_2_vect<'b>(&'b mut self, proof: &Vec<ProofCommand>) -> &'b Vec<StepType> where TypeTermType: 'b {
         // Mutable borrow to translator data
         {
             // We only translate pre-ordered proofs.
             let mut_data = self.get_mut_translator_data();
 
-            mut_data.pre_ord_proof = PreOrderedAletheProof::new(proof);
+            // mut_data.pre_ordered_proof = PreOrderedAletheProof::new(proof);
+
+            mut_data.alethe_proof = proof.to_vec();
 
             // Clean previously created data.
             if mut_data.alethe_scopes.get_contexts_opened() > 0 {
