@@ -1,4 +1,4 @@
-use super::{PrimitivePool, Rc, TermPool};
+use super::{match_term, PrimitivePool, Rc, TermPool};
 use crate::CheckerError;
 use indexmap::{map::Entry, IndexMap};
 use rug::{Integer, Rational};

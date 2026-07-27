@@ -1,6 +1,6 @@
 use super::{assert_clause_len, assert_eq, RuleArgs, RuleResult};
 use crate::{
-    ast::{Operator, Rc, Sort, Term},
+    ast::{match_term, Operator, Rc, Sort, Term},
     checker::{
         error::PolynomialError,
         rules::{assert_num_premises, get_premise_term},
@@ -195,7 +195,7 @@ pub fn poly_simp_rel(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> R
     let bitvector_case = match_term!(
         (= (bvmul c1 (bvsub x1 x2)) (bvmul c2 (bvsub y1 y2)))
         = get_premise_term(&premises[0])?);
-    if let Some(((c1, (x1, x2)), (c2, (y1, y2)))) = bitvector_case {
+    if let Some((c1, x1, x2, c2, y1, y2)) = bitvector_case {
         let sort = pool.sort(c1);
         let Sort::BitVec(_) = sort.as_sort().unwrap() else {
             unreachable!()
