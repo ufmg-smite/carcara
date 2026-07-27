@@ -1044,8 +1044,6 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                     }
 
                     "rare_rewrite" => {
-                        assert!(eunoia_arguments.len() == 1 || eunoia_arguments.len() == 2);
-
                         let rule_name = match &eunoia_arguments[0] {
                             EunoiaTerm::String(rare_rewrite_name) => rare_rewrite_name,
 
@@ -1065,7 +1063,8 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                                 conclusion_clause: Some(conclusion),
                                 rule: rule_name.clone(),
                                 premises: EunoiaList { list: alethe_premises },
-                                arguments: EunoiaList { list: vec![] },
+                                // Drop rule name
+                                arguments: EunoiaList { list: eunoia_arguments[1..].to_vec() },
                             });
                     }
 

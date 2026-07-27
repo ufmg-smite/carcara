@@ -396,6 +396,7 @@ fn translate_2_eunoia_command(
     // Include Alethe's mechanization in Eunoia
     println!("(include \"../alethe_signature/rules/alethe.eo\")");
     println!("(include \"../alethe_signature/rules/tautologies.eo\")");
+    println!("(include \"../alethe_signature/rules/rare_rules.eo\")");
     println!("(include \"../alethe_signature/theories/theory.eo\")");
     println!("(include \"../alethe_signature/programs/programs.eo\")");
     println!("(include \"../alethe_signature/programs/arith.eo\")");

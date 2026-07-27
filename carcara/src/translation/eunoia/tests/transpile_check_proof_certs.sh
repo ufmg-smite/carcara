@@ -52,7 +52,6 @@ for PROBLEM in "$DIR"/*; do
 
             # Use Carcara to transpile to Eunoia, redirect the output to 
             # "$EUNOIA_OUTPUT" 
-            # TODO: use "${PROOF_CERTIFICATE}"_elaborated
             ${CARCARA_TRANSLATE_COMMAND} "${PROOF_CERTIFICATE}_elaborated" "$PROBLEM" "--allow-int-real-subtyping" > "$EUNOIA_OUTPUT"
 
             # Check the return code of Carcara
