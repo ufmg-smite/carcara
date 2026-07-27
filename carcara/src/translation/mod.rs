@@ -11,9 +11,8 @@ use std::ops::Deref;
 // scopes
 use crate::utils::HashMapStack;
 
-// TODO: is this correct? also: pub type alias?
 /// SMT-LIB version 3.0 symbol.
-pub type Symbol = String;
+type Symbol = String;
 
 /// Interface with an Alethe proof compiler.
 pub trait Translator<'a> {
