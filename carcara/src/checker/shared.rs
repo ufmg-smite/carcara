@@ -311,6 +311,7 @@ pub fn get_rule(
         "symm" => extras::symm,
         "not_symm" => extras::not_symm,
         "eq_symmetric" => extras::eq_symmetric,
+        "eq_mp" => extras::eq_mp,
         "weakening" => extras::weakening,
         "bind_let" => extras::bind_let,
         "la_mult_pos" => extras::la_mult_pos,

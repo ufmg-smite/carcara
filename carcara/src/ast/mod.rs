@@ -20,6 +20,7 @@ mod term;
 #[cfg(test)]
 mod tests;
 
+pub use carcara_macros::match_term;
 pub use context::{Context, ContextStack};
 pub use evaluate::Value;
 pub use iter::ProofIter;

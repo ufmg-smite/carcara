@@ -25,7 +25,7 @@ pub fn ite_intro(
 
     // Construct the expected right-hand side
     let expected_us = us[1..].iter().map(|u_i| {
-        let (cond, (a, b), (c, d)) = match_term!((ite cond (= a b) (= c d)) = u_i).unwrap();
+        let (cond, a, b, c, d) = match_term!((ite cond (= a b) (= c d)) = u_i).unwrap();
         let mut is_valid = |r_1, s_1, r_2, s_2| {
             // s_1 == s_2 == (ite cond r_1 r_2)
             if polyeq.eq(s_1, s_2) {

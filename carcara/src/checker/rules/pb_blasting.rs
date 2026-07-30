@@ -1,6 +1,6 @@
 use super::{assert_eq, assert_num_args, RuleArgs, RuleResult};
 use crate::{
-    ast::{Binder, Rc, Sort, Term, TermPool},
+    ast::{match_term, Binder, Rc, Sort, Term, TermPool},
     checker::{error::CheckerError, rules::cutting_planes::split_summation},
 };
 use rug::Integer;
@@ -38,7 +38,7 @@ fn check_pbblast_sum(
     for (i, element) in sum.iter().enumerate() {
         // Try to match (* c ((_ @int_of idx) bv))
         let (c, idx, bv) = match match_term!((* c ((_ int_of idx) bv)) = element) {
-            Some((c, (idx, bv))) => (c.as_integer_err()?, idx, bv),
+            Some((c, idx, bv)) => (c.as_integer_err()?, idx, bv),
             None => {
                 if i == 0 {
                     // For i==0, allow the coefficient to be omitted (defaulting to 1)

@@ -76,6 +76,18 @@ pub fn eq_symmetric(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_eq(u_1, u_2)
 }
 
+pub fn eq_mp(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(premises, 2)?;
+    assert_clause_len(conclusion, 1)?;
+
+    let phi_1 = get_premise_term(&premises[0])?;
+    let equivalence = get_premise_term(&premises[1])?;
+    let (left, right) = match_term_err!((= phi_1 phi_2) = equivalence)?;
+
+    assert_eq(left, phi_1)?;
+    assert_eq(right, &conclusion[0])
+}
+
 pub fn weakening(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_num_premises(premises, 1)?;
     let premise = premises[0].clause;
