@@ -44,6 +44,7 @@ pub mod parser;
 mod rare;
 mod resolution;
 pub mod slice;
+pub mod translation;
 mod utils;
 
 use crate::benchmarking::{CollectResults, OnlineBenchmarkResults, RunMeasurement};
