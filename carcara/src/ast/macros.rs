@@ -24,7 +24,7 @@ macro_rules! match_term_err {
 /// # Examples
 ///
 /// Building the term `(and true (not false))`:
-/// ```
+/// ```text
 /// # use carcara::{ast::*, build_term, match_term};
 /// let mut pool = PrimitivePool::new();
 /// let t = build_term!(pool, (and {pool.bool_true()} (not {pool.bool_false()})));
