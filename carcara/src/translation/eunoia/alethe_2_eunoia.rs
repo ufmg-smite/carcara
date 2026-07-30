@@ -730,7 +730,12 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
     /// account technical differences in the way Alethe rules are
     /// expressed within Eunoia.
     /// Updates `self.get_mut_translator_data().translated_proof`.
-    fn translate_step(&mut self, command: &ProofCommand) {
+    fn translate_step(
+        &mut self,
+        command: &ProofCommand,
+        iter: &ProofIter<'_>,
+        previous_command_id: &str,
+    ) {
         let mut alethe_premises: Vec<EunoiaTerm> = Vec::new();
 
         match command {
@@ -742,13 +747,15 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                 args,
                 discharge,
             }) => {
-                // // Add premises actually present in the original step command.
-                // alethe_premises.extend(
-                //     premises
-                //         .iter()
-                //         .map(|node| EunoiaTerm::Id(String::from(node.deref().id())))
-                //         .collect::<Vec<EunoiaTerm>>(),
-                // );
+                // Add premises actually present in the original step command.
+                alethe_premises.extend(
+                    premises
+                        .iter()
+                        .map(|premise| {
+                            EunoiaTerm::Id(String::from(iter.get_premise(*premise).id()))
+                        })
+                        .collect::<Vec<EunoiaTerm>>(),
+                );
 
                 // NOTE: in ProofStep, clause has type
                 // Vec<Rc<Term>>, though it represents an
@@ -818,8 +825,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
 
                     "let" => {
                         // Include, as premises, previous step from the actual subproof.
-                        // alethe_premises
-                        //     .push(EunoiaTerm::Id(Self::get_previous_step_id(previous_step)));
+                        alethe_premises.push(EunoiaTerm::Id(previous_command_id.to_owned()));
 
                         // We include, as argument, the context surrounding this
                         // subproof's context.
@@ -841,8 +847,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
 
                     "bind_let" => {
                         // Include, as premises, previous step from the actual subproof.
-                        // alethe_premises
-                        //     .push(EunoiaTerm::Id(Self::get_previous_step_id(previous_step)));
+                        alethe_premises.push(EunoiaTerm::Id(previous_command_id.to_owned()));
 
                         // We include, as argument, the context surrounding this
                         // subproof's context.
@@ -902,8 +907,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
 
                     "bind" => {
                         // Include, as premise, the previous step.
-                        // alethe_premises
-                        //     .push(EunoiaTerm::Id(Self::get_previous_step_id(previous_step)));
+                        alethe_premises.push(EunoiaTerm::Id(previous_command_id.to_owned()));
 
                         // We include, as argument, the context surrounding this
                         // subproof's context.
@@ -924,87 +928,89 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                         );
                     }
 
-                    // "subproof" => {
-                    //     // TODO: check this
-                    //     // The command (as mechanized in Eunoia) gets the formula proven
-                    //     // through an "assumption", hence, we use StepPop.
-                    //     // The discharged assumptions (specified, in Alethe, through the
-                    //     // "discharge" formal parameter), will be pushed
-                    //     // NOTE: spurious value so the compiler won't comply
-                    //     let mut implied_conclusion: EunoiaTerm = EunoiaTerm::True;
+                    "subproof" => {
+                        // TODO: check this
+                        // The command (as mechanized in Eunoia) gets the formula proven
+                        // through an "assumption", hence, we use StepPop.
+                        // The discharged assumptions (specified, in Alethe, through the
+                        // "discharge" formal parameter), will be pushed
+                        // NOTE: spurious value so the compiler won't comply
+                        let mut implied_conclusion: EunoiaTerm = EunoiaTerm::True;
 
-                    //     // Assuming that the conclusion is of the form
-                    //     // not φ1, ..., not φn, ψ
-                    //     // extract ψ
-                    //     let mut premise = EunoiaTerm::App(
-                    //         self.alethe_signature.cl.clone(),
-                    //         vec![self.alethe_signature.extract_consequent(&conclusion)],
-                    //     );
+                        // Assuming that the conclusion is of the form
+                        // not φ1, ..., not φn, ψ
+                        // extract ψ
+                        let mut premise = EunoiaTerm::App(
+                            self.alethe_signature.cl.clone(),
+                            vec![self.alethe_signature.extract_consequent(&conclusion)],
+                        );
 
-                    //     let mut cl_disjuncts: Vec<EunoiaTerm> = vec![];
+                        let mut cl_disjuncts: Vec<EunoiaTerm> = vec![];
 
-                    //     // Id of the premise step
-                    //     let mut id_premise: Symbol = "".to_owned();
+                        // Id of the premise step
+                        let mut id_premise: Symbol = "".to_owned();
 
-                    //     // TODO: some more efficient way to deal with
-                    //     // the fact that we use a "stack" of assumptions?
-                    //     let mut discharge_copy = discharge.clone();
-                    //     discharge_copy.reverse();
-                    //     discharge_copy.iter().for_each(|assumption| {
-                    //         // TODO: we are discarding vector premises
-                    //         match assumption.deref() {
-                    //             // TODO: ugly?
-                    //             ProofCommand::Assume { id: _, depth: _, term } => {
-                    //                 cl_disjuncts = vec![EunoiaTerm::App(
-                    //                     self.alethe_signature.not.clone(),
-                    //                     vec![self.translate_term(term)],
-                    //                 )];
+                        // TODO: some more efficient way to deal with
+                        // the fact that we use a "stack" of assumptions?
+                        let mut discharge_copy = discharge.clone();
+                        discharge_copy.reverse();
+                        discharge_copy.iter().for_each(|discharged_assumption| {
+                            let assumption = iter.get_premise(*discharged_assumption);
 
-                    //                 cl_disjuncts.append(
-                    //                     &mut self.alethe_signature.extract_cl_disjuncts(&premise),
-                    //                 );
+                            // TODO: we are discarding vector premises
+                            match assumption {
+                                // TODO: ugly?
+                                ProofCommand::Assume { id: _, term } => {
+                                    cl_disjuncts = vec![EunoiaTerm::App(
+                                        self.alethe_signature.not.clone(),
+                                        vec![self.translate_term(term)],
+                                    )];
 
-                    //                 implied_conclusion = EunoiaTerm::App(
-                    //                     self.alethe_signature.cl.clone(),
-                    //                     // TODO: too much cloning...
-                    //                     cl_disjuncts.clone(),
-                    //                 );
+                                    cl_disjuncts.append(
+                                        &mut self.alethe_signature.extract_cl_disjuncts(&premise),
+                                    );
 
-                    //                 // Get id of previous step
-                    //                 let eunoia_proof =
-                    //                     &self.get_read_translator_data().translated_proof;
+                                    implied_conclusion = EunoiaTerm::App(
+                                        self.alethe_signature.cl.clone(),
+                                        // TODO: too much cloning...
+                                        cl_disjuncts.clone(),
+                                    );
 
-                    //                 id_premise = eunoia_proof[eunoia_proof.len() - 1].get_step_id();
+                                    // Get id of previous step
+                                    let eunoia_proof =
+                                        &self.get_read_translator_data().translated_proof;
 
-                    //                 let rule_name = self.alethe_signature.subproof.clone();
+                                    id_premise = eunoia_proof[eunoia_proof.len() - 1].get_step_id();
 
-                    //                 self.get_mut_translator_data().translated_proof.push(
-                    //                     EunoiaCommand::StepPop {
-                    //                         // TODO: change id!
-                    //                         // TODO: ethos does not complain about repeated ids
-                    //                         id: id.clone(),
-                    //                         conclusion_clause: Some(implied_conclusion.clone()),
-                    //                         rule: rule_name,
-                    //                         premises: EunoiaList {
-                    //                             list: vec![EunoiaTerm::Id(id_premise.clone())],
-                    //                         },
-                    //                         arguments: EunoiaList {
-                    //                             list: eunoia_arguments.clone(),
-                    //                         },
-                    //                     },
-                    //                 );
+                                    let rule_name = self.alethe_signature.subproof.clone();
 
-                    //                 // TODO: too much cloning...
-                    //                 premise = implied_conclusion.clone();
-                    //             }
+                                    self.get_mut_translator_data().translated_proof.push(
+                                        EunoiaCommand::StepPop {
+                                            // TODO: change id!
+                                            // TODO: ethos does not complain about repeated ids
+                                            id: id.clone(),
+                                            conclusion_clause: Some(implied_conclusion.clone()),
+                                            rule: rule_name,
+                                            premises: EunoiaList {
+                                                list: vec![EunoiaTerm::Id(id_premise.clone())],
+                                            },
+                                            arguments: EunoiaList {
+                                                list: eunoia_arguments.clone(),
+                                            },
+                                        },
+                                    );
 
-                    //             _ => {
-                    //                 // TODO: it shouldn't be a ProofCommand different than an Assume
-                    //                 panic!();
-                    //             }
-                    //         }
-                    //     });
-                    // }
+                                    // TODO: too much cloning...
+                                    premise = implied_conclusion.clone();
+                                }
+
+                                _ => {
+                                    // TODO: it shouldn't be a ProofCommand different than an Assume
+                                    panic!();
+                                }
+                            }
+                        });
+                    }
 
                     "forall_inst" => {
                         // TODO: we are discarding premises arguments
@@ -1062,14 +1068,15 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                                 rule: rule_name.clone(),
                                 premises: EunoiaList { list: alethe_premises },
                                 // Drop rule name
-                                arguments: EunoiaList { list: eunoia_arguments[1..].to_vec() },
+                                arguments: EunoiaList {
+                                    list: eunoia_arguments[1..].to_vec(),
+                                },
                             });
                     }
 
                     "sko_ex" => {
                         // Include, as premise, the previous step.
-                        // alethe_premises
-                        //     .push(EunoiaTerm::Id(Self::get_previous_step_id(previous_step)));
+                        alethe_premises.push(EunoiaTerm::Id(previous_command_id.to_owned()));
 
                         // We include, as argument, the context surrounding this
                         // subproof's context.
@@ -1182,7 +1189,7 @@ impl Default for EunoiaTranslator {
 impl Translator<'_> for EunoiaTranslator {
     type Output = EunoiaProof;
 
-    fn translate(&mut self, proof: &Vec<ProofCommand>) -> & Self::Output {
+    fn translate(&mut self, proof: &Proof) -> &Self::Output {
         self.translate_2_vect(proof)
     }
 

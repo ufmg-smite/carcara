@@ -3,11 +3,9 @@
 pub mod test_printer;
 pub mod test_translate;
 
-use crate::ast::*;
-
 use crate::translation::{
     eunoia::{alethe_2_eunoia::*, printer::*},
-    PrintProof, Translator,
+    ProofPrinter, Translator,
 };
 
 use crate::parser::*;
@@ -23,12 +21,15 @@ const TEST_CONFIG: Config = Config {
     parse_hole_args: false,
 };
 
-/// Structure for a basic test involving the translation of a complete 
-/// certificate: compares a given alethe problem and certificate against its 
+/// Structure for a basic test involving the translation of a complete
+/// certificate: compares a given alethe problem and certificate against its
 /// Eunoia counterpart.
-pub fn eunoia_full_translation_test(alethe_problem: &str, alethe_certificate: &str,
-             eunoia_problem: &str, eunoia_certificate: &str) {
-
+pub fn eunoia_full_translation_test(
+    alethe_problem: &str,
+    alethe_certificate: &str,
+    eunoia_problem: &str,
+    eunoia_certificate: &str,
+) {
     let mut eunoia_translator = EunoiaTranslator::new();
 
     let mut buf_problem = Vec::new();
@@ -39,27 +40,22 @@ pub fn eunoia_full_translation_test(alethe_problem: &str, alethe_certificate: &s
     let s_exp_formatter_proof = SExpFormatter::new(&mut buf_proof);
     let mut printer_proof = EunoiaPrinter::new(s_exp_formatter_proof);
 
-    let (problem_ast, proof_ast, _, _pool) = parse_instance(
-        alethe_problem.as_bytes(),
-        alethe_certificate.as_bytes(),
-        None,
-        TEST_CONFIG,
-    )
-    .expect(ERROR_MESSAGE);
+    let (problem_ast, proof_ast, _, _pool) =
+        parse_instance(alethe_problem, alethe_certificate, None, TEST_CONFIG).expect(ERROR_MESSAGE);
 
     let eunoia_problem_translated = eunoia_translator.translate_problem(&problem_ast);
 
-    printer_problem.write_proof(&eunoia_problem_translated).unwrap();
+    printer_problem
+        .write_proof(&eunoia_problem_translated)
+        .unwrap();
 
-    assert_eq!(eunoia_problem, std::str::from_utf8(&buf_problem).unwrap()
-    );
+    assert_eq!(eunoia_problem, std::str::from_utf8(&buf_problem).unwrap());
 
-    let commands = ProofNode::from_commands(proof_ast.commands);
-    let eunoia_certificate_translated = eunoia_translator.translate(&commands);
+    let eunoia_certificate_translated = eunoia_translator.translate(&proof_ast);
 
-    printer_proof.write_proof(eunoia_certificate_translated).unwrap();
+    printer_proof
+        .write_proof(eunoia_certificate_translated)
+        .unwrap();
 
-    assert_eq!(eunoia_certificate, std::str::from_utf8(&buf_proof).unwrap()
-    );
+    assert_eq!(eunoia_certificate, std::str::from_utf8(&buf_proof).unwrap());
 }
-

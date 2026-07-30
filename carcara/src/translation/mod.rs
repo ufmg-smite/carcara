@@ -18,8 +18,8 @@ type Symbol = String;
 pub trait Translator<'a> {
     type Output;
 
-    /// Translates a proof in its DAG form, into some target language.
-    fn translate(&mut self, proof: &Vec<ProofCommand>) -> & Self::Output;
+    /// Translates a proof in its vector representation, into some target language.
+    fn translate(&mut self, proof: &Proof) -> &Self::Output;
 
     /// Translates only an SMT-lib problem.
     fn translate_problem(&mut self, problem: &Problem) -> Self::Output;
@@ -179,11 +179,6 @@ impl LastSteps {
 
 /// Maintains several related data-structures, useful for translation purposes.
 pub struct TranslatorData<TermType: Clone, ProofType: Default> {
-    // /// Pre-ordered version of the Alethe proof to be translated.
-    // pre_ord_proof: PreOrderedAletheProof,
-    /// Alethe proof to be translated, as a vector of ProofCommands
-    alethe_proof: Vec<ProofCommand>,
-
     /// Information about scopes of variables introduced by contexts,
     /// quantifications and other binders.
     alethe_scopes: AletheScopes<TermType>,
@@ -202,8 +197,9 @@ impl<TermType: Clone, ProofType: Default> TranslatorData<TermType, ProofType> {
     fn new() -> Self {
         Self {
             translated_proof: ProofType::default(),
-            // pre_ord_proof: PreOrderedAletheProof::default(),
-            alethe_proof: Vec::new(),
+            // NOTE: no Proof::default
+            // alethe_proof: Proof { constant_definitions:vec![],
+            //                       commands: vec![] },
             alethe_scopes: AletheScopes::new(),
             last_steps: LastSteps::new(),
             is_in_subproof: false,
@@ -234,11 +230,6 @@ pub trait VecToVecTranslator<
     /// enclosing context.
     fn build_var_binding(&self, id: &str) -> TermType;
 
-    // /// Translates `BindingList` constructs, as used for binder terms forall, exists,
-    // /// choice and lambda. The "let" binder uses the same construction but assigns to
-    // /// it a different semantics. See `translate_let_binding_list` for its translation.
-    // fn translate_binding_list(&mut self, binding_list: &BindingList) -> TermType;
-
     /// Translates a `BindingList`: it builds a list of pairs (variable, type) for the binding
     /// occurrences, and returns this coupled with the original list of actual values, as a `@VarList`.
     fn translate_let_binding_list(
@@ -268,7 +259,12 @@ pub trait VecToVecTranslator<
     /// account technical differences in the way Alethe rules are
     /// expressed in the target language.
     /// Updates `self.get_mut_translator_data().translated_proof`.
-    fn translate_step(&mut self, command: &ProofCommand);
+    fn translate_step(
+        &mut self,
+        command: &ProofCommand,
+        iter: &ProofIter<'_>,
+        previous_command_id: &str,
+    );
 
     /// Abstracts the steps required to define and push a new context.
     /// PARAMS:
@@ -345,22 +341,17 @@ pub trait VecToVecTranslator<
                 .to_string()
     }
 
-    /// Implements the actual translation logic, over a list representation of 
-    /// the proof set in self.althe_proof.
-    fn translate_pre_ord_proof_node(&mut self) {
-        let proof;
+    /// Iterates over a list representation of the Alethe proof to be translated.
+    /// Generates a linear representation of the translated proof.
+    /// Should not be called directly by a user implementing this trait for
+    /// some custom data-structure.
+    fn iterate_and_translate_proof(&mut self, proof: &[ProofCommand], iter: &ProofIter<'_>) {
+        // NOTE: needed to iterate like this, to be able to get to "previous
+        // steps, since the current iterator does not allow us to do so.
+        for i in 0..proof.len() {
+            let command = &proof[i];
 
-        // NOTE: cloning to avoid error
-        // "closure requires unique access to `*mut_data` but it is already borrowed//
-        {
-            proof = self
-                .get_mut_translator_data()
-                .alethe_proof
-                .clone();
-        }
-
-        proof.iter().for_each(|node| {
-            match node {
+            match command {
                 ProofCommand::Assume { id, term } => {
                     // TODO: what about :named?
                     let translated_assume = self.translate_assume(id, term);
@@ -370,7 +361,15 @@ pub trait VecToVecTranslator<
                 }
 
                 ProofCommand::Step(ProofStep { id, .. }) => {
-                    self.translate_step(node);
+                    let previous_command_id = if i > 0 {
+                        proof[i - 1].id()
+                    } else {
+                        // { i == 0 }
+                        // TODO: bogus value...
+                        command.id()
+                    };
+
+                    self.translate_step(command, iter, previous_command_id);
 
                     // Is this the closing step of the actual subproof?
                     if !self.get_mut_translator_data().last_steps.last_steps_empty() {
@@ -441,23 +440,26 @@ pub trait VecToVecTranslator<
                             panic!();
                         }
                     }
+
+                    // Translate subproof.
+                    self.iterate_and_translate_proof(commands, iter);
                 }
             }
-        });
+        }
     }
 
-    /// Translation of proof certificates, working over a `ProofCommand` DAG representation
-    /// of the proof. Reorders the received DAG proof into its list of steps representations, and
-    /// invokes the corresponding translation routine to translate the result.
-    fn translate_2_vect<'b>(&'b mut self, proof: &Vec<ProofCommand>) -> &'b Vec<StepType> where TypeTermType: 'b {
+    /// Actual translation routine of proof certificates, working over a vector
+    /// representation of the proof. Handles the preparation of scopes, cleaning of
+    /// previously created data-structures and invocation of the proper translation
+    /// routines.
+    fn translate_2_vect<'b>(&'b mut self, proof: &Proof) -> &'b Vec<StepType>
+    where
+        TypeTermType: 'b,
+    {
         // Mutable borrow to translator data
         {
             // We only translate pre-ordered proofs.
             let mut_data = self.get_mut_translator_data();
-
-            // mut_data.pre_ordered_proof = PreOrderedAletheProof::new(proof);
-
-            mut_data.alethe_proof = proof.to_vec();
 
             // Clean previously created data.
             if mut_data.alethe_scopes.get_contexts_opened() > 0 {
@@ -476,7 +478,7 @@ pub trait VecToVecTranslator<
 
         self.define_push_new_context(None);
 
-        self.translate_pre_ord_proof_node();
+        self.iterate_and_translate_proof(&proof.commands, &proof.iter());
 
         &self.get_read_translator_data().translated_proof
     }

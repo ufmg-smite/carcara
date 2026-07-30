@@ -21,17 +21,22 @@ fn test_small_example() {
 
     let eunoia_problem = "(declare-const a Real)\n\
                           (declare-const b Real)\n";
-    
+
     let eunoia_certificate = "(define ctx1 ( ) true)\n\
          (assume context ctx1)\n\
          (assume h1 (@cl (xor (not (> a 5.0)) (= b 10.0))))\n\
-         (step t1 (@cl (not (> a 5.0)) (= b 10.0)) :rule xor1 :premises ( h1 ))\n\
-         (step t2 (@cl (<= a 5.0) (> a 5.0)) :rule la_generic :args ( (@varlist 1.0 1.0) ))\n\
          (assume h2 (@cl (not (= b 10.0))))\n\
          (assume h3 (@cl (not (<= a 5.0))))\n\
+         (step t1 (@cl (not (> a 5.0)) (= b 10.0)) :rule xor1 :premises ( h1 ))\n\
+         (step t2 (@cl (<= a 5.0) (> a 5.0)) :rule la_generic :args ( (@varlist 1.0 1.0) ))\n\
          (step t3 @empty_cl :rule resolution :premises ( t1 t2 h2 h3 ) :args ( (@varlist) ))\n";
 
-    eunoia_full_translation_test(alethe_problem, alethe_certificate, eunoia_problem, eunoia_certificate);
+    eunoia_full_translation_test(
+        alethe_problem,
+        alethe_certificate,
+        eunoia_problem,
+        eunoia_certificate,
+    );
 }
 
 #[test]
@@ -59,7 +64,12 @@ fn test_let_example() {
          (step t1 (@cl (= (@var ( ( x S ) ) x) b)) \
          :rule refl :premises ( context ))\n\
          (step-pop t2 (@cl (= ( _ (@let ( ( x S ) ) (@var ( ( x S ) ) x)) a) b)) \
-         :rule let_elim :premises ( h1 t1 ))\n";
+         :rule let_elim :premises ( h1 t1 ) :args ( ctx1 ))\n";
 
-    eunoia_full_translation_test(alethe_problem, alethe_certificate, eunoia_problem, eunoia_certificate);
+    eunoia_full_translation_test(
+        alethe_problem,
+        alethe_certificate,
+        eunoia_problem,
+        eunoia_certificate,
+    );
 }

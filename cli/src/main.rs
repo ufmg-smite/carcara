@@ -6,7 +6,7 @@ mod path_args;
 
 use app::*;
 use carcara::{
-    ast::{self, rare_rules::Rules, ProofCommand},
+    ast::{self, rare_rules::Rules, Proof},
     benchmarking::OnlineBenchmarkResults,
     check, check_and_elaborate, check_parallel, generate_lia_smt_instances, parser, slice,
     translation::{self, ProofPrinter, Translator},
@@ -322,19 +322,13 @@ fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
     )?;
 
     match &options.target {
-        TranslationTarget::Eunoia => {
-            translate_2_eunoia_command(&alethe_problem, &alethe_proof.commands)
-        }
+        TranslationTarget::Eunoia => translate_2_eunoia_command(&alethe_problem, &alethe_proof),
 
-        TranslationTarget::Tstp => translate_2_tstp_command(&alethe_problem, &alethe_proof.commands),
+        TranslationTarget::Tstp => translate_2_tstp_command(&alethe_problem, &alethe_proof),
     }
-
 }
 
-fn translate_2_eunoia_command(
-    alethe_problem: &ast::Problem,
-    proof: &Vec<ProofCommand>,
-) -> CliResult<()> {
+fn translate_2_eunoia_command(alethe_problem: &ast::Problem, proof: &Proof) -> CliResult<()> {
     let mut translator = translation::eunoia::alethe_2_eunoia::EunoiaTranslator::new();
     let eunoia_prelude = translator.translate_problem(alethe_problem);
     let eunoia_proof = translator.translate(proof);
@@ -368,10 +362,7 @@ fn translate_2_eunoia_command(
     Ok(())
 }
 
-fn translate_2_tstp_command(
-    alethe_problem: &ast::Problem,
-    proof: &Vec<ProofCommand>,
-) -> CliResult<()> {
+fn translate_2_tstp_command(alethe_problem: &ast::Problem, proof: &Proof) -> CliResult<()> {
     let mut translator = translation::tstp::alethe_2_tstp::TstpTranslator::new();
     let tptp_problem = translator.translate_problem(alethe_problem);
     let tstp_proof = translator.translate(proof);

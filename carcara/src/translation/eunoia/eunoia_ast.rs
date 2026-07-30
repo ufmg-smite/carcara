@@ -1,7 +1,6 @@
 //! AST representation of a fragment of Eunoia required to mechanize Alethe proofs.
 use crate::translation::Symbol;
 
-// TODO:
 pub struct EunoiaTheorySignature;
 
 /// Just a generic wrapper for Vecs, to add structural information to ASTs.
