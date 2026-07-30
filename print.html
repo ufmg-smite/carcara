@@ -343,6 +343,7 @@ small local way. These are grouped in the <code>local</code> elaboration pass. T
 <li><code>eq_congruent</code></li>
 <li><code>cong</code></li>
 <li><code>resolution</code></li>
+<li><code>eq_mp</code></li>
 </ul>
 <h2 id="transitivity-rules"><a class="header" href="#transitivity-rules">Transitivity rules</a></h2>
 <p>The <code>eq_transitive</code> and <code>trans</code> rules may sometimes contain the transitivity chain in an incorrect
@@ -403,6 +404,32 @@ arguments. For each pivot, two arguments are provided: the pivot term, and a boo
 whether it appears on the left-hand clause with positive polarity. For the example above, the
 elaborated step will be:</p>
 <pre><code>(step t4 (cl r) :rule resolution :premises (t1 t2 t3) :args (p true q false))
+</code></pre>
+<h2 id="eq_mp-rule"><a class="header" href="#eq_mp-rule"><code>eq_mp</code> rule</a></h2>
+<p>The <code>eq_mp</code> rule is not part of the Alethe specification. It is an extra rule, equivalent to
+CPC’s <code>EQ_RESOLVE</code>, that derives <code>F2</code> from <code>F1</code> and <code>(= F1 F2)</code>:</p>
+<pre><code>(assume h1 p)
+(assume h2 (= p q))
+(step t3 (cl q) :rule eq_mp :premises (h1 h2))
+</code></pre>
+<p>During elaboration, it is replaced by a <code>resolution</code> step taking the original
+premises and a new <code>equiv_pos2</code> step:</p>
+<pre><code>(assume h1 p)
+(assume h2 (= p q))
+(step t3.t1 (cl (not (= p q)) (not p) q) :rule equiv_pos2)
+(step t3 (cl q) :rule resolution :premises (t3.t1 h2 h1) :args ((= p q) false p false))
+</code></pre>
+<p>In the odd case where <code>q</code> is exactly <code>(not p)</code> this pattern would break the
+resolution, so instead the elaboration is done with a resolution step that
+considers just the equivalence premise and relies on implicit duplicate
+elimination (which can be further eliminated by other elaboration passes if they
+are active). The <code>equiv_pos2</code> step is nested one level deeper here, so that its
+id does not clash with the ones used by the <code>uncrowd</code> pass when it adds the
+<code>contraction</code> step that removes the duplicate:</p>
+<pre><code>(assume h1 p)
+(assume h2 (= p (not p)))
+(step t3.t1.t1 (cl (not (= p (not p))) (not p) (not p)) :rule equiv_pos2)
+(step t3 (cl (not p)) :rule resolution :premises (t3.t1.t1 h2) :args ((= p (not p)) false))
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="resolution-uncrowding"><a class="header" href="#resolution-uncrowding">Resolution uncrowding</a></h1>
 <p>Besides <a href="elaboration/./local.html#resolution-rule">finding resolution pivots</a>, Carcara is also able to refine
