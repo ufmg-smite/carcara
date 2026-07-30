@@ -6,7 +6,7 @@ mod path_args;
 
 use app::*;
 use carcara::{
-    ast::{self, rare_rules::Rules, ProofCommand, ProofNode, Rc, StepNode},
+    ast::{self, rare_rules::Rules, ProofCommand},
     benchmarking::OnlineBenchmarkResults,
     check, check_and_elaborate, check_parallel, generate_lia_smt_instances, parser, slice,
     translation::{self, ProofPrinter, Translator},

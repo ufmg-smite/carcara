@@ -102,6 +102,8 @@ impl<T: Clone> AletheScopes<T> {
     /// Closes the last open scope.
     /// PRE : { `self.context_introduced.len()` >= 1 }
     pub fn close_scope(&mut self) {
+        assert!(!self.context_introduced.is_empty());
+
         self.variables_in_scope.pop_scope();
 
         // TODO: let Some(true)?
