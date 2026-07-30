@@ -178,6 +178,7 @@ impl<'e> Elaborator<'e> {
                 "cong" => local::congruence::cong,
                 "eq_congruent" => local::congruence::eq_congruent,
                 "bounded_farkas" => local::farkas::bounded_farkas,
+                "eq_mp" => local::eq_mp::eq_mp,
                 _ => return None,
             })
         }

@@ -104,6 +104,66 @@ fn eq_symmetric() {
 }
 
 #[test]
+fn eq_mp() {
+    test_cases! {
+        definitions = "
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-fun r () Bool)
+            (declare-fun a () Int)
+            (declare-fun b () Int)
+        ",
+        "Simple working examples" {
+            "(assume h1 p)
+            (assume h2 (= p q))
+            (step t3 (cl q) :rule eq_mp :premises (h1 h2))": true,
+
+            "(assume h1 (not p))
+            (assume h2 (= (not p) (or q r)))
+            (step t3 (cl (or q r)) :rule eq_mp :premises (h1 h2))": true,
+
+            "(assume h1 (< a b))
+            (assume h2 (= (< a b) (not (>= a b))))
+            (step t3 (cl (not (>= a b))) :rule eq_mp :premises (h1 h2))": true,
+
+            "(assume h1 p)
+            (assume h2 (= p p))
+            (step t3 (cl p) :rule eq_mp :premises (h1 h2))": true,
+        }
+        "Premises in the wrong order" {
+            "(assume h1 p)
+            (assume h2 (= p q))
+            (step t3 (cl q) :rule eq_mp :premises (h2 h1))": false,
+        }
+        "Equivalence is flipped" {
+            "(assume h1 p)
+            (assume h2 (= q p))
+            (step t3 (cl q) :rule eq_mp :premises (h1 h2))": false,
+        }
+        "Failing examples" {
+            "(assume h1 p)
+            (assume h2 (= p q))
+            (step t3 (cl r) :rule eq_mp :premises (h1 h2))": false,
+
+            "(assume h1 p)
+            (assume h2 (= p q))
+            (step t3 (cl q r) :rule eq_mp :premises (h1 h2))": false,
+
+            "(assume h1 p)
+            (assume h2 (=> p q))
+            (step t3 (cl q) :rule eq_mp :premises (h1 h2))": false,
+
+            "(assume h1 (= p q))
+            (step t3 (cl q) :rule eq_mp :premises (h1))": false,
+
+            "(step t1 (cl p r) :rule hole)
+            (assume h2 (= p q))
+            (step t3 (cl q) :rule eq_mp :premises (t1 h2))": false,
+        }
+    }
+}
+
+#[test]
 fn weakening() {
     test_cases! {
         definitions = "
