@@ -1,7 +1,7 @@
 use super::{
     assert_clause_len, assert_eq, assert_num_args, assert_num_premises, RuleArgs, RuleResult, Term,
 };
-use crate::ast::{Constant, Operator};
+use crate::ast::{match_term, Constant, Operator};
 use crate::checker::error::{CheckerError, EqualityError};
 use crate::checker::Rc;
 use rug::Integer;
@@ -38,7 +38,7 @@ fn get_pb_hashmap(pbsum: &Rc<Term>) -> Result<PbHash, CheckerError> {
     for term in pbsum {
         let (coeff, literal) =
             // Negated literal  (* c (- 1 x1))
-            if let Some((coeff, (_, literal))) = match_term!((* coeff (- 1 literal)) = term) {
+            if let Some((coeff, literal)) = match_term!((* coeff (- 1 literal)) = term) {
                 (coeff, format!("~{}",literal))
             // Plain literal    (* c x1)
             } else if let Some((coeff, literal)) = match_term!((* coeff literal) = term) {
@@ -363,7 +363,7 @@ pub fn cp_literal(RuleArgs { pool, args, conclusion, .. }: RuleArgs) -> RuleResu
     assert_num_args(args, 1)?;
     // TODO: Set args type to FF 2
 
-    if let Some(((c, (_, l)), _)) = match_term!((>= (* c (- 1 l)) 0) = &conclusion[0]) {
+    if let Some((c, l)) = match_term!((>= (* c (- 1 l)) 0) = &conclusion[0]) {
         rassert!(
             c.as_integer_err()? == 1,
             CheckerError::ExpectedInteger(1.into(), c.clone()),
@@ -371,18 +371,18 @@ pub fn cp_literal(RuleArgs { pool, args, conclusion, .. }: RuleArgs) -> RuleResu
         let neg_l = build_term!(pool,(- 1 {l.clone()}));
         return assert_eq(&neg_l, &args[0]);
     }
-    if let Some(((c, l), _)) = match_term!((>= (* c l) 0) = &conclusion[0]) {
+    if let Some((c, l)) = match_term!((>= (* c l) 0) = &conclusion[0]) {
         rassert!(
             c.as_integer_err()? == 1,
             CheckerError::ExpectedInteger(1.into(), c.clone()),
         );
         return assert_eq(l, &args[0]);
     }
-    if let Some(((_, l), _)) = match_term!((>= (- 1 l) 0) = &conclusion[0]) {
+    if let Some(l) = match_term!((>= (- 1 l) 0) = &conclusion[0]) {
         let neg_l = build_term!(pool,(- 1 {l.clone()}));
         return assert_eq(&neg_l, &args[0]);
     }
-    if let Some((l, _)) = match_term!((>= l 0) = &conclusion[0]) {
+    if let Some(l) = match_term!((>= l 0) = &conclusion[0]) {
         return assert_eq(l, &args[0]);
     }
     Err(CheckerError::Explanation(
@@ -467,7 +467,7 @@ impl PartialEq for CoeffTimesVar<'_> {
 
         // * 1. self is `negated l`, other is `!negated (- 1 l)`
         if self.negated {
-            if let Some((_, l)) = match_term!((- 1 l) = other.var) {
+            if let Some(l) = match_term!((- 1 l) = other.var) {
                 return l == self.var;
             } else {
                 return false;
@@ -475,7 +475,7 @@ impl PartialEq for CoeffTimesVar<'_> {
         }
         // 2. self is `!negated (- 1 l)`, other is `negated l`
         if other.negated {
-            if let Some((_, l)) = match_term!((- 1 l) = self.var) {
+            if let Some(l) = match_term!((- 1 l) = self.var) {
                 return l == other.var;
             } else {
                 return false;
@@ -506,7 +506,7 @@ fn term_to_ctv(term: &Rc<Term>) -> Result<CoeffTimesVar<'_>, Integer> {
     };
 
     // The variable might be negated
-    if let Some((_, inner)) = match_term!((- 1 var) = var) {
+    if let Some(inner) = match_term!((- 1 var) = var) {
         Ok(CoeffTimesVar { coeff, var: inner, negated: true })
     } else {
         Ok(CoeffTimesVar { coeff, var, negated: false })

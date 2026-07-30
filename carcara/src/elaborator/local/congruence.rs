@@ -210,14 +210,42 @@ pub fn eq_congruent(
     _: &mut ContextStack,
     step: &StepNode,
 ) -> Result<Rc<ProofNode>, ElaborationError> {
+    generic_eq_congruent(pool, step, false)
+}
+
+pub fn eq_congruent_pred(
+    pool: &mut PrimitivePool,
+    _: &mut ContextStack,
+    step: &StepNode,
+) -> Result<Rc<ProofNode>, ElaborationError> {
+    generic_eq_congruent(pool, step, true)
+}
+
+fn generic_eq_congruent(
+    pool: &mut PrimitivePool,
+    step: &StepNode,
+    is_pred: bool,
+) -> Result<Rc<ProofNode>, ElaborationError> {
     assert!(step.clause.len() >= 2);
 
-    let premises: Vec<_> = step.clause[..step.clause.len() - 1]
+    let conclusion_len = if is_pred { 2 } else { 1 };
+
+    let premises: Vec<_> = step.clause[..step.clause.len() - conclusion_len]
         .iter()
         .map(|term| match_term!((not (= t u)) = term).unwrap())
         .collect();
 
-    let (f, g) = match_term_err!((= f g) = step.clause.last().unwrap())?;
+    let (f, g) = if is_pred {
+        let a = &step.clause[step.clause.len() - 2];
+        let b = &step.clause[step.clause.len() - 1];
+        match a.remove_negation() {
+            Some(a) => (a, b),
+            None => (a, b.remove_negation_err()?),
+        }
+    } else {
+        match_term_err!((= f g) = step.clause.last().unwrap())?
+    };
+
     let [f_args, g_args] = [f, g].map(term_args);
 
     let mut flipped = vec![false; premises.len()];
@@ -228,12 +256,12 @@ pub fn eq_congruent(
         return Ok(Rc::new(ProofNode::Step(step.clone())));
     }
 
-    // If there are any flipped premises, we need to change the `eq_congruent` step's conclusion to
-    // fix them, and then reconstruct the original conclusion. The general idea is to, for each
-    // flipped premise `(not (= u t))`, add an `eq_symmetric` step concluding `(= (= u t) (= t u))`,
-    // and use `equiv1` to turn that into `(cl (not (= u t)) (= t u))`. Then, we resolve the fixed
-    // `eq_congruent` step with this `equiv1` step to replace the flipped premise, and reach the
-    // original conclusion after a reordering.
+    // If there are any flipped premises, we need to change the `eq_congruent(_pred)` step's
+    // conclusion to fix them, and then reconstruct the original conclusion. The general idea is to,
+    // for each flipped premise `(not (= u t))`, add an `eq_symmetric` step concluding `(= (= u t)
+    // (= t u))`, and use `equiv1` to turn that into `(cl (not (= u t)) (= t u))`. Then, we resolve
+    // the fixed `eq_congruent` step with this `equiv1` step to replace the flipped premise, and
+    // reach the original conclusion after a reordering.
     //
     // The annoying case is when there are duplicate flipped premises. Then, we must take extra
     // care to make sure the resolution step is still valid. We must:
@@ -244,15 +272,16 @@ pub fn eq_congruent(
 
     let mut ids = IdHelper::new(&step.id);
 
-    // (1) First, we build the fixed `eq_congruent` step, possibly applying a `contraction` if there
-    // are duplicate premises.
+    // (1) First, we build the fixed `eq_congruent(_pred)` step, possibly applying a `contraction`
+    // if there are duplicate premises.
     let fixed_eq_congruent_step = {
+        let conclusion_terms = &step.clause[step.clause.len() - conclusion_len..];
         let fixed_conclusion: Vec<_> = premises
             .iter()
             .zip(&flipped)
             .map(|(&(t, u), flipped)| if *flipped { (u, t) } else { (t, u) })
             .map(|(t, u)| build_term!(pool, (not (= {t.clone()} {u.clone()}))))
-            .chain(std::iter::once(step.clause.last().unwrap().clone()))
+            .chain(conclusion_terms.iter().cloned())
             .collect();
 
         let contracted: Vec<_> = fixed_conclusion.iter().dedup().cloned().collect();
@@ -262,7 +291,7 @@ pub fn eq_congruent(
             id: ids.next_id(),
             depth: step.depth,
             clause: fixed_conclusion,
-            rule: "eq_congruent".to_owned(),
+            rule: format!("eq_congruent{}", if is_pred { "_pred" } else { "" }),
             ..StepNode::default()
         }));
 
@@ -319,7 +348,8 @@ pub fn eq_congruent(
 
     // (3) Next, we create the resolution step.
     let resolution_clause: Vec<_> = {
-        flipped.push(false); // Add an extra `false` for the conclusion term
+        // Add one or two extra `false` for the conclusion terms
+        flipped.extend(std::iter::repeat_n(false, conclusion_len));
 
         // The conclusion of the resolution step will be, first, all terms which are not flipped
         // premises

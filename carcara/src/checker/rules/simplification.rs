@@ -89,19 +89,19 @@ pub fn ite_simplify(args: RuleArgs) -> RuleResult {
     generic_simplify_rule(args.conclusion, args.pool, |term, pool| {
         simplify!(term {
             // ite true t_1 t_2 => t_1
-            (ite true t_1 t_2): (_, t_1, _) => t_1.clone(),
+            (ite true t_1 t_2): (t_1, _) => t_1.clone(),
 
             // ite false t_1 t_2 => t_2
-            (ite false t_1 t_2): (_, _, t_2) => t_2.clone(),
+            (ite false t_1 t_2): (_, t_2) => t_2.clone(),
 
             // ite phi t t => t
             (ite phi t t): (_, t_1, t_2) if t_1 == t_2 => t_1.clone(),
 
             // ite psi true false => psi
-            (ite psi true false): (psi, _, _) => psi.clone(),
+            (ite psi true false): psi => psi.clone(),
 
             // ite psi false true => ¬psi
-            (ite psi false true): (psi, _, _) => build_term!(pool, (not {psi.clone()})),
+            (ite psi false true): psi => build_term!(pool, (not {psi.clone()})),
 
             // ite ¬phi t_1 t_2 => ite phi t_2 t_1
             (ite (not phi) t_1 t_2): (phi, t_1, t_2) => {
@@ -109,32 +109,32 @@ pub fn ite_simplify(args: RuleArgs) -> RuleResult {
             },
 
             // ite phi (ite phi t_1 t_2) t_3 => ite phi t_1 t_3
-            (ite phi (ite phi t_1 t_2) t_3): (phi_1, (phi_2, t_1, _), t_3) if phi_1 == phi_2 => {
+            (ite phi (ite phi t_1 t_2) t_3): (phi_1, phi_2, t_1, _, t_3) if phi_1 == phi_2 => {
                 build_term!(pool, (ite {phi_1.clone()} {t_1.clone()} {t_3.clone()}))
             },
 
             // ite phi t_1 (ite phi t_2 t_3) => ite phi t_1 t_3
-            (ite phi t_1 (ite phi t_2 t_3)): (phi_1, t_1, (phi_2, _, t_3)) if phi_1 == phi_2 => {
+            (ite phi t_1 (ite phi t_2 t_3)): (phi_1, t_1, phi_2, _, t_3) if phi_1 == phi_2 => {
                 build_term!(pool, (ite {phi_1.clone()} {t_1.clone()} {t_3.clone()}))
             },
 
             // ite psi true phi => psi v phi
-            (ite psi true phi): (psi, _, phi) => {
+            (ite psi true phi): (psi, phi) => {
                 build_term!(pool, (or {psi.clone()} {phi.clone()}))
             },
 
             // ite psi phi false => psi ^ phi
-            (ite psi phi false): (psi, phi, _) => {
+            (ite psi phi false): (psi, phi) => {
                 build_term!(pool, (and {psi.clone()} {phi.clone()}))
             },
 
             // ite psi false phi => ¬psi ^ phi
-            (ite psi false phi): (psi, _, phi) => {
+            (ite psi false phi): (psi, phi) => {
                 build_term!(pool, (and (not {psi.clone()}) {phi.clone()}))
             },
 
             // ite psi phi true => ¬psi v phi
-            (ite psi phi true): (psi, phi, _) => {
+            (ite psi phi true): (psi, phi) => {
                 build_term!(pool, (or (not {psi.clone()}) {phi.clone()}))
             },
         })
@@ -300,10 +300,10 @@ pub fn implies_simplify(args: RuleArgs) -> RuleResult {
             (=> phi true): _ => pool.bool_true(),
 
             // true -> phi => phi
-            (=> true phi): (_, phi) => phi.clone(),
+            (=> true phi): phi => phi.clone(),
 
             // phi -> false => ¬phi
-            (=> phi false): (phi, _) => build_term!(pool, (not {phi.clone()})),
+            (=> phi false): phi => build_term!(pool, (not {phi.clone()})),
 
             // phi -> phi => true
             (=> phi phi): (phi_1, phi_2) if phi_1 == phi_2 => pool.bool_true(),
@@ -315,7 +315,7 @@ pub fn implies_simplify(args: RuleArgs) -> RuleResult {
             } => phi_2.clone(),
 
             // (phi_1 -> phi_2) -> phi_2 => phi_1 v phi_2
-            (=> (=> phi_1 phi_2) phi_3): ((phi_1, phi_2), phi_3) if phi_2 == phi_3 => {
+            (=> (=> phi_1 phi_2) phi_3): (phi_1, phi_2, phi_3) if phi_2 == phi_3 => {
                 build_term!(pool, (or {phi_1.clone()} {phi_2.clone()}))
             },
         })
@@ -340,16 +340,16 @@ pub fn equiv_simplify(args: RuleArgs) -> RuleResult {
             (= (not phi_1) phi_2): (phi_1, phi_2) if phi_1 == phi_2 => pool.bool_false(),
 
             // true = phi => phi
-            (= true phi_1): (_, phi_1) => phi_1.clone(),
+            (= true phi_1): phi_1 => phi_1.clone(),
 
             // phi = true => phi
-            (= phi_1 true): (phi_1, _) => phi_1.clone(),
+            (= phi_1 true): phi_1 => phi_1.clone(),
 
             // false = phi => ¬phi
-            (= false phi_1): (_, phi_1) => build_term!(pool, (not {phi_1.clone()})),
+            (= false phi_1): phi_1 => build_term!(pool, (not {phi_1.clone()})),
 
             // phi = false => ¬phi
-            (= phi_1 false): (phi_1, _) => build_term!(pool, (not {phi_1.clone()})),
+            (= phi_1 false): phi_1 => build_term!(pool, (not {phi_1.clone()})),
         })
     })
 }
@@ -373,22 +373,22 @@ pub fn bool_simplify(args: RuleArgs) -> RuleResult {
             },
 
             // (phi_1 -> (phi_2 -> phi_3)) => ((phi_1 ^ phi_2) -> phi_3)
-            (=> phi_1 (=> phi_2 phi_3)): (phi_1, (phi_2, phi_3)) => {
+            (=> phi_1 (=> phi_2 phi_3)): (phi_1, phi_2, phi_3) => {
                 build_term!(pool, (=> (and {phi_1.clone()} {phi_2.clone()}) {phi_3.clone()}))
             },
 
             // ((phi_1 -> phi_2) -> phi_2) => (phi_1 v phi_2)
-            (=> (=> phi_1 phi_2) phi_3): ((phi_1, phi_2), phi_3) if phi_2 == phi_3 => {
+            (=> (=> phi_1 phi_2) phi_3): (phi_1, phi_2, phi_3) if phi_2 == phi_3 => {
                 build_term!(pool, (or {phi_1.clone()} {phi_2.clone()}))
             },
 
             // (phi_1 ^ (phi_1 -> phi_2)) => (phi_1 ^ phi_2)
-            (and phi_1 (=> phi_2 phi_3)): (phi_1, (phi_2, phi_3)) if phi_1 == phi_2 => {
+            (and phi_1 (=> phi_2 phi_3)): (phi_1, phi_2, phi_3) if phi_1 == phi_2 => {
                 build_term!(pool, (and {phi_1.clone()} {phi_3.clone()}))
             },
 
             // ((phi_1 -> phi_2) ^ phi_1) => (phi_1 ^ phi_2)
-            (and (=> phi_1 phi_2) phi_3): ((phi_1, phi_2), phi_3) if phi_1 == phi_3 => {
+            (and (=> phi_1 phi_2) phi_3): (phi_1, phi_2, phi_3) if phi_1 == phi_3 => {
                 build_term!(pool, (and {phi_1.clone()} {phi_2.clone()}))
             },
         })

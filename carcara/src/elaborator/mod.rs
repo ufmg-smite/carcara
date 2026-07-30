@@ -177,7 +177,9 @@ impl<'e> Elaborator<'e> {
                 "resolution" | "th_resolution" => local::resolution::resolution,
                 "cong" => local::congruence::cong,
                 "eq_congruent" => local::congruence::eq_congruent,
+                "eq_congruent_pred" => local::congruence::eq_congruent_pred,
                 "bounded_farkas" => local::farkas::bounded_farkas,
+                "eq_mp" => local::eq_mp::eq_mp,
                 _ => return None,
             })
         }

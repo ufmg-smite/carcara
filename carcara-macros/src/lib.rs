@@ -269,6 +269,7 @@ fn op_to_variant(op: &str) -> TokenStream2 {
         "bvxnor" => quote! { crate::ast::Operator::BvXNor },
         "bvcomp" => quote! { crate::ast::Operator::BvComp },
         "bvadd" => quote! { crate::ast::Operator::BvAdd },
+        "bvsub" => quote! { crate::ast::Operator::BvSub },
         "bvmul" => quote! { crate::ast::Operator::BvMul },
         "bvudiv" => quote! { crate::ast::Operator::BvUDiv },
         "bvurem" => quote! { crate::ast::Operator::BvURem },
@@ -302,7 +303,7 @@ fn op_to_variant(op: &str) -> TokenStream2 {
         "select" => quote! { crate::ast::Operator::Select },
         "store" => quote! { crate::ast::Operator::Store },
 
-        other => panic!("unknown operator in match_term_flat!: {other:?}"),
+        other => panic!("unknown operator in match_term!: {other:?}"),
     }
 }
 
@@ -352,7 +353,7 @@ fn gen_match(pat: &Pat, var: &TokenStream2, inner: TokenStream2, ctr: &mut usize
                     let args_ident = format_ident!("__mt_args_{}", ctr);
                     let body = gen_sole_variadic_body(var_id, &args_ident, inner);
                     return quote! {
-                        if let crate::ast::Term::Op(#variant, #args_ident) = (#var).as_ref() {
+                        if let crate::ast::Term::Op(#variant, #args_ident) = (&(#var) as &crate::ast::Term) {
                             #body
                         } else {
                             None
@@ -381,7 +382,7 @@ fn gen_match(pat: &Pat, var: &TokenStream2, inner: TokenStream2, ctr: &mut usize
             }
 
             quote! {
-                if let crate::ast::Term::Op(#variant, #args_vec) = (#var).as_ref() {
+                if let crate::ast::Term::Op(#variant, #args_vec) = (&(#var) as &crate::ast::Term) {
                     if let [#(#arg_idents),*] = #args_vec.as_slice() {
                         #body
                     } else {
@@ -421,7 +422,7 @@ fn gen_match(pat: &Pat, var: &TokenStream2, inner: TokenStream2, ctr: &mut usize
                             op: #variant,
                             op_args: #op_args_vec,
                             args: #args_vec,
-                        } = (#var).as_ref() {
+                        } = (&(#var) as &crate::ast::Term) {
                             if let [#(#op_arg_idents),*] = #op_args_vec.as_slice() {
                                 #body
                             } else { None }
@@ -456,7 +457,7 @@ fn gen_match(pat: &Pat, var: &TokenStream2, inner: TokenStream2, ctr: &mut usize
                     op: #variant,
                     op_args: #op_args_vec,
                     args: #args_vec,
-                } = (#var).as_ref() {
+                } = (&(#var) as &crate::ast::Term) {
                     if let [#(#op_arg_idents),*] = #op_args_vec.as_slice() {
                         if let [#(#arg_idents),*] = #args_vec.as_slice() {
                             #body
@@ -488,7 +489,7 @@ fn gen_match(pat: &Pat, var: &TokenStream2, inner: TokenStream2, ctr: &mut usize
 
             quote! {
                 if let crate::ast::Term::Binder(#binder_variant, #bindings_id, #inner_var) =
-                    (#var).as_ref()
+                    (&(#var) as &crate::ast::Term)
                 {
                     #body
                 } else {
@@ -500,7 +501,7 @@ fn gen_match(pat: &Pat, var: &TokenStream2, inner: TokenStream2, ctr: &mut usize
 }
 
 #[proc_macro]
-pub fn match_term_flat(input: TokenStream) -> TokenStream {
+pub fn match_term(input: TokenStream) -> TokenStream {
     let Input { pattern, expr } = parse_macro_input!(input as Input);
 
     // Single counter shared between parse_pat (for variable/variadic/binder idents)
@@ -524,4 +525,16 @@ pub fn match_term_flat(input: TokenStream) -> TokenStream {
     let body = gen_match(&pat, &quote! { #expr }, result, &mut gen_ctr);
 
     quote! {{ #body }}.into()
+}
+
+#[proc_macro]
+pub fn get_op_variant(input: TokenStream) -> TokenStream {
+    let input = input.to_string();
+    op_to_variant(&input).into()
+}
+
+#[proc_macro]
+pub fn get_param_op_variant(input: TokenStream) -> TokenStream {
+    let input = input.to_string();
+    param_op_to_variant(&input).into()
 }
