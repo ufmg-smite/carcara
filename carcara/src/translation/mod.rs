@@ -441,7 +441,6 @@ pub trait VecToVecTranslator<
                         }
 
                         // Translate subproof.
-                        println!("Estamos por traductir una subproof");
                         self.iterate_and_translate_proof(commands, iter);
                     }
                 }
