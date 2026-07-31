@@ -926,7 +926,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         &mut self,
         command: &ProofCommand,
         iter: &ProofIter<'_>,
-        _previous_command_id: &str,
+        _previous_command_id: Option<&str>,
     ) {
         let mut alethe_premises: Vec<Symbol> = Vec::new();
         let mut alethe_discharged_assumptions: Vec<Symbol> = Vec::new();
@@ -1102,7 +1102,7 @@ impl Default for TstpTranslator {
 impl<'a> Translator<'a> for TstpTranslator {
     type Output = TstpProof;
 
-    fn translate(&mut self, proof: &Proof) -> &Self::Output {
+    fn translate(&mut self, proof: &mut Proof) -> &Self::Output {
         self.translate_2_vect(proof)
     }
 

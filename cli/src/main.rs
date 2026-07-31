@@ -314,7 +314,7 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
 fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
     let (problem, proof, rules) = get_instance(&options.input)?;
 
-    let (alethe_problem, alethe_proof, _, _) = parser::parse_instance(
+    let (alethe_problem, mut alethe_proof, _, _) = parser::parse_instance(
         &problem,
         &proof,
         rules.as_deref(),
@@ -322,13 +322,13 @@ fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
     )?;
 
     match &options.target {
-        TranslationTarget::Eunoia => translate_2_eunoia_command(&alethe_problem, &alethe_proof),
+        TranslationTarget::Eunoia => translate_2_eunoia_command(&alethe_problem, &mut alethe_proof),
 
-        TranslationTarget::Tstp => translate_2_tstp_command(&alethe_problem, &alethe_proof),
+        TranslationTarget::Tstp => translate_2_tstp_command(&alethe_problem, &mut alethe_proof),
     }
 }
 
-fn translate_2_eunoia_command(alethe_problem: &ast::Problem, proof: &Proof) -> CliResult<()> {
+fn translate_2_eunoia_command(alethe_problem: &ast::Problem, proof: &mut Proof) -> CliResult<()> {
     let mut translator = translation::eunoia::alethe_2_eunoia::EunoiaTranslator::new();
     let eunoia_prelude = translator.translate_problem(alethe_problem);
     let eunoia_proof = translator.translate(proof);
@@ -362,7 +362,7 @@ fn translate_2_eunoia_command(alethe_problem: &ast::Problem, proof: &Proof) -> C
     Ok(())
 }
 
-fn translate_2_tstp_command(alethe_problem: &ast::Problem, proof: &Proof) -> CliResult<()> {
+fn translate_2_tstp_command(alethe_problem: &ast::Problem, proof: &mut Proof) -> CliResult<()> {
     let mut translator = translation::tstp::alethe_2_tstp::TstpTranslator::new();
     let tptp_problem = translator.translate_problem(alethe_problem);
     let tstp_proof = translator.translate(proof);

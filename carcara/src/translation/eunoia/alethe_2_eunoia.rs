@@ -734,7 +734,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
         &mut self,
         command: &ProofCommand,
         iter: &ProofIter<'_>,
-        previous_command_id: &str,
+        previous_command_id: Option<&str>,
     ) {
         let mut alethe_premises: Vec<EunoiaTerm> = Vec::new();
 
@@ -825,7 +825,14 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
 
                     "let" => {
                         // Include, as premises, previous step from the actual subproof.
-                        alethe_premises.push(EunoiaTerm::Id(previous_command_id.to_owned()));
+                        match previous_command_id {
+                            Some(id) => alethe_premises.push(EunoiaTerm::Id(id.to_owned())),
+
+                            None => {
+                                println!("'let' step without premises?");
+                                panic!();
+                            }
+                        }
 
                         // We include, as argument, the context surrounding this
                         // subproof's context.
@@ -847,7 +854,14 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
 
                     "bind_let" => {
                         // Include, as premises, previous step from the actual subproof.
-                        alethe_premises.push(EunoiaTerm::Id(previous_command_id.to_owned()));
+                        match previous_command_id {
+                            Some(id) => alethe_premises.push(EunoiaTerm::Id(id.to_owned())),
+
+                            None => {
+                                println!("'let' step without premises?");
+                                panic!();
+                            }
+                        }
 
                         // We include, as argument, the context surrounding this
                         // subproof's context.
@@ -907,7 +921,14 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
 
                     "bind" => {
                         // Include, as premise, the previous step.
-                        alethe_premises.push(EunoiaTerm::Id(previous_command_id.to_owned()));
+                        match previous_command_id {
+                            Some(id) => alethe_premises.push(EunoiaTerm::Id(id.to_owned())),
+
+                            None => {
+                                println!("'let' step without premises?");
+                                panic!();
+                            }
+                        }
 
                         // We include, as argument, the context surrounding this
                         // subproof's context.
@@ -1076,7 +1097,14 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
 
                     "sko_ex" => {
                         // Include, as premise, the previous step.
-                        alethe_premises.push(EunoiaTerm::Id(previous_command_id.to_owned()));
+                        match previous_command_id {
+                            Some(id) => alethe_premises.push(EunoiaTerm::Id(id.to_owned())),
+
+                            None => {
+                                println!("'let' step without premises?");
+                                panic!();
+                            }
+                        }
 
                         // We include, as argument, the context surrounding this
                         // subproof's context.
@@ -1189,7 +1217,7 @@ impl Default for EunoiaTranslator {
 impl Translator<'_> for EunoiaTranslator {
     type Output = EunoiaProof;
 
-    fn translate(&mut self, proof: &Proof) -> &Self::Output {
+    fn translate(&mut self, proof: &mut Proof) -> &Self::Output {
         self.translate_2_vect(proof)
     }
 

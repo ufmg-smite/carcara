@@ -40,7 +40,7 @@ pub fn eunoia_full_translation_test(
     let s_exp_formatter_proof = SExpFormatter::new(&mut buf_proof);
     let mut printer_proof = EunoiaPrinter::new(s_exp_formatter_proof);
 
-    let (problem_ast, proof_ast, _, _pool) =
+    let (problem_ast, mut proof_ast, _, _pool) =
         parse_instance(alethe_problem, alethe_certificate, None, TEST_CONFIG).expect(ERROR_MESSAGE);
 
     let eunoia_problem_translated = eunoia_translator.translate_problem(&problem_ast);
@@ -51,7 +51,7 @@ pub fn eunoia_full_translation_test(
 
     assert_eq!(eunoia_problem, std::str::from_utf8(&buf_problem).unwrap());
 
-    let eunoia_certificate_translated = eunoia_translator.translate(&proof_ast);
+    let eunoia_certificate_translated = eunoia_translator.translate(&mut proof_ast);
 
     printer_proof
         .write_proof(eunoia_certificate_translated)
