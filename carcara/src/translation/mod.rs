@@ -197,9 +197,6 @@ impl<TermType: Clone, ProofType: Default> TranslatorData<TermType, ProofType> {
     fn new() -> Self {
         Self {
             translated_proof: ProofType::default(),
-            // NOTE: no Proof::default
-            // alethe_proof: Proof { constant_definitions:vec![],
-            //                       commands: vec![] },
             alethe_scopes: AletheScopes::new(),
             last_steps: LastSteps::new(),
             is_in_subproof: false,
