@@ -20,7 +20,7 @@ pub trait Translator<'a> {
     type Output;
 
     /// Translates a proof in its vector representation, into some target language.
-    fn translate(&mut self, proof: &Proof) -> &Self::Output;
+    fn translate(&mut self, proof: &mut Proof) -> &Self::Output;
 
     /// Translates only an SMT-lib problem.
     fn translate_problem(&mut self, problem: &Problem) -> Self::Output;
@@ -198,6 +198,9 @@ impl<TermType: Clone, ProofType: Default> TranslatorData<TermType, ProofType> {
     fn new() -> Self {
         Self {
             translated_proof: ProofType::default(),
+            // NOTE: no Proof::default
+            // alethe_proof: Proof { constant_definitions:vec![],
+            //                       commands: vec![] },
             alethe_scopes: AletheScopes::new(),
             last_steps: LastSteps::new(),
             is_in_subproof: false,
@@ -261,7 +264,7 @@ pub trait VecToVecTranslator<
         &mut self,
         command: &ProofCommand,
         iter: &ProofIter<'_>,
-        previous_command_id: &str,
+        previous_command_id: Option<&str>,
     );
 
     /// Abstracts the steps required to define and push a new context.
@@ -343,104 +346,104 @@ pub trait VecToVecTranslator<
     /// Generates a linear representation of the translated proof.
     /// Should not be called directly by a user implementing this trait for
     /// some custom data-structure.
-    fn iterate_and_translate_proof(&mut self, proof: &[ProofCommand], iter: &ProofIter<'_>) {
+    fn iterate_and_translate_proof(&mut self, proof: &[ProofCommand], iter: &mut ProofIter<'_>) {
         // NOTE: needed to iterate like this, to be able to get to "previous
-        // steps, since the current iterator does not allow us to do so.
+        // step", since the current iterator does not allow us to do so.
         for i in 0..proof.len() {
-            let command = &proof[i];
+            if let Some(command) = iter.next() {
+                match command {
+                    ProofCommand::Assume { id, term } => {
+                        // TODO: what about :named?
+                        let translated_assume = self.translate_assume(id, term);
+                        self.get_mut_translator_data()
+                            .translated_proof
+                            .push(translated_assume);
+                    }
 
-            match command {
-                ProofCommand::Assume { id, term } => {
-                    // TODO: what about :named?
-                    let translated_assume = self.translate_assume(id, term);
-                    self.get_mut_translator_data()
-                        .translated_proof
-                        .push(translated_assume);
-                }
+                    ProofCommand::Step(ProofStep { id, .. }) => {
+                        let previous_command_id = if i > 0 {
+                            Some(proof[i - 1].id())
+                        } else {
+                            // { i == 0 }
+                            None
+                        };
 
-                ProofCommand::Step(ProofStep { id, .. }) => {
-                    let previous_command_id = if i > 0 {
-                        proof[i - 1].id()
-                    } else {
-                        // { i == 0 }
-                        // TODO: bogus value...
-                        command.id()
-                    };
+                        self.translate_step(command, iter, previous_command_id);
 
-                    self.translate_step(command, iter, previous_command_id);
+                        // Is this the closing step of the actual subproof?
+                        if !self.get_mut_translator_data().last_steps.last_steps_empty() {
+                            let last_step_id =
+                                &self.get_mut_translator_data().last_steps.get_last_step_id();
+                            if *last_step_id == id {
+                                // TODO: ugly, hacky way of dealing with
+                                // "bind" rule already doing a step-pop of the pushed
+                                // context
 
-                    // Is this the closing step of the actual subproof?
-                    if !self.get_mut_translator_data().last_steps.last_steps_empty() {
-                        let last_step_id =
-                            &self.get_mut_translator_data().last_steps.get_last_step_id();
-                        if *last_step_id == id {
-                            // TODO: ugly, hacky way of dealing with
-                            // "bind" rule already doing a step-pop of the pushed
-                            // context
+                                self.get_mut_translator_data().last_steps.last_steps_pop();
 
-                            self.get_mut_translator_data().last_steps.last_steps_pop();
+                                // Closing the context...
+                                self.get_mut_translator_data().alethe_scopes.close_scope();
 
-                            // Closing the context...
-                            self.get_mut_translator_data().alethe_scopes.close_scope();
-
-                            // self.get_mut_translator_data().local_steps.pop();
-                            // Exiting the subproof.
-                            self.get_mut_translator_data().is_in_subproof = false;
+                                // self.get_mut_translator_data().local_steps.pop();
+                                // Exiting the subproof.
+                                self.get_mut_translator_data().is_in_subproof = false;
+                            }
                         }
                     }
-                }
 
-                // A subproof introduced by the 'anchor' command.
-                ProofCommand::Subproof(Subproof { commands, args, .. }) => {
-                    // Some compilers might to give special treatment to subproofs .
-                    // We flag once we enter a subproof.
-                    self.get_mut_translator_data().is_in_subproof = true;
+                    // A subproof introduced by the 'anchor' command.
+                    ProofCommand::Subproof(Subproof { commands, args, .. }) => {
+                        // Some compilers might to give special treatment to subproofs .
+                        // We flag once we enter a subproof.
+                        self.get_mut_translator_data().is_in_subproof = true;
 
-                    // To store @VarList parameters to @ctx
-                    let ctx_params;
+                        // To store @VarList parameters to @ctx
+                        let ctx_params;
 
-                    if args.is_empty() {
-                        self.get_mut_translator_data()
-                            .alethe_scopes
-                            .open_non_context_scope();
-                    } else {
-                        // { !args.is_empty() }
-
-                        // We actually have an anchor introducing new variables
-                        self.get_mut_translator_data()
-                            .alethe_scopes
-                            .open_context_scope();
-
-                        // Process the vector of AnchorArgs.
-                        ctx_params = self.process_anchor_context(args);
-
-                        // Define and open a new context
-                        self.define_push_new_context(Some(ctx_params));
-                    }
-
-                    // Save information about the last step of the subproof
-                    let last_step = commands.last();
-
-                    match last_step {
-                        Some(ProofCommand::Step(ProofStep {
-                            id: last_step_id,
-                            clause: _,
-                            rule: last_step_rule,
-                            ..
-                        })) => {
+                        if args.is_empty() {
                             self.get_mut_translator_data()
-                                .last_steps
-                                .last_steps_push(last_step_rule.as_str(), last_step_id.as_str());
+                                .alethe_scopes
+                                .open_non_context_scope();
+                        } else {
+                            // { !args.is_empty() }
+
+                            // We actually have an anchor introducing new variables
+                            self.get_mut_translator_data()
+                                .alethe_scopes
+                                .open_context_scope();
+
+                            // Process the vector of AnchorArgs.
+                            ctx_params = self.process_anchor_context(args);
+
+                            // Define and open a new context
+                            self.define_push_new_context(Some(ctx_params));
                         }
 
-                        _ => {
-                            // It shouldn't be something different then a step
-                            panic!();
+                        // Save information about the last step of the subproof
+                        let last_step = commands.last();
+
+                        match last_step {
+                            Some(ProofCommand::Step(ProofStep {
+                                id: last_step_id,
+                                clause: _,
+                                rule: last_step_rule,
+                                ..
+                            })) => {
+                                self.get_mut_translator_data().last_steps.last_steps_push(
+                                    last_step_rule.as_str(),
+                                    last_step_id.as_str(),
+                                );
+                            }
+
+                            _ => {
+                                // It shouldn't be something different then a step
+                                panic!();
+                            }
                         }
+
+                        // Translate subproof.
+                        self.iterate_and_translate_proof(commands, iter);
                     }
-
-                    // Translate subproof.
-                    self.iterate_and_translate_proof(commands, iter);
                 }
             }
         }
@@ -450,7 +453,7 @@ pub trait VecToVecTranslator<
     /// representation of the proof. Handles the preparation of scopes, cleaning of
     /// previously created data-structures and invocation of the proper translation
     /// routines.
-    fn translate_2_vect<'b>(&'b mut self, proof: &Proof) -> &'b Vec<StepType>
+    fn translate_2_vect<'b>(&'b mut self, proof: &mut Proof) -> &'b Vec<StepType>
     where
         TypeTermType: 'b,
     {
@@ -476,7 +479,7 @@ pub trait VecToVecTranslator<
 
         self.define_push_new_context(None);
 
-        self.iterate_and_translate_proof(&proof.commands, &proof.iter());
+        self.iterate_and_translate_proof(&proof.commands, &mut proof.iter());
 
         &self.get_read_translator_data().translated_proof
     }
