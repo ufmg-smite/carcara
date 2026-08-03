@@ -145,7 +145,7 @@ fn get_slice_body(
         ProofCommand::Assume { .. } => return None, // We can't slice an assume
         // Make a note to keep context of the step we're slicing.
         ProofCommand::Step(_) | ProofCommand::Subproof(_) => {
-            for sp in subproof_stack {
+            for sp in &subproof_stack {
                 // Get assumes
                 for command in &sp.commands {
                     if command.is_assume() {
@@ -163,6 +163,16 @@ fn get_slice_body(
                 // Get last step
                 let ult = &sp.commands[sp.commands.len() - 1];
                 to_keep.insert(ult.id().to_owned(), true); // We always need the "premises" of the last step of a subproof
+
+                // Get premises of the last step
+                let ProofCommand::Step(ult) = &ult else {
+                    unreachable!()
+                };
+                for (depth, i) in ult.premises.iter().chain(&ult.discharge) {
+                    // depth - 1 because root proof is not stored in subproof stack
+                    let id = subproof_stack[*depth - 1].commands[*i].id().to_owned();
+                    to_keep.insert(id, false);
+                }
             }
         }
     };
@@ -383,10 +393,14 @@ mod tests {
         (step t3.t2 (cl (or b b)) :rule hole :premises (t3.t1))
         (step t3 (cl (not (not a)) (or b b)) :rule subproof :discharge (t3.a0))
         (step t4 (cl a (or b b)) :rule hole :premises (t3))
-        (step t5 (cl) :rule hole :premises (t4 a0 t2))   
+        (anchor :step t5)
+        (step t5.t1 (cl c) :rule hole)
+        (step t5.t2 (cl (not c)) :rule hole)
+        (step t5 (cl c) :rule hole :premises (t5.t1))
+        (step t6 (cl) :rule hole :premises (t4 t5 a0 t2))
     ";
 
-    const PAIRS: [(&str, (&str, usize)); 5] = [
+    const PAIRS: [(&str, (&str, usize)); 6] = [
         // from t4, d=0 (normal step)
         (
             "(step t3 (cl (not (not a)) (or b b)) :rule hole :args (\"trust\"))
@@ -414,6 +428,15 @@ mod tests {
             (step slice_end (cl) :rule hole :premises (t3) :args (\"trust\"))",
             ("t3.t1", 0),
         ),
+        // from t5.t2, testing previous bug where premises of subproof-ending step lead to a panic
+        (
+            "(anchor :step t5)
+            (step t5.t1 (cl c) :rule hole :args (\"trust\"))
+            (step t5.t2 (cl (not c)) :rule hole)
+            (step t5 (cl c) :rule hole :premises (t5.t1))
+            (step slice_end (cl) :rule hole :premises (t5) :args (\"trust\"))",
+            ("t5.t2", 2),
+        ),
         // Slicing with greater max distance values
         (
             "(assume a0 a)
@@ -421,9 +444,13 @@ mod tests {
             (step t2 (cl a b (not a)) :rule hole :premises (t0))
             (step t3 (cl (not (not a)) (or b b)) :rule hole :args (\"trust\"))
             (step t4 (cl a (or b b)) :rule hole :premises (t3))
-            (step t5 (cl) :rule hole :premises (t4 a0 t2))
-            (step slice_end (cl) :rule hole :premises (t5) :args (\"trust\"))",
-            ("t5", 1),
+            (anchor :step t5)
+            (step t5.t1 (cl c) :rule hole :args (\"trust\"))
+            (step t5.t2 (cl (not c)) :rule hole :args (\"trust\"))
+            (step t5 (cl c) :rule hole :premises (t5.t1))
+            (step t6 (cl) :rule hole :premises (t4 t5 a0 t2))
+            (step slice_end (cl) :rule hole :premises (t6) :args (\"trust\"))",
+            ("t6", 1),
         ),
         (
             "(assume a0 a)
@@ -434,9 +461,13 @@ mod tests {
             (step t3.t2 (cl (or b b)) :rule hole :args (\"trust\"))
             (step t3 (cl (not (not a)) (or b b)) :rule subproof :discharge (t3.a0))
             (step t4 (cl a (or b b)) :rule hole :premises (t3))
-            (step t5 (cl) :rule hole :premises (t4 a0 t2))
-            (step slice_end (cl) :rule hole :premises (t5) :args (\"trust\"))",
-            ("t5", 2),
+            (anchor :step t5)
+            (step t5.t1 (cl c) :rule hole)
+            (step t5.t2 (cl (not c)) :rule hole)
+            (step t5 (cl c) :rule hole :premises (t5.t1))
+            (step t6 (cl) :rule hole :premises (t4 t5 a0 t2))
+            (step slice_end (cl) :rule hole :premises (t6) :args (\"trust\"))",
+            ("t6", 2),
         ),
     ];
 

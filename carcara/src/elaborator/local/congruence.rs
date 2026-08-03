@@ -230,20 +230,31 @@ fn generic_eq_congruent(
 
     let conclusion_len = if is_pred { 2 } else { 1 };
 
+    let mut original_clause = step.clause.clone();
+    let n = original_clause.len();
+
     let premises: Vec<_> = step.clause[..step.clause.len() - conclusion_len]
         .iter()
         .map(|term| match_term!((not (= t u)) = term).unwrap())
         .collect();
 
+    // If true, the conclusion terms of the `eq_congruent_pred` step were flipped. That is, they
+    // were `f (not g)` intead of `(not f) g`.
+    let mut pred_flipped = false;
+
     let (f, g) = if is_pred {
-        let a = &step.clause[step.clause.len() - 2];
-        let b = &step.clause[step.clause.len() - 1];
-        match a.remove_negation() {
-            Some(a) => (a, b),
-            None => (a, b.remove_negation_err()?),
+        if original_clause[n - 2].remove_negation().is_none() {
+            // If the conclusion terms are flipped, we unflip them in `original_clause`, and use
+            // that as a starting point. This will be fixed later in the final `reordering` step
+            original_clause.swap(n - 1, n - 2);
+            pred_flipped = true;
         }
+
+        let a = &original_clause[n - 2];
+        let b = &original_clause[n - 1];
+        (a.remove_negation_err()?, b)
     } else {
-        match_term_err!((= f g) = step.clause.last().unwrap())?
+        match_term_err!((= f g) = original_clause.last().unwrap())?
     };
 
     let [f_args, g_args] = [f, g].map(term_args);
@@ -252,7 +263,27 @@ fn generic_eq_congruent(
     let is_valid = check_cong(&premises, f_args, g_args, Some(&mut flipped));
     assert!(is_valid);
 
+    // If no premises were flipped, we can exit earlier
     if !flipped.iter().any(|f| *f) {
+        // ...but if we are an `eq_congruent_pred` step whose conclusion terms were flipped, we must
+        // remember to flip them back.
+        if is_pred && pred_flipped {
+            let fixed = Rc::new(ProofNode::Step(StepNode {
+                id: IdHelper::new(&step.id).next_id(),
+                depth: step.depth,
+                clause: original_clause,
+                rule: "eq_congruent_pred".to_owned(),
+                ..StepNode::default()
+            }));
+            return Ok(Rc::new(ProofNode::Step(StepNode {
+                id: step.id.clone(),
+                depth: step.depth,
+                clause: step.clause.clone(),
+                rule: "reordering".to_owned(),
+                premises: vec![fixed],
+                ..StepNode::default()
+            })));
+        }
         return Ok(Rc::new(ProofNode::Step(step.clone())));
     }
 
@@ -275,7 +306,7 @@ fn generic_eq_congruent(
     // (1) First, we build the fixed `eq_congruent(_pred)` step, possibly applying a `contraction`
     // if there are duplicate premises.
     let fixed_eq_congruent_step = {
-        let conclusion_terms = &step.clause[step.clause.len() - conclusion_len..];
+        let conclusion_terms = &original_clause[n - conclusion_len..];
         let fixed_conclusion: Vec<_> = premises
             .iter()
             .zip(&flipped)
@@ -353,12 +384,17 @@ fn generic_eq_congruent(
 
         // The conclusion of the resolution step will be, first, all terms which are not flipped
         // premises
-        step.clause
+        original_clause
             .iter()
             .enumerate()
             .filter(|(i, _)| !flipped[*i])
             // ...followed by the flipped premises, which are added by resolution
-            .chain(step.clause.iter().enumerate().filter(|(i, _)| flipped[*i]))
+            .chain(
+                original_clause
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| flipped[*i]),
+            )
             .map(|(_, t)| t.clone())
             .dedup() // ...with duplicates removed
             .collect()
@@ -366,7 +402,7 @@ fn generic_eq_congruent(
 
     // If there are any duplicate premises, they were omitted in the resolution clause. We will add
     // them back with a `weakening` step.
-    let needs_weakening = step.clause.len() != resolution_clause.len();
+    let needs_weakening = n != resolution_clause.len();
     let resolution = Rc::new(ProofNode::Step(StepNode {
         id: ids.next_id(),
         depth: step.depth,
@@ -380,7 +416,7 @@ fn generic_eq_congruent(
     // (4) If needed, we apply `weakening` to add back the duplicate premises.
     let weakened = if needs_weakening {
         // we have to make sure that the terms added by weakening are at the end of the clause
-        let mut missing: MultiSet<_> = step.clause.iter().collect();
+        let mut missing: MultiSet<_> = original_clause.iter().collect();
         for term in resolution.clause() {
             assert!(missing.get(&term) != 0);
             missing.remove(term);
