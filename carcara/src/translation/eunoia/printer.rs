@@ -443,7 +443,7 @@ impl<'a> EunoiaPrinter<'a> {
         let mut ret = "(! ".to_owned();
 
         match attr {
-            EunoiaKindParam::KindParam(some_type, attrs) => {
+            EunoiaKindParam(some_type, attrs) => {
                 ret += &EunoiaPrinter::type_to_concrete_syntax(some_type);
 
                 attrs.iter().for_each(|attr| {

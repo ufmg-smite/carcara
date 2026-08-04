@@ -42,7 +42,7 @@ mod tests {
             EunoiaCommand::Assume {
                 name: String::from("a"),
                 term: EunoiaTerm::Type(EunoiaType::Fun(
-                    vec![EunoiaKindParam::KindParam(
+                    vec![EunoiaKindParam(
                         EunoiaType::Type,
                         vec![
                             EunoiaTypeAttr::Var(String::from("s")),

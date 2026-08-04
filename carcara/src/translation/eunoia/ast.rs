@@ -30,37 +30,16 @@ pub enum EunoiaTypeAttr {
     Requires(EunoiaTerm, EunoiaTerm),
 }
 
-// TODO: check if this name is adequate
 /// Kind parameters: (! T :var A ...)
+/// Annotated kind variable, like: (! Type :var A :implicit)
+/// Note that this declaration is a binder whose scope is the rest of the whole
+/// term where it occurs. For example, in:
+/// (declare-const ite (-> (! Type :var A :implicit) Bool A A A))
+/// A is a variable introduced in (! Type :var A :implicit), whose scope
+/// reaches to the end of the outer construction.
 #[derive(Debug, PartialEq, Clone, Eq, Hash)]
-pub enum EunoiaKindParam {
-    // Annotated kind variable, like: (! Type :var A :implicit)
+pub struct EunoiaKindParam(pub EunoiaType, pub Vec<EunoiaTypeAttr>);
 
-    // TODO: note that this declaration is a binder whose scope is the rest of the whole
-    // term where it occurs. For example, in:
-    // (declare-const ite (-> (! Type :var A :implicit) Bool A A A))
-    // A is a variable introduced in (! Type :var A :implicit), whose scope
-    // reaches to the end of the outer construction.
-
-    // TODO: cannot understand the following (from Ethos' user manual):
-    // Internally, (! T :var t) is syntax sugar for the type (Quote t) where t
-    // is a parameter of type T and Quote is a distinguished type of kind
-    // (-> (! Type :var U) U Type). When type checking applications of functions of
-    // type (-> (Quote t) S), the parameter t is bound to the argument the function
-    // is applied to.
-    // Internally, (! T :implicit) drops T from the list of arguments of the function
-    // type we are defining.
-
-    // TODO: it looks that there are these KindParam, used to define variables that
-    // refer to types that inhabit Type (or "kinds"?); while there is also a
-    // "typed-param" syntactic category that refers to the parameters of a function:
-    // values inhabiting some given type
-    KindParam(EunoiaType, Vec<EunoiaTypeAttr>),
-}
-
-// TODO: not everything about Eunoia's type terms and kinds
-// TODO: types (expressions denoting sets of values) and kinds (expressions denoting sets of types)
-// types as sets? should we change that in the manual?
 /// Type terms.
 #[derive(Debug, PartialEq, Clone, Eq, Hash)]
 pub enum EunoiaType {
@@ -68,7 +47,7 @@ pub enum EunoiaType {
     // Eunoia has 'Bool' as a built-in type
     Bool,
 
-    // TODO: not distinguishing "types" from "kinds", for the moment
+    // NOTE: not distinguishing "types" from "kinds", for the moment
     Type,
 
     Real,
@@ -154,8 +133,8 @@ pub enum EunoiaTerm {
 
     // <string> denoting the category of string literals "<char>*"
     String(String),
-    // TODO: is it reasonable/required a specific syntactic category "constant"?
-    // Like Const(Constant) and then define enum Constant?
+
+    // Boolean constants.
     True,
 
     False,
@@ -325,11 +304,6 @@ impl EunoiaCommand {
         }
     }
 }
-
-/// A collection of proof rules.
-pub struct EunoiaProofRules {}
-
-pub struct EunoiaProgram;
 
 // TODO: note that we are allowing here other concepts beyond
 // proof-centric ones
