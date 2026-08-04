@@ -192,16 +192,10 @@ pub enum EunoiaOperator {
     LessEq,
 }
 
+/// Eunoia commands
 #[derive(Debug, PartialEq)]
 pub enum EunoiaCommand {
-    // Eunoia commands
-
-    // TODO:
-    // The command:
-    // (assume s f)
-    // can be seen as syntax sugar for:
-    // (declare-const s (Proof f))
-    // how to deal with these syntax sugars?
+    // Introducing a globally-scoped assumption.
     Assume {
         name: Symbol,
         term: EunoiaTerm,

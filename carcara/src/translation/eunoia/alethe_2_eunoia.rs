@@ -85,15 +85,15 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
 
             Some(ctx_params) => {
                 // { not ctx_params.is_empty() }
-                let ctx_signature = self.alethe_signature.ctx.clone();
-
+                // Accessed here to avoid a mutable borrow later.
+                let ctx_constructor = self.alethe_signature.ctx.to_owned();
                 self.get_mut_translator_data()
                     .translated_proof
                     .push(EunoiaCommand::Define {
                         name: new_context_id.clone(),
                         // TODO: do not hard-code this string
                         typed_params: EunoiaList { list: Vec::new() },
-                        term: EunoiaTerm::App(ctx_signature, ctx_params),
+                        term: EunoiaTerm::App(ctx_constructor, ctx_params),
                         attrs: Vec::new(),
                     });
 
@@ -184,7 +184,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                 let bound_var = self.build_var_binding(name);
 
                 subst.push(EunoiaTerm::App(
-                    self.alethe_signature.eq.clone(),
+                    self.alethe_signature.eq.to_owned(),
                     vec![bound_var.clone(), bound_var],
                 ));
             }
@@ -238,7 +238,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                             // Substitution map of the form name -> rhs: we
                             // reify it as a term (= name rhs)
                             subst.push(EunoiaTerm::App(
-                                self.alethe_signature.eq.clone(),
+                                self.alethe_signature.eq.to_owned(),
                                 vec![self.build_var_binding(name), rhs],
                             ));
                         }
@@ -260,7 +260,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                         // Substitution map of the form name -> rhs: we
                         // reify it as a term (= name rhs)
                         subst.push(EunoiaTerm::App(
-                            self.alethe_signature.eq.clone(),
+                            self.alethe_signature.eq.to_owned(),
                             vec![self.build_var_binding(name), rhs],
                         ));
                     }
@@ -274,14 +274,14 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
         // Add typed params.
         if context_domain.is_empty() {
             // Empty VarList
-            ctx_params.push(EunoiaTerm::Id(self.alethe_signature.varlist_nil.clone()));
+            ctx_params.push(EunoiaTerm::Id(self.alethe_signature.varlist_nil.to_owned()));
         } else {
             // TODO: shouldn' we build it with @varlist?
             ctx_params.push(EunoiaTerm::List(context_domain));
         }
 
         // Concat (and...)
-        ctx_params.push(EunoiaTerm::App(self.alethe_signature.and.clone(), subst));
+        ctx_params.push(EunoiaTerm::App(self.alethe_signature.and.to_owned(), subst));
 
         ctx_params
     }
@@ -380,7 +380,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
 
                 let final_let_trans = EunoiaTerm::HOApp(
                     Box::new(EunoiaTerm::App(
-                        self.alethe_signature.let_binder.clone(),
+                        self.alethe_signature.let_binder.to_owned(),
                         vec![translated_binding_list, self.translate_term(scope)],
                     )),
                     translated_values,
@@ -435,12 +435,12 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
 
                 let translated_binder = match binder {
                     Binder::Forall => EunoiaTerm::App(
-                        self.alethe_signature.forall_binder.clone(),
+                        self.alethe_signature.forall_binder.to_owned(),
                         vec![translated_bindings, self.translate_term(scope)],
                     ),
 
                     Binder::Exists => EunoiaTerm::App(
-                        self.alethe_signature.exists_binder.clone(),
+                        self.alethe_signature.exists_binder.to_owned(),
                         vec![translated_bindings, self.translate_term(scope)],
                     ),
 
@@ -463,14 +463,14 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                         };
 
                         EunoiaTerm::App(
-                            self.alethe_signature.choice_binder.clone(),
+                            self.alethe_signature.choice_binder.to_owned(),
                             vec![translated_bindings, choice_var, self.translate_term(scope)],
                         )
                     }
 
                     // TODO: complete
                     Binder::Lambda => EunoiaTerm::App(
-                        self.alethe_signature.exists_binder.clone(),
+                        self.alethe_signature.exists_binder.to_owned(),
                         vec![translated_bindings, self.translate_term(scope)],
                     ),
                 };
@@ -510,7 +510,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
         };
 
         EunoiaTerm::App(
-            self.alethe_signature.var.clone(),
+            self.alethe_signature.var.to_owned(),
             vec![
                 EunoiaTerm::List(vec![EunoiaTerm::List(vec![
                     EunoiaTerm::Id(id.to_owned().clone()),
@@ -556,41 +556,41 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
     fn translate_operator(&self, operator: Operator) -> Symbol {
         match operator {
             // Logic
-            Operator::And => self.alethe_signature.and.clone(),
+            Operator::And => self.alethe_signature.and.to_owned(),
 
-            Operator::Or => self.alethe_signature.or.clone(),
+            Operator::Or => self.alethe_signature.or.to_owned(),
 
-            Operator::Xor => self.alethe_signature.xor.clone(),
+            Operator::Xor => self.alethe_signature.xor.to_owned(),
 
-            Operator::Not => self.alethe_signature.not.clone(),
+            Operator::Not => self.alethe_signature.not.to_owned(),
 
-            Operator::Implies => self.alethe_signature.implies.clone(),
+            Operator::Implies => self.alethe_signature.implies.to_owned(),
 
-            Operator::Ite => self.alethe_signature.ite.clone(),
+            Operator::Ite => self.alethe_signature.ite.to_owned(),
 
             // Order / Comparison.
-            Operator::Equals => self.alethe_signature.eq.clone(),
+            Operator::Equals => self.alethe_signature.eq.to_owned(),
 
-            Operator::GreaterThan => self.alethe_signature.gt.clone(),
+            Operator::GreaterThan => self.alethe_signature.gt.to_owned(),
 
-            Operator::GreaterEq => self.alethe_signature.ge.clone(),
+            Operator::GreaterEq => self.alethe_signature.ge.to_owned(),
 
-            Operator::LessThan => self.alethe_signature.lt.clone(),
+            Operator::LessThan => self.alethe_signature.lt.to_owned(),
 
-            Operator::LessEq => self.alethe_signature.le.clone(),
+            Operator::LessEq => self.alethe_signature.le.to_owned(),
 
             Operator::Distinct => String::from("distinct"),
 
             // Arithmetic
-            Operator::Add => self.alethe_signature.add.clone(),
+            Operator::Add => self.alethe_signature.add.to_owned(),
 
-            Operator::Sub => self.alethe_signature.sub.clone(),
+            Operator::Sub => self.alethe_signature.sub.to_owned(),
 
-            Operator::Mult => self.alethe_signature.mult.clone(),
+            Operator::Mult => self.alethe_signature.mult.to_owned(),
 
-            Operator::IntDiv => self.alethe_signature.int_div.clone(),
+            Operator::IntDiv => self.alethe_signature.int_div.to_owned(),
 
-            Operator::RealDiv => self.alethe_signature.real_div.clone(),
+            Operator::RealDiv => self.alethe_signature.real_div.to_owned(),
 
             _ => {
                 println!("No defined translation for operator {:?}", operator);
@@ -691,7 +691,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
             EunoiaCommand::Assume {
                 name: id.to_owned(),
                 term: EunoiaTerm::App(
-                    self.alethe_signature.cl.clone(),
+                    self.alethe_signature.cl.to_owned(),
                     vec![self.translate_term(term)],
                 ),
             }
@@ -707,7 +707,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                 "subproof" => EunoiaCommand::AssumePush {
                     name: id.to_owned(),
                     term: EunoiaTerm::App(
-                        self.alethe_signature.cl.clone(),
+                        self.alethe_signature.cl.to_owned(),
                         vec![self.translate_term(term)],
                     ),
                 },
@@ -716,7 +716,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                 _ => EunoiaCommand::Assume {
                     name: id.to_owned(),
                     term: EunoiaTerm::App(
-                        self.alethe_signature.cl.clone(),
+                        self.alethe_signature.cl.to_owned(),
                         vec![self.translate_term(term)],
                     ),
                 },
@@ -762,11 +762,11 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                 // invocation of Alethe's cl operator
                 // TODO: we are always adding the conclusion clause
                 let conclusion: EunoiaTerm = if clause.is_empty() {
-                    EunoiaTerm::Id(self.alethe_signature.empty_cl.clone())
+                    EunoiaTerm::Id(self.alethe_signature.empty_cl.to_owned())
                 } else {
                     // {!clause.is_empty()}
                     EunoiaTerm::App(
-                        self.alethe_signature.cl.clone(),
+                        self.alethe_signature.cl.to_owned(),
                         clause
                             .iter()
                             .map(|term| self.translate_term(term))
@@ -785,8 +785,8 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                 // semantics (as explained in theory.rs) instead of this
                 match rule.as_str() {
                     "la_generic" => {
-                        let rule_name = self.alethe_signature.la_generic.clone();
-                        let var_cons_signature = self.alethe_signature.varlist_cons.clone();
+                        let rule_name = self.alethe_signature.la_generic.to_owned();
+                        let var_cons_signature = self.alethe_signature.varlist_cons.to_owned();
 
                         self.get_mut_translator_data()
                             .translated_proof
@@ -809,7 +809,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                     }
 
                     "la_mult_neg" => {
-                        let rule_name = self.alethe_signature.la_mult_neg.clone();
+                        let rule_name = self.alethe_signature.la_mult_neg.to_owned();
 
                         self.get_mut_translator_data()
                             .translated_proof
@@ -839,7 +839,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                         eunoia_arguments
                             .push(EunoiaTerm::Id(self.get_last_introduced_context_id()));
 
-                        let rule_name = self.alethe_signature.let_rule.clone();
+                        let rule_name = self.alethe_signature.let_rule.to_owned();
 
                         self.get_mut_translator_data().translated_proof.push(
                             EunoiaCommand::StepPop {
@@ -868,7 +868,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                         eunoia_arguments
                             .push(EunoiaTerm::Id(self.get_last_introduced_context_id()));
 
-                        let rule_name = self.alethe_signature.bind_let.clone();
+                        let rule_name = self.alethe_signature.bind_let.to_owned();
 
                         self.get_mut_translator_data().translated_proof.push(
                             EunoiaCommand::StepPop {
@@ -887,7 +887,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                         // subproof's context.
                         alethe_premises.push(EunoiaTerm::Id("context".to_owned()));
 
-                        let rule_name = self.alethe_signature.refl.clone();
+                        let rule_name = self.alethe_signature.refl.to_owned();
 
                         self.get_mut_translator_data()
                             .translated_proof
@@ -901,7 +901,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                     }
 
                     "resolution" => {
-                        let var_cons_signature = self.alethe_signature.varlist_cons.clone();
+                        let var_cons_signature = self.alethe_signature.varlist_cons.to_owned();
 
                         self.get_mut_translator_data()
                             .translated_proof
@@ -935,14 +935,14 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                         eunoia_arguments
                             .push(EunoiaTerm::Id(self.get_last_introduced_context_id()));
 
-                        let rule_name = self.alethe_signature.bind.clone();
-
                         // :assumption: ctx
+                        // Accessed here to avoid a mutable borrow later.
+                        let bind_rule_name = self.alethe_signature.bind.to_owned();
                         self.get_mut_translator_data().translated_proof.push(
                             EunoiaCommand::StepPop {
                                 id: id.clone(),
                                 conclusion_clause: Some(conclusion),
-                                rule: rule_name,
+                                rule: bind_rule_name,
                                 premises: EunoiaList { list: alethe_premises },
                                 arguments: EunoiaList { list: eunoia_arguments },
                             },
@@ -962,7 +962,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                         // not φ1, ..., not φn, ψ
                         // extract ψ
                         let mut premise = EunoiaTerm::App(
-                            self.alethe_signature.cl.clone(),
+                            self.alethe_signature.cl.to_owned(),
                             vec![self.alethe_signature.extract_consequent(&conclusion)],
                         );
 
@@ -983,7 +983,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                                 // TODO: ugly?
                                 ProofCommand::Assume { id: _, term } => {
                                     cl_disjuncts = vec![EunoiaTerm::App(
-                                        self.alethe_signature.not.clone(),
+                                        self.alethe_signature.not.to_owned(),
                                         vec![self.translate_term(term)],
                                     )];
 
@@ -992,7 +992,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                                     );
 
                                     implied_conclusion = EunoiaTerm::App(
-                                        self.alethe_signature.cl.clone(),
+                                        self.alethe_signature.cl.to_owned(),
                                         // TODO: too much cloning...
                                         cl_disjuncts.clone(),
                                     );
@@ -1003,7 +1003,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
 
                                     id_premise = eunoia_proof[eunoia_proof.len() - 1].get_step_id();
 
-                                    let rule_name = self.alethe_signature.subproof.clone();
+                                    let rule_name = self.alethe_signature.subproof.to_owned();
 
                                     self.get_mut_translator_data().translated_proof.push(
                                         EunoiaCommand::StepPop {
@@ -1035,8 +1035,8 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
 
                     "forall_inst" => {
                         // TODO: we are discarding premises arguments
-                        let rule_name = self.alethe_signature.forall_inst.clone();
-                        let var_cons_signature = self.alethe_signature.varlist_cons.clone();
+                        let rule_name = self.alethe_signature.forall_inst.to_owned();
+                        let var_cons_signature = self.alethe_signature.varlist_cons.to_owned();
 
                         self.get_mut_translator_data()
                             .translated_proof
@@ -1055,7 +1055,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                     }
 
                     "onepoint" => {
-                        let rule_name = self.alethe_signature.onepoint.clone();
+                        let rule_name = self.alethe_signature.onepoint.to_owned();
 
                         self.get_mut_translator_data().translated_proof.push(
                             EunoiaCommand::StepPop {
@@ -1111,7 +1111,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                         eunoia_arguments
                             .push(EunoiaTerm::Id(self.get_last_introduced_context_id()));
 
-                        let rule_name = self.alethe_signature.sko_ex.clone();
+                        let rule_name = self.alethe_signature.sko_ex.to_owned();
 
                         self.get_mut_translator_data().translated_proof.push(
                             EunoiaCommand::StepPop {
@@ -1125,7 +1125,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                     }
 
                     "cong" => {
-                        let rule_name = self.alethe_signature.cong.clone();
+                        let rule_name = self.alethe_signature.cong.to_owned();
 
                         // TODO: build a constructor of Step ASTs
                         self.get_mut_translator_data()
