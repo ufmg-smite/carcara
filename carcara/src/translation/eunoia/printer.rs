@@ -1,5 +1,5 @@
 //! A pretty printer for Eunoia proofs.
-use crate::translation::eunoia::eunoia_ast::*;
+use crate::translation::eunoia::ast::*;
 // Re-exporting ProofPrinter, to avoid conflicting import paths in other modules.
 pub use crate::translation::ProofPrinter;
 use std::io;

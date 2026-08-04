@@ -1,7 +1,7 @@
 //! Translator for `EunoiaProof`.
 use crate::ast::*;
 use crate::translation::eunoia::alethe_signature::theory::*;
-use crate::translation::eunoia::eunoia_ast::*;
+use crate::translation::eunoia::ast::*;
 use crate::translation::Symbol;
 use crate::translation::Translator;
 use crate::translation::TranslatorData;

@@ -1,6 +1,6 @@
 //! Translator for `TstpProof`.
 use crate::ast::*;
-use crate::translation::tstp::tstp_ast::*;
+use crate::translation::tstp::ast::*;
 use crate::translation::Translator;
 use crate::translation::TranslatorData;
 use crate::translation::VecToVecTranslator;

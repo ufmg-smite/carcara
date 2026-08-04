@@ -1,5 +1,5 @@
 //! A pretty printer for Tstp proofs.
-use crate::translation::tstp::tstp_ast::*;
+use crate::translation::tstp::ast::*;
 // Re-exporting ProofPrinter, to avoid conflicting import paths in other modules.
 pub use crate::translation::ProofPrinter;
 use std::io;
