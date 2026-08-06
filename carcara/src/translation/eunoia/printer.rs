@@ -26,10 +26,10 @@ impl<'a> SExpFormatter<'a> {
             // S-expression has the form (tag arg1 ...)
             write!(self.sink, "(")?;
             write!(self.sink, "{}", tag)?;
-            // TODO: how to propagate errors from within the lambda abstraction?
-            args.iter().for_each(|arg| {
-                let _ = write!(self.sink, " {}", arg);
-            });
+
+            for arg in args {
+                write!(self.sink, " {}", arg)?;
+            }
 
             write!(self.sink, ")")?;
         };

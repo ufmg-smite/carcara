@@ -1,13 +1,10 @@
 //! Test suite and related services.
 
-// pub mod test_translate;
-pub mod test_steps;
-
-use crate::ast::*;
+pub mod test_translate;
 
 use crate::translation::{
     tstp::{alethe_2_tstp::*, printer::*},
-    PrintProof, Translator,
+    ProofPrinter, Translator,
 };
 
 use crate::parser::*;
@@ -39,9 +36,9 @@ pub fn tstp_full_translation_test(alethe_problem: &str, alethe_certificate: &str
     let annotated_formula_formatter_proof = AnnotatedFormulaFormatter::new(&mut buf_proof);
     let mut printer_proof = TstpPrinter::new(annotated_formula_formatter_proof);
 
-    let (problem_ast, proof_ast, _, _pool) = parse_instance(
-        alethe_problem.as_bytes(),
-        alethe_certificate.as_bytes(),
+    let (problem_ast, mut proof_ast, _, _pool) = parse_instance(
+        alethe_problem,
+        alethe_certificate,
         None, 
         TEST_CONFIG,
     )
@@ -53,8 +50,8 @@ pub fn tstp_full_translation_test(alethe_problem: &str, alethe_certificate: &str
 
     assert_eq!(tstp_problem, std::str::from_utf8(&buf_problem).unwrap());
 
-    let commands = ProofNode::from_commands(proof_ast.commands);
-    let tstp_certificate_translated = tstp_translator.translate(&commands);
+    // let commands = ProofNode::from_commands(proof_ast.commands);
+    let tstp_certificate_translated = tstp_translator.translate(&mut proof_ast);
 
     printer_proof.write_proof(tstp_certificate_translated).unwrap();
 

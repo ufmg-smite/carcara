@@ -16,8 +16,18 @@ impl<'a> AnnotatedFormulaFormatter<'a> {
         AnnotatedFormulaFormatter { sink }
     }
 
-    // Prints an annotated formula with properly formatted concrete syntax, and
-    // separating it from surrounding formulas.
+    /// Print comma-separated lists of arguments.
+    fn print_sequence<T>(seq: &[T], func: fn(&T) -> String) -> String {
+        let mut result = func(&seq[0]);
+        for item in &seq[1..] {
+            result += ", ";
+            result += &func(item);
+        }
+        result
+    }
+
+    /// Prints an annotated formula with properly formatted concrete syntax, and
+    /// separating it from surrounding formulas.
     fn write_annotated_formula(&mut self, language: &str, args: &[String]) -> io::Result<()> {
         if args.is_empty() {
             panic!();
@@ -26,20 +36,12 @@ impl<'a> AnnotatedFormulaFormatter<'a> {
             // Formula of the form language(arg1 ...)
             write!(self.sink, "{}", language)?;
             write!(self.sink, "(")?;
-            // TODO: some more idiomatic way of dealing with this?
-            let mut first_element = true;
-            args.iter().for_each(|arg| {
-                if first_element {
-                    let _ = write!(self.sink, "{}", arg);
-                    first_element = false;
-                } else {
-                    // {not first_element}
-                    // There might be optional arguments, we filter them.
-                    if !arg.is_empty() {
-                        let _ = write!(self.sink, ", {}", arg);
-                    }
-                }
-            });
+
+            write!(
+                self.sink,
+                "{}",
+                AnnotatedFormulaFormatter::print_sequence(args, |s: &String| s.clone())
+            )?;
 
             write!(self.sink, ").")?;
         };
@@ -413,39 +415,13 @@ impl<'a> TstpPrinter<'a> {
                 ret += ", ";
 
                 ret += &TstpPrinter::useful_info_to_concrete_syntax(useful_info);
+
                 ret += ", [";
 
-                // ret += ", [";
-
-                // // TODO: a more idiomatic way of solving this
-                // let mut first_iteration = true;
-
-                // general_data.iter().for_each(|data| {
-                //     if first_iteration {
-                //         ret += &TstpPrinter::general_data_to_concrete_syntax(data);
-                //         first_iteration = false;
-                //     } else {
-                //         // { ! first_iteration }
-                //         ret += ", ";
-                //         ret += &TstpPrinter::general_data_to_concrete_syntax(data);
-                //     }
-                // });
-
-                // ret += "], [";
-
-                // TODO: a more idiomatic way of solving this
-                let mut first_iteration = true;
-
-                parents.iter().for_each(|parent| {
-                    if first_iteration {
-                        ret += &TstpPrinter::source_to_concrete_syntax(parent);
-                        first_iteration = false;
-                    } else {
-                        // { ! first_iteration }
-                        ret += ", ";
-                        ret += &TstpPrinter::source_to_concrete_syntax(parent);
-                    }
-                });
+                ret += &AnnotatedFormulaFormatter::print_sequence(
+                    parents,
+                    TstpPrinter::source_to_concrete_syntax,
+                );
 
                 ret += "])";
             }
@@ -548,19 +524,10 @@ impl<'a> TstpPrinter<'a> {
 
                 ret += "(";
 
-                // TODO: repeating code, and a more idiomatic way
-                // to deal with this
-                let mut first_iteration = true;
-
-                params.iter().for_each(|param| {
-                    if first_iteration {
-                        ret += &TstpPrinter::formula_to_concrete_syntax(param);
-                        first_iteration = false;
-                    } else {
-                        // { ! first_iteration }
-                        ret += &(", ".to_owned() + &TstpPrinter::formula_to_concrete_syntax(param));
-                    }
-                });
+                ret += &AnnotatedFormulaFormatter::print_sequence(
+                    params,
+                    TstpPrinter::formula_to_concrete_syntax,
+                );
 
                 ret += ")";
             }
@@ -595,18 +562,9 @@ impl<'a> TstpPrinter<'a> {
                 );
 
                 ret += ", [";
-                // TODO: abstract this into a single procedure
-                // TODO: more idiomatic way to deal with this?
-                let mut first_element = true;
 
-                general_list.iter().for_each(|assumption| {
-                    if first_element {
-                        ret += assumption;
-                        first_element = false;
-                    } else {
-                        // { ! first_element }
-                        ret += &(", ".to_owned() + assumption);
-                    }
+                ret += &AnnotatedFormulaFormatter::print_sequence(general_list, |s: &String| {
+                    s.clone()
                 });
 
                 ret += "])";
@@ -617,19 +575,8 @@ impl<'a> TstpPrinter<'a> {
 
                 ret = "assumptions([".to_owned();
 
-                // TODO: more idiomatic way to deal with this?
-                // TODO: abstract this into a single procedure
-                let mut first_element = true;
-
-                assumptions.iter().for_each(|assumption| {
-                    if first_element {
-                        ret += assumption;
-                        first_element = false;
-                    } else {
-                        // { ! first_element }
-                        ret += &(", ".to_owned() + assumption);
-                    }
-                });
+                ret +=
+                    &AnnotatedFormulaFormatter::print_sequence(assumptions, |s: &String| s.clone());
 
                 ret += "])";
             }
@@ -665,19 +612,10 @@ impl<'a> TstpPrinter<'a> {
 
                 ret += "(";
 
-                // TODO: repeating code, and a more idiomatic way
-                // to deal with this
-                let mut first_iteration = true;
-
-                args.iter().for_each(|arg| {
-                    if first_iteration {
-                        ret += &TstpPrinter::formula_to_concrete_syntax(arg);
-                        first_iteration = false;
-                    } else {
-                        // { ! first_iteration }
-                        ret += &(", ".to_owned() + &TstpPrinter::formula_to_concrete_syntax(arg));
-                    }
-                });
+                ret += &AnnotatedFormulaFormatter::print_sequence(
+                    args,
+                    TstpPrinter::formula_to_concrete_syntax,
+                );
 
                 ret += ")";
             }
