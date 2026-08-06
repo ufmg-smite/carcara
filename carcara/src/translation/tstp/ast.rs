@@ -23,20 +23,20 @@ impl TstpAnnotatedFormula {
     /// for providing names to the formula.
     /// TODO: should it generate the corresponding `useful_info`?
     pub fn new(
-        provided_language: TstpLanguage,
-        provided_name: Symbol,
-        provided_role: TstpFormulaRole,
-        provided_formula: TstpFormula,
-        provided_source: TstpAnnotatedFormulaSource,
-        provided_useful_info: Symbol,
+        language: TstpLanguage,
+        name: Symbol,
+        role: TstpFormulaRole,
+        formula: TstpFormula,
+        source: TstpAnnotatedFormulaSource,
+        useful_info: Symbol,
     ) -> Self {
         Self {
-            language: provided_language,
-            name: provided_name,
-            role: provided_role,
-            formula: provided_formula,
-            source: provided_source,
-            useful_info: provided_useful_info,
+            language,
+            name,
+            role,
+            formula,
+            source,
+            useful_info,
         }
     }
 
