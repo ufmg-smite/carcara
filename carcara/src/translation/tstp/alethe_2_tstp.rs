@@ -956,13 +956,6 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                         .collect::<Vec<Symbol>>(),
                 );
 
-                // alethe_discharged_assumptions.extend(
-                //     discharge
-                //         .iter()
-                //         .map(|node| String::from(node.deref().id()))
-                //         .collect::<Vec<Symbol>>(),
-                // );
-
                 alethe_translated_args.extend(
                     args.iter()
                         .map(|arg| self.translate_term(arg))
