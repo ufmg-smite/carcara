@@ -1,0 +1,304 @@
+//! AST representation of a fragment of Eunoia required to mechanize Alethe proofs.
+use crate::translation::Symbol;
+
+/// Just a generic wrapper for Vecs, to add structural information to ASTs.
+/// Represents an actual list of stuff, to capture the structure of something
+/// like `(<type>*)` in `(declare-type <symbol> (<type>*))`, as opposed to
+/// something like `<attr>*` in `(declare-const <symbol> <type> <attr>*)`.
+#[derive(Debug, PartialEq, Clone)]
+pub struct EunoiaList<T> {
+    pub list: Vec<T>,
+}
+
+/// Attributes of annotated type variables.
+#[derive(Debug, PartialEq, Clone, Eq, Hash)]
+pub enum EunoiaTypeAttr {
+    // :var symbol
+    Var(Symbol),
+
+    // :implicit
+    Implicit,
+
+    // :requires (<term> <term>)
+    // TODO: Internally, (! T :requires (t s)) is syntax sugar for
+    // (eo::requires t s T) where eo::requires is an operator that evalutes to
+    // its third argument if and only if its first two arguments are equivalent
+    // (details on this operator are given in computation). Furthermore, the
+    // function type (-> (eo::requires t s T) S) is treated as
+    // (-> T (eo::requires t s S)). The Ethos rewrites all types of the former to
+    // the latter.
+    Requires(EunoiaTerm, EunoiaTerm),
+}
+
+/// Kind parameters: (! T :var A ...)
+/// Annotated kind variable, like: (! Type :var A :implicit)
+/// Note that this declaration is a binder whose scope is the rest of the whole
+/// term where it occurs. For example, in:
+/// (declare-const ite (-> (! Type :var A :implicit) Bool A A A))
+/// A is a variable introduced in (! Type :var A :implicit), whose scope
+/// reaches to the end of the outer construction.
+#[derive(Debug, PartialEq, Clone, Eq, Hash)]
+pub struct EunoiaKindParam(pub EunoiaType, pub Vec<EunoiaTypeAttr>);
+
+/// Type terms.
+#[derive(Debug, PartialEq, Clone, Eq, Hash)]
+pub enum EunoiaType {
+    // Built-in primitive types.
+    // Eunoia has 'Bool' as a built-in type
+    Bool,
+
+    // NOTE: not distinguishing "types" from "kinds", for the moment
+    Type,
+
+    Real,
+
+    // An already declared Sort.
+    // TODO: what about args?
+    Name(Symbol),
+
+    // A (possible polymorphic) function type
+    Fun(Vec<EunoiaKindParam>, Vec<EunoiaType>, Box<EunoiaType>),
+}
+
+// TODO: using it also for EunoiaTypedParam
+/// Annotated attributes in declarations of constants.
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum EunoiaConsAttr {
+    // :right-assoc
+    RightAssoc,
+    // :left-assoc
+    LeftAssoc,
+    // :right-assoc-nil
+    RightAssocNil(EunoiaTerm),
+
+    // :chainable
+    Chainable,
+
+    // :pairwise
+    Pairwise,
+
+    // :binder symbol
+    Binder(Symbol),
+}
+
+/// A parameter name and type.
+#[derive(Debug, PartialEq)]
+pub struct EunoiaTypedParam {
+    pub name: Symbol,
+    pub eunoia_type: EunoiaType,
+    pub attrs: Vec<EunoiaConsAttr>,
+}
+
+/// Attributes allowed within a 'define' statement.
+#[derive(Debug, PartialEq)]
+pub enum EunoiaDefineAttr {
+    // :type
+    Type(EunoiaType),
+}
+
+// TODO: using rug crate, as in Alethe ASTs
+#[derive(Debug, PartialEq)]
+pub enum EunoiaLitCategory {
+    // TODO: include the following:
+    // <binary> denoting the category of binary constants #b<0|1>+,
+    // <hexadecimal> denoting the category of hexadecimal constants #x<hex-digit>+ where hexdigit is [0-9] | [a-f] | [A-F],
+}
+
+// NOTE: a more expressive grammar, to enforce compositional semantics
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+pub enum EunoiaTerm {
+    // TODO: it is not clear how to includes Types and Kinds
+    Type(EunoiaType),
+
+    // Constant terms.
+
+    // Note: Numeral, rational and decimal values are implemented by the
+    // arbitrary precision arithmetic library GMP. Binary and hexadecimal
+    // values are implemented as layer on top of numeral values that
+    // tracks a bit width. String values are implemented as a vector of
+    // unsigned integers whose maximum value is specified by SMT-LIB
+    // version 2.6, namely the character set corresponds to Unicode
+    // values 0 to 196607.
+    // lit-category
+    // TODO: should we define this concept as a separate notion from
+    // EunoiaTerm?
+    // <numeral> denoting the category of numerals -?<digit>+
+    Numeral(rug::Integer),
+
+    // <decimal> denoting the category of decimals -?<digit>+.<digit>+,
+    Decimal(rug::Rational),
+
+    // <rational> denoting the category of rationals -?<digit>+/<digit>+,
+    Rational(rug::Integer, rug::Integer),
+
+    // <string> denoting the category of string literals "<char>*"
+    String(String),
+
+    // Boolean constants.
+    True,
+
+    False,
+
+    // An arbitrary identifier.
+    Id(Symbol),
+
+    // TODO: different with Id(Symbol)?
+    // TODO: not using ID tag for Symbol...
+    // A variable, consisting of an identifier and a sort
+    // TODO: equivalent to Alethe's SortedVar?
+    Var(Symbol, Box<EunoiaTerm>),
+
+    // To capture the situations where a list of
+    // terms is to be considered also a term (as opposed to a
+    // list of terms that represents, for example, formal
+    // parameters in some definition).
+    // NOTE: Eunoia's grammar is, actually, (<symbol> <term>+) (note the '+').
+    List(Vec<EunoiaTerm>),
+
+    // To capture the situation where a list of terms are
+    // actually an evaluation of some given function over
+    // actual parameters.
+    App(Symbol, Vec<EunoiaTerm>),
+
+    // Explicit higher-order function application ("_" symbol)
+    HOApp(Box<EunoiaTerm>, Vec<EunoiaTerm>),
+
+    // Application of a built-in operator
+    Op(EunoiaOperator, Vec<EunoiaTerm>),
+}
+
+/// Eunoia's built-in computational operators.
+#[derive(Debug, PartialEq, Clone, Eq, Hash)]
+pub enum EunoiaOperator {
+    // eo::xor
+    Xor,
+
+    // eo::not
+    Not,
+
+    // eo::is_eq TODO: ?
+    Eq,
+
+    // eo::gt TODO: non-core (still used in small.eo)?
+    GreaterThan,
+
+    // eo::ge TODO: non-core (still used in small.eo)?
+    GreaterEq,
+
+    // eo::lt TODO: non-core?
+    LessThan,
+
+    // eo::le TODO: non-core?
+    LessEq,
+}
+
+/// Eunoia commands
+#[derive(Debug, PartialEq)]
+pub enum EunoiaCommand {
+    // Introducing a globally-scoped assumption.
+    Assume {
+        name: Symbol,
+        term: EunoiaTerm,
+    },
+
+    // To introduce assumptions in local context, that will be consumed by
+    // step-pop.
+    AssumePush {
+        name: Symbol,
+        term: EunoiaTerm,
+    },
+
+    // Eunoia definitions.
+    Define {
+        name: Symbol,
+        typed_params: EunoiaList<EunoiaTypedParam>,
+        term: EunoiaTerm,
+        attrs: Vec<EunoiaDefineAttr>,
+    },
+
+    // (program <symbol> <keyword> <sexpr>*) |
+    // (program <symbol> (<typed-param>*) (<type>*) <type> ((<term> <term>)+)) |
+    Program {
+        name: Symbol,
+        typed_params: EunoiaList<EunoiaTypedParam>,
+        params: EunoiaList<EunoiaType>,
+        ret: EunoiaType,
+        body: EunoiaList<(EunoiaTerm, EunoiaTerm)>,
+    },
+
+    // TODO:
+    // The command:
+    // (step s f :rule r :premises (p1 ... pn) :args (t1 ... tm))
+    // can be seen as syntax sugar for:
+    // (define s () (r p1 ... pn t1 ... tm) :type (Proof f))
+    /// Proof step:
+    /// (step <symbol> <term>? :rule <symbol> <premises>? <arguments>?)
+    Step {
+        id: Symbol,
+        conclusion_clause: Option<EunoiaTerm>,
+        rule: Symbol,
+        premises: EunoiaList<EunoiaTerm>,
+        arguments: EunoiaList<EunoiaTerm>,
+    },
+
+    /// Step that might consume a local assumption, previously introduced by
+    /// 'assume-push'.
+    StepPop {
+        id: Symbol,
+        conclusion_clause: Option<EunoiaTerm>,
+        rule: Symbol,
+        premises: EunoiaList<EunoiaTerm>,
+        arguments: EunoiaList<EunoiaTerm>,
+    },
+
+    // Common commands
+
+    // TODO: for the moment, allowing an arbitrary EunoiaTerm as a type
+    // TODO: how to handle declare-type:n
+    // (declare-type <symbol> (<type>*)) declares a new type constructor named
+    // <symbol> whose kind is Type if <type>* is empty. If <type>* is
+    // <type_1> ... <type_n>, then kind of <symbol> is
+    // (-> <type_1> ... <type_n> Type). This is a derived command as it is a
+    // shorthand for (declare-const <symbol> Type) if <type>* is empty, and for
+    // (declare-const <symbol> (-> <type>* Type)) otherwise.
+    // SMT-LIB declare-const.
+    DeclareConst {
+        name: Symbol,
+        eunoia_type: EunoiaTerm,
+        attrs: Vec<EunoiaConsAttr>,
+    },
+
+    // SMT-lib 2 commands
+    // (declare-sort name arity)
+    DeclareSort {
+        name: Symbol,
+        // TODO: only a numeral
+        arity: EunoiaTerm,
+    },
+
+    // (set-logic symbol)
+    SetLogic {
+        name: Symbol,
+    },
+}
+
+impl EunoiaCommand {
+    /// Returns the value of the Id field, of self, assuming that it is
+    /// a `Step` or a `StepPop` command.
+    pub fn get_step_id(&self) -> Symbol {
+        match self {
+            EunoiaCommand::Step { id, .. } => id.clone(),
+
+            EunoiaCommand::StepPop { id, .. } => id.clone(),
+
+            _ => {
+                println!("EunoiaCommand must be a Step or StepPop command.");
+                panic!()
+            }
+        }
+    }
+}
+
+// TODO: note that we are allowing here other concepts beyond
+// proof-centric ones
+pub type EunoiaProof = Vec<EunoiaCommand>;
