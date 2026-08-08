@@ -56,7 +56,7 @@ pub struct AletheTheory {
 
     // Binders.
     pub let_binder: &'static str,
-p    pub forall_binder: &'static str,
+    pub forall_binder: &'static str,
     pub exists_binder: &'static str,
     pub choice_binder: &'static str,
 
