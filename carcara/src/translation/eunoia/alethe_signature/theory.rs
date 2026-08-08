@@ -43,6 +43,7 @@ pub struct AletheTheory {
     pub la_mult_neg: &'static str,
     pub discard_context: &'static str,
     pub onepoint: &'static str,
+    pub resolution: &'static str,
     pub sko_ex: &'static str,
     pub cong: &'static str,
 
@@ -50,6 +51,8 @@ pub struct AletheTheory {
     pub ctx: &'static str,
     // To bind variables in a context.
     pub var: &'static str,
+    // Name of the assumption that refers to the last introduced context.
+    pub ctx_assumption: &'static str,
 
     // Binders.
     pub let_binder: &'static str,
@@ -102,12 +105,14 @@ impl AletheTheory {
             la_mult_neg: "la_mult_neg",
             discard_context: "discard_context",
             onepoint: "onepoint",
+            resolution: "resolution",
             sko_ex: "sko_ex",
             cong: "cong",
 
             // Context representation and manipulation.
             ctx: "@ctx",
             var: "@var",
+            ctx_assumption: "context",
 
             // Binders.
             let_binder: "@let",
@@ -123,9 +128,9 @@ impl AletheTheory {
 
     // Utilities to help in the translation of steps that use specific rules.
 
-    // Helps in extracting the lhs and rhs of a conclusion clause of
-    // the form (@cl ("=", t1, t2)).
-    // PRE: {conclusion is an EunoiaTerm of the form (@cl ("=", t1, t2)) }
+    /// Helps in extracting the lhs and rhs of a conclusion clause of
+    /// the form (@cl ("=", t1, t2)).
+    /// PRE: {conclusion is an `EunoiaTerm` of the form (@cl ("=", t1, t2)) }
     pub fn extract_eq_lhs_rhs(&self, conclusion: &EunoiaTerm) -> (EunoiaTerm, EunoiaTerm) {
         match conclusion {
             // TODO: just assuming that cl and clause are correct
@@ -149,9 +154,9 @@ impl AletheTheory {
         }
     }
 
-    // Helps in extracting the consequent of an implication in the form
-    // (@cl (not p1 or p2)).
-    // PRE: {conclusion is an EunoiaTerm of the form (@cl (not p1 or p2)) }
+    /// Helps in extracting the consequent of an implication in the form
+    /// (@cl (not p1 or p2)).
+    /// PRE: {conclusion is an `EunoiaTerm` of the form (@cl (not p1 or p2)) }
     pub fn extract_consequent(&self, conclusion: &EunoiaTerm) -> EunoiaTerm {
         match conclusion {
             // @cl
@@ -186,6 +191,40 @@ impl AletheTheory {
                 println!("Actual term: {:?}", conclusion);
                 panic!()
             }
+        }
+    }
+
+    pub fn rule_receives_premises(&self, rule: &String) -> bool {
+        match rule {
+            rule if rule == self.let_rule => true,
+
+            rule if rule == self.bind_let => true,
+
+            rule if rule == self.bind => true,
+
+            rule if rule == self.subproof => true,
+
+            rule if rule == self.onepoint => true,
+
+            rule if rule == self.sko_ex => true,
+
+            _ => false,
+        }
+    }
+
+    pub fn rule_receives_varying_arguments(&self, rule: &String) -> bool {
+        match rule {
+            // The coefficients are one single argument.  This means they
+            // must be be wrapped in a single function call using an n-ary
+            // function.
+            rule if rule == self.la_generic => true,
+
+            // It receives the pivots.
+            rule if rule == self.resolution => true,
+
+            rule if rule == self.forall_inst => true,
+
+            _ => false,
         }
     }
 }

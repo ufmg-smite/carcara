@@ -1,4 +1,3 @@
-#![allow(unused)]
 /// Services for the translation of Alethe proofs.
 pub mod eunoia;
 pub mod tstp;
