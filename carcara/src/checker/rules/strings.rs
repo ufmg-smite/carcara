@@ -1177,13 +1177,15 @@ pub fn string_length_pos(RuleArgs { args, conclusion, polyeq_time, .. }: RuleArg
     assert_clause_len(conclusion, 1)?;
 
     let t = &args[0];
+    // Note that the three occurrences of 't' are matched independently, since they
+    // don't have to be identical to each other.
     let (t_1, t_2, t_3) = match_term_err!(
         (or
             (and
-                (= (strlen t) 0)
-                (= t "")
+                (= (strlen t_1) 0)
+                (= t_2 "")
             )
-            (> (strlen t) 0)
+            (> (strlen t_3) 0)
         ) = &conclusion[0]
     )?;
 

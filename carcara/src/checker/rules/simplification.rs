@@ -95,7 +95,7 @@ pub fn ite_simplify(args: RuleArgs) -> RuleResult {
             (ite false t_1 t_2): (_, t_2) => t_2.clone(),
 
             // ite phi t t => t
-            (ite phi t t): (_, t_1, t_2) if t_1 == t_2 => t_1.clone(),
+            (ite phi t t): (_, t) => t.clone(),
 
             // ite psi true false => psi
             (ite psi true false): psi => psi.clone(),
@@ -109,13 +109,13 @@ pub fn ite_simplify(args: RuleArgs) -> RuleResult {
             },
 
             // ite phi (ite phi t_1 t_2) t_3 => ite phi t_1 t_3
-            (ite phi (ite phi t_1 t_2) t_3): (phi_1, phi_2, t_1, _, t_3) if phi_1 == phi_2 => {
-                build_term!(pool, (ite {phi_1.clone()} {t_1.clone()} {t_3.clone()}))
+            (ite phi (ite phi t_1 t_2) t_3): (phi, t_1, _, t_3) => {
+                build_term!(pool, (ite {phi.clone()} {t_1.clone()} {t_3.clone()}))
             },
 
             // ite phi t_1 (ite phi t_2 t_3) => ite phi t_1 t_3
-            (ite phi t_1 (ite phi t_2 t_3)): (phi_1, t_1, phi_2, _, t_3) if phi_1 == phi_2 => {
-                build_term!(pool, (ite {phi_1.clone()} {t_1.clone()} {t_3.clone()}))
+            (ite phi t_1 (ite phi t_2 t_3)): (phi, t_1, _, t_3) => {
+                build_term!(pool, (ite {phi.clone()} {t_1.clone()} {t_3.clone()}))
             },
 
             // ite psi true phi => psi v phi
@@ -145,17 +145,17 @@ pub fn eq_simplify(args: RuleArgs) -> RuleResult {
     generic_simplify_rule(args.conclusion, args.pool, |term, pool| {
         simplify!(term {
             // t = t => true
-            (= t t): (t1, t2) if t1 == t2 => pool.bool_true(),
+            (= t t): _ => pool.bool_true(),
 
             // t_1 = t_2 => false, if t_1 and t_2 are different numerical constants
-            (= t t): (t1, t2) if {
-                let t1 = t1.as_signed_number();
-                let t2 = t2.as_signed_number();
-                t1.is_some() && t2.is_some() && t1 != t2
+            (= t_1 t_2): (t_1, t_2) if {
+                let t_1 = t_1.as_signed_number();
+                let t_2 = t_2.as_signed_number();
+                t_1.is_some() && t_2.is_some() && t_1 != t_2
             } => pool.bool_false(),
 
             // ¬(t = t) => false, if t is a numerical constant
-            (not (= t t)): (t1, t2) if t1 == t2 && t1.is_signed_number() => pool.bool_false(),
+            (not (= t t)): t if t.is_signed_number() => pool.bool_false(),
         })
     })
 }
@@ -306,7 +306,7 @@ pub fn implies_simplify(args: RuleArgs) -> RuleResult {
             (=> phi false): phi => build_term!(pool, (not {phi.clone()})),
 
             // phi -> phi => true
-            (=> phi phi): (phi_1, phi_2) if phi_1 == phi_2 => pool.bool_true(),
+            (=> phi phi): _ => pool.bool_true(),
 
             // ¬phi -> phi => phi
             // phi -> ¬phi => ¬phi
@@ -315,7 +315,7 @@ pub fn implies_simplify(args: RuleArgs) -> RuleResult {
             } => phi_2.clone(),
 
             // (phi_1 -> phi_2) -> phi_2 => phi_1 v phi_2
-            (=> (=> phi_1 phi_2) phi_3): (phi_1, phi_2, phi_3) if phi_2 == phi_3 => {
+            (=> (=> phi_1 phi_2) phi_2): (phi_1, phi_2) => {
                 build_term!(pool, (or {phi_1.clone()} {phi_2.clone()}))
             },
         })

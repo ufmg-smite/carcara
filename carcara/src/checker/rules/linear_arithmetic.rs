@@ -9,13 +9,8 @@ use rug::{ops::NegAssign, Integer, Rational};
 pub fn la_rw_eq(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
 
-    let (t_1, u_1, t_2, u_2, u_3, t_3) = match_term_err!(
-        (= (= t u) (and (<= t u) (<= u t))) = &conclusion[0]
-    )?;
-    assert_eq(t_1, t_2)?;
-    assert_eq(t_2, t_3)?;
-    assert_eq(u_1, u_2)?;
-    assert_eq(u_2, u_3)
+    match_term_err!((= (= t u) (and (<= t u) (<= u t))) = &conclusion[0])?;
+    Ok(())
 }
 
 /// Takes a disequality term and returns its negation, represented by an operator and two linear
@@ -383,22 +378,15 @@ pub fn la_generic_partial(
 pub fn la_disequality(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
 
-    let (t1_1, t2_1, t1_2, t2_2, t2_3, t1_3) = match_term_err!(
-        (or (= t1 t2) (not (<= t1 t2)) (not (<= t2 t1))) = &conclusion[0]
-    )?;
-    assert_eq(t1_1, t1_2)?;
-    assert_eq(t1_2, t1_3)?;
-    assert_eq(t2_1, t2_2)?;
-    assert_eq(t2_2, t2_3)
+    match_term_err!((or (= t1 t2) (not (<= t1 t2)) (not (<= t2 t1))) = &conclusion[0])?;
+    Ok(())
 }
 
 pub fn la_totality(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
 
-    let (t1_1, t2_1, t2_2, t1_2) = match_term_err!((or (<= t1 t2) (<= t2 t1)) = &conclusion[0])?;
-
-    assert_eq(t1_1, t1_2)?;
-    assert_eq(t2_1, t2_2)
+    match_term_err!((or (<= t1 t2) (<= t2 t1)) = &conclusion[0])?;
+    Ok(())
 }
 
 fn assert_less_than(a: &Rc<Term>, b: &Rc<Term>) -> RuleResult {
