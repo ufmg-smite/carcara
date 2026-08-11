@@ -1,5 +1,7 @@
 extern crate proc_macro;
 
+use std::collections::HashMap;
+
 use proc_macro::TokenStream;
 use proc_macro2::{Delimiter, Ident, Spacing, TokenStream as TokenStream2, TokenTree};
 use quote::{format_ident, quote};
@@ -23,6 +25,15 @@ impl Parse for Input {
     }
 }
 
+// A counter for generating unique idents, and the names bound so far,
+// used to detect repeated names.
+struct ParseCtx {
+    ctr: usize,
+    // Maps a name written by the user to the generated ident bound by its
+    // first occurrence in the pattern.
+    bound: HashMap<String, Ident>,
+}
+
 // Internal representation of the s-expression pattern.
 //
 // Every free variable and binder binding list gets a unique generated Ident so
@@ -39,7 +50,14 @@ enum Pat {
     // Real/rational literal
     LiteralReal(f64),
     // Each occurrence gets a unique generated ident to avoid shadowing.
-    FreeVar(Ident),
+    FreeVar {
+        id: Ident,
+        // `Some(first)` when this name already appeared earlier in the pattern.
+        // Such an occurrence doesn't capture anything: instead, the generated
+        // code checks that this term is equal to the one bound by `first`, and
+        // the match fails if it isn't.
+        same_as: Option<Ident>,
+    },
     // Carries a generated name that will hold the captured &[Rc<Term>] slice.
     Variadic(Ident),
     Op {
@@ -64,9 +82,14 @@ enum Pat {
 impl Pat {
     /// Collects all free variables in depth-first, left-to-right order.
     /// This order determines the flat tuple returned by the macro.
+    ///
+    /// Repeated occurrences of a name are not included: they are turned into
+    /// equality checks instead of captures, so a name always contributes
+    /// exactly one element to the tuple, no matter how many times it appears.
     fn free_vars(&self) -> Vec<Ident> {
         match self {
-            Pat::FreeVar(id) => vec![id.clone()],
+            Pat::FreeVar { same_as: Some(_), .. } => Vec::new(),
+            Pat::FreeVar { id, same_as: None } => vec![id.clone()],
             // Variadic contributes the slice ident as one element of the tuple.
             Pat::Variadic(id) => vec![id.clone()],
             Pat::Op { args, .. } => args.iter().flat_map(|p| p.free_vars()).collect(),
@@ -111,35 +134,53 @@ fn is_three_dots(tokens: &[TokenTree], i: usize) -> bool {
 
 // Parses a slice of tokens as a list of pattern arguments, handling '...'
 // variadics. Shared between regular Op and ParamOp argument parsing.
-fn parse_args(tokens: &[TokenTree], ctr: &mut usize) -> Vec<Pat> {
+fn parse_args(tokens: &[TokenTree], ctx: &mut ParseCtx) -> Vec<Pat> {
     let mut args = Vec::new();
     let mut i = 0;
     while i < tokens.len() {
         if is_three_dots(tokens, i) {
             // Generate a unique ident for this variadic capture.
-            *ctr += 1;
-            args.push(Pat::Variadic(format_ident!("__mt_variadic_{}", ctr)));
+            ctx.ctr += 1;
+            args.push(Pat::Variadic(format_ident!("__mt_variadic_{}", ctx.ctr)));
             i += 3;
             continue;
         }
-        args.push(parse_pat(tokens[i].clone(), ctr));
+        args.push(parse_pat(tokens[i].clone(), ctx));
         i += 1;
     }
     args
 }
 
 // Recursively parses a TokenTree into a Pat.
-// 'ctr' is used to generate unique idents for all captures.
-fn parse_pat(tt: TokenTree, ctr: &mut usize) -> Pat {
+// 'ctx' provides the counter used to generate unique idents for all captures,
+// and tracks which names have already been bound.
+fn parse_pat(tt: TokenTree, ctx: &mut ParseCtx) -> Pat {
     match tt {
         TokenTree::Ident(id) => match id.to_string().as_str() {
             "true" => Pat::True,
             "false" => Pat::False,
             // Every free variable gets a unique generated ident. This prevents
             // repeated names from shadowing each other in the generated let bindings.
-            _ => {
-                *ctr += 1;
-                Pat::FreeVar(format_ident!("__mt_var_{}", ctr))
+            name => {
+                ctx.ctr += 1;
+                let new_id = format_ident!("__mt_var_{}", ctx.ctr);
+
+                // '_' is a wildcard: each occurrence matches anything, and it
+                // never has to be equal to any other occurrence.
+                let same_as = if name == "_" {
+                    None
+                } else {
+                    // If this name was already bound, this occurrence becomes an
+                    // equality check against the term captured by the first one.
+                    match ctx.bound.get(name) {
+                        Some(first) => Some(first.clone()),
+                        None => {
+                            ctx.bound.insert(name.to_owned(), new_id.clone());
+                            None
+                        }
+                    }
+                };
+                Pat::FreeVar { id: new_id, same_as }
             }
         },
 
@@ -180,12 +221,12 @@ fn parse_pat(tt: TokenTree, ctr: &mut usize) -> Pat {
                     let inner_tt = tokens[4].clone();
                     // Generate a unique ident for this binder's bindings so that
                     // multiple binders in one pattern don't shadow each other.
-                    *ctr += 1;
-                    let bindings_id = format_ident!("__mt_bindings_{}", ctr);
+                    ctx.ctr += 1;
+                    let bindings_id = format_ident!("__mt_bindings_{}", ctx.ctr);
                     return Pat::Binder {
                         binder: name,
                         bindings_id,
-                        inner: Box::new(parse_pat(inner_tt, ctr)),
+                        inner: Box::new(parse_pat(inner_tt, ctx)),
                     };
                 }
             }
@@ -197,8 +238,8 @@ fn parse_pat(tt: TokenTree, ctr: &mut usize) -> Pat {
                     let inner_tokens: Vec<_> = inner.stream().into_iter().collect();
                     if matches!(&inner_tokens[0], TokenTree::Ident(id) if *id == "_") {
                         let (op, op_len) = read_op(&inner_tokens[1..]);
-                        let op_args = parse_args(&inner_tokens[1 + op_len..], ctr);
-                        let args = parse_args(&tokens[1..], ctr);
+                        let op_args = parse_args(&inner_tokens[1 + op_len..], ctx);
+                        let args = parse_args(&tokens[1..], ctx);
                         return Pat::ParamOp { op, op_args, args };
                     }
                 }
@@ -206,7 +247,7 @@ fn parse_pat(tt: TokenTree, ctr: &mut usize) -> Pat {
 
             // Regular Op pattern - read operator, then parse args.
             let (op, op_len) = read_op(&tokens);
-            let args = parse_args(&tokens[op_len..], ctr);
+            let args = parse_args(&tokens[op_len..], ctx);
             Pat::Op { op, args }
         }
 
@@ -336,8 +377,14 @@ fn gen_match(pat: &Pat, var: &TokenStream2, inner: TokenStream2, ctr: &mut usize
         Pat::LiteralReal(f) => quote! {
             if (#var).as_fraction().is_some_and(|r| r == #f) { #inner } else { None }
         },
-        Pat::FreeVar(id) => quote! {
+        // First occurrence of a name -> capture the term.
+        Pat::FreeVar { id, same_as: None } => quote! {
             { let #id = #var; #inner }
+        },
+        // Repeated occurrence: the term must be equal to the one captured by the
+        // first occurrence, otherwise the whole match fails.
+        Pat::FreeVar { same_as: Some(first), .. } => quote! {
+            if (#var) == (#first) { #inner } else { None }
         },
         // Variadic as a standalone pattern: bind the value directly.
         Pat::Variadic(id) => quote! {
@@ -507,8 +554,8 @@ pub fn match_term(input: TokenStream) -> TokenStream {
     // Single counter shared between parse_pat (for variable/variadic/binder idents)
     // and gen_match (for temporary arg idents). gen_match starts at 1000 to avoid
     // collisions with the idents generated by parse_pat.
-    let mut parse_ctr = 0usize;
-    let pat = parse_pat(pattern, &mut parse_ctr);
+    let mut ctx = ParseCtx { ctr: 0, bound: HashMap::new() };
+    let pat = parse_pat(pattern, &mut ctx);
     let free_vars = pat.free_vars();
 
     // Innermost code: return a flat tuple of all captured variables.
