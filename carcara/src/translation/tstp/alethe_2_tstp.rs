@@ -1,12 +1,8 @@
 //! Translator for `TstpProof`.
 use crate::ast::*;
-use crate::translation::tstp::ast::*;
-use crate::translation::Translator;
-use crate::translation::TranslatorData;
-use crate::translation::VecToVecTranslator;
 
-// Deref for ast::rc::Rc<Term>
-use std::ops::Deref;
+use crate::translation::{tstp::ast::*, Translator, TranslatorData, VecToVecTranslator};
+
 // formulas_count
 use std::collections::HashMap;
 
@@ -409,9 +405,13 @@ impl TstpTranslator {
     }
 }
 
-impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOperator>
-    for TstpTranslator
-{
+impl VecToVecTranslator<'_> for TstpTranslator {
+    // Corresponding TSTP ASTs.
+    type StepType = TstpAnnotatedFormula;
+    type TermType = TstpFormula;
+    type TypeTermType = TstpType;
+    type OperatorType = TstpOperator;
+
     fn get_mut_translator_data(&mut self) -> &mut TranslatorData<TstpType, TstpProof> {
         &mut self.translation
     }
@@ -497,7 +497,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         //         tstp_sort = self.translate_term(sort);
 
         //         // TODO: ugly patch...
-        //         let rhs: TstpFormula = match term.deref() {
+        //         let rhs: TstpFormula = match term.as_ref() {
         //             Term::Var(string, _) => TstpFormula::Variable(string.clone()),
 
         //             _ => self.translate_term(term),
@@ -726,8 +726,8 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
     fn translate_let_binding_list(
         &mut self,
         binding_list: &BindingList,
-    ) -> (TstpFormula, Vec<TstpFormula>) {
-        let mut _binding_occ: Vec<TstpFormula> = Vec::new();
+    ) -> (Vec<TstpFormula>, Vec<TstpFormula>) {
+        let binding_occ: Vec<TstpFormula> = Vec::new();
         let mut values = Vec::new();
 
         binding_list.iter().for_each(|sorted_var| {
@@ -746,8 +746,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
             values.push(translated_value.clone());
         });
 
-        // (TstpFormula::List(binding_occ), values)
-        (TstpFormula::Variable("dummy".to_owned()), values)
+        (binding_occ, values)
     }
 
     /// NOTE: In this case, we would not need a reference to self. Yet,
@@ -830,24 +829,12 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
                 // TODO: is this correct?
                 assert!(sorts.len() >= 2,);
 
-                let return_sort;
+                let term = sorts.last().unwrap();
 
-                match sorts.last() {
-                    Some(term) => {
-                        match (*term).deref() {
-                            Term::Sort(sort) => {
-                                return_sort = TstpTranslator::translate_sort(sort);
-                            }
+                let return_sort = match term.as_ref() {
+                    Term::Sort(sort) => TstpTranslator::translate_sort(sort),
 
-                            _ => {
-                                // TODO: is this correct?
-                                panic!();
-                            }
-                        }
-                    }
-
-                    None => {
-                        // TODO: is this correct?
+                    _ => {
                         panic!();
                     }
                 };
@@ -856,7 +843,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
 
                 for (pos, rc_sort) in sorts.iter().enumerate() {
                     if pos < sorts.len() - 1 {
-                        match rc_sort.deref() {
+                        match rc_sort.as_ref() {
                             Term::Sort(sort) => {
                                 sorts_params.push(TstpTranslator::translate_sort(sort));
                             }
@@ -1040,7 +1027,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         });
 
         function_declarations.iter().for_each(|pair| {
-            let tstp_type: TstpType = match (pair.1).deref() {
+            let tstp_type: TstpType = match (pair.1).as_ref() {
                 Term::Sort(sort) => TstpTranslator::translate_sort(sort),
 
                 _ => {

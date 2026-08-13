@@ -5,8 +5,6 @@ pub mod tstp;
 use crate::ast::*;
 
 use std::io::Result;
-// Deref for ast::rc::Rc<Term>
-use std::ops::Deref;
 
 // scopes
 use crate::utils::HashMapStack;
@@ -150,26 +148,16 @@ impl LastSteps {
 
     /// Pre : { !`self.last_steps_rule.is_empty()` }
     pub fn get_last_step_rule(&self) -> &str {
-        match self.last_steps_rules.last() {
-            Some(rule_name) => rule_name,
-
-            None => {
-                // Pre not satisfied
-                panic!()
-            }
-        }
+        self.last_steps_rules
+            .last()
+            .expect("self.last_steps_rule.is_empty()")
     }
 
     /// Pre : { !`self.last_steps_id.is_empty()` }
     pub fn get_last_step_id(&self) -> &str {
-        match self.last_steps_ids.last() {
-            Some(id) => id,
-
-            None => {
-                // Pre not satisfied
-                panic!()
-            }
-        }
+        self.last_steps_ids
+            .last()
+            .expect("self.last_steps_id.is_empty()")
     }
 
     pub fn last_steps_empty(&self) -> bool {
@@ -204,53 +192,58 @@ impl<TermType: Clone, ProofType: Default> TranslatorData<TermType, ProofType> {
     }
 }
 
-/// Describes the behavior of a translator that converts an Alethe proof in its DAG
-/// representation, into a vector of steps representation, in some given target language.
-/// Parameterized over the types of the target language steps and terms.
-pub trait VecToVecTranslator<
-    'a,
-    StepType,
-    TermType: Clone + 'a,
-    TypeTermType: Clone + 'a,
-    OperatorType,
->
-{
+/// Describes the behavior of a translator that converts an Alethe proof in its vector
+/// representation, into a semantically equivalent proof into some given target language,
+/// and also in a vector representation.
+pub trait VecToVecTranslator<'a> {
+    // ASTs of the target language.
+    // ASTs of whole steps.
+    type StepType;
+    // ASTs of expressions in conclusions and arguments.
+    type TermType: Clone + 'a;
+    // Type constructors of the target language.
+    type TypeTermType: Clone + 'a;
+    // Type for symbols representing operators in the target language.
+    type OperatorType;
+
     /// Mutable access to common fields.
-    fn get_mut_translator_data(&mut self) -> &mut TranslatorData<TypeTermType, Vec<StepType>>;
+    fn get_mut_translator_data(
+        &mut self,
+    ) -> &mut TranslatorData<Self::TypeTermType, Vec<Self::StepType>>;
 
     /// Read-only access to common fields.
-    fn get_read_translator_data(&self) -> &TranslatorData<TypeTermType, Vec<StepType>>;
+    fn get_read_translator_data(&self) -> &TranslatorData<Self::TypeTermType, Vec<Self::StepType>>;
 
     /// For a given variable name "id", that is bound by some
     /// context, it builds and returns its @var representation.
     /// That is, its representation as a variable bound by some
     /// enclosing context.
-    fn build_var_binding(&self, id: &str) -> TermType;
+    fn build_var_binding(&self, id: &str) -> Self::TermType;
 
     /// Translates a `BindingList`: it builds a list of pairs (variable, type) for the binding
     /// occurrences, and returns this coupled with the original list of actual values, as a `@VarList`.
     fn translate_let_binding_list(
         &mut self,
         binding_list: &BindingList,
-    ) -> (TermType, Vec<TermType>);
+    ) -> (Vec<Self::TermType>, Vec<Self::TermType>);
 
     /// Translates a given Alethe Term into its corresponding representation, possibly
     /// modifying scoping information contained in self, to deal with
     /// translation of binding constructions.
-    fn translate_term(&mut self, term: &Term) -> TermType;
+    fn translate_term(&mut self, term: &Term) -> Self::TermType;
 
     /// In some situations, we need to access to the `VecToVecTranslator` object.
     /// Hence the self reference.
-    fn translate_operator(&self, operator: Operator) -> OperatorType;
+    fn translate_operator(&self, operator: Operator) -> Self::OperatorType;
 
-    fn translate_constant(constant: &Constant) -> TermType;
+    fn translate_constant(constant: &Constant) -> Self::TermType;
 
-    fn translate_sort(sort: &Sort) -> TypeTermType;
+    fn translate_sort(sort: &Sort) -> Self::TypeTermType;
 
     /// Implements the translation of an Alethe `Assume`, taking into
     /// account technical differences in the way Alethe rules are
     /// expressed in the target language.
-    fn translate_assume(&mut self, id: &str, term: &Rc<Term>) -> StepType;
+    fn translate_assume(&mut self, id: &str, term: &Rc<Term>) -> Self::StepType;
 
     /// Implements the translation of an Alethe `ProofStep`, taking into
     /// account technical differences in the way Alethe rules are
@@ -266,7 +259,7 @@ pub trait VecToVecTranslator<
     /// Abstracts the steps required to define and push a new context.
     /// PARAMS:
     /// `option_ctx_params`: a vector with the variables introduced by the context (optionally)
-    fn define_push_new_context(&mut self, option_ctx_params: Option<Vec<TermType>>);
+    fn define_push_new_context(&mut self, option_ctx_params: Option<Vec<Self::TermType>>);
 
     /// Abstracts the process of traversing a given context, identifying the fixed
     /// variables and the substitutions. Returns the corresponding list of
@@ -274,7 +267,7 @@ pub trait VecToVecTranslator<
     /// of contexts.
     /// PRE : { the scope representing the context to be processed is already
     ///         opened }
-    fn process_anchor_context(&mut self, context: &[AnchorArg]) -> Vec<TermType>;
+    fn process_anchor_context(&mut self, context: &[AnchorArg]) -> Vec<Self::TermType>;
 
     /// Returns the identifier of the last context actually introduced within the proof certificate.
     /// PRE: { 0 < `self.contexts_opened`}
@@ -294,34 +287,27 @@ pub trait VecToVecTranslator<
     /// last step.
     fn get_previous_step_id(previous_step: &Option<Rc<ProofNode>>) -> String {
         // Include, as premise, the previous step.
-        match previous_step {
-            Some(step) => {
-                match step.deref() {
+        let step = previous_step.as_ref().expect("Expected a previous step.");
+
+        match step.as_ref() {
+            ProofNode::Step(StepNode { id, .. }) => id.clone(),
+
+            ProofNode::Subproof(SubproofNode { last_step, .. }) => {
+                // The previous step is the closing step of a subproof.
+                // It is represented as a single SubproofNode. We look
+                // for the actual last step of this subproof.
+                match last_step.as_ref() {
                     ProofNode::Step(StepNode { id, .. }) => id.clone(),
 
-                    ProofNode::Subproof(SubproofNode { last_step, .. }) => {
-                        // The previous step is the closing step of a subproof.
-                        // It is represented as a single SubproofNode. We look
-                        // for the actual last step of this subproof.
-                        match last_step.deref() {
-                            ProofNode::Step(StepNode { id, .. }) => id.clone(),
-
-                            _ => {
-                                // It shouldn't be another kind of ProofNode
-                                panic!();
-                            }
-                        }
-                    }
-
-                    ProofNode::Assume { .. } => {
+                    _ => {
                         // It shouldn't be another kind of ProofNode
                         panic!();
                     }
                 }
             }
 
-            _ => {
-                // There should be some previous step.
+            ProofNode::Assume { .. } => {
+                // It shouldn't be another kind of ProofNode
                 panic!();
             }
         }
@@ -449,9 +435,9 @@ pub trait VecToVecTranslator<
     /// representation of the proof. Handles the preparation of scopes, cleaning of
     /// previously created data-structures and invocation of the proper translation
     /// routines.
-    fn translate_2_vect<'b>(&'b mut self, proof: &mut Proof) -> &'b Vec<StepType>
+    fn translate_2_vect<'b>(&'b mut self, proof: &mut Proof) -> &'b Vec<Self::StepType>
     where
-        TypeTermType: 'b,
+        Self::TypeTermType: 'b,
     {
         // Mutable borrow to translator data
         {
@@ -481,7 +467,7 @@ pub trait VecToVecTranslator<
     }
 
     /// Translates only an SMT-lib problem.
-    fn translate_problem_2_vect(&mut self, problem: &Problem) -> Vec<StepType>;
+    fn translate_problem_2_vect(&mut self, problem: &Problem) -> Vec<Self::StepType>;
 }
 
 /// Common pretty printing interface shared by Eunoia and TSTP compilers.
