@@ -76,33 +76,6 @@ impl EunoiaTranslator {
             });
     }
 
-    // /// Implements the construction of an Eunoia `step-pop` command, for the
-    // /// given Eunoia conclusion, premises and arguments.
-    // fn translate_generic_step_pop(
-    //     &mut self,
-    //     id: &str,
-    //     conclusion: EunoiaTerm,
-    //     rule: &String,
-    //     premises: Vec<EunoiaTerm>,
-    //     arguments: Vec<EunoiaTerm>,
-    // ) {
-    //     // Step-pops are used to close subproofs. Premises shouldn't be empty.
-    //     if premises.is_empty() {
-    //         println!("'{}' step without premises?", rule);
-    //         panic!();
-    //     }
-
-    //     self.get_mut_translator_data()
-    //         .translated_proof
-    //         .push(EunoiaCommand::StepPop {
-    //             id: id.to_owned(),
-    //             conclusion_clause: Some(conclusion),
-    //             rule: rule.clone(),
-    //             premises: EunoiaList { list: premises },
-    //             arguments: EunoiaList { list: arguments },
-    //         });
-    // }
-
     /// Implements the construction of an Eunoia `step-pop` command, for the
     /// given Eunoia conclusion, premises and arguments. Implements the semantics
     /// of Alethe step-pop steps:
