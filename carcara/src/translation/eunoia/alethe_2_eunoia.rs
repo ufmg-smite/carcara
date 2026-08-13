@@ -104,7 +104,13 @@ impl EunoiaTranslator {
     }
 }
 
-impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for EunoiaTranslator {
+impl VecToVecTranslator<'_> for EunoiaTranslator {
+    // Corresponding Eunoia ASTs.
+    type StepType = EunoiaCommand;
+    type TermType = EunoiaTerm;
+    type TypeTermType = EunoiaType;
+    type OperatorType = Symbol;
+
     fn get_mut_translator_data(&mut self) -> &mut TranslatorData<EunoiaType, EunoiaProof> {
         &mut self.translation
     }

@@ -405,9 +405,13 @@ impl TstpTranslator {
     }
 }
 
-impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOperator>
-    for TstpTranslator
-{
+impl VecToVecTranslator<'_> for TstpTranslator {
+    // Corresponding TSTP ASTs.
+    type StepType = TstpAnnotatedFormula;
+    type TermType = TstpFormula;
+    type TypeTermType = TstpType;
+    type OperatorType = TstpOperator;
+
     fn get_mut_translator_data(&mut self) -> &mut TranslatorData<TstpType, TstpProof> {
         &mut self.translation
     }
