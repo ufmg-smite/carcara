@@ -148,26 +148,16 @@ impl LastSteps {
 
     /// Pre : { !`self.last_steps_rule.is_empty()` }
     pub fn get_last_step_rule(&self) -> &str {
-        match self.last_steps_rules.last() {
-            Some(rule_name) => rule_name,
-
-            None => {
-                // Pre not satisfied
-                panic!()
-            }
-        }
+        self.last_steps_rules
+            .last()
+            .expect("self.last_steps_rule.is_empty()")
     }
 
     /// Pre : { !`self.last_steps_id.is_empty()` }
     pub fn get_last_step_id(&self) -> &str {
-        match self.last_steps_ids.last() {
-            Some(id) => id,
-
-            None => {
-                // Pre not satisfied
-                panic!()
-            }
-        }
+        self.last_steps_ids
+            .last()
+            .expect("self.last_steps_id.is_empty()")
     }
 
     pub fn last_steps_empty(&self) -> bool {
@@ -235,7 +225,7 @@ pub trait VecToVecTranslator<'a> {
     fn translate_let_binding_list(
         &mut self,
         binding_list: &BindingList,
-    ) -> (Self::TermType, Vec<Self::TermType>);
+    ) -> (Vec<Self::TermType>, Vec<Self::TermType>);
 
     /// Translates a given Alethe Term into its corresponding representation, possibly
     /// modifying scoping information contained in self, to deal with
@@ -297,34 +287,27 @@ pub trait VecToVecTranslator<'a> {
     /// last step.
     fn get_previous_step_id(previous_step: &Option<Rc<ProofNode>>) -> String {
         // Include, as premise, the previous step.
-        match previous_step {
-            Some(step) => {
-                match step.as_ref() {
+        let step = previous_step.as_ref().expect("Expected a previous step.");
+
+        match step.as_ref() {
+            ProofNode::Step(StepNode { id, .. }) => id.clone(),
+
+            ProofNode::Subproof(SubproofNode { last_step, .. }) => {
+                // The previous step is the closing step of a subproof.
+                // It is represented as a single SubproofNode. We look
+                // for the actual last step of this subproof.
+                match last_step.as_ref() {
                     ProofNode::Step(StepNode { id, .. }) => id.clone(),
 
-                    ProofNode::Subproof(SubproofNode { last_step, .. }) => {
-                        // The previous step is the closing step of a subproof.
-                        // It is represented as a single SubproofNode. We look
-                        // for the actual last step of this subproof.
-                        match last_step.as_ref() {
-                            ProofNode::Step(StepNode { id, .. }) => id.clone(),
-
-                            _ => {
-                                // It shouldn't be another kind of ProofNode
-                                panic!();
-                            }
-                        }
-                    }
-
-                    ProofNode::Assume { .. } => {
+                    _ => {
                         // It shouldn't be another kind of ProofNode
                         panic!();
                     }
                 }
             }
 
-            _ => {
-                // There should be some previous step.
+            ProofNode::Assume { .. } => {
+                // It shouldn't be another kind of ProofNode
                 panic!();
             }
         }

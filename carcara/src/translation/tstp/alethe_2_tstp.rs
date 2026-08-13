@@ -726,8 +726,8 @@ impl VecToVecTranslator<'_> for TstpTranslator {
     fn translate_let_binding_list(
         &mut self,
         binding_list: &BindingList,
-    ) -> (TstpFormula, Vec<TstpFormula>) {
-        let mut _binding_occ: Vec<TstpFormula> = Vec::new();
+    ) -> (Vec<TstpFormula>, Vec<TstpFormula>) {
+        let binding_occ: Vec<TstpFormula> = Vec::new();
         let mut values = Vec::new();
 
         binding_list.iter().for_each(|sorted_var| {
@@ -746,8 +746,7 @@ impl VecToVecTranslator<'_> for TstpTranslator {
             values.push(translated_value.clone());
         });
 
-        // (TstpFormula::List(binding_occ), values)
-        (TstpFormula::Variable("dummy".to_owned()), values)
+        (binding_occ, values)
     }
 
     /// NOTE: In this case, we would not need a reference to self. Yet,
@@ -830,24 +829,12 @@ impl VecToVecTranslator<'_> for TstpTranslator {
                 // TODO: is this correct?
                 assert!(sorts.len() >= 2,);
 
-                let return_sort;
+                let term = sorts.last().unwrap();
 
-                match sorts.last() {
-                    Some(term) => {
-                        match (*term).as_ref() {
-                            Term::Sort(sort) => {
-                                return_sort = TstpTranslator::translate_sort(sort);
-                            }
+                let return_sort = match term.as_ref() {
+                    Term::Sort(sort) => TstpTranslator::translate_sort(sort),
 
-                            _ => {
-                                // TODO: is this correct?
-                                panic!();
-                            }
-                        }
-                    }
-
-                    None => {
-                        // TODO: is this correct?
+                    _ => {
                         panic!();
                     }
                 };

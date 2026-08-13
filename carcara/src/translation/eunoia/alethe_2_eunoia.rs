@@ -76,28 +76,65 @@ impl EunoiaTranslator {
             });
     }
 
+    // /// Implements the construction of an Eunoia `step-pop` command, for the
+    // /// given Eunoia conclusion, premises and arguments.
+    // fn translate_generic_step_pop(
+    //     &mut self,
+    //     id: &str,
+    //     conclusion: EunoiaTerm,
+    //     rule: &String,
+    //     premises: Vec<EunoiaTerm>,
+    //     arguments: Vec<EunoiaTerm>,
+    // ) {
+    //     // Step-pops are used to close subproofs. Premises shouldn't be empty.
+    //     if premises.is_empty() {
+    //         println!("'{}' step without premises?", rule);
+    //         panic!();
+    //     }
+
+    //     self.get_mut_translator_data()
+    //         .translated_proof
+    //         .push(EunoiaCommand::StepPop {
+    //             id: id.to_owned(),
+    //             conclusion_clause: Some(conclusion),
+    //             rule: rule.clone(),
+    //             premises: EunoiaList { list: premises },
+    //             arguments: EunoiaList { list: arguments },
+    //         });
+    // }
+
     /// Implements the construction of an Eunoia `step-pop` command, for the
-    /// given Eunoia conclusion, premises and arguments.
+    /// given Eunoia conclusion, premises and arguments. Implements the semantics
+    /// of Alethe step-pop steps:
+    /// - The surrounding context is passed as argument.
+    /// - The immediate previous step is passed as a premise.
     fn translate_generic_step_pop(
         &mut self,
         id: &str,
         conclusion: EunoiaTerm,
-        rule: &String,
-        premises: Vec<EunoiaTerm>,
-        arguments: Vec<EunoiaTerm>,
+        rule: &str,
+        mut premises: Vec<EunoiaTerm>,
+        mut arguments: Vec<EunoiaTerm>,
+        previous_command_id: Option<&str>,
     ) {
         // Step-pops are used to close subproofs. Premises shouldn't be empty.
-        if premises.is_empty() {
-            println!("'{}' step without premises?", rule);
-            panic!();
-        }
+        // Include, as premises, previous step from the actual subproof.
+        premises.push(EunoiaTerm::Id(
+            previous_command_id
+                .expect("step without premises?")
+                .to_owned(),
+        ));
+
+        // We include, as argument, the context surrounding this
+        // subproof's context.
+        arguments.push(EunoiaTerm::Id(self.get_last_introduced_context_id()));
 
         self.get_mut_translator_data()
             .translated_proof
             .push(EunoiaCommand::StepPop {
                 id: id.to_owned(),
                 conclusion_clause: Some(conclusion),
-                rule: rule.clone(),
+                rule: rule.to_owned(),
                 premises: EunoiaList { list: premises },
                 arguments: EunoiaList { list: arguments },
             });
@@ -405,44 +442,34 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                     .alethe_scopes
                     .open_non_context_scope();
 
-                let (translated_binding_list, translated_values) =
-                    self.translate_let_binding_list(binding_list);
+                let (bindings, translated_values) = self.translate_let_binding_list(binding_list);
 
-                match translated_binding_list {
-                    EunoiaTerm::List(ref bindings) => {
-                        bindings.iter().for_each(|var| match var {
-                            EunoiaTerm::Var(id, sort) => {
-                                let eunoia_sort = match **sort {
-                                    EunoiaTerm::Type(ref actual_sort) => actual_sort,
-
-                                    _ => {
-                                        println!("Expected sort3, got {:?}", sort);
-                                        panic!()
-                                    }
-                                };
-
-                                self.get_mut_translator_data()
-                                    .alethe_scopes
-                                    .insert_variable_in_scope(id, eunoia_sort);
-                            }
+                bindings.iter().for_each(|var| match var {
+                    EunoiaTerm::Var(id, sort) => {
+                        let eunoia_sort = match **sort {
+                            EunoiaTerm::Type(ref actual_sort) => actual_sort,
 
                             _ => {
-                                // It shouldn't be diff. than EunoiaTerm::Var.
-                                panic!();
+                                println!("Expected sort3, got {:?}", sort);
+                                panic!()
                             }
-                        });
+                        };
+
+                        self.get_mut_translator_data()
+                            .alethe_scopes
+                            .insert_variable_in_scope(id, eunoia_sort);
                     }
 
                     _ => {
-                        // It shouldn't be diff. than EunoiaTerm::List.
+                        // It shouldn't be diff. than EunoiaTerm::Var.
                         panic!();
                     }
-                }
+                });
 
                 let final_let_trans = EunoiaTerm::HOApp(
                     Box::new(EunoiaTerm::App(
                         self.alethe_signature.let_binder.to_owned(),
-                        vec![translated_binding_list, self.translate_term(scope)],
+                        vec![EunoiaTerm::List(bindings), self.translate_term(scope)],
                     )),
                     translated_values,
                 );
@@ -455,10 +482,6 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
             Term::Binder(binder, binding_list, scope) => {
                 // New scope to shadow those context variables that
                 // now bound by this binder.
-                // TODO: reusing variables_in_scope concept
-                // for this new kind of scope (not the one
-                // related with contexts introduced through
-                // "anchor" commands).
                 self.get_mut_translator_data()
                     .alethe_scopes
                     .open_non_context_scope();
@@ -556,18 +579,12 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
     /// enclosing binder.
     /// PRE : { id is in scope }
     fn build_var_binding(&self, id: &str) -> EunoiaTerm {
-        let sort = match self
+        let sort = self
             .get_read_translator_data()
             .alethe_scopes
             .get_variable_in_scope(&id.to_owned())
-        {
-            Some(value) => value.clone(),
-
-            None => {
-                // Not satisfying pre-condition
-                panic!()
-            }
-        };
+            .expect("Id is not in scope.")
+            .clone();
 
         EunoiaTerm::App(
             self.alethe_signature.var.to_owned(),
@@ -587,7 +604,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
     fn translate_let_binding_list(
         &mut self,
         binding_list: &BindingList,
-    ) -> (EunoiaTerm, Vec<EunoiaTerm>) {
+    ) -> (Vec<EunoiaTerm>, Vec<EunoiaTerm>) {
         let mut binding_occ = Vec::new();
         let mut values = Vec::new();
 
@@ -605,7 +622,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
             values.push(translated_value.clone());
         });
 
-        (EunoiaTerm::List(binding_occ), values)
+        (binding_occ, values)
     }
 
     fn translate_operator(&self, operator: Operator) -> Symbol {
@@ -678,20 +695,12 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
             Sort::Function(sorts) => {
                 assert!(sorts.len() >= 2,);
 
-                let return_sort;
+                let term = sorts.last().unwrap();
 
-                match sorts.last() {
-                    Some(term) => match (*term).as_ref() {
-                        Term::Sort(sort) => {
-                            return_sort = EunoiaTranslator::translate_sort(sort);
-                        }
+                let return_sort = match term.as_ref() {
+                    Term::Sort(sort) => EunoiaTranslator::translate_sort(sort),
 
-                        _ => {
-                            panic!();
-                        }
-                    },
-
-                    None => {
+                    _ => {
                         panic!();
                     }
                 };
@@ -827,95 +836,15 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                 });
 
                 match rule.as_str() {
-                    "let" => {
-                        // Include, as premises, previous step from the actual subproof.
-                        match previous_command_id {
-                            Some(id) => eunoia_premises.push(EunoiaTerm::Id(id.to_owned())),
-
-                            None => {
-                                println!("'let' step without premises?");
-                                panic!();
-                            }
-                        }
-
-                        // We include, as argument, the context surrounding this
-                        // subproof's context.
-                        eunoia_arguments
-                            .push(EunoiaTerm::Id(self.get_last_introduced_context_id()));
-
+                    // Subproof-closing steps
+                    "let" | "bind_let" | "bind" | "sko_ex" => {
                         self.translate_generic_step_pop(
                             id,
                             conclusion,
-                            &"let_elim".to_owned(),
+                            "let_elim",
                             eunoia_premises,
                             eunoia_arguments,
-                        );
-                    }
-
-                    "bind_let" => {
-                        // Include, as premises, previous step from the actual subproof.
-                        match previous_command_id {
-                            Some(id) => eunoia_premises.push(EunoiaTerm::Id(id.to_owned())),
-
-                            None => {
-                                println!("'bind_let' step without premises?");
-                                panic!();
-                            }
-                        }
-
-                        // We include, as argument, the context surrounding this
-                        // subproof's context.
-                        eunoia_arguments
-                            .push(EunoiaTerm::Id(self.get_last_introduced_context_id()));
-
-                        self.translate_generic_step_pop(
-                            id,
-                            conclusion,
-                            rule,
-                            eunoia_premises,
-                            eunoia_arguments,
-                        );
-                    }
-
-                    "refl" => {
-                        // We include, as a premise, the context surrounding this
-                        // subproof's context.
-                        eunoia_premises.push(EunoiaTerm::Id(
-                            self.alethe_signature.ctx_assumption.to_owned(),
-                        ));
-
-                        self.translate_generic_step(
-                            id,
-                            conclusion,
-                            rule,
-                            eunoia_premises,
-                            eunoia_arguments,
-                        );
-                    }
-
-                    "bind" => {
-                        // Include, as premise, the previous step.
-                        match previous_command_id {
-                            Some(id) => eunoia_premises.push(EunoiaTerm::Id(id.to_owned())),
-
-                            None => {
-                                println!("'bind' step without premises?");
-                                panic!();
-                            }
-                        }
-
-                        // We include, as argument, the context surrounding this
-                        // subproof's context.
-                        eunoia_arguments
-                            .push(EunoiaTerm::Id(self.get_last_introduced_context_id()));
-
-                        // :assumption: ctx
-                        self.translate_generic_step_pop(
-                            id,
-                            conclusion,
-                            rule,
-                            eunoia_premises,
-                            eunoia_arguments,
+                            previous_command_id,
                         );
                     }
 
@@ -972,12 +901,18 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
 
                                     // TODO: change id!
                                     // TODO: ethos does not complain about repeated ids
-                                    self.translate_generic_step_pop(
-                                        id,
-                                        implied_conclusion.clone(),
-                                        rule,
-                                        vec![EunoiaTerm::Id(id_premise.clone())],
-                                        eunoia_arguments.clone(),
+                                    self.get_mut_translator_data().translated_proof.push(
+                                        EunoiaCommand::StepPop {
+                                            id: id.to_owned(),
+                                            conclusion_clause: Some(implied_conclusion.clone()),
+                                            rule: rule.clone(),
+                                            premises: EunoiaList {
+                                                list: vec![EunoiaTerm::Id(id_premise.clone())],
+                                            },
+                                            arguments: EunoiaList {
+                                                list: eunoia_arguments.clone(),
+                                            },
+                                        },
                                     );
 
                                     premise = implied_conclusion.clone();
@@ -989,6 +924,22 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                                 }
                             }
                         });
+                    }
+
+                    "refl" => {
+                        // We include, as a premise, the context surrounding this
+                        // subproof's context.
+                        eunoia_premises.push(EunoiaTerm::Id(
+                            self.alethe_signature.ctx_assumption.to_owned(),
+                        ));
+
+                        self.translate_generic_step(
+                            id,
+                            conclusion,
+                            rule,
+                            eunoia_premises,
+                            eunoia_arguments,
+                        );
                     }
 
                     "rare_rewrite" => {
@@ -1011,31 +962,6 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                             eunoia_premises,
                             // Dropping rule name.
                             eunoia_arguments[1..].to_vec(),
-                        );
-                    }
-
-                    "sko_ex" => {
-                        // Include, as premise, the previous step.
-                        match previous_command_id {
-                            Some(id) => eunoia_premises.push(EunoiaTerm::Id(id.to_owned())),
-
-                            None => {
-                                println!("'sko_ex' step without premises?");
-                                panic!();
-                            }
-                        }
-
-                        // We include, as argument, the context surrounding this
-                        // subproof's context.
-                        eunoia_arguments
-                            .push(EunoiaTerm::Id(self.get_last_introduced_context_id()));
-
-                        self.translate_generic_step_pop(
-                            id,
-                            conclusion,
-                            rule,
-                            eunoia_premises,
-                            eunoia_arguments,
                         );
                     }
 
