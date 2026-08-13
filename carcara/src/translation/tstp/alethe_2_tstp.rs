@@ -5,8 +5,6 @@ use crate::translation::Translator;
 use crate::translation::TranslatorData;
 use crate::translation::VecToVecTranslator;
 
-// Deref for ast::rc::Rc<Term>
-use std::ops::Deref;
 // formulas_count
 use std::collections::HashMap;
 
@@ -497,7 +495,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         //         tstp_sort = self.translate_term(sort);
 
         //         // TODO: ugly patch...
-        //         let rhs: TstpFormula = match term.deref() {
+        //         let rhs: TstpFormula = match term.as_ref() {
         //             Term::Var(string, _) => TstpFormula::Variable(string.clone()),
 
         //             _ => self.translate_term(term),
@@ -834,7 +832,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
 
                 match sorts.last() {
                     Some(term) => {
-                        match (*term).deref() {
+                        match (*term).as_ref() {
                             Term::Sort(sort) => {
                                 return_sort = TstpTranslator::translate_sort(sort);
                             }
@@ -856,7 +854,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
 
                 for (pos, rc_sort) in sorts.iter().enumerate() {
                     if pos < sorts.len() - 1 {
-                        match rc_sort.deref() {
+                        match rc_sort.as_ref() {
                             Term::Sort(sort) => {
                                 sorts_params.push(TstpTranslator::translate_sort(sort));
                             }
@@ -1040,7 +1038,7 @@ impl VecToVecTranslator<'_, TstpAnnotatedFormula, TstpFormula, TstpType, TstpOpe
         });
 
         function_declarations.iter().for_each(|pair| {
-            let tstp_type: TstpType = match (pair.1).deref() {
+            let tstp_type: TstpType = match (pair.1).as_ref() {
                 Term::Sort(sort) => TstpTranslator::translate_sort(sort),
 
                 _ => {

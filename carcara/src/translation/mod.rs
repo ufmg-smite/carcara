@@ -5,8 +5,6 @@ pub mod tstp;
 use crate::ast::*;
 
 use std::io::Result;
-// Deref for ast::rc::Rc<Term>
-use std::ops::Deref;
 
 // scopes
 use crate::utils::HashMapStack;
@@ -296,14 +294,14 @@ pub trait VecToVecTranslator<
         // Include, as premise, the previous step.
         match previous_step {
             Some(step) => {
-                match step.deref() {
+                match step.as_ref() {
                     ProofNode::Step(StepNode { id, .. }) => id.clone(),
 
                     ProofNode::Subproof(SubproofNode { last_step, .. }) => {
                         // The previous step is the closing step of a subproof.
                         // It is represented as a single SubproofNode. We look
                         // for the actual last step of this subproof.
-                        match last_step.deref() {
+                        match last_step.as_ref() {
                             ProofNode::Step(StepNode { id, .. }) => id.clone(),
 
                             _ => {

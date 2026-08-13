@@ -7,9 +7,6 @@ use crate::translation::Translator;
 use crate::translation::TranslatorData;
 use crate::translation::VecToVecTranslator;
 
-// Deref for ast::rc::Rc<Term>
-use std::ops::Deref;
-
 pub struct EunoiaTranslator {
     // We are not including it into the Pool of terms
     /// "Alethe in Eunoia" signature considered during translation.
@@ -680,7 +677,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
                 let return_sort;
 
                 match sorts.last() {
-                    Some(term) => match (*term).deref() {
+                    Some(term) => match (*term).as_ref() {
                         Term::Sort(sort) => {
                             return_sort = EunoiaTranslator::translate_sort(sort);
                         }
@@ -699,7 +696,7 @@ impl VecToVecTranslator<'_, EunoiaCommand, EunoiaTerm, EunoiaType, Symbol> for E
 
                 for (pos, rc_sort) in sorts.iter().enumerate() {
                     if pos < sorts.len() - 1 {
-                        match rc_sort.deref() {
+                        match rc_sort.as_ref() {
                             Term::Sort(sort) => {
                                 sorts_params.push(EunoiaTranslator::translate_sort(sort));
                             }
