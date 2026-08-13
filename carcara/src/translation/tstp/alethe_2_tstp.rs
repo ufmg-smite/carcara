@@ -1,9 +1,7 @@
 //! Translator for `TstpProof`.
 use crate::ast::*;
-use crate::translation::tstp::ast::*;
-use crate::translation::Translator;
-use crate::translation::TranslatorData;
-use crate::translation::VecToVecTranslator;
+
+use crate::translation::{tstp::ast::*, Translator, TranslatorData, VecToVecTranslator};
 
 // formulas_count
 use std::collections::HashMap;

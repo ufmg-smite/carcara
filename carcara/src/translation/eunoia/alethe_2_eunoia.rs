@@ -1,11 +1,9 @@
 //! Translator for `EunoiaProof`.
 use crate::ast::*;
-use crate::translation::eunoia::alethe_signature::theory::*;
-use crate::translation::eunoia::ast::*;
-use crate::translation::Symbol;
-use crate::translation::Translator;
-use crate::translation::TranslatorData;
-use crate::translation::VecToVecTranslator;
+use crate::translation::{
+    eunoia::{alethe_signature::theory::*, ast::*},
+    Symbol, Translator, TranslatorData, VecToVecTranslator,
+};
 
 pub struct EunoiaTranslator {
     // We are not including it into the Pool of terms
