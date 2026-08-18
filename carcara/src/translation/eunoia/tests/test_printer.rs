@@ -309,7 +309,7 @@ mod tests {
         let assumes = vec![EunoiaCommand::Step {
             id: String::from("t1"),
             conclusion_clause: Some(EunoiaTerm::Id("some_conclusion".to_owned())),
-            rule: "let_elim".to_owned(),
+            rule: "let".to_owned(),
             premises: EunoiaList {
                 list: vec![
                     EunoiaTerm::Id("context".to_owned()),
@@ -322,7 +322,7 @@ mod tests {
             },
         }];
 
-        let expected = "(step t1 some_conclusion :rule let_elim :premises ( context h1 t1 ) \
+        let expected = "(step t1 some_conclusion :rule let :premises ( context h1 t1 ) \
                         :args ( context ))\n";
 
         printer.write_proof(&assumes).unwrap();
@@ -339,7 +339,7 @@ mod tests {
         let assumes = vec![EunoiaCommand::StepPop {
             id: String::from("t1"),
             conclusion_clause: Some(EunoiaTerm::Id("some_conclusion".to_owned())),
-            rule: "let_elim".to_owned(),
+            rule: "let".to_owned(),
             premises: EunoiaList {
                 list: vec![
                     EunoiaTerm::Id("context".to_owned()),
@@ -352,7 +352,7 @@ mod tests {
             },
         }];
 
-        let expected = "(step-pop t1 some_conclusion :rule let_elim :premises ( context h1 t1 ) \
+        let expected = "(step-pop t1 some_conclusion :rule let :premises ( context h1 t1 ) \
                         :args ( context ))\n";
 
         printer.write_proof(&assumes).unwrap();

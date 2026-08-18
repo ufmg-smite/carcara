@@ -64,7 +64,7 @@ fn test_let_example() {
          (step t1 (@cl (= (@var ( ( x S ) ) x) b)) \
          :rule refl :premises ( context ))\n\
          (step-pop t2 (@cl (= ( _ (@let ( ( x S ) ) (@var ( ( x S ) ) x)) a) b)) \
-         :rule let_elim :premises ( h1 t1 ) :args ( ctx1 ))\n";
+         :rule let :premises ( h1 t1 ) :args ( ctx1 ))\n";
 
     eunoia_full_translation_test(
         alethe_problem,
