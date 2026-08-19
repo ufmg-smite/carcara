@@ -76,10 +76,9 @@ impl TstpTranslator {
         // TODO: ugly way to deal with this, since I do not want to implement
         // the Display trait for TstpFormulaRole at this level (or at the level
         // of the ASTs themselves).
-        let new_name: String = match role {
+        match role {
             TstpFormulaRole::Assumption => {
                 // TODO: for the moment we are just using Alethe step's id.
-                // new_name = "assumption".to_owned();
                 step_id.to_owned()
             }
 
@@ -89,25 +88,21 @@ impl TstpTranslator {
 
             TstpFormulaRole::Lemma => {
                 // TODO: for the moment we are just using Alethe step's id.
-                // new_name = "lemma".to_owned();
                 step_id.to_owned()
             }
 
             TstpFormulaRole::Conjecture => {
                 // TODO: for the moment we are just using Alethe step's id.
-                // new_name = "conjecture".to_owned();
                 step_id.to_owned()
             }
 
             TstpFormulaRole::Hypothesis => {
                 // TODO: for the moment we are just using Alethe step's id.
-                // new_name = "hypothesis".to_owned();
                 step_id.to_owned()
             }
 
             TstpFormulaRole::Logic => {
                 // TODO: for the moment we are just using Alethe step's id.
-                // new_name = "logic".to_owned();
                 step_id.to_owned()
             }
 
@@ -119,12 +114,9 @@ impl TstpTranslator {
 
             TstpFormulaRole::Plain => {
                 // TODO: for the moment we are just using Alethe step's id.
-                // new_name = "plain".to_owned();
                 step_id.to_owned()
             }
-        };
-
-        new_name
+        }
     }
 
     /// Translates the application of an Alethe operator into its expected TSTP
@@ -161,42 +153,28 @@ impl TstpTranslator {
                 // translate_operator_application might be invoked to translate a unit clause.
                 assert!(!operands_tstp.is_empty());
 
-                let mut ret: TstpFormula;
-
                 if operands_tstp.len() >= 2 {
-                    ret = TstpFormula::BinaryOperatorApp(
-                        binary_op.clone(),
-                        Box::new(operands_tstp[0].clone()),
-                        Box::new(operands_tstp[1].clone()),
-                    );
-
-                    // TODO: some better way to skip the first 2 positions?
-                    let mut position = 0;
-                    operands_tstp.iter().for_each(|operand| {
-                        if position > 1 {
-                            ret = TstpFormula::BinaryOperatorApp(
+                    operands_tstp
+                        .into_iter()
+                        .reduce(|a, b| {
+                            TstpFormula::BinaryOperatorApp(
                                 binary_op.clone(),
-                                Box::new(ret.clone()),
-                                Box::new(operand.clone()),
-                            );
-                        } else {
-                            // { position <= 1 }
-                            position += 1;
-                        }
-                    });
+                                Box::new(a),
+                                Box::new(b),
+                            )
+                        })
+                        .expect("BinaryOperator applied over no operand!")
                 } else {
                     // { operands_tstp.len() == 1 }
                     // We should be translating just a unit clause
                     assert!(operator == Operator::Or);
 
-                    ret = TstpFormula::BinaryOperatorApp(
+                    TstpFormula::BinaryOperatorApp(
                         binary_op.clone(),
                         Box::new(TstpFormula::NullaryOperatorApp(TstpNullaryOperator::False)),
                         Box::new(operands_tstp[0].clone()),
-                    );
+                    )
                 }
-
-                ret
             }
 
             TstpOperator::Functor(functor) => {
