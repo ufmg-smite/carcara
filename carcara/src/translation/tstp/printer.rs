@@ -134,116 +134,87 @@ impl<'a> TstpPrinter<'a> {
     ///   start with a lowercase letter or are 'single quoted', and variables start with an
     ///   uppercase letter."
     fn formula_to_concrete_syntax(formula: &TstpFormula) -> String {
-        let mut ret: String;
-
-        match formula {
+        let ret: String = match formula {
             TstpFormula::BinaryOperatorApp(binary_op, left_operand, right_operand) => {
-                ret = "( ".to_owned()
-                    + &TstpPrinter::formula_to_concrete_syntax(left_operand)
-                    + " "
-                    + &TstpPrinter::operator_to_concrete_syntax(&TstpOperator::BinaryOperator(
-                        binary_op.clone(),
-                    ))
-                    + " "
-                    + &TstpPrinter::formula_to_concrete_syntax(right_operand)
-                    + " )";
+                format!(
+                    "( {} {} {} )",
+                    TstpPrinter::formula_to_concrete_syntax(left_operand),
+                    TstpPrinter::operator_to_concrete_syntax(&TstpOperator::BinaryOperator(
+                        binary_op.clone()
+                    )),
+                    TstpPrinter::formula_to_concrete_syntax(right_operand)
+                )
             }
 
             TstpFormula::FunctorApp(functor, arguments) => {
                 // TODO: unnecessary clone
-                ret = TstpPrinter::operator_to_concrete_syntax(&TstpOperator::Functor(
-                    functor.clone(),
-                )) + "(";
-
-                let mut first_element = true;
-
-                arguments.iter().for_each(|argument| {
-                    if first_element {
-                        ret += &TstpPrinter::formula_to_concrete_syntax(argument);
-                        first_element = false;
-                    } else {
-                        // { ! first_element }
-                        ret +=
-                            &(", ".to_owned() + &TstpPrinter::formula_to_concrete_syntax(argument));
-                    }
-                });
-
-                ret += ")";
+                format!(
+                    "{} ({})",
+                    TstpPrinter::operator_to_concrete_syntax(&TstpOperator::Functor(
+                        functor.clone(),
+                    )),
+                    AnnotatedFormulaFormatter::print_sequence(
+                        arguments,
+                        TstpPrinter::formula_to_concrete_syntax,
+                    )
+                )
             }
 
-            TstpFormula::Integer(integer) => {
-                ret = integer.to_string();
-            }
+            TstpFormula::Integer(integer) => integer.to_string(),
 
             TstpFormula::NullaryOperatorApp(nullary_op) => {
-                ret = TstpPrinter::operator_to_concrete_syntax(&TstpOperator::NullaryOperator(
+                TstpPrinter::operator_to_concrete_syntax(&TstpOperator::NullaryOperator(
                     nullary_op.clone(),
-                ));
+                ))
             }
 
             TstpFormula::Typing(var, type_inhabited) => {
-                ret = TstpPrinter::formula_to_concrete_syntax(var);
-                ret += &(": ".to_owned() + &TstpPrinter::type_to_concrete_syntax(type_inhabited));
+                format!(
+                    "{}: {}",
+                    TstpPrinter::formula_to_concrete_syntax(var),
+                    TstpPrinter::type_to_concrete_syntax(type_inhabited)
+                )
             }
 
             TstpFormula::UnaryOperatorApp(unary_op, operand) => {
-                ret = TstpPrinter::operator_to_concrete_syntax(&TstpOperator::UnaryOperator(
-                    unary_op.clone(),
-                )) + " "
-                    + &TstpPrinter::formula_to_concrete_syntax(operand);
+                format!(
+                    "{} {}",
+                    TstpPrinter::operator_to_concrete_syntax(&TstpOperator::UnaryOperator(
+                        unary_op.clone(),
+                    )),
+                    TstpPrinter::formula_to_concrete_syntax(operand)
+                )
             }
 
             TstpFormula::UniversalQuant(variables, scope) => {
-                ret = "(! [".to_owned();
-                // TODO: abstract this pattern into a procedure
-                let mut first_element = true;
-
-                variables.iter().for_each(|elem| {
-                    if first_element {
-                        ret += &TstpPrinter::typed_variable_to_concrete_syntax(elem);
-                        first_element = false;
-                    } else {
-                        // { ! first_element }
-                        ret += &(", ".to_owned()
-                            + &TstpPrinter::typed_variable_to_concrete_syntax(elem));
-                    }
-                });
-
-                ret += "] : ";
-                ret += &TstpPrinter::formula_to_concrete_syntax(scope);
-                ret += ")";
+                format!(
+                    "(! [{}] : {})",
+                    AnnotatedFormulaFormatter::print_sequence(
+                        variables,
+                        TstpPrinter::typed_variable_to_concrete_syntax,
+                    ),
+                    TstpPrinter::formula_to_concrete_syntax(scope)
+                )
             }
 
             TstpFormula::ExistentialQuant(variables, scope) => {
-                ret = "(? [".to_owned();
-                // TODO: abstract this pattern into a procedure
-                let mut first_element = true;
-
-                variables.iter().for_each(|elem| {
-                    if first_element {
-                        ret += &TstpPrinter::typed_variable_to_concrete_syntax(elem);
-                        first_element = false;
-                    } else {
-                        // { ! first_element }
-                        ret += &(", ".to_owned()
-                            + &TstpPrinter::typed_variable_to_concrete_syntax(elem));
-                    }
-                });
-
-                ret += "] : ";
-                ret += &TstpPrinter::formula_to_concrete_syntax(scope);
-                ret += ")";
+                format!(
+                    "(? [{}] : {})",
+                    AnnotatedFormulaFormatter::print_sequence(
+                        variables,
+                        TstpPrinter::typed_variable_to_concrete_syntax,
+                    ),
+                    TstpPrinter::formula_to_concrete_syntax(scope)
+                )
             }
 
-            TstpFormula::Variable(name) => {
-                ret = name.clone();
-            }
+            TstpFormula::Variable(name) => name.clone(),
 
             _ => {
                 println!("No defined printer for TSTP formula {:?}", formula);
                 panic!();
             }
-        }
+        };
 
         ret
     }

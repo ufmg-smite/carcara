@@ -15,8 +15,23 @@ impl<'a> SExpFormatter<'a> {
         SExpFormatter { sink }
     }
 
-    // Prints an s-expression with properly formatted concrete syntax, and
-    // separating it from surrounding s-expressions.
+    /// Print lists of arguments, separated just by spaces.
+    fn print_sequence<T>(seq: &[T], func: fn(&T) -> String) -> String {
+        if seq.is_empty() {
+            "".to_owned()
+        } else {
+            // { !seq.is_empty() }
+            let mut result = func(&seq[0]);
+            for item in &seq[1..] {
+                result += " ";
+                result += &func(item);
+            }
+            result
+        }
+    }
+
+    /// Prints an s-expression with properly formatted concrete syntax, and
+    /// separating it from surrounding s-expressions.
     fn write_s_expr(&mut self, tag: &str, args: &[String]) -> io::Result<()> {
         if args.is_empty() {
             // S-expression is a constant
@@ -126,11 +141,11 @@ impl<'a> ProofPrinter for EunoiaPrinter<'a> {
                     args.append(&mut EunoiaPrinter::eunoia_list_to_concrete_syntax(
                         body,
                         &Box::new(|tuple: &(EunoiaTerm, EunoiaTerm)| {
-                            "(".to_owned()
-                                + &EunoiaPrinter::term_to_concrete_syntax(&tuple.0)
-                                + " "
-                                + &EunoiaPrinter::term_to_concrete_syntax(&tuple.1)
-                                + ")"
+                            format!(
+                                "({} {})",
+                                EunoiaPrinter::term_to_concrete_syntax(&tuple.0),
+                                EunoiaPrinter::term_to_concrete_syntax(&tuple.1)
+                            )
                         }),
                     ));
                 }
@@ -264,11 +279,7 @@ impl<'a> EunoiaPrinter<'a> {
                 if r.is_integer() {
                     ret += &(r.clone().abs().to_string() + ".0");
                 } else {
-                    ret += &("(/ ".to_owned()
-                        + &r.numer().clone().abs().to_string()
-                        + ".0 "
-                        + &r.denom().to_string()
-                        + ".0");
+                    ret += &format!("/ {}.0 {}.0)", r.numer().clone().abs(), &r.denom());
                 }
                 if r.is_negative() {
                     ret += ")";
@@ -276,7 +287,7 @@ impl<'a> EunoiaPrinter<'a> {
             }
 
             EunoiaTerm::Rational(n, d) => {
-                ret = n.to_string() + "/" + &d.to_string();
+                ret = format!("{}/{}", n, d);
             }
 
             EunoiaTerm::Id(name) => {
@@ -296,60 +307,54 @@ impl<'a> EunoiaPrinter<'a> {
             }
 
             EunoiaTerm::App(symbol, params) => {
-                ret = "(".to_owned() + &symbol.clone();
-
-                params.iter().for_each(|param| {
-                    ret += " ";
-                    ret += &EunoiaPrinter::term_to_concrete_syntax(param);
-                });
-
-                ret += ")";
+                if params.is_empty() {
+                    ret = format!("({})", symbol.clone());
+                } else {
+                    // { not params.is_empty() }
+                    ret = format!(
+                        "({} {})",
+                        symbol.clone(),
+                        SExpFormatter::print_sequence(
+                            params,
+                            EunoiaPrinter::term_to_concrete_syntax
+                        )
+                    );
+                }
             }
 
             EunoiaTerm::HOApp(function, params) => {
-                ret = "( _ ".to_owned() + &EunoiaPrinter::term_to_concrete_syntax(function);
-
-                params.iter().for_each(|param| {
-                    ret += " ";
-                    ret += &EunoiaPrinter::term_to_concrete_syntax(param);
-                });
-
-                ret += ")";
+                ret = format!(
+                    "( _ {} {})",
+                    EunoiaPrinter::term_to_concrete_syntax(function),
+                    SExpFormatter::print_sequence(params, EunoiaPrinter::term_to_concrete_syntax)
+                );
             }
 
             EunoiaTerm::Op(operator, params) => {
-                ret = "(".to_owned() + &EunoiaPrinter::operator_to_concrete_syntax(operator);
-
-                params.iter().for_each(|param| {
-                    ret += " ";
-                    ret += &EunoiaPrinter::term_to_concrete_syntax(param);
-                });
-
-                ret += ")";
+                ret = format!(
+                    "({} {})",
+                    EunoiaPrinter::operator_to_concrete_syntax(operator),
+                    SExpFormatter::print_sequence(params, EunoiaPrinter::term_to_concrete_syntax)
+                );
             }
 
             EunoiaTerm::String(string) => {
-                ret = "\"".to_owned() + &string.clone() + "\"";
+                ret = format!("\"{}\"", string.clone());
             }
 
             EunoiaTerm::List(terms) => {
-                ret = "(".to_owned();
-
-                terms.iter().for_each(|term| {
-                    ret += " ";
-                    ret += &EunoiaPrinter::term_to_concrete_syntax(term);
-                });
-
-                ret += " )";
+                ret = format!(
+                    "( {} )",
+                    SExpFormatter::print_sequence(terms, EunoiaPrinter::term_to_concrete_syntax)
+                );
             }
 
             EunoiaTerm::Var(name, sort) => {
-                ret = "(".to_owned();
-                ret += " ";
-                ret += &name.clone();
-                ret += " ";
-                ret += &EunoiaPrinter::term_to_concrete_syntax(sort);
-                ret += " )";
+                ret = format!(
+                    "( {} {} )",
+                    name.clone(),
+                    EunoiaPrinter::term_to_concrete_syntax(sort)
+                );
             }
         }
 
@@ -357,63 +362,47 @@ impl<'a> EunoiaPrinter<'a> {
     }
 
     fn type_to_concrete_syntax(some_type: &EunoiaType) -> String {
-        let mut ret: String;
-
         match some_type {
-            EunoiaType::Bool => {
-                ret = "Bool".to_owned();
-            }
+            EunoiaType::Bool => "Bool".to_owned(),
 
-            EunoiaType::Type => {
-                ret = "Type".to_owned();
-            }
+            EunoiaType::Type => "Type".to_owned(),
 
-            EunoiaType::Real => {
-                ret = "Real".to_owned();
-            }
+            EunoiaType::Real => "Real".to_owned(),
 
-            EunoiaType::Name(name) => {
-                ret = name.clone();
-            }
+            EunoiaType::Name(name) => name.clone(),
 
             EunoiaType::Fun(kind_params, dom, codom) => {
-                ret = "(-> ".to_owned();
-
-                kind_params.iter().for_each(|kind| {
-                    ret += &EunoiaPrinter::kind_param_to_concrete_syntax(kind);
-                    ret += " ";
-                });
-
-                dom.iter().for_each(|some_type| {
-                    ret += &EunoiaPrinter::type_to_concrete_syntax(some_type);
-                    ret += " ";
-                });
-
-                ret += &EunoiaPrinter::type_to_concrete_syntax(codom);
-                ret += ")";
+                format!(
+                    "(-> {} {} {})",
+                    SExpFormatter::print_sequence(
+                        kind_params,
+                        EunoiaPrinter::kind_param_to_concrete_syntax
+                    ),
+                    SExpFormatter::print_sequence(dom, EunoiaPrinter::type_to_concrete_syntax),
+                    EunoiaPrinter::type_to_concrete_syntax(codom)
+                )
             }
         }
-
-        ret
     }
 
     fn typed_param_to_concrete_syntax(param: &EunoiaTypedParam) -> String {
-        let mut ret = "(".to_owned();
-
         let EunoiaTypedParam { name, eunoia_type, attrs } = param;
 
-        ret += &name.clone();
-        ret += " ";
-        ret += &EunoiaPrinter::type_to_concrete_syntax(eunoia_type);
-
-        attrs.iter().for_each(|attr| {
-            ret += " ";
-            ret += &EunoiaPrinter::cons_attr_to_concrete_syntax(attr);
-        });
-
-        ret += ")";
-
-        ret
+        if attrs.is_empty() {
+            format!(
+                "({} {})",
+                name.clone(),
+                EunoiaPrinter::type_to_concrete_syntax(eunoia_type)
+            )
+        } else {
+            // { not attrs.is_empty() }
+            format!(
+                "({} {} {})",
+                name.clone(),
+                EunoiaPrinter::type_to_concrete_syntax(eunoia_type),
+                SExpFormatter::print_sequence(attrs, EunoiaPrinter::cons_attr_to_concrete_syntax)
+            )
+        }
     }
 
     fn define_attr_to_concrete_syntax(attr: &EunoiaDefineAttr) -> String {
@@ -431,31 +420,28 @@ impl<'a> EunoiaPrinter<'a> {
             EunoiaTypeAttr::Implicit => ":implicit".to_owned(),
 
             EunoiaTypeAttr::Requires(lhs, rhs) => {
-                ((":requires (".to_owned() + &EunoiaPrinter::term_to_concrete_syntax(lhs))
-                    + " "
-                    + &EunoiaPrinter::term_to_concrete_syntax(rhs))
-                    + ")"
+                format!(
+                    ":requires ({} {})",
+                    EunoiaPrinter::term_to_concrete_syntax(lhs),
+                    EunoiaPrinter::term_to_concrete_syntax(rhs)
+                )
             }
         }
     }
 
     fn kind_param_to_concrete_syntax(attr: &EunoiaKindParam) -> String {
-        let mut ret = "(! ".to_owned();
-
         match attr {
             EunoiaKindParam(some_type, attrs) => {
-                ret += &EunoiaPrinter::type_to_concrete_syntax(some_type);
-
-                attrs.iter().for_each(|attr| {
-                    ret += " ";
-                    ret += &EunoiaPrinter::type_attr_to_concrete_syntax(attr);
-                });
+                format!(
+                    "(! {} {})",
+                    EunoiaPrinter::type_to_concrete_syntax(some_type),
+                    SExpFormatter::print_sequence(
+                        attrs,
+                        EunoiaPrinter::type_attr_to_concrete_syntax
+                    )
+                )
             }
         }
-
-        ret += ")";
-
-        ret
     }
 
     fn operator_to_concrete_syntax(op: &EunoiaOperator) -> String {
