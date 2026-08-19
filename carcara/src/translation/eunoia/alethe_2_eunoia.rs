@@ -814,7 +814,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                         self.translate_generic_step_pop(
                             id,
                             conclusion,
-                            "let_elim",
+                            rule,
                             eunoia_premises,
                             eunoia_arguments,
                             previous_command_id,
@@ -842,11 +842,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                         // Id of the premise step
                         let mut id_premise: Symbol = "".to_owned();
 
-                        // TODO: some more efficient way to deal with
-                        // the fact that we use a "stack" of assumptions?
-                        let mut discharge_copy = discharge.clone();
-                        discharge_copy.reverse();
-                        discharge_copy.iter().for_each(|discharged_assumption| {
+                        discharge.iter().rev().for_each(|discharged_assumption| {
                             let assumption = iter.get_premise(*discharged_assumption);
 
                             // TODO: we are discarding vector premises

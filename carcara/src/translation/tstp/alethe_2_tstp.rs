@@ -63,7 +63,6 @@ impl TstpTranslator {
     fn new_formula_name(&mut self, step_id: &str, role: &TstpFormulaRole) -> String {
         // For axioms, lemmas, conjecture, hypothesis, naming
         // mechanism is rather simple: role + number.
-        let mut new_name: String;
 
         if self.formulas_count.contains_key(role) {
             self.formulas_count
@@ -77,55 +76,53 @@ impl TstpTranslator {
         // TODO: ugly way to deal with this, since I do not want to implement
         // the Display trait for TstpFormulaRole at this level (or at the level
         // of the ASTs themselves).
-        match role {
+        let new_name: String = match role {
             TstpFormulaRole::Assumption => {
                 // TODO: for the moment we are just using Alethe step's id.
                 // new_name = "assumption".to_owned();
-                new_name = step_id.to_owned();
+                step_id.to_owned()
             }
 
             TstpFormulaRole::Axiom => {
-                new_name = "axiom".to_owned();
-                new_name += &("_".to_owned() + &self.formulas_count[role].to_string());
+                format!("axiom_{}", self.formulas_count[role])
             }
 
             TstpFormulaRole::Lemma => {
                 // TODO: for the moment we are just using Alethe step's id.
                 // new_name = "lemma".to_owned();
-                new_name = step_id.to_owned();
+                step_id.to_owned()
             }
 
             TstpFormulaRole::Conjecture => {
                 // TODO: for the moment we are just using Alethe step's id.
                 // new_name = "conjecture".to_owned();
-                new_name = step_id.to_owned();
+                step_id.to_owned()
             }
 
             TstpFormulaRole::Hypothesis => {
                 // TODO: for the moment we are just using Alethe step's id.
                 // new_name = "hypothesis".to_owned();
-                new_name = step_id.to_owned();
+                step_id.to_owned()
             }
 
             TstpFormulaRole::Logic => {
                 // TODO: for the moment we are just using Alethe step's id.
                 // new_name = "logic".to_owned();
-                new_name = step_id.to_owned();
+                step_id.to_owned()
             }
 
             TstpFormulaRole::Type => {
                 // TODO: it could be better if we just name it after the
                 // subject of the typing statement.
-                new_name = "type".to_owned();
-                new_name += &("_".to_owned() + &self.formulas_count[role].to_string());
+                format!("type_{}", self.formulas_count[role])
             }
 
             TstpFormulaRole::Plain => {
                 // TODO: for the moment we are just using Alethe step's id.
                 // new_name = "plain".to_owned();
-                new_name = step_id.to_owned();
+                step_id.to_owned()
             }
-        }
+        };
 
         new_name
     }

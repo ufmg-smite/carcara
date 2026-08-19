@@ -94,7 +94,7 @@ impl AletheTheory {
             ge: ">=",
 
             // Rules' names.
-            let_rule: "let_elim",
+            let_rule: "let",
             refl: "refl",
             equiv_pos2: "equiv_pos2",
             subproof: "subproof",
