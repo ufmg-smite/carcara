@@ -62,7 +62,7 @@ fn test_let_example() {
          (define ctx2 ( ) (@ctx ( ( x S ) ) (and (= (@var ( ( x S ) ) x) b) ctx1)))\n\
          (assume-push context ctx2)\n\
          (step t1 (@cl (= (@var ( ( x S ) ) x) b)) \
-         :rule refl :args ( context ))\n\
+         :rule refl :args ( ctx2 ))\n\
          (step-pop t2 (@cl (= ( _ (@let ( ( x S ) ) (@var ( ( x S ) ) x)) a) b)) \
          :rule let :premises ( h1 t1 ) :args ( ctx1 ))\n";
 

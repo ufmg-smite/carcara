@@ -399,7 +399,7 @@ impl VecToVecTranslator<'_> for TstpTranslator {
     /// PARAMS:
     /// `option_ctx_params`: a vector with the variables introduced by the context (optionally)
     fn define_push_new_context(&mut self, _option_ctx_params: Option<Vec<TstpFormula>>) {
-        let _new_context_id = self.generate_new_context_id();
+        let _new_context_id = self.get_current_context_id();
 
         // match option_ctx_params {
         //     // First call to the method. We create a dummy context with no actual

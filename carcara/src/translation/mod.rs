@@ -314,7 +314,7 @@ pub trait VecToVecTranslator<'a> {
     }
 
     /// Encapsulates the mechanism used to generate fresh identifiers of contexts.
-    fn generate_new_context_id(&self) -> String {
+    fn get_current_context_id(&self) -> String {
         // TODO: do not hard-code this string
         String::from("ctx")
             + &self
@@ -375,31 +375,19 @@ pub trait VecToVecTranslator<'a> {
 
                     // A subproof introduced by the 'anchor' command.
                     ProofCommand::Subproof(Subproof { commands, args, .. }) => {
-                        // Some compilers might to give special treatment to subproofs .
+                        // Some compilers might give special treatment to subproofs .
                         // We flag once we enter a subproof.
                         self.get_mut_translator_data().is_in_subproof = true;
 
-                        // To store @VarList parameters to @ctx
-                        let ctx_params;
+                        self.get_mut_translator_data()
+                            .alethe_scopes
+                            .open_context_scope();
 
-                        if args.is_empty() {
-                            self.get_mut_translator_data()
-                                .alethe_scopes
-                                .open_non_context_scope();
-                        } else {
-                            // { !args.is_empty() }
+                        // Process the vector of AnchorArgs.
+                        let ctx_params = self.process_anchor_context(args);
 
-                            // We actually have an anchor introducing new variables
-                            self.get_mut_translator_data()
-                                .alethe_scopes
-                                .open_context_scope();
-
-                            // Process the vector of AnchorArgs.
-                            ctx_params = self.process_anchor_context(args);
-
-                            // Define and open a new context
-                            self.define_push_new_context(Some(ctx_params));
-                        }
+                        // Define and open a new context
+                        self.define_push_new_context(Some(ctx_params));
 
                         // Save information about the last step of the subproof
                         let last_step = commands.last();
