@@ -896,9 +896,9 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                     }
 
                     "refl" => {
-                        // We include, as a premise, the context surrounding this
+                        // We include, as an argument, the context surrounding this
                         // subproof's context.
-                        eunoia_premises.push(EunoiaTerm::Id(
+                        eunoia_arguments.push(EunoiaTerm::Id(
                             self.alethe_signature.ctx_assumption.to_owned(),
                         ));
 
