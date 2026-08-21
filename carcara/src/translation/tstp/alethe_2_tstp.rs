@@ -934,13 +934,6 @@ impl VecToVecTranslator<'_> for TstpTranslator {
                     self.translate_operator_application(Operator::Or, clause)
                 };
 
-                // NOTE: not adding conclusion clause to this list
-                let mut tstp_arguments: Vec<TstpFormula> = Vec::new();
-
-                args.iter().for_each(|arg| {
-                    tstp_arguments.push(self.translate_term(arg));
-                });
-
                 let annotated_formula = self.classify_source_build_step_term(
                     id,
                     rule,
