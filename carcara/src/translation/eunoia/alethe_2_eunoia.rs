@@ -133,7 +133,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
     /// PARAMS:
     /// `option_ctx_params`: a vector with the variables introduced by the context (optionally)
     fn define_push_new_context(&mut self, option_ctx_params: Option<Vec<EunoiaTerm>>) {
-        let new_context_id = self.generate_new_context_id();
+        let new_context_id = self.get_current_context_id();
 
         match option_ctx_params {
             // First call to the method. We create a dummy context with no actual
@@ -814,7 +814,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                         self.translate_generic_step_pop(
                             id,
                             conclusion,
-                            rule,
+                            if rule == "let" { "let_elim" } else { rule },
                             eunoia_premises,
                             eunoia_arguments,
                             previous_command_id,
@@ -896,11 +896,9 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                     }
 
                     "refl" => {
-                        // We include, as a premise, the context surrounding this
+                        // We include, as an argument, the context surrounding this
                         // subproof's context.
-                        eunoia_premises.push(EunoiaTerm::Id(
-                            self.alethe_signature.ctx_assumption.to_owned(),
-                        ));
+                        eunoia_arguments.push(EunoiaTerm::Id(self.get_current_context_id()));
 
                         self.translate_generic_step(
                             id,
