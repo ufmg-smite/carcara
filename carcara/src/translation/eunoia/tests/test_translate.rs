@@ -19,7 +19,13 @@ fn test_small_example() {
                           (step t2 (cl (<= a 5.0) (> a 5.0)) :rule la_generic :args (1.0 1.0))
                           (step t3 (cl) :rule resolution :premises (t1 t2 h2 h3))";
 
-    let eunoia_problem = "(declare-const a Real)\n\
+    let eunoia_problem = "(include \"./theories/theory.eo\")\n\
+                          (include \"./rules/alethe.eo\")\n\
+                          (include \"./rules/tautologies.eo\")\n\
+                          (include \"./rules/rare_rules.eo\")\n\
+                          (include \"./programs/programs.eo\")\n\
+                          (include \"./programs/arith.eo\")\n\
+                          (declare-const a Real)\n\
                           (declare-const b Real)\n";
 
     let eunoia_certificate = "(define ctx1 ( ) true)\n\
@@ -52,9 +58,15 @@ fn test_let_example() {
                               (step t1 (cl (= x b)) :rule refl)
                               (step t2 (cl (= (let ((x a)) x) b)) :rule let :premises (h1))";
 
-    let eunoia_problem = "(declare-const S Type)\n\
-         (declare-const a S)\n\
-         (declare-const b S)\n";
+    let eunoia_problem = "(include \"./theories/theory.eo\")\n\
+                          (include \"./rules/alethe.eo\")\n\
+                          (include \"./rules/tautologies.eo\")\n\
+                          (include \"./rules/rare_rules.eo\")\n\
+                          (include \"./programs/programs.eo\")\n\
+                          (include \"./programs/arith.eo\")\n\
+                          (declare-const S Type)\n\
+                          (declare-const a S)\n\
+                          (declare-const b S)\n";
 
     let eunoia_certificate = "(define ctx1 ( ) true)\n\
          (assume context ctx1)\n\

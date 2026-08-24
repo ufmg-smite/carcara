@@ -58,7 +58,8 @@ impl<T: Clone> AletheScopes<T> {
     }
 
     /// Abstracts the operations required for opening a new scope introduced
-    /// by some binder different than a context.
+    /// by some binder different than a context, or a context with no added
+    /// assumptions.
     pub fn open_non_context_scope(&mut self) {
         self.open_scope(false);
     }
@@ -379,15 +380,29 @@ pub trait VecToVecTranslator<'a> {
                         // We flag once we enter a subproof.
                         self.get_mut_translator_data().is_in_subproof = true;
 
-                        self.get_mut_translator_data()
-                            .alethe_scopes
-                            .open_context_scope();
+                        let ctx_params;
 
-                        // Process the vector of AnchorArgs.
-                        let ctx_params = self.process_anchor_context(args);
+                        if args.is_empty() {
+                            // The anchor command is not introducing new definitions.
+                            // Hence, we do not need to push new assumptions.
+                            // We model this as a call to open_non_context_scope.
+                            self.get_mut_translator_data()
+                                .alethe_scopes
+                                .open_non_context_scope();
+                        } else {
+                            // { !args.is_empty() }
 
-                        // Define and open a new context
-                        self.define_push_new_context(Some(ctx_params));
+                            // We actually have an anchor introducing new variables
+                            self.get_mut_translator_data()
+                                .alethe_scopes
+                                .open_context_scope();
+
+                            // Process the vector of AnchorArgs.
+                            ctx_params = self.process_anchor_context(args);
+
+                            // Define and open a new context
+                            self.define_push_new_context(Some(ctx_params));
+                        }
 
                         // Save information about the last step of the subproof
                         let last_step = commands.last();

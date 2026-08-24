@@ -30,7 +30,7 @@ pub fn eunoia_full_translation_test(
     eunoia_problem: &str,
     eunoia_certificate: &str,
 ) {
-    let mut eunoia_translator = EunoiaTranslator::new();
+    let mut eunoia_translator = EunoiaTranslator::new(".");
 
     let mut buf_problem = Vec::new();
     let s_exp_formatter_problem = SExpFormatter::new(&mut buf_problem);

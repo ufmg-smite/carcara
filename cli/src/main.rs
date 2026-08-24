@@ -322,23 +322,26 @@ fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
     )?;
 
     match &options.target {
-        TranslationTarget::Eunoia => translate_2_eunoia_command(&alethe_problem, &mut alethe_proof),
+        TranslationTarget::Eunoia => translate_2_eunoia_command(
+            &alethe_problem,
+            &mut alethe_proof,
+            &options.eunoia_mech.unwrap(),
+        ),
 
         TranslationTarget::Tstp => translate_2_tstp_command(&alethe_problem, &mut alethe_proof),
     }
 }
 
-fn translate_2_eunoia_command(alethe_problem: &ast::Problem, proof: &mut Proof) -> CliResult<()> {
-    let mut translator = translation::eunoia::alethe_2_eunoia::EunoiaTranslator::new();
+fn translate_2_eunoia_command(
+    alethe_problem: &ast::Problem,
+    proof: &mut Proof,
+    eunoia_mech: &str,
+) -> CliResult<()> {
+    let mut translator = translation::eunoia::alethe_2_eunoia::EunoiaTranslator::new(eunoia_mech);
     let eunoia_prelude = translator.translate_problem(alethe_problem);
     let eunoia_proof = translator.translate(proof);
 
-    let mut buf_proof = Vec::new();
-    let s_exp_formatter_proof = translation::eunoia::printer::SExpFormatter::new(&mut buf_proof);
-    let mut printer_proof = translation::eunoia::printer::EunoiaPrinter::new(s_exp_formatter_proof);
-
-    printer_proof.write_proof(eunoia_proof).unwrap();
-
+    // Sink where to write the "prelude" of the problem and the path to  the Eunoia mechanization.
     let mut buf_prelude = Vec::new();
     let s_exp_formatter_prelude =
         carcara::translation::eunoia::printer::SExpFormatter::new(&mut buf_prelude);
@@ -347,15 +350,13 @@ fn translate_2_eunoia_command(alethe_problem: &ast::Problem, proof: &mut Proof) 
 
     printer_prelude.write_proof(&eunoia_prelude).unwrap();
 
-    // TODO: do not hard-code this in here
-    // TODO: fix where to include these depedencies
-    // Include Alethe's mechanization in Eunoia
-    println!("(include \"../alethe_signature/rules/alethe.eo\")");
-    println!("(include \"../alethe_signature/rules/tautologies.eo\")");
-    println!("(include \"../alethe_signature/rules/rare_rules.eo\")");
-    println!("(include \"../alethe_signature/theories/theory.eo\")");
-    println!("(include \"../alethe_signature/programs/programs.eo\")");
-    println!("(include \"../alethe_signature/programs/arith.eo\")");
+    // Sink where to write the translated proof.
+    let mut buf_proof = Vec::new();
+    let s_exp_formatter_proof = translation::eunoia::printer::SExpFormatter::new(&mut buf_proof);
+    let mut printer_proof = translation::eunoia::printer::EunoiaPrinter::new(s_exp_formatter_proof);
+
+    printer_proof.write_proof(eunoia_proof).unwrap();
+
     println!("{}", std::str::from_utf8(&buf_prelude).unwrap());
     println!("{}", std::str::from_utf8(&buf_proof).unwrap());
 

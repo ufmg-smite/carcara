@@ -399,6 +399,11 @@ pub struct TranslateCommandOptions {
     #[clap(arg_enum)]
     pub target: TranslationTarget,
 
+    /// When translating into Eunoia, we need to pass a path to the folder
+    /// containing the corresponding mechanization.
+    #[clap(long)]
+    pub eunoia_mech: Option<String>,
+
     #[clap(flatten)]
     pub input: Input,
 

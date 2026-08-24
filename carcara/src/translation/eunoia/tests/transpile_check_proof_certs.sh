@@ -27,7 +27,7 @@ else
                                             --rare-file ./alethe_signature/rules/rare_rules.rare"
 fi
 
-CARCARA_TRANSLATE_COMMAND="../../../../../target/release/carcara translate eunoia"
+CARCARA_TRANSLATE_COMMAND="../../../../../target/release/carcara translate eunoia --eunoia-mech ../alethe_signature"
 ETHOS_COMMAND="../../../../../../ethos_fork/ethos/build/src/ethos"
 
 # Loop through each file in the directory.
@@ -67,7 +67,6 @@ for PROBLEM in "$DIR"/*; do
                     echo ""
                 fi
             else
-                rm "$EUNOIA_OUTPUT"
                 echo "Carcara failed on file $PROBLEM"
                 echo ""
             fi

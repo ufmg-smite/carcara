@@ -195,6 +195,11 @@ pub enum EunoiaOperator {
 /// Eunoia commands
 #[derive(Debug, PartialEq)]
 pub enum EunoiaCommand {
+    // To include signature files.
+    Include {
+        path: String,
+    },
+
     // Introducing a globally-scoped assumption.
     Assume {
         name: Symbol,

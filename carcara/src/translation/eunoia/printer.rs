@@ -70,6 +70,11 @@ impl<'a> ProofPrinter for EunoiaPrinter<'a> {
         // TODO: some generic way of doing this? maybe with macros?
         for command in proof {
             match command {
+                EunoiaCommand::Include { path } => {
+                    tag = "include".to_owned();
+                    args = vec![format!(r#""{}""#, path)];
+                }
+
                 EunoiaCommand::Assume { name, term } => {
                     tag = "assume".to_owned();
                     args = vec![name.clone(), EunoiaPrinter::term_to_concrete_syntax(term)];
