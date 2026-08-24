@@ -379,8 +379,6 @@ pub trait VecToVecTranslator<'a> {
                         // We flag once we enter a subproof.
                         self.get_mut_translator_data().is_in_subproof = true;
 
-                        let ctx_params;
-
                         if args.is_empty() {
                             // The anchor command is not introducing new definitions.
                             // Hence, we do not need to push new assumptions.
@@ -397,7 +395,7 @@ pub trait VecToVecTranslator<'a> {
                                 .open_context_scope();
 
                             // Process the vector of AnchorArgs.
-                            ctx_params = self.process_anchor_context(args);
+                            let ctx_params = self.process_anchor_context(args);
 
                             // Define and open a new context
                             self.define_push_new_context(Some(ctx_params));

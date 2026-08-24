@@ -194,6 +194,54 @@ mod tests {
     }
 
     #[test]
+    fn test_match_term_repeated_names() {
+        let mut p = PrimitivePool::new();
+        let (true_, false_) = (p.bool_true(), p.bool_false());
+        let not_true = p.add(Term::Op(Operator::Not, vec![true_]));
+        let not_false = p.add(Term::Op(Operator::Not, vec![false_]));
+
+        // A name used more than once only matches if all the terms bound to it are equal, and it
+        // contributes a single element to the resulting tuple
+        let term = parse_term(&mut p, "(= (not true) (not true))");
+        let t: &Rc<Term> = match_term!((= x x) = &term).unwrap();
+        assert_eq!(t, &not_true);
+
+        let term = parse_term(&mut p, "(= (not true) (not false))");
+        assert!(match_term!((= x x) = &term).is_none());
+
+        // Distinct names still match distinct terms
+        let (a, b) = match_term!((= x y) = &term).unwrap();
+        assert_eq!(a, &not_true);
+        assert_eq!(b, &not_false);
+
+        // Repeated names in nested positions, mixed with distinct ones
+        let term = parse_term(&mut p, "(= (= 1 2) (and (<= 1 2) (<= 2 1)))");
+        let (t, u) = match_term!((= (= t u) (and (<= t u) (<= u t))) = &term).unwrap();
+        assert_eq!(1, t.as_integer().unwrap());
+        assert_eq!(2, u.as_integer().unwrap());
+
+        let term = parse_term(&mut p, "(= (= 1 2) (and (<= 1 2) (<= 2 5)))");
+        assert!(match_term!((= (= t u) (and (<= t u) (<= u t))) = &term).is_none());
+
+        // '_' is a wildcard: distinct occurrences don't have to be equal, but they are still
+        // captured
+        let term = parse_term(&mut p, "(= 1 2)");
+        let (a, b) = match_term!((= _ _) = &term).unwrap();
+        assert_eq!(1, a.as_integer().unwrap());
+        assert_eq!(2, b.as_integer().unwrap());
+
+        // Repeated names inside a binder's body
+        let term = parse_term(&mut p, "(forall ((x Int)) (= (not true) (not true)))");
+        let (bindings, t): (&BindingList, &Rc<Term>) =
+            match_term!((forall ... (= x x)) = &term).unwrap();
+        assert_eq!(1, bindings.len());
+        assert_eq!(t, &not_true);
+
+        let term = parse_term(&mut p, "(forall ((x Int)) (= (not true) (not false)))");
+        assert!(match_term!((forall ... (= x x)) = &term).is_none());
+    }
+
+    #[test]
     fn test_build_term() {
         let definitions = "
             (declare-fun a () Int)
