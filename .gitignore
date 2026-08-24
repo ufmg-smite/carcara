@@ -5,3 +5,7 @@
 .devcontainer/
 /tests/
 /rare-tests/
+/.claude/
+/.codex
+/carcara.code-workspace
+/github
