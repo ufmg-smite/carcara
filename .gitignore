@@ -3,3 +3,5 @@
 /debug/
 .vscode/
 .devcontainer/
+/tests/
+/rare-tests/
