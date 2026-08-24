@@ -7,10 +7,6 @@ use thiserror::Error;
 /// The error type for errors when constructing or applying substitutions.
 #[derive(Debug, PartialEq, Eq, Error)]
 pub enum SubstitutionError {
-    /// A term in the left-hand side of the substitution was not a variable.
-    #[error("term in the left-hand side of substitution is not a variable: '{0}'")]
-    NotAVariable(Rc<Term>),
-
     /// One of the mappings in the substitution was mapping a term to a term of a different sort.
     #[error("trying to substitute term '{0}' with a term of a different sort: '{1}'")]
     DifferentSorts(Rc<Term>, Rc<Term>),
@@ -39,6 +35,10 @@ pub struct Substitution {
     /// The substitution's mappings.
     map: IndexMap<Rc<Term>, Rc<Term>>,
 
+    /// Whether the substitution should be applied in a capture-avoiding way or not. By default this
+    /// will be true but can be set to false.
+    avoid_capture: bool,
+
     /// The variables that should be renamed to preserve capture-avoidance, if they are bound by a
     /// binder term.
     should_be_renamed: Option<IndexSet<String>>,
@@ -46,17 +46,26 @@ pub struct Substitution {
 }
 
 impl Substitution {
+    fn compare_sort_rare_list(lhs: &Sort, rhs: &Sort) -> bool {
+        match (lhs, rhs) {
+            (Sort::RareList(inner), other) => inner.as_sort().is_some_and(|s| s == other),
+            (other, Sort::RareList(inner)) => inner.as_sort().is_some_and(|s| s == other),
+            _ => false,
+        }
+    }
+
     /// Constructs an empty substitution.
     pub fn empty() -> Self {
         Self {
             map: IndexMap::new(),
+            avoid_capture: true,
             should_be_renamed: None,
             cache: IndexMap::new(),
         }
     }
 
     /// Constructs a singleton substitution mapping `x` to `t`. This returns an error if the sorts
-    /// of the given terms are not the same, or if `x` is not a variable term.
+    /// of the given terms are not the same.
     pub fn single(pool: &mut dyn TermPool, x: Rc<Term>, t: Rc<Term>) -> SubstitutionResult<Self> {
         let mut this = Self::empty();
         this.insert(pool, x, t)?;
@@ -64,18 +73,18 @@ impl Substitution {
     }
 
     /// Constructs a new substitution from an arbitrary mapping of terms to other terms. This
-    /// returns an error if any term in the left-hand side is not a variable, or if any term is
-    /// mapped to a term of a different sort.
+    /// returns an error if any term is mapped to a term of a different sort.
     pub fn new(
         pool: &mut dyn TermPool,
         map: IndexMap<Rc<Term>, Rc<Term>>,
     ) -> SubstitutionResult<Self> {
         for (k, v) in &map {
-            if !k.is_var() && !k.is_sort_var() {
-                return Err(SubstitutionError::NotAVariable(k.clone()));
-            }
-            if pool.sort(k) != pool.sort(v)
-                && k.as_sort().is_some_and(super::term::Sort::is_polymorphic)
+            let k_sort = pool.sort(k).as_sort().unwrap().clone();
+            let v_sort = pool.sort(v).as_sort().unwrap().clone();
+            if k_sort != v_sort
+                && !k_sort.is_polymorphic()
+                && !v_sort.is_polymorphic()
+                && !Self::compare_sort_rare_list(&k_sort, &v_sort)
             {
                 return Err(SubstitutionError::DifferentSorts(k.clone(), v.clone()));
             }
@@ -83,6 +92,7 @@ impl Substitution {
 
         Ok(Self {
             map,
+            avoid_capture: true,
             should_be_renamed: None,
             cache: IndexMap::new(),
         })
@@ -94,17 +104,20 @@ impl Substitution {
     }
 
     /// Extends the substitution by adding a new mapping from `x` to `t`. This returns an error if
-    /// the sorts of the given terms are not the same, or if `x` is not a variable term.
+    /// the sorts of the given terms are not the same.
     pub(crate) fn insert(
         &mut self,
         pool: &mut dyn TermPool,
         x: Rc<Term>,
         t: Rc<Term>,
     ) -> SubstitutionResult<()> {
-        if !x.is_var() && !x.is_sort_var() {
-            return Err(SubstitutionError::NotAVariable(x));
-        }
-        if pool.sort(&x) != pool.sort(&t) {
+        let x_sort = pool.sort(&x).as_sort().unwrap().clone();
+        let t_sort = pool.sort(&t).as_sort().unwrap().clone();
+        if x_sort != t_sort
+            && !x_sort.is_polymorphic()
+            && !t_sort.is_polymorphic()
+            && !Self::compare_sort_rare_list(&x_sort, &t_sort)
+        {
             return Err(SubstitutionError::DifferentSorts(x, t));
         }
 
@@ -135,10 +148,14 @@ impl Substitution {
     /// This will clear `self.should_be_renamed`, such that it might need to be recomputed later.
     /// Therefore, you should avoid using this method if possible.
     pub(super) fn remove(&mut self, x: &Rc<Term>) {
-        let was_present = self.map.shift_remove(x).is_some();
+        let was_present = self.map.swap_remove(x).is_some();
         if was_present {
             self.should_be_renamed = None;
         }
+    }
+
+    pub fn set_capture_avoidance(&mut self, avoid_capture: bool) {
+        self.avoid_capture = avoid_capture;
     }
 
     /// Computes which binder variables will need to be renamed, and stores the result in
@@ -225,6 +242,29 @@ impl Substitution {
                 };
                 pool.add(Term::Let(new_bindings, new_term))
             }
+            Term::Match(term, patterns) => {
+                let new_term = self.apply(pool, term);
+                let new_patterns = patterns
+                    .iter()
+                    .map(|(binding_list, pattern, res)| {
+                        let (new_bindings, mut renaming) =
+                            self.rename_binding_list(pool, binding_list, true);
+                        let new_pattern = if renaming.is_empty() {
+                            pattern.clone()
+                        } else {
+                            renaming.apply(pool, pattern)
+                        };
+                        let new_res = if renaming.is_empty() {
+                            self.apply(pool, res)
+                        } else {
+                            let renamed = renaming.apply(pool, res);
+                            self.apply(pool, &renamed)
+                        };
+                        (new_bindings, new_pattern, new_res)
+                    })
+                    .collect();
+                pool.add(Term::Match(new_term, new_patterns))
+            }
             Term::Const(_) | Term::Var(..) => term.clone(),
             Term::ParamOp { op, op_args, args } => {
                 let new_args = apply_to_sequence!(args);
@@ -235,7 +275,7 @@ impl Substitution {
                 })
             }
             Term::Sort(Sort::Atom(sort, args)) => {
-                let new_args = apply_to_sequence!(args);
+                let new_args = apply_to_sequence!(args).into_boxed_slice();
                 pool.add(Term::Sort(Sort::Atom(sort.clone(), new_args)))
             }
             Term::Sort(Sort::Function(args)) => {
@@ -245,6 +285,10 @@ impl Substitution {
             Term::Sort(Sort::Array(x, y)) => {
                 let [x, y] = [x, y].map(|s| self.apply(pool, s));
                 pool.add(Term::Sort(Sort::Array(x, y)))
+            }
+            Term::Sort(Sort::Datatype(sort, args)) => {
+                let new_args = apply_to_sequence!(args);
+                pool.add(Term::Sort(Sort::Datatype(sort.clone(), new_args)))
             }
             Term::Sort(Sort::ParamSort(vars, sort)) => {
                 let new_sort = self.apply(pool, sort);
@@ -303,7 +347,9 @@ impl Substitution {
         binding_list: &[SortedVar],
         inner: &Rc<Term>,
     ) -> Rc<Term> {
-        self.compute_should_be_renamed(pool);
+        if self.avoid_capture {
+            self.compute_should_be_renamed(pool);
+        }
 
         // In some situations, if the substitution has only one mapping (say, `x -> t`) we can skip
         // applying the substitution to a binder term altogether. This can happen if the variable
@@ -314,7 +360,10 @@ impl Substitution {
         // we can just skip the substitution entirely, which is way faster in some cases. In
         // particular, the skolemization rules require this optimization to have acceptable
         // performance.
-        if self.can_skip_instead_of_renaming(binding_list) {
+        //
+        // TODO guarding this with "avoid_capture" as well to guarantee I'm not breaking anything
+        // (i.e., by not computing "should_be_renamed" maybe this will be applied inadvertently)
+        if self.avoid_capture && self.can_skip_instead_of_renaming(binding_list) {
             return original_term.clone();
         }
 
@@ -342,6 +391,9 @@ impl Substitution {
         binding_list: &[SortedVar],
         is_value_list: bool,
     ) -> (BindingList, Self) {
+        if !self.avoid_capture {
+            return (BindingList(binding_list.to_vec()), Self::empty());
+        }
         let mut new_substitution = Self::empty();
         let mut new_vars = IndexSet::new();
         let new_binding_list = binding_list
@@ -365,7 +417,7 @@ impl Substitution {
                     {
                         break;
                     }
-                    new_var.push('\'');
+                    new_var.push_str("_renamed");
                     changed = true;
                 }
 
@@ -402,11 +454,11 @@ mod tests {
 
     fn run_test(definitions: &str, original: &str, x: &str, t: &str, result: &str) {
         let mut pool = PrimitivePool::new();
-        let mut parser = Parser::new(&mut pool, Config::new(), definitions.as_bytes()).unwrap();
+        let mut parser = Parser::new(&mut pool, Config::new(), definitions).unwrap();
         parser.parse_problem().unwrap();
 
         let [original, x, t, result] = [original, x, t, result].map(|s| {
-            parser.reset(s.as_bytes()).unwrap();
+            parser.reset(s).unwrap();
             parser.parse_term().unwrap()
         });
 
@@ -446,33 +498,37 @@ mod tests {
             "(forall ((p Bool)) (and p q))" [q -> r] => "(forall ((p Bool)) (and p r))",
 
             // Simple renaming
-            "(forall ((y Int)) (> y 0))" [x -> y] => "(forall ((y' Int)) (> y' 0))",
+            "(forall ((y Int)) (> y 0))" [x -> y] => "(forall ((y_renamed Int)) (> y_renamed 0))",
 
             // Renaming may be skipped
             "(forall ((x Int)) (> x 0))" [x -> y] => "(forall ((x Int)) (> x 0))",
 
             // Capture-avoidance
-            "(forall ((y Int)) (> y x))" [x -> y] => "(forall ((y' Int)) (> y' y))",
+            "(forall ((y Int)) (> y x))" [x -> y] => "(forall ((y_renamed Int)) (> y_renamed y))",
             "(forall ((x Int) (y Int)) (= x y))" [x -> y] =>
-                "(forall ((x' Int) (y' Int)) (= x' y'))",
+                "(forall ((x_renamed Int) (y_renamed Int)) (= x_renamed y_renamed))",
             "(forall ((x Int) (y Int)) (= x y))" [x -> x] => "(forall ((x Int) (y Int)) (= x y))",
-            "(forall ((y Int)) (> y x))" [x -> (+ y 0)] => "(forall ((y' Int)) (> y' (+ y 0)))",
+            "(forall ((y Int)) (> y x))" [x -> (+ y 0)] =>
+                "(forall ((y_renamed Int)) (> y_renamed (+ y 0)))",
 
-            "(forall ((y Int) (y' Int)) (= y y'))" [x -> y] =>
-                "(forall ((y' Int) (y'' Int)) (= y' y''))",
-            "(forall ((y Int) (y' Int) (y'' Int)) (= y y' y''))" [x -> y] =>
-                "(forall ((y' Int) (y'' Int) (y''' Int)) (= y' y'' y'''))",
+            "(forall ((y Int) (y_renamed Int)) (= y y_renamed))" [x -> y] =>
+                "(forall ((y_renamed Int) (y_renamed_renamed Int)) (= y_renamed y_renamed_renamed))",
+            "(forall ((y Int) (y_renamed Int) (y_renamed_renamed Int))
+                (= y y_renamed y_renamed_renamed))" [x -> y]
+            => "(forall ((y_renamed Int) (y_renamed_renamed Int) (y_renamed_renamed_renamed Int))
+                    (= y_renamed y_renamed_renamed y_renamed_renamed_renamed))",
 
             // The capture-avoidance may disambiguate repeated bindings
-            "(forall ((y Int) (y' Int) (y' Int)) (= y y' y'))" [x -> y] =>
-                "(forall ((y' Int) (y'' Int) (y''' Int)) (= y' y''' y'''))",
+            "(forall ((y Int) (y_renamed Int) (y_renamed Int)) (= y y_renamed y_renamed))" [x -> y] =>
+                "(forall ((y_renamed Int) (y_renamed_renamed Int) (y_renamed_renamed_renamed Int))
+                    (= y_renamed y_renamed_renamed_renamed y_renamed_renamed_renamed))",
 
-            // In theory, since x does not appear in this term, renaming y to y' is unnecessary
-            "(forall ((y Int)) (> y 0))" [x -> y] => "(forall ((y' Int)) (> y' 0))",
+            // In theory, since x does not appear in this term, renaming y to y_renamed is unnecessary
+            "(forall ((y Int)) (> y 0))" [x -> y] => "(forall ((y_renamed Int)) (> y_renamed 0))",
 
             // Name collision with variables with different types
             "(forall ((y Bool)) (and y (> x 0)))" [x -> y] =>
-                "(forall ((y' Bool)) (and y' (> y 0)))",
+                "(forall ((y_renamed Bool)) (and y_renamed (> y 0)))",
 
             // TODO: Add tests for `choice`, `let`, and `lambda` terms
         }

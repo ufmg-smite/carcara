@@ -1,1 +1,0 @@
-(step t36 (cl (= (+ fmt0 2) (+ 2 fmt0))) :rule hole :args ("TRUST_THEORY_REWRITE"))

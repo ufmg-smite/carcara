@@ -1,6 +1,0 @@
-(assume a2 (= b true))
-(assume a4 (= a false))
-(assume a5 (= c true))
-(assume a6 (= k 1))
-
-(step a0 (cl (= (* 2 k 10 3) (* 2 10 3))) :rule hole :premises (a6) :args ("TRUST_THEORY_REWRITE" b))

@@ -1,8 +1,13 @@
-use super::IdHelper;
-use crate::{ast::*, resolution::*, utils::DedupIterator};
+use super::{error::ElaborationError, IdHelper};
+use crate::{
+    ast::*,
+    checker::error::CheckerError,
+    resolution::*,
+    utils::{DedupIterator, MultiSet},
+};
 use std::collections::{HashMap, HashSet};
 
-fn literals_to_clause(pool: &mut dyn TermPool, clause: &[Literal]) -> Vec<Rc<Term>> {
+fn literals_to_clause(pool: &mut PrimitivePool, clause: &[Literal]) -> Vec<Rc<Term>> {
     clause.iter().map(|l| literal_to_term(pool, *l)).collect()
 }
 
@@ -30,7 +35,10 @@ impl<'a> ResolutionPremise<'a> {
     }
 }
 
-fn apply_naive_resolution<'a>(premises: &[ResolutionPremise<'a>]) -> Vec<Literal<'a>> {
+fn apply_naive_resolution<'a>(
+    pool: &mut PrimitivePool,
+    premises: &[ResolutionPremise<'a>],
+) -> Result<Vec<Literal<'a>>, ResolutionError> {
     assert!(premises.len() >= 2);
 
     let mut current = premises[0].clause.clone();
@@ -45,7 +53,12 @@ fn apply_naive_resolution<'a>(premises: &[ResolutionPremise<'a>]) -> Vec<Literal
             (negated_pivot, pivot)
         };
 
-        let pos = current.iter().position(|x| x == &pivot_in_current).unwrap();
+        let pos = current
+            .iter()
+            .position(|x| x == &pivot_in_current)
+            .ok_or_else(|| {
+                ResolutionError::PivotNotFound(literal_to_term(pool, pivot_in_current))
+            })?;
         current.remove(pos);
 
         let mut found = false;
@@ -56,22 +69,53 @@ fn apply_naive_resolution<'a>(premises: &[ResolutionPremise<'a>]) -> Vec<Literal
                 current.push(t);
             }
         }
-        assert!(found);
+
+        if !found {
+            let p = literal_to_term(pool, pivot_in_next);
+            return Err(ResolutionError::PivotNotFound(p));
+        }
     }
 
-    current
+    Ok(current)
+}
+
+fn check_clauses_are_compatible(
+    got: &[Rc<Term>],
+    target: &[Rc<Term>],
+) -> Result<(), ResolutionError> {
+    let [got, target]: [indexmap::IndexSet<_>; 2] =
+        [got, target].map(|clause| clause.iter().collect());
+    if let Some(&extra) = target.difference(&got).next() {
+        return Err(ResolutionError::ExtraTermInConclusion(extra.clone()));
+    }
+    if let Some(&missing) = got.difference(&target).next() {
+        return Err(ResolutionError::MissingTermInConclusion(missing.clone()));
+    }
+    Ok(())
 }
 
 pub fn uncrowd_resolution(
     pool: &mut PrimitivePool,
     step: &StepNode,
     rotate_premises: bool,
-) -> Rc<ProofNode> {
+) -> Result<Rc<ProofNode>, ElaborationError> {
+    if step.premises.len() < 2 {
+        return Err(CheckerError::WrongNumberOfPremises((2..).into(), step.premises.len()).into());
+    }
+    if step.args.is_empty() {
+        return Err(ElaborationError::UncrowdMissingPivots);
+    } else {
+        let expected = 2 * (step.premises.len() - 1);
+        if step.args.len() != expected {
+            return Err(CheckerError::WrongNumberOfArgs(expected.into(), step.args.len()).into());
+        }
+    }
+
     let target_conclusion: HashSet<_> = step.clause.iter().map(Rc::remove_all_negations).collect();
 
     let mut premises = ResolutionPremise::from_step(step);
 
-    let naive_conclusion = apply_naive_resolution(&premises);
+    let naive_conclusion = apply_naive_resolution(pool, &premises)?;
 
     let mut literals_info =
         find_crowding_literals(&naive_conclusion, &target_conclusion, &premises);
@@ -98,15 +142,18 @@ pub fn uncrowd_resolution(
             step.depth,
             &premises[previous_cut..cut],
             &step.clause,
-        );
+        )?;
         premises[cut - 1] = ResolutionPremise { node, clause, pivot: None };
         previous_cut = cut - 1;
     }
 
     let mut final_step = premises[previous_cut].node.as_step().unwrap().clone();
 
+    // Make sure there are no missing or extra terms in the conclusion
+    check_clauses_are_compatible(&final_step.clause, &step.clause)?;
+
     if final_step.clause.len() != step.clause.len() {
-        let clause = get_weakening_clause(&final_step.clause, &step.clause);
+        let clause = get_weakening_clause(&final_step.clause, &step.clause)?;
         final_step = StepNode {
             id: ids.next_id(),
             depth: step.depth,
@@ -119,7 +166,6 @@ pub fn uncrowd_resolution(
 
     // We might need to add a reordering step
     if final_step.clause != step.clause {
-        assert!(final_step.clause.iter().collect::<HashSet<_>>() == step.clause.iter().collect());
         final_step = StepNode {
             id: ids.next_id(),
             depth: step.depth,
@@ -133,17 +179,17 @@ pub fn uncrowd_resolution(
     // To make sure elaboration is idempotent, we need to change the last id to match the original
     // step's id
     final_step.id = step.id.clone();
-    Rc::new(ProofNode::Step(final_step))
+    Ok(Rc::new(ProofNode::Step(final_step)))
 }
 
 fn add_partial_resolution_step<'a>(
-    pool: &mut dyn TermPool,
+    pool: &mut PrimitivePool,
     ids: &mut IdHelper,
     depth: usize,
     premises: &[ResolutionPremise<'a>],
     final_target: &[Rc<Term>],
-) -> (Rc<ProofNode>, Vec<Literal<'a>>) {
-    let conclusion = apply_naive_resolution(premises);
+) -> Result<(Rc<ProofNode>, Vec<Literal<'a>>), ElaborationError> {
+    let conclusion = apply_naive_resolution(pool, premises)?;
     let contracted_conclusion: Vec<_> = conclusion.iter().dedup().copied().collect();
 
     let needs_contraction = contracted_conclusion.len() != conclusion.len();
@@ -168,7 +214,7 @@ fn add_partial_resolution_step<'a>(
     }));
 
     if resolution_step.clause() == final_target {
-        return (resolution_step, conclusion);
+        return Ok((resolution_step, conclusion));
     }
 
     if needs_contraction {
@@ -183,34 +229,29 @@ fn add_partial_resolution_step<'a>(
             discharge: Vec::new(),
             previous_step: None,
         }));
-        (contraction_step, contracted_conclusion)
+        Ok((contraction_step, contracted_conclusion))
     } else {
-        (resolution_step, conclusion)
+        Ok((resolution_step, conclusion))
     }
 }
 
-fn get_weakening_clause(current: &[Rc<Term>], target: &[Rc<Term>]) -> Vec<Rc<Term>> {
-    let mut missing: HashMap<&Rc<Term>, usize> = HashMap::new();
-    for term in target {
-        *missing.entry(term).or_default() += 1;
-    }
+fn get_weakening_clause(
+    current: &[Rc<Term>],
+    target: &[Rc<Term>],
+) -> Result<Vec<Rc<Term>>, ResolutionError> {
+    let mut missing: MultiSet<_> = target.iter().collect();
     for term in current {
-        match missing.get_mut(term) {
-            Some(0) | None => panic!("current clause is not a subset of target clause!"),
-            Some(1) => {
-                missing.remove(term);
-            }
-            Some(count) => *count -= 1,
+        // This should be ensured since we're calling `check_clauses_are_compatible` beforehand, but
+        // it doesn't hurt to double check
+        if missing.get(&term) == 0 {
+            return Err(ResolutionError::MissingTermInConclusion(term.clone()));
         }
+        missing.remove(term);
     }
 
     let mut result = current.to_vec();
-    for (term, n) in missing {
-        for _ in 0..n {
-            result.push(term.clone());
-        }
-    }
-    result
+    result.extend(missing.into_iter().cloned());
+    Ok(result)
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -375,7 +416,7 @@ mod tests {
 
     #[test]
     fn test_uncrowd_resolution() {
-        let problem: &[u8] = b"
+        let problem = "
             (declare-const a Bool)
             (declare-const b Bool)
             (declare-const c Bool)
@@ -385,7 +426,7 @@ mod tests {
             (declare-const z Bool)
             (declare-const w Bool)
         ";
-        let proof = b"
+        let proof = "
             (step t1 (cl x a b) :rule hole)
             (step t2 (cl (not x) y a c) :rule hole)
             (step t3 (cl (not y) z b) :rule hole)
@@ -401,14 +442,17 @@ mod tests {
         ";
         let (_, proof, _, mut pool) =
             parse_instance(problem, proof, None, parser::Config::new()).unwrap();
-        let proof = ProofNode::from_commands(proof.commands);
+        let proof = ProofNodeForest::from_commands(proof.commands)
+            .0
+            .pop()
+            .unwrap();
         let ProofNode::Step(step) = proof.as_ref() else {
             unreachable!();
         };
 
-        let got = uncrowd_resolution(&mut pool, step, true);
+        let got = uncrowd_resolution(&mut pool, step, true).unwrap();
 
-        let expected = b"
+        let expected = "
             (step t1 (cl x a b) :rule hole)
             (step t2 (cl (not x) y a c) :rule hole)
             (step t3 (cl (not y) z b) :rule hole)
@@ -430,7 +474,10 @@ mod tests {
         let (_, expected, _) =
             parse_instance_with_pool(problem, expected, None, parser::Config::new(), &mut pool)
                 .unwrap();
-        let expected = ProofNode::from_commands(expected.commands);
+        let expected = ProofNodeForest::from_commands(expected.commands)
+            .0
+            .pop()
+            .unwrap();
         assert!(compare_nodes(&expected, &got));
     }
 }

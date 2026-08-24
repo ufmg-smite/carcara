@@ -1,0 +1,354 @@
+//! Tptp/Tstp ASTs.
+
+pub type Symbol = String;
+
+/// Tstp annotated formula.
+#[derive(Clone)] // To use them as HashMap keys.
+pub struct TstpAnnotatedFormula {
+    pub language: TstpLanguage,
+    pub name: Symbol,
+    pub role: TstpFormulaRole,
+    pub formula: TstpFormula,
+    pub source: TstpAnnotatedFormulaSource,
+    // From the docs:
+    // "The introduction of new non-variable symbols should be recorded in
+    // a <new_symbol_record> in the <useful_info> field of the <inference_record>
+    // of a derived formula, or in the <optional_info> field of the <internal_source>
+    // of an introduced formula."
+    pub useful_info: Symbol,
+}
+
+impl TstpAnnotatedFormula {
+    /// Builds a new annotated formula. Implements a mechanism
+    /// for providing names to the formula.
+    /// TODO: should it generate the corresponding `useful_info`?
+    pub fn new(
+        language: TstpLanguage,
+        name: Symbol,
+        role: TstpFormulaRole,
+        formula: TstpFormula,
+        source: TstpAnnotatedFormulaSource,
+        useful_info: Symbol,
+    ) -> Self {
+        Self {
+            language,
+            name,
+            role,
+            formula,
+            source,
+            useful_info,
+        }
+    }
+
+    /// Query methods.
+    pub fn is_assumption(&self) -> bool {
+        self.role == TstpFormulaRole::Assumption
+    }
+}
+
+/// Possible TPTP languages.
+#[derive(Clone)]
+pub enum TstpLanguage {
+    // First-order logic
+    Fof,
+    // Typed first-order logic
+    Tff,
+}
+
+/// Possible formulae roles.
+/// The TPTP language spec. introduces formula roles
+/// using the the so-called "semantic grammar rules":
+/// "These define specific values that make semantic sense when more general
+/// syntactic rules apply".
+#[derive(PartialEq, Eq, Hash, Clone)] // To use them as HashMap keys.
+pub enum TstpFormulaRole {
+    // From the docs:
+    // "assumption"s can be used like axioms, but must be discharged before a derivation is complete.
+    Assumption,
+    // From the docs:
+    // "axiom"s are accepted, without proof. There is no guarantee that the
+    // axioms of a problem are consistent.
+    Axiom,
+    Lemma,
+    Conjecture,
+    // From the docs:
+    // "hypothesis"s are assumed to be true for a particular problem, and are
+    // used like "axiom"s.
+    Hypothesis,
+    // Logic used.
+    Logic,
+    Type,
+    // From TPTP's docs:
+    // "plain formulae have no special user semantics, and are typically used
+    // in derivation output"
+    Plain,
+}
+
+/// Syntactic category of expressions that denote formulas but, also, values
+/// inhabiting other types: numeric and string literals.
+/// Note that we mix into a single category of "formulas", notions of formulas
+/// from different logics supported by TPTP.
+#[derive(Clone, Debug)]
+pub enum TstpFormula {
+    Variable(Symbol),
+
+    // Logic
+    UniversalQuant(Vec<TstpTypedVariable>, Box<TstpFormula>),
+
+    ExistentialQuant(Vec<TstpTypedVariable>, Box<TstpFormula>),
+
+    // "Indefinite description", in TPTP's docs.
+    Choice(Box<TstpTypedVariable>, Box<TstpFormula>),
+
+    Lambda(Vec<TstpTypedVariable>, Box<TstpFormula>),
+
+    // Application of built-in operators. Arity captured through ASTs, for more robust
+    // type checking.
+    NullaryOperatorApp(TstpNullaryOperator),
+    UnaryOperatorApp(TstpUnaryOperator, Box<TstpFormula>),
+    BinaryOperatorApp(TstpBinaryOperator, Box<TstpFormula>, Box<TstpFormula>),
+
+    // TPTP jargon: functor.
+    FunctorApp(TstpFunctor, Vec<TstpFormula>),
+
+    //  Typing statements
+    Typing(Box<TstpFormula>, TstpType),
+
+    // Literals
+    // Numeric
+    Integer(rug::Integer),
+    // TODO: only <unsigned_rational>  ::- <decimal><slash><positive_decimal>
+    Rational(rug::Integer, rug::Integer),
+    // TODO: Only <decimal_fraction>   ::- <decimal><dot_decimal>
+    Real(rug::Rational),
+
+    // Distinct object: inhabitant of type Individual ($i, in TPTP)
+    DistinctObject(String),
+}
+
+/// Bounding occurrences of variables in quantifiers.
+#[derive(Clone, Debug)]
+pub enum TstpTypedVariable {
+    TypedVariable(Symbol, Box<TstpType>),
+}
+
+// NOTE: To simplify internal architecture, we define this sum-type of operators.
+#[derive(Clone, Debug)]
+pub enum TstpOperator {
+    NullaryOperator(TstpNullaryOperator),
+
+    UnaryOperator(TstpUnaryOperator),
+
+    BinaryOperator(TstpBinaryOperator),
+
+    Functor(TstpFunctor),
+}
+
+#[derive(Clone, Debug)]
+pub enum TstpNullaryOperator {
+    // Logical nullary connectives
+    // From TPTP docs:
+    // Defined predicates recognized: $true and $false, with the obvious interpretations.
+    True,
+    False,
+}
+
+#[derive(Clone, Debug)]
+pub enum TstpUnaryOperator {
+    // Logical connectives
+    Not,
+}
+
+#[derive(Clone, Debug)]
+pub enum TstpBinaryOperator {
+    // Logical connectives
+    // From TPTP docs:
+    Or,
+    Xor,
+    And,
+    Implies,
+    Consequence,
+    Iff,
+    // From TPTP docs: Conditional expressions have $ite as the functor.
+    Ite,
+
+    // Relations (putting in the same category as operator, as happens in Alethe)
+    Equality,
+    Inequality,
+    Less,
+    LessEq,
+    Greater,
+    GreaterEq,
+}
+
+#[derive(Clone, Debug)]
+pub enum TstpFunctor {
+    // Functor defined in the problem.
+    ProblemFunctor(Symbol),
+
+    // Defined functors.
+    // Arith
+    Sum,
+    // Difference between two numbers.
+    Difference,
+    Product,
+    // Exact quotient of two numbers of the same type.
+    Quotient,
+    // Integral quotient of two numbers:
+    // $quotient_e(N,D) - the Euclidean quotient, which has a non-negative remainder.
+    QuotientE,
+    // Unary minus of a number.
+    Uminus,
+}
+/// Type terms.
+/// From TPTP docs:
+/// "The defined types are $o - the Boolean type, $i - the type of individuals, $real - the type
+/// of reals, $rat - the type of rational, and $int - the type of integers. New types are introduced
+/// in formulae with the type role, based on $tType - the type of all types."
+#[derive(Clone, Debug)]
+pub enum TstpType {
+    // TODO: just one universe?
+    // $tType
+    Universe,
+
+    // User-defined constant types
+    UserDefined(Symbol),
+
+    // Primitive types
+    Bool,
+
+    // Numeric types
+    Int,
+    Rational,
+    Real,
+
+    // $i: the type of individuals
+    Invidual,
+
+    // TODO:? Function type: (TstpType ... ) > TstpType
+    Fun(Vec<TstpType>, Box<TstpType>),
+}
+
+/// NOTE: some Alethe rules are "applied" over arguments, besides premises.
+/// For the moment, we codify the first case into the <`inference_rule`>
+/// field of an <`inference_record`>, by extending it to be not just an atomic
+/// word, but also an atomic word followed by some arbitrary arguments.
+#[derive(Clone, Debug)]
+pub enum TstpInferenceRuleName {
+    RuleName(Symbol),
+
+    RuleWithArgs(Symbol, Vec<TstpFormula>),
+}
+
+/// From TPTP's docs:
+/// "The source field is used to record where the annotated formula came from, and is most
+///   commonly a file record or an inference record. A file record stores the name of the file
+///   from which the annotated formula was read, and optionally the name of the annotated
+///   formula as it occurs in that file - this might be different from the name of the annotated
+///   formula itself, e.g., if an ATP systems reads an annotated formula, renames it, and then
+///   prints it out. An inference record stores information about an inferred formula."
+#[derive(Clone, Debug)]
+pub enum TstpAnnotatedFormulaSource {
+    // We are collapsing a little bit the structure of the grammar rules for "source".
+    // Its original rules are:
+    // <source> ::= <dag_source> | <internal_source> | <external_source> | unknown | [<sources>]
+
+    // The following corresponds to the "internal_source" category from the grammar.
+    // <internal_source>  ::= introduced(<intro_type>,<useful_info>,<parents>)
+    InternalSourceIntroduced(
+        TstpInternalSourceIntroducedType,
+        TstpUsefulInfo,
+        Vec<TstpAnnotatedFormulaSource>,
+    ),
+
+    // The following corresponds to the "dag_source" category from the grammar.
+    // <dag_source>           ::= <name> | <inference_record>
+
+    // Inference record: inference(rule name, general data, parent formulas)
+    // From docs:
+    // "<parents> can be empty in cases when there is a justification for a
+    // tautologous theorem. In cases when a tautology is introduced as a leaf,
+    // e.g., for splitting, then use an <internal_source>.
+    DagSourceInference(
+        TstpInferenceRuleName,
+        TstpUsefulInfo,
+        Vec<TstpParentFormula>,
+    ),
+
+    DagSourceName(Symbol),
+
+    // No source provided
+    Empty,
+}
+
+// TODO: we are just modelling the case when
+// <parent_details> produces an empty literal
+// <parent_info> ::= <source><parent_details>
+// <parent_details> ::= :<general_term> | <nothing>
+pub type TstpParentFormula = TstpAnnotatedFormulaSource;
+
+#[derive(Clone, Debug)]
+pub enum TstpInferenceStatus {
+    Thm,
+}
+
+#[derive(Clone, Debug)]
+pub enum TstpInternalSourceIntroducedType {
+    Name(Symbol),
+    Definition,
+    Tautology,
+    Assumption,
+}
+
+// useful_info has 2 kinds of productions:
+// - regular grammar rules: <useful_info> ::= <general_list>
+// - semantic grammar rules: <useful_info> :== [] | [<info_items>]
+#[derive(Clone, Debug)]
+pub enum TstpUsefulInfo {
+    // <general_list> reduces mostly to <general_data> (plus
+    // list structure)
+    GeneralList(Vec<TstpGeneralData>),
+
+    // Semantics grammar rules: "info items"
+    InfoItems(Vec<TstpInfoItem>),
+}
+
+// <general_data> ::= <atomic_word> | <general_function> | <variable> | <number> |
+//                    <distinct_object> | <formula_data>
+#[derive(Clone, Debug)]
+pub enum TstpGeneralData {
+    AtomicWord(Symbol),
+    // <general_function> ::= <atomic_word>(<general_terms>)
+    // TODO: for the moment, it seems to be better for the
+    // parameters to be TstpFormulas...
+    GeneralFunction(Symbol, Vec<TstpFormula>),
+}
+
+/// Productions of <`info_item`>.
+#[derive(Clone, Debug)]
+pub enum TstpInfoItem {
+    // Productions of <inference_item>:
+    // <inference_status>
+    InferenceItemInferenceStatusStatus(TstpInferenceStatus),
+    InferenceItemInferenceStatusInferenceInfo(
+        TstpInferenceRuleName,
+        TstpInferenceInfoGeneralListQualifier,
+        // General list
+        Vec<Symbol>,
+    ),
+
+    // <assumptions_record>
+    InferenceItemAssumptionsRecord(Vec<Symbol>),
+}
+
+// Represents the possible values of <atomic_word> in the <inference_info>
+// production rule. From the docs
+// "<atomic_word> indicates the information being recorded in the
+//  <general_list>. The <atomic_word> are (loosely) set by TPTP
+// conventions, and include esplit, sr_split, and discharge."
+#[derive(Clone, Debug)]
+pub enum TstpInferenceInfoGeneralListQualifier {
+    Discharge,
+}
+
+pub type TstpProof = Vec<TstpAnnotatedFormula>;

@@ -1,1 +1,0 @@
-(step t24 (cl (= (or (or (or (or (or (or (or (or (or (or (or (= y 0) (= y 1)) (= y 2)) (= y 3)) (= y 4)) (= y 5)) (= y 6)) (= y 7)) (= y 8)) (= y 9)) (= y 10)) (= y 11)) (or (= y 11) (= y 10) (= y 9) (= y 8) (= y 7) (= y 6) (= y 5) (= y 4) (= y 3) (= y 2) (= y 0) (= y 1)))) :rule hole :args ("TRUST_THEORY_REWRITE"))

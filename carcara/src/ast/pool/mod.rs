@@ -6,8 +6,16 @@ mod storage;
 use super::{Binder, Operator, Rc, Sort, Substitution, Term};
 use crate::ast::{Constant, ParamOperator};
 use indexmap::{IndexMap, IndexSet};
-use rug::Integer;
 use storage::Storage;
+
+/// A `step` command.
+#[derive(Debug, Clone)]
+pub struct DatatypeDef {
+    /// The datatype name
+    pub name: String,
+    // For each constructor, its selectors and tester
+    pub cons_map: IndexMap<Rc<Term>, (Vec<Rc<Term>>, Rc<Term>)>,
+}
 
 pub trait TermPool {
     /// Returns the term corresponding to the boolean constant `true`.
@@ -45,6 +53,8 @@ pub trait TermPool {
     /// This method uses a cache, so there is no additional cost to computing the free variables of
     /// a term multiple times.
     fn free_vars(&mut self, term: &Rc<Term>) -> IndexSet<Rc<Term>>;
+
+    fn dt_def(&self, sort: &Rc<Term>) -> &DatatypeDef;
 }
 
 /// A structure to store and manage all allocated terms.
@@ -61,6 +71,8 @@ pub struct PrimitivePool {
     pub(crate) storage: Storage,
     pub(crate) free_vars_cache: IndexMap<Rc<Term>, IndexSet<Rc<Term>>>,
     pub(crate) sorts_cache: IndexMap<Rc<Term>, Rc<Term>>,
+    pub(crate) binders_cache: IndexMap<(Rc<Term>, Binder), IndexSet<Rc<Term>>>,
+    pub(crate) dt_defs: IndexMap<Rc<Term>, DatatypeDef>,
 }
 
 impl PrimitivePool {
@@ -81,7 +93,7 @@ impl PrimitivePool {
                 Constant::Integer(_) => Sort::Int,
                 Constant::Real(_) => Sort::Real,
                 Constant::String(_) => Sort::String,
-                Constant::BitVec(_, w) => Sort::BitVec(w.clone()),
+                Constant::BitVec(_, w) => Sort::BitVec(*w),
             },
             Term::Var(_, sort) => sort.as_sort().unwrap().clone(),
             Term::Op(op, args) => match op {
@@ -138,7 +150,8 @@ impl PrimitivePool {
                 | Operator::BvSRem
                 | Operator::BvSMod
                 | Operator::BvAShr => {
-                    match self.compute_sort(&args[0]).as_sort().unwrap().clone() {
+                    let sort = self.unwrap_sort(&args[0]);
+                    match sort {
                         Sort::BitVec(width) => Sort::BitVec(width),
                         Sort::ParamSort(v, head) => {
                             if let Some(Sort::Var(_)) = head.as_sort() {
@@ -150,10 +163,12 @@ impl PrimitivePool {
                         _ => unreachable!(),
                     }
                 }
-                Operator::BvComp => Sort::BitVec(Integer::ONE.into()),
-                Operator::BvBbTerm | Operator::BvPBbTerm => Sort::BitVec(Integer::from(args.len())),
+                Operator::BvComp => Sort::BitVec(1),
+                Operator::BvBbTerm | Operator::BvPBbTerm => Sort::BitVec(args.len()),
                 Operator::BvConst => match &*args[1] {
-                    Term::Const(Constant::Integer(bvsize)) => Sort::BitVec(bvsize.clone()),
+                    Term::Const(Constant::Integer(bvsize)) => {
+                        Sort::BitVec(bvsize.to_usize().unwrap())
+                    }
                     _ => Sort::ParamSort(
                         vec![args[1].clone()],
                         self.add(Term::Sort(Sort::Var("BitVec".to_owned()))),
@@ -161,12 +176,16 @@ impl PrimitivePool {
                 },
                 Operator::BvConcat => {
                     enum TotalWidth {
-                        Width(Integer),
+                        Width(usize),
                         ParamSort(Rc<Term>),
                     }
                     let mut total_width: Vec<TotalWidth> = vec![];
                     for arg in args {
-                        match self.compute_sort(arg).as_sort().unwrap().clone() {
+                        let sort = match self.compute_sort(arg).as_sort().unwrap().clone() {
+                            Sort::RareList(inner) => inner.as_sort().unwrap().clone(),
+                            sort => sort,
+                        };
+                        match sort {
                             Sort::BitVec(arg_width) => {
                                 total_width.push(TotalWidth::Width(arg_width));
                             }
@@ -186,7 +205,7 @@ impl PrimitivePool {
                                 .iter()
                                 .map(|x| match x {
                                     TotalWidth::Width(w) => {
-                                        self.add(Term::Const(Constant::Integer(w.clone())))
+                                        self.add(Term::Const(Constant::Integer((*w).into())))
                                     }
                                     TotalWidth::ParamSort(p) => p.clone(),
                                 })
@@ -198,13 +217,14 @@ impl PrimitivePool {
                             self.add(Term::Sort(Sort::Var("BitVec".to_owned()))),
                         )
                     } else {
-                        Sort::BitVec(total_width.iter().fold(Integer::ZERO, |acc, x| match x {
+                        Sort::BitVec(total_width.iter().fold(0, |acc, x| match x {
                             TotalWidth::Width(w) => acc + w,
                             TotalWidth::ParamSort(_) => unreachable!(),
                         }))
                     }
                 }
                 Operator::Ite => self.compute_sort(&args[1]).as_sort().unwrap().clone(),
+                Operator::Abs => self.compute_sort(&args[0]).as_sort().unwrap().clone(),
                 Operator::Add | Operator::Sub | Operator::Mult => {
                     if args
                         .iter()
@@ -216,19 +236,22 @@ impl PrimitivePool {
                     }
                 }
                 Operator::RealDiv | Operator::ToReal => Sort::Real,
-                Operator::IntDiv | Operator::Mod | Operator::Abs | Operator::ToInt => Sort::Int,
-                Operator::Select => match self.compute_sort(&args[0]).as_sort().unwrap() {
-                    Sort::Array(_, y) => y.as_sort().unwrap().clone(),
-                    Sort::ParamSort(v, head) => {
-                        if let Some(Sort::Var(_)) = head.as_sort() {
-                            v[1].as_sort().unwrap().clone()
-                        } else {
-                            unreachable!()
+                Operator::IntDiv | Operator::Mod | Operator::ToInt => Sort::Int,
+                Operator::Select => {
+                    let sort = self.unwrap_sort(&args[0]);
+                    match sort {
+                        Sort::Array(_, y) => y.as_sort().unwrap().clone(),
+                        Sort::ParamSort(v, head) => {
+                            if let Some(Sort::Var(_)) = head.as_sort() {
+                                v[1].as_sort().unwrap().clone()
+                            } else {
+                                unreachable!()
+                            }
                         }
+                        _ => unreachable!(),
                     }
-                    _ => unreachable!(),
-                },
-                Operator::Store => self.compute_sort(&args[0]).as_sort().unwrap().clone(),
+                }
+                Operator::Store => self.unwrap_sort(&args[0]),
                 Operator::StrLen | Operator::IndexOf | Operator::StrToCode | Operator::StrToInt => {
                     Sort::Int
                 }
@@ -255,12 +278,15 @@ impl PrimitivePool {
                 | Operator::ReOption
                 | Operator::ReRange => Sort::RegLan,
                 Operator::RareList => {
-                    let element_sort = match args.first() {
-                        Some(arg) => self.compute_sort(arg),
-                        None => self.add(Term::Sort(Sort::Var("T".to_owned()))),
+                    let element_sort = if let Some(arg) = args.first() {
+                        self.compute_sort(arg)
+                    } else {
+                        self.add(Term::Sort(Sort::Var("T".to_owned())))
                     };
                     Sort::RareList(element_sort)
                 }
+                Operator::Pow2 | Operator::Log2 => Sort::Int,
+                Operator::IsPow2 => Sort::Bool,
             },
             Term::App(f, args) => {
                 match self.compute_sort(f).as_sort().unwrap() {
@@ -268,6 +294,7 @@ impl PrimitivePool {
                     Sort::ParamSort(_, p_sort) => {
                         let p_function_sort = p_sort.as_sort().unwrap();
                         if let Sort::Function(sorts) = p_function_sort {
+                            // match with sorts of args, apply the resulting substitution on the return sort
                             let mut map = IndexMap::new();
                             for i in 0..args.len() {
                                 let sort_i = sorts[i].as_sort().unwrap();
@@ -308,43 +335,69 @@ impl PrimitivePool {
                 Sort::Function(result)
             }
             Term::Let(_, inner) => self.compute_sort(inner).as_sort().unwrap().clone(),
+            Term::Match(_, patterns) => self
+                .compute_sort(&patterns.last().unwrap().2)
+                .as_sort()
+                .unwrap()
+                .clone(),
             Term::ParamOp { op, op_args, args } => {
                 let sort = match op {
                     ParamOperator::BvExtract => {
-                        let i = op_args[0].as_integer().unwrap();
-                        let j = op_args[1].as_integer().unwrap();
-                        Sort::BitVec(i - j + Integer::ONE)
+                        let i = op_args[0].as_integer().unwrap().to_usize().unwrap();
+                        let j = op_args[1].as_integer().unwrap().to_usize().unwrap();
+                        Sort::BitVec(i - j + 1)
                     }
                     ParamOperator::ZeroExtend | ParamOperator::SignExtend => {
-                        let extension_width = op_args[0].as_integer().unwrap();
-                        let Sort::BitVec(bv_width) =
-                            self.compute_sort(&args[0]).as_sort().unwrap().clone()
-                        else {
-                            unreachable!()
-                        };
-                        Sort::BitVec(extension_width + bv_width)
+                        let extension_width = op_args[0].as_integer().unwrap().to_usize().unwrap();
+                        let sort = self.unwrap_sort(&args[0]);
+                        match sort {
+                            Sort::BitVec(bv_width) => Sort::BitVec(extension_width + bv_width),
+                            Sort::ParamSort(v, head) => {
+                                let width = v.first().cloned().unwrap_or_else(|| {
+                                    unreachable!(
+                                        "bitvector parametric sort missing width in zero/sign extend"
+                                    )
+                                });
+                                let ext = self
+                                    .add(Term::Const(Constant::Integer(extension_width.into())));
+                                let add = self.add(Term::Op(Operator::Add, vec![ext, width]));
+                                Sort::ParamSort(vec![add], head)
+                            }
+                            _ => unreachable!(),
+                        }
                     }
                     ParamOperator::RotateLeft | ParamOperator::RotateRight => {
                         self.compute_sort(&args[0]).as_sort().unwrap().clone()
                     }
                     ParamOperator::Repeat => {
                         let repetitions = op_args[0].as_integer().unwrap();
-                        let Sort::BitVec(bv_width) =
-                            self.compute_sort(&args[0]).as_sort().unwrap().clone()
-                        else {
-                            unreachable!()
-                        };
-                        Sort::BitVec(repetitions * bv_width)
+                        let sort = self.unwrap_sort(&args[0]);
+                        match sort {
+                            Sort::BitVec(bv_width) => {
+                                Sort::BitVec((repetitions * bv_width).to_usize().unwrap())
+                            }
+                            Sort::ParamSort(v, head) => {
+                                let width = v.first().cloned().unwrap_or_else(|| {
+                                    unreachable!(
+                                        "bitvector parametric sort missing width in repeat"
+                                    )
+                                });
+                                let reps =
+                                    self.add(Term::Const(Constant::Integer(repetitions.clone())));
+                                let mul = self.add(Term::Op(Operator::Mult, vec![reps, width]));
+                                Sort::ParamSort(vec![mul], head)
+                            }
+                            _ => unreachable!(),
+                        }
                     }
-
                     ParamOperator::BvConst => unreachable!(
                         "bv const should be handled by the parser and transformed into a constant"
                     ),
                     ParamOperator::IntToBv => {
-                        let bvsize = op_args[0].as_integer().unwrap();
+                        let bvsize = op_args[0].as_integer().unwrap().to_usize().unwrap();
                         Sort::BitVec(bvsize)
                     }
-                    ParamOperator::BvBitOf => Sort::Bool,
+                    ParamOperator::BvBitOf | ParamOperator::Tester => Sort::Bool,
                     ParamOperator::BvIntOf => Sort::Int,
                     ParamOperator::RePower | ParamOperator::ReLoop => Sort::RegLan,
                     ParamOperator::ArrayConst => op_args[0].as_sort().unwrap().clone(),
@@ -419,7 +472,7 @@ impl PrimitivePool {
                 let mut vars = self.free_vars_with_priorities(inner, prior_pools);
                 for bound_var in bindings {
                     let term = self.add_with_priorities(bound_var.clone().into(), prior_pools);
-                    vars.shift_remove(&term);
+                    vars.swap_remove(&term);
                 }
                 vars
             }
@@ -428,7 +481,19 @@ impl PrimitivePool {
                 for (var, value) in bindings {
                     let sort = self.sort_with_priorities(value, prior_pools);
                     let term = self.add_with_priorities((var.clone(), sort).into(), prior_pools);
-                    vars.shift_remove(&term);
+                    vars.swap_remove(&term);
+                }
+                vars
+            }
+            Term::Match(term, patterns) => {
+                let mut vars = self.free_vars_with_priorities(term, prior_pools);
+                for (bindings, _, res) in patterns {
+                    let mut res_vars = self.free_vars_with_priorities(res, prior_pools);
+                    for bound_var in bindings {
+                        let term = self.add_with_priorities(bound_var.clone().into(), prior_pools);
+                        res_vars.swap_remove(&term);
+                    }
+                    vars.extend(res_vars.into_iter());
                 }
                 vars
             }
@@ -449,6 +514,58 @@ impl PrimitivePool {
         self.free_vars_cache.insert(term.clone(), set);
         self.free_vars_cache.get(term).unwrap().clone()
     }
+
+    pub fn unwrap_sort(&mut self, arg: &Rc<Term>) -> Sort {
+        match self.compute_sort(arg).as_sort().unwrap().clone() {
+            Sort::RareList(inner) => inner.as_sort().unwrap().clone(),
+            sort => sort,
+        }
+    }
+
+    pub fn add_dt_def(&mut self, sort: &Rc<Term>, def: &DatatypeDef) {
+        if !sort.is_sort_dt() {
+            // return Err(ParserError::ExpectedDTSort(sort.clone()));
+            unreachable!();
+        }
+        self.dt_defs.insert(sort.clone(), def.clone());
+    }
+
+    pub fn collect_binders(&mut self, term: &Rc<Term>, binder: Binder) -> IndexSet<Rc<Term>> {
+        if let Some(set) = self.binders_cache.get(&(term.clone(), binder)) {
+            return set.clone();
+        }
+        let set = match term.as_ref() {
+            Term::App(_, args) | Term::Op(_, args) | Term::ParamOp { op: _, op_args: _, args } => {
+                let mut set = IndexSet::new();
+                for a in args {
+                    set.extend(self.collect_binders(a, binder).into_iter());
+                }
+                set
+            }
+            Term::Binder(b, _, inner) => {
+                let mut set = IndexSet::new();
+                if *b == Binder::Choice {
+                    set.insert(term.clone());
+                }
+                set.extend(self.collect_binders(inner, binder));
+                set
+            }
+            Term::Let(_, inner) => self.collect_binders(inner, binder),
+            Term::Match(term, patterns) => {
+                let mut set = self.collect_binders(term, binder);
+                for (_, _, res) in patterns {
+                    set.extend(self.collect_binders(res, binder).into_iter());
+                }
+                set
+            }
+            Term::Var(..) | Term::Const(_) | Term::Sort(_) => IndexSet::new(),
+        };
+        self.binders_cache.insert((term.clone(), binder), set);
+        self.binders_cache
+            .get(&(term.clone(), binder))
+            .unwrap()
+            .clone()
+    }
 }
 
 impl TermPool for PrimitivePool {
@@ -464,5 +581,13 @@ impl TermPool for PrimitivePool {
 
     fn free_vars(&mut self, term: &Rc<Term>) -> IndexSet<Rc<Term>> {
         self.free_vars_with_priorities(term, [])
+    }
+
+    fn dt_def(&self, sort: &Rc<Term>) -> &DatatypeDef {
+        if !sort.is_sort_dt() {
+            // return Err(ParserError::ExpectedDTSort(sort.clone()));
+            unreachable!();
+        }
+        &self.dt_defs[sort]
     }
 }

@@ -1,0 +1,10 @@
+[book]
+authors = ["Bruno Andreotti"]
+language = "en"
+src = "src"
+title = "Carcara Documentation"
+
+[output.html]
+preferred-dark-theme = "ayu"
+git-repository-url = "https://github.com/ufmg-smite/carcara"
+smart-punctuation = true

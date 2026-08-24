@@ -1,44 +1,40 @@
 use super::*;
-use crate::utils::DedupIterator;
+use crate::{checker::error::CheckerError, resolution::ResolutionError, utils::DedupIterator};
 
-pub fn remove_reorderings(root: &Rc<ProofNode>) -> Rc<ProofNode> {
-    let mut modified = HashSet::new();
-
-    mutate(root, |_, node| {
+pub fn remove_reorderings(proof: ProofNodeForest) -> Result<ProofNodeForest, crate::Error> {
+    proof.mutate(|_, node, premises_changed| {
         let Some(step) = node.as_step() else {
-            return node.clone();
+            return Ok(node.clone());
         };
 
+        // For reordering steps, we remove the step and return its only premise
         if step.rule == "reordering" {
-            // Since the premises are changed before the mutation function is called, we have to
-            // insert the new node in the modified set
-            let new = Rc::new(step.premises[0].as_ref().clone());
-            modified.insert(new.clone());
-            return new;
+            return Ok(step.premises[0].clone());
         }
 
         // If the rule is order-sensitive, and any premise was modified, we recompute the conclusion
         if let Some(recompute) = get_recomputation_func(&step.rule) {
-            if step.premises.iter().any(|p| modified.contains(p)) {
+            if premises_changed {
                 let new = Rc::new(ProofNode::Step(StepNode {
-                    clause: recompute(step),
+                    clause: recompute(step).map_err(|e| e.at(step))?,
                     ..step.clone()
                 }));
-                modified.insert(new.clone());
-                return new;
+                return Ok(new);
             }
         }
 
-        node.clone()
+        // Otherwise the node is unchanged
+        Ok(node.clone())
     })
 }
 
-type RecomputationFunc = fn(&StepNode) -> Vec<Rc<Term>>;
+type RecomputationFunc = fn(&StepNode) -> Result<Vec<Rc<Term>>, ElaborationError>;
 
 fn get_recomputation_func(rule: &str) -> Option<RecomputationFunc> {
     Some(match rule {
-        "weakening" => recompute_weakening,
-        "contraction" => recompute_contraction,
+        // Weakening and contraction recomputation is infallibe, so we have to wrap in `Ok`
+        "weakening" => |step| Ok(recompute_weakening(step)),
+        "contraction" => |step| Ok(recompute_contraction(step)),
         "resolution" | "th_resolution" | "strict_resolution" => recompute_resolution,
         _ => return None,
     })
@@ -53,11 +49,18 @@ fn recompute_weakening(step: &StepNode) -> Vec<Rc<Term>> {
 
 fn recompute_contraction(step: &StepNode) -> Vec<Rc<Term>> {
     let new: Vec<_> = step.premises[0].clause().iter().dedup().cloned().collect();
-    assert_eq!(step.clause.len(), new.len());
     new
 }
 
-fn recompute_resolution(step: &StepNode) -> Vec<Rc<Term>> {
+fn recompute_resolution(step: &StepNode) -> Result<Vec<Rc<Term>>, ElaborationError> {
+    if step.premises.len() < 2 {
+        return Err(CheckerError::WrongNumberOfPremises((2..).into(), step.premises.len()).into());
+    }
+    let num_args = 2 * (step.premises.len() - 1);
+    if step.args.len() != num_args {
+        return Err(CheckerError::WrongNumberOfArgs(num_args.into(), step.args.len()).into());
+    }
+
     let premise_clauses: Vec<_> = step.premises.iter().map(|p| p.clause()).collect();
     let pivots: Vec<_> = step
         .args
@@ -68,13 +71,13 @@ fn recompute_resolution(step: &StepNode) -> Vec<Rc<Term>> {
             (pivot, polarity)
         })
         .collect();
-    apply_naive_resolution(&premise_clauses, &pivots)
+    Ok(apply_naive_resolution(&premise_clauses, &pivots)?)
 }
 
-fn apply_naive_resolution(premises: &[&[Rc<Term>]], pivots: &[(&Rc<Term>, bool)]) -> Vec<Rc<Term>> {
-    assert!(premises.len() >= 2);
-    assert_eq!(pivots.len(), premises.len() - 1);
-
+fn apply_naive_resolution(
+    premises: &[&[Rc<Term>]],
+    pivots: &[(&Rc<Term>, bool)],
+) -> Result<Vec<Rc<Term>>, ResolutionError> {
     let mut current = premises[0].to_vec();
 
     for (&premise, &(pivot, polarity)) in premises[1..].iter().zip(pivots) {
@@ -86,7 +89,10 @@ fn apply_naive_resolution(premises: &[&[Rc<Term>]], pivots: &[(&Rc<Term>, bool)]
             }
         };
 
-        let pos = current.iter().position(|x| is_pivot(x, true)).unwrap();
+        let pos = current
+            .iter()
+            .position(|x| is_pivot(x, true))
+            .ok_or_else(|| ResolutionError::PivotNotFound(pivot.clone()))?;
         current.remove(pos);
 
         let mut found = false;
@@ -97,8 +103,10 @@ fn apply_naive_resolution(premises: &[&[Rc<Term>]], pivots: &[(&Rc<Term>, bool)]
                 current.push(t.clone());
             }
         }
-        assert!(found);
+        if !found {
+            return Err(ResolutionError::PivotNotFound(pivot.clone()));
+        }
     }
 
-    current
+    Ok(current)
 }

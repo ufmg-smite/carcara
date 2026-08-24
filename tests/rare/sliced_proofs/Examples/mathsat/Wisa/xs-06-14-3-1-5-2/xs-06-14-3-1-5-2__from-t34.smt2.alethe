@@ -1,1 +1,0 @@
-(step t34 (cl (= (or (or (= arg1 (+ fmt0 0)) (= arg1 (+ fmt0 1))) (= arg1 (+ fmt0 2))) (or (= arg1 (+ fmt0 2)) (= arg1 (+ fmt0 0)) (= arg1 (+ fmt0 1))))) :rule hole :args ("TRUST_THEORY_REWRITE"))

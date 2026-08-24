@@ -290,7 +290,7 @@ pub fn ite_intro(RuleArgs { conclusion, polyeq_time, .. }: RuleArgs) -> RuleResu
 
     // The remaining terms in `us` should be of the correct form
     for u_i in &us[1..] {
-        let (cond, (a, b), (c, d)) = match_term_err!((ite cond (= a b) (= c d)) = u_i)?;
+        let (cond, a, b, c, d) = match_term_err!((ite cond (= a b) (= c d)) = u_i)?;
 
         let mut is_valid = |r_1, s_1, r_2, s_2| {
             // s_1 == s_2 == (ite cond r_1 r_2)
@@ -324,21 +324,21 @@ pub fn connective_def(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 
     if let Some((phi_1, phi_2)) = match_term!((xor phi_1 phi_2) = first) {
         // phi_1 xor phi_2 <-> (¬phi_1 ^ phi_2) v (phi_1 ^ ¬phi_2)
-        let ((a, b), (c, d)) = match_term_err!((or (and (not a) b) (and c (not d))) = second)?;
+        let (a, b, c, d) = match_term_err!((or (and (not a) b) (and c (not d))) = second)?;
         assert_eq(a, phi_1)?;
         assert_eq(b, phi_2)?;
         assert_eq(c, phi_1)?;
         assert_eq(d, phi_2)
     } else if let Some((phi_1, phi_2)) = match_term!((= phi_1 phi_2) = first) {
         // (phi_1 <-> phi_2) <-> (phi_1 -> phi_2) ^ (phi_2 -> phi_1)
-        let ((a, b), (c, d)) = match_term_err!((and (=> a b) (=> c d)) = second)?;
+        let (a, b, c, d) = match_term_err!((and (=> a b) (=> c d)) = second)?;
         assert_eq(a, phi_1)?;
         assert_eq(b, phi_2)?;
         assert_eq(c, phi_2)?;
         assert_eq(d, phi_1)
     } else if let Some((phi_1, phi_2, phi_3)) = match_term!((ite phi_1 phi_2 phi_3) = first) {
         // ite phi_1 phi_2 phi_3 <-> (phi_1 -> phi_2) ^ (¬phi_1 -> phi_3)
-        let ((a, b), (c, d)) = match_term_err!((and (=> a b) (=> (not c) d)) = second)?;
+        let (a, b, c, d) = match_term_err!((and (=> a b) (=> (not c) d)) = second)?;
         assert_eq(a, phi_1)?;
         assert_eq(b, phi_2)?;
         assert_eq(c, phi_1)?;

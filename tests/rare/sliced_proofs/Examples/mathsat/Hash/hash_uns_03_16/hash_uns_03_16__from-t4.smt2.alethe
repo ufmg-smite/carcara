@@ -1,1 +1,0 @@
-(step t4 (cl (= (+ (hash_1 x1) (hash_1 x1)) (* 2 (hash_1 x1)))) :rule hole :args ("TRUST_THEORY_REWRITE"))

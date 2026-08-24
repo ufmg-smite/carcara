@@ -18,6 +18,9 @@ pub enum ResolutionError {
 
     #[error("pivot was not found in clause: '{0}'")]
     PivotNotFound(Rc<Term>),
+
+    #[error("RUP resolution failed")]
+    RupFailed,
 }
 
 pub type Literal<'a> = (u32, &'a Rc<Term>);
@@ -50,7 +53,7 @@ impl<'a> ClauseCollection<'a> for IndexSet<Literal<'a>> {
     }
 
     fn remove_term(&mut self, item: &Literal<'a>) -> bool {
-        self.shift_remove(item)
+        self.swap_remove(item)
     }
 }
 

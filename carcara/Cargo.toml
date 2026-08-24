@@ -9,10 +9,11 @@ authors = [
     "Tiago Campos <tiagocampos@mixrank.com>",
 ]
 edition = "2021"
-rust-version = "1.78.0"
+rust-version = "1.87"
 license = "Apache-2.0"
 
 [dependencies]
+carcara-macros = { path = "../carcara-macros" }
 egg = "0.10.0"
 egglog = "0.4.0"
 indexmap = "2.0.0"

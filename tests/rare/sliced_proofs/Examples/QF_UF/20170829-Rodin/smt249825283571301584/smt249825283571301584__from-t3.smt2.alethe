@@ -1,1 +1,0 @@
-(step t3 (cl (= (not (not reg)) reg)) :rule hole :args ("TRUST_THEORY_REWRITE" (= (not (not reg)) reg) 1 6))

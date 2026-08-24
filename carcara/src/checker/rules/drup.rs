@@ -17,7 +17,7 @@ pub fn drup(
     let conclusion = build_term!(pool, (cl[conclusion.to_vec()]));
 
     match check_drup(pool, conclusion, premises.as_slice(), args, check_drat) {
-        Ok(()) => Ok(()),
+        Ok(_) => Ok(()),
         Err(err) => Err(CheckerError::DrupFormatError(err)),
     }
 }

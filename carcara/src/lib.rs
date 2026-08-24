@@ -40,13 +40,17 @@ pub mod benchmarking;
 pub mod checker;
 mod drup;
 pub mod elaborator;
+pub mod external;
 pub mod parser;
 pub mod rare;
 mod resolution;
+pub mod slice;
+pub mod translation;
 mod utils;
 
 use crate::benchmarking::{CollectResults, OnlineBenchmarkResults, RunMeasurement};
 use checker::{error::CheckerError, CheckerStatistics};
+use elaborator::error::ElaborationError;
 use parser::{ParserError, Position};
 use std::io;
 use std::time::{Duration, Instant};
@@ -74,25 +78,33 @@ pub enum Error {
     #[error("checking failed on step '{step}' with rule '{rule}': {inner}")]
     Checker {
         inner: Box<CheckerError>,
-        rule: String,
-        step: String,
+        rule: Box<str>,
+        step: Box<str>,
     },
 
     // While this is a kind of checking error, it does not happen in a specific step like all other
     // checker errors, so we model it as a different variant
     #[error("checker error: proof does not conclude empty clause")]
     DoesNotReachEmptyClause,
+
+    #[error("elaboration failed on step '{step}' with rule '{rule}': {inner}")]
+    Elaborator {
+        inner: ElaborationError,
+        rule: Box<str>,
+        step: Box<str>,
+    },
 }
 
-pub fn check<T: io::BufRead>(
-    problem: T,
-    proof: T,
-    rules: Option<T>,
+pub fn check<'s>(
+    problem: &'s str,
+    proof: &'s str,
+    rules: Option<&'s str>,
     parser_config: parser::Config,
     checker_config: checker::Config,
     collect_stats: bool,
 ) -> Result<bool, Error> {
     let mut run_measures: RunMeasurement = RunMeasurement::default();
+
     // Parsing
     let total = Instant::now();
     let (problem, proof, rules, mut pool) =
@@ -139,10 +151,10 @@ pub fn check<T: io::BufRead>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn check_parallel<T: io::BufRead>(
-    problem: T,
-    proof: T,
-    rules: Option<T>,
+pub fn check_parallel<'s>(
+    problem: &'s str,
+    proof: &'s str,
+    rules: Option<&'s str>,
     parser_config: parser::Config,
     checker_config: checker::Config,
     collect_stats: bool,
@@ -152,7 +164,7 @@ pub fn check_parallel<T: io::BufRead>(
     use crate::checker::Scheduler;
     use std::sync::Arc;
     let mut run_measures: RunMeasurement = RunMeasurement::default();
-    // Parsing (TODO : Complete rare rules)
+
     let total = Instant::now();
     let (problem, proof, rules, pool) =
         parser::parse_instance(problem, proof, rules, parser_config)?;
@@ -208,17 +220,18 @@ pub fn check_parallel<T: io::BufRead>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn check_and_elaborate<T: io::BufRead>(
-    problem: T,
-    proof: T,
-    rules: Option<T>,
+pub fn check_and_elaborate<'s>(
+    problem: &'s str,
+    proof: &'s str,
+    rules: Option<&'s str>,
     parser_config: parser::Config,
     checker_config: checker::Config,
     elaborator_config: elaborator::Config,
-    pipeline: Vec<elaborator::ElaborationStep>,
+    pipeline: Vec<elaborator::ElaborationPass>,
     collect_stats: bool,
 ) -> Result<(bool, ast::Problem, ast::Proof, ast::PrimitivePool), Error> {
     let mut run: RunMeasurement = RunMeasurement::default();
+
     // Parsing (Complete rare rules)
     let total = Instant::now();
     let (problem, proof, rules, mut pool) =
@@ -254,10 +267,10 @@ pub fn check_and_elaborate<T: io::BufRead>(
     // Elaborating
     let elaboration = Instant::now();
 
-    let node = ast::ProofNode::from_commands(proof.commands);
+    let node = ast::ProofNodeForest::from_commands(proof.commands);
     let (elaborated, pipeline_durations) =
         elaborator::Elaborator::new(&mut pool, &problem, elaborator_config)
-            .elaborate_with_stats(&node, pipeline);
+            .elaborate_with_stats(node, pipeline)?;
     let elaborated = ast::Proof {
         commands: elaborated.into_commands(),
         ..proof
@@ -276,10 +289,10 @@ pub fn check_and_elaborate<T: io::BufRead>(
     Ok((checking_result, problem, elaborated, pool))
 }
 
-pub fn generate_lia_smt_instances<T: io::BufRead>(
-    problem: T,
-    proof: T,
-    rules: Option<T>,
+pub fn generate_lia_smt_instances<'s>(
+    problem: &'s str,
+    proof: &'s str,
+    rules: Option<&'s str>,
     config: parser::Config,
     use_sharing: bool,
 ) -> Result<Vec<(String, String)>, Error> {
@@ -388,9 +401,9 @@ mod tests {
 
     fn check_proof(proof: &str, check_hole_rewrites: bool) -> Result<bool, Error> {
         check(
-            PROBLEM.as_bytes(),
-            proof.as_bytes(),
-            None::<&[u8]>,
+            PROBLEM,
+            proof,
+            None,
             parser::Config::new(),
             checker::Config::new().check_hole_rewrites(check_hole_rewrites),
             false,
@@ -403,16 +416,16 @@ mod tests {
     }
 
     #[test]
-    fn parallel_checker_checks_hole_rewrite() {
+    fn parallel_checker_checks_hole_rewrite_with_default_stack_size() {
         assert!(!check_parallel(
-            PROBLEM.as_bytes(),
-            VALID_HOLE_REWRITE_PROOF.as_bytes(),
-            None::<&[u8]>,
+            PROBLEM,
+            VALID_HOLE_REWRITE_PROOF,
+            None,
             parser::Config::new(),
             checker::Config::new().check_hole_rewrites(true),
             false,
             2,
-            128 * 1024 * 1024,
+            0,
         )
         .unwrap());
     }
@@ -420,9 +433,9 @@ mod tests {
     #[test]
     fn checker_uses_custom_rare_rules_for_hole_rewrites() {
         assert!(!check(
-            PROBLEM.as_bytes(),
-            CUSTOM_RARE_HOLE_REWRITE_PROOF.as_bytes(),
-            Some(CUSTOM_RARE_RULE.as_bytes()),
+            PROBLEM,
+            CUSTOM_RARE_HOLE_REWRITE_PROOF,
+            Some(CUSTOM_RARE_RULE),
             parser::Config::new(),
             checker::Config::new().check_hole_rewrites(true),
             false,
@@ -433,9 +446,9 @@ mod tests {
     #[test]
     fn checker_reuses_complete_rare_database_across_holes() {
         assert!(!check(
-            PROBLEM.as_bytes(),
-            TWO_CUSTOM_RARE_HOLES_PROOF.as_bytes(),
-            Some(CUSTOM_RARE_RULE.as_bytes()),
+            PROBLEM,
+            TWO_CUSTOM_RARE_HOLES_PROOF,
+            Some(CUSTOM_RARE_RULE),
             parser::Config::new(),
             checker::Config::new().check_hole_rewrites(true),
             false,
@@ -463,9 +476,9 @@ mod tests {
             "#,
         ] {
             let error = check(
-                PROBLEM.as_bytes(),
-                VALID_HOLE_REWRITE_PROOF.as_bytes(),
-                Some(rules.as_bytes()),
+                PROBLEM,
+                VALID_HOLE_REWRITE_PROOF,
+                Some(rules),
                 parser::Config::new(),
                 checker::Config::new().check_hole_rewrites(true),
                 false,
@@ -486,14 +499,14 @@ mod tests {
     #[test]
     fn failed_parallel_hole_rewrite_is_holey() {
         assert!(check_parallel(
-            PROBLEM.as_bytes(),
-            INVALID_HOLE_REWRITE_PROOF.as_bytes(),
-            None::<&[u8]>,
+            PROBLEM,
+            INVALID_HOLE_REWRITE_PROOF,
+            None,
             parser::Config::new(),
             checker::Config::new().check_hole_rewrites(true),
             false,
             2,
-            128 * 1024 * 1024,
+            0,
         )
         .unwrap());
     }
@@ -503,24 +516,9 @@ mod tests {
         let mut checker_config = checker::Config::new().check_hole_rewrites(true);
         checker_config.hole_rewrite_options.timeout = Some(Duration::ZERO);
         assert!(check(
-            PROBLEM.as_bytes(),
-            VALID_HOLE_REWRITE_PROOF.as_bytes(),
-            None::<&[u8]>,
-            parser::Config::new(),
-            checker_config,
-            false,
-        )
-        .unwrap());
-    }
-
-    #[test]
-    fn positive_elapsed_timeout_is_holey() {
-        let mut checker_config = checker::Config::new().check_hole_rewrites(true);
-        checker_config.hole_rewrite_options.timeout = Some(Duration::from_nanos(1));
-        assert!(check(
-            PROBLEM.as_bytes(),
-            VALID_HOLE_REWRITE_PROOF.as_bytes(),
-            None::<&[u8]>,
+            PROBLEM,
+            VALID_HOLE_REWRITE_PROOF,
+            None,
             parser::Config::new(),
             checker_config,
             false,

@@ -14,8 +14,17 @@ pub enum Implied<T, X> {
     Bottom(X),
     NotUnsat(),
 }
-// A RUP addition is a vector of the clause plus the unit clause and the hash of the clause.
-pub type RupAdition = Vec<(IndexSet<Literal>, Option<Literal>, u64)>;
+// A RUP Addition is a vector of the clause plus the unit clause and the hash of the clause
+pub type RupAddition = Vec<(IndexSet<Literal>, Option<Literal>, u64)>;
+
+//This enum is used to bookkeeping the action performed by a reverse unit propagation
+#[allow(dead_code)]
+pub enum DRupProofAction {
+    RupStory(IndexSet<Literal>, RupAddition),
+    Delete(Rc<Term>),
+}
+
+pub type DRupStory = Vec<DRupProofAction>;
 
 #[derive(Debug, Error)]
 pub enum DrupFormatError {
@@ -147,8 +156,8 @@ fn rup(
     pool: &mut dyn TermPool,
     drup_clauses: &HashMap<u64, IndexSet<Literal>>,
     goal: &[Rc<Term>],
-) -> Option<RupAdition> {
-    let mut unit_story: RupAdition = vec![];
+) -> Option<RupAddition> {
+    let mut unit_story: RupAddition = vec![];
 
     let mut clauses = vec![];
 
@@ -206,7 +215,7 @@ pub fn check_drup(
     premises: &[Rc<Term>],
     args: &[Rc<Term>],
     check_rat: bool,
-) -> Result<(), DrupFormatError> {
+) -> Result<DRupStory, DrupFormatError> {
     let mut premises: HashMap<u64, _> = premises
         .iter()
         .map(|p| {
@@ -224,6 +233,7 @@ pub fn check_drup(
         })
         .collect();
 
+    let mut drup_history: DRupStory = vec![];
     for t in args {
         if let Some(terms) = match_term!((delete (cl ...)) = &t) {
             let clause_term = if terms.is_empty() {
@@ -232,6 +242,7 @@ pub fn check_drup(
                 build_term!(pool, (cl[terms.to_vec()]))
             };
             premises.remove(&hash_term(pool, &clause_term));
+            drup_history.push(DRupProofAction::Delete(clause_term));
             continue;
         }
 
@@ -257,6 +268,11 @@ pub fn check_drup(
             })
             .collect::<IndexSet<_>>();
 
+        drup_history.push(DRupProofAction::RupStory(
+            terms_indexed_set.clone(),
+            unit_history.unwrap(),
+        ));
+
         premises.insert(hash_term(pool, t), terms_indexed_set);
     }
 
@@ -264,7 +280,7 @@ pub fn check_drup(
         return Err(DrupFormatError::NoConclusionInPremise);
     }
 
-    Ok(())
+    Ok(drup_history)
 }
 
 // Checks RAT, essentially rat is equivalent to RUP plus a blocked clause
@@ -273,7 +289,7 @@ pub fn check_drat(
     pool: &mut dyn TermPool,
     drup_clauses: &HashMap<u64, IndexSet<Literal>>,
     goal: &[Rc<Term>],
-) -> Option<RupAdition> {
+) -> Option<RupAddition> {
     let pivot = &goal[0];
     let mut unit_history = vec![];
     for clause in drup_clauses.values() {
@@ -282,7 +298,7 @@ pub fn check_drat(
 
         if clause.contains(&negated_pivot) {
             let mut resolvent = clause.clone();
-            resolvent.shift_remove(&negated_pivot);
+            resolvent.swap_remove(&negated_pivot);
             let mut resolvent = resolvent
                 .iter()
                 .map(|(p, literal)| {

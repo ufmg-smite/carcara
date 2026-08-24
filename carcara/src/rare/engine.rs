@@ -561,7 +561,7 @@ pub fn to_egg_expr(
             Term::Const(c) => match c {
                 Constant::Integer(i) => Some(EggExpr::Num(i.clone())),
                 Constant::String(s) => Some(EggExpr::String(s.clone())),
-                Constant::BitVec(i, j) => Some(EggExpr::BitVec(i.clone(), j.clone())),
+                Constant::BitVec(i, j) => Some(EggExpr::BitVec(i.clone(), (*j).into())),
                 Constant::Real(d) => {
                     let (numer, denom) = d.clone().into_numer_denom();
                     if numer.to_i64().is_some() && denom.to_i64().is_some() {
@@ -705,7 +705,7 @@ pub fn to_egg_expr(
 
                         Sort::BitVec(w) => {
                             let tag = EggExpr::Const("BitVec".to_owned());
-                            let width = EggExpr::Num(w.clone());
+                            let width = EggExpr::Num((*w).into());
                             build_args_list(vec![Some(tag), Some(width)])
                         }
 
@@ -726,6 +726,15 @@ pub fn to_egg_expr(
                         }
 
                         Sort::Atom(name, args) => {
+                            let mut v = Vec::with_capacity(1 + args.len());
+                            v.push(Some(EggExpr::Const(name.to_string())));
+                            for a in args {
+                                v.push(to_egg_expr(a, subs, func_cache, var_map, collect_shapes));
+                            }
+                            Some(build_args_list(v)?)
+                        }
+
+                        Sort::Datatype(name, args) => {
                             let mut v = Vec::with_capacity(1 + args.len());
                             v.push(Some(EggExpr::Const(name.clone())));
                             for a in args {
@@ -827,6 +836,9 @@ pub fn to_egg_expr(
                 // consistent with how Op/App are encoded elsewhere.
                 Some(EggExpr::Call(format!("@{}", op), vec![packed?]))
             }
+            // The RARE encoding does not currently model SMT-LIB datatype match expressions.
+            // Reject them conservatively so the enclosing proof step remains a hole.
+            Term::Match(_, _) => None,
         }
     }
 

@@ -1,1 +1,0 @@
-(step t11 (cl (= (not true) false)) :rule hole :args ("TRUST_THEORY_REWRITE"))

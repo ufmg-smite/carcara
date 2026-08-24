@@ -1,13 +1,17 @@
+pub mod error;
 mod hole;
-mod lia_generic;
+mod local;
 mod polyeq;
-mod reflexivity;
 mod reordering;
-mod resolution;
-mod transitivity;
+mod sat_refutation;
 mod uncrowding;
 
-use crate::{ast::*, CheckerError};
+use crate::{
+    ast::*,
+    external::{ExternalTool, SatTools},
+    Error,
+};
+use error::ElaborationError;
 use indexmap::IndexSet;
 use polyeq::PolyeqElaborator;
 use std::{
@@ -20,46 +24,26 @@ pub struct Config {
     /// If `Some`, enables the elaboration of `lia_generic` steps using an external solver. When
     /// checking a proof, this means calling the solver to solve the linear integer arithmetic
     /// problem, checking the proof, and discarding it. When elaborating, the proof will instead be
-    /// inserted in the place of the `lia_generic` step. See [`LiaGenericOptions`] for more details.
-    pub lia_options: Option<LiaGenericOptions>,
+    /// inserted in the place of the `lia_generic` step.
+    pub lia_solver: Option<ExternalTool>,
 
     /// Enables an optimization that reorders premises when uncrowding resolution steps, in order to
     /// further minimize the number of `contraction` steps added.
     pub uncrowd_rotation: bool,
 
-    pub hole_options: Option<HoleOptions>,
+    pub hole_solver: Option<ExternalTool>,
+
+    pub sat_ref_tools: Option<SatTools>,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum ElaborationStep {
+pub enum ElaborationPass {
     Polyeq,
-    LiaGeneric,
+    Hole,
     Local,
     Uncrowd,
     Reordering,
-    Hole,
-}
-
-/// The options that control how `lia_generic` steps are elaborated using an external solver.
-#[derive(Debug, Clone)]
-pub struct LiaGenericOptions {
-    /// The external solver path. The solver should be a binary that can read SMT-LIB from stdin and
-    /// output an Alethe proof to stdout.
-    pub solver: Box<str>,
-
-    /// The arguments to pass to the solver.
-    pub arguments: Vec<Box<str>>,
-}
-
-/// The options that control how `hole` steps are elaborated using an external solver.
-#[derive(Debug, Clone)]
-pub struct HoleOptions {
-    /// The external solver path. The solver should be a binary that can read SMT-LIB from stdin and
-    /// output an Alethe proof to stdout.
-    pub solver: Box<str>,
-
-    /// The arguments to pass to the solver.
-    pub arguments: Vec<Box<str>>,
+    SatRefutation,
 }
 
 pub struct Elaborator<'e> {
@@ -73,108 +57,144 @@ impl<'e> Elaborator<'e> {
         Self { pool, problem, config }
     }
 
-    pub fn elaborate_with_default_pipeline(&mut self, root: &Rc<ProofNode>) -> Rc<ProofNode> {
-        use ElaborationStep::*;
-        let pipeline = vec![Polyeq, LiaGeneric, Local, Uncrowd, Reordering];
-        self.elaborate(root, pipeline)
+    pub fn elaborate_with_default_pipeline(
+        &mut self,
+        proof: ProofNodeForest,
+    ) -> Result<ProofNodeForest, Error> {
+        use ElaborationPass::*;
+        let pipeline = vec![Polyeq, Hole, Local, Uncrowd, Reordering];
+        self.elaborate(proof, pipeline)
     }
 
     pub fn elaborate(
         &mut self,
-        root: &Rc<ProofNode>,
-        pipeline: Vec<ElaborationStep>,
-    ) -> Rc<ProofNode> {
-        self.elaborate_with_stats(root, pipeline).0
+        proof: ProofNodeForest,
+        pipeline: Vec<ElaborationPass>,
+    ) -> Result<ProofNodeForest, Error> {
+        Ok(self.elaborate_with_stats(proof, pipeline)?.0)
     }
 
     pub fn elaborate_with_stats(
         &mut self,
-        root: &Rc<ProofNode>,
-        pipeline: Vec<ElaborationStep>,
-    ) -> (Rc<ProofNode>, Vec<Duration>) {
+        proof: ProofNodeForest,
+        pipeline: Vec<ElaborationPass>,
+    ) -> Result<(ProofNodeForest, Vec<Duration>), Error> {
         let mut durations = Vec::new();
-        let mut current = root.clone();
-        for step in &pipeline {
+        let mut current = proof;
+        for pass in pipeline {
             let time = Instant::now();
-            current = match step {
-                ElaborationStep::Polyeq => self.elaborate_polyeq(&current),
-                ElaborationStep::LiaGeneric if self.config.lia_options.is_some() => {
-                    mutate(&current, |_, node| match node.as_ref() {
-                        ProofNode::Step(s) if s.rule == "lia_generic" => {
-                            lia_generic::lia_generic(self, s).unwrap_or_else(|| node.clone())
-                        }
-                        _ => node.clone(),
-                    })
-                }
-                ElaborationStep::LiaGeneric => current.clone(),
-                ElaborationStep::Local => self.elaborate_local(&current),
-                ElaborationStep::Uncrowd => mutate(&current, |_, node| match node.as_ref() {
+            current = match pass {
+                ElaborationPass::Polyeq => self.elaborate_polyeq(current)?,
+                ElaborationPass::Hole => self.elaborate_hole(current)?,
+                ElaborationPass::Local => self.elaborate_local(current)?,
+                ElaborationPass::Uncrowd => current.mutate(|_, node, _| match node.as_ref() {
                     ProofNode::Step(s)
                         if (s.rule == "resolution" || s.rule == "th_resolution")
                             && !s.args.is_empty() =>
                     {
                         uncrowding::uncrowd_resolution(self.pool, s, self.config.uncrowd_rotation)
+                            .map_err(|e| e.at(s))
                     }
-                    _ => node.clone(),
-                }),
-                ElaborationStep::Reordering => reordering::remove_reorderings(&current),
-                ElaborationStep::Hole => {
-                    if self.config.hole_options.is_none() {
-                        current.clone()
+                    _ => Ok(node.clone()),
+                })?,
+                ElaborationPass::Reordering => reordering::remove_reorderings(current)?,
+                ElaborationPass::SatRefutation => {
+                    if self.config.sat_ref_tools.is_some() {
+                        // TODO: proper error handling
+                        current
+                            .mutate::<_, ()>(|_, node, _| match node.as_ref() {
+                                ProofNode::Step(s) if (s.rule == "sat_refutation") => {
+                                    Ok(sat_refutation::sat_refutation(self, s)
+                                        .unwrap_or_else(|| node.clone()))
+                                }
+                                _ => Ok(node.clone()),
+                            })
+                            .unwrap()
                     } else {
-                        mutate(&current, |_, node| match node.as_ref() {
-                            ProofNode::Step(s)
-                                if (s.rule == "all_simplify" || s.rule == "rare_rewrite") =>
-                            {
-                                hole::hole(self, s).unwrap_or_else(|| node.clone())
-                            }
-                            _ => node.clone(),
-                        })
+                        current
                     }
                 }
             };
             durations.push(time.elapsed());
         }
-        (current, durations)
+        Ok((current, durations))
     }
 
-    fn elaborate_polyeq(&mut self, root: &Rc<ProofNode>) -> Rc<ProofNode> {
-        mutate(root, |context, node| {
-            match node.as_ref() {
-                ProofNode::Assume { id, depth, term }
-                    if context.is_empty() && !self.problem.premises.contains(term) =>
-                {
-                    self.elaborate_assume(id, *depth, term)
-                }
-                ProofNode::Step(s) if s.rule == "refl" => {
-                    reflexivity::refl(self.pool, context, s).unwrap() // TODO: add proper error handling
-                }
-                _ => node.clone(),
-            }
-        })
-    }
-
-    fn elaborate_local(&mut self, root: &Rc<ProofNode>) -> Rc<ProofNode> {
+    fn elaborate_polyeq(&mut self, proof: ProofNodeForest) -> Result<ProofNodeForest, Error> {
         fn get_elaboration_function(rule: &str) -> Option<ElaborationFunc> {
             Some(match rule {
-                "eq_transitive" => transitivity::eq_transitive,
-                "trans" => transitivity::trans,
-                "resolution" | "th_resolution" => resolution::resolution,
+                "refl" => polyeq::reflexivity::refl,
+                "forall_inst" => polyeq::quantifiers::forall_inst,
+                "subproof" => polyeq::subproof::subproof,
+                "ite_intro" => polyeq::tautology::ite_intro,
+                "bfun_elim" => polyeq::clausification::bfun_elim,
                 _ => return None,
             })
         }
 
-        mutate(root, |context, node| {
+        proof.mutate(|context, node, _| match node.as_ref() {
+            ProofNode::Assume { id, depth, term }
+                if context.is_empty() && !self.problem.premises.contains(term) =>
+            {
+                Ok(self.elaborate_assume(id, *depth, term))
+            }
+            ProofNode::Step(s) => {
+                if let Some(func) = get_elaboration_function(&s.rule) {
+                    func(self.pool, context, s).map_err(|e| e.at(s))
+                } else {
+                    Ok(node.clone())
+                }
+            }
+            _ => Ok(node.clone()),
+        })
+    }
+
+    fn elaborate_hole(&mut self, proof: ProofNodeForest) -> Result<ProofNodeForest, Error> {
+        // Skip `mutate` in the common case where neither option was given
+        if self.config.hole_solver.is_none() && self.config.lia_solver.is_none() {
+            return Ok(proof);
+        }
+
+        proof.mutate(|_, node, _| match node.as_ref() {
+            ProofNode::Step(s)
+                if self.config.hole_solver.is_some()
+                    && (s.rule == "all_simplify" || s.rule == "rare_rewrite") =>
+            {
+                hole::hole(self, s).map_err(|e| e.at(s))
+            }
+            ProofNode::Step(s) if self.config.lia_solver.is_some() && s.rule == "lia_generic" => {
+                hole::lia_generic(self, s).map_err(|e| e.at(s))
+            }
+            _ => Ok(node.clone()),
+        })
+    }
+
+    fn elaborate_local(&mut self, proof: ProofNodeForest) -> Result<ProofNodeForest, Error> {
+        fn get_elaboration_function(rule: &str) -> Option<ElaborationFunc> {
+            Some(match rule {
+                "eq_transitive" => local::transitivity::eq_transitive,
+                "trans" => local::transitivity::trans,
+                "resolution" | "th_resolution" => local::resolution::resolution,
+                "cong" => local::congruence::cong,
+                "eq_congruent" => local::congruence::eq_congruent,
+                "eq_congruent_pred" => local::congruence::eq_congruent_pred,
+                "bounded_farkas" => local::farkas::bounded_farkas,
+                "eq_mp" => local::eq_mp::eq_mp,
+                _ => return None,
+            })
+        }
+
+        proof.mutate(|context, node, _| {
             match node.as_ref() {
                 ProofNode::Step(s) => {
                     if let Some(func) = get_elaboration_function(&s.rule) {
-                        return func(self.pool, context, s).unwrap(); // TODO: add proper error handling
+                        return func(self.pool, context, s).map_err(|e| e.at(s));
                     }
                 }
                 ProofNode::Subproof(_) => unreachable!(),
                 ProofNode::Assume { .. } => (),
             }
-            node.clone()
+            Ok(node.clone())
         })
     }
 
@@ -229,7 +249,7 @@ impl<'e> Elaborator<'e> {
     }
 }
 
-pub fn add_refl_step(
+fn add_refl_step(
     pool: &mut dyn TermPool,
     a: Rc<Term>,
     b: Rc<Term>,
@@ -248,14 +268,83 @@ pub fn add_refl_step(
     }))
 }
 
-type ElaborationFunc =
-    fn(&mut PrimitivePool, &mut ContextStack, &StepNode) -> Result<Rc<ProofNode>, CheckerError>;
+fn add_symm_step(pool: &mut PrimitivePool, node: &Rc<ProofNode>, id: String) -> Rc<ProofNode> {
+    assert_eq!(node.clause().len(), 1);
+    let (a, b) = match_term!((= a b) = node.clause()[0]).unwrap();
+    let clause = vec![build_term!(pool, (= {b.clone()} {a.clone()}))];
+    Rc::new(ProofNode::Step(StepNode {
+        id,
+        depth: node.depth(),
+        clause,
+        rule: "symm".into(),
+        premises: vec![node.clone()],
+        args: Vec::new(),
+        discharge: Vec::new(),
+        previous_step: None,
+    }))
+}
 
-fn mutate<F>(root: &Rc<ProofNode>, mut mutate_func: F) -> Rc<ProofNode>
+fn add_trans_step(
+    pool: &mut PrimitivePool,
+    nodes: impl IntoIterator<Item = Rc<ProofNode>>,
+    id: String,
+) -> Rc<ProofNode> {
+    let premises: Vec<_> = nodes.into_iter().collect();
+    let depth = premises.first().unwrap().depth();
+    let (a, _) =
+        match_term!((= a b) = premises.first().unwrap().clause().first().unwrap()).unwrap();
+    let (_, b) = match_term!((= a b) = premises.last().unwrap().clause().first().unwrap()).unwrap();
+    Rc::new(ProofNode::Step(StepNode {
+        id,
+        depth,
+        clause: vec![build_term!(pool, (= {a.clone()} {b.clone()}))],
+        rule: "trans".to_owned(),
+        premises,
+        ..StepNode::default()
+    }))
+}
+
+type ElaborationFunc =
+    fn(&mut PrimitivePool, &mut ContextStack, &StepNode) -> Result<Rc<ProofNode>, ElaborationError>;
+
+pub trait Mutate: Sized {
+    fn mutate<F, E>(self, mutate_func: F) -> Result<Self, E>
+    where
+        F: FnMut(&mut ContextStack, &Rc<ProofNode>, bool) -> Result<Rc<ProofNode>, E>;
+}
+
+impl Mutate for ProofNodeForest {
+    fn mutate<F, E>(self, mut mutate_func: F) -> Result<Self, E>
+    where
+        F: FnMut(&mut ContextStack, &Rc<ProofNode>, bool) -> Result<Rc<ProofNode>, E>,
+    {
+        let mut cache = HashMap::new();
+        self.0
+            .into_iter()
+            .map(|node| mutate_impl(&node, &mut cache, &mut mutate_func))
+            .collect::<Result<Vec<_>, E>>()
+            .map(ProofNodeForest)
+    }
+}
+
+impl Mutate for Rc<ProofNode> {
+    fn mutate<F, E>(self, mutate_func: F) -> Result<Self, E>
+    where
+        F: FnMut(&mut ContextStack, &Rc<ProofNode>, bool) -> Result<Rc<ProofNode>, E>,
+    {
+        let mut cache = HashMap::new();
+        mutate_impl(&self, &mut cache, mutate_func)
+    }
+}
+
+fn mutate_impl<F, E>(
+    root: &Rc<ProofNode>,
+    cache: &mut HashMap<Rc<ProofNode>, Rc<ProofNode>>,
+    mut mutate_func: F,
+) -> Result<Rc<ProofNode>, E>
 where
-    F: FnMut(&mut ContextStack, &Rc<ProofNode>) -> Rc<ProofNode>,
+    F: FnMut(&mut ContextStack, &Rc<ProofNode>, bool) -> Result<Rc<ProofNode>, E>,
 {
-    let mut cache: HashMap<&Rc<ProofNode>, Rc<ProofNode>> = HashMap::new();
     let mut did_outbound: HashSet<&Rc<ProofNode>> = HashSet::new();
     let mut todo = vec![(root, false)];
 
@@ -268,7 +357,7 @@ where
         }
 
         let mutated = match node.as_ref() {
-            ProofNode::Assume { .. } => mutate_func(&mut context, node),
+            ProofNode::Assume { .. } => mutate_func(&mut context, node, false)?,
             ProofNode::Step(s) if !is_done => {
                 todo.push((node, true));
 
@@ -288,6 +377,12 @@ where
                 let premises: Vec<_> = s.premises.iter().map(|p| cache[p].clone()).collect();
                 let discharge: Vec<_> = s.discharge.iter().map(|p| cache[p].clone()).collect();
                 let previous_step = s.previous_step.as_ref().map(|p| cache[p].clone());
+                let changed = s
+                    .premises
+                    .iter()
+                    .chain(s.discharge.iter())
+                    .chain(s.previous_step.iter())
+                    .any(|p| *p != cache[p]);
 
                 let new_node = Rc::new(ProofNode::Step(StepNode {
                     premises,
@@ -295,7 +390,7 @@ where
                     previous_step,
                     ..s.clone()
                 }));
-                mutate_func(&mut context, &new_node)
+                mutate_func(&mut context, &new_node, changed)?
             }
             ProofNode::Subproof(s) if !is_done => {
                 assert!(
@@ -312,6 +407,7 @@ where
 
                 todo.push((node, true));
                 todo.push((&s.last_step, false));
+                todo.extend(s.extra_steps.iter().rev().map(|node| (node, false)));
                 outbound_premises_stack.push(IndexSet::new());
                 context.push(&s.args);
                 continue;
@@ -320,10 +416,16 @@ where
                 context.pop();
                 let outbound_premises =
                     outbound_premises_stack.pop().unwrap().into_iter().collect();
+                let extra_steps = s
+                    .extra_steps
+                    .iter()
+                    .map(|node| cache[node].clone())
+                    .collect();
                 Rc::new(ProofNode::Subproof(SubproofNode {
                     last_step: cache[&s.last_step].clone(),
                     args: s.args.clone(),
                     outbound_premises,
+                    extra_steps,
                 }))
             }
         };
@@ -331,26 +433,26 @@ where
             .last_mut()
             .unwrap()
             .extend(mutated.get_outbound_premises());
-        cache.insert(node, mutated);
+        cache.insert(node.clone(), mutated);
     }
     assert!(outbound_premises_stack.len() == 1 && outbound_premises_stack[0].is_empty());
-    cache[root].clone()
+    Ok(cache[root].clone())
 }
 
-struct IdHelper {
+pub struct IdHelper {
     root: String,
     stack: Vec<usize>,
 }
 
 impl IdHelper {
-    fn new(root: &str) -> Self {
+    pub fn new(root: &str) -> Self {
         Self {
             root: root.to_owned(),
             stack: vec![0],
         }
     }
 
-    fn next_id(&mut self) -> String {
+    pub fn next_id(&mut self) -> String {
         use std::fmt::Write;
 
         let mut current = self.root.clone();
@@ -361,11 +463,11 @@ impl IdHelper {
         current
     }
 
-    fn push(&mut self) {
+    pub fn push(&mut self) {
         self.stack.push(0);
     }
 
-    fn pop(&mut self) {
+    pub fn pop(&mut self) {
         assert!(self.stack.len() >= 2, "can't pop last frame from the stack");
         self.stack.pop();
     }

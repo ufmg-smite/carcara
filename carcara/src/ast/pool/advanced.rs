@@ -1,5 +1,5 @@
 use super::super::{Rc, Term};
-use super::{PrimitivePool, TermPool};
+use super::{DatatypeDef, PrimitivePool, TermPool};
 use indexmap::IndexSet;
 use std::sync::{Arc, RwLock};
 
@@ -64,6 +64,10 @@ impl TermPool for ContextPool {
             .write()
             .unwrap()
             .free_vars_with_priorities(term, [&self.global_pool])
+    }
+
+    fn dt_def(&self, sort: &Rc<Term>) -> &DatatypeDef {
+        self.global_pool.dt_def(sort)
     }
 }
 
@@ -132,5 +136,9 @@ impl TermPool for LocalPool {
                 &self.ctx_pool.inner.read().unwrap(),
             ],
         )
+    }
+
+    fn dt_def(&self, sort: &Rc<Term>) -> &DatatypeDef {
+        self.inner.dt_def(sort)
     }
 }

@@ -1,3 +1,5 @@
+use crate::ast::Constant;
+
 use super::{Operator, Rc, Term};
 use indexmap::IndexMap;
 use std::cell::RefCell;
@@ -67,7 +69,7 @@ pub enum RewriteTerm {
     ManyEq(Operator, &'static str),
     OperatorEq(Operator, Vec<RewriteTerm>),
     VarEqual(&'static str),
-    // Const(Constant), // Merge later
+    Const(Constant),
 }
 
 #[macro_export]

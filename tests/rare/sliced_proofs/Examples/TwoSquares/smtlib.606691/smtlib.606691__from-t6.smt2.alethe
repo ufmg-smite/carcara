@@ -1,1 +1,0 @@
-(step t6 (cl (= (+ (* 4 f3) 1) (+ 1 (* 4 f3)))) :rule hole :args ("TRUST_THEORY_REWRITE"))

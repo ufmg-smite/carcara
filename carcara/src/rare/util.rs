@@ -3,7 +3,7 @@ use std::hash::{Hash, Hasher};
 
 use indexmap::{IndexMap, IndexSet};
 
-use crate::ast::{Operator, Rc, Sort, Term, TermPool};
+use crate::ast::{match_term, Operator, Rc, Sort, Term, TermPool};
 
 pub fn clauses_to_or(pool: &mut dyn TermPool, clauses: &[Rc<Term>]) -> Option<Rc<Term>> {
     if clauses.is_empty() {
@@ -81,6 +81,18 @@ pub fn collect_vars(root: &Rc<Term>, collect_functions: bool) -> IndexMap<String
                 visit(body, acc, collect_functions);
             }
 
+            Term::Match(term, patterns) => {
+                visit(term, acc, collect_functions);
+                for (bindings, pattern, result) in patterns {
+                    for (id, sort) in bindings {
+                        acc.entry(id.clone()).or_insert_with(|| sort.clone());
+                        visit(sort, acc, collect_functions);
+                    }
+                    visit(pattern, acc, collect_functions);
+                    visit(result, acc, collect_functions);
+                }
+            }
+
             Term::ParamOp { op_args, args, .. } => {
                 for t in op_args.iter().chain(args) {
                     visit(t, acc, collect_functions);
@@ -119,6 +131,16 @@ pub fn collect_subterms(root: &Rc<Term>) -> Vec<Rc<Term>> {
                 }
                 visit(body, acc);
             }
+            Term::Match(term, patterns) => {
+                visit(term, acc);
+                for (bindings, pattern, result) in patterns {
+                    for (_, sort) in bindings {
+                        visit(sort, acc);
+                    }
+                    visit(pattern, acc);
+                    visit(result, acc);
+                }
+            }
             Term::ParamOp { op_args, args, .. } => {
                 for arg in op_args.iter().chain(args.iter()) {
                     visit(arg, acc);
@@ -148,6 +170,7 @@ pub fn unify_pattern_bidirectional(
                 Sort::Function(ts) => ts.iter().any(|x| occurs(v, x)),
                 Sort::Atom(_, ts) => ts.iter().any(|x| occurs(v, x)),
                 Sort::Array(i, e) => occurs(v, i) || occurs(v, e),
+                Sort::Datatype(_, ts) => ts.iter().any(|x| occurs(v, x)),
                 Sort::ParamSort(ps, inner) => ps.iter().any(|x| occurs(v, x)) || occurs(v, inner),
                 Sort::RareList(inner) => occurs(v, inner),
                 Sort::BitVec(_)
@@ -163,6 +186,14 @@ pub fn unify_pattern_bidirectional(
             Term::Op(_, args) => args.iter().any(|a| occurs(v, a)),
             Term::Binder(_, bl, body) => bl.iter().any(|(_, t)| occurs(v, t)) || occurs(v, body),
             Term::Let(bl, body) => bl.iter().any(|(_, t)| occurs(v, t)) || occurs(v, body),
+            Term::Match(term, patterns) => {
+                occurs(v, term)
+                    || patterns.iter().any(|(bindings, pattern, result)| {
+                        bindings.iter().any(|(_, sort)| occurs(v, sort))
+                            || occurs(v, pattern)
+                            || occurs(v, result)
+                    })
+            }
             Term::ParamOp { op_args, args, .. } => {
                 op_args.iter().any(|x| occurs(v, x)) || args.iter().any(|x| occurs(v, x))
             }
@@ -300,6 +331,15 @@ pub fn unify_pattern_bidirectional(
                                 .all(|(x, y)| unify_term(x, y, lhs_env, rhs_env))
                     }
 
+                    (Sort::Datatype(n1, as1), Sort::Datatype(n2, as2)) => {
+                        n1 == n2
+                            && as1.len() == as2.len()
+                            && as1
+                                .iter()
+                                .zip(as2.iter())
+                                .all(|(x, y)| unify_term(x, y, lhs_env, rhs_env))
+                    }
+
                     // BitVec width must match
                     (Sort::BitVec(w1), Sort::BitVec(w2)) => w1 == w2,
 
@@ -334,6 +374,22 @@ pub fn unify_pattern_bidirectional(
                     .zip(b2.iter())
                     .all(|((_, t1), (_, t2))| unify_term(t1, t2, lhs_env, rhs_env));
                 binds_ok && unify_term(body1, body2, lhs_env, rhs_env)
+            }
+
+            (Term::Match(t1, ps1), Term::Match(t2, ps2)) if ps1.len() == ps2.len() => {
+                unify_term(t1, t2, lhs_env, rhs_env)
+                    && ps1.iter().zip(ps2).all(
+                        |((bindings1, pattern1, result1), (bindings2, pattern2, result2))| {
+                            bindings1.len() == bindings2.len()
+                                && bindings1.iter().zip(bindings2).all(
+                                    |((_, sort1), (_, sort2))| {
+                                        unify_term(sort1, sort2, lhs_env, rhs_env)
+                                    },
+                                )
+                                && unify_term(pattern1, pattern2, lhs_env, rhs_env)
+                                && unify_term(result1, result2, lhs_env, rhs_env)
+                        },
+                    )
             }
 
             (

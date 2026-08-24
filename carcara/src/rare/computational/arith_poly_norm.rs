@@ -203,7 +203,6 @@ pub mod tests {
     use crate::parser::{parse_instance_with_pool, Config, Parser};
     use crate::rare::engine::{run_egglog, RunEgglogOptions};
     use egglog::EGraph;
-    use std::io::Cursor;
 
     /// Returns true if debug-egglog feature is enabled
     /// Run with: cargo test --features debug-egglog <`test_name`> -- --nocapture
@@ -336,9 +335,9 @@ pub mod tests {
         term_str: &str,
         config: Config,
     ) -> Rc<crate::ast::Term> {
-        let mut parser = Parser::new(pool, config, DEFINITIONS.as_bytes()).expect("parser error");
+        let mut parser = Parser::new(pool, config, DEFINITIONS).expect("parser error");
         parser.parse_problem().expect("parse problem error");
-        parser.reset(term_str.as_bytes()).expect("reset error");
+        parser.reset(term_str).expect("reset error");
         parser.parse_term().expect("parse term error")
     }
 
@@ -352,14 +351,9 @@ pub mod tests {
     }
 
     fn parse_rare_rules(pool: &mut PrimitivePool, source: &str) -> RareStatements {
-        let (_, _, rules) = parse_instance_with_pool(
-            Cursor::new(b"".as_slice()),
-            Cursor::new(b"".as_slice()),
-            Some(Cursor::new(source.as_bytes())),
-            base_parser_config(),
-            pool,
-        )
-        .expect("rare rules parse error");
+        let (_, _, rules) =
+            parse_instance_with_pool("", "", Some(source), base_parser_config(), pool)
+                .expect("rare rules parse error");
         rules
     }
 

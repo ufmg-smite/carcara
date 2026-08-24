@@ -1,5 +1,2 @@
-disallowed-methods = [
-    "std::rc::Rc::new",
-    "alloc::rc::Rc::new",
-]
+disallowed-methods = ["std::rc::Rc::new", "alloc::rc::Rc::new"]
 type-complexity-threshold = 500

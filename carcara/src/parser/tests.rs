@@ -21,17 +21,17 @@ pub fn parse_terms<const N: usize>(
     definitions: &str,
     terms: [&str; N],
 ) -> [Rc<Term>; N] {
-    let mut parser = Parser::new(pool, TEST_CONFIG, definitions.as_bytes()).expect(ERROR_MESSAGE);
+    let mut parser = Parser::new(pool, TEST_CONFIG, definitions).expect(ERROR_MESSAGE);
     parser.parse_problem().expect(ERROR_MESSAGE);
 
     terms.map(|s| {
-        parser.reset(s.as_bytes()).expect(ERROR_MESSAGE);
+        parser.reset(s).expect(ERROR_MESSAGE);
         parser.parse_term().expect(ERROR_MESSAGE)
     })
 }
 
 pub fn parse_term(pool: &mut PrimitivePool, input: &str) -> Rc<Term> {
-    Parser::new(pool, TEST_CONFIG, input.as_bytes())
+    Parser::new(pool, TEST_CONFIG, input)
         .and_then(|mut parser| parser.parse_term())
         .expect(ERROR_MESSAGE)
 }
@@ -40,17 +40,25 @@ pub fn parse_term(pool: &mut PrimitivePool, input: &str) -> Rc<Term> {
 /// panics if no error is encountered.
 pub fn parse_term_err(input: &str) -> Error {
     let mut pool = PrimitivePool::new();
-    Parser::new(&mut pool, TEST_CONFIG, input.as_bytes())
+    Parser::new(&mut pool, TEST_CONFIG, input)
         .and_then(|mut p| p.parse_term())
         .expect_err("expected error")
 }
 
 /// Parses a proof from a `&str`. Panics if any error is encountered.
 pub fn parse_proof(pool: &mut PrimitivePool, input: &str) -> Proof {
-    Parser::new(pool, TEST_CONFIG, input.as_bytes())
+    Parser::new(pool, TEST_CONFIG, input)
         .expect(ERROR_MESSAGE)
         .parse_proof()
         .expect(ERROR_MESSAGE)
+}
+
+/// Tries to parse a proof from a `&str`, expecting it to fail. Returns the error encountered, or
+/// panics if no error is encountered.
+pub fn parse_proof_err(pool: &mut PrimitivePool, input: &str) -> Error {
+    Parser::new(pool, TEST_CONFIG, input)
+        .and_then(|mut p| p.parse_proof())
+        .expect_err("expected error")
 }
 
 fn run_parser_tests(pool: &mut PrimitivePool, cases: &[(&str, Term)]) {
@@ -72,7 +80,7 @@ fn test_hash_consing() {
         )
         (* 2 2)
     )";
-    let mut parser = Parser::new(&mut pool, Config::new(), input.as_bytes()).unwrap();
+    let mut parser = Parser::new(&mut pool, Config::new(), input).unwrap();
     parser.parse_term().unwrap();
 
     // We expect this input to result in 7 unique terms after parsing:
@@ -448,7 +456,7 @@ fn test_declare_sort() {
         (declare-fun x () T)",
         ["x"],
     );
-    let expected_sort = p.add(Term::Sort(Sort::Atom("T".to_owned(), Vec::new())));
+    let expected_sort = p.add(Term::Sort(Sort::Atom("T".into(), Box::new([]))));
     assert_eq!(p.add(Term::new_var("x", expected_sort)), got);
 }
 
@@ -478,11 +486,11 @@ fn test_define_fun() {
 #[test]
 fn test_define_fun_rec() {
     fn run_test(pool: &mut PrimitivePool, problem: &str, expected_premises: &[&str]) {
-        let mut parser = Parser::new(pool, TEST_CONFIG, problem.as_bytes()).expect(ERROR_MESSAGE);
+        let mut parser = Parser::new(pool, TEST_CONFIG, problem).expect(ERROR_MESSAGE);
         let got = parser.parse_problem().expect(ERROR_MESSAGE).premises;
         assert_eq!(expected_premises.len(), got.len());
         for p in expected_premises {
-            parser.reset(p.as_bytes()).expect(ERROR_MESSAGE);
+            parser.reset(p).expect(ERROR_MESSAGE);
             let expected = parser.parse_term().expect(ERROR_MESSAGE);
             assert!(got.contains(&expected));
         }
@@ -698,6 +706,25 @@ fn test_premises_in_subproofs() {
 }
 
 #[test]
+fn test_assumes_after_steps_in_subproofs() {
+    let mut p = PrimitivePool::new();
+    let bad_input = "
+        (assume h1 true)
+        (assume h2 true)
+        (anchor :step t3)
+        (step t3.t1 (cl) :rule rule-name :premises (h1 h2))
+        (assume h3 false)
+        (step t3.t2 (cl) :rule rule-name :premises (t3.t1 h1 h2))
+        (step t3 (cl) :rule rule-name :premises (h1 t3.t1 h2 t3.t2))
+    ";
+
+    assert!(matches!(
+        parse_proof_err(&mut p, bad_input),
+        Error::Parser(ParserError::AssumeAfterStepInSubproof(_), _)
+    ));
+}
+
+#[test]
 fn test_bitvectors() {
     let mut p = PrimitivePool::new();
     let cases = [
@@ -781,6 +808,48 @@ fn test_qualified_operators() {
     ));
     assert!(matches!(
         parse_term_err("((as undefined (Array Int Int)) 1)"),
-        Error::Parser(ParserError::InvalidQualifiedOp(_), _),
+        Error::Parser(ParserError::UndefinedIden(_), _),
+    ));
+}
+
+#[test]
+fn test_proofs_with_extra_parens() {
+    let mut p = PrimitivePool::new();
+    let proof = parse_proof(&mut p, "( (assume h1 true) )");
+    assert_eq!(proof.commands.len(), 1);
+    assert_eq!(
+        &proof.commands[0],
+        &ProofCommand::Assume {
+            id: "h1".into(),
+            term: p.bool_true(),
+        }
+    );
+
+    // Empty proof with extra parens
+    let proof = parse_proof(&mut p, "()");
+    assert_eq!(proof.commands.len(), 0);
+
+    // Extra set of parens
+    assert!(matches!(
+        parse_proof_err(&mut p, "(( (assume h1 true) ))"),
+        Error::Parser(ParserError::UnexpectedToken(Token::OpenParen), _)
+    ));
+
+    // Stuff after final closing parens
+    assert!(matches!(
+        parse_proof_err(&mut p, "( (assume h1 true) ) (assume h2 false)"),
+        Error::Parser(ParserError::UnexpectedToken(Token::OpenParen), _)
+    ));
+
+    // Missing closing parens
+    assert!(matches!(
+        parse_proof_err(&mut p, "( (assume h1 true)"),
+        Error::Parser(ParserError::UnexpectedToken(Token::Eof), _)
+    ));
+
+    // Missing opening parens
+    assert!(matches!(
+        parse_proof_err(&mut p, "(assume h1 true) )"),
+        Error::Parser(ParserError::UnexpectedToken(Token::CloseParen), _)
     ));
 }

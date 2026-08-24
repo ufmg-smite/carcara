@@ -1,1 +1,0 @@
-(step t58 (cl (= (= arg1 (+ 1 fmt0)) (= fmt0 (+ -1 arg1)))) :rule hole :args ("TRUST_THEORY_REWRITE"))

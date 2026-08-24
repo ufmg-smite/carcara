@@ -23,12 +23,9 @@ pub fn check_rare(
     };
 
     if let Term::Const(Constant::String(v)) = &**rule_literal {
-        let rule = rare_rules.rules.get(v);
-        if rule.is_none() {
+        let Some(rare_term) = rare_rules.rules.get(v) else {
             return Err(CheckerError::RareRuleNotFound(v.clone()));
-        }
-
-        let rare_term = rule.unwrap();
+        };
         if rare_term.arguments.len() + 1 != args.len() {
             return Err(CheckerError::RareNumberOfPremisesWrong(
                 rare_term.arguments.len(),
@@ -48,20 +45,18 @@ pub fn check_rare(
             let var_sort =
                 if arg_sort.attribute == crate::ast::rare_rules::AttributeParameters::List {
                     match arg_sort.term.as_sort().unwrap() {
-                        Sort::RareList(elem_sort) => {
-                            let value_sort = pool.sort(&value);
-                            if value_sort.as_sort() == Some(arg_sort.term.as_sort().unwrap()) {
-                                arg_sort.term.clone()
-                            } else {
-                                elem_sort.clone()
-                            }
-                        }
+                        // List parameters are represented by element-sorted variables in the
+                        // parsed rule body. Their supplied value may be a `rare-list`, but the
+                        // substitution key must retain the variable's element sort in order to
+                        // match those occurrences.
+                        Sort::RareList(elem_sort) => elem_sort.clone(),
                         _ => arg_sort.term.clone(),
                     }
                 } else {
                     arg_sort.term.clone()
                 };
-            map.insert(pool.add(Term::Var(arg.clone(), var_sort)), value);
+            let variable = pool.add(Term::Var(arg.clone(), var_sort));
+            map.insert(variable, value);
         }
 
         if rare_term.premises.len() != premises.len() {
@@ -71,13 +66,12 @@ pub fn check_rare(
         }
 
         let mut rare_premises = rare_term.premises.iter();
+        let mut subst = Substitution::new(pool, map.clone())?;
 
         for premise in premises {
             let premise = get_premise_term(premise)?;
             let rare_premise = rare_premises.next().unwrap();
-            let rare_premise = Substitution::new(pool, map.clone())
-                .unwrap()
-                .apply(pool, rare_premise);
+            let rare_premise = subst.apply(pool, rare_premise);
             let rare_premise = rewrite_meta_terms(pool, rare_premise, &get_rules());
 
             if *premise != rare_premise {
@@ -88,10 +82,7 @@ pub fn check_rare(
             }
         }
 
-        let got = Substitution::new(pool, map)
-            .unwrap()
-            .apply(pool, &rare_term.conclusion);
-
+        let got = subst.apply(pool, &rare_term.conclusion);
         for premise in premises {
             let premise = get_premise_term(premise)?;
             let premise_rare = rewrite_meta_terms(pool, premise.clone(), &get_rules());
@@ -111,8 +102,8 @@ pub fn check_rare(
             ));
         }
 
-        Ok(())
-    } else {
-        Err(CheckerError::RareRuleExpectedLiteral(rule_literal.clone()))
+        return Ok(());
     }
+
+    Err(CheckerError::RareRuleExpectedLiteral(rule_literal.clone()))
 }

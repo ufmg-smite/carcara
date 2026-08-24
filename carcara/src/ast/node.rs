@@ -26,19 +26,6 @@ pub enum ProofNode {
 }
 
 impl ProofNode {
-    /// Creates a proof node from a list of commands.
-    ///
-    /// The root node will be the fist command that concludes an empty clause, or, if no command
-    /// does so, the last command in the vector.
-    pub fn from_commands(commands: Vec<ProofCommand>) -> Rc<Self> {
-        proof_list_to_node(commands, None).unwrap()
-    }
-
-    /// Creates a proof node from a list of commands, specifying a command id to be the root node.
-    pub fn from_commands_with_root_id(commands: Vec<ProofCommand>, root: &str) -> Option<Rc<Self>> {
-        proof_list_to_node(commands, Some(root))
-    }
-
     /// Returns the unique id of this command.
     ///
     /// For subproofs, this is the id of the last step in the subproof.
@@ -119,8 +106,11 @@ impl ProofNode {
 }
 
 impl Rc<ProofNode> {
-    pub fn into_commands(&self) -> Vec<ProofCommand> {
-        proof_node_to_list(self)
+    pub fn new(value: ProofNode) -> Self {
+        // SAFETY: In the case of proof nodes, we don't care about creating identical nodes in
+        // different allocations. It is safe to assume that nodes that were not `clone`d from each
+        // other are not equal.
+        unsafe { Rc::new_raw(value) }
     }
 
     /// Visits every node of the proof, in postorder, and calls `visit_func` on them.
@@ -185,6 +175,7 @@ impl Rc<ProofNode> {
         });
         result
     }
+
     /// Returns a vector containing this proof's assumptions of the desired level
     pub fn get_assumptions_of_depth(&self, of_depth: usize) -> Vec<Rc<ProofNode>> {
         let mut result = Vec::new();
@@ -243,10 +234,27 @@ pub struct SubproofNode {
     /// The outbound premises of a subproof, that is, the premises from steps in the subproof that
     /// refer to steps outside it.
     pub outbound_premises: Vec<Rc<ProofNode>>,
+
+    /// Optional set of extra (possibly unused) steps to be included in the subproof, even if they
+    /// are not transitively used by `last_step`.
+    pub extra_steps: Vec<Rc<ProofNode>>,
 }
 
-/// Converts a list of proof commands into a `ProofNode`.
-fn proof_list_to_node(commands: Vec<ProofCommand>, root_id: Option<&str>) -> Option<Rc<ProofNode>> {
+pub struct ProofNodeForest(pub Vec<Rc<ProofNode>>);
+
+impl ProofNodeForest {
+    /// Creates a forest of proof nodes from a list of commands.
+    pub fn from_commands(commands: Vec<ProofCommand>) -> Self {
+        proof_list_to_nodes(commands)
+    }
+
+    pub fn into_commands(&self) -> Vec<ProofCommand> {
+        proof_nodes_to_list(self)
+    }
+}
+
+/// Converts a list of proof commands into a `ProofNodeForest`.
+fn proof_list_to_nodes(commands: Vec<ProofCommand>) -> ProofNodeForest {
     use indexmap::IndexSet;
 
     struct Frame {
@@ -331,35 +339,32 @@ fn proof_list_to_node(commands: Vec<ProofCommand>, root_id: Option<&str>) -> Opt
                     }
                 }
 
+                let last_step = frame.accumulator.pop().unwrap();
                 ProofNode::Subproof(SubproofNode {
-                    last_step: frame.accumulator.pop().unwrap(),
+                    last_step,
                     args: frame.args,
                     outbound_premises: frame.outbound_premises.into_iter().collect(),
+                    // We make sure all other steps are included as extra steps, even if they're
+                    // not used
+                    extra_steps: frame.accumulator,
                 })
             }
         };
         stack.last_mut().unwrap().accumulator.push(Rc::new(node));
     };
 
-    if let Some(root_id) = root_id {
-        new_root_proof.into_iter().find(|node| node.id() == root_id)
-    } else {
-        new_root_proof
-            .iter()
-            .find(|node| node.clause().is_empty())
-            .or(new_root_proof.last())
-            .cloned()
-    }
+    ProofNodeForest(new_root_proof)
 }
 
 /// Converts a `ProofNode` into a list of proof commands.
-fn proof_node_to_list(root: &Rc<ProofNode>) -> Vec<ProofCommand> {
+fn proof_nodes_to_list(proof: &ProofNodeForest) -> Vec<ProofCommand> {
     use std::collections::{HashMap, HashSet};
 
     let mut stack: Vec<Vec<ProofCommand>> = vec![Vec::new()];
 
     let mut seen: HashMap<&Rc<ProofNode>, (usize, usize)> = HashMap::new();
-    let mut todo: Vec<(&Rc<ProofNode>, bool)> = vec![(root, false)];
+    let mut todo: Vec<(&Rc<ProofNode>, bool)> =
+        proof.0.iter().rev().map(|node| (node, false)).collect();
     let mut did_outbound: HashSet<&Rc<ProofNode>> = HashSet::new();
 
     loop {
@@ -414,15 +419,17 @@ fn proof_node_to_list(root: &Rc<ProofNode>) -> Vec<ProofCommand> {
 
                 todo.push((node, true));
                 todo.push((&s.last_step, false));
+                todo.extend(s.extra_steps.iter().rev().map(|node| (node, false)));
                 stack.push(Vec::new());
                 continue;
             }
             ProofNode::Subproof(s) => {
                 let commands = stack.pop().unwrap();
                 if stack.is_empty() {
-                    return commands;
+                    unreachable!();
                 }
                 assert!(commands.len() >= 2, "malformed subproof!");
+
                 ProofCommand::Subproof(Subproof {
                     commands,
                     args: s.args.clone(),
@@ -431,10 +438,17 @@ fn proof_node_to_list(root: &Rc<ProofNode>) -> Vec<ProofCommand> {
             }
         };
         let d = node.depth();
+        // Depending on if the command is an `assume` command or not, we push it to a different
+        // vector in the stack frame
         let index = stack[d].len();
         seen.insert(node, (d, index));
         stack[d].push(command);
     }
+}
+
+#[cfg(test)]
+pub fn compare_forests(a: &ProofNodeForest, b: &ProofNodeForest) -> bool {
+    a.0.len() == b.0.len() && a.0.iter().zip(b.0.iter()).all(|(a, b)| compare_nodes(a, b))
 }
 
 #[cfg(test)]

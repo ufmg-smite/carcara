@@ -1,1 +1,0 @@
-(step t1 (cl (= (distinct (ite (= (hash_1 x1) (hash_2 x1)) (hash_2 x1) (+ (hash_1 x1) (hash_1 x1))) (ite (= (hash_1 x1) (hash_2 x1)) (hash_2 x1) (* 2 (hash_1 x1)))) (not (= (ite (= (hash_1 x1) (hash_2 x1)) (hash_2 x1) (+ (hash_1 x1) (hash_1 x1))) (ite (= (hash_1 x1) (hash_2 x1)) (hash_2 x1) (* 2 (hash_1 x1))))))) :rule hole :args ("TRUST_THEORY_REWRITE"))

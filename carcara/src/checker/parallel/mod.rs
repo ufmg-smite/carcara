@@ -1,9 +1,10 @@
+use super::shared::{check_assume_shared, check_step_core, StepCheckContext};
 pub mod scheduler;
 
 use super::{
-    error::{CheckerError, SubproofError},
+    error::CheckerError,
     rules::{Premise, RuleArgs, RuleResult},
-    Config, ProofChecker,
+    Config,
 };
 use crate::benchmarking::{CollectResults, OnlineBenchmarkResults};
 use crate::{ast::rare_rules::Rules, checker::CheckerStatistics};
@@ -50,7 +51,6 @@ impl<'c> ParallelProofChecker<'c> {
         stack_size: usize,
         rare_rules: Rules,
     ) -> Self {
-        let rare_rules = Arc::new(rare_rules);
         ParallelProofChecker {
             pool,
             config,
@@ -59,7 +59,7 @@ impl<'c> ParallelProofChecker<'c> {
             reached_empty_clause: false,
             is_holey: false,
             stack_size,
-            rare_rules,
+            rare_rules: Arc::new(rare_rules),
         }
     }
 
@@ -83,7 +83,7 @@ impl<'c> ParallelProofChecker<'c> {
         proof: &Proof,
         scheduler: &Scheduler,
     ) -> CarcaraResult<bool> {
-        // Used to estimulate threads to abort prematurely (only happens when a
+        // Used to stimulate threads to abort prematurely (only happens when a
         // thread already found out an invalid step)
         let premature_abort = Arc::new(AtomicBool::new(false));
         let context_pool = ContextPool::from_global(&self.pool);
@@ -136,7 +136,7 @@ impl<'c> ParallelProofChecker<'c> {
                     }
                 });
 
-            // If an error happend
+            // If an error happened
             err?;
 
             if reached {
@@ -154,7 +154,7 @@ impl<'c> ParallelProofChecker<'c> {
         scheduler: &Scheduler,
         stats: &mut CheckerStatistics<CR>,
     ) -> CarcaraResult<bool> {
-        // Used to estimulate threads to abort prematurely (only happens when a
+        // Used to stimulate threads to abort prematurely (only happens when a
         // thread already found out an invalid step)
         let premature_abort = Arc::new(AtomicBool::new(false));
         let context_pool = ContextPool::from_global(&self.pool);
@@ -232,7 +232,7 @@ impl<'c> ParallelProofChecker<'c> {
                     }
                 });
 
-            // If an error happend
+            // If an error happened
             err?;
 
             if reached {
@@ -254,8 +254,8 @@ impl<'c> ParallelProofChecker<'c> {
     ) -> CarcaraResult<(bool, bool)> {
         use std::sync::atomic::Ordering;
 
-        // egglog's EGraph is not Send or Sync. Each worker therefore owns one
-        // lazily prepared database baseline and clones it for its local holes.
+        // egglog's EGraph is not Send or Sync. Each worker therefore owns one lazily prepared
+        // database baseline and clones it for its local holes.
         let rare_rules = self.rare_rules.clone();
         let rare_check_context = self
             .config
@@ -305,12 +305,12 @@ impl<'c> ParallelProofChecker<'c> {
                         should_abort.store(true, Ordering::Release);
                         Error::Checker {
                             inner: Box::new(e),
-                            rule: step.rule.clone(),
-                            step: step.id.clone(),
+                            rule: step.rule.as_str().into(),
+                            step: step.id.as_str().into(),
                         }
                     })?;
 
-                    if step.clause.is_empty() {
+                    if step.clause.is_empty() && self.context.is_empty() {
                         self.reached_empty_clause = true;
                     }
                 }
@@ -343,7 +343,7 @@ impl<'c> ParallelProofChecker<'c> {
                         return Err(Error::Checker {
                             inner: Box::new(CheckerError::Assume(term.clone())),
                             rule: "assume".into(),
-                            step: id.clone(),
+                            step: id.as_str().into(),
                         });
                     }
                 }
@@ -368,67 +368,16 @@ impl<'c> ParallelProofChecker<'c> {
         term: &Rc<Term>,
         premises: &IndexSet<Rc<Term>>,
         iter: &ScheduleIter,
-        mut stats: &mut Option<&mut CheckerStatistics<CR>>,
+        stats: &mut Option<&mut CheckerStatistics<CR>>,
     ) -> bool {
-        let time = Instant::now();
-
-        // Similarly to the single-threaded checker, we ignore `assume` commands that are inside
-        // subproofs
-        if iter.is_in_subproof() {
-            return true;
-        }
-
-        if premises.contains(term) {
-            if let Some(s) = stats {
-                let time = time.elapsed();
-                s.assume_time += time;
-                s.results
-                    .add_assume_measurement(s.file_name, id, true, time);
-            }
-            return true;
-        }
-
-        if self.config.elaborated {
-            return false;
-        }
-
-        let mut found = false;
-        let mut polyeq_time = Duration::ZERO;
-        let mut core_time = Duration::ZERO;
-
-        for p in premises {
-            let mut this_polyeq_time = Duration::ZERO;
-
-            let mut comp = Polyeq::new().mod_reordering(true).mod_nary(true);
-            let result = comp.eq_with_time(term, p, &mut this_polyeq_time);
-            let depth = comp.max_depth();
-
-            polyeq_time += this_polyeq_time;
-
-            if let Some(s) = &mut stats {
-                s.results.add_polyeq_depth(depth);
-            }
-            if result {
-                core_time = this_polyeq_time;
-                found = true;
-                break;
-            }
-        }
-
-        if !found {
-            return false;
-        }
-
-        if let Some(s) = stats {
-            let time = time.elapsed();
-            s.assume_time += time;
-            s.assume_core_time += core_time;
-            s.polyeq_time += polyeq_time;
-            s.results
-                .add_assume_measurement(s.file_name, id, false, time);
-        }
-
-        true
+        check_assume_shared(
+            id,
+            term,
+            premises,
+            &self.config,
+            iter.is_in_subproof(),
+            stats,
+        )
     }
 
     fn check_step<CR: CollectResults + Send + Default>(
@@ -440,28 +389,9 @@ impl<'c> ParallelProofChecker<'c> {
         rare_check_context: Option<&RareCheckContext<'_>>,
         stats: &mut Option<&mut CheckerStatistics<CR>>,
     ) -> RuleResult {
-        let time = Instant::now();
         let mut polyeq_time = Duration::ZERO;
 
-        if !step.discharge.is_empty() && step.rule != "subproof" {
-            return Err(CheckerError::Subproof(SubproofError::DischargeInWrongRule));
-        }
-
-        let rule = match ProofChecker::get_rule(&step.rule, self.config.elaborated) {
-            Some(r) => r,
-            None if self.config.ignore_unknown_rules => {
-                self.is_holey = true;
-                return Ok(());
-            }
-            None => return Err(CheckerError::UnknownRule),
-        };
-
-        let check_hole_rewrite =
-            self.config.check_hole_rewrites && ProofChecker::is_hole_rewrite(step);
-        if (step.rule == "hole" && !check_hole_rewrite) || step.rule == "lia_generic" {
-            self.is_holey = true;
-        }
-
+        // Collect premises and discharge - this part is iterator-specific
         let premises: Vec<_> = step
             .premises
             .iter()
@@ -476,42 +406,36 @@ impl<'c> ParallelProofChecker<'c> {
             .map(|&i| iter.get_premise(i))
             .collect();
 
-        if check_hole_rewrite {
-            let checked = ProofChecker::check_hole_rewrite(
-                pool,
-                step,
-                &premises,
-                rare_check_context.expect("RARE context is initialized when checking is enabled"),
-                self.config.hole_rewrite_options,
-            );
-            self.is_holey |= !checked;
-        } else {
-            let rule_args = RuleArgs {
-                conclusion: &step.clause,
-                premises: &premises,
-                args: &step.args,
-                pool,
-                context: &mut self.context,
-                previous_command,
-                discharge: &discharge,
-                polyeq_time: &mut polyeq_time,
-                rare_rules: self.rare_rules.as_ref(),
-            };
+        // Prepare rule arguments - this is pool-specific
+        let rule_args = RuleArgs {
+            conclusion: &step.clause,
+            premises: &premises,
+            args: &step.args,
+            pool,
+            context: &mut self.context,
+            previous_command,
+            discharge: &discharge,
+            polyeq_time: &mut polyeq_time,
+            rare_rules: self.rare_rules.as_ref(),
+        };
 
-            rule(rule_args)?;
-        }
+        // Use shared core logic
+        let context = StepCheckContext {
+            config: &self.config,
+            is_end_step: iter.is_end_step(),
+            current_subproof: iter.current_subproof(),
+            subproof_depth: iter.depth(),
+            is_holey: &mut self.is_holey,
+            rare_check_context,
+        };
 
-        if iter.is_end_step() {
-            let subproof = iter.current_subproof().unwrap();
-            ProofChecker::check_discharge(subproof, iter.depth(), &step.discharge)?;
-        }
+        let result = check_step_core(step, rule_args, context, stats);
 
+        // Update polyeq time in stats
         if let Some(s) = stats {
-            let time = time.elapsed();
-            s.results
-                .add_step_measurement(s.file_name, &step.id, &step.rule, time);
             s.polyeq_time += polyeq_time;
         }
-        Ok(())
+
+        result
     }
 }

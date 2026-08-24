@@ -1,1 +1,0 @@
-(step t157 (cl (= (< arg1 (- (+ (+ arg0 distance) fmt_length) 4)) (not (>= arg1 (- (+ (+ arg0 distance) fmt_length) 4))))) :rule hole :args ("TRUST_THEORY_REWRITE"))

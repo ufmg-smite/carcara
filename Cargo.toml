@@ -1,5 +1,5 @@
 [workspace]
-members = ["carcara", "cli", "test-generator"]
+members = ["carcara", "carcara-macros", "cli", "test-generator"]
 resolver = "2"
 
 [profile.release]

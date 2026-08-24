@@ -1,1 +1,0 @@
-(step t148 (cl (= (+ (* 4 (x_count (+ -2 fmt1 (* -1 fmt0)))) (* 4 (s_count (+ -2 fmt1 (* -1 fmt0)))) arg0) (+ arg0 (* 4 (x_count (+ -2 fmt1 (* -1 fmt0)))) (* 4 (s_count (+ -2 fmt1 (* -1 fmt0))))))) :rule hole :args ("TRUST_THEORY_REWRITE"))

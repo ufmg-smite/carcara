@@ -1,1 +1,0 @@
-(step t140 (cl (= (+ (+ -2 fmt1) (* -1 fmt0)) (+ -2 fmt1 (* -1 fmt0)))) :rule hole :args ("TRUST_THEORY_REWRITE"))

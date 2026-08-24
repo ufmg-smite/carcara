@@ -2,8 +2,9 @@ use super::{
     assert_clause_len, assert_eq, assert_is_bool_constant, assert_num_args, assert_num_premises,
     CheckerError, Premise, RuleArgs, RuleResult,
 };
-use crate::{ast::*, resolution::*};
+use crate::{ast::*, resolution::*, utils::MultiSet};
 use indexmap::IndexSet;
+use std::collections::{hash_map::Entry, HashMap, VecDeque};
 
 pub fn resolution(rule_args: RuleArgs) -> RuleResult {
     if !rule_args.args.is_empty() {
@@ -30,7 +31,7 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
     greedy_resolution(conclusion, &premise_clauses, pool, false)
         .map(|_| ())
         .or_else(|greedy_error| {
-            if rup_resolution(conclusion, premises) {
+            if rup(conclusion, premises) {
                 Ok(())
             } else {
                 // If RUP resolution also fails, we return the error originally returned by the greedy
@@ -40,8 +41,18 @@ pub fn resolution(rule_args: RuleArgs) -> RuleResult {
         })
 }
 
-fn rup_resolution(conclusion: &[Rc<Term>], premises: &[Premise]) -> bool {
-    let mut clauses: Vec<IndexSet<(bool, &Rc<Term>)>> = premises
+pub fn rup_resolution(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+    if rup(conclusion, premises) {
+        Ok(())
+    } else {
+        Err(ResolutionError::RupFailed.into())
+    }
+}
+
+fn rup(conclusion: &[Rc<Term>], premises: &[Premise]) -> bool {
+    // A `None` clause signifies that the clause was removed (equivalent to the clause ⊤). A `Some`
+    // empty clause represents an actual empty clause, i.e. ⊥.
+    let mut clauses: Vec<Option<IndexSet<(bool, &Rc<Term>)>>> = premises
         .iter()
         .map(|p| {
             p.clause
@@ -49,36 +60,62 @@ fn rup_resolution(conclusion: &[Rc<Term>], premises: &[Premise]) -> bool {
                 .map(Rc::remove_all_negations_with_polarity)
                 .collect()
         })
+        .map(Some)
         .collect();
-    clauses.extend(conclusion.iter().map(|t| {
-        let (p, t) = t.remove_all_negations_with_polarity();
-        let mut clause = IndexSet::new();
-        clause.insert((!p, t));
-        clause
-    }));
 
-    loop {
-        if clauses.is_empty() {
-            return false;
-        }
-        let smallest = clauses.iter().min_by_key(|c| c.len()).unwrap();
-        match smallest.len() {
-            0 => return true,
-            1 => {
-                let literal = *smallest.iter().next().unwrap();
-                let negated_literal = (!literal.0, literal.1);
+    let mut assignments: HashMap<&Rc<Term>, bool> = HashMap::new();
 
-                // Remove all clauses that contain the literal
-                clauses.retain(|c| !c.contains(&literal));
-
-                // Remove the negated literal from all clauses that contain it
-                for c in &mut clauses {
-                    c.shift_remove(&negated_literal);
-                }
-            }
-            _ => return false,
+    // A map from literals to a list of clauses that use them
+    let mut used_in: HashMap<&Rc<Term>, Vec<usize>> = HashMap::new();
+    for (i, cl) in clauses.iter().enumerate() {
+        let Some(cl) = cl else { continue };
+        for lit in cl {
+            used_in.entry(lit.1).or_default().push(i);
         }
     }
+
+    // We make a queue with all the unit literals, starting from the negated conclusion
+    let mut queue: VecDeque<(bool, &Rc<Term>)> = conclusion
+        .iter()
+        .map(Rc::remove_all_negations_with_polarity)
+        .map(|(p, l)| (!p, l))
+        .collect();
+    // ...and including any premise clause that happens to be unit
+    queue.extend(clauses.iter().filter_map(|cl| {
+        let cl = cl.as_ref()?;
+        if cl.len() == 1 {
+            cl.iter().next().copied()
+        } else {
+            None
+        }
+    }));
+
+    while let Some(lit) = queue.pop_front() {
+        match assignments.entry(lit.1) {
+            Entry::Occupied(e) if *e.get() != lit.0 => return true, // conflict!
+            Entry::Occupied(_) => continue,
+            Entry::Vacant(e) => e.insert(lit.0),
+        };
+        let negated = (!lit.0, lit.1);
+        for c in used_in.get(lit.1).iter().copied().flatten() {
+            let Some(cl) = &mut clauses[*c] else { continue };
+
+            // Remove all clauses that contain the literal
+            if cl.contains(&lit) {
+                clauses[*c] = None;
+            // Remove the negated literal from all clauses that contain it
+            } else if cl.swap_remove(&negated) {
+                if cl.is_empty() {
+                    return true; // return true as soon as a clause becomes empty
+                } else if cl.len() == 1 {
+                    // ...or if the clause becomes unit, add the literal to the queue
+                    let unit = cl.iter().next().unwrap();
+                    queue.push_back(*unit);
+                }
+            }
+        }
+    }
+    false
 }
 
 pub fn resolution_with_args(
@@ -222,13 +259,20 @@ pub fn tautology(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult 
 pub fn contraction(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
     assert_num_premises(premises, 1)?;
 
-    let premise_set: IndexSet<_> = premises[0].clause.iter().collect();
-    let conclusion_set: IndexSet<_> = conclusion.iter().collect();
-    if let Some(&t) = premise_set.difference(&conclusion_set).next() {
-        Err(CheckerError::ContractionMissingTerm(t.clone()))
-    } else if let Some(&t) = conclusion_set.difference(&premise_set).next() {
-        Err(CheckerError::ContractionExtraTerm(t.clone()))
-    } else {
-        Ok(())
+    let premise_set: MultiSet<_> = premises[0].clause.iter().collect();
+    let conclusion_set: MultiSet<_> = conclusion.iter().collect();
+    for (&t, &count) in &premise_set.0 {
+        let got = conclusion_set.get(&t);
+        if got == 0 {
+            return Err(CheckerError::ContractionMissingTerm(t.clone()));
+        } else if got > count {
+            return Err(CheckerError::ContractionExtraTerm(t.clone()));
+        }
     }
+    for (t, count) in conclusion_set.0 {
+        if premise_set.get(&t) < count {
+            return Err(CheckerError::ContractionExtraTerm(t.clone()));
+        }
+    }
+    Ok(())
 }

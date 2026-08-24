@@ -1,1 +1,0 @@
-(step t160 (cl (= (+ distance fmt_length arg0 -4) (+ -4 arg0 fmt_length distance))) :rule hole :args ("TRUST_THEORY_REWRITE"))

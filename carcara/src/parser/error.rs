@@ -65,9 +65,25 @@ pub enum ParserError {
     #[error("expected bitvector sort, got '{0}'")]
     ExpectedBvSort(Sort),
 
+    /// Expected `DatatypeSort`
+    #[error("expected datatype sort, got '{0}'")]
+    ExpectedDTSort(Sort),
+
     // Expected Constant::Integer, got other Term
     #[error("expected integer constant, got '{0}'")]
     ExpectedIntegerConstant(Rc<Term>),
+
+    /// Pattern in match is not valid
+    #[error("invalid pattern '{0}'")]
+    InvalidPattern(Rc<Term>),
+
+    /// Results in match do not have the same type
+    #[error("invalid match results (different types) '{0} and {1}'")]
+    InvalidMatchResults(Rc<Term>, Rc<Term>),
+
+    /// Results in match do not have the same type
+    #[error("Patterns in match statement do not have variable or do not cover all constructors")]
+    InvalidPatterns,
 
     /// A term that is not a function was used as a function.
     #[error("'{0}' is not a function sort")]
@@ -121,6 +137,10 @@ pub enum ParserError {
     #[error("subproof '{0}' was not closed")]
     UnclosedSubproof(String),
 
+    /// The parser encountered an `assume` after a `step` inside of a subproof.
+    #[error("`assume` command '{0}' appears after step inside subproof")]
+    AssumeAfterStepInSubproof(String),
+
     /// The parser encountered an unknown indexed operator.
     #[error("not a valid indexed operator: '{0}'")]
     InvalidIndexedOp(String),
@@ -128,10 +148,6 @@ pub enum ParserError {
     /// The parser encountered an unknown qualified operator.
     #[error("not a valid qualified operator: '{0}'")]
     InvalidQualifiedOp(String),
-
-    /// The parser encountered an invalid argument.
-    #[error("not a valid format for the argument: '{0}'")]
-    InvalidRareArgFormat(String),
 
     /// The parser encountered an unknown qualified operator.
     #[error("not a valid qualified argument: '{0}'")]
@@ -156,10 +172,6 @@ pub enum ParserError {
     /// Every RARE rule argument must name a declared parameter.
     #[error("RARE rule '{0}' uses undeclared argument '{1}'")]
     UndeclaredRareArgument(String, String),
-
-    /// The parser encountered an unknown rare rule attribute.
-    #[error("the rule '{0}' has to start with the arguments first")]
-    ExpectArgsFirst(String),
 }
 
 /// Returns an error if the length of `sequence` is not in the `expected` range.
@@ -195,7 +207,7 @@ where
 #[derive(Debug, Error)]
 pub struct SortError {
     /// The possible sorts that were expected.
-    pub expected: Vec<Sort>,
+    pub expected: Box<[Sort]>,
 
     /// The sort we got.
     pub got: Sort,
@@ -203,7 +215,7 @@ pub struct SortError {
 
 impl fmt::Display for SortError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.expected.as_slice() {
+        match &*self.expected {
             [] => unreachable!(),
             [p] => write!(f, "expected '{}', got '{}'", p, self.got),
             [first, middle @ .., last] => {
@@ -224,7 +236,7 @@ impl SortError {
             Ok(())
         } else {
             Err(Self {
-                expected: vec![expected.clone()],
+                expected: vec![expected.clone()].into_boxed_slice(),
                 got: got.clone(),
             })
         }
@@ -244,7 +256,7 @@ impl SortError {
             Ok(())
         } else {
             Err(Self {
-                expected: possibilities.to_vec(),
+                expected: possibilities.to_vec().into_boxed_slice(),
                 got: got.clone(),
             })
         }
@@ -256,7 +268,11 @@ impl SortError {
         value: Option<&Sort>,
         got: &Sort,
     ) -> Result<(), Self> {
-        let any = Sort::Atom("?".to_owned(), Vec::new());
+        let any = Sort::Atom("?".into(), Box::new([]));
+
+        if let Sort::RareList(inner) = got {
+            return Self::assert_array_sort(pool, key, value, inner.as_sort().unwrap());
+        }
 
         if let Sort::ParamSort(v, head) = got {
             if let Some(Sort::Var(name)) = head.as_sort() {
@@ -264,7 +280,7 @@ impl SortError {
                     if v.len() != 2 {
                         let any = pool.add(Term::Sort(any.clone()));
                         return Err(Self {
-                            expected: vec![Sort::Array(any.clone(), any)],
+                            expected: vec![Sort::Array(any.clone(), any)].into_boxed_slice(),
                             got: got.clone(),
                         });
                     }
@@ -284,19 +300,13 @@ impl SortError {
         let expected = {
             let key = pool.add(Term::Sort(key.cloned().unwrap_or_else(|| any.clone())));
             let value = pool.add(Term::Sort(value.cloned().unwrap_or_else(|| any.clone())));
-            vec![Sort::Array(key, value)]
+            vec![Sort::Array(key, value)].into_boxed_slice()
         };
-
         let Sort::Array(got_key, got_value) = got else {
             return Err(Self { expected, got: got.clone() });
         };
-
-        if (!got_key.as_sort().unwrap().is_polymorphic()
-            && got_key.as_var().is_none()
-            && key.is_some_and(|k| got_key.as_sort().unwrap() != k))
-            || (!got_value.as_sort().unwrap().is_polymorphic()
-                && got_value.as_var().is_none()
-                && value.is_some_and(|v| got_value.as_sort().unwrap() != v))
+        if key.is_some_and(|k| got_key.as_sort().unwrap() != k)
+            || value.is_some_and(|v| got_value.as_sort().unwrap() != v)
         {
             return Err(Self { expected, got: got.clone() });
         }
