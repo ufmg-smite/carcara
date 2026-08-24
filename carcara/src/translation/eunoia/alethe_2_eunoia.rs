@@ -6,7 +6,6 @@ use crate::translation::{
 };
 
 pub struct EunoiaTranslator {
-    // We are not including it into the Pool of terms
     /// "Alethe in Eunoia" signature considered during translation.
     alethe_signature: AletheTheory,
 
@@ -14,9 +13,9 @@ pub struct EunoiaTranslator {
 }
 
 impl EunoiaTranslator {
-    pub fn new() -> EunoiaTranslator {
+    pub fn new(eunoia_mech: &str) -> EunoiaTranslator {
         Self {
-            alethe_signature: AletheTheory::new(),
+            alethe_signature: AletheTheory::new(eunoia_mech),
             translation: TranslatorData::new(),
         }
     }
@@ -967,6 +966,15 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
 
         let mut eunoia_prelude = Vec::new();
 
+        // Include files for the Alethe mechanization in Eunoia.
+        self.alethe_signature
+            .mechanization_files
+            .iter()
+            .for_each(|path| {
+                eunoia_prelude.push(EunoiaCommand::Include { path: path.clone() });
+            });
+
+        // Sorts declarations.
         sort_declarations.iter().for_each(|pair| {
             eunoia_prelude.push(EunoiaCommand::DeclareConst {
                 name: pair.0.clone(),
@@ -975,6 +983,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
             });
         });
 
+        // Constants declarations.
         function_declarations.iter().for_each(|pair| {
             eunoia_prelude.push(EunoiaCommand::DeclareConst {
                 name: pair.0.clone(),
@@ -984,12 +993,6 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
         });
 
         eunoia_prelude
-    }
-}
-
-impl Default for EunoiaTranslator {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

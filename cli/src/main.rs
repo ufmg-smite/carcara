@@ -6,9 +6,10 @@ mod path_args;
 
 use app::*;
 use carcara::{
-    ast::{self, rare_rules::Rules},
+    ast::{self, rare_rules::Rules, Proof},
     benchmarking::OnlineBenchmarkResults,
     check, check_and_elaborate, check_parallel, generate_lia_smt_instances, parser, slice,
+    translation::{self, ProofPrinter, Translator},
 };
 use error::{CliError, CliResult};
 use path_args::{get_instances_from_paths, infer_problem_path};
@@ -66,6 +67,7 @@ fn main() {
         Command::GenerateLiaProblems(options) => {
             generate_lia_problems_command(options, !cli.no_print_with_sharing)
         }
+        Command::Translate(options) => translate_command(options),
     };
     if let Err(e) = result {
         log::error!("{}", e);
@@ -304,6 +306,58 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
         let mut f = File::create(file_name)?;
         write!(f, "{}", content)?;
     }
+
+    Ok(())
+}
+
+// Translation-related commands.
+fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
+    let (problem, proof, rules) = get_instance(&options.input)?;
+
+    let (alethe_problem, mut alethe_proof, _, _) = parser::parse_instance(
+        &problem,
+        &proof,
+        rules.as_deref(),
+        options.parsing.into_config(),
+    )?;
+
+    // NOTE: currently supporting only translation into Eunoia.
+    match &options.target {
+        TranslationTarget::Eunoia => translate_2_eunoia_command(
+            &alethe_problem,
+            &mut alethe_proof,
+            &options.eunoia_mech.unwrap(),
+        ),
+    }
+}
+
+fn translate_2_eunoia_command(
+    alethe_problem: &ast::Problem,
+    proof: &mut Proof,
+    eunoia_mech: &str,
+) -> CliResult<()> {
+    let mut translator = translation::eunoia::alethe_2_eunoia::EunoiaTranslator::new(eunoia_mech);
+    let eunoia_prelude = translator.translate_problem(alethe_problem);
+    let eunoia_proof = translator.translate(proof);
+
+    // Sink where to write the "prelude" of the problem and the path to the Eunoia mechanization.
+    let mut buf_prelude = Vec::new();
+    let s_exp_formatter_prelude =
+        carcara::translation::eunoia::printer::SExpFormatter::new(&mut buf_prelude);
+    let mut printer_prelude =
+        carcara::translation::eunoia::printer::EunoiaPrinter::new(s_exp_formatter_prelude);
+
+    printer_prelude.write_proof(&eunoia_prelude).unwrap();
+
+    // Sink where to write the translated proof.
+    let mut buf_proof = Vec::new();
+    let s_exp_formatter_proof = translation::eunoia::printer::SExpFormatter::new(&mut buf_proof);
+    let mut printer_proof = translation::eunoia::printer::EunoiaPrinter::new(s_exp_formatter_proof);
+
+    printer_proof.write_proof(eunoia_proof).unwrap();
+
+    println!("{}", std::str::from_utf8(&buf_prelude).unwrap());
+    println!("{}", std::str::from_utf8(&buf_proof).unwrap());
 
     Ok(())
 }

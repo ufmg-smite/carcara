@@ -1,8 +1,15 @@
 use crate::translation::eunoia::ast::*;
-/// Definition of Alethe in Eunoia, following [AletheInAlf](https://github.com/cvc5/aletheinalf/).
+
 // NOTE: THIS IS ONLY DONE TO AVOID THE COMPLEXITIES OF DECLARING
 // AND DEALING WITH GLOBALS IN RUST.
+
+/// Definition of Alethe in Eunoia, following [AletheInEunoia](https://github.com/cvc5/AletheInEunoia).
+/// Serves as an additional layer of abstraction for the current compiler to
+/// interact with the internals of our current main mechanization in Eunoia.
 pub struct AletheTheory {
+    // Path to each file of the current AletheInEunoia mechanization.
+    pub mechanization_files: Vec<String>,
+
     // Built-in operators.
     pub cl: &'static str,
     // To represent the empty clause.
@@ -66,8 +73,22 @@ pub struct AletheTheory {
 }
 
 impl AletheTheory {
-    pub fn new() -> Self {
+    pub fn new(eunoia_mech: &str) -> Self {
         AletheTheory {
+            // Build paths to current mechanization files.
+            mechanization_files: vec![
+                // Theories
+                format!("{}/theories/theory.eo", eunoia_mech),
+                // Rules
+                format!("{}/rules/alethe.eo", eunoia_mech),
+                format!("{}/rules/tautologies.eo", eunoia_mech),
+                format!("{}/rules/rare_rules.eo", eunoia_mech),
+                // Programs
+                format!("{}/programs/programs.eo", eunoia_mech),
+                format!("{}/programs/arith.eo", eunoia_mech),
+            ],
+
+            // Clauses.
             cl: "@cl",
             empty_cl: "@empty_cl",
 
@@ -226,11 +247,5 @@ impl AletheTheory {
 
             _ => false,
         }
-    }
-}
-
-impl Default for AletheTheory {
-    fn default() -> Self {
-        AletheTheory::new()
     }
 }

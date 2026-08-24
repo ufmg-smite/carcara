@@ -79,6 +79,9 @@ pub enum Command {
 
     /// Generates the equivalent SMT instance for every `lia_generic` step in a proof.
     GenerateLiaProblems(ParseCommandOptions),
+
+    /// Translates an Alethe proof into different formats (Eunoia, TSTP).
+    Translate(TranslateCommandOptions),
 }
 
 #[derive(Args)]
@@ -382,6 +385,30 @@ pub struct SliceCommandOptions {
     stats: bool,
     #[clap(long, default_value = "0", hide = true)]
     stack_size: usize,
+}
+
+// Translation-related options.
+#[derive(ArgEnum, Clone)]
+pub enum TranslationTarget {
+    // NOTE: currently supporting translation into Eunoia.
+    Eunoia,
+}
+
+#[derive(Args)]
+pub struct TranslateCommandOptions {
+    #[clap(arg_enum)]
+    pub target: TranslationTarget,
+
+    /// When translating into Eunoia, we need to pass a path to the folder
+    /// containing the corresponding mechanization.
+    #[clap(long)]
+    pub eunoia_mech: Option<String>,
+
+    #[clap(flatten)]
+    pub input: Input,
+
+    #[clap(flatten)]
+    pub parsing: ParsingOptions,
 }
 
 #[derive(ArgEnum, Clone)]
