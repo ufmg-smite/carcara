@@ -898,9 +898,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                     "refl" => {
                         // We include, as an argument, the context surrounding this
                         // subproof's context.
-                        eunoia_arguments.push(EunoiaTerm::Id(
-                            self.get_current_context_id(),
-                        ));
+                        eunoia_arguments.push(EunoiaTerm::Id(self.get_current_context_id()));
 
                         self.translate_generic_step(
                             id,
