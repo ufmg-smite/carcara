@@ -72,7 +72,7 @@ impl<'a> ProofPrinter for EunoiaPrinter<'a> {
             match command {
                 EunoiaCommand::Include { path } => {
                     tag = "include".to_owned();
-                    args = vec![path.clone()];
+                    args = vec![format!(r#""{}""#, path)];
                 }
 
                 EunoiaCommand::Assume { name, term } => {
