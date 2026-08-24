@@ -900,7 +900,6 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                         // subproof's context.
                         eunoia_arguments.push(EunoiaTerm::Id(
                             self.get_current_context_id(),
-                            // self.get_last_introduced_context_id(),
                         ));
 
                         self.translate_generic_step(
