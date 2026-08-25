@@ -184,7 +184,7 @@
 format</a>, with a focus on performance
 and usability. It can efficiently check Alethe proofs even in the presence of coarse-grained steps,
 and reports detailed error messages in the case that the proof is invalid. Besides checking, Carcara
-is capable of <em>elaborating</em> proofs, by adding ommited detail and breaking down hard-to-check steps
+is capable of <em>elaborating</em> proofs, by adding omitted detail and breaking down hard-to-check steps
 into multiple simpler steps.</p>
 <p>This project was developed in the SMITE research group, at Universidade Federal de
 Minas Gerais (UFMG). A research paper describing Carcara has been <a href="https://link.springer.com/chapter/10.1007/978-3-031-30823-9_19">published at TACAS
@@ -318,7 +318,7 @@ polyequality. The following step is valid:</p>
 <pre><code>(step t1 (cl (= (or (= a b) c) (or (= b a) c))) :rule refl)
 </code></pre>
 <p>The <code>polyeq</code> elaboration pass can be used to remove all such instances where polyequality reasoning
-is required. For exemple, calling <code>carcara elaborate --pipeline polyeq</code> on the above step will
+is required. For example, calling <code>carcara elaborate --pipeline polyeq</code> on the above step will
 transform it into the following steps:</p>
 <pre><code>(step t1.t1 (cl (= (= a b) (= b a))) :rule eq_symmetric)
 (step t1.t2 (cl (= (or (= a b) c) (or (= b a) c))) :rule cong :premises (t1.t1))
@@ -464,8 +464,8 @@ a single <code>contraction</code> step deduplicate multiple pivots.</p>
 reordering steps can be challenging to deal with. With that in mind, Carcara has an elaboration step
 that can completely remove all <code>reordering</code> steps from a proof.</p>
 <p>This is done by replacing the <code>reordering</code> step with its premise and, anytime it is used as a
-premise in another step, recomputing the clause of the step that used it. As an exmple, consider the
-following proof:</p>
+premise in another step, recomputing the clause of the step that used it. As an example, consider
+the following proof:</p>
 <pre><code>(step t1 (cl a b c) :rule hole)
 (step t2 (cl b a c) :rule reordering :premises (t1))
 (step t3 (cl b a c d) :rule weakening :premises (t2))
@@ -482,7 +482,7 @@ be recomputed, and these changes will propagate down the proof.</p>
 <ol class="footnote-definition"><li id="footnote-1">
 <p>Strictly speaking, the step would not be invalid according to the semantics of Alethe, which
 are entirely agnostic to clause ordering. However, when elaborating a proof, we aim to ensure a more
-strict semantics, in which clause ordering is maitained in rules such as <code>weakening</code>. <a href="#fr-1-1">↩</a></p>
+strict semantics, in which clause ordering is maintained in rules such as <code>weakening</code>. <a href="#fr-1-1">↩</a></p>
 </li>
 </ol><div style="break-before: page; page-break-before: always;"></div><h1 id="other-features"><a class="header" href="#other-features">Other features</a></h1>
 <p>Besides proof checking and elaboration, Carcara has a number of other functions useful for dealing

@@ -183,8 +183,8 @@
 reordering steps can be challenging to deal with. With that in mind, Carcara has an elaboration step
 that can completely remove all <code>reordering</code> steps from a proof.</p>
 <p>This is done by replacing the <code>reordering</code> step with its premise and, anytime it is used as a
-premise in another step, recomputing the clause of the step that used it. As an exmple, consider the
-following proof:</p>
+premise in another step, recomputing the clause of the step that used it. As an example, consider
+the following proof:</p>
 <pre><code>(step t1 (cl a b c) :rule hole)
 (step t2 (cl b a c) :rule reordering :premises (t1))
 (step t3 (cl b a c d) :rule weakening :premises (t2))
@@ -201,7 +201,7 @@ be recomputed, and these changes will propagate down the proof.</p>
 <ol class="footnote-definition"><li id="footnote-1">
 <p>Strictly speaking, the step would not be invalid according to the semantics of Alethe, which
 are entirely agnostic to clause ordering. However, when elaborating a proof, we aim to ensure a more
-strict semantics, in which clause ordering is maitained in rules such as <code>weakening</code>. <a href="#fr-1-1">↩</a></p>
+strict semantics, in which clause ordering is maintained in rules such as <code>weakening</code>. <a href="#fr-1-1">↩</a></p>
 </li>
 </ol>
                     </main>

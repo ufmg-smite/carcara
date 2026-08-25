@@ -188,7 +188,7 @@ polyequality. The following step is valid:</p>
 <pre><code>(step t1 (cl (= (or (= a b) c) (or (= b a) c))) :rule refl)
 </code></pre>
 <p>The <code>polyeq</code> elaboration pass can be used to remove all such instances where polyequality reasoning
-is required. For exemple, calling <code>carcara elaborate --pipeline polyeq</code> on the above step will
+is required. For example, calling <code>carcara elaborate --pipeline polyeq</code> on the above step will
 transform it into the following steps:</p>
 <pre><code>(step t1.t1 (cl (= (= a b) (= b a))) :rule eq_symmetric)
 (step t1.t2 (cl (= (or (= a b) c) (or (= b a) c))) :rule cong :premises (t1.t1))
