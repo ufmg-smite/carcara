@@ -35,6 +35,7 @@
 
 #[macro_use]
 pub mod ast;
+pub mod automata;
 pub mod benchmarking;
 pub mod checker;
 mod drup;

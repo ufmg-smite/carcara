@@ -653,6 +653,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
 
             // TODO
             Constant::BitVec(..) => panic!(),
+            Constant::RegLan(_, _) => panic!(),
         }
     }
 

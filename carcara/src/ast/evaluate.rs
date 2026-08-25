@@ -15,19 +15,20 @@ pub enum Value {
 
 impl Value {
     /// Constructs a value from a [`Constant`].
-    pub fn from_constant(c: Constant) -> Self {
+    pub fn from_constant(c: Constant) -> Option<Self> {
         match c {
-            Constant::Integer(i) => Value::Integer(i),
-            Constant::Real(r) => Value::Real(r),
-            Constant::String(s) => Value::String(s),
-            Constant::BitVec(val, width) => Value::BitVec(val, width),
+            Constant::Integer(i) => Some(Value::Integer(i)),
+            Constant::Real(r) => Some(Value::Real(r)),
+            Constant::String(s) => Some(Value::String(s)),
+            Constant::RegLan(_, _) => None,
+            Constant::BitVec(val, width) => Some(Value::BitVec(val, width)),
         }
     }
 
     /// Tries to construct a value from a term, return `None` if it is not possible.
     pub fn from_term(t: &Rc<Term>) -> Option<Self> {
         match t.as_ref() {
-            Term::Const(c) => Some(Value::from_constant(c.clone())),
+            Term::Const(c) => Value::from_constant(c.clone()),
             Term::Op(Operator::True, _) => Some(Value::Bool(true)),
             Term::Op(Operator::False, _) => Some(Value::Bool(false)),
             _ => None,
@@ -118,7 +119,8 @@ impl Rc<Term> {
         }
 
         let result = match self.as_ref() {
-            Term::Const(c) => Value::from_constant(c.clone()).into_term(),
+            Term::Const(c) => Value::from_constant(c.clone())
+                .map_or_else(|| Term::Const(c.clone()), Value::into_term),
             Term::Op(op, args) => {
                 let args: Vec<_> = args
                     .iter()
@@ -352,7 +354,8 @@ fn eval_op(op: Operator, args: &[Rc<Term>]) -> Option<Value> {
         | Operator::ReDiff
         | Operator::ReKleeneCross
         | Operator::ReOption
-        | Operator::ReRange => return None,
+        | Operator::ReRange
+        | Operator::ReFromAutomaton => return None,
 
         // Bitvectors
         Operator::BvNot => {

@@ -93,6 +93,7 @@ impl PrimitivePool {
                 Constant::Integer(_) => Sort::Int,
                 Constant::Real(_) => Sort::Real,
                 Constant::String(_) => Sort::String,
+                Constant::RegLan(_, _) => Sort::RegLan,
                 Constant::BitVec(_, w) => Sort::BitVec(*w),
             },
             Term::Var(_, sort) => sort.as_sort().unwrap().clone(),
@@ -276,7 +277,8 @@ impl PrimitivePool {
                 | Operator::ReDiff
                 | Operator::ReKleeneCross
                 | Operator::ReOption
-                | Operator::ReRange => Sort::RegLan,
+                | Operator::ReRange
+                | Operator::ReFromAutomaton => Sort::RegLan,
                 Operator::RareList => {
                     let element_sort = if let Some(arg) = args.first() {
                         self.compute_sort(arg)

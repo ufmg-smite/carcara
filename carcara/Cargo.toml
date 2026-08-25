@@ -21,6 +21,7 @@ rug = { version = "1.21.0", default-features = false, features = [
     "rational",
 ] }
 thiserror = "1.0.47"
+nom = "8.0.0"
 
 [dev-dependencies]
 test-generator = { path = "../test-generator" }

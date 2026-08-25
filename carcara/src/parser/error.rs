@@ -149,6 +149,13 @@ pub enum ParserError {
     #[error("not a valid qualified operator: '{0}'")]
     InvalidQualifiedOp(String),
 
+    // RCP errors
+    #[error("not a valid automaton declaration: '{0}'")]
+    InvalidAutomatonDeclaration(String),
+
+    #[error("expected an automaton declaration, got: '{0}'")]
+    ExpectedAnAutomatonDeclaration(Rc<Term>),
+
     /// The parser encountered an invalid argument.
     #[error("not a valid format for the argument: '{0}'")]
     InvalidRareArgFormat(String),

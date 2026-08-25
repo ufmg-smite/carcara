@@ -16,6 +16,7 @@ use crate::{
         rare_rules::{RareStatements, Rules},
         *,
     },
+    automata::parser::parse_automaton,
     utils::{HashCache, HashMapStack},
     CarcaraResult, Error,
 };
@@ -409,6 +410,26 @@ impl<'p, 's> Parser<'p, 's> {
                 SortError::assert_eq(&Sort::String, sorts[0])?;
                 SortError::assert_eq(&Sort::String, sorts[1])?;
                 SortError::assert_eq(&Sort::String, sorts[2])?;
+            }
+            Operator::ReFromAutomaton => {
+                assert_num_args(&args, 1)?;
+                SortError::assert_eq(&Sort::String, sorts[0])?;
+                if let Term::Const(Constant::String(s)) = args[0].as_ref() {
+                    let automata = match parse_automaton(s.trim()) {
+                        Ok((remaining, automata)) => {
+                            if !remaining.is_empty() {
+                                return Err(ParserError::InvalidAutomatonDeclaration(s.clone()));
+                            }
+                            Ok(automata)
+                        }
+                        Err(_) => Err(ParserError::InvalidAutomatonDeclaration(s.clone())),
+                    }?;
+                    return Ok(self
+                        .pool
+                        .add(Term::Const(Constant::RegLan(s.to_owned(), automata))));
+                } else {
+                    return Err(ParserError::ExpectedAnAutomatonDeclaration(args[0].clone()));
+                }
             }
             Operator::StrFromCode | Operator::StrFromInt => {
                 assert_num_args(&args, 1)?;
