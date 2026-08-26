@@ -323,11 +323,9 @@ fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
 
     // NOTE: currently supporting only translation into Eunoia.
     match &options.target {
-        TranslationTarget::Eunoia => translate_2_eunoia_command(
-            &alethe_problem,
-            &mut alethe_proof,
-            &options.eunoia_mech.unwrap(),
-        ),
+        TranslationTarget::Eunoia => {
+            translate_2_eunoia_command(&alethe_problem, &mut alethe_proof, &options.eunoia_mech)
+        }
     }
 }
 
