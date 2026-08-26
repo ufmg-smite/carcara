@@ -14,6 +14,12 @@ pub enum ElaborationError {
 
     #[error("cannot uncrowd resolution without pivots being provided")]
     UncrowdMissingPivots,
+
+    #[error("cannot reconstruct DRUP elaboration: clause with hash {0:#x} has no proof")]
+    DrupMissingClause(u64),
+
+    #[error("cannot reconstruct DRUP elaboration: {0}")]
+    InvalidDrupTrace(&'static str),
 }
 
 impl ElaborationError {

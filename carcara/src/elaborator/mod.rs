@@ -1,3 +1,4 @@
+mod drup;
 pub mod error;
 mod hole;
 mod local;
@@ -192,6 +193,7 @@ impl<'e> Elaborator<'e> {
                 "eq_congruent_pred" => local::congruence::eq_congruent_pred,
                 "bounded_farkas" => local::farkas::bounded_farkas,
                 "eq_mp" => local::eq_mp::eq_mp,
+                "drup" => drup::elaborate_drup,
                 _ => return None,
             })
         }
