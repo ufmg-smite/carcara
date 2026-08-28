@@ -195,13 +195,13 @@ Minas Gerais (UFMG). A research paper describing Carcara has been <a href="https
 <div style="break-before: page; page-break-before: always;"></div><h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
 <h2 id="building-from-source"><a class="header" href="#building-from-source">Building from source</a></h2>
 <p>To build Carcara from source, you will first need to install Rust and Cargo. Currently, Carcara
-requires at least Rust version 1.87. Once you have installed an appropriate version of Rust, you can
+requires at least Rust version 1.93. Once you have installed an appropriate version of Rust, you can
 download and install the latest version of Carcara by running the following command:</p>
 <pre><code>cargo install --git https://github.com/ufmg-smite/carcara.git
 </code></pre>
 <p>This will build the project and place the <code>carcara</code> binary in Cargo’s binary directory
 (<code>~/.cargo/bin</code> by default).</p>
-<p>You can uninstall Carcara by running <code>cargo uninstall carcara-cli</code>.</p>
+<p>You can uninstall Carcara by running <code>cargo uninstall carcara</code>.</p>
 <h2 id="pre-built-binary"><a class="header" href="#pre-built-binary">Pre-built binary</a></h2>
 <p>Alternatively, a pre-compiled executable for the <code>x86_64-unknown-linux-gnu</code> platform can be
 downloaded from the <a href="https://github.com/ufmg-smite/carcara/releases">GitHub releases page</a>. To use
@@ -568,7 +568,7 @@ toolchain using Rustup, you can install Clippy and Rustfmt by running:</p>
 guidelines, or <code>cargo clippy</code> to detect possible problems using Clippy. You may also run <code>cargo clippy --fix</code> to let Clippy try to automatically fix the detected issues.</p>
 <p>When opening a pull request, make sure that your code compiles without warnings, and is formatted
 with Rustfmt. Run <code>cargo test</code> to ensure your changes do not break any existing behaviour.
-Additionally, we strive to support Rust versions as old as 1.87—please refrain from using features
+Additionally, we strive to support Rust versions as old as 1.93—please refrain from using features
 introduced in newer versions of Rust.</p>
 
                     </main>
