@@ -259,11 +259,7 @@ pub fn sat_refutation(elaborator: &mut Elaborator, step: &StepNode) -> Option<Rc
                 .iter()
                 .map(|l| build_term!(elaborator.pool, (not {l.clone()})))
                 .collect();
-            let problem = get_problem_string(
-                elaborator.pool,
-                &elaborator.problem.prelude.clone(),
-                &asserts,
-            );
+            let problem = get_problem_string(&elaborator.problem.prelude.clone(), &asserts);
             log::debug!("\tGet proof for lemma {}", i);
 
             let solver_proof_commands =

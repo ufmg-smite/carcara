@@ -1174,7 +1174,8 @@ impl<'p, 's> Parser<'p, 's> {
                 Token::ReservedWord(Reserved::DefineFun) => {
                     let (name, func_def) = self.parse_define_fun()?;
                     if func_def.params.is_empty() {
-                        constant_definitions.push((name.clone(), func_def.body.clone()));
+                        let sort = self.pool.sort(&func_def.body);
+                        constant_definitions.push((name.clone(), func_def.body.clone(), sort));
                     }
                     self.state.function_defs.insert(name, func_def);
                     continue;

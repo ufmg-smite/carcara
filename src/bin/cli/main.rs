@@ -6,7 +6,7 @@ mod path_args;
 
 use app::*;
 use carcara::{
-    ast::{self, Proof, rare_rules::Rules},
+    ast::{self, Proof, printer, rare_rules::Rules},
     benchmarking::OnlineBenchmarkResults,
     check, check_and_elaborate, check_parallel, generate_lia_smt_instances, parser, slice,
     translation::{self, ProofPrinter, Translator},
@@ -31,11 +31,11 @@ fn main() {
 
     logger::init(cli.log_level.into(), colors_enabled);
 
+    let display_options = printer::DisplayOptions::new().use_sharing(!cli.no_print_with_sharing);
     let result = match cli.command {
-        Command::Parse(options) => parse_command(options).and_then(|(pb, pf, _rules, mut pool)| {
-            ast::printer::print_proof(&mut pool, &pb.prelude, &pf, !cli.no_print_with_sharing)?;
-            Ok(())
-        }),
+        Command::Parse(options) => {
+            parse_command(options).map(|(_, pf, _, _)| println!("{}", pf.display(display_options)))
+        }
         Command::Check(options) => {
             match check_command(options) {
                 Ok(s) => println!("{}", s),
@@ -47,20 +47,13 @@ fn main() {
             }
             return;
         }
-        Command::Elaborate(options) => {
-            elaborate_command(options).and_then(|(res, pb, pf, mut pool)| {
-                println!("{}", res);
-                ast::printer::print_proof(&mut pool, &pb.prelude, &pf, !cli.no_print_with_sharing)?;
-                Ok(())
-            })
-        }
+        Command::Elaborate(options) => elaborate_command(options).map(|(res, _, pf, _)| {
+            println!("{}", res);
+            println!("{}", pf.display(display_options))
+        }),
         Command::Bench(options) => bench_command(options),
-        Command::Slice(options) => {
-            slice_command(options, cli.no_print_with_sharing).and_then(|(pb, pf, mut pool)| {
-                ast::printer::print_proof(&mut pool, &pb.prelude, &pf, !cli.no_print_with_sharing)?;
-                Ok(())
-            })
-        }
+        Command::Slice(options) => slice_command(options, cli.no_print_with_sharing)
+            .map(|(_, pf, _)| println!("{}", pf.display(display_options))),
         Command::GenerateLiaProblems(options) => {
             generate_lia_problems_command(options, !cli.no_print_with_sharing)
         }
@@ -271,13 +264,12 @@ fn slice_command(
             File::create(problem_filename)
                 .and_then(|mut f| {
                     f.write_all(format!("{}", problem.prelude).as_bytes())?;
-                    ast::printer::write_asserts(
-                        &mut pool,
-                        &problem.prelude,
-                        &mut f,
-                        &sliced_asserts,
-                        false,
-                    )?;
+
+                    let options = printer::DisplayOptions::new()
+                        .use_sharing(false)
+                        .sharing_prefix("p_".into())
+                        .smt_lib_strict(true);
+                    write!(f, "{}", printer::display_asserts(&sliced_asserts, options))?;
                     f.write_all(b"(check-sat)\n")?;
                     f.write_all(b"(exit)\n")
                 })
@@ -288,13 +280,9 @@ fn slice_command(
 
             File::create(proof_filename)
                 .and_then(|mut f| {
-                    ast::printer::write_proof_to_dest(
-                        &mut pool,
-                        &problem.prelude,
-                        &sliced_proof,
-                        &mut f,
-                        !no_print_with_sharing,
-                    )?;
+                    let options =
+                        printer::DisplayOptions::new().use_sharing(!no_print_with_sharing);
+                    write!(f, "{}", sliced_proof.display(options))?;
                     f.write_all(b"\n")
                 })
                 .map_err(|inner| carcara::Error::Io {

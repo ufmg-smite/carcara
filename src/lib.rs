@@ -378,7 +378,7 @@ pub fn generate_lia_smt_instances<'s>(
     use_sharing: bool,
 ) -> Result<Vec<(String, String)>, Error> {
     use std::fmt::Write;
-    let (problem, proof, _, mut pool) = parser::parse_instance(problem, proof, rules, config)?;
+    let (problem, proof, _, _) = parser::parse_instance(problem, proof, rules, config)?;
 
     let mut iter = proof.iter();
     let mut result = Vec::new();
@@ -394,17 +394,16 @@ pub fn generate_lia_smt_instances<'s>(
             let mut problem_string = String::new();
             write!(&mut problem_string, "{}", problem.prelude).unwrap();
 
-            let mut bytes = Vec::new();
-            ast::printer::write_clause_smt_problem(
-                &mut pool,
-                &problem.prelude,
-                &mut bytes,
-                &step.clause,
-                use_sharing,
+            let options = ast::printer::DisplayOptions::new()
+                .use_sharing(use_sharing)
+                .sharing_prefix("p_".into())
+                .smt_lib_strict(true);
+            write!(
+                &mut problem_string,
+                "{}",
+                ast::printer::display_clause_smt_problem(&step.clause, options)
             )
             .unwrap();
-            write!(&mut problem_string, "{}", String::from_utf8(bytes).unwrap()).unwrap();
-
             writeln!(&mut problem_string, "(check-sat)").unwrap();
             writeln!(&mut problem_string, "(exit)").unwrap();
 
