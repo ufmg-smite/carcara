@@ -23,7 +23,7 @@ pub fn hole(
         .iter()
         .map(|l| build_term!(elaborator.pool, (not {l.clone()})))
         .collect();
-    let problem = external::get_problem_string(elaborator.pool, &prelude, &asserts);
+    let problem = external::get_problem_string(&prelude, &asserts);
     let solver = elaborator.config.hole_solver.as_ref().unwrap();
     let (commands, status) = external::get_solver_proof(elaborator.pool, problem.clone(), solver)?;
     if status == Status::Holey {
@@ -48,8 +48,7 @@ pub fn lia_generic(
         .iter()
         .map(|l| build_term!(elaborator.pool, (not {l.clone()})))
         .collect();
-    let problem =
-        external::get_problem_string(elaborator.pool, &elaborator.problem.prelude, &asserts);
+    let problem = external::get_problem_string(&elaborator.problem.prelude, &asserts);
     let solver = elaborator.config.lia_solver.as_ref().unwrap();
     let (commands, _) = external::get_solver_proof(elaborator.pool, problem, solver)?;
 

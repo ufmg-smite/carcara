@@ -124,20 +124,23 @@ pub enum ExternalError {
     LemmaNotChecked(Rc<Term>),
 }
 
-pub fn get_problem_string<'a, I: IntoIterator<Item = &'a Rc<Term>>>(
-    pool: &mut Pool,
-    prelude: &ProblemPrelude,
-    assertions: I,
-) -> String {
+pub fn get_problem_string(prelude: &ProblemPrelude, assertions: &[Rc<Term>]) -> String {
     use std::fmt::Write;
 
     let mut problem = String::new();
     writeln!(&mut problem, "(set-option :produce-proofs true)").unwrap();
     write!(&mut problem, "{}", prelude).unwrap();
 
-    let mut bytes = Vec::new();
-    printer::write_asserts(pool, prelude, &mut bytes, assertions, false).unwrap();
-    write!(&mut problem, "{}", String::from_utf8(bytes).unwrap()).unwrap();
+    let options = printer::DisplayOptions::new()
+        .use_sharing(false)
+        .sharing_prefix("p_".into())
+        .smt_lib_strict(true);
+    write!(
+        &mut problem,
+        "{}",
+        printer::display_asserts(assertions, options)
+    )
+    .unwrap();
     writeln!(&mut problem, "(check-sat)").unwrap();
     writeln!(&mut problem, "(get-proof)").unwrap();
     writeln!(&mut problem, "(exit)").unwrap();

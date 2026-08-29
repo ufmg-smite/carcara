@@ -49,16 +49,10 @@ fn sat_refutation_external_check(
         } else {
             unreachable!();
         };
-        let mut bytes = Vec::new();
-        printer::write_term(
-            pool,
-            prelude,
-            &mut bytes,
-            &lemma_or,
-            true,
-            format!("@p{}_", counter),
-        )
-        .unwrap();
+        let options = printer::DisplayOptions::new()
+            .use_sharing(true)
+            .smt_lib_strict(true)
+            .sharing_prefix(format!("@p{}_", counter));
         counter += 1;
         if !lemmas_to_th_ids.contains_key(lemma) {
             log::debug!("Lemma {} not in map {:?}", lemma, lemmas_to_th_ids);
@@ -68,7 +62,7 @@ fn sat_refutation_external_check(
             &mut lemmas_str,
             "{};{}",
             lemmas_to_th_ids[lemma],
-            String::from_utf8(bytes).unwrap()
+            lemma_or.display(options),
         )
         .unwrap();
     });
@@ -427,7 +421,7 @@ pub fn sat_refutation(
                         });
 
                         log::debug!("\t[sat_refutation check] Check lemma: {:?}", lemma);
-                        let problem = external::get_problem_string(pool, &prelude, &assertions);
+                        let problem = external::get_problem_string(&prelude, &assertions);
 
                         if let Err(e) =
                             external::get_solver_proof(pool, problem.clone(), smt_solver)

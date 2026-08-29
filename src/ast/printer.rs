@@ -2,18 +2,17 @@
 
 use crate::{
     ast::{
-        AnchorArg, Binder, BindingList, Constant, MatchCase, MatchPattern, Operator, ParamOperator,
-        ProblemPrelude, Proof, ProofCommand, ProofIter, ProofStep, Rc, Sort, SortedVar, Term,
-        pool::Pool,
+        AnchorArg, Binder, BindingList, Constant, MatchCase, MatchPattern, Operator,
+        ProblemPrelude, Proof, ProofCommand, Rc, Sort, SortedVar, Term,
     },
     parser::Token,
     utils::{DedupIterator, is_symbol_character},
 };
-use indexmap::IndexMap;
+use carcara_macros::GenerateSetters;
 use std::{
     borrow::Cow,
-    collections::{HashMap, HashSet},
-    fmt, io,
+    collections::HashMap,
+    fmt,
     sync::atomic::{AtomicBool, Ordering},
 };
 
@@ -21,489 +20,410 @@ use std::{
 /// make use of term sharing or not.
 pub static USE_SHARING_IN_TERM_DISPLAY: AtomicBool = AtomicBool::new(false);
 
-/// Prints a proof to the standard output.
-///
-/// If `use_sharing` is `true`, terms that are used multiple times will make use of sharing. The
-/// first time a novel term appears, it receives a unique name using the `:named` attribute. After
-/// that, any occurrence of that term will simply use this name, instead of printing the whole term.
-pub fn print_proof(
-    pool: &mut Pool,
-    prelude: &ProblemPrelude,
-    proof: &Proof,
+#[derive(Debug, Clone, GenerateSetters)]
+pub struct DisplayOptions {
     use_sharing: bool,
-) -> Result<(), crate::Error> {
-    let mut stdout = io::stdout();
-    AlethePrinter::new(pool, prelude, use_sharing, &mut stdout)
-        .write_proof(proof)
-        .map_err(|inner| crate::Error::Io { inner, file: "<stdout>".into() })
+    sharing_prefix: String,
+    smt_lib_strict: bool,
 }
 
-/// Writes a proof to the provided destination.
-///
-/// If `use_sharing` is `true`, terms that are used multiple times will make use of sharing. The
-/// first time a novel term appears, it receives a unique name using the `:named` attribute. After
-/// that, any occurrence of that term will simply use this name, instead of printing the whole term.
-pub fn write_proof_to_dest(
-    pool: &mut Pool,
-    prelude: &ProblemPrelude,
-    proof: &Proof,
-    dest: &mut dyn io::Write,
-    use_sharing: bool,
-) -> io::Result<()> {
-    AlethePrinter::new(pool, prelude, use_sharing, dest).write_proof(proof)
+impl DisplayOptions {
+    /// Creates a new [`DisplayOptions`].
+    pub fn new() -> Self {
+        Self {
+            use_sharing: false,
+            sharing_prefix: "@p_".to_owned(),
+            smt_lib_strict: false,
+        }
+    }
 }
 
-/// Given the conclusion clause of a step, writes to `dest` an SMT-LIB problem that corresponds to
-// the negation of that clause.
-pub(crate) fn write_clause_smt_problem(
-    pool: &mut Pool,
-    prelude: &ProblemPrelude,
-    dest: &mut dyn io::Write,
+impl Default for DisplayOptions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Proof {
+    pub fn display(&self, options: DisplayOptions) -> impl fmt::Display {
+        struct DisplayProof<'a>(&'a Proof, DisplayOptions);
+
+        impl fmt::Display for DisplayProof<'_> {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                self.0.print(f, &mut Printer::new(&self.1))
+            }
+        }
+
+        DisplayProof(self, options)
+    }
+}
+
+impl Term {
+    pub fn display(&self, options: DisplayOptions) -> impl fmt::Display {
+        struct DisplayTerm<'a>(&'a Term, DisplayOptions);
+
+        impl fmt::Display for DisplayTerm<'_> {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                self.0.print(f, &mut Printer::new(&self.1))
+            }
+        }
+
+        DisplayTerm(self, options)
+    }
+}
+
+pub fn display_asserts(assertions: &[Rc<Term>], options: DisplayOptions) -> impl fmt::Display {
+    struct DisplayAsserts<'a>(&'a [Rc<Term>], DisplayOptions);
+
+    impl fmt::Display for DisplayAsserts<'_> {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            let mut printer = Printer::new(&self.1);
+            for assertion in self.0 {
+                write!(f, "(assert ")?;
+                assertion.print(f, &mut printer)?;
+                writeln!(f, ")")?;
+            }
+            Ok(())
+        }
+    }
+
+    DisplayAsserts(assertions, options)
+}
+
+pub(crate) fn display_clause_smt_problem(
     clause: &[Rc<Term>],
-    use_sharing: bool,
-) -> io::Result<()> {
-    let mut printer = AlethePrinter::new(pool, prelude, use_sharing, dest);
-    // We have to override the default prefix "@p_" because symbols starting with "@" are reserved
-    // in SMT-LIB.
-    printer.term_sharing_variable_prefix = "p_".to_owned();
-    // Since we are printing an SMT-LIB problem, we have to be compliant. For Carcara, this means
-    // that arithmetic constants cannot use the GMP notation
-    printer.smt_lib_strict = true;
-    printer.write_clause_smt_problem(clause)
-}
+    options: DisplayOptions,
+) -> impl fmt::Display {
+    struct DisplayAsserts<'a>(&'a [Rc<Term>], DisplayOptions);
 
-/// Writes the assertions of an SMT-LIB problem to the provided destination.
-pub fn write_asserts<'a, I: IntoIterator<Item = &'a Rc<Term>>>(
-    pool: &mut Pool,
-    prelude: &ProblemPrelude,
-    dest: &mut dyn io::Write,
-    assertions: I,
-    use_sharing: bool,
-) -> io::Result<()> {
-    let mut printer = AlethePrinter::new(pool, prelude, use_sharing, dest);
-    // We have to override the default prefix "@p_" because symbols starting with "@" are reserved
-    // in SMT-LIB.
-    printer.term_sharing_variable_prefix = "p_".to_owned();
-    // Since we are printing an SMT-LIB problem, we have to be
-    // compliant. For Carcara, this means that arithmetic constants
-    // cannot use the GMP notation
-    printer.smt_lib_strict = true;
-
-    for assertion in assertions {
-        write!(printer.inner, "(assert ")?;
-        assertion.print_with_sharing(&mut printer)?;
-        writeln!(printer.inner, ")")?;
+    impl fmt::Display for DisplayAsserts<'_> {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            let mut printer = Printer::new(&self.1);
+            for term in self.0.iter().dedup() {
+                write!(f, "(assert (not ")?;
+                term.print(f, &mut printer)?;
+                writeln!(f, "))")?;
+            }
+            Ok(())
+        }
     }
-    Ok(())
+
+    DisplayAsserts(clause, options)
 }
 
-/// Writes a term to the provided destination.
-pub(crate) fn write_term(
-    pool: &mut Pool,
-    prelude: &ProblemPrelude,
-    dest: &mut dyn io::Write,
-    term: &Rc<Term>,
-    use_sharing: bool,
-    prefix: String,
-) -> io::Result<()> {
-    let mut printer = AlethePrinter::new(pool, prelude, use_sharing, dest);
-    printer.term_sharing_variable_prefix = prefix;
-    // Since we are printing an SMT-LIB problem, we have to be
-    // compliant. For Carcara, this means that arithmetic constants
-    // cannot use the GMP notation
-    printer.smt_lib_strict = true;
-    term.print_with_sharing(&mut printer)?;
-    Ok(())
+struct Printer<'a> {
+    options: &'a DisplayOptions,
+    term_indices: Option<HashMap<Rc<Term>, usize>>,
+    defined_constants: HashMap<Rc<Term>, String>,
+
+    /// The number of nested binder terms which we are currently inside of.
+    ///
+    /// This is used to disable term sharing in non-closed terms.
+    binder_depth: usize,
 }
 
-trait PrintProof {
-    fn write_proof(&mut self, proof: &Proof) -> io::Result<()>;
-}
+impl<'a> Printer<'a> {
+    pub fn new(options: &'a DisplayOptions) -> Self {
+        Self {
+            options,
+            term_indices: options.use_sharing.then(HashMap::new),
+            defined_constants: HashMap::new(),
+            binder_depth: 0,
+        }
+    }
 
-trait PrintWithSharing {
-    fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()>;
-}
+    fn s_expr<H, T>(&mut self, f: &mut fmt::Formatter, head: &H, tail: &[T]) -> fmt::Result
+    where
+        H: Print + ?Sized,
+        T: Print,
+    {
+        write!(f, "(")?;
+        head.print(f, self)?;
+        self.s_expr_tail(f, tail)
+    }
 
-impl<T: PrintWithSharing> PrintWithSharing for &T {
-    fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
-        PrintWithSharing::print_with_sharing(*self, p)
+    fn s_expr_tail<T: Print>(&mut self, f: &mut fmt::Formatter, tail: &[T]) -> fmt::Result {
+        for t in tail {
+            write!(f, " ")?;
+            t.print(f, self)?;
+        }
+        write!(f, ")")
     }
 }
 
-impl PrintWithSharing for Rc<Term> {
-    fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
+trait Print {
+    fn print(&self, f: &mut fmt::Formatter, p: &mut Printer) -> fmt::Result;
+}
+
+impl<T: Print> Print for &T {
+    fn print(&self, f: &mut fmt::Formatter, p: &mut Printer) -> fmt::Result {
+        Print::print(*self, f, p)
+    }
+}
+
+impl Print for str {
+    fn print(&self, f: &mut fmt::Formatter, _: &mut Printer) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+impl Print for Proof {
+    fn print(&self, f: &mut fmt::Formatter, p: &mut Printer) -> fmt::Result {
+        for (name, value, sort) in &self.constant_definitions {
+            write!(f, "(define-fun {} () {} ", quote_symbol(name), sort)?;
+            value.print(f, p)?;
+            writeln!(f, ")")?;
+        }
+        p.defined_constants = self
+            .constant_definitions
+            .iter()
+            .cloned()
+            .map(|(name, term, _)| (term, name))
+            .collect();
+        let mut iter = self.iter();
+        while let Some(command) = iter.next() {
+            match command {
+                ProofCommand::Assume { id, term } => {
+                    write!(f, "(assume {} ", quote_symbol(id))?;
+                    term.print(f, p)?;
+                    write!(f, ")")?;
+                }
+                ProofCommand::Step(step) => {
+                    write!(f, "(step {} ", quote_symbol(&step.id))?;
+                    p.s_expr(f, "cl", &step.clause)?;
+
+                    write!(f, " :rule {}", step.rule)?;
+
+                    if let [head, tail @ ..] = step.premises.as_slice() {
+                        let id = iter.get_premise(*head).id();
+                        write!(f, " :premises ({}", quote_symbol(id))?;
+                        for premise in tail {
+                            let id = iter.get_premise(*premise).id();
+                            write!(f, " {}", quote_symbol(id))?;
+                        }
+                        write!(f, ")")?;
+                    }
+
+                    if let [head, tail @ ..] = step.args.as_slice() {
+                        write!(f, " :args ")?;
+                        p.s_expr(f, head, tail)?;
+                    }
+
+                    if let [head, tail @ ..] = step.discharge.as_slice() {
+                        let id = iter.get_premise(*head).id();
+                        write!(f, " :discharge ({}", id)?;
+                        for discharge in tail {
+                            let id = iter.get_premise(*discharge).id();
+                            write!(f, " {}", quote_symbol(id))?;
+                        }
+                        write!(f, ")")?;
+                    }
+
+                    write!(f, ")")?;
+                }
+                ProofCommand::Subproof(s) => {
+                    write!(f, "(anchor :step {}", quote_symbol(command.id()))?;
+                    if let [head, tail @ ..] = s.args.as_slice() {
+                        write!(f, " :args ")?;
+                        p.s_expr(f, head, tail)?;
+                    }
+                    write!(f, ")")?;
+                }
+            }
+            writeln!(f)?;
+        }
+        p.defined_constants.clear();
+        Ok(())
+    }
+}
+
+impl Print for AnchorArg {
+    fn print(&self, f: &mut fmt::Formatter, p: &mut Printer) -> fmt::Result {
+        match self {
+            AnchorArg::Variable(var) => var.print(f, p),
+            AnchorArg::Assign(var, value) => {
+                write!(f, "(:= ")?;
+                var.print(f, p)?;
+                write!(f, " ")?;
+                value.print(f, p)?;
+                write!(f, ")")
+            }
+        }
+    }
+}
+
+impl Print for Rc<Term> {
+    fn print(&self, f: &mut fmt::Formatter, p: &mut Printer) -> fmt::Result {
         if let Some(name) = p.defined_constants.get(self) {
-            return write!(p.inner, "{}", quote_symbol(name));
+            return write!(f, "{}", quote_symbol(name));
         }
         if let Some(indices) = &mut p.term_indices {
-            // There are a few cases where we don't use sharing when printing a term:
+            // If there is already a name for this term, use it
+            if let Some(i) = indices.get(self) {
+                return write!(f, "{}{}", p.options.sharing_prefix, i);
+            }
+
+            // There are a few cases where we cannot use `:named` when printing a term:
             let cannot_use_sharing =
+                // - We are inside of a binder, so this term might not be closed. It would be more
+                // accurate to compute if the term is actually closed (if it has any free variables
+                // besides the problem's global variables), but this is expensive to do, so we
+                // conservatively disable sharing based on the binder depth instead.
+                p.binder_depth > 0
                 // - Terminal terms (i.e., constants or variables) could in theory be shared,
                 // but, since they are very small, it's not worth it to give them a name.
-                self.is_const() || self.is_var()
+                || self.is_const() || self.is_var()
                 // - If a term is only used once in the proof, there is no reason to give it a
                 // name. We detect this case by checking if the number of references to it's `Rc` is
                 // no more than 3: one in the pool storage, one in the pool sorts cache, and one in
                 // the proof itself.
                 // TODO: this is a terrible way of checking if it is only used once in the proof,
                 // as it depends on internal implementation details of the term pool.
-                || Rc::strong_count(self) <= 3
-                // - Terms which are not closed, that is, terms which have free variables besides
-                // the global variables, cannot be shared
-                || !self.is_closed(p.pool, &p.global_variables);
+                || Rc::strong_count(self) <= 3;
 
             if !cannot_use_sharing {
-                return if let Some(i) = indices.get(self) {
-                    write!(p.inner, "{}{}", p.term_sharing_variable_prefix, i)
-                } else if p.use_sharing {
-                    let i = indices.len();
-                    indices.insert(self.clone(), i);
-                    write!(p.inner, "(! ")?;
-                    p.write_raw_term(self)?;
-                    write!(p.inner, " :named {}{})", p.term_sharing_variable_prefix, i)
-                } else {
-                    p.write_raw_term(self)
-                };
+                let i = indices.len();
+                indices.insert(self.clone(), i);
+                write!(f, "(! ")?;
+                self.as_ref().print(f, p)?;
+                return write!(f, " :named {}{})", p.options.sharing_prefix, i);
             }
         }
-        p.write_raw_term(self)
+        self.as_ref().print(f, p)
     }
 }
 
-impl PrintWithSharing for Rc<Sort> {
-    fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
-        write!(p.inner, "{}", self)
-    }
-}
-
-impl PrintWithSharing for SortedVar {
-    fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
-        let (name, sort) = self;
-        write!(p.inner, "({} ", quote_symbol(name))?;
-        sort.print_with_sharing(p)?;
-        write!(p.inner, ")")
-    }
-}
-
-impl<T> PrintWithSharing for BindingList<T>
-where
-    (String, T): PrintWithSharing,
-{
-    fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
-        match self.as_slice() {
-            [] => write!(p.inner, "()"),
-            [head, tail @ ..] => p.write_s_expr(head, tail),
-        }
-    }
-}
-
-impl PrintWithSharing for (String, Rc<Term>) {
-    fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
-        let (name, value) = self;
-        write!(p.inner, "({} ", quote_symbol(name))?;
-        value.print_with_sharing(p)?;
-        write!(p.inner, ")")
-    }
-}
-
-impl PrintWithSharing for Constant {
-    fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
-        write!(p.inner, "{}", self)
-    }
-}
-
-impl PrintWithSharing for Operator {
-    fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
-        write!(p.inner, "{}", self)
-    }
-}
-
-impl PrintWithSharing for ParamOperator {
-    fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
-        write!(p.inner, "{}", self)
-    }
-}
-
-impl PrintWithSharing for MatchCase {
-    fn print_with_sharing(&self, p: &mut AlethePrinter) -> io::Result<()> {
-        write!(p.inner, "({} ", self.pattern)?;
-        self.body.print_with_sharing(p)?;
-        write!(p.inner, ")")
-    }
-}
-
-/// A pretty printer for Alethe proofs.
-pub struct AlethePrinter<'a> {
-    pool: &'a mut Pool,
-    inner: &'a mut dyn io::Write,
-    term_indices: Option<IndexMap<Rc<Term>, usize>>,
-    term_sharing_variable_prefix: String,
-    global_variables: HashSet<Rc<Term>>,
-    defined_constants: HashMap<Rc<Term>, String>,
-    smt_lib_strict: bool,
-    use_sharing: bool,
-}
-
-impl PrintProof for AlethePrinter<'_> {
-    fn write_proof(&mut self, proof: &Proof) -> io::Result<()> {
-        for (name, value) in &proof.constant_definitions {
-            write!(self.inner, "(define-fun {} () ", quote_symbol(name))?;
-            self.pool.sort(value).print_with_sharing(self)?;
-            write!(self.inner, " ")?;
-            value.print_with_sharing(self)?;
-            writeln!(self.inner, ")")?;
-        }
-        self.defined_constants = proof
-            .constant_definitions
-            .iter()
-            .cloned()
-            .map(|(name, term)| (term, name))
-            .collect();
-        let mut iter = proof.iter();
-        while let Some(command) = iter.next() {
-            match command {
-                ProofCommand::Assume { id, term } => {
-                    write!(self.inner, "(assume {} ", quote_symbol(id))?;
-                    term.print_with_sharing(self)?;
-                    write!(self.inner, ")")?;
-                }
-                ProofCommand::Step(s) => self.write_step(&mut iter, s)?,
-                ProofCommand::Subproof(s) => {
-                    write!(self.inner, "(anchor :step {}", quote_symbol(command.id()))?;
-
-                    if !s.args.is_empty() {
-                        write!(self.inner, " :args (")?;
-                        let mut is_first = true;
-                        for arg in &s.args {
-                            if !is_first {
-                                write!(self.inner, " ")?;
-                            }
-                            is_first = false;
-
-                            match arg {
-                                AnchorArg::Variable((name, sort)) => {
-                                    write!(self.inner, "({} ", quote_symbol(name))?;
-                                    sort.print_with_sharing(self)?;
-                                    write!(self.inner, ")")?;
-                                }
-                                AnchorArg::Assign(var, value) => {
-                                    write!(self.inner, "(:= ")?;
-                                    var.print_with_sharing(self)?;
-                                    write!(self.inner, " ")?;
-                                    value.print_with_sharing(self)?;
-                                    write!(self.inner, ")")?;
-                                }
-                            }
-                        }
-                        write!(self.inner, ")")?;
-                    }
-
-                    write!(self.inner, ")")?;
-                }
-            }
-            writeln!(self.inner)?;
-        }
-        self.defined_constants.clear();
-        Ok(())
-    }
-}
-
-impl<'a> AlethePrinter<'a> {
-    /// Constructs a new `AlethePrinter`.
-    ///
-    /// If `use_sharing` is `true`, terms that are used multiple times will make use of sharing. The
-    /// problem prelude is required to know the proof's global variables, and thus know which terms
-    /// are closed.
-    pub fn new(
-        pool: &'a mut Pool,
-        prelude: &ProblemPrelude,
-        use_sharing: bool,
-        dest: &'a mut dyn io::Write,
-    ) -> Self {
-        let global_variables = if use_sharing {
-            prelude
-                .function_declarations
-                .iter()
-                .map(|var| pool.add(var.clone().into()))
-                .collect()
-        } else {
-            HashSet::new()
-        };
-        Self {
-            pool,
-            inner: dest,
-            term_indices: use_sharing.then(IndexMap::new),
-            term_sharing_variable_prefix: "@p_".to_owned(),
-            global_variables,
-            defined_constants: HashMap::new(),
-            smt_lib_strict: false,
-            use_sharing,
-        }
-    }
-
-    fn write_s_expr<H, T>(&mut self, head: &H, tail: &[T]) -> io::Result<()>
-    where
-        H: PrintWithSharing + ?Sized,
-        T: PrintWithSharing,
-    {
-        write!(self.inner, "(")?;
-        head.print_with_sharing(self)?;
-        self.write_s_expr_tail(tail)
-    }
-
-    fn write_s_expr_tail<T: PrintWithSharing>(&mut self, tail: &[T]) -> io::Result<()> {
-        for t in tail {
-            write!(self.inner, " ")?;
-            t.print_with_sharing(self)?;
-        }
-        write!(self.inner, ")")
-    }
-
-    fn write_raw_term(&mut self, term: &Term) -> io::Result<()> {
-        match term {
+impl Print for Term {
+    fn print(&self, f: &mut fmt::Formatter, p: &mut Printer) -> fmt::Result {
+        match self {
             Term::Const(c) => {
-                if self.smt_lib_strict {
+                if p.options.smt_lib_strict {
                     if let Constant::Integer(i) = c {
                         if i.is_negative() {
-                            write!(self.inner, "(- {})", i.clone().abs())
+                            write!(f, "(- {})", i.clone().abs())
                         } else {
-                            write!(self.inner, "{}", i)
+                            write!(f, "{}", i)
                         }
                     } else if let Constant::Real(r) = c {
                         if r.is_negative() {
-                            write!(self.inner, "(- ")?;
+                            write!(f, "(- ")?;
                         }
                         if r.is_integer() {
-                            write!(self.inner, "{}.0", r.clone().abs())?;
+                            write!(f, "{}.0", r.clone().abs())?;
                         } else {
-                            write!(
-                                self.inner,
-                                "(/ {}.0 {}.0)",
-                                r.numer().clone().abs(),
-                                r.denom()
-                            )?;
+                            write!(f, "(/ {}.0 {}.0)", r.numer().clone().abs(), r.denom())?;
                         }
                         if r.is_negative() {
-                            write!(self.inner, ")")?;
+                            write!(f, ")")?;
                         }
                         Ok(())
                     } else {
-                        write!(self.inner, "{}", c)
+                        write!(f, "{}", c)
                     }
                 } else {
-                    write!(self.inner, "{}", c)
+                    write!(f, "{}", c)
                 }
             }
-            Term::Var(name, _) => write!(self.inner, "{}", quote_symbol(name)),
-            Term::App(func, args) => self.write_s_expr(func, args),
+            Term::Var(name, _) => write!(f, "{}", quote_symbol(name)),
+            Term::App(func, args) => p.s_expr(f, func, args),
             Term::Op(op, args) => {
                 if args.is_empty() {
-                    write!(self.inner, "{}", op)
+                    write!(f, "{}", op)
                 } else {
-                    self.write_s_expr(op, args)
+                    p.s_expr(f, op, args)
                 }
             }
             Term::Binder(binder, bindings, term) => {
-                write!(self.inner, "({} ", binder)?;
-                bindings.print_with_sharing(self)?;
-                write!(self.inner, " ")?;
-                // TODO: should we avoid creating names within binders?
-                // let place_holder = self.use_sharing;
-                // self.use_sharing = false;
-                term.print_with_sharing(self)?;
-                // self.use_sharing = place_holder;
-                write!(self.inner, ")")
+                p.binder_depth += 1;
+                write!(f, "({} ", binder)?;
+                bindings.print(f, p)?;
+                write!(f, " ")?;
+                term.print(f, p)?;
+                p.binder_depth -= 1;
+                write!(f, ")")
             }
             Term::Let(bindings, term) => {
-                write!(self.inner, "(let ")?;
-                bindings.print_with_sharing(self)?;
-                write!(self.inner, " ")?;
-                term.print_with_sharing(self)?;
-                write!(self.inner, ")")
+                p.binder_depth += 1;
+                write!(f, "(let ")?;
+                bindings.print(f, p)?;
+                write!(f, " ")?;
+                term.print(f, p)?;
+                p.binder_depth -= 1;
+                write!(f, ")")
             }
             Term::Match(term, cases) => {
-                write!(self.inner, "(match {} (", term)?;
+                write!(f, "(match {} (", term)?;
+                p.binder_depth += 1;
                 for case in cases {
-                    case.print_with_sharing(self)?;
+                    case.print(f, p)?;
                 }
-                write!(self.inner, ")")
+                p.binder_depth -= 1;
+                write!(f, "))")
             }
             Term::ParamOp { op, op_args, args } => {
                 if !args.is_empty() {
-                    write!(self.inner, "(")?;
+                    write!(f, "(")?;
                 }
-                write!(self.inner, "(_ {}", op)?;
-                self.write_s_expr_tail(op_args)?;
+                write!(f, "(_ {}", op)?;
+                p.s_expr_tail(f, op_args)?;
                 if !args.is_empty() {
-                    self.write_s_expr_tail(args)?;
+                    p.s_expr_tail(f, args)?;
                 }
                 Ok(())
             }
             Term::AsOp(op, sort, args) => {
                 if !args.is_empty() {
-                    write!(self.inner, "(")?;
+                    write!(f, "(")?;
                 }
-                write!(self.inner, "(as {} {})", op, sort)?;
+                write!(f, "(as {} {})", op, sort)?;
                 if !args.is_empty() {
-                    self.write_s_expr_tail(args)?;
+                    p.s_expr_tail(f, args)?;
                 }
                 Ok(())
             }
         }
     }
+}
 
-    fn write_step(&mut self, iter: &mut ProofIter, step: &ProofStep) -> io::Result<()> {
-        write!(self.inner, "(step {} (cl", quote_symbol(&step.id))?;
-
-        for t in &step.clause {
-            write!(self.inner, " ")?;
-            t.print_with_sharing(self)?;
-        }
-        write!(self.inner, ")")?;
-
-        write!(self.inner, " :rule {}", step.rule)?;
-
-        if let [head, tail @ ..] = step.premises.as_slice() {
-            let id = iter.get_premise(*head).id();
-            write!(self.inner, " :premises ({}", quote_symbol(id))?;
-            for premise in tail {
-                let id = iter.get_premise(*premise).id();
-                write!(self.inner, " {}", quote_symbol(id))?;
-            }
-            write!(self.inner, ")")?;
-        }
-
-        if let [head, tail @ ..] = step.args.as_slice() {
-            write!(self.inner, " :args (")?;
-            head.print_with_sharing(self)?;
-            for arg in tail {
-                write!(self.inner, " ")?;
-                arg.print_with_sharing(self)?;
-            }
-            write!(self.inner, ")")?;
-        }
-
-        if let [head, tail @ ..] = step.discharge.as_slice() {
-            let id = iter.get_premise(*head).id();
-            write!(self.inner, " :discharge ({}", id)?;
-            for discharge in tail {
-                let id = iter.get_premise(*discharge).id();
-                write!(self.inner, " {}", quote_symbol(id))?;
-            }
-            write!(self.inner, ")")?;
-        }
-
-        write!(self.inner, ")")?;
-        Ok(())
+impl Print for SortedVar {
+    fn print(&self, f: &mut fmt::Formatter, _: &mut Printer) -> fmt::Result {
+        let (name, sort) = self;
+        write!(f, "({} {})", quote_symbol(name), sort.as_ref())
     }
+}
 
-    fn write_clause_smt_problem(&mut self, clause: &[Rc<Term>]) -> io::Result<()> {
-        for term in clause.iter().dedup() {
-            write!(self.inner, "(assert (not ")?;
-            term.print_with_sharing(self)?;
-            writeln!(self.inner, "))")?;
+impl Print for (String, Rc<Term>) {
+    fn print(&self, f: &mut fmt::Formatter, p: &mut Printer) -> fmt::Result {
+        let (name, value) = self;
+        write!(f, "({} ", quote_symbol(name))?;
+        value.print(f, p)?;
+        write!(f, ")")
+    }
+}
+
+impl<T> Print for BindingList<T>
+where
+    (String, T): Print,
+{
+    fn print(&self, f: &mut fmt::Formatter, p: &mut Printer) -> fmt::Result {
+        match self.as_slice() {
+            [] => write!(f, "()"),
+            [head, tail @ ..] => p.s_expr(f, head, tail),
         }
-        Ok(())
+    }
+}
+
+impl Print for Operator {
+    fn print(&self, f: &mut fmt::Formatter, _: &mut Printer) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+impl Print for MatchCase {
+    fn print(&self, f: &mut fmt::Formatter, p: &mut Printer) -> fmt::Result {
+        write!(f, "({} ", self.pattern)?;
+        self.body.print(f, p)?;
+        write!(f, ")")
     }
 }
 
@@ -555,26 +475,12 @@ fn escape_string(string: &str) -> Cow<'_, str> {
 }
 
 impl fmt::Display for Term {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // If the alternate flag (`#`) is passed, or the global `USE_SHARING_IN_TERM_DISPLAY` is
         // false, we disable printing with sharing
         let use_sharing = USE_SHARING_IN_TERM_DISPLAY.load(Ordering::Relaxed) && !f.alternate();
-        let mut buf = Vec::new();
-        // This pool is only used for the free variables cache, so it's fine to use a fresh pool
-        let mut pool = Pool::new();
-        let mut printer = AlethePrinter {
-            pool: &mut pool,
-            inner: &mut buf,
-            term_indices: use_sharing.then(IndexMap::new),
-            term_sharing_variable_prefix: "@p_".to_owned(),
-            global_variables: HashSet::new(),
-            defined_constants: HashMap::new(),
-            smt_lib_strict: false,
-            use_sharing,
-        };
-        printer.write_raw_term(self).unwrap();
-        let result = std::str::from_utf8(&buf).unwrap();
-        write!(f, "{}", result)
+        let options = DisplayOptions::new().use_sharing(use_sharing);
+        write!(f, "{}", self.display(options))
     }
 }
 
@@ -721,6 +627,7 @@ impl fmt::Display for ProblemPrelude {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fmt::Write;
 
     #[test]
     fn test_sharing() {
@@ -745,14 +652,14 @@ mod tests {
         let expected = "\
             (step t1 (cl (and (! (= 1 2) :named @p_0) @p_0)) :rule hole)\n\
             (step t2 (cl (and (! (or a b) :named @p_1) (not @p_1))) :rule hole)\n\
-            (step t3 (cl (and (forall ((x Int)) (or (= x 2) (! (= 2 3) :named @p_2))) @p_2)) :rule hole)\n\
+            (step t3 (cl (and (forall ((x Int)) (or (= x 2) (= 2 3))) (! (= 2 3) :named @p_2))) :rule hole)\n\
             (step t4 (cl (forall ((x Int)) (= (+ x 2) (+ x 2)))) :rule hole)\n\
             (step t5 (cl (and (! (forall ((p Bool)) p) :named @p_3) @p_3)) :rule hole)\n\
             (anchor :step t6 :args ((x Int)))\n\
-            (step t6.t1 (cl (= (+ x 2) (+ x 2))) :rule hole)\n\
+            (step t6.t1 (cl (! (= (! (+ x 2) :named @p_5) @p_5) :named @p_4)) :rule hole)\n\
             (step t6 (cl) :rule hole)\n\
         ";
-        let (problem, proof, _, mut pool) = parser::parse_instance(
+        let (_, proof, _, _pool) = parser::parse_instance(
             definitions.into(),
             proof.into(),
             None,
@@ -760,14 +667,9 @@ mod tests {
         )
         .unwrap();
 
-        let mut buf = Vec::new();
-        AlethePrinter::new(&mut pool, &problem.prelude, true, &mut buf)
-            .write_proof(&proof)
-            .unwrap();
-
-        println!("{}", std::str::from_utf8(&buf).unwrap());
-        println!("{}", expected);
-
-        assert_eq!(expected, std::str::from_utf8(&buf).unwrap());
+        let mut buf = String::new();
+        let options = DisplayOptions::new().use_sharing(true);
+        write!(buf, "{}", proof.display(options)).unwrap();
+        assert_eq!(expected, buf);
     }
 }
