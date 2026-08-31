@@ -40,7 +40,12 @@ pub struct ProofIter<'a> {
 impl<'a> ProofIter<'a> {
     /// Constructs a new `ProofIter`, given a slice of proof commands.
     pub fn new(commands: &'a [ProofCommand]) -> Self {
-        Self { stack: vec![(0, commands)] }
+        Self::new_at_position(commands, 0)
+    }
+
+    /// Constructs a new `ProofIter`, starting at the given index.
+    pub fn new_at_position(commands: &'a [ProofCommand], pos: usize) -> Self {
+        Self { stack: vec![(pos, commands)] }
     }
 
     /// Returns the current nesting depth of the iterator, or more precisely, the nesting depth of

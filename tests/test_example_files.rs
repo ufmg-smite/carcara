@@ -2,12 +2,23 @@ use carcara::*;
 use std::path::{Path, PathBuf};
 
 fn run_parallel_checker_test(
-    _problem_path: &Path,
-    _proof_path: &Path,
-    _config: (parser::Config, checker::Config),
-    _num_threads: usize,
+    problem_path: &Path,
+    proof_path: &Path,
+    config: (parser::Config, checker::Config),
+    num_threads: usize,
 ) -> CarcaraResult<()> {
-    Ok(()) // TODO
+    let (problem, proof, rare_rules, pool) = parser::parse_instance(
+        parser::Source::file(problem_path, &mut String::new())?,
+        parser::Source::file(proof_path, &mut String::new())?,
+        None,
+        config.0,
+    )?;
+
+    let mut checker =
+        checker::ParallelChecker::new(std::sync::Arc::new(pool), &rare_rules, config.1);
+    checker.check(&problem, &proof, num_threads, 128 * 1024 * 1024)?;
+
+    Ok(())
 }
 
 fn run_test(

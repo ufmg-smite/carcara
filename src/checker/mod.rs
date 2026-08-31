@@ -151,7 +151,13 @@ impl<'c> Checker<'c> {
     /// Returns `Ok` if the proof is valid, with the proof status.
     pub fn check(&mut self, problem: &Problem, proof: &Proof) -> CarcaraResult<Status> {
         let null_stats = None::<&mut CheckerStatistics<OnlineBenchmarkResults>>;
-        self.check_commands(problem, &proof.filename, &proof.commands, null_stats)
+        let status =
+            self.check_commands(problem, &proof.filename, &proof.commands, 0, null_stats)?;
+        if self.reached_empty_clause {
+            Ok(status)
+        } else {
+            Err(Error::DoesNotReachEmptyClause { file: proof.filename.clone() })
+        }
     }
 
     /// Checks that `proof` is a valid proof for the given problem, collecting benchmarking
@@ -162,7 +168,13 @@ impl<'c> Checker<'c> {
         proof: &Proof,
         stats: &mut CheckerStatistics<CR>,
     ) -> CarcaraResult<Status> {
-        self.check_commands(problem, &proof.filename, &proof.commands, Some(stats))
+        let status =
+            self.check_commands(problem, &proof.filename, &proof.commands, 0, Some(stats))?;
+        if self.reached_empty_clause {
+            Ok(status)
+        } else {
+            Err(Error::DoesNotReachEmptyClause { file: proof.filename.clone() })
+        }
     }
 
     /// Checks a sequence of commands.
@@ -174,11 +186,12 @@ impl<'c> Checker<'c> {
         problem: &Problem,
         proof_filename: &Path,
         commands: &[ProofCommand],
+        start_positon: usize,
         mut stats: Option<&mut CheckerStatistics<CR>>,
     ) -> CarcaraResult<Status> {
         // Similarly to the parser, to avoid stack overflows in proofs with many nested subproofs,
         // we check the subproofs iteratively, instead of recursively
-        let mut iter = ProofIter::new(commands);
+        let mut iter = ProofIter::new_at_position(commands, start_positon);
         while let Some(command) = iter.next() {
             match command {
                 ProofCommand::Step(step) => {
@@ -248,16 +261,11 @@ impl<'c> Checker<'c> {
                 }
             }
         }
-
-        if self.reached_empty_clause {
-            Ok(if self.is_holey {
-                Status::Holey
-            } else {
-                Status::Valid
-            })
+        Ok(if self.is_holey {
+            Status::Holey
         } else {
-            Err(Error::DoesNotReachEmptyClause { file: proof_filename.to_path_buf() })
-        }
+            Status::Valid
+        })
     }
 
     fn check_assume<'i, CR: CollectResults + Send + Default>(
