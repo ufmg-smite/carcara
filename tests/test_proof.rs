@@ -9,7 +9,7 @@ fn run_test(problem: &str, proof: &str, expected_result: bool) {
     )
     .unwrap();
 
-    let got = ProofChecker::new(&mut pool, &rare_rules, Config::new()).check(&problem, &proof);
+    let got = Checker::new(&mut pool, &rare_rules, Config::new()).check(&problem, &proof);
 
     assert_eq!(got.is_ok(), expected_result);
 }

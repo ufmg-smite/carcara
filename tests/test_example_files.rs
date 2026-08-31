@@ -23,7 +23,7 @@ fn run_test(
     )?;
 
     // First, we check the proof normally
-    checker::ProofChecker::new(&mut pool, &rare_rules, config.1.clone()).check(&problem, &proof)?;
+    checker::Checker::new(&mut pool, &rare_rules, config.1.clone()).check(&problem, &proof)?;
 
     // Then we elaborate it
     let elab_config = elaborator::Config::new().uncrowd_rotation(true);
@@ -37,7 +37,7 @@ fn run_test(
     };
 
     // After that, we check the elaborated proof to make sure it is valid
-    checker::ProofChecker::new(&mut pool, &rare_rules, config.1.clone().elaborated(true))
+    checker::Checker::new(&mut pool, &rare_rules, config.1.clone().elaborated(true))
         .check(&problem, &elaborated)?;
 
     // Finally, we elaborate the already elaborated proof, to make sure the elaboration is

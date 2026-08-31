@@ -63,6 +63,7 @@ use elaborator::error::ElaborationError;
 use parser::{ParserError, Position};
 use std::io;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
@@ -182,7 +183,7 @@ pub fn check<'s>(
 
     // Checking
     let checking = Instant::now();
-    let mut checker = checker::ProofChecker::new(&mut pool, &rules, checker_config);
+    let mut checker = checker::Checker::new(&mut pool, &rules, checker_config);
     if collect_stats {
         let mut checker_stats = CheckerStatistics {
             file_name: "this",
@@ -225,16 +226,66 @@ pub fn check<'s>(
 /// threads. The `stack_size` argument sets the stack size of the worker threads.
 #[allow(clippy::too_many_arguments)]
 pub fn check_parallel<'s>(
-    _problem: parser::Source<'s>,
-    _proof: parser::Source<'s>,
-    _rules: Option<parser::Source<'s>>,
-    _parser_config: parser::Config,
-    _checker_config: checker::Config,
-    _collect_stats: bool,
-    _num_threads: usize,
-    _stack_size: usize,
+    problem: parser::Source<'s>,
+    proof: parser::Source<'s>,
+    rules: Option<parser::Source<'s>>,
+    parser_config: parser::Config,
+    checker_config: checker::Config,
+    collect_stats: bool,
+    num_threads: usize,
+    stack_size: usize,
 ) -> Result<Status, Error> {
-    todo!()
+    let mut run_measures: RunMeasurement = RunMeasurement::default();
+
+    // Parsing
+    let total = Instant::now();
+    let (problem, proof, rules, pool) =
+        parser::parse_instance(problem, proof, rules, parser_config)?;
+    run_measures.parsing = total.elapsed();
+
+    // Checking
+    let checking = Instant::now();
+    let mut checker = checker::ParallelChecker::new(Arc::new(pool), &rules, checker_config);
+    if collect_stats {
+        let mut checker_stats = CheckerStatistics {
+            file_name: "this",
+            polyeq_time: Duration::ZERO,
+            assume_time: Duration::ZERO,
+            assume_core_time: Duration::ZERO,
+            results: OnlineBenchmarkResults::new(),
+        };
+        let res = checker.check_with_stats(
+            &problem,
+            &proof,
+            num_threads,
+            stack_size,
+            &mut checker_stats,
+        );
+
+        run_measures.checking = checking.elapsed();
+        run_measures.total = total.elapsed();
+
+        checker_stats.results.add_run_measurement(
+            &("this".to_owned(), 0),
+            RunMeasurement {
+                parsing: run_measures.parsing,
+                checking: run_measures.checking,
+                elaboration: run_measures.elaboration,
+                scheduling: run_measures.scheduling,
+                total: run_measures.total,
+                polyeq: checker_stats.polyeq_time,
+                assume: checker_stats.assume_time,
+                assume_core: checker_stats.assume_core_time,
+                elaboration_pipeline: Vec::new(),
+            },
+        );
+        // Print the statistics
+        checker_stats.results.print(false);
+
+        res
+    } else {
+        checker.check(&problem, &proof, num_threads, stack_size)
+    }
 }
 
 /// Parses, checks, and elaborates an Alethe proof against an SMT-LIB problem.
@@ -266,7 +317,7 @@ pub fn check_and_elaborate<'s>(
 
     // Checking
     let checking = Instant::now();
-    let mut checker = checker::ProofChecker::new(&mut pool, &rules, checker_config);
+    let mut checker = checker::Checker::new(&mut pool, &rules, checker_config);
     let checking_status = if collect_stats {
         let mut checker_stats = CheckerStatistics {
             file_name: "this",
