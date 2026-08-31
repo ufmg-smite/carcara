@@ -102,7 +102,7 @@ pub struct PrimitivePool {
     pub(crate) sorts: Storage<Sort>,
     free_vars_cache: IndexMap<Rc<Term>, IndexSet<Rc<Term>>>,
     sorts_cache: IndexMap<Rc<Term>, Rc<Sort>>,
-    binders_cache: IndexMap<(Rc<Term>, Binder), IndexSet<Rc<Term>>>,
+    choice_subterms_cache: IndexMap<Rc<Term>, IndexSet<Rc<Term>>>,
     datatypes: IndexMap<String, Datatype>,
 }
 
@@ -585,9 +585,9 @@ impl PrimitivePool {
         self.datatypes.insert(name, datatype);
     }
 
-    /// Collects all subterms of `term` which are binders of the given binder type.
-    pub fn collect_binders(&mut self, term: &Rc<Term>, binder: Binder) -> IndexSet<Rc<Term>> {
-        if let Some(set) = self.binders_cache.get(&(term.clone(), binder)) {
+    /// Collects all `choice` subterms of `term`.
+    pub fn choice_subterms(&mut self, term: &Rc<Term>) -> IndexSet<Rc<Term>> {
+        if let Some(set) = self.choice_subterms_cache.get(term) {
             return set.clone();
         }
         let set = match term.as_ref() {
@@ -597,33 +597,27 @@ impl PrimitivePool {
             | Term::AsOp(_, _, args) => {
                 let mut set = IndexSet::new();
                 for a in args {
-                    set.extend(self.collect_binders(a, binder).into_iter());
+                    set.extend(self.choice_subterms(a).into_iter());
                 }
                 set
             }
-            Term::Binder(b, _, inner) => {
-                let mut set = IndexSet::new();
-                if *b == binder {
-                    set.insert(term.clone());
-                }
-                set.extend(self.collect_binders(inner, binder));
+            Term::Binder(Binder::Choice, _, inner) => {
+                let mut set = IndexSet::from([term.clone()]);
+                set.extend(self.choice_subterms(inner));
                 set
             }
-            Term::Let(_, inner) => self.collect_binders(inner, binder),
+            Term::Binder(_, _, inner) | Term::Let(_, inner) => self.choice_subterms(inner),
             Term::Match(term, cases) => {
-                let mut set = self.collect_binders(term, binder);
+                let mut set = self.choice_subterms(term);
                 for case in cases {
-                    set.extend(self.collect_binders(&case.body, binder).into_iter());
+                    set.extend(self.choice_subterms(&case.body).into_iter());
                 }
                 set
             }
             Term::Var(..) | Term::Const(_) => IndexSet::new(),
         };
-        self.binders_cache.insert((term.clone(), binder), set);
-        self.binders_cache
-            .get(&(term.clone(), binder))
-            .unwrap()
-            .clone()
+        self.choice_subterms_cache.insert(term.clone(), set);
+        self.choice_subterms_cache.get(term).unwrap().clone()
     }
 }
 

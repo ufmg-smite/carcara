@@ -205,7 +205,7 @@ pub fn sat_refutation(
                 let (choice_var_name, _) = &bindings[0];
                 let mut choice_dependencies = Vec::new();
                 let univ_vars = pool
-                    .collect_binders(body, Binder::Choice)
+                    .choice_subterms(body)
                     .iter()
                     .map(|c| {
                         choice_dependencies.push(c.clone());
@@ -279,7 +279,7 @@ pub fn sat_refutation(
                     clause_id_to_lemma.get(&i).map(|lemma| {
                         if handling_choice {
                             let choice_assertions: Vec<_> = pool
-                                .collect_binders(lemma, Binder::Choice)
+                                .choice_subterms(lemma)
                                 .iter()
                                 .map(|epsilon| epsilon_to_assertion[epsilon].clone())
                                 .collect();
@@ -319,7 +319,7 @@ pub fn sat_refutation(
                     .map(|(k, v)| {
                         // collect choices before we apply substitution in lemma
                         let choice_assertions: Vec<_> = pool
-                            .collect_binders(k, Binder::Choice)
+                            .choice_subterms(k)
                             .iter()
                             .map(|epsilon| epsilon_to_assertion[epsilon].clone())
                             .collect();
@@ -401,11 +401,9 @@ pub fn sat_refutation(
                             &lemma
                                 .iter()
                                 .map(|l| {
-                                    pool.collect_binders(l, Binder::Choice).iter().for_each(
-                                        |epsilon| {
-                                            lemma_choices.push(epsilon.clone());
-                                        },
-                                    );
+                                    pool.choice_subterms(l).iter().for_each(|epsilon| {
+                                        lemma_choices.push(epsilon.clone());
+                                    });
                                     substitution.apply(pool, l)
                                 })
                                 .collect::<Vec<Rc<Term>>>()
