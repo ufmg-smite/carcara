@@ -91,7 +91,6 @@ pub fn bind(
     // Since we are closing a subproof, we only care about the substitutions that were introduced
     // in it
     let context = context.last().unwrap();
-    let context = context.as_ref().unwrap();
 
     let (xs, ys): (IndexSet<_>, IndexSet<_>) = {
         let (mut xs, mut ys) = (IndexSet::new(), IndexSet::new());
@@ -148,8 +147,7 @@ pub fn r#let(
     assert_clause_len(conclusion, 1)?;
 
     // Since we are closing a subproof, we only care about the mappings that were introduced in it
-    let context = context.last().unwrap();
-    let args = &context.as_ref().unwrap().args;
+    let args = &context.last().unwrap().args;
     let mappings: IndexMap<Rc<Term>, Rc<Term>> = args
         .iter()
         .filter_map(|arg| {
@@ -303,7 +301,6 @@ pub fn onepoint(
         .collect();
 
     let context = context.last().unwrap();
-    let context = context.as_ref().unwrap();
     let mut mappings = context.args.iter().filter_map(AnchorArg::as_assign);
 
     // For each substitution (:= x t) in the context, the equality (= x t) must appear in phi
@@ -386,8 +383,7 @@ fn generic_skolemization_rule(
         current_phi = context.apply_previous(pool, &current_phi);
     }
 
-    let context = context.last().unwrap();
-    let args = context.as_ref().unwrap().args.iter();
+    let args = context.last().unwrap().args.iter();
 
     let substitution: HashMap<Rc<Term>, Rc<Term>> = args
         .filter_map(AnchorArg::as_assign)
