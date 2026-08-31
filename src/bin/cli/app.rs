@@ -86,9 +86,12 @@ pub struct StatsOptions {
 
 #[derive(Args)]
 pub struct StackOptions {
-    /// Defines the thread stack size for each check worker (does not include the main thread stack size, which should be set manually).
-    #[clap(long, default_value = "0")]
-    pub stack_size: usize,
+    /// Defines the thread stack size for each check worker (does not include the main thread stack
+    /// size, which should be set manually).
+    ///
+    /// If not provided, the platform's default stack size is used.
+    #[clap(long)]
+    pub stack_size: Option<usize>,
 }
 
 #[derive(Args, Clone)]

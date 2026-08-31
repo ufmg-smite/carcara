@@ -16,7 +16,7 @@ fn run_parallel_checker_test(
 
     let mut checker =
         checker::ParallelChecker::new(std::sync::Arc::new(pool), &rare_rules, config.1);
-    checker.check(&problem, &proof, num_threads, 128 * 1024 * 1024)?;
+    checker.check(&problem, &proof, num_threads, Some(128 * 1024 * 1024))?;
 
     Ok(())
 }
