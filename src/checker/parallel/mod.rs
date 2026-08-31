@@ -15,6 +15,11 @@ use std::{
 };
 
 /// A parallel proof checker for Alethe.
+///
+/// This checker splits the proof's top-level commands among a number of worker threads, such that
+/// commands inside the same subproof are checked by the same worker thread. Each thread has a local
+/// `Pool`, with the global pool as a parent, and a local context. The work is split dinamically
+/// using a work queue.
 pub struct ParallelChecker<'c> {
     global_pool: Arc<Pool>,
     config: Config,
@@ -66,6 +71,7 @@ impl<'c> ParallelChecker<'c> {
         stack_size: usize,
         stats: Option<&mut CheckerStatistics<CR>>,
     ) -> CarcaraResult<Status> {
+        let num_threads = num_threads.min(proof.commands.len()).max(1);
         let work_queue = ArrayQueue::new(proof.commands.len());
         for pos in 0..proof.commands.len() {
             work_queue.push(pos).unwrap();
@@ -110,6 +116,14 @@ impl<'c> ParallelChecker<'c> {
                 .unwrap()
         })?;
 
+        let combined_stats = combined_result.stats;
+        if let Some(stats) = stats
+            && let Some(combined_stats) = combined_stats
+        {
+            let file_name = stats.file_name;
+            *stats = combined_stats;
+            stats.file_name = file_name;
+        }
         if combined_result.reached_empty_clause {
             Ok(combined_result.status)
         } else {
@@ -146,7 +160,7 @@ fn combine_stats<R: CollectResults + Send + Default>(
     let b = b?;
     a.polyeq_time += b.polyeq_time;
     a.assume_time += b.assume_time;
-    a.assume_core_time = b.assume_core_time;
+    a.assume_core_time += b.assume_core_time;
     a.results = CollectResults::combine(a.results, b.results);
     Some(a)
 }

@@ -134,7 +134,7 @@ impl Config {
 /// Parses an SMT problem instance (in the SMT-LIB format) and its associated proof (in the Alethe
 /// format). If the optional argument `rules` is provided, also parses a set of Rare rewrite rules.
 ///
-/// This returns the parsed problem, proof, and rules, as well as the `TermPool` used in parsing.
+/// This returns the parsed problem, proof, and rules, as well as the `Pool` used in parsing.
 pub fn parse_instance<'s>(
     problem: Source<'s>,
     proof: Source<'s>,

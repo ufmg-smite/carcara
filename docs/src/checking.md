@@ -42,6 +42,8 @@ elaboration chapter](elaboration.md).
 
 ## Parallel checking
 Using the `--num-threads`/`-u` option, you can control how many concurrent threads Carcara will use
-to check the proof. If the given value is greater than 1, Carcara will split the proof steps among
-that many worker threads, and check them in parallel. Note that proof parsing, which is oftentimes a
-bottleneck in Carcara, will still be sequential.
+to check the proof. If the given value is greater than 1, Carcara will check the proof's top-level
+commands in parallel, distributing them between that many worker threads (commands inside a
+subproof are checked together, as a single unit). Each worker uses its own private pool of terms
+that shares the parsed terms with the other workers, so no synchronization is needed between them.
+Note that proof parsing, which is oftentimes a bottleneck in Carcara, will still be sequential.

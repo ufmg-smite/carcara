@@ -72,7 +72,6 @@ fn run_job<T: CollectResults + Default + Send>(
             parsing,
             checking,
             elaboration,
-            scheduling: Duration::ZERO,
             total,
             polyeq: checker_stats.polyeq_time,
             assume: checker_stats.assume_time,
