@@ -9,7 +9,7 @@ use crate::{
     CarcaraResult, Error, Status,
     ast::{
         ContextStack, Problem, ProblemPrelude, Proof, ProofCommand, ProofIter, ProofStep, Rc, Term,
-        pool::PrimitivePool, rare_rules::Rules,
+        pool::Pool, rare_rules::Rules,
     },
     benchmarking::{CollectResults, OnlineBenchmarkResults},
     external::{ExternalTool, SatTools},
@@ -123,7 +123,7 @@ impl Config {
 
 /// A proof checker for Alethe.
 pub struct ProofChecker<'c> {
-    pool: &'c mut PrimitivePool,
+    pool: &'c mut Pool,
     config: Config,
     context: ContextStack,
     reached_empty_clause: bool,
@@ -133,7 +133,7 @@ pub struct ProofChecker<'c> {
 
 impl<'c> ProofChecker<'c> {
     /// Constructs a new `ProofChecker` with a given pool, set of rare rules, and `Config`.
-    pub fn new(pool: &'c mut PrimitivePool, rare_rules: &'c Rules, config: Config) -> Self {
+    pub fn new(pool: &'c mut Pool, rare_rules: &'c Rules, config: Config) -> Self {
         ProofChecker {
             pool,
             config,

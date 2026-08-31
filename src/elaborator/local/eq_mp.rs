@@ -1,7 +1,6 @@
 use crate::{
     ast::{
-        ContextStack, ProofNode, Rc, StepNode, build_term, match_term, match_term_err,
-        pool::{PrimitivePool, TermPool},
+        ContextStack, ProofNode, Rc, StepNode, build_term, match_term, match_term_err, pool::Pool,
     },
     elaborator::{IdHelper, error::ElaborationError},
 };
@@ -23,7 +22,7 @@ use crate::{
 /// the resolution would conclude the empty clause. It can conclude `F2` however if the resolution is
 /// just with `t2`.
 pub fn eq_mp(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     _: &mut ContextStack,
     step: &StepNode,
 ) -> Result<Rc<ProofNode>, ElaborationError> {

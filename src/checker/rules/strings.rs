@@ -5,7 +5,7 @@ use super::{
 use crate::{
     ast::{
         Binder, BindingList, Constant, Operator, Rc, Sort, Term, build_term, match_term,
-        match_term_err, polyeq, pool::TermPool,
+        match_term_err, polyeq, pool::Pool,
     },
     checker::{error::CheckerError, rules::assert_polyeq},
 };
@@ -24,7 +24,7 @@ use std::{cmp, time::Duration};
 /// So, applying `flatten` to them would lead to `[term]`. Furthermore,
 /// the empty String isn't mapped to any entry in the vector, so `flatten`
 /// applied to `""` leads to an empty vector.
-fn string_concat_flatten(pool: &mut dyn TermPool, term: Rc<Term>) -> Vec<Rc<Term>> {
+fn string_concat_flatten(pool: &mut Pool, term: Rc<Term>) -> Vec<Rc<Term>> {
     let mut flattened = Vec::new();
     if let Term::Const(Constant::String(s)) = term.as_ref() {
         flattened.extend(
@@ -96,7 +96,7 @@ fn overlap(s: Vec<Rc<Term>>, t: Vec<Rc<Term>>) -> usize {
 /// of their characters (`"abc"` would become `(str.++ "a" "b" "c")`), and
 /// nested `str.++` applications are dissolved, remaining just one application
 /// with all the previous nested arguments (e.g., `(str.++ a (str.++ b (str.++ c "")))` would lead to `(str.++ a b c)`).
-fn expand_string_constants(pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term> {
+fn expand_string_constants(pool: &mut Pool, term: &Rc<Term>) -> Rc<Term> {
     match term.as_ref() {
         Term::Const(Constant::String(s)) => {
             let args: Vec<Rc<Term>> = s
@@ -183,7 +183,7 @@ fn expand_string_constants(pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term>
 /// application is returned with the flat form vector as its arguments (e.g.,
 /// `[a, "b", c]` would lead to `(str.++ a "b" c)`, where `a` and `c` are
 /// arbitrary terms).
-fn concat(pool: &mut dyn TermPool, terms: Vec<Rc<Term>>) -> Rc<Term> {
+fn concat(pool: &mut Pool, terms: Vec<Rc<Term>>) -> Rc<Term> {
     match terms.len() {
         0 => pool.add(Term::new_string("")),
         1 => terms[0].clone(),
@@ -200,7 +200,7 @@ fn concat(pool: &mut dyn TermPool, terms: Vec<Rc<Term>>) -> Rc<Term> {
 /// The function throws an error if the prefix/suffix is larger than the main
 /// term. It returns the prefix/suffix in flat form if the check was successful.
 fn is_prefix_or_suffix(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     term: Rc<Term>,
     pref: Rc<Term>,
     rev: bool,
@@ -231,7 +231,7 @@ fn is_prefix_or_suffix(
 /// An application of `is_prefix_or_suffix` where the reverse parameter is set
 /// to `false` by default.
 fn is_prefix(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     term: Rc<Term>,
     pref: Rc<Term>,
     polyeq_time: &mut Duration,
@@ -242,7 +242,7 @@ fn is_prefix(
 /// An application of `is_prefix_or_suffix` where the reverse parameter is set
 /// to `true` by default.
 fn is_suffix(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     term: Rc<Term>,
     pref: Rc<Term>,
     polyeq_time: &mut Duration,
@@ -266,7 +266,7 @@ type Suffixes = (Vec<Rc<Term>>, Vec<Rc<Term>>);
 /// doesn't remove anything, so the tuple returned is the flat form for both of
 /// them.
 fn strip_prefix_or_suffix(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     s: Rc<Term>,
     t: Rc<Term>,
     rev: bool,
@@ -313,19 +313,19 @@ fn string_check_length_one(term: Rc<Term>) -> Result<(), CheckerError> {
     Err(CheckerError::ExpectedStringConstantOfLengthOne(term))
 }
 
-fn build_skolem_prefix(pool: &mut dyn TermPool, u: Rc<Term>, n: Rc<Term>) -> Rc<Term> {
+fn build_skolem_prefix(pool: &mut Pool, u: Rc<Term>, n: Rc<Term>) -> Rc<Term> {
     build_term!(pool, (strsubstr {u.clone()} 0 {n.clone()}))
 }
 
-fn build_skolem_suffix_rem(pool: &mut dyn TermPool, u: Rc<Term>, n: Rc<Term>) -> Rc<Term> {
+fn build_skolem_suffix_rem(pool: &mut Pool, u: Rc<Term>, n: Rc<Term>) -> Rc<Term> {
     build_term!(pool, (strsubstr {u.clone()} {n.clone()} (- (strlen {u.clone()}) {n})))
 }
 
-fn build_skolem_suffix(pool: &mut dyn TermPool, u: Rc<Term>, n: Rc<Term>) -> Rc<Term> {
+fn build_skolem_suffix(pool: &mut Pool, u: Rc<Term>, n: Rc<Term>) -> Rc<Term> {
     build_term!(pool, (strsubstr {u.clone()} (- (strlen {u.clone()}) {n.clone()}) {n.clone()}))
 }
 
-fn build_skolem_unify_split_prefix(pool: &mut dyn TermPool, t: Rc<Term>, s: Rc<Term>) -> Rc<Term> {
+fn build_skolem_unify_split_prefix(pool: &mut Pool, t: Rc<Term>, s: Rc<Term>) -> Rc<Term> {
     let t_len = pool.add(Term::Op(Operator::StrLen, vec![t.clone()]));
     let s_len = pool.add(Term::Op(Operator::StrLen, vec![s.clone()]));
     let true_branch = build_skolem_suffix_rem(pool, t.clone(), s_len).clone();
@@ -333,7 +333,7 @@ fn build_skolem_unify_split_prefix(pool: &mut dyn TermPool, t: Rc<Term>, s: Rc<T
     build_term!(pool, (ite (>= (strlen {t.clone()}) (strlen {s.clone()})) {true_branch} {false_branch}))
 }
 
-fn build_skolem_unify_split_suffix(pool: &mut dyn TermPool, t: Rc<Term>, s: Rc<Term>) -> Rc<Term> {
+fn build_skolem_unify_split_suffix(pool: &mut Pool, t: Rc<Term>, s: Rc<Term>) -> Rc<Term> {
     let t_len = pool.add(Term::Op(Operator::StrLen, vec![t.clone()]));
     let s_len = pool.add(Term::Op(Operator::StrLen, vec![s.clone()]));
     let n_t = build_term!(pool, (- {t_len.clone()} {s_len.clone()}));
@@ -343,7 +343,7 @@ fn build_skolem_unify_split_suffix(pool: &mut dyn TermPool, t: Rc<Term>, s: Rc<T
     build_term!(pool, (ite (>= (strlen {t.clone()}) (strlen {s.clone()})) {true_branch} {false_branch}))
 }
 
-fn build_str_suffix_len(pool: &mut dyn TermPool, s: Rc<Term>, n: Rc<Term>) -> Rc<Term> {
+fn build_str_suffix_len(pool: &mut Pool, s: Rc<Term>, n: Rc<Term>) -> Rc<Term> {
     build_term!(pool, (strsubstr {s.clone()} (- (strlen {s.clone()}) {n.clone()}) {n.clone()}))
 }
 
@@ -373,7 +373,7 @@ fn extract_arguments(t: &Rc<Term>) -> Result<Vec<Rc<Term>>, CheckerError> {
 /// application of the concatenation operator to them.
 ///
 /// If the list contains only one regular expression, it returns it directly.
-fn singleton_elim(pool: &mut dyn TermPool, r_list: Vec<Rc<Term>>) -> Rc<Term> {
+fn singleton_elim(pool: &mut Pool, r_list: Vec<Rc<Term>>) -> Rc<Term> {
     match r_list.len() {
         1 => r_list[0].clone(),
         _ => pool.add(Term::Op(Operator::ReConcat, r_list)),
@@ -385,7 +385,7 @@ fn singleton_elim(pool: &mut dyn TermPool, r_list: Vec<Rc<Term>>) -> Rc<Term> {
 /// Internally handles the generation of the Skolem term resulting from `re_unfold_pos_component`,
 /// as well as the recursive step `re_unfold_pos_concat_recursive` to produce the resulting term.
 fn re_unfold_pos_concat(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     t: Rc<Term>,
     r: Rc<Term>,
 ) -> Result<(Rc<Term>, Rc<Term>), CheckerError> {
@@ -406,7 +406,7 @@ fn re_unfold_pos_concat(
     /// where `t` is the target string reconstructed by concatenating all `k_i`, and `i` is the
     /// index of the current string k being processed in the concatenation.
     fn re_unfold_pos_component(
-        pool: &mut dyn TermPool,
+        pool: &mut Pool,
         t: Rc<Term>,
         i: usize,
         previous_ks: &mut Vec<Rc<Term>>,
@@ -466,7 +466,7 @@ fn re_unfold_pos_concat(
     }
 
     fn re_unfold_pos_concat_recursive(
-        pool: &mut dyn TermPool,
+        pool: &mut Pool,
         t: Rc<Term>,
         r: Rc<Term>,
         previous_ks: &mut Vec<Rc<Term>>,
@@ -538,9 +538,9 @@ fn re_unfold_pos_concat(
 /// It takes an `Rc<Term>` and recursively match over the regular expression operators whose length
 /// can be inferred. It throws an error if the term length cannot be evaluated, i.e., if the length
 /// of the term itself or one of its arguments cannot be inferred.
-fn str_fixed_len_re(pool: &mut dyn TermPool, r: Rc<Term>) -> Result<usize, CheckerError> {
+fn str_fixed_len_re(pool: &mut Pool, r: Rc<Term>) -> Result<usize, CheckerError> {
     fn has_same_length(
-        pool: &mut dyn TermPool,
+        pool: &mut Pool,
         args: &[Rc<Term>],
         r: Rc<Term>,
         ignore: Operator,

@@ -3,7 +3,7 @@ use super::{
     assert_is_bool_constant, assert_num_args, assert_num_premises,
 };
 use crate::{
-    ast::{Rc, Term, match_term, pool::TermPool},
+    ast::{Rc, Term, match_term, pool::Pool},
     resolution::{ClauseCollection, Literal, ResolutionError, greedy_resolution, literal_to_term},
     utils::MultiSet,
 };
@@ -174,7 +174,7 @@ pub fn strict_resolution(
 fn apply_generic_resolution<'a, C: ClauseCollection<'a>>(
     premises: &'a [Premise],
     args: &'a [Rc<Term>],
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
 ) -> Result<C, CheckerError> {
     assert_num_premises(premises, 2..)?;
     let num_steps = premises.len() - 1;
@@ -210,7 +210,7 @@ fn apply_generic_resolution<'a, C: ClauseCollection<'a>>(
 }
 
 fn binary_resolution<'a, C: ClauseCollection<'a>>(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     current: &mut C,
     next: &'a [Rc<Term>],
     pivot: Literal<'a>,

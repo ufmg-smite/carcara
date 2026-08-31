@@ -1,9 +1,7 @@
 use crate::{
     ast::{
         Binder, BindingList, Operator, ProblemPrelude, ProofCommand, Rc, Sort, Substitution, Term,
-        build_term, match_term, match_term_err,
-        pool::{PrimitivePool, TermPool},
-        printer,
+        build_term, match_term, match_term_err, pool::Pool, printer,
     },
     checker::{SatRefConfig, error::CheckerError, rules::RuleResult},
     external,
@@ -17,7 +15,7 @@ use std::{
 };
 
 fn sat_refutation_external_check(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     cnf_path: String,
     prelude: &ProblemPrelude,
     checker: &external::ExternalTool,
@@ -103,7 +101,7 @@ fn sat_refutation_external_check(
 }
 
 pub fn sat_refutation(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     premise_steps: Vec<&ProofCommand>,
     prelude: &ProblemPrelude,
     config: &SatRefConfig,

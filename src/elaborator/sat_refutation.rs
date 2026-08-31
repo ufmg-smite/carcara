@@ -1,8 +1,7 @@
 use super::{Elaborator, IdHelper};
 use crate::{
     ast::{
-        Operator, ProofCommand, ProofNode, ProofStep, Rc, StepNode, Term, build_term,
-        pool::{PrimitivePool, TermPool},
+        Operator, ProofCommand, ProofNode, ProofStep, Rc, StepNode, Term, build_term, pool::Pool,
     },
     external::*,
 };
@@ -69,7 +68,7 @@ fn build_res_step(
 }
 
 fn get_resolution_refutation(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     step: &StepNode,
     premise_to_proof: &HashMap<Rc<Term>, Rc<ProofNode>>,
     cnf_path: String,

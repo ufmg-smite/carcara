@@ -1,6 +1,6 @@
 //! Helpers for checking and elaborating `resolution` steps.
 
-use crate::ast::{Rc, Term, build_term, pool::TermPool};
+use crate::ast::{Rc, Term, build_term, pool::Pool};
 use indexmap::{IndexMap, IndexSet, map::Entry};
 use thiserror::Error;
 
@@ -77,7 +77,7 @@ impl<'a> ClauseCollection<'a> for IndexSet<Literal<'a>> {
 
 /// Transforms a `Literal` into an `Rc<Term>`, undoing the transformation done by
 /// `Rc<Term>::remove_all_negations`.
-pub fn literal_to_term(pool: &mut dyn TermPool, (n, term): Literal) -> Rc<Term> {
+pub fn literal_to_term(pool: &mut Pool, (n, term): Literal) -> Rc<Term> {
     let mut term = term.clone();
     for _ in 0..n {
         term = build_term!(pool, (not { term }));
@@ -116,7 +116,7 @@ pub struct ResolutionTrace {
 pub fn greedy_resolution(
     conclusion: &[Rc<Term>],
     premises: &[&[Rc<Term>]],
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     tracing: bool,
 ) -> Result<ResolutionTrace, ResolutionError> {
     // If we are elaborating, we record which pivot was found for each binary resolution step, so we

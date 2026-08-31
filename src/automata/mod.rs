@@ -7,7 +7,7 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::hash::Hash;
 
-use crate::ast::{Constant, Operator, Rc, Term, pool::TermPool};
+use crate::ast::{Constant, Operator, Rc, Term, pool::Pool};
 use crate::automata::utils::{has_overlapping_ranges, missing_ranges};
 use crate::checker::error::{CheckerError, StringError};
 
@@ -476,7 +476,7 @@ impl Automaton {
 
     /// Constructs an automaton from an AST regular expression term.
     pub fn create_from_regex_operators(
-        pool: &mut dyn TermPool,
+        pool: &mut Pool,
         t: &Rc<Term>,
     ) -> Result<Automaton, CheckerError> {
         match t.as_ref() {
@@ -1235,8 +1235,8 @@ mod tests {
     }
 
     fn accepts_regex(regex: &str, s: &str) -> bool {
-        use crate::{ast::pool::PrimitivePool, parser::tests::parse_term};
-        let mut pool = PrimitivePool::new();
+        use crate::{ast::pool::Pool, parser::tests::parse_term};
+        let mut pool = Pool::new();
         let term = parse_term(&mut pool, regex);
         let aut = Automaton::create_from_regex_operators(&mut pool, &term).unwrap();
         aut.accepts(s)

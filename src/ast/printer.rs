@@ -4,7 +4,7 @@ use crate::{
     ast::{
         AnchorArg, Binder, BindingList, Constant, MatchCase, MatchPattern, Operator, ParamOperator,
         ProblemPrelude, Proof, ProofCommand, ProofIter, ProofStep, Rc, Sort, SortedVar, Term,
-        pool::{PrimitivePool, TermPool},
+        pool::Pool,
     },
     parser::Token,
     utils::{DedupIterator, is_symbol_character},
@@ -27,7 +27,7 @@ pub static USE_SHARING_IN_TERM_DISPLAY: AtomicBool = AtomicBool::new(false);
 /// first time a novel term appears, it receives a unique name using the `:named` attribute. After
 /// that, any occurrence of that term will simply use this name, instead of printing the whole term.
 pub fn print_proof(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     prelude: &ProblemPrelude,
     proof: &Proof,
     use_sharing: bool,
@@ -44,7 +44,7 @@ pub fn print_proof(
 /// first time a novel term appears, it receives a unique name using the `:named` attribute. After
 /// that, any occurrence of that term will simply use this name, instead of printing the whole term.
 pub fn write_proof_to_dest(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     prelude: &ProblemPrelude,
     proof: &Proof,
     dest: &mut dyn io::Write,
@@ -56,7 +56,7 @@ pub fn write_proof_to_dest(
 /// Given the conclusion clause of a step, writes to `dest` an SMT-LIB problem that corresponds to
 // the negation of that clause.
 pub(crate) fn write_clause_smt_problem(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     prelude: &ProblemPrelude,
     dest: &mut dyn io::Write,
     clause: &[Rc<Term>],
@@ -74,7 +74,7 @@ pub(crate) fn write_clause_smt_problem(
 
 /// Writes the assertions of an SMT-LIB problem to the provided destination.
 pub fn write_asserts<'a, I: IntoIterator<Item = &'a Rc<Term>>>(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     prelude: &ProblemPrelude,
     dest: &mut dyn io::Write,
     assertions: I,
@@ -99,7 +99,7 @@ pub fn write_asserts<'a, I: IntoIterator<Item = &'a Rc<Term>>>(
 
 /// Writes a term to the provided destination.
 pub(crate) fn write_term(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     prelude: &ProblemPrelude,
     dest: &mut dyn io::Write,
     term: &Rc<Term>,
@@ -234,7 +234,7 @@ impl PrintWithSharing for MatchCase {
 
 /// A pretty printer for Alethe proofs.
 pub struct AlethePrinter<'a> {
-    pool: &'a mut PrimitivePool,
+    pool: &'a mut Pool,
     inner: &'a mut dyn io::Write,
     term_indices: Option<IndexMap<Rc<Term>, usize>>,
     term_sharing_variable_prefix: String,
@@ -315,7 +315,7 @@ impl<'a> AlethePrinter<'a> {
     /// problem prelude is required to know the proof's global variables, and thus know which terms
     /// are closed.
     pub fn new(
-        pool: &'a mut PrimitivePool,
+        pool: &'a mut Pool,
         prelude: &ProblemPrelude,
         use_sharing: bool,
         dest: &'a mut dyn io::Write,
@@ -561,7 +561,7 @@ impl fmt::Display for Term {
         let use_sharing = USE_SHARING_IN_TERM_DISPLAY.load(Ordering::Relaxed) && !f.alternate();
         let mut buf = Vec::new();
         // This pool is only used for the free variables cache, so it's fine to use a fresh pool
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let mut printer = AlethePrinter {
             pool: &mut pool,
             inner: &mut buf,

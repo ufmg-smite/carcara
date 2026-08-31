@@ -1,11 +1,11 @@
 use super::{CheckerError, RuleArgs, RuleResult, assert_eq};
 use crate::{
-    ast::{Operator, ParamOperator, Rc, Sort, Term, build_term, match_term_err, pool::TermPool},
+    ast::{Operator, ParamOperator, Rc, Sort, Term, build_term, match_term_err, pool::Pool},
     checker::rules::assert_clause_len,
 };
 use rug::Integer;
 
-fn bitvector_size(pool: &mut dyn TermPool, term: &Rc<Term>) -> usize {
+fn bitvector_size(pool: &mut Pool, term: &Rc<Term>) -> usize {
     if let Sort::BitVec(size) = pool.sort(term).as_ref() {
         *size
     } else {
@@ -13,7 +13,7 @@ fn bitvector_size(pool: &mut dyn TermPool, term: &Rc<Term>) -> usize {
     }
 }
 
-fn get_term_bits(term: &Rc<Term>, pool: &mut dyn TermPool) -> Vec<Rc<Term>> {
+fn get_term_bits(term: &Rc<Term>, pool: &mut Pool) -> Vec<Rc<Term>> {
     if let Some((Operator::BvBbTerm, args_x)) = term.as_op() {
         args_x.to_vec()
     } else {
@@ -34,7 +34,7 @@ fn ripple_carry_adder(
     x: &[Rc<Term>],
     y: &[Rc<Term>],
     carry: Option<Rc<Term>>,
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
 ) -> (Vec<Rc<Term>>, Rc<Term>) {
     let size = x.len();
     let mut carries = vec![carry.unwrap_or_else(|| pool.bool_false())];
@@ -61,7 +61,7 @@ fn ripple_carry_adder(
     (res, carries.pop().unwrap())
 }
 
-fn shift_add_multiplier(x: &Rc<Term>, y: &Rc<Term>, pool: &mut dyn TermPool) -> Rc<Term> {
+fn shift_add_multiplier(x: &Rc<Term>, y: &Rc<Term>, pool: &mut Pool) -> Rc<Term> {
     let size = bitvector_size(pool, x);
     let x = get_term_bits(x, pool);
     let y = get_term_bits(y, pool);
@@ -305,7 +305,7 @@ pub fn not(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 }
 
 /// Bitblasts `(bvult x y)`
-fn bitblast_ult(pool: &mut dyn TermPool, x: &Rc<Term>, y: &Rc<Term>) -> Rc<Term> {
+fn bitblast_ult(pool: &mut Pool, x: &Rc<Term>, y: &Rc<Term>) -> Rc<Term> {
     let size = bitvector_size(pool, x);
     let x = get_term_bits(x, pool);
     let y = get_term_bits(y, pool);
@@ -568,12 +568,7 @@ pub fn sign_extend(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 }
 
 /// Bitblasts an application of either `bvshl`, `bvlshr` or `bvashr`.
-fn bitblast_shift_op(
-    pool: &mut dyn TermPool,
-    op: Operator,
-    x: &Rc<Term>,
-    y: &Rc<Term>,
-) -> Rc<Term> {
+fn bitblast_shift_op(pool: &mut Pool, op: Operator, x: &Rc<Term>, y: &Rc<Term>) -> Rc<Term> {
     let size = bitvector_size(pool, x);
 
     // First, we will need to bitblast a term that corresponds to `(bvult y size)`
@@ -661,17 +656,17 @@ pub fn ashr(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
 // Returns a quotient/remainder pair
 fn bitblast_udiv_urem_rec(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     x: &[Rc<Term>],
     y: &[Rc<Term>],
     n: usize,
 ) -> (Vec<Rc<Term>>, Vec<Rc<Term>>) {
-    fn shift_right(pool: &mut dyn TermPool, v: &mut [Rc<Term>]) {
+    fn shift_right(pool: &mut Pool, v: &mut [Rc<Term>]) {
         v.rotate_left(1); // Rust and SMT-LIB disagree on endianness
         *v.last_mut().unwrap() = pool.bool_false();
     }
 
-    fn shift_left(pool: &mut dyn TermPool, v: &mut [Rc<Term>]) {
+    fn shift_left(pool: &mut Pool, v: &mut [Rc<Term>]) {
         v.rotate_right(1); // Rust and SMT-LIB disagree on endianness
         *v.first_mut().unwrap() = pool.bool_false();
     }
@@ -725,7 +720,7 @@ fn bitblast_udiv_urem_rec(
 }
 
 fn bitblast_udiv_urem(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     x: &Rc<Term>,
     y: &Rc<Term>,
 ) -> (Vec<Rc<Term>>, Vec<Rc<Term>>) {

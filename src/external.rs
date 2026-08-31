@@ -2,9 +2,7 @@ use crate::{
     CarcaraResult, Status,
     ast::{
         Operator, Polyeq, ProblemPrelude, ProofCommand, ProofNode, ProofNodeForest, Rc, StepNode,
-        SubproofNode, Term, build_term, match_term,
-        pool::{PrimitivePool, TermPool},
-        printer,
+        SubproofNode, Term, build_term, match_term, pool::Pool, printer,
     },
     checker,
     elaborator::{IdHelper, Mutate},
@@ -127,7 +125,7 @@ pub enum ExternalError {
 }
 
 pub fn get_problem_string<'a, I: IntoIterator<Item = &'a Rc<Term>>>(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     prelude: &ProblemPrelude,
     assertions: I,
 ) -> String {
@@ -148,7 +146,7 @@ pub fn get_problem_string<'a, I: IntoIterator<Item = &'a Rc<Term>>>(
 }
 
 pub fn parse_and_check_solver_proof(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     problem: &str,
     proof: &str,
 ) -> CarcaraResult<(Vec<ProofCommand>, Status)> {
@@ -166,7 +164,7 @@ pub fn parse_and_check_solver_proof(
 }
 
 pub fn get_solver_proof(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     problem: String,
     solver: &ExternalTool,
 ) -> Result<(Vec<ProofCommand>, Status), ExternalError> {
@@ -255,7 +253,7 @@ pub fn gen_dimacs<'a>(
 }
 
 pub fn collect_premise_clauses(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     premise_steps: &Vec<&ProofCommand>,
     lemmas_to_th_ids: &mut HashMap<Rc<Term>, String>,
     lemmas_to_step_ids: &mut HashMap<Rc<Term>, String>,
@@ -452,7 +450,7 @@ fn increase_subproof_depth(proof: Rc<ProofNode>, delta: usize, prefix: &str) -> 
 }
 
 pub fn insert_solver_proof(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     commands: Vec<ProofCommand>,
     conclusion: &[Rc<Term>],
     root_id: &str,

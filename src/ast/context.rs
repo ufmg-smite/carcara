@@ -1,4 +1,4 @@
-use super::{AnchorArg, Rc, Substitution, Term, pool::TermPool};
+use super::{AnchorArg, Rc, Substitution, Term, pool::Pool};
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard, atomic::AtomicUsize};
 
 /// A single Alethe subproof context.
@@ -152,7 +152,7 @@ impl ContextStack {
     }
 
     /// Computes the cumulative substitution of all contexts up to the given index `up_to`.
-    fn catch_up_cumulative(&mut self, pool: &mut dyn TermPool, up_to: usize) {
+    fn catch_up_cumulative(&mut self, pool: &mut Pool, up_to: usize) {
         /// Maximum depth beyond which the substitution construction will not use a cache.
         ///
         /// This may be surprising, but in some pathological benchmarks with very deep subproof
@@ -230,7 +230,7 @@ impl ContextStack {
     /// Apply the immediately previous context to a term.
     ///
     /// This applies the cumulative substitution of all contexts in the stack, except for the top one.
-    pub fn apply_previous(&mut self, pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term> {
+    pub fn apply_previous(&mut self, pool: &mut Pool, term: &Rc<Term>) -> Rc<Term> {
         if self.len() < 2 {
             term.clone()
         } else {
@@ -252,7 +252,7 @@ impl ContextStack {
     /// Apply the current context to a term.
     ///
     /// This applies the cumulative substitution of all contexts in the stack.
-    pub fn apply(&mut self, pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term> {
+    pub fn apply(&mut self, pool: &mut Pool, term: &Rc<Term>) -> Rc<Term> {
         if self.is_empty() {
             term.clone()
         } else {

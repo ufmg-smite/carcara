@@ -1,16 +1,13 @@
 use super::{IdHelper, PolyeqElaborator};
 use crate::{
-    ast::{
-        ContextStack, ProofNode, Rc, StepNode, build_term,
-        pool::{PrimitivePool, TermPool},
-    },
+    ast::{ContextStack, ProofNode, Rc, StepNode, build_term, pool::Pool},
     checker::{apply_bfun_elim, error::CheckerError},
     elaborator::error::ElaborationError,
 };
 use indexmap::IndexMap;
 
 pub fn bfun_elim(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     _: &mut ContextStack,
     step: &StepNode,
 ) -> Result<Rc<ProofNode>, ElaborationError> {

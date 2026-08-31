@@ -128,7 +128,7 @@ fn get_instance(options: &Input) -> CliResult<Instance> {
 
 fn parse_command(
     options: ParseCommandOptions,
-) -> CliResult<(ast::Problem, ast::Proof, Rules, ast::pool::PrimitivePool)> {
+) -> CliResult<(ast::Problem, ast::Proof, Rules, ast::pool::Pool)> {
     let instance = get_instance(&options.input)?;
     let result = parser::parse_instance(
         instance.problem(),
@@ -171,12 +171,7 @@ fn check_command(options: CheckCommandOptions) -> CliResult<carcara::Status> {
 
 fn elaborate_command(
     options: ElaborateCommandOptions,
-) -> CliResult<(
-    carcara::Status,
-    ast::Problem,
-    ast::Proof,
-    ast::pool::PrimitivePool,
-)> {
+) -> CliResult<(carcara::Status, ast::Problem, ast::Proof, ast::pool::Pool)> {
     let instance = get_instance(&options.input)?;
 
     let checker_config = (options.checking, options.tools.clone()).into_config();
@@ -252,7 +247,7 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
 fn slice_command(
     options: SliceCommandOptions,
     no_print_with_sharing: bool,
-) -> CliResult<(ast::Problem, ast::Proof, ast::pool::PrimitivePool)> {
+) -> CliResult<(ast::Problem, ast::Proof, ast::pool::Pool)> {
     let instance = get_instance(&options.input)?;
     let (problem, proof, _, mut pool) = parser::parse_instance(
         instance.problem(),

@@ -1,6 +1,6 @@
 //! Algorithms for creating and applying capture-avoiding substitutions over terms.
 
-use super::{BindingList, MatchCase, MatchPattern, Rc, Sort, Term, pool::TermPool};
+use super::{BindingList, MatchCase, MatchPattern, Rc, Sort, Term, pool::Pool};
 use crate::utils::{HashMapStack, MultiSet};
 use rapidhash::{HashMapExt, HashSetExt, RapidHashMap, RapidHashSet};
 use thiserror::Error;
@@ -71,7 +71,7 @@ impl Substitution {
 
     /// Constructs a singleton substitution mapping `x` to `t`. This returns an error if the sorts
     /// of the given terms are not the same.
-    pub fn single(pool: &mut dyn TermPool, x: Rc<Term>, t: Rc<Term>) -> SubstitutionResult<Self> {
+    pub fn single(pool: &mut Pool, x: Rc<Term>, t: Rc<Term>) -> SubstitutionResult<Self> {
         let mut this = Self::empty();
         this.insert(pool, x, t)?;
         Ok(this)
@@ -79,10 +79,7 @@ impl Substitution {
 
     /// Constructs a new substitution from an arbitrary mapping of terms to other terms. This
     /// returns an error if any term is mapped to a term of a different sort.
-    pub fn new(
-        pool: &mut dyn TermPool,
-        map: RapidHashMap<Rc<Term>, Rc<Term>>,
-    ) -> SubstitutionResult<Self> {
+    pub fn new(pool: &mut Pool, map: RapidHashMap<Rc<Term>, Rc<Term>>) -> SubstitutionResult<Self> {
         for (k, v) in &map {
             if !pool.sort(k).is_compatible(&pool.sort(v)) {
                 return Err(SubstitutionError::DifferentSorts(k.clone(), v.clone()));
@@ -120,7 +117,7 @@ impl Substitution {
     /// the sorts of the given terms are not the same.
     pub(crate) fn insert(
         &mut self,
-        pool: &mut dyn TermPool,
+        pool: &mut Pool,
         x: Rc<Term>,
         t: Rc<Term>,
     ) -> SubstitutionResult<()> {
@@ -173,7 +170,7 @@ impl Substitution {
 
     /// Computes which binder variables will need to be renamed, and stores the result in
     /// `self.should_be_renamed`.
-    fn compute_should_be_renamed(&mut self, pool: &mut dyn TermPool) {
+    fn compute_should_be_renamed(&mut self, pool: &mut Pool) {
         if self.should_be_renamed.is_some() {
             return;
         }
@@ -208,7 +205,7 @@ impl Substitution {
     }
 
     /// Applies the substitution to `term`, and returns the result as a new term.
-    pub fn apply(&mut self, pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term> {
+    pub fn apply(&mut self, pool: &mut Pool, term: &Rc<Term>) -> Rc<Term> {
         self.renaming_shadow = MultiSet::new();
         let result = self.apply_impl(pool, term, true);
         assert!(self.renaming_shadow.is_empty());
@@ -222,19 +219,14 @@ impl Substitution {
     /// maintaining a cache can be bigger than the benefit of using it, in which case this function
     /// is used. In most cases, however, using a cache improves performance, so avoid using this
     /// function unless you know what you are doing.
-    pub fn apply_uncached(&mut self, pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term> {
+    pub fn apply_uncached(&mut self, pool: &mut Pool, term: &Rc<Term>) -> Rc<Term> {
         self.renaming_shadow = MultiSet::new();
         let result = self.apply_impl(pool, term, false);
         assert!(self.renaming_shadow.is_empty());
         result
     }
 
-    fn apply_impl(
-        &mut self,
-        pool: &mut dyn TermPool,
-        term: &Rc<Term>,
-        use_cache: bool,
-    ) -> Rc<Term> {
+    fn apply_impl(&mut self, pool: &mut Pool, term: &Rc<Term>, use_cache: bool) -> Rc<Term> {
         macro_rules! apply_to_sequence {
             ($sequence:expr) => {
                 $sequence
@@ -350,7 +342,7 @@ impl Substitution {
     /// used.
     fn apply_to_binder<T: BindingValue>(
         &mut self,
-        pool: &mut dyn TermPool,
+        pool: &mut Pool,
         binding_list: &BindingList<T>,
         inner: &Rc<Term>,
         use_cache: bool,
@@ -404,7 +396,7 @@ impl Substitution {
     /// a variable is the old name with `_renamed` appended.
     fn rename_binding_list<V: BindingValue>(
         &mut self,
-        pool: &mut dyn TermPool,
+        pool: &mut Pool,
         binding_list: &[(String, V)],
     ) -> (BindingList<V>, Self) {
         if !self.avoid_capture {
@@ -454,27 +446,27 @@ impl Substitution {
 
 /// A trait for objects that can be the value in a binding list, namely `Rc<Term>` or `Rc<Sort>`.
 trait BindingValue: Clone {
-    fn get_sort(&self, pool: &mut dyn TermPool) -> Rc<Sort>;
+    fn get_sort(&self, pool: &mut Pool) -> Rc<Sort>;
 
-    fn apply_subst(&self, pool: &mut dyn TermPool, substitution: &mut Substitution) -> Self;
+    fn apply_subst(&self, pool: &mut Pool, substitution: &mut Substitution) -> Self;
 }
 
 impl BindingValue for Rc<Term> {
-    fn get_sort(&self, pool: &mut dyn TermPool) -> Rc<Sort> {
+    fn get_sort(&self, pool: &mut Pool) -> Rc<Sort> {
         pool.sort(self)
     }
 
-    fn apply_subst(&self, pool: &mut dyn TermPool, substitution: &mut Substitution) -> Self {
+    fn apply_subst(&self, pool: &mut Pool, substitution: &mut Substitution) -> Self {
         substitution.apply(pool, self)
     }
 }
 
 impl BindingValue for Rc<Sort> {
-    fn get_sort(&self, _: &mut dyn TermPool) -> Rc<Sort> {
+    fn get_sort(&self, _: &mut Pool) -> Rc<Sort> {
         self.clone()
     }
 
-    fn apply_subst(&self, _: &mut dyn TermPool, _: &mut Substitution) -> Self {
+    fn apply_subst(&self, _: &mut Pool, _: &mut Substitution) -> Self {
         self.clone()
     }
 }
@@ -494,7 +486,7 @@ impl SortSubstitution {
     }
 
     /// Applies the substitution to `sort`, and returns the result as a new sort.
-    pub fn apply(&mut self, pool: &mut dyn TermPool, sort: &Rc<Sort>) -> Rc<Sort> {
+    pub fn apply(&mut self, pool: &mut Pool, sort: &Rc<Sort>) -> Rc<Sort> {
         macro_rules! apply_to_sequence {
             ($sequence:expr) => {
                 $sequence
@@ -567,13 +559,13 @@ impl SortSubstitution {
 mod tests {
     use super::Substitution;
     use crate::{
-        ast::pool::PrimitivePool,
+        ast::pool::Pool,
         parser::{Config, Parser},
     };
     use rapidhash::{HashMapExt, RapidHashMap};
 
     fn run_test(definitions: &str, original: &str, x: &str, t: &str, result: &str) {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let mut parser = Parser::new(&mut pool, Config::new(), definitions.into()).unwrap();
         parser.parse_problem().unwrap();
 

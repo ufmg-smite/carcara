@@ -1,7 +1,7 @@
 use crate::{
     ast::{
         ContextStack, ProofNode, Rc, StepNode, Term, build_term, match_term, match_term_err,
-        pool::{PrimitivePool, TermPool},
+        pool::Pool,
     },
     checker::error::CheckerError,
     elaborator::{IdHelper, add_symm_step, error::ElaborationError},
@@ -54,7 +54,7 @@ fn find_and_trace_chain<'a, T>(
 }
 
 pub fn trans(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     _: &mut ContextStack,
     step: &StepNode,
 ) -> Result<Rc<ProofNode>, ElaborationError> {
@@ -95,7 +95,7 @@ pub fn trans(
 }
 
 pub fn eq_transitive(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     _: &mut ContextStack,
     step: &StepNode,
 ) -> Result<Rc<ProofNode>, ElaborationError> {
@@ -195,7 +195,7 @@ pub fn eq_transitive(
 }
 
 fn flip_eq_transitive_premises(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     new_eq_transitive_step: Rc<ProofNode>,
     depth: usize,
     new_clause: &[Rc<Term>],

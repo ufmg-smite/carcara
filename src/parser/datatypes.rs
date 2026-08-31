@@ -3,7 +3,7 @@ use crate::{
     CarcaraResult,
     ast::{
         MatchCase, MatchPattern, Rc, Sort, Term,
-        pool::{Datatype, DatatypeConstructor, TermPool},
+        pool::{Datatype, DatatypeConstructor},
     },
 };
 use indexmap::IndexMap;

@@ -1,16 +1,13 @@
 use super::{IdHelper, error::ElaborationError};
 use crate::{
-    ast::{
-        ProofNode, Rc, StepNode, Term,
-        pool::{PrimitivePool, TermPool},
-    },
+    ast::{ProofNode, Rc, StepNode, Term, pool::Pool},
     checker::error::CheckerError,
     resolution::{Literal, ResolutionError, literal_to_term},
     utils::MultiSet,
 };
 use rapidhash::{HashMapExt, HashSetExt, RapidHashMap, RapidHashSet};
 
-fn literals_to_clause(pool: &mut PrimitivePool, clause: &[Literal]) -> Vec<Rc<Term>> {
+fn literals_to_clause(pool: &mut Pool, clause: &[Literal]) -> Vec<Rc<Term>> {
     clause.iter().map(|l| literal_to_term(pool, *l)).collect()
 }
 
@@ -39,7 +36,7 @@ impl<'a> ResolutionPremise<'a> {
 }
 
 fn apply_naive_resolution<'a>(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     premises: &[ResolutionPremise<'a>],
 ) -> Result<Vec<Literal<'a>>, ResolutionError> {
     assert!(premises.len() >= 2);
@@ -98,7 +95,7 @@ fn check_clauses_are_compatible(
 }
 
 pub fn uncrowd_resolution(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     step: &StepNode,
     rotate_premises: bool,
 ) -> Result<Rc<ProofNode>, ElaborationError> {
@@ -187,7 +184,7 @@ pub fn uncrowd_resolution(
 }
 
 fn add_partial_resolution_step<'a>(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     ids: &mut IdHelper,
     depth: usize,
     premises: &[ResolutionPremise<'a>],

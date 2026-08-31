@@ -3,7 +3,7 @@ use rug::Integer;
 
 use crate::ast::{
     Operator, Rc, Sort, Term,
-    pool::TermPool,
+    pool::Pool,
     rare_rules::{RewriteTerm, build_equation, pseudo_term},
 };
 
@@ -130,7 +130,7 @@ where
 
 #[inline]
 fn reconstruct_meta_terms<'a>(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     rule: &'a RewriteTerm,
     traces: &IndexMap<String, TraceRef<'a>>,
 ) -> TraceOwned {
@@ -159,7 +159,7 @@ fn reconstruct_meta_terms<'a>(
 }
 
 fn check_rewrites(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     term: &Rc<Term>,
     rules: &[(RewriteTerm, RewriteTerm)],
 ) -> Option<TraceOwned> {
@@ -174,7 +174,7 @@ fn check_rewrites(
 }
 
 fn rewrite_arg_for_parent(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     arg: &Rc<Term>,
     rules: &[(RewriteTerm, RewriteTerm)],
     ctx: &mut RewriteContext,
@@ -199,7 +199,7 @@ fn rewrite_arg_for_parent(
 }
 
 fn rewrite_arguments(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     args: &[Rc<Term>],
     rules: &[(RewriteTerm, RewriteTerm)],
     ctx: &mut RewriteContext,
@@ -230,7 +230,7 @@ fn rewrite_arguments(
 /// last case the term is intentionally left un-normalized rather than guessing a width, so the
 /// downstream equality check fails loudly instead of fabricating a wrong nil.
 fn bv_nil_if_empty(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     op: Operator,
     original_args: &[Rc<Term>],
     new_args: &[Rc<Term>],
@@ -255,7 +255,7 @@ fn bv_nil_if_empty(
 /// Recover the bit width of an n-ary bitvector operator from its pre-flatten arguments. A rare
 /// list argument is looked through to its first element, since after flattening the operator has
 /// no arguments left to take the width from.
-fn bv_operand_width(pool: &mut dyn TermPool, original_args: &[Rc<Term>]) -> Option<usize> {
+fn bv_operand_width(pool: &mut Pool, original_args: &[Rc<Term>]) -> Option<usize> {
     for arg in original_args {
         let probe = match arg.as_ref() {
             Term::Op(Operator::RareList, elems) => elems.first()?,
@@ -270,7 +270,7 @@ fn bv_operand_width(pool: &mut dyn TermPool, original_args: &[Rc<Term>]) -> Opti
 }
 
 fn rewrite_meta_terms_inner(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     term: Rc<Term>,
     rules: &[(RewriteTerm, RewriteTerm)],
     ctx: &mut RewriteContext,
@@ -377,7 +377,7 @@ fn rewrite_meta_terms_inner(
 }
 
 pub fn rewrite_meta_terms(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     term: Rc<Term>,
     rules: &[(RewriteTerm, RewriteTerm)],
 ) -> Rc<Term> {
@@ -389,12 +389,12 @@ pub fn rewrite_meta_terms(
 mod tests {
     use super::*;
     use crate::{
-        ast::pool::PrimitivePool,
+        ast::pool::Pool,
         parser::{Config, Parser},
     };
 
     fn run_test(definitions: &str, original: &str, rule: (RewriteTerm, RewriteTerm), result: &str) {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let mut parser = Parser::new(&mut pool, Config::new(), definitions.into()).unwrap();
         parser.parse_problem().unwrap();
 
@@ -432,29 +432,29 @@ mod tests {
 
     use crate::ast::Constant;
 
-    fn rare_list(pool: &mut PrimitivePool, elems: Vec<Rc<Term>>) -> Rc<Term> {
+    fn rare_list(pool: &mut Pool, elems: Vec<Rc<Term>>) -> Rc<Term> {
         pool.add(Term::Op(Operator::RareList, elems))
     }
 
-    fn op(pool: &mut PrimitivePool, op: Operator, args: Vec<Rc<Term>>) -> Rc<Term> {
+    fn op(pool: &mut Pool, op: Operator, args: Vec<Rc<Term>>) -> Rc<Term> {
         pool.add(Term::Op(op, args))
     }
 
-    fn int(pool: &mut PrimitivePool, value: i32) -> Rc<Term> {
+    fn int(pool: &mut Pool, value: i32) -> Rc<Term> {
         pool.add(Term::Const(Constant::Integer(Integer::from(value))))
     }
 
-    fn bv(pool: &mut PrimitivePool, value: i32, width: usize) -> Rc<Term> {
+    fn bv(pool: &mut Pool, value: i32, width: usize) -> Rc<Term> {
         pool.add(Term::new_bv(value, width))
     }
 
-    fn normalize(pool: &mut PrimitivePool, term: Rc<Term>) -> Rc<Term> {
+    fn normalize(pool: &mut Pool, term: Rc<Term>) -> Rc<Term> {
         rewrite_meta_terms(pool, term, &get_rules())
     }
 
     #[test]
     fn test_nary_list_flatten_and_singleton() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
 
         // Flatten a rare list into its n-ary parent (and do NOT collapse a multi-element list).
         let (a, b, c) = (int(&mut pool, 1), int(&mut pool, 2), int(&mut pool, 3));
@@ -477,7 +477,7 @@ mod tests {
 
     #[test]
     fn test_nary_empty_to_nil() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
 
         // Arithmetic empties fold to the additive / multiplicative identity.
         let empty = rare_list(&mut pool, vec![]);
@@ -504,7 +504,7 @@ mod tests {
 
     #[test]
     fn test_bv_nary_flatten_and_singleton() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let (a, b, c) = (
             bv(&mut pool, 1, 4),
             bv(&mut pool, 2, 4),
@@ -528,7 +528,7 @@ mod tests {
         // Width-dependent nil construction. The all-empty rewrite state that would trigger this
         // through `normalize` cannot itself carry a width, so exercise the helper directly with a
         // (non-empty originals, empty result) pair to verify the per-operator nil values.
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let probe = bv(&mut pool, 5, 4);
         let originals = vec![rare_list(&mut pool, vec![probe])];
         let empty: Vec<Rc<Term>> = vec![];

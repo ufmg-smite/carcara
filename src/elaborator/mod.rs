@@ -12,8 +12,7 @@ use crate::{
     Error,
     ast::{
         ContextStack, Polyeq, Problem, ProofNode, ProofNodeForest, Rc, StepNode, SubproofNode,
-        Term, build_term, match_term,
-        pool::{PrimitivePool, TermPool},
+        Term, build_term, match_term, pool::Pool,
     },
     external::{ExternalTool, SatTools},
 };
@@ -86,14 +85,14 @@ pub enum ElaborationPass {
 
 /// A proof elaborator for Alethe.
 pub struct Elaborator<'e> {
-    pool: &'e mut PrimitivePool,
+    pool: &'e mut Pool,
     problem: &'e Problem,
     config: Config,
 }
 
 impl<'e> Elaborator<'e> {
     /// Constructs a new [`Elaborator`] with the given `pool`, `problem`, and `config`.
-    pub fn new(pool: &'e mut PrimitivePool, problem: &'e Problem, config: Config) -> Self {
+    pub fn new(pool: &'e mut Pool, problem: &'e Problem, config: Config) -> Self {
         Self { pool, problem, config }
     }
 
@@ -307,7 +306,7 @@ impl<'e> Elaborator<'e> {
 }
 
 fn add_refl_step(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     a: Rc<Term>,
     b: Rc<Term>,
     id: String,
@@ -325,7 +324,7 @@ fn add_refl_step(
     }))
 }
 
-fn add_symm_step(pool: &mut PrimitivePool, node: &Rc<ProofNode>, id: String) -> Rc<ProofNode> {
+fn add_symm_step(pool: &mut Pool, node: &Rc<ProofNode>, id: String) -> Rc<ProofNode> {
     assert_eq!(node.clause().len(), 1);
     let (a, b) = match_term!((= a b) = node.clause()[0]).unwrap();
     let clause = vec![build_term!(pool, (= {b.clone()} {a.clone()}))];
@@ -342,7 +341,7 @@ fn add_symm_step(pool: &mut PrimitivePool, node: &Rc<ProofNode>, id: String) -> 
 }
 
 fn add_trans_step(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     nodes: impl IntoIterator<Item = Rc<ProofNode>>,
     id: String,
 ) -> Rc<ProofNode> {
@@ -362,7 +361,7 @@ fn add_trans_step(
 }
 
 type ElaborationFunc =
-    fn(&mut PrimitivePool, &mut ContextStack, &StepNode) -> Result<Rc<ProofNode>, ElaborationError>;
+    fn(&mut Pool, &mut ContextStack, &StepNode) -> Result<Rc<ProofNode>, ElaborationError>;
 
 /// A proof that can be mutated by applying a function to each of its nodes.
 ///
