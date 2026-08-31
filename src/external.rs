@@ -1,8 +1,8 @@
 use crate::{
     CarcaraResult, Status,
     ast::{
-        Binder, Operator, Polyeq, ProblemPrelude, ProofCommand, ProofNode, ProofNodeForest, Rc,
-        StepNode, SubproofNode, Term, build_term, match_term,
+        Operator, Polyeq, ProblemPrelude, ProofCommand, ProofNode, ProofNodeForest, Rc, StepNode,
+        SubproofNode, Term, build_term, match_term,
         pool::{PrimitivePool, TermPool},
         printer,
     },
@@ -349,7 +349,7 @@ pub fn collect_premise_clauses(
     });
     premise_clauses.iter().for_each(|c| {
         c.iter().for_each(|l| {
-            let choices_l = pool.collect_binders(l, Binder::Choice);
+            let choices_l = pool.choice_subterms(l);
             choices_l.iter().for_each(|l_cs| {
                 choice_terms.insert(l_cs.clone());
             });
