@@ -20,6 +20,10 @@ use std::{
 /// make use of term sharing or not.
 pub static USE_SHARING_IN_TERM_DISPLAY: AtomicBool = AtomicBool::new(false);
 
+/// The minimum number of times a term must appear in the proof for it to be shared when printing
+/// with sharing enabled.
+const SHARING_THRESHOLD: usize = 2;
+
 #[derive(Debug, Clone, GenerateSetters)]
 pub struct DisplayOptions {
     use_sharing: bool,
@@ -50,7 +54,11 @@ impl Proof {
 
         impl fmt::Display for DisplayProof<'_> {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                self.0.print(f, &mut Printer::new(&self.1))
+                let mut printer = Printer::new(&self.1);
+                if self.1.use_sharing {
+                    printer.term_usage = count_proof_term_usage(self.0);
+                }
+                self.0.print(f, &mut printer)
             }
         }
 
@@ -64,7 +72,13 @@ impl Term {
 
         impl fmt::Display for DisplayTerm<'_> {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                self.0.print(f, &mut Printer::new(&self.1))
+                let mut printer = Printer::new(&self.1);
+                if self.1.use_sharing {
+                    let mut counts = HashMap::new();
+                    count_subterms_usage(self.0, &mut counts);
+                    printer.term_usage = counts;
+                }
+                self.0.print(f, &mut printer)
             }
         }
 
@@ -78,6 +92,13 @@ pub fn display_asserts(assertions: &[Rc<Term>], options: DisplayOptions) -> impl
     impl fmt::Display for DisplayAsserts<'_> {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             let mut printer = Printer::new(&self.1);
+            if self.1.use_sharing {
+                let mut counts = HashMap::new();
+                for term in self.0 {
+                    count_term_usage(term, &mut counts);
+                }
+                printer.term_usage = counts;
+            }
             for assertion in self.0 {
                 write!(f, "(assert ")?;
                 assertion.print(f, &mut printer)?;
@@ -94,11 +115,18 @@ pub(crate) fn display_clause_smt_problem(
     clause: &[Rc<Term>],
     options: DisplayOptions,
 ) -> impl fmt::Display {
-    struct DisplayAsserts<'a>(&'a [Rc<Term>], DisplayOptions);
+    struct DisplayClauseProblem<'a>(&'a [Rc<Term>], DisplayOptions);
 
-    impl fmt::Display for DisplayAsserts<'_> {
+    impl fmt::Display for DisplayClauseProblem<'_> {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             let mut printer = Printer::new(&self.1);
+            if self.1.use_sharing {
+                let mut counts = HashMap::new();
+                for term in self.0 {
+                    count_term_usage(term, &mut counts);
+                }
+                printer.term_usage = counts;
+            }
             for term in self.0.iter().dedup() {
                 write!(f, "(assert (not ")?;
                 term.print(f, &mut printer)?;
@@ -108,12 +136,13 @@ pub(crate) fn display_clause_smt_problem(
         }
     }
 
-    DisplayAsserts(clause, options)
+    DisplayClauseProblem(clause, options)
 }
 
 struct Printer<'a> {
     options: &'a DisplayOptions,
     term_indices: Option<HashMap<Rc<Term>, usize>>,
+    term_usage: HashMap<Rc<Term>, usize>,
     defined_constants: HashMap<Rc<Term>, String>,
 
     /// The number of nested binder terms which we are currently inside of.
@@ -127,6 +156,7 @@ impl<'a> Printer<'a> {
         Self {
             options,
             term_indices: options.use_sharing.then(HashMap::new),
+            term_usage: HashMap::new(),
             defined_constants: HashMap::new(),
             binder_depth: 0,
         }
@@ -148,6 +178,90 @@ impl<'a> Printer<'a> {
             t.print(f, self)?;
         }
         write!(f, ")")
+    }
+}
+
+/// Counts the number of times each term appears in `proof`.
+fn count_proof_term_usage(proof: &Proof) -> HashMap<Rc<Term>, usize> {
+    fn count_commands_term_usage(commands: &[ProofCommand], counts: &mut HashMap<Rc<Term>, usize>) {
+        for command in commands {
+            match command {
+                ProofCommand::Assume { term, .. } => count_term_usage(term, counts),
+                ProofCommand::Step(step) => {
+                    for term in &step.clause {
+                        count_term_usage(term, counts);
+                    }
+                    for arg in &step.args {
+                        count_term_usage(arg, counts);
+                    }
+                }
+                ProofCommand::Subproof(subproof) => {
+                    for arg in &subproof.args {
+                        if let AnchorArg::Assign(_, value) = arg {
+                            count_term_usage(value, counts);
+                        }
+                    }
+                    count_commands_term_usage(&subproof.commands, counts);
+                }
+            }
+        }
+    }
+
+    let mut counts = HashMap::new();
+    for (_, term, _) in &proof.constant_definitions {
+        count_term_usage(term, &mut counts);
+    }
+    count_commands_term_usage(&proof.commands, &mut counts);
+    counts
+}
+
+/// Counts the occurrences of `term` and its subterms.
+///
+/// Once a term reaches the sharing threshold, we know it will be shared, so we stop counting it
+/// (and don't traverse its subterms again, since they'll only appear once, inside the shared term's
+/// definition).
+fn count_term_usage(term: &Rc<Term>, counts: &mut HashMap<Rc<Term>, usize>) {
+    if term.is_const() || term.is_var() {
+        return;
+    }
+    let entry = counts.entry(term.clone()).or_insert(0);
+    if *entry >= SHARING_THRESHOLD {
+        return;
+    }
+    *entry += 1;
+    if *entry >= SHARING_THRESHOLD {
+        return;
+    }
+    count_subterms_usage(term, counts);
+}
+
+/// Counts the occurrences of the subterms of `term`, but not `term` itself.
+fn count_subterms_usage(term: &Term, counts: &mut HashMap<Rc<Term>, usize>) {
+    match term {
+        Term::App(f, args) => {
+            count_term_usage(f, counts);
+            for arg in args {
+                count_term_usage(arg, counts);
+            }
+        }
+        Term::Op(_, args) | Term::AsOp(_, _, args) => {
+            for arg in args {
+                count_term_usage(arg, counts);
+            }
+        }
+        Term::ParamOp { op_args, args, .. } => {
+            for arg in op_args {
+                count_term_usage(arg, counts);
+            }
+            for arg in args {
+                count_term_usage(arg, counts);
+            }
+        }
+        // The scrutinee is printed outside the binder scope, but the case bodies bind variables.
+        Term::Match(scrutinee, _) => count_term_usage(scrutinee, counts),
+        // Terms inside binders can't be shared, so we don't count them.
+        Term::Binder(..) | Term::Let(..) => {}
+        Term::Const(_) | Term::Var(..) => {}
     }
 }
 
@@ -273,13 +387,9 @@ impl Print for Rc<Term> {
                 // - Terminal terms (i.e., constants or variables) could in theory be shared,
                 // but, since they are very small, it's not worth it to give them a name.
                 || self.is_const() || self.is_var()
-                // - If a term is only used once in the proof, there is no reason to give it a
-                // name. We detect this case by checking if the number of references to it's `Rc` is
-                // no more than 3: one in the pool storage, one in the pool sorts cache, and one in
-                // the proof itself.
-                // TODO: this is a terrible way of checking if it is only used once in the proof,
-                // as it depends on internal implementation details of the term pool.
-                || Rc::strong_count(self) <= 3;
+                // - If a term does not appear often enough in the proof, there is no reason to
+                // give it a name. The usage counts are precomputed when the printer is created.
+                || p.term_usage.get(self).copied().unwrap_or(0) < SHARING_THRESHOLD;
 
             if !cannot_use_sharing {
                 let i = indices.len();
@@ -652,14 +762,14 @@ mod tests {
         let expected = "\
             (step t1 (cl (and (! (= 1 2) :named @p_0) @p_0)) :rule hole)\n\
             (step t2 (cl (and (! (or a b) :named @p_1) (not @p_1))) :rule hole)\n\
-            (step t3 (cl (and (forall ((x Int)) (or (= x 2) (= 2 3))) (! (= 2 3) :named @p_2))) :rule hole)\n\
+            (step t3 (cl (and (forall ((x Int)) (or (= x 2) (= 2 3))) (= 2 3))) :rule hole)\n\
             (step t4 (cl (forall ((x Int)) (= (+ x 2) (+ x 2)))) :rule hole)\n\
-            (step t5 (cl (and (! (forall ((p Bool)) p) :named @p_3) @p_3)) :rule hole)\n\
+            (step t5 (cl (and (! (forall ((p Bool)) p) :named @p_2) @p_2)) :rule hole)\n\
             (anchor :step t6 :args ((x Int)))\n\
-            (step t6.t1 (cl (! (= (! (+ x 2) :named @p_5) @p_5) :named @p_4)) :rule hole)\n\
+            (step t6.t1 (cl (= (! (+ x 2) :named @p_3) @p_3)) :rule hole)\n\
             (step t6 (cl) :rule hole)\n\
         ";
-        let (_, proof, _, _pool) = parser::parse_instance(
+        let (_, proof, _, _) = parser::parse_instance(
             definitions.into(),
             proof.into(),
             None,
