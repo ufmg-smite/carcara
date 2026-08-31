@@ -222,7 +222,8 @@ pub fn check<'s>(
 /// Parses and checks an Alethe proof against an SMT-LIB problem, checking steps in parallel.
 ///
 /// This is similar to [`check`], but the proof steps are checked concurrently using `num_threads`
-/// threads. The `stack_size` argument sets the stack size of the worker threads.
+/// threads. The `stack_size` argument, if given, sets the stack size of the worker threads;
+/// otherwise, the platform's default stack size is used.
 #[allow(clippy::too_many_arguments)]
 pub fn check_parallel<'s>(
     problem: parser::Source<'s>,
@@ -232,7 +233,7 @@ pub fn check_parallel<'s>(
     checker_config: checker::Config,
     collect_stats: bool,
     num_threads: usize,
-    stack_size: usize,
+    stack_size: Option<usize>,
 ) -> Result<Status, Error> {
     let mut run_measures: RunMeasurement = RunMeasurement::default();
 

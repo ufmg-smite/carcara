@@ -38,13 +38,14 @@ impl<'c> ParallelChecker<'c> {
 
     /// Checks that `proof` is a valid proof for the given problem.
     ///
-    /// Returns `Ok` if the proof is valid, with the proof status.
+    /// Returns `Ok` if the proof is valid, with the proof status. `stack_size`, if given, sets the
+    /// stack size of each worker thread. Otherwise, the platform's default stack size is used.
     pub fn check(
         &mut self,
         problem: &Problem,
         proof: &Proof,
         num_threads: usize,
-        stack_size: usize,
+        stack_size: Option<usize>,
     ) -> CarcaraResult<Status> {
         let null_stats = None::<&mut CheckerStatistics<OnlineBenchmarkResults>>;
         self.check_impl(problem, proof, num_threads, stack_size, null_stats)
@@ -57,7 +58,7 @@ impl<'c> ParallelChecker<'c> {
         problem: &Problem,
         proof: &Proof,
         num_threads: usize,
-        stack_size: usize,
+        stack_size: Option<usize>,
         stats: &mut CheckerStatistics<CR>,
     ) -> CarcaraResult<Status> {
         self.check_impl(problem, proof, num_threads, stack_size, Some(stats))
@@ -68,7 +69,7 @@ impl<'c> ParallelChecker<'c> {
         problem: &Problem,
         proof: &Proof,
         num_threads: usize,
-        stack_size: usize,
+        stack_size: Option<usize>,
         stats: Option<&mut CheckerStatistics<CR>>,
     ) -> CarcaraResult<Status> {
         let num_threads = num_threads.min(proof.commands.len()).max(1);
@@ -89,9 +90,11 @@ impl<'c> ParallelChecker<'c> {
 
             let workers: Vec<_> = (0..num_threads)
                 .map(|i| {
-                    thread::Builder::new()
-                        .name(format!("worker-{i}"))
-                        .stack_size(stack_size)
+                    let mut builder = thread::Builder::new().name(format!("worker-{i}"));
+                    if let Some(size) = stack_size {
+                        builder = builder.stack_size(size);
+                    }
+                    builder
                         .spawn_scoped(s, move || {
                             let mut local_pool = Pool::with_parent(global_pool.clone());
                             let local_checker =
