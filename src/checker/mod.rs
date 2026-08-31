@@ -25,8 +25,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub use parallel::{ParallelProofChecker, scheduler::Scheduler};
-
 // The elaborator needs to use this function to elaborate `bfun_elim` steps
 pub(crate) use rules::clausification::apply_bfun_elim;
 pub(crate) use rules::linear_arithmetic::la_generic_partial;

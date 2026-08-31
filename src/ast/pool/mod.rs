@@ -1,6 +1,5 @@
 //! This module implements `TermPool`, a structure that stores terms and implements hash consing.
 
-mod advanced;
 mod storage;
 
 use super::{
@@ -10,8 +9,6 @@ use indexmap::{IndexMap, IndexSet};
 use rapidhash::{HashMapExt, RapidHashMap};
 use std::borrow::Cow;
 use storage::Storage;
-
-pub use advanced::{ContextPool, LocalPool};
 
 /// A user-defined datatype.
 #[derive(Debug, Clone)]
