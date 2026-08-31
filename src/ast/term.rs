@@ -1,9 +1,4 @@
-use super::{
-    Rc, Sort,
-    macros::impl_str_conversion_traits,
-    match_term, match_term_err,
-    pool::{PrimitivePool, TermPool},
-};
+use super::{Rc, Sort, macros::impl_str_conversion_traits, match_term, match_term_err, pool::Pool};
 use crate::{CheckerError, automata::Automaton};
 use rug::{Integer, Rational};
 use std::{collections::HashSet, hash::Hash, ops::Deref};
@@ -1113,7 +1108,7 @@ impl Term {
     /// Returns the sort of this term. This does not make use of a cache --- if possible, prefer to
     /// use `TermPool::sort`.
     pub fn raw_sort(&self) -> Sort {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let added = pool.add(self.clone());
         pool.sort(&added).as_ref().clone()
     }
@@ -1302,7 +1297,7 @@ impl Term {
 impl Rc<Term> {
     /// Returns whether the term is closed, that is, whether it contains no free variables aside
     /// from global variables.
-    pub fn is_closed(&self, pool: &mut PrimitivePool, global_vars: &HashSet<Rc<Term>>) -> bool {
+    pub fn is_closed(&self, pool: &mut Pool, global_vars: &HashSet<Rc<Term>>) -> bool {
         pool.free_vars(self).iter().all(|x| global_vars.contains(x))
     }
 

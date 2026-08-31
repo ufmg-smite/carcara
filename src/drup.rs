@@ -1,4 +1,4 @@
-use crate::ast::{Rc, Term, build_term, match_term, pool::TermPool};
+use crate::ast::{Rc, Term, build_term, match_term, pool::Pool};
 use indexmap::IndexSet;
 use std::{
     borrow::{Borrow, BorrowMut},
@@ -43,7 +43,7 @@ pub enum DrupFormatError {
     NotInRatFormat,
 }
 
-pub fn hash_term<T: Borrow<Rc<Term>>>(pool: &mut dyn TermPool, term: T) -> u64 {
+pub fn hash_term<T: Borrow<Rc<Term>>>(pool: &mut Pool, term: T) -> u64 {
     let term: Rc<Term> = {
         let (p, regular_term): (bool, &Rc<Term>) =
             term.borrow().remove_all_negations_with_polarity();
@@ -154,7 +154,7 @@ fn get_implied_clause(
 // Perform *only* rup (reverse unit propagation) in a set of clauses and a "goal", here the goal is the implied clause by
 // F /\ ~ C |- \bottom
 fn rup(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     drup_clauses: &HashMap<u64, IndexSet<Literal>>,
     goal: &[Rc<Term>],
 ) -> Option<RupAddition> {
@@ -211,7 +211,7 @@ fn rup(
 // This implements the rule for drup checking, by using a chain of goals that calls RUP, check_rat is optional in case if you
 // want to check also for RAT format
 pub fn check_drup(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     conclusion: Rc<Term>,
     premises: &[Rc<Term>],
     args: &[Rc<Term>],
@@ -287,7 +287,7 @@ pub fn check_drup(
 // Checks RAT, essentially rat is equivalent to RUP plus a blocked clause
 // (eg. given a clause C \/ p, we look for RUP in every D \/ ~ p in the set clause)
 pub fn check_drat(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     drup_clauses: &HashMap<u64, IndexSet<Literal>>,
     goal: &[Rc<Term>],
 ) -> Option<RupAddition> {

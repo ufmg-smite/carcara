@@ -1,7 +1,7 @@
 use super::{ElaborationError, Elaborator};
 use crate::{
     Status,
-    ast::{ProblemPrelude, ProofNode, Rc, StepNode, build_term, pool::TermPool},
+    ast::{ProblemPrelude, ProofNode, Rc, StepNode, build_term},
     external::{self, ExternalError},
 };
 

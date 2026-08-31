@@ -25,7 +25,7 @@ macro_rules! match_term_err {
 /// Building the term `(and true (not false))`:
 /// ```text
 /// # use carcara::{ast::*, build_term, match_term};
-/// let mut pool = PrimitivePool::new();
+/// let mut pool = Pool::new();
 /// let t = build_term!(pool, (and {pool.bool_true()} (not {pool.bool_false()})));
 /// assert!(match_term!((and true (not false)) = t).is_some());
 /// ```
@@ -129,15 +129,12 @@ pub(crate) use {build_term, impl_str_conversion_traits, match_term_err};
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{
-        BindingList, Operator, Rc, Sort, Term, match_term,
-        pool::{PrimitivePool, TermPool},
-    };
+    use crate::ast::{BindingList, Operator, Rc, Sort, Term, match_term, pool::Pool};
     use crate::parser::tests::{parse_term, parse_terms};
 
     #[test]
     fn test_match_term() {
-        let mut p = PrimitivePool::new();
+        let mut p = Pool::new();
         let [one, two, five] = [1, 2, 5].map(|n| p.add(Term::new_int(n)));
 
         let term = parse_term(&mut p, "(= (= (not false) (= true false)) (not true))");
@@ -197,7 +194,7 @@ mod tests {
 
     #[test]
     fn test_match_term_repeated_names() {
-        let mut p = PrimitivePool::new();
+        let mut p = Pool::new();
         let (true_, false_) = (p.bool_true(), p.bool_false());
         let not_true = p.add(Term::Op(Operator::Not, vec![true_]));
         let not_false = p.add(Term::Op(Operator::Not, vec![false_]));
@@ -251,7 +248,7 @@ mod tests {
             (declare-fun p () Bool)
             (declare-fun q () Bool)
         ";
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let bool_sort = pool.add_sort(Sort::Bool);
         let int_sort = pool.add_sort(Sort::Int);
 

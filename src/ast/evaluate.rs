@@ -1,4 +1,4 @@
-use super::{Constant, Operator, ParamOperator, Rc, Sort, Term, pool::TermPool};
+use super::{Constant, Operator, ParamOperator, Rc, Sort, Term, pool::Pool};
 use rug::{Integer, Rational};
 use std::collections::{HashMap, HashSet};
 
@@ -125,14 +125,14 @@ impl Rc<Term> {
     /// We say that a term is evaluatable if it is either:
     /// - a constant term
     /// - an application of an operator over evaluatable terms
-    pub fn evaluate(&self, pool: &mut dyn TermPool) -> Rc<Term> {
+    pub fn evaluate(&self, pool: &mut Pool) -> Rc<Term> {
         self.evaluate_impl(&mut HashMap::new(), pool).clone()
     }
 
     fn evaluate_impl<'t, 'c>(
         &'t self,
         cache: &'c mut HashMap<&'t Rc<Term>, Rc<Term>>,
-        pool: &mut dyn TermPool,
+        pool: &mut Pool,
     ) -> &'c Rc<Term> {
         if cache.contains_key(self) {
             return &cache[self];
@@ -260,7 +260,7 @@ macro_rules! bitvec_comparison_op {
     }};
 }
 
-fn eval_op(pool: &mut dyn TermPool, op: Operator, arg_terms: &[Rc<Term>]) -> Option<Value> {
+fn eval_op(pool: &mut Pool, op: Operator, arg_terms: &[Rc<Term>]) -> Option<Value> {
     let args: Vec<_> = arg_terms.iter().map(Value::from_term).collect();
     Some(match op {
         Operator::True => Value::Bool(true),

@@ -2,8 +2,7 @@ use super::{IdHelper, PolyeqElaborator};
 use crate::{
     ast::{
         ContextStack, Operator, ProofNode, Rc, Sort, StepNode, Term, build_term, match_term,
-        match_term_err,
-        pool::{PrimitivePool, TermPool},
+        match_term_err, pool::Pool,
     },
     checker::{apply_bfun_elim, error::CheckerError},
     elaborator::error::ElaborationError,
@@ -19,11 +18,7 @@ fn is_flipped(term: &Rc<Term>, a: &Rc<Term>, b: &Rc<Term>) -> bool {
 /// `got` alongside the pairs of `args` and rebuilding only the
 /// disequalities that are flipped. If there isn't any, the function
 /// returns `None`.
-fn canonical_elimination(
-    pool: &mut PrimitivePool,
-    args: &[Rc<Term>],
-    got: &Rc<Term>,
-) -> Option<Rc<Term>> {
+fn canonical_elimination(pool: &mut Pool, args: &[Rc<Term>], got: &Rc<Term>) -> Option<Rc<Term>> {
     match args {
         [] | [_] => unreachable!(),
         [a, b] => is_flipped(got, a, b).then(|| {
@@ -57,7 +52,7 @@ fn canonical_elimination(
 /// orientation, which is not how the rule is specified. The step is
 /// changed to generate the expected order.
 pub fn distinct_elim(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     _: &mut ContextStack,
     step: &StepNode,
 ) -> Result<Rc<ProofNode>, ElaborationError> {
@@ -90,7 +85,7 @@ pub fn distinct_elim(
 }
 
 pub fn bfun_elim(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     _: &mut ContextStack,
     step: &StepNode,
 ) -> Result<Rc<ProofNode>, ElaborationError> {

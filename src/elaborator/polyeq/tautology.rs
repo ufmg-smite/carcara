@@ -2,7 +2,7 @@ use super::*;
 use crate::ast::*;
 
 pub fn ite_intro(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     _: &mut ContextStack,
     step: &StepNode,
 ) -> Result<Rc<ProofNode>, ElaborationError> {

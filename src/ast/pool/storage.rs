@@ -69,11 +69,6 @@ impl<T: Hash + Eq> Storage<T> {
         }
     }
 
-    /// Returns a reference to the allocation of `object` stored in `self`, if it is present.
-    pub fn get(&self, object: &T) -> Option<&Rc<T>> {
-        self.0.get(object).map(|t| &t.0)
-    }
-
     // This method is only necessary for the hash consing tests
     #[cfg(test)]
     pub fn into_vec(self) -> Vec<Rc<T>> {

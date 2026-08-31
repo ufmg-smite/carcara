@@ -3,9 +3,7 @@ use super::{
     error::{CheckerError, EqualityError},
 };
 use crate::{
-    ast::{
-        Operator, ProofCommand, Rc, Term, alpha_equiv, polyeq, pool::TermPool, rare_rules::Rules,
-    },
+    ast::{Operator, ProofCommand, Rc, Term, alpha_equiv, polyeq, pool::Pool, rare_rules::Rules},
     utils::{Range, TypeName},
 };
 use std::time::Duration;
@@ -18,7 +16,7 @@ pub struct RuleArgs<'a> {
     pub(super) conclusion: &'a [Rc<Term>],
     pub(super) premises: &'a [Premise<'a>],
     pub(super) args: &'a [Rc<Term>],
-    pub(super) pool: &'a mut dyn TermPool,
+    pub(super) pool: &'a mut Pool,
     pub(super) context: &'a mut ContextStack,
     pub(super) rare_rules: &'a Rules,
 

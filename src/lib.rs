@@ -253,7 +253,7 @@ pub fn check_and_elaborate<'s>(
     elaborator_config: elaborator::Config,
     pipeline: Vec<elaborator::ElaborationPass>,
     collect_stats: bool,
-) -> Result<(Status, ast::Problem, ast::Proof, ast::pool::PrimitivePool), Error> {
+) -> Result<(Status, ast::Problem, ast::Proof, ast::pool::Pool), Error> {
     let mut run: RunMeasurement = RunMeasurement::default();
 
     // Parsing (Complete rare rules)

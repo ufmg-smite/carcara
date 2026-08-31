@@ -12,7 +12,7 @@ use crate::{
         AnchorArg, Binder, BindingList, Constant, Operator, ParamOperator, Problem, ProblemPrelude,
         Proof, ProofCommand, ProofStep, QualifiedOperator, Rc, Sort, SortSubstitution, SortedVar,
         Subproof, Substitution, Term, build_term,
-        pool::{PrimitivePool, TermPool},
+        pool::Pool,
         rare_rules::{RareStatements, Rules},
     },
     automata::parser::parse_automaton,
@@ -140,14 +140,14 @@ pub fn parse_instance<'s>(
     proof: Source<'s>,
     rules: Option<Source<'s>>,
     config: Config,
-) -> CarcaraResult<(Problem, Proof, Rules, PrimitivePool)> {
-    let mut pool = PrimitivePool::new();
+) -> CarcaraResult<(Problem, Proof, Rules, Pool)> {
+    let mut pool = Pool::new();
     parse_instance_with_pool(problem, proof, rules, config, &mut pool)
         .map(|(prelude, proof, rules)| (prelude, proof, rules, pool))
 }
 
-/// Given an existing [`PrimitivePool`], parses an SMT problem instance (in the SMT-LIB format) and
-/// its associated proof (in the Alethe format). If the optional argument `rules` is provided, also
+/// Given an existing [`Pool`], parses an SMT problem instance (in the SMT-LIB format) and its
+/// associated proof (in the Alethe format). If the optional argument `rules` is provided, also
 /// parses a set of Rare rewrite rules.
 ///
 /// This returns the parsed problem, proof, and rules.
@@ -156,7 +156,7 @@ pub fn parse_instance_with_pool<'s>(
     proof: Source<'s>,
     rules: Option<Source<'s>>,
     config: Config,
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
 ) -> CarcaraResult<(Problem, Proof, Rules)> {
     let mut parser = Parser::new(pool, config, problem)?;
     let problem = parser.parse_problem()?;
@@ -182,7 +182,7 @@ struct FunctionDef {
 }
 
 impl FunctionDef {
-    fn apply(&self, p: &mut PrimitivePool, args: Vec<Rc<Term>>) -> Result<Rc<Term>, ParserError> {
+    fn apply(&self, p: &mut Pool, args: Vec<Rc<Term>>) -> Result<Rc<Term>, ParserError> {
         assert_num_args(&args, self.params.len())?;
         if args.is_empty() {
             return Ok(self.body.clone());
@@ -241,7 +241,7 @@ struct ParserState {
 
 /// A parser for the Alethe proof format.
 pub struct Parser<'p, 's> {
-    pool: &'p mut PrimitivePool,
+    pool: &'p mut Pool,
     config: Config,
     lexer: lexer::Lexer<'s>,
     current_token: Token,
@@ -255,11 +255,7 @@ impl<'p, 's> Parser<'p, 's> {
     /// Constructs a new `Parser` from a [`Source`].
     ///
     /// This operation can fail if there is an IO or lexer error on the first token.
-    pub fn new(
-        pool: &'p mut PrimitivePool,
-        config: Config,
-        input: Source<'s>,
-    ) -> CarcaraResult<Self> {
+    pub fn new(pool: &'p mut Pool, config: Config, input: Source<'s>) -> CarcaraResult<Self> {
         let mut lexer = lexer::Lexer::new(input);
         let (current_token, current_position) = lexer.next_token()?;
         Ok(Parser {

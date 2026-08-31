@@ -3,7 +3,7 @@
 #![cfg(test)]
 
 use super::*;
-use crate::ast::pool::PrimitivePool;
+use crate::ast::pool::Pool;
 
 const ERROR_MESSAGE: &str = "parser error during test";
 
@@ -11,7 +11,7 @@ const ERROR_MESSAGE: &str = "parser error during test";
 const TEST_CONFIG: Config = Config::new().apply_function_defs(true);
 
 pub fn parse_terms<const N: usize>(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     definitions: &str,
     terms: [&str; N],
 ) -> [Rc<Term>; N] {
@@ -24,7 +24,7 @@ pub fn parse_terms<const N: usize>(
     })
 }
 
-pub fn parse_term(pool: &mut PrimitivePool, input: &str) -> Rc<Term> {
+pub fn parse_term(pool: &mut Pool, input: &str) -> Rc<Term> {
     Parser::new(pool, TEST_CONFIG, input.into())
         .and_then(|mut parser| parser.parse_term())
         .expect(ERROR_MESSAGE)
@@ -33,14 +33,14 @@ pub fn parse_term(pool: &mut PrimitivePool, input: &str) -> Rc<Term> {
 /// Tries to parse a term from a `&str`, expecting it to fail. Returns the error encountered, or
 /// panics if no error is encountered.
 pub fn parse_term_err(input: &str) -> Error {
-    let mut pool = PrimitivePool::new();
+    let mut pool = Pool::new();
     Parser::new(&mut pool, TEST_CONFIG, input.into())
         .and_then(|mut p| p.parse_term())
         .expect_err("expected error")
 }
 
 /// Parses a proof from a `&str`. Panics if any error is encountered.
-pub fn parse_proof(pool: &mut PrimitivePool, input: &str) -> Proof {
+pub fn parse_proof(pool: &mut Pool, input: &str) -> Proof {
     Parser::new(pool, TEST_CONFIG, input.into())
         .expect(ERROR_MESSAGE)
         .parse_proof()
@@ -49,21 +49,21 @@ pub fn parse_proof(pool: &mut PrimitivePool, input: &str) -> Proof {
 
 /// Tries to parse a proof from a `&str`, expecting it to fail. Returns the error encountered, or
 /// panics if no error is encountered.
-pub fn parse_proof_err(pool: &mut PrimitivePool, input: &str) -> Error {
+pub fn parse_proof_err(pool: &mut Pool, input: &str) -> Error {
     Parser::new(pool, TEST_CONFIG, input.into())
         .and_then(|mut p| p.parse_proof())
         .expect_err("expected error")
 }
 
 /// Parses a problem from a `&str`. Panics if any error is encountered.
-fn parse_problem(pool: &mut PrimitivePool, input: &str) -> Problem {
+fn parse_problem(pool: &mut Pool, input: &str) -> Problem {
     Parser::new(pool, TEST_CONFIG, input.into())
         .expect(ERROR_MESSAGE)
         .parse_problem()
         .expect(ERROR_MESSAGE)
 }
 
-fn run_parser_tests(pool: &mut PrimitivePool, cases: &[(&str, Term)]) {
+fn run_parser_tests(pool: &mut Pool, cases: &[(&str, Term)]) {
     for (case, expected) in cases {
         let got = parse_term(pool, case);
         assert_eq!(expected, &*got);
@@ -74,7 +74,7 @@ fn run_parser_tests(pool: &mut PrimitivePool, cases: &[(&str, Term)]) {
 fn test_hash_consing() {
     use indexmap::IndexSet;
 
-    let mut pool = PrimitivePool::new();
+    let mut pool = Pool::new();
     let input = "(-
         (-
             (+ 1 2)
@@ -115,7 +115,7 @@ fn test_hash_consing() {
 
 #[test]
 fn test_constant_terms() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
     assert_eq!(Term::new_int(42), *parse_term(&mut p, "42"));
     assert_eq!(Term::new_real((3, 2)), *parse_term(&mut p, "1.5"));
     assert_eq!(Term::new_string("foo"), *parse_term(&mut p, "\"foo\""));
@@ -124,7 +124,7 @@ fn test_constant_terms() {
 
 #[test]
 fn test_arithmetic_ops() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
     let [one, two, three, five, seven] = [1, 2, 3, 5, 7].map(|n| p.add(Term::new_int(n)));
     let cases = [
         (
@@ -154,7 +154,7 @@ fn test_arithmetic_ops() {
 
 #[test]
 fn test_logic_ops() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
     let [zero, one, two, three, four] = [0, 1, 2, 3, 4].map(|n| p.add(Term::new_int(n)));
     let cases = [
         (
@@ -227,7 +227,7 @@ fn test_logic_ops() {
 
 #[test]
 fn test_ite() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
     let [one, two, three] = [1, 2, 3].map(|n| p.add(Term::new_int(n)));
     let cases = [
         (
@@ -258,7 +258,7 @@ fn test_ite() {
 
 #[test]
 fn test_quantifiers() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
     let bool_sort = p.add_sort(Sort::Bool);
     let real_sort = p.add_sort(Sort::Real);
     let cases = [
@@ -298,7 +298,7 @@ fn test_quantifiers() {
 
 #[test]
 fn test_choice_terms() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
     let bool_sort = p.add_sort(Sort::Bool);
     let int_sort = p.add_sort(Sort::Int);
     let cases = [
@@ -328,7 +328,7 @@ fn test_choice_terms() {
 
 #[test]
 fn test_let_terms() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
     let bool_sort = p.add_sort(Sort::Bool);
     let int_sort = p.add_sort(Sort::Int);
     let cases = [
@@ -355,7 +355,7 @@ fn test_let_terms() {
 
 #[test]
 fn test_lambda_terms() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
     let int_sort = p.add_sort(Sort::Int);
     let cases = [
         ("(lambda ((x Int)) x)", {
@@ -384,7 +384,7 @@ fn test_lambda_terms() {
 
 #[test]
 fn test_annotated_terms() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
     let zero = Term::new_int(0);
     let [two, three] = [2, 3].map(|n| p.add(Term::new_int(n)));
     let cases = [
@@ -416,7 +416,7 @@ fn test_annotated_terms() {
 
 #[test]
 fn test_declare_fun() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
 
     parse_terms(
         &mut p,
@@ -438,7 +438,7 @@ fn test_declare_fun() {
 
 #[test]
 fn test_declare_sort() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
 
     parse_terms(
         &mut p,
@@ -463,7 +463,7 @@ fn test_declare_sort() {
 
 #[test]
 fn test_define_fun() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
     let [got] = parse_terms(
         &mut p,
         "(define-fun add ((a Int) (b Int)) Int (+ a b))",
@@ -486,7 +486,7 @@ fn test_define_fun() {
 
 #[test]
 fn test_define_fun_rec() {
-    fn run_test(pool: &mut PrimitivePool, problem: &str, expected_premises: &[&str]) {
+    fn run_test(pool: &mut Pool, problem: &str, expected_premises: &[&str]) {
         let mut parser = Parser::new(pool, TEST_CONFIG, problem.into()).expect(ERROR_MESSAGE);
         let got = parser.parse_problem().expect(ERROR_MESSAGE).premises;
         assert_eq!(expected_premises.len(), got.len());
@@ -496,7 +496,7 @@ fn test_define_fun_rec() {
             assert!(got.contains(&expected));
         }
     }
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
 
     run_test(
         &mut p,
@@ -526,7 +526,7 @@ fn test_define_fun_rec() {
 
 #[test]
 fn test_define_sort() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
     let [got] = parse_terms(
         &mut p,
         "(define-sort booool () Bool)",
@@ -557,7 +557,7 @@ fn test_define_sort() {
 
 #[test]
 fn test_assume() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
     let input = "
         (assume h1 true)
         (assume h2 (or true false) :ignore \"extra\" :attributes)
@@ -584,7 +584,7 @@ fn test_assume() {
 
 #[test]
 fn test_step() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
     let input = "
         (step t1 (cl (= (+ 2 3) (- 1 2))) :rule rule-name)
         (step t2 (cl) :rule rule-name :premises (t1))
@@ -655,7 +655,7 @@ fn test_step() {
 
 #[test]
 fn test_premises_in_subproofs() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
     let input = "
         (assume h1 true)
         (assume h2 true)
@@ -708,7 +708,7 @@ fn test_premises_in_subproofs() {
 
 #[test]
 fn test_assumes_after_steps_in_subproofs() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
     let bad_input = "
         (assume h1 true)
         (assume h2 true)
@@ -727,7 +727,7 @@ fn test_assumes_after_steps_in_subproofs() {
 
 #[test]
 fn test_bitvectors() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
     let cases = [
         (
             "(assume a0 (not (bvuge (bvcomp (_ bv1 4) (_ bv1 4)) (_ bv1 1))))",
@@ -757,7 +757,7 @@ fn test_bitvectors() {
 
 #[test]
 fn test_indexed_operators() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
     let cases = [
         (
             "(assume a0 (= ((_ zero_extend 2) #b100) #b00100))",
@@ -791,7 +791,7 @@ fn test_indexed_operators() {
 
 #[test]
 fn test_qualified_operators() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
     let cases = [("((as const (Array Int Real)) 0.0)", {
         let [int, real] = [Sort::Int, Sort::Real].map(|s| p.add_sort(s));
         let sort = p.add_sort(Sort::Array(int, real));
@@ -815,7 +815,7 @@ fn test_qualified_operators() {
 
 #[test]
 fn test_proofs_with_extra_parens() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
     let proof = parse_proof(&mut p, "( (assume h1 true) )");
     assert_eq!(proof.commands.len(), 1);
     assert_eq!(
@@ -857,7 +857,7 @@ fn test_proofs_with_extra_parens() {
 
 #[test]
 fn test_datatypes() {
-    let mut p = PrimitivePool::new();
+    let mut p = Pool::new();
     // Basic
     parse_problem(
         &mut p,

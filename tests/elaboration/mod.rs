@@ -1,6 +1,6 @@
 use carcara::{
     ast::{
-        ProblemPrelude, Proof, ProofCommand, ProofNodeForest, pool::PrimitivePool,
+        ProblemPrelude, Proof, ProofCommand, ProofNodeForest, pool::Pool,
         printer::write_proof_to_dest,
     },
     elaborator, parser,
@@ -12,7 +12,7 @@ struct TestCase {
     expected: &'static str,
 }
 
-fn print_proof(pool: &mut PrimitivePool, prelude: &ProblemPrelude, commands: Vec<ProofCommand>) {
+fn print_proof(pool: &mut Pool, prelude: &ProblemPrelude, commands: Vec<ProofCommand>) {
     let mut buf = Vec::new();
     let proof = Proof {
         constant_definitions: Vec::new(),
