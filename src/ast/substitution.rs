@@ -130,7 +130,7 @@ impl Substitution {
         // it may be different after adding the `x -> t` mapping, so we remove these cache entries.
         // Additionally, any term that is itself a free variable of `t` should also be removed,
         // since it might need to be renamed.
-        let t_free_vars = pool.free_vars(&t).into_owned();
+        let t_free_vars = pool.free_vars(&t).clone();
         self.cache
             .retain_top(|k, _| !pool.free_vars(k).contains(&x) && !t_free_vars.contains(k));
 

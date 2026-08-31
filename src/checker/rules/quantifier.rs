@@ -310,7 +310,7 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         .find(|&clause| clause == phi_prime)
         .ok_or_else(|| QuantifierError::ClauseDoesntAppearInCnf(phi_prime.clone()))?;
 
-    let free_vars = pool.free_vars(selected_clause).into_owned();
+    let free_vars = pool.free_vars(selected_clause).clone();
 
     // While all bindings in `r_bindings` must also be in `new_bindings`, the same is not true in
     // the opposite direction. That is because some variables from the set may be omitted in the
@@ -382,7 +382,7 @@ pub fn miniscope_split(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResul
     }
 
     let right_term = pool.add(Term::Op(op, right_args.to_vec()));
-    let free_vars = pool.free_vars(&right_term).into_owned();
+    let free_vars = pool.free_vars(&right_term).clone();
     for v in bindings {
         if free_vars.contains(&pool.add(v.clone().into())) {
             return Err(QuantifierError::MiniscopeFreeVar(v.0.clone(), right_term).into());
@@ -400,7 +400,7 @@ pub fn miniscope_ite(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult 
     )?;
     assert_eq(bindings_1, bindings_2)?;
     assert_eq(bindings_1, bindings_3)?;
-    let free_vars = pool.free_vars(phi1).into_owned();
+    let free_vars = pool.free_vars(phi1).clone();
     for v in bindings_1 {
         if free_vars.contains(&pool.add(v.clone().into())) {
             return Err(QuantifierError::MiniscopeFreeVar(v.0.clone(), phi1.clone()).into());
