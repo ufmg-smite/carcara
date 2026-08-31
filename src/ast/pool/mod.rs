@@ -7,7 +7,6 @@ use super::{
 };
 use indexmap::{IndexMap, IndexSet};
 use rapidhash::{HashMapExt, RapidHashMap};
-use std::borrow::Cow;
 use storage::Storage;
 
 /// A user-defined datatype.
@@ -94,8 +93,8 @@ impl Pool {
     ///
     /// This method uses a cache, so there is no additional cost to computing the free variables of
     /// a term multiple times.
-    pub fn free_vars(&'_ mut self, term: &Rc<Term>) -> Cow<'_, IndexSet<Rc<Term>>> {
-        Cow::Borrowed(self.compute_free_vars(term))
+    pub fn free_vars(&'_ mut self, term: &Rc<Term>) -> &IndexSet<Rc<Term>> {
+        self.compute_free_vars(term)
     }
 
     /// Searches the pool for a defined datatype with the given name. Panics if no datatype is
