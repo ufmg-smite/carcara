@@ -16,7 +16,7 @@ macro_rules! match_term_err {
 
 /// A macro to help build new terms.
 ///
-/// This macro takes two arguments: the `TermPool` with which to build the term, and an s-expression
+/// This macro takes two arguments: the `Pool` with which to build the term, and an s-expression
 /// representing the term to be built. Subterms in that s-expression that are surrounded by `{}` are
 /// evaluated as expressions, and they should have type `Rc<Term>`.
 ///

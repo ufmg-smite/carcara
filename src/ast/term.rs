@@ -1106,7 +1106,7 @@ impl Term {
     }
 
     /// Returns the sort of this term. This does not make use of a cache --- if possible, prefer to
-    /// use `TermPool::sort`.
+    /// use `Pool::sort`.
     pub fn raw_sort(&self) -> Sort {
         let mut pool = Pool::new();
         let added = pool.add(self.clone());

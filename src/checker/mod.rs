@@ -134,7 +134,7 @@ pub struct Checker<'c> {
 }
 
 impl<'c> Checker<'c> {
-    /// Constructs a new `ProofChecker` with a given pool, set of rare rules, and `Config`.
+    /// Constructs a new `Checker` with a given pool, set of rare rules, and `Config`.
     pub fn new(pool: &'c mut Pool, rare_rules: &'c Rules, config: Config) -> Self {
         Self {
             pool,
@@ -180,18 +180,19 @@ impl<'c> Checker<'c> {
     /// Checks a sequence of commands.
     ///
     /// This must be a contiguous slice of commands at the proof root level, that is, not inside
-    /// a subproof.
+    /// a subproof. Only the commands from `start_position` to the end of `commands` are actually
+    /// checked; the preceding commands are used only to resolve premises and the subproof context.
     fn check_commands<CR: CollectResults + Send + Default>(
         &mut self,
         problem: &Problem,
         proof_filename: &Path,
         commands: &[ProofCommand],
-        start_positon: usize,
+        start_position: usize,
         mut stats: Option<&mut CheckerStatistics<CR>>,
     ) -> CarcaraResult<Status> {
         // Similarly to the parser, to avoid stack overflows in proofs with many nested subproofs,
         // we check the subproofs iteratively, instead of recursively
-        let mut iter = ProofIter::new_at_position(commands, start_positon);
+        let mut iter = ProofIter::new_at_position(commands, start_position);
         while let Some(command) = iter.next() {
             match command {
                 ProofCommand::Step(step) => {

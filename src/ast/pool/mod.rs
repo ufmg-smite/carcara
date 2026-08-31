@@ -32,6 +32,11 @@ pub struct DatatypeConstructor {
 /// This structure guarantees that identical terms or sorts share a single allocation, which allows
 /// [`Rc`] values to be safely compared and hashed by reference. The pool is also responsible for
 /// computing and storing the sort of each term, as well as other term metadata.
+///
+/// A pool may have an optional [`parent`](Self::parent), a shared pool used as a read-only
+/// fallback: when looking up a term, sort, or cached metadata, the pool first consults the parent
+/// and reuses its result if present. This is used by the parallel checker, where every worker
+/// thread checks steps against a local pool whose parent is the shared global pool.
 #[derive(Debug, Default)]
 pub struct Pool {
     parent: Option<Arc<Pool>>,
@@ -50,6 +55,10 @@ impl Pool {
     }
 
     /// Constructs a new `Pool` with the given parent.
+    ///
+    /// The parent is only read from, never written to, so a single `Arc<Pool>` may be shared
+    /// between many child pools, potentially across threads. This is what allows the parallel
+    /// checker to share a global pool of parsed terms between its worker threads.
     pub fn with_parent(parent: Arc<Pool>) -> Self {
         let mut pool = Self::new();
         pool.parent = Some(parent);
@@ -59,8 +68,8 @@ impl Pool {
     /// Takes a term and returns a possibly newly allocated `Rc` that references it.
     ///
     /// If the term was not originally in the term pool, it is added to it. Otherwise, this method
-    /// just returns an `Rc` pointing to the existing allocation. This method also computes the
-    /// term's sort, and adds it to the sort cache.
+    /// just returns an `Rc` pointing to the existing allocation, possibly in this pool's parent.
+    /// This method also computes the term's sort, and adds it to the sort cache.
     pub fn add(&mut self, term: Term) -> Rc<Term> {
         if let Some(in_parent) = self
             .parent
@@ -77,7 +86,7 @@ impl Pool {
     /// Takes a sort and returns a possibly newly allocated `Rc` that references it.
     ///
     /// If the sort was not originally in the term pool, it is added to it. Otherwise, this method
-    /// just returns an `Rc` pointing to the existing allocation.
+    /// just returns an `Rc` pointing to the existing allocation, possibly in this pool's parent.
     pub fn add_sort(&mut self, sort: Sort) -> Rc<Sort> {
         if let Some(in_parent) = self
             .parent
