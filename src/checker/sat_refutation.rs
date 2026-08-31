@@ -204,6 +204,7 @@ pub fn sat_refutation(
                 let mut choice_dependencies = Vec::new();
                 let univ_vars = pool
                     .choice_subterms(body)
+                    .clone()
                     .iter()
                     .map(|c| {
                         choice_dependencies.push(c.clone());

@@ -7,6 +7,7 @@ use super::{
 };
 use indexmap::{IndexMap, IndexSet};
 use rapidhash::{HashMapExt, RapidHashMap};
+use std::sync::Arc;
 use storage::Storage;
 
 /// A user-defined datatype.
@@ -33,6 +34,7 @@ pub struct DatatypeConstructor {
 /// computing and storing the sort of each term, as well as other term metadata.
 #[derive(Debug, Default)]
 pub struct Pool {
+    parent: Option<Arc<Pool>>,
     pub(crate) terms: Storage<Term>,
     pub(crate) sorts: Storage<Sort>,
     free_vars_cache: IndexMap<Rc<Term>, IndexSet<Rc<Term>>>,
@@ -47,12 +49,26 @@ impl Pool {
         Self::default()
     }
 
+    /// Constructs a new `Pool` with the given parent.
+    pub fn with_parent(parent: Arc<Pool>) -> Self {
+        let mut pool = Self::new();
+        pool.parent = Some(parent);
+        pool
+    }
+
     /// Takes a term and returns a possibly newly allocated `Rc` that references it.
     ///
     /// If the term was not originally in the term pool, it is added to it. Otherwise, this method
     /// just returns an `Rc` pointing to the existing allocation. This method also computes the
     /// term's sort, and adds it to the sort cache.
     pub fn add(&mut self, term: Term) -> Rc<Term> {
+        if let Some(in_parent) = self
+            .parent
+            .as_ref()
+            .and_then(|p| p.terms.get(&term).cloned())
+        {
+            return in_parent;
+        }
         let term = self.terms.add(term);
         self.compute_sort(&term);
         term
@@ -63,6 +79,13 @@ impl Pool {
     /// If the sort was not originally in the term pool, it is added to it. Otherwise, this method
     /// just returns an `Rc` pointing to the existing allocation.
     pub fn add_sort(&mut self, sort: Sort) -> Rc<Sort> {
+        if let Some(in_parent) = self
+            .parent
+            .as_ref()
+            .and_then(|p| p.sorts.get(&sort).cloned())
+        {
+            return in_parent;
+        }
         self.sorts.add(sort)
     }
 
@@ -86,6 +109,13 @@ impl Pool {
     /// This method assumes that the sorts of any subterms have already been checked, and are
     /// correct.
     pub fn sort(&self, term: &Rc<Term>) -> Rc<Sort> {
+        if let Some(in_parent) = self
+            .parent
+            .as_ref()
+            .and_then(|p| p.sorts_cache.get(term).cloned())
+        {
+            return in_parent;
+        }
         self.sorts_cache[term].clone()
     }
 
@@ -93,13 +123,40 @@ impl Pool {
     ///
     /// This method uses a cache, so there is no additional cost to computing the free variables of
     /// a term multiple times.
-    pub fn free_vars(&'_ mut self, term: &Rc<Term>) -> &IndexSet<Rc<Term>> {
+    pub fn free_vars<'a>(&'a mut self, term: &Rc<Term>) -> &'a IndexSet<Rc<Term>> {
+        if self
+            .parent
+            .as_ref()
+            .is_some_and(|p| p.free_vars_cache.contains_key(term))
+        {
+            return &self.parent.as_ref().unwrap().as_ref().free_vars_cache[term];
+        }
         self.compute_free_vars(term)
+    }
+
+    /// Returns an `IndexSet` containing all `choice` subterms of the given term.
+    pub fn choice_subterms(&mut self, term: &Rc<Term>) -> &IndexSet<Rc<Term>> {
+        if self
+            .parent
+            .as_ref()
+            .is_some_and(|p| p.choice_subterms_cache.contains_key(term))
+        {
+            return &self.parent.as_ref().unwrap().as_ref().choice_subterms_cache[term];
+        }
+        self.compute_choice_subterms(term)
+    }
+
+    /// Registers a user-defined datatype in the pool, under the given name.
+    pub fn add_datatype(&mut self, name: String, datatype: Datatype) {
+        self.datatypes.insert(name, datatype);
     }
 
     /// Searches the pool for a defined datatype with the given name. Panics if no datatype is
     /// found.
     pub fn get_datatype(&self, name: &str) -> &Datatype {
+        if let Some(in_parent) = self.parent.as_ref().and_then(|p| p.datatypes.get(name)) {
+            return in_parent;
+        }
         &self.datatypes[name]
     }
 
@@ -461,9 +518,8 @@ impl Pool {
         Some(self.add_sort(res))
     }
 
-    /// Computes the free variables of `term`, reusing cached results from the given prior pools
-    /// whenever possible.
-    pub fn compute_free_vars<'a>(&'a mut self, term: &Rc<Term>) -> &'a IndexSet<Rc<Term>> {
+    /// Computes the free variables of `term` and stores it in the cache.
+    fn compute_free_vars<'a>(&'a mut self, term: &Rc<Term>) -> &'a IndexSet<Rc<Term>> {
         if self.free_vars_cache.contains_key(term) {
             return &self.free_vars_cache[term];
         }
@@ -523,15 +579,10 @@ impl Pool {
         &self.free_vars_cache[term]
     }
 
-    /// Registers a user-defined datatype in the pool, under the given name.
-    pub fn add_datatype(&mut self, name: String, datatype: Datatype) {
-        self.datatypes.insert(name, datatype);
-    }
-
-    /// Collects all `choice` subterms of `term`.
-    pub fn choice_subterms(&mut self, term: &Rc<Term>) -> IndexSet<Rc<Term>> {
-        if let Some(set) = self.choice_subterms_cache.get(term) {
-            return set.clone();
+    /// Computes the set of `choice` subterms of `term` and stores it in the cache.
+    fn compute_choice_subterms(&mut self, term: &Rc<Term>) -> &IndexSet<Rc<Term>> {
+        if self.choice_subterms_cache.contains_key(term) {
+            return &self.choice_subterms_cache[term];
         }
         let set = match term.as_ref() {
             Term::App(_, args)
@@ -540,26 +591,26 @@ impl Pool {
             | Term::AsOp(_, _, args) => {
                 let mut set = IndexSet::new();
                 for a in args {
-                    set.extend(self.choice_subterms(a).into_iter());
+                    set.extend(self.choice_subterms(a).iter().cloned());
                 }
                 set
             }
             Term::Binder(Binder::Choice, _, inner) => {
                 let mut set = IndexSet::from([term.clone()]);
-                set.extend(self.choice_subterms(inner));
+                set.extend(self.choice_subterms(inner).iter().cloned());
                 set
             }
-            Term::Binder(_, _, inner) | Term::Let(_, inner) => self.choice_subterms(inner),
+            Term::Binder(_, _, inner) | Term::Let(_, inner) => self.choice_subterms(inner).clone(),
             Term::Match(term, cases) => {
-                let mut set = self.choice_subterms(term);
+                let mut set = self.choice_subterms(term).clone();
                 for case in cases {
-                    set.extend(self.choice_subterms(&case.body).into_iter());
+                    set.extend(self.choice_subterms(&case.body).iter().cloned());
                 }
                 set
             }
             Term::Var(..) | Term::Const(_) => IndexSet::new(),
         };
         self.choice_subterms_cache.insert(term.clone(), set);
-        self.choice_subterms_cache.get(term).unwrap().clone()
+        &self.choice_subterms_cache[term]
     }
 }
