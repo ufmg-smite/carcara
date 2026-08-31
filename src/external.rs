@@ -159,7 +159,7 @@ pub fn parse_and_check_solver_proof(
     let (problem, proof, rules) =
         parser::parse_instance_with_pool(problem, proof, None, config, pool)?;
     let config = checker::Config::new().ignore_unknown_rules(true);
-    let res = checker::ProofChecker::new(pool, &rules, config).check(&problem, &proof)?;
+    let res = checker::Checker::new(pool, &rules, config).check(&problem, &proof)?;
     Ok((proof.commands, res))
 }
 
