@@ -453,22 +453,23 @@ impl Print for Term {
                 write!(f, ")")
             }
             Term::Let(bindings, term) => {
-                p.binder_depth += 1;
                 write!(f, "(let ")?;
                 bindings.print(f, p)?;
                 write!(f, " ")?;
+                p.binder_depth += 1;
                 term.print(f, p)?;
                 p.binder_depth -= 1;
                 write!(f, ")")
             }
             Term::Match(term, cases) => {
-                write!(f, "(match {} (", term)?;
+                write!(f, "(match {} ", term)?;
                 p.binder_depth += 1;
-                for case in cases {
-                    case.print(f, p)?;
+                match cases.as_slice() {
+                    [head, tail @ ..] => p.s_expr(f, head, tail)?,
+                    [] => write!(f, "()")?,
                 }
                 p.binder_depth -= 1;
-                write!(f, "))")
+                write!(f, ")")
             }
             Term::ParamOp { op, op_args, args } => {
                 if !args.is_empty() {
@@ -737,7 +738,220 @@ impl fmt::Display for ProblemPrelude {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        ast::pool::Pool,
+        parser::tests::{parse_proof, parse_terms},
+    };
     use std::fmt::Write;
+
+    fn display(definitions: &str, input: &str, options: DisplayOptions) -> String {
+        let mut pool = Pool::new();
+        let [term] = parse_terms(&mut pool, definitions, [input]);
+        format!("{}", term.display(options))
+    }
+
+    #[test]
+    fn test_sort_display() {
+        let mut pool = Pool::new();
+        let int = pool.add_sort(Sort::Int);
+        let real = pool.add_sort(Sort::Real);
+        let bool_sort = pool.add_sort(Sort::Bool);
+
+        let cases = [
+            (Sort::Bool, "Bool"),
+            (Sort::Int, "Int"),
+            (Sort::Real, "Real"),
+            (Sort::String, "String"),
+            (Sort::RegLan, "RegLan"),
+            (Sort::Type, "Type"),
+            (Sort::Atom("T".into(), Box::new([])), "T"),
+            (
+                Sort::Atom("f".into(), Box::new([int.clone(), bool_sort.clone()])),
+                "(f Int Bool)",
+            ),
+            (
+                Sort::Function(vec![int.clone(), real.clone(), bool_sort.clone()]),
+                "(-> Int Real Bool)",
+            ),
+            (Sort::Var("?x".into()), "?x"),
+            (Sort::Array(int.clone(), real.clone()), "(Array Int Real)"),
+            (Sort::BitVec(4), "(_ BitVec 4)"),
+            (Sort::ParamBitVec, "(_ BitVec ?)"),
+            (Sort::Set(int.clone()), "(Set Int)"),
+            (Sort::Tuple(vec![]), "UnitTuple"),
+            (
+                Sort::Tuple(vec![int.clone(), bool_sort.clone()]),
+                "(Tuple Int Bool)",
+            ),
+            (Sort::Par(vec!["X".into()], int.clone()), "(par (X) Int)"),
+            (
+                Sort::Par(vec!["X".into(), "Y".into()], int.clone()),
+                "(par (X Y) Int)",
+            ),
+            (Sort::Datatype { name: "List".into(), args: vec![] }, "List"),
+            (
+                Sort::Datatype {
+                    name: "List".into(),
+                    args: vec![int.clone()],
+                },
+                "(List Int)",
+            ),
+        ];
+        for (sort, expected) in cases {
+            assert_eq!(expected, format!("{}", sort), "sort: {sort:?}");
+        }
+    }
+
+    #[test]
+    fn test_term_display() {
+        let definitions = "
+            (declare-fun f (Int Int) Int)
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
+            (declare-const x Int)
+            (declare-datatype List (par (T) ((nil) (cons (head T) (tail (List T))))))
+            (declare-const l (List Int))
+        ";
+        let options = DisplayOptions::new();
+        let cases = [
+            ("42", "42"),
+            ("\"foo\"", "\"foo\""),
+            ("(_ bv1 4)", "(_ bv1 4)"),
+            ("1.0", "1.0"),
+            ("0.5", "1/2"),
+            ("x", "x"),
+            ("(f 1 2)", "(f 1 2)"),
+            ("true", "true"),
+            ("false", "false"),
+            ("(and p q)", "(and p q)"),
+            ("(= 1 2)", "(= 1 2)"),
+            ("(forall ((x Int)) (= x 0))", "(forall ((x Int)) (= x 0))"),
+            ("(exists ((x Int)) (= x 0))", "(exists ((x Int)) (= x 0))"),
+            ("(choice ((x Int)) (= x 0))", "(choice ((x Int)) (= x 0))"),
+            ("(lambda ((x Int)) (+ x 1))", "(lambda ((x Int)) (+ x 1))"),
+            ("(let ((x 1)) (+ x 1))", "(let ((x 1)) (+ x 1))"),
+            ("((_ zero_extend 2) #b100)", "((_ zero_extend 2) (_ bv4 3))"),
+            (
+                "((as const (Array Int Int)) 0)",
+                "((as const (Array Int Int)) 0)",
+            ),
+            (
+                "(match l (((cons h t) false) (_ true)))",
+                "(match l (((cons h t) false) (_ true)))",
+            ),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(
+                expected,
+                display(definitions, input, options.clone()),
+                "term: {input}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_term_display_smt_lib_strict() {
+        let mut pool = Pool::new();
+        let options = DisplayOptions::new().smt_lib_strict(true);
+
+        let neg_int = pool.add(Term::new_int(-5));
+        assert_eq!("(- 5)", format!("{}", neg_int.display(options.clone())));
+
+        let real_int = pool.add(Term::new_real(2));
+        assert_eq!("2.0", format!("{}", real_int.display(options.clone())));
+
+        let real_frac = pool.add(Term::new_real((1, 2)));
+        assert_eq!(
+            "(/ 1.0 2.0)",
+            format!("{}", real_frac.display(options.clone()))
+        );
+
+        let neg_real = pool.add(Term::new_real((-3, 2)));
+        assert_eq!("(- (/ 3.0 2.0))", format!("{}", neg_real.display(options)));
+    }
+
+    #[test]
+    fn test_term_display_sharing() {
+        let options = DisplayOptions::new().use_sharing(true);
+        // A repeated subterm is shared.
+        assert_eq!(
+            "(and (! (= 1 2) :named @p_0) @p_0)",
+            display("", "(and (= 1 2) (= 1 2))", options.clone())
+        );
+        // Subterms inside a binder are not shared.
+        assert_eq!(
+            "(forall ((x Int)) (= (+ x 1) (+ x 1)))",
+            display(
+                "",
+                "(forall ((x Int)) (= (+ x 1) (+ x 1)))",
+                options.clone()
+            )
+        );
+        // A once-used term is not shared.
+        assert_eq!(
+            "(and (= 1 2) true)",
+            display("", "(and (= 1 2) true)", options.clone())
+        );
+        // The sharing prefix can be customized.
+        let options = options.sharing_prefix("x_".into());
+        assert_eq!(
+            "(and (! (= 1 2) :named x_0) x_0)",
+            display("", "(and (= 1 2) (= 1 2))", options)
+        );
+    }
+
+    #[test]
+    fn test_proof_display() {
+        let mut pool = Pool::new();
+        let input = "
+            (define-fun five () Int 5)
+            (assume h1 (not true))
+            (step t1 (cl (= (+ 1 2) 3)) :rule refl)
+            (step t2 (cl) :rule resolution :premises (h1 t1))
+            (anchor :step t3 :args ((x Int) (:= (y Int) 5)))
+            (assume t3.h1 (= x y))
+            (step t3.t2 (cl (= x y)) :rule refl)
+            (step t3 (cl) :rule hole :premises (t3.t2) :discharge (t3.h1))
+            (step t4 (cl) :rule hole)
+        ";
+        let proof = parse_proof(&mut pool, input);
+        let expected = "\
+            (define-fun five () Int 5)\n\
+            (assume h1 (not true))\n\
+            (step t1 (cl (= (+ 1 2) 3)) :rule refl)\n\
+            (step t2 (cl) :rule resolution :premises (h1 t1))\n\
+            (anchor :step t3 :args ((x Int) (:= (y Int) five)))\n\
+            (assume t3.h1 (= x y))\n\
+            (step t3.t2 (cl (= x y)) :rule refl)\n\
+            (step t3 (cl) :rule hole :premises (t3.t2) :discharge (t3.h1))\n\
+            (step t4 (cl) :rule hole)\n\
+        ";
+        assert_eq!(
+            expected,
+            format!("{}", proof.display(DisplayOptions::new()))
+        );
+    }
+
+    #[test]
+    fn test_display_asserts_clause() {
+        let mut pool = Pool::new();
+        let definitions = "(declare-fun p () Bool)";
+        let [a, b] = parse_terms(&mut pool, definitions, ["p", "(not p)"]);
+
+        let options = DisplayOptions::new();
+        let asserts = format!(
+            "{}",
+            display_asserts(&[a.clone(), b.clone()], options.clone())
+        );
+        assert_eq!("(assert p)\n(assert (not p))\n", asserts);
+
+        // The clause problem negates each literal and deduplicates the clause.
+        let clause = format!(
+            "{}",
+            display_clause_smt_problem(&[a.clone(), a.clone(), b], options)
+        );
+        assert_eq!("(assert (not p))\n(assert (not (not p)))\n", clause);
+    }
 
     #[test]
     fn test_sharing() {
