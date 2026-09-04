@@ -1,0 +1,26 @@
+# Custom SMT-LIB operators, loaded by `build.rs` at compile time.
+# Each operator is declared with `[[operator]]`, `name`, `return_type`, and optional `arg_types`
+# (defaults to `[]` for nullary operators). Supported sorts: Bool, Int, Real, String, RegLan.
+#
+# The entries below are real cvc5 string extensions carcara doesn't implement as built-ins, see
+# https://cvc5.github.io/docs/cvc5-1.0.2/theories/strings.html
+
+[[operator]]
+name = "str.rev"
+return_type = "String"
+arg_types = ["String"]
+
+[[operator]]
+name = "str.to_lower"
+return_type = "String"
+arg_types = ["String"]
+
+[[operator]]
+name = "str.to_upper"
+return_type = "String"
+arg_types = ["String"]
+
+[[operator]]
+name = "str.update"
+return_type = "String"
+arg_types = ["String", "Int", "String"]
