@@ -130,6 +130,7 @@ pub struct ProofChecker<'c> {
     context: ContextStack,
     reached_empty_clause: bool,
     is_holey: bool,
+    automata_cache: indexmap::IndexMap<Rc<Term>, std::sync::Arc<crate::automata::Automaton>>,
     rare_rules: &'c Rules,
 }
 
@@ -142,6 +143,7 @@ impl<'c> ProofChecker<'c> {
             context: ContextStack::new(),
             reached_empty_clause: false,
             is_holey: false,
+            automata_cache: indexmap::IndexMap::new(),
             rare_rules,
         }
     }
@@ -323,6 +325,7 @@ impl<'c> ProofChecker<'c> {
             previous_command,
             discharge: &discharge,
             polyeq_time: &mut polyeq_time,
+            automata_cache: &mut self.automata_cache,
             rare_rules: self.rare_rules,
         };
 

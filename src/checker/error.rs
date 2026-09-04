@@ -1,9 +1,10 @@
 //! Errors produced while checking a proof.
+
+use crate::automata::{Automaton, Trigger};
+use crate::external::ExternalError;
 use crate::{
     ast::*,
-    automata::Trigger,
     checker::rules::linear_arithmetic::LinearComb,
-    external::ExternalError,
     utils::{Range, TypeName},
 };
 use rug::{Integer, Rational};
@@ -200,6 +201,12 @@ pub enum CheckerError {
     /// A term was expected to be a numeric constant.
     #[error("expected term '{0}' to be a numerical constant")]
     ExpectedAnyNumber(Rc<Term>),
+
+    #[error("expected term '{0}' to be a string constant")]
+    ExpectedAnyString(Rc<Term>),
+
+    #[error("expected an 'automaton' term, got '{0}'")]
+    ExpectedAutomaton(Rc<Term>),
 
     /// A term was expected to be an integer constant.
     #[error("expected term '{0}' to be an integer constant")]
@@ -551,7 +558,7 @@ pub enum SubproofError {
     OnepointWrongRightBindings(BindingList),
 }
 
-/// Errors relevant to all String rules (CPC and RCP calculus).
+/// Errors relevant to all String rules (CPC and RCP calculi).
 #[derive(Debug, Error)]
 pub enum StringError {
     #[error("expected two ranges to calculate the intersection between then, got '{0}' and '{1}'")]
@@ -580,6 +587,35 @@ pub enum StringError {
         expected: String,
         got: String,
     },
+
+    #[error(
+        "regular expression index of failed: index of '{regex}' in '{s}' starting at '{index}' expected to be '{expected}', got '{got}'"
+    )]
+    RegexIndexOfFailed {
+        s: String,
+        regex: Rc<Term>,
+        index: Integer,
+        expected: Integer,
+        got: Integer,
+    },
+
+    #[error("expected automata '{0}' and '{1}' to be equivalent")]
+    ExpectedEquivalentAutomata(Automaton, Automaton),
+
+    #[error("expected automaton '{0}' to be the empty intersection of '{1}' and '{2}'")]
+    ExpectedAutomataEmptyIntersection(Automaton, Automaton, Automaton),
+
+    #[error("expected non empty intersection between '{0}' and '{1}'")]
+    ExpectedAutomataIntersection(Automaton, Automaton),
+
+    #[error("expected '{0}' to be a subautomaton of '{1}'")]
+    ExpectedSubautomaton(Automaton, Automaton),
+
+    #[error("mismatched number of terms: concatenation has {0} terms, but premises have {1}")]
+    ConcatTermsNumberDiffersFromPremiseTermsNumber(usize, usize),
+
+    #[error("expected a backwardable operator, got '{0}'")]
+    NotBackwardableOperator(Rc<Term>),
 }
 
 impl From<StringError> for CheckerError {

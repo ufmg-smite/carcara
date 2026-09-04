@@ -1560,3 +1560,164 @@ fn re_concat_unfold_pos() {
         }
     }
 }
+
+// TODO: add test cases for all rules
+#[test]
+fn re_convert() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () String)
+            (declare-fun b () String)
+        ",
+        "Simple working examples" {
+            r#"(assume h1 (>= (str.len "ab") 2))
+               (define-fun w_1 () String (str.substr "ab" 0 2))
+               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
+        }
+    }
+}
+
+#[test]
+fn re_empty_intersection() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () String)
+            (declare-fun b () String)
+        ",
+        "Simple working examples" {
+            r#"(assume h1 (>= (str.len "ab") 2))
+               (define-fun w_1 () String (str.substr "ab" 0 2))
+               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
+        }
+    }
+}
+
+#[test]
+fn re_intersection() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () String)
+            (declare-fun b () String)
+        ",
+        "Simple working examples" {
+            r#"(assume h1 (>= (str.len "ab") 2))
+               (define-fun w_1 () String (str.substr "ab" 0 2))
+               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
+        }
+    }
+}
+
+#[test]
+fn re_forward_prop() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () String)
+            (declare-fun b () String)
+        ",
+        "Simple working examples" {
+            r#"(assume h1 (>= (str.len "ab") 2))
+               (define-fun w_1 () String (str.substr "ab" 0 2))
+               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
+        }
+    }
+}
+
+#[test]
+fn concat_bwd_propagation() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () String)
+            (declare-fun b () String)
+        ",
+        "Simple working examples" {
+            r#"(assume h1 (>= (str.len "ab") 2))
+               (define-fun w_1 () String (str.substr "ab" 0 2))
+               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
+        }
+    }
+}
+
+#[test]
+fn concat_aut_bwd_propagation() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () String)
+            (declare-fun b () String)
+        ",
+        "Simple working examples" {
+            r#"(assume h1 (>= (str.len "ab") 2))
+               (define-fun w_1 () String (str.substr "ab" 0 2))
+               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
+        }
+    }
+}
+
+#[test]
+fn str_replace_re_eval() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () String)
+            (declare-fun b () String)
+        ",
+        "Simple working examples" {
+            r#"(assume h1 (>= (str.len "ab") 2))
+               (define-fun w_1 () String (str.substr "ab" 0 2))
+               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
+        }
+    }
+}
+
+#[test]
+fn str_replace_re_all_eval() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () String)
+            (declare-fun b () String)
+        ",
+        "Simple working examples" {
+            r#"(assume h1 (>= (str.len "ab") 2))
+               (define-fun w_1 () String (str.substr "ab" 0 2))
+               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
+        }
+    }
+}
+
+#[test]
+fn str_in_re_eval() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () String)
+            (declare-fun b () String)
+        ",
+        "Simple working examples" {
+            r#"(assume h1 (>= (str.len "ab") 2))
+               (define-fun w_1 () String (str.substr "ab" 0 2))
+               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
+        }
+    }
+}
+
+#[test]
+fn str_indexof_re_eval() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () String)
+            (declare-fun b () String)
+        ",
+        "Simple working examples" {
+            r#"(assume h1 (>= (str.len "ab") 2))
+               (define-fun w_1 () String (str.substr "ab" 0 2))
+               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
+        }
+    }
+}
